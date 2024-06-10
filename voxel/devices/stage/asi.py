@@ -7,6 +7,38 @@ from time import sleep
 
 # constants for Tiger ASI hardware
 
+MIN_VELOCITY_MM_S = {
+    "ultra coarse": 1.833,
+    "super coarse": 0.917,
+    "standard": 0.688,
+    "fine": 0.171,
+    "extra fine": 0.046
+}
+
+MAX_VELOCITY_MM_S = {
+    "ultra coarse": 28.000,
+    "super coarse": 14.000,
+    "standard": 7.000,
+    "fine": 1.750,
+    "extra fine": 0.700
+}
+
+STEP_VELOCITY_MM_S = {
+    "ultra coarse": 0.917,
+    "super coarse": 0.459,
+    "standard": 0.344,
+    "fine": 0.086,
+    "extra fine": 0.023
+}
+
+ENCODER_RESOLUTION_NM = {
+    "ultra coarse": 88.0,
+    "super coarse": 44.0,
+    "standard": 22.0,
+    "fine": 5.5,
+    "extra fine": 2.2
+}
+
 MODES = {
     "step shoot": TTLIn0Mode.REPEAT_LAST_REL_MOVE,
     "off": TTLIn0Mode.OFF,
@@ -19,15 +51,13 @@ SCAN_PATTERN = {
 }
 
 
-# singleton wrapper around TigerController
-class TigerControllerSingleton(TigerController, metaclass=Singleton):
-    def __init__(self, com_port):
-        super(TigerControllerSingleton, self).__init__(com_port)
-
-
 class Stage(BaseStage):
 
-    def __init__(self, port: str, hardware_axis: str, instrument_axis: str, tigerbox: TigerController = None,
+    def __init__(self, port: str,
+                 lead_screw: str,
+                 hardware_axis: str,
+                 axis_map: dict,
+                 tigerbox: TigerController = None,
                  log_level="INFO"):
         """Connect to hardware.
 
@@ -38,7 +68,7 @@ class Stage(BaseStage):
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.log.setLevel(log_level)
 
-        self.tigerbox = TigerControllerSingleton(com_port=port) if tigerbox is None else tigerbox
+        self.tigerbox = TigerController(com_port=port) if tigerbox is None else tigerbox
         self.tigerbox.log.setLevel(log_level)
 
         self._hardware_axis = hardware_axis.upper()
@@ -248,16 +278,16 @@ class Stage(BaseStage):
         limits = sorted([sample_limit_lower, sample_limit_upper])
         return limits
 
-    # @property
-    # def backlash_mm(self):
-    #     """Get the axis backlash compensation."""
-    #     tiger_backlash = self.tigerbox.get_axis_backlash(self.hardware_axis)
-    #     return self._tiger_to_sample(tiger_backlash)
-    #
-    # @backlash_mm.setter
-    # def backlash_mm(self, backlash: float):
-    #     """Set the axis backlash compensation to a set value (0 to disable)."""
-    #     self.tigerbox.set_axis_backlash(**{self.hardware_axis: backlash})
+    @property
+    def backlash_mm(self):
+        """Get the axis backlash compensation."""
+        tiger_backlash = self.tigerbox.get_axis_backlash(self.hardware_axis)
+        return self._tiger_to_sample(tiger_backlash)
+    
+    @backlash_mm.setter
+    def backlash_mm(self, backlash: float):
+        """Set the axis backlash compensation to a set value (0 to disable)."""
+        self.tigerbox.set_axis_backlash(**{self.hardware_axis: backlash})
 
     @property
     def speed_mm_s(self):
@@ -269,16 +299,16 @@ class Stage(BaseStage):
     def speed_mm_s(self, speed: float):
         self.tigerbox.set_speed(**{self.hardware_axis: speed})
 
-    # @property
-    # def acceleration_ms(self):
-    #     """Get the tiger axis acceleration."""
-    #     tiger_speed = self.tigerbox.get_acceleration(self.hardware_axis)
-    #     return self._tiger_to_sample(tiger_speed)
-    #
-    # @acceleration_ms.setter
-    # def acceleration_ms(self, acceleration: float):
-    #     """Set the tiger axis acceleration."""
-    #     self.tigerbox.set_acceleration(**{self.hardware_axis: acceleration})
+    @property
+    def acceleration_ms(self):
+        """Get the tiger axis acceleration."""
+        tiger_speed = self.tigerbox.get_acceleration(self.hardware_axis)
+        return self._tiger_to_sample(tiger_speed)
+    
+    @acceleration_ms.setter
+    def acceleration_ms(self, acceleration: float):
+        """Set the tiger axis acceleration."""
+        self.tigerbox.set_acceleration(**{self.hardware_axis: acceleration})
 
     @property
     def mode(self):

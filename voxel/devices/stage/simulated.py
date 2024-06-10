@@ -1,17 +1,15 @@
 import logging
 import time
-import random
 from voxel.devices.stage.base import BaseStage
 from voxel.devices.joystick.base import BaseJoystick
-from voxel.devices.joystick.axes_mapping import AxesMapping
-from voxel.devices.utils.singleton import Singleton
+
 
 JOYSTICK_AXES = {
     "joystick_x": 0,
     "joystick_y": 1,
     "wheel_z": 2,
     "wheel_f": 3,
-    "None":4
+    "None": 4
 }
 
 POLARITY = {
@@ -19,11 +17,6 @@ POLARITY = {
     "default": 1,
 }
 
-# singleton wrapper around AxesMapping
-# TODO: this seems like a roundabout way of getting this to work...
-class AxesMappingSingleton(AxesMapping, metaclass=Singleton):
-    def __init__(self):
-        super(AxesMappingSingleton, self).__init__()
 
 class Stage(BaseStage):
 
@@ -31,14 +24,11 @@ class Stage(BaseStage):
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self._hardware_axis = hardware_axis.upper()
         self._instrument_axis = instrument_axis.lower()
-        self.axes_mapping = AxesMappingSingleton()
-        self.axes_mapping.axis_map[instrument_axis] = hardware_axis
         # TODO change this, but self.id for consistency in lookup
         self.id = self.instrument_axis
         self._position_mm = 0
         self._speed = 1.0
         self._limits = [-10000, 10000]
-
 
     def move_relative_mm(self, position: float, wait: bool = True):
         w_text = "" if wait else "NOT "
@@ -46,8 +36,9 @@ class Stage(BaseStage):
         move_time_s = position / self._speed
         self.move_end_time_s = time.time() + move_time_s
         self._position_mm += position
-        # while time.time() < self.move_end_time_s:
-        #     time.sleep(0.01)
+        if wait:
+            while time.time() < self.move_end_time_s:
+                time.sleep(0.01)
 
     def move_absolute_mm(self, position: float, wait: bool = True):
         w_text = "" if wait else "NOT "
@@ -55,8 +46,9 @@ class Stage(BaseStage):
         move_time_s = abs(self._position_mm - position) / self._speed
         self.move_end_time_s = time.time() + move_time_s
         self._position_mm = position
-        # while time.time() < self.move_end_time_s:
-        #     time.sleep(0.01)
+        if wait:
+            while time.time() < self.move_end_time_s:
+                time.sleep(0.01)
 
     def setup_stage_scan(self, fast_axis_start_position: float,
                          slow_axis_start_position: float,
@@ -83,7 +75,6 @@ class Stage(BaseStage):
 
     @property
     def position_mm(self):
-        self._position_mm = 0#random.randint(0, 10)
         return self._position_mm
 
     @property
