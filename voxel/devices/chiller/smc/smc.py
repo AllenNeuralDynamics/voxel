@@ -106,15 +106,24 @@ class SMCChiller(BaseChiller):
 if __name__ == "__main__":
     try:
         chiller = SMCChiller('test-chiller', 'COM1')
+
         print("Internal Sensor Temperature:", chiller.temperature)
+
         print("External Sensor Temperature:", chiller.external_temperature)
+
         print("Alarm Status:", chiller.alarm_status)
-        chiller.temperature = 25.0  # Set temperature and persist it
+
+        chiller.temperature = 25.0
         print("Temperature set to 25.0°C and persisted.")
-        chiller.temperature = 25.0, False  # Set temperature without persisting it
+
+        chiller.persist = False
+        chiller.temperature = 25.0
         print("Temperature set to 25.0°C without persisting.")
-        chiller.set_offset(2.5)  # Set offset and persist it
+
+        chiller.persist = True
+        chiller.set_offset(2.5)
         print("Offset set to 2.5°C and persisted.")
+
     except Exception as e:
         print(f"Error: {e}")
     finally:
