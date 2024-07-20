@@ -1,7 +1,6 @@
-import logging
-from voxel.devices.utils.singleton import Singleton
 from voxel.devices.stage.base import BaseStage
-from tigerasi.tiger_controller import TigerController, STEPS_PER_UM
+from voxel.descriptors.deliminated_property import DeliminatedProperty
+from tigerasi.tiger_controller import TigerController
 from tigerasi.device_codes import *
 from time import sleep
 
@@ -53,30 +52,26 @@ SCAN_PATTERN = {
 
 class Stage(BaseStage):
 
-    def __init__(self, port: str,
+    def __init__(self,
+                 tigerbox: TigerController,
                  lead_screw: str,
                  instrument_axis: str,
-                 axis_map: dict,
-                 tigerbox: TigerController = None,
-                 log_level="INFO"):
+                 hardware_axis: str,
+                 joystick_axis: str):
         """Connect to hardware.
 
         :param tigerbox: TigerController instance.
-        :param hardware_axis: stage hardware axis.
         :param instrument_axis: instrument hardware axis.
-        :param axis_map: dictionary representing the mapping from instrument axis
-        to hardware axis, i.e: axis_map[<instrument_axis>] = <hardware_axis>.
+        :param hardware_axis: stage hardware axis.
+        :param joystick_axis: joystick axis setting.
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
-        self.log.setLevel(log_level)
-
-        self.tigerbox = TigerController(com_port=port) if tigerbox is None else tigerbox
-        self.tigerbox.log.setLevel(log_level)
-
-        self._instrument_axis = instrument_axis.upper()
-        self._hardware_axis = axis_map[instrument_axis].lower()
         # TODO change this, but self.id for consistency in lookup
         self.id = self.instrument_axis
+        self._instrument_axis = instrument_axis.upper()
+        self._hardware_axis = hardware_axis.lower()
+        # axis_map: dictionary representing the mapping from sample pose to tigerbox axis.
+        # i.e: `axis_map[<sample_frame_axis>] = <tiger_frame_axis>`.
+        axis_map = {self.instrument_axis: self.hardware_axis}
         # We assume a bijective axis mapping (one-to-one and onto).
         self.log.debug("Remapping axes with the convention "
                        "{'instrument axis': 'hardware axis'} "
@@ -257,7 +252,7 @@ class Stage(BaseStage):
     @property
     def instrument_axis(self):
         return self._instrument_axis
-    
+
     @property
     def position_mm(self):
         tiger_position = self.tigerbox.get_position(self.hardware_axis)
@@ -294,6 +289,9 @@ class Stage(BaseStage):
         """Set the axis backlash compensation to a set value (0 to disable)."""
         self.tigerbox.set_axis_backlash(**{self.hardware_axis: backlash})
 
+    @DeliminatedProperty(minimum=lambda self: self.min_speed_mm_s,
+                         maximum=lambda self: self.max_speed_mm_s,
+                         step=lambda self: self.step_speed_mm_s)
     @property
     def speed_mm_s(self):
         """Get the tiger axis speed."""
