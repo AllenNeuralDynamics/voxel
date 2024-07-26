@@ -1,7 +1,7 @@
 from time import sleep
 from typing import Literal
 
-from ...descriptors.deliminated_property import DeliminatedProperty
+from ...descriptors.deliminated_property import deliminated_property
 from . import BaseFlipMount
 
 FLIP_TIME_RANGE_MS: tuple[float, float] = (500.0, 2800.0, 100.0) # min, max, step
@@ -43,7 +43,7 @@ class SimulatedFlipMount(BaseFlipMount):
         except Exception as e:
             raise e
 
-    @DeliminatedProperty(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
+    @deliminated_property(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:
         return self._flip_time_ms
 

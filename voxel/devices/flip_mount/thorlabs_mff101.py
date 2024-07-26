@@ -3,7 +3,7 @@ from typing import Optional
 
 from pylablib.devices import Thorlabs
 
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 from . import BaseFlipMount
 
 VALID_POSITIONS = [0, 1]
@@ -64,7 +64,7 @@ class ThorlabsFlipMount(BaseFlipMount):
         self._inst.move_to_state(self._positions[position_name])
         self.log.info(f'Flip mount {self.id} moved to position {position_name}')
 
-    @DeliminatedProperty(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
+    @deliminated_property(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> int:
         if self._inst is None:
             raise ValueError('Flip mount not connected')

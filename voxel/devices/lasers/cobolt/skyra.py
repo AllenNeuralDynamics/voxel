@@ -4,7 +4,7 @@ from enum import Enum
 from pycobolt import CoboltLaser
 from sympy import symbols, solve, Expr
 
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 from voxel.devices.lasers.base import BaseLaser
 
 # Define StrEnums if they don't yet exist.
@@ -101,7 +101,7 @@ class SkyraLaser(BaseLaser):
         self._inst.send_cmd(f'{self._prefix}Cmd.LaserDisable')
         self.log.info(f"laser {self._prefix} enabled")
 
-    @DeliminatedProperty(minimum=0, maximum=lambda self: self.max_power)
+    @deliminated_property(minimum=0, maximum=lambda self: self.max_power)
     def power_setpoint_mw(self):
         if self._inst.constant_current == 'ON':
             return int(round(self._coefficients_curve().subs(symbols('x'), self._current_setpoint)))

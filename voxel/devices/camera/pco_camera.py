@@ -4,7 +4,7 @@ import time
 from voxel.devices.utils.singleton import Singleton
 from voxel.devices.camera.base import BaseCamera
 from sdks import pco
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 
 BUFFER_SIZE_MB = 2400
 
@@ -58,7 +58,7 @@ class Camera(BaseCamera):
             del self.pco
         self.pco = pcoSingleton.Camera(id=self.id)
 
-    @DeliminatedProperty(minimum=float('-inf'), maximum=float('inf'))
+    @deliminated_property(minimum=float('-inf'), maximum=float('inf'))
     def exposure_time_ms(self):
         # convert from s units to ms
         return self.pco.exposure_time*1000
@@ -72,7 +72,7 @@ class Camera(BaseCamera):
         # refresh parameter values
         self._get_min_max_step_values()
 
-    @DeliminatedProperty(minimum=float('-inf'), maximum=float('inf'))
+    @deliminated_property(minimum=float('-inf'), maximum=float('inf'))
     def width_px(self):
         roi = self.pco.sdk.get_roi()
         return roi['x1'] - roi['x0'] + 1
@@ -92,7 +92,7 @@ class Camera(BaseCamera):
         roi = self.pco.sdk.get_roi()
         return roi['x0'] - 1
 
-    @DeliminatedProperty(minimum=float('-inf'), maximum=float('inf'))
+    @deliminated_property(minimum=float('-inf'), maximum=float('inf'))
     def height_px(self):
         roi = self.pco.sdk.get_roi()
         height_px = roi['y1'] - roi['y0'] + 1
@@ -115,7 +115,7 @@ class Camera(BaseCamera):
         roi = self.pco.sdk.get_roi()
         return roi['y0'] - 1
 
-    @DeliminatedProperty(minimum=float('-inf'), maximum=float('inf'))
+    @deliminated_property(minimum=float('-inf'), maximum=float('inf'))
     def line_interval_us(self):
         line_interval_s = self.pco.sdk.get_cmos_line_timing()['line time']
         # returned value is in s, convert to us

@@ -5,7 +5,7 @@ from voxel.devices.camera.base import BaseCamera
 from voxel.devices.camera.sdks.egrabber import *
 from voxel.devices.utils.singleton import Singleton
 from voxel.processes.gpu.gputools.downsample_2d import DownSample2D
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 
 BUFFER_SIZE_MB = 2400
 
@@ -115,7 +115,7 @@ class Camera(BaseCamera):
         # initialize parameter values
         self._update_parameters()
 
-    @DeliminatedProperty(minimum=float('-inf'), maximum=float('inf'))
+    @deliminated_property(minimum=float('-inf'), maximum=float('inf'))
     def exposure_time_ms(self):
         # us to ms conversion
         return self.grabber.remote.get("ExposureTime")/1000
@@ -128,7 +128,7 @@ class Camera(BaseCamera):
         # refresh parameter values
         self._get_min_max_step_values()
 
-    @DeliminatedProperty(minimum=float('-inf'), maximum=float('inf'))
+    @deliminated_property(minimum=float('-inf'), maximum=float('inf'))
     def width_px(self):
         return self.grabber.remote.get("Width")
     
@@ -147,7 +147,7 @@ class Camera(BaseCamera):
     def width_offset_px(self):
         return self.grabber.remote.get("OffsetX")
     
-    @DeliminatedProperty(minimum=float('-inf'), maximum=float('inf'))
+    @deliminated_property(minimum=float('-inf'), maximum=float('inf'))
     def height_px(self):
         return self.grabber.remote.get("Height")
 

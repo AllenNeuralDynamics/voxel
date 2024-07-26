@@ -1,7 +1,7 @@
 from obis_laser import ObisLX, OperationalQuery, OperationalCmd
 from serial import Serial
 
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 from ..base import BaseLaser
 
 MODULATION_MODES: dict[str, str] = {
@@ -55,7 +55,7 @@ class ObisLXLaser(BaseLaser):
     def close(self):
         self._inst.close()
 
-    @DeliminatedProperty(minimum=0, maximum=lambda self: self._inst.max_power)
+    @deliminated_property(minimum=0, maximum=lambda self: self._inst.max_power)
     def power_setpoint_mw(self):
         return self._inst.power_setpoint
 

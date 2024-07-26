@@ -3,7 +3,7 @@ import random
 from voxel.devices.lasers.base import BaseLaser
 import logging
 from serial import Serial
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 
 MODULATION_MODES = {
     'off': {'external_control_mode': 'OFF', 'digital_modulation': 'OFF'},
@@ -41,7 +41,7 @@ class SimulatedLaser(BaseLaser):
     def disable(self):
         pass
 
-    @DeliminatedProperty(minimum=0, maximum=MAX_POWER_MW)
+    @deliminated_property(minimum=0, maximum=MAX_POWER_MW)
     def power_setpoint_mw(self):
         return self._simulated_power_setpoint_mw
 

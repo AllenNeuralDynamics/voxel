@@ -4,7 +4,7 @@ from voxel.devices.lasers.base import BaseLaser
 from aaopto_aotf import MPDS
 from aaopto_aotf.device_codes import *
 from sympy import symbols, solve
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 
 MAX_VOLTAGE_V = 10
 
@@ -45,7 +45,7 @@ class AOTF(BaseLaser):
     def disable(self):
         self.aotf.disable_channel(self.id)
 
-    @DeliminatedProperty(minimum=0, maximum=MAX_VOLTAGE_V)
+    @deliminated_property(minimum=0, maximum=MAX_VOLTAGE_V)
     def power_setpoint_mw(self):
         return round(self.func.subs(symbols('x'), self.setpoint_v), 1)
 

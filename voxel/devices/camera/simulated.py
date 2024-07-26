@@ -4,7 +4,7 @@ import time
 from multiprocessing import Process, Queue, Event
 from voxel.devices.camera.base import BaseCamera
 from voxel.processes.gpu.gputools.downsample_2d import DownSample2D
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 from threading import Thread
 
 BUFFER_SIZE_FRAMES = 8
@@ -52,22 +52,22 @@ TRIGGERS = {
 
 class Camera(BaseCamera):
 
-    width_px = DeliminatedProperty(fget=lambda instance: getattr(instance, '_width_px'),
-                                   fset=lambda instance, value: setattr(instance, '_width_px', value),
-                                   minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX,
-                                   step=DIVISIBLE_WIDTH_PX)
-    width_offset_px = DeliminatedProperty(fget=lambda instance: getattr(instance, '_width_offset_px'),
-                                   fset=lambda instance, value: setattr(instance, '_width_offset_px', value),
-                                   minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX,
-                                   step=DIVISIBLE_WIDTH_PX)
-    height_px = DeliminatedProperty(fget=lambda instance: getattr(instance, '_height_px'),
-                                   fset=lambda instance, value: setattr(instance, '_height_px', value),
-                                   minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX,
-                                   step=DIVISIBLE_HEIGHT_PX)
-    height_offset_px = DeliminatedProperty(fget=lambda instance: getattr(instance, '_height_offset_px'),
-                                    fset=lambda instance, value: setattr(instance, '_height_offset_px', value),
-                                    minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX,
-                                    step=DIVISIBLE_HEIGHT_PX)
+    width_px = deliminated_property(fget=lambda instance: getattr(instance, '_width_px'),
+                                    fset=lambda instance, value: setattr(instance, '_width_px', value),
+                                    minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX,
+                                    step=DIVISIBLE_WIDTH_PX)
+    width_offset_px = deliminated_property(fget=lambda instance: getattr(instance, '_width_offset_px'),
+                                           fset=lambda instance, value: setattr(instance, '_width_offset_px', value),
+                                           minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX,
+                                           step=DIVISIBLE_WIDTH_PX)
+    height_px = deliminated_property(fget=lambda instance: getattr(instance, '_height_px'),
+                                     fset=lambda instance, value: setattr(instance, '_height_px', value),
+                                     minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX,
+                                     step=DIVISIBLE_HEIGHT_PX)
+    height_offset_px = deliminated_property(fget=lambda instance: getattr(instance, '_height_offset_px'),
+                                            fset=lambda instance, value: setattr(instance, '_height_offset_px', value),
+                                            minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX,
+                                            step=DIVISIBLE_HEIGHT_PX)
 
 
 
@@ -90,7 +90,7 @@ class Camera(BaseCamera):
                          'polarity': 'rising'}
         self._latest_frame = None
 
-    @DeliminatedProperty(minimum=MIN_EXPOSURE_TIME_MS, maximum=MAX_EXPOSURE_TIME_MS, step=0.001)
+    @deliminated_property(minimum=MIN_EXPOSURE_TIME_MS, maximum=MAX_EXPOSURE_TIME_MS, step=0.001)
     def exposure_time_ms(self):
         return self._exposure_time_ms
 
@@ -106,7 +106,7 @@ class Camera(BaseCamera):
         self._exposure_time_ms = exposure_time_ms
         self.log.info(f"exposure time set to: {exposure_time_ms} ms")
 
-    @DeliminatedProperty(minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX, step=DIVISIBLE_WIDTH_PX)
+    @deliminated_property(minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX, step=DIVISIBLE_WIDTH_PX)
     def width_px(self):
         return self._width_px
 
@@ -116,7 +116,7 @@ class Camera(BaseCamera):
         self._width_px = value
         self.log.info(f"width set to: {value} px")
 
-    @DeliminatedProperty(minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX, step=DIVISIBLE_WIDTH_PX)
+    @deliminated_property(minimum=MIN_WIDTH_PX, maximum=MAX_WIDTH_PX, step=DIVISIBLE_WIDTH_PX)
     def width_offset_px(self):
         return self._width_offset_px
 
@@ -130,7 +130,7 @@ class Camera(BaseCamera):
         self._width_offset_px = value
         self.log.info(f"width offset set to: {value} px")
 
-    @DeliminatedProperty(minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX, step=DIVISIBLE_HEIGHT_PX)
+    @deliminated_property(minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX, step=DIVISIBLE_HEIGHT_PX)
     def height_px(self):
         return self._height_px
 
@@ -141,7 +141,7 @@ class Camera(BaseCamera):
         self._height_px = value
         self.log.info(f"height set to: {value} px")
 
-    @DeliminatedProperty(minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX, step=DIVISIBLE_HEIGHT_PX)
+    @deliminated_property(minimum=MIN_HEIGHT_PX, maximum=MAX_HEIGHT_PX, step=DIVISIBLE_HEIGHT_PX)
     def height_offset_px(self):
         return self._height_offset_px
 

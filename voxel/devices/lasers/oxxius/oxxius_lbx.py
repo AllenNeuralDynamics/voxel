@@ -2,7 +2,7 @@ from oxxius_laser import BoolVal, LBX
 from serial import Serial
 from sympy import symbols, solve, Expr
 
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 from voxel.devices.lasers.base import BaseLaser
 
 MODULATION_MODES = {
@@ -35,7 +35,7 @@ class OxxiusLBXLaser(BaseLaser):
         self._inst.disable()
 
     @property
-    @DeliminatedProperty(minimum=0, maximum=lambda self: self.max_power)
+    @deliminated_property(minimum=0, maximum=lambda self: self.max_power)
     def power_setpoint_mw(self):
         if self._inst.constant_current == 'ON':
             return int(round(self._coefficients_curve().subs(symbols('x'), self._inst.current_setpoint)))

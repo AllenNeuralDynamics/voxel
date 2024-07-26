@@ -1,6 +1,6 @@
 from vortran_laser import StradusLaser as StradusVortran, BoolVal
 
-from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.descriptors.deliminated_property import deliminated_property
 from voxel.devices.lasers.base import BaseLaser
 
 MODULATION_MODES = {
@@ -30,7 +30,7 @@ class StradusLaser(BaseLaser):
     def close(self):
         self._inst.close()
 
-    @DeliminatedProperty(minimum=0, maximum=lambda self: self._inst.max_power)
+    @deliminated_property(minimum=0, maximum=lambda self: self._inst.max_power)
     def power_setpoint_mw(self):
         return self._inst.power_setpoint
 
