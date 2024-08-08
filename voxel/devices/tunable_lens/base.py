@@ -1,26 +1,33 @@
-import inspect
+from abc import abstractmethod
+from typing import Any, Dict
 
-class BaseTunableLens:
+from ..base import VoxelDevice
+
+
+class BaseTunableLens(VoxelDevice):
 
     @property
-    def mode(self):
-        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
+    @abstractmethod
+    def mode(self) -> str:
+        """Get the tunable lens control mode."""
         pass
 
     @mode.setter
+    @abstractmethod
     def mode(self, mode: str):
-        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
+        """Set the tunable lens control mode.
+        :param mode: one of "internal" or "external".
+        :type mode: str
+        """
         pass
 
     @property
-    def signal_temperature_c(self):
-        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
+    @abstractmethod
+    def temperature_c(self) -> float:
+        """Get the temperature in deg C."""
         pass
 
-    def log_metadata(self):
-        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
-        pass
-
-    def close(self):
-        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
+    @abstractmethod
+    def log_metadata(self) -> Dict[str, Any]:
+        """Log metadata about the tunable lens."""
         pass

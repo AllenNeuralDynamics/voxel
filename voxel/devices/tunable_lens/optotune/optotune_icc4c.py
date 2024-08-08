@@ -1,6 +1,6 @@
-import logging
 import optoICC
 from optoKummenberg.tools.definitions import UnitType
+
 from voxel.devices.tunable_lens.base import BaseTunableLens
 
 # constants for Optotune ICC-4C controller
@@ -11,18 +11,21 @@ from voxel.devices.tunable_lens.base import BaseTunableLens
 # UNITLESS = 4
 # UNDEFINED = 5
 
-MODES = {"internal": UnitType.FP,
-         "external": UnitType.CURRENT}
+MODES = {"internal": UnitType.FP, "external": UnitType.CURRENT}
 
-class TunableLens(BaseTunableLens):
 
-    def __init__(self, port: str, channel: int):
-        """Connect to hardware.
+class OptotuneICC4CTunableLens(BaseTunableLens):
 
-        :param tigerbox: TigerController instance.
-        :param hardware_axis: stage hardware axis.
+    def __init__(self, id: str, port: str, channel: int):
+        """Connect to OptotuneI ICC-4C Tunable Lens.
+        :param id: unique voxel id for this device.
+        :param port: serial port for the ICC-4-C controller.
+        :param channel: channel number for the tunable lens.
+        :type id: str
+        :type port: str
+        :type channel: int
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        super().__init__(id)
         self.icc4c = optoICC.connect(port=port)
         self.icc4c.reset(force=True)
         self.icc4c.go_pro()
@@ -50,11 +53,31 @@ class TunableLens(BaseTunableLens):
         self.tunable_lens.SetControlMode(MODES[mode])
 
     @property
-    def signal_temperature_c(self):
+    def temperature_c(self):
         """Get the temperature in deg C."""
-        state = {}
-        state['Temperature [C]'] = self.tunable_lens.TemperatureManager.GetDeviceTemperature()
-        return state
+        return {
+            "Temperature [C]": self.tunable_lens.TemperatureManager.GetDeviceTemperature()
+        }
+
+    def log_metadata(self):
+        return {
+            "id": self.id,
+            "mode": self.mode,
+            "temperature_c": self.temperature_c,
+        }
 
     def close(self):
         self.icc4c.close()
+
+
+# Example usage:
+if __name__ == "__main__":
+    etl = OptotuneICC4CTunableLens(id="optotune", port='COM7', channel=0)
+    print(etl.temperature_c)
+    print(etl.mode)
+    etl.mode = 'internal'
+    print(etl.mode)
+    etl.mode = 'external'
+    print(etl.mode)
+    print(etl.log_metadata())
+    etl.close()

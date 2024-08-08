@@ -1,8 +1,7 @@
-import logging
-from voxel.devices.utils.singleton import Singleton
-from voxel.devices.tunable_lens.base import BaseTunableLens
-from tigerasi.tiger_controller import TigerController
 from tigerasi.device_codes import *
+from tigerasi.tiger_controller import TigerController
+
+from voxel.devices.tunable_lens.base import BaseTunableLens
 
 # constants for Tiger ASI hardware
 
@@ -11,24 +10,23 @@ MODES = {
     "internal": TunableLensControlMode.TG1000_INPUT_NO_TEMP_COMPENSATION,
 }
 
-# singleton wrapper around TigerController
-class TigerControllerSingleton(TigerController, metaclass=Singleton):
-    def __init__(self, com_port):
-        super(TigerControllerSingleton, self).__init__(com_port)
-        
-class TunableLens(BaseTunableLens):
 
-    def __init__(self, port: str, hardware_axis: str):
-        """Connect to hardware.
+class ASITunableLens(BaseTunableLens):
 
+    def __init__(self, id: str,  tigerbox: TigerController,  hardware_axis: str):
+        """Connect to ASI tunable lens.
+        :param id: unique voxel id for this device.
         :param tigerbox: TigerController instance.
         :param hardware_axis: stage hardware axis.
+        :type id: st
+        :type tigerbox: TigerController
+        :type hardware_axis: str
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
-        self.tigerbox = TigerControllerSingleton(com_port = port)
+        super().__init__(id)
+        self.tigerbox = tigerbox
         self.hardware_axis = hardware_axis.upper()
-        # TODO change this, but self.id for consistency in lookup
-        self.id = self.hardware_axis
+        # TODO change this, but self.axis for consistency in lookup
+        self.axis = self.hardware_axis
 
     @property
     def mode(self):
@@ -48,19 +46,16 @@ class TunableLens(BaseTunableLens):
         self.tigerbox.set_axis_control_mode(**{self.hardware_axis: MODES[mode]})
 
     @property
-    def signal_temperature_c(self):
+    def temperature_c(self):
         """Get the temperature in deg C."""
-        state = {}
-        state['Temperature [C]'] = self.tigerbox.get_etl_temp(self.hardware_axis)
-        return state  
+        return self.tigerbox.get_etl_temp(self.hardware_axis)
 
     def log_metadata(self):
         self.log.info('tiger hardware axis parameters')
         build_config = self.tigerbox.get_build_config()
         self.log.debug(f'{build_config}')
         axis_settings = self.tigerbox.get_info(self.hardware_axis)
-        self.log.info("{'instrument axis': 'hardware axis'} "
-                       f"{self.sample_to_tiger_axis_map}.")
+        self.log.info(f'{self.hardware_axis} axis settings')
         for setting in axis_settings:
             self.log.info(f'{self.hardware_axis} axis, {setting}, {axis_settings[setting]}')
 
