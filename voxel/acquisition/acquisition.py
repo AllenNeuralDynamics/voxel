@@ -1,4 +1,4 @@
-import numpy
+import numpy as np
 import time
 import threading
 import logging
@@ -14,16 +14,21 @@ from gputools import get_device
 from voxel.instruments.instrument import Instrument
 from voxel.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
 import inflection
-
+import inspect
 
 class Acquisition:
 
-    def __init__(self, instrument: Instrument, config_filename: str, log_level='INFO'):
+    def __init__(self, instrument: Instrument, config_filename: str, yaml_handler: YAML = None, log_level='INFO'):
+
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.log.setLevel(log_level)
 
+        # create yaml object to use when loading and dumping config
+        self.yaml = yaml_handler if yaml_handler is not None else YAML()
+
         self.config_path = Path(config_filename)
-        self.config = YAML(typ='safe', pure=True).load(Path(self.config_path))
+        self.config = self.yaml.load(Path(self.config_path))
+
         self.instrument = instrument
 
         # initialize metadata attribute. NOT a dictionary since only one metadata class can exist in acquisition
@@ -43,15 +48,18 @@ class Acquisition:
         device_class = getattr(sys.modules[driver], module)
         return device_class(**kwds)
 
-    def _setup_class(self, device: object, settings: dict):
-        """Setup device based on settings dictionary
+    def _setup_class(self, device: object, properties: dict):
+        """Setup device based on properties dictionary
         :param device: device to be setup
-        :param settings: dictionary of attributes, values to set according to config"""
+        :param properties: dictionary of attributes, values to set according to config"""
 
         self.log.info(f'setting up {device}')
-        # successively iterate through settings keys
-        for key, value in settings.items():
-            setattr(device, key, value)
+        # successively iterate through properties keys and if there is setter, set
+        for key, value in properties.items():
+            try:
+                setattr(device, key, value)
+            except (TypeError, AttributeError):
+                self.log.info(f'{device} property {key} has no setter')
 
     def _construct_operations(self, device_name: str, operation_dictionary: dict):
         """Load and setup operations of an acquisition
@@ -77,9 +85,9 @@ class Acquisition:
         module = class_specs['module']
         init = class_specs.get('init', {})
         class_object = self._load_class(driver, module, init)
-        settings = class_specs.get('settings', {})
+        properties = class_specs.get('properties', {})
         self.log.info(f'constructing {driver}')
-        self._setup_class(class_object, settings)
+        self._setup_class(class_object, properties)
 
         return class_object
 
@@ -179,7 +187,7 @@ class Acquisition:
         row_count_px = self.instrument.cameras[camera_id].height_px
         column_count_px = self.instrument.cameras[camera_id].width_px
         data_type = self.writers[camera_id][writer_id].data_type
-        frame_size_mb = row_count_px * column_count_px * numpy.dtype(data_type).itemsize / 1024 ** 2
+        frame_size_mb = row_count_px * column_count_px * np.dtype(data_type).itemsize / 1024 ** 2
         return frame_size_mb
 
     def _pyramid_factor(self, levels: int):
@@ -337,15 +345,15 @@ class Acquisition:
         """
         self.log.info(f"checking local storage directory space for next tile")
         drives = dict()
+        data_size_gb = 0
         for camera_id, camera in self.instrument.cameras.items():
             for writer_id, writer in self.writers[camera_id].items():
-                data_size_gb = 0
                 # if windows
                 if platform.system() == 'Windows':
                     local_drive = os.path.splitdrive(writer.path)[0]
                 # if unix
                 else:
-                    abs_path = os.path.abspath(self.writer.path)
+                    abs_path = os.path.abspath(writer.path)
                     local_drive = '/'
 
                 frame_size_mb = self._frame_size_mb(camera_id, writer_id)
@@ -360,10 +368,10 @@ class Acquisition:
             free_size_gb = shutil.disk_usage(drive).free / 1024 ** 3
             if data_size_gb >= free_size_gb:
                 self.log.error(f"only {free_size_gb:.1f} available on drive: {drive}")
-                return False  # not enough local disk space
+                return False
             else:
                 self.log.info(f'available disk space = {free_size_gb:.1f} [GB] on drive {drive}')
-                return True  # enough local disk space
+                return True
 
     def check_external_tile_disk_space(self, tile: dict):
         """Checks local and ext disk space before scan to see if disk has enough space scan
@@ -534,6 +542,36 @@ class Acquisition:
             raise ValueError(f'{memory_gb} [GB] \
                                 GPU RAM requested but only \
                                 {total_gpu_memory_gb} [GB] available')
+
+    def update_current_state_config(self):
+        """Capture current state of instrument in config form"""
+
+        # update properties of operations
+        for device_name, op_dict in self.config['acquisition']['operations'].items():
+            for op_name, op_specs in op_dict.items():
+                op = getattr(self, inflection.pluralize(op_specs['type']))[device_name][op_name]
+                op_specs['properties'] = self._collect_properties(op)
+        # update properties of metadata
+        self.config['acquisition']['metadata']['properties'] = self._collect_properties(self.metadata)
+
+    @staticmethod
+    def _collect_properties(obj: object):
+        """Scan through object and return dictionary of properties
+        :param obj: object to find properties from """
+
+        properties = {}
+        for attr_name in dir(obj):
+            attr = getattr(type(obj), attr_name, None)
+            if isinstance(attr, property) or isinstance(inspect.unwrap(attr), property):
+                properties[attr_name] = getattr(obj, attr_name)
+        return properties
+
+    def save_config(self, path: Path):
+        """Save current config to path provided
+        :param path: path to save config to"""
+
+        with path.open("w") as f:
+            self.yaml.dump(self.config, f)
 
     def stop_acquisition(self):
         """Method to force quit acquisition by raising error"""

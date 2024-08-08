@@ -8,16 +8,19 @@ import inflection
 from threading import Lock, RLock
 from functools import wraps
 from voxel.descriptors.deliminated_property import _DeliminatedProperty
+import copy
 
 class Instrument:
 
-    def __init__(self, config_path: str, log_level='INFO'):
+    def __init__(self, config_path: str, yaml_handler: YAML = None, log_level='INFO'):
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.log.setLevel(log_level)
 
+        # create yaml object to use when loading and dumping config
+        self.yaml = yaml_handler if yaml_handler is not None else YAML()
+
         self.config_path = Path(config_path)
-        # yaml = YAML(typ='safe', pure=True)    # loads yaml in as dict. May want to use in future
-        self.config = YAML(typ='safe', pure=True).load(self.config_path)
+        self.config = self.yaml.load(self.config_path)
 
         # store a dict of {device name: device type} for convenience
         self.channels = {}
@@ -67,8 +70,8 @@ class Instrument:
         module = device_specs['module']
         init = device_specs.get('init', {})
         device_object = self._load_device(driver, module, init, lock)
-        settings = device_specs.get('settings', {})
-        self._setup_device(device_object, settings)
+        properties = device_specs.get('properties', {})
+        self._setup_device(device_object, properties)
 
         # create device dictionary if it doesn't already exist and add device to dictionary
         if not hasattr(self, device_type):
@@ -85,7 +88,8 @@ class Instrument:
 
         # Add subdevices under device and fill in any needed keywords to init
         for subdevice_name, subdevice_specs in device_specs.get('subdevices', {}).items():
-            self._construct_subdevice(device_object, subdevice_name, subdevice_specs, lock)
+            # copy so config is not altered by adding in parent devices
+            self._construct_subdevice(device_object, subdevice_name, copy.deepcopy(subdevice_specs), lock)
 
     def _construct_subdevice(self, device_object, subdevice_name, subdevice_specs, lock):
         """Handle the case where devices share serial ports or device objects
@@ -97,6 +101,7 @@ class Instrument:
         # Import subdevice class in order to access keyword argument required in the init of the device
         subdevice_class = getattr(importlib.import_module(subdevice_specs['driver']), subdevice_specs['module'])
         subdevice_needs = inspect.signature(subdevice_class.__init__).parameters
+        kwds = {}
         for name, parameter in subdevice_needs.items():
             # If subdevice init needs a serial port, add device's serial port to init arguments
             if parameter.annotation == Serial and Serial in [type(v) for v in device_object.__dict__.values()]:
@@ -122,15 +127,36 @@ class Instrument:
         return thread_safe_device_class(**kwds)
 
 
-    def _setup_device(self, device: object, settings: dict):
-        """Setup device based on settings dictionary
+    def _setup_device(self, device: object, properties: dict):
+        """Setup device based on property dictionary
         :param device: device to be setup
-        :param settings: dictionary of attributes, values to set according to config"""
+        :param properties: dictionary of attributes, values to set according to config"""
 
         self.log.info(f'setting up {device}')
-        # successively iterate through settings keys
-        for key, value in settings.items():
-            setattr(device, key, value)
+        # successively iterate through properties keys and if there is setter, set
+        for key, value in properties.items():
+            try:
+                setattr(device, key, value)
+            except (TypeError, AttributeError):
+                self.log.info(f'{device} property {key} has no setter')
+
+    def update_current_state_config(self):
+        """Capture current state of instrument in config form"""
+
+        for device_name, device_specs in self.config['instrument']['devices'].items():
+            device = getattr(self, inflection.pluralize(device_specs['type']))[device_name]
+            properties = {}
+            for attr_name in dir(device):
+                attr = getattr(type(device), attr_name, None)
+                if isinstance(attr, property) or isinstance(inspect.unwrap(attr), property):
+                    properties[attr_name] = getattr(device, attr_name)
+            device_specs['properties'] = properties
+
+    def save_config(self, path: Path):
+        """Save current config to path provided
+        :param path: path to save config to"""
+        with path.open("w") as f:
+            self.yaml.dump(self.config, f)
 
     def close(self):
         """Close functionality"""
