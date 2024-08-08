@@ -1,12 +1,12 @@
 from vortran_laser import StradusLaser as StradusVortran, BoolVal
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
-from voxel.devices.lasers.base import BaseLaser
+from voxel.devices.laser.base import BaseLaser
 
 MODULATION_MODES = {
-    'off': {'external_control': BoolVal.OFF, 'digital_modulation': BoolVal.OFF},
-    'analog': {'external_control': BoolVal.ON, 'digital_modulation': BoolVal.OFF},
-    'digital': {'external_control': BoolVal.OFF, 'digital_modulation': BoolVal.ON}
+    "off": {"external_control": BoolVal.OFF, "digital_modulation": BoolVal.OFF},
+    "analog": {"external_control": BoolVal.ON, "digital_modulation": BoolVal.OFF},
+    "digital": {"external_control": BoolVal.OFF, "digital_modulation": BoolVal.ON},
 }
 
 
@@ -41,11 +41,11 @@ class StradusLaser(BaseLaser):
     @property
     def modulation_mode(self):
         if self._inst.external_control == BoolVal.ON:
-            return 'analog'
+            return "analog"
         elif self._inst.digital_modulation == BoolVal.ON:
-            return 'digital'
+            return "digital"
         else:
-            return 'off'
+            return "off"
 
     @modulation_mode.setter
     def modulation_mode(self, value: str):

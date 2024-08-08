@@ -2,12 +2,12 @@ from oxxius_laser import LCX
 from serial import Serial
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
-from voxel.devices.lasers.base import BaseLaser
+from voxel.devices.laser.base import BaseLaser
 
 
 class OxxiusLCXLaser(BaseLaser):
 
-    def __init__(self, id: str, port: Serial or str, prefix: str):
+    def __init__(self, id: str, port: Serial | str, prefix: str):
         """
         Communicate with specific LBX laser in L6CC Combiner box.
 
@@ -34,11 +34,11 @@ class OxxiusLCXLaser(BaseLaser):
 
     @property
     def power_mw(self) -> float:
-        return self._inst.power
+        return float(self._inst.power)
 
     @property
     def temperature_c(self) -> float:
-        return self._inst.temperature
+        return float(self._inst.temperature)
 
     def status(self):
         return self.status()

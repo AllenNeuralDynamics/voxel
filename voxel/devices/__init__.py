@@ -1,7 +1,4 @@
 from .base import VoxelDevice
-from .lasers import BaseLaser
+from .laser import BaseLaser
 
-__all__ = [
-    'VoxelDevice',
-    'BaseLaser'
-]
+__all__ = ["VoxelDevice", "BaseLaser"]
