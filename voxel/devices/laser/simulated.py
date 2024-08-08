@@ -1,6 +1,6 @@
 import random
 
-from voxel.devices.lasers.base import BaseLaser
+from voxel.devices.laser.base import BaseLaser
 import logging
 from serial import Serial
 from voxel.descriptors.deliminated_property import DeliminatedProperty

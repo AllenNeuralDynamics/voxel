@@ -1,6 +1,6 @@
 import logging
 from voxel.devices.utils.singleton import Singleton
-from voxel.devices.lasers.base import BaseLaser
+from voxel.devices.laser.base import BaseLaser
 from aaopto_aotf import MPDS
 from aaopto_aotf.device_codes import *
 from sympy import symbols, solve

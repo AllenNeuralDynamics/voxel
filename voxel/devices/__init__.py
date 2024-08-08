@@ -1,7 +1,7 @@
 from .base import VoxelDevice
-from .lasers import BaseLaser
+from .error import VoxelDeviceError
 
 __all__ = [
     'VoxelDevice',
-    'BaseLaser'
+    'VoxelDeviceError',
 ]

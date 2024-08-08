@@ -5,7 +5,7 @@ from pycobolt import CoboltLaser
 from sympy import symbols, solve, Expr
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
-from voxel.devices.lasers.base import BaseLaser
+from voxel.devices.laser.base import BaseLaser
 
 # Define StrEnums if they don't yet exist.
 if sys.version_info < (3, 11):
