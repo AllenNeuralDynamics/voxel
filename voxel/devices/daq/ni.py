@@ -55,6 +55,7 @@ class DAQ(BaseDAQ):
         self.do_task = None
         self.ao_task = None
         self.co_task = None
+        self.ci_task = None
         self._tasks = None
 
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
@@ -69,6 +70,7 @@ class DAQ(BaseDAQ):
         self.dev.reset_device()
         self.ao_physical_chans = self.dev.ao_physical_chans.channel_names
         self.co_physical_chans = self.dev.co_physical_chans.channel_names
+        self.ci_physical_chans = self.dev.ci_physical_chans.channel_names
         self.do_physical_chans = self.dev.do_ports.channel_names
         self.dio_ports = [channel.replace(f'port', "PFI") for channel in self.dev.do_ports.channel_names]
         self.dio_lines = self.dev.di_lines.channel_names
@@ -96,8 +98,8 @@ class DAQ(BaseDAQ):
     def add_task(self, task_type: str, pulse_count=None):
 
         # check task type
-        if task_type not in ['ao', 'co', 'do']:
-            raise ValueError(f"{task_type} must be one of {['ao', 'co', 'do']}")
+        if task_type not in ['ao', 'co', 'do', 'ci']:
+            raise ValueError(f"{task_type} must be one of {['ao', 'co', 'do', 'ci']}")
 
         task = self.tasks[f'{task_type}_task']
 
@@ -113,8 +115,14 @@ class DAQ(BaseDAQ):
             if v not in valid and valid != []:
                 raise ValueError(f"{k} must be one of {valid}")
 
-        channel_options = {'ao': self.ao_physical_chans, 'do': self.do_physical_chans, 'co': self.co_physical_chans}
-        add_task_options = {'ao': daq_task.ao_channels.add_ao_voltage_chan, 'do': daq_task.do_channels.add_do_chan}
+        channel_options = {'ao': self.ao_physical_chans,
+                           'do': self.do_physical_chans,
+                           'co': self.co_physical_chans,
+                           'ci': self.ci_physical_chans}
+        add_task_options = {'ao': daq_task.ao_channels.add_ao_voltage_chan,
+                            'do': daq_task.do_channels.add_do_chan,
+                            'co': daq_task.co_channels.add_co_pulse_chan_freq,
+                            'ci': daq_task.ci_channels.add_ci_count_edges_chan}
 
         if task_type in ['ao', 'do']:
             self._timing_checks(task_type)
@@ -156,9 +164,9 @@ class DAQ(BaseDAQ):
             # store the total task time
             self.task_time_s[task['name']] = total_time_ms / 1000
 
-        else:  # co channel
-            # if f"{self.id}/{ timing['output_port']}" not in self.dio_ports:
-            #     raise ValueError("output port must be one of %r." % self.dio_ports)
+        else:  # co or ci channel
+            if f"{self.id}/{channel_port}" not in channel_options[task_type]:
+                raise ValueError(f"{task_type} number must be one of {channel_options[task_type]}")
 
             if timing['frequency_hz'] < 0:
                 raise ValueError(f"frequency must be >0 Hz")
@@ -167,14 +175,21 @@ class DAQ(BaseDAQ):
                 if f"{self.id}/{channel_number}" not in self.co_physical_chans:
                     raise ValueError("co number must be one of %r." % self.co_physical_chans)
                 physical_name = f"/{self.id}/{channel_number}"
-                co_chan = daq_task.co_channels.add_co_pulse_chan_freq(
-                    counter=physical_name,
-                    units=FrequencyUnits.HZ,
-                    freq=timing['frequency_hz'],
-                    duty_cycle=0.5)
-                co_chan.co_pulse_term = f'/{self.id}/{timing["output_port"]}'
-                pulse_count = {'sample_mode': AcqType.FINITE, 'samps_per_chan': pulse_count} \
-                    if pulse_count is not None else {'sample_mode': AcqType.CONTINUOUS}
+
+                if task_type == 'co':
+                    co_chan = add_task_options[task_type](
+                        counter=physical_name,
+                        units=FrequencyUnits.HZ,
+                        freq=timing['frequency_hz'],
+                        duty_cycle=0.5)
+                    co_chan.co_pulse_term = f'/{self.id}/{timing["output_port"]}'
+                    pulse_count = {'sample_mode': AcqType.FINITE, 'samps_per_chan': pulse_count} \
+                        if pulse_count is not None else {'sample_mode': AcqType.CONTINUOUS}
+                else:   # ci task
+                    ci_chan = add_task_options[task_type](counter=physical_name,
+                                                          edge=nidaqmx.constants.Edge.RISING)
+                    ci_chan.ci_count_edges_term = f'/{self.id}/{timing["output_port"]}'
+
             if timing['trigger_mode'] == 'off':
                 daq_task.timing.cfg_implicit_timing(
                     **pulse_count)
@@ -461,17 +476,17 @@ class DAQ(BaseDAQ):
         self.do_task.control(TaskMode.TASK_COMMIT)
 
     def start(self):
-        for task in [self.ao_task, self.do_task, self.co_task]:
+        for task in [self.ao_task, self.do_task, self.co_task, self.ci_task]:
             if task is not None:
                 task.start()
 
     def stop(self):
-        for task in [self.ao_task, self.do_task, self.co_task]:
+        for task in [self.ao_task, self.do_task, self.co_task, self.ci_task]:
             if task is not None:
                 task.stop()
 
     def close(self):
-        for task in [self.ao_task, self.do_task, self.co_task]:
+        for task in [self.ao_task, self.do_task, self.co_task, self.ci_task]:
             if task is not None:
                 task.close()
 
@@ -481,13 +496,13 @@ class DAQ(BaseDAQ):
 
     def wait_until_done_all(self, timeout=1.0):
 
-        for task in [self.ao_task, self.do_task, self.co_task]:
+        for task in [self.ao_task, self.do_task, self.co_task, self.ci_task]:
             if task is not None:
                 task.wait_until_done(timeout)
 
     def is_finished_all(self):
 
-        for task in [self.ao_task, self.do_task, self.co_task]:
+        for task in [self.ao_task, self.do_task, self.co_task, self.ci_task]:
             if task is not None:
                 if not task.is_task_done():
                     return False
