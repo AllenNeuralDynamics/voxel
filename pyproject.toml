@@ -1,43 +1,126 @@
 [build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "voxel"
+description = "A python package for controlling Light Sheet Microscopes"
+license = { text = "MIT" }
+requires-python = ">=3.9, <3.12"
 authors = [
     { name = "Micah Woodard", email = "micah.woodard@alleninstitute.org" },
     { name = "Adam Glaser", email = "adam.glaser@alleninstitute.org" },
     { name = "Walter Mwaniki", email = "walter.mwaniki@alleninstitute.org" },
 ]
-version = "0.0.0"
-dynamic = ["description"]
-description-file = 'README.md'
-dependencies = [
-    'pyserial >= 3.5',
-    'ruamel-yaml >= 0.18.5',
-    'psutil >= 5.9.8',
-    'nidaqmx >= 0.9.0',
-    'matplotlib >= 3.8.2',
-    'scipy >= 1.12.0',
-    'PyImarisWriter >= 0.7.0',
-    'tifffile >= 2024.1.30',
-    'egrabber >= 0.0.2',
-    'h5py >= 3.0.0',
-    'scikit-image >= 0.20.0',
-    'gputools >= 0.2.14',
-    'scikit-tensor-py3',
-    'tensorstore >= 0.1.56',
-    'pyclesperanto >= 0.8.2',
-    'pylablib >= 1.4.2',
-    'pytest >= 8.2.1',
-    'inflection >= 0.5.1',
-    'tigerasi >= 0.0.26',
-    'pydantic >= 2.7.3',
-    'PyVISA >= 1.14.1',
-    'PyVISA-py >= 0.7.2',
-    'pyusb >= 1.2.1',
-    'imohash >= 1.0.5',
-    'sympy >= 1.12.1',
-    'pycobolt @ git+https://github.com/cobolt-lasers/pycobolt.git',
-    'histogram1d >= 0.14',
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
 ]
+readme = "README.md"
+keywords = [
+    "microscopy",
+    "light-sheet",
+    "lightsheet",
+    "microscope",
+    "imaging",
+]
+dynamic = ["version"]
+
+dependencies = [
+    "ruamel-yaml>=0.18.5",
+    "inflection>=0.5.1",
+    "pydantic>=2.7.3",
+    "imohash>=1.0.5",
+    # device driver dependencies
+    "pyserial>=3.5",
+    "pyusb>=1.2.1",
+    "psutil>=5.9.8",
+    "PyVISA>=1.14.1",
+    "PyVISA-py>=0.7.2",
+    "pylablib>=1.4.2",
+    "nidaqmx>=0.9.0",
+    "tigerasi>=0.0.26",
+    # data handling dependencies
+    "h5py>=3.0.0",
+    # processing and utils dependencies
+    "pyclesperanto>=0.8.2",
+    "scikit-image>=0.20.0",
+    "gputools>0.2.14",
+    "scikit-tensor-py3",
+    "tensorstore>=0.1.56",
+    "matplotlib>=3.8.2",
+    "scipy>=1.12.0",
+    "fast_histogram>=0.14",
+    "sympy>=1.12.1",
+    "numpy>2.0.0",
+]
+
+
+[project.optional-dependencies]
+"imaris" = ["PyImarisWriter>=0.7.0"]
+"tifffile" = ["tifffile>=2024.1.30"]
+"egrabber" = ["egrabber>=0.0.2"]
+"pycobolt" = ["pycobolt @ git+https://github.com/cobolt-lasers/pycobolt.git"]
+"dev" = [
+    "pytest>=8.2.1",
+    "black",
+    "coverage",
+    "flake8",
+    "interrogate",
+    "isort",
+    "Sphinx",
+    "furo",
+]
+
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["voxel"]
+
+[tool.setuptools.dynamic]
+version = { attr = "voxel.__version__" }
+
+[tool.black]
+line-length = 120
+target-version = ["py37"]
+exclude = '''
+(
+    /(
+        \.eggs         # exclude a few common directories in the
+      | \.git          # root of the project
+      | \.hg
+      | \.mypy_cache
+      | \.tox
+      | \.venv
+      | _build
+      | build
+      | dist
+    )/
+    | .gitignore
+)
+'''
+
+[tool.coverage.run]
+omit = ["*__init__*"]
+source = ["src", "tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "from",
+    "import",
+    "pragma: no cover",
+]
+fail_under = 100
+
+[tool.isort]
+line_length = 120
+profile = "black"
+
+[tool.interrogate]
+exclude = ["setup.py", "docs", "build"]
+fail_under = 100
