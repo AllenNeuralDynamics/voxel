@@ -45,7 +45,7 @@ class VoxelDevice(ABC):
         """
         self.name = name
         self.log = get_component_logger(self)
-        self.daq_channel: WaveGenChannel
+        self.acq_daq_channel: WaveGenChannel
         self.device_type: VoxelDeviceType = device_type
 
     def apply_settings(self, settings: dict):

@@ -1,5 +1,6 @@
 import importlib
 from enum import StrEnum
+from os import name
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
@@ -88,19 +89,13 @@ class DaqSpecs(BaseModel):
     tasks: dict[str, DaqTaskSpecs]
 
 
-class WaveformSpecs(BaseModel):
-    task: str
-    pin: str
-    apply_filter: bool = False
-
-
 class ObjectSpec(BaseModel):
     driver: str
     kwds: dict[str, Any] = {}
 
 
 class DeviceSpec(ObjectSpec):
-    waveform: WaveformSpecs | None = None
+    acq_pin: str | None = None
 
 
 class ChannelSpec(BaseModel):
@@ -163,6 +158,9 @@ class InstrumentBuilder:
         for task_name in daq_specs.tasks:
             self._create_daq_task(task_name=task_name)
 
+        if "acq_task" not in self.daq_tasks:
+            self.log.warning("No acquisition task found in the DAQ configuration")
+
     def _create_daq_task(self, task_name: str) -> None:
         if task_name in self.daq_tasks:
             return  # Task already created
@@ -206,16 +204,16 @@ class InstrumentBuilder:
 
         self.devices[device_name] = device_class(**kwargs)
 
-        if device_spec.waveform:
-            waveform_spec = device_spec.waveform
-            task = self.daq_tasks[waveform_spec.task]
-            assert isinstance(task, WaveGenTask)
-            channel = task.add_ao_channel(
-                name=device_name,
-                pin=waveform_spec.pin,
-                apply_filter=waveform_spec.apply_filter,
-            )
-            self.devices[device_name].daq_channel = channel
+        if device_spec.acq_pin:
+            if "acq_task" in self.daq_tasks:
+                task = self.daq_tasks["acq_task"]
+                assert isinstance(task, WaveGenTask)
+                channel = task.add_ao_channel(name=device_name, pin=device_spec.acq_pin)
+                self.devices[device_name].acq_daq_channel = channel
+            else:
+                self.log.warning(
+                    f"Did not create daq channel for device: {device_name}. Daq Channel specified but no acquisition task found"
+                )
 
     def _initialize_channels(self) -> None:
         self.log.info("Initializing channels...")

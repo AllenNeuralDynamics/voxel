@@ -24,6 +24,7 @@ from voxel.utils.vec import Vec2D, Vec3D
 class WriterMetadata:
     """Configuration properties for a frame stack writer."""
 
+    path: str | Path
     frame_count: int
     frame_shape: Vec2D
     position: Vec3D
@@ -36,7 +37,7 @@ class WriterMetadata:
 class VoxelWriter(LoggingSubprocess):
     """Writer class for voxel data with double buffering"""
 
-    def __init__(self, path: str, name: str) -> None:
+    def __init__(self, name: str) -> None:
         """Initialize the writer
 
         :param path: Directory to write files to
@@ -45,10 +46,6 @@ class VoxelWriter(LoggingSubprocess):
         :type name: str
         """
         super().__init__(name=name)
-
-        self.dir = Path(path)
-        if not self.dir.exists():
-            self.dir.mkdir(parents=True, exist_ok=True)
 
         self.dimension_order = Pixels_DimensionOrder.XYZCT
         self.voxel_size_unit = UnitsLength.MICROMETER
@@ -132,13 +129,17 @@ class VoxelWriter(LoggingSubprocess):
         """
         self.metadata = metadata
         try:
+            self.dir = Path(self.metadata.path)
+            if not self.dir.exists():
+                self.dir.mkdir(parents=True, exist_ok=True)
+                self.log.warning(f"Directory {self.dir} did not exist. Created it.")
             batch_shape = (
                 self.batch_size_px,
                 self.metadata.frame_shape.y,
                 self.metadata.frame_shape.x,
             )
             self.dbl_buf = SharedDoubleBuffer(batch_shape, self.dtype)
-            self.log.info(f"Configured writer with buffer shape: {batch_shape}")
+            self.log.info(f"Configured writer with buffer {batch_shape} and output directory: {self.dir}")
         except Exception as e:
             if self.dbl_buf:
                 self.dbl_buf.close_and_unlink()

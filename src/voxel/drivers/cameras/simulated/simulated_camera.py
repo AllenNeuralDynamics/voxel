@@ -227,7 +227,7 @@ class SimulatedCamera(VoxelCamera):
     def prepare(self) -> None:
         pass
 
-    def start(self, frame_count: int) -> None:
+    def start(self, frame_count: int = -1) -> None:
         self.instance.start_acquisition(frame_count)
 
     def stop(self) -> None:

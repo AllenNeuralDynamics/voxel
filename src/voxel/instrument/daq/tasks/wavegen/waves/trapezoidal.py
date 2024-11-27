@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
 from scipy import signal
 
 from voxel.utils.descriptors.deliminated import deliminated_property
@@ -22,14 +23,18 @@ class TrapezoidalWave:
         high_point: float = 0.5,
         fall_point: float = 0.5,
         low_point: float = 1.5,
-        apply_filter: bool = False,
         is_digital: bool = False,
+        apply_filter: bool | None = False,
     ) -> None:
         self.name = name
         self.timing = timing
         self.min_voltage_limit = min_voltage_limit
         self.max_voltage_limit = max_voltage_limit
+
         self.is_digital = is_digital
+        self._filter = apply_filter if apply_filter is not None else not is_digital
+        self._filter_order = 3
+        self._lowpass_cutoff = self.timing.sampling_rate / 10
 
         self._max_voltage = max_voltage if max_voltage else self.max_voltage_limit
         self._min_voltage = min_voltage if min_voltage else self.min_voltage_limit
@@ -37,10 +42,6 @@ class TrapezoidalWave:
         self._high_point = high_point if not is_digital else rise_point
         self._fall_point = fall_point
         self._low_point = low_point if not is_digital else fall_point
-
-        self._filter = apply_filter
-        self._filter_order = 3
-        self._lowpass_cutoff = self.timing.sampling_rate / 10
 
         self.rise_point = self.rise_point  # trigger validation
         self.data = self._generate()
@@ -207,7 +208,7 @@ class TrapezoidalWave:
         middle_range_end = samples * 2
         return filtered_waveform[samples:middle_range_end]
 
-    def plot(self, ax: plt.Axes | None = None, color="blue", *, periods: int = 2) -> plt.Axes:
+    def plot(self, ax: Axes | None = None, color="blue", *, periods: int = 2) -> Axes:
         """
         Plot the waveform either on a new figure or an existing axes.
 
@@ -249,32 +250,32 @@ class TrapezoidalWave:
 
         return ax
 
-    def plot2(self, ax: plt.Axes | None = None, color="blue", *, periods: int = 2) -> plt.Axes | None:
-        show = True if ax is None else False
-        if show:
-            plt.figure()
-            ax = plt.gca()
-        period_ms = self.timing.period_ms
-        # add a vertical markers for each period
-        for i in range(periods + 1):
-            ax.axvline(i * period_ms, color="gray", linestyle="--", alpha=0.5)
+    # def plot2(self, ax: Axes | None = None, color="blue", *, periods: int = 2) -> Axes | None:
+    #     show = True if ax is None else False
+    #     if show:
+    #         plt.figure()
+    #         ax = plt.gca()
+    #     period_ms = self.timing.period_ms
+    #     # add a vertical markers for each period
+    #     for i in range(periods + 1):
+    #         ax.axvline(i * period_ms, color="gray", linestyle="--", alpha=0.5)
 
-        # Plot waveform
-        full_waveform = np.tile(self.data, periods)
-        time = np.linspace(0, periods * period_ms, len(full_waveform))
-        ax.plot(time, full_waveform, color=color, label=self.name, alpha=0.5)
-        # add horizontal markers for min, max, and average voltage
-        ax.axhline(self.max_voltage, color="teal", linestyle="--", alpha=0.5)
-        ax.axhline(self.min_voltage, color="teal", linestyle="--", alpha=0.5)
-        ax.axhline((self.max_voltage + self.min_voltage) / 2, color="teal", linestyle="--", alpha=0.5)
-        if not show:
-            return ax
-        plt.show()
+    #     # Plot waveform
+    #     full_waveform = np.tile(self.data, periods)
+    #     time = np.linspace(0, periods * period_ms, len(full_waveform))
+    #     ax.plot(time, full_waveform, color=color, label=self.name, alpha=0.5)
+    #     # add horizontal markers for min, max, and average voltage
+    #     ax.axhline(self.max_voltage, color="teal", linestyle="--", alpha=0.5)
+    #     ax.axhline(self.min_voltage, color="teal", linestyle="--", alpha=0.5)
+    #     ax.axhline((self.max_voltage + self.min_voltage) / 2, color="teal", linestyle="--", alpha=0.5)
+    #     if not show:
+    #         return ax
+    #     plt.show()
 
 
 # Example usage
 if __name__ == "__main__":
     timing = WaveGenTiming(sampling_rate=1e6, period_ms=500)
-    wv = TrapezoidalWave("TestGenerator", timing, lowpass_cutoff=10)
+    wv = TrapezoidalWave(name="TestGenerator", timing=timing, min_voltage_limit=-1, max_voltage_limit=1)
     print(wv)
     wv.plot()

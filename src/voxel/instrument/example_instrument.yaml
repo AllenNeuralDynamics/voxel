@@ -24,9 +24,7 @@ devices:
     driver: voxel.drivers.cameras.simulated.SimulatedCamera
     kwds:
       pixel_size_um: 3.5, 3.5
-    waveform:
-      task: acq_task
-      pin: ao0
+    acq_pin: ao0
   objective_40x:
     driver: voxel.instrument.devices.lens.VoxelLens
     kwds:
@@ -35,16 +33,28 @@ devices:
     driver: voxel.drivers.lasers.simulated.SimulatedLaser
     kwds:
       wavelength: 488
-    waveform:
-      task: acq_task
-      pin: ao1
+    acq_pin: ao1
   laser_561:
     driver: voxel.drivers.lasers.simulated.SimulatedLaser
     kwds:
       wavelength: 561
-    waveform:
-      task: acq_task
-      pin: ao2
+    acq_pin: ao2
+  z-axis:
+    driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+    kwds:
+      dimension: Z
+    acq_pin: ao3
+  etl:
+    driver: voxel.drivers.tunable_lenses.simulated.SimulatedTunableLens
+    acq_pin: ao4
+  x-axis:
+    driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+    kwds:
+      dimension: X
+  y-axis:
+    driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+    kwds:
+      dimension: Y
   filter_488:
     driver: voxel.drivers.filters.simulated.SimulatedFilter
     kwds:
@@ -55,21 +65,6 @@ devices:
     kwds:
       wheel: filterwheel
       position: 2
-  x-axis:
-    driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
-    kwds:
-      dimension: X
-    waveform:
-      task: acq_task
-      pin: ao3
-  y-axis:
-    driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
-    kwds:
-      dimension: Y
-  z-axis:
-    driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
-    kwds:
-      dimension: Z
   filterwheel:
     driver: voxel.drivers.filters.simulated.SimulatedFilterWheel
     kwds:
@@ -78,8 +73,6 @@ devices:
 io:
   imaris: &imaris
     driver: voxel.drivers.writers.imaris.ImarisWriter
-    kwds:
-      path: D:/voxel_test
   robocopy: &robocopy
     driver: voxel.drivers.transfers.robocopy.RobocopyFileTransfer
     kwds:
@@ -103,16 +96,23 @@ channels:
     transfer: *robocopy
 
 settings:
-  simulated_camera_1:
+  channel.*.camera.acq_waveforms:
+    min_voltage: 0.0
+    max_voltage: 5.0
+    is_digital: True
+    rise_point: 0.0
+    fall_point: 0.5
+
+  device.simulated_camera_1:
     exposure_time_ms: 20.0
     pixel_type: 16
     roi_height_px: 512
     roi_width_px: 512
     bit_packing_mode: msb
-  channels.*.writer:
+  channel.*.writer:
     compression: lz4shuffle
     pixel_type: uint16
-  channels.*.file_transfer:
+  channel.*.file_transfer:
     verify_transfer: True
     max_retry: 3
     timeout_s: 60

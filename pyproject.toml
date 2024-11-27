@@ -44,6 +44,7 @@ dependencies = [
     "cupy>=13.3.0",
     "torch>=2.4.1",
     "pyimariswriter>=0.7.0",
+    "psutil>=6.1.0",
 ]
 
 [project.optional-dependencies]

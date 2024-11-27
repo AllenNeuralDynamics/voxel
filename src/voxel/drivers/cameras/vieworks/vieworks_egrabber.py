@@ -616,7 +616,7 @@ class VieworksCamera(VoxelCamera):
             raise RuntimeError("Failed to prepare camera") from e
         self.log.info("Camera preparation complete. Successfully allocated buffer.")
 
-    def start(self, frame_count: int = GENTL_INFINITE):
+    def start(self, frame_count: int | None = GENTL_INFINITE):
         """
         Start the camera to acquire a certain number of frames. \n
         If frame number is not specified, acquires infinitely until stopped. \n

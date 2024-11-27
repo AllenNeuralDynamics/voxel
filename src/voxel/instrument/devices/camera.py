@@ -345,7 +345,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         pass
 
     @abstractmethod
-    def start(self, frame_count: int) -> None:
+    def start(self, frame_count: int = -1) -> None:
         """Start the camera to acquire a certain number of frames. \n
         If frame number is not specified, acquires infinitely until stopped. \n
         Initializes the camera buffer.

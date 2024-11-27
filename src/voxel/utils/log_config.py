@@ -8,8 +8,8 @@ from pathlib import Path
 
 LOGGING_SUBPROC_SUFFIX = "_sub"
 LOGGING_PROJECT_NAME = "voxel"
-NAME_MIN_WIDTH = 50
-MSG_MIN_WIDTH = 10
+NAME_MIN_WIDTH = 8
+MSG_MIN_WIDTH = 8
 LOG_QUEUE = Queue(-1)
 
 

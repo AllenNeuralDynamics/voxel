@@ -39,12 +39,11 @@ class ImarisWriter(VoxelWriter):
     def __init__(
         self,
         *,
-        path: str,
         compression=ImarisCompression.NONE,
         batch_size_px: int = 64,
         name: str = "ImarisWriter",
     ) -> None:
-        super().__init__(path=path, name=name)
+        super().__init__(name=name)
         self._compression = compression  # ImarisWriter handles compression internally
         self._batch_size_px = batch_size_px
         self._block_size = Vec3D(x=64, y=64, z=64)

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-type WaveformData = np.ndarray[float]
+WaveformData = np.ndarray
 
 
 @dataclass
