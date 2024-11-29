@@ -2,7 +2,7 @@ from oxxius_laser import LCX
 from serial import Serial
 
 from voxel.utils.descriptors.deliminated import deliminated_property
-from voxel.instrument.devices.laser import VoxelLaser
+from voxel.devices.laser import VoxelLaser
 
 
 class OxxiusLCXLaser(VoxelLaser):

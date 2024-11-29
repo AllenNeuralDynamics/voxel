@@ -5,7 +5,7 @@ from nidaqmx.task.channels import DOChannel as NiDOChannel
 
 from ...daq import PinInfo, VoxelDaq, VoxelDaqTask
 from ..clockgen import ClockGenTask
-from .waves import SinusoidalWave, TrapezoidalWave, WaveformData, WaveGenTiming
+from .waves import TrapezoidalWave, WaveGenTiming
 
 
 class WaveGenChannel:
@@ -15,7 +15,7 @@ class WaveGenChannel:
         self.name = name
         self.task = task
         self.inst = inst
-        self.wave = TrapezoidalWave(
+        self.wave: TrapezoidalWave = TrapezoidalWave(
             name=f"{self.name}_waveform",
             timing=self.task.timing,
             min_voltage_limit=self.task.daq.min_ao_voltage,
@@ -46,7 +46,7 @@ class WaveGenTask(VoxelDaqTask):
         self,
         name: str,
         daq: "VoxelDaq",
-        sampling_rate_hz: int,
+        sampling_rate_hz: int | float,
         period_ms: float,
         trigger: ClockGenTask | None = None,
     ) -> None:
@@ -101,7 +101,7 @@ class WaveGenTask(VoxelDaqTask):
 
     def add_ao_channel(self, name: str, pin: str, apply_filter: bool = True) -> WaveGenChannel:
         """Add an analog output channel to the task."""
-        pin = self.daq.assign_pin(pin)
+        pin: PinInfo = self.daq.assign_pin(pin)
         channel_inst = self.inst.ao_channels.add_ao_voltage_chan(pin.path, name)
         channel = WaveGenChannel(name=name, task=self, inst=channel_inst, apply_filter=apply_filter, is_digital=False)
         self.channels[name] = channel
@@ -145,6 +145,3 @@ class WaveGenTask(VoxelDaqTask):
             trigger_source=self.daq.get_pfi_path(self._trigger.out)
         )
         self.inst.triggers.start_trigger.retriggerable = True
-
-
-__all__ = ["WaveGenTask", "WaveGenChannel", "WaveGenTiming", "WaveformData", "TrapezoidalWave", "SinusoidalWave"]

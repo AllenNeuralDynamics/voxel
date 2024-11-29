@@ -10,8 +10,8 @@ from tigerasi.device_codes import (
 )
 from tigerasi.tiger_controller import TigerController
 
-from voxel.instrument.devices import VoxelDevice, VoxelDeviceConnectionError
-from voxel.instrument.devices.linear_axis import LinearAxisDimension, ScanState
+from voxel.devices import VoxelDevice, VoxelDeviceConnectionError
+from voxel.devices.linear_axis import LinearAxisDimension, ScanState
 
 type AxisMap = dict[str, str]  # axis name -> hardware_axis
 type JoystickMap = dict[str, str]  # axis name -> joystick axis

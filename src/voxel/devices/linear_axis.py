@@ -77,7 +77,7 @@ class VoxelLinearAxis(VoxelDevice):
 
     @property
     @abstractmethod
-    def position_mm(self) -> float | None:
+    def position_mm(self) -> float:
         """Current position in mm"""
         pass
 

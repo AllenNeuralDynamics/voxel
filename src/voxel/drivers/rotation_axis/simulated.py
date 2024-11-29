@@ -1,7 +1,7 @@
 import time
 from typing import Optional
 
-from voxel.instrument.devices.rotation_axis import VoxelRotationAxis
+from voxel.devices.rotation_axis import VoxelRotationAxis
 
 
 class SimulatedRotationAxis(VoxelRotationAxis):

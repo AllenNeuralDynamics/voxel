@@ -2,6 +2,7 @@ from typing import Literal
 
 from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.constants import FrequencyUnits, Level
+from nidaqmx.task.channels import COChannel as NiCOChannel
 
 from voxel.utils.descriptors.deliminated import deliminated_property
 
@@ -105,7 +106,7 @@ class ClockGenTask(VoxelDaqTask):
     def _reconfigure_task(self) -> None:
         self.channel = self._create_co_channel()
 
-    def _create_co_channel(self) -> None:
+    def _create_co_channel(self) -> NiCOChannel:
         """Create a counter output channel for triggering."""
         return self.inst.co_channels.add_co_pulse_chan_freq(
             counter=self.counter.path,

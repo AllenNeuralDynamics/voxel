@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum, IntEnum
 
-from voxel.instrument.drivers.camera import Binning, PixelType
+from voxel.devices.camera import Binning, PixelType
 
 pixel_type_lut = {
     PixelType.MONO16: "MONO16",

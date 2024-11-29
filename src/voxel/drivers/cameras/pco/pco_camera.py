@@ -1,12 +1,12 @@
 import time
-from typing import Union, Literal, tuple
+from typing import Literal
 
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.vec import Vec2D
-from voxel.instrument.devices import VoxelDeviceConnectionError
-from voxel.instrument.devices.camera import VoxelCamera, AcquisitionState, PixelType, Binning
-from voxel.instrument.drivers.camera.pco.definitions import (
+from voxel.devices import VoxelDeviceConnectionError
+from voxel.devices.camera import VoxelCamera, AcquisitionState, PixelType, Binning
+from voxel.drivers.cameras.pco.definitions import (
     pixel_type_lut,
     binning_lut,
     TriggerMode,
@@ -14,9 +14,9 @@ from voxel.instrument.drivers.camera.pco.definitions import (
     TriggerSettings,
     TriggerSource,
 )
-from voxel.instrument.drivers.camera.pco.sdk import Camera
+from voxel.drivers.cameras.pco.sdk import Camera
 
-type EnumeratedProp = Union[TriggerMode, TriggerSource, ReadoutMode]
+type EnumeratedProp = TriggerMode | TriggerSource | ReadoutMode
 type LimitType = Literal["min", "max", "step"]
 
 

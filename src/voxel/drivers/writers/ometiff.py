@@ -1,7 +1,7 @@
 from typing import Self
 import tifffile as tf
 import numpy as np
-from voxel.instrument.io.writer import VoxelWriter, WriterMetadata, PixelType
+from voxel.io.writer import VoxelWriter, WriterMetadata, PixelType
 
 COMPRESSION_METHODS = [None, "deflate", "lzw", "zstd", "lzma"]
 

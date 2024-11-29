@@ -3,13 +3,16 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 import numpy as np
-from voxel.instrument.channel import VoxelChannel
-from voxel.instrument.frame_stack import FrameStack
+from voxel.channel import VoxelChannel
 from voxel.utils.vec import Vec2D
 from voxel.utils.log_config import get_logger
 import psutil
 
-from .plan import VoxelAcquisitionPlanner
+from .planner import VoxelAcquisitionPlanner
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from voxel.frame_stack import FrameStack
 
 
 @dataclass

@@ -3,7 +3,7 @@ from serial import Serial
 from sympy import symbols, solve, Expr
 
 from voxel.utils.descriptors.deliminated import deliminated_property
-from voxel.instrument.devices.laser import VoxelLaser
+from voxel.devices.laser import VoxelLaser
 
 MODULATION_MODES = {
     "off": {"external_control_mode": BoolVal.OFF, "digital_modulation": BoolVal.OFF},

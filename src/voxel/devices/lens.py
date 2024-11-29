@@ -2,8 +2,6 @@
 Module for a voxel lens device.
 """
 
-from typing import Optional
-
 from .base import VoxelDevice, VoxelDeviceType
 
 
@@ -24,7 +22,7 @@ class VoxelLens(VoxelDevice):
     def __init__(
         self,
         magnification: float,
-        name: str | None = None,
+        name: str = "voxel_lens",
         focal_length_um: float | None = None,
         aperture_um: float | None = None,
     ):

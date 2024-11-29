@@ -1,4 +1,4 @@
-from voxel.instrument.devices.camera import AcquisitionState, VoxelCamera, VoxelFrame, TriggerMode
+from voxel.devices.camera import AcquisitionState, VoxelCamera, VoxelFrame, TriggerMode
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.vec import Vec2D

@@ -3,8 +3,8 @@ from typing import Literal
 
 from tigerasi.device_codes import JoystickInput
 
-from voxel.instrument.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
-from voxel.instrument.drivers.hubs.tigerbox import ASITigerBox
+from voxel.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
+from voxel.drivers.hubs.tigerbox import ASITigerBox
 from voxel.utils.descriptors.deliminated import deliminated_property
 
 ASIJoystickInput = JoystickInput

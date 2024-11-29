@@ -25,10 +25,9 @@ class VoxelFlipMount(VoxelDevice):
 
     @position.setter
     @abstractmethod
-    def position(self, position_name: str, wait=False):
+    def position(self, position_name: str):
         """Set the flip mount to a specific position
         :param position_name: Name of the position to move to
-        :param wait: Wait for the flip mount to finish flipping. Default: False
         """
         pass
 

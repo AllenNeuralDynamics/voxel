@@ -1,8 +1,8 @@
 import time
 from typing import Callable, Literal, Optional, Union
 
-from voxel.instrument.devices import VoxelDeviceConnectionError
-from voxel.instrument.devices.camera import (
+from voxel.devices import VoxelDeviceConnectionError
+from voxel.devices.camera import (
     BYTES_PER_MB,
     AcquisitionState,
     VoxelCamera,

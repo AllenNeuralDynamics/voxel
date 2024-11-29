@@ -88,7 +88,8 @@ def plot_scan_path(scan_path: list[Vec2D], title: str):
     y = [point.y for point in scan_path]
 
     # Create a colormap based on the order of tiles
-    colors = plt.cm.viridis(np.linspace(0, 1, len(scan_path)))
+    # colors = plt.cm.viridis(np.linspace(0, 1, len(scan_path)))
+    colors = plt.cm.get_cmap("viridis")(np.linspace(0, 1, len(scan_path)))
 
     # Plot tiles
     scatter = ax.scatter(x, y, c=range(len(scan_path)), cmap="viridis", s=100)

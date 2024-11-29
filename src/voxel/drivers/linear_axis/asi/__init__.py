@@ -1,3 +1,3 @@
-from .asi import ASITigerLinearAxis, ASITigerBox, ASIJoystickInput, ASITriggeredStepAndShootConfig
+from .asi import ASITigerLinearAxis, ASIJoystickInput, ASITriggeredStepAndShootConfig
 
-__all__ = ["ASITigerLinearAxis", "ASITigerBox", "ASIJoystickInput", "ASITriggeredStepAndShootConfig"]
+__all__ = ["ASITigerLinearAxis", "ASIJoystickInput", "ASITriggeredStepAndShootConfig"]

@@ -3,7 +3,7 @@ from serial import Serial
 
 from voxel.utils.descriptors.deliminated import deliminated_property
 from .obis_lx import obis_modulation_getter, obis_modulation_setter
-from voxel.instrument.devices.laser import VoxelLaser
+from voxel.devices.laser import VoxelLaser
 
 MODULATION_MODES = {"off": "CWP", "analog": "ANALOG", "digital": "DIGITAL", "mixed": "MIXED"}
 

@@ -2,7 +2,7 @@ from time import sleep
 from typing import Literal
 
 from voxel.utils.descriptors.deliminated import deliminated_property
-from voxel.instrument.devices.flip_mount import VoxelFlipMount
+from voxel.devices.flip_mount import VoxelFlipMount
 
 FLIP_TIME_RANGE_MS: tuple[float, float, float] = (500.0, 2800.0, 100.0)  # min, max, step
 

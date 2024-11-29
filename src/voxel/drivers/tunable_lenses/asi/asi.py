@@ -1,12 +1,8 @@
-from tigerasi.device_codes import *
-from tigerasi.tiger_controller import TigerController
-
-from voxel.instrument.hubs.tigerbox import ASITigerBox
-from voxel.instrument.drivers.tunable_lenses.base import VoxelTunableLens, TunableLensControlMode
+from voxel.drivers.hubs.tigerbox import ASITigerBox
+from voxel.devices.tunable_lens import VoxelTunableLens, TunableLensControlMode
 
 
 class ASITunableLens(VoxelTunableLens):
-
     def __init__(
         self,
         name: str,
@@ -15,10 +11,10 @@ class ASITunableLens(VoxelTunableLens):
     ):
         """Connect to ASI tunable lens.
         :param name: unique voxel name for this device.
-        :param tigerbox: TigerController instance.
+        :param tigerbox: ASITigerBox instance.
         :param hardware_axis: stage hardware axis.
-        :type name: st
-        :type tigerbox: TigerController
+        :type name: str
+        :type tigerbox: ASITigerBox
         :type hardware_axis: str
         :raises DeviceConnectionError: if the hardware axis is not found or is already registered.
         """

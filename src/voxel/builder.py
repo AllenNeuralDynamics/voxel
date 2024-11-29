@@ -1,18 +1,18 @@
-import importlib
 from enum import StrEnum
-from os import name
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
 
-from voxel.instrument.channel import VoxelChannel
-from voxel.instrument.daq.daq import VoxelDaq, VoxelDaqTask
-from voxel.instrument.daq.tasks.clockgen import ClockGenTask
-from voxel.instrument.daq.tasks.dc_control import DCControlTask
-from voxel.instrument.daq.tasks.wavegen import WaveGenTask
-from voxel.instrument.devices import (
+from voxel.acquisition.planner import VoxelAcquisitionPlanner, load_acquisition_plan
+from voxel.acquisition.specs import AcquisitionSpecs
+from voxel.channel import VoxelChannel
+from voxel.daq.daq import VoxelDaq, VoxelDaqTask
+from voxel.daq.tasks.clockgen import ClockGenTask
+from voxel.daq.tasks.dc_control import DCControlTask
+from voxel.daq.tasks.wavegen import WaveGenTask
+from voxel.devices import (
     VoxelCamera,
     VoxelFileTransfer,
     VoxelFilter,
@@ -20,11 +20,11 @@ from voxel.instrument.devices import (
     VoxelLens,
     VoxelWriter,
 )
-from voxel.instrument.instrument import VoxelInstrument
+from voxel.instrument import VoxelInstrument
 from voxel.utils.log_config import get_logger
 
 if TYPE_CHECKING:
-    from voxel.instrument.devices import VoxelDevice
+    from voxel.devices import VoxelDevice
 
 
 class DaqTaskType(StrEnum):
@@ -107,7 +107,7 @@ class ChannelSpec(BaseModel):
     transfer: ObjectSpec
 
 
-class InstrumentConfig(BaseModel):
+class InstrumentSpecs(BaseModel):
     name: str
     description: str = "Voxel Instrument"
     daq: DaqSpecs
@@ -116,7 +116,7 @@ class InstrumentConfig(BaseModel):
     channels: dict[str, ChannelSpec] = {}
 
     @classmethod
-    def from_yaml(cls, config_file: str | Path) -> "InstrumentConfig":
+    def from_yaml(cls, config_file: str | Path) -> "InstrumentSpecs":
         yaml = YAML(typ="safe", pure=True)
         with open(config_file, "r") as f:
             config_data = yaml.load(f)
@@ -130,7 +130,7 @@ class InstrumentConfig(BaseModel):
 
 
 class InstrumentBuilder:
-    def __init__(self, config: InstrumentConfig) -> None:
+    def __init__(self, config: InstrumentSpecs) -> None:
         self.log = get_logger(self.__class__.__name__)
         self.config = config
         self.daq: VoxelDaq
@@ -190,7 +190,7 @@ class InstrumentBuilder:
         if device_name in self.devices:
             return  # Device already created
         device_spec = self.config.devices[device_name]
-        device_class = self._parse_driver(device_spec.driver)
+        device_class = parse_driver(device_spec.driver)
 
         kwargs = device_spec.kwds.copy()
 
@@ -244,47 +244,86 @@ class InstrumentBuilder:
             self.log.debug(f"Channel {channel_name} initialized")
         self.log.info("All Channels initialized")
 
-    def _parse_driver(self, driver: str):
-        module_name, class_name = driver.rsplit(".", 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, class_name)
-
     def _build_object(self, obj_spec: ObjectSpec):
-        cls = self._parse_driver(obj_spec.driver)
+        cls = parse_driver(obj_spec.driver)
         return cls(**obj_spec.kwds)
 
 
-def clean_yaml_file(file_path: str) -> None:
-    # remove extra newlines at the end of each section
-    with open(file_path) as f:
-        lines = f.readlines()
-    with open(file_path, "w") as f:
-        f.writelines([line for line in lines if line.strip() != ""])
+class FrameStackSpecs(BaseModel):
+    idx: str
+    pos: str
+    size: str
+    z_step_size: float | int
+    channels: list[str]
+    settings: dict[str, Any] = {}
 
 
-def update_yaml_content(file_path: str, new_content: dict[str, Any]) -> None:
-    try:
-        yaml = YAML(typ="safe")
-        yaml.default_flow_style = False
-        yaml.indent(mapping=2, sequence=4, offset=2)
+class AcquisitionPlanSpecs(BaseModel):
+    frame_stacks: dict[str, FrameStackSpecs]
+    scan_path: list[str]
 
-        # Read existing content
+
+class VoxelSpecs(BaseModel):
+    acquisition: AcquisitionSpecs | None = None
+    metadata: dict[str, Any] = {}
+    instrument: InstrumentSpecs
+    file_path: Path
+
+    @classmethod
+    def from_yaml(cls, file_path: str | Path) -> "VoxelSpecs":
         try:
-            with open(file_path) as file:
-                data = yaml.load(file) or {}
-        except FileNotFoundError:
-            data = {}
+            file_path = Path(file_path)
+            loader = YAML(typ="safe")
+            with file_path.open() as file:
+                data = loader.load(file)
 
-        # Update content
-        data.update(new_content)
+                if instrument_data := data.get("instrument", None):
+                    instrument = InstrumentSpecs(**instrument_data)
+                else:
+                    raise ValueError("No instrument configuration found in the file")
 
-        # Write updated content
-        with open(file_path, "w") as file:
-            for key, value in data.items():
-                yaml.dump({key: value}, file)
-                file.write("\n")
-    except Exception as e:
-        raise ValueError(f"Error updating YAML content: {e}")
+                acquisition_data = data.get("acquisition", None)
+                acquisition = AcquisitionSpecs(**acquisition_data) if acquisition_data else None
+
+                metadata = data.get("metadata", {})
+
+                return cls(instrument=instrument, acquisition=acquisition, metadata=metadata, file_path=file_path)
+        except Exception as e:
+            raise ValueError(f"Error loading configuration from {file_path}: {e}")
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return self.model_dump_json(indent=2)
+
+
+class VoxelBuilder:
+    def __init__(self, config: VoxelSpecs) -> None:
+        self.log = get_logger(self.__class__.__name__)
+        self.config = config
+
+        self._instrument: VoxelInstrument | None = None
+        self._acquisition: VoxelAcquisitionPlanner | None = None
+
+    def get_instrument(self) -> VoxelInstrument:
+        if not self._instrument:
+            self._instrument = InstrumentBuilder(self.config.instrument).build()
+        return self._instrument
+
+    def get_acquisition(self) -> VoxelAcquisitionPlanner:
+        if not self.config.acquisition:
+            raise ValueError("No acquisition configuration found in the file")
+        if not self._acquisition:
+            frame_stacks, scan_path = load_acquisition_plan(self.config.acquisition.plan_file_path)
+            self._acquisition = VoxelAcquisitionPlanner(
+                instrument=self.get_instrument(),
+                specs=self.config.acquisition,
+                config_path=self.config.file_path,
+                frame_stacks=frame_stacks,
+                scan_path=scan_path,
+            )
+        return self._acquisition
 
 
 def parse_driver(driver: str) -> Any:
@@ -298,8 +337,15 @@ if __name__ == "__main__":
     from voxel.utils.log_config import setup_logging
 
     setup_logging(level="DEBUG")
-    config = InstrumentConfig.from_yaml(config_file="example_instrument.yaml")
-    # print(config)
-    builder = InstrumentBuilder(config)
-    instrument = builder.build()
-    instrument.close()
+
+    config = VoxelSpecs.from_yaml(file_path="example_config.yaml")
+    builder = VoxelBuilder(config)
+
+    builder.log.info(builder.config)
+
+    with builder.get_instrument() as instrument:
+        instrument.log.info("Instrument is running")
+        instrument.log.info(instrument)
+
+    acquisition = builder.get_acquisition()
+    acquisition.log.info(acquisition)

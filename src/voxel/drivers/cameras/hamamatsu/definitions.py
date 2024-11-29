@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
-from voxel.instrument.drivers.cameras import Binning, PixelType
+from voxel.devices.camera import Binning, PixelType
 from .sdk.dcamapi4 import DCAMPROP
 
 # dcam properties dict for convenience in calls

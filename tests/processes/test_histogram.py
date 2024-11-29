@@ -1,10 +1,9 @@
 import numpy
 import time
 from multiprocessing.shared_memory import SharedMemory
-from voxel.processing.histogram import HistogramProjection
+from voxel.utils.processing.histogram import HistogramProjection
 
 if __name__ == "__main__":
-
     num_frames = 1024
     img_shape = (1024, 1024)
 

@@ -1,7 +1,7 @@
 import time
 
-from voxel.instrument.devices import VoxelDeviceError
-from voxel.instrument.devices.filter import VoxelFilter, VoxelFilterWheel
+from voxel.devices import VoxelDeviceError
+from voxel.devices.filter import VoxelFilter, VoxelFilterWheel
 
 SWITCH_TIME_S = 0.1  # simulated switching time
 

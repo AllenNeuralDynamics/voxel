@@ -3,10 +3,10 @@ from time import sleep
 
 import numpy as np
 
-from voxel.instrument.daq.daq import VoxelDaq
-from voxel.instrument.daq.tasks.clockgen import ClockGenTask
-from voxel.instrument.daq.tasks.dc_control import DCControlTask
-from voxel.instrument.daq.tasks.wavegen import WaveGenTask
+from voxel.daq.daq import VoxelDaq
+from voxel.daq.tasks.clockgen import ClockGenTask
+from voxel.daq.tasks.dc_control import DCControlTask
+from voxel.daq.tasks.wavegen import WaveGenTask
 from voxel.utils.log_config import setup_logging
 
 setup_logging(level="INFO")
@@ -30,7 +30,6 @@ def run_task(task: WaveGenTask | ClockGenTask, duration: int = 30) -> None:
 
 
 if __name__ == "__main__":
-
     # channels
     # test1 -> ao20 (oscilloscope 1)
     # galvo -> ao0 (oscilloscope 2)

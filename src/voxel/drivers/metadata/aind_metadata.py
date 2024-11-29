@@ -1,8 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Optional
 
-from voxel.acquisition.plan.metadata import VoxelMetadata, MetadataNameFormat
+from voxel.acquisition.metadata import VoxelMetadata
 
 
 class DateTimeFormat(StrEnum):
@@ -53,32 +52,4 @@ class AINDMetadata(VoxelMetadata):
     Metadata matching the AIND standard.
     """
 
-    instrument_name: str
-    experiment_id: str
-    subject_id: str
-    experimenter_full_name: str
-    name_format: Optional[MetadataNameFormat]
-    date_format: DateTimeFormat
-    x_anatomical_direction: AnatomicalDirection
-    y_anatomical_direction: AnatomicalDirection
-    z_anatomical_direction: AnatomicalDirection
-    details: dict = field(default_factory=dict)
-
-    def __post_init__(self):
-        super().__post_init__()
-        directions = [self.x_anatomical_direction, self.y_anatomical_direction, self.z_anatomical_direction]
-        if len(set(directions)) != 3:
-            raise ValueError("Anatomical directions must be unique.")
-
-    def to_dict(self):
-        base_dict = super().to_dict()
-        return {
-            **base_dict,
-            **{
-                "date_format": self.date_format.value,
-                "x_anatomical_direction": self.x_anatomical_direction.value,
-                "y_anatomical_direction": self.y_anatomical_direction.value,
-                "z_anatomical_direction": self.z_anatomical_direction.value,
-            },
-            **self.details,
-        }
+    pass

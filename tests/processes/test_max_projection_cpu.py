@@ -1,10 +1,9 @@
 import numpy
 import time
 from multiprocessing.shared_memory import SharedMemory
-from voxel.processing.max_projection.cpu.max_projection import CPUMaxProjection
+from voxel.utils.processing.max_projection.cpu.max_projection import CPUMaxProjection
 
 if __name__ == "__main__":
-
     num_frames = 256
     img_shape = (1024, 1024)
 

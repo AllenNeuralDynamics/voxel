@@ -1,6 +1,6 @@
 import numpy as np
 
-from voxel.instrument.io.writer import PixelType, VoxelWriter, WriterMetadata
+from voxel.io.writer import PixelType, VoxelWriter, WriterMetadata
 
 
 class SimpleWriter(VoxelWriter):

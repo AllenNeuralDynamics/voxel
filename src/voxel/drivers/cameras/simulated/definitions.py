@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from voxel.instrument.devices.camera import Binning, PixelType, TriggerMode
+from voxel.devices.camera import Binning, PixelType, TriggerMode
 
 
 class TriggerSource(StrEnum):

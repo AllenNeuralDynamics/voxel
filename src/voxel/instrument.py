@@ -1,3 +1,4 @@
+from typing import Self
 from voxel.utils.log_config import get_component_logger
 
 from .channel import VoxelChannel
@@ -132,6 +133,12 @@ class VoxelInstrument:
             device.close()
         if self.daq:
             self.daq.clean_up()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
 
 
 __all__ = ["VoxelInstrument", "VoxelChannel", "VoxelStage", "VoxelDevice"]

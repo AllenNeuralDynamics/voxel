@@ -1,6 +1,5 @@
-from turtle import position
-from voxel.instrument.devices.linear_axis import VoxelLinearAxis
-from voxel.instrument.devices.rotation_axis import VoxelRotationAxis
+from voxel.devices.linear_axis import VoxelLinearAxis
+from voxel.devices.rotation_axis import VoxelRotationAxis
 from voxel.utils.vec import Vec3D
 
 
@@ -22,11 +21,13 @@ class VoxelStage:
         self.yaw = yaw  # Rotation around the z-axis
 
     @property
-    def position_mm(self) -> Vec3D:
-        return Vec3D(self.x.position_mm, self.y.position_mm, self.z.position_mm or 0)
+    def position_mm(self) -> Vec3D[float]:
+        return Vec3D(self.x.position_mm, self.y.position_mm, self.z.position_mm if self.z is not None else 0)
 
     @property
     def position_deg(self) -> Vec3D:
+        if self.roll is None or self.pitch is None or self.yaw is None:
+            return Vec3D(0, 0, 0)
         return Vec3D(self.roll.position_deg or 0, self.pitch.position_deg or 0, self.yaw.position_deg or 0)
 
     def move_to(
@@ -48,11 +49,11 @@ class VoxelStage:
         rotational_zipped = zip([roll, pitch, yaw], [self.roll, self.pitch, self.yaw])
         for arg, axis in rotational_zipped:
             if arg is not None and axis is not None:
-                axis.position_rad = arg
+                axis.position_deg = arg
 
     @property
-    @property
     def limits_mm(self) -> tuple[Vec3D, Vec3D]:
-        return Vec3D(self.x.lower_limit_mm, self.y.lower_limit_mm, self.z.lower_limit_mm or 0), Vec3D(
-            self.x.upper_limit_mm, self.y.upper_limit_mm, self.z.upper_limit_mm or 0
-        )
+        z_limits = (self.z.lower_limit_mm, self.z.upper_limit_mm) if self.z is not None else (0, 0)
+        lower_limits = Vec3D(self.x.lower_limit_mm, self.y.lower_limit_mm, z_limits[0])
+        upper_limits = Vec3D(self.x.upper_limit_mm, self.y.upper_limit_mm, z_limits[1])
+        return lower_limits, upper_limits

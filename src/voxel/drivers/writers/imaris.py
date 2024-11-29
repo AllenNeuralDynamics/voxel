@@ -5,7 +5,7 @@ import multiprocessing as mp
 from datetime import datetime
 from voxel.utils.vec import Vec3D
 from PyImarisWriter import PyImarisWriter as pw
-from voxel.instrument.io.writer import (
+from voxel.io.writer import (
     VoxelWriter,
     WriterMetadata,
     PixelType,

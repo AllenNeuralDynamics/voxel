@@ -4,9 +4,10 @@ import sys
 import time
 from pathlib import Path
 from subprocess import Popen
-from typing import Any, Iterable, list
+from typing import Any
+from collections.abc import Iterable
 
-from instrument.file_transfers.base import VoxelFileTransfer
+from voxel.io.transfer import VoxelFileTransfer
 
 
 class RsyncFileTransfer(VoxelFileTransfer):
@@ -61,7 +62,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
             # path is the entire experiment path
             # subdirs is any tile specific subdir i.e. zarr store
             # files are any tile specific files
-            file_list = dict()
+            file_list = {}
             for path, subdirs, files in os.walk(local_directory.absolute()):
                 for name in files:
                     # check and only add if filename matches tranfer's filename

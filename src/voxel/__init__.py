@@ -1,3 +1,4 @@
-"""Init package"""
+from .instrument import VoxelInstrument
+from .builder import InstrumentSpecs, InstrumentBuilder
 
-__version__ = "0.1.0"
+__all__ = ["VoxelInstrument", "InstrumentSpecs", "InstrumentBuilder"]

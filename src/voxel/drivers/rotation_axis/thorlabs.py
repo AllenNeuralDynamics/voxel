@@ -2,8 +2,8 @@ import time
 
 from pylablib.devices import Thorlabs
 
-from voxel.instrument.devices import VoxelDeviceConnectionError
-from voxel.instrument.devices.rotation_axis import VoxelRotationAxis
+from voxel.devices import VoxelDeviceConnectionError
+from voxel.devices.rotation_axis import VoxelRotationAxis
 
 MIN_POSITION_DEG = 0
 MAX_POSITION_DEG = 360

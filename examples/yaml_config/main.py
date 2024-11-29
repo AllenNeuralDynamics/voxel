@@ -1,5 +1,5 @@
 from pathlib import Path
-from voxel.instrument.builder import InstrumentBuilder, InstrumentConfig
+from voxel.builder import InstrumentBuilder, InstrumentConfig
 from voxel.acquisition.plan.config import PlannerConfig
 from voxel.acquisition.plan import VoxelAcquisitionPlanner
 from voxel.instrument.instrument import VoxelInstrument
@@ -39,7 +39,7 @@ def test_building_planner(prebuild_instrument: bool = False) -> None:
 
 if __name__ == "__main__":
     from voxel.utils.log_config import setup_logging, get_logger
-    from voxel.acquisition.plan import VoxelAcquisitionPlanner
+    from voxel.acquisition.planner import VoxelAcquisitionPlanner
 
     setup_logging(level="DEBUG")
     logger = get_logger("Test Script")
