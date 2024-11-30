@@ -34,8 +34,9 @@ class RobocopyFileTransfer(VoxelFileTransfer):
         log_path = Path(local_directory, f"{self._filename}.log")
         transfer_complete = False
         retry_num = 0
+        subprocess: Popen | None = None
         # loop over number of attempts in the event that a file transfer fails
-        while transfer_complete == False and retry_num <= self._max_retry - 1:
+        while transfer_complete is False and retry_num <= self._max_retry - 1:
             # generate a list of subdirs and files in the parent local dir to delete at the end
             delete_list = []
             for name in os.listdir(local_directory.absolute()):
@@ -45,7 +46,7 @@ class RobocopyFileTransfer(VoxelFileTransfer):
             # path is the entire experiment path
             # subdirs is any tile specific subdir i.e. zarr store
             # files are any tile specific files
-            file_list = dict()
+            file_list = {}
             for path, subdirs, files in os.walk(local_directory.absolute()):
                 for name in files:
                     # check and only add if filename matches tranfer's filename but not the log file
@@ -94,18 +95,16 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                         stuck_time_s = 0
                         while file_progress < 100:
                             start_time_s = time.time()
-                            # open log file
-                            f = open(log_path, "r")
-                            # read the last line
-                            line = f.readlines()[-1]
-                            # close the log file
-                            f.close()
+
+                            with open(log_path, "r") as f:
+                                line = f.readlines()[-1]  # read the last line
+
                             # try to find if there is a % in the last line
                             try:
                                 # convert the string to a float
                                 file_progress = float(line.replace("%", ""))
                             # line did not contain %
-                            except:
+                            except Exception:
                                 file_progress = 0
                             # sum to transferred amount to track progress
                             self.progress = (
@@ -142,7 +141,7 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                     local_file_path = os.path.join(local_directory.absolute(), file)
                     external_file_path = os.path.join(external_directory.absolute(), file)
                     # .zarr is directory but os.path.isdir will return False
-                    if os.path.isdir(local_file_path) or ".zarr" in local_dir:
+                    if os.path.isdir(local_file_path) or ".zarr" in local_file_path:
                         # TODO how to hash check zarr -> directory instead of file?
                         shutil.rmtree(local_file_path)
                     elif os.path.isfile(local_file_path):
@@ -161,7 +160,7 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                                     self.log.info(f"hashes did not match, deleting {external_file_path}")
                                     os.remove(external_file_path)
                                     pass
-                            except:
+                            except FileNotFoundError:
                                 self.log.warning(f"no external file exists at {external_file_path}")
                         else:
                             # remove local file
@@ -172,5 +171,5 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                 end_time = time.time()
                 total_time = end_time - start_time
                 self.log.info(f"transfer complete, total time: {total_time} sec")
-                subprocess.kill()
+                subprocess.kill() if subprocess else None
                 retry_num += 1

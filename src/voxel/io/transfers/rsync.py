@@ -51,6 +51,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
         log_path = Path(local_directory, f"{self._filename}.log")
         transfer_complete = False
         retry_num = 0
+        subprocess: Popen | None = None
         # loop over number of attempts in the event that a file transfer fails
         while transfer_complete is False and retry_num <= self._max_retry - 1:
             # generate a list of subdirs and files in the parent local dir to delete at the end
@@ -90,9 +91,17 @@ class RsyncFileTransfer(VoxelFileTransfer):
                     if not os.path.isdir(external_dir):
                         os.makedirs(external_dir)
                     # setup log file
-                    self._log_file = open(log_path, "w")
                     self.log.info(f"transferring {file_path} from {local_directory} to {external_directory}")
+
                     # generate rsync command with args
+                    cmd_with_args = self._flatten(
+                        [
+                            self._protocol,
+                            self._flags,
+                            file_path,
+                            Path(external_dir, filename),
+                        ]
+                    )
                     if sys.platform == "win32":
                         # if windows, rsync expects absolute paths with driver letters to use
                         # /cygdrive/drive-letter and / not \
@@ -102,18 +111,10 @@ class RsyncFileTransfer(VoxelFileTransfer):
                         external_dir = external_dir.replace("\\", "/").replace(":", "")
                         external_dir = "/cygdrive/" + external_dir + "/" + filename
                         cmd_with_args = self._flatten([self._protocol, self._flags, file_path, external_dir])
-                    elif sys.platform == "darwin" or "linux" or "linux2":
-                        # linux or darwin, paths defined as below
-                        cmd_with_args = self._flatten(
-                            [
-                                self._protocol,
-                                self._flags,
-                                file_path,
-                                Path(external_dir, filename),
-                            ]
-                        )
-                    subprocess = Popen(cmd_with_args, stdout=self._log_file)
-                    self._log_file.close()
+
+                    with log_path.open(mode="w", encoding="utf-8") as f:
+                        subprocess = Popen(args=list(cmd_with_args), stdout=f.fileno())
+
                     time.sleep(1.0)
                     # lets monitor the progress of the individual file if size > 1 GB
                     if file_size_mb > 1024:
@@ -126,49 +127,48 @@ class RsyncFileTransfer(VoxelFileTransfer):
                         while file_progress < 100:
                             start_time_s = time.time()
                             # open the stdout file in a temporary handle with r+ mode
-                            f = open(log_path, "r+")
-                            # read the last line
-                            line = f.readlines()[-1]
-                            # try to find if there is a % in the last line
-                            try:
-                                # grab the index of the % symbol
-                                index = line.find("%")
-                                # a location with % has been found
-                                if index != -1:
-                                    # grab the string of the % progress
-                                    value = line[index - 4 : index]
-                                    # strip and convert to float
-                                    file_progress = float(value.rstrip())
-                                # we must be at the last line of the file
-                                else:
-                                    # go back to beginning of file
-                                    f.seek(0)
-                                    # read line that must be 100% line
-                                    line = f.readlines()[-4]
+                            with open(log_path, "r+") as f:
+                                line = f.readlines()[-1]  # read the last line
+
+                                # try to find if there is a % in the last line
+                                try:
                                     # grab the index of the % symbol
                                     index = line.find("%")
-                                    # grab the string of the % progress
-                                    value = line[index - 4 : index]
-                                    # strip and convert to float
-                                    file_progress = float(value.rstrip())
-                            # no lines in the file yet
-                            except Exception:
-                                file_progress = 0
-                            # sum to transferred amount to track progress
-                            self.progress = (
-                                (total_transferred_mb + file_size_mb * file_progress / 100) / total_size_mb * 100
-                            )
-                            end_time_s = time.time()
-                            # keep track of how long stuck at same progress
-                            if self.progress == previous_progress:
-                                stuck_time_s += end_time_s - start_time_s
-                                # break if exceeds timeout
-                                if stuck_time_s > +self._timeout_s:
-                                    break
-                            previous_progress = self.progress
-                            self.log.info(f"file transfer is {self.progress:.2f} % complete.")
-                            # close temporary stdout file handle
-                            f.close()
+                                    # a location with % has been found
+                                    if index != -1:
+                                        # grab the string of the % progress
+                                        value = line[index - 4 : index]
+                                        # strip and convert to float
+                                        file_progress = float(value.rstrip())
+                                    # we must be at the last line of the file
+                                    else:
+                                        # go back to beginning of file
+                                        f.seek(0)
+                                        # read line that must be 100% line
+                                        line = f.readlines()[-4]
+                                        # grab the index of the % symbol
+                                        index = line.find("%")
+                                        # grab the string of the % progress
+                                        value = line[index - 4 : index]
+                                        # strip and convert to float
+                                        file_progress = float(value.rstrip())
+                                # no lines in the file yet
+                                except Exception:
+                                    file_progress = 0
+                                # sum to transferred amount to track progress
+                                self.progress = (
+                                    (total_transferred_mb + file_size_mb * file_progress / 100) / total_size_mb * 100
+                                )
+                                end_time_s = time.time()
+                                # keep track of how long stuck at same progress
+                                if self.progress == previous_progress:
+                                    stuck_time_s += end_time_s - start_time_s
+                                    # break if exceeds timeout
+                                    if stuck_time_s > +self._timeout_s:
+                                        break
+                                previous_progress = self.progress
+                                self.log.info(f"file transfer is {self.progress:.2f} % complete.")
+
                             # pause for 10 sec
                             time.sleep(10.0)
                     else:
@@ -189,7 +189,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
                     local_file_path = os.path.join(local_directory.absolute(), file)
                     external_file_path = os.path.join(external_directory.absolute(), file)
                     # .zarr is directory but os.path.isdir will return False
-                    if os.path.isdir(local_file_path) or ".zarr" in local_dir:
+                    if os.path.isdir(local_file_path) or ".zarr" in local_file_path:
                         # TODO how to hash check zarr -> directory instead of file?
                         shutil.rmtree(local_file_path)
                     elif os.path.isfile(local_file_path):
@@ -208,7 +208,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
                                     self.log.info(f"hashes did not match, deleting {external_file_path}")
                                     os.remove(external_file_path)
                                     pass
-                            except external_file_path.DoesNotExist:
+                            except FileNotFoundError:
                                 self.log.warning(f"no external file exists at {external_file_path}")
                         else:
                             # remove local file
@@ -219,7 +219,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
                 end_time = time.time()
                 total_time = end_time - start_time
                 self.log.info(f"transfer complete, total time: {total_time} sec")
-                subprocess.kill()
+                subprocess.kill() if subprocess else None
                 retry_num += 1
 
     def _flatten(self, lst: list[Any]) -> Iterable[Any]:
