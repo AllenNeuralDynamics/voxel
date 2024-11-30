@@ -84,7 +84,7 @@ class SkyraLaser(VoxelLaser):
         :param coefficients: polynomial coefficients describing
         the relationship between current mA and power mW
         """
-        super().__init__(name)
+        super().__init__(name=name, wavelength=wavelength)
 
         self._inst = CoboltLaser(port)
 
@@ -94,11 +94,6 @@ class SkyraLaser(VoxelLaser):
         self._max_current_ma = max_current_ma
         self._current_setpoint = self._min_current_ma
         self._max_power_mw = max_power_mw
-        self._wavelength = wavelength
-
-    @property
-    def wavelength(self) -> int:
-        return self._wavelength
 
     def _coefficients_curve(self) -> Expr:
         x = symbols("x")
@@ -115,7 +110,12 @@ class SkyraLaser(VoxelLaser):
         self._inst.send_cmd(f"{self._prefix}Cmd.LaserDisable")
         self.log.info(f"laser {self._prefix} enabled")
 
-    @deliminated_property(minimum=0, maximum=lambda self: self.max_power)
+    @deliminated_property(
+        minimum=0,
+        maximum=lambda self: self.max_power,
+        unit="mW",
+        description="The target power that the laser is trying to achieve.",
+    )
     def power_setpoint_mw(self):
         if self._inst.constant_current == "ON":
             return int(round(self._coefficients_curve().subs(symbols("x"), self._current_setpoint)))
@@ -123,7 +123,7 @@ class SkyraLaser(VoxelLaser):
             return self._inst.send_cmd(f"{self._prefix}Query.PowerSetpoint") * 1000
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float or int):
+    def power_setpoint_mw(self, value: float):
         if self.modulation_mode != "off":
             # solutions for laser value
             solutions = solve(self._coefficients_curve() - value)
@@ -154,7 +154,7 @@ class SkyraLaser(VoxelLaser):
 
     @modulation_mode.setter
     def modulation_mode(self, value: str):
-        if value not in MODULATION_MODES.keys():
+        if value not in MODULATION_MODES:
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         external_control_mode = MODULATION_MODES[value]["external_control_mode"]
         digital_modulation = MODULATION_MODES[value]["digital_modulation"]

@@ -4,11 +4,12 @@ from enum import StrEnum
 from .base import VoxelDevice, VoxelDeviceType
 
 
-class TunableLensControlMode(StrEnum):
+class ETLControlMode(StrEnum):
     """Tunable lens control modes."""
 
     INTERNAL = "internal"
     EXTERNAL = "external"
+    UNKNOWN = "unknown"
 
 
 class VoxelTunableLens(VoxelDevice):
@@ -17,13 +18,13 @@ class VoxelTunableLens(VoxelDevice):
 
     @property
     @abstractmethod
-    def mode(self) -> TunableLensControlMode:
+    def mode(self) -> ETLControlMode:
         """Get the tunable lens control mode."""
         pass
 
     @mode.setter
     @abstractmethod
-    def mode(self, mode: TunableLensControlMode) -> None:
+    def mode(self, mode: ETLControlMode) -> None:
         """Set the tunable lens control mode.
         :param mode: one of "internal" or "external".
         :type mode: str

@@ -8,11 +8,11 @@ class VoxelAOTF(VoxelDevice):
         super().__init__(device_type=VoxelDeviceType.AOTF, name=name)
 
     @abstractmethod
-    def enable_all(self) -> None:
+    def enable(self) -> None:
         pass
 
     @abstractmethod
-    def disable_all(self) -> None:
+    def disable(self) -> None:
         pass
 
     @property
@@ -20,13 +20,19 @@ class VoxelAOTF(VoxelDevice):
     def frequency_hz(self) -> None:
         pass
 
+    @frequency_hz.setter
     @abstractmethod
-    def set_frequency_hz(self, channel: int, frequency_hz: dict) -> None:
+    def frequency_hz(self, frequency_hz: int) -> None:
         pass
 
     @property
     @abstractmethod
     def power_dbm(self):
+        pass
+
+    @power_dbm.setter
+    @abstractmethod
+    def power_dbm(self, power_dbm: float):
         pass
 
     @abstractmethod
@@ -35,7 +41,7 @@ class VoxelAOTF(VoxelDevice):
 
     @property
     @abstractmethod
-    def blanking_mode(self):
+    def blanking_mode(self) -> str:
         pass
 
     @blanking_mode.setter
@@ -45,10 +51,10 @@ class VoxelAOTF(VoxelDevice):
 
     @property
     @abstractmethod
-    def input_mode(self):
+    def input_mode(self) -> str:
         pass
 
     @input_mode.setter
     @abstractmethod
-    def input_mode(self, modes: dict):
+    def input_mode(self, mode: str):
         pass

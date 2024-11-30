@@ -6,14 +6,16 @@ import time
 
 import numpy as np
 
+from voxel.utils.vec import Vec2D
+
 
 from .definitions import (
     PixelType,
-    TriggerMode,
+    Trigger,
     TriggerPolarity,
     TriggerSource,
 )
-from .image_model import ImageModel
+from .image_model import ROI, ImageModel
 
 # Constants
 BUFFER_SIZE_FRAMES = 8
@@ -69,7 +71,7 @@ class SimulatedCameraHardware:
         self.exposure_time_ms: float = INIT_EXPOSURE_TIME_MS
         self.bit_packing_mode: str = "lsb"
         self.readout_mode: str = "default"
-        self.trigger_mode: str = next(iter(TriggerMode))
+        self.trigger_mode: str = next(iter(Trigger))
         self.trigger_source: str = next(iter(TriggerSource))
         self.trigger_activation: str = next(iter(TriggerPolarity))
 
@@ -137,6 +139,14 @@ class SimulatedCameraHardware:
         self._initialize_buffer()
         if was_running:
             self.start_acquisition()
+
+    @property
+    def roi(self) -> ROI:
+        return ROI(
+            origin=Vec2D(self.roi_width_offset_px, self.roi_height_offset_px),
+            size=Vec2D(self.roi_width_px, self.roi_height_px),
+            bounds=Vec2D(self.sensor_width_px, self.sensor_height_px),
+        )
 
     @property
     def pixel_type(self):

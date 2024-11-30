@@ -1,5 +1,4 @@
 import time
-from typing import Optional
 
 from voxel.devices.rotation_axis import VoxelRotationAxis
 
@@ -12,7 +11,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
 
     def __init__(self, name: str) -> None:
         """Constructor for the SimulatedRotationAxis class."""
-        super().__init__(name)
+        super().__init__(name=name)
         self._position_deg = 0.0
         self._target_position_deg = 0.0
         self._speed_deg_s = 10.0
@@ -41,12 +40,12 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         return self._position_deg
 
     @position_deg.setter
-    def position_deg(self, position: float) -> None:
+    def position_deg(self, value: float) -> None:
         """Set the position of the rotation axis in degrees.
         :param position: The new position in degrees
         :type position: float
         """
-        self._target_position_deg = position
+        self._target_position_deg = value
         self._movement_start_time = time.time()
 
     @property
@@ -58,14 +57,14 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         return self._speed_deg_s
 
     @speed_deg_s.setter
-    def speed_deg_s(self, speed: float) -> None:
+    def speed_deg_s(self, value: float) -> None:
         """Set the speed of the rotation axis in degrees per second.
         :param speed: The new speed in degrees per second
         :type speed: float
         """
-        if speed <= 0:
+        if value <= 0:
             raise ValueError("Speed must be positive")
-        self._speed_deg_s = speed
+        self._speed_deg_s = value
 
     @property
     def is_moving(self) -> bool:
@@ -75,7 +74,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         """
         return self._movement_start_time is not None
 
-    def wait_until_stopped(self, timeout: Optional[float] = None, check_interval: float = 1) -> None:
+    def wait_until_stopped(self, timeout: float | None = None, check_interval: float = 1) -> None:
         """Wait until the rotation axis has stopped moving.
         :param timeout: Maximum time to wait for the rotation axis to stop moving
         :param check_interval: Time interval between checks

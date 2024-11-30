@@ -1,4 +1,4 @@
-from voxel.devices.tunable_lens import VoxelTunableLens, TunableLensControlMode
+from voxel.devices.tunable_lens import VoxelTunableLens, ETLControlMode
 
 
 class SimulatedTunableLens(VoxelTunableLens):
@@ -6,11 +6,11 @@ class SimulatedTunableLens(VoxelTunableLens):
         super().__init__(name)
 
     @property
-    def mode(self) -> TunableLensControlMode:
-        return TunableLensControlMode.INTERNAL
+    def mode(self) -> ETLControlMode:
+        return ETLControlMode.INTERNAL
 
     @mode.setter
-    def mode(self, mode: TunableLensControlMode):
+    def mode(self, mode: ETLControlMode):
         pass
 
     @property

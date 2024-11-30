@@ -30,6 +30,7 @@ dependencies = [
     "pyusb >= 1.2.1",
     "PyVISA-py >= 0.7.2",
     "tigerasi >= 0.0.26",
+    "pylablib-lightweight>=1.4.3",
     # files
     "imohash>=1.1.0",
     "tifffile>=2024.9.20",
@@ -43,31 +44,34 @@ dependencies = [
     "tensorstore>=0.1.68",
     "cupy>=13.3.0",
     "torch>=2.4.1",
-    "pyimariswriter>=0.7.0",
     "psutil>=6.1.0",
     "pyclesperanto>=0.16.0",
     "scikit-image>=0.24.0",
 ]
 
 [project.optional-dependencies]
-# thorlabs = ["pylablib>=1.4.2"]
+aaopto = ["aaopto-aotf>=0.0.11"]
+cobolt = ["pycobolt"]
+coherent = ["coherent-lasers"]
+vortran = ["vortran-laser"]
+oxxius = ["oxxius-laser"]
+obis = ["obis-laser"]
 bdv = ["h5py>=3.12.1", "tqdm>=4.66.5"]
 imaris = ["pyimariswriter>=0.7.0"]
-aaopto = ["aaopto-aotf>=0.0.11"]
-cobolt = ["pycobolt @ git+https://github.com/cobolt-lasers/pycobolt.git"]
-coherent = [
-    "coherent_lasers @ git+https://github.com/AllenNeuralDynamics/coherent_lasers.git",
-]
-vortran = [
-    "vortran_laser @ git+https://github.com/AllenNeuralDynamics/vortran_laser.git",
-]
-oxxius = [
-    "oxxius_laser @ git+https://github.com/AllenNeuralDynamics/oxxius_laser.git",
-]
-# obis = ["obis_laser @ git+https://github.com/AllenNeuralDynamics/obis-laser.git"]
+etl-opto = ["optoicc", "optokummenberg"]
 
 [dependency-groups]
 dev = ["pytest>=8.3.3", "ruff>=0.8.0"]
+
+[tool.uv.sources]
+pycobolt = { git = "https://github.com/cobolt-lasers/pycobolt.git" }
+coherent-lasers = { git = "https://github.com/AllenNeuralDynamics/coherent_lasers.git" }
+obis-laser = { git = "https://github.com/AllenNeuralDynamics/obis-laser.git" }
+oxxius-laser = { git = "https://github.com/AllenNeuralDynamics/oxxius_laser.git" }
+vortran-laser = { git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" }
+optokummenberg = { path = ".wheelhouse/optoKummenberg-1.0.4894-py3-none-any.whl" }
+optoicc = { path = ".wheelhouse/optoICC-2.0.4922-py3-none-any.whl" }
+
 
 [build-system]
 requires = ["hatchling"]

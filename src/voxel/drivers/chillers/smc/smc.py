@@ -73,12 +73,12 @@ class SMCChiller(VoxelChiller):
         return float(temp_str) / 10
 
     @property
-    def temperature_c(self):
+    def temperature_c(self) -> float:
         response = self._read_value(SMCCommand.READ_INTERNAL_SENSOR)
         return self._parse_temperature(response)
 
     @temperature_c.setter
-    def temperature_c(self, value):
+    def temperature_c(self, value: float) -> None:
         SMCcommand = SMCCommand.SET_TEMPERATURE_FRAM if self.persist else SMCCommand.SET_TEMPERATURE_NO_FRAM
         temp_str = f"{int(value * 10):04d}"
         data = [ord(c) for c in temp_str]
@@ -90,9 +90,9 @@ class SMCChiller(VoxelChiller):
         return self._parse_temperature(response)
 
     @property
-    def alarm_status(self):
+    def alarm_status(self) -> str | None:
         response = self._read_value(SMCCommand.READ_ALARM_STATUS)
-        return response.decode().strip()
+        return response.decode().strip() if response else None
 
     def set_offset(self, offset):
         SMCcommand = SMCCommand.SET_OFFSET_FRAM if self.persist else SMCCommand.SET_OFFSET_NO_FRAM
@@ -106,27 +106,22 @@ class SMCChiller(VoxelChiller):
 
 # Example usage
 if __name__ == "__main__":
-    try:
-        chiller = SMCChiller("test-chiller", "COM1")
+    chiller = SMCChiller("test-chiller", "COM1")
 
-        print("Internal Sensor Temperature:", chiller.temperature)
+    print("Internal Sensor Temperature:", chiller.temperature_c)
 
-        print("External Sensor Temperature:", chiller.external_temperature)
+    print("External Sensor Temperature:", chiller.external_temperature_c)
 
-        print("Alarm Status:", chiller.alarm_status)
+    print("Alarm Status:", chiller.alarm_status)
 
-        chiller.temperature = 25.0
-        print("Temperature set to 25.0°C and persisted.")
+    chiller.temperature_c = 25.0
+    print("Temperature set to 25.0°C and persisted.")
 
-        chiller.persist = False
-        chiller.temperature = 25.0
-        print("Temperature set to 25.0°C without persisting.")
+    chiller.persist = False
+    chiller.temperature_c = 25.0
+    print("Temperature set to 25.0°C without persisting.")
 
-        chiller.persist = True
-        chiller.set_offset(2.5)
-        print("Offset set to 2.5°C and persisted.")
-
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        chiller.close()
+    chiller.persist = True
+    chiller.set_offset(2.5)
+    print("Offset set to 2.5°C and persisted.")
+    chiller.close()

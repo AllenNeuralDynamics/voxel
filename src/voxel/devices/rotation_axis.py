@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from .base import VoxelDevice, VoxelDeviceType
 
@@ -21,10 +20,10 @@ class VoxelRotationAxis(VoxelDevice):
 
     @position_deg.setter
     @abstractmethod
-    def position_deg(self, position: float) -> None:
+    def position_deg(self, value: float) -> None:
         """Set the position of the rotation axis in degrees.
-        :param position: The new position in degrees
-        :type position: float
+        :param value: The new position in degrees
+        :type value: float
         """
         pass
 
@@ -39,10 +38,10 @@ class VoxelRotationAxis(VoxelDevice):
 
     @speed_deg_s.setter
     @abstractmethod
-    def speed_deg_s(self, speed: float) -> None:
+    def speed_deg_s(self, value: float) -> None:
         """Set the speed of the rotation axis in degrees per second.
-        :param speed: The new speed in degrees per second
-        :type speed: float
+        :param value: The new speed in degrees per second
+        :type value: float
         """
         pass
 
@@ -56,9 +55,7 @@ class VoxelRotationAxis(VoxelDevice):
         pass
 
     @abstractmethod
-    def wait_until_stopped(
-        self, timeout: Optional[float] = None, check_interval: float = 0.1
-    ) -> None:
+    def wait_until_stopped(self, timeout: float | None = None, check_interval: float = 0.1) -> None:
         """Wait until the rotation axis has stopped moving.
         :param timeout: Maximum time to wait for the rotation axis to stop moving
         :param check_interval: Time interval between checks

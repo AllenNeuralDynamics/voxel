@@ -2,7 +2,7 @@ from aaopto_aotf import MPDS
 from aaopto_aotf.device_codes import BlankingMode, InputMode
 
 from voxel.devices.aotf import VoxelAOTF
-from voxel.utils.singleton import Singleton
+from voxel.utils.singleton import thread_safe_singleton
 
 BLANKING_MODES = {
     "external": BlankingMode.EXTERNAL,
@@ -15,53 +15,48 @@ INPUT_MODES = {
 }
 
 
-# singleton wrapper around MPDS
-class MPDSSingleton(MPDS, metaclass=Singleton):
-    def __init__(self, com_port):
-        super(MPDSSingleton, self).__init__(com_port)
+@thread_safe_singleton
+def get_MPDS_singleton(com_port) -> MPDS:
+    return MPDS(com_port)
 
 
-class AOTF(VoxelAOTF):
-    def __init__(self, port: str, name: str = ""):
+class AAOptoAOTF(VoxelAOTF):
+    def __init__(self, port: str, name: str = "", channel: int = 0):
         super().__init__(name)
-        self.aotf = MPDSSingleton(com_port=port)
-        self.product_id = self.aotf.get_product_id()
+        self._aotf = get_MPDS_singleton(com_port=port)
+        # make sure the channel is valid
+        if channel >= self._aotf.num_channels:
+            raise ValueError(f"Channel {channel} is invalid. Must be less than {self._aotf.num_channels}")
+        self._channel = channel
+        self.product_id = self._aotf.get_product_id()
 
-    # def enable_all(self):
-    #      for channel in range(self.aotf.num_channels):
-    #         self.enable_channel(channel)
+    def enable(self):
+        self._aotf.enable_channel(self._channel)
 
-    # def disable_all(self):
-    #      for channel in range(self.aotf.num_channels):
-    #         self.disable_channel(channel)
+    def disable(self):
+        self._aotf.disable_channel(self._channel)
 
     @property
     def frequency_hz(self):
-        frequency_hz = dict()
-        for channel in range(self.aotf.num_channels):
-            frequency_hz[channel] = self.aotf.get_frequency(channel)
-        return frequency_hz
+        return self._aotf.get_frequency(self._channel)
 
-    def set_frequency_hz(self, channel: int, frequency_hz: dict):
-        for key in frequency_hz:
-            self.aotf.set_frequency(channel=channel, frequency=frequency_hz[key])
-        self.aotf.save_profile()
+    @frequency_hz.setter
+    def frequency_hz(self, frequency_hz: int):
+        self._aotf.set_frequency(self._channel, frequency_hz)
+        self._aotf.save_profile()
 
     @property
     def power_dbm(self):
-        power_dbm = dict()
-        for channel in range(self.aotf.num_channels):
-            power_dbm[channel] = self.aotf.get_power_dbm(channel)
-        return power_dbm
+        return self._aotf.get_power_dbm(self._channel)
 
-    def set_power_dbm(self, channel: int, power_dbm: dict):
-        for key in power_dbm:
-            self.aotf.set_frequency(channel=channel, frequency=power_dbm[key])
-        self.aotf.save_profile()
+    @power_dbm.setter
+    def power_dbm(self, power_dbm: float):
+        self._aotf.set_power_dbm(self._channel, power_dbm)
+        self._aotf.save_profile()
 
     @property
     def blanking_mode(self):
-        mode = self.aotf.get_blanking_mode()
+        mode = self._aotf.get_blanking_mode()
         converted_mode = next(key for key, enum in BLANKING_MODES.items() if enum.value == mode)
         return converted_mode
 
@@ -70,22 +65,17 @@ class AOTF(VoxelAOTF):
         valid = list(BLANKING_MODES.keys())
         if mode not in valid:
             raise ValueError("blanking mode must be one of %r." % valid)
-        self.aotf.set_blanking_mode(BLANKING_MODES[mode])
+        self._aotf.set_blanking_mode(BLANKING_MODES[mode])
 
-    # @property
-    # def input_mode(self):
-    #     modes = dict()
-    #     for channel in range(self.aotf.num_channels):
-    #         modes[channel] = self.aotf.get_channel_input_mode(channel)
-    #     converted_mode = next(key for key, enum in INPUT_MODES.items() if enum.value == mode)
-    #     return converted_mode
+    @property
+    def input_mode(self) -> str:
+        mode = self._aotf.get_channel_input_mode(self._channel)
+        converted_mode = next(key for key, enum in INPUT_MODES.items() if enum.value == mode)
+        return converted_mode
 
-    # @input_mode.setter
-    # def input_mode(self, modes: dict):
-    #     valid = list(INPUT_MODES.keys())
-    #     for key in modes:
-    #         if modes[key] not in valid:
-    #             raise ValueError("input mode must be one of %r." % valid)
-
-    #     for key in modes:
-    #         self.aotf.set_channel_input_mode(channel=key, mode=INPUT_MODES[mode])
+    @input_mode.setter
+    def input_mode(self, mode: str):
+        valid = list(INPUT_MODES.keys())
+        if mode not in valid:
+            raise ValueError("input mode must be one of %r." % valid)
+        self._aotf.set_channel_input_mode(self._channel, INPUT_MODES[mode])

@@ -2,13 +2,13 @@ import struct
 
 import serial
 
-from voxel.devices.tunable_lens import VoxelTunableLens, TunableLensControlMode
+from voxel.devices.tunable_lens import ETLControlMode, VoxelTunableLens
 
 # constants for Optotune EL-E-4i controller
 
 MODES = {
-    TunableLensControlMode.EXTERNAL: ["MwDA", ">xxx"],
-    TunableLensControlMode.INTERNAL: ["MwCA", ">xxxBhh"],
+    ETLControlMode.EXTERNAL: ["MwDA", ">xxx"],
+    ETLControlMode.INTERNAL: ["MwCA", ">xxxBhh"],
 }
 
 
@@ -38,34 +38,36 @@ class OptotuneELE4ITunableLens(VoxelTunableLens):
                 self.log.error(f"Error reading serial number: {res}")
 
     @property
-    def mode(self) -> TunableLensControlMode:
+    def mode(self) -> ETLControlMode:
         """Get the tunable lens control mode."""
-        res = self._send_command("MMA", ">xxxB")
-        if res is None:
-            self.log.error("Error reading mode")
-        else:
+        mode = ETLControlMode.UNKNOWN
+        if res := self._send_command("MMA", ">xxxB"):
             try:
-                mode = None
-                if res[0] == 1:
-                    mode = TunableLensControlMode.INTERNAL
-                if res[0] == 5:
-                    mode = TunableLensControlMode.EXTERNAL
+                res = res[0]
+                mode = ETLControlMode.INTERNAL if res == 1 else ETLControlMode.EXTERNAL if res == 5 else mode
                 self.log.debug(f"Mode: {mode}")
-                return mode
             except IndexError:
                 self.log.error(f"Error reading mode: {res}")
+        return mode
 
     @mode.setter
-    def mode(self, mode: TunableLensControlMode):
+    def mode(self, mode: ETLControlMode):
         """Set the tunable lens control mode."""
         mode_list = MODES[mode]
         self._send_command(mode_list[0], mode_list[1])
 
     @property
-    def temperature_c(self):
+    def temperature_c(self) -> float:
         """Get the temperature in deg C."""
-        temp_res = self._send_command("TCA", ">xxxh")
-        return {"Temperature [C]": temp_res[0] * 0.0625 if temp_res else None}
+        temp: float = -9999.0
+        if temp_res := self._send_command("TCA", ">xxxh"):
+            try:
+                temp = temp_res[0] * 0.0625 if temp_res else temp
+                self.log.debug(f"Temperature: {temp}")
+            except IndexError:
+                self.log.error(f"Error reading temperature: {temp_res}")
+
+        return temp
 
     def _send_command(self, command, reply_fmt=None):
         if type(command) is not bytes:

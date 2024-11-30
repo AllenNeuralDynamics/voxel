@@ -11,6 +11,10 @@ class SimulatedLinearAxis(VoxelLinearAxis):
     def __init__(self, name: str, dimension: LinearAxisDimension):
         super().__init__(name, dimension)
         self._position_mm = 0.0
+        self._speed_mm_s = 1.0
+        self._acceleration_ms = 1.0
+        self._lower_limit_mm = -10.0
+        self._upper_limit_mm = 10.0
 
     def configure_scan(self, config: ScanConfig) -> None:
         pass
@@ -29,6 +33,7 @@ class SimulatedLinearAxis(VoxelLinearAxis):
         minimum=lambda self: self.lower_limit_mm,
         maximum=lambda self: self.upper_limit_mm,
         unit="mm",
+        description="Current position in mm",
     )
     def position_mm(self) -> float | None:
         return self._position_mm
@@ -46,30 +51,38 @@ class SimulatedLinearAxis(VoxelLinearAxis):
 
     @property
     def upper_limit_mm(self) -> float:
-        return 10.0
+        return self._upper_limit_mm
 
     @property
     def lower_limit_mm(self) -> float:
-        return -10.0
+        return self._lower_limit_mm
 
     def set_upper_limit_mm_in_place(self) -> None:
-        self.upper_limit_mm = self.position_mm
+        self._upper_limit_mm = self.position_mm
 
     def set_lower_limit_mm_in_place(self) -> None:
-        self.lower_limit_mm = self.position_mm
+        self._lower_limit_mm = self.position_mm
 
     def zero_in_place(self) -> None:
         pass
 
     @property
     def speed_mm_s(self) -> float:
-        return 1.0
+        return self._speed_mm_s
+
+    @speed_mm_s.setter
+    def speed_mm_s(self, value: float) -> None:
+        self._speed_mm_s = value
 
     @property
     def acceleration_ms(self) -> float:
-        return 1.0
+        return self._acceleration_ms
 
-    def set_backlash_mm(self, backlash_mm: float) -> None:
+    @acceleration_ms.setter
+    def acceleration_ms(self, value: float) -> None:
+        self._acceleration_ms = value
+
+    def set_backlash_mm(self, value: float) -> None:
         pass
 
     def go_to_origin(self) -> None:

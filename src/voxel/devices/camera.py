@@ -1,9 +1,11 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
+from typing import Any
 
 import numpy as np
 
+from voxel.utils.descriptors import deliminated
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.vec import Vec2D
@@ -38,7 +40,7 @@ class PixelType(IntEnum):
         return self.value // 8
 
 
-class TriggerMode(StrEnum):
+class Trigger(StrEnum):
     OFF = "off"
     HARDWARE = "hardware"
     SOFTWARE = "software"
@@ -82,6 +84,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
             assert len(parts) == 2, f"Invalid pixel size string: {pixel_size_um}"
             pixel_size_um = float(parts[0]), float(parts[1])
         self.pixel_size_um = Vec2D(*pixel_size_um)
+        self._trigger = Trigger.OFF
 
     def __repr__(self) -> str:
         return ", ".join(
@@ -294,7 +297,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @property
+    @deliminated_property()
     @abstractmethod
     def line_interval_us(self) -> float:
         """Get the line interval of the camera in us. \n
@@ -305,6 +308,17 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         :rtype: float
         """
         pass
+
+    # @line_interval_us.setter
+    # def line_interval_us(self, value: float) -> None:
+    #     """Set the line interval of the camera in us. \n
+    #     This is the time interval between adjacent \n
+    #     rows activating on the camera sensor.
+
+    #     :param value: The line interval of the camera in us
+    #     :type value: float
+    #     """
+    #     ...
 
     @property
     @abstractmethod
@@ -317,24 +331,30 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @property
-    @abstractmethod
-    def trigger_mode(self) -> TriggerMode:
+    @enumerated_property(options={e.value for e in Trigger})
+    def trigger(self) -> Trigger:
         """Get the trigger mode of the camera.
 
         :return: The trigger mode of the camera.
         :rtype: TriggerMode
         """
-        pass
+        return self._trigger
 
-    @trigger_mode.setter
+    @trigger.setter
     @abstractmethod
-    def trigger_mode(self, mode: TriggerMode) -> None:
+    def trigger(self, mode: Trigger | str) -> None:
         """Set the trigger mode of the camera.
 
         :param mode: The trigger mode of the camera.
         :type mode: TriggerMode
         """
+        self._trigger = Trigger(mode)
+        if self._trigger == Trigger.HARDWARE:
+            self.configure_hardware_triggering()
+
+    @abstractmethod
+    def configure_hardware_triggering(self) -> None:
+        """Configure the hardware triggering settings of the camera."""
         pass
 
     @abstractmethod
@@ -392,28 +412,23 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @abstractmethod
-    def log_metadata(self) -> None:
-        """Log all metadata from the camera to the logger."""
-        pass
+    # @property
+    # @abstractmethod
+    # def sensor_temperature_c(self) -> float:
+    #     """
+    #     Get the sensor temperature of the camera in deg C.
 
-    @property
-    @abstractmethod
-    def sensor_temperature_c(self) -> float:
-        """
-        Get the sensor temperature of the camera in deg C.
+    #     :return: The sensor temperature of the camera in deg C.
+    #     :rtype: float
+    #     """
+    #     pass
 
-        :return: The sensor temperature of the camera in deg C.
-        :rtype: float
-        """
-        pass
+    # @property
+    # @abstractmethod
+    # def mainboard_temperature_c(self) -> float:
+    #     """Get the mainboard temperature of the camera in deg C.
 
-    @property
-    @abstractmethod
-    def mainboard_temperature_c(self) -> float:
-        """Get the mainboard temperature of the camera in deg C.
-
-        :return: The mainboard temperature of the camera in deg C.
-        :rtype: float
-        """
-        pass
+    #     :return: The mainboard temperature of the camera in deg C.
+    #     :rtype: float
+    #     """
+    #     pass

@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 import time
-from typing import Literal
+from typing import Any, Literal
 
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
@@ -18,6 +19,8 @@ from voxel.drivers.cameras.pco.sdk import Camera
 
 type EnumeratedProp = TriggerMode | TriggerSource | ReadoutMode
 type LimitType = Literal["min", "max", "step"]
+
+type PCOCameraLut = Mapping[TriggerMode, str] | Mapping[TriggerSource, str] | Mapping[ReadoutMode, str]
 
 
 class PCOCamera(VoxelCamera):
@@ -52,9 +55,9 @@ class PCOCamera(VoxelCamera):
         # LUTs
         self._pixel_type_lut = pixel_type_lut
         self._binning_lut = binning_lut
-        self._trigger_mode_lut: dict[TriggerMode, str] = self._get_lut(TriggerMode)
-        self._trigger_source_lut: dict[TriggerSource, str] = self._get_lut(TriggerSource)
-        self._readout_mode_lut: dict[ReadoutMode, str] = self._get_lut(ReadoutMode)
+        self._trigger_mode_lut: Mapping[TriggerMode, str] = self._get_lut(TriggerMode)
+        self._trigger_source_lut: Mapping[TriggerSource, str] = self._get_lut(TriggerSource)
+        self._readout_mode_lut: Mapping[ReadoutMode, str] = self._get_lut(ReadoutMode)
 
         # private props
         self._pixel_type = list(self._pixel_type_lut)[0]
@@ -67,20 +70,15 @@ class PCOCamera(VoxelCamera):
     # Sensor properties ________________________________________________________________________________________________
 
     @property
-    def sensor_size_px(self) -> Vec2D:
-        return Vec2D(self._delimination_props["roi_width"]["max"], self._delimination_props["roi_height"]["max"])
-
-    @property
-    def sensor_width_px(self) -> int:
-        return self.sensor_size_px.x
-
-    @property
-    def sensor_height_px(self) -> int:
-        return self.sensor_size_px.y
+    def sensor_size_px(self) -> Vec2D[int]:
+        if (x := self._delimination_props["roi_width"]["max"]) and (y := self._delimination_props["roi_height"]["max"]):
+            return Vec2D(int(x), int(y))
+        self.log.error("Unable to determine sensor size")
+        return Vec2D(0, 0)
 
     # Image properties _________________________________________________________________________________________________
 
-    @enumerated_property(Binning, lambda self: list(self._binning_lut))
+    @enumerated_property(options=lambda self: set(self._binning_lut))
     def binning(self) -> Binning:
         """
         Get the binning mode of the camera.
@@ -240,7 +238,7 @@ class PCOCamera(VoxelCamera):
         roi = self._camera.sdk.get_roi()
         self._camera.sdk.set_roi(y0=offset_px + 1, y1=roi["y1"] - roi["y0"] + offset_px + 1)
 
-    @enumerated_property(PixelType, lambda self: list(self._pixel_type_lut))
+    @enumerated_property(options=lambda self: set(self._pixel_type_lut))
     def pixel_type(self) -> PixelType:
         """
         Get the pixel type of the camera.
@@ -319,18 +317,18 @@ class PCOCamera(VoxelCamera):
         return line_interval_s * 1e6
 
     @line_interval_us.setter
-    def line_interval_us(self, line_interval_us: float):
+    def line_interval_us(self, value: float) -> None:
         """
         Set the line interval of the camera in us. \n
         This is the time interval between adjacnet \n
         rows activating on the camera sensor.
 
-        :param line_interval_us: The linterval of the camera in us
-        :type line_interval_us: float
+        :param value: The linterval of the camera in us
+        :type value: float
         """
         # timebase is us if interval > 4 us
-        self._camera.sdk.set_cmos_line_timing("on", line_interval_us / 1e6)
-        self.log.info(f"line interval set to: {line_interval_us} us")
+        self._camera.sdk.set_cmos_line_timing("on", value / 1e6)
+        self.log.info(f"line interval set to: {value} us")
         # refresh parameter values
         self._fetch_delimination_props()
 
@@ -353,7 +351,7 @@ class PCOCamera(VoxelCamera):
             case _:
                 return (self.line_interval_us * self.roi_height_px / 2) / 1000 + self.exposure_time_ms
 
-    @enumerated_property(ReadoutMode, lambda self: list(self._readout_mode_lut))
+    @enumerated_property(options=lambda self: set(self._readout_mode_lut))
     def readout_mode(self) -> ReadoutMode:
         """
         Get the readout mode of the camera.
@@ -410,7 +408,7 @@ class PCOCamera(VoxelCamera):
         """
         return TriggerSettings(self.trigger_mode, self.trigger_source)
 
-    @enumerated_property(TriggerMode, lambda self: list(self._trigger_mode_lut))
+    @enumerated_property(options=lambda self: set(self._trigger_mode_lut))
     def trigger_mode(self) -> TriggerMode:
         mode = self._camera.sdk.get_trigger_mode()["trigger mode"]
         try:
@@ -423,7 +421,7 @@ class PCOCamera(VoxelCamera):
         self._camera.sdk.set_trigger_mode(mode=self._trigger_mode_lut[mode])
         self.log.info(f"Set trigger mode to {mode}")
 
-    @enumerated_property(TriggerSource, lambda self: list(self._trigger_source_lut))
+    @enumerated_property(options=lambda self: set(self._trigger_source_lut))
     def trigger_source(self) -> TriggerSource:
         source = self._camera.sdk.get_acquire_mode()["acquire mode"]
         try:
@@ -536,7 +534,7 @@ class PCOCamera(VoxelCamera):
 
     # Private methods __________________________________________________________________________________________________
 
-    def _get_lut(self, str_enum_class) -> dict[EnumeratedProp, str]:
+    def _get_lut(self, str_enum_class) -> Mapping[Any, str]:
         lut = {}
         options = list(str_enum_class)
         for option in options:
@@ -549,7 +547,9 @@ class PCOCamera(VoxelCamera):
                 self.log.error(f"Error setting trigger mode {option}: {e}")
         return lut
 
-    def _get_delimination_props(self) -> dict[str, dict[LimitType, int]]:
+    def _get_delimination_props(self) -> dict[str, dict[LimitType, int | None]]:
+        if not self._camera.description:
+            raise RuntimeError("Camera description not found.")
         return {
             "line_interval_us": {"min": None, "max": None, "step": None},
             "exposure_time_ms": {

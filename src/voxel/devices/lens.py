@@ -13,9 +13,9 @@ class VoxelLens(VoxelDevice):
     :param aperture_um: The aperture of the lens in micrometers.
     :return lens: The lens device.
     :type magnification: float
-    :type name: Optional[str]
-    :type focal_length_um: Optional[float]
-    :type aperture_um: Optional[float]
+    :type name: str | None
+    :type focal_length_um: float| None
+    :type aperture_um: float| None
     :rtype lens: VoxelLens
     """
 

@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import Optional, Literal
 
 from tigerasi.device_codes import (
@@ -6,23 +7,30 @@ from tigerasi.device_codes import (
     ScanPattern,
     JoystickPolarity,
     JoystickInput,
-    TunableLensControlMode,
 )
 from tigerasi.tiger_controller import TigerController
 
 from voxel.devices import VoxelDevice, VoxelDeviceConnectionError
+from voxel.devices.base import VoxelDeviceType
 from voxel.devices.linear_axis import LinearAxisDimension, ScanState
 
 type AxisMap = dict[str, str]  # axis name -> hardware_axis
 type JoystickMap = dict[str, str]  # axis name -> joystick axis
 type DimensionsMap = dict[LinearAxisDimension, str]  # LinearAxisDimension -> axis name
 
+
+class TigerBoxETLControlMode(StrEnum):
+    TG1000_INPUT_NO_TEMP_COMPENSATION = "0"
+    EXTERNAL_INPUT_NO_TEMP_COMPENSATION = "1"
+    TG1000_INPUT_WITH_TEMP_COMPENSATION = "2"
+
+
 STEPS_PER_UM = 10
 
 
 class ASITigerBox(VoxelDevice):
-    def __init__(self, port: str, name: Optional[str] = None):
-        super().__init__(name)
+    def __init__(self, port: str, name: str = "tigerbox") -> None:
+        super().__init__(name, device_type=VoxelDeviceType.HUB)
         self.box = TigerController(port)
         self.axis_map = {}
         self.dimensions_map = {}
@@ -190,7 +198,7 @@ class ASITigerBox(VoxelDevice):
     def get_axis_home_position(self, axis_name: str) -> float:
         return float(self.box.get_home(self.axis_map[axis_name]))
 
-    def set_axis_home_position(self, axis_name: str, position_mm: float = None) -> None:
+    def set_axis_home_position(self, axis_name: str, position_mm: float | None = None) -> None:
         position_mm = position_mm or self.get_axis_position(axis_name)
         self.box.set_home(**{self.axis_map[axis_name]: position_mm, "wait": True})
 
@@ -389,10 +397,10 @@ class ASITigerBox(VoxelDevice):
     def get_etl_temp(self, axis_name: str) -> float:
         return self.box.get_etl_temp(self.axis_map[axis_name])
 
-    def get_axis_control_mode(self, axis_name: str) -> TunableLensControlMode:
+    def get_axis_control_mode(self, axis_name: str) -> TigerBoxETLControlMode:
         return self.box.get_axis_control_mode(self.axis_map[axis_name])
 
-    def set_axis_control_mode(self, axis_name: str, mode: TunableLensControlMode) -> None:
+    def set_axis_control_mode(self, axis_name: str, mode: TigerBoxETLControlMode) -> None:
         self.box.set_axis_control_mode(**{self.axis_map[axis_name]: mode})
 
     # Helpers _________________________________________________________________________________________________________

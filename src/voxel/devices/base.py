@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 
 class VoxelDeviceType(StrEnum):
+    HUB = "hub"
     CAMERA = "camera"
     LENS = "lens"
     LASER = "laser"

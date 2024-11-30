@@ -2,6 +2,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 
+from voxel.utils.descriptors.deliminated import deliminated_property
+
 from .base import VoxelDevice, VoxelDeviceType
 
 
@@ -75,7 +77,7 @@ class VoxelLinearAxis(VoxelDevice):
         """Get the current scan state"""
         pass
 
-    @property
+    @deliminated_property(unit="mm")
     @abstractmethod
     def position_mm(self) -> float:
         """Current position in mm"""
@@ -83,7 +85,7 @@ class VoxelLinearAxis(VoxelDevice):
 
     @position_mm.setter
     @abstractmethod
-    def position_mm(self, position: float) -> None:
+    def position_mm(self, value: float) -> None:
         """Move to position in mm"""
         pass
 
@@ -139,7 +141,7 @@ class VoxelLinearAxis(VoxelDevice):
 
     @speed_mm_s.setter
     @abstractmethod
-    def speed_mm_s(self, speed: float) -> None:
+    def speed_mm_s(self, value: float) -> None:
         """Set speed in mm/s"""
         pass
 
@@ -151,12 +153,12 @@ class VoxelLinearAxis(VoxelDevice):
 
     @acceleration_ms.setter
     @abstractmethod
-    def acceleration_ms(self, acceleration: float) -> None:
+    def acceleration_ms(self, value: float) -> None:
         """Set acceleration in m/s^2"""
         pass
 
     @abstractmethod
-    def set_backlash_mm(self, backlash_mm: float) -> None:
+    def set_backlash_mm(self, value: float) -> None:
         """Set backlash in mm"""
         pass
 

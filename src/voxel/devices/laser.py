@@ -1,14 +1,17 @@
 from abc import abstractmethod
 from typing import Optional
 
+from voxel.utils.descriptors.deliminated import deliminated_property
+
 from .base import VoxelDevice, VoxelDeviceType
 
 
 class VoxelLaser(VoxelDevice):
     """Base class for all voxel laser devices."""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, wavelength: int) -> None:
         super().__init__(device_type=VoxelDeviceType.LASER, name=name)
+        self._wavelength = wavelength
 
     def __repr__(self) -> str:
         return (
@@ -30,12 +33,11 @@ class VoxelLaser(VoxelDevice):
         pass
 
     @property
-    @abstractmethod
-    def wavelength(self) -> str:
+    def wavelength(self) -> int:
         """Wavelength of laser"""
-        pass
+        return self._wavelength
 
-    @property
+    @deliminated_property(unit="mW", description="The target power that the laser is trying to achieve.")
     @abstractmethod
     def power_setpoint_mw(self) -> float:
         """
@@ -71,7 +73,7 @@ class VoxelLaser(VoxelDevice):
 
     @property
     @abstractmethod
-    def temperature_c(self) -> Optional[float]:
+    def temperature_c(self) -> float | None:
         """
         Get the main temperature of the laser in degrees Celsius.
 

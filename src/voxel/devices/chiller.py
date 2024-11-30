@@ -21,10 +21,10 @@ class VoxelChiller(VoxelDevice):
 
     @temperature_c.setter
     @abstractmethod
-    def temperature_c(self, temperature: float):
+    def temperature_c(self, value: float) -> None:
         """
         Set the temperature of the chiller.
-        :param temperature: The temperature to set the chiller to.
-        :type temperature: float
+        :param value: The temperature to set the chiller to.
+        :type value: float
         """
         pass

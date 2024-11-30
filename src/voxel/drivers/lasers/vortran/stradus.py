@@ -18,9 +18,8 @@ class StradusLaser(VoxelLaser):
         :param port: comm port for lasers.
         :param wavelength: wavelength of laser
         """
-        super().__init__(name)
+        super().__init__(name=name, wavelength=wavelength)
         self._inst = StradusVortran(port)
-        self._wavelength = wavelength
 
     def enable(self):
         self._inst.enable()
@@ -50,14 +49,10 @@ class StradusLaser(VoxelLaser):
 
     @modulation_mode.setter
     def modulation_mode(self, value: str):
-        if value not in MODULATION_MODES.keys():
+        if value not in MODULATION_MODES:
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         for attribute, state in MODULATION_MODES[value].items():
             setattr(self._inst, attribute, state)
-
-    @property
-    def wavelength(self) -> int:
-        return self._wavelength
 
     @property
     def power_mw(self) -> float:

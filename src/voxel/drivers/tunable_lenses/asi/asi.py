@@ -1,5 +1,5 @@
-from voxel.drivers.hubs.tigerbox import ASITigerBox
-from voxel.devices.tunable_lens import VoxelTunableLens, TunableLensControlMode
+from voxel.drivers.hubs.tigerbox import ASITigerBox, TigerBoxETLControlMode
+from voxel.devices.tunable_lens import VoxelTunableLens, ETLControlMode
 
 
 class ASITunableLens(VoxelTunableLens):
@@ -33,27 +33,27 @@ class ASITunableLens(VoxelTunableLens):
         """Get the tiger axis control mode."""
         mode = self._tigerbox.get_axis_control_mode(self.name)
         match mode:
-            case TunableLensControlMode.EXTERNAL_INPUT_NO_TEMP_COMPENSATION:
-                return TunableLensControlMode.EXTERNAL
-            case TunableLensControlMode.TG1000_INPUT_NO_TEMP_COMPENSATION:
-                return TunableLensControlMode.INTERNAL
+            case TigerBoxETLControlMode.EXTERNAL_INPUT_NO_TEMP_COMPENSATION:
+                return ETLControlMode.EXTERNAL
+            case TigerBoxETLControlMode.TG1000_INPUT_NO_TEMP_COMPENSATION:
+                return ETLControlMode.INTERNAL
             case _:
-                raise ValueError("mode must be one of %r." % TunableLensControlMode)
+                raise ValueError("mode must be one of %r." % ETLControlMode)
 
     @mode.setter
-    def mode(self, mode: TunableLensControlMode):
+    def mode(self, mode: ETLControlMode):
         """Set the tiger axis control mode."""
         match mode:
-            case TunableLensControlMode.EXTERNAL:
+            case ETLControlMode.EXTERNAL:
                 self._tigerbox.set_axis_control_mode(
-                    self.name, TunableLensControlMode.EXTERNAL_INPUT_NO_TEMP_COMPENSATION
+                    self.name, TigerBoxETLControlMode.EXTERNAL_INPUT_NO_TEMP_COMPENSATION
                 )
-            case TunableLensControlMode.INTERNAL:
+            case ETLControlMode.INTERNAL:
                 self._tigerbox.set_axis_control_mode(
-                    self.name, TunableLensControlMode.TG1000_INPUT_NO_TEMP_COMPENSATION
+                    self.name, TigerBoxETLControlMode.TG1000_INPUT_NO_TEMP_COMPENSATION
                 )
             case _:
-                raise ValueError("mode must be one of %r." % TunableLensControlMode)
+                raise ValueError("mode must be one of %r." % ETLControlMode)
 
     def log_metadata(self):
         self.log.info("tiger hardware axis parameters")

@@ -1,13 +1,11 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from tigerasi.device_codes import JoystickInput
+from tigerasi.device_codes import JoystickInput as ASIJoystickInput
 
 from voxel.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
 from voxel.drivers.hubs.tigerbox import ASITigerBox
 from voxel.utils.descriptors.deliminated import deliminated_property
-
-ASIJoystickInput = JoystickInput
 
 
 @dataclass
@@ -85,8 +83,8 @@ class ASITigerLinearAxis(VoxelLinearAxis):
         return self._tigerbox.get_axis_position(self.name)
 
     @position_mm.setter
-    def position_mm(self, position_mm: float) -> None:
-        self._tigerbox.move_absolute_mm(self.name, position_mm)
+    def position_mm(self, value: float) -> None:
+        self._tigerbox.move_absolute_mm(self.name, value)
 
     @property
     def upper_limit_mm(self) -> float:
@@ -123,7 +121,7 @@ class ASITigerLinearAxis(VoxelLinearAxis):
     def home_position_mm(self) -> float:
         return self._tigerbox.get_axis_home_position(self.name)
 
-    def set_home_position(self, home_position: float = None) -> None:
+    def set_home_position(self, home_position: float | None = None) -> None:
         """Set the home position of the axis
         :param home_position: The position to set as the home position.
         If None, the current position is set as the home position.
@@ -150,23 +148,23 @@ class ASITigerLinearAxis(VoxelLinearAxis):
     # Other Kinematic properties and methods __________________________________________________________________________
 
     @property
-    def speed_mm_s(self) -> float | None:
+    def speed_mm_s(self) -> float:
         return self._tigerbox.get_axis_speed(self.name)
 
     @speed_mm_s.setter
-    def speed_mm_s(self, speed_mm_s: float) -> None:
-        self._tigerbox.set_axis_speed(self.name, speed_mm_s)
+    def speed_mm_s(self, value: float) -> None:
+        self._tigerbox.set_axis_speed(axis_name=self.name, speed_mm_s=value)
 
     @property
-    def acceleration_ms(self) -> float | None:
-        return self._tigerbox.get_axis_acceleration(self.name)
+    def acceleration_ms(self) -> float:
+        return self._tigerbox.get_axis_acceleration(axis_name=self.name)
 
     @acceleration_ms.setter
-    def acceleration_ms(self, acceleration_ms: float) -> None:
-        self._tigerbox.set_axis_acceleration(self.name, acceleration_ms)
+    def acceleration_ms(self, value: float) -> None:
+        self._tigerbox.set_axis_acceleration(axis_name=self.name, acceleration_ms=value)
 
-    def set_backlash_mm(self, backlash_mm: float) -> None:
-        self._tigerbox.set_axis_backlash(self.name, backlash_mm)
+    def set_backlash_mm(self, value: float) -> None:
+        self._tigerbox.set_axis_backlash(axis_name=self.name, backlash_mm=value)
 
     # Input methods _____________________________________________________________________________________________
 
@@ -184,17 +182,17 @@ class ASITigerLinearAxis(VoxelLinearAxis):
     def zero_at_center(self) -> None:
         """Move the axis to the center of the travel range."""
         self.position_mm = (self.lower_limit_mm + self.upper_limit_mm) / 2
-        self.zero_in_place()
         self.await_movement()
+        self.zero_in_place()
 
     def zero_at_upper_limit(self) -> None:
         """Move the axis to the upper limit of the travel range."""
         self.position_mm = self.upper_limit_mm
-        self.zero_in_place()
         self.await_movement()
+        self.zero_in_place()
 
     def zero_at_lower_limit(self) -> None:
         """Move the axis to the lower limit of the travel range."""
         self.position_mm = self.lower_limit_mm
-        self.zero_in_place()
         self.await_movement()
+        self.zero_in_place()

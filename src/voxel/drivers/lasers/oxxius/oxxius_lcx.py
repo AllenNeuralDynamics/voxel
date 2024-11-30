@@ -14,20 +14,15 @@ class OxxiusLCXLaser(VoxelLaser):
         :param prefix: prefix specic to laser.
         :param wavelength: wavelength of laser
         """
-        super().__init__(name)
+        super().__init__(name=name, wavelength=wavelength)
         self._prefix = prefix
         self._inst = LCX(port, self._prefix)
-        self._wavelength = wavelength
 
     def enable(self):
         self._inst.enable()
 
     def disable(self):
         self._inst.disable()
-
-    @property
-    def wavelength(self) -> int:
-        return self._wavelength
 
     @deliminated_property(minimum=0, maximum=lambda self: self._inst.max_power)
     def power_setpoint_mw(self):

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from enum import IntEnum
 
 from voxel.devices.camera import Binning, PixelType
 from .sdk.dcamapi4 import DCAMPROP
@@ -34,6 +33,41 @@ ENUMERATED_PROPERTIES = {
 }
 
 
+DcamSensorMode = DCAMPROP.SENSORMODE
+
+DcamReadoutDirection = DCAMPROP.READOUT_DIRECTION
+
+DcamTriggerMode = DCAMPROP.TRIGGER_MODE
+DcamTriggerSource = DCAMPROP.TRIGGERSOURCE
+DcamTriggerPolarity = DCAMPROP.TRIGGERPOLARITY
+DcamTriggerActive = DCAMPROP.TRIGGERACTIVE
+
+
+@dataclass
+class TriggerSettings:
+    mode: DcamTriggerMode
+    source: DcamTriggerSource
+    polarity: DcamTriggerPolarity
+    active: DcamTriggerActive
+
+    def dict(self):
+        return {"mode": self.mode, "source": self.source, "polarity": self.polarity, "active": self.active}
+
+
+class HamamatsuSettings:
+    """Enumerated Settings for Hamamatsu Cameras."""
+
+    Binning = Binning
+    PixelType = PixelType
+    SensorMode = DcamSensorMode
+    ReadoutDirection = DcamReadoutDirection
+    TriggerMode = DcamTriggerMode
+    TriggerSource = DcamTriggerSource
+    TriggerPolarity = DcamTriggerPolarity
+    TriggerActive = DcamTriggerActive
+    TriggerSettings = TriggerSettings
+
+
 # class SensorMode(IntEnum):
 #     """The sensor mode of the camera."""
 #     AREA = 1
@@ -45,10 +79,7 @@ ENUMERATED_PROPERTIES = {
 #     DUALLIGHTSHEET = 16
 #     PHOTONNUMBERRESOLVING = 18
 #     WHOLELINES = 19
-SensorMode = DCAMPROP.SENSORMODE
 
-
-ReadoutDirection = DCAMPROP.READOUT_DIRECTION
 # class ReadoutDirection(IntEnum):
 #     """The readout direction of the camera."""
 #     FORWARD = 1
@@ -77,57 +108,3 @@ ReadoutDirection = DCAMPROP.READOUT_DIRECTION
 #     """The trigger polarity of the camera."""
 #     NEGATIVE = 1
 #     POSITIVE = 2
-
-TriggerMode = DCAMPROP.TRIGGER_MODE
-TriggerSource = DCAMPROP.TRIGGERSOURCE
-TriggerPolarity = DCAMPROP.TRIGGERPOLARITY
-
-
-class TriggerActive(IntEnum):
-    """The type of trigger event that will be used to trigger the camera."""
-
-    EDGE = 1
-    LEVEL = 2
-    SYNCREADOUT = 3
-    POINT = 4
-
-    # TODO: Rewrite descriptions for each value
-    # Figure out the usefulness of descriptions and whether they should be included in the final implementation
-    @property
-    def description(self):
-        match self.value:
-            case TriggerActive.EDGE:
-                return "The camera will be triggered on the edge of the trigger signal"
-            case TriggerActive.LEVEL:
-                return "The camera will be triggered on the level of the trigger signal"
-            case TriggerActive.SYNCREADOUT:
-                return "The camera will be triggered on the readout of the trigger signal"
-            case TriggerActive.POINT:
-                return "The camera will be triggered on the point of the trigger signal"
-            case _:
-                return "Specifies the type of trigger event to be used"
-
-
-@dataclass
-class TriggerSettings:
-    mode: TriggerMode
-    source: TriggerSource
-    polarity: TriggerPolarity
-    active: TriggerActive
-
-    def dict(self):
-        return {"mode": self.mode, "source": self.source, "polarity": self.polarity, "active": self.active}
-
-
-class HamamatsuSettings:
-    """Enumerated Settings for Hamamatsu Cameras."""
-
-    Binning = Binning
-    PixelType = PixelType
-    SensorMode = SensorMode
-    ReadoutDirection = ReadoutDirection
-    TriggerMode = TriggerMode
-    TriggerSource = TriggerSource
-    TriggerPolarity = TriggerPolarity
-    TriggerActive = TriggerActive
-    TriggerSettings = TriggerSettings

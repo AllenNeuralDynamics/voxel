@@ -1,5 +1,4 @@
 import time
-from typing import Optional
 
 from tigerasi.tiger_controller import TigerController
 
@@ -13,11 +12,11 @@ class ASIFilterWheel(VoxelFilterWheel):
     """Filter Wheel Abstraction from an ASI Tiger Controller."""
 
     def __init__(self, tigerbox: TigerController, wheel_id: str, name: str = ""):
-        super().__init__(name)
+        super().__init__(name=name)
         self.tigerbox = tigerbox
         self.wheel_id = wheel_id
         self.filters: dict[str, int] = {}
-        self._current_filter: Optional[str] = None
+        self._current_filter: str | None = None
         self._is_closed = False
 
     def add_filter(self, filter_name: str, position: int):
@@ -52,7 +51,7 @@ class ASIFilterWheel(VoxelFilterWheel):
         self._current_filter = filter_name
 
     @property
-    def current_filter(self) -> Optional[str]:
+    def current_filter(self) -> str | None:
         """Return the name of the currently active filter, or None if no filter is active."""
         return self._current_filter
 

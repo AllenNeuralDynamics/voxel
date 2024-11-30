@@ -9,7 +9,7 @@ MODULATION_MODES = {"off": "CWP", "analog": "ANALOG", "digital": "DIGITAL", "mix
 
 
 class ObisLSLaser(VoxelLaser):
-    def __init__(self, name: str, wavelength: int, port: Serial | str, prefix: str = None):
+    def __init__(self, name: str, wavelength: int, port: Serial | str, prefix: str | None = None) -> None:
         """
         Communicate with specific LS laser.
 
@@ -17,14 +17,9 @@ class ObisLSLaser(VoxelLaser):
         :param wavelength: wavelength of laser
         :param prefix: prefix specic to laser.
         """
-        super().__init__(name)
+        super().__init__(name=name, wavelength=wavelength)
         self.prefix = prefix
-        self._wavelength = wavelength
         self._inst = ObisLS(port, self.prefix)
-
-    @property
-    def wavelength(self) -> int:
-        return self._wavelength
 
     def enable(self):
         self._inst.enable()

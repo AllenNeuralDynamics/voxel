@@ -1,4 +1,5 @@
-from voxel.devices.camera import AcquisitionState, VoxelCamera, VoxelFrame, TriggerMode
+from collections.abc import Mapping
+from voxel.devices.camera import AcquisitionState, VoxelCamera, VoxelFrame, Trigger
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.vec import Vec2D
@@ -21,12 +22,6 @@ from .simulated_hardware import (
     SimulatedCameraHardware,
 )
 
-PixelTypeLUT = dict[PixelType, str]
-BinningLUT = dict[Binning, str]
-TriggerModeLUT = dict[TriggerMode, str]
-TriggerSourceLUT = dict[TriggerSource, str]
-TriggerPolarityLUT = dict[TriggerPolarity, str]
-
 
 class SimulatedCamera(VoxelCamera):
     def __init__(
@@ -44,22 +39,22 @@ class SimulatedCamera(VoxelCamera):
             self.instance = SimulatedCameraHardware()
 
         # Property LUTs
-        self._pixel_type_lut: PixelTypeLUT = {
+        self._pixel_type_lut: Mapping[PixelType, str] = {
             PixelType.MONO8: "MONO8",
             PixelType.MONO12: "MONO12",
             PixelType.MONO14: "MONO14",
             PixelType.MONO16: "MONO16",
         }
-        self._binning_lut: BinningLUT = {
-            Binning.X1: "1x1",
+        self._binning_lut: Mapping[Binning, str] = {Binning.X1: "1x1"}
+        self._trigger_mode_lut: Mapping[Trigger, str] = {mode: mode.value for mode in Trigger}
+        self._trigger_source_lut: Mapping[TriggerSource, str] = {source: source.value for source in TriggerSource}
+        self._trigger_polarity_lut: Mapping[TriggerPolarity, str] = {
+            polarity: polarity.value for polarity in TriggerPolarity
         }
-        self._trigger_mode_lut: TriggerModeLUT = {mode: mode.value for mode in TriggerMode}
-        self._trigger_source_lut: TriggerSourceLUT = {source: source.value for source in TriggerSource}
-        self._trigger_polarity_lut: TriggerPolarityLUT = {polarity: polarity.value for polarity in TriggerPolarity}
 
         # private properties
         self._binning: Binning = Binning.X1
-        self._trigger_mode: TriggerMode = TriggerMode.OFF
+        self._trigger_mode: Trigger = Trigger.OFF
 
         self.log.info(f"Simulated camera initialized with id: {name}")
 
@@ -199,7 +194,7 @@ class SimulatedCamera(VoxelCamera):
         self.instance.exposure_time_ms = exposure_time_ms
         self.log.info(f"Exposure time set to: {exposure_time_ms} ms")
 
-    @property
+    @deliminated_property(unit="us")
     def line_interval_us(self) -> float:
         return self.instance.line_interval_us_lut[self.pixel_type]
 
@@ -208,12 +203,12 @@ class SimulatedCamera(VoxelCamera):
         return (self.line_interval_us * self.roi_height_px) / 1000 + self.exposure_time_ms
 
     @property
-    def trigger_mode(self) -> TriggerMode:
+    def trigger_mode(self) -> Trigger:
         return self._trigger_mode
 
     @trigger_mode.setter
-    def trigger_mode(self, mode: TriggerMode) -> None:
-        self._trigger_mode = TriggerMode(mode)
+    def trigger_mode(self, mode: Trigger) -> None:
+        self._trigger_mode = Trigger(mode)
         self.log.info(f"Trigger mode set to: {mode}")
 
     @property

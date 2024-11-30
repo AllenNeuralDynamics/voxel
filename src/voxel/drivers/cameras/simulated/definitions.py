@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from voxel.devices.camera import Binning, PixelType, TriggerMode
+from voxel.devices.camera import Binning, PixelType, Trigger
 
 
 class TriggerSource(StrEnum):
@@ -18,7 +18,7 @@ class TriggerPolarity(StrEnum):
 class TriggerSettings:
     """Trigger settings for a camera."""
 
-    mode: TriggerMode | None
+    mode: Trigger | None
     source: TriggerSource | None
     polarity: TriggerPolarity | None
 
@@ -34,7 +34,7 @@ class SimulatedCameraSettings:
 
     Binning = Binning
     PixelType = PixelType
-    TriggerMode = TriggerMode
+    TriggerMode = Trigger
     TriggerSource = TriggerSource
     TriggerPolarity = TriggerPolarity
     TriggerSettings = TriggerSettings

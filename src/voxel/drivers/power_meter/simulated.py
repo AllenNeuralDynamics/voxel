@@ -16,7 +16,7 @@ class SimulatedPowerMeter(VoxelPowerMeter):
         Parameters:
         wavelength_nm (float): The wavelength in nanometers.
         """
-        super().__init__(name)
+        super().__init__(name=name)
         self._wavelength_nm = wavelength_nm
         self._is_connected = False
         self._connect()

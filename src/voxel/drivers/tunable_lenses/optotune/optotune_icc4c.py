@@ -2,7 +2,7 @@ import optoICC
 from optoKummenberg.tools.definitions import UnitType
 
 
-from voxel.devices.tunable_lens import VoxelTunableLens, TunableLensControlMode
+from voxel.devices.tunable_lens import VoxelTunableLens, ETLControlMode
 
 # constants for Optotune ICC-4C controller
 # CURRENT   = 0
@@ -12,7 +12,7 @@ from voxel.devices.tunable_lens import VoxelTunableLens, TunableLensControlMode
 # UNITLESS = 4
 # UNDEFINED = 5
 
-MODES = {TunableLensControlMode.INTERNAL: UnitType.FP, TunableLensControlMode.EXTERNAL: UnitType.CURRENT}
+MODES = {ETLControlMode.INTERNAL: UnitType.FP, ETLControlMode.EXTERNAL: UnitType.CURRENT}
 
 
 class OptotuneICC4CTunableLens(VoxelTunableLens):
@@ -40,20 +40,21 @@ class OptotuneICC4CTunableLens(VoxelTunableLens):
         return self._channel
 
     @property
-    def mode(self) -> TunableLensControlMode:
+    def mode(self) -> ETLControlMode:
         """Get the tunable lens control mode."""
         mode = self.tunable_lens.GetControlMode()
         return next(key for key, value in MODES.items() if value == mode)
 
     @mode.setter
-    def mode(self, mode: TunableLensControlMode):
+    def mode(self, mode: ETLControlMode):
         """Set the tunable lens control mode."""
         self.tunable_lens.SetControlMode(MODES[mode])
 
     @property
     def temperature_c(self):
         """Get the temperature in deg C."""
-        return {"Temperature [C]": self.tunable_lens.TemperatureManager.GetDeviceTemperature()}
+        temp = self.tunable_lens.TemperatureManager.GetDeviceTemperature()
+        return temp
 
     def log_metadata(self):
         return {

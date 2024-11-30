@@ -23,15 +23,10 @@ class OxxiusLBXLaser(VoxelLaser):
         :param wavelength: wavelength of laser
         the relationship between current percentage and power mw
         """
-        super().__init__(name)
+        super().__init__(name=name, wavelength=wavelength)
         self._prefix = prefix
         self._inst = LBX(port, self._prefix)
         self._coefficients = coefficients
-        self._wavelength = wavelength
-
-    @property
-    def wavelength(self) -> int:
-        return self._wavelength
 
     def enable(self):
         self._inst.enable()
@@ -47,7 +42,7 @@ class OxxiusLBXLaser(VoxelLaser):
             return int(self._inst.power_setpoint)
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float or int):
+    def power_setpoint_mw(self, value: float):
         if self._inst.constant_current == "ON":
             solutions = solve(self._coefficients_curve() - value)  # solutions for laser value
             for sol in solutions:
@@ -70,11 +65,10 @@ class OxxiusLBXLaser(VoxelLaser):
 
     @modulation_mode.setter
     def modulation_mode(self, value: str):
-        if value not in MODULATION_MODES.keys():
+        if value not in MODULATION_MODES:
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         for attribute, state in MODULATION_MODES[value].items():
             setattr(self._inst, attribute, state)
-        self._set_max_power()
 
     def status(self):
         return self._inst.faults()
@@ -103,6 +97,3 @@ class OxxiusLBXLaser(VoxelLaser):
             return int((round(self._coefficients_curve().subs(symbols("x"), 100), 1)))
         else:
             return self._inst.max_power
-
-    def _set_max_power(self):
-        type(self.power_setpoint_mw).maximum = self.max_power

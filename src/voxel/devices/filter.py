@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from .base import VoxelDevice, VoxelDeviceType
 
@@ -36,7 +35,7 @@ class VoxelFilterWheel(VoxelDevice):
         super().__init__(name, device_type=VoxelDeviceType.FILTER_WHEEL)
 
     @abstractmethod
-    def add_filter(self, name: str, position: int):
+    def add_filter(self, filter_name: str, position: int):
         """Add a filter to the wheel."""
         pass
 
@@ -47,6 +46,6 @@ class VoxelFilterWheel(VoxelDevice):
 
     @property
     @abstractmethod
-    def current_filter(self) -> Optional[str]:
+    def current_filter(self) -> str | None:
         """Return the name of the currently active filter, or None if no filter is active."""
         pass

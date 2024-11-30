@@ -1,5 +1,4 @@
 import random
-from typing import Optional
 
 from serial import Serial
 
@@ -16,18 +15,17 @@ MAX_POWER_MW = 100
 
 
 class SimulatedLaser(VoxelLaser):
-    def __init__(self, wavelength: int, name: Optional[str] = None, prefix: str = ""):
+    def __init__(self, wavelength: int, name: str = "simulated_laser", prefix: str = ""):
         """
         Communicate with specific Simulated laser in Simulated Combiner box.
 
         :param name: voxel device name for this laser.
         :param prefix: prefix specic to laser.
         """
-        super().__init__(name)
+        super().__init__(name=name, wavelength=wavelength)
 
         self.prefix = prefix
         self.ser = Serial
-        self._wavelength = wavelength
         self._simulated_power_setpoint_mw = 10.0
         self._max_power_mw = 100.0
         self._modulation_mode = "digital"
@@ -60,7 +58,7 @@ class SimulatedLaser(VoxelLaser):
 
     @modulation_mode.setter
     def modulation_mode(self, value: str):
-        if value not in MODULATION_MODES.keys():
+        if value not in MODULATION_MODES:
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         for attribute, state in MODULATION_MODES[value].items():
             setattr(self, attribute, state)
@@ -80,10 +78,6 @@ class SimulatedLaser(VoxelLaser):
     @cdrh.setter
     def cdrh(self, value: str):
         self._cdrh = value
-
-    @property
-    def wavelength(self) -> int:
-        return self._wavelength
 
     def close(self):
         pass

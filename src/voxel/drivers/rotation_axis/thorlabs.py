@@ -52,15 +52,15 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         return self._instance.get_position()
 
     @position_deg.setter
-    def position_deg(self, position_deg: float) -> None:
+    def position_deg(self, value: float) -> None:
         """Set the position of the rotation axis in degrees.
         :param position_deg: The new position in degrees
         :type position_deg: float
         """
-        if position_deg < MIN_POSITION_DEG or position_deg > MAX_POSITION_DEG:
-            raise ValueError(f"Position {position_deg} must be between " f"{MIN_POSITION_DEG} and {MAX_POSITION_DEG}")
-        self._instance.move_to(position_deg)
-        self.log.info(f"Rotation mount {self.serial_number} commanded " f"to move to position {position_deg} deg")
+        if value < MIN_POSITION_DEG or value > MAX_POSITION_DEG:
+            raise ValueError(f"Position {value} must be between " f"{MIN_POSITION_DEG} and {MAX_POSITION_DEG}")
+        self._instance.move_to(value)
+        self.log.info(f"Rotation mount {self.serial_number} commanded " f"to move to position {value} deg")
 
     @property
     def speed_deg_s(self) -> float:
@@ -72,17 +72,15 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         return velocity_parameters.max_velocity
 
     @speed_deg_s.setter
-    def speed_deg_s(self, speed_deg_s: float) -> None:
+    def speed_deg_s(self, value: float) -> None:
         """Set the speed of the rotation axis in degrees per second.
         :param speed_deg_s: The new speed in degrees per second
         :type speed_deg_s: float
         """
-        if speed_deg_s < MIN_SPEED_DEG_S or speed_deg_s > MAX_SPEED_DEG_S:
-            raise ValueError(
-                f"Speed {speed_deg_s} deg/s must be between " f"{MIN_SPEED_DEG_S} and {MAX_SPEED_DEG_S} deg/s"
-            )
-        self._instance.set_velocity_parameters(max_velocity=speed_deg_s)
-        self.log.info(f"Rotation mount {self.serial_number} set " f"to speed {speed_deg_s} deg/s")
+        if value < MIN_SPEED_DEG_S or value > MAX_SPEED_DEG_S:
+            raise ValueError(f"Speed {value} deg/s must be between " f"{MIN_SPEED_DEG_S} and {MAX_SPEED_DEG_S} deg/s")
+        self._instance.set_velocity_parameters(max_velocity=value)
+        self.log.info(f"Rotation mount {self.serial_number} set " f"to speed {value} deg/s")
 
     @property
     def is_moving(self) -> bool:

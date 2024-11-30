@@ -24,8 +24,8 @@ class SimulatedFlipMount(VoxelFlipMount):
         self._conn = conn
         self._position_1 = self._sanitize_string(position_1)
         self._position_2 = self._sanitize_string(position_2)
-        self._positions = {self._position_1: 0, self._position_2: 1}
-        self._inst: Literal[0, 1] = 0
+        self._positions = {0: self._position_1, 1: self._position_2}
+        self._inst: int = 0
         self._flip_time_ms: float = FLIP_TIME_RANGE_MS[0]  # min flip time
 
     def close(self):
@@ -54,19 +54,18 @@ class SimulatedFlipMount(VoxelFlipMount):
         return self._positions[self._inst]
 
     @position.setter
-    def position(self, position: str):
+    def position(self, position_name: str):
         """Set the flip mount to a specific position by name. \n
         :param position: Name of the position to set the flip mount to.
         :type position: str
         :raises ValueError: If the position is not found in the available positions.
         """
-        try:
-            new_position = next(k for k, v in self._positions.items() if v == position.lower())
-            self._inst = self._positions[new_position]
-        except KeyError:
-            raise ValueError(f"Invalid position {position}. Valid positions are {list(self._positions.keys())}")
-        except Exception as e:
-            raise e
+        position_name = position_name.lower()
+        if new_position := next((k for k, v in self._positions.items() if v == position_name.lower()), None):
+            assert new_position in [0, 1], f"Invalid position {position_name}. Valid positions are {self._positions}"
+            self._inst = new_position
+        else:
+            self.log.error(f"Invalid position {position_name}. Valid positions are {self._positions}")
 
     @deliminated_property(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:

@@ -20,7 +20,7 @@ def obis_modulation_getter(instance, logger, modes=None):
 def obis_modulation_setter(instance, value: str, modes=None):
     if modes is None:
         modes = MODULATION_MODES
-    if value not in modes.keys():
+    if value not in modes:
         raise ValueError("mode must be one of %r." % modes.keys())
     if modes[value] == "CWP":
         instance.set_operational_setting(OperationalCmd.MODE_INTERNAL_CW, modes[value])
@@ -29,7 +29,7 @@ def obis_modulation_setter(instance, value: str, modes=None):
 
 
 class ObisLXLaser(VoxelLaser):
-    def __init__(self, name: str, wavelength: int, port: Serial | str, prefix: str = None):
+    def __init__(self, name: str, wavelength: int, port: Serial | str, prefix: str | None = None):
         """
         Communicate with specific LBX laser in L6CC Combiner box.
 
@@ -37,14 +37,9 @@ class ObisLXLaser(VoxelLaser):
         :param prefix: prefix specic to laser.
         :param wavelength: wavelength of laser
         """
-        super().__init__(name)
+        super().__init__(name=name, wavelength=wavelength)
         self.prefix = prefix
-        self._wavelength = wavelength
         self._inst = ObisLX(port, self.prefix)
-
-    @property
-    def wavelength(self) -> int:
-        return self._wavelength
 
     def enable(self):
         self._inst.enable()
