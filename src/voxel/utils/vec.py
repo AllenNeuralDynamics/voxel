@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Self
+from typing import Iterator, Self
 
 type Number = int | float
 
@@ -48,6 +48,10 @@ class Vec2D[T: Number]:
     def __floordiv__(self, other: T) -> Vec2D[Number]:
         return Vec2D(self.x // other, self.y // other)
 
+    # tuple unpacking
+    def __iter__(self) -> Iterator[T]:
+        return iter((self.x, self.y))
+
 
 @dataclass
 class Vec3D[T: Number]:
@@ -71,6 +75,9 @@ class Vec3D[T: Number]:
         else:
             x, y, z = int(split[0]), int(split[1]), int(split[2])
         return cls(x, y, z)  # type: ignore
+
+    def __iter__(self) -> Iterator[T]:
+        return iter((self.x, self.y, self.z))
 
     def __hash__(self):
         return hash((self.x, self.y, self.z))

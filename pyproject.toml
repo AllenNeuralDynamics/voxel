@@ -46,6 +46,7 @@ dependencies = [
     "pyimariswriter>=0.7.0",
     "psutil>=6.1.0",
     "pyclesperanto>=0.16.0",
+    "scikit-image>=0.24.0",
 ]
 
 [project.optional-dependencies]

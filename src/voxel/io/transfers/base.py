@@ -49,7 +49,7 @@ class VoxelFileTransfer:
         :rtype: str
         """
 
-        return self._filename
+        return str(self._filename)
 
     @filename.setter
     @abstractmethod
@@ -74,7 +74,7 @@ class VoxelFileTransfer:
         :rtype: str
         """
 
-        return self._acquisition_name
+        return str(self._acquisition_name)
 
     @acquisition_name.setter
     @abstractmethod
@@ -91,7 +91,7 @@ class VoxelFileTransfer:
 
     @property
     @abstractmethod
-    def local_path(self) -> str:
+    def local_path(self) -> Path:
         """
         The local path of files to be transferred.
 
@@ -103,7 +103,7 @@ class VoxelFileTransfer:
 
     @local_path.setter
     @abstractmethod
-    def local_path(self, local_path: str) -> None:
+    def local_path(self, local_path: str | Path) -> None:
         """
         The local path of files to be transferred.
 
@@ -124,7 +124,7 @@ class VoxelFileTransfer:
         :rtype: str
         """
 
-        return self._external_path
+        return str(self._external_path)
 
     @external_path.setter
     @abstractmethod
@@ -140,8 +140,7 @@ class VoxelFileTransfer:
         self.log.info(f"setting local path to: {external_path}")
 
     @property
-    @abstractmethod
-    def verify_transfer(self) -> str:
+    def verify_transfer(self) -> bool:
         """
         State of transfer process.
 
@@ -224,10 +223,11 @@ class VoxelFileTransfer:
         :rtype: float
         """
 
-        state = {}
-        state["Transfer Progress [%]"] = self.progress
+        # state = {}
+        # state["Transfer Progress [%]"] = self.progress
+        # return state
         self.log.info(f"{self._filename} transfer progress: {self.progress:.2f} [%]")
-        return state
+        return self.progress
 
     @abstractmethod
     def start(self):

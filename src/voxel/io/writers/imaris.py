@@ -5,7 +5,7 @@ import multiprocessing as mp
 from datetime import datetime
 from voxel.utils.vec import Vec3D
 from PyImarisWriter import PyImarisWriter as pw
-from voxel.io.writer import (
+from voxel.io.writers.base import (
     VoxelWriter,
     WriterMetadata,
     PixelType,
@@ -186,12 +186,12 @@ class ImarisWriter(VoxelWriter):
             if not self._image_converter:
                 return
             image_extents = pw.ImageExtents(
-                minX=self.metadata.position.x,
-                minY=self.metadata.position.y,
-                minZ=self.metadata.position.z,
-                maxX=self.metadata.position.x + self.metadata.voxel_size.x * self.metadata.frame_shape.x,
-                maxY=self.metadata.position.y + self.metadata.voxel_size.y * self.metadata.frame_shape.y,
-                maxZ=self.metadata.position.z + self.metadata.voxel_size.z * self.metadata.frame_count,
+                minX=self.metadata.position_um.x,
+                minY=self.metadata.position_um.y,
+                minZ=self.metadata.position_um.z,
+                maxX=self.metadata.position_um.x + self.metadata.voxel_size.x * self.metadata.frame_shape.x,
+                maxY=self.metadata.position_um.y + self.metadata.voxel_size.y * self.metadata.frame_shape.y,
+                maxZ=self.metadata.position_um.z + self.metadata.voxel_size.z * self.metadata.frame_count,
             )
 
             parameters = pw.Parameters()
@@ -222,16 +222,17 @@ def test_imaris_writer():
     from voxel.utils.frame_gen import generate_spiral_frames
     from voxel.utils.vec import Vec2D, Vec3D
 
-    writer = ImarisWriter(directory="test_output", name="imaris_writer", batch_size_px=64)
+    writer = ImarisWriter(name="imaris_writer", batch_size_px=64)
 
     NUM_BATCHES = 2
     MULT = 4
     frame_shape = Vec2D(writer.block_size.x * MULT, writer.block_size.y * MULT)
     frame_count = writer.batch_size_px * NUM_BATCHES
     metadata = WriterMetadata(
+        path="test_output",
         frame_count=frame_count,
         frame_shape=frame_shape,
-        position=Vec3D(0, 0, 0),
+        position_um=Vec3D(0, 0, 0),
         file_name="voxel_data",
         voxel_size=Vec3D(0.1, 0.1, 1.0),
         channel_name="Channel0",

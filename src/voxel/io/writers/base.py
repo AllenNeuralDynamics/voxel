@@ -26,12 +26,12 @@ class WriterMetadata:
 
     path: str | Path
     frame_count: int
-    frame_shape: Vec2D
-    position: Vec3D
+    frame_shape: Vec2D[int]
+    position_um: Vec3D[float]
     file_name: str
     channel_name: str
     channel_idx: int = 0
-    voxel_size: Vec3D = Vec3D(1.0, 1.0, 1.0)
+    voxel_size: Vec3D[float] = Vec3D(1.0, 1.0, 1.0)
 
 
 class VoxelWriter(LoggingSubprocess):

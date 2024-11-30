@@ -12,8 +12,8 @@ from .linear_axis import VoxelLinearAxis, LinearAxisDimension
 from .power_meter import VoxelPowerMeter
 from .rotation_axis import VoxelRotationAxis
 from .tunable_lens import VoxelTunableLens
-from ..io.writer import VoxelWriter
-from ..io.transfer import VoxelFileTransfer
+from ..io.writers.base import VoxelWriter
+from ..io.transfers.base import VoxelFileTransfer
 
 
 __all__ = [

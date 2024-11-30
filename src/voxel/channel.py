@@ -5,7 +5,7 @@ import numpy as np
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec2D, Vec3D
 
-from .io.writer import WriterMetadata
+from .io.writers.base import WriterMetadata
 from .devices import VoxelFileTransfer
 
 if TYPE_CHECKING:
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
         VoxelLaser,
         VoxelLens,
     )
-    from .io.writer import VoxelWriter
+    from .io.writers.base import VoxelWriter
     from .frame_stack import FrameStack
 
 
@@ -60,7 +60,7 @@ class VoxelChannel:
                 path=self.path,
                 frame_count=stack.frame_count,
                 frame_shape=self.camera.frame_size_px,
-                position=stack.pos,
+                position_um=stack.pos,
                 channel_name=self.name,
                 channel_idx=self.assigned_index,
                 voxel_size=Vec3D(self.camera.pixel_size_um.x, self.camera.pixel_size_um.y, stack.z_step_size),

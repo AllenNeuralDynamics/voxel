@@ -1,7 +1,10 @@
-from typing import Self
 import tifffile as tf
 import numpy as np
-from voxel.io.writer import VoxelWriter, WriterMetadata, PixelType
+from voxel.io.writers.base import VoxelWriter, WriterMetadata, PixelType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 COMPRESSION_METHODS = [None, "deflate", "lzw", "zstd", "lzma"]
 
@@ -9,12 +12,12 @@ COMPRESSION_METHODS = [None, "deflate", "lzw", "zstd", "lzma"]
 class OMETiffWriter(VoxelWriter):
     """Writer class for voxel data that outputs to a single OME-TIFF file."""
 
-    def __init__(self, *, directory: str, compression=None, batch_size_px: int = 64, name: str = Self) -> None:
-        super().__init__(directory, name)
+    def __init__(self, *, compression=None, batch_size_px: int = 64, name: str = "ome_tiff_writer") -> None:
+        super().__init__(name)
         self._compression = compression if compression in COMPRESSION_METHODS else None
         self._batch_size_px = batch_size_px
-        self.output_file = None
-        self.tiff_writer = None
+        self.output_filej: Path
+        self.tiff_writer: tf.TiffWriter
         self.pages_written = 0
 
     @property
@@ -22,7 +25,7 @@ class OMETiffWriter(VoxelWriter):
         return PixelType.UINT16
 
     @property
-    def compression(self) -> str:
+    def compression(self) -> str | None:
         return self._compression
 
     @compression.setter
@@ -91,15 +94,16 @@ def test_tiffwriter():
     from voxel.utils.vec import Vec2D, Vec3D
     from voxel.utils.frame_gen import generate_spiral_frames  # , generate_checkered_frames
 
-    writer = OMETiffWriter(directory="test_output", name="tiff_writer", compression="zstd", batch_size_px=128)
+    writer = OMETiffWriter(name="tiff_writer", compression="zstd", batch_size_px=128)
 
     NUM_BATCHES = 5
     frame_shape = Vec2D(512, 512)
     frame_count = writer.batch_size_px * NUM_BATCHES
     metadata = WriterMetadata(
+        path="test_output/ome_tiff_writer",
         frame_count=frame_count,
         frame_shape=frame_shape,
-        position=Vec3D(0, 0, 0),
+        position_um=Vec3D(0, 0, 0),
         file_name="voxel_data_compressed",
         voxel_size=Vec3D(0.1, 0.1, 1.0),
         channel_name="Channel0",

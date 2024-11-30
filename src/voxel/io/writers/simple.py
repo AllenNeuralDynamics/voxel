@@ -1,6 +1,6 @@
 import numpy as np
 
-from voxel.io.writer import PixelType, VoxelWriter, WriterMetadata
+from voxel.io.writers.base import PixelType, VoxelWriter, WriterMetadata
 
 
 class SimpleWriter(VoxelWriter):
@@ -14,8 +14,8 @@ class SimpleWriter(VoxelWriter):
     def batch_size_px(self) -> int:
         return 64
 
-    def configure(self, props: WriterMetadata) -> None:
-        super().configure(props)
+    def configure(self, metadata: WriterMetadata) -> None:
+        super().configure(metadata)
         self.log.info(
             f"Configured writer with {self.metadata.frame_count} frames "
             f"of shape: {self.metadata.frame_shape.x}x{self.metadata.frame_shape.y}"
@@ -66,16 +66,18 @@ def test_writer():
     from voxel.utils.frame_gen import generate_frames
     from voxel.utils.vec import Vec2D, Vec3D
 
-    writer = SimpleWriter("test", "test_writer")
+    writer = SimpleWriter("test")
 
     NUM_BATCHES = 2
     frame_shape = Vec2D(4096, 4096)
     frame_count = (writer.batch_size_px * NUM_BATCHES) - 40
     props = WriterMetadata(
+        path="test_output/simple_writer",
         frame_count=frame_count,
         frame_shape=frame_shape,
-        position=Vec3D(0, 0, 0),
+        position_um=Vec3D(0, 0, 0),
         file_name="test_file_power_of_2",
+        channel_name="Channel0",
     )
 
     writer.configure(props)
