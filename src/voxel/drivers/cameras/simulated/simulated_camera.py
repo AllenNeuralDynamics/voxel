@@ -1,4 +1,3 @@
-from collections.abc import Mapping
 from voxel.devices.camera import AcquisitionState, VoxelCamera, VoxelFrame, Trigger
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
@@ -11,16 +10,20 @@ from .definitions import (
     TriggerSource,
 )
 from .simulated_hardware import (
-    MAX_EXPOSURE_TIME_MS,
-    MIN_EXPOSURE_TIME_MS,
-    MIN_HEIGHT_PX,
-    MIN_WIDTH_PX,
-    STEP_EXPOSURE_TIME_MS,
-    STEP_HEIGHT_PX,
-    STEP_WIDTH_PX,
+    # MAX_EXPOSURE_TIME_MS,
+    # MIN_EXPOSURE_TIME_MS,
+    # MIN_HEIGHT_PX,
+    # MIN_WIDTH_PX,
+    # STEP_EXPOSURE_TIME_MS,
+    # STEP_HEIGHT_PX,
+    # STEP_WIDTH_PX,
     ImageModelParams,
     SimulatedCameraHardware,
 )
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class SimulatedCamera(VoxelCamera):
@@ -63,9 +66,9 @@ class SimulatedCamera(VoxelCamera):
         return Vec2D(self.instance.sensor_width_px, self.instance.sensor_height_px)
 
     @deliminated_property(
-        minimum=MIN_WIDTH_PX,
+        minimum=lambda self: self.instance.min_width,
         maximum=lambda self: self.sensor_size_px.x,
-        step=STEP_WIDTH_PX,
+        step=lambda self: self.instance.roi_step_width_px,
         unit="px",
     )
     def roi_width_px(self) -> int:
@@ -86,7 +89,7 @@ class SimulatedCamera(VoxelCamera):
     @deliminated_property(
         minimum=0,
         maximum=lambda self: self.sensor_size_px.x,
-        step=STEP_WIDTH_PX,
+        step=lambda self: self.instance.roi_step_width_px,
         unit="px",
     )
     def roi_width_offset_px(self) -> int:
@@ -98,9 +101,9 @@ class SimulatedCamera(VoxelCamera):
         self.log.info(f"ROI width offset set to: {value} px")
 
     @deliminated_property(
-        minimum=MIN_HEIGHT_PX,
+        minimum=lambda self: self.instance.min_height,
         maximum=lambda self: self.sensor_sensor_size_px.y,
-        step=STEP_HEIGHT_PX,
+        step=lambda self: self.instance.roi_step_height_px,
         unit="px",
     )
     def roi_height_px(self) -> int:
@@ -121,7 +124,7 @@ class SimulatedCamera(VoxelCamera):
     @deliminated_property(
         minimum=0,
         maximum=lambda self: self.sensor_sensor_size_px.y,
-        step=STEP_HEIGHT_PX,
+        step=lambda self: self.instance.roi_step_height_px,
         unit="px",
     )
     def roi_height_offset_px(self) -> int:
@@ -181,9 +184,9 @@ class SimulatedCamera(VoxelCamera):
         return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.bytes_per_pixel) / 1e6
 
     @deliminated_property(
-        minimum=MIN_EXPOSURE_TIME_MS,
-        maximum=MAX_EXPOSURE_TIME_MS,
-        step=STEP_EXPOSURE_TIME_MS,
+        minimum=lambda self: self.instance.min_exposure_time_ms,
+        maximum=lambda self: self.instance.max_exposure_time_ms,
+        step=lambda self: self.instance.step_exposure_time_ms,
         unit="ms",
     )
     def exposure_time_ms(self) -> float:
@@ -200,7 +203,10 @@ class SimulatedCamera(VoxelCamera):
 
     @property
     def frame_time_ms(self) -> float:
-        return (self.line_interval_us * self.roi_height_px) / 1000 + self.exposure_time_ms
+        return self.instance.frame_time_ms
+
+    def configure_hardware_triggering(self) -> None:
+        pass
 
     @property
     def trigger_mode(self) -> Trigger:
@@ -223,10 +229,11 @@ class SimulatedCamera(VoxelCamera):
         pass
 
     def start(self, frame_count: int = -1) -> None:
-        self.instance.start_acquisition(frame_count)
+        self.instance.start(frame_count)
+        self.log.info(f"Camera started with frame_time: {self.frame_time_ms / 1000:.2f} s")
 
     def stop(self) -> None:
-        self.instance.stop_acquisition()
+        self.instance.stop()
 
     def grab_frame(self) -> VoxelFrame:
         frame = self.instance.grab_frame()

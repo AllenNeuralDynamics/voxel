@@ -14,11 +14,6 @@ class LinearAxisDimension(StrEnum):
     N = "N"  # calibration axis, focusing axis
 
 
-class ScanType(StrEnum):
-    STEP_AND_SHOOT = "step_and_shoot"
-    CONTINUOUS = "continuous"
-
-
 class ScanState(StrEnum):
     IDLE = "idle"
     CONFIGURED = "configured"
@@ -27,9 +22,14 @@ class ScanState(StrEnum):
 
 @dataclass
 class ScanConfig:
+    class ScanType(StrEnum):
+        STEP_AND_SHOOT = "step_and_shoot"
+        CONTINUOUS = "continuous"
+
     start_mm: float
     stop_mm: float
     scan_type: ScanType
+    step_size_um: float
 
 
 class VoxelLinearAxis(VoxelDevice):

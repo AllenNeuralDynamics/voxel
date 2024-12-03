@@ -1,10 +1,12 @@
 from enum import StrEnum
 from pathlib import Path
+from turtle import Vec2D
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
 
+from voxel.acquisition.engine import VoxelAcquisitionEngine
 from voxel.acquisition.planner import VoxelAcquisitionPlanner, load_acquisition_plan
 from voxel.acquisition.specs import AcquisitionSpecs
 from voxel.channel import VoxelChannel
@@ -43,7 +45,7 @@ DAQ_TASK_TYPES = {
 class WaveGenTaskProps(BaseModel):
     sampling_rate_hz: float
     period_ms: float
-    trigger: str | None = None
+    trigger_task: str | None = None
 
 
 class ClockGenTaskProps(BaseModel):
@@ -172,7 +174,8 @@ class InstrumentBuilder:
         # Handle dependencies
         for key, value in kwargs.items():
             if isinstance(value, str) and value in self.config.daq.tasks:
-                kwargs[key] = self._create_daq_task(value)
+                self._create_daq_task(value)
+                kwargs[key] = self.daq_tasks[value]
 
         kwargs["name"] = task_name
         kwargs["daq"] = self.daq
@@ -272,7 +275,7 @@ class VoxelSpecs(BaseModel):
     @classmethod
     def from_yaml(cls, file_path: str | Path) -> "VoxelSpecs":
         try:
-            file_path = Path(file_path)
+            file_path = Path(file_path).absolute()
             loader = YAML(typ="safe")
             with file_path.open() as file:
                 data = loader.load(file)
@@ -315,7 +318,8 @@ class VoxelBuilder:
         if not self.config.acquisition:
             raise ValueError("No acquisition configuration found in the file")
         if not self._acquisition:
-            frame_stacks, scan_path = load_acquisition_plan(self.config.acquisition.plan_file_path)
+            acquisition_plan_path = self.config.file_path.parent / self.config.acquisition.plan_file_path
+            frame_stacks, scan_path = load_acquisition_plan(acquisition_plan_path)
             self._acquisition = VoxelAcquisitionPlanner(
                 instrument=self.get_instrument(),
                 specs=self.config.acquisition,
@@ -335,17 +339,46 @@ def parse_driver(driver: str) -> Any:
 
 if __name__ == "__main__":
     from voxel.utils.log_config import setup_logging
+    from voxel.acquisition.engine import VoxelAcquisitionEngine
+    from voxel.frame_stack import FrameStack
+    from voxel.utils.vec import Vec2D, Vec3D
 
-    setup_logging(level="DEBUG")
+    setup_logging(level="DEBUG", detailed=True)
 
-    config = VoxelSpecs.from_yaml(file_path="example_config.yaml")
-    builder = VoxelBuilder(config)
+    CONFIG_PATH = Path(__file__).parent / "example_config.yaml"
 
-    builder.log.info(builder.config)
+    config = VoxelSpecs.from_yaml(file_path=CONFIG_PATH)
+    builder = VoxelBuilder(config=config)
 
-    with builder.get_instrument() as instrument:
-        instrument.log.info("Instrument is running")
-        instrument.log.info(instrument)
+    # builder.log.info(builder.config)
 
+    instrument = builder.get_instrument()
     acquisition = builder.get_acquisition()
-    acquisition.log.info(acquisition)
+
+    channel = next(iter(instrument.channels.values()))
+
+    frame_count = channel.writer.batch_size_px * 3
+    z_step_size_um = channel.camera.pixel_size_um.x
+    idx = Vec2D(0, 0)
+    frame_stacks = {
+        idx: FrameStack(
+            idx=idx,
+            pos_um=Vec3D(0.0, 0.0, 0.0),
+            size_um=Vec3D(channel.fov_um.x, channel.fov_um.y, frame_count * z_step_size_um),
+            step_size_um=z_step_size_um,
+        )
+    }
+
+    scan_path = [idx]
+
+    engine = VoxelAcquisitionEngine(
+        instrument=instrument,
+        channels=[channel.name],
+        frame_stacks=frame_stacks,
+        scan_path=scan_path,
+        path=Path(__file__).parent / "test_output",
+    )
+
+    engine.run()
+
+    instrument.close()

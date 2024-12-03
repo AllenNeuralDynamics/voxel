@@ -17,7 +17,7 @@ class SimulatedLinearAxis(VoxelLinearAxis):
         self._upper_limit_mm = 10.0
 
     def configure_scan(self, config: ScanConfig) -> None:
-        pass
+        self.log.info(f"Configuring scan: {config}")
 
     def start_scan(self) -> None:
         pass

@@ -1,11 +1,15 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Iterator, Self
+from typing import Self, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 type Number = int | float
 
 
-@dataclass(frozen=True)
+@dataclass
 class Vec2D[T: Number]:
     x: T
     y: T
@@ -45,8 +49,8 @@ class Vec2D[T: Number]:
     def __truediv__(self, other: T) -> Vec2D[float]:
         return Vec2D(self.x / other, self.y / other)
 
-    def __floordiv__(self, other: T) -> Vec2D[Number]:
-        return Vec2D(self.x // other, self.y // other)
+    def __floordiv__(self, other: T) -> Vec2D[int]:
+        return Vec2D(int(self.x // other), int(self.y // other))
 
     # tuple unpacking
     def __iter__(self) -> Iterator[T]:

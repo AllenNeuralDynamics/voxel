@@ -8,7 +8,7 @@ class VoxelStage:
         self,
         x: VoxelLinearAxis,
         y: VoxelLinearAxis,
-        z: VoxelLinearAxis | None = None,
+        z: VoxelLinearAxis,
         roll: VoxelRotationAxis | None = None,
         pitch: VoxelRotationAxis | None = None,
         yaw: VoxelRotationAxis | None = None,
@@ -22,7 +22,7 @@ class VoxelStage:
 
     @property
     def position_mm(self) -> Vec3D[float]:
-        return Vec3D(self.x.position_mm, self.y.position_mm, self.z.position_mm if self.z is not None else 0)
+        return Vec3D(self.x.position_mm, self.y.position_mm, self.z.position_mm)
 
     @property
     def position_deg(self) -> Vec3D:
@@ -38,6 +38,7 @@ class VoxelStage:
         roll: float | None = None,
         pitch: float | None = None,
         yaw: float | None = None,
+        wait: bool = False,
     ) -> None:
         """Move stage to specified positions"""
         linear_zipped = zip([x, y, z], [self.x, self.y, self.z])
@@ -50,6 +51,11 @@ class VoxelStage:
         for arg, axis in rotational_zipped:
             if arg is not None and axis is not None:
                 axis.position_deg = arg
+
+        if wait:
+            for axis in [self.x, self.y, self.z, self.roll, self.pitch, self.yaw]:
+                if axis is not None:
+                    axis.await_movement()
 
     @property
     def limits_mm(self) -> tuple[Vec3D, Vec3D]:

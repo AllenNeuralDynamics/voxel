@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-import numpy as np
 
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec2D, Vec3D
@@ -9,6 +8,7 @@ from .io.writers.base import WriterMetadata
 from .devices import VoxelFileTransfer
 
 if TYPE_CHECKING:
+    import numpy as np
     from .devices import (
         VoxelCamera,
         VoxelFilter,
@@ -47,9 +47,23 @@ class VoxelChannel:
         self.assigned_index = -1
         self.path = Path()
 
+        self.latest_frame: np.ndarray | None = None
+
     @property
     def fov_um(self) -> Vec2D:
         return self._fov_um
+
+    def activate(self) -> None:
+        """Activate the channel."""
+        self.laser.enable()
+        self.emmision_filter.enable()
+        self.is_active = True
+
+    def deactivate(self) -> None:
+        """Deactivate the channel."""
+        self.laser.disable()
+        self.emmision_filter.disable()
+        self.is_active = False
 
     def prepare(self, stack: "FrameStack", channel_idx: int, path: str | Path) -> None:
         """Prepare camera and configure the writer for the channel."""
@@ -60,22 +74,30 @@ class VoxelChannel:
                 path=self.path,
                 frame_count=stack.frame_count,
                 frame_shape=self.camera.frame_size_px,
-                position_um=stack.pos,
+                position_um=stack.pos_um,
                 channel_name=self.name,
                 channel_idx=self.assigned_index,
-                voxel_size=Vec3D(self.camera.pixel_size_um.x, self.camera.pixel_size_um.y, stack.z_step_size),
+                voxel_size=Vec3D(self.camera.pixel_size_um.x, self.camera.pixel_size_um.y, stack.step_size_um),
                 file_name=f"{stack.idx.x}_{stack.idx.y}_{self.name}",
             )
         )
         self.camera.prepare()
 
-    def start(self) -> None:
+    def start(self, frame_count: int) -> None:
         """Start the channel."""
         self.writer.start()
-        self.camera.start()
-        self.laser.enable()
-        self.emmision_filter.enable()
-        self.is_active = True
+        self.camera.start(frame_count)
+
+    def stop(self) -> None:
+        """Stop the channel."""
+        self.camera.stop()
+        self.writer.stop()
+
+    def capture_frame(self) -> None:
+        """Capture a frame."""
+        frame = self.camera.grab_frame()
+        self.writer.add_frame(frame)
+        self.latest_frame = frame
 
     def apply_settings(self, settings: dict[str, dict[str, Any]]) -> None:
         """Apply settings to the channel."""
@@ -89,15 +111,3 @@ class VoxelChannel:
             self.laser.apply_settings(settings["laser"])
         if "filter" in settings:
             self.emmision_filter.apply_settings(settings["filter"])
-
-    def activate(self) -> None:
-        """Activate the channel."""
-        self.laser.enable()
-        self.emmision_filter.enable()
-        self.is_active = True
-
-    def deactivate(self) -> None:
-        """Deactivate the channel."""
-        self.laser.disable()
-        self.emmision_filter.disable()
-        self.is_active = False

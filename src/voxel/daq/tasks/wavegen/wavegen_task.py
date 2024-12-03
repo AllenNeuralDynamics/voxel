@@ -48,9 +48,9 @@ class WaveGenTask(VoxelDaqTask):
         daq: "VoxelDaq",
         sampling_rate_hz: int | float,
         period_ms: float,
-        trigger: ClockGenTask | None = None,
+        trigger_task: ClockGenTask | None = None,
     ) -> None:
-        super().__init__(name, daq)
+        super().__init__(name=name, daq=daq)
         self._pins: list[PinInfo] = []
 
         self.channels: dict[str, WaveGenChannel] = {}
@@ -59,8 +59,8 @@ class WaveGenTask(VoxelDaqTask):
         self._period_ms = period_ms
         self._sampling_rate = sampling_rate_hz
 
-        self._trigger = trigger
-        self._sample_mode = NiAcqType.FINITE if self._trigger else NiAcqType.CONTINUOUS
+        self.trigger_task = trigger_task
+        self._sample_mode = NiAcqType.FINITE if self.trigger_task else NiAcqType.CONTINUOUS
 
     def __repr__(self) -> str:
         return (
@@ -139,9 +139,9 @@ class WaveGenTask(VoxelDaqTask):
         )
 
     def _cfg_triggering(self) -> None:
-        if not self._trigger or not self.channels:
+        if not self.trigger_task or not self.channels:
             return
         self.inst.triggers.start_trigger.cfg_dig_edge_start_trig(
-            trigger_source=self.daq.get_pfi_path(self._trigger.out)
+            trigger_source=self.daq.get_pfi_path(self.trigger_task.out)
         )
         self.inst.triggers.start_trigger.retriggerable = True

@@ -74,7 +74,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         """
         return self._movement_start_time is not None
 
-    def wait_until_stopped(self, timeout: float | None = None, check_interval: float = 1) -> None:
+    def await_movement(self, timeout: float | None = None, check_interval: float = 1) -> None:
         """Wait until the rotation axis has stopped moving.
         :param timeout: Maximum time to wait for the rotation axis to stop moving
         :param check_interval: Time interval between checks

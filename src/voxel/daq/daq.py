@@ -29,11 +29,11 @@ class PinInfo:
 
 
 class VoxelDaq:
-    def __init__(self, conn: str, name: str = "nidaq") -> None:
-        self.name = name
+    def __init__(self, conn: str) -> None:
+        self.name = conn
         self.log = get_component_logger(self)
         self.system = System.local()
-        self.inst, self.model = self._connect(conn)
+        self.inst, self.model = self._connect(name=self.name)
 
         self.tasks: dict[str, "VoxelDaqTask"] = {}
 
@@ -56,9 +56,7 @@ class VoxelDaq:
                 model = NiDaqModel.NI6739
             else:
                 model = NiDaqModel.OTHER
-                self.log.warning(
-                    f"Daq Device: {nidaq.product_type} might not be fully supported."
-                )
+                self.log.warning(f"Daq Device: {nidaq.product_type} might not be fully supported.")
             return nidaq, model
         except DaqError as e:
             raise RuntimeError(f"Unable to connect to DAQ device: {e}")

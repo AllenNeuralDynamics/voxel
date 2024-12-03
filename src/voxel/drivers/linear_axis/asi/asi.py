@@ -56,9 +56,10 @@ class ASITigerLinearAxis(VoxelLinearAxis):
     def configure_scan(self, config: ScanConfig):
         if not self.dimension == LinearAxisDimension.Z:
             raise ValueError("Unable to configure scan. This axis is not used for scanning.")
-        if isinstance(config, ASITriggeredStepAndShootConfig):
+        if config.scan_type == ScanConfig.ScanType.STEP_AND_SHOOT:
             self._tigerbox.setup_step_shoot_scan(self.name, config.step_size_um)
-            return
+        elif config.scan_type == ScanConfig.ScanType.CONTINUOUS:
+            self.log.warning("Continuous scans are not yet implemented.")
 
     def start_scan(self):
         if self.scan_state != ScanState.CONFIGURED:

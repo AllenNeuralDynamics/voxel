@@ -91,7 +91,7 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         status = self._instance.get_status()
         return status.is_moving
 
-    def wait_until_stopped(self, timeout: float | None = None, check_interval: float = 0.1):
+    def await_movement(self, timeout: float | None = None, check_interval: float = 0.1):
         """Wait until the rotation axis has stopped moving.
         :param timeout: Maximum time to wait for the rotation axis to stop moving
         :param check_interval: Time interval between checks
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     new_position = 90.0
     print(f"Moving to {new_position} degrees...")
     axis.position_deg = new_position
-    axis.wait_until_stopped(timeout=30)  # Wait up to 30 seconds
+    axis.await_movement(timeout=30)  # Wait up to 30 seconds
     print(f"New position: {axis.position_deg:.2f} degrees")
 
     new_speed = 5.0

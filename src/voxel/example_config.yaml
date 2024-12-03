@@ -1,5 +1,7 @@
+instrument_name: &instrument_name exaspim
+
 metadata:
-  instrument_name: exaspim
+  instrument_name: *instrument_name
   experiment_id: example_experiment
   subject_id: 123456
   experimenter_full_name: adam glaser
@@ -24,7 +26,7 @@ acquisition:
     - green
 
 instrument:
-  name: "Example Instrument"
+  name: *instrument_name
   description: "A simulated instrument for testing purposes"
 
   daq:
@@ -35,7 +37,7 @@ instrument:
         kwds:
           out_pin: PFI0
           counter: ctr0
-          freq_hz: 1000
+          freq_hz: 15
           duty_cycle: 0.5
           initial_delay_ms: 0
       acq_task:
@@ -43,7 +45,7 @@ instrument:
         kwds:
           sampling_rate_hz: 350000
           period_ms: 10
-          trigger: acq_clock
+          trigger_task: acq_clock
 
   devices:
     simulated_camera_1:
@@ -98,9 +100,9 @@ instrument:
 
   io:
     imaris: &imaris
-      driver: voxel.drivers.writers.imaris.ImarisWriter
+      driver: voxel.io.writers.imaris.ImarisWriter
     robocopy: &robocopy
-      driver: voxel.drivers.transfers.robocopy.RobocopyFileTransfer
+      driver: voxel.io.transfers.robocopy.RobocopyFileTransfer
       kwds:
         external_path: D:/voxel_test2
         local_path: D:/voxel_test

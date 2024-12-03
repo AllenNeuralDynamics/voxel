@@ -46,14 +46,26 @@ class ClockGenTask(VoxelDaqTask):
         self._gate = self.daq.assign_pin(gate_pin) if gate_pin else None
         self._aux = self.daq.assign_pin(aux_pin) if aux_pin else None
 
-        self._freq_hz = freq_hz
-        self._duty_cycle = duty_cycle
-        self._initial_delay_ms = initial_delay_ms
-        self._idle_state = Level.HIGH if idle_state == "HIGH" else Level.LOW
-
-        self.channel = self._create_co_channel()
+        self.channel = self._create_co_channel(
+            freq=freq_hz,
+            duty_cycle=duty_cycle,
+            delay_ms=initial_delay_ms,
+            idle=Level.HIGH if idle_state == "HIGH" else Level.LOW,
+        )
         self._cfg_routing()
-        self._cfg_timing()
+        self.configure(num_samples=-1)
+
+        self.freq_hz = freq_hz
+        self.duty_cycle = duty_cycle
+        self.initial_delay_ms = initial_delay_ms
+        self.idle_state = Level.HIGH if idle_state == "HIGH" else Level.LOW
+
+    def configure(self, num_samples: int) -> None:
+        """Configure the timing for the task."""
+        if num_samples > 0:
+            self.inst.timing.cfg_implicit_timing(sample_mode=NiAcqType.FINITE, samps_per_chan=num_samples)
+        else:
+            self.inst.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)
 
     @property
     def pins(self) -> list[PinInfo]:
@@ -65,57 +77,58 @@ class ClockGenTask(VoxelDaqTask):
 
     @deliminated_property(minimum=0.0, step=1.0, maximum=1e6, unit="Hz")
     def freq_hz(self) -> float:
-        return self._freq_hz
+        return self.channel.co_pulse_freq
 
     @freq_hz.setter
     def freq_hz(self, freq: float) -> None:
-        self._freq_hz = freq
-        self._reconfigure_task()
+        # self._freq_hz = freq
+        self.channel.co_pulse_freq = freq
+        # self._reconfigure_task()
 
     @deliminated_property(minimum=0.0, step=0.01, maximum=1.0, unit="%")
     def duty_cycle(self) -> float:
-        return self._duty_cycle
+        return self.channel.co_pulse_duty_cyc
 
     @duty_cycle.setter
     def duty_cycle(self, duty: float) -> None:
-        self._duty_cycle = duty
-        self._reconfigure_task()
+        # self._duty_cycle = duty
+        self.channel.co_pulse_duty_cyc = duty
+        # self._reconfigure_task()
 
     @deliminated_property(minimum=0.0, step=1.0, maximum=1000.0, unit="ms")
     def initial_delay_ms(self) -> float:
-        return self._initial_delay_ms
+        return self.channel.co_pulse_freq_initial_delay
 
     @initial_delay_ms.setter
     def initial_delay_ms(self, delay: float) -> None:
-        self._initial_delay_ms = delay
-        self._reconfigure_task()
+        # self._initial_delay_ms = delay
+        self.channel.co_pulse_freq_initial_delay = delay
+        # self._reconfigure_task()
 
     @property
     def idle_state(self) -> Literal["HIGH", "LOW"]:
-        return "HIGH" if self._idle_state == Level.HIGH else "LOW"
+        return "HIGH" if self.channel.co_pulse_idle_state == Level.High else "LOW"
 
     @idle_state.setter
     def idle_state(self, state: Literal["HIGH", "LOW"]) -> None:
-        self._idle_state = Level.HIGH if state == "HIGH" else Level.LOW
-        self._reconfigure_task()
+        # self._idle_state = Level.HIGH if state == "HIGH" else Level.LOW
+        self.channel.co_pulse_idle_state = Level.HIGH if state == "HIGH" else Level.LOW
+        # self._reconfigure_task()
 
     @property
     def period_ms(self) -> float:
         return 1000 / self.freq_hz
 
-    def _reconfigure_task(self) -> None:
-        self.channel = self._create_co_channel()
-
-    def _create_co_channel(self) -> NiCOChannel:
+    def _create_co_channel(self, freq, duty_cycle, delay_ms, idle) -> NiCOChannel:
         """Create a counter output channel for triggering."""
         return self.inst.co_channels.add_co_pulse_chan_freq(
             counter=self.counter.path,
             name_to_assign_to_channel=self.name,
             units=FrequencyUnits.HZ,
-            freq=self.freq_hz,
-            duty_cycle=self.duty_cycle,
-            initial_delay=self.initial_delay_ms,
-            idle_state=self._idle_state,
+            freq=freq,
+            duty_cycle=duty_cycle,
+            initial_delay=delay_ms,
+            idle_state=idle,
         )
 
     def _cfg_routing(self) -> None:

@@ -1,7 +1,7 @@
 from .definitions import SimulatedCameraSettings
 from .image_model import ImageModel
 from .simulated_camera import SimulatedCamera
-from .simulated_hardware import (
+from .multithreaded_simulated_hardware import (
     BUFFER_SIZE_FRAMES,
     MIN_WIDTH_PX,
     STEP_WIDTH_PX,

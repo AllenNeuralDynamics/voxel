@@ -1,7 +1,7 @@
+from dataclasses import dataclass
 import time
 from abc import abstractmethod
-from dataclasses import dataclass
-from multiprocessing import Event
+from multiprocessing import Event, Value
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +33,18 @@ class WriterMetadata:
     channel_idx: int = 0
     voxel_size: Vec3D[float] = Vec3D(1.0, 1.0, 1.0)
 
+    def to_dict(self) -> dict:
+        return {
+            "path": str(self.path),
+            "frame_count": self.frame_count,
+            "frame_shape": self.frame_shape.to_str(),
+            "position_um": self.position_um.to_str(),
+            "file_name": self.file_name,
+            "channel_name": self.channel_name,
+            "channel_idx": self.channel_idx,
+            "voxel_size": self.voxel_size.to_str(),
+        }
+
 
 class VoxelWriter(LoggingSubprocess):
     """Writer class for voxel data with double buffering"""
@@ -63,7 +75,7 @@ class VoxelWriter(LoggingSubprocess):
 
         self._frame_shape: Vec2D
         self._frame_count = 0
-        self._batch_count = 0
+        self._batch_count = Value("i", 1)
         self._avg_rate = 0.0
 
         self._total_data_written = 0
@@ -160,7 +172,7 @@ class VoxelWriter(LoggingSubprocess):
             self.running_flag.set()
             self.needs_processing.clear()
             self._frame_count = 0
-            self._batch_count = 0
+            self._batch_count.value = 0
             self._total_data_written = 0
             super().start()
             self.log.debug("Writer started")
@@ -178,7 +190,7 @@ class VoxelWriter(LoggingSubprocess):
 
         self.running_flag.clear()
 
-        self.log.info(f"Processed {self._frame_count} frames in {self._batch_count} batches")
+        self.log.info(f"Processed {self._frame_count} frames in {self._batch_count.value} batches")
         self.log.info("Stopping writer")
 
         self.join()
@@ -197,7 +209,6 @@ class VoxelWriter(LoggingSubprocess):
         """Main writer loop"""
         self._initialize()
         self._avg_rate = 0
-        self._batch_count = 1
         while self.running_flag.is_set():
             if self.needs_processing.is_set():
                 mem_block = self.dbl_buf.mem_blocks[self.dbl_buf.read_mem_block_idx.value]
@@ -208,7 +219,7 @@ class VoxelWriter(LoggingSubprocess):
 
                 self.needs_processing.clear()
                 self.dbl_buf.num_frames.value = 0
-                self._batch_count += 1
+                # self._batch_count.value += 1
                 self._frame_count += batch_data.shape[0]
             else:
                 time.sleep(0.1)
@@ -245,7 +256,7 @@ class VoxelWriter(LoggingSubprocess):
         while not self.needs_processing.is_set():
             time.sleep(0.001)
 
-        self._batch_count += 1
+        self._batch_count.value += 1
 
     def _timed_batch_processing(self, batch_data: np.ndarray) -> None:
         """Process a batch of data with timing information
@@ -257,16 +268,16 @@ class VoxelWriter(LoggingSubprocess):
         """
 
         batch_start_time = time.time()
-        self._process_batch(batch_data, self._batch_count)
+        self._process_batch(batch_data, self._batch_count.value)
         batch_end_time = time.time()
 
         time_taken = batch_end_time - batch_start_time
         data_size_mbs = batch_data.nbytes / (1024 * 1024)
         rate_mbps = data_size_mbs / time_taken if time_taken > 0 else 0
-        self._avg_rate = (self._avg_rate * (self._batch_count - 1) + rate_mbps) / self._batch_count
+        self._avg_rate = (self._avg_rate * (self._batch_count.value - 1) + rate_mbps) / self._batch_count.value
 
         self.log.info(
-            f"Batch {self._batch_count}, "
+            f"Batch {self._batch_count.value}, "
             f"Time: {time_taken:.2f} s, "
             f"Size: {data_size_mbs:.2f} MB, "
             f"Rate: {rate_mbps:.2f} MB/s | "

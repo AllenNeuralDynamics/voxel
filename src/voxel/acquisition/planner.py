@@ -76,7 +76,6 @@ class VoxelAcquisitionPlanner:
             self._channels = [instrument.channels[channel_name] for channel_name in specs.channels]
 
         self._observers: list[Callable[[], None]] = []
-        self._hash = None
 
         if specs.volume_min_corner:
             volume_min_corner = Vec3D.from_str(specs.volume_min_corner)
@@ -105,7 +104,6 @@ class VoxelAcquisitionPlanner:
     def _regenerate_plan(self):
         self._frame_stacks = self.generate_frame_stacks(self.channels)
         self._scan_path = self.generate_scan_path(self._frame_stacks)
-        self._hash = None
         self._notify_observers()
 
     @property
@@ -204,7 +202,7 @@ class VoxelAcquisitionPlanner:
         return Vec2D(x_max + 1, y_max + 1)
 
     def generate_frame_stacks(self, channels: list["VoxelChannel"]) -> dict[Vec2D, FrameStack]:
-        channel_names = [channel.name for channel in channels]
+        # channel_names = [channel.name for channel in channels]
         # all channels must have the same fov
         fov = channels[0].fov_um
         for channel in channels:
@@ -227,10 +225,10 @@ class VoxelAcquisitionPlanner:
                 idx = Vec2D(x, y)
                 frame_stacks[idx] = FrameStack(
                     idx=idx,
-                    pos=Vec3D(pos_x, pos_y, self.volume.min_corner.z),
-                    size=Vec3D(effective_tile_width, effective_tile_height, self.volume.size.z),
-                    z_step_size=self.z_step_size,
-                    channels=channel_names,
+                    pos_um=Vec3D(pos_x, pos_y, self.volume.min_corner.z),
+                    size_um=Vec3D(effective_tile_width, effective_tile_height, self.volume.size.z),
+                    step_size_um=self.z_step_size,
+                    # channels=channel_names,
                 )
 
         self.volume.max_corner.x = self.volume.min_corner.x + actual_width
@@ -364,30 +362,3 @@ class VoxelAcquisitionPlanner:
     #     except Exception as e:
     #         instrument.close()
     #         raise e
-
-    # def __hash__(self):
-    #     if self._hash is None:
-    #         self._hash = hash(
-    #             (
-    #                 self.instrument.name,
-    #                 self._z_step_size,
-    #                 tuple(channel.name for channel in self.channels),
-    #                 self._plan_file_path,
-    #                 self._tile_overlap,
-    #                 self._scan_pattern,
-    #                 self._scan_direction,
-    #                 self._start_corner,
-    #                 self._reverse_scan_path,
-    #                 self.volume.min_corner,
-    #                 self.volume.max_corner,
-    #             )
-    #         )
-    #     return self._hash
-
-    # def __eq__(self, other) -> bool:
-    #     if not isinstance(other, VoxelAcquisitionPlanner):
-    #         raise NotImplementedError("Cannot compare VoxelAcquisitionManager with other types")
-    #     return hash(self) == hash(other)
-
-    # def __ne__(self, other) -> bool:
-    #     return not self.__eq__(other)

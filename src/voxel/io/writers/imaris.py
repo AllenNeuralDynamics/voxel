@@ -211,7 +211,7 @@ class ImarisWriter(VoxelWriter):
             )
             self._image_converter.Destroy()
 
-            self.log.info(f"Finished writing {self._batch_count} batches to {self._output_file}")
+            self.log.info(f"Finished writing {self._batch_count.value} batches to {self._output_file}")
             self.log.info(f"Processed {self._frames_written}/{self.metadata.frame_count} frames")
         except Exception as e:
             self.log.error(f"Failed to finalize ImarisWriter: {e}")

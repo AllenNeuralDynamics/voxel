@@ -55,7 +55,7 @@ class VoxelRotationAxis(VoxelDevice):
         pass
 
     @abstractmethod
-    def wait_until_stopped(self, timeout: float | None = None, check_interval: float = 0.1) -> None:
+    def await_movement(self, timeout: float | None = None, check_interval: float = 0.1) -> None:
         """Wait until the rotation axis has stopped moving.
         :param timeout: Maximum time to wait for the rotation axis to stop moving
         :param check_interval: Time interval between checks
