@@ -1,266 +1,244 @@
-from voxel.devices.camera import AcquisitionState, VoxelCamera, VoxelFrame, Trigger
+import os
+
+import numpy as np
+from voxel.devices.camera import AcquisitionState, VoxelCamera, PixelType, Binning, Trigger
+from typing import Literal, TypedDict
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
+from voxel.utils.frame_gen import generate_reference_image
 from voxel.utils.vec import Vec2D
 
-from .definitions import (
-    Binning,
-    PixelType,
-    TriggerPolarity,
-    TriggerSource,
-)
-from .simulated_hardware import (
-    # MAX_EXPOSURE_TIME_MS,
-    # MIN_EXPOSURE_TIME_MS,
-    # MIN_HEIGHT_PX,
-    # MIN_WIDTH_PX,
-    # STEP_EXPOSURE_TIME_MS,
-    # STEP_HEIGHT_PX,
-    # STEP_WIDTH_PX,
-    ImageModelParams,
-    SimulatedCameraHardware,
-)
-from typing import TYPE_CHECKING
+VP_151MX_M6H0 = Vec2D(10640, 14192) // 1
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
+
+class ImageModelParams(TypedDict):
+    qe: float
+    gain: float
+    dark_noise: float
+    bitdepth: int
+    baseline: int
+    reference_image_path: str | None
+    size: Vec2D[int]
+
+
+def _default_reference_image_path():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(current_dir, "reference_image.tif")
+
+
+DEFAULT_IMAGE_MODEL: ImageModelParams = {
+    "qe": 0.85,
+    "gain": 0.08,
+    "dark_noise": 6.89,
+    "bitdepth": 12,
+    "baseline": 0,
+    "reference_image_path": _default_reference_image_path(),
+    "size": Vec2D(2048 + 2, 2048 + 2),
+}
 
 
 class SimulatedCamera(VoxelCamera):
+    _min_width: int = 64
+    _min_height: int = 64
+
+    _roi_step_width_px: int = 16
+    _roi_step_height_px: int = 16
+
+    _min_exposure_time_ms: float = 0.001
+    _max_exposure_time_ms: float = 1e2
+    _step_exposure_time_ms: float = 1.0
+    _init_exposure_time_ms: float = 10
+
+    _line_interval_us_lut = {PixelType.MONO8: 8.00, PixelType.MONO16: 12.00}
+
+    _binning_lut = {"1x1": Binning.X1, "2x2": Binning.X2, "4x4": Binning.X4}
+    _pixel_type_lut = {"MONO16": PixelType.MONO16}
+
     def __init__(
         self,
-        name: str = "simulated_camera",
-        pixel_size_um: tuple[float, float] = (1.0, 1.0),
-        image_model_params: ImageModelParams | None = None,
+        name: str,
+        pixel_size_um: tuple[float, float] | str,
+        sensor_width_px: int = VP_151MX_M6H0.x,
+        sensor_height_px: int = VP_151MX_M6H0.y,
+        image_model_params: ImageModelParams = DEFAULT_IMAGE_MODEL,
+        max_frame_rate: int = 15,
     ) -> None:
         super().__init__(name=name, pixel_size_um=pixel_size_um)
-        self.log.info(f"Initializing simulated camera. ID: {name}")
+        self._image_model_params = image_model_params
+        self._sensor_size_px = Vec2D(sensor_width_px, sensor_height_px)
+        self._roi_width_px = sensor_width_px
+        self._roi_height_px = sensor_height_px
+        self._roi_width_offset_px = 0
+        self._roi_height_offset_px = 0
+        self._exposure_time_ms = self._init_exposure_time_ms
+        self._binning = "1x1"
+        self._pixel_type = "MONO16"
+        self._max_frame_time_ms = 1 / max_frame_rate * 1000
 
-        if image_model_params:
-            self.instance = SimulatedCameraHardware(image_model_params)
-        else:
-            self.instance = SimulatedCameraHardware()
+        self.is_running = False
+        self._frame_count = 0
+        self._requested_frame_count = -1
 
-        # Property LUTs
-        self._pixel_type_lut: Mapping[PixelType, str] = {
-            PixelType.MONO8: "MONO8",
-            PixelType.MONO12: "MONO12",
-            PixelType.MONO14: "MONO14",
-            PixelType.MONO16: "MONO16",
-        }
-        self._binning_lut: Mapping[Binning, str] = {Binning.X1: "1x1"}
-        self._trigger_mode_lut: Mapping[Trigger, str] = {mode: mode.value for mode in Trigger}
-        self._trigger_source_lut: Mapping[TriggerSource, str] = {source: source.value for source in TriggerSource}
-        self._trigger_polarity_lut: Mapping[TriggerPolarity, str] = {
-            polarity: polarity.value for polarity in TriggerPolarity
-        }
+    @enumerated_property(options=set(_binning_lut.keys()))
+    def binning(self) -> Binning:
+        return self._binning_lut[self._binning]
 
-        # private properties
-        self._binning: Binning = Binning.X1
-        self._trigger_mode: Trigger = Trigger.OFF
+    @binning.setter
+    def binning(self, binning: str) -> None:
+        self._binning = binning
 
-        self.log.info(f"Simulated camera initialized with id: {name}")
+    @enumerated_property(options=set(_pixel_type_lut.keys()))
+    def pixel_type(self) -> PixelType:
+        return self._pixel_type_lut[self._pixel_type]
+
+    @pixel_type.setter
+    def pixel_type(self, pixel_type: str) -> None:
+        self._pixel_type = pixel_type
 
     @property
     def sensor_size_px(self) -> Vec2D:
-        return Vec2D(self.instance.sensor_width_px, self.instance.sensor_height_px)
+        return self._sensor_size_px
 
     @deliminated_property(
-        minimum=lambda self: self.instance.min_width,
+        minimum=lambda self: self._min_width,
         maximum=lambda self: self.sensor_size_px.x,
-        step=lambda self: self.instance.roi_step_width_px,
+        step=lambda self: self._roi_step_width_px,
         unit="px",
     )
     def roi_width_px(self) -> int:
-        return self.instance.roi_width_px
+        return self._roi_width_px
 
     @roi_width_px.setter
-    def roi_width_px(self, value: int) -> None:
-        # Update hardware ROI width
-        self.instance.roi_width_px = value
-        # Update offset if necessary
-        centered_offset_px = (
-            round((self.sensor_size_px.x / 2 - value / 2) / self.instance.roi_step_width_px)
-            * self.instance.roi_step_width_px
-        )
-        self.instance.roi_width_offset_px = centered_offset_px
-        self.log.info(f"ROI width set to: {value} px")
+    def roi_width_px(self, roi_width_px: int) -> None:
+        self._roi_width_px = roi_width_px
+
+    @deliminated_property(
+        minimum=lambda self: self._min_height,
+        maximum=lambda self: self.sensor_size_px.y,
+        step=lambda self: self._roi_step_height_px,
+        unit="px",
+    )
+    def roi_height_px(self) -> int:
+        return self._roi_height_px
+
+    @roi_height_px.setter
+    def roi_height_px(self, roi_height_px: int) -> None:
+        self._roi_height_px = roi_height_px
 
     @deliminated_property(
         minimum=0,
         maximum=lambda self: self.sensor_size_px.x,
-        step=lambda self: self.instance.roi_step_width_px,
+        step=lambda self: self._roi_step_width_px,
         unit="px",
     )
     def roi_width_offset_px(self) -> int:
-        return self.instance.roi_width_offset_px
+        return self._roi_width_offset_px
 
     @roi_width_offset_px.setter
-    def roi_width_offset_px(self, value: int) -> None:
-        self.instance.roi_width_offset_px = value
-        self.log.info(f"ROI width offset set to: {value} px")
-
-    @deliminated_property(
-        minimum=lambda self: self.instance.min_height,
-        maximum=lambda self: self.sensor_sensor_size_px.y,
-        step=lambda self: self.instance.roi_step_height_px,
-        unit="px",
-    )
-    def roi_height_px(self) -> int:
-        return self.instance.roi_height_px
-
-    @roi_height_px.setter
-    def roi_height_px(self, value: int) -> None:
-        # Update hardware ROI height
-        self.instance.roi_height_px = value
-        # Update offset if necessary
-        centered_offset_px = (
-            round((self.sensor_size_px.y / 2 - value / 2) / self.instance.roi_step_height_px)
-            * self.instance.roi_step_height_px
-        )
-        self.instance.roi_height_offset_px = centered_offset_px
-        self.log.info(f"ROI height set to: {value} px")
+    def roi_width_offset_px(self, roi_width_offset_px: int) -> None:
+        self._roi_width_offset_px = roi_width_offset_px
 
     @deliminated_property(
         minimum=0,
-        maximum=lambda self: self.sensor_sensor_size_px.y,
-        step=lambda self: self.instance.roi_step_height_px,
+        maximum=lambda self: self.sensor_size_px.y,
+        step=lambda self: self._roi_step_height_px,
         unit="px",
     )
     def roi_height_offset_px(self) -> int:
-        return self.instance.roi_height_offset_px
+        return self._roi_height_offset_px
 
     @roi_height_offset_px.setter
-    def roi_height_offset_px(self, value: int) -> None:
-        self.instance.roi_height_offset_px = value
-        self.log.info(f"ROI height offset set to: {value} px")
-
-    def _get_binning_options(self) -> set[str]:
-        return set(self._binning_lut.values())
-
-    @enumerated_property(options=_get_binning_options)
-    def binning(self) -> Binning:
-        return self._binning
-
-    @binning.setter
-    def binning(self, binning: Binning) -> None:
-        if binning in self._binning_lut:
-            self._binning = binning
-            self.log.info(f"Binning set to: {binning.name}")
-        else:
-            self.log.error(f"Invalid binning: {binning}")
-
-    def _get_pixel_type_options(self) -> set[str]:
-        return set(self._pixel_type_lut.values())
-
-    @enumerated_property(options=_get_pixel_type_options)
-    def pixel_type(self) -> PixelType:
-        return self.instance.pixel_type
-
-    @pixel_type.setter
-    def pixel_type(self, pixel_type: PixelType) -> None:
-        if pixel_type in self._pixel_type_lut:
-            self.instance.pixel_type = pixel_type
-            self.log.info(f"Pixel type set to: {pixel_type.name}")
-        else:
-            self.log.error(f"Invalid pixel type: {pixel_type}")
+    def roi_height_offset_px(self, roi_height_offset_px: int) -> None:
+        self._roi_height_offset_px = roi_height_offset_px
 
     @property
-    def frame_size_px(self) -> Vec2D[int]:
-        width = self.roi_width_px // self.binning
-        height = self.roi_height_px // self.binning
-        return Vec2D(width, height)
-
-    @property
-    def frame_width_px(self) -> int:
-        return self.frame_size_px.x
-
-    @property
-    def frame_height_px(self) -> int:
-        return self.frame_size_px.y
+    def frame_size_px(self) -> Vec2D:
+        return Vec2D(self.roi_width_px, self.roi_height_px) // self.binning
 
     @property
     def frame_size_mb(self) -> float:
-        return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.bytes_per_pixel) / 1e6
+        return self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.size_bytes / 1e6
 
     @deliminated_property(
-        minimum=lambda self: self.instance.min_exposure_time_ms,
-        maximum=lambda self: self.instance.max_exposure_time_ms,
-        step=lambda self: self.instance.step_exposure_time_ms,
+        minimum=_min_exposure_time_ms,
+        maximum=_max_exposure_time_ms,
+        step=_step_exposure_time_ms,
         unit="ms",
     )
     def exposure_time_ms(self) -> float:
-        return self.instance.exposure_time_ms
+        return self._exposure_time_ms
 
     @exposure_time_ms.setter
     def exposure_time_ms(self, exposure_time_ms: float) -> None:
-        self.instance.exposure_time_ms = exposure_time_ms
-        self.log.info(f"Exposure time set to: {exposure_time_ms} ms")
-
-    @deliminated_property(unit="us")
-    def line_interval_us(self) -> float:
-        return self.instance.line_interval_us_lut[self.pixel_type]
+        self._exposure_time_ms = exposure_time_ms
 
     @property
     def frame_time_ms(self) -> float:
-        return self.instance.frame_time_ms
+        readout_time_ms = self._line_interval_us_lut[self.pixel_type] * self.roi_height_px / 1000
+        self.log.debug(
+            f"Readout: {readout_time_ms} ms, "
+            f"exposure: {self.exposure_time_ms} ms, "
+            f"max: {self._max_frame_time_ms} ms"
+        )
+        return max(max(self.exposure_time_ms, readout_time_ms), self._max_frame_time_ms)
+
+    @deliminated_property(unit="us")
+    def line_interval_us(self) -> float:
+        return self._line_interval_us_lut[self.pixel_type]
 
     def configure_hardware_triggering(self) -> None:
-        pass
+        self.log.info("Simulated camera does not support hardware triggering")
 
-    @property
-    def trigger_mode(self) -> Trigger:
-        return self._trigger_mode
+    def prepare(self) -> None:
+        self.log.info("Simulated camera prepared")
 
-    @trigger_mode.setter
-    def trigger_mode(self, mode: Trigger) -> None:
-        self._trigger_mode = Trigger(mode)
-        self.log.info(f"Trigger mode set to: {mode}")
+    def start(self, frame_count: int = -1) -> None:
+        self.is_running = True
+        self._frame_count = 0
+        self._requested_frame_count = frame_count
+        self.log.info(f"Simulated camera started with {frame_count} frames")
+
+    def stop(self) -> None:
+        self.is_running = False
+
+    def grab_frame(self) -> np.ndarray:
+        if not self.is_running:
+            self.log.error("Attempted to grab frame while camera is not running")
+            return np.zeros((int(self.roi_height_px), int(self.roi_width_px)), dtype=np.uint16)
+        self._frame_count += 1
+        total_frames_str = f"out of {self._requested_frame_count} frames)" if self._requested_frame_count > 0 else ""
+        self.log.info(f"Simulated camera grabbed frame {self._frame_count} {total_frames_str}")
+        return generate_reference_image(
+            height_px=int(self.roi_height_px),
+            width_px=int(self.roi_width_px),
+            exposure_time_ms=int(self.exposure_time_ms),
+            resize_method="upsample",
+        )
 
     @property
     def sensor_temperature_c(self) -> float:
-        return self.instance.sensor_temperature_c
+        return np.random.uniform(49, 55)
 
     @property
     def mainboard_temperature_c(self) -> float:
-        return self.instance.mainboard_temperature_c
-
-    def prepare(self) -> None:
-        pass
-
-    def start(self, frame_count: int = -1) -> None:
-        self.instance.start(frame_count)
-        self.log.info(f"Camera started with frame_time: {self.frame_time_ms / 1000:.2f} s")
-
-    def stop(self) -> None:
-        self.instance.stop()
-
-    def grab_frame(self) -> VoxelFrame:
-        frame = self.instance.grab_frame()
-        return frame
+        return np.random.uniform(25, 30)
 
     @property
     def acquisition_state(self) -> AcquisitionState:
-        state = self.instance.acquisition_state
         return AcquisitionState(
-            frame_index=int(state["frame_index"]),
-            input_buffer_size=int(state["input_buffer_size"]),
-            output_buffer_size=int(state["output_buffer_size"]),
-            dropped_frames=int(state["dropped_frames"]),
-            data_rate_mbs=state["frame_rate"]
-            * self.instance.roi_width_px
-            * self.instance.roi_height_px
-            * (16 if self.pixel_type == PixelType.MONO16 else 8)
-            / 8
-            / 1e6,
-            frame_rate_fps=state["frame_rate"],
+            frame_index=self._frame_count,
+            input_buffer_size=0,
+            output_buffer_size=0,
+            dropped_frames=0,
+            data_rate_mbs=self.frame_size_mb / self.frame_time_ms,
+            frame_rate_fps=1 / self.frame_time_ms * 1000,
         )
 
     def log_metadata(self) -> None:
         pass
 
     def close(self):
-        self.instance.close()
+        pass
 
     def reset(self):
         self.roi_width_px = self.sensor_size_px.x

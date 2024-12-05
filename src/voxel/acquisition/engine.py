@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from abc import ABC
+from abc import ABC, abstractmethod
 import math
 from pathlib import Path
 import time
@@ -27,9 +27,15 @@ class AcquisitionState:
     progress: dict[Vec2D, list[float]]
 
 
-def get_available_disk_space(path: str) -> int:
+def get_available_disk_space_mb(path: str) -> int:
     """Return the available disk space in mega bytes."""
     return psutil.disk_usage(path).free // (1024**2)
+
+
+def calculate_frame_stack_size_mb(frame_stack: "FrameStack", channel: VoxelChannel) -> float:
+    pixel_count = frame_stack.size_um.x * frame_stack.size_um.y
+    frame_size_bytes = pixel_count * np.dtype(channel.writer.dtype).itemsize
+    return frame_size_bytes / (1024**2)
 
 
 @dataclass
@@ -84,7 +90,51 @@ class VoxelAcquisitionEngine(ABC):
 
     @property
     def available_disk_space(self) -> int:
-        return psutil.disk_usage(str(self.path)).free // (1024**2)
+        return get_available_disk_space_mb(str(self.path))
+
+    @abstractmethod
+    def run(self) -> None: ...
+
+    def validate_acquisition_plan(self):
+        # Validate that the plan is compatible with the instrument
+        #   - Check that the position of the frame_stacks is within the limits of the stage
+        #   - Check that the channels in the plan are available in the instrument
+        ...
+
+    def check_external_disk_space(self, frame_stack: "FrameStack") -> bool:
+        # Check that there is enough disk space to save the frames
+        ...
+
+
+class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
+    def __init__(
+        self,
+        instrument: VoxelInstrument,
+        channels: list[str],
+        frame_stacks: dict[Vec2D, FrameStack],
+        scan_path: list[Vec2D[int]],
+        path: str | Path,
+    ) -> None:
+        super().__init__(instrument, channels, frame_stacks, scan_path, path)
+
+        if not self.instrument.daq:
+            raise ValueError("DAQ not found in the instrument.")
+
+        acq_task = self.instrument.daq.tasks.get("acq_task")
+        if not isinstance(acq_task, WaveGenTask):
+            raise ValueError("Acquisition task not found or is not a WaveGenTask.")
+
+        self.acq_task: WaveGenTask = acq_task
+        self.log.info(f"Acquistion task found with channels: {self.acq_task.channels.keys()}")
+
+        clock_task = self.acq_task.trigger_task
+        if not clock_task:
+            raise ValueError("Trigger Clock task not found in acquisition task.")
+        self.clock_task: "ClockGenTask" = clock_task
+
+        self.state = {stack.idx: StackAcquisitionState() for stack in self.frame_stacks.values()}
+
+        self.current_stack: FrameStack
 
     def run(self) -> None:
         for tile_idx in self.scan_path:
@@ -92,7 +142,7 @@ class VoxelAcquisitionEngine(ABC):
 
     def _capture_stack(self, stack: "FrameStack") -> None:
         """Capture a frame stack."""
-        self.log.info(f"Capturing frame stack: {stack}")
+        self.log.warning(f"Capturing frame stack: {stack}")
 
         self.stage.move_to(x=stack.pos_um.x, y=stack.pos_um.y, z=stack.pos_um.z, wait=True)
         self.log.info(f"Moved to position: {self.stage.position_mm.to_str()}")
@@ -117,7 +167,7 @@ class VoxelAcquisitionEngine(ABC):
             acq_frame_time_s = 1 / self.clock_task.freq_hz
             self.log.info(f"Clock frequency set to: {self.clock_task.freq_hz} Hz, frame time: {acq_frame_time_s} s")
 
-            expected_size_mb = self._calculate_frame_stack_size_mb(stack, channel)
+            expected_size_mb = calculate_frame_stack_size_mb(stack, channel)
 
             while not self.available_disk_space > expected_size_mb * 1.5:
                 self.log.warning("Low disk space. Waiting for space to free up.")
@@ -147,7 +197,7 @@ class VoxelAcquisitionEngine(ABC):
                 for stack_index in frame_range:
                     start_time = time.perf_counter()
 
-                    self.log.info(f"    Frame {stack_index} of {stack.frame_count}")
+                    # self.log.info(f"    Frame {stack_index} of {stack.frame_count}")
                     channel.capture_frame()
                     self.state[stack.idx].new_frame(channel.latest_frame)
 
@@ -156,21 +206,7 @@ class VoxelAcquisitionEngine(ABC):
                         time.sleep(acq_frame_time_s - (end_time - start_time))
 
                 self.clock_task.stop()
+                self.log.info(f"  Batch {batch_idx + 1} done")
 
             channel.stop()
             channel.deactivate()
-
-    def _calculate_frame_stack_size_mb(self, frame_stack: "FrameStack", channel: VoxelChannel) -> float:
-        pixel_count = frame_stack.size_um.x * frame_stack.size_um.y
-        frame_size_bytes = pixel_count * np.dtype(channel.writer.dtype).itemsize
-        return frame_size_bytes / (1024**2)
-
-    def validate_acquisition_plan(self):
-        # Validate that the plan is compatible with the instrument
-        #   - Check that the position of the frame_stacks is within the limits of the stage
-        #   - Check that the channels in the plan are available in the instrument
-        ...
-
-    def check_external_disk_space(self, frame_stack: "FrameStack") -> bool:
-        # Check that there is enough disk space to save the frames
-        ...

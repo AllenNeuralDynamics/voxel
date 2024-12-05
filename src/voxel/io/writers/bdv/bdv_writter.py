@@ -182,10 +182,10 @@ class BdvWriter(VoxelWriter):
 
         self.log.info(f"Initialized. Writing to {self._output_file}")
 
-    def _process_batch(self, batch_data, batch_count) -> None:
+    def _process_batch(self, batch_data) -> None:
         self._npy2bdv.append_substack(
             substack=batch_data,
-            z_start=batch_count * self.batch_size_px,
+            z_start=self.batch_count * self.batch_size_px,
             tile=self._tile_idx,
             channel=self.metadata.channel_idx,
         )

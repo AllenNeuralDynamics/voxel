@@ -92,6 +92,10 @@ class VoxelWriter(LoggingSubprocess):
         return "".join([axis for axis in self.dimension_order.value if axis in "ZCYX"])[::-1]
 
     @property
+    def batch_count(self) -> int:
+        return self._batch_count.value
+
+    @property
     @abstractmethod
     def batch_size_px(self) -> int:
         """The number of pixels in the z dimension per batch. Determines the size of the buffer.
@@ -117,13 +121,11 @@ class VoxelWriter(LoggingSubprocess):
         pass
 
     @abstractmethod
-    def _process_batch(self, batch_data: np.ndarray, batch_count: int) -> None:
+    def _process_batch(self, batch_data: np.ndarray) -> None:
         """Process a batch of data with validation and metrics
 
         :param batch_data: The batch of frame data to process
         :type batch_data: np.ndarray
-        :param batch_count: Current batch number (1-based)
-        :type batch_count: int
         """
         pass
 
@@ -190,7 +192,7 @@ class VoxelWriter(LoggingSubprocess):
 
         self.running_flag.clear()
 
-        self.log.info(f"Processed {self._frame_count} frames in {self._batch_count.value} batches")
+        self.log.info(f"Processed {self._frame_count} frames in {self.batch_count} batches")
         self.log.info("Stopping writer")
 
         self.join()
@@ -238,6 +240,7 @@ class VoxelWriter(LoggingSubprocess):
             self._switch_buffers()
 
         self.dbl_buf.add_frame(frame)
+        self.log.debug(f"Added frame {self._frame_count + 1}")
         self._frame_count += 1
 
     def _switch_buffers(self) -> None:
@@ -248,12 +251,14 @@ class VoxelWriter(LoggingSubprocess):
 
         # Toggle buffers
         self.dbl_buf.toggle_buffers()
+        self.log.warning(f"Switched buffers. Read buffer: {self.dbl_buf.read_mem_block_idx.value}")
 
         # Signal that new data needs processing
         self.needs_processing.set()
 
         # Wait for processing to start before continuing
         while not self.needs_processing.is_set():
+            self.log.debug(f"Waiting for processing to start on batch {self.batch_count}")
             time.sleep(0.001)
 
         self._batch_count.value += 1
@@ -268,16 +273,16 @@ class VoxelWriter(LoggingSubprocess):
         """
 
         batch_start_time = time.time()
-        self._process_batch(batch_data, self._batch_count.value)
+        self._process_batch(batch_data)
         batch_end_time = time.time()
 
         time_taken = batch_end_time - batch_start_time
         data_size_mbs = batch_data.nbytes / (1024 * 1024)
         rate_mbps = data_size_mbs / time_taken if time_taken > 0 else 0
-        self._avg_rate = (self._avg_rate * (self._batch_count.value - 1) + rate_mbps) / self._batch_count.value
+        self._avg_rate = (self._avg_rate * (self.batch_count - 1) + rate_mbps) / self.batch_count
 
         self.log.info(
-            f"Batch {self._batch_count.value}, "
+            f"Batch {self.batch_count}, "
             f"Time: {time_taken:.2f} s, "
             f"Size: {data_size_mbs:.2f} MB, "
             f"Rate: {rate_mbps:.2f} MB/s | "

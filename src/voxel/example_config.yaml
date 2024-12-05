@@ -101,6 +101,8 @@ instrument:
   io:
     imaris: &imaris
       driver: voxel.io.writers.imaris.ImarisWriter
+    simple_writer: &simple_writer
+      driver: voxel.io.writers.simple.SimpleWriter
     robocopy: &robocopy
       driver: voxel.io.transfers.robocopy.RobocopyFileTransfer
       kwds:

@@ -95,9 +95,10 @@ class VoxelChannel:
 
     def capture_frame(self) -> None:
         """Capture a frame."""
-        frame = self.camera.grab_frame()
-        self.writer.add_frame(frame)
-        self.latest_frame = frame
+        # frame = self.camera.grab_frame()
+        # self.writer.add_frame(frame)
+        # self.latest_frame = frame
+        self.writer.add_frame(self.camera.grab_frame())
 
     def apply_settings(self, settings: dict[str, dict[str, Any]]) -> None:
         """Apply settings to the channel."""

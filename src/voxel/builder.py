@@ -1,3 +1,4 @@
+import datetime
 from enum import StrEnum
 from pathlib import Path
 from turtle import Vec2D
@@ -339,25 +340,32 @@ def parse_driver(driver: str) -> Any:
 
 if __name__ == "__main__":
     from voxel.utils.log_config import setup_logging
-    from voxel.acquisition.engine import VoxelAcquisitionEngine
+    from voxel.acquisition.engine import ExaspimAcquisitionEngine
     from voxel.frame_stack import FrameStack
     from voxel.utils.vec import Vec2D, Vec3D
+    import json
 
-    setup_logging(level="DEBUG", detailed=True)
+    setup_logging(level="INFO", detailed=True)
 
     CONFIG_PATH = Path(__file__).parent / "example_config.yaml"
 
     config = VoxelSpecs.from_yaml(file_path=CONFIG_PATH)
     builder = VoxelBuilder(config=config)
 
-    # builder.log.info(builder.config)
-
     instrument = builder.get_instrument()
     acquisition = builder.get_acquisition()
 
+    acquisition.volume.max_corner = Vec3D(5000, 5000, 512)
+
+    frame_stacks = [fs.to_dict() for fs in acquisition.frame_stacks.values()]
+
+    acquisition.log.warning(f"{json.dumps(frame_stacks, indent=2)}")
+
+    # Running an acquisition engine
+
     channel = next(iter(instrument.channels.values()))
 
-    frame_count = channel.writer.batch_size_px * 3
+    frame_count = channel.writer.batch_size_px * 1
     z_step_size_um = channel.camera.pixel_size_um.x
     idx = Vec2D(0, 0)
     frame_stacks = {
@@ -370,13 +378,15 @@ if __name__ == "__main__":
     }
 
     scan_path = [idx]
-
-    engine = VoxelAcquisitionEngine(
+    dir = Path("D:/voxel_test/engine/")
+    path = dir / f"test_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    path.mkdir(parents=True, exist_ok=True)
+    engine = ExaspimAcquisitionEngine(
         instrument=instrument,
         channels=[channel.name],
-        frame_stacks=frame_stacks,
-        scan_path=scan_path,
-        path=Path(__file__).parent / "test_output",
+        frame_stacks=acquisition.frame_stacks,
+        scan_path=acquisition.scan_path,
+        path=path,
     )
 
     engine.run()

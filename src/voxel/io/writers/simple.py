@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class SimpleWriter(VoxelWriter):
     """Simple writer class for testing purposes"""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str = "simple_writer"):
         super().__init__(name)
         self._output_file: Path
 
@@ -23,7 +23,7 @@ class SimpleWriter(VoxelWriter):
 
     @property
     def batch_size_px(self) -> int:
-        return 64
+        return 64 // 1
 
     def configure(self, metadata: WriterMetadata) -> None:
         super().configure(metadata)
@@ -44,26 +44,24 @@ class SimpleWriter(VoxelWriter):
             f.write(f"{'-'*80}\n")
         self.log.info(f"Initialized. Expecting {self.metadata.frame_count} frames in {self.batch_size_px} px batches")
 
-    def _process_batch(self, batch_data, batch_count) -> None:
+    def _process_batch(self, batch_data) -> None:
         num_frames = int(batch_data.shape[0])
-        start_frame = (batch_count - 1) * self.batch_size_px
+        start_frame = (self.batch_count - 1) * self.batch_size_px
 
         stats = {
-            "batch_number": batch_count,
             "frames_processed": num_frames,
-            "frame_range": f"{start_frame}-{start_frame + num_frames - 1}",
             "min_value": float(np.min(batch_data)),
             "max_value": float(np.max(batch_data)),
             "mean_value": float(np.mean(batch_data)),
         }
 
         with self._output_file.open("a") as f:
-            f.write(f"\nBatch: {batch_count:03d} [{start_frame}-{start_frame + num_frames - 1}]\n")
+            f.write(f"\nBatch: {self.batch_count:03d} [{start_frame}-{start_frame + num_frames - 1}]\n")
             f.write(f"\n{json.dumps(stats, indent=2)}\n\n")
             f.write(f"{'-'*80}\n")
 
         self.log.info(
-            f"Batch: {batch_count:2d} | {start_frame}-{start_frame + num_frames - 1} frames | "
+            f"Batch: {self.batch_count:2d} | {start_frame}-{start_frame + num_frames - 1} frames | "
             f"Min: {stats['min_value']:3f} | Mean: {stats['mean_value']:.1f} | Max: {stats['max_value']:3f}"
         )
 

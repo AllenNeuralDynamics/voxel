@@ -58,9 +58,9 @@ class OMETiffWriter(VoxelWriter):
         self.pages_written = 0
         self._ome_xml = self._ome_xml.encode("ascii", "xmlcharrefreplace").decode("ascii")
 
-    def _process_batch(self, batch_data: np.ndarray, batch_count: int) -> None:
+    def _process_batch(self, batch_data: np.ndarray) -> None:
         # For the first batch, include the OME-XML metadata
-        description = self._ome_xml if batch_count == 1 else None
+        description = self._ome_xml if self.batch_count == 1 else None
 
         self.tiff_writer.write(
             batch_data,
@@ -76,7 +76,7 @@ class OMETiffWriter(VoxelWriter):
         current_file_size = self.output_file.stat().st_size / (1024 * 1024)  # File size in MB
 
         self.log.info(
-            f"Batch {batch_count} written to {self.output_file} | Current file size: {current_file_size:.2f} MB"
+            f"Batch {self.batch_count} written to {self.output_file} | Current file size: {current_file_size:.2f} MB"
         )
 
     def _finalize(self) -> None:
