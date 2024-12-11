@@ -61,32 +61,13 @@ class VoxelAcquisitionEngine(ABC):
         self.log = get_logger(self.__class__.__name__)
 
         self.instrument = instrument
-
         self.stage = self.instrument.stage
         self.channels = [instrument.channels[channel_name] for channel_name in channels]
-
         self.frame_stacks = frame_stacks
         self.scan_path = scan_path
         self.path = Path(path)
 
-        if not self.instrument.daq:
-            raise ValueError("DAQ not found in the instrument.")
-
-        acq_task = self.instrument.daq.tasks.get("acq_task")
-        if not isinstance(acq_task, WaveGenTask):
-            raise ValueError("Acquisition task not found or is not a WaveGenTask.")
-
-        self.acq_task: WaveGenTask = acq_task
-        self.log.info(f"Acquistion task found with channels: {self.acq_task.channels.keys()}")
-
-        clock_task = self.acq_task.trigger_task
-        if not clock_task:
-            raise ValueError("Trigger Clock task not found in acquisition task.")
-        self.clock_task: "ClockGenTask" = clock_task
-
-        self.state = {stack.idx: StackAcquisitionState() for stack in self.frame_stacks.values()}
-
-        self.current_stack: FrameStack
+        self.validate_acquisition_plan()
 
     @property
     def available_disk_space(self) -> int:
@@ -96,14 +77,45 @@ class VoxelAcquisitionEngine(ABC):
     def run(self) -> None: ...
 
     def validate_acquisition_plan(self):
-        # Validate that the plan is compatible with the instrument
-        #   - Check that the position of the frame_stacks is within the limits of the stage
-        #   - Check that the channels in the plan are available in the instrument
-        ...
+        """Validate the acquisition plan.
+        - Check that the scan path is valid
+        - Check that the position of the frame_stacks is within the limits of the stage
+        """
+        errors = []
+        errors.extend(self._validate_scan_path())
+        errors.extend(self._validate_frame_stack_positions())
+        if len(self.scan_path) != len(self.frame_stacks):
+            self.log.warning("Scan path does not include all frame stacks.")
+        if errors:
+            for error in errors:
+                self.log.error(error)
+            raise ValueError("Invalid acquisition plan.")
 
-    def check_external_disk_space(self, frame_stack: "FrameStack") -> bool:
-        # Check that there is enough disk space to save the frames
-        ...
+    def _validate_scan_path(self) -> list[str]:
+        """Make sure the scan plan is valid."""
+        errors = []
+        for tile_idx in self.scan_path:
+            if tile_idx not in self.frame_stacks:
+                errors.append(f"Frame stack not found for tile index: {tile_idx}")
+        return errors
+
+    def _validate_frame_stack_positions(self) -> list[str]:
+        """Ensure frame stack positions are within stage limits."""
+        errors = []
+        min_limit, max_limit = self.stage.limits_mm
+        for stack in self.frame_stacks.values():
+            min_corner = stack.pos_um
+            max_corner = stack.pos_um + stack.size_um
+            for coord in ["x", "y", "z"]:
+                min_val = getattr(min_limit, coord)
+                max_val = getattr(max_limit, coord)
+                min_c = getattr(min_corner, coord)
+                max_c = getattr(max_corner, coord)
+                if not min_val <= min_c <= max_val:
+                    errors.append(f"{coord.upper()} position of frame stack {stack.idx} is out of stage limits.")
+                if not min_val <= max_c <= max_val:
+                    errors.append(f"{coord.upper()} position of frame stack {stack.idx} is out of stage limits.")
+        return errors
 
 
 class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
@@ -164,8 +176,10 @@ class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
             self.log.info(f"Capturing frames for channel: {channel.name}")
 
             self.clock_task.freq_hz = 1 / (channel.camera.frame_time_ms / 1000)
-            acq_frame_time_s = 1 / self.clock_task.freq_hz
-            self.log.info(f"Clock frequency set to: {self.clock_task.freq_hz} Hz, frame time: {acq_frame_time_s} s")
+            acq_frame_time_s = (1 / self.clock_task.freq_hz) * 1
+            self.log.info(
+                f"Clock frequency set to: {self.clock_task.freq_hz:.2f} Hz, frame time: {acq_frame_time_s:.2f} s"
+            )
 
             expected_size_mb = calculate_frame_stack_size_mb(stack, channel)
 
@@ -180,6 +194,9 @@ class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
             self.clock_task.configure(num_samples=batch_size)
 
             num_batches = math.ceil(stack.frame_count / batch_size)
+
+            channel.camera.start(frame_count=batch_size)
+            channel.writer.start()
 
             channel.start(frame_count=batch_size)
 
@@ -196,9 +213,8 @@ class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
 
                 for stack_index in frame_range:
                     start_time = time.perf_counter()
-
-                    # self.log.info(f"    Frame {stack_index} of {stack.frame_count}")
                     channel.capture_frame()
+                    self.log.info(f"    Captured Frame {stack_index} of {stack.frame_count}")
                     self.state[stack.idx].new_frame(channel.latest_frame)
 
                     end_time = time.perf_counter()
@@ -208,5 +224,8 @@ class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
                 self.clock_task.stop()
                 self.log.info(f"  Batch {batch_idx + 1} done")
 
-            channel.stop()
+            # channel.stop()
+            channel.camera.stop()
             channel.deactivate()
+
+        self.acq_task.stop()

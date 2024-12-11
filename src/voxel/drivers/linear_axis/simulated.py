@@ -13,8 +13,8 @@ class SimulatedLinearAxis(VoxelLinearAxis):
         self._position_mm = 0.0
         self._speed_mm_s = 1.0
         self._acceleration_ms = 1.0
-        self._lower_limit_mm = -10.0
-        self._upper_limit_mm = 10.0
+        self._lower_limit_mm = -10_000.0
+        self._upper_limit_mm = 10_000.0
 
     def configure_scan(self, config: ScanConfig) -> None:
         self.log.info(f"Configuring scan: {config}")

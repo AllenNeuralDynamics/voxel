@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 import atexit
-from enum import Enum
+from enum import Enum, StrEnum
 import logging
 from logging.handlers import QueueHandler, QueueListener
 from multiprocessing import Process, Queue
 from pathlib import Path
+
 
 LOGGING_SUBPROC_SUFFIX = "_sub"
 LOGGING_PROJECT_NAME = "voxel"
@@ -16,26 +17,37 @@ LOG_QUEUE = Queue(-1)
 class LogColor(Enum):
     """ANSI color codes for logging"""
 
-    GREY = "\033[38;20m"
-    BLUE = "\033[34;20m"
+    GREEN = "\033[32;20m"
     YELLOW = "\033[33;20m"
     RED = "\033[31;20m"
     BOLD_RED = "\033[31;1m"
-    GREEN = "\033[32;20m"
-    CYAN = "\033[36;20m"
     PURPLE = "\033[35;20m"
+    BLUE = "\033[34;20m"
+    CYAN = "\033[36;20m"
+    GREY = "\033[38;20m"
     RESET = "\033[0m"
 
 
+class LogEmoji(StrEnum):
+    """Emoji ansi codes"""
+
+    GREEN_CIRCLE = "\U0001f7e2"
+    PURPLE_CIRCLE = "\U0001f7e3"
+    BLUE_CIRCLE = "\U0001f535"
+    YELLOW_CIRCLE = "\U0001f7e1"
+    RED_CIRCLE = "\U0001f534"
+    CROSS_MARK = "❌"
+
+
 class CustomFormatter(logging.Formatter):
-    """Base formatter with common functionality"""
+    """Enhanced formatter with modular and extendable formatting logic."""
 
     LEVEL_EMOJIS: dict[int, str] = {
-        logging.DEBUG: "\U0001f7e3",
-        logging.INFO: "\U0001f535",
-        logging.WARNING: "\U0001f7e1",
-        logging.ERROR: "\U0001f534",
-        logging.CRITICAL: "❌",
+        logging.DEBUG: LogEmoji.PURPLE_CIRCLE,
+        logging.INFO: LogEmoji.BLUE_CIRCLE,
+        logging.WARNING: LogEmoji.YELLOW_CIRCLE,
+        logging.ERROR: LogEmoji.RED_CIRCLE,
+        logging.CRITICAL: LogEmoji.CROSS_MARK,
     }
 
     LEVEL_COLORS: dict[int, LogColor] = {
@@ -46,39 +58,53 @@ class CustomFormatter(logging.Formatter):
         logging.CRITICAL: LogColor.BOLD_RED,
     }
 
-    def __init__(self, detailed: bool = True, fancy: bool = False, colored: bool = True) -> None:
+    FIELD_COLORS: dict[str, str] = {
+        "asctime": "%(color_code)s",
+        "name": "%(color_code)s",
+        "message": "%(color_code)s",
+        "filename": LogColor.CYAN.value,
+        "processName": LogColor.GREY.value,
+    }
+
+    def __init__(
+        self,
+        detailed: bool = True,
+        fancy: bool = False,
+        colored: bool = True,
+        extra_fields: dict[str, str] | None = None,
+    ) -> None:
+        """
+        :param detailed: Whether to include detailed fields like process name and file location.
+        :param fancy: Whether to include emojis in log level display.
+        :param colored: Whether to apply color coding to fields.
+        :param extra_fields: Additional fields to include in the format, e.g., thread name.
+        """
         self.detailed = detailed
         self.fancy = fancy
         self.colored = colored
+        self.extra_fields = extra_fields or {}
 
+        fmt = self._build_format()
         date_fmt = "%Y-%m-%d %H:%M:%S"
+        super().__init__(fmt=fmt, datefmt=date_fmt)
+
+    def _build_format(self) -> str:
+        """Constructs the format string dynamically."""
         level_str = "%(emoji)s " if self.fancy else "%(levelname)8s - "
 
-        time_fmt = "%(asctime)s"
-        time_fmt = f"%(color_code)s{time_fmt}{LogColor.RESET.value}" if self.colored else time_fmt
+        base_format = level_str
 
-        name_fmt = f"%(name)-{NAME_MIN_WIDTH}s"
-        name_fmt = f"%(color_code)s{name_fmt}{LogColor.RESET.value}" if self.colored else name_fmt
+        fields = ["asctime", "name", "message"]
+        fields += ["processName", "filename"] if self.detailed else []
 
-        msg_fmt = f"%(message)-{MSG_MIN_WIDTH}s"
-        msg_fmt = f"%(color_code)s{msg_fmt}{LogColor.RESET.value}" if self.colored else msg_fmt
+        for i, field in enumerate(fields):
+            separator = " - " if i < len(fields) - 1 else ""
+            base_format += f"{self.FIELD_COLORS.get(field, '')}%({field})s{LogColor.RESET.value}{separator}"
 
-        default_fmt = f"{level_str}{time_fmt} - {name_fmt} - {msg_fmt}"
-
-        # default_fmt = f"%(asctime)s - {level_str} - %(name)-{NAME_MIN_WIDTH}s - %(message)-{MSG_MIN_WIDTH}s"
-        # default_fmt = f"%(color_code)s{default_fmt}{LogColor.RESET.value}" if self.colored else default_fmt
-
-        file_name = "%(filename)s:%(lineno)d"
-        file_name = f"{LogColor.GREY.value}{file_name}{LogColor.RESET.value}" if self.colored else file_name
-
-        process_name = "%(processName)s"
-        process_name = f"{LogColor.GREY.value}{process_name}{LogColor.RESET.value}" if self.colored else process_name
-
-        detailed_fmt = default_fmt + f" - {process_name} - {file_name}"
-        super().__init__(fmt=detailed_fmt if detailed else default_fmt, datefmt=date_fmt)
+        return base_format
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format log record with emojis"""
+        """Override format to inject emojis and color codes."""
         if self.fancy:
             record.emoji = self.LEVEL_EMOJIS.get(record.levelno, "-")
         if self.colored:
@@ -86,19 +112,11 @@ class CustomFormatter(logging.Formatter):
         return super().format(record)
 
     def formatException(self, ei) -> str:
-        """Format exception with red color"""
-        if ei:
-            formatted = super().formatException(ei)
-            if self.fancy:
-                return f"{self.LEVEL_COLORS[logging.ERROR].value}{formatted}{LogColor.RESET.value}"
-            return formatted
-        return ""
-
-
-# class FileFormatter():
-#     """Formatter for file logs"""
-
-#     def __init__(self, detailed: bool = True, jsonify: bool = True) -> None:
+        """Format exception messages with red color."""
+        formatted = super().formatException(ei)
+        if self.colored and formatted:
+            return f"{self.LEVEL_COLORS[logging.ERROR].value}{formatted}{LogColor.RESET.value}"
+        return formatted
 
 
 def get_logger(name) -> logging.Logger:
@@ -148,7 +166,7 @@ def _create_handlers(log_file: str | None, detailed: bool = True, fancy: bool = 
 
 
 def setup_logging(
-    level: str | int = "INFO",
+    level: str | int = logging.INFO,
     log_file: str | None = None,
     fancy: bool = True,
     detailed: bool = False,
@@ -163,28 +181,28 @@ def setup_logging(
     """
     root_logger = logging.getLogger()
     lib_logger = logging.getLogger(LOGGING_PROJECT_NAME)
-    LOG_LEVEL_MAP = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }
 
-    level = LOG_LEVEL_MAP.get(str(level).upper(), logging.INFO)
-    lib_logger.setLevel(level)
-    root_logger.setLevel(level)
+    # Normalize log level
+    if isinstance(level, str):
+        level = getattr(logging, level.upper(), logging.INFO)
 
-    lib_logger.handlers.clear()
+    # Clear existing handlers
     root_logger.handlers.clear()
+    lib_logger.handlers.clear()
 
+    # Create handlers
     handlers = _create_handlers(log_file, detailed=detailed, fancy=fancy)
     queue_handler = QueueHandler(LOG_QUEUE)
+
+    root_logger.setLevel(level)
+    lib_logger.setLevel(level)
     root_logger.addHandler(queue_handler)
 
+    # Listener for subprocess logs
     listener = QueueListener(LOG_QUEUE, *handlers, respect_handler_level=True)
     listener.start()
 
+    # Register listener stop on exit
     atexit.register(listener.stop)
 
 
@@ -197,41 +215,36 @@ class LoggingSubprocess(Process, ABC):
         super().__init__()
         self.name = name
         self._log_queue = queue
-        self.log = get_component_logger(self)
-        self._log_level = self.log.getEffectiveLevel()
-        self._initialized = False
+        self._log_level = logging.INFO
+        self.log = logging.getLogger(f"{LOGGING_PROJECT_NAME}.{name}")
 
     def _setup_logging(self):
-        """Set up logging for the subprocess"""
-        if not self._initialized:
-            for logger in [
-                logging.getLogger(),
-                logging.getLogger(LOGGING_PROJECT_NAME),
-            ]:
-                logger.handlers.clear()
-                logger.setLevel(self._log_level)
+        """
+        Set up logging for the subprocess without altering global state.
+        """
+        # Use a dedicated logger for this subprocess
+        subprocess_logger = logging.getLogger(f"{LOGGING_PROJECT_NAME}.{self.name}")
+        subprocess_logger.propagate = False  # Prevent duplication in parent loggers
+        subprocess_logger.handlers.clear()
 
-            self.log = get_component_logger(self)
+        # Add QueueHandler
+        queue_handler = QueueHandler(self._log_queue)
+        subprocess_logger.addHandler(queue_handler)
+        subprocess_logger.setLevel(self._log_level)
 
-            queue_handler = QueueHandler(self._log_queue)
-            self.log.addHandler(queue_handler)
-            self.log.setLevel(self._log_level)
-
-            self.name += LOGGING_SUBPROC_SUFFIX
-
-            self._initialized = True
+        # Attach logger for internal use
+        self.log = subprocess_logger
 
     def run(self) -> None:
         """
         Main process execution method. Sets up logging and calls _run().
-        Child classes should override _run() instead of run().
         """
+        self._setup_logging()
+        self.log.info("Subprocess logging initialized.")
         try:
-            self._setup_logging()
             self._run()
         except Exception as e:
-            self.log.error(f"Process error: {str(e)}")
-            raise e
+            self.log.critical(f"Subprocess '{self.name}' failed: {e}", exc_info=True)
 
     @abstractmethod
     def _run(self) -> None:
@@ -253,16 +266,21 @@ class Counter(LoggingSubprocess):
         self.log.info(f"Counter process started with count={self.count}")  # Added startup message
         for i in range(self.count):
             self.log.info(f"Count: {i}")
-            self.log.debug(f"Debug message: {i}")
-            self.log.warning(f"Warning message: {i}")
-            self.log.error(f"Error message: {i}")
-            time.sleep(0.5)  # Reduced sleep time for faster testing
+            if i % 5 == 0:
+                self.log.warning(f"Count divisible by 5: {i}")
+            if i % 10 == 0:
+                self.log.error(f"Count divisible by 10: {i}")
+            if i % 15 == 0:
+                self.log.critical(f"Count divisible by 15: {i}")
+            if i > 49:
+                self.log.critical(f"Max count exceeded: {i}")
+                raise ValueError("Count exceeded 10")
+            time.sleep(0.001)  # Reduced sleep time for faster testing
         self.log.info("Counter process completed")  # Added completion message
 
 
-# @with_logging(level="ERROR")
 def main() -> None:
-    proc = Counter("counter", 5)
+    proc = Counter("counter", 75)
     proc.log.critical("Main process started ....................................")
     proc.log.info("Starting counter process")
     proc.start()
@@ -272,5 +290,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    setup_logging(level="DEBUG")
+    setup_logging(level="DEBUG", detailed=True)
     main()

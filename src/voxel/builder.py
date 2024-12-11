@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
 
-from voxel.acquisition.engine import VoxelAcquisitionEngine
 from voxel.acquisition.planner import VoxelAcquisitionPlanner, load_acquisition_plan
 from voxel.acquisition.specs import AcquisitionSpecs
 from voxel.channel import VoxelChannel
@@ -308,27 +307,27 @@ class VoxelBuilder:
         self.config = config
 
         self._instrument: VoxelInstrument | None = None
-        self._acquisition: VoxelAcquisitionPlanner | None = None
+        self._acquisition_planner: VoxelAcquisitionPlanner | None = None
 
-    def get_instrument(self) -> VoxelInstrument:
+    def build_instrument(self) -> VoxelInstrument:
         if not self._instrument:
             self._instrument = InstrumentBuilder(self.config.instrument).build()
         return self._instrument
 
-    def get_acquisition(self) -> VoxelAcquisitionPlanner:
+    def build_acquisition_planner(self) -> VoxelAcquisitionPlanner:
         if not self.config.acquisition:
             raise ValueError("No acquisition configuration found in the file")
-        if not self._acquisition:
+        if not self._acquisition_planner:
             acquisition_plan_path = self.config.file_path.parent / self.config.acquisition.plan_file_path
             frame_stacks, scan_path = load_acquisition_plan(acquisition_plan_path)
-            self._acquisition = VoxelAcquisitionPlanner(
-                instrument=self.get_instrument(),
+            self._acquisition_planner = VoxelAcquisitionPlanner(
+                instrument=self.build_instrument(),
                 specs=self.config.acquisition,
                 config_path=self.config.file_path,
                 frame_stacks=frame_stacks,
                 scan_path=scan_path,
             )
-        return self._acquisition
+        return self._acquisition_planner
 
 
 def parse_driver(driver: str) -> Any:
@@ -352,10 +351,10 @@ if __name__ == "__main__":
     config = VoxelSpecs.from_yaml(file_path=CONFIG_PATH)
     builder = VoxelBuilder(config=config)
 
-    instrument = builder.get_instrument()
-    acquisition = builder.get_acquisition()
+    instrument = builder.build_instrument()
+    acquisition = builder.build_acquisition_planner()
 
-    acquisition.volume.max_corner = Vec3D(5000, 5000, 512)
+    acquisition.volume.max_corner = Vec3D(5000, 5000, 64)  # in um
 
     frame_stacks = [fs.to_dict() for fs in acquisition.frame_stacks.values()]
 

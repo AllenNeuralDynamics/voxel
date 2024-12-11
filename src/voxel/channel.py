@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 from typing import TYPE_CHECKING, Any
 
 from voxel.utils.log_config import get_component_logger
@@ -85,13 +86,13 @@ class VoxelChannel:
 
     def start(self, frame_count: int) -> None:
         """Start the channel."""
-        self.writer.start()
+        self.writer.start() if not self.writer.is_alive else None
         self.camera.start(frame_count)
 
     def stop(self) -> None:
         """Stop the channel."""
         self.camera.stop()
-        self.writer.stop()
+        # self.writer.stop()
 
     def capture_frame(self) -> None:
         """Capture a frame."""

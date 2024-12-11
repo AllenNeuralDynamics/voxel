@@ -1,8 +1,8 @@
 import os
 
 import numpy as np
-from voxel.devices.camera import AcquisitionState, VoxelCamera, PixelType, Binning, Trigger
-from typing import Literal, TypedDict
+from voxel.devices.camera import AcquisitionState, VoxelCamera, PixelType, Binning
+from typing import TypedDict
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.frame_gen import generate_reference_image
@@ -76,6 +76,7 @@ class SimulatedCamera(VoxelCamera):
         self._max_frame_time_ms = 1 / max_frame_rate * 1000
 
         self.is_running = False
+        self._frame: np.ndarray
         self._frame_count = 0
         self._requested_frame_count = -1
 
@@ -190,7 +191,13 @@ class SimulatedCamera(VoxelCamera):
         self.log.info("Simulated camera does not support hardware triggering")
 
     def prepare(self) -> None:
-        self.log.info("Simulated camera prepared")
+        self.log.info("Preparing simulated camera. Generating reference image")
+        self._frame = generate_reference_image(
+            height_px=int(self.roi_height_px),
+            width_px=int(self.roi_width_px),
+            exposure_time_ms=int(self.exposure_time_ms),
+            resize_method="upsample",
+        )
 
     def start(self, frame_count: int = -1) -> None:
         self.is_running = True
@@ -206,14 +213,8 @@ class SimulatedCamera(VoxelCamera):
             self.log.error("Attempted to grab frame while camera is not running")
             return np.zeros((int(self.roi_height_px), int(self.roi_width_px)), dtype=np.uint16)
         self._frame_count += 1
-        total_frames_str = f"out of {self._requested_frame_count} frames)" if self._requested_frame_count > 0 else ""
-        self.log.info(f"Simulated camera grabbed frame {self._frame_count} {total_frames_str}")
-        return generate_reference_image(
-            height_px=int(self.roi_height_px),
-            width_px=int(self.roi_width_px),
-            exposure_time_ms=int(self.exposure_time_ms),
-            resize_method="upsample",
-        )
+        self.log.debug(f"Simulated camera grabbed frame {self._frame_count}")
+        return self._frame
 
     @property
     def sensor_temperature_c(self) -> float:

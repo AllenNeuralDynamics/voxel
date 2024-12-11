@@ -131,12 +131,12 @@ class VoxelDaq:
         """Close all tasks and release ports."""
         tasks = list(self.tasks.keys())
         for name in tasks:
-            self.log.info(f"Cleaning up task: {name}")
+            self.log.info(f"Cleaning up daq task: {name}")
             self.tasks[name].close()
 
         if system:
             for task in list(self.system.tasks):
-                self.log.info(f"Cleaning up task: {task.name}")
+                self.log.info(f"Cleaning up daq task: {task.name}")
                 task.close()
 
         self.assigned_channels.clear()
@@ -184,11 +184,11 @@ class VoxelDaqTask(ABC):
         pass
 
     def start(self) -> None:
-        self.log.info("Starting task...")
+        self.log.info("Starting daq task...")
         self.inst.start()
 
     def stop(self) -> None:
-        self.log.info("Stopping task...")
+        self.log.info("Stopping daq task...")
         self.inst.stop()
 
     def close(self) -> None:

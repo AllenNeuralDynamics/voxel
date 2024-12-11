@@ -18,6 +18,7 @@ class ImarisCompression(Enum):
     NONE = pw.eCompressionAlgorithmNone
 
 
+# TODO: UPdate the progress checker to integrate properly with Voxel
 class ImarisProgressChecker(pw.CallbackClass):
     """Adapter to map VoxelWriter progress to ImarisWriter progress callback."""
 
@@ -30,13 +31,13 @@ class ImarisProgressChecker(pw.CallbackClass):
 
         # log progress every 10%
         if progress * 100 % 10 == 0:
-            self.writer.log.info(f"Progress: {progress * 100:.2f}% | Bytes Written: {total_bytes_written}")
+            self.writer.log.debug(f"Progress: {progress * 100:.2f}% | Bytes Written: {total_bytes_written}")
 
 
 class ImarisWriter(VoxelWriter):
     """Writer class for voxel data that outputs to a single Imaris .ims file."""
 
-    THREADS_PER_CORE = 2
+    THREAD_COUNT = 1 * mp.cpu_count()
     BASE_SIZE = 64
     XY_BLOCK_SIZE = 256
 
@@ -55,7 +56,6 @@ class ImarisWriter(VoxelWriter):
         self.dimension_order = Pixels_DimensionOrder.XYZCT
         self.progress = 0.0
 
-        self._frames_written = 0
         self._z_blocks_written = 0
 
         # Imaris objects
@@ -83,11 +83,10 @@ class ImarisWriter(VoxelWriter):
         super().configure(metadata)
         self._output_file = self.dir / f"{self.metadata.file_name}.ims"
 
-        self.log.info(f"Imaris Writer configured for output to {self._output_file}")
         self.log.info(
             f"Expecting: {self.metadata.frame_count} frames "
             f"of shape {self.metadata.frame_shape.x}px x {self.metadata.frame_shape.y}px "
-            f"in batches of {self._batch_size_px}."
+            f"in batches of {self._batch_size_px}. Output file: {self._output_file}"
         )
 
     def _initialize(self) -> None:
@@ -98,7 +97,7 @@ class ImarisWriter(VoxelWriter):
         # options
         opts = pw.Options()
         opts.mEnableLogProgress = True
-        # opts.mNumberOfThreads = self.THREADS_PER_CORE * mp.cpu_count()
+        opts.mNumberOfThreads = self.THREAD_COUNT
         # self.log.warning(f"Cores: {mp.cpu_count()}, Threads: {opts.mNumberOfThreads}")
         opts.mCompressionAlgorithmType = self._compression.value
 
@@ -125,8 +124,8 @@ class ImarisWriter(VoxelWriter):
         image_size = batch_size
         image_size.z = int(ceil(self.metadata.frame_count / self.batch_size_px)) * self.batch_size_px
 
-        self.log.info(f"Image size: {image_size}")
-        self.log.info(f"Blocks per batch: {self._blocks_per_batch}")
+        self.log.debug(f"Image size: {image_size}")
+        self.log.debug(f"Blocks per batch: {self._blocks_per_batch}")
 
         sample_size = pw.ImageSize(x=1, y=1, z=1, c=1, t=1)
 
@@ -143,7 +142,7 @@ class ImarisWriter(VoxelWriter):
             progress_callback_class=self._callback_class,
         )
 
-        self._frames_written = 0
+        self._frame_count = 0
         self._z_blocks_written = 0
 
     def _process_batch(self, batch_data: np.ndarray) -> None:
@@ -179,12 +178,10 @@ class ImarisWriter(VoxelWriter):
                         self._image_converter.CopyBlock(block_data, block_index)
 
                     # self.log.debug(f"Block {block_index} in batch {self.batch_count}")
-        self._frames_written += self.block_size.z * self._blocks_per_batch.z
+        self._frame_count += self.block_size.z * self._blocks_per_batch.z
         self._z_blocks_written += self._blocks_per_batch.z
 
-        self.log.info(
-            f"Batch {self.batch_count} written to {self._output_file} | Pages written: {self._frames_written}"
-        )
+        self.log.debug(f"Batch {self.batch_count} | Frames: {self._frame_count}")
 
     def _finalize(self) -> None:
         try:
@@ -217,9 +214,9 @@ class ImarisWriter(VoxelWriter):
             self._image_converter.Destroy()
 
             self.log.info(
-                f"Finished writing. Batches: {self.batch_count}, "
-                f"Frames: {self._frames_written}/{self.metadata.frame_count}, "
-                f"File: {self._output_file}"
+                f"Finished writing Batch: {self.batch_count} - "
+                f"{self._frame_count}/{self.metadata.frame_count} frames written, "
+                f"Avg. Rate: {self._avg_fps:.2f} fps | {self._avg_rate:.2f} MB/s"
             )
         except Exception as e:
             self.log.error(f"Failed to finalize ImarisWriter: {e}")
@@ -227,7 +224,7 @@ class ImarisWriter(VoxelWriter):
 
 def test_imaris_writer():
     """Test the Imaris IMS voxel writer with realistic image data."""
-    from voxel.utils.frame_gen import generate_reference_image_batch, generate_reference_image
+    from voxel.utils.frame_gen import generate_reference_image
     from voxel.utils.vec import Vec3D
     import time
 
@@ -255,16 +252,6 @@ def test_imaris_writer():
     while not writer.running_flag.is_set():
         time.sleep(0.1)
         writer.log.warning("Waiting for writer to start...")
-
-    # reps = BATCH_SIZE
-    # writer.log.info(f"Generating {writer.batch_size_px // reps} reference frames for {reps} repetitions/batch")
-    # frames = generate_reference_image_batch(
-    #     nframes=writer.batch_size_px // reps,
-    #     height_px=writer.metadata.frame_shape.y,
-    #     width_px=writer.metadata.frame_shape.x,
-    #     exposure_time_ms=10,
-    #     resize_method="tile",
-    # )
 
     frame_1 = generate_reference_image(
         height_px=writer.metadata.frame_shape.y,
