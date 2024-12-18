@@ -1,6 +1,6 @@
-from .deliminated import deliminated_property, DeliminatedProperty, DeliminatedPropertyProxy
-from .enumerated import enumerated_property, EnumeratedProperty, EnumeratedPropertyProxy
-from .annotated import annotated_property, PropertyInfo, AnnotatedProperty, AnnotatedPropertyProxy
+from .annotated import AnnotatedProperty, AnnotatedPropertyProxy, PropertyInfo, annotated_property
+from .deliminated import DeliminatedProperty, DeliminatedPropertyProxy, deliminated_property
+from .enumerated import EnumeratedProperty, EnumeratedPropertyProxy, enumerated_property
 
 __all__ = [
     "annotated_property",

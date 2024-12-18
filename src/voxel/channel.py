@@ -1,23 +1,25 @@
+from math import ceil
 from pathlib import Path
-import time
 from typing import TYPE_CHECKING, Any
 
+from voxel.utils.frame_gen import downsample_image_by_decimation
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec2D, Vec3D
 
-from .io.writers.base import WriterMetadata
 from .devices import VoxelFileTransfer
+from .io.writers.base import WriterMetadata
 
 if TYPE_CHECKING:
     import numpy as np
+
     from .devices import (
         VoxelCamera,
         VoxelFilter,
         VoxelLaser,
         VoxelLens,
     )
-    from .io.writers.base import VoxelWriter
     from .frame_stack import FrameStack
+    from .io.writers.base import VoxelWriter
 
 
 class VoxelChannel:
@@ -43,7 +45,10 @@ class VoxelChannel:
         self.is_active = is_active
         self.writer = writer
         self.file_transfer = file_transfer
-        self._fov_um = self.camera.sensor_size_um / self.lens.magnification
+        # self._fov_um = self.camera.sensor_size_um / self.lens.magnification
+        roi_width_um = self.camera.roi_width_px * self.camera.pixel_size_um.x / self.lens.magnification
+        roi_height_um = self.camera.roi_height_px * self.camera.pixel_size_um.y / self.lens.magnification
+        self._fov_um = Vec2D(roi_width_um, roi_height_um)
         self.devices = {device.name: device for device in [self.camera, self.lens, self.laser, self.emmision_filter]}
         self.assigned_index = -1
         self.path = Path()
@@ -66,10 +71,12 @@ class VoxelChannel:
         self.emmision_filter.disable()
         self.is_active = False
 
+    # TODO: Maybe handle cases where one file contains multiple channels?
     def prepare(self, stack: "FrameStack", channel_idx: int, path: str | Path) -> None:
         """Prepare camera and configure the writer for the channel."""
         self.assigned_index = channel_idx
         self.path = Path(path)
+        self.camera.prepare()
         self.writer.configure(
             WriterMetadata(
                 path=self.path,
@@ -79,27 +86,26 @@ class VoxelChannel:
                 channel_name=self.name,
                 channel_idx=self.assigned_index,
                 voxel_size=Vec3D(self.camera.pixel_size_um.x, self.camera.pixel_size_um.y, stack.step_size_um),
-                file_name=f"{stack.idx.x}_{stack.idx.y}_{self.name}",
+                file_name=f"tile_{stack.idx.x}_{stack.idx.y}_{self.name}",
             )
         )
-        self.camera.prepare()
 
-    def start(self, frame_count: int) -> None:
+    def start(self, frame_count: int | None = None) -> None:
         """Start the channel."""
-        self.writer.start() if not self.writer.is_alive else None
-        self.camera.start(frame_count)
+        self.writer.start()
+        self.camera.start(frame_count=frame_count)
 
     def stop(self) -> None:
         """Stop the channel."""
         self.camera.stop()
-        # self.writer.stop()
+        self.writer.close()
 
     def capture_frame(self) -> None:
         """Capture a frame."""
-        # frame = self.camera.grab_frame()
-        # self.writer.add_frame(frame)
-        # self.latest_frame = frame
-        self.writer.add_frame(self.camera.grab_frame())
+        frame = self.camera.grab_frame()
+        self.writer.add_frame(frame)
+        factor = ceil(frame.shape[1] // 2048)
+        self.latest_frame = downsample_image_by_decimation(frame, factor)
 
     def apply_settings(self, settings: dict[str, dict[str, Any]]) -> None:
         """Apply settings to the channel."""

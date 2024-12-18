@@ -18,7 +18,9 @@ class WaveGenChannel:
         self.wave: TrapezoidalWave = TrapezoidalWave(
             name=f"{self.name}_waveform",
             timing=self.task.timing,
-            min_voltage_limit=self.task.daq.min_ao_voltage,
+            min_voltage=0.0,
+            max_voltage=5.0,
+            min_voltage_limit=max(self.task.daq.min_ao_voltage, 0.0),
             max_voltage_limit=self.task.daq.max_ao_voltage,
             apply_filter=apply_filter,
             is_digital=is_digital,
@@ -99,11 +101,11 @@ class WaveGenTask(VoxelDaqTask):
     def timing(self) -> WaveGenTiming:
         return WaveGenTiming(sampling_rate=self.sampling_rate, period_ms=self.period_ms)
 
-    def add_ao_channel(self, name: str, pin: str, apply_filter: bool = True) -> WaveGenChannel:
+    def add_ao_channel(self, name: str, pin: str, apply_filter: bool = False) -> WaveGenChannel:
         """Add an analog output channel to the task."""
         pin: PinInfo = self.daq.assign_pin(pin)
         channel_inst = self.inst.ao_channels.add_ao_voltage_chan(pin.path, name)
-        channel = WaveGenChannel(name=name, task=self, inst=channel_inst, apply_filter=apply_filter, is_digital=False)
+        channel = WaveGenChannel(name=name, task=self, inst=channel_inst, apply_filter=apply_filter, is_digital=True)
         self.channels[name] = channel
         self._pins.append(pin)
         self._cfg_timing()

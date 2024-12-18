@@ -3,7 +3,7 @@ from ruamel.yaml import YAML
 
 from voxel.utils.vec import Vec3D
 
-from .scan_path import ScanDirection, ScanPattern, StartCorner
+from .scan_pattern import ScanDirection, ScanPattern, StartCorner
 
 
 class AcquisitionSpecs(BaseModel):
@@ -14,8 +14,6 @@ class AcquisitionSpecs(BaseModel):
     scan_direction: ScanDirection = ScanDirection.ROW_WISE
     start_corner: StartCorner = StartCorner.TOP_LEFT
     reverse_scan_path: bool = False
-    volume_min_corner: str | None = None
-    volume_max_corner: str | None = None
     channels: list[str] = ["all"]
 
     @classmethod

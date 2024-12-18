@@ -5,8 +5,8 @@ import cupy as cp
 import jax.numpy as jnp
 import numpy as np
 import tensorstore as ts
-from jax import device_put
 import torch
+from jax import device_put
 
 
 class VoxelDownsampler[T](ABC):

@@ -1,8 +1,8 @@
 import math
 from collections.abc import Callable
 
-from voxel.utils.vec import Plane, Vec3D
 from voxel.utils.log_config import get_logger
+from voxel.utils.vec import Plane, Vec3D
 
 
 class VolumeBoundaryError(Exception):

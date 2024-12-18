@@ -1,9 +1,8 @@
-from typing import Any, Self
 from collections.abc import Callable
+from typing import Any, Self
 
 from .annotated import PropertyInfo
 from .proxy import DescriptorProxy
-
 
 type DynamicNumber = int | float | Callable[[Any], int | float]
 

@@ -1,7 +1,6 @@
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.new.annotated import PropertyInfo, annotated_property
 
-
 windspeed_info = PropertyInfo("m/s", "Wind speed")
 
 

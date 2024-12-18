@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from enum import StrEnum, IntEnum
+from enum import IntEnum, StrEnum
 
 from voxel.devices.camera import Binning, PixelType
 

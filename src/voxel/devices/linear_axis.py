@@ -31,6 +31,9 @@ class ScanConfig:
     scan_type: ScanType
     step_size_um: float
 
+    def __repr__(self):
+        return f"{self.scan_type} scan from {self.start_mm} to {self.stop_mm} in steps of {self.step_size_um} um"
+
 
 class VoxelLinearAxis(VoxelDevice):
     """

@@ -1,5 +1,6 @@
 from voxel.devices.linear_axis import VoxelLinearAxis
 from voxel.devices.rotation_axis import VoxelRotationAxis
+from voxel.utils.log_config import get_logger
 from voxel.utils.vec import Vec3D
 
 
@@ -19,6 +20,7 @@ class VoxelStage:
         self.roll = roll  # Rotation around the x-axis
         self.pitch = pitch  # Rotation around the y-axis
         self.yaw = yaw  # Rotation around the z-axis
+        self.log = get_logger("VoxelStage")
 
     @property
     def position_mm(self) -> Vec3D[float]:
@@ -42,20 +44,49 @@ class VoxelStage:
     ) -> None:
         """Move stage to specified positions"""
         linear_zipped = zip([x, y, z], [self.x, self.y, self.z])
+        moved_linear = False
+        moved_rotational = False
 
         for arg, axis in linear_zipped:
             if arg is not None and axis is not None:
                 axis.position_mm = arg
+                moved_linear = True
 
         rotational_zipped = zip([roll, pitch, yaw], [self.roll, self.pitch, self.yaw])
         for arg, axis in rotational_zipped:
             if arg is not None and axis is not None:
                 axis.position_deg = arg
+                moved_rotational = True
 
         if wait:
             for axis in [self.x, self.y, self.z, self.roll, self.pitch, self.yaw]:
                 if axis is not None:
                     axis.await_movement()
+
+        if moved_linear:
+            self.log.info(f"Moved stage to {self.position_mm.to_str()} mm")
+        if moved_rotational:
+            self.log.info(f"Moved stage to {self.position_deg.to_str()} degrees")
+
+    def rotate_to(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        z: float | None = None,
+        wait: bool = False,
+    ) -> None:
+        rotational_zipped = zip([x, y, z], [self.roll, self.pitch, self.yaw])
+        moved = False
+        for arg, axis in rotational_zipped:
+            if arg is not None and axis is not None:
+                axis.position_deg = arg
+                moved = True
+        if wait:
+            for axis in [self.roll, self.pitch, self.yaw]:
+                if axis is not None:
+                    axis.await_movement()
+        if moved:
+            self.log.info(f"Moved stage to {self.position_deg.to_str()} degrees")
 
     @property
     def limits_mm(self) -> tuple[Vec3D, Vec3D]:

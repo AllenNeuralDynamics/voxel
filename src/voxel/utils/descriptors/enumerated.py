@@ -1,10 +1,9 @@
+from collections.abc import Callable
 from enum import IntEnum, StrEnum
 from typing import Any, Self
-from collections.abc import Callable
 
 from voxel.utils.descriptors.annotated import PropertyInfo
 from voxel.utils.descriptors.proxy import DescriptorProxy
-
 
 type PropertyOptions = set[str | int] | set[str]
 type DynamicOptions = PropertyOptions | Callable[[Any], PropertyOptions]

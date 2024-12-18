@@ -1,10 +1,10 @@
 from .planner import (
-    VoxelAcquisitionPlanner,
     AcquisitionSpecs,
     ScanDirection,
     ScanPattern,
     StartCorner,
     Volume,
+    VoxelAcquisitionPlanner,
     VoxelMetadata,
 )
 

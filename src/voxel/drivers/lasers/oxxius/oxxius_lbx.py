@@ -1,9 +1,9 @@
-from oxxius_laser import BoolVal, LBX
+from oxxius_laser import LBX, BoolVal
 from serial import Serial
-from sympy import symbols, solve, Expr
+from sympy import Expr, solve, symbols
 
-from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.devices.laser import VoxelLaser
+from voxel.utils.descriptors.deliminated import deliminated_property
 
 MODULATION_MODES = {
     "off": {"external_control_mode": BoolVal.OFF, "digital_modulation": BoolVal.OFF},

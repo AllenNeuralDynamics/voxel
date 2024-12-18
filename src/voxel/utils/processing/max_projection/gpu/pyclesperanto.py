@@ -31,16 +31,9 @@ class GPUMaxProjection(BaseMaxProjection):
             x_projection = False
         else:
             x_projection = True
-            if (
-                self._x_projection_count_px < 0
-                or self._x_projection_count_px > self._column_count_px
-            ):
-                raise ValueError(
-                    f"x projection must be > 0 and < {self._column_count_px}"
-                )
-            x_index_list = np.arange(
-                0, self._column_count_px, self._x_projection_count_px
-            )
+            if self._x_projection_count_px < 0 or self._x_projection_count_px > self._column_count_px:
+                raise ValueError(f"x projection must be > 0 and < {self._column_count_px}")
+            x_index_list = np.arange(0, self._column_count_px, self._x_projection_count_px)
             if self._column_count_px not in x_index_list:
                 x_index_list = np.append(x_index_list, self._column_count_px)
             self.mip_yz = np.zeros(
@@ -51,10 +44,7 @@ class GPUMaxProjection(BaseMaxProjection):
             y_projection = False
         else:
             y_projection = True
-            if (
-                self._y_projection_count_px < 0
-                or self._y_projection_count_px > self._row_count_px
-            ):
+            if self._y_projection_count_px < 0 or self._y_projection_count_px > self._row_count_px:
                 raise ValueError(f"y projection must be > 0 and < {self._row_count_px}")
             y_index_list = np.arange(0, self._row_count_px, self._y_projection_count_px)
             if self._row_count_px not in y_index_list:
@@ -67,16 +57,9 @@ class GPUMaxProjection(BaseMaxProjection):
             z_projection = False
         else:
             z_projection = True
-            if (
-                self._z_projection_count_px < 0
-                or self._z_projection_count_px > self._frame_count_px_px
-            ):
-                raise ValueError(
-                    f"z projection must be > 0 and < {self._frame_count_px}"
-                )
-            self.mip_xy = np.zeros(
-                (self._row_count_px, self._column_count_px), dtype=self._data_type
-            )
+            if self._z_projection_count_px < 0 or self._z_projection_count_px > self._frame_count_px_px:
+                raise ValueError(f"z projection must be > 0 and < {self._frame_count_px}")
+            self.mip_xy = np.zeros((self._row_count_px, self._column_count_px), dtype=self._data_type)
 
         frame_index = 0
         start_index = 0
@@ -84,9 +67,7 @@ class GPUMaxProjection(BaseMaxProjection):
         while frame_index < self._frame_count_px_px:
             # max project latest image
             if self.new_image.is_set():
-                self.latest_img = np.ndarray(
-                    self.shm_shape, self._data_type, buffer=self.shm.buf
-                )
+                self.latest_img = np.ndarray(self.shm_shape, self._data_type, buffer=self.shm.buf)
                 if z_projection:
                     # move images to gpu
                     latest_img = cle.push(self.latest_img)
@@ -97,10 +78,7 @@ class GPUMaxProjection(BaseMaxProjection):
                     self.mip_xy = cle.pull(new_mip_xy)
                     # if this projection thickness is complete or end of stack
                     chunk_index = frame_index % self._z_projection_count_px
-                    if (
-                        chunk_index == self._z_projection_count_px - 1
-                        or frame_index == self._frame_count_px_px - 1
-                    ):
+                    if chunk_index == self._z_projection_count_px - 1 or frame_index == self._frame_count_px_px - 1:
                         end_index = int(frame_index + 1)
                         self.log.info(
                             f"saving {self.filename}_max_projection_xy_z_{start_index:06}_{end_index:06}.tiff"
@@ -138,9 +116,7 @@ class GPUMaxProjection(BaseMaxProjection):
             for i in range(0, len(x_index_list) - 1):
                 start_index = x_index_list[i]
                 end_index = x_index_list[i + 1]
-                self.log.info(
-                    f"saving {self.filename}_max_projection_yz_x_{start_index:06}_{end_index:06}.tiff"
-                )
+                self.log.info(f"saving {self.filename}_max_projection_yz_x_{start_index:06}_{end_index:06}.tiff")
                 tifffile.imwrite(
                     Path(
                         self.path,
@@ -153,9 +129,7 @@ class GPUMaxProjection(BaseMaxProjection):
             for i in range(0, len(y_index_list) - 1):
                 start_index = y_index_list[i]
                 end_index = y_index_list[i + 1]
-                self.log.info(
-                    f"saving {self.filename}_max_projection_xz_y_{start_index:06}_{end_index:06}.tiff"
-                )
+                self.log.info(f"saving {self.filename}_max_projection_xz_y_{start_index:06}_{end_index:06}.tiff")
                 tifffile.imwrite(
                     Path(
                         self.path,

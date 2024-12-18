@@ -67,6 +67,13 @@ class ClockGenTask(VoxelDaqTask):
         else:
             self.inst.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)
 
+    def __enter__(self) -> "ClockGenTask":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.stop()
+
     @property
     def pins(self) -> list[PinInfo]:
         pins = [self.out]

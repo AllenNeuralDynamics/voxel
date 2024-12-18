@@ -1,9 +1,12 @@
 from enum import StrEnum
 from math import ceil
-from voxel.io.writers.base import VoxelWriter, WriterMetadata
-from .sdk import npy2bdv
-import numpy as np
 from typing import TYPE_CHECKING
+
+import numpy as np
+
+from voxel.io.writers.base import VoxelWriter, WriterMetadata
+
+from .sdk import npy2bdv
 
 if TYPE_CHECKING:
     from pathlib import Path

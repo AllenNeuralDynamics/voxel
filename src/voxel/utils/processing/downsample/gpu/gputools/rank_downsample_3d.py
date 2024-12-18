@@ -76,9 +76,7 @@ class GPUToolsDownSample3D(BaseDownSample):
         """
 
         x_g = OCLArray.from_array(image)
-        y_g = OCLArray.empty(
-            tuple(s0 // s for s, s0 in zip(self._binning, x_g.shape)), x_g.dtype
-        )
+        y_g = OCLArray.empty(tuple(s0 // s for s, s0 in zip(self._binning, x_g.shape)), x_g.dtype)
 
         self._prog.run_kernel(
             "rank_3",

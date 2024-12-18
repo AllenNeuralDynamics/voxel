@@ -18,12 +18,10 @@ acquisition:
   scan_direction: row_wise
   start_corner: top_left
   reverse_scan_path: false
-  volume_min_corner: (0, 0, 0)
-  volume_max_corner: (114.24, 114.24, 50)
   plan_file_path: ./example_plan.yaml
   channels:
     - red
-    - green
+    # - green
 
 instrument:
   name: *instrument_name
@@ -37,22 +35,31 @@ instrument:
         kwds:
           out_pin: PFI0
           counter: ctr0
-          freq_hz: 15
+          freq_hz: 6
           duty_cycle: 0.5
           initial_delay_ms: 0
       acq_task:
         type: wavegen
         kwds:
           sampling_rate_hz: 350000
-          period_ms: 10
+          period_ms: 20
           trigger_task: acq_clock
 
   devices:
     simulated_camera_1:
       driver: voxel.drivers.cameras.simulated.SimulatedCamera
       kwds:
-        pixel_size_um: 3.5, 3.5
-      acq_pin: ao0
+        pixel_size_um: 0.5, 0.5
+        # sensor_width_px: 4096
+        # sensor_height_px: 4096
+        # resize_method: tile
+      acq_pin: ao5
+    vieworks_camera_1:
+      driver: voxel.drivers.cameras.vieworks.VieworksCamera
+      kwds:
+        serial_number: MP151BDD022
+        pixel_size_um: 0.5, 0.5
+      acq_pin: ao4
     objective_40x:
       driver: voxel.devices.lens.VoxelLens
       kwds:
@@ -74,7 +81,7 @@ instrument:
       acq_pin: ao3
     etl:
       driver: voxel.drivers.tunable_lenses.simulated.SimulatedTunableLens
-      acq_pin: ao4
+      acq_pin: ao12
     x-axis:
       driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
@@ -111,7 +118,7 @@ instrument:
 
   channels:
     red:
-      camera: simulated_camera_1
+      camera: vieworks_camera_1
       lens: objective_40x
       laser: laser_561
       filter: filter_561

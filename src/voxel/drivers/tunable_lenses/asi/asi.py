@@ -1,5 +1,5 @@
+from voxel.devices.tunable_lens import ETLControlMode, VoxelTunableLens
 from voxel.drivers.hubs.tigerbox import ASITigerBox, TigerBoxETLControlMode
-from voxel.devices.tunable_lens import VoxelTunableLens, ETLControlMode
 
 
 class ASITunableLens(VoxelTunableLens):

@@ -1,11 +1,11 @@
-from abc import ABC, abstractmethod
 import atexit
-from enum import Enum, StrEnum
+from email.mime import base
 import logging
+from abc import ABC, abstractmethod
+from enum import Enum, StrEnum
 from logging.handlers import QueueHandler, QueueListener
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, process
 from pathlib import Path
-
 
 LOGGING_SUBPROC_SUFFIX = "_sub"
 LOGGING_PROJECT_NAME = "voxel"
@@ -95,11 +95,14 @@ class CustomFormatter(logging.Formatter):
         base_format = level_str
 
         fields = ["asctime", "name", "message"]
-        fields += ["processName", "filename"] if self.detailed else []
 
         for i, field in enumerate(fields):
             separator = " - " if i < len(fields) - 1 else ""
             base_format += f"{self.FIELD_COLORS.get(field, '')}%({field})s{LogColor.RESET.value}{separator}"
+
+        base_format += f" - {LogColor.CYAN.value}%(filename)s:%(lineno)d{LogColor.RESET.value}"
+        if self.detailed:
+            base_format += f" - {LogColor.GREY.value}%(processName)s %(threadName)s{LogColor.RESET.value}"
 
         return base_format
 
@@ -137,7 +140,8 @@ def get_component_logger(obj) -> logging.Logger:
     :return: A Logger instance.
     """
     if hasattr(obj, "name") and isinstance(obj.name, str) and obj.name != "":
-        return get_logger(f"{obj.__class__.__name__}[{obj.name}]")
+        return get_logger(f"{obj.name}")
+        # return get_logger(f"{obj.__class__.__name__}[{obj.name}]")
     return get_logger(obj.__class__.__name__)
 
 
@@ -192,11 +196,10 @@ def setup_logging(
 
     # Create handlers
     handlers = _create_handlers(log_file, detailed=detailed, fancy=fancy)
-    queue_handler = QueueHandler(LOG_QUEUE)
 
     root_logger.setLevel(level)
     lib_logger.setLevel(level)
-    root_logger.addHandler(queue_handler)
+    root_logger.addHandler(QueueHandler(LOG_QUEUE))
 
     # Listener for subprocess logs
     listener = QueueListener(LOG_QUEUE, *handlers, respect_handler_level=True)
@@ -204,6 +207,33 @@ def setup_logging(
 
     # Register listener stop on exit
     atexit.register(listener.stop)
+
+
+def get_log_queue() -> Queue:
+    """
+    Get the global log queue for subprocess communication.
+
+    :return: The log queue.
+    """
+    return LOG_QUEUE
+
+
+def get_log_level() -> int:
+    """
+    Get the current log level of the library logger.
+
+    :return: The log level.
+    """
+    return logging.getLogger(LOGGING_PROJECT_NAME).getEffectiveLevel()
+
+
+def get_subprocess_component_logger(obj, queue, level) -> logging.Logger:
+    logger = get_component_logger(obj)
+    logger.propagate = False
+    logger.handlers.clear()
+    logger.addHandler(QueueHandler(queue))
+    logger.setLevel(level)
+    return logger
 
 
 class LoggingSubprocess(Process, ABC):

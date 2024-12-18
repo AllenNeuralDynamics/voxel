@@ -1,7 +1,9 @@
-import tifffile as tf
-import numpy as np
-from voxel.io.writers.base import VoxelWriter, WriterMetadata, PixelType
 from typing import TYPE_CHECKING
+
+import numpy as np
+import tifffile as tf
+
+from voxel.io.writers.base import PixelType, VoxelWriter, WriterMetadata
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,7 +32,7 @@ class OMETiffWriter(VoxelWriter):
 
     @compression.setter
     def compression(self, value: str) -> None:
-        if self.running_flag.is_set():
+        if self._is_running.is_set():
             self.log.warning("Cannot change compression method while writer is running.")
             return
         self._compression = value if value in COMPRESSION_METHODS else None
@@ -91,8 +93,8 @@ class OMETiffWriter(VoxelWriter):
 
 def test_tiffwriter():
     """Test the OME-TIFF voxel writer with realistic image data."""
-    from voxel.utils.vec import Vec2D, Vec3D
     from voxel.utils.frame_gen import generate_spiral_frames  # , generate_checkered_frames
+    from voxel.utils.vec import Vec2D, Vec3D
 
     writer = OMETiffWriter(name="tiff_writer", compression="zstd", batch_size_px=128)
 

@@ -28,10 +28,5 @@ class NPDownSample2D(BaseDownSample):
         :rtype: numpy.array
         """
 
-        downsampled_image = (
-            image[0::2, 0::2]
-            + image[1::2, 0::2]
-            + image[0::2, 1::2]
-            + image[1::2, 1::2]
-        ) // 4
+        downsampled_image = (image[0::2, 0::2] + image[1::2, 0::2] + image[0::2, 1::2] + image[1::2, 1::2]) // 4
         return downsampled_image

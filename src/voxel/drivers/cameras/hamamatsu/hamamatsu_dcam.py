@@ -601,6 +601,9 @@ class HamamatsuCamera(VoxelCamera):
             active=self.trigger_active,
         )
 
+    def _configure_hardware_triggering(self) -> None:
+        raise NotImplementedError("Hardware triggering is not added yet")
+
     @property
     def sensor_temperature_c(self) -> float:
         """Get the sensor temperature in degrees Celsius.

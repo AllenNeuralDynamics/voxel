@@ -25,13 +25,14 @@ class FrameStack:
             "pos_um": self.pos_um.to_str(),
             "size_um": self.size_um.to_str(),
             "step_size_um": self.step_size_um,
+            "frame_count": self.frame_count,
             "settings": self.settings,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "FrameStack":
         return cls(
-            idx=Vec2D.from_str(data["idx_um"]),
+            idx=Vec2D.from_str(data["idx"]),
             pos_um=Vec3D.from_str(data["pos_um"]),
             size_um=Vec3D.from_str(data["size_um"]),
             step_size_um=data["step_size_um"],

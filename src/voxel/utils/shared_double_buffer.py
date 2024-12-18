@@ -1,5 +1,6 @@
-from multiprocessing import Value, Lock
+from multiprocessing import Lock, Value
 from multiprocessing.shared_memory import SharedMemory
+
 import numpy as np
 
 
@@ -57,7 +58,6 @@ class SharedDoubleBuffer:
         :raises RuntimeError: If previous buffer hasn't been fully consumed
         """
         with self.write_lock:
-
             self.num_frames.value += self.buffer_index.value + 1
             self.buffer_index.value = -1
 

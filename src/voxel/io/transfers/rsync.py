@@ -2,10 +2,10 @@ import os
 import shutil
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from subprocess import Popen
 from typing import Any
-from collections.abc import Iterable
 
 from voxel.io.transfers.base import VoxelFileTransfer
 

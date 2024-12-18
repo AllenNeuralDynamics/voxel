@@ -2,10 +2,10 @@ import sys
 from enum import Enum
 
 from pycobolt import CoboltLaser
-from sympy import symbols, solve, Expr
+from sympy import Expr, solve, symbols
 
-from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.devices.laser import VoxelLaser
+from voxel.utils.descriptors.deliminated import deliminated_property
 
 # Define StrEnums if they don't yet exist.
 if sys.version_info < (3, 11):

@@ -28,7 +28,5 @@ class CucimDownSample2D(BaseDownSample):
 
         # convert numpy to cupy array
         image = cupy.asarray(image)
-        downsampled_image = downscale_local_mean(
-            image, factors=(self._binning, self._binning)
-        )
+        downsampled_image = downscale_local_mean(image, factors=(self._binning, self._binning))
         return downsampled_image

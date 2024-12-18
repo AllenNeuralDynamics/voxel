@@ -131,12 +131,12 @@ class VoxelDaq:
         """Close all tasks and release ports."""
         tasks = list(self.tasks.keys())
         for name in tasks:
-            self.log.info(f"Cleaning up daq task: {name}")
+            self.log.debug(f"Cleaning up daq task: {name}")
             self.tasks[name].close()
 
         if system:
             for task in list(self.system.tasks):
-                self.log.info(f"Cleaning up daq task: {task.name}")
+                self.log.debug(f"Cleaning up daq task: {task.name}")
                 task.close()
 
         self.assigned_channels.clear()
@@ -167,6 +167,9 @@ class VoxelDaq:
         """Maximum sample rate for AO channels."""
         return self.inst.ao_max_rate
 
+    def __del__(self) -> None:
+        self.clean_up()
+
 
 class VoxelDaqTask(ABC):
     def __init__(self, name: str, daq: VoxelDaq) -> None:
@@ -184,11 +187,11 @@ class VoxelDaqTask(ABC):
         pass
 
     def start(self) -> None:
-        self.log.info("Starting daq task...")
+        self.log.debug("Starting daq task...")
         self.inst.start()
 
     def stop(self) -> None:
-        self.log.info("Stopping daq task...")
+        self.log.debug("Stopping daq task...")
         self.inst.stop()
 
     def close(self) -> None:

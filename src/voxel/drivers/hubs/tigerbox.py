@@ -1,12 +1,12 @@
 from enum import StrEnum
-from typing import Optional, Literal
+from typing import Literal, Optional
 
 from tigerasi.device_codes import (
+    JoystickInput,
+    JoystickPolarity,
+    ScanPattern,
     TTLIn0Mode,
     TTLOut0Mode,
-    ScanPattern,
-    JoystickPolarity,
-    JoystickInput,
 )
 from tigerasi.tiger_controller import TigerController
 

@@ -3,6 +3,7 @@ import time
 import serial
 
 from voxel.devices.chiller import VoxelChiller
+
 from . import SMCCommand, SMCControl
 
 BAUD_RATE = 1200

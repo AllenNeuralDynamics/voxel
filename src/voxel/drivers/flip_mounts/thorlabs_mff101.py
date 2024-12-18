@@ -3,8 +3,8 @@ from time import sleep
 from pylablib.devices import Thorlabs
 
 from voxel.devices.base import VoxelDeviceError
-from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.devices.flip_mount import VoxelFlipMount
+from voxel.utils.descriptors.deliminated import deliminated_property
 
 VALID_POSITIONS = [0, 1]
 FLIP_TIME_RANGE_MS = (500, 2800, 100)

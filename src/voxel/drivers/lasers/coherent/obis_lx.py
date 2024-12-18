@@ -1,8 +1,8 @@
-from obis_laser import ObisLX, OperationalQuery, OperationalCmd
+from obis_laser import ObisLX, OperationalCmd, OperationalQuery
 from serial import Serial
 
-from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.devices.laser import VoxelLaser
+from voxel.utils.descriptors.deliminated import deliminated_property
 
 MODULATION_MODES: dict[str, str] = {"off": "CWP", "analog": "ANALOG", "digital": "DIGITAL", "mixed": "MIXED"}
 

@@ -1,7 +1,5 @@
-import datetime
 from enum import StrEnum
 from pathlib import Path
-from turtle import Vec2D
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
@@ -154,14 +152,23 @@ class InstrumentBuilder:
         )
 
     def _initialize_daq(self) -> None:
+        errors = []
         daq_specs = self.config.daq
         self.daq = VoxelDaq(conn=daq_specs.conn)
         self.log.info(f"Created DAQ: {self.daq}")
         for task_name in daq_specs.tasks:
-            self._create_daq_task(task_name=task_name)
+            try:
+                self._create_daq_task(task_name)
+            except Exception as e:
+                errors.append(f"Error creating daq task {task_name}: {e}")
 
         if "acq_task" not in self.daq_tasks:
             self.log.warning("No acquisition task found in the DAQ configuration")
+
+        if errors:
+            errors_str = "\n\t".join(errors)
+            self.log.error(f"Errors encountered during DAQ initialization:\n\t{errors_str}")
+            exit(1)
 
     def _create_daq_task(self, task_name: str) -> None:
         if task_name in self.daq_tasks:
@@ -185,9 +192,16 @@ class InstrumentBuilder:
 
     def _initialize_devices(self) -> None:
         self.log.info("Initializing devices...")
+        errors = []
         for device_name in self.config.devices:
-            self._create_device(device_name)
-        self.log.info("Devices initialized")
+            try:
+                self._create_device(device_name)
+            except Exception as e:
+                errors.append(f"Error initializing device {device_name}: {e}")
+        if errors:
+            errors_str = "\n\t".join(errors)
+            self.log.error(f"Errors encountered during device initialization:\n\t{errors_str}")
+            exit(1)
 
     def _create_device(self, device_name: str) -> None:
         if device_name in self.devices:
@@ -220,20 +234,38 @@ class InstrumentBuilder:
 
     def _initialize_channels(self) -> None:
         self.log.info("Initializing channels...")
+        errors = []
         for channel_name, components in self.config.channels.items():
-            camera = self.devices[components.camera]
-            assert isinstance(camera, VoxelCamera)
-            lens = self.devices[components.lens]
-            assert isinstance(lens, VoxelLens)
-            laser = self.devices[components.laser]
-            assert isinstance(laser, VoxelLaser)
-            filter_ = self.devices[components.filter_]
-            assert isinstance(filter_, VoxelFilter)
-            writer = self._build_object(components.writer)
-            assert isinstance(writer, VoxelWriter) or writer is None
-            transfer = self._build_object(components.transfer)
-            assert isinstance(transfer, VoxelFileTransfer) or transfer is None
+            errors += self._create_channel(channel_name, components)
+        self.log.info("All Channels initialized")
+        if errors:
+            errors_str = "\n\t".join(errors)
+            self.log.error(f"Errors encountered during channel initialization:\n\t{errors_str}")
+            exit(1)
 
+    def _create_channel(self, channel_name: str, components: ChannelSpec) -> list[str]:
+        errors = []
+
+        if camera := self.devices[components.camera]:
+            assert isinstance(camera, VoxelCamera), errors.append(f"Device {components.camera} is not a VoxelCamera")
+        if lens := self.devices[components.lens]:
+            assert isinstance(lens, VoxelLens), errors.append(f"Device {components.lens} is not a VoxelLens")
+        if laser := self.devices[components.laser]:
+            assert isinstance(laser, VoxelLaser), errors.append(f"Device {components.laser} is not a VoxelLaser")
+        if filter_ := self.devices[components.filter_]:
+            assert isinstance(filter_, VoxelFilter), errors.append(f"Device {components.filter_} is not a VoxelFilter")
+
+        components.writer.kwds["name"] = f"{channel_name}_writer"
+        writer = self._build_object(components.writer)
+        assert isinstance(writer, VoxelWriter), errors.append(f"Device {components.writer} is not a VoxelWriter")
+
+        components.transfer.kwds["name"] = f"{channel_name}_transfer"
+        transfer = self._build_object(components.transfer)
+        assert isinstance(transfer, VoxelFileTransfer), errors.append(
+            f"Device {components.transfer} is not a VoxelFileTransfer"
+        )
+
+        if not errors:
             channel = VoxelChannel(
                 name=channel_name,
                 camera=camera,
@@ -245,7 +277,7 @@ class InstrumentBuilder:
             )
             self.channels[channel_name] = channel
             self.log.debug(f"Channel {channel_name} initialized")
-        self.log.info("All Channels initialized")
+        return errors
 
     def _build_object(self, obj_spec: ObjectSpec):
         cls = parse_driver(obj_spec.driver)
@@ -319,13 +351,11 @@ class VoxelBuilder:
             raise ValueError("No acquisition configuration found in the file")
         if not self._acquisition_planner:
             acquisition_plan_path = self.config.file_path.parent / self.config.acquisition.plan_file_path
-            frame_stacks, scan_path = load_acquisition_plan(acquisition_plan_path)
             self._acquisition_planner = VoxelAcquisitionPlanner(
                 instrument=self.build_instrument(),
                 specs=self.config.acquisition,
                 config_path=self.config.file_path,
-                frame_stacks=frame_stacks,
-                scan_path=scan_path,
+                plan=load_acquisition_plan(acquisition_plan_path),
             )
         return self._acquisition_planner
 
@@ -335,59 +365,3 @@ def parse_driver(driver: str) -> Any:
     module, class_name = driver.rsplit(".", 1)
     module = __import__(module, fromlist=[class_name])
     return getattr(module, class_name)
-
-
-if __name__ == "__main__":
-    from voxel.utils.log_config import setup_logging
-    from voxel.acquisition.engine import ExaspimAcquisitionEngine
-    from voxel.frame_stack import FrameStack
-    from voxel.utils.vec import Vec2D, Vec3D
-    import json
-
-    setup_logging(level="INFO", detailed=True)
-
-    CONFIG_PATH = Path(__file__).parent / "example_config.yaml"
-
-    config = VoxelSpecs.from_yaml(file_path=CONFIG_PATH)
-    builder = VoxelBuilder(config=config)
-
-    instrument = builder.build_instrument()
-    acquisition = builder.build_acquisition_planner()
-
-    acquisition.volume.max_corner = Vec3D(5000, 5000, 64)  # in um
-
-    frame_stacks = [fs.to_dict() for fs in acquisition.frame_stacks.values()]
-
-    acquisition.log.warning(f"{json.dumps(frame_stacks, indent=2)}")
-
-    # Running an acquisition engine
-
-    channel = next(iter(instrument.channels.values()))
-
-    frame_count = channel.writer.batch_size_px * 1
-    z_step_size_um = channel.camera.pixel_size_um.x
-    idx = Vec2D(0, 0)
-    frame_stacks = {
-        idx: FrameStack(
-            idx=idx,
-            pos_um=Vec3D(0.0, 0.0, 0.0),
-            size_um=Vec3D(channel.fov_um.x, channel.fov_um.y, frame_count * z_step_size_um),
-            step_size_um=z_step_size_um,
-        )
-    }
-
-    scan_path = [idx]
-    dir = Path("D:/voxel_test/engine/")
-    path = dir / f"test_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    path.mkdir(parents=True, exist_ok=True)
-    engine = ExaspimAcquisitionEngine(
-        instrument=instrument,
-        channels=[channel.name],
-        frame_stacks=acquisition.frame_stacks,
-        scan_path=acquisition.scan_path,
-        path=path,
-    )
-
-    engine.run()
-
-    instrument.close()

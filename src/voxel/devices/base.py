@@ -2,10 +2,9 @@
 
 from abc import ABC, abstractmethod
 from enum import StrEnum
-
+from typing import TYPE_CHECKING
 
 from voxel.utils.log_config import get_component_logger
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from voxel.daq.tasks.wavegen import WaveGenChannel

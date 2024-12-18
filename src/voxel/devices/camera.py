@@ -1,11 +1,9 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
-from typing import Any
 
 import numpy as np
 
-from voxel.utils.descriptors import deliminated
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.vec import Vec2D
@@ -40,10 +38,16 @@ class PixelType(IntEnum):
         return self.value // 8
 
 
-class Trigger(StrEnum):
+class TriggerSetting(StrEnum):
     OFF = "off"
     HARDWARE = "hardware"
     SOFTWARE = "software"
+
+
+class BitPackingMode(StrEnum):
+    LSB = "LSB"
+    MSB = "MSB"
+    NONE = "None"
 
 
 @dataclass
@@ -84,7 +88,13 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
             assert len(parts) == 2, f"Invalid pixel size string: {pixel_size_um}"
             pixel_size_um = float(parts[0]), float(parts[1])
         self.pixel_size_um = Vec2D(*pixel_size_um)
-        self._trigger = Trigger.OFF
+
+        self._Trigger_setting_map = {
+            TriggerSetting.OFF: self._configure_free_running_mode,
+            TriggerSetting.HARDWARE: self._configure_hardware_triggering,
+            TriggerSetting.SOFTWARE: self._configure_software_triggering,
+        }
+        self._trigger = TriggerSetting.OFF
 
     def __repr__(self) -> str:
         return ", ".join(
@@ -235,26 +245,6 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @property
-    @abstractmethod
-    def frame_size_px(self) -> Vec2D[int]:
-        """Get the size of the camera image in pixels.
-
-        :return: The size of the camera image in pixels.
-        :rtype: Vec2D
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def frame_size_mb(self) -> float:
-        """Get the size of the camera image in MB.
-
-        :return: The size of the camera image in MB.
-        :rtype: float
-        """
-        pass
-
     @enumerated_property(options={e.value for e in PixelType})
     @abstractmethod
     def pixel_type(self) -> PixelType:
@@ -273,6 +263,26 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
 
         :param pixel_type_bits: The pixel type
         :type pixel_type_bits: PixelType
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def frame_size_px(self) -> Vec2D[int]:
+        """Get the size of the camera image in pixels.
+
+        :return: The size of the camera image in pixels.
+        :rtype: Vec2D
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def frame_size_mb(self) -> float:
+        """Get the size of the camera image in MB.
+
+        :return: The size of the camera image in MB.
+        :rtype: float
         """
         pass
 
@@ -331,8 +341,9 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @enumerated_property(options={e.value for e in Trigger})
-    def trigger(self) -> Trigger:
+    @enumerated_property(options={e.value for e in TriggerSetting})
+    @abstractmethod
+    def trigger_setting(self) -> TriggerSetting:
         """Get the trigger mode of the camera.
 
         :return: The trigger mode of the camera.
@@ -340,21 +351,29 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         return self._trigger
 
-    @trigger.setter
-    @abstractmethod
-    def trigger(self, mode: Trigger | str) -> None:
+    @trigger_setting.setter
+    def trigger_setting(self, mode: TriggerSetting | str) -> None:
         """Set the trigger mode of the camera.
 
         :param mode: The trigger mode of the camera.
         :type mode: TriggerMode
         """
-        self._trigger = Trigger(mode)
-        if self._trigger == Trigger.HARDWARE:
-            self.configure_hardware_triggering()
+        self._trigger = TriggerSetting(mode)
+        self._Trigger_setting_map[self._trigger]()
 
     @abstractmethod
-    def configure_hardware_triggering(self) -> None:
+    def _configure_free_running_mode(self) -> None:
+        """Configure the free running settings of the camera."""
+        pass
+
+    @abstractmethod
+    def _configure_hardware_triggering(self) -> None:
         """Configure the hardware triggering settings of the camera."""
+        pass
+
+    @abstractmethod
+    def _configure_software_triggering(self) -> None:
+        """Configure the software triggering settings of the camera."""
         pass
 
     @abstractmethod
@@ -365,7 +384,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         pass
 
     @abstractmethod
-    def start(self, frame_count: int = -1) -> None:
+    def start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire a certain number of frames. \n
         If frame number is not specified, acquires infinitely until stopped. \n
         Initializes the camera buffer.

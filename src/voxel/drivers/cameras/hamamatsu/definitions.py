@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from voxel.devices.camera import Binning, PixelType
+
 from .sdk.dcamapi4 import DCAMPROP
 
 # dcam properties dict for convenience in calls

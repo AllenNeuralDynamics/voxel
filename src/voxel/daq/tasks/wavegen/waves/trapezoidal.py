@@ -4,6 +4,7 @@ from matplotlib.axes import Axes
 from scipy import signal
 
 from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.log_config import get_component_logger
 
 from .base import WaveformData, WaveGenTiming
 
@@ -22,11 +23,12 @@ class TrapezoidalWave:
         rise_point: float = 0.0,
         high_point: float = 0.5,
         fall_point: float = 0.5,
-        low_point: float = 1.5,
-        is_digital: bool = False,
+        low_point: float = 1.0,
+        is_digital: bool = True,
         apply_filter: bool | None = False,
     ) -> None:
         self.name = name
+        self.log = get_component_logger(self)
         self.timing = timing
         self.min_voltage_limit = min_voltage_limit
         self.max_voltage_limit = max_voltage_limit
@@ -75,6 +77,10 @@ class TrapezoidalWave:
     )
     def min_voltage(self) -> float:
         return self._min_voltage
+
+    @min_voltage.setter
+    def min_voltage(self, voltage: float) -> None:
+        self._min_voltage = voltage
 
     @property
     def amplitude(self) -> float:
@@ -189,11 +195,12 @@ class TrapezoidalWave:
         waveform[rise_point:high_point] = np.linspace(self.min_voltage, self.max_voltage, high_point - rise_point)
         waveform[high_point:fall_point] = self.max_voltage
         waveform[fall_point:low_point] = np.linspace(self.max_voltage, self.min_voltage, low_point - fall_point)
-        if not self.apply_filter:
-            return waveform
-        return self._apply_lowpass_filter(
-            waveform, self.lowpass_cutoff, self.timing.sampling_rate, self.lowpass_filter_order
-        )
+        if self.apply_filter:
+            waveform = self._apply_lowpass_filter(
+                waveform, self.lowpass_cutoff, self.timing.sampling_rate, self.lowpass_filter_order
+            )
+
+        return waveform
 
     @staticmethod
     def _apply_lowpass_filter(waveform: WaveformData, cutoff: float, sample_rate: float, order: int) -> WaveformData:

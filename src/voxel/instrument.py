@@ -1,4 +1,5 @@
 from typing import Self
+
 from voxel.utils.log_config import get_component_logger
 
 from .channel import VoxelChannel

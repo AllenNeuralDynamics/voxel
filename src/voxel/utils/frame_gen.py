@@ -9,7 +9,7 @@ import tifffile
 os.environ["JAX_PLATFORM_NAME"] = "cpu"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import jax.numpy as jnp
-from jax import jit, random, config
+from jax import config, jit, random
 from jax.image import resize
 
 jax_loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict if name.startswith("jax")]
@@ -124,6 +124,22 @@ def generate_reference_image(
         exposure_time_ms=exposure_time_ms,
         resize_method=resize_method,
     )
+
+
+def downsample_image_by_decimation(image: np.ndarray, factor: int) -> np.ndarray:
+    """
+    Downsample an image by a given factor.
+
+    This method of downsampling is called "decimation" or "subsampling".
+
+    Parameters:
+    image (np.ndarray): The input image to be downsampled.
+    factor (int): The factor by which to downsample the image. For example, a factor of 2 will reduce the image dimensions by half.
+
+    Returns:
+    np.ndarray: The downsampled image.
+    """
+    return np.array(image[::factor, ::factor])
 
 
 @jit

@@ -2,8 +2,8 @@ import random
 
 from serial import Serial
 
-from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.devices.laser import VoxelLaser
+from voxel.utils.descriptors.deliminated import deliminated_property
 
 MODULATION_MODES = {
     "off": {"external_control_mode": "OFF", "digital_modulation": "OFF"},

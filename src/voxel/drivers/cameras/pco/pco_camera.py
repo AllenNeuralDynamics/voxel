@@ -1,21 +1,21 @@
-from collections.abc import Mapping
 import time
+from collections.abc import Mapping
 from typing import Any, Literal
 
+from voxel.devices import VoxelDeviceConnectionError
+from voxel.devices.camera import AcquisitionState, Binning, PixelType, VoxelCamera
+from voxel.drivers.cameras.pco.definitions import (
+    ReadoutMode,
+    TriggerMode,
+    TriggerSettings,
+    TriggerSource,
+    binning_lut,
+    pixel_type_lut,
+)
+from voxel.drivers.cameras.pco.sdk import Camera
 from voxel.utils.descriptors.deliminated import deliminated_property
 from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.vec import Vec2D
-from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.camera import VoxelCamera, AcquisitionState, PixelType, Binning
-from voxel.drivers.cameras.pco.definitions import (
-    pixel_type_lut,
-    binning_lut,
-    TriggerMode,
-    ReadoutMode,
-    TriggerSettings,
-    TriggerSource,
-)
-from voxel.drivers.cameras.pco.sdk import Camera
 
 type EnumeratedProp = TriggerMode | TriggerSource | ReadoutMode
 type LimitType = Literal["min", "max", "step"]

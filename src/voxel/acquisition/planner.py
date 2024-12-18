@@ -1,13 +1,14 @@
 import json
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from ruamel.yaml import YAML
 
 from voxel.acquisition.metadata import VoxelMetadata
-from voxel.acquisition.scan_path import (
+from voxel.acquisition.scan_pattern import (
     ScanDirection,
     ScanPattern,
     StartCorner,
@@ -31,20 +32,70 @@ if TYPE_CHECKING:
 DEFAULT_TILE_OVERLAP = 0.15
 
 
-def load_acquisition_plan(file_path: Path | str) -> tuple[dict[Vec2D, FrameStack] | None, list[Vec2D] | None]:
+type FrameStackCollection = dict[Vec2D[int], FrameStack]
+type ScanPath = list[Vec2D[int]]
+
+
+@dataclass(frozen=True)
+class AcquisitionPlan:
+    frame_stacks: FrameStackCollection
+    scan_path: ScanPath
+    channels: list[str]
+
+    def __post_init__(self):
+        errors = self._validate_scan_path()
+        if errors:
+            raise ValueError(f"Invalid acquisition plan: {'\t\n '.join(errors)}")
+
+    def _validate_scan_path(self) -> list[str]:
+        """Make sure the scan plan is valid."""
+        errors = []
+        for tile_idx in self.scan_path:
+            if tile_idx not in self.frame_stacks:
+                errors.append(f"Frame stack not found for tile index: {tile_idx}")
+        return errors
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "frame_stacks": {key.to_str(): value.to_dict() for key, value in self.frame_stacks.items()},
+            "scan_path": [pos.to_str() for pos in self.scan_path],
+            "channels": self.channels,
+        }
+
+    @classmethod
+    def from_dict(cls, plan_data: dict[str, Any]) -> "AcquisitionPlan":
+        return cls(
+            frame_stacks={
+                Vec2D.from_str(key): FrameStack.from_dict(value) for key, value in plan_data["frame_stacks"].items()
+            },
+            scan_path=[Vec2D.from_str(pos) for pos in plan_data["scan_path"]],
+            channels=plan_data.get("channels", []),
+        )
+
+    def __str__(self) -> str:
+        return json.dumps(self.to_dict(), indent=2)
+
+
+def load_acquisition_plan(file_path: Path | str) -> AcquisitionPlan | None:
     """Load frame stacks and scan path from a plan file"""
     with open(file_path) as file:
         yaml = YAML(typ="safe")
-        data = yaml.load(file)
-        frame_stacks = None
-        scan_path = None
-        if data and (frame_stacks_data := data.get("frame_stacks")) and (scan_path_data := data.get("scan_path")):
-            frame_stacks = {
-                Vec2D.from_str(idx_str): FrameStack.from_dict(specs) for idx_str, specs in frame_stacks_data.items()
-            }
-            scan_path = [Vec2D.from_str(pos) for pos in scan_path_data]
+        try:
+            data = yaml.load(file).get("plan")
+            return AcquisitionPlan.from_dict(plan_data=data)
+        except Exception as e:
+            get_logger("planner.load_acquisition_plan").error(f"Failed to load acquisition plan: {e}")
+    return None
 
-    return frame_stacks, scan_path
+
+def get_volume_corners(frame_stacks: FrameStackCollection) -> tuple[Vec3D, Vec3D]:
+    min_x = min(stack.pos_um.x for stack in frame_stacks.values())
+    min_y = min(stack.pos_um.y for stack in frame_stacks.values())
+    min_z = min(stack.pos_um.z for stack in frame_stacks.values())
+    max_x = max(stack.pos_um.x + stack.size_um.x for stack in frame_stacks.values())
+    max_y = max(stack.pos_um.y + stack.size_um.y for stack in frame_stacks.values())
+    max_z = max(stack.pos_um.z + stack.size_um.z for stack in frame_stacks.values())
+    return Vec3D(min_x, min_y, min_z), Vec3D(max_x, max_y, max_z)
 
 
 class VoxelAcquisitionPlanner:
@@ -54,8 +105,7 @@ class VoxelAcquisitionPlanner:
         specs: AcquisitionSpecs,
         config_path: Path,
         metadata: VoxelMetadata | None = None,
-        frame_stacks: dict[Vec2D, FrameStack] | None = None,
-        scan_path: list[Vec2D] | None = None,
+        plan: AcquisitionPlan | None = None,
     ) -> None:
         self.log = get_logger(self.__class__.__name__)
         self.instrument = instrument
@@ -70,29 +120,31 @@ class VoxelAcquisitionPlanner:
         self._reverse_scan_path = specs.reverse_scan_path
         self._plan_file_path = Path(specs.plan_file_path)
 
+        self._observers: list[Callable[[], None]] = []
+
         if specs.channels == "all":
             self._channels = list(instrument.channels.values())
         else:
             self._channels = [instrument.channels[channel_name] for channel_name in specs.channels]
 
-        self._observers: list[Callable[[], None]] = []
+        if plan and plan.channels != self.channel_names:
+            self.log.warning("Channels in the plan do not match the selected channels. updating plan.")
+            plan = AcquisitionPlan(
+                frame_stacks=plan.frame_stacks,
+                scan_path=plan.scan_path,
+                channels=self.channel_names,
+            )
 
-        if specs.volume_min_corner:
-            volume_min_corner = Vec3D.from_str(specs.volume_min_corner)
-        else:
-            volume_min_corner = instrument.stage.limits_mm[0]
-            specs.volume_min_corner = volume_min_corner.to_str()
-        if specs.volume_max_corner:
-            volume_max_corner = Vec3D.from_str(specs.volume_max_corner)
-        else:
-            volume_max_corner = instrument.stage.limits_mm[1]
-            specs.volume_max_corner = volume_max_corner.to_str()
+        min_corner, max_corner = get_volume_corners(plan.frame_stacks) if plan else instrument.stage.limits_mm
 
-        self.volume = Volume(volume_min_corner, volume_max_corner, self.z_step_size)
+        self.volume = Volume(min_corner, max_corner, self.z_step_size)
         self.volume.add_observer(self._regenerate_plan)
 
-        self._frame_stacks = frame_stacks or self.generate_frame_stacks(self.channels)
-        self._scan_path = scan_path or self.generate_scan_path(self._frame_stacks)
+        self.plan = self._generate_plan(self.channels)
+        # self.plan = plan or self._generate_plan(self.channels)
+
+        if plan and plan != self.plan:
+            self.log.error("Regenerated plan does not match the loaded plan.")
 
     def add_observer(self, callback: Callable[[], None]):
         self._observers.append(callback)
@@ -102,17 +154,8 @@ class VoxelAcquisitionPlanner:
             callback()
 
     def _regenerate_plan(self):
-        self._frame_stacks = self.generate_frame_stacks(self.channels)
-        self._scan_path = self.generate_scan_path(self._frame_stacks)
+        self.plan = self._generate_plan(channels=self.channels)
         self._notify_observers()
-
-    @property
-    def frame_stacks(self) -> dict[Vec2D, FrameStack]:
-        return self._frame_stacks
-
-    @property
-    def scan_path(self) -> list[Vec2D]:
-        return self._scan_path
 
     @property
     def specs(self) -> AcquisitionSpecs:
@@ -124,8 +167,6 @@ class VoxelAcquisitionPlanner:
             scan_direction=self.scan_direction,
             start_corner=self.start_corner,
             reverse_scan_path=self.reverse_scan_path,
-            volume_min_corner=self.volume.min_corner.to_str(),
-            volume_max_corner=self.volume.max_corner.to_str(),
             channels=[channel.name for channel in self.channels],
         )
 
@@ -140,6 +181,10 @@ class VoxelAcquisitionPlanner:
         else:
             self._channels = [self.instrument.channels[channel_name] for channel_name in channels]
         self._regenerate_plan()
+
+    @property
+    def channel_names(self) -> list[str]:
+        return [channel.name for channel in self.channels]
 
     @property
     def z_step_size(self):
@@ -201,13 +246,33 @@ class VoxelAcquisitionPlanner:
         y_max = max(frame_stack.idx.y for frame_stack in frame_stacks.values())
         return Vec2D(x_max + 1, y_max + 1)
 
-    def generate_frame_stacks(self, channels: list["VoxelChannel"]) -> dict[Vec2D, FrameStack]:
-        # channel_names = [channel.name for channel in channels]
+    def _generate_plan(self, channels: list["VoxelChannel"]) -> AcquisitionPlan:
+        frame_stacks = self._generate_frame_stacks(channels)
+        scan_path = self._generate_scan_path(frame_stacks)
+        return AcquisitionPlan(frame_stacks=frame_stacks, scan_path=scan_path, channels=self.channel_names)
+
+    def _generate_frame_stacks(self, channels: list["VoxelChannel"]) -> FrameStackCollection:
         # all channels must have the same fov
         fov = channels[0].fov_um
-        for channel in channels:
-            if channel.fov_um != fov:
-                raise ValueError("Unable to generate tiles with channels of different FOV")
+        if any(channel.fov_um != fov for channel in channels):
+            #   raise ValueError("Unable to generate tiles with channels of different FOV")
+            self.log.warning("Channels have different FOV. Using the maximum FOV for all channels.")
+            channels_fov = json.dumps(
+                {
+                    channel.name: {
+                        "frame_size_px": channel.camera.frame_size_px.to_str(),
+                        "pixel_size_um": channel.camera.pixel_size_um.to_str(),
+                        "fov_um": channel.fov_um.to_str(),
+                    }
+                    for channel in channels
+                },
+                indent=2,
+            )
+            self.log.debug(f"Channels FOV: {channels_fov}")
+            fov = Vec2D(max(channel.fov_um.x for channel in channels), max(channel.fov_um.y for channel in channels))
+
+        self.log.debug(f"FOV Used: {fov.to_str()}")
+
         frame_stacks = {}
         effective_tile_width = fov.x * (1 - self.tile_overlap)
         effective_tile_height = fov.y * (1 - self.tile_overlap)
@@ -236,7 +301,7 @@ class VoxelAcquisitionPlanner:
 
         return frame_stacks
 
-    def generate_scan_path(self, frame_stacks) -> list[Vec2D]:
+    def _generate_scan_path(self, frame_stacks) -> list[Vec2D]:
         grid_size = self._get_grid_size(frame_stacks)
         match self.scan_pattern:
             case ScanPattern.RASTER:
@@ -253,15 +318,12 @@ class VoxelAcquisitionPlanner:
         return path
 
     def save_plan(self) -> None:
-        plan = {
-            "scan_path": [str(idx) for idx in self.scan_path],
-            "frame_stacks": {str(idx): frame_stack.to_dict() for idx, frame_stack in self.frame_stacks.items()},
-        }
         with open(self._plan_file_path, "w") as file:
             yaml = YAML()
             yaml.default_flow_style = False
             yaml.indent(mapping=2, sequence=4, offset=2)
-            yaml.dump({"plan": plan}, file)
+            file.write("# This is an auto-generated file. Please DO NOT edit it manually\n")
+            yaml.dump({"plan": self.plan.to_dict()}, file)
             file.write("\n")
 
     def update_acquisition_specs(self) -> None:
@@ -285,80 +347,5 @@ class VoxelAcquisitionPlanner:
 
     def __repr__(self):
         specs = json.dumps(self.specs.model_dump())
-        scan_path = json.dumps([str(idx) for idx in self.scan_path])
-        frame_stacks = json.dumps(
-            {str(idx): frame_stack.to_dict() for idx, frame_stack in self.frame_stacks.items()}, indent=2
-        )
-        return f"VoxelAcquisitionPlanner: \n\n{specs}, \n{frame_stacks}, \n{scan_path}\n"
-
-    # def save_to_yaml(self) -> None:
-    #     self.log.info(f"Saving acquisition to {self._plan_file_path}")
-    #     specs = {
-    #         "z_step_size": self.z_step_size,
-    #         "tile_overlap": self.tile_overlap,
-    #         "scan_pattern": str(self.scan_pattern),
-    #         "scan_direction": str(self.scan_direction),
-    #         "start_corner": str(self.start_corner),
-    #         "reverse_scan_path": self.reverse_scan_path,
-    #         "volume_min_corner": self.volume.min_corner.to_str(),
-    #         "volume_max_corner": self.volume.max_corner.to_str(),
-    #         "file_path": self._plan_file_path,
-    #         "channels": [channel.name for channel in self.channels],
-    #     }
-
-    #     clean_yaml_file(self._plan_file_path)
-
-    #     yaml = YAML()
-    #     yaml.default_flow_style = False
-    #     yaml.indent(mapping=2, sequence=4, offset=2)
-
-    #     # Read existing content
-    #     try:
-    #         with open(self._plan_file_path) as file:
-    #             data = yaml.load(file) or {}
-    #     except FileNotFoundError:
-    #         data = {}
-
-    #     # Update the necessary keys
-    #     data["specs"] = specs
-    #     data["plan"]["frame_stacks"] = {
-    #         str(idx): frame_stack.to_dict() for idx, frame_stack in self.frame_stacks.items()
-    #     }
-    #     data["plan"]["scan_path"] = [str(idx) for idx in self.scan_path]
-
-    #     # Write updated content back to file
-    #     with open(self._plan_file_path, "w") as file:
-    #         for key, value in data.items():
-    #             yaml.dump({key: value}, file)
-    #             file.write("\n")
-
-    # @classmethod
-    # def load_from_yaml(
-    #     cls, file_path: str | Path, instrument: VoxelInstrument | None = None
-    # ) -> "VoxelAcquisitionPlanner":
-    #     config = PlannerConfig.from_yaml(Path(file_path))
-    #     if not instrument:
-    #         try:
-    #             inst_config = InstrumentSpecs.from_yaml(config.instrument)
-    #             instrument = InstrumentBuilder(inst_config).build()
-    #         except FileNotFoundError:
-    #             raise ValueError(f"Instrument configuration file not found: {config.instrument}")
-    #     try:
-    #         metadata = VoxelMetadata(**config.metadata) if config.metadata else None
-    #         frame_stacks = {
-    #             Vec2D.from_str(idx_str): FrameStack.from_dict(specs.model_dump())
-    #             for idx_str, specs in (config.plan.frame_stacks.items() if config.plan else [])
-    #         }
-
-    #         scan_path = [Vec2D.from_str(pos) for pos in (config.plan.scan_path if config.plan else [])]
-
-    #         return VoxelAcquisitionPlanner(
-    #             instrument=instrument,
-    #             specs=config.specs,
-    #             metadata=metadata,
-    #             frame_stacks=frame_stacks if config.plan else None,
-    #             scan_path=scan_path if config.plan else None,
-    #         )
-    #     except Exception as e:
-    #         instrument.close()
-    #         raise e
+        plan = str(self.plan)
+        return f"VoxelAcquisitionPlanner: \n\n{specs}, \n{plan}\n"
