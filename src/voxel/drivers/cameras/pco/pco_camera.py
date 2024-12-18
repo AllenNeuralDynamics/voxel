@@ -482,7 +482,7 @@ class PCOCamera(VoxelCamera):
         self.log.info(f"buffer set to: {self._buffer_size_frames} frames")
         self._camera.record(number_of_images=self._buffer_size_frames, mode="fifo")
 
-    def start(self, frame_count: int = -1) -> None:
+    def start(self, frame_count: int | None = None) -> None:
         """
         Start the camera.
         """

@@ -632,7 +632,7 @@ class HamamatsuCamera(VoxelCamera):
         self._buffer_allocated = True
         self.log.info(f"Allocated buffer for {self._buffer_size_frames} frames")
 
-    def start(self, frame_count: int = -1) -> None:
+    def start(self, frame_count: int | None = None) -> None:
         """Start the camera."""
         self._dropped_frames = 0
         self._current_frame = 0

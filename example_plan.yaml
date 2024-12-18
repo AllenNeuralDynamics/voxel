@@ -4,9 +4,9 @@ plan:
     (0, 0):
       idx: (0, 0)
       pos_um: (0.0, 0.0, 0.0)
-      size_um: (150.79, 113.05, 768.0)
+      size_um: (75.30999999999999, 56.525, 64.0)
       step_size_um: 0.5
-      frame_count: 1536
+      frame_count: 128
       settings:
   scan_path:
     - (0, 0)

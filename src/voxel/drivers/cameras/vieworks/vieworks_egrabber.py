@@ -11,7 +11,7 @@ from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.singleton import thread_safe_singleton
 from voxel.utils.vec import Vec2D
 
-from .sdk.egrabber import (
+from egrabber import (
     BUFFER_INFO_BASE,
     GENTL_INFINITE,
     INFO_DATATYPE_PTR,
@@ -788,10 +788,10 @@ class VieworksCamera(VoxelCamera):
     def _regenerate_bit_packing_mode_lut(self) -> None:
         self._bit_packing_mode_lut = self._get_bit_packing_mode_lut()
 
-    def _regenerate_trigger_luts(self) -> None:
-        self._trigger_mode_lut = self._get_trigger_setting_lut("TriggerMode")
-        self._trigger_source_lut = self._get_trigger_setting_lut("TriggerSource")
-        self._trigger_polarity_lut = self._get_trigger_setting_lut("TriggerActivation")
+    # def _regenerate_trigger_luts(self) -> None:
+    #     self._trigger_mode_lut = self._get_trigger_setting_lut("TriggerMode")
+    #     self._trigger_source_lut = self._get_trigger_setting_lut("TriggerSource")
+    #     self._trigger_polarity_lut = self._get_trigger_setting_lut("TriggerActivation")
 
     def _get_binning_lut(self) -> BinningLUT:
         """
@@ -974,62 +974,62 @@ class VieworksCamera(VoxelCamera):
             self.log.debug(f"Completed querying line interval options: {lut}")
         return lut
 
-    def _get_trigger_setting_lut(self, setting: str) -> Mapping[Any, str]:
-        """
-        Internal function that queries camera SDK to determine the trigger settings options.
-        Note:
-            EGrabber defines trigger configuration as:
-                - TriggerMode: 'On', 'Off'
-                - TriggerSource: 'Internal', 'External'
-                - TriggerActivation: 'Rising', 'Falling'
-        """
-        lut: dict[TriggerMode | TriggerSource | TriggerPolarity, str] = {}
-        init_trigger_setting = None
-        skipped_options = []
-        if not self._remote:
-            raise RuntimeError("Unable to query trigger settings. Remote component is not available.")
-        try:
-            self.log.debug(f"Querying {setting} options...")
-            trigger_setting_options = self._remote.get(f"@ee {setting}", dtype=list)
-            init_trigger_setting = self._remote.get(setting)
-            for trigger_setting in trigger_setting_options:
-                try:
-                    self._remote.set(setting, trigger_setting)
-                    lut_key = None
-                    if setting == "TriggerMode":
-                        lut_key = TriggerMode[trigger_setting.upper().replace(" ", "")]
-                    elif setting == "TriggerSource":
-                        if trigger_setting == "Line0":
-                            lut_key = TriggerSource.EXTERNAL
-                        elif trigger_setting == "Software":
-                            lut_key = TriggerSource.INTERNAL
-                    elif setting == "TriggerActivation":
-                        lut_key = TriggerPolarity[trigger_setting.upper().replace(" ", "")]
-                    if lut_key:
-                        lut[lut_key] = trigger_setting
-                except GenTLException as e:
-                    self.log.debug(
-                        f"{setting}: {trigger_setting} skipped. Not settable on this device. Error: {str(e)}"
-                    )
-                    skipped_options.append(trigger_setting)
-                except KeyError:
-                    self.log.debug(f"{setting}: {trigger_setting} skipped. Not allowed in voxel.")
-                    skipped_options.append(trigger_setting)
-                except Exception as e:
-                    self.log.debug(f"Unexpected error processing {setting} option {trigger_setting}: {str(e)}")
-                    skipped_options.append(trigger_setting)
-        except Exception as e:
-            self.log.error(f"Error querying {setting} options: {str(e)}")
-        finally:
-            if skipped_options:
-                self.log.debug(f"Skipped {setting} options: {skipped_options}. See debug logs for more info.")
-            if init_trigger_setting:
-                try:
-                    self._remote.set(setting, init_trigger_setting)
-                except Exception as e:
-                    self.log.error(f"Failed to restore initial {setting} setting: {str(e)}")
-            self.log.debug(f"Completed querying {setting} options: {lut}")
-        return lut
+    # def _get_trigger_setting_lut(self, setting: str) -> Mapping[Any, str]:
+    #     """
+    #     Internal function that queries camera SDK to determine the trigger settings options.
+    #     Note:
+    #         EGrabber defines trigger configuration as:
+    #             - TriggerMode: 'On', 'Off'
+    #             - TriggerSource: 'Internal', 'External'
+    #             - TriggerActivation: 'Rising', 'Falling'
+    #     """
+    #     lut: dict[TriggerMode | TriggerSource | TriggerPolarity, str] = {}
+    #     init_trigger_setting = None
+    #     skipped_options = []
+    #     if not self._remote:
+    #         raise RuntimeError("Unable to query trigger settings. Remote component is not available.")
+    #     try:
+    #         self.log.debug(f"Querying {setting} options...")
+    #         trigger_setting_options = self._remote.get(f"@ee {setting}", dtype=list)
+    #         init_trigger_setting = self._remote.get(setting)
+    #         for trigger_setting in trigger_setting_options:
+    #             try:
+    #                 self._remote.set(setting, trigger_setting)
+    #                 lut_key = None
+    #                 if setting == "TriggerMode":
+    #                     lut_key = TriggerMode[trigger_setting.upper().replace(" ", "")]
+    #                 elif setting == "TriggerSource":
+    #                     if trigger_setting == "Line0":
+    #                         lut_key = TriggerSource.EXTERNAL
+    #                     elif trigger_setting == "Software":
+    #                         lut_key = TriggerSource.INTERNAL
+    #                 elif setting == "TriggerActivation":
+    #                     lut_key = TriggerPolarity[trigger_setting.upper().replace(" ", "")]
+    #                 if lut_key:
+    #                     lut[lut_key] = trigger_setting
+    #             except GenTLException as e:
+    #                 self.log.debug(
+    #                     f"{setting}: {trigger_setting} skipped. Not settable on this device. Error: {str(e)}"
+    #                 )
+    #                 skipped_options.append(trigger_setting)
+    #             except KeyError:
+    #                 self.log.debug(f"{setting}: {trigger_setting} skipped. Not allowed in voxel.")
+    #                 skipped_options.append(trigger_setting)
+    #             except Exception as e:
+    #                 self.log.debug(f"Unexpected error processing {setting} option {trigger_setting}: {str(e)}")
+    #                 skipped_options.append(trigger_setting)
+    #     except Exception as e:
+    #         self.log.error(f"Error querying {setting} options: {str(e)}")
+    #     finally:
+    #         if skipped_options:
+    #             self.log.debug(f"Skipped {setting} options: {skipped_options}. See debug logs for more info.")
+    #         if init_trigger_setting:
+    #             try:
+    #                 self._remote.set(setting, init_trigger_setting)
+    #             except Exception as e:
+    #                 self.log.error(f"Failed to restore initial {setting} setting: {str(e)}")
+    #         self.log.debug(f"Completed querying {setting} options: {lut}")
+    #     return lut
 
     def _get_delimination_prop(self, prop_name: str, limit_type: str) -> int | float | None:
         if self._delimination_props[prop_name][limit_type] is None:

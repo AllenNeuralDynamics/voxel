@@ -1,9 +1,13 @@
 from pathlib import Path
+
+
 from voxel.acquisition.engine import ExaspimAcquisitionEngine
 from voxel.acquisition.planner import AcquisitionPlan, VoxelAcquisitionPlanner, load_acquisition_plan
 from voxel.builder import VoxelBuilder, VoxelSpecs
 from voxel.frame_stack import FrameStack
-from voxel.utils.vec import Vec3D, Vec2D
+from voxel.utils.vec import Vec2D, Vec3D
+
+from simple_gui import SimpleGUI
 
 CONFIG_PATH = Path(__file__).parent / "example_config.yaml"
 OUTPUT_DIR = Path("D:/voxel_test/examples/microscope")
@@ -12,7 +16,7 @@ DEFAULT_TILES = Vec2D(5, 3)
 DEFAULT_BATCHES = 50
 
 DEFAULT_TILES = Vec2D(1, 1)
-DEFAULT_BATCHES = 12
+DEFAULT_BATCHES = 1
 
 
 def create_acquisition_plan(
@@ -49,17 +53,6 @@ def main() -> None:
     config = VoxelSpecs.from_yaml(file_path=CONFIG_PATH)
     builder = VoxelBuilder(config=config)
     with builder.build_instrument() as instrument:
-        # camera = instrument.cameras["vieworks_camera_1"]
-        # # camera.binning = 2
-        # # camera.exposure_time_ms = 10
-        # # camera.roi_width_px //= 2
-        # # camera.roi_height_px //= 2
-
-        # camera.prepare()
-        # camera.start(1)
-        # camera.grab_frame()
-        # camera.stop()
-
         loaded_plan = None
         if (planner := builder.build_acquisition_planner()) and builder.config.acquisition:
             create_acquisition_plan(
@@ -67,16 +60,18 @@ def main() -> None:
             )
             loaded_plan = load_acquisition_plan(file_path=builder.config.acquisition.plan_file_path)
 
+        for camera in instrument.cameras.values():
+            camera.reset_roi()
+            camera.roi_width_px //= 2
+            camera.roi_height_px //= 2
+
         engine = ExaspimAcquisitionEngine(
             instrument=instrument,
             plan=loaded_plan or create_mock_acquisition_plan(instrument),
             path=OUTPUT_DIR,
         )
-
-        for camera in instrument.cameras.values():
-            camera.reset_roi()
-
-        engine.run()
+        gui = SimpleGUI(engine=engine)
+        gui.start()
 
 
 if __name__ == "__main__":

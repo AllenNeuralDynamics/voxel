@@ -104,8 +104,9 @@ class VoxelChannel:
         """Capture a frame."""
         frame = self.camera.grab_frame()
         self.writer.add_frame(frame)
-        factor = ceil(frame.shape[1] // 2048)
+        factor = ceil(frame.shape[0] // 2048)
         self.latest_frame = downsample_image_by_decimation(frame, factor)
+        self.log.warning(f"Shape: {self.latest_frame.shape}")
 
     def apply_settings(self, settings: dict[str, dict[str, Any]]) -> None:
         """Apply settings to the channel."""
