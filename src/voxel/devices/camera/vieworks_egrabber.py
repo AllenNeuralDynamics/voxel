@@ -1,5 +1,6 @@
 import ctypes as ct
 import logging
+from typing import Dict
 
 import numpy
 import numpy as np
@@ -76,12 +77,25 @@ POLARITIES = dict()
 
 @thread_safe_singleton
 def get_egentl_singleton() -> EGenTL:
+    """Get the singleton instance of EGenTL.
+
+    :return: Singleton instance of EGenTL
+    :rtype: EGenTL
+    """
     return EGenTL()
 
 
-class Camera(BaseCamera):
+class VieworksCamera(BaseCamera):
+    """Camera class for handling Vieworks eGrabber operations."""
 
     def __init__(self, id: str) -> None:
+        """Initialize the Camera instance.
+
+        :param id: Camera ID
+        :type id: str
+        :raises ValueError: If no valid cameras are found or no grabber is found for the given ID
+        """
+        super().__init__()
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.id = str(id)  # convert to string incase serial # is entered as int
         self.gentl = get_egentl_singleton()
@@ -120,7 +134,7 @@ class Camera(BaseCamera):
                     self.grabber = grabber
                     self.egrabber = egrabber
                     break
-        except:
+        except Exception:
             self.log.error(f"no grabber found for S/N: {self.id}")
             raise ValueError(f"no grabber found for S/N: {self.id}")
 
@@ -134,12 +148,22 @@ class Camera(BaseCamera):
         self._update_parameters()
 
     @DeliminatedProperty(minimum=float("-inf"), maximum=float("inf"))
-    def exposure_time_ms(self):
+    def exposure_time_ms(self) -> float:
+        """Get the exposure time in milliseconds.
+
+        :return: Exposure time in milliseconds
+        :rtype: float
+        """
         # us to ms conversion
         return self.grabber.remote.get("ExposureTime") / 1000
 
     @exposure_time_ms.setter
-    def exposure_time_ms(self, exposure_time_ms: float):
+    def exposure_time_ms(self, exposure_time_ms: float) -> None:
+        """Set the exposure time in milliseconds.
+
+        :param exposure_time_ms: Exposure time in milliseconds
+        :type exposure_time_ms: float
+        """
         # Note: round ms to nearest us
         self.grabber.remote.set("ExposureTime", round(exposure_time_ms * 1e3, 1))
         self.log.info(f"exposure time set to: {exposure_time_ms} ms")
@@ -147,11 +171,21 @@ class Camera(BaseCamera):
         self._get_min_max_step_values()
 
     @DeliminatedProperty(minimum=float("-inf"), maximum=float("inf"))
-    def width_px(self):
+    def width_px(self) -> int:
+        """Get the width in pixels.
+
+        :return: Width in pixels
+        :rtype: int
+        """
         return self.grabber.remote.get("Width")
 
     @width_px.setter
-    def width_px(self, value: int):
+    def width_px(self, value: int) -> None:
+        """Set the width in pixels.
+
+        :param value: Width in pixels
+        :type value: int
+        """
         # reset offset to (0,0)
         self.grabber.remote.set("OffsetX", 0)
         self.grabber.remote.set("Width", value)
@@ -162,15 +196,30 @@ class Camera(BaseCamera):
         self._get_min_max_step_values()
 
     @property
-    def width_offset_px(self):
+    def width_offset_px(self) -> int:
+        """Get the width offset in pixels.
+
+        :return: Width offset in pixels
+        :rtype: int
+        """
         return self.grabber.remote.get("OffsetX")
 
     @DeliminatedProperty(minimum=float("-inf"), maximum=float("inf"))
-    def height_px(self):
+    def height_px(self) -> int:
+        """Get the height in pixels.
+
+        :return: Height in pixels
+        :rtype: int
+        """
         return self.grabber.remote.get("Height")
 
     @height_px.setter
-    def height_px(self, value: int):
+    def height_px(self, value: int) -> None:
+        """Set the height in pixels.
+
+        :param value: Height in pixels
+        :type value: int
+        """
         # reset offset to (0,0)
         self.grabber.remote.set("OffsetY", 0)
         self.grabber.remote.set("Height", value)
@@ -182,17 +231,33 @@ class Camera(BaseCamera):
         self._get_min_max_step_values()
 
     @property
-    def height_offset_px(self):
+    def height_offset_px(self) -> int:
+        """Get the height offset in pixels.
+
+        :return: Height offset in pixels
+        :rtype: int
+        """
         return self.grabber.remote.get("OffsetY")
 
     @property
-    def pixel_type(self):
+    def pixel_type(self) -> str:
+        """Get the pixel type.
+
+        :return: Pixel type
+        :rtype: str
+        """
         pixel_type = self.grabber.remote.get("PixelFormat")
         # invert the dictionary and find the abstracted key to output
         return next(key for key, value in PIXEL_TYPES.items() if value == pixel_type)
 
     @pixel_type.setter
-    def pixel_type(self, pixel_type_bits: str):
+    def pixel_type(self, pixel_type_bits: str) -> None:
+        """Set the pixel type.
+
+        :param pixel_type_bits: Pixel type bits
+        :type pixel_type_bits: str
+        :raises ValueError: If pixel type is not valid
+        """
         valid = list(PIXEL_TYPES.keys())
         if pixel_type_bits not in valid:
             raise ValueError("pixel_type_bits must be one of %r." % valid)
@@ -203,13 +268,24 @@ class Camera(BaseCamera):
         self._update_parameters()
 
     @property
-    def bit_packing_mode(self):
+    def bit_packing_mode(self) -> str:
+        """Get the bit packing mode.
+
+        :return: Bit packing mode
+        :rtype: str
+        """
         bit_packing = self.grabber.stream.get("UnpackingMode")
         # invert the dictionary and find the abstracted key to output
         return next(key for key, value in BIT_PACKING_MODES.items() if value == bit_packing)
 
     @bit_packing_mode.setter
-    def bit_packing_mode(self, bit_packing: str):
+    def bit_packing_mode(self, bit_packing: str) -> None:
+        """Set the bit packing mode.
+
+        :param bit_packing: Bit packing mode
+        :type bit_packing: str
+        :raises ValueError: If bit packing mode is not valid
+        """
         valid = list(BIT_PACKING_MODES.keys())
         if bit_packing not in valid:
             raise ValueError("bit_packing_mode must be one of %r." % valid)
@@ -219,16 +295,31 @@ class Camera(BaseCamera):
         self._get_min_max_step_values()
 
     @property
-    def line_interval_us(self):
+    def line_interval_us(self) -> float:
+        """Get the line interval in microseconds.
+
+        :return: Line interval in microseconds
+        :rtype: float
+        """
         pixel_type = self.pixel_type
         return LINE_INTERVALS_US[pixel_type]
 
     @property
-    def frame_time_ms(self):
+    def frame_time_ms(self) -> float:
+        """Get the frame time in milliseconds.
+
+        :return: Frame time in milliseconds
+        :rtype: float
+        """
         return (self.line_interval_us * self.height_px) / 1000 + self.exposure_time_ms
 
     @property
-    def trigger(self):
+    def trigger(self) -> Dict[str, str]:
+        """Get the trigger settings.
+
+        :return: Trigger settings
+        :rtype: dict
+        """
         mode = self.grabber.remote.get("TriggerMode")
         source = self.grabber.remote.get("TriggerSource")
         polarity = self.grabber.remote.get("TriggerActivation")
@@ -239,7 +330,15 @@ class Camera(BaseCamera):
         }
 
     @trigger.setter
-    def trigger(self, trigger: dict):
+    def trigger(self, trigger: Dict[str, str]) -> None:
+        """Set the trigger settings.
+
+        :param trigger: Trigger settings
+        :type trigger: dict
+        :raises ValueError: If mode is not valid
+        :raises ValueError: If source is not valid
+        :raises ValueError: If polarity is not valid
+        """
         mode = trigger["mode"]
         source = trigger["source"]
         polarity = trigger["polarity"]
@@ -262,11 +361,22 @@ class Camera(BaseCamera):
         self._get_min_max_step_values()
 
     @property
-    def binning(self):
+    def binning(self) -> int:
+        """Get the binning setting.
+
+        :return: Binning setting
+        :rtype: int
+        """
         return self._binning
 
     @binning.setter
-    def binning(self, binning: int):
+    def binning(self, binning: int) -> None:
+        """Set the binning setting.
+
+        :param binning: Binning setting
+        :type binning: int
+        :raises ValueError: If binning is not valid
+        """
         valid_binning = list(BINNINGS.keys())
         if binning not in valid_binning:
             raise ValueError("binning must be one of %r." % valid_binning)
@@ -282,56 +392,100 @@ class Camera(BaseCamera):
         self._get_min_max_step_values()
 
     @property
-    def sensor_width_px(self):
-        return self.max_width_px
+    def readout_mode(self) -> str:
+        """
+        Get the readout mode.
+
+        :return: The readout mode.
+        :rtype: str
+        """
+        return "rolling shutter"
 
     @property
-    def sensor_height_px(self):
+    def sensor_width_px(self) -> int:
+        """Get the sensor width in pixels.
+
+        :return: Sensor width in pixels
+        :rtype: int
+        """
+        return self.max_width_px
+
+    from typing import Dict, Any
+
+    @property
+    def sensor_height_px(self) -> int:
+        """Get the sensor height in pixels.
+
+        :return: Sensor height in pixels
+        :rtype: int
+        """
         return self.max_height_px
 
     @property
-    def mainboard_temperature_c(self):
-        """get the mainboard temperature in degrees C."""
+    def mainboard_temperature_c(self) -> float:
+        """Get the mainboard temperature in degrees Celsius.
+
+        :return: Mainboard temperature in degrees Celsius
+        :rtype: float
+        """
         self.grabber.remote.set("DeviceTemperatureSelector", "Mainboard")
         temperature = self.grabber.remote.get("DeviceTemperature")
         return temperature
 
     @property
-    def sensor_temperature_c(self):
-        """get the sensor temperature in degrees C."""
+    def sensor_temperature_c(self) -> float:
+        """Get the sensor temperature in degrees Celsius.
+
+        :return: Sensor temperature in degrees Celsius
+        :rtype: float
+        """
         self.grabber.remote.set("DeviceTemperatureSelector", "Sensor")
         temperature = self.grabber.remote.get("DeviceTemperature")
         return temperature
 
-    def prepare(self):
+    def prepare(self) -> None:
+        """Prepare the camera for acquisition."""
+        self.log.info(f"preparing camera")
         # determine bits to bytes
         if self.pixel_type == "mono8":
             bit_to_byte = 1
         else:
             bit_to_byte = 2
         # software binning, so frame size is independent of binning factor
-        frame_size_mb = self.width_px * self.height_px * bit_to_byte / 1e6
+        frame_size_mb = self.width_px * self.height_px * bit_to_byte / 1024**2
         self.buffer_size_frames = round(BUFFER_SIZE_MB / frame_size_mb)
         # realloc buffers appears to be allocating ram on the pc side, not camera side.
         self.grabber.realloc_buffers(self.buffer_size_frames)  # allocate RAM buffer N frames
         self.log.info(f"buffer set to: {self.buffer_size_frames} frames")
 
-    def start(self, frame_count: int = GENTL_INFINITE):
-        """Start camera. If no frame count given, assume infinite frames"""
+    def start(self, frame_count: int = GENTL_INFINITE) -> None:
+        """Start the camera acquisition.
+
+        :param frame_count: Number of frames to acquire, defaults to GENTL_INFINITE
+        :type frame_count: int, optional
+        """
+        self.log.info(f"starting camera")
         if frame_count == float("inf"):
             frame_count = GENTL_INFINITE
         self.grabber.start(frame_count=frame_count)
 
-    def stop(self):
+    def stop(self) -> None:
+        """Stop the camera acquisition."""
+        self.log.info(f"stopping camera")
         self.grabber.stop()
+        self.grabber.stream.execute("StreamReset")
 
-    def abort(self):
+    def abort(self) -> None:
+        """Abort the camera acquisition."""
         self.stop()
 
-    def close(self):
+    def close(self) -> None:
+        """Close the camera connection."""
         pass
 
-    def reset(self):
+    def reset(self) -> None:
+        """Reset the camera instance."""
+        self.log.info(f"resetting camera")
         del self.grabber
         self.grabber = EGrabber(
             self.gentl,
@@ -341,8 +495,12 @@ class Camera(BaseCamera):
             remote_required=True,
         )
 
-    def grab_frame(self):
-        """Retrieve a frame as a 2D numpy array with shape (rows, cols)."""
+    def grab_frame(self) -> numpy.ndarray:
+        """Retrieve a frame as a 2D numpy array with shape (rows, cols).
+
+        :return: Frame as a 2D numpy array
+        :rtype: numpy.ndarray
+        """
         # Note: creating the buffer and then "pushing" it at the end has the
         #   effect of moving the internal camera frame buffer from the output
         #   pool back to the input pool, so it can be reused.
@@ -364,11 +522,20 @@ class Camera(BaseCamera):
         return image
 
     @property
-    def latest_frame(self):
+    def latest_frame(self) -> numpy.ndarray:
+        """Get the latest frame.
+
+        :return: Latest frame
+        :rtype: numpy.ndarray
+        """
         return self._latest_frame
 
-    def signal_acquisition_state(self):
-        """return a dict with the state of the acquisition buffers"""
+    def acquisition_state(self) -> Dict[str, Any]:
+        """Return a dict with the state of the acquisition buffers.
+
+        :return: State of the acquisition buffers
+        :rtype: dict
+        """
         # Detailed description of constants here:
         # https://documentation.euresys.com/Products/Coaxlink/Coaxlink/en-us/Content/IOdoc/egrabber-reference/
         # namespace_gen_t_l.html#a6b498d9a4c08dea2c44566722699706e
@@ -392,7 +559,7 @@ class Camera(BaseCamera):
         )
         return state
 
-    def log_metadata(self):
+    def log_metadata(self) -> None:
         """Log camera metadata with the schema tag."""
         # log egrabber camera settings
         self.log.info("egrabber camera parameters")
@@ -442,7 +609,8 @@ class Camera(BaseCamera):
                         if not self.grabber.system.get(query.command(feature)):
                             self.log.info(f"system, {feature}, {self.grabber.system.get(feature)}")
 
-    def _update_parameters(self):
+    def _update_parameters(self) -> None:
+        """Update the camera parameters."""
         # grab min/max parameter values
         self._get_min_max_step_values()
         # check binning options
@@ -458,7 +626,8 @@ class Camera(BaseCamera):
         # check trigger polarity options
         self._query_trigger_polarities()
 
-    def _get_min_max_step_values(self):
+    def _get_min_max_step_values(self) -> None:
+        """Get the minimum, maximum, and step values for camera parameters."""
         # gather min max values. all may not be available for certain cameras.
         # minimum exposure time
         # convert from us to ms
@@ -466,7 +635,7 @@ class Camera(BaseCamera):
             self.min_exposure_time_ms = self.grabber.remote.get("ExposureTime.Min") / 1e3
             type(self).exposure_time_ms.minimum = self.min_exposure_time_ms
             self.log.debug(f"min exposure time is: {self.min_exposure_time_ms} ms")
-        except:
+        except Exception:
             self.log.debug(f"min exposure time not available for camera {self.id}")
         # maximum exposure time
         # convert from us to ms
@@ -474,59 +643,59 @@ class Camera(BaseCamera):
             self.max_exposure_time_ms = self.grabber.remote.get("ExposureTime.Max") / 1e3
             type(self).exposure_time_ms.maximum = self.max_exposure_time_ms
             self.log.debug(f"max exposure time is: {self.max_exposure_time_ms} ms")
-        except:
+        except Exception:
             self.log.debug(f"max exposure time not available for camera {self.id}")
         # minimum width
         try:
             self.min_width_px = self.grabber.remote.get("Width.Min")
             type(self).width_px.minimum = self.min_width_px
             self.log.debug(f"min width is: {self.min_width_px} px")
-        except:
+        except Exception:
             self.log.debug(f"min width not available for camera {self.id}")
         # maximum width
         try:
             self.max_width_px = self.grabber.remote.get("Width.Max")
             type(self).width_px.maximum = self.max_width_px
             self.log.debug(f"max width is: {self.max_width_px} px")
-        except:
+        except Exception:
             self.log.debug(f"max width not available for camera {self.id}")
         # minimum height
         try:
             self.min_height_px = self.grabber.remote.get("Height.Min")
             type(self).height_px.minimum = self.min_height_px
             self.log.debug(f"min height is: {self.min_height_px} px")
-        except:
+        except Exception:
             self.log.debug(f"min height not available for camera {self.id}")
         # maximum height
         try:
             self.max_height_px = self.grabber.remote.get("Height.Max")
             type(self).height_px.maximum = self.max_height_px
             self.log.debug(f"max height is: {self.max_height_px} px")
-        except:
+        except Exception:
             self.log.debug(f"max height not available for camera {self.id}")
         # minimum offset x
         try:
             self.min_offset_x_px = self.grabber.remote.get("OffsetX.Min")
             self.log.debug(f"min offset x is: {self.min_offset_x_px} px")
-        except:
+        except Exception:
             self.log.debug(f"min offset x not available for camera {self.id}")
         # maximum offset x
         try:
             self.max_offset_x_px = self.grabber.remote.get("OffsetX.Max")
             self.log.debug(f"max offset x is: {self.max_offset_x_px} px")
-        except:
+        except Exception:
             self.log.debug(f"max offset x not available for camera {self.id}")
         # minimum offset y
         try:
             self.min_offset_y_px = self.grabber.remote.get("OffsetY.Min")
             self.log.debug(f"min offset y is: {self.min_offset_y_px} px")
-        except:
+        except Exception:
             self.log.debug(f"min offset y not available for camera {self.id}")
         # maximum offset y
         try:
             self.max_offset_y_px = self.grabber.remote.get("OffsetY.Max")
             self.log.debug(f"max offset y is: {self.max_offset_y_px} px")
-        except:
+        except Exception:
             self.log.debug(f"max offset y not available for camera {self.id}")
         # step exposure time
         # convert from us to ms
@@ -534,36 +703,37 @@ class Camera(BaseCamera):
             self.step_exposure_time_ms = self.grabber.remote.get("ExposureTime.Inc") / 1e3
             type(self).exposure_time_ms.step = self.step_exposure_time_ms
             self.log.debug(f"step exposure time is: {self.step_exposure_time_ms} ms")
-        except:
+        except Exception:
             self.log.debug(f"step exposure time not available for camera {self.id}")
         # step width
         try:
             self.step_width_px = self.grabber.remote.get("Width.Inc")
             type(self).width_px.step = self.step_width_px
             self.log.debug(f"step width is: {self.step_width_px} px")
-        except:
+        except Exception:
             self.log.debug(f"step width not available for camera {self.id}")
         # step height
         try:
             self.step_height_px = self.grabber.remote.get("Height.Inc")
             type(self).height_px.step = self.step_height_px
             self.log.debug(f"step height is: {self.step_height_px} px")
-        except:
+        except Exception:
             self.log.debug(f"step height not available for camera {self.id}")
         # step offset x
         try:
             self.step_offset_x_px = self.grabber.remote.get("OffsetX.Inc")
             self.log.debug(f"step offset x is: {self.step_offset_x_px} px")
-        except:
+        except Exception:
             self.log.debug(f"step offset x not available for camera {self.id}")
         # step offset y
         try:
             self.step_offset_y_px = self.grabber.remote.get("OffsetY.Inc")
             self.log.debug(f"step offset y is: {self.step_offset_y_px} px")
-        except:
+        except Exception:
             self.log.debug(f"step offset y not available for camera {self.id}")
 
-    def _query_binning(self):
+    def _query_binning(self) -> None:
+        """Query the available binning options."""
         # egrabber defines 1 as 'X1', 2 as 'X2', 3 as 'X3'...
         # check only horizontal since we will use same binning for vertical
         binning_options = self.grabber.remote.get("@ee BinningHorizontal", dtype=list)
@@ -574,7 +744,7 @@ class Camera(BaseCamera):
                 # generate integer key
                 key = int(binning.replace("X", ""))
                 BINNINGS[key] = binning
-            except:
+            except Exception:
                 self.log.debug(f"{binning} not avaiable on this camera")
                 # only implement software binning for even numbers
                 if int(binning.replace("X", "")) % 2 == 0:
@@ -584,7 +754,8 @@ class Camera(BaseCamera):
         # reset to initial value
         self.grabber.remote.set("BinningHorizontal", init_binning)
 
-    def _query_pixel_types(self):
+    def _query_pixel_types(self) -> None:
+        """Query the available pixel types."""
         # egrabber defines as 'Mono8', 'Mono12', 'Mono16'...
         pixel_type_options = self.grabber.remote.get("@ee PixelFormat", dtype=list)
         init_pixel_type = self.grabber.remote.get("PixelFormat")
@@ -594,7 +765,7 @@ class Camera(BaseCamera):
                 # generate lowercase string key
                 key = pixel_type.lower()
                 PIXEL_TYPES[key] = pixel_type
-            except:
+            except Exception:
                 self.log.debug(f"{pixel_type} not avaiable on this camera")
 
         # once the pixel types are found, determine line intervals
@@ -602,7 +773,8 @@ class Camera(BaseCamera):
         # reset to initial value
         self.grabber.remote.set("PixelFormat", init_pixel_type)
 
-    def _query_bit_packing_modes(self):
+    def _query_bit_packing_modes(self) -> None:
+        """Query the available bit packing modes."""
         # egrabber defines as 'Msb', 'Lsb', 'None'...
         bit_packing_options = self.grabber.stream.get("@ee UnpackingMode", dtype=list)
         init_bit_packing = self.grabber.stream.get("UnpackingMode")
@@ -612,12 +784,13 @@ class Camera(BaseCamera):
                 # generate lowercase string key
                 key = bit_packing.lower()
                 BIT_PACKING_MODES[key] = bit_packing
-            except:
+            except Exception:
                 self.log.debug(f"{bit_packing} not avaiable on this camera")
         # reset to initial value
         self.grabber.stream.set("UnpackingMode", init_bit_packing)
 
-    def _query_line_intervals(self):
+    def _query_line_intervals(self) -> None:
+        """Query the line intervals for each pixel type."""
         # based on framerate and number of sensor rows
         for key in PIXEL_TYPES:
             # set pixel type
@@ -633,7 +806,8 @@ class Camera(BaseCamera):
             # conver from s to us and store
             LINE_INTERVALS_US[key] = line_interval_s * 1e6
 
-    def _query_trigger_modes(self):
+    def _query_trigger_modes(self) -> None:
+        """Query the available trigger modes."""
         trigger_mode_options = self.grabber.remote.get("@ee TriggerMode", dtype=list)
         init_trigger_mode = self.grabber.remote.get("TriggerMode")
         for trigger_mode in trigger_mode_options:
@@ -645,7 +819,7 @@ class Camera(BaseCamera):
                     # generate lowercase string key
                     key = trigger_mode.lower()
                     MODES[key] = trigger_mode
-                except:
+                except Exception:
                     self.log.debug(f"{trigger_mode} not avaiable on this camera")
             # if it is already set to this value, we know that it is a valid setting
             else:
@@ -654,7 +828,8 @@ class Camera(BaseCamera):
         # reset to initial value
         self.grabber.remote.set("TriggerMode", init_trigger_mode)
 
-    def _query_trigger_sources(self):
+    def _query_trigger_sources(self) -> None:
+        """Query the available trigger sources."""
         trigger_source_options = self.grabber.remote.get("@ee TriggerSource", dtype=list)
         init_trigger_source = self.grabber.remote.get("TriggerSource")
         for trigger_source in trigger_source_options:
@@ -663,12 +838,13 @@ class Camera(BaseCamera):
                 # generate lowercase string key
                 key = trigger_source.lower()
                 SOURCES[key] = trigger_source
-            except:
+            except Exception:
                 self.log.debug(f"{trigger_source} not avaiable on this camera")
         # reset to initial value
         self.grabber.remote.set("TriggerSource", init_trigger_source)
 
-    def _query_trigger_polarities(self):
+    def _query_trigger_polarities(self) -> None:
+        """Query the available trigger polarities."""
         trigger_polarity_options = self.grabber.remote.get("@ee TriggerActivation", dtype=list)
         init_trigger_polarity = self.grabber.remote.get("TriggerActivation")
         for trigger_polarity in trigger_polarity_options:
@@ -677,7 +853,7 @@ class Camera(BaseCamera):
                 # generate lowercase string key
                 key = trigger_polarity.lower()
                 POLARITIES[key] = trigger_polarity
-            except:
+            except Exception:
                 self.log.debug(f"{trigger_polarity} not avaiable on this camera")
         # reset to initial value
         self.grabber.remote.set("TriggerActivation", init_trigger_polarity)
