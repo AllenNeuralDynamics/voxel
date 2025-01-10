@@ -1,44 +1,20 @@
-from abc import abstractmethod
-
-from ..base import VoxelDevice
+import inspect
 
 
-class BaseFilterWheel(VoxelDevice):
-    """
-    Base class for filter wheel devices.
-    """
+class BaseFilterWheel:
 
-    def __init__(self) -> None:
-        """
-        Initialize the BaseFilterWheel object.
-        """
-        self.filter_list: list = list()
+    def __init__(self):
+        self.filter_list = list()
 
     @property
-    @abstractmethod
-    def filter(self) -> str:
-        """
-        Get the current filter.
-
-        :return: Current filter name
-        :rtype: str
-        """
+    def filter(self):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
-    @abstractmethod
     @filter.setter
-    def filter(self, filter_name: str) -> None:
-        """
-        Set the current filter.
-
-        :param filter_name: Filter name
-        :type filter_name: str
-        """
+    def filter(self, filter_name: str):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
-    @abstractmethod
-    def close(self) -> None:
-        """
-        Close the filter wheel device.
-        """
+    def close(self):
         pass

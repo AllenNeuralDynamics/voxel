@@ -5,30 +5,15 @@ from voxel.devices.filterwheel.asi import FilterWheel
 
 
 class Filter(BaseFilter):
-    """
-    Filter class for handling ASI filter devices.
-    """
-    def __init__(self, wheel: FilterWheel, id: str) -> None:
-        """
-        Initialize the Filter object.
 
-        :param wheel: Filter wheel object
-        :type wheel: FilterWheel
-        :param id: Filter ID
-        :type id: str
-        """
+    def __init__(self, wheel: FilterWheel, id: str):
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.id = id
         self.wheel = wheel
 
-    def enable(self) -> None:
-        """
-        Enable the filter device.
-        """
+    def enable(self):
+        """Set parent filter wheel to filter"""
         self.wheel.filter = self.id
 
-    def close(self) -> None:
-        """
-        Close the filter device.
-        """
+    def close(self):
         self.wheel.close()

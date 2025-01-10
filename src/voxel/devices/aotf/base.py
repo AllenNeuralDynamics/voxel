@@ -1,112 +1,52 @@
-from abc import abstractmethod
-from typing import Dict
-
-from voxel.devices.base import VoxelDevice
+import inspect
 
 
-class BaseAOTF(VoxelDevice):
-    """
-    Base class for Acousto-Optic Tunable Filter (AOTF) devices.
-    """
+class BaseAOTF:
 
-    @abstractmethod
-    def enable_all(self) -> None:
-        """
-        Enable all channels of the AOTF.
-        """
+    def enable_all(self):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
-    @abstractmethod
-    def disable_all(self) -> None:
-        """
-        Disable all channels of the AOTF.
-        """
+    def disable_all(self):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @property
-    @abstractmethod
-    def frequency_hz(self) -> Dict[int, float]:
-        """
-        Get the frequency in Hz for the AOTF.
-
-        :return: The frequency in Hz.
-        :rtype: dict
-        """
+    def frequency_hz(self):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @frequency_hz.setter
-    @abstractmethod
-    def frequency_hz(self, frequency_hz: Dict[int, float]) -> None:
-        """
-        Set the frequency in Hz for a specific channel of the AOTF.
-
-        :param frequency_hz: The frequency in Hz.
-        :type frequency_hz: dict
-        """
+    def frequency_hz(self, channel: int, frequency_hz: dict):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @property
-    @abstractmethod
-    def power_dbm(self) -> Dict[int, float]:
-        """
-        Get the power in dBm for the AOTF.
-
-        :return: The power in dBm.
-        :rtype: dict
-        """
+    def power_dbm(self):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @power_dbm.setter
-    @abstractmethod
-    def power_dbm(self, power_dbm: Dict[int, float]) -> None:
-        """
-        Set the power in dBm for a specific channel of the AOTF.
-
-        :param power_dbm: The power in dBm.
-        :type power_dbm: dict
-        """
+    def power_dbm(self, channel: int, power_dbm: dict):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @property
-    @abstractmethod
-    def blanking_mode(self) -> str:
-        """
-        Get the blanking mode of the AOTF.
-
-        :return: The blanking mode.
-        :rtype: str
-        """
+    def blanking_mode(self):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @blanking_mode.setter
-    @abstractmethod
-    def blanking_mode(self, mode: str) -> None:
-        """
-        Set the blanking mode of the AOTF.
-
-        :param mode: The blanking mode.
-        :type mode: str
-        """
+    def blanking_mode(self, mode: str):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @property
-    @abstractmethod
-    def input_mode(self) -> Dict[int, str]:
-        """
-        Get the input mode of the AOTF.
-
-        :return: The input mode.
-        :rtype: dict
-        """
+    def input_mode(self):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass
 
     @input_mode.setter
-    @abstractmethod
-    def input_mode(self, modes: Dict[int, str]) -> None:
-        """
-        Set the input mode of the AOTF.
-
-        :param modes: The input modes.
-        :type modes: dict
-        """
+    def input_mode(self, modes: dict):
+        self.log.warning(f"WARNING: {inspect.stack()[0][3]} not implemented")
         pass

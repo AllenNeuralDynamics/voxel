@@ -7,29 +7,26 @@ from voxel.processes.downsample.base import BaseDownSample
 class CLEDownSample2D(BaseDownSample):
     """
     Voxel 2D downsampling with pyclesperanto.
+
+    :param binning: Binning factor
+    :type binning: int
     """
 
-    def __init__(self, binning: int) -> None:
-        """
-        Module for handling 2D downsampling processes.
-
-        :param binning: The binning factor for downsampling.
-        :type binning: int
-        :raises ValueError: If the binning factor is not valid.
-        """
+    def __init__(self, binning: int):
         super().__init__(binning)
         # get gpu device
         self._device = cle.select_device()
 
-    def run(self, image: numpy.ndarray) -> numpy.ndarray:
+    def run(self, image: numpy.array):
         """
         Run function for image downsampling.
 
         :param image: Input image
-        :type image: numpy.ndarray
+        :type image: numpy.array
         :return: Downsampled image
-        :rtype: numpy.ndarray
+        :rtype: numpy.array
         """
+
         # move image to gpu
         input_image = cle.push(image)
         # run operation

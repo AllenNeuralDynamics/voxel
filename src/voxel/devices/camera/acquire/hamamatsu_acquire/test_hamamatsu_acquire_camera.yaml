@@ -1,0 +1,15 @@
+camera:
+  id: "Hamamatsu C15440-20UP S/N: 500749"
+  region of interest:
+    width_px: 2304
+    height_px: 2304
+  timing:
+    exposure_time_ms: 25.0
+    line_interval_us: 15.0
+  image format:
+    bit_depth: Mono16
+  trigger:
+    mode: On
+    source: External
+    polarity: Rising
+      

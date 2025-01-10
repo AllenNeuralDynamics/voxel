@@ -2,7 +2,6 @@ import logging
 import threading
 from abc import abstractmethod
 from pathlib import Path
-from typing import Optional
 
 from imohash import hashfile
 
@@ -18,30 +17,27 @@ class BaseFileTransfer:
 
     From -> \\\\local_path\\\\acquisition_name\\\\filename*
     To -> \\\\external_path\\\\acquisition_name\\\\filename*
+
+    :param external_path: External path of files to be transferred
+    :param local_path: Local path of files to be transferred
+    :type external_path: str
+    :type local_path: str
+    :raise ValueError: Same external and local path
     """
 
     def __init__(self, external_path: str, local_path: str):
-        """
-        Base class for file transfer processes.
-
-        :param external_path: External path of files to be transferred.
-        :type external_path: str
-        :param local_path: Local path of files to be transferred.
-        :type local_path: str
-        :raises ValueError: If the file path is not valid.
-        """
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self._external_path = Path(external_path)
         self._local_path = Path(local_path)
         if self._external_path == self._local_path:
             raise ValueError("External path and local path cannot be the same")
-        self._filename: Optional[str] = None
-        self._max_retry: int = 0
-        self._acquisition_name: Path = Path()
-        self._verify_transfer: bool = False
-        self._num_tries: int = 1
-        self._timeout_s: float = 60
-        self._progress: float = 0
+        self._filename = None
+        self._max_retry = 0
+        self._acquisition_name = Path()
+        self._verify_transfer = False
+        self._num_tries = 1
+        self._timeout_s = 60
+        self._progress = 0
 
     @property
     @abstractmethod
@@ -52,17 +48,19 @@ class BaseFileTransfer:
         :return: The base filename
         :rtype: str
         """
+
         return self._filename
 
     @filename.setter
     @abstractmethod
     def filename(self, filename: str) -> None:
         """
-        The base filename of files to be transferred.
+        The base filename of files to be transferred.\n
 
         :param filename: The base filename
         :type filename: str
         """
+
         self.log.info(f"setting name to: {filename}")
         self._filename = filename
 
@@ -75,7 +73,8 @@ class BaseFileTransfer:
         :return: The base filename
         :rtype: str
         """
-        return str(self._acquisition_name)
+
+        return self._acquisition_name
 
     @acquisition_name.setter
     @abstractmethod
@@ -86,6 +85,7 @@ class BaseFileTransfer:
         :param acquisition_name: The base acquisition_name
         :type acquisition_name: str
         """
+
         self._acquisition_name = Path(acquisition_name)
         self.log.info(f"setting acquisition name to: {acquisition_name}")
 
@@ -98,7 +98,8 @@ class BaseFileTransfer:
         :return: The local path
         :rtype: str
         """
-        return str(self._local_path)
+
+        return self._local_path
 
     @local_path.setter
     @abstractmethod
@@ -109,6 +110,7 @@ class BaseFileTransfer:
         :param local_path: The local path
         :type local_path: str
         """
+
         self._local_path = Path(local_path)
         self.log.info(f"setting local path to: {local_path}")
 
@@ -121,7 +123,8 @@ class BaseFileTransfer:
         :return: The external path
         :rtype: str
         """
-        return str(self._external_path)
+
+        return self._external_path
 
     @external_path.setter
     @abstractmethod
@@ -132,18 +135,20 @@ class BaseFileTransfer:
         :param external_path: The external path
         :type external_path: str
         """
+
         self._external_path = Path(external_path)
         self.log.info(f"setting local path to: {external_path}")
 
     @property
     @abstractmethod
-    def verify_transfer(self) -> bool:
+    def verify_transfer(self) -> str:
         """
         State of transfer process.
 
         :return: The transfer process state
-        :rtype: bool
+        :rtype: str
         """
+
         return self._verify_transfer
 
     @verify_transfer.setter
@@ -155,6 +160,7 @@ class BaseFileTransfer:
         :param verify_transfer: The transfer process state
         :type verify_transfer: bool
         """
+
         self._verify_transfer = verify_transfer
         self.log.info(f"setting verify transfer to: {verify_transfer}")
 
@@ -167,6 +173,7 @@ class BaseFileTransfer:
         :return: Number of retry attempts
         :rtype: int
         """
+
         return self._max_retry
 
     @max_retry.setter
@@ -178,6 +185,7 @@ class BaseFileTransfer:
         :param max_retry: Number of retry attempts
         :type max_retry: int
         """
+
         self._max_retry = max_retry
         self.log.info(f"setting max retry to: {max_retry}")
 
@@ -190,6 +198,7 @@ class BaseFileTransfer:
         :return: Timeout in seconds
         :rtype: float
         """
+
         return self._timeout_s
 
     @timeout_s.setter
@@ -201,6 +210,7 @@ class BaseFileTransfer:
         :param timeout_s: Timeout in seconds
         :type timeout_s: float
         """
+
         self._timeout_s = timeout_s
         self.log.info(f"setting timeout to: {timeout_s} [s]")
 
@@ -213,26 +223,29 @@ class BaseFileTransfer:
         :return: Progress in percent
         :rtype: float
         """
+
         return self._progress
 
     @progress.setter
-    def progress(self, value: float) -> None:
+    def progress(self, value):
         self._progress = value
 
     @abstractmethod
-    def start(self) -> None:
+    def start(self):
         """
         Start the transfer process.
         """
+
         self.log.info(f"transferring from {self._local_path} to {self._external_path}")
         self.thread = threading.Thread(target=self._run)
         self.thread.start()
 
     @abstractmethod
-    def wait_until_finished(self) -> None:
+    def wait_until_finished(self):
         """
         Wait for the transfer process to finish.
         """
+
         self.thread.join()
 
     @abstractmethod
@@ -243,23 +256,24 @@ class BaseFileTransfer:
         :return: State of thread
         :rtype: bool
         """
+
         return self.thread.is_alive()
 
     @abstractmethod
     def _verify_file(self, local_file_path: str, external_file_path: str) -> bool:
         """
-        Internal function that hash checks a transferred file.
+        Internal function that hash checks a transfered file.
 
         :param local_file_path: Local path of files
         :type local_file_path: str
         :param external_file_path: External path of files
         :type external_file_path: str
-        :return: State of transferred file
+        :return: State of transfered file
         :rtype: bool
         """
         # verifying large files with a full checksum is too time consuming
         # verifying based on file size alone is not thorough
-        # use imohash library to perform hashing on small subset of file
+        # use imohash library to perform hasing on small subset of file
         # imohash defaults to reading 16K bits (i.e. 1<<14) from beginning, middle, and end
         local_hash = hashfile(local_file_path, sample_size=1 << 14)
         external_hash = hashfile(external_file_path, sample_size=1 << 14)
@@ -273,7 +287,7 @@ class BaseFileTransfer:
             return False
 
     @abstractmethod
-    def _run(self) -> None:
+    def _run(self):
         """
         Internal function that runs the transfer process.
         """

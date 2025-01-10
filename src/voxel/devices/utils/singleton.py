@@ -1,32 +1,18 @@
 from functools import wraps
-from threading import Lock
-from typing import Callable, Any, TypeVar, Type
-
-T = TypeVar('T')
+from threading import Lock, Thread
 
 
-def thread_safe_singleton(func: Callable[..., T]) -> Callable[..., T]:
+def thread_safe_singleton(func):
     """
     A decorator that makes a function a thread-safe singleton.
     The decorated function will only be executed once, and its result
     will be cached and returned for all subsequent calls.
-
-    :param func: The function to be decorated.
-    :type func: function
-    :return: The singleton instance of the function.
-    :rtype: function
     """
     lock = Lock()
-    instance: T = None
+    instance = None
 
     @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> T:
-        """
-        Wrapper function to ensure thread-safe singleton behavior.
-
-        :return: The singleton instance of the function.
-        :rtype: function
-        """
+    def wrapper(*args, **kwargs):
         nonlocal instance
         if instance is None:
             with lock:
@@ -42,7 +28,7 @@ class Singleton(type):
     This is a thread-safe implementation of Singleton.
     """
 
-    _instances: dict[Type, Any] = {}
+    _instances = {}
 
     _lock: Lock = Lock()
     """
@@ -50,14 +36,22 @@ class Singleton(type):
     first access to the Singleton.
     """
 
-    def __call__(cls: Type[T], *args: Any, **kwargs: Any) -> T:
+    def __call__(cls, *args, **kwargs):
         """
-        Ensure that only one instance of the class is created.
-
-        :return: The singleton instance of the class.
-        :rtype: object
+        Possible changes to the value of the `__init__` argument do not affect
+        the returned instance.
         """
+        # Now, imagine that the program has just been launched. Since there's no
+        # Singleton instance yet, multiple threads can simultaneously pass the
+        # previous conditional and reach this point almost at the same time. The
+        # first of them will acquire lock and will proceed further, while the
+        # rest will wait here.
         with cls._lock:
+            # The first thread to acquire the lock, reaches this conditional,
+            # goes inside and creates the Singleton instance. Once it leaves the
+            # lock block, a thread that might have been waiting for the lock
+            # release may then enter this section. But since the Singleton field
+            # is already initialized, the thread won't create a new object.
             if cls not in cls._instances:
                 instance = super().__call__(*args, **kwargs)
                 cls._instances[cls] = instance

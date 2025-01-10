@@ -3,14 +3,14 @@ import os
 import sys
 from ctypes import c_wchar
 from math import ceil
-from multiprocessing import Array, Process, Value, Queue
+from multiprocessing import Array, Process
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import List, Dict, Tuple, Optional
 
 import numpy as np
 
+from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.writers.base import BaseWriter
 from voxel.writers.bdv_writer import npy2bdv
 
@@ -35,64 +35,64 @@ class BDVWriter(BaseWriter):
     Writer will save data to the following location
 
     path\\acquisition_name\\filename.h5
+
+    :param path: Path for the data writer
+    :type path: str
     """
 
-    def __init__(self, path: str) -> None:
-        """
-        Module for handling BigDataViewer (BDV) data writing processes.
-
-        :param path: The path for the data writer.
-        :type path: str
-        """
+    def __init__(self, path: str):
         super().__init__(path)
-        self._compression = None  # initialize as no compression
-        self.compression_opts: Optional[Tuple[int, int, int, int, int]] = None
+        self.compression_opts = None
         # Lists for storing all datasets in a single BDV file
-        self.current_tile_num: int = 0
-        self.current_channel_num: int = 0
-        self.tile_list: List[Tuple[float, float, float]] = list()
-        self.channel_list: List[str] = list()
-        self.dataset_dict: Dict[Tuple[int, int], Tuple[int, int, int]] = dict()
-        self.voxel_size_dict: Dict[Tuple[int, int], Tuple[float, float, float]] = dict()
-        self.affine_deskew_dict: Dict[Tuple[int, int], np.ndarray] = dict()
-        self.affine_scale_dict: Dict[Tuple[int, int], np.ndarray] = dict()
-        self.affine_shift_dict: Dict[Tuple[int, int], np.ndarray] = dict()
+        self.current_tile_num = 0
+        self.current_channel_num = 0
+        self.tile_list = list()
+        self.channel_list = list()
+        self.dataset_dict = dict()
+        self.voxel_size_dict = dict()
+        self.affine_deskew_dict = dict()
+        self.affine_scale_dict = dict()
+        self.affine_shift_dict = dict()
 
     @property
-    def theta_deg(self) -> float:
+    def theta_deg(self):
         """Get theta value of the writer.
 
         :return: Theta value in deg
         :rtype: float
         """
+
         return self._theta_deg
 
     @theta_deg.setter
-    def theta_deg(self, theta_deg: float) -> None:
+    def theta_deg(self, theta_deg: float):
         """Set the theta value of the writer.
 
-        :param theta_deg: Theta value in deg
-        :type theta_deg: float
+        :param value: Theta value in deg
+        :type value: float
         """
+
         self.log.info(f"setting theta to: {theta_deg} [deg]")
         self._theta_deg = theta_deg
 
     @property
-    def frame_count_px(self) -> int:
+    def frame_count_px(self):
         """Get the number of frames in the writer.
 
         :return: Frame number in pixels
         :rtype: int
         """
+
         return self._frame_count_px_px
 
     @frame_count_px.setter
-    def frame_count_px(self, frame_count_px: int) -> None:
+    def frame_count_px(self, frame_count_px: int):
         """Set the number of frames in the writer.
 
-        :param frame_count_px: Frame number in pixels
-        :type frame_count_px: int
+        :param value: Frame number in pixels
+        :type value: int
         """
+
         self.log.info(f"setting frame count to: {frame_count_px} [px]")
         if frame_count_px % DIVISIBLE_FRAME_COUNT_PX != 0:
             frame_count_px = ceil(frame_count_px / DIVISIBLE_FRAME_COUNT_PX) * DIVISIBLE_FRAME_COUNT_PX
@@ -100,59 +100,64 @@ class BDVWriter(BaseWriter):
         self._frame_count_px_px = frame_count_px
 
     @property
-    def chunk_count_px(self) -> int:
+    def chunk_count_px(self):
         """Get the chunk count in pixels
 
         :return: Chunk count in pixels
         :rtype: int
         """
+
         return CHUNK_COUNT_PX
 
     @property
-    def filename(self) -> str:
+    def filename(self):
         """
         The base filename of file writer.
 
         :return: The base filename
         :rtype: str
         """
+
         return self._filename
 
     @filename.setter
-    def filename(self, filename: str) -> None:
+    def filename(self, filename: str):
         """
         The base filename of file writer.
 
-        :param filename: The base filename
-        :type filename: str
+        :param value: The base filename
+        :type value: str
         """
+
         self._filename = filename if filename.endswith(".h5") else f"{filename}.h5"
         self.log.info(f"setting filename to: {filename}")
 
     @property
-    def compression(self) -> str:
+    def compression(self):
         """Get the compression codec of the writer.
 
         :return: Compression codec
         :rtype: str
         """
+
         return next(key for key, value in COMPRESSIONS.items() if value == self._compression)
 
     @compression.setter
-    def compression(self, compression: str) -> None:
+    def compression(self, compression: str):
         """Set the compression codec of the writer.
 
-        :param compression: Compression codec
+        :param value: Compression codec
         * **gzp**
         * **lzf**
         * **b3d**
         * **none**
-        :type compression: str
+        :type value: str
         :raises ValueError: Invalid compression codec
         :raises ValueError: B3D compression only supported on Windows
         :raises ValueError: HDF5 is not installed
         :raises ValueError: HDF5 version is >1.8.xx
         """
+
         valid = list(COMPRESSIONS.keys())
         if compression not in valid:
             raise ValueError("compression type must be one of %r." % valid)
@@ -179,8 +184,11 @@ class BDVWriter(BaseWriter):
                 int(B3D_READ_NOISE * 1000),
             )
 
-    def prepare(self) -> None:
-        """Prepare the writer."""
+    def prepare(self):
+        """
+        Prepare the writer.
+        """
+
         self.log.info(f"{self._filename}: intializing writer.")
         # Specs for reconstructing the shared memory object.
         self._shm_name = Array(c_wchar, 32)  # hidden and exposed via property.
@@ -266,12 +274,15 @@ class BDVWriter(BaseWriter):
             args=(shm_shape, shm_nbytes, self._progress, self._log_queue),
         )
 
-    def start(self) -> None:
-        """Start the writer."""
+    def start(self):
+        """
+        Start the writer.
+        """
+
         self.log.info(f"{self._filename}: starting writer.")
         self._process.start()
 
-    def _run(self, shm_shape: List[int], shm_nbytes: int, shared_progress: Value, shared_log_queue: Queue) -> None:
+    def _run(self, shm_shape, shm_nbytes, shared_progress, shared_log_queue):
         """
         Main run function of the BDV writer.
 
@@ -430,8 +441,7 @@ class BDVWriter(BaseWriter):
             )
         bdv_writer.close()
 
-    def delete_files(self) -> None:
-        """Delete all files generated by the writer."""
+    def delete_files(self):
         filepath = Path(self._path, self._acquisition_name, self._filename).absolute()
         xmlpath = Path(self._path, self._acquisition_name, self._filename).absolute().replace("h5", "xml")
         os.remove(filepath)

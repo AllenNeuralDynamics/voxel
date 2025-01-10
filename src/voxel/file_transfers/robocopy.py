@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from subprocess import DEVNULL, Popen
 
+from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.file_transfers.base import BaseFileTransfer
 
 
@@ -16,26 +17,18 @@ class RobocopyFileTransfer(BaseFileTransfer):
 
     From -> \\\\local_path\\\\acquisition_name\\\\filename*
     To -> \\\\external_path\\\\acquisition_name\\\\filename*
+
+    :param external_path: External path of files to be transferred
+    :param local_path: Local path of files to be transferred
+    :type external_path: str
+    :type local_path: str
     """
 
     def __init__(self, external_path: str, local_path: str):
-        """
-        Initialize the RobocopyFileTransfer class.
-
-        :param external_path: The external path of files to be transferred.
-        :type external_path: str
-        :param local_path: The local path of files to be transferred.
-        :type local_path: str
-        """
         super().__init__(external_path, local_path)
         self._protocol = "robocopy"
 
-    def _run(self) -> None:
-        """
-        Run the file transfer process.
-
-        :raises ValueError: If the local file path is not a file or directory.
-        """
+    def _run(self):
         start_time = time.time()
         local_directory = Path(self._local_path, self._acquisition_name)
         external_directory = Path(self._external_path, self._acquisition_name)
@@ -73,7 +66,7 @@ class RobocopyFileTransfer(BaseFileTransfer):
                 for file_path, file_size_mb in sorted_file_list.items():
                     # transfer just one file and iterate
                     # split filename and path
-                    local_dir, filename = os.path.split(file_path)
+                    [local_dir, filename] = os.path.split(file_path)
                     self.log.info(f"transfering {filename}")
                     # specify external directory
                     # need to change directories to str because they are Path objects
@@ -103,15 +96,17 @@ class RobocopyFileTransfer(BaseFileTransfer):
                         while file_progress < 100:
                             start_time_s = time.time()
                             # open log file
-                            with open(log_path, "r") as f:
-                                # read the last line
-                                line = f.readlines()[-1]
+                            f = open(log_path, "r")
+                            # read the last line
+                            line = f.readlines()[-1]
+                            # close the log file
+                            f.close()
                             # try to find if there is a % in the last line
                             try:
                                 # convert the string to a float
                                 file_progress = float(line.replace("%", ""))
                             # line did not contain %
-                            except ValueError:
+                            except:
                                 file_progress = 0
                             # sum to transferred amount to track progress
                             self._progress = (
@@ -131,7 +126,6 @@ class RobocopyFileTransfer(BaseFileTransfer):
                             self.log.info(f"{self.filename} transfer is {self.progress:.2f} [%] complete.")
                             # pause for 10 sec
                             time.sleep(10.0)
-                        subprocess.wait()
                     else:
                         subprocess.wait()
                         self._progress = (total_transferred_mb + file_size_mb) / total_size_mb * 100
@@ -168,7 +162,7 @@ class RobocopyFileTransfer(BaseFileTransfer):
                                     self.log.info(f"hashes did not match, deleting {external_file_path}")
                                     os.remove(external_file_path)
                                     pass
-                            except FileNotFoundError:
+                            except:
                                 self.log.warning(f"no external file exists at {external_file_path}")
                         else:
                             # remove local file
