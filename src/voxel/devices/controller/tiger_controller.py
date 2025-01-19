@@ -1,0 +1,51 @@
+import threading
+import time
+
+from tigerasi.tiger_controller import TigerController as TigerBox
+
+UPDATE_RATE_HZ = 10.0
+
+
+class TigerController(TigerBox):
+    """
+    Controller for the ASI Tiger stage.
+    """
+    def __init__(self, com_port: str) -> None:
+        """
+        Initialize the TigerController object.
+
+        :param com_port: COM port for the controller
+        :type com_port: str
+        """
+        super().__init__(com_port)
+        self._get_positions = True
+        self._position_mm = 0  # internal cache of position values
+        self._position_mm_updater = threading.Thread(target=self._position_mm_updater)
+        self._position_mm_updater.start()
+
+    def _position_mm_updater(self) -> None:
+        """
+        Thread to continuously get the position in millimeters for all axes.
+        """
+        # get position for all axes on some time interval
+        # returns a dict of {hardware axes: positions}
+        while self._get_positions:
+            with threading.RLock:
+                self._position_mm = self.get_position(*self.ordered_axes)
+            time.sleep(1.0 / UPDATE_RATE_HZ)
+
+    def get_position_mm(self) -> float:
+        """
+        Get the current position in millimeters.
+
+        :return: Current position in millimeters
+        :rtype: float
+        """
+        return self._position_mm
+
+    def close(self) -> None:
+        """
+        Close the TigerController.
+        """
+        self._get_positions = False
+        self.ser.close()

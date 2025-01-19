@@ -1,9 +1,9 @@
 import logging
 from typing import Dict, Optional
 
-from tigerasi.device_codes import *
-from tigerasi.tiger_controller import TigerController
+from tigerasi.device_codes import JoystickInput, JoystickPolarity
 
+from voxel.devices.controller.tiger_controller import TigerController
 from voxel.devices.joystick.base import BaseJoystick
 
 JOYSTICK_AXES = {

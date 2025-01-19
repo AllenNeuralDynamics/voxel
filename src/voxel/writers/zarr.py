@@ -24,7 +24,7 @@ COMPRESSIONS = {
     "none": aqz.CompressionCodec.NONE,
 }
 
-DATA_TYPES = {"unit8": aqz.DataType.UINT16, "uint16": aqz.DataType.UINT16}
+DATA_TYPES = {"unit8": aqz.DataType.UINT8, "uint16": aqz.DataType.UINT16}
 
 VERSIONS = {"v2": aqz.ZarrVersion.V2, "v3": aqz.ZarrVersion.V3}
 

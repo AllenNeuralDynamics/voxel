@@ -72,7 +72,7 @@ class SimulatedCamera(BaseCamera):
         self._height_offset_px = 0
         self._binning = 1
         self._trigger = {"mode": "on", "source": "internal", "polarity": "rising"}
-
+        self._latest_frame = None
         self._frame = Value("i", 0)
         self._frame_rate = Value("d", 0.0)
         self._dropped_frames = Value("d", 0.0)
@@ -355,12 +355,12 @@ class SimulatedCamera(BaseCamera):
     def start(self, frames=float("inf")) -> None:
         """Start camera."""
         self.log.info("simulated camera starting...")
-        self._frame_generator.start()
+        # self._frame_generator.start()
 
     def stop(self) -> None:
         """Stop camera,."""
         self.log.info("simulated camera stopping...")
-        self._frame_generator.stop()
+        # self._frame_generator.stop()
 
     def abort(self) -> None:
         """Abort camera."""
@@ -383,12 +383,13 @@ class SimulatedCamera(BaseCamera):
         :return: Latest frame
         :rtype: numpy.ndarray
         """
-        image = self._frame_generator.get_latest_frame()
-        # image = numpy.random.randint(
-        #     low=128, high=256, size=(self.image_height_px, self.image_width_px), dtype=PIXEL_TYPES[self._pixel_type]
-        # )
+        # image = self._frame_generator.get_latest_frame()
+        image = numpy.random.randint(
+            low=128, high=256, size=(self.image_height_px, self.image_width_px), dtype=PIXEL_TYPES[self._pixel_type]
+        )
         # self.log.info(self._buffer_index.value)
         # self._buffer_index.value -= 1
+        self._latest_frame = numpy.copy(image)
         if self._binning > 1:
             return self.gpu_binning.run(image)
         else:

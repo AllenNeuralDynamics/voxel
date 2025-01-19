@@ -2,11 +2,10 @@ import logging
 from time import sleep
 from typing import Dict, Optional
 
-from tigerasi.device_codes import *
+from tigerasi.device_codes import RingBufferMode, ScanPattern, TTLIn0Mode, TTLOut0Mode
 from tigerasi.tiger_controller import TigerController
 
 from voxel.devices.stage.base import BaseStage
-from voxel.devices.utils.singleton import Singleton
 
 # constants for Tiger ASI hardware
 
@@ -22,27 +21,6 @@ SCAN_PATTERN = {
     "raster": ScanPattern.RASTER,
     "serpentine": ScanPattern.SERPENTINE,
 }
-
-
-# singleton wrapper around TigerController
-class TigerControllerSingleton(TigerController, metaclass=Singleton):
-    """
-    Singleton wrapper around TigerController.
-
-    :param TigerController: Base class for TigerController
-    :type TigerController: class
-    :param metaclass: Singleton metaclass
-    :type metaclass: type
-    """
-
-    def __init__(self, com_port: str) -> None:
-        """
-        Initialize the TigerControllerSingleton object.
-
-        :param com_port: COM port for the controller
-        :type com_port: str
-        """
-        super(TigerControllerSingleton, self).__init__(com_port)
 
 
 class TigerStage(BaseStage):
@@ -79,7 +57,7 @@ class TigerStage(BaseStage):
         if tigerbox is None and port is None:
             raise ValueError("Tigerbox and port cannot both be none")
 
-        self.tigerbox = TigerControllerSingleton(com_port=port) if tigerbox is None else tigerbox
+        self.tigerbox = tigerbox
         self.tigerbox.log.setLevel(log_level)
 
         self.hardware_axis = hardware_axis.upper()
@@ -336,11 +314,10 @@ class TigerStage(BaseStage):
         :return: Current position in millimeters
         :rtype: Optional[float]
         """
-        tiger_position = self.tigerbox.get_position(self.hardware_axis)
+        tiger_position = self.tigerbox.get_position_mm()[self.hardware_axis]
         # converting 1/10 um to mm
-        tiger_position_mm = {k: v / 10000 for k, v in tiger_position.items()}
-        # FIXME: Sometimes tigerbox yields empty stage position so return None if this happens?
-        return self._hardware_to_instrument(tiger_position_mm).get(self.instrument_axis, None)
+        tiger_position_mm = tiger_position / 10000
+        return tiger_position_mm
 
     @position_mm.setter
     def position_mm(self, value: float) -> None:

@@ -9,6 +9,7 @@ class BaseCamera(VoxelDevice):
     """
 
     def __init__(self):
+        """Initialization of the BaseCamera class."""
         self._um_px = None
 
     @property
@@ -336,6 +337,26 @@ class BaseCamera(VoxelDevice):
         :rtype: float
         """
         return self._um_px * self.binning
+
+    @property
+    def fov_height_mm(self) -> float:
+        """
+        Get the field of view height in mm.
+
+        :return: The field of view height in mm.
+        :rtype: float
+        """
+        return self.sampling_um_px * self.image_height_px
+
+    @property
+    def fov_width_mm(self) -> float:
+        """
+        Get the field of view width in mm.
+
+        :return: The field of view width in mm.
+        :rtype: float
+        """
+        return self.sampling_um_px * self.image_width_px
 
     @abstractmethod
     def reset(self) -> None:

@@ -1,34 +1,12 @@
 import logging
 import time
 
-from tigerasi.tiger_controller import TigerController
-
+from voxel.devices.controller.tiger_controller import TigerController
 from voxel.devices.filterwheel.base import BaseFilterWheel
-from voxel.devices.utils.singleton import Singleton
 
 # constants for the ASI filter wheel
 
 SWITCH_TIME_S = 0.1  # estimated timing
-
-
-class TigerControllerSingleton(TigerController, metaclass=Singleton):
-    """
-    Singleton class for TigerController.
-
-    :param TigerController: Base class for TigerController
-    :type TigerController: class
-    :param metaclass: Singleton metaclass
-    :type metaclass: type
-    """
-
-    def __init__(self, com_port: str) -> None:
-        """
-        Initialize the TigerControllerSingleton object.
-
-        :param com_port: COM port for the controller
-        :type com_port: str
-        """
-        super(TigerControllerSingleton, self).__init__(com_port)
 
 
 class FW1000FilterWheel(BaseFilterWheel):
