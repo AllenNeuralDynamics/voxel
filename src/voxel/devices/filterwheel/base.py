@@ -25,8 +25,8 @@ class BaseFilterWheel(VoxelDevice):
         """
         pass
 
-    @abstractmethod
     @filter.setter
+    @abstractmethod
     def filter(self, filter_name: str) -> None:
         """
         Set the current filter.

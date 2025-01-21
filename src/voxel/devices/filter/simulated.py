@@ -1,14 +1,14 @@
 import logging
 
 from voxel.devices.filter.base import BaseFilter
-from voxel.devices.filterwheel.simulated import FilterWheel
+from voxel.devices.filterwheel.simulated import SimulatedFilterWheel
 
 
 class Filter(BaseFilter):
     """
     Filter class for handling simulated filter devices.
     """
-    def __init__(self, wheel: FilterWheel, id: str) -> None:
+    def __init__(self, wheel: SimulatedFilterWheel, id: str) -> None:
         """
         Initialize the Filter object.
 
