@@ -3,7 +3,7 @@ from time import sleep
 from typing import Dict, Optional
 
 from tigerasi.device_codes import RingBufferMode, ScanPattern, TTLIn0Mode, TTLOut0Mode
-from tigerasi.tiger_controller import TigerController
+from voxel.devices.controller.tiger_controller import TigerController
 
 from voxel.devices.stage.base import BaseStage
 
@@ -78,10 +78,6 @@ class TigerStage(BaseStage):
         self.hardware_to_instrument_axis_map = self._sanitize_axis_map(r_axis_map)
         self.log.debug(f"New instrument to hardware axis mapping: " f"{self.instrument_to_hardware_axis_map}")
         self.log.debug(f"New hardware to instrument axis mapping: " f"{self.hardware_to_instrument_axis_map}")
-        self.tiger_joystick_mapping = self.tigerbox.get_joystick_axis_mapping()
-
-        # clear ring buffer incase there are persistent values
-        self.tigerbox.reset_ring_buffer(axis=self.hardware_axis.upper())
 
         # set parameter values
         # (!!) these are hardcoded here and cannot

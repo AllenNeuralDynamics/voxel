@@ -557,6 +557,8 @@ class VieworksCamera(BaseCamera):
         if self._binning > 1 and isinstance(self._binning, int):
             image = np.copy(self.gpu_binning.run(image))
         self._latest_frame = np.copy(image)
+        # increment the current frame number
+        self.frame_number += 1
         return image
 
     @property
@@ -578,7 +580,8 @@ class VieworksCamera(BaseCamera):
         # https://documentation.euresys.com/Products/Coaxlink/Coaxlink/en-us/Content/IOdoc/egrabber-reference/
         # namespace_gen_t_l.html#a6b498d9a4c08dea2c44566722699706e
         state = {}
-        state["Frame Index"] = self.grabber.stream.get_info(STREAM_INFO_NUM_DELIVERED, INFO_DATATYPE_SIZET)
+        # state["Frame Index"] = self.grabber.stream.get_info(STREAM_INFO_NUM_DELIVERED, INFO_DATATYPE_SIZET)
+        state["Frame Index"] = self.frame_number  # frame number is not taken from the camera due to start/stop
         state["Input Buffer Size"] = self.grabber.stream.get_info(STREAM_INFO_NUM_QUEUED, INFO_DATATYPE_SIZET)
         state["Output Buffer Size"] = self.grabber.stream.get_info(STREAM_INFO_NUM_AWAIT_DELIVERY, INFO_DATATYPE_SIZET)
         # number of underrun, i.e. dropped frames

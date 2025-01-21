@@ -11,6 +11,7 @@ class BaseCamera(VoxelDevice):
     def __init__(self):
         """Initialization of the BaseCamera class."""
         self._um_px = None
+        self._frame_number = 0
 
     @property
     @abstractmethod
@@ -286,6 +287,26 @@ class BaseCamera(VoxelDevice):
         :rtype: np.ndarray
         """
         pass
+
+    @property
+    def frame_number(self) -> int:
+        """
+        Get the current frame number.
+
+        :return: Get the current frame number.
+        :rtype: int
+        """
+        return self._frame_number
+
+    @frame_number.setter
+    def frame_number(self, value: int) -> None:
+        """
+        Set the current frame number.
+
+        :param value: The current frame number.
+        :type value: float
+        """
+        self._frame_number = value
 
     @property
     def image_width_px(self) -> int:
