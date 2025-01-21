@@ -1,26 +1,8 @@
 import logging
-from time import sleep
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
-from tigerasi.device_codes import RingBufferMode, ScanPattern, TTLIn0Mode, TTLOut0Mode
 from voxel.devices.controller.tiger_controller import TigerController
-
 from voxel.devices.stage.base import BaseStage
-
-# constants for Tiger ASI hardware
-
-STEPS_PER_UM = 10
-
-MODES = {
-    "step shoot": TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION,
-    "off": TTLIn0Mode.OFF,
-    "stage scan": TTLIn0Mode.MOVE_TO_NEXT_ABS_POSITION,
-}
-
-SCAN_PATTERN = {
-    "raster": ScanPattern.RASTER,
-    "serpentine": ScanPattern.SERPENTINE,
-}
 
 
 class TigerStage(BaseStage):
@@ -32,8 +14,8 @@ class TigerStage(BaseStage):
         self,
         hardware_axis: str,
         instrument_axis: str,
-        tigerbox: TigerController = None,
-        port: str = None,
+        tigerbox: Optional[TigerController] = None,
+        port: Optional[str] = None,
         log_level: str = "INFO",
     ) -> None:
         """
@@ -76,12 +58,10 @@ class TigerStage(BaseStage):
         self.instrument_to_hardware_axis_map = self._sanitize_axis_map(axis_map)
         r_axis_map = dict(zip(axis_map.values(), axis_map.keys()))
         self.hardware_to_instrument_axis_map = self._sanitize_axis_map(r_axis_map)
-        self.log.debug(f"New instrument to hardware axis mapping: " f"{self.instrument_to_hardware_axis_map}")
-        self.log.debug(f"New hardware to instrument axis mapping: " f"{self.hardware_to_instrument_axis_map}")
 
         # set parameter values
         # (!!) these are hardcoded here and cannot
-        # be queiried from the tigerbox
+        # be queried from the tigerbox
         self.min_speed_mm_s: float = 0.001
         self.max_speed_mm_s: float = 1.000
         self.step_speed_mm_s: float = 0.01
@@ -140,14 +120,14 @@ class TigerStage(BaseStage):
         """
         return self._remap(axes, self.instrument_to_hardware_axis_map)
 
-    def _instrument_to_hardware_axis_list(self, *axes: str) -> list[str]:
+    def _instrument_to_hardware_axis_list(self, *axes: str) -> List[str]:
         """
         Convert instrument axes to hardware axes list.
 
         :param axes: Instrument axes
         :type axes: str
         :return: Hardware axes list
-        :rtype: list[str]
+        :rtype: List[str]
         """
         # Easiest way to convert is to temporarily convert into dict.
         axes_dict = {x: 0 for x in axes}
@@ -174,13 +154,7 @@ class TigerStage(BaseStage):
         :param wait: Whether to wait for the move to complete, defaults to True
         :type wait: bool, optional
         """
-        w_text = "" if wait else "NOT "
-        self.log.info(f"Relative move by: {self.hardware_axis}={position} mm and {w_text}waiting.")
-        # convert from mm to 1/10um
-        self.tigerbox.move_relative(**{self.hardware_axis: round(position * 1000 * STEPS_PER_UM, 1)}, wait=wait)
-        if wait:
-            while self.tigerbox.is_moving():
-                sleep(0.001)
+        self.tigerbox.move_relative_mm(axis=self.hardware_axis, position=position, wait=wait)
 
     def move_absolute_mm(self, position: float, wait: bool = True) -> None:
         """
@@ -191,13 +165,7 @@ class TigerStage(BaseStage):
         :param wait: Whether to wait for the move to complete, defaults to True
         :type wait: bool, optional
         """
-        w_text = "" if wait else "NOT "
-        self.log.info(f"Absolute move to: {self.hardware_axis}={position} mm and {w_text}waiting.")
-        # convert from mm to 1/10um
-        self.tigerbox.move_absolute(**{self.hardware_axis: round(position * 1000 * STEPS_PER_UM, 1)}, wait=wait)
-        if wait:
-            while self.tigerbox.is_moving():
-                sleep(0.001)
+        self.tigerbox.move_absolute_mm(axis=self.hardware_axis, position=position, wait=wait)
 
     def setup_stage_scan(
         self,
@@ -231,41 +199,17 @@ class TigerStage(BaseStage):
         :type retrace_speed_percent: int
         :raises ValueError: If pattern is not valid or retrace speed percent is out of range
         """
-        # TODO: if position is unspecified, we should set is as
-        #  "current position" from hardware.
-        # Get the axis id in machine coordinate frame.
-        if self.mode == "stage scan":
-            valid_pattern = list(SCAN_PATTERN.keys())
-            if pattern not in valid_pattern:
-                raise ValueError("pattern must be one of %r." % valid_pattern)
-            assert retrace_speed_percent <= 100 and retrace_speed_percent > 0
-            fast_axis = self.hardware_axis
-            axis_to_card = self.tigerbox.axis_to_card
-            fast_card = axis_to_card[fast_axis][0]
-            fast_position = axis_to_card[fast_axis][1]
-            slow_axis = next(
-                key for key, value in axis_to_card.items() if value[0] == fast_card and value[1] != fast_position
-            )
-            # Stop any existing scan. Apply machine coordinate frame scan params.
-            self.log.debug(
-                f"fast axis start: {fast_axis_start_position}," f"slow axis start: {slow_axis_start_position}"
-            )
-            self.tigerbox.setup_scan(
-                fast_axis,
-                slow_axis,
-                pattern=SCAN_PATTERN[pattern],
-            )
-            self.tigerbox.scanr(
-                scan_start_mm=fast_axis_start_position,
-                pulse_interval_um=frame_interval_um,
-                num_pixels=frame_count,
-                retrace_speed_percent=retrace_speed_percent,
-            )
-            self.tigerbox.scanv(
-                scan_start_mm=slow_axis_start_position, scan_stop_mm=slow_axis_stop_position, line_count=strip_count
-            )
-        else:
-            raise ValueError(f"mode must be stage scan not {self.mode}")
+        self.tigerbox.setup_stage_scan(
+            fast_axis=self.hardware_axis,
+            fast_axis_start_position=fast_axis_start_position,
+            slow_axis_start_position=slow_axis_start_position,
+            slow_axis_stop_position=slow_axis_stop_position,
+            frame_count=frame_count,
+            frame_interval_um=frame_interval_um,
+            strip_count=strip_count,
+            pattern=pattern,
+            retrace_speed_percent=retrace_speed_percent,
+        )
 
     def setup_step_shoot_scan(self, step_size_um: float) -> None:
         """
@@ -274,33 +218,19 @@ class TigerStage(BaseStage):
         :param step_size_um: Step size in micrometers
         :type step_size_um: float
         """
-        step_size_steps = step_size_um * STEPS_PER_UM
-        self.tigerbox.reset_ring_buffer(axis=self.hardware_axis.upper())
-        self.tigerbox.setup_ring_buffer(self.hardware_axis, mode=RingBufferMode.TTL)
-        self.tigerbox.queue_buffered_move(**{self.hardware_axis: step_size_steps})
-        # TTL mode dictates whether ring buffer move is relative or absolute.
-        self.tigerbox.set_ttl_pin_modes(
-            TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION,
-            TTLOut0Mode.PULSE_AFTER_MOVING,
-            aux_io_mode=0,
-            aux_io_mask=0,
-            aux_io_state=0,
-        )
+        self.tigerbox.setup_step_shoot_scan(axis=self.hardware_axis, step_size_um=step_size_um)
 
     def start(self) -> None:
         """
         Start the stage.
         """
-        if self.mode == "stage scan":
-            self.tigerbox.start_scan()
-        elif self.mode == "step shoot":
-            pass
+        self.tigerbox.start()
 
     def close(self) -> None:
         """
         Close the stage.
         """
-        self.tigerbox.ser.close()
+        self.tigerbox.close()
 
     @property
     def position_mm(self) -> Optional[float]:
@@ -323,24 +253,21 @@ class TigerStage(BaseStage):
         :param value: Position in millimeters
         :type value: float
         """
-        self.move_absolute_mm(value, False)
+        self.tigerbox.move_absolute_mm(axis=self.hardware_axis, position=value, wait=False)
 
     @property
-    def limits_mm(self) -> list[float]:
+    def limits_mm(self) -> List[float]:
         """
         Get the limits of the stage in millimeters.
 
         :return: Limits in millimeters
-        :rtype: list[float]
+        :rtype: List[float]
         """
-        # Get lower/upper limit in tigerbox frame.
-        tiger_limit_lower = self.tigerbox.get_lower_travel_limit(self.hardware_axis)
-        tiger_limit_upper = self.tigerbox.get_upper_travel_limit(self.hardware_axis)
+        limits = self.tigerbox.get_limits_mm(axis=self.hardware_axis)
         # Convert to sample frame before returning.
-        sample_limit_lower = list(self._hardware_to_instrument(tiger_limit_lower).values())[0]
-        sample_limit_upper = list(self._hardware_to_instrument(tiger_limit_upper).values())[0]
-        limits = sorted([sample_limit_lower, sample_limit_upper])
-        return limits
+        sample_limit_lower = list(self._hardware_to_instrument(limits[0]).values())[0]
+        sample_limit_upper = list(self._hardware_to_instrument(limits[1]).values())[0]
+        return [sample_limit_lower, sample_limit_upper]
 
     @property
     def backlash_mm(self) -> Dict[str, float]:
@@ -350,8 +277,8 @@ class TigerStage(BaseStage):
         :return: Backlash in millimeters
         :rtype: Dict[str, float]
         """
-        tiger_backlash = self.tigerbox.get_axis_backlash(self.hardware_axis)
-        return self._hardware_to_instrument(tiger_backlash)
+        backlash_mm = self.tigerbox.get_backlash_mm(axis=self.hardware_axis)
+        return self._hardware_to_instrument(backlash_mm)
 
     @backlash_mm.setter
     def backlash_mm(self, backlash: float) -> None:
@@ -361,7 +288,7 @@ class TigerStage(BaseStage):
         :param backlash: Backlash in millimeters
         :type backlash: float
         """
-        self.tigerbox.set_axis_backlash(**{self.hardware_axis: backlash})
+        self.tigerbox.set_backlash_mm(axis=self.hardware_axis, backlash=backlash)
 
     @property
     def speed_mm_s(self) -> Dict[str, float]:
@@ -371,7 +298,7 @@ class TigerStage(BaseStage):
         :return: Speed in millimeters per second
         :rtype: Dict[str, float]
         """
-        tiger_speed = self.tigerbox.get_speed(self.hardware_axis)
+        tiger_speed = self.tigerbox.get_speed_mm_s(self.hardware_axis)
         return self._hardware_to_instrument(tiger_speed)
 
     @speed_mm_s.setter
@@ -382,7 +309,7 @@ class TigerStage(BaseStage):
         :param speed: Speed in millimeters per second
         :type speed: float
         """
-        self.tigerbox.set_speed(**{self.hardware_axis: speed})
+        self.tigerbox.set_speed_mm_s(axis=self.hardware_axis, speed=speed)
 
     @property
     def acceleration_ms(self) -> Dict[str, float]:
@@ -392,7 +319,7 @@ class TigerStage(BaseStage):
         :return: Acceleration in millimeters per second squared
         :rtype: Dict[str, float]
         """
-        tiger_acceleration = self.tigerbox.get_acceleration(self.hardware_axis)
+        tiger_acceleration = self.tigerbox.get_acceleration_ms(axis=self.hardware_axis)
         return self._hardware_to_instrument(tiger_acceleration)
 
     @acceleration_ms.setter
@@ -403,7 +330,7 @@ class TigerStage(BaseStage):
         :param acceleration: Acceleration in millimeters per second squared
         :type acceleration: float
         """
-        self.tigerbox.set_acceleration(**{self.hardware_axis: acceleration})
+        self.tigerbox.set_acceleration_ms(axis=self.hardware_axis, acceleration=acceleration)
 
     @property
     def mode(self) -> str:
@@ -413,11 +340,7 @@ class TigerStage(BaseStage):
         :return: Mode of the stage
         :rtype: str
         """
-        card_address = self.tigerbox.axis_to_card[self.hardware_axis][0]
-        ttl_reply = self.tigerbox.get_ttl_pin_modes(card_address)  # note this does not return ENUM values
-        mode = int(ttl_reply[str.find(ttl_reply, "X") + 2 : str.find(ttl_reply, "Y") - 1])  # strip the X= response
-        converted_mode = next(key for key, enum in MODES.items() if enum.value == mode)
-        return converted_mode
+        self.tigerbox.get_mode(axis=self.hardware_axis)
 
     @mode.setter
     def mode(self, mode: str) -> None:
@@ -428,12 +351,7 @@ class TigerStage(BaseStage):
         :type mode: str
         :raises ValueError: If mode is not valid
         """
-        valid = list(MODES.keys())
-        if mode not in valid:
-            raise ValueError("mode must be one of %r." % valid)
-
-        card_address = self.tigerbox.axis_to_card[self.hardware_axis][0]
-        self.tigerbox.set_ttl_pin_modes(in0_mode=MODES[mode], card_address=card_address)
+        self.tigerbox.set_mode(axis=self.hardware_axis, mode=mode)
 
     def halt(self) -> None:
         """
@@ -448,7 +366,7 @@ class TigerStage(BaseStage):
         :return: True if the axis is moving, False otherwise
         :rtype: bool
         """
-        return self.tigerbox.is_axis_moving(self.hardware_axis)
+        return self.tigerbox.is_axis_moving(axis=self.hardware_axis)
 
     def zero_in_place(self) -> None:
         """
@@ -456,16 +374,10 @@ class TigerStage(BaseStage):
         """
         # We must populate the axes explicitly since the tigerbox is shared
         # between camera stage and sample stage.
-        self.tigerbox.zero_in_place(self.hardware_axis)
+        self.tigerbox.zero_in_place(axis=self.hardware_axis)
 
     def log_metadata(self) -> None:
         """
         Log metadata.
         """
-        self.log.info("tiger hardware axis parameters")
-        build_config = self.tigerbox.get_build_config()
-        self.log.debug(f"{build_config}")
-        axis_settings = self.tigerbox.get_info(self.hardware_axis)
-        self.log.info("{'instrument axis': 'hardware axis'} " f"{self.instrument_to_hardware_axis_map}.")
-        for setting in axis_settings:
-            self.log.info(f"{self.hardware_axis} axis, {setting}, {axis_settings[setting]}")
+        self.tigerbox.log_metadata(axis=self.hardware_axis)
