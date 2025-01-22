@@ -1,16 +1,12 @@
-from .annotated import AnnotatedProperty, AnnotatedPropertyProxy, PropertyInfo, annotated_property
-from .deliminated import DeliminatedProperty, DeliminatedPropertyProxy, deliminated_property
-from .enumerated import EnumeratedProperty, EnumeratedPropertyProxy, enumerated_property
+from .deliminated import DeliminatedFloatProperty, deliminated_float, DeliminatedFloat
+from .enumerated import EnumeratedProperty, enumerated_string, enumerated_int, EnumeratedValue
 
 __all__ = [
-    "annotated_property",
-    "deliminated_property",
-    "enumerated_property",
-    "AnnotatedProperty",
-    "DeliminatedProperty",
+    "deliminated_float",
+    "enumerated_string",
+    "enumerated_int",
+    "DeliminatedFloat",
+    "EnumeratedValue",
+    "DeliminatedFloatProperty",
     "EnumeratedProperty",
-    "PropertyInfo",
-    "AnnotatedPropertyProxy",
-    "DeliminatedPropertyProxy",
-    "EnumeratedPropertyProxy",
 ]

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from voxel.devices.camera import Binning, PixelType
+from voxel.devices.camera import PixelType
 
 from .sdk.dcamapi4 import DCAMPROP
 
@@ -58,7 +58,6 @@ class TriggerSettings:
 class HamamatsuSettings:
     """Enumerated Settings for Hamamatsu Cameras."""
 
-    Binning = Binning
     PixelType = PixelType
     SensorMode = DcamSensorMode
     ReadoutDirection = DcamReadoutDirection

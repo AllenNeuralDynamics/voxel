@@ -33,7 +33,7 @@ class ScanPathSettings:
     reverse: bool
 
 
-def generate_raster_path(grid_size: Vec2D, direction: ScanDirection) -> list[Vec2D]:
+def generate_raster_path(grid_size: Vec2D[int], direction: ScanDirection) -> list[Vec2D]:
     path = []
     for y in range(grid_size.y):
         for x in range(grid_size.x):
@@ -41,7 +41,7 @@ def generate_raster_path(grid_size: Vec2D, direction: ScanDirection) -> list[Vec
     return path if direction == ScanDirection.ROW_WISE else _transpose_path(path)
 
 
-def generate_serpentine_path(grid_size: Vec2D, direction: ScanDirection) -> list[Vec2D]:
+def generate_serpentine_path(grid_size: Vec2D[int], direction: ScanDirection) -> list[Vec2D]:
     path = []
     for y in range(grid_size.y):
         row = [Vec2D(x, y) for x in range(grid_size.x)]
@@ -51,7 +51,7 @@ def generate_serpentine_path(grid_size: Vec2D, direction: ScanDirection) -> list
     return path if direction == ScanDirection.ROW_WISE else _transpose_path(path)
 
 
-def generate_spiral_path(grid_size: Vec2D) -> list[Vec2D]:
+def generate_spiral_path(grid_size: Vec2D[int]) -> list[Vec2D]:
     path = []
     x, y = 0, 0
     dx, dy = 1, 0
@@ -64,7 +64,7 @@ def generate_spiral_path(grid_size: Vec2D) -> list[Vec2D]:
     return path
 
 
-def _transpose_path(path: list[Vec2D]) -> list[Vec2D]:
+def _transpose_path(path: list[Vec2D[int]]) -> list[Vec2D[int]]:
     return [Vec2D(p.y, p.x) for p in path]
 
 

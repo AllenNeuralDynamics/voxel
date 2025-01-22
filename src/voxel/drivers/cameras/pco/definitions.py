@@ -1,17 +1,6 @@
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
-from voxel.devices.camera import Binning, PixelType
-
-pixel_type_lut = {
-    PixelType.MONO16: "MONO16",
-}
-
-binning_lut = {
-    Binning.X1: 1,
-    Binning.X2: 2,
-    Binning.X4: 4,
-}
 
 READOUT_OUTPUT = {
     "light sheet forward": 0,

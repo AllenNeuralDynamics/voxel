@@ -1,53 +1,62 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
+from functools import cached_property
+# from enum import IntEnum, StrEnum
 
 import numpy as np
 
-from voxel.utils.descriptors.deliminated import deliminated_property
-from voxel.utils.descriptors.enumerated import enumerated_property
+from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
+from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.vec import Vec2D
 
-from .base import VoxelDevice, VoxelDeviceType
+from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
 
 BYTES_PER_MB = 1_000_000
 
 VoxelFrame = np.ndarray[tuple[int, int, int], np.dtype[np.uint8 | np.uint16]]
 
 
-class Binning(IntEnum):
-    X1 = 1
-    X2 = 2
-    X4 = 4
-    X8 = 8
+# class Binning(IntEnum):
+#     X1 = 1
+#     X2 = 2
+#     X4 = 4
+#     X8 = 8
+
+
+# class PixelType(IntEnum):
+#     MONO8 = 8
+#     MONO10 = 10
+#     MONO12 = 12
+#     MONO14 = 14
+#     MONO16 = 16
+
+#     @property
+#     def dtype(self) -> np.dtype:
+#         return np.dtype(np.uint8) if self == PixelType.MONO8 else np.dtype(np.uint16)
+
+#     @property
+#     def bytes_per_pixel(self) -> int:
+#         return self.value // 8
 
 
 class PixelType(IntEnum):
-    MONO8 = 8
-    MONO10 = 10
-    MONO12 = 12
-    MONO14 = 14
-    MONO16 = 16
+    UINT8 = 8
+    UINT16 = 16
 
     @property
     def dtype(self) -> np.dtype:
-        return np.dtype(np.uint8) if self == PixelType.MONO8 else np.dtype(np.uint16)
+        return np.dtype(np.uint8) if self == PixelType.UINT8 else np.dtype(np.uint16)
 
     @property
-    def bytes_per_pixel(self) -> int:
-        return self.value // 8
+    def bytes(self) -> int:
+        return self.dtype.itemsize
 
 
 class TriggerSetting(StrEnum):
     OFF = "off"
     HARDWARE = "hardware"
     SOFTWARE = "software"
-
-
-class BitPackingMode(StrEnum):
-    LSB = "LSB"
-    MSB = "MSB"
-    NONE = "None"
 
 
 @dataclass
@@ -71,8 +80,82 @@ class AcquisitionState:
         )
 
 
-class VoxelCamera[TriggerConfig](VoxelDevice):
+VOXEL_CAMERA_DETAILS: dict[str, VoxelPropertyDetails] = {
+    "sensor_size_um": VoxelPropertyDetails(
+        label="Sensor Size",
+        unit="um",
+        description="The size of the camera sensor in microns.",
+    ),
+    "sensor_size_px": VoxelPropertyDetails(
+        label="Sensor Size",
+        unit="px",
+        description="The size of the camera sensor in pixels.",
+    ),
+    "frame_size": VoxelPropertyDetails(
+        label="Frame Size",
+        unit="px",
+        description="The size of the camera image in pixels.",
+    ),
+    "frame_size_mb": VoxelPropertyDetails(
+        label="Frame Size",
+        unit="MB",
+        description="The size of the camera image in MB.",
+    ),
+    "roi_width_px": VoxelPropertyDetails(
+        label="ROI Width",
+        unit="px",
+        description="The width of the region of interest in pixels.",
+    ),
+    "roi_width_offset_px": VoxelPropertyDetails(
+        label="ROI Width Offset",
+        unit="px",
+        description="The width offset of the region of interest in pixels.",
+    ),
+    "roi_height_px": VoxelPropertyDetails(
+        label="ROI Height",
+        unit="px",
+        description="The height of the region of interest in pixels.",
+    ),
+    "roi_height_offset_px": VoxelPropertyDetails(
+        label="ROI Height Offset",
+        unit="px",
+        description="The height offset of the region of interest in pixels.",
+    ),
+    "binning": VoxelPropertyDetails(
+        label="Binning",
+    ),
+    "pixel_type": VoxelPropertyDetails(
+        label="Pixel Type",
+        description="The pixel type of the camera. Determines the bit depth of the camera image.",
+    ),
+    "exposure_time_ms": VoxelPropertyDetails(
+        label="Exposure Time",
+        unit="ms",
+        description="The exposure time of the camera in ms.",
+    ),
+    "line_interval_us": VoxelPropertyDetails(
+        label="Line Interval",
+        unit="us",
+        description="The time interval between adjacent rows activating on the camera sensor.",
+    ),
+    "frame_time_ms": VoxelPropertyDetails(
+        label="Frame Time",
+        unit="ms",
+        description="The total time to acquire a single image. Determined by exposure time and readout time.",
+    ),
+    "trigger_setting": VoxelPropertyDetails(
+        label="Trigger Setting",
+        description="The trigger mode of the camera. Either off, hardware, or software triggering.",
+    ),
+}
+
+
+class VoxelCamera(VoxelDevice):
     """Base class for all voxel supported cameras."""
+
+    _BINNING_OPTIONS = [1, 2, 4, 8]
+    details = VOXEL_CAMERA_DETAILS
+    signals = {"sensor_temperature_c"}
 
     def __init__(self, name: str, pixel_size_um: tuple[float, float] | str) -> None:
         """Initialize the camera.
@@ -82,7 +165,6 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         :type name: str
         :type pixel_size_um: tuple[float, float]
         """
-        super().__init__(name=name, device_type=VoxelDeviceType.CAMERA)
         if isinstance(pixel_size_um, str):
             parts = pixel_size_um.split(",")
             assert len(parts) == 2, f"Invalid pixel size string: {pixel_size_um}"
@@ -95,6 +177,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
             TriggerSetting.SOFTWARE: self._configure_software_triggering,
         }
         self._trigger = TriggerSetting.OFF
+        super().__init__(name=name, device_type=VoxelDeviceType.CAMERA)
 
     def __repr__(self) -> str:
         return ", ".join(
@@ -105,15 +188,14 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
                 f"ROI Offset:       {self.roi_width_offset_px} px, {self.roi_height_offset_px} px",
                 f"Binning:          {self.binning}",
                 f"Image Size:       ({self.frame_size_px.x}, {self.frame_size_px.y}) px",
-                f"Pixel Type:       {self.pixel_type}",
+                f"Pixel Type:       {self.pixel_type.name}",
                 f"Exposure:         {self.exposure_time_ms:.2f} ms",
                 f"Line Interval:    {self.line_interval_us:.2f} µs",
                 f"Frame Time:       {self.frame_time_ms:.2f} ms",
             )
         )
 
-    # sensor properties
-    @property
+    @cached_property
     def sensor_size_um(self) -> Vec2D[float]:
         """Get the size of the camera sensor in microns.
 
@@ -125,7 +207,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
             self.sensor_size_px.y * self.pixel_size_um.y,
         )
 
-    @property
+    @cached_property
     @abstractmethod
     def sensor_size_px(self) -> Vec2D[int]:
         """Get the size of the camera sensor in pixels.
@@ -136,7 +218,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         pass
 
     # ROI Configuration Properties
-    @deliminated_property()
+    @deliminated_int()
     @abstractmethod
     def roi_width_px(self) -> int:
         """Get the width of the camera region of interest in pixels.
@@ -156,7 +238,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @deliminated_property()
+    @deliminated_int()
     @abstractmethod
     def roi_width_offset_px(self) -> int:
         """Get the width offset of the camera region of interest in pixels.
@@ -175,7 +257,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @deliminated_property()
+    @deliminated_int()
     @abstractmethod
     def roi_height_px(self) -> int:
         """Get the height of the camera region of interest in pixels.
@@ -197,7 +279,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @deliminated_property()
+    @deliminated_int()
     @abstractmethod
     def roi_height_offset_px(self) -> int:
         """Get the height offset of the camera region of interest in pixels.
@@ -225,9 +307,9 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         self.roi_height_px = self.sensor_size_px.y
 
     # Image Format Properties
-    @enumerated_property(options={e.value for e in Binning})
+    @enumerated_int(options=_BINNING_OPTIONS)
     @abstractmethod
-    def binning(self) -> Binning:
+    def binning(self) -> int:
         """Get the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning
 
         :return: The binning mode of the camera
@@ -237,7 +319,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
 
     @binning.setter
     @abstractmethod
-    def binning(self, binning: Binning) -> None:
+    def binning(self, binning: int) -> None:
         """Set the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning
 
         :param binning: The binning mode of the camera
@@ -245,7 +327,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @enumerated_property(options={e.value for e in PixelType})
+    @property
     @abstractmethod
     def pixel_type(self) -> PixelType:
         """Get the pixel type of the camera.
@@ -255,23 +337,11 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @pixel_type.setter
-    @abstractmethod
-    def pixel_type(self, pixel_type_bits: PixelType) -> None:
-        """The pixel type of the camera: \n
-        - mono8, mono10, mono12, mono14, monospacing, etc.
-
-        :param pixel_type_bits: The pixel type
-        :type pixel_type_bits: PixelType
-        """
-        pass
-
     @property
     @abstractmethod
-    def frame_size_px(self) -> Vec2D[int]:
-        """Get the size of the camera image in pixels.
-
-        :return: The size of the camera image in pixels.
+    def frame_size_px(self) -> Vec2D:
+        """Get the image size in pixels.
+        :return: The image size in pixels.
         :rtype: Vec2D
         """
         pass
@@ -287,7 +357,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         pass
 
     # Acquisition/Capture Properties
-    @deliminated_property()
+    @deliminated_float()
     @abstractmethod
     def exposure_time_ms(self) -> float:
         """Get the exposure time of the camera in ms.
@@ -307,7 +377,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @deliminated_property()
+    @deliminated_float()
     @abstractmethod
     def line_interval_us(self) -> float:
         """Get the line interval of the camera in us. \n
@@ -341,8 +411,7 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    @enumerated_property(options={e.value for e in TriggerSetting})
-    @abstractmethod
+    @property
     def trigger_setting(self) -> TriggerSetting:
         """Get the trigger mode of the camera.
 
@@ -400,11 +469,6 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         pass
 
     @abstractmethod
-    def reset(self) -> None:
-        """Reset the camera."""
-        pass
-
-    @abstractmethod
     def grab_frame(self) -> VoxelFrame:
         """Grab a frame from the camera buffer. \n
         If binning is via software, the GPU binned \n
@@ -431,16 +495,21 @@ class VoxelCamera[TriggerConfig](VoxelDevice):
         """
         pass
 
-    # @property
     # @abstractmethod
-    # def sensor_temperature_c(self) -> float:
-    #     """
-    #     Get the sensor temperature of the camera in deg C.
-
-    #     :return: The sensor temperature of the camera in deg C.
-    #     :rtype: float
-    #     """
+    # def reset(self) -> None:
+    #     """Reset the camera."""
     #     pass
+
+    @property
+    @abstractmethod
+    def sensor_temperature_c(self) -> float:
+        """
+        Get the sensor temperature of the camera in deg C.
+
+        :return: The sensor temperature of the camera in deg C.
+        :rtype: float
+        """
+        pass
 
     # @property
     # @abstractmethod

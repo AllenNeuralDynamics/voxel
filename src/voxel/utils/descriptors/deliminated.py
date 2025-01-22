@@ -1,104 +1,189 @@
+from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, Self
+import math
+from typing import Any, Protocol, Self
 
-from .annotated import PropertyInfo
-from .proxy import DescriptorProxy
+from voxel.utils.log_config import get_logger
 
-type DynamicNumber = int | float | Callable[[Any], int | float]
-
-
-class DeliminatedPropertyProxy(DescriptorProxy[int | float]):
-    @property
-    def minimum(self) -> int | float:
-        return self.descriptor.get_minimum(self.instance)
-
-    @property
-    def maximum(self) -> int | float:
-        return self.descriptor.get_maximum(self.instance)
-
-    @property
-    def step(self) -> int | float | None:
-        return self.descriptor.get_step(self.instance)
+type DynamicNumber = float | Callable[[Any], float]
 
 
-class DeliminatedProperty:
+type Number = float | int
+
+
+class DeliminatedValue(Protocol):
+    min_value: Number | None
+    max_value: Number | None
+    step: Number | None
+
+
+class DeliminatedFloat(float):
+    min_value: Number | None
+    max_value: Number | None
+    step: Number | None
+
+    def __new__(cls, value, min_value=None, max_value=None, step=None):
+        if not isinstance(value, float):
+            value = float(value)
+
+        if min_value is not None:
+            value = max(min_value, value)
+        if step is not None:
+            modulus = (value - (min_value or 0)) % step
+            if not math.isclose(modulus, 0, abs_tol=1e-9) or math.isclose(modulus, step, abs_tol=1e-9):
+                value = value - modulus if modulus < step / 2 else value + (step - modulus)
+        if max_value is not None:
+            value = min(max_value, value)
+
+        # Create the instance
+        obj = super().__new__(cls, value)
+        obj.min_value = min_value
+        obj.max_value = max_value
+        obj.step = step
+        return obj
+
+    def __str__(self):
+        return f"{super().__str__()} " f"(min={self.min_value}, max={self.max_value}, step={self.step})"
+
+
+class DeliminatedInt(int):
+    min_value: Number | None
+    max_value: Number | None
+    step: Number | None
+
+    def __new__(cls, value, min_value=None, max_value=None, step=None):
+        if not isinstance(value, int):
+            value = int(value)
+
+        if min_value is not None:
+            value = max(min_value, value)
+        if step is not None:
+            modulus = (value - (min_value or 0)) % step
+            if modulus != 0:
+                value = value - modulus if modulus < step / 2 else value + (step - modulus)
+        if max_value is not None:
+            value = min(max_value, value)
+
+        # Create the instance
+        obj = super().__new__(cls, int(value))
+        obj.min_value = min_value
+        obj.max_value = max_value
+        obj.step = step
+        return obj
+
+    def __str__(self):
+        return f"{super().__str__()} " f"(min={self.min_value}, max={self.max_value}, step={self.step})"
+
+
+class DeliminatedProperty(ABC):
     def __init__(
         self,
-        fget: Callable[[Any], int | float] | None = None,
-        fset: Callable[[Any, int | float], None] | None = None,
-        minimum: DynamicNumber = float("-inf"),
-        maximum: DynamicNumber = float("inf"),
-        step: DynamicNumber | None = None,
-        info: PropertyInfo | None = None,
+        fget: Callable[[object], Number],
+        fset: Callable[[object, Number], None] | None = None,
+        min_value: Number | Callable[[Any], Number] | None = None,
+        max_value: Number | Callable[[Any], Number] | None = None,
+        step: Number | Callable[[Any], Number] | None = None,
     ) -> None:
         self.fget = fget
         self.fset = fset
-        self.info = info
-        self._minimum = minimum
-        self._maximum = maximum
+        self._min = min_value
+        self._max = max_value
         self._step = step
 
-    def get_minimum(self, instance: object) -> int | float:
-        return self._unwrap_dynamic_attribute(self._minimum, instance)
+        self.log = get_logger(__name__ + "." + self.__class__.__name__)
 
-    def get_maximum(self, instance: object) -> int | float:
-        return self._unwrap_dynamic_attribute(self._maximum, instance)
+    def get_minimum(self, instance: object) -> Number | None:
+        return self._unwrap_dynamic_attribute(self._min, instance)
 
-    def get_step(self, instance: object) -> int | float | None:
+    def get_maximum(self, instance: object) -> Number | None:
+        return self._unwrap_dynamic_attribute(self._max, instance)
+
+    def get_step(self, instance: object) -> Number | None:
         if not self._step:
             return None
         return self._unwrap_dynamic_attribute(self._step, instance)
 
-    def __get__(self, obj, objtype=None):
-        if self.fget is None or obj is None:
-            raise AttributeError("unreadable attribute")
-        value = self.fget(obj)
-        return value
-        # return DeliminatedPropertyProxy(value, obj, self)
+    @abstractmethod
+    def __get__(self, obj, objtype=None) -> DeliminatedValue:
+        pass
 
-    def __set__(self, obj: object, value: int | float) -> None:
-        if self.fset is None:
-            raise AttributeError("can't set attribute")
-        adjusted_value = self._adjust_value(value, obj)
-        if value != adjusted_value and hasattr(obj, "on_property_update_notice"):
-            msg: str = (
-                f"Value {value} was adjusted to match constraints. "
-                f"Min: {self.get_minimum(obj)}, Max: {self.get_maximum(obj)}, "
-                f"Step: {self.get_step(obj)}, Value: {adjusted_value}"
-            )
-            obj.on_property_update_notice(msg)  # type: ignore
-        self.fset(obj, adjusted_value)
+    @abstractmethod
+    def __set__(self, obj: object, value: Number) -> None:
+        pass
 
     def __set_name__(self, owner, name) -> None:
-        self._name = f"{owner.__name__}.{name}"
+        self._name = name
+        self._full_name = f"{owner.__name__}.{name}"
 
     def setter(self, fset) -> Self:
-        return type(self)(self.fget, fset, self._minimum, self._maximum, self._step, self.info)
-
-    def _adjust_value(self, value: int | float, obj: object) -> int | float:
-        minimum = self.get_minimum(obj)
-        maximum = self.get_maximum(obj)
-        value = max(minimum, min(maximum, value))
-        if step := self.get_step(obj):
-            return round((value - minimum) / step) * step + minimum
-        return value
+        return type(self)(self.fget, fset, self._min, self._max, self._step)
 
     @staticmethod
-    def _unwrap_dynamic_attribute(value: DynamicNumber, obj: object) -> int | float:
-        if callable(value):
-            return value(obj)
-        return value
+    def _unwrap_dynamic_attribute(attr: Number | Callable[[Any], Number] | None, obj: object) -> Number | None:
+        if attr and callable(attr):
+            return attr(obj)
+        return attr
 
 
-def deliminated_property(
-    minimum: DynamicNumber = float("-inf"),
-    maximum: DynamicNumber = float("inf"),
-    step: DynamicNumber | None = None,
-    unit: str | None = None,
-    description: str | None = None,
-) -> Callable[..., DeliminatedProperty]:
-    def decorator(func) -> DeliminatedProperty:
-        info = PropertyInfo(unit=unit, description=description)
-        return DeliminatedProperty(fget=func, minimum=minimum, maximum=maximum, step=step, info=info)
+class DeliminatedFloatProperty(DeliminatedProperty):
+    def __get__(self, obj, objtype=None) -> DeliminatedFloat:
+        if not obj:
+            raise AttributeError("Can't access attribute from class")
+        if self.fget is None:
+            raise AttributeError("unreadable attribute")
+        value = self.fget(obj)
+        return DeliminatedFloat(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
+
+    def __set__(self, obj: object, value: Number) -> None:
+        if self.fset is None:
+            raise AttributeError("can't set attribute")
+        adjusted_value = DeliminatedFloat(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
+        if value != adjusted_value:
+            self.log.warning(
+                f"Value {value} was adjusted to {adjusted_value} to match constraints. "
+                f"Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}"
+            )
+        self.fset(obj, float(adjusted_value))
+
+
+class DeliminatedIntProperty(DeliminatedProperty):
+    def __get__(self, obj, objtype=None) -> DeliminatedInt:
+        if not obj:
+            raise AttributeError("Can't access attribute from class")
+        if self.fget is None:
+            raise AttributeError("unreadable attribute")
+        value = self.fget(obj)
+        return DeliminatedInt(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
+
+    def __set__(self, obj: object, value: Number) -> None:
+        if self.fset is None:
+            raise AttributeError("can't set attribute")
+        adjusted_value = DeliminatedInt(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
+        if value != adjusted_value:
+            self.log.warning(
+                f"Value {value} was adjusted to {adjusted_value} to match constraints. "
+                f"Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}"
+            )
+        self.fset(obj, int(adjusted_value))
+
+
+def deliminated_float(
+    min_value: Number | Callable[[Any], Number] | None = None,
+    max_value: Number | Callable[[Any], Number] | None = None,
+    step: Number | Callable[[Any], Number] | None = None,
+) -> Callable[..., DeliminatedFloatProperty]:
+    def decorator(func) -> DeliminatedFloatProperty:
+        return DeliminatedFloatProperty(fget=func, min_value=min_value, max_value=max_value, step=step)
+
+    return decorator
+
+
+def deliminated_int(
+    min_value: Number | Callable[[Any], Number] | None = None,
+    max_value: Number | Callable[[Any], Number] | None = None,
+    step: Number | Callable[[Any], Number] | None = None,
+) -> Callable[..., DeliminatedIntProperty]:
+    def decorator(func) -> DeliminatedIntProperty:
+        return DeliminatedIntProperty(fget=func, min_value=min_value, max_value=max_value, step=step)
 
     return decorator

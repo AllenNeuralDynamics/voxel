@@ -4,107 +4,107 @@ plan:
     (0, 0):
       idx: (0, 0)
       pos_um: (0.0, 0.0, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (0, 1):
       idx: (0, 1)
       pos_um: (0.0, 113.05, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (0, 2):
       idx: (0, 2)
       pos_um: (0.0, 226.1, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (1, 0):
       idx: (1, 0)
       pos_um: (150.79, 0.0, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (1, 1):
       idx: (1, 1)
       pos_um: (150.79, 113.05, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (1, 2):
       idx: (1, 2)
       pos_um: (150.79, 226.1, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (2, 0):
       idx: (2, 0)
       pos_um: (301.58, 0.0, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (2, 1):
       idx: (2, 1)
       pos_um: (301.58, 113.05, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (2, 2):
       idx: (2, 2)
       pos_um: (301.58, 226.1, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (3, 0):
       idx: (3, 0)
       pos_um: (452.37, 0.0, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (3, 1):
       idx: (3, 1)
       pos_um: (452.37, 113.05, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (3, 2):
       idx: (3, 2)
       pos_um: (452.37, 226.1, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (4, 0):
       idx: (4, 0)
       pos_um: (603.16, 0.0, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (4, 1):
       idx: (4, 1)
       pos_um: (603.16, 113.05, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
     (4, 2):
       idx: (4, 2)
       pos_um: (603.16, 226.1, 0.0)
-      size_um: (150.79, 113.05, 3200.0)
+      size_um: (150.79, 113.05, 64.0)
       step_size_um: 0.5
-      frame_count: 6400
+      frame_count: 128
       settings:
   scan_path:
     - (0, 0)

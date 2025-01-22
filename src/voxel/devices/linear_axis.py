@@ -2,7 +2,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 from .base import VoxelDevice, VoxelDeviceType
 
@@ -43,8 +43,8 @@ class VoxelLinearAxis(VoxelDevice):
     """
 
     def __init__(self, name: str, dimension: LinearAxisDimension) -> None:
-        super().__init__(device_type=VoxelDeviceType.LINEAR_AXIS, name=name)
         self.dimension: LinearAxisDimension = LinearAxisDimension(dimension)
+        super().__init__(device_type=VoxelDeviceType.LINEAR_AXIS, name=name)
 
     def __repr__(self) -> str:
         return (
@@ -80,7 +80,7 @@ class VoxelLinearAxis(VoxelDevice):
         """Get the current scan state"""
         pass
 
-    @deliminated_property(unit="mm")
+    @deliminated_float()
     @abstractmethod
     def position_mm(self) -> float:
         """Current position in mm"""

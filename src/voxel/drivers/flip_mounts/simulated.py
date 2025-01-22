@@ -2,7 +2,7 @@ from time import sleep
 from typing import Literal
 
 from voxel.devices.flip_mount import VoxelFlipMount
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 FLIP_TIME_RANGE_MS: tuple[float, float, float] = (500.0, 2800.0, 100.0)  # min, max, step
 
@@ -67,7 +67,7 @@ class SimulatedFlipMount(VoxelFlipMount):
         else:
             self.log.error(f"Invalid position {position_name}. Valid positions are {self._positions}")
 
-    @deliminated_property(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
+    @deliminated_float(min_value=FLIP_TIME_RANGE_MS[0], max_value=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:
         """Time it takes to flip the mount in milliseconds.
         :return: Time in milliseconds

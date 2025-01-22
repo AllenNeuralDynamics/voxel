@@ -26,10 +26,10 @@ class VoxelLens(VoxelDevice):
         focal_length_um: float | None = None,
         aperture_um: float | None = None,
     ):
-        super().__init__(device_type=VoxelDeviceType.LENS, name=name)
         self.magnification = float(magnification)
         self.focal_length_um: float | None = focal_length_um
         self.aperture_um: float | None = aperture_um
+        super().__init__(device_type=VoxelDeviceType.LENS, name=name)
 
     def close(self):
         """Close the lens."""

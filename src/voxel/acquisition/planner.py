@@ -20,7 +20,6 @@ from voxel.acquisition.scan_pattern import (
 from voxel.acquisition.specs import AcquisitionSpecs
 from voxel.acquisition.volume import Volume
 from voxel.frame_stack import FrameStack
-from voxel.utils.descriptors.enumerated import enumerated_property
 from voxel.utils.log_config import get_logger
 from voxel.utils.vec import Vec2D, Vec3D
 
@@ -75,9 +74,19 @@ class AcquisitionPlan:
     def __str__(self) -> str:
         return json.dumps(self.to_dict(), indent=2)
 
+    def __hash__(self) -> int:
+        return hash(str(self))
 
-def load_acquisition_plan(file_path: Path | str) -> AcquisitionPlan | None:
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, AcquisitionPlan):
+            return False
+        return hash(self) == hash(other)
+
+
+def load_acquisition_plan(file_path: Path | str, config_path: Path | str | None = None) -> AcquisitionPlan | None:
     """Load frame stacks and scan path from a plan file"""
+    if config_path:
+        file_path = Path(config_path).parent / file_path
     with open(file_path) as file:
         yaml = YAML(typ="safe")
         try:
@@ -118,7 +127,7 @@ class VoxelAcquisitionPlanner:
         self._scan_direction = ScanDirection(specs.scan_direction)
         self._start_corner = StartCorner(specs.start_corner)
         self._reverse_scan_path = specs.reverse_scan_path
-        self._plan_file_path = Path(specs.plan_file_path)
+        self._plan_file_path = self.config_path.parent / specs.plan_file_path
 
         self._observers: list[Callable[[], None]] = []
 
@@ -140,11 +149,14 @@ class VoxelAcquisitionPlanner:
         self.volume = Volume(min_corner, max_corner, self.z_step_size)
         self.volume.add_observer(self._regenerate_plan)
 
-        self.plan = self._generate_plan(self.channels)
-        # self.plan = plan or self._generate_plan(self.channels)
+        self.plan: AcquisitionPlan
+        self.plan = self._generate_plan(channels=self.channels)
+        # self._regenerate_plan()
 
         if plan and plan != self.plan:
             self.log.error("Regenerated plan does not match the loaded plan.")
+            # self.log.error(f"Regenerated plan: {self.plan}")
+            # self.log.error(f"Loaded plan: {plan}")
 
     def add_observer(self, callback: Callable[[], None]):
         self._observers.append(callback)
@@ -155,6 +167,7 @@ class VoxelAcquisitionPlanner:
 
     def _regenerate_plan(self):
         self.plan = self._generate_plan(channels=self.channels)
+        self.save_plan()
         self._notify_observers()
 
     @property
@@ -187,7 +200,7 @@ class VoxelAcquisitionPlanner:
         return [channel.name for channel in self.channels]
 
     @property
-    def z_step_size(self):
+    def z_step_size(self) -> float:
         return self._z_step_size
 
     @z_step_size.setter
@@ -196,7 +209,7 @@ class VoxelAcquisitionPlanner:
         self._regenerate_plan()
 
     @property
-    def tile_overlap(self):
+    def tile_overlap(self) -> float:
         return self._tile_overlap
 
     @tile_overlap.setter
@@ -204,7 +217,7 @@ class VoxelAcquisitionPlanner:
         self._tile_overlap = tile_overlap
         self._regenerate_plan()
 
-    @enumerated_property({e.value for e in ScanPattern})
+    @property
     def scan_pattern(self) -> ScanPattern:
         return self._scan_pattern
 
@@ -213,7 +226,7 @@ class VoxelAcquisitionPlanner:
         self._scan_pattern = value
         self._regenerate_plan()
 
-    @enumerated_property({e.value for e in ScanDirection})
+    @property
     def scan_direction(self) -> ScanDirection:
         return self._scan_direction
 
@@ -222,7 +235,7 @@ class VoxelAcquisitionPlanner:
         self._scan_direction = value
         self._regenerate_plan()
 
-    @enumerated_property({e.value for e in StartCorner})
+    @property
     def start_corner(self) -> StartCorner:
         return self._start_corner
 
@@ -241,10 +254,10 @@ class VoxelAcquisitionPlanner:
         self._regenerate_plan()
 
     @staticmethod
-    def _get_grid_size(frame_stacks) -> Vec2D:
+    def _get_grid_size(frame_stacks) -> Vec2D[int]:
         x_max = max(frame_stack.idx.x for frame_stack in frame_stacks.values())
         y_max = max(frame_stack.idx.y for frame_stack in frame_stacks.values())
-        return Vec2D(x_max + 1, y_max + 1)
+        return Vec2D(int(x_max + 1), int(y_max + 1))
 
     def _generate_plan(self, channels: list["VoxelChannel"]) -> AcquisitionPlan:
         frame_stacks = self._generate_frame_stacks(channels)
@@ -301,7 +314,7 @@ class VoxelAcquisitionPlanner:
 
         return frame_stacks
 
-    def _generate_scan_path(self, frame_stacks) -> list[Vec2D]:
+    def _generate_scan_path(self, frame_stacks) -> list[Vec2D[int]]:
         grid_size = self._get_grid_size(frame_stacks)
         match self.scan_pattern:
             case ScanPattern.RASTER:
@@ -310,8 +323,6 @@ class VoxelAcquisitionPlanner:
                 path = generate_serpentine_path(grid_size, self.scan_direction)
             case ScanPattern.SPIRAL:
                 path = generate_spiral_path(grid_size)
-            case _:
-                raise ValueError(f"Unsupported scan pattern: {self.scan_pattern}")
         path = adjust_for_start_corner(path, grid_size, self.start_corner)
         if self.reverse_scan_path:
             path.reverse()

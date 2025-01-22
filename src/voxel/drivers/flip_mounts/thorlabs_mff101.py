@@ -4,7 +4,7 @@ from pylablib.devices import Thorlabs
 
 from voxel.devices.base import VoxelDeviceError
 from voxel.devices.flip_mount import VoxelFlipMount
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 VALID_POSITIONS = [0, 1]
 FLIP_TIME_RANGE_MS = (500, 2800, 100)
@@ -76,7 +76,7 @@ class ThorlabsFlipMount(VoxelFlipMount):
         self._inst.move_to_state(self._positions[position_name])
         self.log.info(f"Flip mount {self.name} moved to position {position_name}")
 
-    @deliminated_property(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
+    @deliminated_float(min_value=FLIP_TIME_RANGE_MS[0], max_value=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:
         """
         Time it takes to flip in milliseconds. \n

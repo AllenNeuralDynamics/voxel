@@ -2,7 +2,7 @@ from oxxius_laser import LCX
 from serial import Serial
 
 from voxel.devices.laser import VoxelLaser
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 
 class OxxiusLCXLaser(VoxelLaser):
@@ -24,7 +24,7 @@ class OxxiusLCXLaser(VoxelLaser):
     def disable(self):
         self._inst.disable()
 
-    @deliminated_property(minimum=0, maximum=lambda self: self._inst.max_power)
+    @deliminated_float(min_value=0, max_value=lambda self: self._inst.max_power)
     def power_setpoint_mw(self):
         return float(self._inst.power_setpoint)
 

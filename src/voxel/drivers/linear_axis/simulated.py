@@ -1,5 +1,5 @@
 from voxel.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 
 class SimulatedLinearAxis(VoxelLinearAxis):
@@ -9,12 +9,12 @@ class SimulatedLinearAxis(VoxelLinearAxis):
     """
 
     def __init__(self, name: str, dimension: LinearAxisDimension):
-        super().__init__(name, dimension)
         self._position_mm = 0.0
         self._speed_mm_s = 1.0
         self._acceleration_ms = 1.0
         self._lower_limit_mm = -10_000.0
         self._upper_limit_mm = 10_000.0
+        super().__init__(name, dimension)
 
     def configure_scan(self, config: ScanConfig) -> None:
         self.log.info(f"Configuring scan: {config}")
@@ -29,11 +29,9 @@ class SimulatedLinearAxis(VoxelLinearAxis):
     def scan_state(self) -> ScanState:
         return ScanState.IDLE
 
-    @deliminated_property(
-        minimum=lambda self: self.lower_limit_mm,
-        maximum=lambda self: self.upper_limit_mm,
-        unit="mm",
-        description="Current position in mm",
+    @deliminated_float(
+        min_value=lambda self: self.lower_limit_mm,
+        max_value=lambda self: self.upper_limit_mm,
     )
     def position_mm(self) -> float | None:
         return self._position_mm
@@ -51,11 +49,11 @@ class SimulatedLinearAxis(VoxelLinearAxis):
 
     @property
     def upper_limit_mm(self) -> float:
-        return self._upper_limit_mm
+        return float(self._upper_limit_mm)
 
     @property
     def lower_limit_mm(self) -> float:
-        return self._lower_limit_mm
+        return float(self._lower_limit_mm)
 
     def set_upper_limit_mm_in_place(self) -> None:
         self._upper_limit_mm = self.position_mm

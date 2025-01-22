@@ -194,10 +194,10 @@ class InstrumentBuilder:
         self.log.info("Initializing devices...")
         errors = []
         for device_name in self.config.devices:
-            try:
-                self._create_device(device_name)
-            except Exception as e:
-                errors.append(f"Error initializing device {device_name}: {e}")
+            # try:
+            self._create_device(device_name)
+            # except Exception as e:
+            #     errors.append(f"Error initializing device {device_name}: {e}")
         if errors:
             errors_str = "\n\t".join(errors)
             self.log.error(f"Errors encountered during device initialization:\n\t{errors_str}")
@@ -205,7 +205,9 @@ class InstrumentBuilder:
 
     def _create_device(self, device_name: str) -> None:
         if device_name in self.devices:
+            self.log.debug(f"Device {device_name} already created")
             return  # Device already created
+        self.log.debug(f"Creating device: {device_name}")
         device_spec = self.config.devices[device_name]
         device_class = parse_driver(device_spec.driver)
 
@@ -225,7 +227,7 @@ class InstrumentBuilder:
             if "acq_task" in self.daq_tasks:
                 task = self.daq_tasks["acq_task"]
                 assert isinstance(task, WaveGenTask)
-                channel = task.add_ao_channel(name=device_name, pin=device_spec.acq_pin)
+                channel = task.add_channel(name=device_name, pin=device_spec.acq_pin)
                 self.devices[device_name].acq_daq_channel = channel
             else:
                 self.log.warning(

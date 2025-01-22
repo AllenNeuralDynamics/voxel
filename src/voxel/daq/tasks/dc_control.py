@@ -1,6 +1,6 @@
 from nidaqmx.task.channels import AOChannel as NiAOChannel
 
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 from ..daq import PinInfo, VoxelDaq, VoxelDaqTask
 
@@ -24,9 +24,9 @@ class DCControlTask(VoxelDaqTask):
     def pins(self) -> list[PinInfo]:
         return [self._pin]
 
-    @deliminated_property(
-        minimum=lambda self: self.daq.min_ao_voltage,
-        maximum=lambda self: self.daq.max_ao_voltage,
+    @deliminated_float(
+        min_value=lambda self: self.daq.min_ao_voltage,
+        max_value=lambda self: self.daq.max_ao_voltage,
     )
     def voltage(self) -> float:
         return self._voltage

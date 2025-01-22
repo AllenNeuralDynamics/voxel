@@ -1,16 +1,7 @@
-from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any
+from functools import cached_property, lru_cache
 
 import numpy as np
-
-from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.camera import AcquisitionState, Binning, BitPackingMode, PixelType, TriggerSetting, VoxelCamera
-from voxel.utils.descriptors.deliminated import deliminated_property
-from voxel.utils.descriptors.enumerated import enumerated_property
-from voxel.utils.singleton import thread_safe_singleton
-from voxel.utils.vec import Vec2D
-
 from egrabber import (
     BUFFER_INFO_BASE,
     GENTL_INFINITE,
@@ -31,33 +22,31 @@ from egrabber import (
     query,
 )
 
-# class TriggerMode(StrEnum):
-#     ON = "On"
-#     OFF = "Off"
+from voxel.devices import VoxelDeviceConnectionError
+from voxel.devices.base import VoxelDeviceError, VoxelPropertyDetails
+from voxel.devices.camera import AcquisitionState, PixelType, TriggerSetting, VoxelCamera
+from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
+from voxel.utils.descriptors.enumerated import enumerated_int, enumerated_string
+from voxel.utils.log_config import get_component_logger
+from voxel.utils.singleton import thread_safe_singleton
+from voxel.utils.vec import Vec2D
 
 
-# class TriggerSource(StrEnum):
-#     INTERNAL = "Internal"
-#     EXTERNAL = "External"
+class BitPackingMode(StrEnum):
+    LSB = "Lsb"
+    MSB = "Msb"
+    OFF = "Off"
 
 
-# class TriggerPolarity(StrEnum):
-#     RISINGEDGE = "Rising Edge"
-#     FALLINGEDGE = "Falling Edge"
-
-
-# class VieworksSettings:
-#     """Settings for a Vieworks camera."""
-
-#     BitPackingMode = BitPackingMode
-#     TriggerMode = TriggerMode
-#     TriggerSource = TriggerSource
-#     TriggerPolarity = TriggerPolarity
-
-
-type PixelTypeLUT = Mapping[PixelType, str]
-type BinningLUT = Mapping[Binning, int]
-type BitPackingModeLUT = Mapping[BitPackingMode, str]
+VIEWORKS_PROPERTY_DETAILS: dict[str, VoxelPropertyDetails] = {
+    "bit_packing_mode": VoxelPropertyDetails(label="Bit Packing Mode"),
+    "mainboard_temperature_c": VoxelPropertyDetails(label="Mainboard Temperature", unit="°C"),
+    "serial_number": VoxelPropertyDetails(label="Serial Number"),
+    "sensor_temperature_c": VoxelPropertyDetails(label="Sensor Temperature", unit="°C"),
+    "frame_rate_hz": VoxelPropertyDetails(
+        label="Frame Rate", unit="Hz", description="Frame rate in Hz, Dependent of PixelType and ROI settings."
+    ),
+}
 
 
 @thread_safe_singleton
@@ -116,37 +105,29 @@ class VieworksCamera(VoxelCamera):
     :type serial_number: str
     """
 
-    BUFFER_SIZE_MB = 2400
+    _BUFFER_SIZE_MB = 2400
+
+    details = VIEWORKS_PROPERTY_DETAILS
 
     def __init__(self, serial_number: str, pixel_size_um: tuple[float, float], name: str = ""):
-        super().__init__(name, pixel_size_um)
         self.serial_number = serial_number
-        self.log.debug(f"Initializing Vieworks camera with serial number: {self.serial_number}")
 
         self._grabber, self._remote, self._stream = self._get_grabber_modules(self.serial_number)
 
         # Caches
-        self._sensor_size_px_cache: Vec2D[int] | None = None
-        self._binning_cache: Binning | None = None
         self._delimination_props = {
             "Width": {"Min": None, "Max": None, "Inc": None},
             "Height": {"Min": None, "Max": None, "Inc": None},
             "ExposureTime": {"Min": None, "Max": None, "Inc": None},
         }
 
+        self.log = get_component_logger(self)
+
         # LUTs
-        self._pixel_type_lut: PixelTypeLUT = self._get_pixel_type_lut()
-        self._binning_lut: BinningLUT = self._get_binning_lut()
-        self._bit_packing_mode_lut: BitPackingModeLUT = self._get_bit_packing_mode_lut()
-        self._line_interval_us_lut: PixelTypeLUT = self._get_line_interval_us_lut()
-
-        # self._trigger_mode_lut: Mapping[TriggerMode, str] = self._get_trigger_setting_lut("TriggerMode")
-        # self._trigger_source_lut: Mapping[TriggerSource, str] = self._get_trigger_setting_lut("TriggerSource")
-        # self._trigger_polarity_lut: Mapping[TriggerPolarity, str] = self._get_trigger_setting_lut("TriggerActivation")
-
-        # self.trigger_setting = TriggerSetting.OFF
-
-        self.log.info("Completed initialization of Vieworks camera.")
+        self._binning_lut: dict[str, int] = self._get_binning_lut()
+        self._pixel_format_options: list[str] = self._get_pixel_format_options()
+        super().__init__(name, pixel_size_um)
+        self.log.debug("Vieworks camera initialized successfully.")
 
     @staticmethod
     def _get_grabber_modules(serial_number) -> tuple[EGrabber, RemoteModule, StreamModule]:
@@ -161,8 +142,8 @@ class VieworksCamera(VoxelCamera):
             raise VoxelDeviceConnectionError("Stream module not available for the grabber.")
         return grabber, grabber.remote, grabber.stream
 
-    def reset(self):
-        """Reset the camera to default settings."""
+    def reinitialize(self):
+        """Reinitialize the camera"""
         del self._grabber
 
         self._grabber, self._remote, self._stream = self._get_grabber_modules(self.serial_number)
@@ -172,22 +153,19 @@ class VieworksCamera(VoxelCamera):
 
     ##########################################################################
 
-    @property
+    @cached_property
     def sensor_size_px(self) -> Vec2D[int]:
         """Get the sensor size in pixels.
         :return: The sensor size in pixels.
         :rtype: Vec2D
         """
-        if not self._sensor_size_px_cache:
-            width = self._remote.get(feature="SensorWidth", dtype=int)
-            height = self._remote.get(feature="SensorHeight", dtype=int)
-            if width and height:
-                self._sensor_size_px_cache = Vec2D(int(width), int(height))
-            else:
-                self.log.error("Failed to get sensor size.")
-                return Vec2D(-1, -1)
-
-        return self._sensor_size_px_cache
+        width = self._remote.get(feature="SensorWidth", dtype=int)
+        height = self._remote.get(feature="SensorHeight", dtype=int)
+        if not width or not height:
+            self.log.error("Failed to get sensor size.")
+            raise VoxelDeviceError("Failed to get sensor size.")
+            # return Vec2D(-1, -1)
+        return Vec2D(int(width), int(height))
 
     @property
     def frame_size_px(self) -> Vec2D:
@@ -207,57 +185,48 @@ class VieworksCamera(VoxelCamera):
 
     ##########################################################################
 
-    @enumerated_property(options=lambda self: set(self._binning_lut))
-    def binning(self) -> Binning:
+    @enumerated_int(options=lambda self: list(self._binning_lut.values()))
+    def binning(self) -> int:
         """Get the binning setting.
         :return: The binning setting i.e Literal[1, 2, 4]
-        :rtype: Binning
+        :rtype: int
         """
-        if not self._binning_cache:
-            h_binning = self._remote.get("BinningHorizontal")
-            if h_binning:
-                self._binning_cache = next((k for k, v in self._binning_lut.items() if v == h_binning), None)
-
-        if self._binning_cache:
-            return self._binning_cache
+        if binning := self._binning_lut.get(self._remote.get("BinningHorizontal")):
+            return binning
         self.log.error("Failed to get binning.")
-        return Binning(1)
+        raise VoxelDeviceError("Failed to get binning.")
 
     @binning.setter
-    def binning(self, binning: Binning) -> None:
+    def binning(self, binning: int) -> None:
         """Set the binning setting.
         :param binning: The binning setting i.e Literal[1, 2, 4]
         :type binning: Binning
         """
-        if binning not in self._binning_lut:
-            self.log.error(f"Invalid binning value: {binning}. Available options: {self._binning_lut.keys()}")
-            return
-        try:
-            self._remote.set("BinningHorizontal", self._binning_lut[binning])
-            self._remote.set("BinningVertical", self._binning_lut[binning])
-            self.log.info(f"Set binning to {binning}")
-        except GenTLException as e:
-            print("Error:", e)
-            self.log.error(f"Failed to set binning: {e}")
-        finally:
-            self._binning_cache = None
-            self._invalidate_all_delimination_props()
+        if val := next((k for k, v in self._binning_lut.items() if v == binning)):
+            try:
+                self._remote.set("BinningHorizontal", val)
+                self._remote.set("BinningVertical", val)
+            except GenTLException as e:
+                self.log.error(f"Failed to set binning: {e}")
+            finally:
+                self._invalidate_all_delimination_props()
 
-    @deliminated_property(
-        minimum=lambda self: self._get_delimination_prop("Width", "Min") * self.binning,
-        maximum=lambda self: self.sensor_size_px.x - self._get_delimination_prop("Width", "Inc") * (self.binning - 1),
+    @deliminated_int(
+        min_value=lambda self: self._get_delimination_prop("Width", "Min") * self.binning,
+        max_value=lambda self: self.sensor_size_px.x - self._get_delimination_prop("Width", "Inc") * (self.binning - 1),
         step=lambda self: self._get_delimination_prop("Width", "Inc") * self.binning,
-        unit="px",
     )
     def roi_width_px(self) -> int:
         """Get the width of the ROI in pixels.
         :return: The width in pixels.
         :rtype: int
         """
-        if roi_width_px := self._remote.get(feature="Width", dtype=int):
-            return roi_width_px * self.binning
-        self.log.error("Failed to get roi width.")
-        return -1
+        res = self._remote.get(feature="Width", dtype=int)
+        try:
+            return int(res) * self.binning
+        except GenTLException as e:
+            self.log.error(f"Failed to get roi width: {e}")
+            return -1
 
     @roi_width_px.setter
     def roi_width_px(self, value: int) -> None:
@@ -267,7 +236,7 @@ class VieworksCamera(VoxelCamera):
         """
         self.roi_width_offset_px = 0
 
-        self.log.debug(f"Setting ROI width with value: {value}")
+        self.log.info(f"Setting ROI width with value: {value // self.binning} value: {value} binning: {self.binning}")
 
         self._remote.set("Width", value // self.binning)
 
@@ -278,21 +247,22 @@ class VieworksCamera(VoxelCamera):
         self.log.info(f"Set ROI width to {value} px")
         self._invalidate_delimination_prop("Width")
 
-    @deliminated_property(
-        minimum=0,
-        maximum=lambda self: self.sensor_size_px.x - self.roi_width_px,
+    @deliminated_int(
+        min_value=0,
+        max_value=lambda self: self.sensor_size_px.x - self.roi_width_px,
         step=lambda self: self._get_delimination_prop("Width", "Inc") * self.binning,
-        unit="px",
     )
     def roi_width_offset_px(self) -> int:
         """Get the offset of the ROI width in pixels.
         :return: The offset in pixels.
         :rtype: int
         """
-        if roi_width_offset := self._remote.get(feature="OffsetX", dtype=int):
-            return roi_width_offset * self.binning
-        self.log.error("Failed to get roi width offset.")
-        return 0
+        res = self._remote.get(feature="OffsetX", dtype=int)
+        try:
+            return int(res) * self.binning
+        except GenTLException as e:
+            self.log.error(f"Failed to get roi width offset: {e}")
+            return 0
 
     @roi_width_offset_px.setter
     def roi_width_offset_px(self, value: int) -> None:
@@ -304,21 +274,22 @@ class VieworksCamera(VoxelCamera):
         self._remote.set("OffsetX", value // self.binning)
         self.log.info(f"Set ROI width offset to {value} px")
 
-    @deliminated_property(
-        minimum=lambda self: self._get_delimination_prop("Height", "Min"),
-        maximum=lambda self: self.sensor_size_px.y,
+    @deliminated_int(
+        min_value=lambda self: self._get_delimination_prop("Height", "Min"),
+        max_value=lambda self: self.sensor_size_px.y,
         step=lambda self: self._get_delimination_prop("Height", "Inc"),
-        unit="px",
     )
     def roi_height_px(self) -> int:
         """Get the height of the ROI in pixels.
         :return: The height in pixels.
         :rtype: int
         """
-        if roi_height_px := self._remote.get(feature="Height", dtype=int):
-            return roi_height_px * self.binning
-        self.log.error("Failed to get roi height.")
-        return -1
+        res = self._remote.get(feature="Height", dtype=int)
+        try:
+            return int(res) * self.binning
+        except GenTLException as e:
+            self.log.error(f"Failed to get roi height: {e}")
+            return -1
 
     @roi_height_px.setter
     def roi_height_px(self, value: int) -> None:
@@ -338,21 +309,22 @@ class VieworksCamera(VoxelCamera):
         self.log.info(f"Set ROI height to {value} px")
         self._invalidate_delimination_prop("Height")
 
-    @deliminated_property(
-        minimum=0,
-        maximum=lambda self: self.sensor_size_px.y - self.roi_height_px,
+    @deliminated_int(
+        min_value=0,
+        max_value=lambda self: self.sensor_size_px.y - self.roi_height_px,
         step=lambda self: self._get_delimination_prop("Height", "Inc") * self.binning,
-        unit="px",
     )
     def roi_height_offset_px(self) -> int:
         """Get the offset of the ROI height in pixels.
         :return: The offset in pixels.
         :rtype: int
         """
-        if roi_height_offset := self._remote.get(feature="OffsetY", dtype=int):
-            return roi_height_offset * self.binning
-        self.log.error("Failed to get roi height offset.")
-        return 0
+        res = self._remote.get(feature="OffsetY", dtype=int)
+        try:
+            return int(res) * self.binning
+        except GenTLException as e:
+            self.log.error(f"Failed to get roi height offset: {e}")
+            return 0
 
     @roi_height_offset_px.setter
     def roi_height_offset_px(self, value: int) -> None:
@@ -364,53 +336,48 @@ class VieworksCamera(VoxelCamera):
         self._remote.set("OffsetY", value // self.binning)
         self.log.info(f"Set ROI height offset to {value} px")
 
-    @enumerated_property(options=lambda self: set(self._pixel_type_lut))
+    @enumerated_string(options=lambda self: self._pixel_format_options)
+    def pixel_format(self) -> str:
+        """Get the pixel format of the camera.
+        :rtype: str
+        """
+        pixel_fmt = self._remote.get("PixelFormat", dtype=str)
+        if pixel_fmt in self._pixel_format_options:
+            return pixel_fmt
+        raise VoxelDeviceError(f"Failed to get pixel format. Device returned: {pixel_fmt}")
+
+    @pixel_format.setter
+    def pixel_format(self, pixel_format: str) -> None:
+        """Set the pixel type of the camera.
+        :param pixel_format: The pixel format
+        :type pixel_format: str
+        """
+        self._remote.set("PixelFormat", pixel_format)
+        if pixel_format != "Mono8":
+            self.binning = 1
+        self._regenerate_all_luts()
+
+    @property
     def pixel_type(self) -> PixelType:
         """Get the pixel type of the camera.
         :return: The pixel type.
         :rtype: PixelType
         """
-        if pixel_type := self._remote.get(feature="PixelFormat"):
-            try:
-                return next(k for k, v in self._pixel_type_lut.items() if v == pixel_type)
-            except StopIteration as e:
-                self.log.error(f"Error getting pixel type: {str(e)}")
-        return PixelType.MONO8
+        if self.pixel_format == "Mono8":
+            return PixelType.UINT8
+        return PixelType.UINT16
 
-    @pixel_type.setter
-    def pixel_type(self, pixel_type: PixelType) -> None:
-        """Set the pixel type of the camera.
-        :param pixel_type: The pixel type (enum)
-        :type pixel_type: PixelType
-        """
-        if pixel_type not in self._pixel_type_lut:
-            self.log.error(f"Invalid pixel type: {pixel_type}, available options: {self._pixel_type_lut.keys()}")
-            return
-
-        self._remote.set("PixelFormat", self._pixel_type_lut[pixel_type])
-
-        self.log.info(f"Set pixel type to {pixel_type}")
-
-        if pixel_type is not PixelType.MONO8:
-            self.binning = Binning(1)
-        self._regenerate_all_luts()
-
-    @enumerated_property(options=lambda self: set(self._bit_packing_mode_lut))
+    @property
     def bit_packing_mode(self) -> BitPackingMode:
         """Get the bit packing mode of the camera.
         :return: The bit packing mode.
         :rtype: BitPackingMode
         """
-        bit_packing_mode = BitPackingMode.NONE
-        if self._stream:
-            grabber_bit_packing = self._stream.get("UnpackingMode")
-            try:
-                bit_packing_mode = next(k for k, v in self._bit_packing_mode_lut.items() if v == grabber_bit_packing)
-            except StopIteration:
-                self.log.error(
-                    f"Grabber bit packing mode ({grabber_bit_packing}) not found in LUT({self._bit_packing_mode_lut})"
-                )
-        return bit_packing_mode
+        try:
+            return BitPackingMode(self._stream.get("UnpackingMode"))
+        except Exception as e:
+            self.log.error(f"Failed to get bit packing mode: {e}")
+            return BitPackingMode.OFF
 
     @bit_packing_mode.setter
     def bit_packing_mode(self, bit_packing_mode: BitPackingMode) -> None:
@@ -418,18 +385,13 @@ class VieworksCamera(VoxelCamera):
         :param bit_packing_mode: The bit packing mode (enum)
         :type bit_packing_mode: BitPackingMode
         """
-        if bit_packing_mode not in self._bit_packing_mode_lut:
-            self._regenerate_bit_packing_mode_lut()
-            if bit_packing_mode not in self._bit_packing_mode_lut:
-                self.log.error(f"Invalid bit packing mode: {bit_packing_mode}")
-            return
-        self._stream.set("UnpackingMode", self._bit_packing_mode_lut[bit_packing_mode])
+        self._stream.set("UnpackingMode", bit_packing_mode)
         self.log.info(f"Set bit packing mode to {bit_packing_mode}")
         self._regenerate_all_luts()
 
-    @deliminated_property(
-        minimum=lambda self: self._get_delimination_prop("ExposureTime", "Min") / 1000,
-        maximum=lambda self: self._get_delimination_prop("ExposureTime", "Max") / 1000,
+    @deliminated_float(
+        min_value=lambda self: self._get_delimination_prop("ExposureTime", "Min") / 1000,
+        max_value=lambda self: self._get_delimination_prop("ExposureTime", "Max") / 1000,
     )
     def exposure_time_ms(self) -> int:
         """Get the exposure time in microseconds.
@@ -453,19 +415,18 @@ class VieworksCamera(VoxelCamera):
         self.log.info(f"Set exposure time to {exposure_time_ms} ms")
         self._invalidate_delimination_prop("ExposureTime")
 
-    @deliminated_property(unit="us")
+    @deliminated_float()
     def line_interval_us(self) -> float:
         """Get the line interval in microseconds. \n
         Note: The line interval is the time between adjacent rows of pixels activating on the sensor.
         :return: The line interval in microseconds.
         :rtype: float
         """
-        return float(self._line_interval_us_lut[self.pixel_type])
+        return self._get_line_interval_us(self.pixel_format)
 
-    @deliminated_property(
-        minimum=lambda self: self._remote.get("AcquisitionFrameRate.Min", dtype=int),
-        maximum=lambda self: self._remote.get("AcquisitionFrameRate.Max", dtype=int),
-        unit="Hz",
+    @deliminated_float(
+        min_value=lambda self: self._remote.get("AcquisitionFrameRate.Min", dtype=int),
+        max_value=lambda self: self._remote.get("AcquisitionFrameRate.Max", dtype=int),
     )
     def frame_rate_hz(self) -> int:
         """Get the frame rate in Hz.
@@ -489,103 +450,15 @@ class VieworksCamera(VoxelCamera):
         :rtype: float
         """
         return 1000 / self.frame_rate_hz
-        # readout_time_ms = self.line_interval_us * self.roi_height_px / 1000
-        # return max(readout_time_ms, self.exposure_time_ms)
-        # return readout_time_ms + self.exposure_time_ms
-
-    # @enumerated_property(options=lambda self: set(self._trigger_mode_lut))
-    # def trigger_mode(self) -> TriggerMode:
-    #     """
-    #     Get the trigger mode of the camera.
-    #     :return: The trigger mode.
-    #     :rtype: TriggerMode
-    #     """
-    #     try:
-    #         mode = self._remote.get("TriggerMode")
-    #         return next(k for k, v in self._trigger_mode_lut.items() if v == mode)
-    #     except StopIteration as e:
-    #         self.log.error(f"Error getting trigger mode: {str(e)}")
-    #         return TriggerMode.OFF
-
-    # @trigger_mode.setter
-    # def trigger_mode(self, trigger_mode: TriggerMode) -> None:
-    #     """
-    #     Set the trigger mode of the camera.
-    #     :param trigger_mode: The trigger mode.
-    #     :type trigger_mode: TriggerMode
-    #     """
-    #     if not self._remote:
-    #         self.log.error("Unable to set trigger mode. Remote component is not available.")
-    #         return
-    #     self._remote.set("TriggerMode", self._trigger_mode_lut[trigger_mode])
-    #     self.log.info(f"Set trigger mode to {trigger_mode}")
-    #     self._regenerate_trigger_luts()
-
-    # @enumerated_property(options=lambda self: set(self._trigger_source_lut))
-    # def trigger_source(self) -> TriggerSource:
-    #     """
-    #     Get the trigger source of the camera.
-    #     :return: The trigger source.
-    #     :rtype: TriggerSource
-    #     """
-    #     if source := self._remote.get("TriggerSource"):
-    #         try:
-    #             return next(k for k, v in self._trigger_source_lut.items() if v == source)
-    #         except StopIteration as e:
-    #             self.log.error(f"Error getting trigger source: {str(e)}")
-    #     return TriggerSource.EXTERNAL
-
-    # @trigger_source.setter
-    # def trigger_source(self, trigger_source: TriggerSource) -> None:
-    #     """
-    #     Set the trigger source of the camera.
-    #     :param trigger_source: The trigger source.
-    #     :type trigger_source: TriggerSource
-    #     """
-    #     if not self._remote:
-    #         self.log.error("Unable to set trigger source. Remote component is not available.")
-    #         return
-    #     self._remote.set("TriggerSource", self._trigger_source_lut[trigger_source])
-    #     self.log.info(f"Set trigger source to {trigger_source}")
-    #     self._regenerate_trigger_luts()
-
-    # @enumerated_property(options=lambda self: set(self._trigger_polarity_lut))
-    # def trigger_polarity(self) -> TriggerPolarity:
-    #     """
-    #     Get the trigger polarity of the camera.
-    #     :return: The trigger polarity.
-    #     :rtype: TriggerPolarity
-    #     """
-    #     if polarity := self._remote.get("TriggerActivation"):
-    #         try:
-    #             return next(k for k, v in self._trigger_polarity_lut.items() if v == polarity)
-    #         except StopIteration as e:
-    #             self.log.error(f"Error getting trigger polarity: {str(e)}")
-    #     return TriggerPolarity.RISINGEDGE
-
-    # @trigger_polarity.setter
-    # def trigger_polarity(self, trigger_polarity: TriggerPolarity) -> None:
-    #     """
-    #     Set the trigger polarity of the camera.
-    #     :param trigger_polarity: The trigger polarity.
-    #     :type trigger_polarity: TriggerPolarity
-    #     """
-    #     if not self._remote:
-    #         self.log.error("Unable to set trigger polarity. Remote component is not available.")
-    #         return
-    #     self._remote.set("TriggerActivation", self._trigger_polarity_lut[trigger_polarity])
-    #     self.log.info(f"Set trigger polarity to {trigger_polarity}")
-    #     self._regenerate_trigger_luts()
 
     def reset_settings(self) -> None:
         """Reset the trigger settings."""
         self.reset_roi()
         self.trigger_setting = TriggerSetting.OFF
-        self.pixel_type = PixelType.MONO8
-        self.binning = Binning(1)
+        self.pixel_format = "Mono8"
+        self.binning = next(iter(self._binning_lut.keys()))
         max_frame_rate = self._remote.get("AcquisitionFrameRate.Max", dtype=int)
         self._remote.set("AcquisitionFrameRate", max_frame_rate)
-        # self.grabber.remote.set("TestPattern", "on")
 
     def prepare(self) -> None:
         """
@@ -596,7 +469,7 @@ class VieworksCamera(VoxelCamera):
         and allocates the buffer in PC RAM.
         :raises RuntimeError: If the camera preparation fails.
         """
-        num_frames = max(1, round(self.BUFFER_SIZE_MB / self.frame_size_mb))
+        num_frames = max(1, round(self._BUFFER_SIZE_MB / self.frame_size_mb))
         self._grabber.realloc_buffers(num_frames)
 
         self.log.info(f"Prepared camera with buffer for {num_frames} frames")
@@ -645,7 +518,7 @@ class VieworksCamera(VoxelCamera):
         # Note: creating the buffer and then "pushing" it at the end has the
         #   effect of moving the internal camera frame buffer from the output
         #   pool back to the input pool, so it can be reused.
-        timeout_ms = int(self.frame_time_ms * self.acquisition_state.input_buffer_size)
+        timeout_ms = int(self.frame_time_ms) * self.acquisition_state.input_buffer_size
 
         with Buffer(self._grabber, timeout=timeout_ms) as buffer:
             self.log.debug(f"Grabbing Frame: {self.acquisition_state}")
@@ -664,14 +537,16 @@ class VieworksCamera(VoxelCamera):
         self._remote.set("TriggerMode", "Off")
 
     def _configure_software_triggering(self) -> None:
+        self._remote.set("TriggerSelector", "ExposureStart")
         self._remote.set("TriggerMode", "On")
         self._remote.set("TriggerSource", "Internal")
-        self._remote.set("TriggerActivation", "Rising Edge")
+        self._remote.set("TriggerActivation", "RisingEdge")
 
     def _configure_hardware_triggering(self) -> None:
+        self._remote.set("TriggerSelector", "ExposureStart")
         self._remote.set("TriggerMode", "On")
-        self._remote.set("TriggerSource", "External")
-        self._remote.set("TriggerActivation", "Rising Edge")
+        self._remote.set("TriggerSource", "Line0")
+        self._remote.set("TriggerActivation", "RisingEdge")
 
     @property
     def sensor_temperature_c(self) -> float:
@@ -773,27 +648,15 @@ class VieworksCamera(VoxelCamera):
 
     def _regenerate_all_luts(self) -> None:
         self._regenerate_binning_lut()
-        self._regenerate_pixel_type_luts()
-        self._regenerate_bit_packing_mode_lut()
-        # self._regenerate_trigger_luts()
+        self._regenerate_pixel_format_options()
 
     def _regenerate_binning_lut(self) -> None:
         self._binning_lut = self._get_binning_lut()
-        self._binning_cache = None
 
-    def _regenerate_pixel_type_luts(self) -> None:
-        self._pixel_type_lut = self._get_pixel_type_lut()
-        self._line_interval_lut = self._get_line_interval_us_lut()
+    def _regenerate_pixel_format_options(self) -> None:
+        self._pixel_format_options = self._get_pixel_format_options()
 
-    def _regenerate_bit_packing_mode_lut(self) -> None:
-        self._bit_packing_mode_lut = self._get_bit_packing_mode_lut()
-
-    # def _regenerate_trigger_luts(self) -> None:
-    #     self._trigger_mode_lut = self._get_trigger_setting_lut("TriggerMode")
-    #     self._trigger_source_lut = self._get_trigger_setting_lut("TriggerSource")
-    #     self._trigger_polarity_lut = self._get_trigger_setting_lut("TriggerActivation")
-
-    def _get_binning_lut(self) -> BinningLUT:
+    def _get_binning_lut(self) -> dict[str, int]:
         """
         Internal function that queries camera SDK to determine binning options.
         Note:
@@ -801,24 +664,19 @@ class VieworksCamera(VoxelCamera):
             For all use-cases, we assume that both the horizontal and vertical
             binning are the same. Therefore, we only consider the horizontal
         """
-        lut: BinningLUT = {}
-        init_binning = None
+        lut: dict[str, int] = {}
+        init_key = None
         skipped_options = []
         if not self._remote:
             raise RuntimeError("Unable to query binning options. Remote component is not available.")
         try:
             self.log.debug("Querying binning options...")
-            init_binning = self._remote.get("BinningHorizontal")
-            default_key = Binning(int(init_binning[1:]))
-            lut[default_key] = init_binning
+            init_key = self._remote.get("BinningHorizontal")
+            lut[init_key] = int(init_key[1:])
             binning_options = self._remote.get("@ee BinningHorizontal", dtype=list)
             for binning in binning_options:
                 try:
-                    self._remote.set("BinningHorizontal", binning)
-                    binning_int = int(binning[1:])
-                    lut[Binning(binning_int)] = binning
-                except (ValueError, KeyError):
-                    self.log.debug(f"Binning setting {binning} skipped. Not allowed in voxel.")
+                    lut[self._remote.set("BinningHorizontal", binning)] = int(binning[1:])
                 except GenTLException as e:
                     skipped_options.append(binning)
                     self.log.debug(f"Binning option: {binning} skipped. Not settable on this device. Error: {str(e)}")
@@ -829,207 +687,92 @@ class VieworksCamera(VoxelCamera):
             self.log.error(f"Error querying binning lut: {str(e)}")
         finally:
             if skipped_options:
-                self.log.debug(f"Skipped binning options: {skipped_options}. See debug logs for more info.")
-            if init_binning:
+                self.log.debug(f"Skipped binning options: {skipped_options}. See below for more info.")
+            if init_key:
                 try:
-                    self._remote.set("BinningHorizontal", init_binning)
+                    self._remote.set("BinningHorizontal", init_key)
                 except Exception as e:
-                    self.log.error(f"Failed to restore initial binning setting {init_binning}: {str(e)}")
+                    self.log.error(f"Failed to restore initial binning setting {init_key}: {str(e)}")
             self.log.debug(f"Completed querying binning options: {lut}")
         return lut
 
-    def _get_pixel_type_lut(self) -> PixelTypeLUT:
+    def _get_pixel_format_options(self) -> list[str]:
         """
         Internal function that queries camera SDK to determine pixel type options.
         Note:
             EGrabber defines pixel type settings as strings: 'Mono8', 'Mono12' 'Mono16' etc.
-            We convert these to PixelType enums for easier handling.
         """
-
-        lut: PixelTypeLUT = {}
-        init_pixel_type = None
-        skipped_options = []
-
-        if not self._remote:
-            raise RuntimeError("Unable to query pixel type options. Remote component is not available.")
+        options: list[str] = []
+        initial = None
         try:
-            self.log.debug("Querying pixel type options...")
-            pixel_type_options = self._remote.get("@ee PixelFormat", dtype=list)
-            init_pixel_type = self._remote.get("PixelFormat")
-            for pixel_type in pixel_type_options:
+            initial = self._remote.get("PixelFormat")
+            raw_options = self._remote.get("@ee PixelFormat", dtype=list)
+            for option in raw_options:
                 try:
-                    self._remote.set("PixelFormat", pixel_type)
-                    lut_key = pixel_type.upper().replace(" ", "")  # convert 'Mono 8' to 'MONO8'
-                    lut[PixelType[lut_key]] = pixel_type
-                except KeyError:
-                    skipped_options.append(pixel_type)
-                    self.log.debug(f"Pixel Type: {pixel_type} skipped. Not allowed in voxel.")
+                    self._remote.set("PixelFormat", option)
+                    options.append(option)
                 except GenTLException as e:
-                    skipped_options.append(pixel_type)
-                    self.log.debug(f"Pixel Type: {pixel_type} skipped. Not settable on this device. Error: {str(e)}")
+                    self.log.debug(f"Pixel Format: {option} skipped. Not settable on this device. Error: {str(e)}")
                 except Exception as e:
-                    skipped_options.append(pixel_type)
-                    self.log.debug(f"Unexpected error processing pixel type: {pixel_type}. Error: {str(e)}")
-        except Exception as e:
-            self.log.error(f"Error querying pixel type options: {str(e)}")
+                    self.log.debug(f"Unexpected error processing pixel format: {option}. Error: {str(e)}")
         finally:
-            if skipped_options:
-                self.log.debug(f"Skipped pixel type options: {skipped_options}. See debug logs for more info.")
-            if init_pixel_type:
+            if initial:
                 try:
-                    self._remote.set("PixelFormat", init_pixel_type)
+                    self._remote.set("PixelFormat", initial)
                 except Exception as e:
-                    self.log.error(f"Failed to restore initial pixel type {init_pixel_type}: {str(e)}")
-            self.log.debug(f"Completed querying pixel type options: {lut}")
-        return lut
+                    self.log.error(f"Failed to restore initial pixel format {initial}: {str(e)}")
+            self.log.debug(f"Completed querying pixel format options: {options}")
+        return options
 
-    def _get_bit_packing_mode_lut(self) -> BitPackingModeLUT:
+    @lru_cache(maxsize=16)
+    def _get_line_interval_us(self, pixel_format: str) -> float:
+        def get_line_interval() -> float:
+            # check max acquisition rate, used to determine line interval
+            max_frame_rate = self._remote.get("AcquisitionFrameRate.Max")
+            # vp-151mx camera uses the sony imx411 camera
+            # which has 10640 active rows but 10802 total rows.
+            # from the manual 10760 are used during readout
+            # Line interval doesn't change when roi_height is updated.
+            # No need to regenerate the lut.
+            device_model = self._remote.get("DeviceModelName")
+            height = self.roi_height_px + 120 if device_model == "VP-151MX-M6H0" else self.sensor_size_px.y
+            return (1 / max_frame_rate) / height * 1e6
+
+        if pixel_format == self.pixel_format:
+            return get_line_interval()
+        initial_pixel_format = self._remote.get("PixelFormat")
+        self._remote.set("PixelFormat", pixel_format)
+        line_interval = get_line_interval()
+        self._remote.set("PixelFormat", initial_pixel_format)
+        return line_interval
+
+    def _get_bit_packing_mode_options(self) -> list[str]:
         """
-        Internal function that queries camera SDK to determine the bit packing mode options.
+        Internal function that queries camera SDK to determine bit packing mode options.
         Note:
-            EGrabber defines the bit packing settings as strings: 'LSB', 'MSB', 'None', etc.
-            We convert these to BitPackingMode enums for easier handling.
+            EGrabber defines bit packing settings as strings: 'LSB', 'MSB', 'None', etc.
         """
-        lut: BitPackingModeLUT = {}
-        init_bit_packing = None
-        skipped_options = []
-        if not self._stream:
-            raise RuntimeError("Unable to query bit packing mode options. Stream component is not available.")
+        options: list[str] = []
+        initial = None
         try:
-            self.log.debug("Querying bit packing mode options...")
-            bit_packing_options = self._stream.get("@ee UnpackingMode", dtype=list)
-            init_bit_packing = self._stream.get("UnpackingMode")
-            for bit_packing_mode in bit_packing_options:
+            initial = self._stream.get("UnpackingMode")
+            raw_options = self._stream.get("@ee UnpackingMode", dtype=list)
+            for option in raw_options:
                 try:
-                    self._stream.set("UnpackingMode", bit_packing_mode)
-                    lut_key = BitPackingMode[bit_packing_mode.upper()]
-                    lut[lut_key] = bit_packing_mode
+                    self._stream.set("UnpackingMode", option)
+                    options.append(option)
                 except GenTLException as e:
-                    self.log.debug(
-                        f"Bit Packing Mode: {bit_packing_mode} skipped. "
-                        f"Not settable on this device. Error: {str(e)}"
-                    )
-                    skipped_options.append(bit_packing_mode)
-                except KeyError:
-                    self.log.debug(f"Bit Packing Mode: {bit_packing_mode} skipped. Not allowed in voxel.")
-                    skipped_options.append(bit_packing_mode)
+                    self.log.debug(f"Bit Packing Mode: {option} skipped. Not settable on this device. Error: {str(e)}")
                 except Exception as e:
-                    self.log.debug(f"Unexpected error processing bit packing option {bit_packing_mode}: {str(e)}")
-                    skipped_options.append(bit_packing_mode)
-        except Exception as e:
-            self.log.error(f"Error querying bit packing mode options: {str(e)}")
+                    self.log.debug(f"Unexpected error processing bit packing option {option}: {str(e)}")
         finally:
-            if skipped_options:
-                self.log.debug(f"Skipped bit packing mode options: {skipped_options}. See debug logs for more info.")
-            if init_bit_packing:
+            if initial:
                 try:
-                    self._stream.set("UnpackingMode", init_bit_packing)
+                    self._stream.set("UnpackingMode", initial)
                 except Exception as e:
                     self.log.error(f"Failed to restore initial bit packing mode setting: {str(e)}")
-            self.log.debug(f"Completed querying bit packing mode options: {lut}")
-        return lut
-
-    def _get_line_interval_us_lut(self) -> PixelTypeLUT:
-        """
-        Internal function that queries camera SDK to determine line interval options.
-        Note:
-            Vieworks cameras use a sony sensor which has a fixed line interval based on the pixel type.
-            Typically: Mono8: 15.0us ...
-        """
-        lut: PixelTypeLUT = {}
-        initial_pixel_type = None
-        if not self._remote:
-            raise RuntimeError("Unable to query line interval options. Remote component is not available.")
-        try:
-            self.log.debug("Querying line interval options...")
-            initial_pixel_type = self.pixel_type
-            pixel_type_options = iter(self._pixel_type_lut.items())
-            for pixel_type in pixel_type_options:
-                try:
-                    self._remote.set("PixelFormat", pixel_type[1])
-                    # check max acquisition rate, used to determine line interval
-                    max_frame_rate = self._remote.get("AcquisitionFrameRate.Max")
-                    # vp-151mx camera uses the sony imx411 camera
-                    # which has 10640 active rows but 10802 total rows.
-                    # from the manual 10760 are used during readout
-                    # Line interval doesn't change when roi_height is updated.
-                    # No need to regenerate the lut.
-                    if self._remote.get("DeviceModelName") == "VP-151MX-M6H0":
-                        line_interval_s = (1 / max_frame_rate) / (self.roi_height_px + 120)
-                    else:
-                        line_interval_s = (1 / max_frame_rate) / self.sensor_size_px.y
-                    lut[pixel_type[0]] = line_interval_s * 1e6
-                except GenTLException as e:
-                    self.log.debug(f"Line Interval: {pixel_type} skipped. Not settable on this device. Error: {str(e)}")
-                except Exception as e:
-                    self.log.debug(f"Unexpected error processing line interval: {pixel_type}. Error: {str(e)}")
-        except Exception as e:
-            self.log.error(f"Error querying line interval options: {str(e)}")
-        finally:
-            if initial_pixel_type:
-                try:
-                    self._remote.set("PixelFormat", self._pixel_type_lut[initial_pixel_type])
-                except Exception as e:
-                    self.log.error(f"Failed to restore initial pixel type setting: {str(e)}")
-            self.log.debug(f"Completed querying line interval options: {lut}")
-        return lut
-
-    # def _get_trigger_setting_lut(self, setting: str) -> Mapping[Any, str]:
-    #     """
-    #     Internal function that queries camera SDK to determine the trigger settings options.
-    #     Note:
-    #         EGrabber defines trigger configuration as:
-    #             - TriggerMode: 'On', 'Off'
-    #             - TriggerSource: 'Internal', 'External'
-    #             - TriggerActivation: 'Rising', 'Falling'
-    #     """
-    #     lut: dict[TriggerMode | TriggerSource | TriggerPolarity, str] = {}
-    #     init_trigger_setting = None
-    #     skipped_options = []
-    #     if not self._remote:
-    #         raise RuntimeError("Unable to query trigger settings. Remote component is not available.")
-    #     try:
-    #         self.log.debug(f"Querying {setting} options...")
-    #         trigger_setting_options = self._remote.get(f"@ee {setting}", dtype=list)
-    #         init_trigger_setting = self._remote.get(setting)
-    #         for trigger_setting in trigger_setting_options:
-    #             try:
-    #                 self._remote.set(setting, trigger_setting)
-    #                 lut_key = None
-    #                 if setting == "TriggerMode":
-    #                     lut_key = TriggerMode[trigger_setting.upper().replace(" ", "")]
-    #                 elif setting == "TriggerSource":
-    #                     if trigger_setting == "Line0":
-    #                         lut_key = TriggerSource.EXTERNAL
-    #                     elif trigger_setting == "Software":
-    #                         lut_key = TriggerSource.INTERNAL
-    #                 elif setting == "TriggerActivation":
-    #                     lut_key = TriggerPolarity[trigger_setting.upper().replace(" ", "")]
-    #                 if lut_key:
-    #                     lut[lut_key] = trigger_setting
-    #             except GenTLException as e:
-    #                 self.log.debug(
-    #                     f"{setting}: {trigger_setting} skipped. Not settable on this device. Error: {str(e)}"
-    #                 )
-    #                 skipped_options.append(trigger_setting)
-    #             except KeyError:
-    #                 self.log.debug(f"{setting}: {trigger_setting} skipped. Not allowed in voxel.")
-    #                 skipped_options.append(trigger_setting)
-    #             except Exception as e:
-    #                 self.log.debug(f"Unexpected error processing {setting} option {trigger_setting}: {str(e)}")
-    #                 skipped_options.append(trigger_setting)
-    #     except Exception as e:
-    #         self.log.error(f"Error querying {setting} options: {str(e)}")
-    #     finally:
-    #         if skipped_options:
-    #             self.log.debug(f"Skipped {setting} options: {skipped_options}. See debug logs for more info.")
-    #         if init_trigger_setting:
-    #             try:
-    #                 self._remote.set(setting, init_trigger_setting)
-    #             except Exception as e:
-    #                 self.log.error(f"Failed to restore initial {setting} setting: {str(e)}")
-    #         self.log.debug(f"Completed querying {setting} options: {lut}")
-    #     return lut
+            self.log.debug(f"Completed querying bit packing mode options: {options}")
+        return options
 
     def _get_delimination_prop(self, prop_name: str, limit_type: str) -> int | float | None:
         if self._delimination_props[prop_name][limit_type] is None:

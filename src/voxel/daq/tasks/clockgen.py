@@ -4,7 +4,7 @@ from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.constants import FrequencyUnits, Level
 from nidaqmx.task.channels import COChannel as NiCOChannel
 
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 from ..daq import PinInfo, VoxelDaq, VoxelDaqTask
 
@@ -82,7 +82,7 @@ class ClockGenTask(VoxelDaqTask):
                 pins.append(pin)
         return pins
 
-    @deliminated_property(minimum=0.0, step=1.0, maximum=1e6, unit="Hz")
+    @deliminated_float(min_value=0.0, step=1.0, max_value=1e6)
     def freq_hz(self) -> float:
         return self.channel.co_pulse_freq
 
@@ -92,7 +92,7 @@ class ClockGenTask(VoxelDaqTask):
         self.channel.co_pulse_freq = freq
         # self._reconfigure_task()
 
-    @deliminated_property(minimum=0.0, step=0.01, maximum=1.0, unit="%")
+    @deliminated_float(min_value=0.0, step=0.01, max_value=1.0)
     def duty_cycle(self) -> float:
         return self.channel.co_pulse_duty_cyc
 
@@ -102,7 +102,7 @@ class ClockGenTask(VoxelDaqTask):
         self.channel.co_pulse_duty_cyc = duty
         # self._reconfigure_task()
 
-    @deliminated_property(minimum=0.0, step=1.0, maximum=1000.0, unit="ms")
+    @deliminated_float(min_value=0.0, step=1.0, max_value=1000.0)
     def initial_delay_ms(self) -> float:
         return self.channel.co_pulse_freq_initial_delay
 

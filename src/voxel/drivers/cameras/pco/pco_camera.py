@@ -1,20 +1,19 @@
+from functools import cached_property
 import time
 from collections.abc import Mapping
 from typing import Any, Literal
 
 from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.camera import AcquisitionState, Binning, PixelType, VoxelCamera
+from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.drivers.cameras.pco.definitions import (
     ReadoutMode,
     TriggerMode,
     TriggerSettings,
     TriggerSource,
-    binning_lut,
-    pixel_type_lut,
 )
 from voxel.drivers.cameras.pco.sdk import Camera
-from voxel.utils.descriptors.deliminated import deliminated_property
-from voxel.utils.descriptors.enumerated import enumerated_property
+from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
+from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.vec import Vec2D
 
 type EnumeratedProp = TriggerMode | TriggerSource | ReadoutMode
@@ -32,6 +31,7 @@ class PCOCamera(VoxelCamera):
     """
 
     BUFFER_SIZE_MB = 2400
+    BINNING_OPTIONS = [1, 2, 4, 8]
 
     def __init__(
         self,
@@ -53,14 +53,11 @@ class PCOCamera(VoxelCamera):
         self._delimination_props = self._get_delimination_props()
 
         # LUTs
-        self._pixel_type_lut = pixel_type_lut
-        self._binning_lut = binning_lut
         self._trigger_mode_lut: Mapping[TriggerMode, str] = self._get_lut(TriggerMode)
         self._trigger_source_lut: Mapping[TriggerSource, str] = self._get_lut(TriggerSource)
         self._readout_mode_lut: Mapping[ReadoutMode, str] = self._get_lut(ReadoutMode)
 
         # private props
-        self._pixel_type = list(self._pixel_type_lut)[0]
         self._current_frame_start_time = time.time()
         self._current_frame_index = 0
         self._buffer_size_frames = self.BUFFER_SIZE_MB
@@ -69,7 +66,7 @@ class PCOCamera(VoxelCamera):
 
     # Sensor properties ________________________________________________________________________________________________
 
-    @property
+    @cached_property
     def sensor_size_px(self) -> Vec2D[int]:
         if (x := self._delimination_props["roi_width"]["max"]) and (y := self._delimination_props["roi_height"]["max"]):
             return Vec2D(int(x), int(y))
@@ -78,8 +75,8 @@ class PCOCamera(VoxelCamera):
 
     # Image properties _________________________________________________________________________________________________
 
-    @enumerated_property(options=lambda self: set(self._binning_lut))
-    def binning(self) -> Binning:
+    @enumerated_int(options=BINNING_OPTIONS)
+    def binning(self) -> int:
         """
         Get the binning mode of the camera.
 
@@ -88,14 +85,10 @@ class PCOCamera(VoxelCamera):
         """
         # pco binning can be different in x, y. take x value.
         binning = self._camera.sdk.get_binning()["binning x"]
-        try:
-            return Binning(binning)
-        except ValueError:
-            self.log.error(f"Unrecognized binning mode: {binning}")
-            return Binning.X1
+        return int(binning)
 
     @binning.setter
-    def binning(self, binning: Binning):
+    def binning(self, binning: int):
         """
         Set the binning of the camera.
 
@@ -107,8 +100,8 @@ class PCOCamera(VoxelCamera):
         :raises ValueError: Invalid binning setting
         """
         # pco binning can be different in x, y. set same for both,
-        self._camera.sdk.set_binning(binning_x=self._binning_lut[binning], binning_y=self._binning_lut[binning])
-        self.log.info(f"Set binning to {binning}")
+        binning = int(binning)
+        self._camera.sdk.set_binning(binning_x=binning, binning_y=binning)
         self._fetch_delimination_props()
 
     @property
@@ -138,11 +131,10 @@ class PCOCamera(VoxelCamera):
 
     # ROI properties ___________________________________________________________________________________________________
 
-    @deliminated_property(
-        minimum=lambda self: self._delimination_props["roi_width"]["min"],
-        maximum=lambda self: self._delimination_props["roi_width"]["max"],
+    @deliminated_int(
+        min_value=lambda self: self._delimination_props["roi_width"]["min"],
+        max_value=lambda self: self._delimination_props["roi_width"]["max"],
         step=lambda self: self._delimination_props["roi_width"]["step"],
-        unit="px",
     )
     def roi_width_px(self):
         """
@@ -167,11 +159,10 @@ class PCOCamera(VoxelCamera):
         offset = int((self.sensor_size_px.x - width_px) // 2)
         self._camera.sdk.set_roi(x0=offset + 1, x1=width_px + offset, y0=roi["y0"], y1=roi["y1"])
 
-    @deliminated_property(
-        minimum=0,
-        maximum=lambda self: self.sensor_size_px.x - self.roi_width_px,
+    @deliminated_int(
+        min_value=0,
+        max_value=lambda self: self.sensor_size_px.x - self.roi_width_px,
         step=lambda self: self._delimination_props["roi_width"]["step"],
-        unit="px",
     )
     def roi_width_offset_px(self):
         """
@@ -194,11 +185,10 @@ class PCOCamera(VoxelCamera):
         roi = self._camera.sdk.get_roi()
         self._camera.sdk.set_roi(x0=offset_px + 1, x1=roi["x1"] - roi["x0"] + offset_px + 1)
 
-    @deliminated_property(
-        minimum=lambda self: self._delimination_props["roi_height"]["min"],
-        maximum=lambda self: self._delimination_props["roi_height"]["max"],
+    @deliminated_int(
+        min_value=lambda self: self._delimination_props["roi_height"]["min"],
+        max_value=lambda self: self._delimination_props["roi_height"]["max"],
         step=lambda self: self._delimination_props["roi_height"]["step"],
-        unit="px",
     )
     def roi_height_px(self):
         """
@@ -210,11 +200,10 @@ class PCOCamera(VoxelCamera):
         roi = self._camera.sdk.get_roi()
         return roi["y1"] - roi["y0"] + 1
 
-    @deliminated_property(
-        minimum=0,
-        maximum=lambda self: self.sensor_size_px.y - self.roi_height_px,
+    @deliminated_int(
+        min_value=0,
+        max_value=lambda self: self.sensor_size_px.y - self.roi_height_px,
         step=lambda self: self._delimination_props["roi_height"]["step"],
-        unit="px",
     )
     def roi_height_offset_px(self):
         """
@@ -238,40 +227,14 @@ class PCOCamera(VoxelCamera):
         roi = self._camera.sdk.get_roi()
         self._camera.sdk.set_roi(y0=offset_px + 1, y1=roi["y1"] - roi["y0"] + offset_px + 1)
 
-    @enumerated_property(options=lambda self: set(self._pixel_type_lut))
+    @property
     def pixel_type(self) -> PixelType:
-        """
-        Get the pixel type of the camera.
+        return PixelType.UINT16
 
-        :return: The pixel type of the camera
-        :rtype: PixelType
-        """
-        pixel_type = self._pixel_type
-        try:
-            return PixelType(pixel_type)
-        except ValueError:
-            self.log.error(f"Unrecognized pixel type: {pixel_type}")
-            return PixelType.MONO16
-
-    @pixel_type.setter
-    def pixel_type(self, pixel_type: PixelType) -> None:
-        """
-        The pixel type of the camera.
-
-        :param pixel_type: The pixel type
-        * **mono16**
-        :type pixel_type: PixelType
-        """
-        try:
-            self._pixel_type = self._pixel_type_lut[pixel_type]
-        except (ValueError, KeyError) as e:
-            self.log.error(f"Invalid pixel type: {e}")
-
-    @deliminated_property(
-        minimum=lambda self: self._delimination_props["exposure_time_ms"]["min"],
-        maximum=lambda self: self._delimination_props["exposure_time_ms"]["max"],
+    @deliminated_float(
+        min_value=lambda self: self._delimination_props["exposure_time_ms"]["min"],
+        max_value=lambda self: self._delimination_props["exposure_time_ms"]["max"],
         step=lambda self: self._delimination_props["exposure_time_ms"]["step"],
-        unit="ms",
     )
     def exposure_time_ms(self) -> float:
         """
@@ -297,11 +260,10 @@ class PCOCamera(VoxelCamera):
         # refresh parameter values
         self._fetch_delimination_props()
 
-    @deliminated_property(
-        minimum=lambda self: self._delimination_props["line_interval_us"]["min"],
-        maximum=lambda self: self._delimination_props["line_interval_us"]["max"],
+    @deliminated_float(
+        min_value=lambda self: self._delimination_props["line_interval_us"]["min"],
+        max_value=lambda self: self._delimination_props["line_interval_us"]["max"],
         step=lambda self: self._delimination_props["line_interval_us"]["step"],
-        unit="us",
     )
     def line_interval_us(self) -> float:
         """
@@ -351,7 +313,7 @@ class PCOCamera(VoxelCamera):
             case _:
                 return (self.line_interval_us * self.roi_height_px / 2) / 1000 + self.exposure_time_ms
 
-    @enumerated_property(options=lambda self: set(self._readout_mode_lut))
+    @property
     def readout_mode(self) -> ReadoutMode:
         """
         Get the readout mode of the camera.
@@ -408,7 +370,7 @@ class PCOCamera(VoxelCamera):
         """
         return TriggerSettings(self.trigger_mode, self.trigger_source)
 
-    @enumerated_property(options=lambda self: set(self._trigger_mode_lut))
+    @property
     def trigger_mode(self) -> TriggerMode:
         mode = self._camera.sdk.get_trigger_mode()["trigger mode"]
         try:
@@ -421,7 +383,7 @@ class PCOCamera(VoxelCamera):
         self._camera.sdk.set_trigger_mode(mode=self._trigger_mode_lut[mode])
         self.log.info(f"Set trigger mode to {mode}")
 
-    @enumerated_property(options=lambda self: set(self._trigger_source_lut))
+    @property
     def trigger_source(self) -> TriggerSource:
         source = self._camera.sdk.get_acquire_mode()["acquire mode"]
         try:

@@ -10,11 +10,11 @@ class SimulatedFilterWheel(VoxelFilterWheel):
     """Simulated Filter Wheel for testing without hardware."""
 
     def __init__(self, name: str, wheel_id: str):
-        super().__init__(name)
         self.wheel_id = wheel_id
         self.filters: dict[str, int] = {}
         self._current_filter: str | None = None
         self._is_closed = False
+        super().__init__(name)
         self.log.debug(f"Simulated Filter Wheel '{name}' initialized")
 
     def add_filter(self, filter_name: str, position: int):
@@ -60,10 +60,10 @@ class SimulatedFilterWheel(VoxelFilterWheel):
 
 class SimulatedFilter(VoxelFilter):
     def __init__(self, name: str, wheel: SimulatedFilterWheel, position: int):
-        super().__init__(name)
         self.wheel = wheel
         self.position = position
-        self.wheel.add_filter(self.name, position)
+        self.wheel.add_filter(name, position)
+        super().__init__(name)
         self.log.debug(f"Simulated Filter '{name}' initialized")
 
     def enable(self) -> None:

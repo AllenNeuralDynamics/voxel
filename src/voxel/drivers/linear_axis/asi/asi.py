@@ -5,7 +5,7 @@ from tigerasi.device_codes import JoystickInput as ASIJoystickInput
 
 from voxel.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
 from voxel.drivers.hubs.tigerbox import ASITigerBox
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 
 @dataclass
@@ -75,10 +75,9 @@ class ASITigerLinearAxis(VoxelLinearAxis):
 
     # Positional properties and methods ______________________________________________________________________________
 
-    @deliminated_property(
-        minimum=lambda self: self.lower_limit_mm,
-        maximum=lambda self: self.upper_limit_mm,
-        unit="mm",
+    @deliminated_float(
+        min_value=lambda self: self.lower_limit_mm,
+        max_value=lambda self: self.upper_limit_mm,
     )
     def position_mm(self) -> float:
         return self._tigerbox.get_axis_position(self.name)

@@ -1,7 +1,6 @@
 from abc import abstractmethod
-from typing import Optional
 
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 from .base import VoxelDevice, VoxelDeviceType
 
@@ -10,8 +9,8 @@ class VoxelLaser(VoxelDevice):
     """Base class for all voxel laser devices."""
 
     def __init__(self, name: str, wavelength: int) -> None:
-        super().__init__(device_type=VoxelDeviceType.LASER, name=name)
         self._wavelength = wavelength
+        super().__init__(device_type=VoxelDeviceType.LASER, name=name)
 
     def __repr__(self) -> str:
         return (
@@ -37,7 +36,7 @@ class VoxelLaser(VoxelDevice):
         """Wavelength of laser"""
         return self._wavelength
 
-    @deliminated_property(unit="mW", description="The target power that the laser is trying to achieve.")
+    @deliminated_float()
     @abstractmethod
     def power_setpoint_mw(self) -> float:
         """

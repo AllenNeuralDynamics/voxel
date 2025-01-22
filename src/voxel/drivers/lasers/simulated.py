@@ -3,7 +3,7 @@ import random
 from serial import Serial
 
 from voxel.devices.laser import VoxelLaser
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 MODULATION_MODES = {
     "off": {"external_control_mode": "OFF", "digital_modulation": "OFF"},
@@ -22,7 +22,6 @@ class SimulatedLaser(VoxelLaser):
         :param name: voxel device name for this laser.
         :param prefix: prefix specic to laser.
         """
-        super().__init__(name=name, wavelength=wavelength)
 
         self.prefix = prefix
         self.ser = Serial
@@ -32,6 +31,7 @@ class SimulatedLaser(VoxelLaser):
         self._temperature = 20.0
         self._cdrh = "ON"
         self._status = []
+        super().__init__(name=name, wavelength=wavelength)
 
     def enable(self):
         self.log.info(f"Enabling {self.name} laser")
@@ -40,7 +40,7 @@ class SimulatedLaser(VoxelLaser):
     def disable(self):
         pass
 
-    @deliminated_property(minimum=0, maximum=MAX_POWER_MW)
+    @deliminated_float(min_value=0, max_value=MAX_POWER_MW)
     def power_setpoint_mw(self):
         return self._simulated_power_setpoint_mw
 

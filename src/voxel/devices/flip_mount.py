@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 from .base import VoxelDevice, VoxelDeviceType
 
@@ -44,7 +44,7 @@ class VoxelFlipMount(VoxelDevice):
         """Wait for the flip mount to finish flipping."""
         pass
 
-    @deliminated_property()
+    @deliminated_float()
     @abstractmethod
     def flip_time_ms(self) -> float:
         """Time it takes to flip the mount in milliseconds. \n

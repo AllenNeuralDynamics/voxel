@@ -17,7 +17,7 @@ def plot_waveforms(task: WaveGenTask):
 
     _, ax = plt.subplots()
     for _, channel in task.channels.items():
-        channel.wave.plot(ax=ax)
+        channel.plot(ax=ax)
 
     plt.ion()
     plt.show()
@@ -44,9 +44,9 @@ if __name__ == "__main__":
 
     clk = ClockGenTask(name="clk", daq=daq, out_pin="PFI0", freq_hz=freq_hz)
     task = WaveGenTask(name="TestTask", daq=daq, sampling_rate_hz=1e6, period_ms=period_ms, trigger_task=clk)
-    test1 = task.add_ao_channel(name="test1-ao20-ch1", pin="ao20")
-    galvo = task.add_ao_channel(name="galvo-ch2", pin="ao0")
-    test2 = task.add_ao_channel(name="test2-ad2-1", pin="ao4")
+    test1 = task.add_channel(name="test1-ao20-ch1", pin="ao20")
+    galvo = task.add_channel(name="galvo-ch2", pin="ao0")
+    test2 = task.add_channel(name="test2-ad2-1", pin="ao4")
     task.write()
     with task, clk:
         sleep(2)

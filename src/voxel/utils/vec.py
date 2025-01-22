@@ -31,6 +31,9 @@ class Vec2D[T: Number]:
             x, y = int(split[0]), int(split[1])
         return cls(x, y)  # type: ignore
 
+    def __int__(self) -> Vec2D[int]:
+        return Vec2D(int(self.x), int(self.y))
+
     def __repr__(self) -> str:
         return self.to_str()
 

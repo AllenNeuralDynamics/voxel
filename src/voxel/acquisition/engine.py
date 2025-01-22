@@ -12,7 +12,7 @@ import numpy as np
 import psutil
 from voxel.acquisition.planner import AcquisitionPlan
 from voxel.channel import VoxelChannel
-from voxel.daq.tasks.wavegen.wavegen_task import WaveGenTask
+from voxel.daq.tasks.wavegen import WaveGenTask
 from voxel.devices.linear_axis import ScanConfig
 from voxel.instrument import VoxelInstrument
 from voxel.utils.log_config import get_logger
@@ -159,6 +159,7 @@ class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
 
             relevant_state = self.state[stack.idx][channel.name]
 
+            # self.clock_task.freq_hz = (1000 / channel.camera.frame_time_ms) * 0.75
             self.clock_task.freq_hz = 1000 / channel.camera.frame_time_ms
             self.log.info(f"Clock frequency set to: {self.clock_task.freq_hz:.2f} Hz")
 
@@ -166,7 +167,7 @@ class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
 
             while not self.available_disk_space > expected_size_mb * 1.5 and not self._stop_event.is_set():
                 self.log.warning("Low disk space. Waiting for space to free up.")
-                time.sleep(5)
+                time.sleep(1)
 
             if self._stop_event.is_set():
                 break
@@ -194,8 +195,8 @@ class ExaspimAcquisitionEngine(VoxelAcquisitionEngine):
 
                 self.log.info(f"Batch {batch_idx}/{num_batches} [{range_str(frame_range)}] = {len(frame_range)}")
 
-                self.clock_task.start()
                 channel.camera.start(frame_count=len(frame_range))
+                self.clock_task.start()
                 for frame_idx in frame_range:
                     if self._stop_event.is_set():
                         break

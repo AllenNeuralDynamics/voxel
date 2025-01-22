@@ -5,7 +5,7 @@ from pycobolt import CoboltLaser
 from sympy import Expr, solve, symbols
 
 from voxel.devices.laser import VoxelLaser
-from voxel.utils.descriptors.deliminated import deliminated_property
+from voxel.utils.descriptors.deliminated import deliminated_float
 
 # Define StrEnums if they don't yet exist.
 if sys.version_info < (3, 11):
@@ -110,12 +110,7 @@ class SkyraLaser(VoxelLaser):
         self._inst.send_cmd(f"{self._prefix}Cmd.LaserDisable")
         self.log.info(f"laser {self._prefix} enabled")
 
-    @deliminated_property(
-        minimum=0,
-        maximum=lambda self: self.max_power,
-        unit="mW",
-        description="The target power that the laser is trying to achieve.",
-    )
+    @deliminated_float(min_value=0, max_value=lambda self: self.max_power)
     def power_setpoint_mw(self):
         if self._inst.constant_current == "ON":
             return int(round(self._coefficients_curve().subs(symbols("x"), self._current_setpoint)))
