@@ -14,7 +14,7 @@ class TigerStage(BaseStage):
         self,
         hardware_axis: str,
         instrument_axis: str,
-        tigerbox: Optional[TigerController] = None,
+        tigerbox: TigerController = None,
         port: Optional[str] = None,
         log_level: str = "INFO",
     ) -> None:
@@ -240,7 +240,8 @@ class TigerStage(BaseStage):
         :return: Current position in millimeters
         :rtype: Optional[float]
         """
-        tiger_position = self.tigerbox.get_position_mm()[self.hardware_axis]
+        position_dict = self.tigerbox.get_position_mm()
+        tiger_position = position_dict[self.hardware_axis]
         # converting 1/10 um to mm
         tiger_position_mm = tiger_position / 10000
         return tiger_position_mm
@@ -264,10 +265,10 @@ class TigerStage(BaseStage):
         :rtype: List[float]
         """
         limits = self.tigerbox.get_limits_mm(axis=self.hardware_axis)
-        # Convert to sample frame before returning.
-        sample_limit_lower = list(self._hardware_to_instrument(limits[0]).values())[0]
-        sample_limit_upper = list(self._hardware_to_instrument(limits[1]).values())[0]
-        return [sample_limit_lower, sample_limit_upper]
+        lower_limit = self._hardware_to_instrument(limits[0])
+        upper_limit = self._hardware_to_instrument(limits[1])
+        sorted_limits = sorted([list(lower_limit.values())[0], list(upper_limit.values())[0]])
+        return sorted_limits
 
     @property
     def backlash_mm(self) -> Dict[str, float]:
