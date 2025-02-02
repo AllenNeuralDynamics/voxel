@@ -59,6 +59,8 @@ def main() -> None:
 
         app.include_router(InstrumentRouter(instrument))
 
+        # @app.on_event("shutdown")
+
         run_server(app)
 
 

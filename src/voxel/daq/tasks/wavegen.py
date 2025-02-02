@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -15,22 +14,6 @@ from .clockgen import ClockGenTask
 
 if TYPE_CHECKING:
     from ..daq import VoxelDaq
-
-
-@dataclass
-class TrapezoidalWaveAnchors:
-    """Anchor points for a waveform."""
-
-    rise: float
-    high: float
-    fall: float
-    low: float
-
-    def __post_init__(self):
-        self.rise = min(max(self.rise, 0), 1)
-        self.high = min(max(self.high, 0), 1)
-        self.fall = min(max(self.fall, 0), 1)
-        self.low = min(max(self.low, 0), 1)
 
 
 def parse_anchors(anchors: list[float]) -> list[float]:
@@ -110,17 +93,17 @@ class WaveGenChannel:
         self.task = task
         self.inst = inst
 
-        self._apply_filter = False
         self._filter_order = 2
-        self._lowpass_cutoff = self.task.sampling_rate / 2
+        self._lowpass_cutoff = -1.0  # self.task.sample_rate / 2
+        # self._lowpass_cutoff = self.task.sample_rate / 2.1
 
         self._trough_voltage = task.daq.min_ao_voltage
         self._peak_voltage = task.daq.max_ao_voltage
-        self._anchors = WaveAnchors([0.0, 0.0, 0.5, 0.5], self.regenerate_waveform)
+        self._anchors = WaveAnchors([0.2, 0.35, 0.65, 0.8], self.regenerate_waveform)
 
         self.data = self._generate_waveform()
 
-    @deliminated_float(min_value=lambda self: self.task.daq.min_ao_voltage, max_value=lambda self: self._peak_voltage)
+    @deliminated_float(max_value=lambda self: self.task.daq.max_ao_voltage, min_value=lambda self: self._trough_voltage)
     def peak_voltage(self) -> float:
         return self._peak_voltage
 
@@ -129,7 +112,7 @@ class WaveGenChannel:
         self._peak_voltage = voltage
         self.regenerate_waveform()
 
-    @deliminated_float(min_value=lambda self: self._trough_voltage, max_value=lambda self: self.task.daq.max_ao_voltage)
+    @deliminated_float(max_value=lambda self: self._peak_voltage, min_value=lambda self: self.task.daq.min_ao_voltage)
     def trough_voltage(self) -> float:
         return self._trough_voltage
 
@@ -142,10 +125,6 @@ class WaveGenChannel:
     def amplitude(self) -> float:
         return (self.peak_voltage - self.trough_voltage) / 2
 
-    @property
-    def apply_filter(self) -> bool:
-        return self._apply_filter
-
     @deliminated_int(min_value=0, max_value=6)
     def lowpass_filter_order(self) -> int:
         return self._filter_order
@@ -153,16 +132,16 @@ class WaveGenChannel:
     @lowpass_filter_order.setter
     def lowpass_filter_order(self, order: int) -> None:
         self._filter_order = order
-        self.regenerate_waveform() if self.apply_filter else None
+        self.regenerate_waveform()
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self.timing.sample_rate / 2)
+    @deliminated_float(min_value=-1.0, max_value=lambda self: self.task.sample_rate / 2)
     def lowpass_cutoff(self) -> float:
         return self._lowpass_cutoff
 
     @lowpass_cutoff.setter
     def lowpass_cutoff(self, cutoff_frequency: float) -> None:
         self._lowpass_cutoff = cutoff_frequency
-        self.regenerate_waveform() if self.apply_filter else None
+        self.regenerate_waveform()
 
     @property
     def anchors(self) -> list[float]:
@@ -238,30 +217,41 @@ class WaveGenChannel:
 
     def _generate_waveform(self) -> np.ndarray:
         """Generate a trapezoidal waveform."""
-        samples = int(self.task.sampling_rate * self.task.period_ms / 1000)
-        waveform = np.full(shape=samples, fill_value=self.trough_voltage)
+        samples = int(self.task.sample_rate * self.task.period_ms / 1000)
+        waveform = np.full(shape=samples + 1, fill_value=self.trough_voltage)
         rise_point = int(samples * self.anchors[0])
-        high_point = int(samples * self.anchors[1])
-        fall_point = int(samples * self.anchors[2])
-        low_point = int(samples * self.anchors[3])
+        high_point = int(samples * self.anchors[1]) + 1
+        fall_point = int(samples * self.anchors[2]) + 1
+        low_point = int(samples * self.anchors[3]) + 1
+
+        waveform[0:rise_point] = self.trough_voltage
 
         waveform[rise_point:high_point] = np.linspace(self.trough_voltage, self.peak_voltage, high_point - rise_point)
         waveform[high_point:fall_point] = self.peak_voltage
         waveform[fall_point:low_point] = np.linspace(self.peak_voltage, self.trough_voltage, low_point - fall_point)
 
-        return self._apply_lowpass_filter(waveform) if self.apply_filter else waveform
+        waveform[low_point:] = self.trough_voltage
+
+        return self._apply_lowpass_filter(waveform)
 
     def _apply_lowpass_filter(self, waveform: np.ndarray) -> np.ndarray:
-        if self.lowpass_cutoff == 0:
+        if self.lowpass_cutoff <= 0:
             return waveform
         samples = len(waveform)
-        nyquist_frequency = self.task.sampling_rate / 2
+        nyquist_frequency = self.task.sample_rate / 2
         normalized_cutoff_frequency = self.lowpass_cutoff / nyquist_frequency
         sos = signal.bessel(self.lowpass_filter_order, normalized_cutoff_frequency, output="sos")
         extended_waveform = np.tile(waveform, 3)
-        filtered_waveform = signal.sosfiltfilt(sos, extended_waveform)
+        filtered_extended_waveform = signal.sosfiltfilt(sos, extended_waveform)
         middle_range_end = samples * 2
-        return filtered_waveform[samples:middle_range_end]
+        filtered_waveform = filtered_extended_waveform[samples:middle_range_end]
+        # normalize the waveform to the peak and trough voltages
+        return filtered_waveform
+        # return np.interp(
+        #     filtered_waveform,
+        #     (filtered_waveform.min(), filtered_waveform.max()),
+        #     (self.trough_voltage, self.peak_voltage),
+        # )
 
 
 class WaveGenTask(VoxelDaqTask):
@@ -286,17 +276,19 @@ class WaveGenTask(VoxelDaqTask):
         name: str,
         daq: "VoxelDaq",
         period_ms: float,
-        sampling_rate_hz: int | float,
+        sample_rate_hz: int | float,
         trigger_task: ClockGenTask | None = None,
     ) -> None:
         super().__init__(name=name, daq=daq)
-        self._pins: list[PinInfo] = []
+        # self._pins: list[PinInfo] = []
+
+        self._pins: dict[str, PinInfo] = {}
 
         self.channels: dict[str, WaveGenChannel] = {}
         self.waveforms: np.ndarray = np.array([])
 
         self._period_ms = period_ms
-        self._sampling_rate = sampling_rate_hz
+        self._sample_rate = min(sample_rate_hz, 400e3)
 
         self.trigger_task = trigger_task
         self._sample_mode = NiAcqType.FINITE if self.trigger_task else NiAcqType.CONTINUOUS
@@ -304,12 +296,16 @@ class WaveGenTask(VoxelDaqTask):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}[{self.name}] \n"
-            f"  period={self.period_ms} ms, sampling_rate={self.sampling_rate} Hz\n"
+            f"  period={self.period_ms} ms, sampling_rate={self.sample_rate} Hz\n"
             f"  channels={list(self.channels.keys())}"
         )
 
+    # @property
+    # def pins(self) -> list[PinInfo]:
+    #     return self._pins
+
     @property
-    def pins(self) -> list[PinInfo]:
+    def pins(self) -> dict[str, PinInfo]:
         return self._pins
 
     @property
@@ -324,12 +320,14 @@ class WaveGenTask(VoxelDaqTask):
             self.regenerate_waveforms()
 
     @property
-    def sampling_rate(self) -> float:
-        return self.inst.timing.samp_clk_rate
+    def sample_rate(self) -> float:
+        return round(self.inst.timing.samp_clk_rate)
 
-    @sampling_rate.setter
-    def sampling_rate(self, sample_rate: float) -> None:
-        self._sampling_rate = sample_rate
+    @sample_rate.setter
+    def sample_rate(self, sample_rate: float) -> None:
+        self._sample_rate = sample_rate
+        self._cfg_timing()
+        self.regenerate_waveforms()
         if self.channels:
             self._cfg_timing()
             self.regenerate_waveforms()
@@ -337,7 +335,7 @@ class WaveGenTask(VoxelDaqTask):
     @property
     def samples_per_period(self) -> int:
         """The number of samples per period. Determines the buffer size created for continuous tasks."""
-        return int(self.sampling_rate * self.period_ms / 1000)
+        return int(self.sample_rate * self.period_ms / 1000)
 
     def add_channel(self, name: str, pin: str) -> WaveGenChannel:
         """Add an analog output channel to the task."""
@@ -345,7 +343,8 @@ class WaveGenTask(VoxelDaqTask):
         channel_inst = self.inst.ao_channels.add_ao_voltage_chan(pin.path, name)
         channel = WaveGenChannel(name=name, task=self, inst=channel_inst)
         self.channels[name] = channel
-        self._pins.append(pin)
+        # self._pins.append(pin)
+        self._pins[name] = pin
         self._cfg_timing()
         self._cfg_triggering()
         return self.channels[name]
@@ -373,7 +372,7 @@ class WaveGenTask(VoxelDaqTask):
 
     def _cfg_timing(self) -> None:
         self.inst.timing.cfg_samp_clk_timing(
-            rate=self.sampling_rate,
+            rate=self._sample_rate,
             sample_mode=self._sample_mode,
             samps_per_chan=self.samples_per_period,
         )

@@ -41,8 +41,8 @@ instrument:
       acq_task:
         type: wavegen
         kwds:
-          sampling_rate_hz: 350000
-          period_ms: 20
+          sample_rate_hz: 700000
+          period_ms: 200
           trigger_task: acq_clock
 
   devices:

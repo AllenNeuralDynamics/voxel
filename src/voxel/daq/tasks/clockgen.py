@@ -1,5 +1,3 @@
-from typing import Literal
-
 from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.constants import FrequencyUnits, Level
 from nidaqmx.task.channels import COChannel as NiCOChannel
@@ -33,7 +31,7 @@ class ClockGenTask(VoxelDaqTask):
         freq_hz: float = 1e3,
         duty_cycle: float = 0.5,
         initial_delay_ms: float = 0.0,
-        idle_state: Literal["HIGH", "LOW"] = "LOW",
+        idle_state: bool = False,
         src_pin: str | None = None,
         gate_pin: str | None = None,
         aux_pin: str | None = None,
@@ -50,7 +48,7 @@ class ClockGenTask(VoxelDaqTask):
             freq=freq_hz,
             duty_cycle=duty_cycle,
             delay_ms=initial_delay_ms,
-            idle=Level.HIGH if idle_state == "HIGH" else Level.LOW,
+            idle=Level.HIGH if idle_state else Level.LOW,
         )
         self._cfg_routing()
         self.configure(num_samples=-1)
@@ -58,7 +56,7 @@ class ClockGenTask(VoxelDaqTask):
         self.freq_hz = freq_hz
         self.duty_cycle = duty_cycle
         self.initial_delay_ms = initial_delay_ms
-        self.idle_state = Level.HIGH if idle_state == "HIGH" else Level.LOW
+        self.idle_state = Level.HIGH if idle_state else Level.LOW
 
     def configure(self, num_samples: int) -> None:
         """Configure the timing for the task."""
@@ -74,12 +72,20 @@ class ClockGenTask(VoxelDaqTask):
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         self.stop()
 
+    # @property
+    # def pins(self) -> list[PinInfo]:
+    #     pins = [self.out]
+    #     for pin in [self._src, self._gate, self._aux]:
+    #         if pin:
+    #             pins.append(pin)
+    #     return pins
     @property
-    def pins(self) -> list[PinInfo]:
-        pins = [self.out]
-        for pin in [self._src, self._gate, self._aux]:
+    def pins(self) -> dict[str, PinInfo]:
+        pins = {"out": self.out}
+        for name, pin in zip(["src", "gate", "aux"], [self._src, self._gate, self._aux]):
             if pin:
-                pins.append(pin)
+                name = f"{self.name}_{name}"
+                pins[name] = pin
         return pins
 
     @deliminated_float(min_value=0.0, step=1.0, max_value=1e6)
@@ -113,13 +119,13 @@ class ClockGenTask(VoxelDaqTask):
         # self._reconfigure_task()
 
     @property
-    def idle_state(self) -> Literal["HIGH", "LOW"]:
-        return "HIGH" if self.channel.co_pulse_idle_state == Level.High else "LOW"
+    def idle_state(self) -> bool:
+        return self.channel.co_pulse_idle_state == Level.High
 
     @idle_state.setter
-    def idle_state(self, state: Literal["HIGH", "LOW"]) -> None:
+    def idle_state(self, state: bool) -> None:
         # self._idle_state = Level.HIGH if state == "HIGH" else Level.LOW
-        self.channel.co_pulse_idle_state = Level.HIGH if state == "HIGH" else Level.LOW
+        self.channel.co_pulse_idle_state = Level.HIGH if state else Level.LOW
         # self._reconfigure_task()
 
     @property

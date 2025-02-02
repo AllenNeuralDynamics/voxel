@@ -21,8 +21,8 @@ class DCControlTask(VoxelDaqTask):
         return f"{self.__class__.__name__}[{self.name}] voltage={self.voltage:.3f}V"
 
     @property
-    def pins(self) -> list[PinInfo]:
-        return [self._pin]
+    def pins(self) -> dict[str, PinInfo]:
+        return {self.name: self._pin}
 
     @deliminated_float(
         min_value=lambda self: self.daq.min_ao_voltage,

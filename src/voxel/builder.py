@@ -41,7 +41,7 @@ DAQ_TASK_TYPES = {
 
 
 class WaveGenTaskProps(BaseModel):
-    sampling_rate_hz: float
+    sample_rate_hz: float
     period_ms: float
     trigger_task: str | None = None
 

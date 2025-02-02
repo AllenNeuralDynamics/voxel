@@ -33,7 +33,7 @@ class ErrorMessage(BaseMessage):
 
 class DeviceRouter(APIRouter):
     def __init__(self, device: VoxelDevice):
-        super().__init__(prefix=f"/{device.name}")
+        super().__init__(prefix=f"/{device.name}", tags=[device.name])
         self.device = device
         self.signals_interval = 1
 

@@ -180,9 +180,15 @@ class VoxelDaqTask(ABC):
 
         self.daq.tasks[self.name] = self
 
+    # @property
+    # @abstractmethod
+    # def pins(self) -> list[PinInfo]:
+    #     """List of pins used by this task."""
+    #     pass
+
     @property
     @abstractmethod
-    def pins(self) -> list[PinInfo]:
+    def pins(self) -> dict[str, PinInfo]:
         """List of pins used by this task."""
         pass
 
@@ -196,7 +202,7 @@ class VoxelDaqTask(ABC):
 
     def close(self) -> None:
         try:
-            for pin in self.pins:
+            for pin in self.pins.values():
                 self.daq.release_pin(pin)
             if self.name in self.daq.tasks:
                 del self.daq.tasks[self.name]
