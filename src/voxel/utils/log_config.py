@@ -1,10 +1,9 @@
 import atexit
-from email.mime import base
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum, StrEnum
 from logging.handlers import QueueHandler, QueueListener
-from multiprocessing import Process, Queue, process
+from multiprocessing import Process, Queue
 from pathlib import Path
 
 LOGGING_SUBPROC_SUFFIX = "_sub"
@@ -151,6 +150,14 @@ def _create_handlers(log_file: str | None, detailed: bool = True, fancy: bool = 
 
     # Create formatters
     console_formatter = CustomFormatter(detailed=detailed, fancy=fancy, colored=True)
+
+    # try importing uvicorn and use its formatter if available
+    try:
+        from uvicorn.logging import DefaultFormatter
+
+        console_formatter = DefaultFormatter(fmt="%(levelprefix)s %(message)s", use_colors=True)
+    except ImportError:
+        pass
 
     # Console handler
     console_handler = logging.StreamHandler()

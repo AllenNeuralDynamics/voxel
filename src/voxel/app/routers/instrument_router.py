@@ -3,8 +3,8 @@ from pydantic import BaseModel
 
 from voxel.devices.base import VoxelDeviceType
 from voxel.instrument import VoxelInstrument
-from voxel.server.device_router import DeviceRouter
-from voxel.server.daq_router import DaqRouter
+from voxel.app.routers.device_router import DeviceRouter
+from voxel.app.routers.daq_router import DaqRouter
 
 
 class ChannelInfo(BaseModel):

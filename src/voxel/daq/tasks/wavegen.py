@@ -94,8 +94,7 @@ class WaveGenChannel:
         self.inst = inst
 
         self._filter_order = 2
-        self._lowpass_cutoff = -1.0  # self.task.sample_rate / 2
-        # self._lowpass_cutoff = self.task.sample_rate / 2.1
+        self._lowpass_cutoff = -1.0
 
         self._trough_voltage = task.daq.min_ao_voltage
         self._peak_voltage = task.daq.max_ao_voltage
@@ -280,7 +279,6 @@ class WaveGenTask(VoxelDaqTask):
         trigger_task: ClockGenTask | None = None,
     ) -> None:
         super().__init__(name=name, daq=daq)
-        # self._pins: list[PinInfo] = []
 
         self._pins: dict[str, PinInfo] = {}
 
@@ -299,10 +297,6 @@ class WaveGenTask(VoxelDaqTask):
             f"  period={self.period_ms} ms, sampling_rate={self.sample_rate} Hz\n"
             f"  channels={list(self.channels.keys())}"
         )
-
-    # @property
-    # def pins(self) -> list[PinInfo]:
-    #     return self._pins
 
     @property
     def pins(self) -> dict[str, PinInfo]:
@@ -343,7 +337,6 @@ class WaveGenTask(VoxelDaqTask):
         channel_inst = self.inst.ao_channels.add_ao_voltage_chan(pin.path, name)
         channel = WaveGenChannel(name=name, task=self, inst=channel_inst)
         self.channels[name] = channel
-        # self._pins.append(pin)
         self._pins[name] = pin
         self._cfg_timing()
         self._cfg_triggering()

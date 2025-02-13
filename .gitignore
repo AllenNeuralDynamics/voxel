@@ -137,3 +137,5 @@ bootstrap.*
 .vscode/
 .run/
 .idea/
+
+voxel-studio/

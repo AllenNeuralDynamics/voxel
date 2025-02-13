@@ -72,13 +72,6 @@ class ClockGenTask(VoxelDaqTask):
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         self.stop()
 
-    # @property
-    # def pins(self) -> list[PinInfo]:
-    #     pins = [self.out]
-    #     for pin in [self._src, self._gate, self._aux]:
-    #         if pin:
-    #             pins.append(pin)
-    #     return pins
     @property
     def pins(self) -> dict[str, PinInfo]:
         pins = {"out": self.out}
@@ -94,9 +87,7 @@ class ClockGenTask(VoxelDaqTask):
 
     @freq_hz.setter
     def freq_hz(self, freq: float) -> None:
-        # self._freq_hz = freq
         self.channel.co_pulse_freq = freq
-        # self._reconfigure_task()
 
     @deliminated_float(min_value=0.0, step=0.01, max_value=1.0)
     def duty_cycle(self) -> float:
@@ -104,9 +95,7 @@ class ClockGenTask(VoxelDaqTask):
 
     @duty_cycle.setter
     def duty_cycle(self, duty: float) -> None:
-        # self._duty_cycle = duty
         self.channel.co_pulse_duty_cyc = duty
-        # self._reconfigure_task()
 
     @deliminated_float(min_value=0.0, step=1.0, max_value=1000.0)
     def initial_delay_ms(self) -> float:
@@ -114,9 +103,7 @@ class ClockGenTask(VoxelDaqTask):
 
     @initial_delay_ms.setter
     def initial_delay_ms(self, delay: float) -> None:
-        # self._initial_delay_ms = delay
         self.channel.co_pulse_freq_initial_delay = delay
-        # self._reconfigure_task()
 
     @property
     def idle_state(self) -> bool:
@@ -124,9 +111,7 @@ class ClockGenTask(VoxelDaqTask):
 
     @idle_state.setter
     def idle_state(self, state: bool) -> None:
-        # self._idle_state = Level.HIGH if state == "HIGH" else Level.LOW
         self.channel.co_pulse_idle_state = Level.HIGH if state else Level.LOW
-        # self._reconfigure_task()
 
     @property
     def period_ms(self) -> float:
