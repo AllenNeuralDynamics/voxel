@@ -2,7 +2,6 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from functools import cached_property
-# from enum import IntEnum, StrEnum
 
 import numpy as np
 
@@ -12,32 +11,36 @@ from voxel.utils.vec import Vec2D
 
 from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
 
-BYTES_PER_MB = 1_000_000
 
-VoxelFrame = np.ndarray[tuple[int, int, int], np.dtype[np.uint8 | np.uint16]]
+class VoxelLens(VoxelDevice):
+    """A voxel lens device.
+    :param magnification: The magnification of the lens.
+    :param name: The name of the lens.
+    :param focal_length_um: The focal length of the lens in micrometers.
+    :param aperture_um: The aperture of the lens in micrometers.
+    :return lens: The lens device.
+    :type magnification: float
+    :type name: str | None
+    :type focal_length_um: float| None
+    :type aperture_um: float| None
+    :rtype lens: VoxelLens
+    """
 
+    def __init__(
+        self,
+        magnification: float,
+        name: str = "voxel_lens",
+        focal_length_um: float | None = None,
+        aperture_um: float | None = None,
+    ):
+        self.magnification = float(magnification)
+        self.focal_length_um: float | None = focal_length_um
+        self.aperture_um: float | None = aperture_um
+        super().__init__(device_type=VoxelDeviceType.LENS, name=name)
 
-# class Binning(IntEnum):
-#     X1 = 1
-#     X2 = 2
-#     X4 = 4
-#     X8 = 8
-
-
-# class PixelType(IntEnum):
-#     MONO8 = 8
-#     MONO10 = 10
-#     MONO12 = 12
-#     MONO14 = 14
-#     MONO16 = 16
-
-#     @property
-#     def dtype(self) -> np.dtype:
-#         return np.dtype(np.uint8) if self == PixelType.MONO8 else np.dtype(np.uint16)
-
-#     @property
-#     def bytes_per_pixel(self) -> int:
-#         return self.value // 8
+    def close(self):
+        """Close the lens."""
+        pass
 
 
 class PixelType(IntEnum):
@@ -157,7 +160,9 @@ class VoxelCamera(VoxelDevice):
     details = VOXEL_CAMERA_DETAILS
     signals = {"sensor_temperature_c"}
 
-    def __init__(self, name: str, pixel_size_um: tuple[float, float] | str) -> None:
+    def __init__(
+        self, name: str, pixel_size_um: tuple[float, float] | str, objective: VoxelLens = VoxelLens(magnification=1)
+    ) -> None:
         """Initialize the camera.
 
         :param name: The unique identifier of the camera.
@@ -170,6 +175,7 @@ class VoxelCamera(VoxelDevice):
             assert len(parts) == 2, f"Invalid pixel size string: {pixel_size_um}"
             pixel_size_um = float(parts[0]), float(parts[1])
         self.pixel_size_um = Vec2D(*pixel_size_um)
+        self.objective = objective
 
         self._Trigger_setting_map = {
             TriggerSetting.OFF: self._configure_free_running_mode,
@@ -195,17 +201,14 @@ class VoxelCamera(VoxelDevice):
             )
         )
 
-    @cached_property
-    def sensor_size_um(self) -> Vec2D[float]:
-        """Get the size of the camera sensor in microns.
+    @property
+    def fov_um(self) -> Vec2D[float]:
+        """Get the field of view of the camera in microns.
 
-        :return: The size of the camera sensor in microns.
+        :return: The field of view of the camera in microns.
         :rtype: Vec2D
         """
-        return Vec2D(
-            self.sensor_size_px.x * self.pixel_size_um.x,
-            self.sensor_size_px.y * self.pixel_size_um.y,
-        )
+        return self.roi_size_um / self.objective.magnification
 
     @cached_property
     @abstractmethod
@@ -218,6 +221,27 @@ class VoxelCamera(VoxelDevice):
         pass
 
     # ROI Configuration Properties
+    @property
+    def roi_size_px(self) -> Vec2D[int]:
+        """Get the size of the camera region of interest in pixels.
+
+        :return: The size of the region of interest in pixels.
+        :rtype: Vec2D
+        """
+        return Vec2D(self.roi_width_px, self.roi_height_px)
+
+    @property
+    def roi_size_um(self) -> Vec2D[float]:
+        """Get the size of the camera region of interest in microns.
+
+        :return: The size of the region of interest in microns.
+        :rtype: Vec2D
+        """
+        return Vec2D(
+            self.roi_width_px * self.pixel_size_um.x,
+            self.roi_height_px * self.pixel_size_um.y,
+        )
+
     @deliminated_int()
     @abstractmethod
     def roi_width_px(self) -> int:
@@ -469,7 +493,7 @@ class VoxelCamera(VoxelDevice):
         pass
 
     @abstractmethod
-    def grab_frame(self) -> VoxelFrame:
+    def grab_frame(self) -> np.ndarray:
         """Grab a frame from the camera buffer. \n
         If binning is via software, the GPU binned \n
         image is computed and returned.

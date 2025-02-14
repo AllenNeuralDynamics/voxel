@@ -73,7 +73,6 @@ class InstrumentRouter(APIRouter):
                 {
                     "name": channel.name,
                     "camera": channel.camera.name,
-                    "lens": channel.lens.name,
                     "laser": channel.laser.name,
                     "filter": channel.emmision_filter.name,
                 }

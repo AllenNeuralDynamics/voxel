@@ -266,8 +266,8 @@ class VoxelAcquisitionPlanner:
 
     def _generate_frame_stacks(self, channels: list["VoxelChannel"]) -> FrameStackCollection:
         # all channels must have the same fov
-        fov = channels[0].fov_um
-        if any(channel.fov_um != fov for channel in channels):
+        fov = channels[0].camera.fov_um
+        if any(channel.camera.fov_um != fov for channel in channels):
             #   raise ValueError("Unable to generate tiles with channels of different FOV")
             self.log.warning("Channels have different FOV. Using the maximum FOV for all channels.")
             channels_fov = json.dumps(
@@ -275,14 +275,17 @@ class VoxelAcquisitionPlanner:
                     channel.name: {
                         "frame_size_px": channel.camera.frame_size_px.to_str(),
                         "pixel_size_um": channel.camera.pixel_size_um.to_str(),
-                        "fov_um": channel.fov_um.to_str(),
+                        "fov_um": channel.camera.fov_um.to_str(),
                     }
                     for channel in channels
                 },
                 indent=2,
             )
             self.log.debug(f"Channels FOV: {channels_fov}")
-            fov = Vec2D(max(channel.fov_um.x for channel in channels), max(channel.fov_um.y for channel in channels))
+            fov = Vec2D(
+                max(channel.camera.fov_um.x for channel in channels),
+                max(channel.camera.fov_um.y for channel in channels),
+            )
 
         self.log.debug(f"FOV Used: {fov.to_str()}")
 

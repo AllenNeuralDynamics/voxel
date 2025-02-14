@@ -50,6 +50,7 @@ instrument:
       driver: voxel.drivers.cameras.simulated.SimulatedCamera
       kwds:
         pixel_size_um: 0.5, 0.5
+        objective: detection_objective
         # sensor_width_px: 4096
         # sensor_height_px: 4096
         # resize_method: tile
@@ -59,8 +60,9 @@ instrument:
       kwds:
         serial_number: MP151BDD022
         pixel_size_um: 0.5, 0.5
+        objective: detection_objective
       acq_pin: ao4
-    objective_40x:
+    detection_objective:
       driver: voxel.devices.lens.VoxelLens
       kwds:
         magnification: 40
@@ -119,14 +121,12 @@ instrument:
   channels:
     red:
       camera: vieworks_camera_1
-      lens: objective_40x
       laser: laser_561
       filter: filter_561
       writer: *imaris
       transfer: *robocopy
     green:
       camera: simulated_camera_1
-      lens: objective_40x
       laser: laser_488
       filter: filter_488
       writer: *imaris

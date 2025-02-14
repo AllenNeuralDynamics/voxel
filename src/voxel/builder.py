@@ -271,7 +271,6 @@ class InstrumentBuilder:
             channel = VoxelChannel(
                 name=channel_name,
                 camera=camera,
-                lens=lens,
                 laser=laser,
                 emmision_filter=filter_,
                 writer=writer,

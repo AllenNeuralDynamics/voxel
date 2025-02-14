@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from voxel.utils.frame_gen import downsample_image_by_decimation
 from voxel.utils.log_config import get_component_logger
-from voxel.utils.vec import Vec2D, Vec3D
+from voxel.utils.vec import Vec3D
 
 from .devices import VoxelFileTransfer
 from .io.writers.base import WriterMetadata
@@ -16,7 +16,6 @@ if TYPE_CHECKING:
         VoxelCamera,
         VoxelFilter,
         VoxelLaser,
-        VoxelLens,
     )
     from .frame_stack import FrameStack
     from .io.writers.base import VoxelWriter
@@ -29,7 +28,6 @@ class VoxelChannel:
         self,
         name: str,
         camera: "VoxelCamera",
-        lens: "VoxelLens",
         laser: "VoxelLaser",
         writer: "VoxelWriter",
         emmision_filter: "VoxelFilter",
@@ -39,25 +37,16 @@ class VoxelChannel:
         self.name = name
         self.log = get_component_logger(self)
         self.camera = camera
-        self.lens = lens
         self.laser = laser
         self.emmision_filter = emmision_filter
         self.is_active = is_active
         self.writer = writer
         self.file_transfer = file_transfer
-        # self._fov_um = self.camera.sensor_size_um / self.lens.magnification
-        roi_width_um = self.camera.roi_width_px * self.camera.pixel_size_um.x / self.lens.magnification
-        roi_height_um = self.camera.roi_height_px * self.camera.pixel_size_um.y / self.lens.magnification
-        self._fov_um = Vec2D(roi_width_um, roi_height_um)
-        self.devices = {device.name: device for device in [self.camera, self.lens, self.laser, self.emmision_filter]}
+        self.devices = {device.name: device for device in [self.camera, self.laser, self.emmision_filter]}
         self.assigned_index = -1
         self.path = Path()
 
         self.latest_frame: np.ndarray | None = None
-
-    @property
-    def fov_um(self) -> Vec2D:
-        return self._fov_um
 
     def activate(self) -> None:
         """Activate the channel."""
@@ -113,8 +102,6 @@ class VoxelChannel:
             return
         if "camera" in settings:
             self.camera.apply_settings(settings["camera"])
-        if "lens" in settings:
-            self.lens.apply_settings(settings["lens"])
         if "laser" in settings:
             self.laser.apply_settings(settings["laser"])
         if "filter" in settings:

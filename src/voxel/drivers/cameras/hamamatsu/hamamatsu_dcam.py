@@ -2,14 +2,10 @@ from functools import cached_property
 import time
 from typing import Any, Literal
 
+import numpy as np
+
 from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.camera import (
-    BYTES_PER_MB,
-    AcquisitionState,
-    PixelType,
-    VoxelCamera,
-    VoxelFrame,
-)
+from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.singleton import Singleton
@@ -30,6 +26,8 @@ from .sdk.dcam import DCAM_IDSTR, DCAMCAP_TRANSFERINFO, DCAMERR, Dcam, Dcamapi, 
 from .sdk.dcamapi4 import DCAMPROP_ATTR, DCAM_PIXELTYPE
 
 type LimitType = Literal["min", "max", "step"]
+
+BYTES_PER_MB = 1_048_576
 
 
 class DcamapiSingleton(Dcamapi, metaclass=Singleton):
@@ -631,7 +629,7 @@ class HamamatsuCamera(VoxelCamera):
                 self._dcam = Dcam(self._dcam_idx)
                 self._dcam.dev_open()
 
-    def grab_frame(self) -> VoxelFrame:
+    def grab_frame(self) -> np.ndarray:
         """
         Grab a frame from the camera buffer.
 
