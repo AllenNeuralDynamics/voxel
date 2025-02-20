@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from voxel.io.writers.base import VoxelWriter, WriterMetadata
+from voxel.io.writers.base import VoxelWriter, WriterConfig
 
 from .sdk import npy2bdv
 
@@ -97,7 +97,7 @@ class BdvWriter(VoxelWriter):
     def batch_size_px(self) -> int:
         return CHUNK_SIZE_PX
 
-    def configure(self, metadata: WriterMetadata) -> None:
+    def configure(self, metadata: WriterConfig) -> None:
         super().configure(metadata)
         self._output_file = self.dir / f"{self.metadata.file_name}.n5"
         self._output_file = self._output_file.resolve()

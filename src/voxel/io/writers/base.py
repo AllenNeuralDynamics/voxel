@@ -14,7 +14,7 @@ from voxel.utils.vec import Vec2D, Vec3D
 
 
 @dataclass
-class WriterMetadata:
+class WriterConfig:
     """Configuration properties for a frame stack writer."""
 
     path: str | Path
@@ -58,7 +58,7 @@ class VoxelWriter:
         self.voxel_size_unit = UnitsLength.MICROMETER
 
         self.timeout = 5  # TODO - Utilize this timeout
-        self.metadata: WriterMetadata
+        self.metadata: WriterConfig
         self.ome: OME
         self._ome_xml: str
 
@@ -154,7 +154,7 @@ class VoxelWriter:
         pass
 
     @abstractmethod
-    def configure(self, metadata: WriterMetadata) -> None:
+    def configure(self, metadata: WriterConfig) -> None:
         """Configure the writer with the given properties.
         Ensure that self._props is assigned in this method.
         :param props: Configuration properties

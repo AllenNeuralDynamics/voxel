@@ -9,7 +9,6 @@ from .chiller import VoxelChiller
 from .filter import VoxelFilter
 from .flip_mount import VoxelFlipMount
 from .laser import VoxelLaser
-from .lens import VoxelLens
 from .linear_axis import LinearAxisDimension, VoxelLinearAxis
 from .power_meter import VoxelPowerMeter
 from .rotation_axis import VoxelRotationAxis
@@ -26,7 +25,6 @@ __all__ = [
     "VoxelFilter",
     "VoxelFlipMount",
     "VoxelLaser",
-    "VoxelLens",
     "VoxelLinearAxis",
     "LinearAxisDimension",
     "VoxelPowerMeter",

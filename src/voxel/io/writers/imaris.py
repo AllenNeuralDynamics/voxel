@@ -10,7 +10,7 @@ from voxel.io.writers.base import (
     Pixels_DimensionOrder,
     PixelType,
     VoxelWriter,
-    WriterMetadata,
+    WriterConfig,
 )
 from voxel.utils.vec import Vec2D, Vec3D
 
@@ -88,7 +88,7 @@ class ImarisWriter(VoxelWriter):
         clone.dimension_order = self.dimension_order
         return clone
 
-    def configure(self, metadata: WriterMetadata) -> None:
+    def configure(self, metadata: WriterConfig) -> None:
         super().configure(metadata)
         self._output_file = self.dir / f"{self.metadata.file_name}.ims"
 
@@ -265,7 +265,7 @@ def test_imaris_writer():
     writer = ImarisWriter(name="imaris_writer")
 
     writer.configure(
-        metadata=WriterMetadata(
+        metadata=WriterConfig(
             path="test_output",
             frame_count=writer.batch_size_px * NUM_BATCHES,
             frame_shape=VP_151MX_M6H0,

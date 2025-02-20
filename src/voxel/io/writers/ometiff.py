@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import tifffile as tf
 
-from voxel.io.writers.base import PixelType, VoxelWriter, WriterMetadata
+from voxel.io.writers.base import PixelType, VoxelWriter, WriterConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,7 +45,7 @@ class OMETiffWriter(VoxelWriter):
     def batch_size_px(self, value: int) -> None:
         self._batch_size_px = value
 
-    def configure(self, metadata: WriterMetadata) -> None:
+    def configure(self, metadata: WriterConfig) -> None:
         super().configure(metadata)
         self.output_file = self.dir / f"{self.metadata.file_name}.ome.tiff"
         num_frames = f"Configured OME-TIFF writer with {self.metadata.frame_count} frames"
@@ -101,7 +101,7 @@ def test_tiffwriter():
     NUM_BATCHES = 5
     frame_shape = Vec2D(512, 512)
     frame_count = writer.batch_size_px * NUM_BATCHES
-    metadata = WriterMetadata(
+    metadata = WriterConfig(
         path="test_output/ome_tiff_writer",
         frame_count=frame_count,
         frame_shape=frame_shape,

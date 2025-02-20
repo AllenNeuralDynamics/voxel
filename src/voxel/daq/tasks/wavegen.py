@@ -88,7 +88,14 @@ class WaveAnchors(list[float]):
 
 
 class WaveGenChannel:
-    def __init__(self, name: str, task: "WaveGenTask", inst: NiAOChannel):
+    def __init__(
+        self,
+        name: str,
+        task: "WaveGenTask",
+        inst: NiAOChannel,
+        anchors: list[float] = [0.2, 0.35, 0.65, 0.8],
+        voltage_range: tuple[float | None, float | None] = (None, None),
+    ) -> None:
         self.name = name
         self.task = task
         self.inst = inst
@@ -96,9 +103,9 @@ class WaveGenChannel:
         self._filter_order = 2
         self._lowpass_cutoff = -1.0
 
-        self._trough_voltage = task.daq.min_ao_voltage
-        self._peak_voltage = task.daq.max_ao_voltage
-        self._anchors = WaveAnchors([0.2, 0.35, 0.65, 0.8], self.regenerate_waveform)
+        self._trough_voltage = voltage_range[0] or task.daq.min_ao_voltage
+        self._peak_voltage = voltage_range[1] or task.daq.max_ao_voltage
+        self._anchors = WaveAnchors(anchors, self.regenerate_waveform)
 
         self.data = self._generate_waveform()
 
@@ -276,7 +283,7 @@ class WaveGenTask(VoxelDaqTask):
         daq: "VoxelDaq",
         period_ms: float,
         sample_rate_hz: int | float,
-        trigger_task: ClockGenTask | None = None,
+        trigger_task: ClockGenTask,
     ) -> None:
         super().__init__(name=name, daq=daq)
 

@@ -109,7 +109,9 @@ class VieworksCamera(VoxelCamera):
 
     details = VIEWORKS_PROPERTY_DETAILS
 
-    def __init__(self, serial_number: str, pixel_size_um: tuple[float, float], name: str = ""):
+    def __init__(
+        self, serial_number: str, pixel_size_um: tuple[float, float], name: str = "", magnification: float = 1.0
+    ):
         self.serial_number = serial_number
 
         self._grabber, self._remote, self._stream = self._get_grabber_modules(self.serial_number)
@@ -126,7 +128,7 @@ class VieworksCamera(VoxelCamera):
         # LUTs
         self._binning_lut: dict[str, int] = self._get_binning_lut()
         self._pixel_format_options: list[str] = self._get_pixel_format_options()
-        super().__init__(name, pixel_size_um)
+        super().__init__(name, pixel_size_um, magnification)
         self.log.debug("Vieworks camera initialized successfully.")
 
     @staticmethod
@@ -425,23 +427,23 @@ class VieworksCamera(VoxelCamera):
         return self._get_line_interval_us(self.pixel_format)
 
     @deliminated_float(
-        min_value=lambda self: self._remote.get("AcquisitionFrameRate.Min", dtype=int),
-        max_value=lambda self: self._remote.get("AcquisitionFrameRate.Max", dtype=int),
+        min_value=lambda self: self._remote.get("AcquisitionFrameRate.Min", dtype=float),
+        max_value=lambda self: self._remote.get("AcquisitionFrameRate.Max", dtype=float),
     )
-    def frame_rate_hz(self) -> int:
+    def frame_rate_hz(self) -> float:
         """Get the frame rate in Hz.
         :return: The frame rate in Hz.
         :rtype: int
         """
-        return self._remote.get("AcquisitionFrameRate", dtype=int)
+        return self._remote.get("AcquisitionFrameRate", dtype=float)
 
     @frame_rate_hz.setter
-    def frame_rate_hz(self, frame_rate_hz: int) -> None:
+    def frame_rate_hz(self, value: float) -> None:
         """Set the frame rate in Hz.
         :param frame_rate_hz: The frame rate in Hz.
         :type frame_rate_hz: int
         """
-        self._remote.set("AcquisitionFrameRate", frame_rate_hz)
+        self._remote.set("AcquisitionFrameRate", value)
 
     @property
     def frame_time_ms(self) -> float:

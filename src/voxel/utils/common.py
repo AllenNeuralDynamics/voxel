@@ -1,5 +1,6 @@
 from typing import Any
 
+import psutil
 from ruamel.yaml import YAML
 
 
@@ -34,3 +35,8 @@ def update_yaml_content(file_path: str, new_content: dict[str, Any]) -> None:
                 file.write("\n")
     except Exception as e:
         raise ValueError(f"Error updating YAML content: {e}")
+
+
+def get_available_disk_space_mb(path: str) -> int:
+    """Return the available disk space in mega bytes."""
+    return psutil.disk_usage(path).free // (1024**2)

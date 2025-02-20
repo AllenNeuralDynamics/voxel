@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from voxel.io.writers.base import PixelType, VoxelWriter, WriterMetadata
+from voxel.io.writers.base import PixelType, VoxelWriter, WriterConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -25,7 +25,7 @@ class SimpleWriter(VoxelWriter):
     def batch_size_px(self) -> int:
         return 64 // 1
 
-    def configure(self, metadata: WriterMetadata) -> None:
+    def configure(self, metadata: WriterConfig) -> None:
         super().configure(metadata)
         self._output_file = self.dir / f"{metadata.file_name}.txt"
 
@@ -87,7 +87,7 @@ def test_writer():
     frame_count = writer.batch_size_px * NUM_BATCHES
 
     writer.configure(
-        WriterMetadata(
+        WriterConfig(
             path="test_output/simple_writer",
             frame_count=frame_count,
             frame_shape=frame_shape,

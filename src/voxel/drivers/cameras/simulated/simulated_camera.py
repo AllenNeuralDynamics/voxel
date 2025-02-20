@@ -62,6 +62,7 @@ class SimulatedCamera(VoxelCamera):
         self,
         name: str,
         pixel_size_um: tuple[float, float] | str,
+        magnification: float = 1,
         sensor_width_px: int = VP_151MX_M6H0.x,
         sensor_height_px: int = VP_151MX_M6H0.y,
         resize_method: Literal["tile", "upsample"] = "upsample",
@@ -88,7 +89,7 @@ class SimulatedCamera(VoxelCamera):
         self._frame: np.ndarray
         self._frame_count = 0
         self._requested_frame_count = -1
-        super().__init__(name=name, pixel_size_um=pixel_size_um)
+        super().__init__(name=name, pixel_size_um=pixel_size_um, maginification=magnification)
 
     @enumerated_int(options=list(_binning_lut.values()))
     def binning(self) -> int:

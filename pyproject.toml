@@ -42,7 +42,7 @@ dependencies = [
     "ome-types>=0.5.3",
     "jax>=0.4.35",
     "tensorstore>=0.1.68",
-    "cupy>=13.3.0",
+    # "cupy>=13.3.0",
     "torch>=2.4.1",
     "psutil>=6.1.0",
     "pyclesperanto>=0.16.0",
@@ -59,18 +59,11 @@ obis = ["obis-laser"]
 bdv = ["h5py>=3.12.1", "tqdm>=4.66.5"]
 imaris = ["pyimariswriter>=0.7.0"]
 etl-opto = ["optoicc", "optokummenberg"]
-egrabber = [
-    "egrabber",
-]
+egrabber = ["egrabber"]
+all = ["voxel[aaopto, cobolt, coherent, vortran, oxxius, obis, bdv, imaris, etl-opto, egrabber]"]
 
 [dependency-groups]
 dev = [
-    "customtkinter>=5.2.2",
-    "fastapi[standard]>=0.115.6",
-    "opencv-python>=4.10.0.84",
-    "pillow>=11.0.0",
-    "pydantic-settings>=2.7.0",
-    "pytest>=8.3.3",
     "ruff>=0.8.0",
 ]
 

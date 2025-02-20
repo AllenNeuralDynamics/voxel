@@ -28,8 +28,8 @@ class VoxelLens(VoxelDevice):
 
     def __init__(
         self,
-        magnification: float,
         name: str = "voxel_lens",
+        magnification: float = 1,
         focal_length_um: float | None = None,
         aperture_um: float | None = None,
     ):
@@ -160,9 +160,7 @@ class VoxelCamera(VoxelDevice):
     details = VOXEL_CAMERA_DETAILS
     signals = {"sensor_temperature_c"}
 
-    def __init__(
-        self, name: str, pixel_size_um: tuple[float, float] | str, objective: VoxelLens = VoxelLens(magnification=1)
-    ) -> None:
+    def __init__(self, name: str, pixel_size_um: tuple[float, float] | str, maginification: float = 1) -> None:
         """Initialize the camera.
 
         :param name: The unique identifier of the camera.
@@ -175,7 +173,7 @@ class VoxelCamera(VoxelDevice):
             assert len(parts) == 2, f"Invalid pixel size string: {pixel_size_um}"
             pixel_size_um = float(parts[0]), float(parts[1])
         self.pixel_size_um = Vec2D(*pixel_size_um)
-        self.objective = objective
+        self.objective = maginification
 
         self._Trigger_setting_map = {
             TriggerSetting.OFF: self._configure_free_running_mode,
@@ -208,7 +206,7 @@ class VoxelCamera(VoxelDevice):
         :return: The field of view of the camera in microns.
         :rtype: Vec2D
         """
-        return self.roi_size_um / self.objective.magnification
+        return self.roi_size_um / self.objective
 
     @cached_property
     @abstractmethod
@@ -434,6 +432,15 @@ class VoxelCamera(VoxelDevice):
         :rtype: float
         """
         pass
+
+    @deliminated_float()
+    def frame_rate_hz(self) -> float:
+        """Get the frame rate of the camera in Hz.
+
+        :return: The frame rate of the camera in Hz.
+        :rtype: float
+        """
+        return 1000 / self.frame_time_ms
 
     @property
     def trigger_setting(self) -> TriggerSetting:
