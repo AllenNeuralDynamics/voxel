@@ -47,6 +47,9 @@ dependencies = [
     "psutil>=6.1.0",
     "pyclesperanto>=0.16.0",
     "scikit-image>=0.24.0",
+    "zerorpc>=0.6.3",
+    "opencv-python>=4.11.0.86",
+    "msgpack-numpy>=0.4.8",
 ]
 
 [project.optional-dependencies]
@@ -65,6 +68,7 @@ all = ["voxel[aaopto, cobolt, coherent, vortran, oxxius, obis, bdv, imaris, etl-
 [dependency-groups]
 dev = [
     "ruff>=0.8.0",
+    "uvicorn>=0.34.0",
 ]
 
 [tool.uv.sources]

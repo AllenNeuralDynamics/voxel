@@ -58,9 +58,12 @@ class ClockGenTask(VoxelDaqTask):
         self.initial_delay_ms = initial_delay_ms
         self.idle_state = Level.HIGH if idle_state else Level.LOW
 
-    def configure(self, num_samples: int) -> None:
-        """Configure the timing for the task."""
-        if num_samples > 0:
+    def configure(self, num_samples: int | None) -> None:
+        """Configure the timing for the task.
+        :param num_samples: The number of samples to acquire. If None, the task will run continuously.
+        :type num_samples: int | None
+        """
+        if num_samples and num_samples > 0:
             self.inst.timing.cfg_implicit_timing(sample_mode=NiAcqType.FINITE, samps_per_chan=num_samples)
         else:
             self.inst.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)

@@ -8,39 +8,9 @@ import numpy as np
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.vec import Vec2D
+import zerorpc
 
 from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
-
-
-class VoxelLens(VoxelDevice):
-    """A voxel lens device.
-    :param magnification: The magnification of the lens.
-    :param name: The name of the lens.
-    :param focal_length_um: The focal length of the lens in micrometers.
-    :param aperture_um: The aperture of the lens in micrometers.
-    :return lens: The lens device.
-    :type magnification: float
-    :type name: str | None
-    :type focal_length_um: float| None
-    :type aperture_um: float| None
-    :rtype lens: VoxelLens
-    """
-
-    def __init__(
-        self,
-        name: str = "voxel_lens",
-        magnification: float = 1,
-        focal_length_um: float | None = None,
-        aperture_um: float | None = None,
-    ):
-        self.magnification = float(magnification)
-        self.focal_length_um: float | None = focal_length_um
-        self.aperture_um: float | None = aperture_um
-        super().__init__(device_type=VoxelDeviceType.LENS, name=name)
-
-    def close(self):
-        """Close the lens."""
-        pass
 
 
 class PixelType(IntEnum):
@@ -84,11 +54,6 @@ class AcquisitionState:
 
 
 VOXEL_CAMERA_DETAILS: dict[str, VoxelPropertyDetails] = {
-    "sensor_size_um": VoxelPropertyDetails(
-        label="Sensor Size",
-        unit="um",
-        description="The size of the camera sensor in microns.",
-    ),
     "sensor_size_px": VoxelPropertyDetails(
         label="Sensor Size",
         unit="px",
@@ -172,8 +137,8 @@ class VoxelCamera(VoxelDevice):
             parts = pixel_size_um.split(",")
             assert len(parts) == 2, f"Invalid pixel size string: {pixel_size_um}"
             pixel_size_um = float(parts[0]), float(parts[1])
-        self.pixel_size_um = Vec2D(*pixel_size_um)
-        self.objective = maginification
+        self._pixel_size_um = Vec2D(*pixel_size_um)
+        self._objective = maginification
 
         self._Trigger_setting_map = {
             TriggerSetting.OFF: self._configure_free_running_mode,
@@ -198,6 +163,24 @@ class VoxelCamera(VoxelDevice):
                 f"Frame Time:       {self.frame_time_ms:.2f} ms",
             )
         )
+
+    @property
+    def objective(self) -> float:
+        """Get the camera objective magnification.
+
+        :return: The camera objective magnification.
+        :rtype: float
+        """
+        return self._objective
+
+    @property
+    def pixel_size_um(self) -> Vec2D[float]:
+        """Get the size of the camera pixel in microns.
+
+        :return: The size of the camera pixel in microns.
+        :rtype: Vec2D
+        """
+        return self._pixel_size_um
 
     @property
     def fov_um(self) -> Vec2D[float]:
@@ -411,16 +394,17 @@ class VoxelCamera(VoxelDevice):
         """
         pass
 
-    # @line_interval_us.setter
-    # def line_interval_us(self, value: float) -> None:
-    #     """Set the line interval of the camera in us. \n
-    #     This is the time interval between adjacent \n
-    #     rows activating on the camera sensor.
+    @line_interval_us.setter
+    def line_interval_us(self, value: float) -> None:
+        """Set the line interval of the camera in us. \n
+        This is the time interval between adjacent \n
+        rows activating on the camera sensor.
 
-    #     :param value: The line interval of the camera in us
-    #     :type value: float
-    #     """
-    #     ...
+        :param value: The line interval of the camera in us
+        :type value: float
+        :raises NotImplementedError: Line interval is not supported on this camera
+        """
+        raise NotImplementedError("Line interval is not supported on this camera")
 
     @property
     @abstractmethod
@@ -526,11 +510,6 @@ class VoxelCamera(VoxelDevice):
         """
         pass
 
-    # @abstractmethod
-    # def reset(self) -> None:
-    #     """Reset the camera."""
-    #     pass
-
     @property
     @abstractmethod
     def sensor_temperature_c(self) -> float:
@@ -542,12 +521,187 @@ class VoxelCamera(VoxelDevice):
         """
         pass
 
-    # @property
-    # @abstractmethod
-    # def mainboard_temperature_c(self) -> float:
-    #     """Get the mainboard temperature of the camera in deg C.
 
-    #     :return: The mainboard temperature of the camera in deg C.
-    #     :rtype: float
-    #     """
-    #     pass
+class VoxelCameraProxy:
+    """
+    A proxy for a remote VoxelCamera service.
+
+    This class implements the public interface defined by VoxelCamera by forwarding
+    method calls over ZeroRPC to a remote service that implements VoxelCamera.
+    It does not inherit from VoxelCamera, but is registered as a virtual subclass,
+    so that consumers of a VoxelCamera can use it interchangeably.
+    """
+
+    def __init__(self, remote_address: str):
+        """
+        :param remote_address: The ZeroRPC address of the remote VoxelCamera service,
+                               e.g. "tcp://192.168.1.10:4242"
+        """
+        self.client = zerorpc.Client()
+        self.client.connect(remote_address)
+
+    # -- Methods --
+    def prepare(self) -> None:
+        return self.client.prepare()
+
+    def start(self, frame_count: int | None = None) -> None:
+        """
+        Start the camera acquisition.
+
+        :param frame_count: The number of frames to acquire. If None, the remote
+                            service should interpret this as indefinite acquisition.
+        """
+        fc = frame_count if frame_count is not None else 0
+        return self.client.start(fc)
+
+    def stop(self) -> None:
+        """Stop the camera by forwarding to the remote service."""
+        return self.client.stop()
+
+    def grab_frame(self) -> np.ndarray:
+        """
+        Grab a frame from the remote camera.
+
+        The remote service should return a serializable frame (e.g. a nested list),
+        which is then converted to a NumPy array.
+        """
+        frame_serialized = self.client.grab_frame()
+        return np.array(frame_serialized)
+
+    def reset_roi(self) -> None:
+        return self.client.reset_roi()
+
+    # -- Properties --
+
+    @cached_property
+    def details(self) -> dict[str, VoxelPropertyDetails]:
+        return self.client.details
+
+    @property
+    def pixel_size_um(self) -> Vec2D[float]:
+        return self.client.pixel_size_um
+
+    @pixel_size_um.setter
+    @property
+    def objective(self) -> float:
+        return self.client.objective
+
+    @property
+    def fov_um(self) -> Vec2D[float]:
+        return self.client.fov_um
+
+    @cached_property
+    def sensor_size_px(self) -> Vec2D[int]:
+        return Vec2D(*self.client.sensor_size_px)
+
+    @property
+    def roi_size_px(self) -> Vec2D[int]:
+        return Vec2D(*self.client.roi_size_px)
+
+    @property
+    def roi_size_um(self) -> Vec2D[float]:
+        return Vec2D(*self.client.roi_size_um)
+
+    @property
+    def roi_width_px(self) -> int:
+        return self.client.roi_width_px
+
+    @roi_width_px.setter
+    def roi_width_px(self, width_px: int) -> None:
+        self.client.roi_width_px = width_px
+
+    @property
+    def roi_width_offset_px(self) -> int:
+        return self.client.roi_width_offset_px
+
+    @roi_width_offset_px.setter
+    def roi_width_offset_px(self, width_offset_px: int) -> None:
+        self.client.roi_width_offset_px = width_offset_px
+
+    @property
+    def roi_height_px(self) -> int:
+        return self.client.roi_height_px
+
+    @roi_height_px.setter
+    def roi_height_px(self, height_px: int) -> None:
+        self.client.roi_height_px = height_px
+
+    @property
+    def roi_height_offset_px(self) -> int:
+        return self.client.roi_height_offset_px
+
+    @roi_height_offset_px.setter
+    def roi_height_offset_px(self, height_offset_px: int) -> None:
+        self.client.roi_height_offset_px = height_offset_px
+
+    @property
+    def binning(self) -> int:
+        return self.client.binning
+
+    @binning.setter
+    def binning(self, binning: int) -> None:
+        self.client.binning = binning
+
+    @property
+    def pixel_type(self) -> PixelType:
+        return PixelType(self.client.pixel_type)
+
+    @property
+    def frame_size_px(self) -> Vec2D[int]:
+        return Vec2D(*self.client.frame_size_px)
+
+    @property
+    def frame_size_mb(self) -> float:
+        return self.client.frame_size_mb
+
+    @property
+    def exposure_time_ms(self) -> float:
+        return self.client.exposure_time_ms
+
+    @exposure_time_ms.setter
+    def exposure_time_ms(self, exposure_time_ms: float) -> None:
+        self.client.exposure_time_ms = exposure_time_ms
+
+    @property
+    def line_interval_us(self) -> float:
+        return self.client.line_interval_us
+
+    @line_interval_us.setter
+    def line_interval_us(self, value: float) -> None:
+        self.client.line_interval_us = value
+
+    @property
+    def frame_time_ms(self) -> float:
+        return self.client.frame_time_ms
+
+    @property
+    def frame_rate_hz(self) -> float:
+        return self.client.frame_rate_hz
+
+    @property
+    def trigger_setting(self) -> TriggerSetting:
+        return TriggerSetting(self.client.trigger_setting)
+
+    @trigger_setting.setter
+    def trigger_setting(self, mode: TriggerSetting | str) -> None:
+        self.client.trigger_setting = TriggerSetting(mode)
+
+    @property
+    def acquisition_state(self) -> AcquisitionState:
+        state = self.client.acquisition_state
+        return AcquisitionState(
+            frame_index=state[0],
+            input_buffer_size=state[1],
+            output_buffer_size=state[2],
+            dropped_frames=state[3],
+            frame_rate_fps=state[4],
+            data_rate_mbs=state[5],
+        )
+
+    @property
+    def sensor_temperature_c(self) -> float:
+        return self.client.sensor_temperature_c
+
+
+# Register VoxelCameraProxy as a virtual subclass of VoxelCamera.
+VoxelCamera.register(VoxelCameraProxy)

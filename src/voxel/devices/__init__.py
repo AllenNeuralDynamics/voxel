@@ -3,7 +3,7 @@
 from ..io.transfers.base import VoxelFileTransfer
 from ..io.writers.base import VoxelWriter
 from .aotf import VoxelAOTF
-from .base import VoxelDevice, VoxelDeviceConnectionError, VoxelDeviceError, VoxelDeviceType
+from .base import VoxelDevice, VoxelDeviceConnectionError, VoxelDeviceError, VoxelDeviceType, VoxelDeviceModel
 from .camera import VoxelCamera
 from .chiller import VoxelChiller
 from .filter import VoxelFilter
@@ -19,6 +19,7 @@ __all__ = [
     "VoxelDeviceType",
     "VoxelDeviceError",
     "VoxelDeviceConnectionError",
+    "VoxelDeviceModel",
     "VoxelAOTF",
     "VoxelCamera",
     "VoxelChiller",
