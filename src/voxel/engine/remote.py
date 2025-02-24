@@ -1,6 +1,5 @@
 import threading
 import time
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import msgpack
@@ -11,7 +10,7 @@ import zmq
 from voxel.utils.log_config import get_component_logger
 
 from .local import AcquisitionEngine, AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
-from .preview import PreviewFrame, PreviewMetadata, PreviewSettings
+from .preview import NewFrameCallback, PreviewFrame, PreviewMetadata, PreviewSettings
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCameraProxy
@@ -69,7 +68,7 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
         self.preview_socket.setsockopt(zmq.SUBSCRIBE, b"frame")
 
         # Local storage for the client's preview callback.
-        self._frame_callback: Callable[["PreviewFrame"], None] | None = None
+        self._frame_callback: NewFrameCallback | None = None
         self._listening_thread: threading.Thread | None = None
         self._listening_event = threading.Event()
 
@@ -135,9 +134,8 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
                 if not isinstance(packed_frame, bytes):
                     self.log.error("Received frame is not in bytes format.")
                     continue
-                preview_frame = unpack_preview_frame(packed_frame)
                 if self._frame_callback is not None:
-                    self._frame_callback(preview_frame)
+                    self._frame_callback(packed_frame)
             except Exception as e:
                 self.log.error(f"Error in ZeroMQ listening loop: {e}")
                 time.sleep(0.1)
@@ -159,7 +157,7 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
             self._listening_thread = None
         self.log.info("Stopped ZeroMQ listening thread for preview frames.")
 
-    def start_preview(self, on_new_frame: Callable[["PreviewFrame"], None]) -> None:
+    def start_preview(self, on_new_frame: NewFrameCallback) -> None:
         """
         Start preview mode on the remote engine.
         Register the callback locally and start the background listener.
@@ -178,7 +176,7 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
         self._stop_listening()
         self._frame_callback = None
 
-    def acquire_batch(self, frame_range: range, on_new_frame: Callable[["PreviewFrame"], None]) -> None:
+    def acquire_batch(self, frame_range: range, on_new_frame: NewFrameCallback) -> None:
         """
         Acquire a batch of frames.
         Since live callbacks cannot be passed over RPC, we register the callback locally
@@ -241,14 +239,18 @@ class AcquisitionEngineService:
         if frame is not None:
             return pack_preview_frame(frame)
 
-    def _publish_preview_frame(self, frame: PreviewFrame) -> None:
+    def _publish_preview_frame(self, frame: PreviewFrame | bytes) -> None:
         """
         Publish the preview frame over ZeroMQ.
         This method is called by the engine to publish frames.
         """
         try:
-            packed_frame = pack_preview_frame(frame)
-            self.pub_socket.send_multipart([b"frame", packed_frame])
+            if isinstance(frame, PreviewFrame):
+                self.pub_socket.send_multipart([b"frame", pack_preview_frame(frame)])
+            elif isinstance(frame, bytes):
+                self.pub_socket.send_multipart([b"frame", frame])
+            else:
+                self.log.error("Received frame is neither PreviewFrame nor bytes.")
         except Exception as e:
             self.log.error(f"Error publishing frame: {e}")
 

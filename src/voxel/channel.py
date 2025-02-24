@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 
 from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
 from voxel.engine.local import AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
-from voxel.engine.preview import PreviewFrame
+from voxel.engine.preview import NewFrameCallback, PreviewFrame
+from voxel.engine.remote import unpack_preview_frame
 from voxel.utils.log_config import get_component_logger
 
 if TYPE_CHECKING:
@@ -30,15 +31,44 @@ class VoxelChannel:
     def __post_init__(self):
         self.log = get_component_logger(self)
         self._current_frame: PreviewFrame | None = None
+        self._preview_callbacks: set[NewFrameCallback] = set()
+        self.register_preview_callback(self._set_current_frame)
 
     @property
     def camera(self) -> VoxelCamera | VoxelCameraProxy:
         """Get the camera associated with this channel."""
         return self.engine.camera
 
-    def _set_current_frame(self, frame: PreviewFrame) -> None:
+    def register_preview_callback(self, callback: NewFrameCallback) -> None:
+        """
+        Register a callback to be called when a new preview frame is available.
+        The callback should accept a single argument, which will be the new frame.
+        """
+        self._preview_callbacks.add(callback)
+
+    def unregister_preview_callback(self, callback: NewFrameCallback) -> None:
+        """
+        Unregister a previously registered preview callback.
+        """
+        self._preview_callbacks.discard(callback)
+
+    def notify_preview_callbacks(self, frame: PreviewFrame | bytes) -> None:
+        """
+        Notify all registered preview callbacks with the new frame.
+        This is called when a new frame is available.
+        """
+        for callback in self._preview_callbacks:
+            try:
+                callback(frame)
+            except Exception as e:
+                self.log.error(f"Error in preview callback: {e}")
+
+    def _set_current_frame(self, frame: PreviewFrame | bytes) -> None:
         """Set the current frame for the channel."""
-        self._current_frame = frame
+        if isinstance(frame, bytes):
+            self._current_frame = unpack_preview_frame(frame)
+        elif isinstance(frame, PreviewFrame):
+            self._current_frame = frame
 
     def start_preview(self) -> None:
         """Start preview mode by enabling devices and delegating preview to the engine."""
@@ -48,7 +78,7 @@ class VoxelChannel:
         self.acq_task.regenerate_waveforms()
         self.acq_task.trigger_task.configure(num_samples=None)
         self.acq_task.start()
-        self.engine.start_preview(on_new_frame=self._set_current_frame)
+        self.engine.start_preview(on_new_frame=self.notify_preview_callbacks)
 
     def stop_preview(self) -> None:
         """Stop preview mode by stopping the engine and disabling devices."""

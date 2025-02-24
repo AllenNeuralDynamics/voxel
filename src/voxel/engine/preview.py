@@ -50,4 +50,4 @@ class PreviewFrame:
     metadata: PreviewMetadata
 
 
-type NewFrameCallback = Callable[[PreviewFrame], None]
+type NewFrameCallback = Callable[[PreviewFrame | bytes], None]
