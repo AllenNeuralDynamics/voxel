@@ -2,43 +2,17 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-import msgpack
-import msgpack_numpy as mpack_numpy
+
 import zerorpc
 import zmq
 
 from voxel.utils.log_config import get_component_logger
 
 from .local import AcquisitionEngine, AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
-from .preview import NewFrameCallback, PreviewFrame, PreviewMetadata, PreviewSettings
+from .preview import NewFrameCallback, PreviewFrame, PreviewSettings, pack_preview_frame, unpack_preview_frame
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCameraProxy
-
-
-def pack_preview_frame(preview: PreviewFrame) -> bytes:
-    """
-    Pack the preview frame along with its metadata using msgpack.
-    The result is a bytes object that can be transmitted over RPC.
-    """
-    return msgpack.packb(
-        {
-            "data": preview.data,  # msgpack-numpy handles numpy arrays.
-            "metadata": preview.metadata.model_dump(),
-        },
-        default=mpack_numpy.encode,
-    )
-
-
-def unpack_preview_frame(packed_frame: bytes) -> PreviewFrame:
-    """
-    Unpack the packed preview frame using msgpack.
-    The result is a PreviewFrame object.
-    """
-    unpacked = msgpack.unpackb(packed_frame, object_hook=mpack_numpy.decode)
-    data = unpacked["data"]
-    metadata = PreviewMetadata(**unpacked["metadata"])
-    return PreviewFrame(data=data, metadata=metadata)
 
 
 class AcquisitionEngineProxy(AcquisitionEngineBase):

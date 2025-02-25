@@ -216,6 +216,8 @@ class SimulatedCamera(VoxelCamera):
             exposure_time_ms=int(self.exposure_time_ms),
             resize_method=self._resize_method,
         )
+        # convert self._frame from jaxlib to numpy
+        self._frame = np.array(self._frame)
         self.log.info(f"Simulated camera started with {frame_count} frames")
 
     def stop(self) -> None:

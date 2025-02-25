@@ -2,11 +2,14 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-
+from voxel.devices.base import VoxelDeviceModel
 from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
-from voxel.engine.local import AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
-from voxel.engine.preview import NewFrameCallback, PreviewFrame
-from voxel.engine.remote import unpack_preview_frame
+from voxel.engine.local import (
+    AcquisitionEngineBase,
+    EngineStatus,
+    StackAcquisitionConfig,
+)
+from voxel.engine.preview import NewFrameCallback, PreviewFrame, unpack_preview_frame
 from voxel.utils.log_config import get_component_logger
 
 if TYPE_CHECKING:
@@ -52,11 +55,13 @@ class VoxelChannel:
         """
         self._preview_callbacks.discard(callback)
 
-    def notify_preview_callbacks(self, frame: PreviewFrame | bytes) -> None:
+    def notify_preview_callbacks(self, frame: PreviewFrame) -> None:
         """
         Notify all registered preview callbacks with the new frame.
         This is called when a new frame is available.
         """
+        if self._preview_callbacks and isinstance(frame, bytes):
+            frame = unpack_preview_frame(frame)
         for callback in self._preview_callbacks:
             try:
                 callback(frame)
@@ -133,3 +138,11 @@ class VoxelChannel:
             self.log.info("Stack acquisition complete.")
 
         threading.Thread(target=acquisition_thread, daemon=True).start()
+
+    @property
+    def snapshot(self) -> list[VoxelDeviceModel]:
+        """
+        Return a snapshot of the channel's devices.
+        This is used for API responses.
+        """
+        return [self.camera.snapshot, self.laser.snapshot, self.filter.snapshot]

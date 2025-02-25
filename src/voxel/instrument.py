@@ -223,7 +223,7 @@ class VoxelInstrument:
         """Build channels from the configuration."""
         channels = {}
         for name, channel_config in self.config.channels.items():
-            camera = (self.cameras[channel_config.camera],)
+            camera = self.cameras[channel_config.camera]
             if isinstance(camera, VoxelCameraProxy):
                 engine = AcquisitionEngineProxy(
                     rpc_address="localhost",

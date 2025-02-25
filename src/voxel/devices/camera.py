@@ -10,7 +10,7 @@ from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.vec import Vec2D
 import zerorpc
 
-from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
+from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails, VoxelDeviceModel
 
 
 class PixelType(IntEnum):
@@ -125,7 +125,12 @@ class VoxelCamera(VoxelDevice):
     details = VOXEL_CAMERA_DETAILS
     signals = {"sensor_temperature_c"}
 
-    def __init__(self, name: str, pixel_size_um: tuple[float, float] | str, maginification: float = 1) -> None:
+    def __init__(
+        self,
+        name: str,
+        pixel_size_um: tuple[float, float] | str,
+        maginification: float = 1,
+    ) -> None:
         """Initialize the camera.
 
         :param name: The unique identifier of the camera.
@@ -701,6 +706,11 @@ class VoxelCameraProxy:
     @property
     def sensor_temperature_c(self) -> float:
         return self.client.sensor_temperature_c
+
+    @property
+    def snapshot(self) -> VoxelDeviceModel:
+        """Get the latest frame from the camera."""
+        return self.client.snapshot()
 
 
 # Register VoxelCameraProxy as a virtual subclass of VoxelCamera.

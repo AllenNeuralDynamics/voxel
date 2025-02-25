@@ -244,16 +244,18 @@ class AcquisitionEngine(AcquisitionEngineBase):
 
     def _preview_loop(self, on_new_frame: NewFrameCallback) -> None:
         """Continuously capture preview frames and update self.latest_frame."""
+        frame_counter = 0
         while not self._halt_event.is_set() and self._state == EngineStatus.PREVIEW:
             try:
                 self._latest_frame = self.camera.grab_frame()
+                frame_counter += 1
                 if on_new_frame is not None:
-                    on_new_frame(self._generate_preview_frame(self._latest_frame))
+                    on_new_frame(self._generate_preview_frame(self._latest_frame, frame_counter))
             except Exception as e:
                 self.log.error(f"Error capturing preview frame: {e}")
             time.sleep(self.camera.frame_time_ms / 1000)
 
-    def _generate_preview_frame(self, raw_frame: np.ndarray) -> PreviewFrame:
+    def _generate_preview_frame(self, raw_frame: np.ndarray, frame_idx: int = 0) -> PreviewFrame:
         """
         Generate a PreviewFrame from the raw frame using the current preview_settings.
         The method crops the raw frame to the ROI (using normalized coordinates) and then
@@ -263,7 +265,13 @@ class AcquisitionEngine(AcquisitionEngineBase):
         ps = self._preview_settings
         full_width = raw_frame.shape[1]
         full_height = raw_frame.shape[0]
-        metadata = PreviewMetadata(**ps.model_dump(), full_width=full_width, full_height=full_height)
+        metadata = PreviewMetadata(
+            **ps.model_dump(),
+            frame_idx=frame_idx,
+            full_width=full_width,
+            full_height=full_height,
+            preview_height=int(full_height * (ps.preview_width / full_width)),
+        )
         # Compute absolute ROI coordinates.
         roi_x_abs = int(full_width * metadata.roi_x)
         roi_y_abs = int(full_height * metadata.roi_y)
@@ -273,6 +281,6 @@ class AcquisitionEngine(AcquisitionEngineBase):
         roi_frame = raw_frame[roi_y_abs : roi_y_abs + roi_h_abs, roi_x_abs : roi_x_abs + roi_w_abs]
         # Resize to the target dimensions.
         preview_img = cv2.resize(
-            roi_frame, (metadata.target_width, metadata.target_height), interpolation=cv2.INTER_AREA
+            roi_frame, (metadata.preview_width, metadata.preview_height), interpolation=cv2.INTER_AREA
         )
         return PreviewFrame(data=preview_img, metadata=metadata)
