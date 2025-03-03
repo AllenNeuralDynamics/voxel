@@ -109,7 +109,7 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
                     self.log.error("Received frame is not in bytes format.")
                     continue
                 if self._frame_callback is not None:
-                    self._frame_callback(packed_frame)
+                    self._frame_callback(unpack_preview_frame(packed_frame))
             except Exception as e:
                 self.log.error(f"Error in ZeroMQ listening loop: {e}")
                 time.sleep(0.1)

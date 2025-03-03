@@ -495,7 +495,8 @@ class VoxelCamera(VoxelDevice):
         image is computed and returned.
 
         :return: The camera frame of size (height, width).
-        :rtype: VoxelFrame
+        :rtype: np.ndarray[np.uint8 | np.uint16]
+        :raises RuntimeError: If the camera is not started
         """
         pass
 

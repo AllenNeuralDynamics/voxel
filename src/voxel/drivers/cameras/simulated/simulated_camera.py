@@ -1,5 +1,4 @@
 from functools import cached_property
-import os
 import time
 from typing import Literal, TypedDict
 
@@ -8,7 +7,12 @@ import numpy as np
 from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors import enumerated_int, enumerated_string, deliminated_float
 from voxel.utils.descriptors.deliminated import deliminated_int
-from voxel.utils.frame_gen import generate_reference_image
+from voxel.utils.frame_gen import (
+    generate_checkered_frame,
+    generate_ripple_frame,
+    generate_reference_image,
+    generate_spiral_frame,
+)
 from voxel.utils.vec import Vec2D
 
 VP_151MX_M6H0 = Vec2D(x=14192, y=10640) // 1
@@ -20,13 +24,6 @@ class ImageModelParams(TypedDict):
     dark_noise: float
     bitdepth: int
     baseline: int
-    reference_image_path: str | None
-    size: Vec2D[int]
-
-
-def _default_reference_image_path():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(current_dir, "reference_image.tif")
 
 
 DEFAULT_IMAGE_MODEL: ImageModelParams = {
@@ -35,8 +32,6 @@ DEFAULT_IMAGE_MODEL: ImageModelParams = {
     "dark_noise": 6.89,
     "bitdepth": 12,
     "baseline": 0,
-    "reference_image_path": _default_reference_image_path(),
-    "size": Vec2D(2048 + 2, 2048 + 2),
 }
 
 
@@ -210,14 +205,38 @@ class SimulatedCamera(VoxelCamera):
         self.is_running = True
         self._frame_count = 0
         self._requested_frame_count = frame_count if frame_count is not None else -1
-        self._frame = generate_reference_image(
-            height_px=int(self.roi_height_px),
-            width_px=int(self.roi_width_px),
-            exposure_time_ms=int(self.exposure_time_ms),
-            resize_method=self._resize_method,
-        )
-        # convert self._frame from jaxlib to numpy
-        self._frame = np.array(self._frame)
+
+        FRAME_TYPE = "ripple"  # "ref" | "spiral" | "checkered"
+        match FRAME_TYPE:
+            case "ref":
+                self._frame = generate_reference_image(
+                    height_px=int(self.roi_height_px),
+                    width_px=int(self.roi_width_px),
+                    exposure_time_ms=int(self.exposure_time_ms),
+                    resize_method=self._resize_method,
+                    data_type=self.pixel_type.dtype,
+                )
+            case "spiral":
+                self._frame = generate_spiral_frame(
+                    width=self.roi_width_px, height=self.roi_height_px, data_type=self.pixel_type.dtype
+                )
+            case "checkered":
+                self._frame = generate_checkered_frame(
+                    width_px=self.roi_width_px, height_px=self.roi_height_px, data_type=self.pixel_type.dtype
+                )
+            case "ripple":
+                self._frame = generate_ripple_frame(
+                    width=self.roi_width_px, height=self.roi_height_px, data_type=self.pixel_type.dtype
+                )
+            case _:
+                self._frame = generate_reference_image(
+                    height_px=int(self.roi_height_px),
+                    width_px=int(self.roi_width_px),
+                    exposure_time_ms=int(self.exposure_time_ms),
+                    resize_method=self._resize_method,
+                    data_type=self.pixel_type.dtype,
+                )
+
         self.log.info(f"Simulated camera started with {frame_count} frames")
 
     def stop(self) -> None:
@@ -235,7 +254,7 @@ class SimulatedCamera(VoxelCamera):
         sleep_time = max(0, frame_time - time_since_last_grab)
         # self.log.warning(f"Frame time: {frame_time}, time since last grab: {time_since_last_grab}")
         if sleep_time > 0:
-            self.log.warning(f"Sleeping for {sleep_time} seconds")
+            self.log.debug(f"Sleeping for {sleep_time} seconds")
         time.sleep(sleep_time)
 
         self._last_grab_frame_time = time.time()

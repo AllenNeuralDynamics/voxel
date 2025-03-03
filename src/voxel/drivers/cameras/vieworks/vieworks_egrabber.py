@@ -533,6 +533,9 @@ class VieworksCamera(VoxelCamera):
 
             data = ct.cast(ptr, ct.POINTER(ct.c_ubyte * pixel_count * 2)).contents
             frame = np.frombuffer(data, count=pixel_count, dtype=self.pixel_type.dtype)
+            state = self.acquisition_state
+            if state.frame_index % 100 == 0:
+                print(f"Frame: {state.frame_index} - dropped: {state.dropped_frames} - fps: {state.frame_rate_fps}")
             return frame.reshape((frame_size.y, frame_size.x))
 
     def _configure_free_running_mode(self) -> None:

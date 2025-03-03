@@ -245,24 +245,94 @@ class AcquisitionEngine(AcquisitionEngineBase):
     def _preview_loop(self, on_new_frame: NewFrameCallback) -> None:
         """Continuously capture preview frames and update self.latest_frame."""
         frame_counter = 0
+        start_time = time.perf_counter()
         while not self._halt_event.is_set() and self._state == EngineStatus.PREVIEW:
             try:
                 self._latest_frame = self.camera.grab_frame()
-                frame_counter += 1
                 if on_new_frame is not None:
                     on_new_frame(self._generate_preview_frame(self._latest_frame, frame_counter))
+                frame_counter += 1
+                if frame_counter % 100 == 0:
+                    elapsed = time.perf_counter() - start_time
+                    fps = frame_counter / elapsed if elapsed > 0 else 0
+                    print(f"Frame: {frame_counter} - fps: {fps:.4f} fps")
             except Exception as e:
                 self.log.error(f"Error capturing preview frame: {e}")
-            time.sleep(self.camera.frame_time_ms / 1000)
+            time.sleep(self.camera.frame_time_ms * 0.25 / 1000)  # Sleep for 0.25 of the frame time
 
     def _generate_preview_frame(self, raw_frame: np.ndarray, frame_idx: int = 0) -> PreviewFrame:
+        """
+        Generate a PreviewFrame from the raw frame using the current preview_settings.
+        The method crops the raw frame to the ROI (using normalized coordinates) and then
+        resizes the cropped image to the target preview dimensions. It also applies black/white
+        point and gamma adjustments to produce an 8-bit preview.
+        """
+        ps = self._preview_settings
+        full_width = raw_frame.shape[1]
+        full_height = raw_frame.shape[0]
+
+        # Build the metadata object (assuming PreviewMetadata supports these fields).
+        metadata = PreviewMetadata(
+            **ps.model_dump(),
+            frame_idx=frame_idx,
+            full_width=full_width,
+            full_height=full_height,
+            preview_height=int(full_height * (ps.preview_width / full_width)),
+        )
+
+        # 1) Compute absolute ROI coordinates.
+        roi_x_abs = int(full_width * metadata.roi_x)
+        roi_y_abs = int(full_height * metadata.roi_y)
+        roi_w_abs = int(full_width * metadata.roi_width)
+        roi_h_abs = int(full_height * metadata.roi_height)
+
+        # 2) Crop to the ROI.
+        roi_frame = raw_frame[roi_y_abs : roi_y_abs + roi_h_abs, roi_x_abs : roi_x_abs + roi_w_abs]
+
+        # 3) Resize to the target dimensions (still in the original dtype, e.g. uint16).
+        preview_img = cv2.resize(
+            roi_frame,
+            (metadata.preview_width, metadata.preview_height),
+            interpolation=cv2.INTER_AREA,
+        )
+
+        # 4) Convert to float32 for intensity scaling.
+        preview_float = preview_img.astype(np.float32)
+
+        # 5) Determine the max possible value from the raw frame's dtype (e.g. 65535 for uint16).
+        max_val = np.iinfo(raw_frame.dtype).max
+
+        # 6) Compute the actual black/white values from percentages.
+        black_val = ps.black_percent * max_val
+        white_val = ps.white_percent * max_val
+
+        # 7) Clamp to [black_val..white_val].
+        preview_float = np.clip(preview_float, black_val, white_val)
+
+        # 8) Normalize to [0..1].
+        denom = (white_val - black_val) + 1e-8
+        preview_float = (preview_float - black_val) / denom
+
+        # 9) Apply gamma correction (gamma factor in PreviewSettings).
+        #    If gamma=1.0, no change.
+        if ps.gamma != 1.0:
+            preview_float = preview_float ** (1.0 / ps.gamma)
+
+        # 10) Scale to [0..255] and convert to uint8.
+        preview_float *= 255.0
+        preview_uint8 = preview_float.astype(np.uint8)
+
+        # 11) Return the final 8-bit preview.
+        return PreviewFrame(frame=preview_uint8, metadata=metadata)
+
+    def _generate_preview_frame0(self, raw_frame: np.ndarray, frame_idx: int = 0) -> PreviewFrame:
         """
         Generate a PreviewFrame from the raw frame using the current preview_settings.
         The method crops the raw frame to the ROI (using normalized coordinates) and then
         resizes the cropped image to the target preview dimensions. It also creates a PreviewMetadata
         instance with the full image dimensions.
         """
-        ps = self._preview_settings
+        ps: PreviewSettings = self._preview_settings
         full_width = raw_frame.shape[1]
         full_height = raw_frame.shape[0]
         metadata = PreviewMetadata(
@@ -283,4 +353,4 @@ class AcquisitionEngine(AcquisitionEngineBase):
         preview_img = cv2.resize(
             roi_frame, (metadata.preview_width, metadata.preview_height), interpolation=cv2.INTER_AREA
         )
-        return PreviewFrame(data=preview_img, metadata=metadata)
+        return PreviewFrame(frame=preview_img, metadata=metadata)

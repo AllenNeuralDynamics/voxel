@@ -238,6 +238,9 @@ class WaveGenChannel:
 
         waveform[low_point:] = self.trough_voltage
 
+        # remove last sample to avoid overflow
+        waveform = waveform[:-1]
+
         return self._apply_lowpass_filter(waveform)
 
     def _apply_lowpass_filter(self, waveform: np.ndarray) -> np.ndarray:
