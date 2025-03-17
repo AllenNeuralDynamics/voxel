@@ -1,7 +1,7 @@
+from enum import StrEnum
 import logging
 import os
 import time
-from typing import Literal
 
 import numpy as np
 import tifffile
@@ -24,14 +24,22 @@ REFERENCE_IMAGE_PATH = os.path.dirname(os.path.abspath(__file__)) + "/reference_
 EXPOSURE_TIME_MS = 10
 
 
+class FrameGenStrategy(StrEnum):
+    TILE = "tile"
+    UPSAMPLE = "upsample"
+    RIPPLE = "ripple"
+    CHECKERED = "checkered"
+    SPIRAL = "spiral"
+
+
 def process_image_batch(
     image: jnp.ndarray,
     nframes: int,
     height_px: int,
     width_px: int,
     exposure_time_ms: int,
-    resize_method: Literal["upsample", "tile"],
     rng_key: jnp.ndarray,
+    resize_method=FrameGenStrategy.UPSAMPLE,
     qe: float = 0.85,
     gain: float = 0.08,
     dark_noise: float = 6.89,
@@ -92,7 +100,7 @@ def resize_image(
     image: jnp.ndarray,
     height_px: int,
     width_px: int,
-    resize_method: Literal["upsample", "tile"] = "upsample",
+    resize_method=FrameGenStrategy.UPSAMPLE,
 ) -> jnp.ndarray:
     """
     Resize or tile the image to the desired dimensions without modifying pixel intensities
@@ -143,7 +151,7 @@ def generate_reference_image2(
     data_type: np.dtype = np.dtype(np.uint16),
     reference_image_path: str = REFERENCE_IMAGE_PATH,
     exposure_time_ms: int = EXPOSURE_TIME_MS,
-    resize_method: Literal["upsample", "tile"] = "upsample",
+    resize_method=FrameGenStrategy.UPSAMPLE,
 ) -> np.ndarray:
     # Load the image and convert it to jax.numpy array
     image = load_and_normalize_tiff(reference_image_path, data_type)
@@ -189,7 +197,7 @@ def generate_reference_image(
     height_px: int,
     width_px: int,
     data_type: np.dtype = np.dtype(np.uint16),
-    resize_method: Literal["upsample", "tile"] = "upsample",
+    resize_method=FrameGenStrategy.UPSAMPLE,
     qe: float = 0.85,
     gain: float = 0.08,
     dark_noise: float = 6.89,
@@ -239,7 +247,7 @@ def generate_reference_image_raw(
     width_px: int,
     data_type: np.dtype = np.dtype(np.uint16),
     reference_image_path: str = REFERENCE_IMAGE_PATH,
-    resize_method: Literal["upsample", "tile"] = "upsample",
+    resize_method=FrameGenStrategy.UPSAMPLE,
 ) -> np.ndarray:
     """
     Loads a TIFF, converts to the desired dtype, and resizes by either tiling or upsampling.
@@ -265,7 +273,7 @@ def generate_reference_image_batch(
     width_px: int,
     reference_image_path: str = REFERENCE_IMAGE_PATH,
     exposure_time_ms: int = EXPOSURE_TIME_MS,
-    resize_method: Literal["upsample", "tile"] = "upsample",
+    resize_method=FrameGenStrategy.UPSAMPLE,
 ) -> jnp.ndarray:
     # Load the image and convert it to jax.numpy array
     image = tifffile.imread(reference_image_path)

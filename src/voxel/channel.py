@@ -9,7 +9,7 @@ from voxel.engine.local import (
     EngineStatus,
     StackAcquisitionConfig,
 )
-from voxel.engine.preview import NewFrameCallback, PreviewFrame, unpack_preview_frame
+from voxel.engine.preview import NewFrameCallback, PreviewFrame
 from voxel.utils.log_config import get_component_logger
 
 if TYPE_CHECKING:
@@ -35,12 +35,26 @@ class VoxelChannel:
         self.log = get_component_logger(self)
         self._current_frame: PreviewFrame | None = None
         self._preview_callbacks: set[NewFrameCallback] = set()
-        self.register_preview_callback(self._set_current_frame)
 
     @property
     def camera(self) -> VoxelCamera | VoxelCameraProxy:
         """Get the camera associated with this channel."""
         return self.engine.camera
+
+    @property
+    def is_previewing(self) -> bool:
+        """Check if the channel is currently in preview mode."""
+        return self.engine.state == EngineStatus.PREVIEW
+
+    @property
+    def is_acquiring(self) -> bool:
+        """Check if the channel is currently in acquisition mode."""
+        return self.engine.state == EngineStatus.CONFIGURED or self.engine.state == EngineStatus.RUNNING
+
+    @property
+    def is_active(self) -> bool:
+        """Check if the channel is currently active (either previewing or acquiring)."""
+        return self.is_previewing or self.is_acquiring
 
     def register_preview_callback(self, callback: NewFrameCallback) -> None:
         """
@@ -60,20 +74,15 @@ class VoxelChannel:
         Notify all registered preview callbacks with the new frame.
         This is called when a new frame is available.
         """
-        if self._preview_callbacks and isinstance(frame, bytes):
-            frame = unpack_preview_frame(frame)
+        if not self._preview_callbacks:
+            return
+        frame = PreviewFrame.unpack(packed_frame=frame) if isinstance(frame, bytes) else frame
         for callback in self._preview_callbacks:
             try:
+                # print(f"Notifying callback {callback} with frame {frame.config.frame_idx}")
                 callback(frame)
             except Exception as e:
                 self.log.error(f"Error in preview callback: {e}")
-
-    def _set_current_frame(self, frame: PreviewFrame | bytes) -> None:
-        """Set the current frame for the channel."""
-        if isinstance(frame, bytes):
-            self._current_frame = unpack_preview_frame(frame)
-        elif isinstance(frame, PreviewFrame):
-            self._current_frame = frame
 
     def start_preview(self) -> None:
         """Start preview mode by enabling devices and delegating preview to the engine."""
@@ -131,7 +140,7 @@ class VoxelChannel:
                 self.acq_task.trigger_task.configure(num_samples=len(frame_range))
                 self.acq_task.trigger_task.start()
                 # Acquire the current batch with the engine.
-                self.engine.acquire_batch(frame_range, on_new_frame=self._set_current_frame)
+                self.engine.acquire_batch(frame_range, on_new_frame=self.notify_preview_callbacks)
                 self.acq_task.trigger_task.stop()
             self.acq_task.stop()
             self.engine.finalize_stack_acquisition()

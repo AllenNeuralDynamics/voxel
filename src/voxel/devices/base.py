@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel
 
-from voxel.utils.descriptors.deliminated import DeliminatedInt, DeliminatedFloat, DeliminatedProperty
+from voxel.utils.descriptors.deliminated import (
+    DeliminatedInt,
+    DeliminatedFloat,
+    DeliminatedProperty,
+)
 from voxel.utils.descriptors.enumerated import EnumeratedProperty, EnumeratedValue
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec2D, Vec3D
@@ -16,7 +20,9 @@ from voxel.utils.vec import Vec2D, Vec3D
 if TYPE_CHECKING:
     from voxel.daq.tasks.wavegen import WaveGenChannel
 
-type VoxelPropertyType = Literal["deliminated", "enumerated", "string", "number", "boolean", "vector", "dict"]
+type VoxelPropertyType = Literal[
+    "deliminated", "enumerated", "string", "number", "boolean", "vector", "dict"
+]
 
 
 class VoxelPropertyModel[T: int | float](BaseModel):
@@ -27,7 +33,13 @@ class VoxelPropertyModel[T: int | float](BaseModel):
     max: int | float | None = None
     step: int | float | None = None
     write: bool = True
-    options: Sequence[str] | Sequence[int] | Sequence[float] | Sequence[int | float | str] | None = None
+    options: (
+        Sequence[str]
+        | Sequence[int]
+        | Sequence[float]
+        | Sequence[int | float | str]
+        | None
+    ) = None
 
 
 class VoxelDeviceType(StrEnum):
@@ -67,7 +79,7 @@ class VoxelPropertyDetails(BaseModel):
 class VoxelDeviceModel(BaseModel):
     name: str
     type: VoxelDeviceType
-    properties: dict[str, VoxelPropertyModel]
+    properties: dict[str, "VoxelPropertyModel"]
 
 
 class VoxelSignalModel(BaseModel):
@@ -141,7 +153,13 @@ class VoxelDevice(ABC):
 
     @cached_property
     def properties(self) -> dict[str, Any]:
-        ignore_list = {"name", "device_type", "log", "property_names", "acq_daq_channel"}
+        ignore_list = {
+            "name",
+            "device_type",
+            "log",
+            "property_names",
+            "acq_daq_channel",
+        }
         return {
             k: v
             for k, v in {**vars(type(self)), **vars(self)}.items()
@@ -160,7 +178,9 @@ class VoxelDevice(ABC):
                 return "deliminated"
             if isinstance(prop_value, (EnumeratedValue, IntEnum, StrEnum)):
                 return "enumerated"
-            if hasattr(prop_value, "__dataclass_fields__") or hasattr(prop_value, "__fields__"):
+            if hasattr(prop_value, "__dataclass_fields__") or hasattr(
+                prop_value, "__fields__"
+            ):
                 return "dict"
             else:
                 return type(prop_value).__name__.lower()
@@ -187,7 +207,17 @@ class VoxelDevice(ABC):
         if isinstance(prop_obj, (property, DeliminatedProperty, EnumeratedProperty)):
             write = prop_obj.fset is not None
 
-        if prop_type not in {"deliminated", "enumerated", "int", "float", "dict", "str", "bool", "vec2d", "vec3d"}:
+        if prop_type not in {
+            "deliminated",
+            "enumerated",
+            "int",
+            "float",
+            "dict",
+            "str",
+            "bool",
+            "vec2d",
+            "vec3d",
+        }:
             prop_value = str(prop_value)
 
         return VoxelPropertyModel(
@@ -201,9 +231,15 @@ class VoxelDevice(ABC):
             write=write,
         )
 
-    def get_properties(self, prop_names: set[str] | None = None) -> dict[str, VoxelPropertyModel]:
+    def get_properties(
+        self, prop_names: set[str] | None = None
+    ) -> dict[str, VoxelPropertyModel]:
         """Get a snapshot of the device's current state."""
-        prop_names = {name for name in prop_names if name in self.property_names} if prop_names else self.property_names
+        prop_names = (
+            {name for name in prop_names if name in self.property_names}
+            if prop_names
+            else self.property_names
+        )
 
         props: dict[str, VoxelPropertyModel] = {}
         for prop_name in prop_names:
@@ -212,7 +248,7 @@ class VoxelDevice(ABC):
         return props
 
     @property
-    def snapshot(self) -> VoxelDeviceModel:
+    def snapshot(self) -> "VoxelDeviceModel":
         return VoxelDeviceModel(
             name=self.name,
             type=self.device_type,
@@ -225,7 +261,11 @@ class VoxelDevice(ABC):
         for signal_name in self._signals:
             signal_value = getattr(self, signal_name)
             if isinstance(signal_value, (int | float | str | bool | Vec2D | Vec3D)):
-                signals[signal_name] = VoxelSignalModel(name=signal_name, value=signal_value)
+                signals[signal_name] = VoxelSignalModel(
+                    name=signal_name, value=signal_value
+                )
             else:
-                self.log.error(f"Signal '{signal_name}' has an unsupported type: {type(signal_value)}")
+                self.log.error(
+                    f"Signal '{signal_name}' has an unsupported type: {type(signal_value)}"
+                )
         return signals

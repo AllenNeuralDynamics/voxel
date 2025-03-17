@@ -2,6 +2,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -10,7 +11,10 @@ from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.vec import Vec2D
 import zerorpc
 
-from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails, VoxelDeviceModel
+from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
+
+if TYPE_CHECKING:
+    from .base import VoxelDeviceModel
 
 
 class PixelType(IntEnum):
@@ -579,6 +583,10 @@ class VoxelCameraProxy:
 
     # -- Properties --
 
+    @property
+    def name(self) -> str:
+        return self.client.name
+
     @cached_property
     def details(self) -> dict[str, VoxelPropertyDetails]:
         return self.client.details
@@ -709,7 +717,7 @@ class VoxelCameraProxy:
         return self.client.sensor_temperature_c
 
     @property
-    def snapshot(self) -> VoxelDeviceModel:
+    def snapshot(self) -> "VoxelDeviceModel":
         """Get the latest frame from the camera."""
         return self.client.snapshot()
 

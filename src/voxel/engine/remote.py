@@ -9,7 +9,7 @@ import zmq
 from voxel.utils.log_config import get_component_logger
 
 from .local import AcquisitionEngine, AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
-from .preview import NewFrameCallback, PreviewFrame, PreviewSettings, pack_preview_frame, unpack_preview_frame
+from .preview import NewFrameCallback, PreviewFrame, PreviewSettings, PreviewTransform
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCameraProxy
@@ -73,14 +73,21 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
         packed = self.rpc_client.get_latest_preview()
         if not packed:
             return None
-        return unpack_preview_frame(packed)
+        return PreviewFrame.unpack(packed)
 
-    def update_preview_settings(self, settings: "PreviewSettings") -> None:
+    # def update_preview_settings(self, settings: "PreviewSettings") -> None:
+    #     """
+    #     Update the remote engine's preview settings.
+    #     We assume the remote service exposes an update_preview_settings method.
+    #     """
+    #     self.rpc_client.update_preview_settings(settings.model_dump())
+
+    def update_preview_transform(self, transform: "PreviewTransform") -> None:
         """
-        Update the remote engine's preview settings.
-        We assume the remote service exposes an update_preview_settings method.
+        Update the remote engine's preview transform.
+        We assume the remote service exposes an update_preview_transform method.
         """
-        self.rpc_client.update_preview_settings(settings.model_dump())
+        self.rpc_client.update_preview_transform(transform.model_dump())
 
     def prepare_stack_acquisition(self, config: StackAcquisitionConfig) -> list[range]:
         """
@@ -109,7 +116,7 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
                     self.log.error("Received frame is not in bytes format.")
                     continue
                 if self._frame_callback is not None:
-                    self._frame_callback(unpack_preview_frame(packed_frame))
+                    self._frame_callback(PreviewFrame.unpack(packed_frame))
             except Exception as e:
                 self.log.error(f"Error in ZeroMQ listening loop: {e}")
                 time.sleep(0.1)
@@ -211,7 +218,13 @@ class AcquisitionEngineService:
     def get_latest_preview(self) -> bytes | None:
         frame = self.engine.get_latest_preview()
         if frame is not None:
-            return pack_preview_frame(frame)
+            return frame.pack()
+
+    # def update_preview_settings(self, settings: dict) -> None:
+    #     self.engine.update_preview_settings(PreviewSettings(**settings))
+
+    def update_preview_transform(self, transform: dict) -> None:
+        self.engine.update_preview_transform(PreviewTransform(**transform))
 
     def _publish_preview_frame(self, frame: PreviewFrame | bytes) -> None:
         """
@@ -220,7 +233,7 @@ class AcquisitionEngineService:
         """
         try:
             if isinstance(frame, PreviewFrame):
-                self.pub_socket.send_multipart([b"frame", pack_preview_frame(frame)])
+                self.pub_socket.send_multipart([b"frame", frame.pack()])
             elif isinstance(frame, bytes):
                 self.pub_socket.send_multipart([b"frame", frame])
             else:

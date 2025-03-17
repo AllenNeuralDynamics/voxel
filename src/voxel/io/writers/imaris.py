@@ -12,6 +12,7 @@ from voxel.io.writers.base import (
     VoxelWriter,
     WriterConfig,
 )
+from voxel.utils.frame_gen import FrameGenStrategy
 from voxel.utils.vec import Vec2D, Vec3D
 
 
@@ -287,13 +288,13 @@ def test_imaris_writer():
             height_px=writer.metadata.frame_shape.y,
             width_px=writer.metadata.frame_shape.x,
             exposure_time_ms=10,
-            resize_method="tile",
+            resize_method=FrameGenStrategy.TILE,
         )
         frame_2 = generate_reference_image(
             height_px=writer.metadata.frame_shape.y,
             width_px=writer.metadata.frame_shape.x,
             exposure_time_ms=10,
-            resize_method="upsample",
+            resize_method=FrameGenStrategy.UPSAMPLE,
         )
         frames = [frame_1, frame_1, frame_2, frame_2]
         reps = BATCH_SIZE // len(frames)

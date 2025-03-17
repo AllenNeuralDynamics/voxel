@@ -1,5 +1,7 @@
 from collections.abc import Callable
-from typing import TypedDict
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Self, TypedDict
 import zlib
 
 import cv2
@@ -9,70 +11,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 
-class PreviewSettings(BaseModel):
-    """
-    Defines the preview configuration, including ROI (region of interest),
-    target preview size, and black/white points as fractions of the
-    sensor's full dynamic range. Also supports optional gamma correction.
-    """
-
-    # Preview resolution and ROI
-    preview_width: int = Field(..., gt=0, description="Target preview width in pixels.")
-    roi_width: float = Field(..., gt=0.0, le=1.0, description="Normalized width of the ROI.")
-    roi_height: float = Field(..., gt=0.0, le=1.0, description="Normalized height of the ROI.")
-    roi_x: float = Field(..., ge=0.0, le=1.0, description="Normalized X coordinate of ROI top-left corner.")
-    roi_y: float = Field(..., ge=0.0, le=1.0, description="Normalized Y coordinate of ROI top-left corner.")
-
-    # Black/white points as a fraction of the full sensor range [0..max_val].
-    # E.g. for 16-bit data, max_val=65535 => black_val = black_percent * 65535
-    black_percent: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description=(
-            "Fraction of the sensor's full range mapped to 0 in the preview. "
-            "0.0 means minimum intensity, 1.0 means maximum intensity."
-        ),
-    )
-    white_percent: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description=(
-            "Fraction of the sensor's full range mapped to 255 in the preview. "
-            "Typically >= black_percent. 1.0 means maximum intensity."
-        ),
-    )
-
-    # Optional gamma correction
-    gamma: float = Field(
-        default=1.0, gt=0.0, description=("Gamma correction factor. " "A value of 1.0 means no gamma correction.")
-    )
-
-
-class PreviewMetadata(PreviewSettings):
-    """
-    Contains the preview configuration plus the full image dimensions,
-    which are determined from the captured frame.
-    """
-
-    preview_height: int = Field(..., gt=0, description="Target preview height in pixels.")
-    full_width: int = Field(..., gt=0, description="Full image width in pixels (from captured frame).")
-    full_height: int = Field(..., gt=0, description="Full image height in pixels (from captured frame).")
-    frame_idx: int = Field(..., ge=0, description="Frame index of the captured image.")
-    compression: str = Field(
-        default="jpeg",
-        description="Compression format used for the preview frame. Options: 'raw', 'zlib','jpeg', 'png'.",
-    )
-    # bitdepth: int = Field(
-    #     default=8,
-    #     ge=1,
-    #     le=16,
-    #     description="Bit depth of the captured image. Typically 8 or 16 bits per channel.",
-    # )
-
-
-def convert_to_jpeg(frame: np.ndarray, quality: int = 80) -> bytes:
+def convert_to_jpeg(frame: np.ndarray, quality: int = 100) -> bytes:
     """
     Convert a NumPy array (BGR image) to JPEG-encoded bytes using OpenCV.
     """
@@ -119,65 +58,86 @@ def compress_uint16_frame_zlib(frame: np.ndarray) -> bytes:
     return compressed
 
 
-compressor_map = {
-    "raw": convert_to_raw,
-    "jpeg": convert_to_jpeg,
-    "png": convert_to_png,
-    "zlib": compress_uint16_frame_zlib,
-}
+class PreviewCompression(StrEnum):
+    RAW = "raw"
+    JPEG = "jpeg"
+    PNG = "png"
+    ZLIB = "zlib"
+
+    def __call__(self, frame: np.ndarray) -> bytes:
+        match self:
+            case PreviewCompression.RAW:
+                return convert_to_raw(frame)
+            case PreviewCompression.JPEG:
+                return convert_to_jpeg(frame)
+            case PreviewCompression.PNG:
+                return convert_to_png(frame)
+            case PreviewCompression.ZLIB:
+                return compress_uint16_frame_zlib(frame)
 
 
-DEFAULT_PREVIEW_SETTINGS = PreviewSettings(
-    preview_width=2048,
-    roi_width=1.0,
-    roi_height=1.0,
-    roi_x=0.0,
-    roi_y=0.0,
-)
+class PreviewTransform(BaseModel):
+    x: float = Field(default=0.0, ge=0.0, le=1.0, description="normalized X coordinate of the preview.")
+    y: float = Field(default=0.0, ge=0.0, le=1.0, description="normalized Y coordinate of the preview.")
+    k: float = Field(default=0.0, ge=0.0, le=1.0, description="zoom factor - 0.0 no zoom, 1.0 full zoom.")
+
+
+class PreviewCorrection(BaseModel):
+    black: float = Field(default=0.0, ge=0.0, le=1.0, description="black point of the preview")
+    white: float = Field(default=1.0, ge=0.0, le=1.0, description="white point of the preview")
+    gamma: float = Field(default=1.0, ge=0.0, le=10.0, description="gamma correction of the preview")
+
+    # add validators to ensure that b < w
+
+
+class PreviewSettings(BaseModel):
+    """
+    Defines the preview configuration, including ROI (region of interest),
+    target preview size, and black/white points as fractions of the
+    sensor's full dynamic range. Also supports optional gamma correction.
+    """
+
+    # Preview resolution and ROI
+    width: int = Field(default=2048 // 2, gt=0, description="Target preview width in pixels.")
+    transform: PreviewTransform = Field(default=PreviewTransform(), description="Preview transform.")
+    correction: PreviewCorrection = Field(default=PreviewCorrection(), description="Preview correction.")
+    compression: PreviewCompression = Field(default=PreviewCompression.JPEG, description="Preview compression.")
+
+
+class PreviewConfig(PreviewSettings):
+    """
+    Contains the preview configuration settings for a frame which combines the preview settings and other metadata.
+    """
+
+    height: int = Field(..., gt=0, description="Target preview height in pixels.")
+    full_width: int = Field(..., gt=0, description="Full image width in pixels (from captured frame).")
+    full_height: int = Field(..., gt=0, description="Full image height in pixels (from captured frame).")
+    frame_idx: int = Field(..., ge=0, description="Frame index of the captured image.")
 
 
 class PreviewFrameDict(TypedDict):
-    metadata: dict[str, int | float]
+    config: dict[str, int | float]
     data: bytes
 
 
+@dataclass
 class PreviewFrame:
-    def __init__(self, frame: np.ndarray, metadata: PreviewMetadata, compression: str = "jpeg") -> None:
-        self.metadata = metadata
-        self.data = compressor_map[compression](frame)
-        self.metadata.compression = compression
+    config: PreviewConfig
+    frame: np.ndarray
 
     def dump(self) -> PreviewFrameDict:
-        # print(f"Data size in MBs: {len(self.data) / (1024 * 1024):.2f} - Compression: {self.metadata.compression}")
         return PreviewFrameDict(
-            metadata=self.metadata.model_dump(),
-            data=self.data,
+            config=self.config.model_dump(),
+            data=self.config.compression(frame=self.frame),
         )
+
+    def pack(self) -> bytes:
+        return msgpack.packb({"config": self.config.model_dump(), "frame": self.frame}, default=mpack_numpy.encode)
+
+    @classmethod
+    def unpack(cls, packed_frame: bytes) -> Self:
+        unpacked = msgpack.unpackb(packed_frame, object_hook=mpack_numpy.decode)
+        return cls(frame=unpacked["frame"], config=PreviewConfig(**unpacked["config"]))
 
 
 type NewFrameCallback = Callable[[PreviewFrame], None]
-
-
-def pack_preview_frame(preview: PreviewFrame) -> bytes:
-    """
-    Pack the preview frame along with its metadata using msgpack.
-    The result is a bytes object that can be transmitted over RPC.
-    """
-    return msgpack.packb(
-        {
-            "data": preview.data,  # msgpack-numpy handles numpy arrays.
-            "metadata": preview.metadata.model_dump(),
-        },
-        default=mpack_numpy.encode,
-    )
-
-
-def unpack_preview_frame(packed_frame: bytes) -> PreviewFrame:
-    """
-    Unpack the packed preview frame using msgpack.
-    The result is a PreviewFrame object.
-    """
-    unpacked = msgpack.unpackb(packed_frame, object_hook=mpack_numpy.decode)
-    data = unpacked["data"]
-    metadata = PreviewMetadata(**unpacked["metadata"])
-    return PreviewFrame(frame=data, metadata=metadata)

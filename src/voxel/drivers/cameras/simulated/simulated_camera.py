@@ -1,6 +1,6 @@
 from functools import cached_property
 import time
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 import numpy as np
 
@@ -8,6 +8,7 @@ from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors import enumerated_int, enumerated_string, deliminated_float
 from voxel.utils.descriptors.deliminated import deliminated_int
 from voxel.utils.frame_gen import (
+    FrameGenStrategy,
     generate_checkered_frame,
     generate_ripple_frame,
     generate_reference_image,
@@ -60,14 +61,12 @@ class SimulatedCamera(VoxelCamera):
         magnification: float = 1,
         sensor_width_px: int = VP_151MX_M6H0.x,
         sensor_height_px: int = VP_151MX_M6H0.y,
-        resize_method: Literal["tile", "upsample"] = "upsample",
+        strategy: FrameGenStrategy = FrameGenStrategy.TILE,
         image_model_params: ImageModelParams = DEFAULT_IMAGE_MODEL,
         max_frame_rate: int = 15,
     ) -> None:
         self._image_model_params = image_model_params
-        self._resize_method: Literal["tile", "upsample"] = (
-            resize_method if resize_method in ["tile", "upsample"] else "upsample"
-        )
+        self._strategy = strategy
         self._sensor_size_px = Vec2D(sensor_width_px, sensor_height_px)
         self._roi_width_px = sensor_width_px
         self._roi_height_px = sensor_height_px
@@ -206,14 +205,13 @@ class SimulatedCamera(VoxelCamera):
         self._frame_count = 0
         self._requested_frame_count = frame_count if frame_count is not None else -1
 
-        FRAME_TYPE = "ripple"  # "ref" | "spiral" | "checkered"
-        match FRAME_TYPE:
-            case "ref":
+        match self._strategy:
+            case "tile" | "upsample":
                 self._frame = generate_reference_image(
                     height_px=int(self.roi_height_px),
                     width_px=int(self.roi_width_px),
                     exposure_time_ms=int(self.exposure_time_ms),
-                    resize_method=self._resize_method,
+                    resize_method=self._strategy,
                     data_type=self.pixel_type.dtype,
                 )
             case "spiral":
@@ -227,14 +225,6 @@ class SimulatedCamera(VoxelCamera):
             case "ripple":
                 self._frame = generate_ripple_frame(
                     width=self.roi_width_px, height=self.roi_height_px, data_type=self.pixel_type.dtype
-                )
-            case _:
-                self._frame = generate_reference_image(
-                    height_px=int(self.roi_height_px),
-                    width_px=int(self.roi_width_px),
-                    exposure_time_ms=int(self.exposure_time_ms),
-                    resize_method=self._resize_method,
-                    data_type=self.pixel_type.dtype,
                 )
 
         self.log.info(f"Simulated camera started with {frame_count} frames")
