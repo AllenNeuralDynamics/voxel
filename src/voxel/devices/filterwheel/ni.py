@@ -29,6 +29,7 @@ class DAQFilterWheel(BaseFilterWheel):
         self.id = dev
         self.dev = nidaqmx.system.device.Device(self.id)
         self.ports = ports
+        self.filters = filters
         for filter in filters:
             FILTERS.append(filter)
             if filter not in list(ports.keys()):
@@ -36,7 +37,7 @@ class DAQFilterWheel(BaseFilterWheel):
         for key, value in list(ports.items()):
             if key not in filters:
                 raise ValueError(f"Port {key} not in filter list: {filters}")
-            if value not in self.dev.ao_physical_chans.channel_names:
+            if f"{dev}/{value}" not in self.dev.ao_physical_chans.channel_names:
                 raise ValueError(f"Port {value} not in device channels: {self.dev.ao_physical_chans.channel_names}")
         # force homing of the wheel to first position
         self.filter = FILTERS[0]
