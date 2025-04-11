@@ -6,6 +6,8 @@ from nidaqmx.constants import TaskMode, AcquisitionType
 
 from voxel.devices.filterwheel.base import BaseFilterWheel
 
+FILTERS = list()
+
 
 class DAQFilterWheel(BaseFilterWheel):
     """
@@ -25,11 +27,20 @@ class DAQFilterWheel(BaseFilterWheel):
         """
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.id = dev
-        self.filters = filters
+        self.dev = nidaqmx.system.device.Device(self.id)
         self.ports = ports
-        # force homing of the wheel
-        self.filter = next(key for key, value in self.filters.items() if value == 0)
-        self._filter = 0
+        self.filters = filters
+        for filter in filters:
+            FILTERS.append(filter)
+            if filter not in list(ports.keys()):
+                raise ValueError(f"Filter {filter} not in port keys: {list(ports.keys())}")
+        for key, value in list(ports.items()):
+            if key not in filters:
+                raise ValueError(f"Port {key} not in filter list: {filters}")
+            if f"{dev}/{value}" not in self.dev.ao_physical_chans.channel_names:
+                raise ValueError(f"Port {value} not in device channels: {self.dev.ao_physical_chans.channel_names}")
+        # force homing of the wheel to first position
+        self.filter = FILTERS[0]
 
     @property
     def filter(self) -> str:
@@ -39,7 +50,7 @@ class DAQFilterWheel(BaseFilterWheel):
         :return: Current filter name
         :rtype: str
         """
-        return next(key for key, value in self.filters.items() if value == self._filter)
+        return self._filter
 
     @filter.setter
     def filter(self, filter_name: str) -> None:
@@ -50,7 +61,9 @@ class DAQFilterWheel(BaseFilterWheel):
         :type filter_name: str
         """
         self.log.info(f"setting filter to {filter_name}")
-        self._filter = self.filters[filter_name]
+        if filter_name not in FILTERS:
+            raise ValueError(f"Filter {filter_name} not in filter list: {FILTERS}")
+        self._filter = filter_name
         channel_port = self.ports[filter_name]
         daq_task = nidaqmx.Task("filter_wheel_task")
         physical_name = f"/{self.id}/{channel_port}"

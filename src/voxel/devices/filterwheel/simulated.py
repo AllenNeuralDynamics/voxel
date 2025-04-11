@@ -4,6 +4,8 @@ from typing import Dict
 
 from voxel.devices.filterwheel.base import BaseFilterWheel
 
+FILTERS = list()
+
 SWITCH_TIME_S = 0.1  # estimated timing
 
 
@@ -24,10 +26,10 @@ class SimulatedFilterWheel(BaseFilterWheel):
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.id = id
         self.filters = filters
-        # force homing of the wheel
-        self.filter = next(key for key, value in self.filters.items() if value == 0)
-        # store simulated index internally
-        self._filter = 0
+        for filter in filters:
+            FILTERS.append(filter)
+        # force homing of the wheel to first position
+        self.filter = FILTERS[0]
 
     @property
     def filter(self) -> str:
@@ -37,7 +39,7 @@ class SimulatedFilterWheel(BaseFilterWheel):
         :return: Current filter name
         :rtype: str
         """
-        return next(key for key, value in self.filters.items() if value == self._filter)
+        return self._filter
 
     @filter.setter
     def filter(self, filter_name: str) -> None:
@@ -48,8 +50,13 @@ class SimulatedFilterWheel(BaseFilterWheel):
         :type filter_name: str
         """
         self.log.info(f"setting filter to {filter_name}")
-        self._filter = self.filters[filter_name]
+        if filter_name not in FILTERS:
+            raise ValueError(f"Filter {filter_name} not in filter list: {FILTERS}")
+        self._filter = filter_name
         time.sleep(SWITCH_TIME_S)
-    
+
     def close(self):
+        """
+        Close the filter wheel device.
+        """
         pass
