@@ -6,14 +6,14 @@ import numpy as np
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
 from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, TaskMode, AOIdleOutputBehavior
-from scipy import signal
+from scipy import signal, interpolate
 from typing import Dict, Optional
 
 from voxel.devices.daq.base import BaseDAQ
 
 DO_WAVEFORMS = ["square wave"]
 
-AO_WAVEFORMS = ["square wave", "sawtooth", "triangle wave"]
+AO_WAVEFORMS = ["square wave", "sawtooth", "nonlinear sawtooth", "triangle wave"]
 
 TRIGGER_MODE = ["on", "off"]
 
@@ -321,6 +321,33 @@ class NIDAQ(BaseDAQ):
                     cutoff_frequency_hz,
                 )
 
+            if waveform == "nonlinear sawtooth":
+                try:
+                    amplitude_volts = channel["parameters"]["amplitude_volts"]["channels"][wavelength]
+                    offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
+                    t0_offset_volts = channel["parameters"]["t0_offset_volts"]["channels"][wavelength]
+                    t50_offset_volts = channel["parameters"]["t50_offset_volts"]["channels"][wavelength]
+                    t100_offset_volts = channel["parameters"]["t100_offset_volts"]["channels"][wavelength]
+                    if offset_volts < self.min_ao_volts or offset_volts > self.max_ao_volts:
+                        raise ValueError(
+                            f"min volts must be > {self.min_ao_volts} volts and < {self.max_ao_volts} volts"
+                        )
+                except AttributeError:
+                    raise ValueError(f"missing input parameter for {waveform}")
+
+                waveform_function = getattr(self, waveform.replace(" ", "_"))
+                voltages = waveform_function(
+                    timing["sampling_frequency_hz"],
+                    timing["period_time_ms"],
+                    start_time_ms,
+                    end_time_ms,
+                    timing["rest_time_ms"],
+                    amplitude_volts,
+                    offset_volts,
+                    t0_offset_volts,
+                    t50_offset_volts,
+                    t100_offset_volts,
+                )              
             # sanity check voltages for ni card range
             max = getattr(self, "max_ao_volts", 5)
             min = getattr(self, "min_ao_volts", 0)
@@ -462,6 +489,94 @@ class NIDAQ(BaseDAQ):
 
         if padding > 0:
             waveform = waveform[padding:padding + waveform_length_samples]
+
+        return waveform
+
+    def nonlinear_sawtooth(
+        self,
+        sampling_frequency_hz: float,
+        period_time_ms: float,
+        start_time_ms: float,
+        end_time_ms: float,
+        rest_time_ms: float,
+        amplitude_volts: float,
+        offset_volts: float,
+        t0_offset_volts: float,
+        t50_offset_volts: float,
+        t100_offset_volts: float,
+    ) -> np.ndarray:
+        """
+        Generate a sawtooth waveform.
+
+        :param sampling_frequency_hz: Sampling frequency in Hz
+        :type sampling_frequency_hz: float
+        :param period_time_ms: Period time in milliseconds
+        :type period_time_ms: float
+        :param start_time_ms: Start time in milliseconds
+        :type start_time_ms: float
+        :param end_time_ms: End time in milliseconds
+        :type end_time_ms: float
+        :param rest_time_ms: Rest time in milliseconds
+        :type rest_time_ms: float
+        :param amplitude_volts: Amplitude in volts
+        :type amplitude_volts: float
+        :param offset_volts: Offset in volts
+        :type offset_volts: float
+        :param t0_offset_volts: First time point offset in volts
+        :type t0_offset_volts: float
+        :param t50_offset_volts: Middle time point offset in volts
+        :type t50_offset_volts: float
+        :param t100_offset_volts: Final time point offset in volts
+        :type t100_offset_volts: float
+        :return: Generated waveform
+        :rtype: numpy.ndarray
+        """
+        waveform_length_samples = int(((period_time_ms + rest_time_ms) / 1000) * sampling_frequency_hz)
+        
+        time_samples_ms = np.linspace(
+            0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
+        )
+        waveform = offset_volts + amplitude_volts * signal.sawtooth(
+            t=time_samples_ms, width=end_time_ms / period_time_ms
+        )
+        waveform[-1] = waveform[-2]  # force last value to not snap back
+
+        # add in nonlinear adjustment
+        t0 = time_samples_ms[0]
+        t25 = time_samples_ms[int(0.25 * len(time_samples_ms))]
+        t50 = time_samples_ms[int(0.5 * len(time_samples_ms))]
+        t75 = time_samples_ms[int(0.75 * len(time_samples_ms))]
+        t100 = time_samples_ms[-1]
+        v0 = waveform[0]
+        v25 = waveform[int(0.25 * len(time_samples_ms))]
+        v50 = waveform[int(0.5 * len(time_samples_ms))]
+        v75 = waveform[int(0.75 * len(time_samples_ms))]
+        v100 = waveform[-1]
+        v0 = v0 + t0_offset_volts
+        v50 = v50 + t50_offset_volts
+        v100 = v100 + t100_offset_volts
+        f = interpolate.interp1d([t0, t25, t50, t75, t100], [v0, v25, v50, v75, v100], kind='quadratic')
+        waveform = f(time_samples_ms)
+
+        # add in delay
+        delay_samples = int((start_time_ms / 1000) * sampling_frequency_hz)
+        waveform = np.pad(
+            array=waveform,
+            pad_width=(delay_samples, 0),
+            mode="constant",
+            constant_values=(offset_volts - amplitude_volts + t0_offset_volts),
+        )
+
+        # add in rest
+        rest_samples = int((rest_time_ms / 1000) * sampling_frequency_hz)
+        waveform = np.pad(
+            array=waveform,
+            pad_width=(0, rest_samples),
+            mode="constant",
+            constant_values=(offset_volts - amplitude_volts + t0_offset_volts),
+        )
+        
+        waveform = waveform[0:waveform_length_samples]
 
         return waveform
 
