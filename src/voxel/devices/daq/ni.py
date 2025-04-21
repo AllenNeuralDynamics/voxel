@@ -325,9 +325,9 @@ class NIDAQ(BaseDAQ):
                 try:
                     amplitude_volts = channel["parameters"]["amplitude_volts"]["channels"][wavelength]
                     offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    t0_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    t50_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    t100_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
+                    t0_offset_volts = channel["parameters"]["t0_offset_volts"]["channels"][wavelength]
+                    t50_offset_volts = channel["parameters"]["t50_offset_volts"]["channels"][wavelength]
+                    t100_offset_volts = channel["parameters"]["t100_offset_volts"]["channels"][wavelength]
                     if offset_volts < self.min_ao_volts or offset_volts > self.max_ao_volts:
                         raise ValueError(
                             f"min volts must be > {self.min_ao_volts} volts and < {self.max_ao_volts} volts"
@@ -493,6 +493,7 @@ class NIDAQ(BaseDAQ):
         return waveform
 
     def nonlinear_sawtooth(
+        self,
         sampling_frequency_hz: float,
         period_time_ms: float,
         start_time_ms: float,
@@ -530,7 +531,8 @@ class NIDAQ(BaseDAQ):
         :return: Generated waveform
         :rtype: numpy.ndarray
         """
-
+        waveform_length_samples = int(((period_time_ms + rest_time_ms) / 1000) * sampling_frequency_hz)
+        
         time_samples_ms = np.linspace(
             0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
         )
@@ -573,6 +575,8 @@ class NIDAQ(BaseDAQ):
             mode="constant",
             constant_values=(offset_volts - amplitude_volts + t0_offset_volts),
         )
+        
+        waveform = waveform[0:waveform_length_samples]
 
         return waveform
 
