@@ -278,8 +278,8 @@ class TigerStage(BaseStage):
         :return: Backlash in millimeters
         :rtype: Dict[str, float]
         """
-        backlash_mm = self.tigerbox.get_backlash_mm(axis=self.hardware_axis)
-        return self._hardware_to_instrument(backlash_mm)
+        backlash = self.tigerbox.get_backlash_mm(axis=self.hardware_axis)
+        return self._hardware_to_instrument(backlash)
 
     @backlash_mm.setter
     def backlash_mm(self, backlash: float) -> None:
@@ -299,8 +299,8 @@ class TigerStage(BaseStage):
         :return: Speed in millimeters per second
         :rtype: Dict[str, float]
         """
-        tiger_speed = self.tigerbox.get_speed_mm_s(self.hardware_axis)
-        return self._hardware_to_instrument(tiger_speed)
+        speed = self.tigerbox.get_speed_mm_s(self.hardware_axis)
+        return self._hardware_to_instrument(speed)
 
     @speed_mm_s.setter
     def speed_mm_s(self, speed: float) -> None:
@@ -320,8 +320,8 @@ class TigerStage(BaseStage):
         :return: Acceleration in millimeters per second squared
         :rtype: Dict[str, float]
         """
-        tiger_acceleration = self.tigerbox.get_acceleration_ms(axis=self.hardware_axis)
-        return self._hardware_to_instrument(tiger_acceleration)
+        acceleration = self.tigerbox.get_acceleration_ms(axis=self.hardware_axis)
+        return self._hardware_to_instrument(acceleration)
 
     @acceleration_ms.setter
     def acceleration_ms(self, acceleration: float) -> None:
@@ -358,7 +358,7 @@ class TigerStage(BaseStage):
         """
         Halt the stage.
         """
-        self.tigerbox.halt()
+        self.tigerbox.halt_axis(axis=self.hardware_axis)
 
     def is_axis_moving(self) -> bool:
         """
@@ -367,7 +367,7 @@ class TigerStage(BaseStage):
         :return: True if the axis is moving, False otherwise
         :rtype: bool
         """
-        return self.tigerbox.is_axis_moving(axis=self.hardware_axis)
+        return self.tigerbox.is_moving(axis=self.hardware_axis)
 
     def zero_in_place(self) -> None:
         """
@@ -375,7 +375,7 @@ class TigerStage(BaseStage):
         """
         # We must populate the axes explicitly since the tigerbox is shared
         # between camera stage and sample stage.
-        self.tigerbox.zero_in_place(axis=self.hardware_axis)
+        self.tigerbox.zero_axis(axis=self.hardware_axis)
 
     def log_metadata(self) -> None:
         """

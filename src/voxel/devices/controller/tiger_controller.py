@@ -1,5 +1,6 @@
 import threading
 import time
+import logging
 from typing import Any, Callable, Dict, List
 
 from tigerasi.device_codes import (RingBufferMode, ScanPattern, TTLIn0Mode,
@@ -8,12 +9,12 @@ from tigerasi.tiger_controller import TigerController as TigerBox
 
 # globals
 
-lock = threading.Lock()
+lock = threading.RLock()
 
 # constants for Tiger ASI hardware
 
 STEPS_PER_UM = 10
-UPDATE_RATE_HZ = 10.0
+UPDATE_RATE_HZ = 1.0
 
 MODES = {
     "step shoot": TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION,
@@ -27,8 +28,6 @@ SCAN_PATTERN = {
 }
 
 # decorators
-
-
 def thread_locked(function: Callable) -> Callable:
     """
     Decorator to ensure that a function is executed with a thread lock.
@@ -53,26 +52,27 @@ def thread_locked(function: Callable) -> Callable:
         with lock:
             return function(*args, **kwargs)
     return wrapper
-
-
+    
 class TigerController(TigerBox):
     """
     Controller for the ASI Tiger stage.
     """
 
-    def __init__(self, com_port: str) -> None:
+    def __init__(self, com_port: str, log_level: str = "INFO",) -> None:
         """
         Initialize the TigerController object.
 
         :param com_port: COM port for the controller
         :type com_port: str
+        :param log_level: Logging level, defaults to "INFO"
+        :type log_level: str, optional
         """
         super().__init__(com_port)
         for axis in self.ordered_axes:
             self.log.info(f"resetting ring buffer for axis={axis.upper()}")
             # clear ring buffer incase there are persistent values
             self.reset_ring_buffer(axis=axis.upper())
-        self.position_mm_updater = PositionUpdater(tigerbox=self, axes=self.ordered_axes, lock=lock)
+        self.position_mm_updater = PositionUpdater(tigerbox=self)
 
     def get_position_mm(self) -> float:
         """
@@ -100,7 +100,7 @@ class TigerController(TigerBox):
         # convert from mm to 1/10um
         self.move_relative(**{axis: round(position * 1000 * STEPS_PER_UM, 1)}, wait=wait)
         if wait:
-            while self.is_moving():
+            while self.is_axis_moving(axis):
                 time.sleep(0.001)
 
     @thread_locked
@@ -120,9 +120,21 @@ class TigerController(TigerBox):
         # convert from mm to 1/10um
         self.move_absolute(**{axis: round(position * 1000 * STEPS_PER_UM, 1)}, wait=wait)
         if wait:
-            while self.is_moving():
+            while self.is_axis_moving(axis):
                 time.sleep(0.001)
 
+    @thread_locked
+    def is_moving(self, axis: str) -> bool:
+        """
+        Check if the axis is moving.
+
+        :param axis: Hardware axis to move
+        :type axis: str
+        :return: True if the axis is moving, False otherwise
+        :rtype: bool
+        """
+        return self.is_axis_moving(axis)
+    
     @thread_locked
     def setup_stage_scan(
         self,
@@ -162,7 +174,7 @@ class TigerController(TigerBox):
         # TODO: if position is unspecified, we should set is as
         #  "current position" from hardware.
         # Get the axis id in machine coordinate frame.
-        if self.mode == "stage scan":
+        if self.get_mode() == "stage scan":
             valid_pattern = list(SCAN_PATTERN.keys())
             if pattern not in valid_pattern:
                 raise ValueError("pattern must be one of %r." % valid_pattern)
@@ -192,7 +204,7 @@ class TigerController(TigerBox):
                 scan_start_mm=slow_axis_start_position, scan_stop_mm=slow_axis_stop_position, line_count=strip_count
             )
         else:
-            raise ValueError(f"mode must be stage scan not {self.mode}")
+            raise ValueError(f"mode must be stage scan not {self.get_mode()}")
 
     @thread_locked
     def setup_step_shoot_scan(self, axis: str, step_size_um: float) -> None:
@@ -222,9 +234,9 @@ class TigerController(TigerBox):
         """
         Start the stage.
         """
-        if self.mode == "stage scan":
+        if self.get_mode() == "stage scan":
             self.start_scan()
-        elif self.mode == "step shoot":
+        elif self.get_mode() == "step shoot":
             pass
 
     @thread_locked
@@ -237,9 +249,9 @@ class TigerController(TigerBox):
         :return: Limits in millimeters
         :rtype: List[float]
         """
-        tiger_limit_lower = self.get_lower_travel_limit(axis)
-        tiger_limit_upper = self.get_upper_travel_limit(axis)
-        limits = [tiger_limit_lower, tiger_limit_upper]
+        limit_lower = self.get_lower_travel_limit(axis)
+        limit_upper = self.get_upper_travel_limit(axis)
+        limits = [limit_lower, limit_upper]
         return limits
 
     @thread_locked
@@ -252,8 +264,8 @@ class TigerController(TigerBox):
         :return: Backlash in millimeters
         :rtype: Dict[str, float]
         """
-        tiger_backlash = self.get_axis_backlash(axis)
-        return tiger_backlash
+        backlash = self.get_axis_backlash(axis)
+        return backlash
 
     @thread_locked
     def set_backlash_mm(self, axis: str, backlash: float) -> None:
@@ -277,8 +289,8 @@ class TigerController(TigerBox):
         :return: Speed in millimeters per second
         :rtype: Dict[str, float]
         """
-        tiger_speed = self.get_speed(axis)
-        return tiger_speed
+        speed = self.get_speed(axis)
+        return speed
 
     @thread_locked
     def set_speed_mm_s(self, axis: str, speed: float) -> None:
@@ -302,8 +314,8 @@ class TigerController(TigerBox):
         :return: Acceleration in millimeters per second squared
         :rtype: Dict[str, float]
         """
-        tiger_acceleration = self.get_acceleration(axis)
-        return tiger_acceleration
+        acceleration = self.get_acceleration(axis)
+        return acceleration
 
     @thread_locked
     def set_acceleration_ms(self, axis: str, acceleration: float) -> None:
@@ -351,26 +363,17 @@ class TigerController(TigerBox):
         self.set_ttl_pin_modes(in0_mode=MODES[mode], card_address=card_address)
 
     @thread_locked
-    def halt(self) -> None:
+    def halt_axis(self, axis: str) -> None:
         """
-        Halt the stage.
+        Halt the stage axis.
+
+        :param axis: Stage axis
+        :type axis: str
         """
         self.halt()
 
     @thread_locked
-    def is_axis_moving(self, axis: str) -> bool:
-        """
-        Check if the axis is moving.
-
-        :param axis: Stage axis
-        :type axis: str
-        :return: True if the axis is moving, False otherwise
-        :rtype: bool
-        """
-        return self.is_axis_moving(axis)
-
-    @thread_locked
-    def zero_in_place(self, axis: str) -> None:
+    def zero_axis(self, axis: str) -> None:
         """
         Zero the stage in place.
 
@@ -394,6 +397,7 @@ class TigerController(TigerBox):
         for setting in axis_settings:
             self.log.info(f"{axis} axis, {setting}, {axis_settings[setting]}")
 
+    @thread_locked
     def close(self) -> None:
         """
         Close the TigerController.
@@ -408,13 +412,17 @@ class PositionUpdater:
     Class for continuously updating the stage positions in millimeters.
     """
 
-    def __init__(self, tigerbox: TigerController) -> None:
+    def __init__(self, tigerbox: TigerController, log_level: str = "INFO",) -> None:
         """
         Initialize the TigerController object.
 
         :param tigerbox: TigerController object.
         :type tigerbox: TigerController
+        :param log_level: Logging level, defaults to "INFO"
+        :type log_level: str, optional
         """
+        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log.setLevel(log_level)
         self.tigerbox = tigerbox
         self.get_positions = True
         # initialize positions in mm
@@ -430,7 +438,11 @@ class PositionUpdater:
         # returns a dict of {hardware axes: positions}
         while self.get_positions:
             with lock:
-                self.position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
+                try:
+                    position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
+                    self.position_mm.update(position_mm)
+                except:
+                    self.log.error('could not update positions')
             time.sleep(1.0 / UPDATE_RATE_HZ)
 
     def close(self) -> None:
