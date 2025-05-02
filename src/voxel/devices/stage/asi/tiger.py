@@ -3,8 +3,9 @@ from time import sleep
 from typing import Dict, Optional
 
 from tigerasi.device_codes import *
-from tigerasi.tiger_controller import TigerController
 
+# from voxel.devices.controller.asi import TigerController
+from tigerasi.tiger_controller import TigerController
 from voxel.devices.stage.base import BaseStage
 from voxel.devices.utils.singleton import Singleton
 
@@ -374,11 +375,11 @@ class TigerStage(BaseStage):
         :return: Current position in millimeters
         :rtype: Optional[float]
         """
-        tiger_position = self.tigerbox.get_position(self.hardware_axis)
+        position_dict = self.tigerbox.get_position_mm()
+        tiger_position = position_dict[self.hardware_axis]
         # converting 1/10 um to mm
-        tiger_position_mm = {k: v / 10000 for k, v in tiger_position.items()}
-        # FIXME: Sometimes tigerbox yields empty stage position so return None if this happens?
-        return self._hardware_to_instrument(tiger_position_mm).get(self.instrument_axis, None)
+        tiger_position_mm = tiger_position / 10000
+        return tiger_position_mm
 
     @position_mm.setter
     def position_mm(self, value: float) -> None:
@@ -405,6 +406,7 @@ class TigerStage(BaseStage):
         sample_limit_lower = list(self._hardware_to_instrument(tiger_limit_lower).values())[0]
         sample_limit_upper = list(self._hardware_to_instrument(tiger_limit_upper).values())[0]
         limits = sorted([sample_limit_lower, sample_limit_upper])
+        print(limits)
         return limits
 
     @property
