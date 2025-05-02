@@ -265,8 +265,8 @@ class TigerStage(BaseStage):
         :rtype: List[float]
         """
         limits = self.tigerbox.get_limits_mm(axis=self.hardware_axis)
-        lower_limit = self._hardware_to_instrument(limits[0])
-        upper_limit = self._hardware_to_instrument(limits[1])
+        lower_limit = limits[0]
+        upper_limit = limits[1]
         sorted_limits = sorted([list(lower_limit.values())[0], list(upper_limit.values())[0]])
         return sorted_limits
 
