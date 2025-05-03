@@ -4,6 +4,8 @@ from enum import Enum
 from serial import Serial, SerialException
 from functools import cache, wraps
 from time import sleep, perf_counter
+
+# from tigerasi.tiger_controller import TigerController
 from tigerasi.device_codes import *
 from typing import Union, Callable, Any
 import logging
@@ -20,7 +22,7 @@ DEFAULT_SPEED_MM_PER_SEC = 7.68 * 67.0
 REPLY_WAIT_TIME_S = 0.020  # minimum time to wait for a reply after having
 # sent a command.
 GET_INFO_STRING_SPLIT = 33  # index to split get info string reply
-UPDATE_RATE_HZ = 2.0
+UPDATE_RATE_HZ = 5.0
 
 lock = threading.RLock()
 
@@ -112,7 +114,6 @@ class TigerController:
             box = TigerController('COM4')
 
         """
-        print("b")
         self.ser = None
         self.log = logging.getLogger(__name__)
         self.skipped_replies = 0
@@ -154,6 +155,24 @@ class TigerController:
         self._rb_axes = []  # axes specified as movable by ring buffer moves.
 
         self.position_mm_updater = PositionUpdater(tigerbox=self)
+
+    def get_position_mm(self) -> float:
+        """
+        Get the current position in millimeters.
+
+        :return: Current position in millimeters
+        :rtype: float
+        """
+        return self.position_mm_updater.position_mm
+
+    @thread_locked
+    def close(self) -> None:
+        """
+        Close the TigerController.
+        """
+        # stop the updating thread
+        self.position_mm_updater.close()
+        self.ser.close()
 
     @thread_locked
     def halt(self, wait: bool = True):
@@ -727,7 +746,13 @@ class TigerController:
         return control_num
 
     @thread_locked
-    def setup_scan(self, fast_axis: str, slow_axis: str, pattern: ScanPattern = ScanPattern.RASTER, wait: bool = True):
+    def setup_scan(
+        self,
+        fast_axis: str,
+        slow_axis: str,
+        pattern: ScanPattern = ScanPattern.RASTER,
+        wait: bool = True,
+    ):
         """setup scan pattern and define axes used for scanning.
         See ASI
         `SCAN Implementation <http://asiimaging.com/docs/products/serial_commands#commandscan_sn>`_
@@ -868,7 +893,11 @@ class TigerController:
             raise RuntimeError(
                 "Cannot infer the card address for which to " "apply the sttings. setup_scan must be run " "first."
             )
-        kwds = {"X": round(scan_start_mm, MM_SCALE), "Y": round(scan_stop_mm, MM_SCALE), "Z": line_count}
+        kwds = {
+            "X": round(scan_start_mm, MM_SCALE),
+            "Y": round(scan_stop_mm, MM_SCALE),
+            "Z": line_count,
+        }
         if overshoot_time_ms is not None:
             kwds["F"] = round(overshoot_time_ms)
         if overshoot_factor is not None:
@@ -953,14 +982,24 @@ class TigerController:
         self._has_firmware(self._array_scan_card_addr, FirmwareModules.ARRAY_MODULE)
         # Specify scan pattern if specified.
         if pattern is not None:
-            self._set_cmd_args_and_kwds(Cmds.SCAN, F=pattern.value, wait=wait, card_address=self._array_scan_card_addr)
+            self._set_cmd_args_and_kwds(
+                Cmds.SCAN,
+                F=pattern.value,
+                wait=wait,
+                card_address=self._array_scan_card_addr,
+            )
         # Set start position.
         start_position = {}
         if x_start_mm is not None:
             start_position["X"] = round(x_start_mm, MM_SCALE)
         if y_start_mm is not None:
             start_position["Y"] = round(y_start_mm, MM_SCALE)
-        self._set_cmd_args_and_kwds(Cmds.AHOME, **start_position, wait=wait, card_address=self._array_scan_card_addr)
+        self._set_cmd_args_and_kwds(
+            Cmds.AHOME,
+            **start_position,
+            wait=wait,
+            card_address=self._array_scan_card_addr,
+        )
         # Setup scan.
         scan_params = {
             "X": x_points,
@@ -969,7 +1008,12 @@ class TigerController:
             "F": round(delta_y_mm, MM_SCALE),
             "T": round(theta_deg, DEG_SCALE),
         }
-        self._set_cmd_args_and_kwds(Cmds.ARRAY, **scan_params, wait=wait, card_address=self._array_scan_card_addr)
+        self._set_cmd_args_and_kwds(
+            Cmds.ARRAY,
+            **scan_params,
+            wait=wait,
+            card_address=self._array_scan_card_addr,
+        )
 
     @thread_locked
     def start_array_scan(self, wait: bool = True):
@@ -1145,7 +1189,11 @@ class TigerController:
                 self._set_cmd_args_and_kwds(Cmds.TTL, param_str, card_address=card, wait=wait)
         # Infer card address(es) for ring buffer axis moves if it was setup.
         elif (
-            in0_mode in [TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION, TTLIn0Mode.MOVE_TO_NEXT_ABS_POSITION]
+            in0_mode
+            in [
+                TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION,
+                TTLIn0Mode.MOVE_TO_NEXT_ABS_POSITION,
+            ]
             and card_address is None
         ):
             if len(self._rb_axes) == 0:
@@ -1432,7 +1480,12 @@ class TigerController:
         self.send(cmd_str, wait=wait)
 
     def _set_cmd_args_and_kwds(
-        self, cmd: Cmds, *args: str, wait: bool = True, card_address: int = None, **kwds: Union[float, int]
+        self,
+        cmd: Cmds,
+        *args: str,
+        wait: bool = True,
+        card_address: int = None,
+        **kwds: Union[float, int],
     ):
         """Flag a parameter or set a parameter with a specified value.
 
@@ -1553,14 +1606,13 @@ class PositionUpdater:
         # get position for all axes on some time interval
         # returns a dict of {hardware axes: positions}
         while self.get_positions:
-            with lock:
-                print("a")
-                try:
-                    position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
-                    self.position_mm.update(position_mm)
-                except:
-                    self.log.error("could not update positions")
-            time.sleep(1.0 / UPDATE_RATE_HZ)
+            try:
+                self.tigerbox.clear_incoming_message_queue()
+                position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
+                self.position_mm.update(position_mm)
+            except:
+                self.log.error("could not update positions")
+        time.sleep(1.0 / UPDATE_RATE_HZ)
 
     def close(self) -> None:
         """
