@@ -5,8 +5,6 @@ from typing import Dict, Optional
 from tigerasi.device_codes import *
 
 from voxel.devices.controller.tiger_controller import TigerController
-
-# from tigerasi.tiger_controller import TigerController
 from voxel.devices.stage.base import BaseStage
 from voxel.devices.utils.singleton import Singleton
 

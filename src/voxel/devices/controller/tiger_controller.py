@@ -5,7 +5,6 @@ from serial import Serial, SerialException
 from functools import cache, wraps
 from time import sleep, perf_counter
 
-# from tigerasi.tiger_controller import TigerController
 from tigerasi.device_codes import *
 from typing import Union, Callable, Any
 import logging
