@@ -406,7 +406,6 @@ class TigerStage(BaseStage):
         sample_limit_lower = list(self._hardware_to_instrument(tiger_limit_lower).values())[0]
         sample_limit_upper = list(self._hardware_to_instrument(tiger_limit_upper).values())[0]
         limits = sorted([sample_limit_lower, sample_limit_upper])
-        print(limits)
         return limits
 
     @property
