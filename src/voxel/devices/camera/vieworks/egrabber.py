@@ -553,8 +553,8 @@ class VieworksCamera(BaseCamera):
         except Exception:
             self.log.error("frame grab failed")
             image = np.zeros((row_count, column_count), dtype=np.uint16)
-        # do software binning if != 1 and not a string for setting in egrabber
-        if self._binning > 1 and isinstance(self._binning, int):
+        # do software binning if != 1 and not a string for setting in egrabber]
+        if self._binning > 1 and isinstance(BINNINGS[self._binning], int):
             image = np.copy(self.gpu_binning.run(image))
         self._latest_frame = np.copy(image)
         # increment the current frame number
