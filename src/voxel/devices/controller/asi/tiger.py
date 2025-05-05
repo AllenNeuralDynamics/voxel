@@ -1610,8 +1610,8 @@ class PositionUpdater:
                 position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
                 self.position_mm.update(position_mm)
             except:
-                self.log.error("could not update positions")
-        time.sleep(1.0 / UPDATE_RATE_HZ)
+                self.log.debug("could not update positions")
+            time.sleep(1.0 / UPDATE_RATE_HZ)
 
     def close(self) -> None:
         """
