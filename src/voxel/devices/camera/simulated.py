@@ -73,12 +73,6 @@ class SimulatedCamera(BaseCamera):
         self._binning = 1
         self._trigger = {"mode": "on", "source": "internal", "polarity": "rising"}
 
-        self._frame = Value("i", 0)
-        self._frame_rate = Value("d", 0.0)
-        self._dropped_frames = Value("d", 0.0)
-        self._buffer_index = Value("i", 0)
-        self._buffer = Queue()
-
     @DeliminatedProperty(minimum=MIN_EXPOSURE_TIME_MS, maximum=MAX_EXPOSURE_TIME_MS, step=0.001)
     def exposure_time_ms(self) -> float:
         """Get the exposure time in milliseconds.
@@ -317,10 +311,6 @@ class SimulatedCamera(BaseCamera):
         :type frame_count: int
         """
         self.log.info("simulated camera preparing...")
-        self._frame_generator = FrameGenerator()
-        self._frame_generator.prepare(
-            frame_count, self._width_px, self._height_px, PIXEL_TYPES[self._pixel_type], self.frame_time_ms
-        )
 
     @property
     def mainboard_temperature_c(self) -> float:
@@ -355,12 +345,10 @@ class SimulatedCamera(BaseCamera):
     def start(self, frames=float("inf")) -> None:
         """Start camera."""
         self.log.info("simulated camera starting...")
-        self._frame_generator.start()
 
     def stop(self) -> None:
         """Stop camera,."""
         self.log.info("simulated camera stopping...")
-        self._frame_generator.stop()
 
     def abort(self) -> None:
         """Abort camera."""
@@ -383,12 +371,11 @@ class SimulatedCamera(BaseCamera):
         :return: Latest frame
         :rtype: numpy.ndarray
         """
-        image = self._frame_generator.get_latest_frame()
-        # image = numpy.random.randint(
-        #     low=128, high=256, size=(self.image_height_px, self.image_width_px), dtype=PIXEL_TYPES[self._pixel_type]
-        # )
-        # self.log.info(self._buffer_index.value)
-        # self._buffer_index.value -= 1
+        image = numpy.random.randint(
+            low=128, high=256, size=(self.image_height_px, self.image_width_px), dtype=PIXEL_TYPES[self._pixel_type]
+        )
+        self._latest_frame = numpy.copy(image)
+        self.frame_number += 1
         if self._binning > 1:
             return self.gpu_binning.run(image)
         else:
@@ -410,26 +397,22 @@ class SimulatedCamera(BaseCamera):
         :return: Acquisition state
         :rtype: dict
         """
-        # copy into new variables for async
-        frame_rate_async = self._frame_generator.frame_rate
-        dropped_frames_async = self._frame_generator.dropped_frames
-        input_buffer_size = self._frame_generator._buffer.qsize()
 
         state = {}
-        state["Frame Index"] = self._frame_generator.frame
-        state["Input Buffer Size"] = input_buffer_size
-        state["Output Buffer Size"] = BUFFER_SIZE_FRAMES - input_buffer_size
+        state["Frame Index"] = self.frame_number
+        state["Input Buffer Size"] = 0
+        state["Output Buffer Size"] = BUFFER_SIZE_FRAMES
         # number of underrun, i.e. dropped frames
-        state["Dropped Frames"] = dropped_frames_async
+        state["Dropped Frames"] = 0
         state["Data Rate [MB/s]"] = (
-            frame_rate_async
+            1.0 / (self.frame_time_ms / 1000)
             * self._width_px
             * self._height_px
             * numpy.dtype(self._pixel_type).itemsize
             / self._binning**2
             / 1024**2
         )
-        state["Frame Rate [fps]"] = frame_rate_async
+        state["Frame Rate [fps]"] = 1.0 / (self.frame_time_ms / 1000)
         self.log.info(
             f"id: {self.id}, "
             f"frame: {state['Frame Index']}, "
@@ -440,152 +423,3 @@ class SimulatedCamera(BaseCamera):
             f"frame rate: {state['Frame Rate [fps]']:.2f} [fps]."
         )
         return state
-
-
-class FrameGenerator:
-    """Frame generator class for generating frames."""
-
-    # frame generator into separate class due to voxel wrapping and thread locking of device classes
-    def __init__(self) -> None:
-        """Initialize the FrameGenerator instance."""
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
-        # multiprocessing shared values
-        self._frame = Value("i", 0)
-        self._frame_rate = Value("d", 0.0)
-        self._dropped_frames = Value("d", 0.0)
-        self._buffer_index = Value("i", 0)
-        self._buffer = Queue()
-
-    @property
-    def frame(self) -> int:
-        """Get the current frame index.
-
-        :return: Current frame index
-        :rtype: int
-        """
-        return self._frame.value
-
-    @property
-    def frame_rate(self) -> float:
-        """Get the estimated frame rate.
-
-        :return: Estimated frame rate
-        :rtype: float
-        """
-        return self._frame_rate.value
-
-    @property
-    def dropped_frames(self) -> int:
-        """Get the number of dropped frames.
-
-        :return: Number of dropped frames
-        :rtype: int
-        """
-        return self._dropped_frames.value
-
-    def get_latest_frame(self) -> numpy.ndarray:
-        """Get the latest frame from the buffer.
-
-        :return: Latest frame
-        :rtype: numpy.ndarray
-        """
-        while self._buffer.empty():
-            time.sleep(0.01)
-        image = self._buffer.get()
-        return image
-
-    def prepare(self, frame_count: int, width_px: int, height_px: int, pixel_type: str, frame_time_ms: float) -> None:
-        """Prepare the frame generator process.
-
-        :param frame_count: Number of frames to generate
-        :type frame_count: int
-        :param width_px: Width in pixels
-        :type width_px: int
-        :param height_px: Height in pixels
-        :type height_px: int
-        :param pixel_type: Pixel type
-        :type pixel_type: str
-        :param frame_time_ms: Frame time in milliseconds
-        :type frame_time_ms: float
-        """
-        self._process = Process(
-            target=self._run,
-            args=(
-                frame_count,
-                width_px,
-                height_px,
-                frame_time_ms,
-                pixel_type,
-                self._buffer,
-                self._frame,
-                self._frame_rate,
-                self._dropped_frames,
-                self._buffer_index,
-            ),
-        )
-
-    def start(self) -> None:
-        """Start the frame generator process."""
-        self.log.info(f"starting camera")
-        self._process.start()
-
-    def stop(self) -> None:
-        """Stop the frame generator process."""
-        self.log.info(f"stopping camera")
-        self._process.kill()
-
-    def _run(
-        self,
-        frame_count: int,
-        width_px: int,
-        height_px: int,
-        frame_time_ms: float,
-        pixel_type: str,
-        buffer: multiprocessing.Queue,
-        frame: multiprocessing.Value,
-        frame_rate: multiprocessing.Value,
-        dropped_frames: multiprocessing.Value,
-        buffer_index: multiprocessing.Value,
-    ) -> None:
-        """Run the frame generator process.
-
-        :param frame_count: Number of frames to generate
-        :type frame_count: int
-        :param width_px: Width in pixels
-        :type width_px: int
-        :param height_px: Height in pixels
-        :type height_px: int
-        :param frame_time_ms: Frame time in milliseconds
-        :type frame_time_ms: float
-        :param pixel_type: Pixel type
-        :type pixel_type: str
-        :param buffer: Buffer to store frames
-        :type buffer: multiprocessing.Queue
-        :param frame: Current frame index
-        :type frame: multiprocessing.Value
-        :param frame_rate: Estimated frame rate
-        :type frame_rate: multiprocessing.Value
-        :param dropped_frames: Number of dropped frames
-        :type dropped_frames: multiprocessing.Value
-        """
-        i = 1
-        frame_count = frame_count if frame_count is not None else 1
-        while i <= frame_count:
-            start_time = time.time()
-            image = numpy.random.randint(low=128, high=256, size=(height_px, width_px), dtype=pixel_type)
-            while (time.time() - start_time) < frame_time_ms / 1000:
-                time.sleep(0.01)
-            self.log.warning("test.")
-            if buffer_index.value < BUFFER_SIZE_FRAMES:
-                self.log.warning("test.")
-                self.log.warning(buffer_index.value)
-                buffer_index.value += 1
-                buffer.put(image)
-            else:
-                dropped_frames.value += 1
-                self.log.warning("buffer full, frame dropped.")
-            frame.value += 1
-            i = i if frame_count is None else i + 1
-            end_time = time.time()
-            frame_rate.value = 1 / (end_time - start_time)
-            self.log.warning(frame_rate.value)
