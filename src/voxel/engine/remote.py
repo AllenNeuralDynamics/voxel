@@ -9,7 +9,7 @@ import zmq
 from voxel.utils.log_config import get_component_logger
 
 from .local import AcquisitionEngine, AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
-from .preview import NewFrameCallback, PreviewFrame, PreviewSettings, PreviewTransform
+from .preview import NewFrameCallback, PreviewFrame, PreviewTransform
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCameraProxy

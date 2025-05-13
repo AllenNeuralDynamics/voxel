@@ -33,7 +33,7 @@ class VoxelChannel:
 
     def __post_init__(self):
         self.log = get_component_logger(self)
-        self._current_frame: PreviewFrame | None = None
+        # self._current_frame: PreviewFrame | None = None
         self._preview_callbacks: set[NewFrameCallback] = set()
 
     @property

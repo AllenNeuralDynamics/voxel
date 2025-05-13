@@ -50,32 +50,59 @@ instrument:
       driver: voxel.drivers.cameras.simulated.SimulatedCamera
       kwds:
         pixel_size_um: 0.5, 0.5
-        objective: detection_objective
-        # sensor_width_px: 4096
-        # sensor_height_px: 4096
-        # resize_method: tile
-      acq_pin: ao5
+        magnification: 40
+        sensor_width_px: 4096
+        sensor_height_px: 4096
+        resize_method: tile
+      acq_pin: ao2
+    simulated_camera_2:
+      driver: voxel.drivers.cameras.simulated.SimulatedCamera
+      kwds:
+        pixel_size_um: 0.5, 0.5
+        magnification: 40
+        sensor_width_px: 4096
+        sensor_height_px: 4096
+        resize_method: tile
+      acq_pin: ao3
     vieworks_camera_1:
       driver: voxel.drivers.cameras.vieworks.VieworksCamera
       kwds:
         serial_number: MP151BDD022
         pixel_size_um: 0.5, 0.5
-        objective: detection_objective
-      acq_pin: ao4
-    detection_objective:
-      driver: voxel.devices.lens.VoxelLens
-      kwds:
         magnification: 40
+      acq_pin: ao4
     laser_488:
       driver: voxel.drivers.lasers.simulated.SimulatedLaser
       kwds:
         wavelength: 488
-      acq_pin: ao1
+      acq_pin: ao5
     laser_561:
       driver: voxel.drivers.lasers.simulated.SimulatedLaser
       kwds:
         wavelength: 561
-      acq_pin: ao2
+      acq_pin: ao6
+    laser_405:
+      driver: voxel.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 405
+      acq_pin: ao7
+    laser_507:
+      driver: voxel.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 507
+      acq_pin: ao8
+    filter_wheel_1:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - BP488
+          - BP561
+    filter_wheel_2:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - BP405
+          - BP561
     z-axis:
       driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
@@ -92,45 +119,62 @@ instrument:
       driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
         dimension: Y
-    filter_488:
-      driver: voxel.drivers.filters.simulated.SimulatedFilter
+    simulated_camera_1_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
-        wheel: filterwheel
-        position: 1
-    filter_561:
-      driver: voxel.drivers.filters.simulated.SimulatedFilter
+        dimension: N
+    left_illumination_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
-        wheel: filterwheel
-        position: 2
-    filterwheel:
-      driver: voxel.drivers.filters.simulated.SimulatedFilterWheel
+        dimension: N
+    right_illumination_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
-        wheel_id: 1
+        dimension: N
 
-  io:
-    imaris: &imaris
-      driver: voxel.io.writers.imaris.ImarisWriter
-    simple_writer: &simple_writer
-      driver: voxel.io.writers.simple.SimpleWriter
-    robocopy: &robocopy
-      driver: voxel.io.transfers.robocopy.RobocopyFileTransfer
-      kwds:
-        external_path: D:/voxel_test2
-        local_path: D:/voxel_test
+  io: &io_specs
+    writers:
+      imaris:
+        driver: voxel.io.writers.imaris.ImarisWriter
+      simple_writer:
+        driver: voxel.io.writers.simple.SimpleWriter
+    transfers:
+      robocopy:
+        driver: voxel.io.transfers.robocopy.RobocopyFileTransfer
+        kwds:
+          external_path: D:/voxel_test2
+          local_path: D:/voxel_test
 
-  channels:
-    red:
-      camera: vieworks_camera_1
-      laser: laser_561
-      filter: filter_561
-      writer: *imaris
-      transfer: *robocopy
-    green:
+  paths:
+    A:
       camera: simulated_camera_1
-      laser: laser_488
-      filter: filter_488
-      writer: *imaris
-      transfer: *robocopy
+      io: *io_specs
+      filter_wheel: filter_wheel_1
+      focusing_axis: simulated_camera_focus
+      channels:
+        red:
+          laser: laser_561
+          filter: BP561
+          axes:
+            - left_illumination_focus
+            - right_illumination_focus
+        green:
+          laser: laser_488
+          filter: BP488
+          axes:
+            - left_illumination_focus
+            - right_illumination_focus
+    B:
+      camera: simulated_camera_2
+      io: *io_specs
+      filter_wheel: filter_wheel_2
+      channels:
+        blue:
+          laser: laser_405
+          filter: BP405
+        yellow:
+          laser: laser_507
+          filter: BP507
 
 settings:
   channel.*.camera.acq_waveforms:

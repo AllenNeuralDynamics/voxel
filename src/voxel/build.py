@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BuildSpec(BaseModel):
@@ -10,6 +10,11 @@ class BuildSpec(BaseModel):
 
 class DeviceBuildSpec(BuildSpec):
     acq_pin: str | None = None
+
+
+class IOSpecs(BaseModel):
+    writers: dict[str, BuildSpec]
+    transfers: dict[str, BuildSpec] = Field(default_factory=dict)
 
 
 def parse_driver(driver: str) -> type:

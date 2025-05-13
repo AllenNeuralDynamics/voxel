@@ -135,11 +135,12 @@ class ASITigerBox(VoxelDevice):
         if not self.axis_map:
             if self.scan_state == ScanState.SCANNING:
                 self.box.stop_scan()
-            self.box.ser.close()
+            self.box.ser.close() if self.box.ser else None
 
     def get_axis_position(self, axis_name: str) -> float:
         box_axis = self.axis_map[axis_name]
-        steps = float(self.box.get_position(box_axis)[box_axis])
+        # steps = float(self.box.get_position(box_axis)[box_axis])
+        steps = self.box.get_position(box_axis)[box_axis]
         return steps / (STEPS_PER_UM * 1000)  # convert to mm
 
     def move_absolute_mm(self, axis_name: str, position_mm: float) -> None:
@@ -229,8 +230,8 @@ class ASITigerBox(VoxelDevice):
             self.box.queue_buffered_move(**{self.axis_map[axis_name]: step_size_steps})
             # TTL mode dictates whether ring buffer move is relative or absolute.
             self.box.set_ttl_pin_modes(
-                TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION,
-                TTLOut0Mode.PULSE_AFTER_MOVING,
+                in0_mode=TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION,
+                out0_mode=TTLOut0Mode.PULSE_AFTER_MOVING,
                 aux_io_mode=0,
                 aux_io_mask=0,
                 aux_io_state=0,

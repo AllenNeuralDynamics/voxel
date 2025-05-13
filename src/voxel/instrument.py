@@ -7,6 +7,7 @@ from ruamel.yaml import YAML
 
 from voxel.daq.tasks.clockgen import ClockGenTask
 from voxel.daq.tasks.wavegen import WaveGenTask
+from voxel.detection_path import DetectionPath, FilterWheel, IlluminationChannel
 from voxel.devices.camera import VoxelCameraProxy
 from voxel.devices.rotation_axis import VoxelRotationAxis
 from voxel.engine.local import AcquisitionEngine
@@ -14,18 +15,16 @@ from voxel.engine.remote import AcquisitionEngineProxy
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec3D
 
-from .build import BuildSpec, DeviceBuildSpec, build_object, build_object_group
-from .channel import VoxelChannel
+from .build import DeviceBuildSpec, IOSpecs, build_object_group
 from .daq import VoxelDaq
 from .devices import (
     LinearAxisDimension,
     VoxelCamera,
-    VoxelDeviceType,
-    VoxelFilter,
-    VoxelLaser,
-    VoxelLinearAxis,
     VoxelDevice,
     VoxelDeviceModel,
+    VoxelDeviceType,
+    VoxelLaser,
+    VoxelLinearAxis,
 )
 
 
@@ -77,18 +76,24 @@ class ConfigLoadError(ValueError):
 
 
 class ChannelConfig(BaseModel):
-    camera: str
     laser: str
     filter_: str = Field(alias="filter")
-    writer: BuildSpec
-    transfer: BuildSpec | None = None
+    axes: list[str] = Field(default_factory=list)
+
+
+class DetectionPathConfig(BaseModel):
+    camera: str
+    io: IOSpecs
+    filter_wheel: str
+    focusing_axis: str | None = None
+    channels: dict[str, ChannelConfig]
 
 
 class InstrumentConfig(BaseModel):
     name: str
     daq: DaqConfig
     devices: dict[str, DeviceBuildSpec]
-    channels: dict[str, ChannelConfig]
+    paths: dict[str, DetectionPathConfig]
     settings: dict[str, dict[str, Any]] | None = None
     path: str | None = None
 
@@ -103,18 +108,17 @@ class InstrumentConfig(BaseModel):
     @model_validator(mode="after")
     def validate_channels_info(self) -> Self:
         """Check that all channel devices are in the devices dict."""
-        channel_errors = [
-            f"Device '{device}' in channel '{name}' not found in devices list."
-            for name, channel in self.channels.items()
-            for device in (channel.camera, channel.laser, channel.filter_)
-            if device not in self.devices
-        ]
+        path_errors = []
+        for path_name, path in self.paths.items():
+            for device in [path.camera, path.filter_wheel] + [channel.laser for channel in path.channels.values()]:
+                if device not in self.devices:
+                    path_errors.append(f"Device '{device}' in path '{path_name}' not found in devices list.")
         daq_errors = [
             f"Device '{pin_specs.device}' at Daq Pin '{pin}' not found in devices list."
             for pin, pin_specs in self.daq.acq_pins.items()
             if pin_specs.device not in self.devices
         ]
-        errors = channel_errors + daq_errors
+        errors = path_errors + daq_errors
         if errors:
             raise ConfigLoadError("; ".join(errors))
         return self
@@ -131,25 +135,12 @@ class VoxelInstrument:
         self.devices = self._build_devices()
         self.daq = self._build_daq()
         self.acq_task = self._build_acq_task()
-        self.channels = self._build_channels()
+        self.paths = self._build_paths()
         self.stage = self._build_stage()
 
         self.apply_build_settings()
 
         self.log.info(f"Initialized {self.name} with {len(self.devices)} devices")
-
-    @property
-    def active_devices(self) -> set[str]:
-        active = set()
-        for channel in self.channels.values():
-            if channel.is_active:
-                active.update(
-                    [
-                        device.name
-                        for device in [channel.camera, channel.laser, channel.filter]
-                    ]
-                )
-        return active
 
     @property
     def cameras(self) -> dict[str, VoxelCamera | VoxelCameraProxy]:
@@ -164,33 +155,26 @@ class VoxelInstrument:
         lasers = {}
         for name, device in self.devices.items():
             if device.device_type == VoxelDeviceType.LASER:
-                assert isinstance(
-                    device, VoxelLaser
-                ), f"Device {name} is not a VoxelLaser"
+                assert isinstance(device, VoxelLaser), f"Device {name} is not a VoxelLaser"
                 lasers[name] = device
         return lasers
-
-    @property
-    def filters(self) -> dict[str, VoxelFilter]:
-        filters = {}
-        for name, device in self.devices.items():
-            if device.device_type == VoxelDeviceType.FILTER:
-                assert isinstance(
-                    device, VoxelFilter
-                ), f"Device {name} is not a VoxelFilter"
-                filters[name] = device
-        return filters
 
     @property
     def linear_axes(self) -> dict[str, VoxelLinearAxis]:
         axes = {}
         for name, device in self.devices.items():
             if device.device_type == VoxelDeviceType.LINEAR_AXIS:
-                assert isinstance(
-                    device, VoxelLinearAxis
-                ), f"Device {name} is not a VoxelLinearAxis"
+                assert isinstance(device, VoxelLinearAxis), f"Device {name} is not a VoxelLinearAxis"
                 axes[name] = device
         return axes
+
+    # @property
+    # def channels(self) -> dict[str, IlluminationChannel]:
+    #     channels = {}
+    #     for path in self.paths.values():
+    #         for channel_name, channel in path.channels.items():
+    #             channels[channel_name] = channel
+    #     return channels
 
     @property
     def snapshot(self) -> dict[str, "VoxelDeviceModel"]:
@@ -224,17 +208,21 @@ class VoxelInstrument:
         )
 
         for pin, pin_specs in self.config.daq.acq_pins.items():
-            self.devices[pin_specs.device].acq_daq_channel = acq_task.add_channel(
-                pin_specs.device, pin
-            )
+            self.devices[pin_specs.device].acq_daq_channel = acq_task.add_channel(pin_specs.device, pin)
 
         return acq_task
 
-    def _build_channels(self) -> dict[str, "VoxelChannel"]:
-        """Build channels from the configuration."""
-        channels = {}
-        for name, channel_config in self.config.channels.items():
-            camera = self.cameras[channel_config.camera]
+    def _build_paths(self) -> dict[str, DetectionPath]:
+        """Build paths from the configuration."""
+        paths = {}
+        errors = {}
+        error_msg_suffix = "Please ensure the device is in the devices list and is of the correct base type."
+        for name, path_config in self.config.paths.items():
+            errors[name] = []
+            camera = self.cameras.get(path_config.camera)
+            if not camera:
+                errors[name].append(f"Camera {path_config.camera} not found in devices list.")
+                continue
             if isinstance(camera, VoxelCameraProxy):
                 engine = AcquisitionEngineProxy(
                     rpc_address="localhost",
@@ -244,32 +232,81 @@ class VoxelInstrument:
             elif isinstance(camera, VoxelCamera):
                 engine = AcquisitionEngine(
                     camera=camera,
-                    writer=build_object(channel_config.writer),
-                    transfer=build_object(channel_config.transfer)
-                    if channel_config.transfer
-                    else None,
+                    io=path_config.io,
                 )
             else:
-                raise ValueError(f"Invalid camera type: {type(camera)}")
-            channels[name] = VoxelChannel(
+                errors[name].append(f"Invalid camera type: {type(camera)}")
+                continue
+
+            filter_wheel = self.devices.get(path_config.filter_wheel)
+            if not filter_wheel or not isinstance(filter_wheel, FilterWheel):
+                errors[name].append(f"Invalid Filter wheel: {path_config.filter_wheel}. {error_msg_suffix}")
+                continue
+
+            if focusing_axis_key := path_config.focusing_axis:
+                focusing_axis = self.devices.get(focusing_axis_key)
+                if not focusing_axis or not isinstance(focusing_axis, VoxelLinearAxis):
+                    errors[name].append(f"Invalid Focusing axis {focusing_axis_key}. {error_msg_suffix}")
+                    continue
+            else:
+                focusing_axis = None
+            if path_config.focusing_axis and not focusing_axis:
+                errors[name].append(f"Focusing axis {path_config.focusing_axis} not found in devices list.")
+                continue
+
+            channels = {}
+            for channel_name, channel_config in path_config.channels.items():
+                channel_errors = []
+                laser = self.lasers.get(channel_config.laser)
+                if not laser or not isinstance(laser, VoxelLaser):
+                    channel_errors.append(f"Invalid Laser {channel_config.laser}. {error_msg_suffix}")
+                    continue
+                if channel_config.filter_ not in filter_wheel.filters:
+                    channel_errors.append(
+                        f"Filter {channel_config.filter_} not found in filter wheel {path_config.filter_wheel}."
+                    )
+                    continue
+                illumination_axes: list[VoxelLinearAxis] = []
+                for axis_name in channel_config.axes:
+                    axis = self.devices.get(axis_name)
+                    if not axis or not isinstance(axis, VoxelLinearAxis):
+                        channel_errors.append(f"Invalid Focusing axis {axis_name}. {error_msg_suffix}")
+                        continue
+                    illumination_axes.append(axis)
+                if channel_errors:
+                    errors[name][channel_name] = channel_errors
+                    continue
+
+                channels[channel_name] = IlluminationChannel(
+                    laser=laser,
+                    filter=channel_config.filter_,
+                    name=channel_name,
+                    axes=illumination_axes,
+                )
+
+            paths[name] = DetectionPath(
                 name=name,
                 engine=engine,
-                laser=self.lasers[channel_config.laser],
-                filter=self.filters[channel_config.filter_],
+                filter_wheel=filter_wheel,
+                channels=channels,
                 acq_task=self.acq_task,
+                focusing_axis=focusing_axis,
             )
-        return channels
 
-    def _build_stage(self) -> "Stage":
+        if errors:
+            error_msg = "\n".join([f"{path}: {', '.join(errors[path])}" for path in errors if errors[path]])
+            raise ConfigLoadError(f"Errors in paths:\n{error_msg}")
+
+        return paths
+
+    def _build_stage(self) -> "VoxelStage":
         axes: dict[LinearAxisDimension, VoxelLinearAxis] = {}
         for name, device in self.devices.items():
             if device.device_type == VoxelDeviceType.LINEAR_AXIS:
-                assert isinstance(
-                    device, VoxelLinearAxis
-                ), f"Device {name} is not a VoxelLinearAxis"
+                assert isinstance(device, VoxelLinearAxis), f"Device {name} is not a VoxelLinearAxis"
                 if not axes.get(device.dimension, None):
                     axes[device.dimension] = device
-        return self.Stage(
+        return self.VoxelStage(
             x=axes[LinearAxisDimension.X],
             y=axes[LinearAxisDimension.Y],
             z=axes[LinearAxisDimension.Z],
@@ -296,17 +333,13 @@ class VoxelInstrument:
         self.close()
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__} "
-            f"Devices: \n\t - "
-            f"{self._get_devices_str()} \n"
-        )
+        return f"{self.__class__.__name__} " f"Devices: \n\t - " f"{self._get_devices_str()} \n"
 
     def _get_devices_str(self) -> str:
         return "\n\t - ".join([f"{device}" for device in self.devices.values()])
 
     @dataclass
-    class Stage:
+    class VoxelStage:
         x: VoxelLinearAxis
         y: VoxelLinearAxis
         z: VoxelLinearAxis
@@ -352,9 +385,7 @@ class VoxelInstrument:
                     axis.position_mm = arg
                     moved_linear = True
 
-            rotational_zipped = zip(
-                [roll, pitch, yaw], [self.roll, self.pitch, self.yaw]
-            )
+            rotational_zipped = zip([roll, pitch, yaw], [self.roll, self.pitch, self.yaw])
             for arg, axis in rotational_zipped:
                 if arg is not None and axis is not None:
                     axis.position_deg = arg
@@ -392,17 +423,9 @@ class VoxelInstrument:
 
         @property
         def limits_mm(self) -> tuple[Vec3D, Vec3D]:
-            z_limits = (
-                (self.z.lower_limit_mm, self.z.upper_limit_mm)
-                if self.z is not None
-                else (0, 0)
-            )
-            lower_limits = Vec3D(
-                self.x.lower_limit_mm, self.y.lower_limit_mm, z_limits[0]
-            )
-            upper_limits = Vec3D(
-                self.x.upper_limit_mm, self.y.upper_limit_mm, z_limits[1]
-            )
+            z_limits = (self.z.lower_limit_mm, self.z.upper_limit_mm) if self.z is not None else (0, 0)
+            lower_limits = Vec3D(self.x.lower_limit_mm, self.y.lower_limit_mm, z_limits[0])
+            upper_limits = Vec3D(self.x.upper_limit_mm, self.y.upper_limit_mm, z_limits[1])
             return lower_limits, upper_limits
 
 

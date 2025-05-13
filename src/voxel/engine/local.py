@@ -5,12 +5,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
+from collections.abc import Mapping
 
 import cv2
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from voxel.build import BuildSpec, IOSpecs, build_object
 from voxel.devices.camera import VoxelCameraProxy
 from voxel.engine.preview import (
     NewFrameCallback,
@@ -118,11 +120,14 @@ class AcquisitionEngineBase(ABC):
 
 @dataclass
 class AcquisitionEngine(AcquisitionEngineBase):
-    def __init__(self, camera: "VoxelCamera", writer: "VoxelWriter", transfer: VoxelFileTransfer | None = None):
+    def __init__(self, camera: "VoxelCamera", io: IOSpecs):
         self.log = get_component_logger(self)
         self._camera = camera
-        self._writer = writer
-        self._transfer = transfer
+
+        self._writers, self._writer = self._validate_writers(writer_specs=io.writers)
+
+        self._transfers, self._transfer = self._validate_transfers(transfer_specs=io.transfers)
+
         self._state = EngineStatus.INACTIVE
         self._disk_space_check_interval = 2  # seconds
         self._latest_frame: np.ndarray | None = None
@@ -132,6 +137,72 @@ class AcquisitionEngine(AcquisitionEngineBase):
         self._preview_thread: threading.Thread | None = None
         self._halt_event = threading.Event()
         self._transform_lock = threading.Lock()
+
+    @staticmethod
+    def _validate_io_specs[T](
+        io_specs: Mapping[str, BuildSpec], io_type: type[T]
+    ) -> tuple[Mapping[str, BuildSpec], list[str]]:
+        """Validate the IO specifications."""
+        if not io_specs:
+            return {}, [f"No {io_type.__name__} specifications provided."]
+        valid_specs = {}
+        errors = []
+        for name, spec in io_specs.items():
+            if isinstance(build_object(spec), io_type):
+                valid_specs[name] = spec
+            else:
+                errors.append(f"{io_type.__name__} {name} is not a valid {io_type.__name__}.")
+        return valid_specs, errors
+
+    def _validate_writers(self, writer_specs: Mapping[str, BuildSpec]) -> tuple[Mapping[str, BuildSpec], VoxelWriter]:
+        """Validate the writer specifications."""
+        writers, errors = self._validate_io_specs(writer_specs, VoxelWriter)
+        if errors:
+            self.log.error(f"Errors in writer specifications: {', '.join(errors)}")
+        if not writers:
+            raise ValueError("No valid writers provided.")
+        return writers, build_object((next(iter(writers.values()))))
+
+    def _validate_transfers(
+        self, transfer_specs: Mapping[str, BuildSpec]
+    ) -> tuple[Mapping[str, BuildSpec], VoxelFileTransfer | None]:
+        """Validate the transfer specifications."""
+        transfers, errors = self._validate_io_specs(transfer_specs, VoxelFileTransfer)
+        if errors:
+            self.log.error(f"Errors in transfer specifications: {', '.join(errors)}")
+        if not transfers:
+            self.log.error("No valid transfers provided.")
+            return {}, None
+        return transfers, build_object((next(iter(transfers.values()))))
+
+    @property
+    def writer(self) -> str:
+        return self._writer.name
+
+    def set_writer(self, writer_name: str) -> None:
+        """Set the writer to a new writer."""
+        if writer_name not in self._writers:
+            raise ValueError(f"Writer {writer_name} not found in available writers.")
+        if self._state != EngineStatus.INACTIVE:
+            raise RuntimeError("Cannot change writer while engine is running.")
+        self.log.info(f"Changing writer from {self._writer.name} to {writer_name}.")
+        self._writer.close()
+        self._writer = build_object(self._writers[writer_name])
+        self.log.info(f"Writer set to {writer_name}.")
+
+    @property
+    def transfer(self) -> VoxelFileTransfer | None:
+        return self._transfer
+
+    def set_transfer(self, transfer_name: str) -> None:
+        """Set the transfer to a new transfer."""
+        if transfer_name not in self._transfers:
+            raise ValueError(f"Transfer {transfer_name} not found in available transfers.")
+        if self._state != EngineStatus.INACTIVE:
+            raise RuntimeError("Cannot change transfer while engine is running.")
+        self.log.info(f"Setting transfer to {transfer_name}.")
+        self._transfer = build_object(self._transfers[transfer_name])
+        self.log.info(f"Transfer set to {transfer_name}.")
 
     @property
     def camera(self) -> "VoxelCamera":
