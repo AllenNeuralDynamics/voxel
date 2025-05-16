@@ -1,9 +1,11 @@
 import logging
+import time
 
 import nidaqmx
 import numpy
-from nidaqmx.constants import TaskMode, AcquisitionType
+from nidaqmx.constants import AcquisitionType, TaskMode
 
+from voxel.devices.daq.ni import NIDAQ
 from voxel.devices.filterwheel.base import BaseFilterWheel
 
 FILTERS = list()
@@ -14,20 +16,20 @@ class DAQFilterWheel(BaseFilterWheel):
     FilterWheel class for handling simulated filter wheel devices.
     """
 
-    def __init__(self, dev: str, filters: dict, ports: dict) -> None:
+    def __init__(self, filters: dict, ports: dict, daq: NIDAQ = None) -> None:
         """
         Initialize the FilterWheel object.
 
-        :param daq: NI-DAQmx device
-        :type daq: Device
         :param filters: Dictionary of filters
         :type filters: dict
         :param ports: Dictionary of filter ports
         :type ports: dict
+        :param daq: NI-DAQmx device
+        :type daq: NIDAQ
         """
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
-        self.id = dev
-        self.dev = nidaqmx.system.device.Device(self.id)
+        self.id = daq.id
+        self.dev = daq
         self.ports = ports
         self.filters = filters
         for filter in filters:
@@ -37,7 +39,7 @@ class DAQFilterWheel(BaseFilterWheel):
         for key, value in list(ports.items()):
             if key not in filters:
                 raise ValueError(f"Port {key} not in filter list: {filters}")
-            if f"{dev}/{value}" not in self.dev.ao_physical_chans.channel_names:
+            if f"{daq.id}/{value}" not in self.dev.ao_physical_chans.channel_names:
                 raise ValueError(f"Port {value} not in device channels: {self.dev.ao_physical_chans.channel_names}")
         # force homing of the wheel to first position
         self.filter = FILTERS[0]
@@ -84,7 +86,9 @@ class DAQFilterWheel(BaseFilterWheel):
         daq_task.wait_until_done()
         daq_task.stop()
         daq_task.close()
-
+        time.sleep(0.5)  # wait for wheel to settle
+        self.log.info(f"filter set to {filter_name}")
+        
     def close(self) -> None:
         """
         Close the filter wheel device.
