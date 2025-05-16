@@ -5,12 +5,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 from collections.abc import Mapping
 
 import cv2
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from voxel.build import BuildSpec, IOSpecs, build_object
 from voxel.devices.camera import VoxelCameraProxy

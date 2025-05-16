@@ -108,9 +108,6 @@ instrument:
       kwds:
         dimension: Z
       acq_pin: ao3
-    etl:
-      driver: voxel.drivers.tunable_lenses.simulated.SimulatedTunableLens
-      acq_pin: ao12
     x-axis:
       driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
@@ -131,6 +128,9 @@ instrument:
       driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
       kwds:
         dimension: N
+    etl:
+      driver: voxel.drivers.tunable_lenses.simulated.SimulatedTunableLens
+      acq_pin: ao12
 
   io: &io_specs
     writers:
@@ -150,24 +150,24 @@ instrument:
       camera: simulated_camera_1
       io: *io_specs
       filter_wheel: filter_wheel_1
-      focusing_axis: simulated_camera_focus
+      focusing_axes:
+        detection: simulated_camera_1_focus
+        left: left_illumination_focus
+        right: right_illumination_focus
       channels:
         red:
           laser: laser_561
           filter: BP561
-          axes:
-            - left_illumination_focus
-            - right_illumination_focus
         green:
           laser: laser_488
           filter: BP488
-          axes:
-            - left_illumination_focus
-            - right_illumination_focus
     B:
       camera: simulated_camera_2
       io: *io_specs
       filter_wheel: filter_wheel_2
+      focusing_axes:
+        left: left_illumination_focus
+        right: right_illumination_focus
       channels:
         blue:
           laser: laser_405

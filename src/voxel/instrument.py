@@ -278,10 +278,7 @@ class VoxelInstrument:
                     continue
 
                 channels[channel_name] = IlluminationChannel(
-                    laser=laser,
-                    filter=channel_config.filter_,
-                    name=channel_name,
-                    axes=illumination_axes,
+                    laser=laser, filter=channel_config.filter_, name=channel_name
                 )
 
             paths[name] = DetectionPath(
@@ -290,7 +287,6 @@ class VoxelInstrument:
                 filter_wheel=filter_wheel,
                 channels=channels,
                 acq_task=self.acq_task,
-                focusing_axis=focusing_axis,
             )
 
         if errors:

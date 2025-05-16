@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import threading
 from voxel.daq.tasks.wavegen import WaveGenTask
 from voxel.devices.base import VoxelDevice, VoxelDeviceType
@@ -45,10 +45,9 @@ class IlluminationChannel:
     laser: VoxelLaser
     filter: str
     name: str = ""
-    axes: list[VoxelLinearAxis] = field(default_factory=list)
 
     def __post_init__(self):
-        if self.name == "":
+        if not self.name or self.name == "":
             self.name = f"{self.laser.name}_{self.filter}"
 
 
@@ -67,9 +66,9 @@ class DetectionPath:
         name: str,
         engine: AcquisitionEngineBase,
         filter_wheel: FilterWheel,
-        channels: dict[str, IlluminationChannel],
         acq_task: WaveGenTask,
-        focusing_axis: VoxelLinearAxis | None,
+        channels: dict[str, IlluminationChannel],
+        focusing_axes: dict[str, VoxelLinearAxis] = {},
     ) -> None:
         self.name = name
         self.log = get_component_logger(self)
@@ -81,7 +80,7 @@ class DetectionPath:
 
         self._engine = engine
         self._acq_task = acq_task
-        self._focusing_axis = focusing_axis
+        self._focusing_axes = focusing_axes
 
         self._preview_callbacks: set[NewFrameCallback] = set()
 
@@ -123,11 +122,6 @@ class DetectionPath:
     def filter_wheel(self) -> FilterWheel:
         """Get the filter wheel associated with this detection path."""
         return self._filter_wheel
-
-    @property
-    def focusing_axis(self) -> VoxelLinearAxis | None:
-        """Get the focusing axis associated with this detection path."""
-        return self._focusing_axis
 
     @property
     def state(self) -> EngineStatus:
