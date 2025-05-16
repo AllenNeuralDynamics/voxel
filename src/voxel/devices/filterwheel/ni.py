@@ -39,8 +39,8 @@ class DAQFilterWheel(BaseFilterWheel):
         for key, value in list(ports.items()):
             if key not in filters:
                 raise ValueError(f"Port {key} not in filter list: {filters}")
-            if f"{daq.id}/{value}" not in self.dev.ao_physical_chans.channel_names:
-                raise ValueError(f"Port {value} not in device channels: {self.dev.ao_physical_chans.channel_names}")
+            if f"{daq.id}/{value}" not in daq.dev.ao_physical_chans.channel_names:
+                raise ValueError(f"Port {value} not in device channels: {daq.dev.ao_physical_chans.channel_names}")
         # force homing of the wheel to first position
         self.filter = FILTERS[0]
 
@@ -88,7 +88,7 @@ class DAQFilterWheel(BaseFilterWheel):
         daq_task.close()
         time.sleep(0.5)  # wait for wheel to settle
         self.log.info(f"filter set to {filter_name}")
-        
+
     def close(self) -> None:
         """
         Close the filter wheel device.
