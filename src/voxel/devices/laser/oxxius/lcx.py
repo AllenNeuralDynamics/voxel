@@ -1,6 +1,6 @@
-from oxxius_laser import LCX
-from serial import Serial
-from typing import Union, Dict
+from typing import Dict, Union
+
+from oxxius_laser.oxxius_laser import LCX, BoolVal, Cmd, OxxiusController, Query
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
@@ -11,35 +11,50 @@ class OxxiusLCXLaser(BaseLaser):
     OxxiusLCXLaser class for handling Oxxius LCX laser devices.
     """
 
-    def __init__(self, id: str, wavelength: int, port: Union[Serial, str], prefix: str) -> None:
-        """
-        Initialize the OxxiusLCXLaser object.
+    def __init__(
+        self, id: str,
+        wavelength: int,
+        prefix: str,
+        coefficients: Dict[str, float] = None,
+        port: str = None,
+        controller: OxxiusController = None,
+    ) -> None:
+        """_summary_
 
-        :param id: Laser ID
+        :param id: _description_
         :type id: str
-        :param wavelength: Wavelength in nanometers
+        :param wavelength: _description_
         :type wavelength: int
-        :param port: Serial port for the laser
-        :type port: Serial or str
-        :param prefix: Command prefix for the laser
+        :param prefix: _description_
         :type prefix: str
+        :param coefficients: _description_, defaults to None
+        :type coefficients: Dict[str, float], optional
+        :param port: _description_, defaults to None
+        :type port: str, optional
+        :param controller: _description_, defaults to None
+        :type controller: OxxiusController, optional
         """
         super().__init__(id)
+
+        if controller is None and port is None:
+            raise ValueError("Controller and port cannot both be none")
+
+        self._controller = LCX(port, self._prefix) if controller is None else controller
         self._prefix = prefix
-        self._inst = LCX(port, self._prefix)
+        self._coefficients = coefficients
         self._wavelength = wavelength
 
     def enable(self) -> None:
         """
         Enable the laser.
         """
-        self._inst.enable()
+        self._controller.enable()
 
     def disable(self) -> None:
         """
         Disable the laser.
         """
-        self._inst.disable()
+        self._controller.disable()
 
     @property
     def wavelength(self) -> int:
@@ -51,7 +66,7 @@ class OxxiusLCXLaser(BaseLaser):
         """
         return self._wavelength
 
-    @DeliminatedProperty(minimum=0, maximum=lambda self: self._inst.max_power)
+    @DeliminatedProperty(minimum=0, maximum=lambda self: self.max_power)
     def power_setpoint_mw(self) -> float:
         """
         Get the power setpoint in milliwatts.
@@ -59,17 +74,25 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Power setpoint in milliwatts
         :rtype: float
         """
-        return float(self._inst.power_setpoint)
+        return float(self._controller.get(self._prefix, Query.LaserPowerSetting))
 
     @power_setpoint_mw.setter
     def power_setpoint_mw(self, value: Union[float, int]) -> None:
         """
-        Set the power setpoint in milliwatts.
+        Set the power setpoint.
 
-        :param value: Power setpoint in milliwatts
-        :type value: float | int
+        :param value: Power setpoint value.
+        :type value: float
         """
-        self._inst.power_setpoint = value
+        if 0 > value > self.max_power:
+            reason = (
+                f"exceeds maximum power output {self.max_power}mW"
+                if value > self.max_power
+                else "is below 0mW"
+            )
+            self.log.error(f"Cannot set laser to {value}ml because it {reason}")
+        else:
+            self._controller.set(self._prefix, Cmd.LaserPower, value)
 
     @property
     def power_mw(self) -> float:
@@ -79,7 +102,17 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Current power in milliwatts
         :rtype: float
         """
-        return self._inst.power
+        return self._controller.get(self._prefix, Query.LaserPower)
+
+    @property
+    def max_power(self) -> float:
+        """
+        Get the maximum power in milliwatts.
+
+        :return: Maximum power in milliwatts
+        :rtype: float
+        """
+        return self._controller.get(self._prefix, Query.MaximumLaserPower)
 
     @property
     def temperature_c(self) -> float:
@@ -89,7 +122,7 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Temperature in Celsius
         :rtype: float
         """
-        return self._inst.temperature
+        return self._controller.temperature
 
     def status(self) -> Dict[str, Union[str, float]]:
         """
@@ -98,12 +131,12 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Status of the laser
         :rtype: dict
         """
-        return self._inst.get_system_status()
+        return BoolVal(self._controller.get(self._prefix, Query.EmmissionKeyStatus))
 
     def close(self) -> None:
         """
         Close the laser connection.
         """
         self.disable()
-        if self._inst.ser.is_open:
-            self._inst.ser.close()
+        if self._controller.ser.is_open:
+            self._controller.ser.close()
