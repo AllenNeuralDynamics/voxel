@@ -13,7 +13,7 @@ class OxxiusLCXLaser(BaseLaser):
 
     def __init__(
         self, id: str,
-        wavelength: int,
+        wavelength: float,
         prefix: str,
         coefficients: Dict[str, float] = None,
         port: str = None,
@@ -24,7 +24,7 @@ class OxxiusLCXLaser(BaseLaser):
         :param id: _description_
         :type id: str
         :param wavelength: _description_
-        :type wavelength: int
+        :type wavelength: float
         :param prefix: _description_
         :type prefix: str
         :param coefficients: _description_, defaults to None
@@ -39,30 +39,33 @@ class OxxiusLCXLaser(BaseLaser):
         if controller is None and port is None:
             raise ValueError("Controller and port cannot both be none")
 
-        self._controller = LCX(port, self._prefix) if controller is None else controller
+        if controller is None:
+            self._controller = LCX(port, self._prefix)
+        else:
+            self._controller = controller
         self._prefix = prefix
         self._coefficients = coefficients
         self._wavelength = wavelength
 
     def enable(self) -> None:
         """
-        Enable the laser.
+        Enable laser emission.
         """
-        self._controller.enable()
+        self._controller.set(Cmd.LaserEmission, BoolVal.ON, self._prefix)
 
     def disable(self) -> None:
         """
-        Disable the laser.
+        Disable laser emission.
         """
-        self._controller.disable()
+        self._controller.set(Cmd.LaserEmission, BoolVal.OFF, self._prefix)
 
     @property
-    def wavelength(self) -> int:
+    def wavelength(self) -> float:
         """
         Get the wavelength of the laser.
 
         :return: Wavelength in nanometers
-        :rtype: int
+        :rtype: float
         """
         return self._wavelength
 
@@ -74,7 +77,7 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Power setpoint in milliwatts
         :rtype: float
         """
-        return float(self._controller.get(self._prefix, Query.LaserPowerSetting))
+        return float(self._controller.get(Query.LaserPowerSetting, self._prefix))
 
     @power_setpoint_mw.setter
     def power_setpoint_mw(self, value: Union[float, int]) -> None:
@@ -92,7 +95,7 @@ class OxxiusLCXLaser(BaseLaser):
             )
             self.log.error(f"Cannot set laser to {value}ml because it {reason}")
         else:
-            self._controller.set(self._prefix, Cmd.LaserPower, value)
+            self._controller.set(Cmd.LaserPower, value, self._prefix)
 
     @property
     def power_mw(self) -> float:
@@ -102,7 +105,7 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Current power in milliwatts
         :rtype: float
         """
-        return self._controller.get(self._prefix, Query.LaserPower)
+        return float(self._controller.get(Query.LaserPower, self._prefix))
 
     @property
     def max_power(self) -> float:
@@ -112,7 +115,7 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Maximum power in milliwatts
         :rtype: float
         """
-        return self._controller.get(self._prefix, Query.MaximumLaserPower)
+        return float(self._controller.get(Query.MaximumLaserPower, self._prefix))
 
     @property
     def temperature_c(self) -> float:
@@ -122,7 +125,7 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Temperature in Celsius
         :rtype: float
         """
-        return self._controller.temperature
+        return float(self._controller.temperature)
 
     def status(self) -> Dict[str, Union[str, float]]:
         """
@@ -131,12 +134,10 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Status of the laser
         :rtype: dict
         """
-        return BoolVal(self._controller.get(self._prefix, Query.EmmissionKeyStatus))
+        return BoolVal(self._controller.get(Query.EmmissionKeyStatus, self._prefix))
 
     def close(self) -> None:
         """
         Close the laser connection.
         """
         self.disable()
-        if self._controller.ser.is_open:
-            self._controller.ser.close()

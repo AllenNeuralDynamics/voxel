@@ -416,8 +416,14 @@ class VieworksCamera(BaseCamera):
         self._binning = binning
         # if binning is not an integer, do it in hardware
         if not isinstance(BINNINGS[binning], int):
-            self.grabber.remote.set("BinningHorizontal", BINNINGS[binning])
-            self.grabber.remote.set("BinningVertical", BINNINGS[binning])
+            try:
+                self.grabber.remote.set("BinningHorizontal", BINNINGS[binning])
+            except:
+                self.log.warning("cannot set horizontal binning")
+            try:
+                self.grabber.remote.set("BinningVertical", BINNINGS[binning])
+            except:
+                self.log.warning("cannot set vertical binning")
         # initialize the opencl binning program
         else:
             self.gpu_binning = GPUToolsDownSample2D(binning=int(self._binning), mode="sum")
@@ -812,12 +818,12 @@ class VieworksCamera(BaseCamera):
     def _query_binning(self) -> None:
         """Query the available binning options."""
         # egrabber defines 1 as 'X1', 2 as 'X2', 3 as 'X3'...
-        # check only horizontal since we will use same binning for vertical
-        binning_options = self.grabber.remote.get("@ee BinningHorizontal", dtype=list)
-        init_binning = self.grabber.remote.get("BinningHorizontal")
+        # check only vertical since we will use same binning for horizontal
+        binning_options = self.grabber.remote.get("@ee BinningVertical", dtype=list)
+        init_binning = self.grabber.remote.get("BinningVertical")
         for binning in binning_options:
             try:
-                self.grabber.remote.set("BinningHorizontal", binning)
+                self.grabber.remote.set("BinningVertical", binning)
                 # generate integer key
                 key = int(binning.replace("X", ""))
                 BINNINGS[key] = binning
@@ -829,7 +835,7 @@ class VieworksCamera(BaseCamera):
                     key = int(binning.replace("X", ""))
                     BINNINGS[key] = key
         # reset to initial value
-        self.grabber.remote.set("BinningHorizontal", init_binning)
+        self.grabber.remote.set("BinningVertical", init_binning)
 
     def _query_pixel_types(self) -> None:
         """Query the available pixel types."""
