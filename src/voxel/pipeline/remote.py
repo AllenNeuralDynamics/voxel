@@ -8,16 +8,17 @@ import zmq
 
 from voxel.utils.log_config import get_component_logger
 
-from .local import AcquisitionEngine, AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
-from .preview import NewFrameCallback, PreviewFrame, PreviewTransform
+from .interface import PipelineStatus, StackAcquisitionConfig
+from .local import LocalCameraPipeline, ICameraPipeline
+from .preview_frame import NewFrameCallback, PreviewFrame, PreviewTransform
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCameraProxy
 
 
-class AcquisitionEngineProxy(AcquisitionEngineBase):
+class CameraPipelineProxy(ICameraPipeline):
     """
-    Proxy for interacting with a remote AcquisitionEngineService.
+    Proxy for interacting with a remote CameraPipelineService.
     Implements the protocol:
       - Synchronous commands (frame_size_mb, frame_rate_hz, state, get_latest_preview,
         update_preview_settings, prepare_stack_acquisition, finalize_stack_acquisition)
@@ -61,8 +62,8 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
         return self.rpc_client.frame_rate_hz()
 
     @property
-    def state(self) -> EngineStatus:
-        return EngineStatus(self.rpc_client.state())
+    def state(self) -> PipelineStatus:
+        return PipelineStatus(self.rpc_client.state())
 
     # --- Synchronous Methods ---
     def get_latest_preview(self) -> PreviewFrame | None:
@@ -77,14 +78,14 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
 
     # def update_preview_settings(self, settings: "PreviewSettings") -> None:
     #     """
-    #     Update the remote engine's preview settings.
+    #     Update the remote pipeline's preview settings.
     #     We assume the remote service exposes an update_preview_settings method.
     #     """
     #     self.rpc_client.update_preview_settings(settings.model_dump())
 
     def update_preview_transform(self, transform: "PreviewTransform") -> None:
         """
-        Update the remote engine's preview transform.
+        Update the remote pipeline's preview transform.
         We assume the remote service exposes an update_preview_transform method.
         """
         self.rpc_client.update_preview_transform(transform.model_dump())
@@ -140,7 +141,7 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
 
     def start_preview(self, on_new_frame: NewFrameCallback) -> None:
         """
-        Start preview mode on the remote engine.
+        Start preview mode on the remote pipeline.
         Register the callback locally and start the background listener.
         Then, invoke the remote RPC to start preview.
         """
@@ -172,13 +173,13 @@ class AcquisitionEngineProxy(AcquisitionEngineBase):
         self.rpc_client.acquire_batch(range_list)
 
 
-class AcquisitionEngineService:
+class CameraPipelineService:
     """
-    ZeroRPC server that wraps an AcquisitionEngine and also publishes frames over ZeroMQ.
+    ZeroRPC server that wraps a LocalCameraPipeline and also publishes frames over ZeroMQ.
     """
 
-    def __init__(self, engine: AcquisitionEngine, rpc_address: str, pub_address: str):
-        self.engine = engine
+    def __init__(self, pipeline: LocalCameraPipeline, rpc_address: str, pub_address: str):
+        self.pipeline = pipeline
         self.rpc_address = rpc_address
         self.pub_address = pub_address
         self.log = get_component_logger(self)
@@ -207,29 +208,29 @@ class AcquisitionEngineService:
     # --- Exposed RPC Methods ---
 
     def frame_size_mb(self) -> float:
-        return self.engine.frame_size_mb
+        return self.pipeline.frame_size_mb
 
     def frame_rate_hz(self) -> float:
-        return self.engine.frame_rate_hz
+        return self.pipeline.frame_rate_hz
 
     def state(self) -> int:
-        return int(self.engine.state)
+        return int(self.pipeline.state)
 
     def get_latest_preview(self) -> bytes | None:
-        frame = self.engine.get_latest_preview()
+        frame = self.pipeline.get_latest_preview()
         if frame is not None:
             return frame.pack()
 
     # def update_preview_settings(self, settings: dict) -> None:
-    #     self.engine.update_preview_settings(PreviewSettings(**settings))
+    #     self.pipeline.update_preview_settings(PreviewSettings(**settings))
 
     def update_preview_transform(self, transform: dict) -> None:
-        self.engine.update_preview_transform(PreviewTransform(**transform))
+        self.pipeline.update_preview_transform(PreviewTransform(**transform))
 
     def _publish_preview_frame(self, frame: PreviewFrame | bytes) -> None:
         """
         Publish the preview frame over ZeroMQ.
-        This method is called by the engine to publish frames.
+        This method is called by the pipeline to publish frames.
         """
         try:
             if isinstance(frame, PreviewFrame):
@@ -243,19 +244,19 @@ class AcquisitionEngineService:
 
     def start_preview(self) -> str:
         """
-        Start preview mode. The engine will call our internal callback to publish frames.
+        Start preview mode. The pipeline will call our internal callback to publish frames.
         """
-        self.engine.start_preview(on_new_frame=self._publish_preview_frame)
+        self.pipeline.start_preview(on_new_frame=self._publish_preview_frame)
         return "Preview started"
 
     def stop_preview(self) -> str:
-        self.engine.stop_preview()
+        self.pipeline.stop_preview()
         return "Preview stopped"
 
     def prepare_stack_acquisition(self, config: dict) -> list:
         # Convert dict config to a StackAcquisitionConfig object.
         config_obj = StackAcquisitionConfig(**config)
-        ranges = self.engine.prepare_stack_acquisition(config_obj)
+        ranges = self.pipeline.prepare_stack_acquisition(config_obj)
         # Return the ranges as a list of tuples.
         return [(r.start, r.stop, r.step) for r in ranges]
 
@@ -264,9 +265,9 @@ class AcquisitionEngineService:
         step = frame_range[2] if len(frame_range) > 2 else 1
         r = range(frame_range[0], frame_range[1], step)
 
-        self.engine.acquire_batch(r, on_new_frame=self._publish_preview_frame)
+        self.pipeline.acquire_batch(r, on_new_frame=self._publish_preview_frame)
         return "Batch acquired"
 
     def finalize_stack_acquisition(self) -> str:
-        self.engine.finalize_stack_acquisition()
+        self.pipeline.finalize_stack_acquisition()
         return "Acquisition finalized"

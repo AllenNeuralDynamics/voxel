@@ -10,7 +10,7 @@ from voxel.daq.tasks.wavegen import WaveGenTask
 from voxel.detection_path import DetectionPath, FilterWheel, IlluminationChannel
 from voxel.devices.camera import VoxelCameraProxy
 from voxel.devices.rotation_axis import VoxelRotationAxis
-from voxel.engine.local import AcquisitionEngine
+from voxel.engine.local import LocalFrameCaptureNode
 from voxel.engine.remote import AcquisitionEngineProxy
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec3D
@@ -230,7 +230,7 @@ class VoxelInstrument:
                     camera_proxy=camera,
                 )
             elif isinstance(camera, VoxelCamera):
-                engine = AcquisitionEngine(
+                engine = LocalFrameCaptureNode(
                     camera=camera,
                     io=path_config.io,
                 )

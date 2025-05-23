@@ -1,134 +1,44 @@
 import math
 import threading
 import time
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import IntEnum
-from pathlib import Path
 from typing import TYPE_CHECKING
-from collections.abc import Mapping
 
 import cv2
 import numpy as np
-from pydantic import BaseModel
 
-from voxel.build import BuildSpec, IOSpecs, build_object
-from voxel.devices.camera import VoxelCameraProxy
-from voxel.engine.preview import (
-    NewFrameCallback,
-    PreviewFrame,
-    PreviewConfig,
-    PreviewSettings,
-    PreviewTransform,
-)
-from voxel.io.transfers.base import VoxelFileTransfer
-from voxel.io.writers.base import VoxelWriter, WriterConfig
 from voxel.utils.common import get_available_disk_space_mb
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec3D
-from voxel.devices.camera import VoxelCamera
+
+from .interface import ICameraPipeline, PipelineStatus, StackAcquisitionConfig
+from .io.manager import IOManager
+from .io.transfers.base import VoxelFileTransfer
+from .io.writers.base import VoxelWriter, WriterConfig
+from .preview_frame import (
+    NewFrameCallback,
+    PreviewConfig,
+    PreviewFrame,
+    PreviewSettings,
+    PreviewTransform,
+)
 
 if TYPE_CHECKING:
-    from voxel.frame_stack import FrameStack
-
-
-class EngineStatus(IntEnum):
-    """Status of the engine."""
-
-    RUNNING = 3
-    CONFIGURED = 2
-    PREVIEW = 1
-    INACTIVE = 0
-    ERROR = -1
-
-
-class StackAcquisitionConfig(BaseModel):
-    """
-    Configuration for stack acquisition.
-    This class holds the parameters required for configuring the acquisition engine.
-    """
-
-    channel_name: str
-    channel_idx: int
-    stack: "FrameStack"
-    local_path: str | Path
-    remote_path: str | Path
-
-
-class AcquisitionEngineBase(ABC):
-    """
-    Protocol for acquisition engines. This protocol defines the methods required for
-    previewing and acquiring frames.
-    """
-
-    @property
-    @abstractmethod
-    def camera(self) -> VoxelCamera | VoxelCameraProxy: ...
-
-    @property
-    @abstractmethod
-    def frame_size_mb(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def frame_rate_hz(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def state(self) -> EngineStatus: ...
-
-    @abstractmethod
-    def get_latest_preview(self) -> PreviewFrame | None: ...
-
-    # @abstractmethod
-    # def update_preview_settings(self, settings: PreviewSettings) -> None: ...
-
-    @abstractmethod
-    def update_preview_transform(self, transform: PreviewTransform) -> None: ...
-
-    @abstractmethod
-    def start_preview(self, on_new_frame: NewFrameCallback) -> None: ...
-
-    @abstractmethod
-    def stop_preview(self) -> None: ...
-
-    @abstractmethod
-    def prepare_stack_acquisition(self, config: StackAcquisitionConfig) -> list[range]:
-        """
-        Prepare the engine for acquisition.
-          -  Prepare the camera.
-          -  Configure the writer and wait for disk space. Start the writer subprocess.
-          -  Determine the number of batches and return the frame_ranges as a list of ranges.
-        """
-        pass
-
-    @abstractmethod
-    def acquire_batch(self, frame_range: range, on_new_frame: NewFrameCallback) -> None:
-        """Acquire a batch of frames given a range of frame indices."""
-        pass
-
-    @abstractmethod
-    def finalize_stack_acquisition(self) -> None:
-        """
-        Finalize the acquisition process.
-        This method should be called after all batches have been acquired.
-        - Close the writer subprocess.
-
-        """
-        pass
+    from voxel.devices.camera import VoxelCamera
 
 
 @dataclass
-class AcquisitionEngine(AcquisitionEngineBase):
-    def __init__(self, camera: "VoxelCamera", io: IOSpecs):
+class LocalCameraPipeline(ICameraPipeline):
+    def __init__(self, camera: "VoxelCamera", io_manager: IOManager):
         self.log = get_component_logger(self)
         self._camera = camera
+        self._io_manager = io_manager
 
-        self._writers, self._writer = self._validate_writers(writer_specs=io.writers)
+        self._writer = self._io_manager.get_writer_instance(io_manager.available_writers[0])
 
-        self._transfers, self._transfer = self._validate_transfers(transfer_specs=io.transfers)
+        self._transfer = self._io_manager.get_transfer_instance(io_manager.available_transfers[0])
 
-        self._state = EngineStatus.INACTIVE
+        self._state = PipelineStatus.INACTIVE
         self._disk_space_check_interval = 2  # seconds
         self._latest_frame: np.ndarray | None = None
 
@@ -138,57 +48,32 @@ class AcquisitionEngine(AcquisitionEngineBase):
         self._halt_event = threading.Event()
         self._transform_lock = threading.Lock()
 
-    @staticmethod
-    def _validate_io_specs[T](
-        io_specs: Mapping[str, BuildSpec], io_type: type[T]
-    ) -> tuple[Mapping[str, BuildSpec], list[str]]:
-        """Validate the IO specifications."""
-        if not io_specs:
-            return {}, [f"No {io_type.__name__} specifications provided."]
-        valid_specs = {}
-        errors = []
-        for name, spec in io_specs.items():
-            if isinstance(build_object(spec), io_type):
-                valid_specs[name] = spec
-            else:
-                errors.append(f"{io_type.__name__} {name} is not a valid {io_type.__name__}.")
-        return valid_specs, errors
-
-    def _validate_writers(self, writer_specs: Mapping[str, BuildSpec]) -> tuple[Mapping[str, BuildSpec], VoxelWriter]:
-        """Validate the writer specifications."""
-        writers, errors = self._validate_io_specs(writer_specs, VoxelWriter)
-        if errors:
-            self.log.error(f"Errors in writer specifications: {', '.join(errors)}")
-        if not writers:
-            raise ValueError("No valid writers provided.")
-        return writers, build_object((next(iter(writers.values()))))
-
-    def _validate_transfers(
-        self, transfer_specs: Mapping[str, BuildSpec]
-    ) -> tuple[Mapping[str, BuildSpec], VoxelFileTransfer | None]:
-        """Validate the transfer specifications."""
-        transfers, errors = self._validate_io_specs(transfer_specs, VoxelFileTransfer)
-        if errors:
-            self.log.error(f"Errors in transfer specifications: {', '.join(errors)}")
-        if not transfers:
-            self.log.error("No valid transfers provided.")
-            return {}, None
-        return transfers, build_object((next(iter(transfers.values()))))
+    @property
+    def available_writers(self) -> list[str]:
+        return self._io_manager.available_writers
 
     @property
-    def writer(self) -> str:
-        return self._writer.name
+    def writer(self) -> VoxelWriter:
+        return self._writer
 
     def set_writer(self, writer_name: str) -> None:
         """Set the writer to a new writer."""
-        if writer_name not in self._writers:
+        if writer_name not in self.available_writers:
             raise ValueError(f"Writer {writer_name} not found in available writers.")
-        if self._state != EngineStatus.INACTIVE:
+        if self._state != PipelineStatus.INACTIVE:
             raise RuntimeError("Cannot change writer while engine is running.")
         self.log.info(f"Changing writer from {self._writer.name} to {writer_name}.")
         self._writer.close()
-        self._writer = build_object(self._writers[writer_name])
+        try:
+            self._writer = self._io_manager.get_writer_instance(writer_name)
+        except ValueError as e:
+            self.log.error(f"Error setting writer {writer_name}: {e}")
+            return
         self.log.info(f"Writer set to {writer_name}.")
+
+    @property
+    def available_transfers(self) -> list[str]:
+        return self._io_manager.available_transfers
 
     @property
     def transfer(self) -> VoxelFileTransfer | None:
@@ -196,12 +81,16 @@ class AcquisitionEngine(AcquisitionEngineBase):
 
     def set_transfer(self, transfer_name: str) -> None:
         """Set the transfer to a new transfer."""
-        if transfer_name not in self._transfers:
+        if transfer_name not in self.available_transfers:
             raise ValueError(f"Transfer {transfer_name} not found in available transfers.")
-        if self._state != EngineStatus.INACTIVE:
-            raise RuntimeError("Cannot change transfer while engine is running.")
+        if self._state != PipelineStatus.INACTIVE:
+            raise RuntimeError("Cannot change transfer while pipeline is running.")
         self.log.info(f"Setting transfer to {transfer_name}.")
-        self._transfer = build_object(self._transfers[transfer_name])
+        try:
+            self._transfer = self._io_manager.get_transfer_instance(transfer_name)
+        except ValueError as e:
+            self.log.error(f"Error setting transfer {transfer_name}: {e}")
+            return
         self.log.info(f"Transfer set to {transfer_name}.")
 
     @property
@@ -209,7 +98,7 @@ class AcquisitionEngine(AcquisitionEngineBase):
         return self._camera
 
     @property
-    def state(self) -> EngineStatus:
+    def state(self) -> PipelineStatus:
         return self._state
 
     @property
@@ -239,7 +128,7 @@ class AcquisitionEngine(AcquisitionEngineBase):
         self.camera.start()
         self._halt_event.clear()
         self._preview_thread = threading.Thread(target=self._preview_loop, args=(on_new_frame,), daemon=True)
-        self._state = EngineStatus.PREVIEW
+        self._state = PipelineStatus.PREVIEW
         self._preview_thread.start()
 
     def stop_preview(self) -> None:
@@ -250,7 +139,7 @@ class AcquisitionEngine(AcquisitionEngineBase):
             self._preview_thread.join()
             self._preview_thread = None
         self.camera.stop()
-        self._state = EngineStatus.INACTIVE
+        self._state = PipelineStatus.INACTIVE
 
     def prepare_stack_acquisition(self, config: StackAcquisitionConfig) -> list[range]:
         """Prepare the engine for acquisition."""
@@ -276,7 +165,7 @@ class AcquisitionEngine(AcquisitionEngineBase):
 
         self._wait_for_disk_space(config.stack.frame_count)
 
-        self._state = EngineStatus.CONFIGURED
+        self._state = PipelineStatus.CONFIGURED
 
         return self._get_frame_ranges(config.stack.frame_count)
 
@@ -299,7 +188,7 @@ class AcquisitionEngine(AcquisitionEngineBase):
         """Finalize the acquisition process."""
         self.log.info("Finalizing stack acquisition.")
         self._writer.close()
-        self._state = EngineStatus.INACTIVE
+        self._state = PipelineStatus.INACTIVE
 
     def _wait_for_disk_space(self, frame_count: int) -> None:
         """Wait for sufficient disk space before starting acquisition."""
@@ -320,7 +209,7 @@ class AcquisitionEngine(AcquisitionEngineBase):
     def _preview_loop(self, on_new_frame: NewFrameCallback) -> None:
         """Continuously capture preview frames and update self.latest_frame."""
         frame_idx = 0
-        while not self._halt_event.is_set() and self._state == EngineStatus.PREVIEW:
+        while not self._halt_event.is_set() and self._state == PipelineStatus.PREVIEW:
             try:
                 self._latest_frame = self.camera.grab_frame()
                 self._handle_on_new_frame(frame=self._latest_frame, frame_idx=frame_idx, on_new_frame=on_new_frame)

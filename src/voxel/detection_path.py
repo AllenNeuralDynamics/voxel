@@ -5,7 +5,7 @@ from voxel.devices.base import VoxelDevice, VoxelDeviceType
 from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
 from voxel.devices.laser import VoxelLaser
 from voxel.devices.linear_axis import VoxelLinearAxis
-from voxel.engine.local import AcquisitionEngineBase, EngineStatus, StackAcquisitionConfig
+from voxel.engine.local import IFrameCaptureNode, EngineStatus, StackAcquisitionConfig
 from voxel.engine.preview import NewFrameCallback, PreviewFrame
 from voxel.utils.descriptors.enumerated import enumerated_string
 from voxel.utils.log_config import get_component_logger
@@ -64,7 +64,7 @@ class DetectionPath:
     def __init__(
         self,
         name: str,
-        engine: AcquisitionEngineBase,
+        engine: IFrameCaptureNode,
         filter_wheel: FilterWheel,
         acq_task: WaveGenTask,
         channels: dict[str, IlluminationChannel],

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from voxel.devices.base import VoxelDeviceModel
 from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
 from voxel.engine.local import (
-    AcquisitionEngineBase,
+    IFrameCaptureNode,
     EngineStatus,
     StackAcquisitionConfig,
 )
@@ -26,7 +26,7 @@ class VoxelChannel:
     """
 
     name: str
-    engine: AcquisitionEngineBase  # Handles camera, writer, preview, and batch acquisition.
+    engine: IFrameCaptureNode  # Handles camera, writer, preview, and batch acquisition.
     acq_task: "WaveGenTask"  # NI-DAQ task wrapper (with main and trigger tasks).
     laser: "VoxelLaser"
     filter: "VoxelFilter"

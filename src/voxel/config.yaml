@@ -1,0 +1,167 @@
+instrument:
+  metadata:
+    name: Exaspim 2
+    description: "A simulated exaspim 2 instrument for testing purposes"
+
+  devices:
+    camera_1:
+      driver: voxel.drivers.cameras.simulated.SimulatedCamera
+      kwds:
+        pixel_size_um: 0.5, 0.5
+        magnification: 40
+        sensor_width_px: 4096
+        sensor_height_px: 4096
+        resize_method: tile
+    camera_2:
+      driver: voxel.drivers.cameras.simulated.SimulatedCamera
+      kwds:
+        pixel_size_um: 0.5, 0.5
+        magnification: 40
+        sensor_width_px: 4096
+        sensor_height_px: 4096
+        resize_method: tile
+    laser_488:
+      driver: voxel.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 488
+    laser_561:
+      driver: voxel.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 561
+    laser_405:
+      driver: voxel.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 405
+    laser_507:
+      driver: voxel.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 507
+    fw_main:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - LP420 # DAPI/GFP Emission
+          - LP570 # RFP/FarRed Emmission
+    fw_1:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - BP460-50 # DAPI/CFP
+          - BP525-50 # GFP
+          - BP540-30 # YFP
+    fw_2:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - BP525-50 # GFP (if doing dual GFP view)
+          - BP600-50 # RFP
+          - OPEN
+    detection_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    camera_1_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    camera_2_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    left_illumination_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    right_illumination_focus:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    etl:
+      driver: voxel.drivers.tunable_lenses.simulated.SimulatedTunableLens
+    z-axis:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: Z
+    x-axis:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: X
+    y-axis:
+      driver: voxel.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: Y
+
+  stage:
+    x: x-axis
+    y: y-axis
+    z: z-axis
+
+  assemblies:
+    detection:
+      camera_1:
+        filter_wheels: [fw_main, fw_1]
+        devices:
+          - detection_focus
+          - camera_1_focus
+        pipeline: &local_camera_pipeline
+          type: local
+      camera_2:
+        filter_wheels: [fw_main, fw_2]
+        devices:
+          - detection_focus
+          - camera_2_focus
+        pipeline: *local_camera_pipeline
+    illumination:
+      laser_488:
+        devices: &shared_illumination_devices
+          - etl
+          - left_illumination_focus
+          - right_illumination_focus
+      laser_561:
+        devices: *shared_illumination_devices
+      laser_405:
+        devices: *shared_illumination_devices
+      laser_507:
+        devices: *shared_illumination_devices
+
+  io_specs:
+    writers:
+      imaris:
+        driver: voxel.pipeline.io.writers.imaris.ImarisWriter
+      simple_writer:
+        driver: voxel.pipeline.io.writers.simple.SimpleWriter
+    transfers:
+      robocopy:
+        driver: voxel.pipeline.io.transfers.robocopy.RobocopyFileTransfer
+
+  channels:
+    DAPI_CAM1:
+      detection: camera_1
+      illumination: laser_405
+      filter_selections:
+        fw_main: { filter: LP420 }
+        fw_1: { filter: BP460-50 }
+    GFP_CAM1:
+      detection: camera_1
+      illumination: laser_488
+      filter_selections:
+        fw_main: { filter: LP420 }
+        fw_1: { filter: BP525-50 }
+    RFP_CAM2:
+      detection: camera_2
+      illumination: laser_561
+      filter_selections:
+        fw_main: { filter: LP570 }
+        fw_2: { filter: BP600-50 }
+    YFP_CAM1:
+      detection: camera_1
+      illumination: laser_507
+      filter_selections:
+        fw_main: { filter: LP420 }
+        fw_1: { filter: BP540-30 }
+    GFP_CAM2:
+      detection: camera_2
+      illumination: laser_488
+      filter_selections:
+        fw_main: { filter: LP420 }
+        fw_2: { filter: BP525-50 }
