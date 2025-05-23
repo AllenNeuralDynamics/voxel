@@ -1,14 +1,14 @@
 import bisect
 from functools import total_ordering
 from logging import Logger
-from typing import Any, Self, Union, get_args, get_origin, get_type_hints
+from typing import Any, Self
 
 import numpy as np
 from pydantic import BaseModel, model_validator
 
 from voxel.devices.base import VoxelDevice
-from voxel.utils.descriptors.deliminated import DeliminatedFloatProperty, DeliminatedIntProperty, DeliminatedProperty
-from voxel.utils.descriptors.enumerated import EnumeratedIntProperty, EnumeratedProperty
+from voxel.utils.descriptors.deliminated import DeliminatedProperty
+from voxel.utils.descriptors.enumerated import EnumeratedProperty
 
 
 @total_ordering
@@ -41,7 +41,7 @@ class ZSetting[T](BaseModel):
         return self
 
     def __setitem__(self, z: float, value: T) -> None:
-        self.add_point(z, value)
+        self.add_point(ZPoint(z=z, value=value))
 
     def __getitem__(self, z: float) -> T:
         return self.get_value(z)
@@ -53,6 +53,7 @@ class ZSetting[T](BaseModel):
     def z_coords(self) -> list[float]:
         return [p.z for p in self.points]
 
+    # TODO: Use pydantic's type system to infer the type of the generic
     @property
     def value_type(self) -> type[T]:
         return type(self.points[0].value)
@@ -61,7 +62,7 @@ class ZSetting[T](BaseModel):
     def is_numeric(self) -> bool:
         return isinstance(self.points[0].value, (int, float, np.number))
 
-    def add_point(self, point: ZPoint) -> None:
+    def add_point(self, point: ZPoint[T]) -> None:
         if self.is_numeric and not isinstance(point.value, (int, float, np.number)):
             raise TypeError(f"Numeric ZSetting values must be numeric. Got {type(point.value)}.")
         if not self.is_numeric and not isinstance(point.value, self.value_type):
@@ -218,6 +219,7 @@ class ConfiguredDevice:
         """
         return self._settings.get(prop_name, None)
 
+    # TODO: improve this to check type compatibility more robustly
     def _validate_and_add_setting_entry(self, prop_name: str, setting: ZSetting[Any]) -> None:
         if prop_name in self._settings:
             return
@@ -240,15 +242,9 @@ class ConfiguredDevice:
 
     def _is_property_numeric(self, prop_name: str) -> bool:
         class_attr = getattr(type(self.device), prop_name, None)
-        numeric_types = (int, float, np.number, DeliminatedFloatProperty, DeliminatedIntProperty, EnumeratedIntProperty)
-        if isinstance(class_attr, numeric_types):
-            return True
-
-        # using type hints
-        if hasattr(self.device, "__annotations__"):
-            return self.device.__annotations__.get(prop_name) in numeric_types
-
-        return False
+        if class_attr is None or not isinstance(class_attr, type):
+            return False
+        return issubclass(class_attr, (int, float, np.number))
 
     def _get_set_method_name(self, setting_name: str) -> str:
         return f"set_{setting_name}"
