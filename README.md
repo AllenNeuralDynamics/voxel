@@ -359,7 +359,7 @@ Voxel is a general microscope control package designed to simplify the process
 of configuring and controlling different microscopy systems. Voxel provides two
 key modules:
 
-1. **Instrument**: `VoxelInstrument`
+1. **Instrument**: `Instrument`
 
    Defining and controlling a collection of devices through a configuration YAML
    file. The instrument module is designed to be flexible and extensible

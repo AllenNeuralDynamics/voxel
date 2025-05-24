@@ -1,3 +1,3 @@
-from .instrument import VoxelInstrument
+from .instrument import Instrument
 
-__all__ = ["VoxelInstrument"]
+__all__ = ["Instrument"]

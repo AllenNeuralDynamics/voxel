@@ -1,428 +1,341 @@
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-from ruamel.yaml import YAML
+from pydantic import BaseModel, Field
 
-from voxel.daq.tasks.clockgen import ClockGenTask
-from voxel.daq.tasks.wavegen import WaveGenTask
-from voxel.detection_path import DetectionPath, FilterWheel, IlluminationChannel
-from voxel.devices.camera import VoxelCameraProxy
+from voxel.channel_builder import ChannelBuilder
+from voxel.devices.filter_wheel import VoxelFilterWheel
+from voxel.devices.base import VoxelDevice
+from voxel.devices.camera import VoxelCamera
+from voxel.devices.laser import VoxelLaser
+from voxel.devices.linear_axis import VoxelLinearAxis
 from voxel.devices.rotation_axis import VoxelRotationAxis
-from voxel.engine.local import LocalFrameCaptureNode
-from voxel.engine.remote import AcquisitionEngineProxy
+from voxel.pipeline.interface import ICameraPipeline
+from voxel.pipeline.io.manager import IOManager
+from voxel.pipeline.local import LocalCameraPipeline
+from voxel.settings import SettingsBlock
+from voxel.stage import SpecimenStage
+from voxel.channel import ImagingChannel
 from voxel.utils.log_config import get_component_logger
-from voxel.utils.vec import Vec3D
-
-from .build import DeviceBuildSpec, IOSpecs, build_object_group
-from .daq import VoxelDaq
-from .devices import (
-    LinearAxisDimension,
-    VoxelCamera,
-    VoxelDevice,
-    VoxelDeviceModel,
-    VoxelDeviceType,
-    VoxelLaser,
-    VoxelLinearAxis,
-)
 
 
-class ClockGenSpecs(BaseModel):
-    out_pin: str
-    counter: str
-    freq_hz: int | float
-    duty_cycle: float = 0.5
-    initial_delay_ms: int = 0
-
-    @field_validator("duty_cycle")
-    def validate_duty_cycle(cls, value: float) -> float:
-        if not 0 < value < 1:
-            raise ValueError("Duty cycle must be between 0 and 1.")
-        return value
+class BuildSpec(BaseModel):
+    driver: str
+    kwds: dict[str, Any] = {}
 
 
-class DaqTaskTimingConfig(BaseModel):
-    period_ms: int
-    sample_rate_hz: int | float
+type BuildSpecGroup = dict[str, "BuildSpec"]
 
 
-class AcqPinSpecs(BaseModel):
-    device: str  # device name in the devices dict
-    anchors: list[float]
-    voltage: list[float]
-
-    @field_validator("anchors")
-    def validate_anchors(cls, value: list[float]) -> list[float]:
-        if not all(0 <= anchor <= 1 for anchor in value):
-            raise ValueError("Anchors must be between 0 and 1.")
-        sorted_value = sorted(value)
-        return sorted_value if len(sorted_value) < 4 else sorted_value[:4]
-
-    @field_validator("voltage")
-    def validate_voltage(cls, value: list[float]) -> list[float]:
-        return sorted(value)
+def parse_driver(driver: str) -> type:
+    """Parse a driver string into a module and class name.
+    :param driver: The driver string.
+    :type driver: str
+    :return: A tuple of the module and class name.
+    :rtype: tuple[str, str]
+    """
+    module_name, class_name = driver.rsplit(".", 1)
+    module = __import__(module_name, fromlist=[class_name])
+    driver_class = getattr(module, class_name)
+    if not isinstance(driver_class, type):
+        raise TypeError(f"Attribute {class_name} in {module_name} is not a class.")
+    return driver_class
 
 
-class DaqConfig(BaseModel):
-    conn: str
-    acq_clock: ClockGenSpecs
-    acq_timing: DaqTaskTimingConfig
-    acq_pins: dict[str, AcqPinSpecs]
+def build_object(spec: "BuildSpec") -> Any:
+    """Build an object from a build spec.
+    :param spec: The build spec.
+    :type spec: BuildSpec
+    :return: The built object.
+    :rtype: Any
+    :raises TypeError: If the driver is not a class.
+    """
+    return parse_driver(spec.driver)(**spec.kwds)
 
 
-class ConfigLoadError(ValueError):
+def build_object_group(specs: BuildSpecGroup) -> dict[str, Any]:
+    """Build a group of objects from a group of build specs.
+    :param specs: The build specs.
+    :type specs: dict[str, BuildSpec]
+    :return: A dictionary of the built objects.
+    :rtype: dict[str, Any]
+    """
+    built_objects = {}
+
+    def build_single_object(name: str) -> None:
+        if name in built_objects:
+            return
+        if spec := specs.get(name):
+            kwds = spec.kwds.copy()
+            for key, value in kwds.items():
+                if isinstance(value, str) and value in specs:
+                    build_single_object(value)
+                    kwds[key] = built_objects[value]
+            driver = parse_driver(spec.driver)
+            if "name" in driver.__init__.__code__.co_varnames:
+                kwds["name"] = name  # check if driver takes name as kwarg or arg
+            built_objects[name] = driver(**kwds)
+
+    for name in specs:
+        build_single_object(name)
+    return built_objects
+
+
+class IOSpecs(BaseModel):
+    writers: dict[str, BuildSpec]
+    transfers: dict[str, BuildSpec] = {}
+
+
+class StageConfig(BaseModel):
+    x: str
+    y: str
+    z: str
+    roll: str | None = None
+    pitch: str | None = None
+    yaw: str | None = None
+
+
+class OpticalPathUnit(BaseModel):
+    aux_devices: list[str]
+
+
+class IlluminationUnitModel(OpticalPathUnit):
     pass
 
 
-class ChannelConfig(BaseModel):
-    laser: str
-    filter_: str = Field(alias="filter")
-    axes: list[str] = Field(default_factory=list)
+class PipelineOptions(BaseModel):
+    type: Literal["local", "remote"]
+
+    @property
+    def is_local(self) -> bool:
+        return self.type == "local"
 
 
-class DetectionPathConfig(BaseModel):
-    camera: str
-    io: IOSpecs
-    filter_wheel: str
-    focusing_axis: str | None = None
-    channels: dict[str, ChannelConfig]
+class LocalPipelineOptions(PipelineOptions):
+    type = "local"
+
+
+class DetectionUnitModel(OpticalPathUnit):
+    filter_wheels: list[str]
+    pipeline: PipelineOptions = LocalPipelineOptions(type="local")
+
+
+class InstrumentAssembly(BaseModel):
+    stage: StageConfig
+    detection: dict[str, DetectionUnitModel]
+    illumination: dict[str, IlluminationUnitModel]
+
+
+class ChannelConfiguration(BaseModel):
+    detection: str
+    illumination: str
+    filters: dict[str, str] = Field(default_factory=dict)
+    settings: dict[str, SettingsBlock] = Field(default_factory=dict)
+
+
+class InstrumentMetadata(BaseModel):
+    name: str
+    description: str | None = None
+    version: str | None = None
 
 
 class InstrumentConfig(BaseModel):
-    name: str
-    daq: DaqConfig
-    devices: dict[str, DeviceBuildSpec]
-    paths: dict[str, DetectionPathConfig]
-    settings: dict[str, dict[str, Any]] | None = None
-    path: str | None = None
-
-    @classmethod
-    def from_yaml(cls, config_file: str | Path) -> "InstrumentConfig":
-        yaml_inst = YAML(typ="safe", pure=True)
-        with open(config_file, "r") as f:
-            config_data = yaml_inst.load(f)
-        config_data["path"] = str(Path(config_file).resolve())
-        return cls.model_validate(config_data)
-
-    @model_validator(mode="after")
-    def validate_channels_info(self) -> Self:
-        """Check that all channel devices are in the devices dict."""
-        path_errors = []
-        for path_name, path in self.paths.items():
-            for device in [path.camera, path.filter_wheel] + [channel.laser for channel in path.channels.values()]:
-                if device not in self.devices:
-                    path_errors.append(f"Device '{device}' in path '{path_name}' not found in devices list.")
-        daq_errors = [
-            f"Device '{pin_specs.device}' at Daq Pin '{pin}' not found in devices list."
-            for pin, pin_specs in self.daq.acq_pins.items()
-            if pin_specs.device not in self.devices
-        ]
-        errors = path_errors + daq_errors
-        if errors:
-            raise ConfigLoadError("; ".join(errors))
-        return self
+    metadata: InstrumentMetadata
+    devices: BuildSpecGroup
+    assembly: InstrumentAssembly
+    io_specs: IOSpecs
+    channels: dict[str, ChannelConfiguration]
 
 
-@dataclass
-class VoxelInstrument:
-    config: InstrumentConfig
-
-    def __post_init__(self) -> None:
-        self.name = self.config.name
+class Instrument:
+    def __init__(
+        self,
+        metadata: InstrumentMetadata,
+        devices: dict[str, VoxelDevice],
+        assembly: InstrumentAssembly,
+        io_manager: IOManager,
+    ) -> None:
         self.log = get_component_logger(self)
-
-        self.devices = self._build_devices()
-        self.daq = self._build_daq()
-        self.acq_task = self._build_acq_task()
-        self.paths = self._build_paths()
-        self.stage = self._build_stage()
-
-        self.apply_build_settings()
-
-        self.log.info(f"Initialized {self.name} with {len(self.devices)} devices")
+        self.validate_assembly(devices=devices, assembly=assembly)
+        self.metadata = metadata
+        self._devices = devices
+        self._assembly = assembly
+        self._io_manager = io_manager
+        self._stage = self._create_stage()
+        self._pipelines = self._create_pipelines()
+        self._channels: dict[str, ImagingChannel] = {}
 
     @property
-    def cameras(self) -> dict[str, VoxelCamera | VoxelCameraProxy]:
-        cameras = {}
-        for name, device in self.devices.items():
-            if isinstance(device, (VoxelCamera, VoxelCameraProxy)):
-                cameras[name] = device
-        return cameras
+    def devices(self) -> dict[str, VoxelDevice]:
+        return self._devices
+
+    @property
+    def assembly(self) -> InstrumentAssembly:
+        return self._assembly
+
+    @property
+    def stage(self) -> SpecimenStage:
+        return self._stage
+
+    @property
+    def cameras(self) -> dict[str, VoxelCamera]:
+        return {name: device for name, device in self.devices.items() if isinstance(device, VoxelCamera)}
+
+    @property
+    def pipelines(self) -> dict[str, ICameraPipeline]:
+        return self._pipelines
+
+    @property
+    def filter_wheels(self) -> dict[str, VoxelFilterWheel]:
+        return {name: device for name, device in self.devices.items() if isinstance(device, VoxelFilterWheel)}
 
     @property
     def lasers(self) -> dict[str, VoxelLaser]:
-        lasers = {}
-        for name, device in self.devices.items():
-            if device.device_type == VoxelDeviceType.LASER:
-                assert isinstance(device, VoxelLaser), f"Device {name} is not a VoxelLaser"
-                lasers[name] = device
-        return lasers
+        return {name: device for name, device in self.devices.items() if isinstance(device, VoxelLaser)}
 
     @property
-    def linear_axes(self) -> dict[str, VoxelLinearAxis]:
-        axes = {}
-        for name, device in self.devices.items():
-            if device.device_type == VoxelDeviceType.LINEAR_AXIS:
-                assert isinstance(device, VoxelLinearAxis), f"Device {name} is not a VoxelLinearAxis"
-                axes[name] = device
-        return axes
-
-    # @property
-    # def channels(self) -> dict[str, IlluminationChannel]:
-    #     channels = {}
-    #     for path in self.paths.values():
-    #         for channel_name, channel in path.channels.items():
-    #             channels[channel_name] = channel
-    #     return channels
+    def io_manager(self) -> IOManager:
+        return self._io_manager
 
     @property
-    def snapshot(self) -> dict[str, "VoxelDeviceModel"]:
-        return {name: device.snapshot for name, device in self.devices.items()}
+    def channels(self) -> dict[str, ImagingChannel]:
+        return self._channels
 
-    def _build_devices(self) -> dict[str, "VoxelDevice"]:
-        return build_object_group(self.config.devices)
-
-    def _build_daq(self) -> VoxelDaq:
-        return VoxelDaq(self.config.daq.conn)
-
-    def _build_acq_task(self) -> WaveGenTask:
-        if not self.daq:
-            self.daq = self._build_daq()
-        clock_task = ClockGenTask(
-            name=f"{self.name}-acq-clock-task",
-            daq=self.daq,
-            out_pin=self.config.daq.acq_clock.out_pin,
-            counter=self.config.daq.acq_clock.counter,
-            freq_hz=self.config.daq.acq_clock.freq_hz,
-            duty_cycle=self.config.daq.acq_clock.duty_cycle,
-            initial_delay_ms=self.config.daq.acq_clock.initial_delay_ms,
-        )
-
-        acq_task = WaveGenTask(
-            name=f"{self.name}-acq-task",
-            daq=self.daq,
-            period_ms=self.config.daq.acq_timing.period_ms,
-            sample_rate_hz=self.config.daq.acq_timing.sample_rate_hz,
-            trigger_task=clock_task,
-        )
-
-        for pin, pin_specs in self.config.daq.acq_pins.items():
-            self.devices[pin_specs.device].acq_daq_channel = acq_task.add_channel(pin_specs.device, pin)
-
-        return acq_task
-
-    def _build_paths(self) -> dict[str, DetectionPath]:
-        """Build paths from the configuration."""
-        paths = {}
-        errors = {}
-        error_msg_suffix = "Please ensure the device is in the devices list and is of the correct base type."
-        for name, path_config in self.config.paths.items():
-            errors[name] = []
-            camera = self.cameras.get(path_config.camera)
-            if not camera:
-                errors[name].append(f"Camera {path_config.camera} not found in devices list.")
-                continue
-            if isinstance(camera, VoxelCameraProxy):
-                engine = AcquisitionEngineProxy(
-                    rpc_address="localhost",
-                    preview_address="localhost",
-                    camera_proxy=camera,
-                )
-            elif isinstance(camera, VoxelCamera):
-                engine = LocalFrameCaptureNode(
-                    camera=camera,
-                    io=path_config.io,
-                )
+    def _create_pipelines(self) -> dict[str, ICameraPipeline]:
+        """Create the pipelines for the cameras in the instrument."""
+        pipelines = {}
+        for camera_name, camera in self.cameras.items():
+            detection_unit = self.assembly.detection.get(camera_name)
+            if detection_unit and detection_unit.pipeline.is_local:
+                pipeline = LocalCameraPipeline(camera=camera, io_manager=self.io_manager)
             else:
-                errors[name].append(f"Invalid camera type: {type(camera)}")
-                continue
+                raise NotImplementedError(
+                    f"Remote pipelines are not implemented yet for camera {camera_name} with assembly {detection_unit}"
+                )
+            pipelines[camera_name] = pipeline
+        return pipelines
 
-            filter_wheel = self.devices.get(path_config.filter_wheel)
-            if not filter_wheel or not isinstance(filter_wheel, FilterWheel):
-                errors[name].append(f"Invalid Filter wheel: {path_config.filter_wheel}. {error_msg_suffix}")
-                continue
+    def _create_stage(self) -> SpecimenStage:
+        cfg = self.assembly.stage
+        # Mandatory linear axes
+        x_ax_name, y_ax_name, z_ax_name = cfg.x, cfg.y, cfg.z
+        x_axis, y_axis, z_axis = self.devices[x_ax_name], self.devices[y_ax_name], self.devices[z_ax_name]
 
-            if focusing_axis_key := path_config.focusing_axis:
-                focusing_axis = self.devices.get(focusing_axis_key)
-                if not focusing_axis or not isinstance(focusing_axis, VoxelLinearAxis):
-                    errors[name].append(f"Invalid Focusing axis {focusing_axis_key}. {error_msg_suffix}")
-                    continue
-            else:
-                focusing_axis = None
-            if path_config.focusing_axis and not focusing_axis:
-                errors[name].append(f"Focusing axis {path_config.focusing_axis} not found in devices list.")
-                continue
+        assert isinstance(x_axis, VoxelLinearAxis), f"Device '{x_ax_name}' for X axis is not a VoxelLinearAxis."
+        assert isinstance(y_axis, VoxelLinearAxis), f"Device '{y_ax_name}' for Y axis is not a VoxelLinearAxis."
+        assert isinstance(z_axis, VoxelLinearAxis), f"Device '{z_ax_name}' for Z axis is not a VoxelLinearAxis."
 
-            channels = {}
-            for channel_name, channel_config in path_config.channels.items():
-                channel_errors = []
-                laser = self.lasers.get(channel_config.laser)
-                if not laser or not isinstance(laser, VoxelLaser):
-                    channel_errors.append(f"Invalid Laser {channel_config.laser}. {error_msg_suffix}")
-                    continue
-                if channel_config.filter_ not in filter_wheel.filters:
-                    channel_errors.append(
-                        f"Filter {channel_config.filter_} not found in filter wheel {path_config.filter_wheel}."
+        # Optional rotational axes helper
+        def get_rot_axis(axis_name_in_spec: str | None) -> VoxelRotationAxis | None:
+            if axis_name_in_spec is None:
+                return None
+            device = self.devices[axis_name_in_spec]
+            assert isinstance(
+                device, VoxelRotationAxis
+            ), f"Device '{axis_name_in_spec}' is not a VoxelRotationAxis, got {type(device).__name__}."
+            return device
+
+        roll_axis = get_rot_axis(cfg.roll)
+        pitch_axis = get_rot_axis(cfg.pitch)
+        yaw_axis = get_rot_axis(cfg.yaw)
+
+        return SpecimenStage(x=x_axis, y=y_axis, z=z_axis, roll=roll_axis, pitch=pitch_axis, yaw=yaw_axis)
+
+    @classmethod
+    def from_config(cls, config: InstrumentConfig) -> Self:
+        """Load an instrument from a config."""
+        instrument = cls(
+            metadata=config.metadata,
+            devices=build_object_group(config.devices),
+            assembly=config.assembly,
+            io_manager=IOManager(config.io_specs),
+        )
+        for channel_name, channel_recipe in config.channels.items():
+            builder = instrument.get_channel_builder()
+            builder.set_name(channel_name)
+            builder.set_detection(channel_recipe.detection)
+            builder.set_illumination(channel_recipe.illumination)
+            for fw_name, filter_name in channel_recipe.filters.items():
+                builder.configure_filter_wheel(fw_name, filter_name)
+            builder.build()
+        return instrument
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> Self:
+        """Load an instrument from a YAML file.
+        :param path: The path to the YAML file.
+        :type path: str | Path
+        :return: The loaded instrument.
+        :rtype: Instrument
+        """
+        from ruamel.yaml import YAML
+
+        yaml = YAML()
+        with open(path, "r") as f:
+            config = InstrumentConfig.model_validate(yaml.load(f))
+        return cls.from_config(config)
+
+    @staticmethod
+    def validate_assembly(devices: dict[str, VoxelDevice], assembly: InstrumentAssembly) -> None:
+        """Validate the assemblies configuration.
+        :param devices: The devices.
+        :type devices: dict[str, VoxelDevice]
+        :param assemblies: The assemblies.
+        :type assemblies: InstrumentAssembly
+        """
+
+        # Make sure all cameras have a valid detection assembly
+        for camera_name, camera in devices.items():
+            if isinstance(camera, VoxelCamera) and camera_name not in assembly.detection:
+                raise ValueError(f"Camera {camera_name} does not have a valid detection assembly.")
+
+        # Make sure detection assemblies have valid cameras and filter wheels and devices
+        for unit_name, unit in assembly.detection.items():
+            if unit_name not in devices:
+                raise ValueError(f"Camera/Assembly {unit_name} not found in devices.")
+            if not isinstance(devices[unit_name], VoxelCamera):
+                raise TypeError(f"Camera/Assembly {unit_name} is not a VoxelCamera.")
+
+            for fw_name in unit.filter_wheels:
+                if fw_name not in devices:
+                    raise ValueError(f"Filter wheel {fw_name} of assembly {unit_name} not found in devices.")
+                if not isinstance(devices[fw_name], VoxelFilterWheel):
+                    raise TypeError(f"Device {fw_name} of assembly {unit_name} is not a VoxelFilterWheel.")
+
+        # Make sure all lasers have a valid illumination assembly
+        for laser_name, laser in devices.items():
+            if isinstance(laser, VoxelLaser) and laser_name not in assembly.illumination:
+                raise ValueError(f"Laser {laser_name} does not have a valid illumination assembly.")
+
+        # Make sure illumination assemblies have valid lasers
+        for unit_name, unit in assembly.illumination.items():
+            if unit_name not in devices:
+                raise ValueError(f"Laser/Assembly {unit_name} not found in devices.")
+            if not isinstance(devices[unit_name], VoxelLaser):
+                raise TypeError(f"Laser/Assembly {unit_name} is not a VoxelLaser.")
+
+        stage_axes = list(assembly.stage.model_dump().values())
+
+        # Combined check of devices array in the assemblies
+        for unit_name, unit in list(assembly.detection.items()) + list(assembly.illumination.items()):
+            for device_name in unit.aux_devices:
+                if device_name not in devices:
+                    raise ValueError(f"Device {device_name} of assembly {unit_name} not found in devices.")
+                if not isinstance(devices[device_name], VoxelDevice):
+                    raise TypeError(f"Device {device_name} of assembly {unit_name} is not a VoxelDevice.")
+                if device_name in stage_axes:
+                    raise ValueError(
+                        f"Device {device_name} of assembly {unit_name} is a stage axis and cannot be in an assembly."
                     )
-                    continue
-                illumination_axes: list[VoxelLinearAxis] = []
-                for axis_name in channel_config.axes:
-                    axis = self.devices.get(axis_name)
-                    if not axis or not isinstance(axis, VoxelLinearAxis):
-                        channel_errors.append(f"Invalid Focusing axis {axis_name}. {error_msg_suffix}")
-                        continue
-                    illumination_axes.append(axis)
-                if channel_errors:
-                    errors[name][channel_name] = channel_errors
-                    continue
 
-                channels[channel_name] = IlluminationChannel(
-                    laser=laser, filter=channel_config.filter_, name=channel_name
-                )
+    def get_channel_builder(self) -> "ChannelBuilder":
+        """Get a channel builder for the instrument."""
+        return ChannelBuilder(self)
 
-            paths[name] = DetectionPath(
-                name=name,
-                engine=engine,
-                filter_wheel=filter_wheel,
-                channels=channels,
-                acq_task=self.acq_task,
-            )
-
-        if errors:
-            error_msg = "\n".join([f"{path}: {', '.join(errors[path])}" for path in errors if errors[path]])
-            raise ConfigLoadError(f"Errors in paths:\n{error_msg}")
-
-        return paths
-
-    def _build_stage(self) -> "VoxelStage":
-        axes: dict[LinearAxisDimension, VoxelLinearAxis] = {}
-        for name, device in self.devices.items():
-            if device.device_type == VoxelDeviceType.LINEAR_AXIS:
-                assert isinstance(device, VoxelLinearAxis), f"Device {name} is not a VoxelLinearAxis"
-                if not axes.get(device.dimension, None):
-                    axes[device.dimension] = device
-        return self.VoxelStage(
-            x=axes[LinearAxisDimension.X],
-            y=axes[LinearAxisDimension.Y],
-            z=axes[LinearAxisDimension.Z],
-            name=f"{self.name}-stage",
-        )
-
-    def apply_build_settings(self):
-        if self.config.settings:
-            for name, device_settings in self.config.settings.items():
-                instance = self.devices[name]
-                if instance:
-                    instance.apply_settings(device_settings)
-
-    def close(self):
-        for device in self.devices.values():
-            device.close()
-        if self.daq:
-            self.daq.clean_up()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
-        self.close()
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__} " f"Devices: \n\t - " f"{self._get_devices_str()} \n"
-
-    def _get_devices_str(self) -> str:
-        return "\n\t - ".join([f"{device}" for device in self.devices.values()])
-
-    @dataclass
-    class VoxelStage:
-        x: VoxelLinearAxis
-        y: VoxelLinearAxis
-        z: VoxelLinearAxis
-        roll: VoxelRotationAxis | None = None  # Rotation around the x-axis
-        pitch: VoxelRotationAxis | None = None  # Rotation around the y-axis
-        yaw: VoxelRotationAxis | None = None  # Rotation around the z-axis
-        name: str = "Stage"
-
-        def __post_init__(self) -> None:
-            self.log = get_component_logger(self)
-
-        @property
-        def position_mm(self) -> Vec3D[float]:
-            return Vec3D(self.x.position_mm, self.y.position_mm, self.z.position_mm)
-
-        @property
-        def position_deg(self) -> Vec3D:
-            if self.roll is None or self.pitch is None or self.yaw is None:
-                return Vec3D(0, 0, 0)
-            return Vec3D(
-                self.roll.position_deg or 0,
-                self.pitch.position_deg or 0,
-                self.yaw.position_deg or 0,
-            )
-
-        def move_to(
-            self,
-            x: float | None = None,
-            y: float | None = None,
-            z: float | None = None,
-            roll: float | None = None,
-            pitch: float | None = None,
-            yaw: float | None = None,
-            wait: bool = False,
-        ) -> None:
-            """Move stage to specified positions"""
-            linear_zipped = zip([x, y, z], [self.x, self.y, self.z])
-            moved_linear = False
-            moved_rotational = False
-
-            for arg, axis in linear_zipped:
-                if arg is not None and axis is not None:
-                    axis.position_mm = arg
-                    moved_linear = True
-
-            rotational_zipped = zip([roll, pitch, yaw], [self.roll, self.pitch, self.yaw])
-            for arg, axis in rotational_zipped:
-                if arg is not None and axis is not None:
-                    axis.position_deg = arg
-                    moved_rotational = True
-
-            if wait:
-                for axis in [self.x, self.y, self.z, self.roll, self.pitch, self.yaw]:
-                    if axis is not None:
-                        axis.await_movement()
-
-            if moved_linear:
-                self.log.info(f"Moved stage to {self.position_mm.to_str()} mm")
-            if moved_rotational:
-                self.log.info(f"Moved stage to {self.position_deg.to_str()} degrees")
-
-        def rotate_to(
-            self,
-            x: float | None = None,
-            y: float | None = None,
-            z: float | None = None,
-            wait: bool = False,
-        ) -> None:
-            rotational_zipped = zip([x, y, z], [self.roll, self.pitch, self.yaw])
-            moved = False
-            for arg, axis in rotational_zipped:
-                if arg is not None and axis is not None:
-                    axis.position_deg = arg
-                    moved = True
-            if wait:
-                for axis in [self.roll, self.pitch, self.yaw]:
-                    if axis is not None:
-                        axis.await_movement()
-            if moved:
-                self.log.info(f"Moved stage to {self.position_deg.to_str()} degrees")
-
-        @property
-        def limits_mm(self) -> tuple[Vec3D, Vec3D]:
-            z_limits = (self.z.lower_limit_mm, self.z.upper_limit_mm) if self.z is not None else (0, 0)
-            lower_limits = Vec3D(self.x.lower_limit_mm, self.y.lower_limit_mm, z_limits[0])
-            upper_limits = Vec3D(self.x.upper_limit_mm, self.y.upper_limit_mm, z_limits[1])
-            return lower_limits, upper_limits
-
-
-__all__ = ["VoxelInstrument"]
+    def add_channel(self, channel: "ImagingChannel") -> None:
+        """Add a channel to the instrument."""
+        if channel.name in self.channels:
+            if self.channels[channel.name] is channel:
+                return
+            self.log.warning(f"Channel {channel.name} already exists. Overwriting.")
+        self.channels[channel.name] = channel

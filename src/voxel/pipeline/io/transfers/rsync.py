@@ -7,7 +7,7 @@ from pathlib import Path
 from subprocess import Popen
 from typing import Any
 
-from voxel.io.transfers.base import VoxelFileTransfer
+from voxel.pipeline.io.transfers.base import VoxelFileTransfer
 
 
 class RsyncFileTransfer(VoxelFileTransfer):

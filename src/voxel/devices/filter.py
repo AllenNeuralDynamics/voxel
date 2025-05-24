@@ -30,22 +30,22 @@ class VoxelFilter(VoxelDevice):
         pass
 
 
-class VoxelFilterWheel(VoxelDevice):
-    def __init__(self, name: str) -> None:
-        super().__init__(name, device_type=VoxelDeviceType.FILTER_WHEEL)
+# class VoxelFilterWheel(VoxelDevice):
+#     def __init__(self, name: str) -> None:
+#         super().__init__(name, device_type=VoxelDeviceType.FILTER_WHEEL)
 
-    @abstractmethod
-    def add_filter(self, filter_name: str, position: int):
-        """Add a filter to the wheel."""
-        pass
+#     @abstractmethod
+#     def add_filter(self, filter_name: str, position: int):
+#         """Add a filter to the wheel."""
+#         pass
 
-    @abstractmethod
-    def set_filter(self, filter_name: str) -> None:
-        """Set the filterwheel to the specified filter."""
-        pass
+#     @abstractmethod
+#     def set_filter(self, filter_name: str) -> None:
+#         """Set the filterwheel to the specified filter."""
+#         pass
 
-    @property
-    @abstractmethod
-    def current_filter(self) -> str | None:
-        """Return the name of the currently active filter, or None if no filter is active."""
-        pass
+#     @property
+#     @abstractmethod
+#     def current_filter(self) -> str | None:
+#         """Return the name of the currently active filter, or None if no filter is active."""
+#         pass

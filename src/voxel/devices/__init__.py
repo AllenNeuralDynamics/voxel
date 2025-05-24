@@ -1,12 +1,10 @@
 """Voxel Device Base classes."""
 
-from ..io.transfers.base import VoxelFileTransfer
-from ..io.writers.base import VoxelWriter
 from .aotf import VoxelAOTF
 from .base import VoxelDevice, VoxelDeviceConnectionError, VoxelDeviceError, VoxelDeviceType, VoxelDeviceModel
 from .camera import VoxelCamera
 from .chiller import VoxelChiller
-from .filter import VoxelFilter
+from .filter_wheel import VoxelFilterWheel
 from .flip_mount import VoxelFlipMount
 from .laser import VoxelLaser
 from .linear_axis import LinearAxisDimension, VoxelLinearAxis
@@ -23,7 +21,7 @@ __all__ = [
     "VoxelAOTF",
     "VoxelCamera",
     "VoxelChiller",
-    "VoxelFilter",
+    "VoxelFilterWheel",
     "VoxelFlipMount",
     "VoxelLaser",
     "VoxelLinearAxis",
@@ -31,6 +29,4 @@ __all__ = [
     "VoxelPowerMeter",
     "VoxelRotationAxis",
     "VoxelTunableLens",
-    "VoxelWriter",
-    "VoxelFileTransfer",
 ]

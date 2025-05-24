@@ -24,8 +24,8 @@ from voxel.utils.log_config import get_logger
 from voxel.utils.vec import Vec2D, Vec3D
 
 if TYPE_CHECKING:
-    from voxel.channel import VoxelChannel
-    from voxel.instrument import VoxelInstrument
+    from voxel.channel import ImagingChannel
+    from voxel.instrument import Instrument
 
 
 DEFAULT_TILE_OVERLAP = 0.15
@@ -110,7 +110,7 @@ def get_volume_corners(frame_stacks: FrameStackCollection) -> tuple[Vec3D, Vec3D
 class VoxelAcquisitionPlanner:
     def __init__(
         self,
-        instrument: "VoxelInstrument",
+        instrument: "Instrument",
         specs: AcquisitionSpecs,
         config_path: Path,
         metadata: VoxelMetadata | None = None,
@@ -184,7 +184,7 @@ class VoxelAcquisitionPlanner:
         )
 
     @property
-    def channels(self) -> list["VoxelChannel"]:
+    def channels(self) -> list["ImagingChannel"]:
         return self._channels
 
     @channels.setter
@@ -259,12 +259,12 @@ class VoxelAcquisitionPlanner:
         y_max = max(frame_stack.idx.y for frame_stack in frame_stacks.values())
         return Vec2D(int(x_max + 1), int(y_max + 1))
 
-    def _generate_plan(self, channels: list["VoxelChannel"]) -> AcquisitionPlan:
+    def _generate_plan(self, channels: list["ImagingChannel"]) -> AcquisitionPlan:
         frame_stacks = self._generate_frame_stacks(channels)
         scan_path = self._generate_scan_path(frame_stacks)
         return AcquisitionPlan(frame_stacks=frame_stacks, scan_path=scan_path, channels=self.channel_names)
 
-    def _generate_frame_stacks(self, channels: list["VoxelChannel"]) -> FrameStackCollection:
+    def _generate_frame_stacks(self, channels: list["ImagingChannel"]) -> FrameStackCollection:
         # all channels must have the same fov
         fov = channels[0].camera.fov_um
         if any(channel.camera.fov_um != fov for channel in channels):

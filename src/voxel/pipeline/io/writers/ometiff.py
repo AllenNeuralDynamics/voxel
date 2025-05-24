@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import tifffile as tf
 
-from voxel.io.writers.base import PixelType, VoxelWriter, WriterConfig
+from voxel.pipeline.io.writers.base import PixelType, VoxelWriter, WriterConfig
 
 if TYPE_CHECKING:
     from pathlib import Path

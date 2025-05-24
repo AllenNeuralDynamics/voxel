@@ -6,7 +6,7 @@ from math import ceil
 import numpy as np
 from PyImarisWriter import PyImarisWriter as pw
 
-from voxel.io.writers.base import (
+from voxel.pipeline.io.writers.base import (
     Pixels_DimensionOrder,
     PixelType,
     VoxelWriter,

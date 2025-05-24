@@ -10,7 +10,7 @@
 
 # from voxel.app.messaging import MessageBus, MessageEnvelope, SignalStream, StreamIntervals, WebSocketConnection
 # from voxel.devices.base import VoxelDeviceModel
-# from voxel.instrument import ConfigLoadError, InstrumentConfig, VoxelInstrument
+# from voxel.instrument import ConfigLoadError, InstrumentConfig, Instrument
 # from voxel.utils.common import get_local_ip
 # from voxel.utils.log_config import get_logger
 
@@ -33,7 +33,7 @@
 
 #         self.bus = bus
 
-#         self.instrument = VoxelInstrument((InstrumentConfig.from_yaml(self.config_path)))
+#         self.instrument = Instrument((InstrumentConfig.from_yaml(self.config_path)))
 
 #         self.streams: list[SignalStream] = []
 #         self.streams.append(
@@ -45,10 +45,10 @@
 #             )
 #         )
 
-#     def reload(self) -> VoxelInstrument:
+#     def reload(self) -> Instrument:
 #         self.instrument.close() if self.instrument else None
 #         self.stop_streams()
-#         self.instrument = VoxelInstrument((InstrumentConfig.from_yaml(self.config_path)))
+#         self.instrument = Instrument((InstrumentConfig.from_yaml(self.config_path)))
 #         self.start_streams()
 #         return self.instrument
 

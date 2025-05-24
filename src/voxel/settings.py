@@ -140,15 +140,18 @@ class ZSetting[T](BaseModel):
         raise ValueError(f"No point found with z-coordinate {z}.")
 
 
-class ConfiguredDevice:
+type SettingsBlock = dict[str, ZSetting[Any]]  # prop_name -> ZSetting for that property
+
+
+class ConfiguredDevice[T: VoxelDevice]:
     """
     A class representing a device with a configuration.
     The configuration is a dictionary containing ZSettings.
     """
 
-    _settings: dict[str, ZSetting[Any]]  # prop_name -> ZSetting for that property
+    _settings: SettingsBlock
 
-    def __init__(self, device: VoxelDevice, settings: dict[str, ZSetting[Any]] | None = None) -> None:
+    def __init__(self, device: T, settings: SettingsBlock | None = None) -> None:
         self.device = device
         self._settings = {}
         if settings:
@@ -162,6 +165,10 @@ class ConfiguredDevice:
     @property
     def log(self) -> Logger:
         return self.device.log
+
+    @property
+    def settings(self) -> SettingsBlock:
+        return self._settings
 
     def add_setting_point(self, prop_name: str, point: ZPoint[Any]) -> None:
         """Adds a ZPoint. Creates ZSetting if prop_name is new and valid."""

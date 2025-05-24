@@ -5,8 +5,8 @@ from voxel.devices.base import VoxelDevice, VoxelDeviceType
 from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
 from voxel.devices.laser import VoxelLaser
 from voxel.devices.linear_axis import VoxelLinearAxis
-from voxel.engine.local import IFrameCaptureNode, EngineStatus, StackAcquisitionConfig
-from voxel.engine.preview import NewFrameCallback, PreviewFrame
+from voxel.pipeline.local import IFrameCaptureNode, PipelineStatus, StackAcquisitionConfig
+from voxel.pipeline.preview import NewFrameCallback, PreviewFrame
 from voxel.utils.descriptors.enumerated import enumerated_string
 from voxel.utils.log_config import get_component_logger
 
@@ -124,7 +124,7 @@ class DetectionPath:
         return self._filter_wheel
 
     @property
-    def state(self) -> EngineStatus:
+    def state(self) -> PipelineStatus:
         """Get the status of the detection path."""
         return self._engine.state
 
@@ -165,7 +165,7 @@ class DetectionPath:
         """
         self.log.info(f"starting stack acquisition on channel: {config.channel_name}.")
 
-        if self._engine.state == EngineStatus.PREVIEW:
+        if self._engine.state == PipelineStatus.PREVIEW:
             self.stop_preview()
 
         def acquisition_thread():

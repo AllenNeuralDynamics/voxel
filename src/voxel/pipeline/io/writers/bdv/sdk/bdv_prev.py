@@ -10,7 +10,7 @@ from time import perf_counter, sleep
 
 import numpy as np
 
-from voxel.io.writers.base import VoxelWriter
+from voxel.pipeline.io.writers.base import VoxelWriter
 from .sdk import npy2bdv
 
 CHUNK_COUNT_PX = 64

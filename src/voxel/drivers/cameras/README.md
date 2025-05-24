@@ -1,6 +1,6 @@
 # Voxel Camera
 
-`VoxelCamera` is an abstract base class that defines the inteface for cameras compatible with a VoxelInstrument.
+`VoxelCamera` is an abstract base class that defines the inteface for cameras compatible with a Instrument.
 
 ## Methods
 
