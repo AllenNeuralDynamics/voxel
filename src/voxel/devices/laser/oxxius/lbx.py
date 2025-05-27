@@ -19,27 +19,30 @@ class OxxiusLBXLaser(BaseLaser):
     """
 
     def __init__(
-        self, id: str,
+        self,
+        id: str,
         prefix: str,
         wavelength: float,
         coefficients: Dict[str, float] = None,
         port: str = None,
         controller: OxxiusController = None,
     ) -> None:
-        """_summary_
+        """
+        Initialize an OxxiusLBXLaser instance.
 
-        :param id: _description_
+        :param id: Laser identifier.
         :type id: str
-        :param prefix: _description_
+        :param prefix: Command prefix for the laser.
         :type prefix: str
-        :param wavelength: _description_
+        :param wavelength: Wavelength of the laser in nanometers.
         :type wavelength: float
-        :param coefficients: Coefficients for the power-current curve
-        :type coefficients: dict
-        :param port: _description_, defaults to None
+        :param coefficients: Coefficients for the power-current curve.
+        :type coefficients: dict, optional
+        :param port: Serial port name, defaults to None.
         :type port: str, optional
-        :param controller: _description_, defaults to None
+        :param controller: OxxiusController instance, defaults to None.
         :type controller: OxxiusController, optional
+        :raises ValueError: If both controller and port are None.
         """
         super().__init__(id)
 
@@ -56,14 +59,14 @@ class OxxiusLBXLaser(BaseLaser):
         self._coefficients = coefficients
         # initialize laser modulation mode to off
         self._set_constant_current(BoolVal.OFF)
-        self.modulation_mode = 'off'
+        self.modulation_mode = "off"
 
     @property
     def wavelength(self) -> float:
         """
         Get the wavelength of the laser.
 
-        :return: Wavelength in nanometers
+        :return: Wavelength in nanometers.
         :rtype: float
         """
         return self._wavelength
@@ -71,12 +74,16 @@ class OxxiusLBXLaser(BaseLaser):
     def enable(self) -> None:
         """
         Enable laser emission.
+
+        :return: None
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.ON, self._prefix)
 
     def disable(self) -> None:
         """
         Disable laser emission.
+
+        :return: None
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.OFF, self._prefix)
 
@@ -85,11 +92,17 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Get the power setpoint.
 
-        :return: Power setpoint.
+        :return: Power setpoint in milliwatts.
         :rtype: float
         """
         if self._get_constant_current() == BoolVal.ON:
-            return float(round(self._coefficients_curve().subs(symbols("x"), self._controller.get(Query.LaserCurrentSetting, self._prefix))))
+            return float(
+                round(
+                    self._coefficients_curve().subs(
+                        symbols("x"), self._controller.get(Query.LaserCurrentSetting, self._prefix)
+                    )
+                )
+            )
         else:
             return float(self._controller.get(Query.LaserPowerSetting, self._prefix))
 
@@ -98,11 +111,12 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Set the power setpoint in milliwatts.
 
-        :param value: Power setpoint in milliwatts
+        :param value: Power setpoint in milliwatts.
         :type value: float
+        :return: None
         """
         if self._get_constant_current() == BoolVal.ON:
-            solutions = solve(self._coefficients_curve() - value)  # solutions for laser value
+            solutions = solve(self._coefficients_curve() - value)
             print(value)
             for sol in solutions:
                 if round(sol) in range(0, 101):
@@ -115,23 +129,18 @@ class OxxiusLBXLaser(BaseLaser):
                                 "Laser is in constant power mode so changing power will not change intensity"
                             )
                         print(sol)
-                        self._controller.set(Cmd.LaserCurrent, int(sol), self._prefix)  # need to apply int here
+                        self._controller.set(Cmd.LaserCurrent, int(sol), self._prefix)
                     return
-            # If no value exists, alert user
             self.log.error(f"Cannot set laser to {value}mW because no current percent correlates to {value} mW")
         else:
             if 0 > value > self.max_power:
                 reason = (
-                    f"exceeds maximum power output {self.max_power}mW"
-                    if value > self.max_power
-                    else "is below 0mW"
+                    f"exceeds maximum power output {self.max_power}mW" if value > self.max_power else "is below 0mW"
                 )
                 self.log.error(f"Cannot set laser to {value}ml because it {reason}")
             else:
                 if self._get_constant_current() == BoolVal.ON:
-                    self.log.warning(
-                        "Laser is in constant current mode so changing power will not change intensity"
-                    )
+                    self.log.warning("Laser is in constant current mode so changing power will not change intensity")
                 self._controller.set(Cmd.LaserPower, value, self._prefix)
 
     @property
@@ -139,7 +148,7 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Get the modulation mode.
 
-        :return: Modulation mode
+        :return: Modulation mode ('off', 'analog', or 'digital').
         :rtype: str
         """
         external_control_mode = BoolVal(self._controller.get(Query.ExternalPowerControl, self._prefix))
@@ -156,26 +165,27 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Set the modulation mode.
 
-        :param value: Modulation mode
+        :param value: Modulation mode ('off', 'analog', or 'digital').
         :type value: str
-        :raises ValueError: If the modulation mode is not valid
+        :raises ValueError: If the modulation mode is not valid.
+        :return: None
         """
         if value not in MODULATION_MODES.keys():
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         states = MODULATION_MODES[value]
         # needs to be set first otherwise digital ON is rejected
-        if states['digital_modulation'] == BoolVal.ON:
+        if states["digital_modulation"] == BoolVal.ON:
             self._set_constant_current(BoolVal.ON)
         else:
             self._set_constant_current(BoolVal.OFF)
-        self._controller.set(Cmd.DigitalModulation, states['digital_modulation'], self._prefix)
-        self._controller.set(Cmd.ExternalPowerControl, states['external_control_mode'], self._prefix)
+        self._controller.set(Cmd.DigitalModulation, states["digital_modulation"], self._prefix)
+        self._controller.set(Cmd.ExternalPowerControl, states["external_control_mode"], self._prefix)
 
     def status(self) -> Dict[str, Union[str, float]]:
         """
         Get the status of the laser.
 
-        :return: Status of the laser
+        :return: Status of the laser.
         :rtype: dict
         """
         return self._controller.faults()
@@ -183,6 +193,8 @@ class OxxiusLBXLaser(BaseLaser):
     def close(self) -> None:
         """
         Close the laser connection.
+
+        :return: None
         """
         self.disable()
         if self._controller.ser.is_open:
@@ -193,7 +205,7 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Get the current laser power.
 
-        :return: Current laser power.
+        :return: Current laser power in milliwatts.
         :rtype: float
         """
         return float(self._controller.get(Query.LaserPower, self._prefix))
@@ -203,7 +215,7 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Get the temperature of the laser in Celsius.
 
-        :return: Temperature in Celsius
+        :return: Temperature in Celsius.
         :rtype: float
         """
         return float(self._controller.temperature)
@@ -212,7 +224,7 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Get the power-current curve as a symbolic expression.
 
-        :return: Power-current curve
+        :return: Power-current curve as a sympy expression.
         :rtype: Expr
         """
         x = symbols("x")
@@ -226,18 +238,20 @@ class OxxiusLBXLaser(BaseLaser):
         """
         Get the maximum power in milliwatts.
 
-        :return: Maximum power in milliwatts
+        :return: Maximum power in milliwatts.
         :rtype: float
         """
         return float(self._controller.get(Query.MaximumLaserPower, self._prefix))
 
     def _set_max_power(self) -> None:
         """
-        Set the maximum power.
+        Set the maximum power property for the power_setpoint_mw descriptor.
+
+        :return: None
         """
         type(self.power_setpoint_mw).maximum = self.max_power
 
-    def _get_constant_current(self) -> bool:
+    def _get_constant_current(self) -> BoolVal:
         """
         Get the constant current mode status.
 
@@ -252,5 +266,6 @@ class OxxiusLBXLaser(BaseLaser):
 
         :param value: Desired constant current mode status.
         :type value: BoolVal
+        :return: None
         """
         self._controller.set(Cmd.LaserDriverControlMode, value, self._prefix)
