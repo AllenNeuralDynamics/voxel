@@ -2,7 +2,7 @@ import time
 import logging
 from typing import Dict, Optional
 
-from tigerasi.tiger_controller import TigerController
+from voxel.devices.controller.asi.tiger import TigerController
 
 from voxel.devices.flip_mount.base import BaseFlipMount
 

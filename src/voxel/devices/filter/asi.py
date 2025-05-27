@@ -1,19 +1,20 @@
 import logging
 
 from voxel.devices.filter.base import BaseFilter
-from voxel.devices.filterwheel.asi import FilterWheel
+from voxel.devices.filterwheel.asi.tiger import FW1000FilterWheel
 
 
 class Filter(BaseFilter):
     """
     Filter class for handling ASI filter devices.
     """
-    def __init__(self, wheel: FilterWheel, id: str) -> None:
+
+    def __init__(self, wheel: FW1000FilterWheel, id: str) -> None:
         """
         Initialize the Filter object.
 
         :param wheel: Filter wheel object
-        :type wheel: FilterWheel
+        :type wheel: FW1000FilterWheel
         :param id: Filter ID
         :type id: str
         """

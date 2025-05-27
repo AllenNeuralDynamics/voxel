@@ -1,10 +1,9 @@
 import logging
 
 from tigerasi.device_codes import *
-from tigerasi.tiger_controller import TigerController
+from voxel.devices.controller.asi.tiger import TigerController
 
 from voxel.devices.tunable_lens.base import BaseTunableLens
-from voxel.devices.utils.singleton import Singleton
 
 # constants for Tiger ASI hardware
 
@@ -14,38 +13,17 @@ MODES = {
 }
 
 
-# singleton wrapper around TigerController
-class TigerControllerSingleton(TigerController, metaclass=Singleton):
-    """
-    Singleton class for TigerController.
-
-    :param TigerController: Base class for TigerController
-    :type TigerController: class
-    :param metaclass: Singleton metaclass
-    :type metaclass: type
-    """
-
-    def __init__(self, com_port: str) -> None:
-        """
-        Initialize the TigerControllerSingleton object.
-
-        :param com_port: COM port for the controller
-        :type com_port: str
-        """
-        super(TigerControllerSingleton, self).__init__(com_port)
-
-
 class TGTLCTunableLens(BaseTunableLens):
     """
     TunableLens class for handling ASI tunable lens devices.
     """
 
-    def __init__(self, port: str, hardware_axis: str) -> None:
+    def __init__(self, tigerbox: TigerController, hardware_axis: str) -> None:
         """
         Initialize the TunableLens object.
 
-        :param port: COM port for the controller
-        :type port: str
+        :param tigerbox: TigerController object
+        :type tigerbox: TigerController
         :param hardware_axis: Hardware axis
         :type hardware_axis: str
         """
