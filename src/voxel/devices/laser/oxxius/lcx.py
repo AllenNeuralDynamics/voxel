@@ -1,6 +1,6 @@
 from typing import Dict, Union
 
-from oxxius_laser.oxxius_laser import LCX, BoolVal, Cmd, OxxiusController, Query
+from oxxius_laser import LCX, BoolVal, Cmd, OxxiusController, Query
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
@@ -13,22 +13,19 @@ class OxxiusLCXLaser(BaseLaser):
 
     def __init__(
         self, id: str,
-        wavelength: float,
         prefix: str,
-        coefficients: Dict[str, float] = None,
+        wavelength: float,
         port: str = None,
-        controller: OxxiusController = None,
+        controller: OxxiusController = None
     ) -> None:
         """_summary_
 
         :param id: _description_
         :type id: str
-        :param wavelength: _description_
-        :type wavelength: float
         :param prefix: _description_
         :type prefix: str
-        :param coefficients: _description_, defaults to None
-        :type coefficients: Dict[str, float], optional
+        :param wavelength: _description_
+        :type wavelength: float
         :param port: _description_, defaults to None
         :type port: str, optional
         :param controller: _description_, defaults to None
@@ -44,7 +41,7 @@ class OxxiusLCXLaser(BaseLaser):
         else:
             self._controller = controller
         self._prefix = prefix
-        self._coefficients = coefficients
+        type(self).power_setpoint_mw.maximum = self.max_power
         self._wavelength = wavelength
 
     def enable(self) -> None:
@@ -69,7 +66,7 @@ class OxxiusLCXLaser(BaseLaser):
         """
         return self._wavelength
 
-    @DeliminatedProperty(minimum=0, maximum=lambda self: self.max_power)
+    @DeliminatedProperty(minimum=0, maximum=float("inf"))
     def power_setpoint_mw(self) -> float:
         """
         Get the power setpoint in milliwatts.

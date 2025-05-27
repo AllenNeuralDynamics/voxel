@@ -1,6 +1,6 @@
 from typing import Dict, Union
 
-from oxxius_laser.oxxius_laser import LBX, BoolVal, Cmd, OxxiusController, Query
+from oxxius_laser import LBX, BoolVal, Cmd, OxxiusController, Query
 from sympy import Expr, solve, symbols
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
@@ -20,8 +20,8 @@ class OxxiusLBXLaser(BaseLaser):
 
     def __init__(
         self, id: str,
-        wavelength: float,
         prefix: str,
+        wavelength: float,
         coefficients: Dict[str, float] = None,
         port: str = None,
         controller: OxxiusController = None,
@@ -30,12 +30,12 @@ class OxxiusLBXLaser(BaseLaser):
 
         :param id: _description_
         :type id: str
-        :param wavelength: _description_
-        :type wavelength: float
         :param prefix: _description_
         :type prefix: str
-        :param coefficients: _description_, defaults to None
-        :type coefficients: Dict[str, float], optional
+        :param wavelength: _description_
+        :type wavelength: float
+        :param coefficients: Coefficients for the power-current curve
+        :type coefficients: dict
         :param port: _description_, defaults to None
         :type port: str, optional
         :param controller: _description_, defaults to None
@@ -51,8 +51,12 @@ class OxxiusLBXLaser(BaseLaser):
         else:
             self._controller = controller
         self._prefix = prefix
-        self._coefficients = coefficients
+        type(self).power_setpoint_mw.maximum = self.max_power
         self._wavelength = wavelength
+        self._coefficients = coefficients
+        # initialize laser modulation mode to off
+        self._set_constant_current(BoolVal.OFF)
+        self.modulation_mode = 'off'
 
     @property
     def wavelength(self) -> float:
@@ -76,7 +80,7 @@ class OxxiusLBXLaser(BaseLaser):
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.OFF, self._prefix)
 
-    @DeliminatedProperty(minimum=0, maximum=lambda self: self.max_power)
+    @DeliminatedProperty(minimum=0, maximum=float("inf"))
     def power_setpoint_mw(self) -> float:
         """
         Get the power setpoint.
@@ -85,7 +89,7 @@ class OxxiusLBXLaser(BaseLaser):
         :rtype: float
         """
         if self._get_constant_current() == BoolVal.ON:
-            return float(round(self._coefficients_curve().subs(symbols("x"), self._controller.get(Query.LaserPowerSetting, self._prefix))))
+            return float(round(self._coefficients_curve().subs(symbols("x"), self._controller.get(Query.LaserCurrentSetting, self._prefix))))
         else:
             return float(self._controller.get(Query.LaserPowerSetting, self._prefix))
 
@@ -99,6 +103,7 @@ class OxxiusLBXLaser(BaseLaser):
         """
         if self._get_constant_current() == BoolVal.ON:
             solutions = solve(self._coefficients_curve() - value)  # solutions for laser value
+            print(value)
             for sol in solutions:
                 if round(sol) in range(0, 101):
                     if 0 > value > 100:
@@ -109,7 +114,8 @@ class OxxiusLBXLaser(BaseLaser):
                             self.log.warning(
                                 "Laser is in constant power mode so changing power will not change intensity"
                             )
-                        self._controller.set(Cmd.LaserCurrent, value, self._prefix)
+                        print(sol)
+                        self._controller.set(Cmd.LaserCurrent, int(sol), self._prefix)  # need to apply int here
                     return
             # If no value exists, alert user
             self.log.error(f"Cannot set laser to {value}mW because no current percent correlates to {value} mW")
@@ -154,16 +160,16 @@ class OxxiusLBXLaser(BaseLaser):
         :type value: str
         :raises ValueError: If the modulation mode is not valid
         """
-        print(value)
         if value not in MODULATION_MODES.keys():
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         states = MODULATION_MODES[value]
-        self._controller.set(Cmd.ExternalPowerControl, states['external_control_mode'], self._prefix)
+        # needs to be set first otherwise digital ON is rejected
         if states['digital_modulation'] == BoolVal.ON:
             self._set_constant_current(BoolVal.ON)
-            self._controller.set(Cmd.DigitalModulation, states['digital_modulation'], self._prefix)
         else:
-            self._controller.set(Cmd.DigitalModulation, states['digital_modulation'], self._prefix)
+            self._set_constant_current(BoolVal.OFF)
+        self._controller.set(Cmd.DigitalModulation, states['digital_modulation'], self._prefix)
+        self._controller.set(Cmd.ExternalPowerControl, states['external_control_mode'], self._prefix)
 
     def status(self) -> Dict[str, Union[str, float]]:
         """
@@ -179,6 +185,8 @@ class OxxiusLBXLaser(BaseLaser):
         Close the laser connection.
         """
         self.disable()
+        if self._controller.ser.is_open:
+            self._controller.ser.close()
 
     @property
     def power_mw(self) -> float:
@@ -208,7 +216,7 @@ class OxxiusLBXLaser(BaseLaser):
         :rtype: Expr
         """
         x = symbols("x")
-        func: Expr = x
+        func: Expr = 0
         for order, co in self._coefficients.items():
             func = func + float(co) * x ** int(order)
         return func
@@ -221,10 +229,7 @@ class OxxiusLBXLaser(BaseLaser):
         :return: Maximum power in milliwatts
         :rtype: float
         """
-        if self._get_constant_current() == BoolVal.ON:
-            return float((round(self._coefficients_curve().subs(symbols("x"), 100), 1)))
-        else:
-            return float(self._controller.get(Query.MaximumLaserPower, self._prefix))
+        return float(self._controller.get(Query.MaximumLaserPower, self._prefix))
 
     def _set_max_power(self) -> None:
         """
@@ -248,8 +253,4 @@ class OxxiusLBXLaser(BaseLaser):
         :param value: Desired constant current mode status.
         :type value: BoolVal
         """
-        if value == BoolVal.OFF and self._controller.digital_modulation == BoolVal.ON:
-            self.log.warning(
-                f"Putting Laser {self.prefix} in constant power mode and disabling digital modulation mode"
-            )
         self._controller.set(Cmd.LaserDriverControlMode, value, self._prefix)
