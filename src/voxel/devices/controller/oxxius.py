@@ -63,15 +63,15 @@ class L6ccController:
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.ser: Serial = Serial(port, **OXXIUS_COM_SETUP) if type(port) != Serial else port
         self.ser.reset_input_buffer()
-        # self.property_updater = PropertyUpdater(controller=self)
         # build laser dictionary
         self.laser_list: list[str] = []
         for laser_prefix in LASER_PREFIXES:
-            reply = self.get(laser_prefix, Query.LaserIdentification)
+            reply = self.get(Query.LaserIdentification, laser_prefix)
             if reply != "Not authorized":
                 self.laser_list.append(laser_prefix)
             else:
                 self.log.warning(f"No laser detected for laser prefix: {laser_prefix}.")
+        self.property_updater = PropertyUpdater(controller=self)
 
     @thread_locked
     @property
@@ -93,31 +93,34 @@ class L6ccController:
             return faults
 
     @thread_locked
-    def get(self, prefix: str, msg: Query) -> str:
+    def get(self, msg: Query, prefix: str = None) -> str:
         """
         Send a query command to the device.
 
-        :param prefix: Command prefix.
-        :type prefix: str
         :param msg: Query message.
         :type msg: Query
+        :param prefix: Command prefix.
+        :type prefix: str
         :return: Device reply.
         :rtype: str
         """
-        reply: str = self._send(f"{prefix} {msg.value}")
+        if prefix == None:
+            reply = self._send(msg.value)
+        else:
+            reply = self._send(f"{prefix} {msg.value}")
         return reply
 
     @thread_locked
-    def set(self, prefix: str, msg: Cmd, value: str | float | BoolVal) -> str:
+    def set(self, msg: Cmd, value: str | float | BoolVal, prefix: str) -> str:
         """
         Send a set command to the device.
 
-        :param prefix: Command prefix.
-        :type prefix: str
         :param msg: Command message.
         :type msg: Cmd
         :param value: Value to set.
         :type value: str or float or BoolVal
+        :param prefix: Command prefix.
+        :type prefix: str
         :return: Device reply.
         :rtype: str
         """
@@ -130,7 +133,7 @@ class L6ccController:
         :return: Current power in mW.
         :rtype: float
         """
-        return float(self.property_updater.power_mw)
+        return self.property_updater.power_mw
 
     def get_temperature_c(self) -> float:
         """
@@ -139,7 +142,16 @@ class L6ccController:
         :return: Current temperature in Celsius.
         :rtype: float
         """
-        return float(self.property_updater.temperature_c)
+        return self.property_updater.temperature_c
+
+    @thread_locked
+    def close(self) -> None:
+        """
+        Close the L6cc Controller.
+        """
+        # stop the updating thread
+        self.property_updater.close()
+        self.ser.close()
 
     def _send(self, msg: str, raise_timeout: bool = True) -> str:
         """
@@ -156,7 +168,11 @@ class L6ccController:
         self.ser.write(f"{msg}\r".encode("ascii"))
         start_time = perf_counter()
         reply = self.ser.read_until(REPLY_TERMINATION)
-        if not len(reply) and raise_timeout and perf_counter() - start_time > self.ser.timeout:
+        if (
+            not len(reply)
+            and raise_timeout
+            and perf_counter() - start_time > self.ser.timeout
+        ):
             raise SerialTimeoutException
         return reply.rstrip(REPLY_TERMINATION).decode("utf-8")
 
@@ -200,7 +216,7 @@ class PropertyUpdater:
         while self.get_properties:
             for laser_prefix in self.controller.laser_list:
                 try:
-                    power_mw = self.controller.get(laser_prefix, Query.LaserPower)
+                    power_mw = self.controller.get(Query.LaserPower, laser_prefix)
                     temperature_c = self.controller.get(Query.BasePlateTemperature)
                     self.power_mw.update({laser_prefix: power_mw})
                     self.temperature_c.update({laser_prefix: temperature_c})

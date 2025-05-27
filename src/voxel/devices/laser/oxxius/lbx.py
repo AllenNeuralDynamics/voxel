@@ -1,10 +1,11 @@
 from typing import Dict, Union
 
-from oxxius_laser import LBX, BoolVal, Cmd, OxxiusController, Query
+from oxxius_laser import LBX, BoolVal, Cmd, Query
 from sympy import Expr, solve, symbols
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
+from voxel.devices.controller.oxxius import L6ccController
 
 MODULATION_MODES = {
     "off": {"external_control_mode": BoolVal.OFF, "digital_modulation": BoolVal.OFF},
@@ -25,7 +26,7 @@ class OxxiusLBXLaser(BaseLaser):
         wavelength: float,
         coefficients: Dict[str, float] = None,
         port: str = None,
-        controller: OxxiusController = None,
+        controller: L6ccController = None,
     ) -> None:
         """
         Initialize an OxxiusLBXLaser instance.
@@ -40,8 +41,8 @@ class OxxiusLBXLaser(BaseLaser):
         :type coefficients: dict, optional
         :param port: Serial port name, defaults to None.
         :type port: str, optional
-        :param controller: OxxiusController instance, defaults to None.
-        :type controller: OxxiusController, optional
+        :param controller: L6ccController instance, defaults to None.
+        :type controller: L6ccController, optional
         :raises ValueError: If both controller and port are None.
         """
         super().__init__(id)
@@ -117,7 +118,6 @@ class OxxiusLBXLaser(BaseLaser):
         """
         if self._get_constant_current() == BoolVal.ON:
             solutions = solve(self._coefficients_curve() - value)
-            print(value)
             for sol in solutions:
                 if round(sol) in range(0, 101):
                     if 0 > value > 100:
@@ -128,7 +128,6 @@ class OxxiusLBXLaser(BaseLaser):
                             self.log.warning(
                                 "Laser is in constant power mode so changing power will not change intensity"
                             )
-                        print(sol)
                         self._controller.set(Cmd.LaserCurrent, int(sol), self._prefix)
                     return
             self.log.error(f"Cannot set laser to {value}mW because no current percent correlates to {value} mW")
@@ -209,7 +208,7 @@ class OxxiusLBXLaser(BaseLaser):
         :rtype: float
         """
         power_mw_dict = self._controller.get_power_mw()
-        return power_mw_dict[self._prefix]
+        return float(power_mw_dict[self._prefix])
 
     @property
     def temperature_c(self) -> float:
@@ -220,7 +219,7 @@ class OxxiusLBXLaser(BaseLaser):
         :rtype: float
         """
         temperature_c_dict = self._controller.get_temperature_c()
-        return temperature_c_dict[self._prefix]
+        return float(temperature_c_dict[self._prefix])
 
     def _coefficients_curve(self) -> Expr:
         """
