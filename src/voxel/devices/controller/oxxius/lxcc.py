@@ -10,21 +10,10 @@ UPDATE_RATE_HZ = 5.0
 
 lock = threading.RLock()
 
-L4CC_LASER_PREFIXES = [
-    "L1",
-    "L2",
-    "L3",
-    "L4"
-]
+L4CC_LASER_PREFIXES = ["L1", "L2", "L3", "L4"]
 
-L6CC_LASER_PREFIXES = [
-    "L1",
-    "L2",
-    "L3",
-    "L4",
-    "L5",
-    "L6"
-]
+L6CC_LASER_PREFIXES = ["L1", "L2", "L3", "L4", "L5", "L6"]
+
 
 def thread_locked(function: Callable) -> Callable:
     """
@@ -182,11 +171,7 @@ class OxxiusController:
         self.ser.write(f"{msg}\r".encode("ascii"))
         start_time = perf_counter()
         reply = self.ser.read_until(REPLY_TERMINATION)
-        if (
-            not len(reply)
-            and raise_timeout
-            and perf_counter() - start_time > self.ser.timeout
-        ):
+        if not len(reply) and raise_timeout and perf_counter() - start_time > self.ser.timeout:
             raise SerialTimeoutException
         return reply.rstrip(REPLY_TERMINATION).decode("utf-8")
 

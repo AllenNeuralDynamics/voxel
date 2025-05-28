@@ -4,8 +4,8 @@ from oxxius_laser import LBX, BoolVal, Cmd, Query
 from sympy import Expr, solve, symbols
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
-from voxel.devices.laser.base import BaseLaser
 from voxel.devices.controller.oxxius.lxcc import OxxiusController
+from voxel.devices.laser.base import BaseLaser
 
 MODULATION_MODES = {
     "off": {"external_control_mode": BoolVal.OFF, "digital_modulation": BoolVal.OFF},
