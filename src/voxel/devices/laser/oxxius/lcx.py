@@ -4,7 +4,7 @@ from oxxius_laser import LCX, BoolVal, Cmd, Query
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
-from voxel.devices.controller.oxxius import OxxiusController
+from voxel.devices.controller.oxxius.lxcc import OxxiusController
 
 class OxxiusLCXLaser(BaseLaser):
     """

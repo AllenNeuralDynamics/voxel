@@ -5,7 +5,7 @@ from sympy import Expr, solve, symbols
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
-from voxel.devices.controller.oxxius import OxxiusController
+from voxel.devices.controller.oxxius.lxcc import OxxiusController
 
 MODULATION_MODES = {
     "off": {"external_control_mode": BoolVal.OFF, "digital_modulation": BoolVal.OFF},
