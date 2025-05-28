@@ -4,21 +4,27 @@ from time import perf_counter, sleep
 from typing import Any, Callable
 
 from oxxius_laser import OXXIUS_COM_SETUP, REPLY_TERMINATION, BoolVal, Cmd, FaultCodeField, Query
-from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
+from serial import Serial, SerialTimeoutException
 
 UPDATE_RATE_HZ = 5.0
 
 lock = threading.RLock()
 
-LASER_PREFIXES = [
+L4CC_LASER_PREFIXES = [
+    "L1",
+    "L2",
+    "L3",
+    "L4"
+]
+
+L6CC_LASER_PREFIXES = [
     "L1",
     "L2",
     "L3",
     "L4",
     "L5",
-    "L6",
+    "L6"
 ]
-
 
 def thread_locked(function: Callable) -> Callable:
     """
@@ -47,17 +53,19 @@ def thread_locked(function: Callable) -> Callable:
     return wrapper
 
 
-class L6ccController:
+class OxxiusController:
     """
     Controller class for Oxxius L6CC laser combiner.
     """
 
-    def __init__(self, port: str | Serial) -> None:
+    def __init__(self, port: str | Serial, model: str) -> None:
         """
         Initialize the L6ccController.
 
         :param port: Serial port name or Serial object.
         :type port: str or Serial
+        :param model: L4cc or L6cc models
+        :type model: str
         :raises SerialTimeoutException: If the device does not respond.
         """
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
@@ -65,6 +73,12 @@ class L6ccController:
         self.ser.reset_input_buffer()
         # build laser dictionary
         self.laser_list: list[str] = []
+        if model == "L4cc":
+            LASER_PREFIXES = L4CC_LASER_PREFIXES
+        elif model == "L6cc":
+            LASER_PREFIXES = L6CC_LASER_PREFIXES
+        else:
+            raise ValueError("model must be L4cc or L6cc")
         for laser_prefix in LASER_PREFIXES:
             reply = self.get(Query.LaserIdentification, laser_prefix)
             if reply != "Not authorized":
@@ -184,7 +198,7 @@ class PropertyUpdater:
 
     def __init__(
         self,
-        controller: L6ccController,
+        controller: OxxiusController,
         log_level: str = "INFO",
     ) -> None:
         """
@@ -197,7 +211,7 @@ class PropertyUpdater:
         """
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.log.setLevel(log_level)
-        self.controller: L6ccController = controller
+        self.controller = controller
         self.get_properties: bool = True
         # initialize power mw property
         self.power_mw: dict[str, float] = {laser_prefix: 0.0 for laser_prefix in self.controller.laser_list}

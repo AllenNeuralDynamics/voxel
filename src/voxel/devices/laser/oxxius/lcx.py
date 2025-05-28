@@ -1,10 +1,10 @@
 from typing import Dict, Union
 
-from oxxius_laser import LCX, BoolVal, Cmd, OxxiusController, Query
+from oxxius_laser import LCX, BoolVal, Cmd, Query
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
-from voxel.devices.controller.oxxius import L6ccController
+from voxel.devices.controller.oxxius import OxxiusController
 
 class OxxiusLCXLaser(BaseLaser):
     """
@@ -12,7 +12,7 @@ class OxxiusLCXLaser(BaseLaser):
     """
 
     def __init__(
-        self, id: str, prefix: str, wavelength: float, port: str = None, controller: L6ccController = None
+        self, id: str, prefix: str, wavelength: float, port: str = None, controller: OxxiusController = None
     ) -> None:
         """
         Initialize an OxxiusLCXLaser instance.
@@ -25,8 +25,8 @@ class OxxiusLCXLaser(BaseLaser):
         :type wavelength: float
         :param port: Serial port name, defaults to None.
         :type port: str, optional
-        :param controller: L6ccController instance, defaults to None.
-        :type controller: L6ccController, optional
+        :param OxxiusController: L6ccController instance, defaults to None.
+        :type OxxiusController: L6ccController, optional
         :raises ValueError: If both controller and port are None.
         """
         super().__init__(id)

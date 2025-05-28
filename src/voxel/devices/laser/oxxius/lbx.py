@@ -5,7 +5,7 @@ from sympy import Expr, solve, symbols
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
-from voxel.devices.controller.oxxius import L6ccController
+from voxel.devices.controller.oxxius import OxxiusController
 
 MODULATION_MODES = {
     "off": {"external_control_mode": BoolVal.OFF, "digital_modulation": BoolVal.OFF},
@@ -26,7 +26,7 @@ class OxxiusLBXLaser(BaseLaser):
         wavelength: float,
         coefficients: Dict[str, float] = None,
         port: str = None,
-        controller: L6ccController = None,
+        controller: OxxiusController = None,
     ) -> None:
         """
         Initialize an OxxiusLBXLaser instance.
@@ -41,8 +41,8 @@ class OxxiusLBXLaser(BaseLaser):
         :type coefficients: dict, optional
         :param port: Serial port name, defaults to None.
         :type port: str, optional
-        :param controller: L6ccController instance, defaults to None.
-        :type controller: L6ccController, optional
+        :param controller: OxxiusController instance, defaults to None.
+        :type controller: OxxiusController, optional
         :raises ValueError: If both controller and port are None.
         """
         super().__init__(id)
