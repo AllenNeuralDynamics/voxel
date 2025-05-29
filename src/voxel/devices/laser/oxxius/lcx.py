@@ -1,7 +1,6 @@
 from typing import Dict, Union
 
-from oxxius_laser import LCX, BoolVal, Cmd, Query
-
+from voxel.devices.controller.oxxius.lxcc import CombinerCmd, Cmd, BoolVal, Query, CombinerQuery
 from voxel.descriptors.deliminated_property import DeliminatedProperty
 from voxel.devices.laser.base import BaseLaser
 from voxel.devices.controller.oxxius.lxcc import OxxiusController
@@ -35,7 +34,7 @@ class OxxiusLCXLaser(BaseLaser):
             raise ValueError("Controller and port cannot both be none")
 
         if controller is None:
-            self._controller = LCX(port, self._prefix)
+            self._controller = OxxiusController(port = port)
         else:
             self._controller = controller
         self._prefix = prefix
@@ -59,6 +58,32 @@ class OxxiusLCXLaser(BaseLaser):
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.OFF, self._prefix)
         self.log.info("laser disabled")
+
+    @DeliminatedProperty(minimum=0, maximum=float("inf"))
+    def aom_power_mw(self) -> float:
+        """
+        Get the wavelength of the laser.
+
+        :return: Wavelength in nanometers.
+        :rtype: float
+        """
+        return float(self._controller.get(CombinerQuery.AOMPower, self._prefix))
+
+    @aom_power_mw.setter
+    def aom_power_mw(self, value: float) -> None:
+        """
+        Set the AOM power.
+
+        :param value: AOM power value.
+        :type value: float
+        :return: None
+        """
+        if 0 > value > round(self.max_power / 1.1):  # AOM power is capped at - 10% of max power 
+            reason = f"exceeds maximum power output {self.max_power}mW" if value > self.max_power else "is below 0mW"
+            self.log.error(f"Cannot set laser to {value} mW because it {reason}")
+        else:
+            self._controller.set(CombinerCmd.AOMPower, value, self._prefix)
+        self.log.info(f"AOM power set to {value} mW")
 
     @property
     def wavelength(self) -> float:
@@ -86,12 +111,12 @@ class OxxiusLCXLaser(BaseLaser):
         Set the power setpoint.
 
         :param value: Power setpoint value.
-        :type value: float or int
+        :type value: float
         :return: None
         """
         if 0 > value > self.max_power:
             reason = f"exceeds maximum power output {self.max_power}mW" if value > self.max_power else "is below 0mW"
-            self.log.error(f"Cannot set laser to {value}ml because it {reason}")
+            self.log.error(f"Cannot set laser to {value} mW because it {reason}")
         else:
             self._controller.set(Cmd.LaserPower, value, self._prefix)
         self.log.info(f"power set to {value} mW")

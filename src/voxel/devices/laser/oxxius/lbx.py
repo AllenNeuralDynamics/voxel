@@ -1,6 +1,6 @@
 from typing import Dict, Union
 
-from oxxius_laser import LBX, BoolVal, Cmd, Query
+from voxel.devices.controller.oxxius.lxcc import BoolVal, Cmd, Query
 from sympy import Expr, solve, symbols
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
@@ -51,7 +51,7 @@ class OxxiusLBXLaser(BaseLaser):
             raise ValueError("Controller and port cannot both be none")
 
         if controller is None:
-            self._controller = LBX(port, self._prefix)
+            self._controller = OxxiusController(port = port)
         else:
             self._controller = controller
         self._prefix = prefix
