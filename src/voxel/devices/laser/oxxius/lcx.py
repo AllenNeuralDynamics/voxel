@@ -1,9 +1,9 @@
 from typing import Dict, Union
 
-from voxel.devices.controller.oxxius.lxcc import CombinerCmd, Cmd, BoolVal, Query, CombinerQuery
 from voxel.descriptors.deliminated_property import DeliminatedProperty
+from voxel.devices.controller.oxxius.lxcc import BoolVal, Cmd, CombinerCmd, CombinerQuery, OxxiusController, Query
 from voxel.devices.laser.base import BaseLaser
-from voxel.devices.controller.oxxius.lxcc import OxxiusController
+
 
 class OxxiusLCXLaser(BaseLaser):
     """
@@ -34,7 +34,7 @@ class OxxiusLCXLaser(BaseLaser):
             raise ValueError("Controller and port cannot both be none")
 
         if controller is None:
-            self._controller = OxxiusController(port = port)
+            self._controller = OxxiusController(port=port)
         else:
             self._controller = controller
         self._prefix = prefix
@@ -78,7 +78,7 @@ class OxxiusLCXLaser(BaseLaser):
         :type value: float
         :return: None
         """
-        if 0 > value > round(self.max_power / 1.1):  # AOM power is capped at - 10% of max power 
+        if 0 > value > round(self.max_power / 1.1):  # AOM power is capped at - 10% of max power
             reason = f"exceeds maximum power output {self.max_power}mW" if value > self.max_power else "is below 0mW"
             self.log.error(f"Cannot set laser to {value} mW because it {reason}")
         else:

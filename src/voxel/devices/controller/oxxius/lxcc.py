@@ -1,10 +1,10 @@
 import logging
 import threading
+from enum import IntEnum, StrEnum
 from time import perf_counter, sleep
 from typing import Any, Callable
-from enum import StrEnum, IntEnum
-from serial import (EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial,
-                    SerialTimeoutException)
+
+from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
 
 
 class CombinerCmd(StrEnum):
@@ -14,8 +14,8 @@ class CombinerCmd(StrEnum):
 
 
 class CombinerQuery(StrEnum):
-    AOMPower = "?PL" # Request power linked to AOM in mW
-    PercentAOMPower = "?PPL" # Request power linked to AOM in perecent
+    AOMPower = "?PL"  # Request power linked to AOM in mW
+    PercentAOMPower = "?PPL"  # Request power linked to AOM in perecent
 
 
 class Cmd(StrEnum):
@@ -54,8 +54,8 @@ class Query(StrEnum):
     LaserVoltage = "?IV"  # Request measured laser voltage
     TemperatureRegulationLoopStatus = "?T"  # Request Temperature Regulation Loop status
     PercentageSplitStatus = "?IPA"
-    LinkedPower = "?PL" # Request power linked to AOM in mW
-    PercentPower = "?PPL" # Request power linked to AOM in perecent
+    LinkedPower = "?PL"  # Request power linked to AOM in mW
+    PercentPower = "?PPL"  # Request power linked to AOM in perecent
 
 
 class FaultCodeField(IntEnum):
