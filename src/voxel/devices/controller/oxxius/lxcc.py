@@ -1,18 +1,117 @@
 import logging
 import threading
+from enum import IntEnum, StrEnum
 from time import perf_counter, sleep
 from typing import Any, Callable
 
-from oxxius_laser import OXXIUS_COM_SETUP, REPLY_TERMINATION, BoolVal, Cmd, FaultCodeField, Query
-from serial import Serial, SerialTimeoutException
+from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
+
+
+class CombinerCmd(StrEnum):
+    AOMPower = "PL"  # Sets the power linked to AOM in mW
+    PercentAOMPower = "PPL"  # Sets the power linked to AOM in perecent
+    ShutterState = "SH"  # Sets shutter to open or closed
+
+
+class CombinerQuery(StrEnum):
+    AOMPower = "?PL"  # Request power linked to AOM in mW
+    PercentAOMPower = "?PPL"  # Request power linked to AOM in perecent
+
+
+class Cmd(StrEnum):
+    LaserDriverControlMode = "ACC"  # Set laser mode: [Power=0, Current=1]
+    ExternalPowerControl = "AM"  # Enable(1)/Disable(0) External power control
+    LaserEmission = "L"  # Enable/Disable Laser Emission. Or DL?
+    LaserCurrent = "CM"  # Set laser current ##.# [mA] or C? C saves to memory
+    LaserPower = "P"  # Set laser power ###.# [mW] Or PM?
+    FiveSecEmissionDelay = "CDRH"  # Enable/Disable 5-second CDRH delay
+    FaultCodeReset = "RST"  # Clears all fault codes or resets the laser unit (0)
+    TemperatureRegulationLoop = "T"  # Set Temperature Regulation Loop
+    PercentageSplit = "IPA"  # Set % split between lasers
+    DigitalModulation = "TTL"  # Sets the digital high-speed modulation
+
+
+class Query(StrEnum):
+    DigitalModulation = "?TTL"
+    EmmissionKeyStatus = "?KEY"
+    LaserType = "INF?"
+    USBConfiguration = "?CDC"
+    LaserDriverControlMode = "?ACC"  # Request laser control mode
+    FaultCode = "?F"  # Request fault code
+    ExternalPowerControl = "?AM"  # Request external power control
+    BasePlateTemperature = "?BT"  # Request baseplate temp
+    FiveSecEmissionDelay = "?CDRH"  # Request 5-second CDRH Delay status
+    LaserOperatingHours = "?HH"  # Request laser operating hours.
+    LaserIdentification = "?HID"  # Request Laser type.
+    LaserEmission = "?L"  # Request laser emission status.
+    LaserPower = "?P"  # Request measured laser power.
+    LaserPowerSetting = "?SP"  # Request desired laser power setpoint.
+    MaximumLaserPower = "?MAXLP"  # Request maximum laser power.
+    LaserCurrent = "?C"  # Request measured laser current
+    LaserCurrentSetting = "?SC"  # Request desired laser current setpoint
+    MaximumLaserCurrent = "?MAXLC"  # Request maximum laser current.
+    InterlockStatus = "?INT"  # Request interlock status
+    LaserVoltage = "?IV"  # Request measured laser voltage
+    TemperatureRegulationLoopStatus = "?T"  # Request Temperature Regulation Loop status
+    PercentageSplitStatus = "?IPA"
+    LinkedPower = "?PL"  # Request power linked to AOM in mW
+    PercentPower = "?PPL"  # Request power linked to AOM in perecent
+
+
+class FaultCodeField(IntEnum):
+    NO_ALARM = (0,)
+    DIODE_CURRENT = (1,)
+    LASER_POWER = (2,)
+    POWER_SUPPLY = (3,)
+    DIODE_TEMPERATURE = (4,)
+    BASE_TEMPERATURE = (5,)
+    INTERLOCK = 7
+
+
+# Laser State Representation
+class OxxiusState(IntEnum):
+    WARMUP = (0,)
+    STANDBY = (2,)
+    LASER_EMISSION_ACTIVE = (3,)
+    INTERNAL_ERROR = (4,)
+    FAULT = (5,)
+    SLEEP = 6
+
+
+class OxxiusUSBConfiguration(IntEnum):
+    STANDARD_USB = 0
+    VIRTUAL_SERIAL_PORT = 1
+
+
+class OxxiusShutterState(IntEnum):
+    CLOSED = 0
+    OPEN = 1
+
+
+# Boolean command value that can also be compared like a boolean.
+class BoolVal(StrEnum):
+    OFF = "0"
+    ON = "1"
+
+
+OXXIUS_COM_SETUP = {
+    "baudrate": 9600,
+    "bytesize": EIGHTBITS,
+    "parity": PARITY_NONE,
+    "stopbits": STOPBITS_ONE,
+    "xonxoff": False,
+    "timeout": 1,
+}
+
+REPLY_TERMINATION = b"\r\n"
 
 UPDATE_RATE_HZ = 5.0
-
-lock = threading.RLock()
 
 L4CC_LASER_PREFIXES = ["L1", "L2", "L3", "L4"]
 
 L6CC_LASER_PREFIXES = ["L1", "L2", "L3", "L4", "L5", "L6"]
+
+lock = threading.RLock()
 
 
 def thread_locked(function: Callable) -> Callable:
@@ -96,7 +195,7 @@ class OxxiusController:
             return faults
 
     @thread_locked
-    def get(self, msg: Query, prefix: str = None) -> str:
+    def get(self, msg: Query | CombinerQuery, prefix: str = None) -> str:
         """
         Send a query command to the device.
 
@@ -110,11 +209,14 @@ class OxxiusController:
         if prefix == None:
             reply = self._send(msg.value)
         else:
-            reply = self._send(f"{prefix} {msg.value}")
+            if type(msg) is Query:
+                reply = self._send(f"{prefix} {msg.value}")
+            else:
+                reply = self._send(f"{msg.value}{prefix.upper().replace('L', '')}")
         return reply
 
     @thread_locked
-    def set(self, msg: Cmd, value: str | float | BoolVal, prefix: str) -> str:
+    def set(self, msg: Cmd | CombinerCmd, value: str | float | BoolVal, prefix: str) -> str:
         """
         Send a set command to the device.
 
@@ -127,7 +229,10 @@ class OxxiusController:
         :return: Device reply.
         :rtype: str
         """
-        return self._send(f"{prefix} {msg} {value}")
+        if type(msg) is Cmd:
+            return self._send(f"{prefix} {msg} {value}")
+        else:
+            return self._send(f"{msg}{prefix.upper().replace('L', '')} {value}")
 
     def get_power_mw(self) -> float:
         """
