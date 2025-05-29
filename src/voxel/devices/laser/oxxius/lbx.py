@@ -4,8 +4,8 @@ from oxxius_laser import LBX, BoolVal, Cmd, Query
 from sympy import Expr, solve, symbols
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
-from voxel.devices.controller.oxxius.lxcc import OxxiusController
 from voxel.devices.laser.base import BaseLaser
+from voxel.devices.controller.oxxius.lxcc import OxxiusController
 
 MODULATION_MODES = {
     "off": {"external_control_mode": BoolVal.OFF, "digital_modulation": BoolVal.OFF},
@@ -79,6 +79,7 @@ class OxxiusLBXLaser(BaseLaser):
         :return: None
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.ON, self._prefix)
+        self.log.info("laser enabled")
 
     def disable(self) -> None:
         """
@@ -87,6 +88,7 @@ class OxxiusLBXLaser(BaseLaser):
         :return: None
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.OFF, self._prefix)
+        self.log.info("laser disabled")
 
     @DeliminatedProperty(minimum=0, maximum=float("inf"))
     def power_setpoint_mw(self) -> float:
@@ -141,6 +143,7 @@ class OxxiusLBXLaser(BaseLaser):
                 if self._get_constant_current() == BoolVal.ON:
                     self.log.warning("Laser is in constant current mode so changing power will not change intensity")
                 self._controller.set(Cmd.LaserPower, value, self._prefix)
+        self.log.info(f"power set to {value} mW")
 
     @property
     def modulation_mode(self) -> str:
@@ -179,6 +182,7 @@ class OxxiusLBXLaser(BaseLaser):
             self._set_constant_current(BoolVal.OFF)
         self._controller.set(Cmd.DigitalModulation, states["digital_modulation"], self._prefix)
         self._controller.set(Cmd.ExternalPowerControl, states["external_control_mode"], self._prefix)
+        self.log.info(f"modulated mode set to {value}")
 
     def status(self) -> Dict[str, Union[str, float]]:
         """
@@ -198,6 +202,7 @@ class OxxiusLBXLaser(BaseLaser):
         self.disable()
         if self._controller.ser.is_open:
             self._controller.ser.close()
+        self.log.info("laser closed")
 
     @property
     def power_mw(self) -> float:
