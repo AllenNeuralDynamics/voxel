@@ -3,9 +3,8 @@ from typing import Dict, Union
 from oxxius_laser import LCX, BoolVal, Cmd, Query
 
 from voxel.descriptors.deliminated_property import DeliminatedProperty
-from voxel.devices.controller.oxxius.lxcc import OxxiusController
 from voxel.devices.laser.base import BaseLaser
-
+from voxel.devices.controller.oxxius.lxcc import OxxiusController
 
 class OxxiusLCXLaser(BaseLaser):
     """
@@ -50,6 +49,7 @@ class OxxiusLCXLaser(BaseLaser):
         :return: None
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.ON, self._prefix)
+        self.log.info("laser enabled")
 
     def disable(self) -> None:
         """
@@ -58,6 +58,7 @@ class OxxiusLCXLaser(BaseLaser):
         :return: None
         """
         self._controller.set(Cmd.LaserEmission, BoolVal.OFF, self._prefix)
+        self.log.info("laser disabled")
 
     @property
     def wavelength(self) -> float:
@@ -80,7 +81,7 @@ class OxxiusLCXLaser(BaseLaser):
         return float(self._controller.get(Query.LaserPowerSetting, self._prefix))
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: Union[float, int]) -> None:
+    def power_setpoint_mw(self, value: float) -> None:
         """
         Set the power setpoint.
 
@@ -93,6 +94,7 @@ class OxxiusLCXLaser(BaseLaser):
             self.log.error(f"Cannot set laser to {value}ml because it {reason}")
         else:
             self._controller.set(Cmd.LaserPower, value, self._prefix)
+        self.log.info(f"power set to {value} mW")
 
     @property
     def power_mw(self) -> float:
@@ -144,3 +146,4 @@ class OxxiusLCXLaser(BaseLaser):
         :return: None
         """
         self.disable()
+        self.log.info("laser closed")
