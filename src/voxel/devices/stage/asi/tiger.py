@@ -92,6 +92,7 @@ class TigerStage(BaseStage):
 
         # clear ring buffer incase there are persistent values
         self.tigerbox.reset_ring_buffer(axis=self.hardware_axis.upper())
+        self.mode = 'off'
 
         # set parameter values
         # (!!) these are hardcoded here and cannot

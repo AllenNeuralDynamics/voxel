@@ -1292,12 +1292,6 @@ class TigerController:
         while True in self.is_axis_moving(*axes).items():
             pass
 
-    @thread_locked
-    def clear_incoming_message_queue(self):
-        """Clear input buffer and reset skipped replies."""
-        self.skipped_replies = 0
-        self.ser.reset_input_buffer()
-
     # Low-Level Commands.
     def send(self, cmd_str: str, read_until: str = "\r\n", wait: bool = True):
         """Send a command; optionally wait for various conditions.
@@ -1309,19 +1303,13 @@ class TigerController:
         :param wait: wait until the reply has been received.
         """
         wait_for_output = wait  # wait for outgoing bytest to exit the PC.
-        wait_for_reply = wait  # wait until at least one line has been read back.
-        # TODO: clear input buffer before issuing a read-and-wait if the
-        #  recv buffer is full. Use in_waiting.
         self.log.debug(f"Sending: {repr(cmd_str)}")
+        self.ser.reset_input_buffer()
         self.ser.write(cmd_str.encode("ascii"))
         self._last_cmd_send_time = perf_counter()
         if wait_for_output:  # Wait for all bytes to exit the output buffer.
             while self.ser.out_waiting:
                 pass
-        # If we do not wait for a reply, we must track how many replies to read later.
-        if not wait_for_reply:
-            self.skipped_replies += 1
-            return
         # Every command issues a reply from the TigerController.
         # We must iterate through all skipped replies till we get ours.
         # TigerController delimits multiple lines with '\r' and replies with '\r\n'.
@@ -1336,10 +1324,7 @@ class TigerController:
             except SyntaxError as e:  # Technically, this could be a skipped reply.
                 self.log.error("Error occurred when sending: " f"{repr(cmd_str)}")
                 raise
-            if self.skipped_replies:
-                self.skipped_replies -= 1
-            else:
-                break
+            break
         return reply
 
     @thread_locked
@@ -1606,7 +1591,6 @@ class PositionUpdater:
         # returns a dict of {hardware axes: positions}
         while self.get_positions:
             try:
-                self.tigerbox.clear_incoming_message_queue()
                 position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
                 self.position_mm.update(position_mm)
             except:

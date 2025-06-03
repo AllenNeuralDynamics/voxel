@@ -356,7 +356,7 @@ class NIDAQ(BaseDAQ):
 
             # sanity check voltages for device range
             if np.max(voltages[:]) > device_max_volts or np.min(voltages[:]) < device_min_volts:
-                raise ValueError(f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts")
+                raise ValueError(f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts for {name} and {channel}")
 
             # store 1d voltage array into 2d waveform array
 

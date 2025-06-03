@@ -59,6 +59,8 @@ class OxxiusLBXLaser(BaseLaser):
         self._wavelength = wavelength
         self._coefficients = coefficients
         # initialize laser modulation mode to off
+        # note cannot change mode without first disabling laser
+        self.disable()
         self._set_constant_current(BoolVal.OFF)
         self.modulation_mode = "off"
 
