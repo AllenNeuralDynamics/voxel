@@ -546,7 +546,7 @@ class VieworksCamera(BaseCamera):
         #   pool back to the input pool, so it can be reused.
         column_count = self.grabber.remote.get("Width")
         row_count = self.grabber.remote.get("Height")
-        timeout_ms = 2000
+        timeout_ms = 5000
         try:
             with Buffer(self.grabber, timeout=timeout_ms) as buffer:
                 ptr = buffer.get_info(BUFFER_INFO_BASE, INFO_DATATYPE_PTR)  # grab pointer to new frame
