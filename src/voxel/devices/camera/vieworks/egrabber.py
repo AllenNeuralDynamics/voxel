@@ -513,7 +513,11 @@ class VieworksCamera(BaseCamera):
         """Stop the camera acquisition."""
         self.log.info("stopping camera")
         self.grabber.stop()
+        # reset stream
+        bit_packing_mode = self.grabber.stream.get("UnpackingMode")
         self.grabber.stream.execute("StreamReset")
+        # reset bitpacking mode -> only stream property
+        self.grabber.stream.set("UnpackingMode", bit_packing_mode)
 
     def abort(self) -> None:
         """Abort the camera acquisition."""
