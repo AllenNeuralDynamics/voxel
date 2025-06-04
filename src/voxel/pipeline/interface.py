@@ -9,7 +9,7 @@ from voxel.devices.camera import VoxelCameraProxy
 from .preview import (
     NewFrameCallback,
     PreviewFrame,
-    PreviewOptions,
+    PreviewConfig,
 )
 from voxel.devices.camera import VoxelCamera
 
@@ -73,7 +73,7 @@ class ICameraPipeline(ABC):
     # def update_preview_settings(self, settings: PreviewSettings) -> None: ...
 
     @abstractmethod
-    def update_preview_transform(self, transform: PreviewOptions) -> None: ...
+    def update_preview_transform(self, transform: PreviewConfig) -> None: ...
 
     @abstractmethod
     def start_preview(self, on_new_frame: NewFrameCallback) -> None: ...

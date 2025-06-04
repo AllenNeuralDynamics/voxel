@@ -23,7 +23,7 @@ from .preview import (
     PreviewMetadata,
     PreviewFrame,
     PreviewSettings,
-    PreviewOptions,
+    PreviewConfig,
     PreviewManager,
 )
 
@@ -47,7 +47,7 @@ class LocalCameraPipeline(ICameraPipeline):
         self._latest_frame: np.ndarray | None = None
 
         self._preview_settings = PreviewSettings()
-        self._preview_transform = PreviewOptions()
+        self._preview_transform = PreviewConfig()
         self._preview_thread: threading.Thread | None = None
         self._halt_event = threading.Event()
         self._transform_lock = threading.Lock()
@@ -117,7 +117,7 @@ class LocalCameraPipeline(ICameraPipeline):
     def frame_rate_hz(self) -> float:
         return self.camera.frame_rate_hz
 
-    def update_preview_transform(self, transform: PreviewOptions) -> None:
+    def update_preview_transform(self, transform: PreviewConfig) -> None:
         with self._transform_lock:
             self._preview_transform = transform
 
@@ -232,7 +232,7 @@ class LocalCameraPipeline(ICameraPipeline):
         self,
         raw_frame: np.ndarray,
         frame_idx: int = 0,
-        transform: PreviewOptions | None = None,
+        transform: PreviewConfig | None = None,
     ) -> PreviewFrame:
         """
         Generate a PreviewFrame from the raw frame using the current preview_settings.
@@ -252,7 +252,7 @@ class LocalCameraPipeline(ICameraPipeline):
             preview_height=preview_height,
             full_width=full_width,
             full_height=full_height,
-            transform=transform or PreviewOptions(x=0.0, y=0.0, k=0.0),
+            transform=transform or PreviewConfig(x=0.0, y=0.0, k=0.0),
             channel_name="<channel_name>",
         )
 

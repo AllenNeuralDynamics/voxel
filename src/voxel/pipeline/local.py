@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
+import uuid
 
 import numpy as np
 
@@ -14,7 +15,7 @@ from voxel.utils.common import get_available_disk_space_mb
 from voxel.utils.log_config import get_component_logger, get_logger
 from voxel.utils.vec import Vec3D
 
-from .preview import PreviewManager
+from .preview import NewFrameCallback, PreviewFrame, PreviewManager
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
@@ -237,7 +238,8 @@ class CameraPipeline(ICameraPipeline):
         self._state_lock = threading.Lock()
         self._state = PipelineState.IDLE
 
-        self._preview_manager = PreviewManager()
+        self._new_frame_observers: dict[str, NewFrameCallback] = {}
+        self._preview_manager = PreviewManager(on_new_frame=self._notify_new_frame_observers, preview_width=1024)
 
         self._active_acq_runner: StackAcquisitionRunner | None = None
         self._live_view_thread: threading.Thread | None = None
@@ -260,6 +262,25 @@ class CameraPipeline(ICameraPipeline):
     def state(self) -> PipelineState:
         with self._state_lock:
             return self._state
+
+    def register_new_frame_observer(self, observer: NewFrameCallback) -> str:
+        """Register a callback to be notified of new preview frames."""
+        observer_id = str(uuid.uuid4())
+        self._new_frame_observers[observer_id] = observer
+        self.log.debug(f"New frame observer registered: {observer_id}")
+        return observer_id
+
+    def unregister_new_frame_observer(self, observer_id: str) -> None:
+        """Unregister a callback for new preview frames."""
+        if observer_id in self._new_frame_observers:
+            del self._new_frame_observers[observer_id]
+            self.log.debug(f"New frame observer unregistered: {observer_id}")
+        else:
+            self.log.warning(f"Attempted to unregister non-existent observer: {observer_id}")
+
+    def _notify_new_frame_observers(self, new_frame: "PreviewFrame") -> None:
+        for observer in self._new_frame_observers.values():
+            observer(new_frame)
 
     def _set_state(self, new_state: PipelineState, action_description: str = ""):
         # Internal helper, assumes caller (public method) has ensured validity
