@@ -10,7 +10,7 @@ from voxel.utils.log_config import get_component_logger
 
 from .interface import PipelineStatus, StackAcquisitionConfig
 from .local import LocalCameraPipeline, ICameraPipeline
-from .preview_frame import NewFrameCallback, PreviewFrame, PreviewTransform
+from .preview import NewFrameCallback, PreviewFrame, PreviewOptions
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCameraProxy
@@ -83,7 +83,7 @@ class CameraPipelineProxy(ICameraPipeline):
     #     """
     #     self.rpc_client.update_preview_settings(settings.model_dump())
 
-    def update_preview_transform(self, transform: "PreviewTransform") -> None:
+    def update_preview_transform(self, transform: "PreviewOptions") -> None:
         """
         Update the remote pipeline's preview transform.
         We assume the remote service exposes an update_preview_transform method.
@@ -225,7 +225,7 @@ class CameraPipelineService:
     #     self.pipeline.update_preview_settings(PreviewSettings(**settings))
 
     def update_preview_transform(self, transform: dict) -> None:
-        self.pipeline.update_preview_transform(PreviewTransform(**transform))
+        self.pipeline.update_preview_transform(PreviewOptions(**transform))
 
     def _publish_preview_frame(self, frame: PreviewFrame | bytes) -> None:
         """

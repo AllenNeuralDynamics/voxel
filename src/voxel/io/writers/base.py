@@ -23,6 +23,7 @@ class WriterConfig:
     position_um: Vec3D[float]
     file_name: str
     channel_name: str
+    batch_size: int
     channel_idx: int = 0
     voxel_size: Vec3D[float] = Vec3D(1.0, 1.0, 1.0)
 
@@ -58,7 +59,7 @@ class VoxelWriter:
         self.voxel_size_unit = UnitsLength.MICROMETER
 
         self.timeout = 5  # TODO - Utilize this timeout
-        self.metadata: WriterConfig
+        self.config: WriterConfig
         self.ome: OME
         self._ome_xml: str
 
@@ -154,28 +155,28 @@ class VoxelWriter:
         pass
 
     @abstractmethod
-    def configure(self, metadata: WriterConfig) -> None:
+    def configure(self, config: WriterConfig) -> None:
         """Configure the writer with the given properties.
         Ensure that self._props is assigned in this method.
         :param props: Configuration properties
         :type props: WriterProps
         """
-        self.metadata = metadata
-        self.dir = Path(self.metadata.path)
+        self.config = config
+        self.dir = Path(self.config.path)
         if not self.dir.exists():
             self.dir.mkdir(parents=True, exist_ok=True)
             self.log.warning(f"Directory {self.dir} did not exist. Created it.")
         self.log.info(f"Configured writer with output directory: {self.dir}")
 
-        self._expected_batches = ceil(self.metadata.frame_count / self.batch_size_px)
+        self._expected_batches = ceil(self.config.frame_count / self.batch_size_px)
 
         if hasattr(self, "_dbl_buf") and self._dbl_buf:
             self._dbl_buf.close_and_unlink()
             del self._dbl_buf
         batch_shape = (
             self.batch_size_px,
-            self.metadata.frame_shape.y,
-            self.metadata.frame_shape.x,
+            self.config.frame_shape.y,
+            self.config.frame_shape.x,
         )
         self._dbl_buf = SharedDoubleBuffer(batch_shape, self.dtype)
         self.log.info(f"Allocated buffer with shape: {self._dbl_buf.shape}")
@@ -194,7 +195,7 @@ class VoxelWriter:
         :type props: WriterProps
         :raises RuntimeError: If writer fails to start
         """
-        if not self.metadata:
+        if not self.config:
             raise RuntimeError("Writer properties not set. Call configure() before starting the writer.")
         if not self._dbl_buf:
             self.log.critical("Unable to start writer. Buffer not allocated.")
@@ -232,7 +233,7 @@ class VoxelWriter:
         self._frames_added.value += 1
         # self.log.debug(f"Added frame {self.frames_added} to buffer")
 
-        is_last_frame = self.frames_added == self.metadata.frame_count
+        is_last_frame = self.frames_added == self.config.frame_count
         buffer_full = self.frames_added > 0 and self.frames_added % self._dbl_buf.shape[0] == 0
 
         if buffer_full or is_last_frame:
@@ -349,8 +350,8 @@ class VoxelWriter:
         # Create Channel object
         channels = [
             Channel(
-                id=f"Channel:0:{self.metadata.channel_idx}",
-                name=self.metadata.channel_name,
+                id=f"Channel:0:{self.config.channel_idx}",
+                name=self.config.channel_name,
                 samples_per_pixel=1,
             )
         ]
@@ -360,14 +361,14 @@ class VoxelWriter:
             id="Pixels:0",
             dimension_order=self.dimension_order,
             type=self.pixel_type,
-            size_x=int(self.metadata.frame_shape.x),
-            size_y=int(self.metadata.frame_shape.y),
-            size_z=self.metadata.frame_count,
+            size_x=int(self.config.frame_shape.x),
+            size_y=int(self.config.frame_shape.y),
+            size_z=self.config.frame_count,
             size_c=1,
             size_t=1,
-            physical_size_x=self.metadata.voxel_size.x,
-            physical_size_y=self.metadata.voxel_size.y,
-            physical_size_z=self.metadata.voxel_size.z,
+            physical_size_x=self.config.voxel_size.x,
+            physical_size_y=self.config.voxel_size.y,
+            physical_size_z=self.config.voxel_size.z,
             physical_size_x_unit=self.voxel_size_unit,
             physical_size_y_unit=self.voxel_size_unit,
             physical_size_z_unit=self.voxel_size_unit,
@@ -377,7 +378,7 @@ class VoxelWriter:
         # Create Image object
         image = Image(
             id="Image:0",
-            name=self.metadata.file_name,
+            name=self.config.file_name,
             pixels=pixels,
         )
 

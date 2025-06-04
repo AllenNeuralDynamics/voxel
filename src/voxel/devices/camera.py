@@ -8,6 +8,7 @@ import numpy as np
 
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int
+from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec2D
 import zerorpc
 
@@ -361,6 +362,15 @@ class VoxelCamera(VoxelDevice):
         pass
 
     @property
+    def pixel_count(self) -> int:
+        """Get the total number of pixels in the camera image.
+
+        :return: The total number of pixels in the camera image.
+        :rtype: int
+        """
+        return self.frame_size_px.x * self.frame_size_px.y
+
+    @property
     @abstractmethod
     def frame_size_mb(self) -> float:
         """Get the size of the camera image in MB.
@@ -549,6 +559,7 @@ class VoxelCameraProxy:
         """
         self.client = zerorpc.Client()
         self.client.connect(remote_address)
+        self.log = get_component_logger(self)
 
     # -- Methods --
     def prepare(self) -> None:

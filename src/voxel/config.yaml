@@ -2,6 +2,15 @@ instrument:
   metadata:
     name: Exaspim 2
     description: "A simulated exaspim 2 instrument for testing purposes"
+  io:
+    writers:
+      imaris:
+        driver: voxel.io.writers.imaris.ImarisWriter
+      simple_writer:
+        driver: voxel.io.writers.simple.SimpleWriter
+    transfers:
+      robocopy:
+        driver: voxel.io.transfers.robocopy.RobocopyFileTransfer
 
   devices:
     camera_1:
@@ -91,7 +100,7 @@ instrument:
       kwds:
         dimension: Y
 
-  assemblies:
+  layout:
     stage:
       x: x-axis
       y: y-axis
@@ -123,48 +132,82 @@ instrument:
       laser_507:
         aux_devices: *shared_illumination_devices
 
-  io_specs:
-    writers:
-      imaris:
-        driver: voxel.pipeline.io.writers.imaris.ImarisWriter
-      simple_writer:
-        driver: voxel.pipeline.io.writers.simple.SimpleWriter
-    transfers:
-      robocopy:
-        driver: voxel.pipeline.io.transfers.robocopy.RobocopyFileTransfer
-
   channels:
     DAPI_CAM1:
       detection: camera_1
       illumination: laser_405
-      filters:
-        fw_main: LP420 }
-        fw_1: BP460-50 }
-      settings:
-        camera_1:
-          exposure_time:
-            - { z: 0, exposure_time: 0.1 }
+      filters: { fw_main: LP420, fw_1: BP460-50 }
     GFP_CAM1:
       detection: camera_1
       illumination: laser_488
-      filters:
-        fw_main: LP420
-        fw_1: BP525-50
+      filters: { fw_main: LP420, fw_1: BP525-50 }
     RFP_CAM2:
       detection: camera_2
       illumination: laser_561
-      filters:
-        fw_main: LP570
-        fw_2: BP600-50
+      filters: { fw_main: LP570, fw_2: BP600-50 }
     YFP_CAM1:
       detection: camera_1
       illumination: laser_507
-      filters:
-        fw_main: LP420
-        fw_1: BP540-30
+      filters: { fw_main: LP420, fw_1: BP540-30 }
     GFP_CAM2:
       detection: camera_2
       illumination: laser_488
-      filters:
-        fw_main: LP420
-        fw_2: BP525-50
+      filters: { fw_main: LP420, fw_2: BP525-50 }
+
+imaging:
+  blocks:
+    GFPxRFP:
+      description:
+        "Simultaneously capture GFP using laser 488 and RFP using laser 561"
+      channels:
+        - GFP_CAM1
+        - RFP_CAM2
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.1 }
+        camera_2:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+    YFP:
+      channels:
+        - YFP_CAM1
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+    DAPIxGFP:
+      channels:
+        - DAPI_CAM1
+        - GFP_CAM2
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.1 }
+    RFPxYFP:
+      channels:
+        - YFP_CAM1
+        - RFP_CAM2
+      settings:
+        type:camera:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+    DAPIxRFP:
+      channels:
+        - DAPI_CAM1
+        - RFP_CAM2
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.1 }
+        camera_2:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+
+  plans:
+    - name: standard
+      description: "Standard imaging plan for Exaspim 2"
+      blocks:
+        - GFPxRFP
+        - RFPxYFP
+        - RFPxYFP

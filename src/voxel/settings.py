@@ -7,6 +7,7 @@ import numpy as np
 from pydantic import BaseModel, model_validator
 
 from voxel.devices.base import VoxelDevice
+from voxel.devices.camera import VoxelCameraProxy
 from voxel.utils.descriptors.deliminated import DeliminatedProperty
 from voxel.utils.descriptors.enumerated import EnumeratedProperty
 
@@ -143,7 +144,7 @@ class ZSetting[T](BaseModel):
 type SettingsBlock = dict[str, ZSetting[Any]]  # prop_name -> ZSetting for that property
 
 
-class ConfiguredDevice[T: VoxelDevice]:
+class ConfiguredDevice[T: VoxelDevice | VoxelCameraProxy]:
     """
     A class representing a device with a configuration.
     The configuration is a dictionary containing ZSettings.

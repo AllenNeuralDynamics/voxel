@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from voxel.pipeline.io.writers.base import VoxelWriter, WriterConfig
+from voxel.io.writers.base import VoxelWriter, WriterConfig
 
 from .sdk import npy2bdv
 
@@ -97,44 +97,44 @@ class BdvWriter(VoxelWriter):
     def batch_size_px(self) -> int:
         return CHUNK_SIZE_PX
 
-    def configure(self, metadata: WriterConfig) -> None:
-        super().configure(metadata)
-        self._output_file = self.dir / f"{self.metadata.file_name}.n5"
+    def configure(self, config: WriterConfig) -> None:
+        super().configure(config)
+        self._output_file = self.dir / f"{self.config.file_name}.n5"
         self._output_file = self._output_file.resolve()
 
-        self._tiles_set.add(tuple(self.metadata.position_um))
-        self._channels_set.add(self.metadata.channel_name)
+        self._tiles_set.add(tuple(self.config.position_um))
+        self._channels_set.add(self.config.channel_name)
 
         # self._channel_idx = self.metadata.channel_idx
-        dict_key = (len(self._tiles_set), self.metadata.channel_idx)
+        dict_key = (len(self._tiles_set), self.config.channel_idx)
 
         if dict_key in self._tile_shape_dict:
             raise ValueError(f"Duplicate tile/channel configuration: {dict_key}")
 
         self._tile_shape_dict[dict_key] = (
-            self.metadata.frame_count,
-            self.metadata.frame_shape.y,
-            self.metadata.frame_shape.x,
+            self.config.frame_count,
+            self.config.frame_shape.y,
+            self.config.frame_shape.x,
         )
 
-        self.metadata.voxel_size.y *= np.cos(self._theta_deg * np.pi / 180.0)
+        self.config.voxel_size.y *= np.cos(self._theta_deg * np.pi / 180.0)
 
         # shearing based on theta and y/z pixel sizes
-        shear = -np.tan(self._theta_deg * np.pi / 180.0) * self.metadata.voxel_size.y / self.metadata.voxel_size.z
+        shear = -np.tan(self._theta_deg * np.pi / 180.0) * self.config.voxel_size.y / self.config.voxel_size.z
         self._affine_deskew_dict[dict_key] = np.array(
             ([1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, shear, 1.0, 0.0])
         )
 
-        scale_x = self.metadata.voxel_size.x / self.metadata.voxel_size.y
+        scale_x = self.config.voxel_size.x / self.config.voxel_size.y
         scale_y = 1.0
-        scale_z = self.metadata.voxel_size.z / self.metadata.voxel_size.y
+        scale_z = self.config.voxel_size.z / self.config.voxel_size.y
         self._affine_scale_dict[dict_key] = np.array(
             ([scale_x, 0.0, 0.0, 0.0], [0.0, scale_y, 0.0, 0.0], [0.0, 0.0, scale_z, 0.0])
         )
 
-        shift_x = scale_x * (self.metadata.position_um.x / self.metadata.voxel_size.x)
-        shift_y = scale_y * (self.metadata.position_um.y / self.metadata.voxel_size.y)
-        shift_z = scale_z * (self.metadata.position_um.z / self.metadata.voxel_size.z)
+        shift_x = scale_x * (self.config.position_um.x / self.config.voxel_size.x)
+        shift_y = scale_y * (self.config.position_um.y / self.config.voxel_size.y)
+        shift_z = scale_z * (self.config.position_um.z / self.config.voxel_size.z)
         self._affine_shift_dict[dict_key] = np.array(
             ([1.0, 0.0, 0.0, shift_x], [0.0, 1.0, 0.0, shift_y], [0.0, 0.0, 1.0, shift_z])
         )
@@ -171,15 +171,15 @@ class BdvWriter(VoxelWriter):
         # append all views based to bdv writer
         # this is necessary for bdv writer to have the metadata to write the xml at the end
         # if a view already exists in the bdv file, it will be skipped and not overwritten
-        image_size_z = int(ceil(self.metadata.frame_count / CHUNK_SIZE_PX) * CHUNK_SIZE_PX)
+        image_size_z = int(ceil(self.config.frame_count / CHUNK_SIZE_PX) * CHUNK_SIZE_PX)
         for key in self._tile_shape_dict:
             append_tile, append_channel = key
             self._npy2bdv.append_view(
                 stack=None,
-                virtual_stack_dim=(image_size_z, self.metadata.frame_shape.y, self.metadata.frame_shape.x),
+                virtual_stack_dim=(image_size_z, self.config.frame_shape.y, self.config.frame_shape.x),
                 tile=append_tile,
                 channel=append_channel,
-                voxel_size_xyz=tuple(self.metadata.voxel_size),
+                voxel_size_xyz=tuple(self.config.voxel_size),
                 voxel_units="um",
             )
 
@@ -190,7 +190,7 @@ class BdvWriter(VoxelWriter):
             substack=batch_data,
             z_start=self.batch_count * self.batch_size_px,
             tile=self._tile_idx,
-            channel=self.metadata.channel_idx,
+            channel=self.config.channel_idx,
         )
 
     def _finalize(self) -> None:
@@ -221,4 +221,4 @@ class BdvWriter(VoxelWriter):
             )
         self._npy2bdv.close()
         self._tile_idx += 1
-        self.log.info(f"Finalized. Wrote {self.metadata.frame_count} frames to {self._output_file}")
+        self.log.info(f"Finalized. Wrote {self.config.frame_count} frames to {self._output_file}")

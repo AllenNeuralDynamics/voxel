@@ -138,10 +138,16 @@ def get_component_logger(obj) -> logging.Logger:
     :param obj: The component object for which to get the logger.
     :return: A Logger instance.
     """
-    if hasattr(obj, "name") and isinstance(obj.name, str) and obj.name != "":
-        return get_logger(f"{obj.name}")
-        # return get_logger(f"{obj.__class__.__name__}[{obj.name}]")
-    return get_logger(obj.__class__.__name__)
+    try:
+        name = obj.name
+    except AttributeError:
+        name = obj.__class__.__name__
+    return get_logger(name)
+
+    # if hasattr(obj, "name") and isinstance(obj.name, str) and obj.name != "":
+    #     return get_logger(f"{obj.name}")
+    #     # return get_logger(f"{obj.__class__.__name__}[{obj.name}]")
+    # return get_logger(obj.__class__.__name__)
 
 
 def _create_handlers(log_file: str | None, detailed: bool = True, fancy: bool = True) -> list[logging.Handler]:

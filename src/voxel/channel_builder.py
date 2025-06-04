@@ -1,8 +1,8 @@
 from typing import Self
 
-from voxel.channel import ImagingChannel
+from voxel.channel import Channel
 from voxel.devices import VoxelCamera, VoxelDevice, VoxelFilterWheel, VoxelLaser
-from voxel.instrument import ChannelConfiguration, DetectionUnitModel, IlluminationUnitModel, Instrument
+from voxel.instrument import ChannelConfiguration, DetectionPathDefinition, IlluminationPathDefinition, Instrument
 from voxel.settings import SettingsBlock, ZPoint, ZSetting
 
 
@@ -12,12 +12,12 @@ class ChannelBuilder:
         self._reset_state()
 
     @property
-    def detection_assemblies(self) -> dict[str, DetectionUnitModel]:
+    def detection_assemblies(self) -> dict[str, DetectionPathDefinition]:
         """Get the detection assemblies in the instrument."""
         return self.instrument.assembly.detection
 
     @property
-    def illumination_assemblies(self) -> dict[str, IlluminationUnitModel]:
+    def illumination_assemblies(self) -> dict[str, IlluminationPathDefinition]:
         """Get the illumination assemblies in the instrument."""
         return self.instrument.assembly.illumination
 
@@ -28,8 +28,8 @@ class ChannelBuilder:
         self._laser: VoxelLaser | None = None
         self._fw_settings: dict[str, tuple[VoxelFilterWheel, str]] = {}  # {fw_name: (fw_obj, filter_name)}
         self._aux_devices: dict[str, VoxelDevice] = {}  # Auxiliary devices from assemblies
-        self._detection_assembly: DetectionUnitModel | None = None
-        self._illumination_assembly: IlluminationUnitModel | None = None
+        self._detection_assembly: DetectionPathDefinition | None = None
+        self._illumination_assembly: IlluminationPathDefinition | None = None
         # Potentially other settings for the channel
         self._channel_specific_settings: dict[str, SettingsBlock] = {}  # {setting_name: setting_block}
 
@@ -140,7 +140,7 @@ class ChannelBuilder:
                 settings[prop_name] = ZSetting(points=[setting])
         return self
 
-    def build(self) -> ImagingChannel:
+    def build(self) -> Channel:
         """
         Validates the current configuration, builds the Channel object,
         adds it to the instrument, and returns the created Channel.
@@ -170,7 +170,7 @@ class ChannelBuilder:
             settings=self._channel_specific_settings,
         )
 
-        channel = ImagingChannel.from_config(config=config, channel_name=self._channel_name, instrument=self.instrument)
+        channel = Channel.from_config(config=config, channel_name=self._channel_name, instrument=self.instrument)
 
         self.instrument.add_channel(channel)  # Adds to the instrument's dictionary
 

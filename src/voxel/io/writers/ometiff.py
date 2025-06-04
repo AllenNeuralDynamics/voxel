@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import tifffile as tf
 
-from voxel.pipeline.io.writers.base import PixelType, VoxelWriter, WriterConfig
+from voxel.io.writers.base import PixelType, VoxelWriter, WriterConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,11 +45,11 @@ class OMETiffWriter(VoxelWriter):
     def batch_size_px(self, value: int) -> None:
         self._batch_size_px = value
 
-    def configure(self, metadata: WriterConfig) -> None:
-        super().configure(metadata)
-        self.output_file = self.dir / f"{self.metadata.file_name}.ome.tiff"
-        num_frames = f"Configured OME-TIFF writer with {self.metadata.frame_count} frames"
-        frame_shape = f"of shape {self.metadata.frame_shape.x}px x {self.metadata.frame_shape.y}px"
+    def configure(self, config: WriterConfig) -> None:
+        super().configure(config)
+        self.output_file = self.dir / f"{self.config.file_name}.ome.tiff"
+        num_frames = f"Configured OME-TIFF writer with {self.config.frame_count} frames"
+        frame_shape = f"of shape {self.config.frame_shape.x}px x {self.config.frame_shape.y}px"
         batch_size = f"in batches of {self._batch_size_px}."
         self.log.info(f"{num_frames} {frame_shape} {batch_size}")
 
@@ -87,7 +87,7 @@ class OMETiffWriter(VoxelWriter):
         except Exception as e:
             self.log.error(f"Failed to close TiffWriter: {e}")
         self.log.info(
-            f"Processed {self.metadata.frame_count} frames in {self._batch_count} batches. Saved to {self.output_file}."
+            f"Processed {self.config.frame_count} frames in {self._batch_count} batches. Saved to {self.output_file}."
         )
 
 
@@ -96,12 +96,12 @@ def test_tiffwriter():
     from voxel.utils.frame_gen import generate_spiral_frames  # , generate_checkered_frames
     from voxel.utils.vec import Vec2D, Vec3D
 
-    writer = OMETiffWriter(name="tiff_writer", compression="zstd", batch_size_px=128)
+    writer = OMETiffWriter(name="tiff_writer", compression="zstd")
 
     NUM_BATCHES = 5
     frame_shape = Vec2D(512, 512)
     frame_count = writer.batch_size_px * NUM_BATCHES
-    metadata = WriterConfig(
+    config = WriterConfig(
         path="test_output/ome_tiff_writer",
         frame_count=frame_count,
         frame_shape=frame_shape,
@@ -109,9 +109,10 @@ def test_tiffwriter():
         file_name="voxel_data_compressed",
         voxel_size=Vec3D(0.1, 0.1, 1.0),
         channel_name="Channel0",
+        batch_size=128,
     )
 
-    writer.configure(metadata)
+    writer.configure(config)
     writer.log.info(f"Expecting: {frame_count} frames of {frame_shape.x}x{frame_shape.y} in {NUM_BATCHES} batches")
     writer.start()
 

@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from voxel.devices.camera import VoxelCameraProxy
-from .preview_frame import (
+from .preview import (
     NewFrameCallback,
     PreviewFrame,
-    PreviewTransform,
+    PreviewOptions,
 )
 from voxel.devices.camera import VoxelCamera
 
@@ -20,11 +20,15 @@ if TYPE_CHECKING:
 class PipelineStatus(IntEnum):
     """Status of the engine."""
 
-    RUNNING = 3
-    CONFIGURED = 2
-    PREVIEW = 1
     INACTIVE = 0
+    PREVIEWING = 10
+    STACK_CONFIGURED = 20
+    BATCH_ACQUIRING = 21
+    BATCH_COMPLETE = 22
+    STACK_FINALIZING = 30
     ERROR = -1
+
+    RUNNING = 3
 
 
 class StackAcquisitionConfig(BaseModel):
@@ -69,7 +73,7 @@ class ICameraPipeline(ABC):
     # def update_preview_settings(self, settings: PreviewSettings) -> None: ...
 
     @abstractmethod
-    def update_preview_transform(self, transform: PreviewTransform) -> None: ...
+    def update_preview_transform(self, transform: PreviewOptions) -> None: ...
 
     @abstractmethod
     def start_preview(self, on_new_frame: NewFrameCallback) -> None: ...

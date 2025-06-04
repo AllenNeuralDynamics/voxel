@@ -1,18 +1,32 @@
 from dataclasses import dataclass
 from typing import Self, cast
 
+from pydantic import BaseModel, Field
+
 from voxel.devices import VoxelDevice, VoxelLaser
 from voxel.devices.camera import VoxelCamera
 from voxel.devices.filter_wheel import VoxelFilterWheel
-from voxel.instrument import ChannelConfiguration, Instrument, OpticalPathUnit
+from voxel.instrument import ChannelConfiguration, Instrument, OpticalPathDefinition
 from voxel.pipeline.local import (
     ICameraPipeline,
     PipelineStatus,
     StackAcquisitionConfig,
 )
-from voxel.pipeline.preview_frame import NewFrameCallback, PreviewFrame
+from voxel.pipeline.preview import NewFrameCallback, PreviewFrame
 from voxel.settings import ConfiguredDevice, SettingsBlock
 from voxel.utils.log_config import get_component_logger
+
+
+class ChannelDefinition(BaseModel):
+    detection: str
+    illumination: str
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+class ImagingChannel:
+    def __init__(self, name: str, definition: ChannelDefinition, instrument: Instrument):
+        self.name = name
+        self.
 
 
 @dataclass
@@ -80,7 +94,7 @@ class IlluminationUnit:
 
 
 @dataclass
-class ImagingChannel:
+class Channel:
     name: str
     detection: DetectionUnit
     illumination: IlluminationUnit
@@ -112,7 +126,7 @@ class ImagingChannel:
         :param config: The stack acquisition configuration.
         :return: A list of frame ranges for the acquisition. Used when calling acquire_batch.
         """
-        if self.detection.pipeline.state == PipelineStatus.PREVIEW:
+        if self.detection.pipeline.state == PipelineStatus.PREVIEWING:
             self.stop_preview()
         self.detection.set_filters(self.filters)
         return self.detection.pipeline.prepare_stack_acquisition(config)
@@ -182,9 +196,9 @@ class ImagingChannel:
         :return: A Channel instance.
         """
 
-        def create_configured_aux_devices(assembly: OpticalPathUnit) -> dict[str, ConfiguredDevice[VoxelDevice]]:
+        def create_configured_aux_devices(unit: OpticalPathDefinition) -> dict[str, ConfiguredDevice[VoxelDevice]]:
             devices = {}
-            for name in assembly.aux_devices:
+            for name in unit.aux_devices:
                 device = instrument.devices[name]
                 settings = config.settings.get(name)
                 devices[name] = ConfiguredDevice(device=device, settings=settings)

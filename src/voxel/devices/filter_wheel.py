@@ -23,3 +23,9 @@ class VoxelFilterWheel(VoxelDevice):
     def current_filter(self, filter_name: str) -> None:
         """Set the current filter to the specified filter name."""
         pass
+
+    def set_filter(self, filter_name: str) -> None:
+        """Set the current filter to the specified filter name."""
+        if filter_name not in self.filters:
+            raise ValueError(f"Filter '{filter_name}' is not available in the filter wheel.")
+        self.current_filter = filter_name

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from voxel.pipeline.io.writers.base import PixelType, VoxelWriter, WriterConfig
+from voxel.io.writers.base import PixelType, VoxelWriter, WriterConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -25,13 +25,13 @@ class SimpleWriter(VoxelWriter):
     def batch_size_px(self) -> int:
         return 64 // 1
 
-    def configure(self, metadata: WriterConfig) -> None:
-        super().configure(metadata)
-        self._output_file = self.dir / f"{metadata.file_name}.txt"
+    def configure(self, config: WriterConfig) -> None:
+        super().configure(config)
+        self._output_file = self.dir / f"{config.file_name}.txt"
 
         self.log.info(
-            f"Configured writer with {self.metadata.frame_count} frames "
-            f"of shape: {self.metadata.frame_shape.x}x{self.metadata.frame_shape.y}"
+            f"Configured writer with {self.config.frame_count} frames "
+            f"of shape: {self.config.frame_shape.x}x{self.config.frame_shape.y}"
         )
 
     def _initialize(self) -> None:
@@ -40,9 +40,9 @@ class SimpleWriter(VoxelWriter):
             f.write(f"Initialized: {datetime.now().astimezone():%Y-%m-%d %H:%M:%S}\n")
             f.write(f"{'-'*80}\n")
             f.write("Metadata:\n")
-            f.write(f"{json.dumps(self.metadata.to_dict(), indent=2)}\n")
+            f.write(f"{json.dumps(self.config.to_dict(), indent=2)}\n")
             f.write(f"{'-'*80}\n")
-        self.log.info(f"Initialized. Expecting {self.metadata.frame_count} frames in {self.batch_size_px} px batches")
+        self.log.info(f"Initialized. Expecting {self.config.frame_count} frames in {self.batch_size_px} px batches")
 
     def _process_batch(self, batch_data) -> None:
         num_frames = int(batch_data.shape[0])
@@ -94,6 +94,7 @@ def test_writer():
             position_um=Vec3D(0.0, 0.0, 0.0),
             file_name="test_file_power_of_2",
             channel_name="Channel0",
+            batch_size=writer.batch_size_px,
         )
     )
     writer.start()

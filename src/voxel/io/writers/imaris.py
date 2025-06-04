@@ -6,7 +6,7 @@ from math import ceil
 import numpy as np
 from PyImarisWriter import PyImarisWriter as pw
 
-from voxel.pipeline.io.writers.base import (
+from voxel.io.writers.base import (
     Pixels_DimensionOrder,
     PixelType,
     VoxelWriter,
@@ -89,15 +89,16 @@ class ImarisWriter(VoxelWriter):
         clone.dimension_order = self.dimension_order
         return clone
 
-    def configure(self, metadata: WriterConfig) -> None:
-        super().configure(metadata)
-        self._output_file = self.dir / f"{self.metadata.file_name}.ims"
+    def configure(self, config: WriterConfig) -> None:
+        self._batch_size_px = config.batch_size or self.DEFAULT_BATCH_SIZE
+        super().configure(config)
+        self._output_file = self.dir / f"{self.config.file_name}.ims"
 
-        num_batches = ceil(self.metadata.frame_count / self._batch_size_px)
+        num_batches = ceil(self.config.frame_count / self._batch_size_px)
 
         self.log.info(
-            f"Expecting: {self.metadata.frame_count} frames "
-            f"of shape {self.metadata.frame_shape.x}px x {self.metadata.frame_shape.y}px "
+            f"Expecting: {self.config.frame_count} frames "
+            f"of shape {self.config.frame_shape.x}px x {self.config.frame_shape.y}px "
             f"in {num_batches} batches of up to {self._batch_size_px} frames."
         )
 
@@ -123,8 +124,8 @@ class ImarisWriter(VoxelWriter):
         )
 
         batch_size = pw.ImageSize(
-            x=self.metadata.frame_shape.x,
-            y=self.metadata.frame_shape.y,
+            x=self.config.frame_shape.x,
+            y=self.config.frame_shape.y,
             z=self._batch_size_px,
             c=1,
             t=1,
@@ -133,7 +134,7 @@ class ImarisWriter(VoxelWriter):
         self._blocks_per_batch = batch_size / block_size
 
         image_size = batch_size
-        image_size.z = int(ceil(self.metadata.frame_count / self.batch_size_px)) * self.batch_size_px
+        image_size.z = int(ceil(self.config.frame_count / self.batch_size_px)) * self.batch_size_px
 
         self.log.debug(f"Image size: {image_size} - Blocks per batch: {self._blocks_per_batch}")
 
@@ -199,7 +200,7 @@ class ImarisWriter(VoxelWriter):
         self._z_blocks_written += self._blocks_per_batch.z
 
         self.log.debug(
-            f"Finished writing batch {self.batch_count} with Frames: {batch_data.shape[0]}/{self.metadata.frame_count}"
+            f"Finished writing batch {self.batch_count} with Frames: {batch_data.shape[0]}/{self.config.frame_count}"
         )
 
     def _finalize(self) -> None:
@@ -207,16 +208,16 @@ class ImarisWriter(VoxelWriter):
             if not self._image_converter:
                 return
             image_extents = pw.ImageExtents(
-                minX=self.metadata.position_um.x,
-                minY=self.metadata.position_um.y,
-                minZ=self.metadata.position_um.z,
-                maxX=self.metadata.position_um.x + self.metadata.voxel_size.x * self.metadata.frame_shape.x,
-                maxY=self.metadata.position_um.y + self.metadata.voxel_size.y * self.metadata.frame_shape.y,
-                maxZ=self.metadata.position_um.z + self.metadata.voxel_size.z * self.metadata.frame_count,
+                minX=self.config.position_um.x,
+                minY=self.config.position_um.y,
+                minZ=self.config.position_um.z,
+                maxX=self.config.position_um.x + self.config.voxel_size.x * self.config.frame_shape.x,
+                maxY=self.config.position_um.y + self.config.voxel_size.y * self.config.frame_shape.y,
+                maxZ=self.config.position_um.z + self.config.voxel_size.z * self.config.frame_count,
             )
 
             parameters = pw.Parameters()
-            parameters.set_channel_name(self.metadata.channel_idx, self.metadata.channel_name)
+            parameters.set_channel_name(self.config.channel_idx, self.config.channel_name)
 
             color_infos = [pw.ColorInfo()]
             color_infos[0].set_base_color(pw.Color(1.0, 1.0, 1.0, 1.0))
@@ -233,9 +234,9 @@ class ImarisWriter(VoxelWriter):
             self._image_converter.Destroy()
             del self._image_converter
 
-            if self.frames_processed < self.metadata.frame_count:
+            if self.frames_processed < self.config.frame_count:
                 self.log.error(
-                    f"Frames processed ({self.frames_processed}) is less than frame count ({self.metadata.frame_count})"
+                    f"Frames processed ({self.frames_processed}) is less than frame count ({self.config.frame_count})"
                 )
             if self.frames_added < self._z_blocks_written * self.block_size.z == self.frames_processed:
                 self.log.warning(
@@ -243,7 +244,7 @@ class ImarisWriter(VoxelWriter):
                 )
 
             self.log.info(
-                f"Finished writing {self.batch_count} batches with a total of {self.frames_processed}/{self.metadata.frame_count} frames written, "
+                f"Finished writing {self.batch_count} batches with a total of {self.frames_processed}/{self.config.frame_count} frames written, "
                 f"Avg. Rate: {self.avg_write_speed_fps:.2f} fps | {self.avg_write_speed_mb_s:.2f} MB/s"
             )
         except Exception as e:
@@ -266,7 +267,7 @@ def test_imaris_writer():
     writer = ImarisWriter(name="imaris_writer")
 
     writer.configure(
-        metadata=WriterConfig(
+        config=WriterConfig(
             path="test_output",
             frame_count=writer.batch_size_px * NUM_BATCHES,
             frame_shape=VP_151MX_M6H0,
@@ -274,6 +275,7 @@ def test_imaris_writer():
             file_name=f"D:/voxel_test/voxel_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             voxel_size=Vec3D(0.1, 0.1, 1.0),
             channel_name="Channel0",
+            batch_size=BATCH_SIZE,
         )
     )
     for i in range(1):
@@ -285,14 +287,14 @@ def test_imaris_writer():
             writer.log.warning("Waiting for writer to start...")
 
         frame_1 = generate_reference_image(
-            height_px=writer.metadata.frame_shape.y,
-            width_px=writer.metadata.frame_shape.x,
+            height_px=writer.config.frame_shape.y,
+            width_px=writer.config.frame_shape.x,
             exposure_time_ms=10,
             resize_method=FrameGenStrategy.TILE,
         )
         frame_2 = generate_reference_image(
-            height_px=writer.metadata.frame_shape.y,
-            width_px=writer.metadata.frame_shape.x,
+            height_px=writer.config.frame_shape.y,
+            width_px=writer.config.frame_shape.x,
             exposure_time_ms=10,
             resize_method=FrameGenStrategy.UPSAMPLE,
         )
