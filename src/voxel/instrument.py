@@ -15,7 +15,7 @@ from voxel.devices.linear_axis import VoxelLinearAxis
 from voxel.devices.rotation_axis import VoxelRotationAxis
 from voxel.pipeline.interface import ICameraPipeline, PipelineStatus, StackAcquisitionConfig
 from voxel.io.manager import IOManager
-from voxel.pipeline.local import LocalCameraPipeline
+from voxel.pipeline.local_pipeline import LocalCameraPipeline
 from voxel.pipeline.preview import NewFrameCallback, PreviewFrame
 from voxel.settings import ConfiguredDevice, SettingsBlock
 from voxel.stage import SpecimenStage

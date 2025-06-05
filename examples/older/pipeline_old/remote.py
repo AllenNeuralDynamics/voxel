@@ -9,14 +9,14 @@ import zmq
 from voxel.utils.log_config import get_component_logger
 
 from .interface import PipelineStatus, StackAcquisitionConfig
-from .local import LocalCameraPipeline, ICameraPipeline
+from .local import LocalCameraPipeline, IImagingPipeline
 from .preview import NewFrameCallback, PreviewFrame, PreviewConfig
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCameraProxy
 
 
-class CameraPipelineProxy(ICameraPipeline):
+class CameraPipelineProxy(IImagingPipeline):
     """
     Proxy for interacting with a remote CameraPipelineService.
     Implements the protocol:
