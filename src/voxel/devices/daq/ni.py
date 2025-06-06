@@ -3,6 +3,7 @@ import math
 import matplotlib.pyplot as plt
 import nidaqmx
 import numpy as np
+import time
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
 from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, TaskMode, AOIdleOutputBehavior
@@ -347,7 +348,7 @@ class NIDAQ(BaseDAQ):
                     t0_offset_volts,
                     t50_offset_volts,
                     t100_offset_volts,
-                )              
+                )
             # sanity check voltages for ni card range
             max = getattr(self, "max_ao_volts", 5)
             min = getattr(self, "min_ao_volts", 0)
@@ -356,7 +357,9 @@ class NIDAQ(BaseDAQ):
 
             # sanity check voltages for device range
             if np.max(voltages[:]) > device_max_volts or np.min(voltages[:]) < device_min_volts:
-                raise ValueError(f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts for {name} and {channel}")
+                raise ValueError(
+                    f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts for {name} and {channel}"
+                )
 
             # store 1d voltage array into 2d waveform array
 
@@ -488,7 +491,7 @@ class NIDAQ(BaseDAQ):
         waveform = signal.lfilter(b, a, signal.lfilter(b, a, waveform)[::-1])[::-1]
 
         if padding > 0:
-            waveform = waveform[padding:padding + waveform_length_samples]
+            waveform = waveform[padding : padding + waveform_length_samples]
 
         return waveform
 
@@ -532,7 +535,7 @@ class NIDAQ(BaseDAQ):
         :rtype: numpy.ndarray
         """
         waveform_length_samples = int(((period_time_ms + rest_time_ms) / 1000) * sampling_frequency_hz)
-        
+
         time_samples_ms = np.linspace(
             0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
         )
@@ -555,7 +558,7 @@ class NIDAQ(BaseDAQ):
         v0 = v0 + t0_offset_volts
         v50 = v50 + t50_offset_volts
         v100 = v100 + t100_offset_volts
-        f = interpolate.interp1d([t0, t25, t50, t75, t100], [v0, v25, v50, v75, v100], kind='quadratic')
+        f = interpolate.interp1d([t0, t25, t50, t75, t100], [v0, v25, v50, v75, v100], kind="quadratic")
         waveform = f(time_samples_ms)
 
         # add in delay
@@ -575,7 +578,7 @@ class NIDAQ(BaseDAQ):
             mode="constant",
             constant_values=(offset_volts - amplitude_volts + t0_offset_volts),
         )
-        
+
         waveform = waveform[0:waveform_length_samples]
 
         return waveform
@@ -664,6 +667,64 @@ class NIDAQ(BaseDAQ):
         )
 
         return waveform
+
+    def change_filter_position(
+        self,
+        channel_port: str,
+        max_volts: float = 5.0,
+        sampling_frequency_hz=10000,
+        period_time_ms=100,
+        duty_cycle_percent=50,
+    ) -> None:
+        """
+        Change the position of the filter wheel by sending a TTL pulse.
+        This method stops and closes existing tasks, creates a new task to change the filter position,
+        and sends a TTL pulse to the specified channel port.
+        :param channel_port: The channel port to send the TTL pulse to
+        :type channel_port: str
+        :param max_volts: The maximum voltage for the TTL pulse, defaults to 5.0
+        :type max_volts: str
+        :param sampling_frequency_hz: The sampling frequency for the task, defaults to 10000
+        :type sampling_frequency_hz: int
+        :param period_time_ms: The period time for the task in milliseconds, defaults to 100
+        :type period_time_ms: int
+        :param duty_cycle_percent: The duty cycle percentage for the TTL pulse, defaults to 50
+        :type duty_cycle_percent: int
+        """
+        self.log.info("stopping tasks to change filter position")
+        self.stop()
+        self.log.info("closing tasks to change filter position")
+        self.close()
+        self.log.info("resetting daq")
+        self.dev.reset_device()
+        self.log.info("creating change position task")
+        filter_position_task = nidaqmx.Task("filter_position_task")
+        physical_name = f"/{self.id}/{channel_port}"
+        self.log.info("adding port to change position task")
+        filter_position_task.ao_channels.add_ao_voltage_chan(physical_name)
+        self.log.info("configuring change position task timing")
+        period_samples = int(period_time_ms / 1000 * sampling_frequency_hz)
+        filter_position_task.timing.cfg_samp_clk_timing(
+            rate=sampling_frequency_hz,
+            sample_mode=AcqType.FINITE,
+            samps_per_chan=period_samples,
+        )
+        ao_voltages = np.zeros(period_samples)
+        ao_voltages[0 : int(period_samples * duty_cycle_percent)] = max_volts
+        self.log.info("writing change position voltages to task")
+        filter_position_task.write(ao_voltages)
+        self.log.info("starting change position task")
+        filter_position_task.start()
+        self.log.info("waiting on change position task")
+        filter_position_task.wait_until_done()
+        self.log.info("stopping change position task")
+        filter_position_task.stop()
+        self.log.info("closing change position task")
+        filter_position_task.close()
+        self.log.info("resetting daq")
+        self.dev.reset_device()
+        self.log.info("waiting to settle")
+        time.sleep(0.5)  # wait for wheel to settle
 
     def plot_waveforms_to_pdf(self, save: bool = False) -> None:
         """

@@ -1,9 +1,4 @@
 import logging
-import time
-
-import nidaqmx
-import numpy
-from nidaqmx.constants import AcquisitionType, TaskMode
 
 from voxel.devices.daq.ni import NIDAQ
 from voxel.devices.filterwheel.base import BaseFilterWheel
@@ -36,11 +31,11 @@ class DAQFilterWheel(BaseFilterWheel):
             FILTERS.append(filter)
             if filter not in list(ports.keys()):
                 raise ValueError(f"Filter {filter} not in port keys: {list(ports.keys())}")
-        for key, value in list(ports.items()):
-            if key not in filters:
-                raise ValueError(f"Port {key} not in filter list: {filters}")
-            if f"{daq.id}/{value}" not in daq.dev.ao_physical_chans.channel_names:
-                raise ValueError(f"Port {value} not in device channels: {daq.dev.ao_physical_chans.channel_names}")
+        # for key, value in list(ports.items()):
+        #     if key not in filters:
+        #         raise ValueError(f"Port {key} not in filter list: {filters}")
+        #     if f"{daq.id}/{value}" not in daq.dev.ao_physical_chans.channel_names:
+        #         raise ValueError(f"Port {value} not in device channels: {daq.dev.ao_physical_chans.channel_names}")
         # force homing of the wheel to first position
         self.filter = FILTERS[0]
 
@@ -67,26 +62,7 @@ class DAQFilterWheel(BaseFilterWheel):
             raise ValueError(f"Filter {filter_name} not in filter list: {FILTERS}")
         self._filter = filter_name
         channel_port = self.ports[filter_name]
-        daq_task = nidaqmx.Task("filter_wheel_task")
-        physical_name = f"/{self.id}/{channel_port}"
-        daq_task.ao_channels.add_ao_voltage_chan(physical_name)
-        # unreserve buffer
-        daq_task.control(TaskMode.TASK_UNRESERVE)
-        daq_task.timing.cfg_samp_clk_timing(
-            rate=10000,  # hardcode 10 kHz sampling rate
-            sample_mode=AcquisitionType.FINITE,
-            samps_per_chan=1000,  # hardcode 100 ms waveform
-        )
-        ao_voltages = numpy.zeros(1000)
-        ao_voltages[0:500] = 5.0  # harcode 5 V TTL pulse for 50 ms
-        daq_task.out_stream.output_buf_size = len(ao_voltages)
-        daq_task.control(TaskMode.TASK_COMMIT)
-        daq_task.write(ao_voltages)
-        daq_task.start()
-        daq_task.wait_until_done()
-        daq_task.stop()
-        daq_task.close()
-        time.sleep(0.5)  # wait for wheel to settle
+        self.dev.change_filter_position(channel_port)
         self.log.info(f"filter set to {filter_name}")
 
     def close(self) -> None:
