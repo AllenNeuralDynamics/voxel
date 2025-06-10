@@ -691,10 +691,6 @@ class NIDAQ(BaseDAQ):
         :param duty_cycle_percent: The duty cycle percentage for the TTL pulse, defaults to 50
         :type duty_cycle_percent: int
         """
-        self.log.info("stopping tasks to change filter position")
-        self.stop()
-        self.log.info("closing tasks to change filter position")
-        self.close()
         self.log.info("resetting daq")
         self.dev.reset_device()
         self.log.info("creating change position task")
@@ -802,6 +798,7 @@ class NIDAQ(BaseDAQ):
         Stop all tasks.
         """
         for task in [self.ao_task, self.do_task, self.co_task]:
+            print(task)
             if task is not None:
                 task.stop()
 
