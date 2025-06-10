@@ -1,18 +1,15 @@
 import os
 import shutil
-import sys
 import time
-from collections.abc import Iterable
 from pathlib import Path
-from subprocess import Popen
-from typing import Any
+from subprocess import DEVNULL, Popen
 
-from voxel.io.transfers.base import VoxelFileTransfer
+from .base import VoxelFileTransfer
 
 
-class RsyncFileTransfer(VoxelFileTransfer):
+class RobocopyFileTransfer(VoxelFileTransfer):
     """
-    Voxel driver for Rsync file transfer process.
+    Voxel driver for Robocopy file transfer process.
 
     Process will transfer files with the following regex
     format:
@@ -26,25 +23,11 @@ class RsyncFileTransfer(VoxelFileTransfer):
     :type local_path: str
     """
 
-    def __init__(self, external_path: str, local_path: str, name: str = "rsync"):
+    def __init__(self, external_path: str, local_path: str, name: str = "robocopy"):
         super().__init__(external_path, local_path, name)
-        self._protocol = "rsync"
-        # print progress, delete files after transfer
-        # check version of rsync
-        # tested with v2.6.9
-        # --info=progress2 is not available for rsync v2.x.x
-        # self._flags = ['--progress', '--remove-source-files', '--recursive']
-        # tested with v3.2.7
-        # --progress outputs progress which is piped to log file
-        # --recursive transfers all files in directory sequentially
-        # --info=progress2 outputs % progress for all files not sequentially for each file
-        self._flags = ["--progress", "--recursive", "--info=progress2"]
+        self._protocol = "robocopy"
 
     def _run(self):
-        """
-        Internal function that runs the transfer process.
-        """
-
         start_time = time.time()
         local_directory = Path(self._local_path, self._acquisition_name)
         external_directory = Path(self._external_path, self._acquisition_name)
@@ -66,7 +49,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
             file_list = {}
             for path, subdirs, files in os.walk(local_directory.absolute()):
                 for name in files:
-                    # check and only add if filename matches tranfer's filename
+                    # check and only add if filename matches tranfer's filename but not the log file
                     if self.filename in name and name != log_path:
                         file_list[os.path.join(path, name)] = os.path.getsize(os.path.join(path, name)) / 1024**2
             total_size_mb = sum(file_list.values())
@@ -78,7 +61,8 @@ class RsyncFileTransfer(VoxelFileTransfer):
                 transfer_complete = True
             # if not, try to initiate transfer again
             else:
-                self.log.info(f"starting file transfer attempt {retry_num+1}/{self._max_retry}")
+                num_files = len(sorted_file_list)
+                self.log.info(f"attempt {retry_num + 1}/{self._max_retry}, tranferring {num_files} files.")
                 for file_path, file_size_mb in sorted_file_list.items():
                     # transfer just one file and iterate
                     # split filename and path
@@ -87,88 +71,57 @@ class RsyncFileTransfer(VoxelFileTransfer):
                     # specify external directory
                     # need to change directories to str because they are Path objects
                     external_dir = local_dir.replace(str(local_directory), str(external_directory))
-                    # make external directory tree if needed
-                    if not os.path.isdir(external_dir):
-                        os.makedirs(external_dir)
-                    # setup log file
-                    self.log.info(f"transferring {file_path} from {local_directory} to {external_directory}")
-
-                    # generate rsync command with args
-                    cmd_with_args = self._flatten(
-                        [
-                            self._protocol,
-                            self._flags,
-                            file_path,
-                            Path(external_dir, filename),
-                        ]
-                    )
-                    if sys.platform == "win32":
-                        # if windows, rsync expects absolute paths with driver letters to use
-                        # /cygdrive/drive-letter and / not \
-                        # example: /cygdrive/c/test/filename.extension
-                        file_path = file_path.replace("\\", "/").replace(":", "")
-                        file_path = "/cygdrive/" + file_path
-                        external_dir = external_dir.replace("\\", "/").replace(":", "")
-                        external_dir = "/cygdrive/" + external_dir + "/" + filename
-                        cmd_with_args = self._flatten([self._protocol, self._flags, file_path, external_dir])
-
-                    with log_path.open(mode="w", encoding="utf-8") as f:
-                        subprocess = Popen(args=list(cmd_with_args), stdout=f.fileno())
-
+                    # robocopy flags
+                    # /j unbuffered copy for transfer speed stability
+                    # /mov deletes local files after transfer
+                    # /if move only the specified filename
+                    # /njh no job header in log file
+                    # /njs no job summary in log file
+                    cmd_with_args = f"{self._protocol} {local_dir} {external_dir} \
+                        /j /if {filename} /njh /njs /log:{log_path}"
+                    # stdout to PIPE will cause malloc errors on exist
+                    # no stdout will print subprocess to python
+                    # stdout to DEVNULL will supresss subprocess output
+                    subprocess = Popen(cmd_with_args, stdout=DEVNULL)
+                    # wait one second for process to start before monitoring log file for progress
                     time.sleep(1.0)
                     # lets monitor the progress of the individual file if size > 1 GB
                     if file_size_mb > 1024:
                         self.log.info(f"{filename} is > 1 GB")
                         # wait for subprocess to start otherwise log file won't exist yet
-                        time.sleep(10.0)
+                        time.sleep(1.0)
                         file_progress = 0
                         previous_progress = 0
                         stuck_time_s = 0
                         while file_progress < 100:
                             start_time_s = time.time()
-                            # open the stdout file in a temporary handle with r+ mode
-                            with open(log_path, "r+") as f:
+
+                            with open(log_path, "r") as f:
                                 line = f.readlines()[-1]  # read the last line
 
-                                # try to find if there is a % in the last line
-                                try:
-                                    # grab the index of the % symbol
-                                    index = line.find("%")
-                                    # a location with % has been found
-                                    if index != -1:
-                                        # grab the string of the % progress
-                                        value = line[index - 4 : index]
-                                        # strip and convert to float
-                                        file_progress = float(value.rstrip())
-                                    # we must be at the last line of the file
-                                    else:
-                                        # go back to beginning of file
-                                        f.seek(0)
-                                        # read line that must be 100% line
-                                        line = f.readlines()[-4]
-                                        # grab the index of the % symbol
-                                        index = line.find("%")
-                                        # grab the string of the % progress
-                                        value = line[index - 4 : index]
-                                        # strip and convert to float
-                                        file_progress = float(value.rstrip())
-                                # no lines in the file yet
-                                except Exception:
-                                    file_progress = 0
-                                # sum to transferred amount to track progress
-                                self.progress = (
-                                    (total_transferred_mb + file_size_mb * file_progress / 100) / total_size_mb * 100
-                                )
-                                end_time_s = time.time()
-                                # keep track of how long stuck at same progress
-                                if self.progress == previous_progress:
-                                    stuck_time_s += end_time_s - start_time_s
-                                    # break if exceeds timeout
-                                    if stuck_time_s > +self._timeout_s:
-                                        break
-                                previous_progress = self.progress
-                                self.log.info(f"file transfer is {self.progress:.2f} % complete.")
-
+                            # try to find if there is a % in the last line
+                            try:
+                                # convert the string to a float
+                                file_progress = float(line.replace("%", ""))
+                            # line did not contain %
+                            except Exception:
+                                file_progress = 0
+                            # sum to transferred amount to track progress
+                            self.progress = (
+                                (total_transferred_mb + file_size_mb * file_progress / 100) / total_size_mb * 100
+                            )
+                            end_time_s = time.time()
+                            # keep track of how long stuck at same progress
+                            if self.progress == previous_progress:
+                                stuck_time_s += end_time_s - start_time_s
+                                # break if exceeds timeout
+                                if stuck_time_s >= self._timeout_s:
+                                    self.log.info("timeout exceeded, restarting file transfer.")
+                                    break
+                            else:
+                                stuck_time_s = 0
+                            previous_progress = self.progress
+                            self.log.info(f"file transfer is {self.progress:.2f} % complete.")
                             # pause for 10 sec
                             time.sleep(10.0)
                     else:
@@ -182,7 +135,6 @@ class RsyncFileTransfer(VoxelFileTransfer):
                     os.remove(log_path)
                     # update the total transfered amount
                     total_transferred_mb += file_size_mb
-                    # self.log.info(f'file transfer is {self.progress:.2f} % complete.')
                 # clean up the local subdirs and files
                 for file in delete_list:
                     # f is a relative path, convert to absolute
@@ -215,20 +167,9 @@ class RsyncFileTransfer(VoxelFileTransfer):
                             self.log.info(f"deleting {local_file_path}")
                             os.remove(local_file_path)
                     else:
-                        self.log.warning(f"{local_file_path} is not a file or directory.")
+                        raise ValueError(f"{local_file_path} is not a file or directory.")
                 end_time = time.time()
                 total_time = end_time - start_time
                 self.log.info(f"transfer complete, total time: {total_time} sec")
                 subprocess.kill() if subprocess else None
                 retry_num += 1
-
-    def _flatten(self, lst: list[Any]) -> Iterable[Any]:
-        """Flatten a list using generators comprehensions.
-        Returns a flattened version of list lst.
-        """
-        for sublist in lst:
-            if isinstance(sublist, list):
-                for item in sublist:
-                    yield item
-            else:
-                yield sublist

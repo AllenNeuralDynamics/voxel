@@ -61,9 +61,10 @@ oxxius = ["oxxius-laser"]
 obis = ["obis-laser"]
 bdv = ["h5py>=3.12.1", "tqdm>=4.66.5"]
 imaris = ["pyimariswriter>=0.7.0"]
-etl-opto = ["optoicc", "optokummenberg"]
-egrabber = ["egrabber"]
-all = ["voxel[aaopto, cobolt, coherent, vortran, oxxius, obis, bdv, imaris, etl-opto, egrabber]"]
+# etl-opto = ["optoicc", "optokummenberg"]
+# egrabber = ["egrabber"]
+# all = ["voxel[aaopto, cobolt, coherent, vortran, oxxius, obis, bdv, imaris, etl-opto, egrabber]"]
+all = ["voxel[aaopto, cobolt, coherent, vortran, oxxius, obis, bdv, imaris]"]
 
 [dependency-groups]
 dev = [
@@ -77,9 +78,9 @@ coherent-lasers = { git = "https://github.com/AllenNeuralDynamics/coherent_laser
 obis-laser = { git = "https://github.com/AllenNeuralDynamics/obis-laser.git" }
 oxxius-laser = { git = "https://github.com/AllenNeuralDynamics/oxxius_laser.git" }
 vortran-laser = { git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" }
-optokummenberg = { path = ".wheelhouse/optoKummenberg-1.0.4894-py3-none-any.whl" }
-optoicc = { path = ".wheelhouse/optoICC-2.0.4922-py3-none-any.whl" }
-egrabber = { path = ".wheelhouse/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+# optokummenberg = { path = ".wheelhouse/optoKummenberg-1.0.4894-py3-none-any.whl" }
+# optoicc = { path = ".wheelhouse/optoICC-2.0.4922-py3-none-any.whl" }
+# egrabber = { path = ".wheelhouse/egrabber-24.09.0.5-py2.py3-none-any.whl" }
 
 
 [build-system]

@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from voxel.frame_stack import StackAcquisitionConfig
-from voxel.io.transfers.base import VoxelFileTransfer
-from voxel.io.writers.base import VoxelWriter, WriterConfig
+from .io.transfers.base import VoxelFileTransfer
+from .io.writers.base import VoxelWriter, WriterConfig
 from voxel.utils.common import get_available_disk_space_mb
 from voxel.utils.log_config import get_logger
 from voxel.utils.vec import Vec3D

@@ -11,7 +11,7 @@ from ..stack_acquisition import BatchStatus
 
 if TYPE_CHECKING:
     from voxel.devices.camera import VoxelCamera
-    from voxel.io.manager import IOManager
+    from ..io.manager import IOManager
 
 
 class ImagingPipelineService:

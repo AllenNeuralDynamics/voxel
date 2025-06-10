@@ -1,7 +1,8 @@
 from voxel.instrument import BuildSpec, IOSpecs, build_object
-from voxel.io.transfers.base import VoxelFileTransfer
-from voxel.io.writers.base import VoxelWriter
 from voxel.utils.log_config import get_component_logger
+
+from ..io.transfers.base import VoxelFileTransfer
+from ..io.writers.base import VoxelWriter
 
 
 class IOManager:
