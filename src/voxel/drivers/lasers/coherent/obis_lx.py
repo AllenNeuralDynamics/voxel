@@ -1,7 +1,7 @@
 from obis_laser import ObisLX, OperationalCmd, OperationalQuery
 from serial import Serial
 
-from voxel.devices.laser import VoxelLaser
+from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 MODULATION_MODES: dict[str, str] = {"off": "CWP", "analog": "ANALOG", "digital": "DIGITAL", "mixed": "MIXED"}
@@ -67,7 +67,7 @@ class ObisLXLaser(VoxelLaser):
 
         Internal Control - off: CWP
         """
-        return obis_modulation_getter(self._inst, self.log, modes=MODULATION_MODES)
+        return obis_modulation_getter(self._inst, self._log, modes=MODULATION_MODES)
 
     @modulation_mode.setter
     def modulation_mode(self, mode: str):

@@ -40,3 +40,24 @@ def update_yaml_content(file_path: str, new_content: dict[str, Any]) -> None:
 def get_available_disk_space_mb(path: str) -> int:
     """Return the available disk space in mega bytes."""
     return psutil.disk_usage(path).free // (1024**2)
+
+
+def merge_dicts(dict1: dict, dict2: dict) -> dict:
+    """Recursively merge two dictionaries. Merge: lists, sets. Overwrite other types.
+    :param dict1: base dictionary
+    :param dict2: dictionary to merge
+    :return: merged dictionary. updated dict1
+    :type dict1: dict
+    :type dict2: dict
+    :rtype: dict
+    """
+    for key, value in dict2.items():
+        if key in dict1 and isinstance(value, dict) and isinstance(dict1[key], dict):
+            merge_dicts(dict1[key], value)
+        elif key in dict1 and isinstance(value, set) and isinstance(dict1[key], set):
+            dict1[key] = dict1[key].union(value)
+        elif key in dict1 and isinstance(value, list) and isinstance(dict1[key], list):
+            dict1[key] += value
+        else:
+            dict1[key] = value
+    return dict1

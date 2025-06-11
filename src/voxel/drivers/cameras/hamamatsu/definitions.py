@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from voxel.devices.camera import PixelType
+from voxel.devices.interfaces.camera import PixelType
 
 from .sdk.dcamapi4 import DCAMPROP
 

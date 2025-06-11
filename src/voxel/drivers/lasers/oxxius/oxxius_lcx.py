@@ -1,7 +1,7 @@
 from oxxius_laser import LCX
 from serial import Serial
 
-from voxel.devices.laser import VoxelLaser
+from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 

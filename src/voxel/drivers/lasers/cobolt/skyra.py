@@ -4,7 +4,7 @@ from enum import Enum
 from pycobolt import CoboltLaser
 from sympy import Expr, solve, symbols
 
-from voxel.devices.laser import VoxelLaser
+from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 # Define StrEnums if they don't yet exist.
@@ -104,11 +104,11 @@ class SkyraLaser(VoxelLaser):
 
     def enable(self):
         self._inst.send_cmd(f"{self._prefix}Cmd.LaserEnable")
-        self.log.info(f"laser {self._prefix} enabled")
+        self._log.info(f"laser {self._prefix} enabled")
 
     def disable(self):
         self._inst.send_cmd(f"{self._prefix}Cmd.LaserDisable")
-        self.log.info(f"laser {self._prefix} enabled")
+        self._log.info(f"laser {self._prefix} enabled")
 
     @deliminated_float(min_value=0, max_value=lambda self: self.max_power)
     def power_setpoint_mw(self):
@@ -131,11 +131,11 @@ class SkyraLaser(VoxelLaser):
                     self._inst.send_cmd(f"{self._prefix}Cmd.CurrentSetpoint" f"{self._current_setpoint}")
                     return
             # if no value exists, alert user
-            self.log.error(f"Cannot set laser to {value} mW because " f"no current mA correlates to {value} mW")
+            self._log.error(f"Cannot set laser to {value} mW because " f"no current mA correlates to {value} mW")
         else:
             # convert from mw to watts
             self._inst.send_cmd(f"{self._prefix}Cmd.PowerSetpoint {value / 1000}")
-        self.log.info(f"laser {self._prefix} set to {value} mW")
+        self._log.info(f"laser {self._prefix} set to {value} mW")
 
     @property
     def modulation_mode(self):
@@ -157,10 +157,10 @@ class SkyraLaser(VoxelLaser):
         self._inst.send_cmd(f"{self._prefix}{external_control_mode}")
         self._inst.send_cmd(f"{self._prefix}{digital_modulation}")
         self._inst.send_cmd(f"{self._prefix}{analog_modulation}")
-        self.log.info(f"modulation mode set to {value}")
+        self._log.info(f"modulation mode set to {value}")
 
     def close(self):
-        self.log.info("closing and calling disable")
+        self._log.info("closing and calling disable")
         self.disable()
         if self._inst.is_connected():
             self._inst.disconnect()

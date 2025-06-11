@@ -2,8 +2,8 @@ from time import sleep
 
 from pylablib.devices import Thorlabs
 
-from voxel.devices.base import VoxelDeviceError
-from voxel.devices.flip_mount import VoxelFlipMount
+from voxel.devices import VoxelDeviceError
+from voxel.devices.interfaces.flip_mount import VoxelFlipMount
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 VALID_POSITIONS = [0, 1]
@@ -74,7 +74,7 @@ class ThorlabsFlipMount(VoxelFlipMount):
                 f"Invalid position {position_name}. Valid positions are {list(self._positions.keys())}"
             )
         self._inst.move_to_state(self._positions[position_name])
-        self.log.info(f"Flip mount {self.name} moved to position {position_name}")
+        self._log.info(f"Flip mount {self.name} moved to position {position_name}")
 
     @deliminated_float(min_value=FLIP_TIME_RANGE_MS[0], max_value=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:
@@ -110,7 +110,7 @@ class ThorlabsFlipMount(VoxelFlipMount):
         clamped_time_ms = int(max(FLIP_TIME_RANGE_MS[0], min(time_ms, FLIP_TIME_RANGE_MS[1])))
         try:
             self._inst.setup_flipper(transit_time=clamped_time_ms / 1000)
-            self.log.debug(f"Flip mount {self.name} switch time set to {clamped_time_ms} ms")
+            self._log.debug(f"Flip mount {self.name} switch time set to {clamped_time_ms} ms")
         except Exception as e:
             raise VoxelDeviceError(f"Could not set flip time: {e}")
 
@@ -119,11 +119,11 @@ class ThorlabsFlipMount(VoxelFlipMount):
         if self._inst is not None:
             self._inst.close()
             self._inst = None
-        self.log.info(f"Flip mount {self.name} shutdown")
+        self._log.info(f"Flip mount {self.name} shutdown")
 
     def _get_hardware_inst(self) -> Thorlabs.MFF:
         try:
             return Thorlabs.MFF(conn=self._conn)
         except Exception as e:
-            self.log.error(f"Could not connect to flip mount {self.name}: {e}")
+            self._log.error(f"Could not connect to flip mount {self.name}: {e}")
             raise VoxelDeviceError from e

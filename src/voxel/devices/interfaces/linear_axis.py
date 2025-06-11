@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from voxel.utils.descriptors.deliminated import deliminated_float
 
-from .base import VoxelDevice, VoxelDeviceType
+from ..base import VoxelDevice, VoxelDeviceType
 
 
 class LinearAxisDimension(StrEnum):

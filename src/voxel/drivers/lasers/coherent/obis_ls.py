@@ -1,7 +1,7 @@
 from obis_laser import ObisLS
 from serial import Serial
 
-from voxel.devices.laser import VoxelLaser
+from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 from .obis_lx import obis_modulation_getter, obis_modulation_setter
@@ -48,7 +48,7 @@ class ObisLSLaser(VoxelLaser):
 
         Internal Control - off: CWP
         """
-        return obis_modulation_getter(self._inst, self.log, modes=MODULATION_MODES)
+        return obis_modulation_getter(self._inst, self._log, modes=MODULATION_MODES)
 
     @modulation_mode.setter
     def modulation_mode(self, mode: str) -> None:

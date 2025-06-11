@@ -4,7 +4,7 @@ from typing import Self, cast
 from pydantic import BaseModel, Field
 
 from voxel.devices import VoxelDevice, VoxelLaser
-from voxel.devices.camera import VoxelCamera
+from voxel.devices.interfaces.camera import VoxelCamera
 from voxel.devices.filter_wheel import VoxelFilterWheel
 from voxel.instrument import ChannelConfiguration, Instrument, OpticalPathDefinition
 from voxel.pipeline.local_pipeline import (

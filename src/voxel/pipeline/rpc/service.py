@@ -10,7 +10,7 @@ from ..preview.publisher import PreviewFrameRelay
 from ..stack_acquisition import BatchStatus
 
 if TYPE_CHECKING:
-    from voxel.devices.camera import VoxelCamera
+    from voxel.devices.interfaces.camera import VoxelCamera
     from ..io.manager import IOManager
 
 
@@ -38,6 +38,13 @@ class ImagingPipelineService:
         return self._pipeline.get_acquisition_status()
 
     # --- Methods ---
+    def get_current_mode(self) -> str:
+        """
+        Get the current mode of the pipeline.
+        :return: The current mode as a string.
+        """
+        return self._pipeline.get_current_mode().value
+
     def update_preview_config(self, options_dict: dict) -> None:
         options = PreviewConfigOptions(**options_dict)
         self._pipeline.update_preview_config(options)

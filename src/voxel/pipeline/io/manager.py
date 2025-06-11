@@ -1,4 +1,5 @@
-from voxel.instrument import BuildSpec, IOSpecs, build_object
+from voxel.instrument.schemas import IOSpecs
+from voxel.utils.build import BuildSpec, build_object
 from voxel.utils.log_config import get_component_logger
 
 from ..io.transfers.base import VoxelFileTransfer

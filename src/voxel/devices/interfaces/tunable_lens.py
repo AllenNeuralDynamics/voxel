@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from enum import StrEnum
 
-from .base import VoxelDevice, VoxelDeviceType
+from ..base import VoxelDevice, VoxelDeviceType
 
 
 class ETLControlMode(StrEnum):

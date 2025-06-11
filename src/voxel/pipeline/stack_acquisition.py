@@ -17,7 +17,7 @@ from voxel.utils.vec import Vec3D
 from .preview.generator import PreviewGenerator
 
 if TYPE_CHECKING:
-    from voxel.devices.camera import VoxelCamera
+    from voxel.devices.interfaces.camera import VoxelCamera
 
 
 def get_batch_ranges(total_frames: int, batch_size: int) -> set[tuple[int, int]]:

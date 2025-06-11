@@ -1,6 +1,5 @@
-from collections.abc import Mapping
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class BuildSpec(BaseModel):
@@ -8,13 +7,7 @@ class BuildSpec(BaseModel):
     kwds: dict[str, Any] = {}
 
 
-class DeviceBuildSpec(BuildSpec):
-    acq_pin: str | None = None
-
-
-class IOSpecs(BaseModel):
-    writers: dict[str, BuildSpec]
-    transfers: dict[str, BuildSpec] = Field(default_factory=dict)
+type BuildSpecGroup = dict[str, "BuildSpec"]
 
 
 def parse_driver(driver: str) -> type:
@@ -43,7 +36,7 @@ def build_object(spec: "BuildSpec") -> Any:
     return parse_driver(spec.driver)(**spec.kwds)
 
 
-def build_object_group(specs: Mapping[str, "BuildSpec"]) -> dict[str, Any]:
+def build_object_group(specs: BuildSpecGroup) -> dict[str, Any]:
     """Build a group of objects from a group of build specs.
     :param specs: The build specs.
     :type specs: dict[str, BuildSpec]

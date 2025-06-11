@@ -5,12 +5,12 @@ import zerorpc
 
 from voxel.utils.log_config import get_component_logger
 
-from ..common import IImagingPipeline
+from ..common import IImagingPipeline, PipelineMode
 from ..preview.common import PreviewConfigOptions
 from ..stack_acquisition import BatchStatus
 
 if TYPE_CHECKING:
-    from voxel.devices.camera import VoxelCameraProxy
+    from voxel.devices.interfaces.camera import VoxelCameraProxy
     from voxel.frame_stack import StackAcquisitionConfig
 
 
@@ -88,6 +88,19 @@ class ImagingPipelineProxy(IImagingPipeline):
             except Exception as e:
                 self.log.error(f"Error processing acquisition status: {e}", exc_info=True)
         return None
+
+    def get_current_mode(self) -> "PipelineMode":
+        """
+        Get the current mode of the pipeline.
+        :return: The current mode of the pipeline.
+        :rtype: PipelineMode
+        """
+        try:
+            mode_str = self._ensure_rpc_call("get_current_mode")
+            return PipelineMode(mode_str)
+        except Exception as e:
+            self.log.error(f"Error getting current pipeline mode: {e}", exc_info=True)
+            return PipelineMode.ERROR
 
     def update_preview_config(self, options: PreviewConfigOptions) -> None:
         self._ensure_rpc_call("update_preview_config", options.model_dump())

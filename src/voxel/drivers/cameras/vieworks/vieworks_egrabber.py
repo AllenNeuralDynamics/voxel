@@ -22,9 +22,8 @@ from egrabber import (
     query,
 )
 
-from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.base import VoxelDeviceError, VoxelPropertyDetails
-from voxel.devices.camera import AcquisitionState, PixelType, TriggerSetting, VoxelCamera
+from voxel.devices.base import VoxelDeviceConnectionError, VoxelDeviceError, VoxelPropertyDetails
+from voxel.devices.interfaces.camera import AcquisitionState, PixelType, TriggerSetting, VoxelCamera
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int, enumerated_string
 from voxel.utils.log_config import get_component_logger

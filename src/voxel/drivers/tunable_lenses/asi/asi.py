@@ -1,4 +1,4 @@
-from voxel.devices.tunable_lens import ETLControlMode, VoxelTunableLens
+from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 from voxel.drivers.hubs.tigerbox import ASITigerBox, TigerBoxETLControlMode
 
 
@@ -56,13 +56,13 @@ class ASITunableLens(VoxelTunableLens):
                 raise ValueError("mode must be one of %r." % ETLControlMode)
 
     def log_metadata(self):
-        self.log.info("tiger hardware axis parameters")
+        self._log.info("tiger hardware axis parameters")
         build_config = self._tigerbox.build_config
-        self.log.debug(f"{build_config}")
+        self._log.debug(f"{build_config}")
         axis_settings = self._tigerbox.get_axis_info(self.name)
-        self.log.info(f"{self.name} axis settings")
+        self._log.info(f"{self.name} axis settings")
         for setting in axis_settings:
-            self.log.info(f"{self.name} axis, {setting}, {axis_settings[setting]}")
+            self._log.info(f"{self.name} axis, {setting}, {axis_settings[setting]}")
 
     def close(self):
         self._tigerbox.deregister_device(self.name)

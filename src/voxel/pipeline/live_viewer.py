@@ -7,7 +7,7 @@ from voxel.utils.log_config import get_component_logger
 from .preview.generator import PreviewGenerator
 
 if TYPE_CHECKING:
-    from voxel.devices.camera import VoxelCamera
+    from voxel.devices.interfaces.camera import VoxelCamera
 
 
 class LiveViewer:

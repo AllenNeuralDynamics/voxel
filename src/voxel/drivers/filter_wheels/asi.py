@@ -3,7 +3,7 @@ import time
 from tigerasi.tiger_controller import TigerController
 
 from voxel.devices import VoxelDeviceError
-from voxel.devices.filter_wheel import VoxelFilterWheel
+from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
 from voxel.utils.descriptors.enumerated import enumerated_string
 
 SWITCH_TIME_S = 0.1  # estimated timing
@@ -50,7 +50,7 @@ class ASIFilterWheel(VoxelFilterWheel):
 
         position = self.filters[filter_name]
         cmd_str = f"MP {position}\r\n"
-        self.log.info(f"Setting filter to {filter_name}")
+        self._log.info(f"Setting filter to {filter_name}")
         self.tigerbox.send(f"FW {self.wheel_id}\r\n", read_until=f"\n\r{self.wheel_id}>")
         self.tigerbox.send(cmd_str, read_until=f"\n\r{self.wheel_id}>")
         time.sleep(SWITCH_TIME_S)

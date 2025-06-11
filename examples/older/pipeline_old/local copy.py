@@ -28,7 +28,7 @@ from .preview import (
 )
 
 if TYPE_CHECKING:
-    from voxel.devices.camera import VoxelCamera
+    from voxel.devices.interfaces.camera import VoxelCamera
 
 
 @dataclass

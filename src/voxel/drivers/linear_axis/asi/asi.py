@@ -3,7 +3,7 @@ from typing import Literal
 
 from tigerasi.device_codes import JoystickInput as ASIJoystickInput
 
-from voxel.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
+from voxel.devices.interfaces.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
 from voxel.drivers.hubs.tigerbox import ASITigerBox
 from voxel.utils.descriptors.deliminated import deliminated_float
 
@@ -59,7 +59,7 @@ class ASITigerLinearAxis(VoxelLinearAxis):
         if config.scan_type == ScanConfig.ScanType.STEP_AND_SHOOT:
             self._tigerbox.setup_step_shoot_scan(self.name, config.step_size_um)
         elif config.scan_type == ScanConfig.ScanType.CONTINUOUS:
-            self.log.warning("Continuous scans are not yet implemented.")
+            self._log.warning("Continuous scans are not yet implemented.")
 
     def start_scan(self):
         if self.scan_state != ScanState.CONFIGURED:
@@ -115,7 +115,7 @@ class ASITigerLinearAxis(VoxelLinearAxis):
     def await_movement(self):
         while self.is_moving:
             pass
-        self.log.info(f"Axis {self.name} has stopped moving. Current position: {self.position_mm}")
+        self._log.info(f"Axis {self.name} has stopped moving. Current position: {self.position_mm}")
 
     @property
     def home_position_mm(self) -> float:

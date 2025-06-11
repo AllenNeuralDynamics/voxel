@@ -1,4 +1,4 @@
-from voxel.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
+from voxel.devices.interfaces.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 
@@ -17,7 +17,7 @@ class SimulatedLinearAxis(VoxelLinearAxis):
         super().__init__(name, dimension)
 
     def configure_scan(self, config: ScanConfig) -> None:
-        self.log.info(f"Configuring scan: {config}")
+        self._log.info(f"Configuring scan: {config}")
 
     def start_scan(self) -> None:
         pass

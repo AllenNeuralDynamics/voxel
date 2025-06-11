@@ -142,7 +142,7 @@ with the expected arguments. For example a camera object for a Vieworks VP-151MX
 can be invoked as:
 
 ```python
-from voxel.devices.camera.vieworks_egrabber import VieworksCamera
+from voxel.devices.interfaces.camera.vieworks_egrabber import VieworksCamera
 
 camera = VieworksCamera(id='123456')
 ```
@@ -177,7 +177,7 @@ instrument:
     devices:
         vp-151mx camera:
         type: camera
-        driver: voxel.devices.camera.simulated
+        driver: voxel.devices.interfaces.camera.simulated
         module: SimulatedCamera
         init:
             id: 123456
@@ -194,7 +194,7 @@ instrument:
             source: external
         488 nm laser:
         type: laser
-        driver: voxel.devices.lasers.simulated
+        driver: voxel.devices.interfaces.lasers.simulated
         module: SimulatedLaser
         init:
             id: COM1
@@ -243,25 +243,25 @@ Currently supported device types and models are listed below.
 
 | Manufacturer | Model            | Class           | Module                           | Tested |
 | ------------ | ---------------- | --------------- | -------------------------------- | ------ |
-| Simulated    | MockCamera       | SimulatedCamera | `voxel.devices.camera.simulated` | ✅     |
-| Vieworks     | VP-151MX         | VieworksCamera  | `voxel.devices.camera.vieworks`  | ✅     |
+| Simulated    | MockCamera       | SimulatedCamera | `voxel.devices.interfaces.camera.simulated` | ✅     |
+| Vieworks     | VP-151MX         | VieworksCamera  | `voxel.devices.interfaces.camera.vieworks`  | ✅     |
 | Vieworks     | VNP-604MX        |                 |                                  | ✅     |
-| Hamamatsu    | ORCA-Flash4.0 V3 | HamamatsuCamera | `voxel.devices.camera.hamamatsu` | ✅     |
+| Hamamatsu    | ORCA-Flash4.0 V3 | HamamatsuCamera | `voxel.devices.interfaces.camera.hamamatsu` | ✅     |
 | Hamamatsu    | ORCA-Fusion BT   |                 |                                  | ✅     |
-| PCO          |                  | PCOCamera       | `voxel.devices.camera.pco`       | ❌     |
+| PCO          |                  | PCOCamera       | `voxel.devices.interfaces.camera.pco`       | ❌     |
 
 #### Lasers
 
 | Manufacturer | Model     | Class          | Module                                     | Tested |
 | ------------ | --------- | -------------- | ------------------------------------------ | ------ |
-| Simulated    | MockLaser | SimulatedLaser | `voxel.devices.laser.simulated`            | ✅     |
-| Coherent     | OBISLX    | ObixLXLaser    | `voxel.devices.laser.coherent`             | ✅     |
-| Coherent     | OBISLS    | ObixLSLaser    | `voxel.devices.laser.coherent`             | ✅     |
+| Simulated    | MockLaser | SimulatedLaser | `voxel.devices.interfaces.laser.simulated`            | ✅     |
+| Coherent     | OBISLX    | ObixLXLaser    | `voxel.devices.interfaces.laser.coherent`             | ✅     |
+| Coherent     | OBISLS    | ObixLSLaser    | `voxel.devices.interfaces.laser.coherent`             | ✅     |
 | Coherent     | GenesisMX | GenesisMXVoxel | `coherent_lasers.genesis_mx.voxel_adapter` | ✅     |
-| Vortran      | Stradus   | StradusLaser   | `voxel.devices.laser.vortran`              | ❌     |
-| Oxxius       | LBX       | OxxiusLBXLaser | `voxel.devices.laser.oxxius`               | ❌     |
-| Oxxius       | LCX       | OxxiusLCXLaser | `voxel.devices.laser.oxxius`               | ❌     |
-| Cobolt       |           | CoboltLaser    | `voxel.devices.laser.cobolt`               | ❌     |
+| Vortran      | Stradus   | StradusLaser   | `voxel.devices.interfaces.laser.vortran`              | ❌     |
+| Oxxius       | LBX       | OxxiusLBXLaser | `voxel.devices.interfaces.laser.oxxius`               | ❌     |
+| Oxxius       | LCX       | OxxiusLCXLaser | `voxel.devices.interfaces.laser.oxxius`               | ❌     |
+| Cobolt       |           | CoboltLaser    | `voxel.devices.interfaces.laser.cobolt`               | ❌     |
 
 #### Stages
 
@@ -309,9 +309,9 @@ Currently supported device types and models are listed below.
 
 | Manufacturer | Model        | Class          | Module                                 | Tested  |
 | ------------ | ------------ | -------------- | -------------------------------------- | ------- |
-| Simulated    | MockTL       | SimulatedTL    | `voxel.devices.tunable_lens.simulated` | ✅      |
-| ASI          | TGTLC        | ASITunableLens | `voxel.devices.tunable_lens.asi`       | ✅      |
-| Optotune     | ELE41, ICC4C | OptotuneTL     | `voxel.devices.tunable_lens.optotune`  | ✅ , ✅ |
+| Simulated    | MockTL       | SimulatedTL    | `voxel.devices.interfaces.tunable_lens.simulated` | ✅      |
+| ASI          | TGTLC        | ASITunableLens | `voxel.devices.interfaces.tunable_lens.asi`       | ✅      |
+| Optotune     | ELE41, ICC4C | OptotuneTL     | `voxel.devices.interfaces.tunable_lens.optotune`  | ✅ , ✅ |
 
 ### Writers
 
@@ -577,7 +577,7 @@ GPU processes:
    devices:
        vp-151mx camera:
        type: camera
-       driver: voxel.devices.camera.simulated
+       driver: voxel.devices.interfaces.camera.simulated
        module: SimulatedCamera
        init:
            id: 123456
@@ -594,7 +594,7 @@ GPU processes:
            source: external
        488 nm laser:
        type: laser
-       driver: voxel.devices.lasers.simulated
+       driver: voxel.devices.interfaces.lasers.simulated
        module: SimulatedLaser
        init:
            id: COM1

@@ -1,45 +1,19 @@
 """Voxel Compatible Devices."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from enum import IntEnum, StrEnum
-from functools import cached_property
-from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Callable, Sequence
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
-from voxel.utils.descriptors.deliminated import (
-    DeliminatedInt,
-    DeliminatedFloat,
-    DeliminatedProperty,
-)
-from voxel.utils.descriptors.enumerated import EnumeratedProperty, EnumeratedValue
+from voxel.utils.descriptors.deliminated import DeliminatedProperty
+from voxel.utils.descriptors.enumerated import EnumeratedStrProperty
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec2D, Vec3D
 
 if TYPE_CHECKING:
     from voxel.daq.tasks.wavegen import WaveGenChannel
-
-type VoxelPropertyType = Literal[
-    "deliminated", "enumerated", "string", "number", "boolean", "vector", "dict"
-]
-
-
-class VoxelPropertyModel[T: int | float](BaseModel):
-    name: str
-    type: str  # VoxelPropertyType
-    value: str | int | float | Vec2D[T] | Vec3D[T] | object
-    min: int | float | None = None
-    max: int | float | None = None
-    step: int | float | None = None
-    write: bool = True
-    options: (
-        Sequence[str]
-        | Sequence[int]
-        | Sequence[float]
-        | Sequence[int | float | str]
-        | None
-    ) = None
 
 
 class VoxelDeviceType(StrEnum):
@@ -59,213 +33,189 @@ class VoxelDeviceType(StrEnum):
 
 
 class VoxelDeviceError(Exception):
-    """Base class for all exceptions raised by devices."""
-
     pass
 
 
 class VoxelDeviceConnectionError(VoxelDeviceError):
-    """Custom exception for camera discovery errors."""
-
     pass
+
+
+class VoxelPropertyValue[T: int | float | bool | str | Vec2D | Vec3D](BaseModel):
+    name: str  # Corresponds to VoxelPropertySchema.name
+    value: T
+
+    # Dynamic constraints
+    min: int | float | None = None  # Minimum value for numeric types
+    max: int | float | None = None  # Maximum value for numeric types
+    step: int | float | None = None  # Step size for numeric types
+    options: Sequence[str | int | float] | None = None  # Valid options for enumerated types
+    is_enabled: bool = True  # Whether the property is enabled or not
+
+    error_message: str | None = None  # Error message if the property is invalid
 
 
 class VoxelPropertyDetails(BaseModel):
     label: str | None = None
     unit: str | None = None
     description: str | None = None
+    read_only: bool = True
+
+    def merge_higher(self, higher: Self) -> None:
+        """Merge another VoxelPropertyDetails instance into this one."""
+        self.label = higher.label if higher.label is not None else self.label
+        self.unit = higher.unit if higher.unit is not None else self.unit
+        self.description = higher.description if higher.description is not None else self.description
+        self.read_only = higher.read_only
 
 
-class VoxelDeviceModel(BaseModel):
-    name: str
-    type: VoxelDeviceType
-    properties: dict[str, "VoxelPropertyModel"]
+def generate_ui_label(attr_name: str) -> str:
+    """Generate a user-friendly label for a property name."""
+    return attr_name.replace("_", " ").capitalize()
 
 
-class VoxelSignalModel(BaseModel):
-    name: str
-    value: int | float | str | bool | Vec2D | Vec3D
+def property_metadata(label: str | None = None, unit: str | None = None, description: str | None = None):
+    def decorator(fget: Callable[[Any], Any]):
+        metadata = VoxelPropertyDetails(
+            label=label if label is not None else generate_ui_label(fget.__name__),
+            description=description if description is not None else fget.__doc__,
+            unit=unit,
+        )
 
+        fget.__setattr__("_voxel_property_metadata", metadata)
+        return fget
 
-def merge_dicts(dict1: dict, dict2: dict) -> dict:
-    """Recursively merge two dictionaries. Merge: lists, sets. Overwrite other types.
-    :param dict1: base dictionary
-    :param dict2: dictionary to merge
-    :return: merged dictionary. updated dict1
-    :type dict1: dict
-    :type dict2: dict
-    :rtype: dict
-    """
-    for key, value in dict2.items():
-        if key in dict1 and isinstance(value, dict) and isinstance(dict1[key], dict):
-            merge_dicts(dict1[key], value)
-        elif key in dict1 and isinstance(value, set) and isinstance(dict1[key], set):
-            dict1[key] = dict1[key].union(value)
-        elif key in dict1 and isinstance(value, list) and isinstance(dict1[key], list):
-            dict1[key] += value
-        else:
-            dict1[key] = value
-    return dict1
+    return decorator
 
 
 class VoxelDevice(ABC):
     """Base class for all voxel devices."""
 
-    _details: dict[str, VoxelPropertyDetails] = {}
-    _signals: set[str] = set()
+    _voxel_property_metadata: dict[str, VoxelPropertyDetails] = {}
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+
+        parent_registry_to_copy = {}
+        for parent in cls.mro()[1:]:
+            if hasattr(parent, "_voxel_property_metadata"):
+                parent_reg_attr = getattr(parent, "_voxel_property_metadata")
+                if isinstance(parent_reg_attr, dict):
+                    parent_registry_to_copy = {
+                        k: v.model_copy(deep=True) if isinstance(v, VoxelPropertyDetails) else v
+                        for k, v in parent_reg_attr.items()
+                    }
+                break  # Found the first parent in MRO with the registry
+
+        # 2. Add/override with details defined directly in 'cls' (e.g., from decorators or docstrings)
+        for attr_name, attr_value in vars(cls).items():
+            if attr_name.startswith("_"):
+                continue
+            if not isinstance(attr_value, (property, DeliminatedProperty, EnumeratedStrProperty)):
+                continue
+            fget = attr_value.fget
+            if not fget:
+                continue
+            metadata: VoxelPropertyDetails | None = getattr(fget, "_voxel_property_metadata")
+            if not metadata:
+                # set a new details attribute if it does not exist
+                metadata = VoxelPropertyDetails(
+                    label=generate_ui_label(attr_name),
+                    description=fget.__doc__,
+                )
+            metadata.read_only = attr_value.fset is None
+
+            if attr_name in parent_registry_to_copy:
+                parent_registry_to_copy[attr_name].merge_higher(higher=metadata)
+            else:
+                parent_registry_to_copy[attr_name] = metadata
+
+        cls._voxel_property_metadata = parent_registry_to_copy
 
     def __init__(self, name: str, device_type: VoxelDeviceType):
         """Initialize the device.
         :param name: The unique identifier of the device.
         :type name: str
         """
-        self.name = name
-        self.log = get_component_logger(self)
-        self.acq_daq_channel: WaveGenChannel
-        self.device_type: VoxelDeviceType = device_type
+        self._name = name
+        self._log = get_component_logger(self)
+        self._acq_daq_channel: WaveGenChannel
+        self._device_type: VoxelDeviceType = device_type
 
-    def __init_subclass__(cls) -> None:
-        """Recursively merge some attributes from all base classes."""
+    @property
+    @property_metadata(label="Device Name", description="The unique identifier of the device.")
+    def name(self) -> str:
+        """A unique identifier of the device."""
+        return self._name
 
-        for parent_class in cls.mro()[1:-1]:
-            if hasattr(parent_class, "details"):
-                cls._details = merge_dicts(cls._details, parent_class.details)
+    @property
+    @property_metadata(label="Device Type", description="The type of the device.")
+    def device_type(self) -> VoxelDeviceType:
+        """The type of the device."""
+        return self._device_type
 
-    def apply_settings(self, settings: dict):
-        """Apply settings to the device."""
-        for key, value in settings.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError:
-                self.log.error(f"Instance '{self.name}' has no attribute '{key}'")
-            except Exception as e:
-                self.log.error(f"Error setting '{key}' for '{self.name}': {str(e)}")
-                raise
-        self.log.info(f"Applied settings to '{self.name}'")
+    def get_property_details(self, prop_name: str) -> VoxelPropertyDetails | None:
+        """Get the details of a property by its name."""
+        return self._voxel_property_metadata.get(prop_name)
+
+    def get_property(self, prop_name: str) -> VoxelPropertyValue | None:
+        """Get the value of a property by its name.
+        :param prop_name: The name of the property.
+        :type prop_name: str
+        :return: The value of the property, or None if the property does not exist.
+        :rtype: VoxelPropertyValue | None
+        """
+        prop_value = getattr(self, prop_name, None)
+        if prop_value is None:
+            self._log.warning(f"Property '{prop_name}' is not set in device '{self.name}'.")
+            if prop_name in self._voxel_property_metadata:
+                self._log.warning(f"Property '{prop_name}' is listed in the device schema, but has no value.")
+            return None
+
+        prop_metadata = self.get_property_details(prop_name)
+        is_enabled = not prop_metadata.read_only if prop_metadata else True
+
+        try:
+            min_value = prop_value.min_value
+        except AttributeError:
+            min_value = None
+        try:
+            max_value = prop_value.max_value
+        except AttributeError:
+            max_value = None
+        try:
+            step = prop_value.step
+        except AttributeError:
+            step = None
+        try:
+            options = prop_value.options
+        except AttributeError:
+            options = None
+
+        return VoxelPropertyValue(
+            name=prop_name,
+            value=prop_value,
+            min=min_value,
+            max=max_value,
+            step=step,
+            options=options,
+            is_enabled=is_enabled,
+        )
 
     @abstractmethod
     def close(self):
         """Close the device."""
         pass
 
-    def __str__(self):
-        return f"{self.__class__.__name__}[{self.name}]"
-
-    @cached_property
-    def properties(self) -> dict[str, Any]:
-        ignore_list = {
-            "name",
-            "device_type",
-            "log",
-            "property_names",
-            "acq_daq_channel",
-        }
-        return {
-            k: v
-            for k, v in {**vars(type(self)), **vars(self)}.items()
-            if not callable(v) and not k.startswith("_") and k not in ignore_list
-        }
-
-    @cached_property
-    def property_names(self) -> set[str]:
-        return set(self.properties.keys())
-
-    def get_property(self, prop_name: str) -> VoxelPropertyModel | None:
-        """Get a snapshot of the device's current state."""
-
-        def get_property_type(prop_value: Any) -> str:
-            if isinstance(prop_value, (DeliminatedFloat | DeliminatedInt)):
-                return "deliminated"
-            if isinstance(prop_value, (EnumeratedValue, IntEnum, StrEnum)):
-                return "enumerated"
-            if hasattr(prop_value, "__dataclass_fields__") or hasattr(
-                prop_value, "__fields__"
-            ):
-                return "dict"
-            else:
-                return type(prop_value).__name__.lower()
-
-        prop_obj = self.properties[prop_name]
-        prop_value = getattr(self, prop_name)
-        prop_type = get_property_type(prop_value)
-
-        min_value = None
-        max_value = None
-        step = None
-        options = None
-        write = False
-
-        if isinstance(prop_obj, DeliminatedProperty):
-            min_value = prop_value.min_value
-            max_value = prop_value.max_value
-            step = prop_value.step
-        elif isinstance(prop_obj, EnumeratedProperty):
-            options = prop_value.options
-        elif isinstance(prop_value, (IntEnum, StrEnum)):
-            options = [member.value for member in prop_value.__class__]
-
-        if isinstance(prop_obj, (property, DeliminatedProperty, EnumeratedProperty)):
-            write = prop_obj.fset is not None
-
-        if prop_type not in {
-            "deliminated",
-            "enumerated",
-            "int",
-            "float",
-            "dict",
-            "str",
-            "bool",
-            "vec2d",
-            "vec3d",
-        }:
-            prop_value = str(prop_value)
-
-        return VoxelPropertyModel(
-            name=prop_name,
-            type=prop_type,
-            value=prop_value,
-            min=min_value,
-            max=max_value,
-            step=step,
-            options=options,
-            write=write,
-        )
-
-    def get_properties(
-        self, prop_names: set[str] | None = None
-    ) -> dict[str, VoxelPropertyModel]:
-        """Get a snapshot of the device's current state."""
-        prop_names = (
-            {name for name in prop_names if name in self.property_names}
-            if prop_names
-            else self.property_names
-        )
-
-        props: dict[str, VoxelPropertyModel] = {}
-        for prop_name in prop_names:
+    def snapshot(self) -> dict[str, VoxelPropertyValue]:
+        """Get a snapshot of the device's current state.
+        :return: A dictionary of property names and their values.
+        :rtype: dict[str, VoxelPropertyValue]
+        """
+        props: dict[str, VoxelPropertyValue] = {}
+        for prop_name in self._voxel_property_metadata:
             if model := self.get_property(prop_name):
                 props[prop_name] = model
         return props
 
-    @property
-    def snapshot(self) -> "VoxelDeviceModel":
-        return VoxelDeviceModel(
-            name=self.name,
-            type=self.device_type,
-            properties=self.get_properties(),
-        )
-
-    def get_signals(self) -> dict[str, VoxelSignalModel]:
-        """Get a snapshot of the device's current state."""
-        signals = {}
-        for signal_name in self._signals:
-            signal_value = getattr(self, signal_name)
-            if isinstance(signal_value, (int | float | str | bool | Vec2D | Vec3D)):
-                signals[signal_name] = VoxelSignalModel(
-                    name=signal_name, value=signal_value
-                )
-            else:
-                self.log.error(
-                    f"Signal '{signal_name}' has an unsupported type: {type(signal_value)}"
-                )
-        return signals
+    def __str__(self):
+        return f"{self.__class__.__name__}[{self.name}]"

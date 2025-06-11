@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from .base import VoxelDevice, VoxelDeviceType
+from ..base import VoxelDevice, VoxelDeviceType
 
 
 class VoxelAOTF(VoxelDevice):

@@ -1,4 +1,4 @@
-from voxel.devices.filter_wheel import VoxelFilterWheel
+from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
 from voxel.utils.descriptors.enumerated import enumerated_string
 
 

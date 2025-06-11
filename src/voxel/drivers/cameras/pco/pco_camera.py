@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Literal
 
 from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
+from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.drivers.cameras.pco.definitions import (
     ReadoutMode,
     TriggerMode,
@@ -70,7 +70,7 @@ class PCOCamera(VoxelCamera):
     def sensor_size_px(self) -> Vec2D[int]:
         if (x := self._delimination_props["roi_width"]["max"]) and (y := self._delimination_props["roi_height"]["max"]):
             return Vec2D(int(x), int(y))
-        self.log.error("Unable to determine sensor size")
+        self._log.error("Unable to determine sensor size")
         return Vec2D(0, 0)
 
     # Image properties _________________________________________________________________________________________________
@@ -256,7 +256,7 @@ class PCOCamera(VoxelCamera):
         """
         # Note: convert from ms to s
         self._camera.exposure_time = exposure_time_ms / 1e3
-        self.log.info(f"exposure time set to: {exposure_time_ms} ms")
+        self._log.info(f"exposure time set to: {exposure_time_ms} ms")
         # refresh parameter values
         self._fetch_delimination_props()
 
@@ -290,7 +290,7 @@ class PCOCamera(VoxelCamera):
         """
         # timebase is us if interval > 4 us
         self._camera.sdk.set_cmos_line_timing("on", value / 1e6)
-        self.log.info(f"line interval set to: {value} us")
+        self._log.info(f"line interval set to: {value} us")
         # refresh parameter values
         self._fetch_delimination_props()
 
@@ -327,7 +327,7 @@ class PCOCamera(VoxelCamera):
         try:
             return ReadoutMode(mode)
         except ValueError:
-            self.log.error(f"Unrecognized readout mode: {mode}")
+            self._log.error(f"Unrecognized readout mode: {mode}")
             return ReadoutMode.LIGHT_SHEET_FORWARD
 
     @readout_mode.setter
@@ -348,7 +348,7 @@ class PCOCamera(VoxelCamera):
         try:
             self._camera.sdk.set_interface_output_format(interface="edge", format=self._readout_mode_lut[readout_mode])
         except ValueError as e:
-            self.log.error(f"Invalid readout mode: {e}")
+            self._log.error(f"Invalid readout mode: {e}")
 
     @property
     def trigger_settings(self) -> TriggerSettings:
@@ -381,7 +381,7 @@ class PCOCamera(VoxelCamera):
     @trigger_mode.setter
     def trigger_mode(self, mode: TriggerMode) -> None:
         self._camera.sdk.set_trigger_mode(mode=self._trigger_mode_lut[mode])
-        self.log.info(f"Set trigger mode to {mode}")
+        self._log.info(f"Set trigger mode to {mode}")
 
     @property
     def trigger_source(self) -> TriggerSource:
@@ -394,7 +394,7 @@ class PCOCamera(VoxelCamera):
     @trigger_source.setter
     def trigger_source(self, source: TriggerSource) -> None:
         self._camera.sdk.set_acquire_mode(mode=self._trigger_source_lut[source])
-        self.log.info(f"Set trigger source to {source}")
+        self._log.info(f"Set trigger source to {source}")
 
     @property
     def sensor_temperature_c(self) -> float:
@@ -441,7 +441,7 @@ class PCOCamera(VoxelCamera):
         Initializes the camera buffer.
         """
         self._buffer_size_frames = round(self.BUFFER_SIZE_MB / self.frame_size_mb)
-        self.log.info(f"buffer set to: {self._buffer_size_frames} frames")
+        self._log.info(f"buffer set to: {self._buffer_size_frames} frames")
         self._camera.record(number_of_images=self._buffer_size_frames, mode="fifo")
 
     def start(self, frame_count: int | None = None) -> None:
@@ -489,10 +489,10 @@ class PCOCamera(VoxelCamera):
         # log pco configuration settings
         # this is not a comprehensive dump of all metadata
         # todo is to figure out api calls to autodump everything
-        self.log.info("pco camera parameters")
+        self._log.info("pco camera parameters")
         configuration = self._camera.configuration
         for key in configuration:
-            self.log.info(f"{key}, {configuration[key]}")
+            self._log.info(f"{key}, {configuration[key]}")
 
     # Private methods __________________________________________________________________________________________________
 
@@ -504,9 +504,9 @@ class PCOCamera(VoxelCamera):
                 self._camera.sdk.set_trigger_mode(mode=option)
                 lut[str_enum_class[option]] = option
             except ValueError as e:
-                self.log.debug(f"Trigger mode {option} not supported: {e}")
+                self._log.debug(f"Trigger mode {option} not supported: {e}")
             except Exception as e:
-                self.log.error(f"Error setting trigger mode {option}: {e}")
+                self._log.error(f"Error setting trigger mode {option}: {e}")
         return lut
 
     def _get_delimination_props(self) -> dict[str, dict[LimitType, int | None]]:

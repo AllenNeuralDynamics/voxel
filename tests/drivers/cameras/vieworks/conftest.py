@@ -12,9 +12,9 @@ CAMERA_2_SN = get_env("VIEWORKS_CAMERA_2_SN")
 @pytest.fixture
 def mock_camera():
     with (
-        # patch('voxel.devices.camera.vieworks.egrabber.EGrabber') as mock_egrabber,
-        # patch('voxel.devices.camera.vieworks.vieworks_egrabber.EGenTLSingleton') as mock_gentl,
-        patch("voxel.devices.camera.vieworks.vieworks_egrabber._discover_grabber") as mock_discover
+        # patch('voxel.devices.interfaces.camera.vieworks.egrabber.EGrabber') as mock_egrabber,
+        # patch('voxel.devices.interfaces.camera.vieworks.vieworks_egrabber.EGenTLSingleton') as mock_gentl,
+        patch("voxel.devices.interfaces.camera.vieworks.vieworks_egrabber._discover_grabber") as mock_discover
     ):
         mock_grabber = MagicMock()
         mock_egrabber_dict = {"interface": 0, "device": 0, "stream": 0}

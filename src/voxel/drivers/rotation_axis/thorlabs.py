@@ -3,7 +3,7 @@ import time
 from pylablib.devices import Thorlabs
 
 from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.rotation_axis import VoxelRotationAxis
+from voxel.devices.interfaces import VoxelRotationAxis
 
 MIN_POSITION_DEG = 0
 MAX_POSITION_DEG = 360
@@ -60,7 +60,7 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         if value < MIN_POSITION_DEG or value > MAX_POSITION_DEG:
             raise ValueError(f"Position {value} must be between " f"{MIN_POSITION_DEG} and {MAX_POSITION_DEG}")
         self._instance.move_to(value)
-        self.log.info(f"Rotation mount {self.serial_number} commanded " f"to move to position {value} deg")
+        self._log.info(f"Rotation mount {self.serial_number} commanded " f"to move to position {value} deg")
 
     @property
     def speed_deg_s(self) -> float:
@@ -80,7 +80,7 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         if value < MIN_SPEED_DEG_S or value > MAX_SPEED_DEG_S:
             raise ValueError(f"Speed {value} deg/s must be between " f"{MIN_SPEED_DEG_S} and {MAX_SPEED_DEG_S} deg/s")
         self._instance.set_velocity_parameters(max_velocity=value)
-        self.log.info(f"Rotation mount {self.serial_number} set " f"to speed {value} deg/s")
+        self._log.info(f"Rotation mount {self.serial_number} set " f"to speed {value} deg/s")
 
     @property
     def is_moving(self) -> bool:
@@ -102,21 +102,21 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         while self.is_moving:
             time.sleep(check_interval)
             if timeout is not None and time.time() - start_time > timeout:
-                self.log.warning(
+                self._log.warning(
                     f"Rotation mount {self.serial_number} "
                     f"did not stop within the specified timeout of {timeout} seconds"
                 )
                 break
 
         if not self.is_moving:
-            self.log.info(f"Rotation mount {self.serial_number} stopped at position {self.position_deg:.2f} deg")
+            self._log.info(f"Rotation mount {self.serial_number} stopped at position {self.position_deg:.2f} deg")
         else:
-            self.log.warning(f"Rotation mount {self.serial_number} is still moving")
+            self._log.warning(f"Rotation mount {self.serial_number} is still moving")
 
     def close(self) -> None:
         """Close the connection to the rotation mount."""
         self._instance.close()
-        self.log.info(f"Rotation mount {self.serial_number} closed")
+        self._log.info(f"Rotation mount {self.serial_number} closed")
 
 
 # Example usage

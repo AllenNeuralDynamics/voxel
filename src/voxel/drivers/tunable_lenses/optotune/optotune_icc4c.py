@@ -1,7 +1,7 @@
 import optoICC
 from optoKummenberg.tools.definitions import UnitType
 
-from voxel.devices.tunable_lens import ETLControlMode, VoxelTunableLens
+from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 
 # constants for Optotune ICC-4C controller
 # CURRENT   = 0

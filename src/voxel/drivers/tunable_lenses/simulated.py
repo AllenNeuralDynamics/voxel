@@ -1,4 +1,4 @@
-from voxel.devices.tunable_lens import ETLControlMode, VoxelTunableLens
+from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 
 
 class SimulatedTunableLens(VoxelTunableLens):

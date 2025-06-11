@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from voxel.devices.linear_axis import VoxelLinearAxis
-from voxel.devices.rotation_axis import VoxelRotationAxis
+from voxel.devices.interfaces.linear_axis import VoxelLinearAxis
+from voxel.devices.interfaces.rotation_axis import VoxelRotationAxis
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec3D
 

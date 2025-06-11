@@ -6,7 +6,7 @@ import zerorpc
 from voxel.frame_stack import StackAcquisitionConfig
 from voxel.utils.log_config import get_component_logger
 
-from .common import IImagingPipeline
+from .common import IImagingPipeline, PipelineMode
 from .live_viewer import LiveViewer
 from .preview.common import PreviewConfigOptions
 from .preview.generator import PreviewGenerator
@@ -14,7 +14,7 @@ from .preview.publisher import PreviewFramePublisher, PreviewFrameRelay
 from .stack_acquisition import BatchStatus, StackAcquisitionRunner
 
 if TYPE_CHECKING:
-    from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
+    from voxel.devices.interfaces.camera import VoxelCamera, VoxelCameraProxy
 
     from .io.manager import IOManager
 
@@ -45,6 +45,19 @@ class ImagingPipeline(IImagingPipeline):
     @property
     def available_transfers(self) -> list[str]:
         return self._io_manager.available_transfers
+
+    def get_current_mode(self) -> PipelineMode:
+        """Get the current mode of the pipeline."""
+        with self._state_lock:
+            if self._active_acq_runner and self._active_live_viewer:
+                self.log.warning("Both acquisition runner and live viewer are active. This is unexpected.")
+                return PipelineMode.ERROR
+            if self._active_acq_runner:
+                return PipelineMode.ACQUISITION
+            elif self._active_live_viewer:
+                return PipelineMode.PREVIEW
+            else:
+                return PipelineMode.IDLE
 
     def get_acquisition_status(self) -> dict[tuple[int, int], BatchStatus] | None:
         if self._active_acq_runner:

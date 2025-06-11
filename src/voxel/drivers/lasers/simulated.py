@@ -2,7 +2,7 @@ import random
 
 from serial import Serial
 
-from voxel.devices.laser import VoxelLaser
+from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 MODULATION_MODES = {
@@ -34,7 +34,7 @@ class SimulatedLaser(VoxelLaser):
         super().__init__(name=name, wavelength=wavelength)
 
     def enable(self):
-        self.log.info(f"Enabling {self.name} laser")
+        self._log.info(f"Enabling {self.name} laser")
         pass
 
     def disable(self):

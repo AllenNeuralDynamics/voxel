@@ -2,8 +2,8 @@ from dataclasses import dataclass
 import threading
 from voxel.daq.tasks.wavegen import WaveGenTask
 from voxel.devices.base import VoxelDevice, VoxelDeviceType
-from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
-from voxel.devices.laser import VoxelLaser
+from voxel.devices.interfaces.camera import VoxelCamera, VoxelCameraProxy
+from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.devices.linear_axis import VoxelLinearAxis
 from voxel.pipeline.local import IFrameCaptureNode, PipelineStatus, StackAcquisitionConfig
 from voxel.pipeline.preview import NewFrameCallback, PreviewFrame

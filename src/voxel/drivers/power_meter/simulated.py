@@ -1,7 +1,7 @@
 import random
 
 from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.power_meter import VoxelPowerMeter
+from voxel.devices.interfaces.power_meter import VoxelPowerMeter
 
 
 class SimulatedPowerMeter(VoxelPowerMeter):

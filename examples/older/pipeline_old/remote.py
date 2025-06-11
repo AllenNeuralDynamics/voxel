@@ -13,7 +13,7 @@ from .local import LocalCameraPipeline, IImagingPipeline
 from .preview import NewFrameCallback, PreviewFrame, PreviewConfig
 
 if TYPE_CHECKING:
-    from voxel.devices.camera import VoxelCameraProxy
+    from voxel.devices.interfaces.camera import VoxelCameraProxy
 
 
 class CameraPipelineProxy(IImagingPipeline):

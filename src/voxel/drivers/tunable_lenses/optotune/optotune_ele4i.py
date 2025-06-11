@@ -2,7 +2,7 @@ import struct
 
 import serial
 
-from voxel.devices.tunable_lens import ETLControlMode, VoxelTunableLens
+from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 
 # constants for Optotune EL-E-4i controller
 
@@ -35,7 +35,7 @@ class OptotuneELE4ITunableLens(VoxelTunableLens):
             try:
                 self.serial_number = res[0].decode("ascii")
             except IndexError:
-                self.log.error(f"Error reading serial number: {res}")
+                self._log.error(f"Error reading serial number: {res}")
 
     @property
     def mode(self) -> ETLControlMode:
@@ -45,9 +45,9 @@ class OptotuneELE4ITunableLens(VoxelTunableLens):
             try:
                 res = res[0]
                 mode = ETLControlMode.INTERNAL if res == 1 else ETLControlMode.EXTERNAL if res == 5 else mode
-                self.log.debug(f"Mode: {mode}")
+                self._log.debug(f"Mode: {mode}")
             except IndexError:
-                self.log.error(f"Error reading mode: {res}")
+                self._log.error(f"Error reading mode: {res}")
         return mode
 
     @mode.setter
@@ -63,9 +63,9 @@ class OptotuneELE4ITunableLens(VoxelTunableLens):
         if temp_res := self._send_command("TCA", ">xxxh"):
             try:
                 temp = temp_res[0] * 0.0625 if temp_res else temp
-                self.log.debug(f"Temperature: {temp}")
+                self._log.debug(f"Temperature: {temp}")
             except IndexError:
-                self.log.error(f"Error reading temperature: {temp_res}")
+                self._log.error(f"Error reading temperature: {temp_res}")
 
         return temp
 

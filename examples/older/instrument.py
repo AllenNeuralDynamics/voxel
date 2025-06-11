@@ -8,8 +8,8 @@ from ruamel.yaml import YAML
 from voxel.daq.tasks.clockgen import ClockGenTask
 from voxel.daq.tasks.wavegen import WaveGenTask
 from voxel.detection_path import DetectionPath, FilterWheel, IlluminationChannel
-from voxel.devices.camera import VoxelCameraProxy
-from voxel.devices.rotation_axis import VoxelRotationAxis
+from voxel.devices.interfaces.camera import VoxelCameraProxy
+from voxel.devices.interfaces.rotation_axis import VoxelRotationAxis
 from voxel.pipeline.local import LocalFrameCaptureNode
 from voxel.pipeline.remote import AcquisitionEngineProxy
 from voxel.utils.log_config import get_component_logger

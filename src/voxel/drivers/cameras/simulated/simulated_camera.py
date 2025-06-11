@@ -4,7 +4,7 @@ from typing import TypedDict
 
 import numpy as np
 
-from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
+from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors import enumerated_int, enumerated_string, deliminated_float
 from voxel.utils.descriptors.deliminated import deliminated_int
 from voxel.utils.frame_gen import (
@@ -176,7 +176,7 @@ class SimulatedCamera(VoxelCamera):
     @property
     def frame_time_ms(self) -> float:
         readout_time_ms = self._line_interval_us_lut[self.pixel_format] * self.roi_height_px / 1000
-        self.log.debug(
+        self._log.debug(
             f"Readout: {readout_time_ms} ms, "
             f"exposure: {self.exposure_time_ms} ms, "
             f"max: {self._max_frame_time_ms} ms"
@@ -189,16 +189,16 @@ class SimulatedCamera(VoxelCamera):
         return self._line_interval_us_lut[self.pixel_format]
 
     def _configure_free_running_mode(self) -> None:
-        self.log.info("Simulated camera does not support free running mode")
+        self._log.info("Simulated camera does not support free running mode")
 
     def _configure_software_triggering(self) -> None:
-        self.log.info("Simulated camera does not support software triggering")
+        self._log.info("Simulated camera does not support software triggering")
 
     def _configure_hardware_triggering(self) -> None:
-        self.log.info("Simulated camera does not support hardware triggering")
+        self._log.info("Simulated camera does not support hardware triggering")
 
     def prepare(self) -> None:
-        self.log.info("Preparing simulated camera. Generating reference image")
+        self._log.info("Preparing simulated camera. Generating reference image")
 
     def start(self, frame_count: int | None = None) -> None:
         self.is_running = True
@@ -227,7 +227,7 @@ class SimulatedCamera(VoxelCamera):
                     width=self.roi_width_px, height=self.roi_height_px, data_type=self.pixel_type.dtype
                 )
 
-        self.log.info(f"Simulated camera started with {frame_count} frames")
+        self._log.info(f"Simulated camera started with {frame_count} frames")
 
     def stop(self) -> None:
         self.is_running = False
@@ -235,7 +235,7 @@ class SimulatedCamera(VoxelCamera):
 
     def grab_frame(self) -> np.ndarray:
         if not self.is_running:
-            self.log.critical("Attempted to grab frame while camera is not running")
+            self._log.critical("Attempted to grab frame while camera is not running")
             return np.zeros((int(self.roi_height_px), int(self.roi_width_px)), dtype=np.uint16)
 
         frame_time = self.frame_time_ms / 1000
@@ -244,7 +244,7 @@ class SimulatedCamera(VoxelCamera):
         sleep_time = max(0, frame_time - time_since_last_grab)
         # self.log.warning(f"Frame time: {frame_time}, time since last grab: {time_since_last_grab}")
         if sleep_time > 0:
-            self.log.debug(f"Sleeping for {sleep_time} seconds")
+            self._log.debug(f"Sleeping for {sleep_time} seconds")
         time.sleep(sleep_time)
 
         self._last_grab_frame_time = time.time()

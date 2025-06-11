@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from voxel.devices.base import VoxelDeviceModel
-from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
+from voxel.devices.interfaces.camera import VoxelCamera, VoxelCameraProxy
 from voxel.pipeline.local import (
     IFrameCaptureNode,
     PipelineStatus,

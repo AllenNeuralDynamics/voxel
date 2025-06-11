@@ -2,7 +2,7 @@ import time
 
 import serial
 
-from voxel.devices.chiller import VoxelChiller
+from voxel.devices.interfaces.chiller import VoxelChiller
 
 from . import SMCCommand, SMCControl
 

@@ -5,7 +5,7 @@ from typing import Any, Literal
 import numpy as np
 
 from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
+from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.singleton import Singleton
@@ -125,12 +125,12 @@ class HamamatsuCamera(VoxelCamera):
         """
         super().__init__(name, pixel_size_um)
 
-        self.log.info(f"Initializing Hamamatsu camera with name: {self.name} and serial number: {serial_number}")
+        self._log.info(f"Initializing Hamamatsu camera with name: {self.name} and serial number: {serial_number}")
 
         self.serial_number = serial_number
         self._dcam, self._dcam_idx = discover_dcam(self._dcam_provider, self.serial_number)
         self._dcam.dev_open()
-        self.log.debug(f"Hamamatsu camera found with serial number: {self.serial_number}")
+        self._log.debug(f"Hamamatsu camera found with serial number: {self.serial_number}")
 
         # private properties
         self._buffer_size_frames = self.BUFFER_SIZE_MB
@@ -154,7 +154,7 @@ class HamamatsuCamera(VoxelCamera):
         }
         self._fetch_delimination_props()
 
-        self.log.info("Completed initialization of Hamamatsu camera with name: {self.name}")
+        self._log.info("Completed initialization of Hamamatsu camera with name: {self.name}")
 
     def __repr__(self):
         return (
@@ -214,7 +214,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_setvalue("binning", value)
         if not res:
-            self.log.error(f"Failed to set binning. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to set binning. Error: {self._dcam.lasterr()}")
         self._invalidate_delimination_props()
 
     @property
@@ -293,7 +293,7 @@ class HamamatsuCamera(VoxelCamera):
         :type value: int
         """
         self._set_delimination_prop_value("roi_width_offset_px", value)
-        self.log.info(f"Set roi width offset to {value} px")
+        self._log.info(f"Set roi width offset to {value} px")
         self._invalidate_delimination_props(["roi_width_offset_px"])
 
     @deliminated_int(
@@ -343,7 +343,7 @@ class HamamatsuCamera(VoxelCamera):
         :type value: int
         """
         self._set_delimination_prop_value("roi_height_offset_px", value)
-        self.log.info(f"Set roi height offset to {value} px")
+        self._log.info(f"Set roi height offset to {value} px")
         self._invalidate_delimination_props(["roi_height_px", "roi_height_offset_px"])
 
     # Acquisition properties ___________________________________________________________________________________________
@@ -367,7 +367,7 @@ class HamamatsuCamera(VoxelCamera):
         :type value: int
         """
         self._set_delimination_prop_value("exposure_time_s", value * 1e-3)
-        self.log.info(f"Set exposure time to {value} ms")
+        self._log.info(f"Set exposure time to {value} ms")
         self._invalidate_delimination_props(["exposure_time_s"])
 
     @deliminated_float(
@@ -389,7 +389,7 @@ class HamamatsuCamera(VoxelCamera):
         :type value: float
         """
         self._set_delimination_prop_value("line_interval_s", value * 1e-6)
-        self.log.info(f"Set line interval to {value} us")
+        self._log.info(f"Set line interval to {value} us")
         self._invalidate_delimination_props(["line_interval_s"])
 
     @property
@@ -428,7 +428,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_getvalue("pixel_type")
         if not res:
-            self.log.error(f"Failed to get pixel type. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to get pixel type. Error: {self._dcam.lasterr()}")
         else:
             return DCAM_PIXELTYPE(int(res))
 
@@ -449,7 +449,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["sensor_mode"])
         if not res:
-            self.log.error(f"Failed to get sensor mode. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to get sensor mode. Error: {self._dcam.lasterr()}")
         else:
             return DcamSensorMode(int(res))
 
@@ -470,7 +470,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["readout_direction"])
         if not res:
-            self.log.error(f"Failed to get readout direction. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to get readout direction. Error: {self._dcam.lasterr()}")
         else:
             return DcamReadoutDirection(int(res))
 
@@ -490,7 +490,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_mode"])
         if not res:
-            self.log.error(f"Failed to get trigger mode. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to get trigger mode. Error: {self._dcam.lasterr()}")
         else:
             return DcamTriggerMode(int(res))
 
@@ -511,7 +511,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_source"])
         if not res:
-            self.log.error(f"Failed to get trigger source. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to get trigger source. Error: {self._dcam.lasterr()}")
         else:
             return DcamTriggerSource(int(res))
 
@@ -532,7 +532,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_polarity"])
         if not res:
-            self.log.error(f"Failed to get trigger polarity. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to get trigger polarity. Error: {self._dcam.lasterr()}")
         else:
             return DcamTriggerPolarity(int(res))
 
@@ -553,7 +553,7 @@ class HamamatsuCamera(VoxelCamera):
         """
         res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_active"])
         if not res:
-            self.log.error(f"Failed to get trigger active. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to get trigger active. Error: {self._dcam.lasterr()}")
         else:
             return DcamTriggerActive(int(res))
 
@@ -569,7 +569,7 @@ class HamamatsuCamera(VoxelCamera):
     def _set_enumerated_prop_value(self, prop_name: str, value: Any) -> None:
         res = self._dcam.prop_setvalue(ENUMERATED_PROPERTIES[prop_name], value)
         if not res:
-            self.log.error(f"Failed to set {prop_name}. Error: {self._dcam.lasterr()}")
+            self._log.error(f"Failed to set {prop_name}. Error: {self._dcam.lasterr()}")
 
     def _configure_hardware_triggering(self) -> None:
         raise NotImplementedError("Hardware triggering is not added yet")
@@ -600,7 +600,7 @@ class HamamatsuCamera(VoxelCamera):
         self._buffer_size_frames = round(self.BUFFER_SIZE_MB / self.frame_size_mb)
         self._dcam.buf_alloc(self._buffer_size_frames)
         self._buffer_allocated = True
-        self.log.info(f"Allocated buffer for {self._buffer_size_frames} frames")
+        self._log.info(f"Allocated buffer for {self._buffer_size_frames} frames")
 
     def start(self, frame_count: int | None = None) -> None:
         """Start the camera."""
@@ -642,7 +642,7 @@ class HamamatsuCamera(VoxelCamera):
         timeout_ms = 1000
         if self._dcam.wait_capevent_frameready(timeout_ms) and (image := self._dcam.buf_getlastframedata()):
             return image
-        self.log.warning("Timeout waiting for frame ready event")
+        self._log.warning("Timeout waiting for frame ready event")
         raise RuntimeError("Timeout waiting for frame ready event")
 
     @property
@@ -692,12 +692,12 @@ class HamamatsuCamera(VoxelCamera):
         """
 
         # log dcam camera settings
-        self.log.info("dcam camera parameters")
+        self._log.info("dcam camera parameters")
         idprop = self._dcam.prop_getnextid(0)
         while idprop is not False:
             propname = self._dcam.prop_getname(idprop)
             propvalue = self._dcam.prop_getvalue(idprop)
-            self.log.info(f"{propname}, {propvalue}")
+            self._log.info(f"{propname}, {propvalue}")
             idprop = self._dcam.prop_getnextid(idprop)
 
     def close(self) -> None:
@@ -736,7 +736,7 @@ class HamamatsuCamera(VoxelCamera):
 
             res = self._dcam.prop_getattr(DELIMINATED_PROPERTIES[name])
             if type(res) is not DCAMPROP_ATTR:
-                self.log.error(
+                self._log.error(
                     f"Failed to fetch delimination prop: {name}. " f"Error: {DCAMERR(self._dcam_provider.lasterr())}"
                 )
                 return None
@@ -746,7 +746,7 @@ class HamamatsuCamera(VoxelCamera):
             prop_name = list(self._delimination_props.keys())
         for prop in prop_name:
             self._delimination_props[prop] = get_delimination_prop_attr(prop)
-            self.log.debug(f"Fetched delimination prop: {prop_name}")
+            self._log.debug(f"Fetched delimination prop: {prop_name}")
 
     def _invalidate_delimination_props(self, prop_names: list[str] | None = None) -> None:
         """Invalidate a list of delimination properties.
@@ -758,7 +758,7 @@ class HamamatsuCamera(VoxelCamera):
             prop_names = list(self._delimination_props.keys())
         for prop_name in prop_names:
             self._delimination_props[prop_name] = None
-            self.log.debug(f"Invalidated delimination prop: {prop_name}")
+            self._log.debug(f"Invalidated delimination prop: {prop_name}")
 
     def _get_delimination_prop_limit(self, prop_name: str, limit_type: LimitType) -> float | None:
         """Query the min, max, and step of a delimination property.
@@ -784,10 +784,10 @@ class HamamatsuCamera(VoxelCamera):
                 case "step":
                     return delimination_prop.valuestep
                 case _:
-                    self.log.error(f"Invalid limit type: {limit_type}")
+                    self._log.error(f"Invalid limit type: {limit_type}")
                     return None
         except Exception as e:
-            self.log.error(f"Failed to query delimination property: {prop_name}. Error: {e}")
+            self._log.error(f"Failed to query delimination property: {prop_name}. Error: {e}")
             return None
 
     def _get_delimination_prop_value(self, prop_name: str) -> float | int:
@@ -800,9 +800,9 @@ class HamamatsuCamera(VoxelCamera):
         """
         value = self._dcam.prop_getvalue(DELIMINATED_PROPERTIES[prop_name])
         if value is None:
-            self.log.error(f"Failed to get dcam property: {prop_name}")
+            self._log.error(f"Failed to get dcam property: {prop_name}")
             return -1
-        self.log.debug(f"Fetched camera property, {prop_name}: {value}")
+        self._log.debug(f"Fetched camera property, {prop_name}: {value}")
         return value
 
     def _set_delimination_prop_value(self, prop_name: str, value: int | float) -> None:
@@ -814,4 +814,4 @@ class HamamatsuCamera(VoxelCamera):
         :type value: int | float
         """
         self._dcam.prop_setvalue(DELIMINATED_PROPERTIES[prop_name], value)
-        self.log.debug(f"Set camera property: {prop_name} to {value}")
+        self._log.debug(f"Set camera property: {prop_name} to {value}")

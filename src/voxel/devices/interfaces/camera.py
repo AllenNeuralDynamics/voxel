@@ -2,20 +2,17 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from functools import cached_property
-from typing import TYPE_CHECKING
 
 import numpy as np
+import zerorpc
 
+from voxel.devices.base import VoxelPropertyValue
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.log_config import get_component_logger
 from voxel.utils.vec import Vec2D
-import zerorpc
 
-from .base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
-
-if TYPE_CHECKING:
-    from .base import VoxelDeviceModel
+from ..base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
 
 
 class PixelType(IntEnum):
@@ -542,7 +539,7 @@ class VoxelCamera(VoxelDevice):
         pass
 
 
-class VoxelCameraProxy:
+class VoxelCameraProxy(VoxelCamera):
     """
     A proxy for a remote VoxelCamera service.
 
@@ -627,7 +624,7 @@ class VoxelCameraProxy:
     def roi_size_um(self) -> Vec2D[float]:
         return Vec2D(*self.client.roi_size_um)
 
-    @property
+    @deliminated_int()
     def roi_width_px(self) -> int:
         return self.client.roi_width_px
 
@@ -635,7 +632,7 @@ class VoxelCameraProxy:
     def roi_width_px(self, width_px: int) -> None:
         self.client.roi_width_px = width_px
 
-    @property
+    @deliminated_int()
     def roi_width_offset_px(self) -> int:
         return self.client.roi_width_offset_px
 
@@ -643,7 +640,7 @@ class VoxelCameraProxy:
     def roi_width_offset_px(self, width_offset_px: int) -> None:
         self.client.roi_width_offset_px = width_offset_px
 
-    @property
+    @deliminated_int()
     def roi_height_px(self) -> int:
         return self.client.roi_height_px
 
@@ -651,7 +648,7 @@ class VoxelCameraProxy:
     def roi_height_px(self, height_px: int) -> None:
         self.client.roi_height_px = height_px
 
-    @property
+    @deliminated_int()
     def roi_height_offset_px(self) -> int:
         return self.client.roi_height_offset_px
 
@@ -659,7 +656,7 @@ class VoxelCameraProxy:
     def roi_height_offset_px(self, height_offset_px: int) -> None:
         self.client.roi_height_offset_px = height_offset_px
 
-    @property
+    @enumerated_int(options=VoxelCamera._BINNING_OPTIONS)
     def binning(self) -> int:
         return self.client.binning
 
@@ -679,7 +676,7 @@ class VoxelCameraProxy:
     def frame_size_mb(self) -> float:
         return self.client.frame_size_mb
 
-    @property
+    @deliminated_float()
     def exposure_time_ms(self) -> float:
         return self.client.exposure_time_ms
 
@@ -687,7 +684,7 @@ class VoxelCameraProxy:
     def exposure_time_ms(self, exposure_time_ms: float) -> None:
         self.client.exposure_time_ms = exposure_time_ms
 
-    @property
+    @deliminated_float()
     def line_interval_us(self) -> float:
         return self.client.line_interval_us
 
@@ -699,7 +696,7 @@ class VoxelCameraProxy:
     def frame_time_ms(self) -> float:
         return self.client.frame_time_ms
 
-    @property
+    @deliminated_float()
     def frame_rate_hz(self) -> float:
         return self.client.frame_rate_hz
 
@@ -727,8 +724,7 @@ class VoxelCameraProxy:
     def sensor_temperature_c(self) -> float:
         return self.client.sensor_temperature_c
 
-    @property
-    def snapshot(self) -> "VoxelDeviceModel":
+    def snapshot(self) -> dict[str, VoxelPropertyValue]:
         """Get the latest frame from the camera."""
         return self.client.snapshot()
 

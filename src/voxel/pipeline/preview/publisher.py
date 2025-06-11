@@ -16,18 +16,19 @@ class PreviewFramePublisher(Protocol):
     def publish_frame(self, frame: PreviewFrame) -> None: ...
 
 
-class PreviewDispatcher(PreviewFramePublisher):
+class PreviewManager(PreviewFramePublisher):
     """
     Receives PreviewFrame objects (locally or from remote ZMQ streams)
     and publishes them to registered local observers.
     """
 
     def __init__(
-        self, stream_addresses: list[str], observers: list[NewFrameCallback], target_width: int = 1024
+        self, *, stream_addresses: list[str] = [], observers: list[NewFrameCallback] = [], target_width: int = 1024
     ) -> None:
         self.log = get_logger("PreviewHub")
         self._target_width = target_width
         self._new_frame_observers = observers
+        self._observers_lock = threading.Lock()
 
         self._receive_thread: threading.Thread | None = None
         self._halt_event = threading.Event()
@@ -43,6 +44,24 @@ class PreviewDispatcher(PreviewFramePublisher):
     @property
     def target_width(self) -> int:
         return self._target_width
+
+    def add_observer(self, callback: NewFrameCallback) -> None:
+        """
+        Register a new observer to receive preview frames.
+        """
+        with self._observers_lock:
+            if callback not in self._new_frame_observers:
+                self._new_frame_observers.append(callback)
+                self.log.info(f"Observer {id(callback)} added. Total observers: {len(self._new_frame_observers)}")
+
+    def remove_observer(self, callback: NewFrameCallback) -> None:
+        """
+        Unregister an observer from receiving preview frames.
+        """
+        with self._observers_lock:
+            if callback in self._new_frame_observers:
+                self._new_frame_observers.remove(callback)
+                self.log.info(f"Observer {id(callback)} removed. Total observers: {len(self._new_frame_observers)}")
 
     def _setup_subscribe_socket(self) -> zmq.Socket:
         if not self._context:
@@ -99,14 +118,15 @@ class PreviewDispatcher(PreviewFramePublisher):
                 f"Frame width {frame.metadata.preview_width} does not match target width {self._target_width}. "
                 "This may lead to unexpected behavior."
             )
-        for callback in self._new_frame_observers:
-            try:
-                callback(frame)
-            except Exception as e:
-                self.log.error(
-                    f"Error in observer {id(callback)} while processing frame "
-                    f"{frame.metadata.frame_idx} ({frame.metadata.channel_name}): {e}"
-                )
+        with self._observers_lock:
+            for callback in self._new_frame_observers:
+                try:
+                    callback(frame)
+                except Exception as e:
+                    self.log.error(
+                        f"Error in observer {id(callback)} while processing frame "
+                        f"{frame.metadata.frame_idx} ({frame.metadata.channel_name}): {e}"
+                    )
 
     def _receive_loop(self):
         if not self._subscribe_socket:

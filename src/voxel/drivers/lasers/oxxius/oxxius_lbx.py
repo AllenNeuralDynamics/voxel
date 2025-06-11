@@ -2,7 +2,7 @@ from oxxius_laser import LBX, BoolVal
 from serial import Serial
 from sympy import Expr, solve, symbols
 
-from voxel.devices.laser import VoxelLaser
+from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 MODULATION_MODES = {
@@ -50,7 +50,7 @@ class OxxiusLBXLaser(VoxelLaser):
                     self._inst.current_setpoint = int(round(sol))  # setpoint must be integer
                     return
             # If no value exists, alert user
-            self.log.error(f"Cannot set laser to {value}mW because " f"no current percent correlates to {value} mW")
+            self._log.error(f"Cannot set laser to {value}mW because " f"no current percent correlates to {value} mW")
         else:
             self._inst.power_setpoint = value
 

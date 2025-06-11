@@ -1,6 +1,6 @@
 import time
 
-from voxel.devices.rotation_axis import VoxelRotationAxis
+from voxel.devices.interfaces.rotation_axis import VoxelRotationAxis
 
 
 class SimulatedRotationAxis(VoxelRotationAxis):
@@ -83,7 +83,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         """
         # Current implementation does not support timeout
         while self.is_moving:
-            self.log.debug(
+            self._log.debug(
                 f"\n\tMoving to {self._target_position_deg} degrees"
                 f"\n\tCurrent position: {self.position_deg:.2f} degrees"
             )
@@ -93,4 +93,4 @@ class SimulatedRotationAxis(VoxelRotationAxis):
     def close(self) -> None:
         """Close the connection to the rotation axis."""
         self._movement_start_time = None
-        self.log.info(f"Rotation axis {self.name} closed.")
+        self._log.info(f"Rotation axis {self.name} closed.")

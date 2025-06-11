@@ -1,14 +1,14 @@
 Available laser devices:
-- voxel.devices.lasers.simulated
+- voxel.devices.interfaces.lasers.simulated
     - SimulatedLaser
-- voxel.devices.lasers.vortran
+- voxel.devices.interfaces.lasers.vortran
     - StradusLaser
-- voxel.devices.lasers.cobolt
+- voxel.devices.interfaces.lasers.cobolt
     - SkyraLaser
-- voxel.devices.lasers.oxxius
+- voxel.devices.interfaces.lasers.oxxius
     -  OxxiusLBXLaser
     -  OxxiusLCXLaser
-- voxel.devices.lasers.coherent
+- voxel.devices.interfaces.lasers.coherent
     - ObisLXLaser
     - ObisLSLaser
     - GenesisMXLaser

@@ -1,3 +1,4 @@
+from enum import StrEnum
 import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
@@ -9,7 +10,14 @@ from .preview.common import PreviewConfigOptions
 
 if TYPE_CHECKING:
     from voxel.frame_stack import StackAcquisitionConfig
-    from voxel.devices.camera import VoxelCamera, VoxelCameraProxy
+    from voxel.devices.interfaces.camera import VoxelCamera, VoxelCameraProxy
+
+
+class PipelineMode(StrEnum):
+    IDLE = "idle"
+    PREVIEW = "preview"
+    ACQUISITION = "acquisition"
+    ERROR = "error"
 
 
 class IImagingPipeline(ABC):
@@ -28,6 +36,11 @@ class IImagingPipeline(ABC):
     @abstractmethod
     def get_acquisition_status(self) -> dict[tuple[int, int], BatchStatus] | None:
         """Returns the current acquisition status of the pipeline."""
+        ...
+
+    @abstractmethod
+    def get_current_mode(self) -> PipelineMode:
+        """Get the current mode of the pipeline."""
         ...
 
     @abstractmethod
