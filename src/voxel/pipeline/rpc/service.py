@@ -1,16 +1,16 @@
 import threading
 from typing import TYPE_CHECKING
 
-from voxel.frame_stack import StackAcquisitionConfig
 from voxel.utils.log_config import get_component_logger
 
 from ..local_pipeline import ImagingPipeline
 from ..preview.common import PreviewConfigOptions
 from ..preview.publisher import PreviewFrameRelay
-from ..stack_acquisition import BatchStatus
+from ..stack_acquisition import BatchStatus, StackAcquisitionConfig
 
 if TYPE_CHECKING:
     from voxel.devices.interfaces.camera import VoxelCamera
+
     from ..io.manager import IOManager
 
 

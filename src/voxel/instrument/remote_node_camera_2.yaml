@@ -1,0 +1,27 @@
+#remote.voxel.yaml
+remote_node:
+  io:
+    writers:
+      imaris:
+        driver: voxel.io.writers.imaris.ImarisWriter
+      simple_writer:
+        driver: voxel.io.writers.simple.SimpleWriter
+    transfers:
+      robocopy:
+        driver: voxel.io.transfers.robocopy.RobocopyFileTransfer
+
+  devices:
+    camera_2:
+      driver: voxel.drivers.cameras.simulated.SimulatedCamera
+      kwds:
+        pixel_size_um: 0.5, 0.5
+        magnification: 40
+        sensor_width_px: 4096
+        sensor_height_px: 4096
+        resize_method: tile
+
+  ports:
+    camera_2:
+      camera_port: 1000
+      pipeline_port: 2000
+      preview_port: 3000

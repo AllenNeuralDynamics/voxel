@@ -5,8 +5,9 @@ from voxel.pipeline.common import PipelineMode
 
 if TYPE_CHECKING:
     from voxel.devices.base import VoxelDevice
-    from voxel.instrument.detection_path import DetectionPath
-    from voxel.instrument.illumination_path import IlluminationPath
+
+    from .detection import DetectionPath
+    from .illumination import IlluminationPath
 
 
 @dataclass(frozen=True)
@@ -44,5 +45,5 @@ class Channel:
 
     def stop_preview(self) -> None:
         """Deactivate the channel by stopping the live view."""
-        self.detection.pipeline.stop_live_view()
         self.illumination.disable()
+        self.detection.pipeline.stop_live_view()

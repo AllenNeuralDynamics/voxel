@@ -9,9 +9,9 @@ from voxel.pipeline.preview.publisher import PreviewManager
 from voxel.utils.build import build_object_group
 from voxel.utils.log_config import get_component_logger
 
-from .channel import Channel
-from .detection_path import DetectionPath
-from .illumination_path import IlluminationPath
+from .optical_paths.channel import Channel
+from .optical_paths.detection import DetectionPath
+from .optical_paths.illumination import IlluminationPath
 from .imaging_unit import ImagingUnit
 from .schemas import ChannelDefinition, ImagingUnitDefinition, InstrumentConfig, InstrumentLayout, InstrumentMetadata
 from .specimen_stage import SpecimenStage

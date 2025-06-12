@@ -4,7 +4,7 @@ from nidaqmx.task.channels import COChannel as NiCOChannel
 
 from voxel.utils.descriptors.deliminated import deliminated_float
 
-from ..daq import PinInfo, VoxelDaq, VoxelDaqTask
+from ..daq import PinInfo, VoxelNiDAQ, VoxelDaqTask
 
 
 class ClockGenTask(VoxelDaqTask):
@@ -25,7 +25,7 @@ class ClockGenTask(VoxelDaqTask):
     def __init__(
         self,
         name: str,
-        daq: VoxelDaq,
+        daq: VoxelNiDAQ,
         out_pin: str,
         counter: str = "ctr0",
         freq_hz: float = 1e3,

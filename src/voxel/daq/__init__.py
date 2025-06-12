@@ -1,3 +1,3 @@
-from .daq import VoxelDaq
+from .daq import VoxelNiDAQ
 
-__all__ = ["VoxelDaq"]
+__all__ = ["VoxelNiDAQ"]

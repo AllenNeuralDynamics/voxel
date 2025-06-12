@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Self
 
 import zerorpc
 
-from voxel.frame_stack import StackAcquisitionConfig
 from voxel.utils.log_config import get_component_logger
 
 from .common import IImagingPipeline, PipelineMode
@@ -11,7 +10,7 @@ from .live_viewer import LiveViewer
 from .preview.common import PreviewConfigOptions
 from .preview.generator import PreviewGenerator
 from .preview.publisher import PreviewFramePublisher, PreviewFrameRelay
-from .stack_acquisition import BatchStatus, StackAcquisitionRunner
+from .stack_acquisition import BatchStatus, StackAcquisitionConfig, StackAcquisitionRunner
 
 if TYPE_CHECKING:
     from voxel.devices.interfaces.camera import VoxelCamera, VoxelCameraProxy

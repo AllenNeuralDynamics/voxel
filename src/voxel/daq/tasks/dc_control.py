@@ -2,13 +2,13 @@ from nidaqmx.task.channels import AOChannel as NiAOChannel
 
 from voxel.utils.descriptors.deliminated import deliminated_float
 
-from ..daq import PinInfo, VoxelDaq, VoxelDaqTask
+from ..daq import PinInfo, VoxelNiDAQ, VoxelDaqTask
 
 
 class DCControlTask(VoxelDaqTask):
     """A wrapper for a nidaqmx DAQ Task managing DC control signals."""
 
-    def __init__(self, name: str, daq: "VoxelDaq", pin: str) -> None:
+    def __init__(self, name: str, daq: "VoxelNiDAQ", pin: str) -> None:
         super().__init__(name, daq)
 
         self._pin = self.daq.assign_pin(pin)

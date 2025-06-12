@@ -1,3 +1,4 @@
+import math
 import threading
 import time
 from enum import StrEnum
@@ -5,19 +6,58 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+from pydantic import BaseModel, field_validator
 
-from voxel.frame_stack import StackAcquisitionConfig
-from .io.transfers.base import VoxelFileTransfer
-from .io.writers.base import VoxelWriter, WriterConfig
 from voxel.utils.common import get_available_disk_space_mb
+from voxel.utils.frame_stack import FrameStack
 from voxel.utils.log_config import get_logger
 from voxel.utils.vec import Vec3D
 
-
+from .io.transfers.base import VoxelFileTransfer
+from .io.writers.base import VoxelWriter, WriterConfig
 from .preview.generator import PreviewGenerator
 
 if TYPE_CHECKING:
     from voxel.devices.interfaces.camera import VoxelCamera
+
+
+class StackAcquisitionConfig(BaseModel):
+    """
+    Configuration for stack acquisition.
+    This class holds the parameters required for configuring the acquisition engine.
+    """
+
+    stack: FrameStack
+    channel_idx: int
+    channel_name: str
+    local_path: str | Path
+    remote_path: str | Path | None = None
+    batch_size: int = 128
+
+    def __post_init__(self) -> None:
+        self._frame_ranges = self._get_frame_ranges(self.stack.frame_count)
+
+    @field_validator("local_path", "remote_path", mode="before")
+    def validate_path(cls, value: str | Path) -> Path:
+        return Path(value) if isinstance(value, str) else value
+
+    @property
+    def frame_ranges(self) -> set[tuple[int, int]]:
+        """
+        Returns a set of tuples representing the frame ranges for each batch.
+        Each tuple contains the start and end indices of the frames in that batch.
+        """
+        return self._frame_ranges
+
+    def _get_frame_ranges(self, frame_count: int) -> set[tuple[int, int]]:
+        """Generate frame ranges for batch acquisition."""
+        num_batches = math.ceil(frame_count / self.batch_size)
+        frame_ranges = set()
+        for i in range(num_batches):
+            start_idx = i * self.batch_size + 1
+            end_idx = min(start_idx + self.batch_size - 1, frame_count)
+            frame_ranges.add((start_idx, end_idx))
+        return frame_ranges
 
 
 def get_batch_ranges(total_frames: int, batch_size: int) -> set[tuple[int, int]]:

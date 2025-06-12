@@ -1,3 +1,4 @@
+#instrument.voxel.yaml
 instrument:
   metadata:
     name: Exaspim 2
@@ -24,6 +25,10 @@ instrument:
         preview_port: 3000
 
   devices:
+    nidaq:
+      driver: voxel.daq.daq.VoxelNiDAQ
+      kwds:
+        unique_id: Dev1
     camera_1:
       driver: voxel.drivers.cameras.simulated.SimulatedCamera
       kwds:
@@ -103,18 +108,18 @@ instrument:
       kwds:
         dimension: Y
 
-  daq:
-    conn: Dev1
-    ports:
-      camera_1: ao1
-      camera_2: ao2
-      laser_488: ao3
-      laser_561: ao4
-      laser_405: ao5
-      laser_507: ao6
-      z_axis: ao7
-
   layout:
+    daq:
+      controller: nidaq
+      connections:
+        camera_1: ao1
+        camera_2: ao2
+        laser_488: ao3
+        laser_561: ao4
+        laser_405: ao5
+        laser_507: ao6
+        z_axis: ao7
+        etl: ao8
     stage:
       x: x_axis
       y: y_axis
@@ -165,88 +170,66 @@ instrument:
       illumination: laser_488
       filters: { fw_main: LP420, fw_2: BP525-50 }
 
-# remote_node.yaml
-remote_node:
-  io:
-    writers:
-      imaris:
-        driver: voxel.io.writers.imaris.ImarisWriter
-      simple_writer:
-        driver: voxel.io.writers.simple.SimpleWriter
-    transfers:
-      robocopy:
-        driver: voxel.io.transfers.robocopy.RobocopyFileTransfer
+  waveform_templates:
+    digital_pulse: &digital_pulse
+      anchors: [0.0, 0.0, 0.001, 0.001]
+      levels: [0, 5]
+    default_laser_waveform: &default_laser_waveform
+      anchors: [0.001, 0.002, 0.019, 0.020]
+      levels: [0, 2.5]
 
-  devices:
-    camera_2:
-      driver: voxel.drivers.cameras.simulated.SimulatedCamera
-      kwds:
-        pixel_size_um: 0.5, 0.5
-        magnification: 40
-        sensor_width_px: 4096
-        sensor_height_px: 4096
-        resize_method: tile
-
-  ports:
-    camera_2:
-      camera_port: 1000
-      pipeline_port: 2000
-      preview_port: 3000
-
-imaging:
-  blocks:
+  imaging_units:
     GFPxRFP:
       description:
         "Simultaneously capture GFP using laser 488 and RFP using laser 561"
       channels:
         - GFP_CAM1
         - RFP_CAM2
-      settings:
-        camera_1:
-          exposure_time:
-            - { z: 0, value: 0.1 }
-        camera_2:
-          exposure_time:
-            - { z: 0, value: 0.15 }
-    YFP:
-      channels:
-        - YFP_CAM1
-      settings:
-        camera_1:
-          exposure_time:
-            - { z: 0, value: 0.15 }
-    DAPIxGFP:
-      channels:
-        - DAPI_CAM1
-        - GFP_CAM2
-      settings:
-        camera_1:
-          exposure_time:
-            - { z: 0, value: 0.1 }
-    RFPxYFP:
-      channels:
-        - YFP_CAM1
-        - RFP_CAM2
-      settings:
-        type:camera:
-          exposure_time:
-            - { z: 0, value: 0.15 }
-    DAPIxRFP:
-      channels:
-        - DAPI_CAM1
-        - RFP_CAM2
-      settings:
-        camera_1:
-          exposure_time:
-            - { z: 0, value: 0.1 }
-        camera_2:
-          exposure_time:
-            - { z: 0, value: 0.15 }
+      daq_task:
+        period_ms: 20.0 # The time for one full cycle (e.g., one camera frame)
+        sample_rate_hz: 100000
+        waveforms:
+          camera_1:
+            <<: *digital_pulse
 
-  plans:
-    - name: standard
-      description: "Standard imaging plan for Exaspim 2"
-      blocks:
-        - GFPxRFP
-        - RFPxYFP
-        - RFPxYFP
+          laser_488:
+            <<: *default_laser_waveform
+
+          camera_2:
+            <<: *digital_pulse
+            phase: 0.01 # Phase shift to reduce overlap with GFP channel, Alternatively use delay_ms: 0.2
+            # delay_ms: 0.2 # Starts at t=0.2ms
+
+          laser_561:
+            <<: *default_laser_waveform
+            phase: 0.01 # Phase shift to align with camera 2
+            # delay_ms: 0.2
+    YFP:
+      description: "Capture YFP using laser 507"
+      channels:
+        - YFP_CAM1
+      daq_task:
+        period_ms: 20.0 # The time for one full cycle (e.g., one camera frame)
+        sample_rate_hz: 100000
+        waveforms:
+          camera_1:
+            <<: *digital_pulse
+          laser_507:
+            <<: *default_laser_waveform
+
+extra_imaging_units:
+  # DAPIxGFP:
+  #   description: "Capture DAPI using laser 405 and GFP using laser 488"
+  #   channels:
+  #     - DAPI_CAM1
+  #     - GFP_CAM2
+  # RFPxYFP:
+  #   description: "Capture RFP using laser 561 and YFP using laser 507"
+  #   channels:
+  #     - YFP_CAM1
+  #     - RFP_CAM2
+  # DAPIxRFP:
+  #   description: "Capture DAPI using laser 405 and RFP using laser 561"
+  #   channels:
+  #     - DAPI_CAM1
+  #     - RFP_CAM2

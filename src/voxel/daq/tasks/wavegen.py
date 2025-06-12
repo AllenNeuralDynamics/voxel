@@ -13,7 +13,7 @@ from ..daq import PinInfo, VoxelDaqTask
 from .clockgen import ClockGenTask
 
 if TYPE_CHECKING:
-    from ..daq import VoxelDaq
+    from ..daq import VoxelNiDAQ
 
 
 def parse_anchors(anchors: list[float]) -> list[float]:
@@ -283,7 +283,7 @@ class WaveGenTask(VoxelDaqTask):
     def __init__(
         self,
         name: str,
-        daq: "VoxelDaq",
+        daq: "VoxelNiDAQ",
         period_ms: float,
         sample_rate_hz: int | float,
         trigger_task: ClockGenTask,

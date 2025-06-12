@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING
 
+from voxel.devices.base import VoxelDevice
 from voxel.utils.log_config import get_component_logger
 
-from ..devices.configured_device import ConfiguredDevice
-from .channel import Channel
 from .instrument import Instrument
+from .optical_paths.channel import Channel
 from .schemas import ImagingUnitDefinition
 
 if TYPE_CHECKING:
@@ -23,19 +23,16 @@ class ImagingUnit:
                 raise ValueError(f"Channel '{channel_name}' not found in instrument '{instrument.name}'.")
             self._channels[channel_name] = instrument.channels[channel_name]
 
-        self._devices = {}
-        for channel in self._channels.values():
-            for device_name, device in channel.devices.items():
-                if device_name not in self._devices:
-                    self._devices[device_name] = ConfiguredDevice(device, definition.z_settings.get(device_name))
-
-        # TODO: Rename to HardwareTriggerController and use it for all hardware triggers
-        self.trigger_controller: WaveGenTask | None = None
+        # TODO: Create from instrument.daq and build task based on definition
+        self.daq_task: WaveGenTask | None = None
 
     @property
-    def devices(self) -> dict[str, ConfiguredDevice]:
+    def devices(self) -> dict[str, VoxelDevice]:
         """Return the devices in this imaging unit."""
-        return self._devices
+        devices: dict[str, VoxelDevice] = {}
+        for channel in self.channels.values():
+            devices.update(channel.devices)
+        return devices
 
     @property
     def channels(self) -> dict[str, Channel]:

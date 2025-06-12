@@ -28,7 +28,7 @@ class PinInfo:
     pfi: str | None = None  # PFI representation if applicable (e.g., "PFI0")
 
 
-class VoxelDaq:
+class VoxelNiDAQ:
     def __init__(self, conn: str) -> None:
         self.name = conn
         self.log = get_component_logger(self)
@@ -172,7 +172,7 @@ class VoxelDaq:
 
 
 class VoxelDaqTask(ABC):
-    def __init__(self, name: str, daq: VoxelDaq) -> None:
+    def __init__(self, name: str, daq: VoxelNiDAQ) -> None:
         self.name = name
         self.inst = NiTask(name)
         self.daq = daq

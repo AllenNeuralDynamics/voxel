@@ -4,12 +4,11 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 
-from .stack_acquisition import BatchStatus
+from .stack_acquisition import BatchStatus, StackAcquisitionConfig
 
 from .preview.common import PreviewConfigOptions
 
 if TYPE_CHECKING:
-    from voxel.frame_stack import StackAcquisitionConfig
     from voxel.devices.interfaces.camera import VoxelCamera, VoxelCameraProxy
 
 

@@ -19,7 +19,7 @@ from voxel.acquisition.scan_pattern import (
 )
 from voxel.acquisition.specs import AcquisitionSpecs
 from voxel.acquisition.volume import Volume
-from voxel.frame_stack import FrameStack
+from voxel.utils.frame_stack import FrameStack
 from voxel.utils.log_config import get_logger
 from voxel.utils.vec import Vec2D, Vec3D
 

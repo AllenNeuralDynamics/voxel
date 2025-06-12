@@ -7,11 +7,10 @@ from voxel.utils.log_config import get_component_logger
 
 from ..common import IImagingPipeline, PipelineMode
 from ..preview.common import PreviewConfigOptions
-from ..stack_acquisition import BatchStatus
+from ..stack_acquisition import BatchStatus, StackAcquisitionConfig
 
 if TYPE_CHECKING:
     from voxel.devices.interfaces.camera import VoxelCameraProxy
-    from voxel.frame_stack import StackAcquisitionConfig
 
 
 class ImagingPipelineProxy(IImagingPipeline):

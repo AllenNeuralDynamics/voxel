@@ -1,6 +1,6 @@
 from typing import Literal, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from voxel.devices.z_settings import ZSettingsCollection
 from voxel.utils.build import BuildSpec, BuildSpecGroup
@@ -59,10 +59,41 @@ class ChannelDefinition(BaseModel):
     filters: dict[str, str] = Field(default_factory=dict)
 
 
+class DAQWaveformModel(BaseModel):
+    anchors: list[float]
+    levels: list[float]
+    phase: float | None = None
+    delay_ms: float | None = None
+    # if delay_ms is set, it will take precedence over phase
+
+    @field_validator("anchors")
+    def validate_anchors(cls, v):
+        # sort anchors, clamp to 0-1 range, take first 4 if more than 4
+        v = sorted(v)
+        v = [max(0.0, min(1.0, a)) for a in v]
+        if len(v) > 4:
+            v = v[:4]
+        return v
+
+    @field_validator("levels")
+    def validate_levels(cls, v):
+        # sort levels, take first 2 if more than 2
+        v = sorted(v)
+        if len(v) > 2:
+            v = v[:2]
+        return v
+
+
+class DAQTaskModel(BaseModel):
+    period_ms: float
+    sampling_rate_hz: float
+    waveforms: dict[str, DAQWaveformModel]
+
+
 class ImagingUnitDefinition(BaseModel):
     name: str
     channels: list[str]
-    z_settings: dict[str, ZSettingsCollection] = Field(default_factory=dict)
+    daq_task: DAQTaskModel
     descriptions: str = ""
 
 
