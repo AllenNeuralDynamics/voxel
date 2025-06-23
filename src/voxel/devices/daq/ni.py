@@ -6,7 +6,7 @@ import numpy as np
 import time
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
-from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, TaskMode, AOIdleOutputBehavior
+from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, AOIdleOutputBehavior
 from scipy import signal, interpolate
 from typing import Dict, Optional
 
@@ -379,20 +379,6 @@ class NIDAQ(BaseDAQ):
         :type rereserve_buffer: bool, optional
         """
         ao_voltages = np.array(list(self.ao_waveforms.values()))
-
-        if rereserve_buffer:  # don't need to rereseve when rewriting already running tasks
-            # unreserve buffer
-            self.ao_task.control(TaskMode.TASK_UNRESERVE)
-            # reconfigure timing
-            self.ao_task.timing.cfg_samp_clk_timing(
-                rate=self.ao_sampling_frequency_hz,
-                active_edge=self.ao_active_edge,
-                sample_mode=self.ao_sample_mode,
-                samps_per_chan=len(ao_voltages[0]),
-            )
-            # sets buffer to length of voltages
-            self.ao_task.out_stream.output_buf_size = len(ao_voltages[0])
-            self.ao_task.control(TaskMode.TASK_COMMIT)
         self.ao_task.write(np.array(ao_voltages))
 
     def write_do_waveforms(self, rereserve_buffer: bool = True) -> None:
@@ -403,12 +389,6 @@ class NIDAQ(BaseDAQ):
         :type rereserve_buffer: bool, optional
         """
         do_voltages = np.array(list(self.do_waveforms.values()))
-        if rereserve_buffer:  # don't need to rereseve when rewriting already running tasks
-            # unreserve buffer
-            self.do_task.control(TaskMode.TASK_UNRESERVE)
-            # sets buffer to length of voltages
-            self.do_task.out_stream.output_buf_size = len(do_voltages[0])
-            # FIXME: Really weird quirk on Micah's computer. Check if actually real
         do_voltages = do_voltages.astype("uint32")[0] if len(do_voltages) == 1 else do_voltages.astype("uint32")
         self.do_task.write(do_voltages)
 
@@ -668,60 +648,6 @@ class NIDAQ(BaseDAQ):
 
         return waveform
 
-    def change_filter_position(
-        self,
-        channel_port: str,
-        max_volts: float = 5.0,
-        sampling_frequency_hz=10000,
-        period_time_ms=100,
-        duty_cycle_percent=50,
-    ) -> None:
-        """
-        Change the position of the filter wheel by sending a TTL pulse.
-        This method stops and closes existing tasks, creates a new task to change the filter position,
-        and sends a TTL pulse to the specified channel port.
-        :param channel_port: The channel port to send the TTL pulse to
-        :type channel_port: str
-        :param max_volts: The maximum voltage for the TTL pulse, defaults to 5.0
-        :type max_volts: str
-        :param sampling_frequency_hz: The sampling frequency for the task, defaults to 10000
-        :type sampling_frequency_hz: int
-        :param period_time_ms: The period time for the task in milliseconds, defaults to 100
-        :type period_time_ms: int
-        :param duty_cycle_percent: The duty cycle percentage for the TTL pulse, defaults to 50
-        :type duty_cycle_percent: int
-        """
-        self.log.info("resetting daq")
-        self.dev.reset_device()
-        self.log.info("creating change position task")
-        filter_position_task = nidaqmx.Task("filter_position_task")
-        physical_name = f"/{self.id}/{channel_port}"
-        self.log.info("adding port to change position task")
-        filter_position_task.ao_channels.add_ao_voltage_chan(physical_name)
-        self.log.info("configuring change position task timing")
-        period_samples = int(period_time_ms / 1000 * sampling_frequency_hz)
-        filter_position_task.timing.cfg_samp_clk_timing(
-            rate=sampling_frequency_hz,
-            sample_mode=AcqType.FINITE,
-            samps_per_chan=period_samples,
-        )
-        ao_voltages = np.zeros(period_samples)
-        ao_voltages[0 : int(period_samples * duty_cycle_percent)] = max_volts
-        self.log.info("writing change position voltages to task")
-        filter_position_task.write(ao_voltages)
-        self.log.info("starting change position task")
-        filter_position_task.start()
-        self.log.info("waiting on change position task")
-        filter_position_task.wait_until_done()
-        self.log.info("stopping change position task")
-        filter_position_task.stop()
-        self.log.info("closing change position task")
-        filter_position_task.close()
-        self.log.info("resetting daq")
-        self.dev.reset_device()
-        self.log.info("waiting to settle")
-        time.sleep(0.5)  # wait for wheel to settle
-
     def plot_waveforms_to_pdf(self, save: bool = False) -> None:
         """
         Plot waveforms and optionally save to a PDF.
@@ -762,29 +688,6 @@ class NIDAQ(BaseDAQ):
         if save:
             plt.savefig("waveforms.pdf", bbox_inches="tight")
 
-    def _rereserve_buffer(self, buf_len: int) -> None:
-        """
-        Re-reserve the buffer for tasks.
-
-        :param buf_len: Length of the buffer
-        :type buf_len: int
-        """
-        """If tasks are already configured, the buffer needs to be cleared and rereserved to work"""
-        self.ao_task.control(TaskMode.TASK_UNRESERVE)  # Unreserve buffer
-        # reconfigure timing
-        self.ao_task.timing.cfg_samp_clk_timing(
-            rate=self.ao_sampling_frequency_hz,
-            active_edge=self.ao_active_edge,
-            sample_mode=self.ao_sample_mode,
-            samps_per_chan=buf_len,
-        )
-        self.ao_task.out_stream.output_buf_size = buf_len  # Sets buffer to length of voltages
-        self.ao_task.control(TaskMode.TASK_COMMIT)
-
-        self.do_task.control(TaskMode.TASK_UNRESERVE)  # Unreserve buffer
-        self.do_task.out_stream.output_buf_size = buf_len
-        self.do_task.control(TaskMode.TASK_COMMIT)
-
     def start(self) -> None:
         """
         Start all tasks.
@@ -798,7 +701,6 @@ class NIDAQ(BaseDAQ):
         Stop all tasks.
         """
         for task in [self.ao_task, self.do_task, self.co_task]:
-            print(task)
             if task is not None:
                 task.stop()
 
@@ -826,7 +728,6 @@ class NIDAQ(BaseDAQ):
         """
         for task in [self.ao_task, self.do_task]:
             if task is not None:
-                print(task)
                 task.wait_until_done(timeout)
 
     def is_finished_all(self) -> bool:
