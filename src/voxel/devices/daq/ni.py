@@ -3,9 +3,10 @@ import math
 import matplotlib.pyplot as plt
 import nidaqmx
 import numpy as np
+import time
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
-from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, TaskMode, AOIdleOutputBehavior
+from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, AOIdleOutputBehavior
 from scipy import signal, interpolate
 from typing import Dict, Optional
 
@@ -347,7 +348,7 @@ class NIDAQ(BaseDAQ):
                     t0_offset_volts,
                     t50_offset_volts,
                     t100_offset_volts,
-                )              
+                )
             # sanity check voltages for ni card range
             max = getattr(self, "max_ao_volts", 5)
             min = getattr(self, "min_ao_volts", 0)
@@ -356,7 +357,9 @@ class NIDAQ(BaseDAQ):
 
             # sanity check voltages for device range
             if np.max(voltages[:]) > device_max_volts or np.min(voltages[:]) < device_min_volts:
-                raise ValueError(f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts for {name} and {channel}")
+                raise ValueError(
+                    f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts for {name} and {channel}"
+                )
 
             # store 1d voltage array into 2d waveform array
 
@@ -376,20 +379,6 @@ class NIDAQ(BaseDAQ):
         :type rereserve_buffer: bool, optional
         """
         ao_voltages = np.array(list(self.ao_waveforms.values()))
-
-        if rereserve_buffer:  # don't need to rereseve when rewriting already running tasks
-            # unreserve buffer
-            self.ao_task.control(TaskMode.TASK_UNRESERVE)
-            # reconfigure timing
-            self.ao_task.timing.cfg_samp_clk_timing(
-                rate=self.ao_sampling_frequency_hz,
-                active_edge=self.ao_active_edge,
-                sample_mode=self.ao_sample_mode,
-                samps_per_chan=len(ao_voltages[0]),
-            )
-            # sets buffer to length of voltages
-            self.ao_task.out_stream.output_buf_size = len(ao_voltages[0])
-            self.ao_task.control(TaskMode.TASK_COMMIT)
         self.ao_task.write(np.array(ao_voltages))
 
     def write_do_waveforms(self, rereserve_buffer: bool = True) -> None:
@@ -400,12 +389,6 @@ class NIDAQ(BaseDAQ):
         :type rereserve_buffer: bool, optional
         """
         do_voltages = np.array(list(self.do_waveforms.values()))
-        if rereserve_buffer:  # don't need to rereseve when rewriting already running tasks
-            # unreserve buffer
-            self.do_task.control(TaskMode.TASK_UNRESERVE)
-            # sets buffer to length of voltages
-            self.do_task.out_stream.output_buf_size = len(do_voltages[0])
-            # FIXME: Really weird quirk on Micah's computer. Check if actually real
         do_voltages = do_voltages.astype("uint32")[0] if len(do_voltages) == 1 else do_voltages.astype("uint32")
         self.do_task.write(do_voltages)
 
@@ -488,7 +471,7 @@ class NIDAQ(BaseDAQ):
         waveform = signal.lfilter(b, a, signal.lfilter(b, a, waveform)[::-1])[::-1]
 
         if padding > 0:
-            waveform = waveform[padding:padding + waveform_length_samples]
+            waveform = waveform[padding : padding + waveform_length_samples]
 
         return waveform
 
@@ -532,7 +515,7 @@ class NIDAQ(BaseDAQ):
         :rtype: numpy.ndarray
         """
         waveform_length_samples = int(((period_time_ms + rest_time_ms) / 1000) * sampling_frequency_hz)
-        
+
         time_samples_ms = np.linspace(
             0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
         )
@@ -555,7 +538,7 @@ class NIDAQ(BaseDAQ):
         v0 = v0 + t0_offset_volts
         v50 = v50 + t50_offset_volts
         v100 = v100 + t100_offset_volts
-        f = interpolate.interp1d([t0, t25, t50, t75, t100], [v0, v25, v50, v75, v100], kind='quadratic')
+        f = interpolate.interp1d([t0, t25, t50, t75, t100], [v0, v25, v50, v75, v100], kind="quadratic")
         waveform = f(time_samples_ms)
 
         # add in delay
@@ -575,7 +558,7 @@ class NIDAQ(BaseDAQ):
             mode="constant",
             constant_values=(offset_volts - amplitude_volts + t0_offset_volts),
         )
-        
+
         waveform = waveform[0:waveform_length_samples]
 
         return waveform
@@ -705,29 +688,6 @@ class NIDAQ(BaseDAQ):
         if save:
             plt.savefig("waveforms.pdf", bbox_inches="tight")
 
-    def _rereserve_buffer(self, buf_len: int) -> None:
-        """
-        Re-reserve the buffer for tasks.
-
-        :param buf_len: Length of the buffer
-        :type buf_len: int
-        """
-        """If tasks are already configured, the buffer needs to be cleared and rereserved to work"""
-        self.ao_task.control(TaskMode.TASK_UNRESERVE)  # Unreserve buffer
-        # reconfigure timing
-        self.ao_task.timing.cfg_samp_clk_timing(
-            rate=self.ao_sampling_frequency_hz,
-            active_edge=self.ao_active_edge,
-            sample_mode=self.ao_sample_mode,
-            samps_per_chan=buf_len,
-        )
-        self.ao_task.out_stream.output_buf_size = buf_len  # Sets buffer to length of voltages
-        self.ao_task.control(TaskMode.TASK_COMMIT)
-
-        self.do_task.control(TaskMode.TASK_UNRESERVE)  # Unreserve buffer
-        self.do_task.out_stream.output_buf_size = buf_len
-        self.do_task.control(TaskMode.TASK_COMMIT)
-
     def start(self) -> None:
         """
         Start all tasks.
@@ -768,7 +728,6 @@ class NIDAQ(BaseDAQ):
         """
         for task in [self.ao_task, self.do_task]:
             if task is not None:
-                print(task)
                 task.wait_until_done(timeout)
 
     def is_finished_all(self) -> bool:

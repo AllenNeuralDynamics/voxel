@@ -1,12 +1,16 @@
 import logging
-import time
-
 import nidaqmx
 import numpy
-from nidaqmx.constants import AcquisitionType, TaskMode
+import time
 
+from nidaqmx.constants import AcquisitionType as AcqType
 from voxel.devices.daq.ni import NIDAQ
 from voxel.devices.filterwheel.base import BaseFilterWheel
+
+MAX_VOLTS = 5.0
+SAMPLING_FREQUENCY_HZ = 10000
+PERIOD_TIME_MS = 100
+DUTY_CYCLE_PERCENT = 50
 
 FILTERS = list()
 
@@ -65,28 +69,32 @@ class DAQFilterWheel(BaseFilterWheel):
         self.log.info(f"setting filter to {filter_name}")
         if filter_name not in FILTERS:
             raise ValueError(f"Filter {filter_name} not in filter list: {FILTERS}")
-        self._filter = filter_name
         channel_port = self.ports[filter_name]
-        daq_task = nidaqmx.Task("filter_wheel_task")
+        self._filter = filter_name
+        self.log.info("creating change position task")
+        filter_position_task = nidaqmx.Task("filter_position_task")
         physical_name = f"/{self.id}/{channel_port}"
-        daq_task.ao_channels.add_ao_voltage_chan(physical_name)
-        # unreserve buffer
-        daq_task.control(TaskMode.TASK_UNRESERVE)
-        daq_task.timing.cfg_samp_clk_timing(
-            rate=10000,  # hardcode 10 kHz sampling rate
-            sample_mode=AcquisitionType.FINITE,
-            samps_per_chan=1000,  # hardcode 100 ms waveform
+        self.log.info("adding port to change position task")
+        filter_position_task.ao_channels.add_ao_voltage_chan(physical_name)
+        self.log.info("configuring change position task timing")
+        period_samples = int(PERIOD_TIME_MS / 1000 * SAMPLING_FREQUENCY_HZ)
+        filter_position_task.timing.cfg_samp_clk_timing(
+            rate=SAMPLING_FREQUENCY_HZ,
+            sample_mode=AcqType.FINITE,
+            samps_per_chan=period_samples,
         )
-        ao_voltages = numpy.zeros(1000)
-        ao_voltages[0:500] = 5.0  # harcode 5 V TTL pulse for 50 ms
-        daq_task.out_stream.output_buf_size = len(ao_voltages)
-        daq_task.control(TaskMode.TASK_COMMIT)
-        daq_task.write(ao_voltages)
-        daq_task.start()
-        daq_task.wait_until_done()
-        daq_task.stop()
-        daq_task.close()
-        time.sleep(0.5)  # wait for wheel to settle
+        ao_voltages = numpy.zeros(period_samples)
+        ao_voltages[0 : int(period_samples * DUTY_CYCLE_PERCENT)] = MAX_VOLTS
+        self.log.info("writing change position voltages to task")
+        filter_position_task.write(ao_voltages)
+        self.log.info("starting change position task")
+        filter_position_task.start()
+        self.log.info("waiting on change position task")
+        filter_position_task.wait_until_done()
+        self.log.info("stopping change position task")
+        filter_position_task.stop()
+        self.log.info("closing change position task")
+        filter_position_task.close()
         self.log.info(f"filter set to {filter_name}")
 
     def close(self) -> None:
