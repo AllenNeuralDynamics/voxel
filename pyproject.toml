@@ -37,7 +37,7 @@ dependencies = [
     "PyVISA>=1.14.1",
     "PyVISA-py>=0.7.2",
     "pylablib>=1.4.2",
-    "nidaqmx>=0.9.0",
+    "nidaqmx=1.0.0",
     # data handling dependencies
     "h5py>=3.0.0",
     # processing and utils dependencies
