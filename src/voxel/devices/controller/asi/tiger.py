@@ -68,7 +68,6 @@ def no_repeated_axis_check(func):
 
     return inner
 
-
 def thread_locked(function: Callable) -> Callable:
     """
     Decorator to ensure that a function is executed with a thread lock.
@@ -153,7 +152,7 @@ class TigerController:
         self._last_rel_move_axes = []  # axes specified in previous MOVEREL
         self._rb_axes = []  # axes specified as movable by ring buffer moves.
 
-        self.position_mm_updater = PositionUpdater(tigerbox=self)
+        self.property_updater = PropertyUpdater(tigerbox=self)
 
     def get_position_mm(self) -> float:
         """
@@ -162,7 +161,7 @@ class TigerController:
         :return: Current position in millimeters
         :rtype: float
         """
-        return self.position_mm_updater.position_mm
+        return self.property_updater.position_mm
 
     @thread_locked
     def close(self) -> None:
@@ -171,10 +170,9 @@ class TigerController:
         """
         # stop the updating thread
         self.log.info("closing controller.")
-        self.position_mm_updater.close()
+        self.property_updater.close()
         self.ser.close()
 
-    @thread_locked
     def halt(self, wait: bool = True):
         """stop any moving axis."""
         self._set_cmd_args_and_kwds(Cmds.HALT, wait=wait)
@@ -1238,15 +1236,16 @@ class TigerController:
         reply = self._set_cmd_args_and_kwds(Cmds.TTL, wait=wait)
         return bool(int(reply.lstrip(":A ")))
 
-    @thread_locked
     def is_moving(self):
         """True if any axes is moving. False otherwise. Blocks."""
-        return self.are_axes_moving()
+        if any(self.property_updater.axes_status):
+            return True
+        else:
+            return False
 
-    @thread_locked
     def is_axis_moving(self, axis: str):
         """True if the specified axis is moving. False otherwise. Blocks."""
-        return next(iter(self.are_axes_moving(axis).items()))[-1]  # True or False
+        return self.property_updater.axes_status[axis]
 
     @thread_locked
     @axis_check()
@@ -1279,21 +1278,18 @@ class TigerController:
             raise RuntimeError(f"Error. Cannot tell if axes are moving. " f"Received: '{reply}'")
         return {x.upper(): state == "B" for x, state in zip(axes, axis_states)}
 
-    @thread_locked
     def wait(self):
         """Block until tigerbox is idle."""
         while self.is_moving():
             pass
 
     # TODO: this needs to be tested
-    @thread_locked
     @axis_check()
     def wait_on_axis(self, *axes: str):
         """Block until specified axis is idle."""
         while True in self.is_axis_moving(*axes).items():
             pass
 
-    # Low-Level Commands.
     def send(self, cmd_str: str, read_until: str = "\r\n", wait: bool = True):
         """Send a command; optionally wait for various conditions.
         :param cmd_str: command string with parameters and the proper line
@@ -1305,7 +1301,8 @@ class TigerController:
         """
         wait_for_output = wait  # wait for outgoing bytest to exit the PC.
         self.log.debug(f"Sending: {repr(cmd_str)}")
-        self.ser.reset_input_buffer()
+        # self.ser.reset_input_buffer()
+        # self.ser.reset_output_buffer()
         self.ser.write(cmd_str.encode("ascii"))
         self._last_cmd_send_time = perf_counter()
         if wait_for_output:  # Wait for all bytes to exit the output buffer.
@@ -1557,9 +1554,9 @@ class TigerController:
         return dict_reply
 
 
-class PositionUpdater:
+class PropertyUpdater:
     """
-    Class for continuously updating the stage positions in millimeters.
+    Class for continuously updating tiger controller properties.
     """
 
     def __init__(
@@ -1578,28 +1575,33 @@ class PositionUpdater:
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.log.setLevel(log_level)
         self.tigerbox = tigerbox
-        self.get_positions = True
+        self.get_properties = True
         # initialize positions in mm
         self.position_mm = {axis: 0.0 for axis in self.tigerbox.ordered_axes}
-        self.position_mm_updater = threading.Thread(target=self.position_mm_updater, args=(lock,))
-        self.position_mm_updater.start()
+        self.axes_status = {axis: False for axis in self.tigerbox.ordered_axes}
+        self.property_updater = threading.Thread(target=self.property_updater)
+        self.property_updater.start()
 
-    def position_mm_updater(self, lock: threading.Lock) -> None:
+    def property_updater(self) -> None:
         """
-        Thread to continuously get the position in millimeters for all axes.
+        Thread to continuously query properties.
         """
-        # get position for all axes on some time interval
-        # returns a dict of {hardware axes: positions}
-        while self.get_positions:
-            try:
-                position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
-                self.position_mm.update(position_mm)
-            except:
-                self.log.debug("could not update positions")
-            time.sleep(1.0 / UPDATE_RATE_HZ)
+        while True: 
+            if self.get_properties:
+                try:
+                    position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
+                    self.position_mm.update(position_mm)
+                except:
+                    self.log.error("could not update axes positions")
+                try:
+                    axes_status = self.tigerbox.are_axes_moving()
+                    self.axes_status.update(axes_status)
+                except:
+                    self.log.error("could not update axes status")           
+                time.sleep(1.0 / UPDATE_RATE_HZ)
 
     def close(self) -> None:
         """
         Close the position updater class.
         """
-        self.get_positions = False
+        self.get_properties = False

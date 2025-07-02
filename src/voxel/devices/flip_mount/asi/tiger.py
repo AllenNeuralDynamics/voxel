@@ -29,14 +29,14 @@ class TigerFlipMount(BaseFlipMount):
         :raises ValueError: If an invalid position is provided
         """
         self.id = f"tiger flip mount: axis = {axis}"
-        self.axis = axis
+        self.axis = axis.upper()
         super().__init__(id)
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.tigerbox = tigerbox
         for key, value in positions.items():
             POSITIONS[key] = value
         # default to starting in first position
-        self._position = self.tigerbox.get_position(*self.axis)[self.axis.upper()]
+        self._position = self.tigerbox.get_position_mm()[self.axis.upper()]
 
     @property
     def position(self) -> Optional[str]:
@@ -59,8 +59,9 @@ class TigerFlipMount(BaseFlipMount):
         if position_name not in POSITIONS:
             raise ValueError(f"Invalid position {position_name}. Valid positions are {list(POSITIONS.keys())}")
         self._position = POSITIONS[position_name]
-        self.tigerbox.move_absolute(**{self.axis: POSITIONS[position_name]}, wait=True)
-        while self.tigerbox.is_axis_moving(self.axis):
+        self.tigerbox.move_absolute(**{self.axis: POSITIONS[position_name]})
+        end_position = POSITIONS[position_name]
+        while abs(self.tigerbox.get_position(*self.axis)[self.axis.upper()] - end_position) > 0.01:
             self.log.info(
                 f"waiting for flip mount: {self.axis} = "
                 f"{self.tigerbox.get_position(*self.axis)[self.axis.upper()] / 10000} -> {POSITIONS[position_name] / 10000} mm"

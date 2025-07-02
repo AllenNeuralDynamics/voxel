@@ -190,7 +190,7 @@ class TigerStage(BaseStage):
         :type wait: bool, optional
         """
         w_text = "" if wait else "NOT "
-        self.log.info(f"Relative move by: {self.hardware_axis}={position} mm and {w_text}waiting.")
+        self.log.info(f"Relative move by: {self.hardware_axis}={position:.3f} mm and {w_text}waiting.")
         # convert from mm to 1/10um
         self.tigerbox.move_relative(**{self.hardware_axis: round(position * 1000 * STEPS_PER_UM, 1)}, wait=wait)
         if wait:
@@ -207,7 +207,7 @@ class TigerStage(BaseStage):
         :type wait: bool, optional
         """
         w_text = "" if wait else "NOT "
-        self.log.info(f"Absolute move to: {self.hardware_axis}={position} mm and {w_text}waiting.")
+        self.log.info(f"Absolute move to: {self.hardware_axis}={position:.3f} mm and {w_text}waiting.")
         # convert from mm to 1/10um
         self.tigerbox.move_absolute(**{self.hardware_axis: round(position * 1000 * STEPS_PER_UM, 1)}, wait=wait)
         if wait:
