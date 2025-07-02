@@ -798,7 +798,6 @@ class NIDAQ(BaseDAQ):
         Stop all tasks.
         """
         for task in [self.ao_task, self.do_task, self.co_task]:
-            print(task)
             if task is not None:
                 task.stop()
 

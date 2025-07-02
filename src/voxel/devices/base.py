@@ -32,9 +32,3 @@ class VoxelDevice(ABC):
         :rtype: str
         """
         return f"{self.__class__.__name__}[{self.id}]"
-
-    def __del__(self) -> None:
-        """
-        Close the device when the object is deleted.
-        """
-        self.close()

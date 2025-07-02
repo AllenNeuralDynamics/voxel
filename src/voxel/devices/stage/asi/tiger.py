@@ -315,7 +315,7 @@ class TigerStage(BaseStage):
         """
         Close the stage.
         """
-        self.tigerbox.ser.close()
+        pass
 
     @property
     def joystick_axis(self) -> str:
