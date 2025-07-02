@@ -170,6 +170,7 @@ class TigerController:
         Close the TigerController.
         """
         # stop the updating thread
+        self.log.info("closing controller.")
         self.position_mm_updater.close()
         self.ser.close()
 

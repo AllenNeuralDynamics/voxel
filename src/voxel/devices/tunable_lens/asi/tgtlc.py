@@ -86,4 +86,5 @@ class TGTLCTunableLens(BaseTunableLens):
         """
         Close the tunable lens device.
         """
-        self.tigerbox.ser.close()
+        self.log.info("closing tunable lens.")
+        pass

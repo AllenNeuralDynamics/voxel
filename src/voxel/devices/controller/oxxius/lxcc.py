@@ -238,6 +238,7 @@ class OxxiusController:
         """
         Close the L6cc Controller.
         """
+        self.log.info("closing controller.")
         self.ser.close()
 
     def _send(self, msg: str, raise_timeout: bool = True) -> str:

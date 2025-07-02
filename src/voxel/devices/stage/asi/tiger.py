@@ -315,6 +315,7 @@ class TigerStage(BaseStage):
         """
         Close the stage.
         """
+        self.log.info("closing stage.")
         pass
 
     @property

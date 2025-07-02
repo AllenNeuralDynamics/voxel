@@ -137,4 +137,5 @@ class ELE4iTunableLens(BaseTunableLens):
         """
         Close the tunable lens device.
         """
+        self.log.info("closing tunable lens.")
         self.tunable_lens.close()
