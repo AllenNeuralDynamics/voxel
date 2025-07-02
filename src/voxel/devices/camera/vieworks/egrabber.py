@@ -525,6 +525,7 @@ class VieworksCamera(BaseCamera):
 
     def close(self) -> None:
         """Close the camera connection."""
+        self.log.info("closing camera")
         pass
 
     def reset(self) -> None:

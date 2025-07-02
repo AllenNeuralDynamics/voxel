@@ -708,6 +708,7 @@ class NIDAQ(BaseDAQ):
         """
         Close all tasks.
         """
+        self.log.info("closing daq.")
         for task in [self.ao_task, self.do_task, self.co_task]:
             if task is not None:
                 task.close()

@@ -129,8 +129,8 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Current laser power in milliwatts.
         :rtype: float
         """
-        power_mw_dict = self._controller.get_power_mw()
-        return float(power_mw_dict[self._prefix])
+        power_mw = self._controller.get(Query.LaserPower, self._prefix)
+        return float(power_mw)
 
     @property
     def temperature_c(self) -> float:
@@ -140,8 +140,8 @@ class OxxiusLCXLaser(BaseLaser):
         :return: Temperature in Celsius.
         :rtype: float
         """
-        temperature_c_dict = self._controller.get_temperature_c()
-        return float(temperature_c_dict[self._prefix])
+        temperature_c = self._controller.get(Query.BasePlateTemperature)
+        return float(temperature_c)
 
     @property
     def max_power(self) -> float:

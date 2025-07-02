@@ -4,7 +4,7 @@ from enum import IntEnum, StrEnum
 from time import perf_counter, sleep
 from typing import Any, Callable
 
-from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
+from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException, SerialException
 
 
 class CombinerCmd(StrEnum):
@@ -173,7 +173,6 @@ class OxxiusController:
                 self.laser_list.append(laser_prefix)
             else:
                 self.log.warning(f"No laser detected for laser prefix: {laser_prefix}.")
-        self.property_updater = PropertyUpdater(controller=self)
 
     @thread_locked
     @property
@@ -234,31 +233,12 @@ class OxxiusController:
         else:
             return self._send(f"{msg}{prefix.upper().replace('L', '')} {value}")
 
-    def get_power_mw(self) -> float:
-        """
-        Get the current power in mW.
-
-        :return: Current power in mW.
-        :rtype: float
-        """
-        return self.property_updater.power_mw
-
-    def get_temperature_c(self) -> float:
-        """
-        Get the current temperature in Celsius.
-
-        :return: Current temperature in Celsius.
-        :rtype: float
-        """
-        return self.property_updater.temperature_c
-
     @thread_locked
     def close(self) -> None:
         """
         Close the L6cc Controller.
         """
-        # stop the updating thread
-        self.property_updater.close()
+        self.log.info("closing controller.")
         self.ser.close()
 
     def _send(self, msg: str, raise_timeout: bool = True) -> str:
@@ -273,65 +253,10 @@ class OxxiusController:
         :return: Device reply.
         :rtype: str
         """
-        self.ser.write(f"{msg}\r".encode("ascii"))
-        start_time = perf_counter()
-        reply = self.ser.read_until(REPLY_TERMINATION)
-        if not len(reply) and raise_timeout and perf_counter() - start_time > self.ser.timeout:
-            raise SerialTimeoutException
-        return reply.rstrip(REPLY_TERMINATION).decode("utf-8")
-
-
-class PropertyUpdater:
-    """
-    Class for continuously updating the controller properties.
-    """
-
-    def __init__(
-        self,
-        controller: OxxiusController,
-        log_level: str = "INFO",
-    ) -> None:
-        """
-        Initialize the property updater class.
-
-        :param controller: L6ccController object.
-        :type controller: L6ccController
-        :param log_level: Logging level, defaults to "INFO".
-        :type log_level: str, optional
-        """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
-        self.log.setLevel(log_level)
-        self.controller = controller
-        self.get_properties: bool = True
-        # initialize power mw property
-        self.power_mw: dict[str, float] = {laser_prefix: 0.0 for laser_prefix in self.controller.laser_list}
-        self.temperature_c: dict[str, float] = {laser_prefix: 0.0 for laser_prefix in self.controller.laser_list}
-        self.property_updater = threading.Thread(target=self.property_updater, args=(lock,))
-        self.property_updater.start()
-
-    def property_updater(self, lock: threading.Lock) -> None:
-        """
-        Thread to continuously get the controller properties for all lasers.
-
-        :param lock: Threading lock to synchronize access.
-        :type lock: threading.Lock
-        :return: None
-        """
-        while self.get_properties:
-            for laser_prefix in self.controller.laser_list:
-                try:
-                    power_mw = self.controller.get(Query.LaserPower, laser_prefix)
-                    temperature_c = self.controller.get(Query.BasePlateTemperature)
-                    self.power_mw.update({laser_prefix: power_mw})
-                    self.temperature_c.update({laser_prefix: temperature_c})
-                except Exception:
-                    self.log.debug(f"could not update properties for laser: {laser_prefix}")
-            sleep(1.0 / UPDATE_RATE_HZ)
-
-    def close(self) -> None:
-        """
-        Close the property updater class.
-
-        :return: None
-        """
-        self.get_properties = False
+        if self.ser.is_open:
+            self.ser.write(f"{msg}\r".encode("ascii"))
+            start_time = perf_counter()
+            reply = self.ser.read_until(REPLY_TERMINATION)
+            if not len(reply) and raise_timeout and perf_counter() - start_time > self.ser.timeout:
+                raise SerialTimeoutException
+            return reply.rstrip(REPLY_TERMINATION).decode("utf-8")

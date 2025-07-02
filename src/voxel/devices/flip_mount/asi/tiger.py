@@ -90,4 +90,5 @@ class TigerFlipMount(BaseFlipMount):
         """
         Close the stage.
         """
-        self.tigerbox.ser.close()
+        self.log.info(f"closing flip mount.")
+        pass

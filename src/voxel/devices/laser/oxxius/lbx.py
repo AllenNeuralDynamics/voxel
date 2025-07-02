@@ -201,8 +201,6 @@ class OxxiusLBXLaser(BaseLaser):
         :return: None
         """
         self.disable()
-        if self._controller.ser.is_open:
-            self._controller.ser.close()
         self.log.info("laser closed")
 
     @property
@@ -213,8 +211,8 @@ class OxxiusLBXLaser(BaseLaser):
         :return: Current laser power in milliwatts.
         :rtype: float
         """
-        power_mw_dict = self._controller.get_power_mw()
-        return float(power_mw_dict[self._prefix])
+        power_mw = self._controller.get(Query.LaserPower, self._prefix)
+        return float(power_mw)
 
     @property
     def temperature_c(self) -> float:
@@ -224,8 +222,8 @@ class OxxiusLBXLaser(BaseLaser):
         :return: Temperature in Celsius.
         :rtype: float
         """
-        temperature_c_dict = self._controller.get_temperature_c()
-        return float(temperature_c_dict[self._prefix])
+        temperature_c = self._controller.get(Query.BasePlateTemperature)
+        return float(temperature_c)
 
     def _coefficients_curve(self) -> Expr:
         """

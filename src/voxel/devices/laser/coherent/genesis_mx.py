@@ -58,6 +58,7 @@ class GenesisMXLaser(BaseLaser):
 
     def close(self) -> None:
         """Close the connection to the laser."""
+        self.log.info("closing laser.")
         self.disable()
 
     @property

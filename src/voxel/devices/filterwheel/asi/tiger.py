@@ -67,4 +67,5 @@ class FW1000FilterWheel(BaseFilterWheel):
         """
         Close the filter wheel device.
         """
-        self.tigerbox.ser.close()
+        self.log.info("closing filter wheel.")
+        pass

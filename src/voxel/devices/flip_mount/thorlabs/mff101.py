@@ -16,20 +16,17 @@ class MFF101FlipMount(BaseFlipMount):
     ThorlabsFlipMount class for handling Thorlabs flip mount devices.
     """
 
-    def __init__(self, id: str, conn: object, positions: Dict[str, int]) -> None:
+    def __init__(self, id: str, positions: Dict[str, int]) -> None:
         """
         Initialize the ThorlabsFlipMount object.
 
         :param id: Flip mount ID
         :type id: str
-        :param conn: Connection object
-        :type conn: object
         :param positions: Dictionary of positions
         :type positions: dict
         :raises ValueError: If an invalid position is provided
         """
         super().__init__(id)
-        self._conn = conn
         self._inst: Optional[Thorlabs.MFF] = None
         self._connect()
         for key, value in positions.items():
@@ -39,6 +36,8 @@ class MFF101FlipMount(BaseFlipMount):
                     Valid positions are {VALID_POSITIONS}"
                 )
             POSITIONS[key] = value
+        position_idx = self._inst.get_state()
+        self._position = next((key for key, value in POSITIONS.items() if value == position_idx), "Unknown")
 
     def _connect(self) -> None:
         """
@@ -47,7 +46,7 @@ class MFF101FlipMount(BaseFlipMount):
         :raises Exception: If connection to the flip mount fails
         """
         try:
-            self._inst = Thorlabs.MFF(conn=self._conn)
+            self._inst = Thorlabs.MFF(conn=self.id)
             self.flip_time_ms = FLIP_TIME_RANGE_MS[0]  # min flip time
         except Exception as e:
             self.log.error(f"Could not connect to flip mount {self.id}: {e}")
@@ -92,10 +91,7 @@ class MFF101FlipMount(BaseFlipMount):
         :return: Current position of the flip mount
         :rtype: str | None
         """
-        if self._inst is None:
-            raise ValueError(f"Position not found for {self.id} Flip mount not connected")
-        pos_idx = self._inst.get_state()
-        return next((key for key, value in POSITIONS.items() if value == pos_idx), "Unknown")
+        return self._position
 
     @position.setter
     def position(self, position_name: str) -> None:
@@ -111,6 +107,7 @@ class MFF101FlipMount(BaseFlipMount):
         if position_name not in POSITIONS:
             raise ValueError(f"Invalid position {position_name}. Valid positions are {list(POSITIONS.keys())}")
         self._inst.move_to_state(POSITIONS[position_name])
+        self._position = position_name
         self.log.info(f"Flip mount {self.id} moved to position {position_name}")
 
     @DeliminatedProperty(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
@@ -153,5 +150,5 @@ class MFF101FlipMount(BaseFlipMount):
 
     def close(self) -> None:
         """Close the flip mount connection."""
+        self.log.info(f"closing flip mount.")
         self._disconnect()
-        self.log.info(f"Flip mount {self.id} shutdown")

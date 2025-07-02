@@ -169,6 +169,7 @@ class TigerController:
         Close the TigerController.
         """
         # stop the updating thread
+        self.log.info("closing controller.")
         self.property_updater.close()
         self.ser.close()
 

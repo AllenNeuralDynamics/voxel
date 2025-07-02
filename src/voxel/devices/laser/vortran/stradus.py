@@ -48,6 +48,7 @@ class StradusLaser(BaseLaser):
         """
         Close the laser connection.
         """
+        self.log.info("closing laser.")
         self._inst.close()
 
     @DeliminatedProperty(minimum=0, maximum=lambda self: self._inst.max_power)

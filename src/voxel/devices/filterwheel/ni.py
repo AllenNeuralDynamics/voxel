@@ -101,4 +101,5 @@ class DAQFilterWheel(BaseFilterWheel):
         """
         Close the filter wheel device.
         """
+        self.log.info("closing filter wheel.")
         pass

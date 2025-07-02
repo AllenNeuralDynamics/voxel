@@ -179,4 +179,5 @@ class ICC4CTunableLens(BaseTunableLens):
         """
         Close the tunable lens device.
         """
+        self.log.info("closing tunable lens.")
         self.icc4c.disconnect()
