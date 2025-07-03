@@ -13,7 +13,7 @@ class BaseIndicatorLight(VoxelDevice):
 
     @property
     @abstractmethod
-    def active_settings(self) -> dict:
+    def settings(self) -> dict:
         """
         Get the active settings.
 
@@ -22,9 +22,9 @@ class BaseIndicatorLight(VoxelDevice):
         """
         pass
 
-    @active_settings.setter
+    @settings.setter
     @abstractmethod
-    def active_settings(self, value: dict) -> None:
+    def settings(self, value: dict) -> None:
         """
         Set the active settings.
 

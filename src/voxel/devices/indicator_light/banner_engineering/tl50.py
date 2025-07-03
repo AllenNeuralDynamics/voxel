@@ -129,7 +129,7 @@ FLASH_PATTERNS = {
     "random": FlashPattern.FLASH_RANDOM,
 }
 
-ROTATION_DIRECTIONS = {
+DIRECTIONS = {
     "counter clockwise": RotationalDirection.DIRECTION_COUNTERCLOCKWISE,
     "clockwise": RotationalDirection.DIRECTION_CLOCKWISE,
 }
@@ -149,7 +149,7 @@ AUDIBLES = {
 }
 
 
-class TL50(BaseIndicatorLight):
+class TL50IndicatorLight(BaseIndicatorLight):
     def __init__(self, com_port: int) -> None:
         """
         Initialize the TL50 indicator light device and set up DLL bindings.
@@ -163,6 +163,7 @@ class TL50(BaseIndicatorLight):
 
         # load DLL
         DIR = os.path.dirname(os.path.realpath(__file__))
+        print(DIR)
         # check if windows or linux
         if platform.system() == "Linux":
             self.log.warning('not yet supported on linux')
@@ -175,7 +176,7 @@ class TL50(BaseIndicatorLight):
                 self.tl50 = ctypes.CDLL(f"{DIR}\\win32\\Tl50UsbLibraryx64.dll")
             else:
                 self.log.info("loading 64-bit DLL")
-                if not os.path.exists(f"{DIR}\\Tl50UsbLibraryx64.dll"):
+                if not os.path.exists(f"{DIR}\\win64\\Tl50UsbLibraryx64.dll"):
                     raise FileNotFoundError("Tl50UsbLibraryx64.dll not found in the expected directory.")
                 self.tl50 = ctypes.CDLL(f"{DIR}\\win64\\Tl50UsbLibraryx64.dll")
 
@@ -184,7 +185,7 @@ class TL50(BaseIndicatorLight):
         self.tl50.InitByPort(com_port)
 
         # initialize cached settings
-        self._active_settings = dict()
+        self._settings = dict()
 
         # set up function argument and return types
         self.tl50.InitByPort.argtypes = [c_int]
@@ -397,19 +398,19 @@ class TL50(BaseIndicatorLight):
         return CommReturnValue(self.tl50.SetSegmentAdvanced(segment, buffer))
 
     @property
-    def active_settings(self) -> dict:
+    def settings(self) -> dict:
         """
         Get the current active settings for the indicator light.
 
         :return: Dictionary of current active settings.
         :rtype: dict
         """
-        return self._active_settings
+        return self._settings
 
-    @active_settings.setter
-    def active_settings(self, settings: dict) -> None:
+    @settings.setter
+    def settings(self, settings: dict) -> None:
         """
-        Set the active settings for the indicator light.
+        Set the settings for the indicator light.
 
         :param settings: Dictionary of settings to apply.
         :type settings: dict
@@ -438,30 +439,46 @@ class TL50(BaseIndicatorLight):
             raise ValueError(f"Invalid color2: {color2} must be one of {list(COLORS.keys())}")
         if intensity2 not in INTENSITIES:
             raise ValueError(f"Invalid intensity2: {intensity2} must be one of {list(INTENSITIES.keys())}")
-        if direction not in ROTATION_DIRECTIONS:
-            raise ValueError(f"Invalid direction: {direction} must be one of {list(ROTATION_DIRECTIONS.keys())}")
+        if direction not in DIRECTIONS:
+            raise ValueError(f"Invalid direction: {direction} must be one of {list(DIRECTIONS.keys())}")
 
+        self._settings["color1"] = color1
+        self._settings["intensity1"] = intensity1
+        self._settings["animation"] = animation
+        self._settings["speed"] = speed
+        self._settings["flash_pattern"] = flash_pattern
+        self._settings["color2"] = color2
+        self._settings["intensity2"] = intensity2
+        self._settings["direction"] = direction
+
+        self.log.info("indicator light settings stored")
+
+    def enable(self) -> None:
+        """
+        Enable the TL50 device by initializing it.
+
+        :return: None
+        """
         self._set_segment(
             segment=0,  # Assuming segment 0 for simplicity, adjust as needed
-            animation=ANIMATIONS[animation],
-            color1=COLORS[color1],
-            intensity1=INTENSITIES[intensity1],
-            speed=SPEEDS[speed],
-            flash_pattern=FLASH_PATTERNS[flash_pattern],
-            color2=COLORS[color2],
-            intensity2=INTENSITIES[intensity2],
-            direction=ROTATION_DIRECTIONS[direction],
+            animation=ANIMATIONS[self._settings["animation"]],
+            color1=COLORS[self._settings["color1"]],
+            intensity1=INTENSITIES[self._settings["intensity1"]],
+            speed=SPEEDS[self._settings["speed"]],
+            flash_pattern=FLASH_PATTERNS[self._settings["flash_pattern"]],
+            color2=COLORS[self._settings["color2"]],
+            intensity2=INTENSITIES[self._settings["intensity2"]],
+            direction=DIRECTIONS[self._settings["direction"]],
         )
+        self.log.info("device enabled.")
 
-        self._active_settings["intensity1"] = intensity1
-        self._active_settings["animation"] = animation
-        self._active_settings["speed"] = speed
-        self._active_settings["flash_pattern"] = flash_pattern
-        self._active_settings["color2"] = color2
-        self._active_settings["intensity2"] = intensity2
-        self._active_settings["direction"] = direction
+    def disable(self) -> None:
+        """
+        Disable the TL50 device by turning off the segment.
 
-        self.log.info("indicator light active")
+        :return: None
+        """
+        self._set_segment_off(segment=0)
 
     def close(self) -> None:
         """
@@ -469,5 +486,6 @@ class TL50(BaseIndicatorLight):
 
         :return: None
         """
+        self.disable()
         self._deinit()
         self.log.info("device closed.")
