@@ -163,7 +163,7 @@ class TL50IndicatorLight(BaseIndicatorLight):
 
         # load DLL
         DIR = os.path.dirname(os.path.realpath(__file__))
-        print(DIR)
+
         # check if windows or linux
         if platform.system() == "Linux":
             self.log.warning('not yet supported on linux')
@@ -182,7 +182,7 @@ class TL50IndicatorLight(BaseIndicatorLight):
 
         # initialize the device with the specified COM port
         self.log.info(f"initializing device on port {com_port}")
-        self.tl50.InitByPort(com_port)
+        self.tl50.InitByPort("".join(filter(lambda char: not char.isalpha(), com_port)))
 
         # initialize cached settings
         self._settings = dict()

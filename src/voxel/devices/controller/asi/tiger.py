@@ -1575,7 +1575,7 @@ class PropertyUpdater:
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.log.setLevel(log_level)
         self.tigerbox = tigerbox
-        self.get_properties = True
+        self.get_properties = threading.Event()
         # initialize positions in mm
         self.position_mm = {axis: 0.0 for axis in self.tigerbox.ordered_axes}
         self.axes_status = {axis: False for axis in self.tigerbox.ordered_axes}
@@ -1586,7 +1586,7 @@ class PropertyUpdater:
         """
         Thread to continuously query properties.
         """
-        while True: 
+        while not self.get_properties.is_set(): 
             if self.get_properties:
                 try:
                     position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
@@ -1604,4 +1604,5 @@ class PropertyUpdater:
         """
         Close the position updater class.
         """
-        self.get_properties = False
+        self.get_properties.set()
+        self.property_updater.join(timeout=1.0)
