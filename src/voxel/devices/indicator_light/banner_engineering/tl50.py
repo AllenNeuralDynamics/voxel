@@ -150,7 +150,7 @@ AUDIBLES = {
 
 
 class TL50IndicatorLight(BaseIndicatorLight):
-    def __init__(self, com_port: int) -> None:
+    def __init__(self, com_port: str) -> None:
         """
         Initialize the TL50 indicator light device and set up DLL bindings.
 
@@ -182,7 +182,7 @@ class TL50IndicatorLight(BaseIndicatorLight):
 
         # initialize the device with the specified COM port
         self.log.info(f"initializing device on port {com_port}")
-        self.tl50.InitByPort("".join(filter(lambda char: not char.isalpha(), com_port)))
+        self.tl50.InitByPort(int("".join(filter(lambda char: not char.isalpha(), com_port))))
 
         # initialize cached settings
         self._settings = dict()
@@ -470,6 +470,7 @@ class TL50IndicatorLight(BaseIndicatorLight):
             intensity2=INTENSITIES[self._settings["intensity2"]],
             direction=DIRECTIONS[self._settings["direction"]],
         )
+        print("enabled")
         self.log.info("device enabled.")
 
     def disable(self) -> None:

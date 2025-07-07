@@ -37,7 +37,7 @@ dependencies = [
     "PyVISA>=1.14.1",
     "PyVISA-py>=0.7.2",
     "pylablib>=1.4.2",
-    "nidaqmx=1.0.0",
+    "nidaqmx==1.0.0",
     # data handling dependencies
     "h5py>=3.0.0",
     # processing and utils dependencies
@@ -66,8 +66,8 @@ obis-laser = ["obis_laser @ git+https://github.com/AllenNeuralDynamics/obis-lase
 egrabber-camera = ["egrabber @ https://github.com/adamkglaser/egrabber-python/releases/download/v24.09.0.5/egrabber-24.09.0.5-py2.py3-none-any.whl"]
 pco-camera = ["pco"]
 ximea-camera = ["ximea-python @ https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl"]
-optokummenberg-etl = ["optokummenberg @https://github.com/adamkglaser/optotune-icc4c/releases/download/v2.0.4922/optoKummenberg-1.0.4894-py3-none-any.whl"]
-optoicc-etl = ["optoicc @https://github.com/adamkglaser/optotune-icc4c/releases/download/v2.0.4922/optoICC-2.0.4922-py3-none-any.whl"]
+# optokummenberg-etl = ["optokummenberg @https://github.com/adamkglaser/optotune-icc4c/releases/download/v2.0.4922/optoKummenberg-1.0.4894-py3-none-any.whl"]
+# optoicc-etl = ["optoicc @https://github.com/adamkglaser/optotune-icc4c/releases/download/v2.0.4922/optoICC-2.0.4922-py3-none-any.whl"]
 tigerasi-controller = ["tigerasi"]
 scikit-tensor = ["scikit-tensor-py3 @ https://github.com/adamkglaser/scikit-tensor-py3/releases/download/v0.1.0/scikit_tensor_py3-0.4.1-py3-none-any.whl"]
 
