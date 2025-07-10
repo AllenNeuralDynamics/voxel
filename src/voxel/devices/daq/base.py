@@ -140,7 +140,7 @@ class BaseDAQ(VoxelDevice):
         rest_time_ms: float,
         amplitude_volts: float,
         offset_volts: float,
-        cutoff_frequency_hz: float,
+        cutoff_frequency_hz: float = 0,
     ) -> numpy.ndarray:
         """
         Generate a sawtooth waveform.
@@ -210,25 +210,26 @@ class BaseDAQ(VoxelDevice):
             constant_values=(offset_volts - amplitude_volts),
         )
 
-        # bessel filter order 6, cutoff frequency is normalied from 0-1 by nyquist frequency
-        b, a = signal.bessel(6, cutoff_frequency_hz / (sampling_frequency_hz / 2), btype="low")
+        if cutoff_frequency_hz > 0:
+            # bessel filter order 6, cutoff frequency is normalied from 0-1 by nyquist frequency
+            b, a = signal.bessel(6, cutoff_frequency_hz / (sampling_frequency_hz / 2), btype="low")
 
-        # pad before filtering with last value
-        padding = int(2 / (cutoff_frequency_hz / (sampling_frequency_hz)))
-        if padding > 0:
-            # waveform = numpy.hstack([waveform[:padding], waveform, waveform[-padding:]])
-            waveform = numpy.pad(
-                array=waveform,
-                pad_width=(padding, padding),
-                mode="constant",
-                constant_values=(offset_volts - amplitude_volts),
-            )
+            # pad before filtering with last value
+            padding = int(2 / (cutoff_frequency_hz / (sampling_frequency_hz)))
+            if padding > 0:
+                # waveform = numpy.hstack([waveform[:padding], waveform, waveform[-padding:]])
+                waveform = numpy.pad(
+                    array=waveform,
+                    pad_width=(padding, padding),
+                    mode="constant",
+                    constant_values=(offset_volts - amplitude_volts),
+                )
 
-        # bi-directional filtering
-        waveform = signal.lfilter(b, a, signal.lfilter(b, a, waveform)[::-1])[::-1]
+            # bi-directional filtering
+            waveform = signal.lfilter(b, a, signal.lfilter(b, a, waveform)[::-1])[::-1]
 
-        if padding > 0:
-            waveform = waveform[padding:-padding]
+            if padding > 0:
+                waveform = waveform[padding:-padding]
 
         return waveform
 
@@ -467,6 +468,7 @@ class BaseDAQ(VoxelDevice):
             period_time_ms,
             delay_time_ms,
             (end_time_ms - delay_time_ms) / 2,
+            end_time_ms,
             rest_time_ms,
             amplitude_volts,
             offset_volts,
