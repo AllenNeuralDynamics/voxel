@@ -3,7 +3,7 @@ import nidaqmx
 import numpy
 import time
 
-from nidaqmx.constants import AcquisitionType as AcqType
+from nidaqmx.constants import AcquisitionType as AcqType, AOIdleOutputBehavior
 from voxel.devices.daq.ni import NIDAQ
 from voxel.devices.filterwheel.base import BaseFilterWheel
 
@@ -76,6 +76,7 @@ class DAQFilterWheel(BaseFilterWheel):
         physical_name = f"/{self.id}/{channel_port}"
         self.log.info("adding port to change position task")
         filter_position_task.ao_channels.add_ao_voltage_chan(physical_name)
+        # channel_options.ao_idle_output_behavior = AOIdleOutputBehavior.ZERO_VOLTS
         self.log.info("configuring change position task timing")
         period_samples = int(PERIOD_TIME_MS / 1000 * SAMPLING_FREQUENCY_HZ)
         filter_position_task.timing.cfg_samp_clk_timing(
@@ -84,7 +85,7 @@ class DAQFilterWheel(BaseFilterWheel):
             samps_per_chan=period_samples,
         )
         ao_voltages = numpy.zeros(period_samples)
-        ao_voltages[0 : int(period_samples * DUTY_CYCLE_PERCENT)] = MAX_VOLTS
+        ao_voltages[0 : int(period_samples * DUTY_CYCLE_PERCENT / 100)] = MAX_VOLTS
         self.log.info("writing change position voltages to task")
         filter_position_task.write(ao_voltages)
         self.log.info("starting change position task")
