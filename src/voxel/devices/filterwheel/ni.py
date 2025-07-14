@@ -10,7 +10,7 @@ from voxel.devices.filterwheel.base import BaseFilterWheel
 MAX_VOLTS = 5.0
 SAMPLING_FREQUENCY_HZ = 10000
 PERIOD_TIME_MS = 100
-DUTY_CYCLE_PERCENT = 50
+DUTY_CYCLE_PERCENT = 10
 
 FILTERS = list()
 
@@ -84,7 +84,7 @@ class DAQFilterWheel(BaseFilterWheel):
             samps_per_chan=period_samples,
         )
         ao_voltages = numpy.zeros(period_samples)
-        ao_voltages[0 : int(period_samples * DUTY_CYCLE_PERCENT)] = MAX_VOLTS
+        ao_voltages[0 : int(period_samples * DUTY_CYCLE_PERCENT / 100)] = MAX_VOLTS
         self.log.info("writing change position voltages to task")
         filter_position_task.write(ao_voltages)
         self.log.info("starting change position task")
