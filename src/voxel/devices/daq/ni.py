@@ -61,6 +61,8 @@ class NIDAQ(BaseDAQ):
         self.task_time_s = dict()
         self.ao_waveforms = dict()
         self.do_waveforms = dict()
+        self.ao_total_time_ms = 0
+        self.do_total_time_ms = 0
 
     def add_task(self, task_type: str, pulse_count: Optional[int] = None) -> None:
         """

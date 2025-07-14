@@ -175,10 +175,6 @@ class BaseDAQ(VoxelDevice):
         repeat_number = numpy.floor(period_samples / waveform_samples)
         if repeat:
             waveform = numpy.tile(waveform, int(repeat_number))
-            self.log.info(
-                f"repeating waveform {repeat_number} times. "
-                f"total samples is {len(waveform)} samples out of {period_samples} samples"
-            )
             waveform = numpy.pad(
                 array=waveform,
                 pad_width=(0, period_samples - len(waveform)),
@@ -305,10 +301,6 @@ class BaseDAQ(VoxelDevice):
         repeat_number = numpy.floor(period_samples / waveform_samples)
         if repeat:
             waveform = numpy.tile(waveform, int(repeat_number))
-            self.log.info(
-                f"repeating waveform {repeat_number} times. "
-                f"total samples is {len(waveform)} samples out of {period_samples} samples"
-            )
             waveform = numpy.pad(
                 array=waveform,
                 pad_width=(0, period_samples - len(waveform)),
@@ -387,10 +379,6 @@ class BaseDAQ(VoxelDevice):
         repeat_number = numpy.floor(period_samples / waveform_samples)
         if repeat:
             waveform = numpy.tile(waveform, int(repeat_number))
-            self.log.info(
-                f"repeating waveform {repeat_number} times. "
-                f"total samples is {len(waveform)} samples out of {period_samples} samples"
-            )
             waveform = numpy.pad(
                 array=waveform,
                 pad_width=(0, period_samples - len(waveform)),
@@ -519,10 +507,6 @@ class BaseDAQ(VoxelDevice):
         repeat_number = numpy.floor(period_samples / waveform_samples)
         if repeat:
             waveform = numpy.tile(waveform, int(repeat_number))
-            self.log.info(
-                f"repeating waveform {repeat_number} times. "
-                f"total samples is {len(waveform)} samples out of {period_samples} samples"
-            )
             waveform = numpy.pad(
                 array=waveform,
                 pad_width=(0, period_samples - len(waveform)),
