@@ -1,0 +1,5 @@
+description: GFP channel on camera 1
+detection: camera_1
+illumination: laser_488
+filters:
+  fw_main: LP420

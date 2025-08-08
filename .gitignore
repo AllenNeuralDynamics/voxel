@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*_cache
 
 # Generated files
 *.pdf
@@ -13,8 +14,11 @@ __pycache__/
 *.zarr
 *.json
 
+test_output/
+
 # C extensions
 *.so
+*.dll
 
 # Distribution / packaging
 .Python
@@ -34,6 +38,9 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Package wheel downloads
+# .wheelhouse/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -128,3 +135,9 @@ bootstrap.*
 
 # IDE
 .vscode/
+.run/
+.idea/
+
+.old/
+*.log.jsonl
+*.log.json

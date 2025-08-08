@@ -1,5 +1,0 @@
-devices:
-  cameras:
-    - name: linescan camera
-      driver: vieworks_egrabber
-      id: MT009BDA035
