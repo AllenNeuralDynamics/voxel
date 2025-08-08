@@ -1,0 +1,112 @@
+[project]
+name = "voxel"
+version = "0.1.0"
+description = "Core library for building SPIM software"
+requires-python = ">=3.12, <3.13"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Adam Glaser", email = "adam.glaser@alleninstitute.org" },
+    { name = "Walter Mwaniki", email = "walter.mwaniki@alleninstitute.org" },
+    { name = "Micah Woodard", email = "micah.woodard@alleninstitute.org" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+keywords = ["microscopy", "light-sheet", "lightsheet", "microscope", "imaging"]
+dependencies = [
+    # core
+    "numpy>=2.1.2",
+    "matplotlib>=3.9.2",
+    "pydantic>=2.9.2",
+    "ruamel-yaml >= 0.18.5",
+    # hardware
+    "nidaqmx>=1.0.1",
+    "pyserial >= 3.5",
+    "PyVISA-py >= 0.7.2",
+    "tigerasi >= 0.0.26",
+    "pylablib-lightweight>=1.4.3",
+    # files
+    "imohash>=1.1.0",
+    "tifffile>=2024.9.20",
+    # processing
+    "gputools >= 0.2.14",
+    "fast-histogram >= 0.14",
+    # utils
+    "sympy >= 1.12.1",
+    "ome-types>=0.5.3",
+    "jax>=0.4.35",
+    "tensorstore>=0.1.68",
+    "torch>=2.4.1",
+    "psutil>=6.1.0",
+    "pyclesperanto>=0.16.0",
+    "scikit-image>=0.24.0",
+    "zerorpc>=0.6.3",
+    "opencv-python>=4.11.0.86",
+    "msgpack-numpy>=0.4.8",
+    "rpyc>=6.0.2",
+    "tabulate>=0.9.0",
+    "colorama>=0.4.6",
+    "msgpack>=1.1.0",
+    "zmq>=0.0.0",
+    "plumbum>=1.9.0",
+    "scipy>=1.14.1",
+    "plotly>=6.2.0",
+]
+
+[project.optional-dependencies]
+bdv = ["h5py>=3.12.1", "tqdm>=4.66.5"]
+imaris = ["pyimariswriter>=0.7.0"]
+writers = ["voxel[bdv, imaris]"]
+
+cobolt = ["pycobolt"]
+coherent = ["coherent-lasers"]
+vortran = ["vortran-laser"]
+oxxius = ["oxxius-laser"]
+obis = ["obis-laser"]
+from-git = ["voxel[cobolt, coherent, vortran, oxxius, obis]"]
+
+aaopto = ["aaopto-aotf>=0.0.11"]
+etl-opto = ["optoicc", "optokummenberg"]
+egrabber = ["egrabber"]
+from-wheelhouse = ["voxel[aaopto, etl-opto, egrabber]"]
+
+
+[tool.uv.sources]
+pycobolt = { git = "https://github.com/cobolt-lasers/pycobolt.git" }
+obis-laser = { git = "https://github.com/AllenNeuralDynamics/obis-laser.git" }
+coherent-lasers = { git = "https://github.com/AllenNeuralDynamics/coherent-lasers.git" }
+oxxius-laser = { git = "https://github.com/AllenNeuralDynamics/oxxius_laser.git" }
+vortran-laser = { git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" }
+optokummenberg = { path = ".wheels/optoKummenberg-1.0.4894-py3-none-any.whl" }
+optoicc = { path = ".wheels/optoICC-2.0.4922-py3-none-any.whl" }
+egrabber = { path = ".wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+
+[project.scripts]
+voxel-mock = "voxel.startup:launch_mock"
+voxel-remote = "voxel.startup.remote:main"
+
+[project.urls]
+"Homepage" = "https://github.com/AllenNeuralDynamics/voxel"
+"Issues" = "https://github.com/AllenNeuralDynamics/voxel/issues"
+
+[build-system]
+requires = ["uv_build>=0.8.2,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.tach]
+source_roots = ["**/src"]
+exclude = ["**/sdk/"]
+external.rename = [
+    "ruamel:ruamel_yaml",
+    "serial:pyserial",
+    "pylablib:pylablib_lightweight",
+    "pyvisa:pyvisa_py",
+    "cv2:opencv_python",
+    "skimage:scikit_image",
+    "PyImarisWriter:pyimariswriter",
+]

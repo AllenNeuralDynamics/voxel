@@ -1,0 +1,252 @@
+instrument:
+  metadata:
+    name: Exaspim 2
+    description: "A simulated exaspim 2 instrument for testing purposes"
+
+  io:
+    writers:
+      imaris:
+        driver: voxel.runtime.io.writers.imaris.ImarisWriter
+      simple_writer:
+        driver: voxel.runtime.io.writers.simple.SimpleWriter
+    transfers:
+      robocopy:
+        driver: voxel.runtime.io.transfers.robocopy.RobocopyFileTransfer
+
+  preview:
+    target_width: 1024
+
+  remote_nodes:
+    192.168.1.51:
+      camera_2:
+        camera_port: 1000
+        pipeline_port: 2000
+        preview_port: 3000
+
+  devices:
+    camera_1:
+      driver: voxel.devices.drivers.cameras.simulated.SimulatedCamera
+      kwds:
+        pixel_size_um: 0.5, 0.5
+        magnification: 40
+        sensor_width_px: 4096
+        sensor_height_px: 4096
+        resize_method: tile
+    laser_488:
+      driver: voxel.devices.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 488
+    laser_561:
+      driver: voxel.devices.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 561
+    laser_405:
+      driver: voxel.devices.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 405
+    laser_507:
+      driver: voxel.devices.drivers.lasers.simulated.SimulatedLaser
+      kwds:
+        wavelength: 507
+    fw_main:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - LP420 # DAPI/GFP Emission
+          - LP570 # RFP/FarRed Emmission
+    fw_1:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - BP460-50 # DAPI/CFP
+          - BP525-50 # GFP
+          - BP540-30 # YFP
+    fw_2:
+      driver: voxel.detection_path.FilterWheel
+      kwds:
+        filters:
+          - BP525-50 # GFP (if doing dual GFP view)
+          - BP600-50 # RFP
+          - OPEN
+    detection_focus:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    camera_1_focus:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    camera_2_focus:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    left_illumination_focus:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    right_illumination_focus:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: N
+    etl:
+      driver: voxel.devices.drivers.tunable_lenses.simulated.SimulatedTunableLens
+    z_axis:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: Z
+    x_axis:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: X
+    y_axis:
+      driver: voxel.devices.drivers.linear_axis.simulated.SimulatedLinearAxis
+      kwds:
+        dimension: Y
+
+  daq:
+    conn: Dev1
+    ports:
+      camera_1: ao1
+      camera_2: ao2
+      laser_488: ao3
+      laser_561: ao4
+      laser_405: ao5
+      laser_507: ao6
+      z_axis: ao7
+
+  layout:
+    stage:
+      x: x_axis
+      y: y_axis
+      z: z_axis
+    detection:
+      camera_1:
+        filter_wheels: [fw_main, fw_1]
+        aux_devices:
+          - detection_focus
+          - camera_1_focus
+      camera_2:
+        filter_wheels: [fw_main, fw_2]
+        aux_devices:
+          - detection_focus
+          - camera_2_focus
+    illumination:
+      laser_488:
+        aux_devices: &shared_illumination_devices
+          - etl
+          - left_illumination_focus
+          - right_illumination_focus
+      laser_561:
+        aux_devices: *shared_illumination_devices
+      laser_405:
+        aux_devices: *shared_illumination_devices
+      laser_507:
+        aux_devices: *shared_illumination_devices
+
+  channels:
+    DAPI_CAM1:
+      detection: camera_1
+      illumination: laser_405
+      filters: { fw_main: LP420, fw_1: BP460-50 }
+    GFP_CAM1:
+      detection: camera_1
+      illumination: laser_488
+      filters: { fw_main: LP420, fw_1: BP525-50 }
+    RFP_CAM2:
+      detection: camera_2
+      illumination: laser_561
+      filters: { fw_main: LP570, fw_2: BP600-50 }
+    YFP_CAM1:
+      detection: camera_1
+      illumination: laser_507
+      filters: { fw_main: LP420, fw_1: BP540-30 }
+    GFP_CAM2:
+      detection: camera_2
+      illumination: laser_488
+      filters: { fw_main: LP420, fw_2: BP525-50 }
+
+# remote_node.yaml
+remote_node:
+  io:
+    writers:
+      imaris:
+        driver: voxel.runtime.io.writers.imaris.ImarisWriter
+      simple_writer:
+        driver: voxel.runtime.io.writers.simple.SimpleWriter
+    transfers:
+      robocopy:
+        driver: voxel.runtime.io.transfers.robocopy.RobocopyFileTransfer
+
+  devices:
+    camera_2:
+      driver: voxel.devices.drivers.cameras.simulated.SimulatedCamera
+      kwds:
+        pixel_size_um: 0.5, 0.5
+        magnification: 40
+        sensor_width_px: 4096
+        sensor_height_px: 4096
+        resize_method: tile
+
+  ports:
+    camera_2:
+      camera_port: 1000
+      pipeline_port: 2000
+      preview_port: 3000
+
+imaging:
+  blocks:
+    GFPxRFP:
+      description:
+        "Simultaneously capture GFP using laser 488 and RFP using laser 561"
+      channels:
+        - GFP_CAM1
+        - RFP_CAM2
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.1 }
+        camera_2:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+    YFP:
+      channels:
+        - YFP_CAM1
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+    DAPIxGFP:
+      channels:
+        - DAPI_CAM1
+        - GFP_CAM2
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.1 }
+    RFPxYFP:
+      channels:
+        - YFP_CAM1
+        - RFP_CAM2
+      settings:
+        type:camera:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+    DAPIxRFP:
+      channels:
+        - DAPI_CAM1
+        - RFP_CAM2
+      settings:
+        camera_1:
+          exposure_time:
+            - { z: 0, value: 0.1 }
+        camera_2:
+          exposure_time:
+            - { z: 0, value: 0.15 }
+
+  plans:
+    - name: standard
+      description: "Standard imaging plan for Exaspim 2"
+      blocks:
+        - GFPxRFP
+        - RFPxYFP
+        - RFPxYFP

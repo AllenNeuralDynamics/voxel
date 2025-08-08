@@ -1,0 +1,8 @@
+writer:
+  driver: zarr_v3
+  compression: lz4
+  compression_level: 0
+  shuffle: shuffle
+  downsample_method: tensorstore
+  data_type: uint16
+  path: .

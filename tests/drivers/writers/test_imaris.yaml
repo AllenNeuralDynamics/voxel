@@ -1,6 +1,0 @@
-writer:
-  driver: imaris
-  compression: lz4shuffle
-  data_type: uint16
-  path: '.'
-  acquisition_name: 'test'

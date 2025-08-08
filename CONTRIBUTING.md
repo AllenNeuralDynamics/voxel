@@ -1,4 +1,4 @@
-## Branching Strategy
+# Branching Strategy
 
 This repository uses the following branching strategy:
 

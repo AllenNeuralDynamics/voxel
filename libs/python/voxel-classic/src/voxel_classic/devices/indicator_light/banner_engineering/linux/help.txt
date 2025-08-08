@@ -1,0 +1,175 @@
+TL50 Pro Tower Light with USB
+Command Line Interface utility for Linux
+v1.0.0
+
+This application allows you to control the TL50 device in a read-eval-print loop.
+The program receives commands (described below) from standard in.  Responses go to standard out.
+
+> --help
+Usage:
+  <command> [arguments] [options]
+Commands:
+  open
+  close
+  setsegment
+  getsegment
+  about
+  license
+  quit
+  
+> open --help
+Command:
+  Initialize serial connection to device.
+Usage:
+  open <port>
+Arguments:
+  <port> - Serial port, e.g. "/dev/ttyUSB0/" or "COM6"
+  
+> close --help
+Command:
+  Remove serial connection to device.
+Usage:
+  close
+  
+> setsegment --help
+Command:
+  Set indication of a segment.
+Usage:
+  setsegment [options]
+Options:
+  --segmentnumber <value> - 0-based index of the segment you want to control (0-9).  If option is not given, segment 0 is assumed.
+  --color1 <value> - The primary color of the animation.
+    Possible values:
+      green
+      red
+      orange
+      amber
+      yellow
+      limegreen
+      springgreen
+      cyan
+      skyblue
+      blue
+      violet
+      magenta
+      rose
+      white
+  --intensity1 <value> - The brightness of color 1.
+    Possible values:
+      high
+      low
+      medium
+      off
+  --animation <value> - The style of indication.
+    Possible values:
+      off - No indication.
+      steady - A single solid color.
+      flash - A single color blinks off and on.
+      twocolorflash - Switches between two different colors.
+      halfhalf - The indication is split between two colors.
+      halfhalfrotate - The indication spins, showing two different colors.
+      chase - A single colored spot travels around the segment, with another color as the background.
+      intensitysweep - Indication gradually changes from off to bright and back to off again, repeatedly.
+  --speed <value> - For dynamic animations, the pace that the animation progresses.
+    Possible values:
+      standard
+      fast
+      slow
+  --pattern <value> - For flashing animations, the manner in which the flashing happens.
+    Possible values:
+      normal
+      strobe
+      threepulse
+      sos
+      random
+  --color2 <value> - For two colored animations, the secondary color of the animation.
+    Possible values:
+      green
+      red
+      orange
+      amber
+      yellow
+      limegreen
+      springgreen
+      cyan
+      skyblue
+      blue
+      violet
+      magenta
+      rose
+      white
+  --intensity2 <value> - For two colred animations, the brightness of color 2.
+    Possible values:
+      high
+      low
+      medium
+      off
+  --direction <value> - For dynamic animations, the direction that the animation progresses.
+    Possible values:
+      counterclockwise
+      clockwise
+	  
+> getsegment --help
+Command:
+  Get indication of a segment.
+  Giving just one argument returns just the value, e.g.:
+blue
+  Otherwise the result is written as option-value pairs, e.g.:
+--color1 blue
+--color2 white
+  Giving no options will cause all option-value pairs to be retrieved.
+Usage:
+  getsegment [options]
+Options:
+  --segmentnumber <value> - 0-based index of the segment you want to retrieve the settings of (0-9).
+  --color1 - Causes the current color 1 to be retrieved.
+  --intensity1 - Causes the current intensity 1 to be retrieved.
+  --animation - Causes the current animation be retrieved.
+  --speed - Causes the current speed to be retrieved.
+  --pattern - Causes the current pattern to be retrieved.
+  --color2 - Causes the current color 2 to be retrieved.
+  --intensity2 - Causes the current intensity 2 to be retrieved.
+  --direction - Causes the current direction to be retrieved.
+  
+> about --help
+Command:
+  Get information about this program.
+Usage:
+  about
+  
+> license --help
+Command:
+  Get license information about this program.
+Usage:
+  license
+  
+> quit --help
+Command:
+  Exit application.
+Usage:
+  quit
+  
+ --------------------------------------------
+
+An example session that checks what color is currently showing and then changes it to red is:
+user@computer:~/$ sudo ./Tl50UsbCli
+> open /dev/ttyUSB0
+> getsegment --color1
+blue
+> setsegment --color1 red
+> getsegment
+--color1 red
+--intensity1 high
+--animation steady
+--speed standard
+--pattern normal
+--color2 green
+--intensity2 high
+--direction counterclockwise
+> quit
+
+ --------------------------------------------
+ 
+ Troubleshooting:
+* Often the required USB serial port has access restrictions. The user account may need to be added the correct user group, or use the "sudo" command to be able to access the port.
+* Similarly, make sure that the application file being ran has execution privileges for the current user (e.g. "chmod 774 Tl50UsbCli").

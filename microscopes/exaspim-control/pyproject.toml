@@ -1,0 +1,49 @@
+[project]
+name = "exaspim-control"
+version = "0.1.0"
+description = "Control software for the ExaSPIM microscope"
+# requires-python = ">=3.10, <3.12"
+requires-python = ">=3.12, <3.13"
+authors = [
+    { name = "Micah Woodard", email = "micah.woodard@alleninstitute.org" },
+    { name = "Adam Glaser", email = "adam.glaser@alleninstitute.org" },
+    { name = "Walter Mwaniki", email = "walter.mwaniki@alleninstitute.org" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+keywords = [
+    "ExA-SPIM",
+    "SPIM",
+    "microscopy",
+    "light-sheet",
+    "lightsheet",
+    "microscope",
+    "imaging",
+]
+
+dependencies = [
+    "voxel-classic",
+    "view @ git+https://github.com/AllenNeuralDynamics/view.git",
+    "aind_data_schema >= 0.26.7",
+]
+
+[tool.uv.sources]
+"voxel-classic" = { workspace = true }
+
+
+[project.urls]
+"Homepage" = "https://github.com/AllenNeuralDynamics/exaspim-control"
+
+[project.scripts]
+"exaspim" = "exaspim_control.app:cli"
+
+[build-system]
+requires = ["uv_build>=0.8.2,<0.9.0"]
+build-backend = "uv_build"
