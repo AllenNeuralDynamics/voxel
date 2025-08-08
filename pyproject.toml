@@ -27,7 +27,6 @@ dependencies = [
     # hardware
     "nidaqmx>=1.0.1",
     "pyserial >= 3.5",
-    "pyusb >= 1.2.1",
     "PyVISA-py >= 0.7.2",
     "tigerasi >= 0.0.26",
     "pylablib-lightweight>=1.4.3",
@@ -42,11 +41,22 @@ dependencies = [
     "ome-types>=0.5.3",
     "jax>=0.4.35",
     "tensorstore>=0.1.68",
-    "cupy>=13.3.0",
     "torch>=2.4.1",
     "psutil>=6.1.0",
     "pyclesperanto>=0.16.0",
     "scikit-image>=0.24.0",
+    "zerorpc>=0.6.3",
+    "opencv-python>=4.11.0.86",
+    "msgpack-numpy>=0.4.8",
+    "rpyc>=6.0.2",
+    "tabulate>=0.9.0",
+    "colorama>=0.4.6",
+    "msgpack>=1.1.0",
+    "zmq>=0.0.0",
+    "plumbum>=1.9.0",
+    "scipy>=1.14.1",
+    "mako>=1.3.7",
+    "plotly>=6.2.0",
 ]
 
 [project.optional-dependencies]
@@ -59,18 +69,13 @@ obis = ["obis-laser"]
 bdv = ["h5py>=3.12.1", "tqdm>=4.66.5"]
 imaris = ["pyimariswriter>=0.7.0"]
 etl-opto = ["optoicc", "optokummenberg"]
-egrabber = [
-    "egrabber",
+egrabber = ["egrabber"]
+all = [
+    "voxel[aaopto, cobolt, coherent, vortran, oxxius, obis, bdv, imaris, etl-opto, egrabber]",
 ]
 
 [dependency-groups]
-dev = [
-    "customtkinter>=5.2.2",
-    "opencv-python>=4.10.0.84",
-    "pillow>=11.0.0",
-    "pytest>=8.3.3",
-    "ruff>=0.8.0",
-]
+dev = ["ruff>=0.8.0", "uvicorn>=0.34.0"]
 
 [tool.uv.sources]
 pycobolt = { git = "https://github.com/cobolt-lasers/pycobolt.git" }
@@ -78,25 +83,18 @@ coherent-lasers = { git = "https://github.com/AllenNeuralDynamics/coherent_laser
 obis-laser = { git = "https://github.com/AllenNeuralDynamics/obis-laser.git" }
 oxxius-laser = { git = "https://github.com/AllenNeuralDynamics/oxxius_laser.git" }
 vortran-laser = { git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" }
-optokummenberg = { path = ".wheelhouse/optoKummenberg-1.0.4894-py3-none-any.whl" }
-optoicc = { path = ".wheelhouse/optoICC-2.0.4922-py3-none-any.whl" }
-egrabber = { path = ".wheelhouse/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+optokummenberg = { path = ".wheels/optoKummenberg-1.0.4894-py3-none-any.whl" }
+optoicc = { path = ".wheels/optoICC-2.0.4922-py3-none-any.whl" }
+egrabber = { path = ".wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }
 
+[project.scripts]
+voxel-mock = "voxel.startup:launch_mock"
+voxel-remote = "voxel.startup.remote:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.2,<0.9.0"]
+build-backend = "uv_build"
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
-# [build-system]
-# requires = ["setuptools", "setuptools-scm"]
-# build-backend = "setuptools.build_meta"
-
-# [tool.setuptools]
-# package-dir = { "" = "src" }
-# packages = ["voxel"]
 
 [tool.ruff]
 line-length = 120
@@ -135,6 +133,19 @@ exclude = [
     "sdk",
 ]
 
-[tool.ruff.lint]
-extend-select = ["C4", "SIM", "TCH"]
+lint.extend-select = ["C4", "SIM", "TC"]
 fixable = ["ALL"]
+
+
+[tool.tach]
+source_roots = ["**/src"]
+exclude = ["**/sdk/"]
+external.rename = [
+    "ruamel:ruamel_yaml",
+    "serial:pyserial",
+    "pylablib:pylablib_lightweight",
+    "pyvisa:pyvisa_py",
+    "cv2:opencv_python",
+    "skimage:scikit_image",
+    "PyImarisWriter:pyimariswriter",
+]

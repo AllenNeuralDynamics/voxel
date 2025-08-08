@@ -1,4 +1,3 @@
-from .builder import InstrumentBuilder, InstrumentSpecs
-from .instrument import VoxelInstrument
+from .instrument import Instrument
 
-__all__ = ["VoxelInstrument", "InstrumentSpecs", "InstrumentBuilder"]
+__all__ = ["Instrument"]

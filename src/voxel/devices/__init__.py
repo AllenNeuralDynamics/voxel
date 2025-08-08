@@ -1,19 +1,14 @@
-"""Voxel Device Base classes."""
-
-from ..io.transfers.base import VoxelFileTransfer
-from ..io.writers.base import VoxelWriter
-from .aotf import VoxelAOTF
-from .base import VoxelDevice, VoxelDeviceConnectionError, VoxelDeviceError, VoxelDeviceType
-from .camera import VoxelCamera
-from .chiller import VoxelChiller
-from .filter import VoxelFilter
-from .flip_mount import VoxelFlipMount
-from .laser import VoxelLaser
-from .lens import VoxelLens
-from .linear_axis import LinearAxisDimension, VoxelLinearAxis
-from .power_meter import VoxelPowerMeter
-from .rotation_axis import VoxelRotationAxis
-from .tunable_lens import VoxelTunableLens
+from .base import VoxelDevice, VoxelDeviceType, VoxelDeviceError, VoxelDeviceConnectionError
+from .interfaces.aotf import VoxelAOTF
+from .interfaces.camera import VoxelCamera
+from .interfaces.chiller import VoxelChiller
+from .interfaces.filter_wheel import VoxelFilterWheel
+from .interfaces.flip_mount import VoxelFlipMount
+from .interfaces.laser import VoxelLaser
+from .interfaces.linear_axis import LinearAxisDimension, VoxelLinearAxis
+from .interfaces.power_meter import VoxelPowerMeter
+from .interfaces.rotation_axis import VoxelRotationAxis
+from .interfaces.tunable_lens import VoxelTunableLens
 
 __all__ = [
     "VoxelDevice",
@@ -23,15 +18,12 @@ __all__ = [
     "VoxelAOTF",
     "VoxelCamera",
     "VoxelChiller",
-    "VoxelFilter",
+    "VoxelFilterWheel",
     "VoxelFlipMount",
     "VoxelLaser",
-    "VoxelLens",
     "VoxelLinearAxis",
+    "VoxelRotationAxis",
     "LinearAxisDimension",
     "VoxelPowerMeter",
-    "VoxelRotationAxis",
     "VoxelTunableLens",
-    "VoxelWriter",
-    "VoxelFileTransfer",
 ]

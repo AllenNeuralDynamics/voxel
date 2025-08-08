@@ -17,7 +17,7 @@ def real_camera():
 
 @pytest.fixture
 def mock_camera():
-    with patch("voxel.devices.camera.hamamatsu.hamamatsu_dcam.discover_dcam") as mock_discover:
+    with patch("voxel.devices.interfaces.camera.hamamatsu.hamamatsu_dcam.discover_dcam") as mock_discover:
         mock_dcam = MagicMock()
         mock_discover.return_value = (mock_dcam, 1)
         camera = HamamatsuCamera(name=HAMAMATSU_CAMERA_ID, serial_number=HAMAMATSU_SERIAL_NUMBER)

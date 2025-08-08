@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 
-import cupy as cp
+# import cupy as cp
 import jax.numpy as jnp
 import numpy as np
 import tensorstore as ts
@@ -252,76 +252,76 @@ class TorchDownsampler(VoxelDownsampler):
                 yield self._downsample(data_torch, factor).cpu().numpy()
 
 
-class CuPyDownsampler(VoxelDownsampler):
-    def __init__(self, levels: int = 1, base: int = 2, factors: list[int] | None = None) -> None:
-        """
-        Initialize the downsampler with the number of pyramid levels and a base factor.
+# class CuPyDownsampler(VoxelDownsampler):
+#     def __init__(self, levels: int = 1, base: int = 2, factors: list[int] | None = None) -> None:
+#         """
+#         Initialize the downsampler with the number of pyramid levels and a base factor.
 
-        :param :levels (int): Number of pyramid levels (including the original level).
-        :param :base (int): Downsampling base factor (default is 2).
-        """
-        # Ensure that a GPU is available
-        if not cp.cuda.is_available():
-            raise ValueError("No GPU found. CuPy downsampling requires a GPU.")
-        super().__init__(levels, base, factors)
+#         :param :levels (int): Number of pyramid levels (including the original level).
+#         :param :base (int): Downsampling base factor (default is 2).
+#         """
+#         # Ensure that a GPU is available
+#         if not cp.cuda.is_available():
+#             raise ValueError("No GPU found. CuPy downsampling requires a GPU.")
+#         super().__init__(levels, base, factors)
 
-    def _downsample(self, data: cp.ndarray, factor: int) -> cp.ndarray:
-        """
-        Generalized downsampling logic for both 2D and 3D data.
+#     def _downsample(self, data: cp.ndarray, factor: int) -> cp.ndarray:
+#         """
+#         Generalized downsampling logic for both 2D and 3D data.
 
-        :param data: Input 2D or 3D CuPy array.
-        :param factor: Downsampling factor.
-        :return: Downsampled data.
-        """
-        ndim = data.ndim
+#         :param data: Input 2D or 3D CuPy array.
+#         :param factor: Downsampling factor.
+#         :return: Downsampled data.
+#         """
+#         ndim = data.ndim
 
-        # Compute new shape
-        cropped_shape = tuple(data.shape[i] - (data.shape[i] % factor) for i in range(ndim))
-        reshaped_shape = tuple(cropped_shape[i] // factor for i in range(ndim))
-        block_shape = tuple(factor for _ in range(ndim))
+#         # Compute new shape
+#         cropped_shape = tuple(data.shape[i] - (data.shape[i] % factor) for i in range(ndim))
+#         reshaped_shape = tuple(cropped_shape[i] // factor for i in range(ndim))
+#         block_shape = tuple(factor for _ in range(ndim))
 
-        # Crop to make dimensions divisible by the factor
-        slices = tuple(slice(0, cropped_shape[i]) for i in range(ndim))
-        cropped_data = data[slices]
+#         # Crop to make dimensions divisible by the factor
+#         slices = tuple(slice(0, cropped_shape[i]) for i in range(ndim))
+#         cropped_data = data[slices]
 
-        # Reshape into blocks and compute the mean over blocks
-        reshaped = cropped_data.reshape(
-            *(reshaped_shape[i] for i in range(ndim)),
-            *(block_shape[i] for i in range(ndim)),
-        )
-        downsampled = reshaped.mean(axis=tuple(range(ndim, 2 * ndim)))  # Mean over block axes
-        return downsampled
+#         # Reshape into blocks and compute the mean over blocks
+#         reshaped = cropped_data.reshape(
+#             *(reshaped_shape[i] for i in range(ndim)),
+#             *(block_shape[i] for i in range(ndim)),
+#         )
+#         downsampled = reshaped.mean(axis=tuple(range(ndim, 2 * ndim)))  # Mean over block axes
+#         return downsampled
 
-    def downsample_2d(self, data: np.ndarray) -> Iterator[np.ndarray]:
-        # Transfer data to GPU
-        data_gpu = cp.array(data)
+#     def downsample_2d(self, data: np.ndarray) -> Iterator[np.ndarray]:
+#         # Transfer data to GPU
+#         data_gpu = cp.array(data)
 
-        for factor in self.factors:
-            if factor == 1:
-                yield cp.asnumpy(data_gpu)  # Transfer back to CPU
-            else:
-                downsampled = self._downsample(data_gpu, factor)
-                yield cp.asnumpy(downsampled)  # Transfer back to CPU
+#         for factor in self.factors:
+#             if factor == 1:
+#                 yield cp.asnumpy(data_gpu)  # Transfer back to CPU
+#             else:
+#                 downsampled = self._downsample(data_gpu, factor)
+#                 yield cp.asnumpy(downsampled)  # Transfer back to CPU
 
-    def downsample_3d(self, data: np.ndarray) -> Iterator[np.ndarray]:
-        # Transfer data to GPU
-        data_gpu = cp.array(data)
+#     def downsample_3d(self, data: np.ndarray) -> Iterator[np.ndarray]:
+#         # Transfer data to GPU
+#         data_gpu = cp.array(data)
 
-        for factor in self.factors:
-            if factor == 1:
-                yield cp.asnumpy(data_gpu)  # Transfer back to CPU
-            else:
-                downsampled = self._downsample(data_gpu, factor)
-                yield cp.asnumpy(downsampled)  # Transfer back to CPU
+#         for factor in self.factors:
+#             if factor == 1:
+#                 yield cp.asnumpy(data_gpu)  # Transfer back to CPU
+#             else:
+#                 downsampled = self._downsample(data_gpu, factor)
+#                 yield cp.asnumpy(downsampled)  # Transfer back to CPU
 
 
 if __name__ == "__main__":
     import time
 
-    from voxel.utils.frame_gen import generate_checkered_batch
+    from voxel.utils.frame_gen import CheckeredGenerator  # generate_checkered_batch
 
     start_gen = time.time()
-    frames = generate_checkered_batch(1, 12800, 12800, 4)
+    frames = CheckeredGenerator(height_px=12800, width_px=12800, initial_size=4).generate()
     frame = frames[0]
     print(f"Generated frames in {time.time() - start_gen:.6f} seconds")
 
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     jax_downsampler = JaxDownsampler(levels=4, base=2)
     np_downsampler = NumPyDownsampler(levels=4, base=2)
     ts_downsampler = TensorStoreDownsampler(levels=4, base=2)
-    cp_downsampler = CuPyDownsampler(levels=4, base=2)
+    # cp_downsampler = CuPyDownsampler(levels=4, base=2)
     torch_downsampler = TorchDownsampler(levels=4, base=2)
 
     def profile_downsampler(downsampler: VoxelDownsampler, frames) -> None:
@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
     # profile_downsampler(cp_downsampler, frames)
 
-    for downsampler in [jax_downsampler, cp_downsampler]:
+    for downsampler in [jax_downsampler, torch_downsampler]:
         # downsampler.factors = [2]
         print()
         profile_downsampler(downsampler, frame)

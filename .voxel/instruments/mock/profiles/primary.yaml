@@ -1,0 +1,51 @@
+description: Main profile with GFP channel on camera 1
+channels:
+  - gfp_cam1
+acq_task:
+  timing:
+    sample_rate: 350000 Hz
+    duration: 500 ms
+    rest_time: 100 ms
+    clock: { pin: PFI0, counter: ctr0, duty_cycle: 0.005 }
+  waveforms:
+    voice_coil:
+      type: csv
+      voltage: &voice_coil_voltage { min: 0V, max: 5V }
+      csv_file: voice_coil.csv
+      directory: /Users/mwaniki/coding/spim/voxel/.voxel/instruments/mock/profiles
+    galvo_scan:
+      type: triangle
+      voltage: *voice_coil_voltage
+      frequency: 250 Hz # 10ms period
+    camera_1:
+      <<: *camera_trigger
+      window: { min: 0.05, span: *camera_window_span }
+    camera_2:
+      <<: *camera_trigger
+      window: { min: 0.075, span: *camera_window_span }
+    camera_3:
+      <<: *camera_trigger
+      window: { min: 0.1, span: *camera_window_span }
+    camera_4:
+      <<: *camera_trigger
+      window: { min: 0.125, span: *camera_window_span }
+    laser_1:
+      <<: *laser_trigger
+    laser_2:
+      <<: *laser_trigger
+    laser_3:
+      <<: *laser_trigger
+    laser_4:
+      <<: *laser_trigger
+    # voice_coil_2:
+    #   type: multi_point
+    #   voltage: *voice_coil_voltage
+    #   points:
+    #     - [0.0, 0.0] # Start at center
+    #     - [0.1, 1.0] # Move to max
+    #     - [0.4, 1.0] # Hold
+    #     - [0.5, 0.0] # Return to center
+    #     - [0.6, 0.0] # Hold
+    #     - [0.7, 0.5] # Smaller move
+    #     - [0.9, 0.5] # Hold
+    #     - [1.0, 0.0] # Return to center

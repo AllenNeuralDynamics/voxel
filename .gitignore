@@ -40,7 +40,7 @@ wheels/
 MANIFEST
 
 # Package wheel downloads
-.wheelhouse/
+# .wheelhouse/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -137,3 +137,7 @@ bootstrap.*
 .vscode/
 .run/
 .idea/
+
+.old/
+*.log.jsonl
+*.log.json

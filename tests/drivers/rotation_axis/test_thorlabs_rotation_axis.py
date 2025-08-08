@@ -13,7 +13,7 @@ ACTUAL_SERIAL_NUMBER = "THE_SERIAL_NUMBER"
 @pytest.fixture
 def thorlabs_axis():
     if USE_MOCK_DEVICE:
-        with patch("voxel.devices.rotation_axis.thorlabs.Thorlabs") as mock_thorlabs:
+        with patch("voxel.devices.interfaces.rotation_axis.thorlabs.Thorlabs") as mock_thorlabs:
             mock_instance = Mock()
             mock_thorlabs.list_kinesis_devices.return_value = [("COM1", "Device1")]
             mock_thorlabs.Kinesis.return_value = mock_instance

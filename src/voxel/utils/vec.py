@@ -22,6 +22,12 @@ class Vec2D[T: Number]:
     def to_str(self) -> str:
         return f"({self.x}, {self.y})"
 
+    def dict(self) -> dict[str, T]:
+        return {"x": self.x, "y": self.y}
+
+    def to_tuple(self) -> tuple[T, T]:
+        return (self.x, self.y)
+
     @classmethod
     def from_str(cls, data: str) -> Self:
         split = data.strip(" ()").split(",")
@@ -30,6 +36,9 @@ class Vec2D[T: Number]:
         else:
             x, y = int(split[0]), int(split[1])
         return cls(x, y)  # type: ignore
+
+    def __int__(self) -> Vec2D[int]:
+        return Vec2D(int(self.x), int(self.y))
 
     def __repr__(self) -> str:
         return self.to_str()
@@ -70,6 +79,9 @@ class Vec3D[T: Number]:
 
     def to_str(self):
         return f"({self.x}, {self.y}, {self.z})"
+
+    def dict(self) -> dict[str, T]:
+        return {"x": self.x, "y": self.y, "z": self.z}
 
     @classmethod
     def from_str(cls, data: str) -> Vec3D:

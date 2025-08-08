@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy
 import numpy as np
 
-from voxel.utils.log_config import get_logger
+from voxel.utils.log import VoxelLogging
 
 
 class BaseMaxProjection:
@@ -19,7 +19,7 @@ class BaseMaxProjection:
 
     def __init__(self, path: str) -> None:
         self._path = path
-        self.log = get_logger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(f"{__name__}.{self.__class__.__name__}")
         self._path = Path(path)
         self._column_count_px = None
         self._row_count_px = None

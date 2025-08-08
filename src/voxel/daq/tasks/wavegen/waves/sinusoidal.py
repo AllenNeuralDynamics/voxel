@@ -1,2 +1,0 @@
-class SinusoidalWave:
-    pass
