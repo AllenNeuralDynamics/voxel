@@ -22,4 +22,4 @@ version = "0.1.0"
 dev = ["ruff>=0.8.0", "pytest>=8.2.1"]
 
 [tool.uv.workspace]
-members = ["libs/python/*", "microscopes/*/backend", "microscopes/extreme"]
+members = ["python/*", "microscopes/*/backend", "microscopes/extreme"]

@@ -33,7 +33,8 @@ dependencies = [
     "psutil>=5.9.8",
     "PyVISA>=1.14.1",
     "PyVISA-py>=0.7.2",
-    "pylablib>=1.4.2",
+    # "pylablib>=1.4.2",
+    "pylablib-lightweight>=1.4.3",
     # "nidaqmx==1.0.0",
     "nidaqmx>=1.0.1",
     # data handling dependencies
