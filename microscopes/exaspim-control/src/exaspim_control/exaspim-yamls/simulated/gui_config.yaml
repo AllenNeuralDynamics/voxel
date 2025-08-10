@@ -1,0 +1,177 @@
+instrument_view:
+  properties:
+    camera_rotation_deg: -90.0
+    resolution_levels: 6
+    intensity_min: 30
+    intensity_max: 400
+    alignment_roi_size: 512
+  device_widgets:
+      filter wheel:
+        type: filter_wheel
+        driver: exaspim_control.widgets.filter_wheel_widget
+        module: FilterWheelWidget
+        init:
+          advanced_user: False
+      vp-151mx:
+        type: camera
+        driver: exaspim_control.widgets.camera_widget
+        module: CameraWidget
+        init:
+          advanced_user: True
+        updating_properties:
+          - sensor_temperature_c
+          - mainboard_temperature_c
+      488 nm:
+        type: laser
+        driver: exaspim_control.widgets.laser_widget
+        module: LaserWidget
+        init:
+          color: "#1FB3E0"
+          advanced_user: False
+        updating_properties:
+          - power_mw
+          - temperature_c
+      561 nm:
+        type: laser
+        driver: exaspim_control.widgets.laser_widget
+        module: LaserWidget
+        init:
+          color: "#32A852"
+          advanced_user: False
+        updating_properties:
+          - power_mw
+          - temperature_c
+      639 nm:
+        type: laser
+        driver: exaspim_control.widgets.laser_widget
+        module: LaserWidget
+        init:
+          color: "#C44157"
+          advanced_user: False
+        updating_properties:
+          - power_mw
+          - temperature_c
+      z:
+        type: scanning_stage
+        driver: exaspim_control.widgets.stage_widget
+        module: StageWidget
+        init:
+          advanced_user: False
+        updating_properties:
+          - position_mm
+      y:
+        type: tiling_stage
+        driver: exaspim_control.widgets.stage_widget
+        module: StageWidget
+        init:
+          advanced_user: False
+        updating_properties:
+          - position_mm
+      x:
+        type: tiling_stage
+        driver: exaspim_control.widgets.stage_widget
+        module: StageWidget
+        init:
+          advanced_user: False
+        updating_properties:
+          - position_mm
+      theta:
+        type: focusing_stage
+        driver: exaspim_control.widgets.stage_widget
+        module: StageWidget
+        init:
+          advanced_user: False
+        updating_properties:
+          - position_mm
+      left:
+        type: focusing_stage
+        driver: exaspim_control.widgets.stage_widget
+        module: StageWidget
+        init:
+          advanced_user: False
+        updating_properties:
+          - position_mm
+      right:
+        type: focusing_stage
+        driver: exaspim_control.widgets.stage_widget
+        module: StageWidget
+        init:
+          advanced_user: False
+        updating_properties:
+          - position_mm
+      camera:
+        type: focusing_stage
+        driver: exaspim_control.widgets.stage_widget
+        module: StageWidget
+        init:
+          advanced_user: False
+        updating_properties:
+          - position_mm
+      flip mount:
+        type: flip_mount
+        driver: exaspim_control.widgets.flip_mount_widget
+        module: FlipMountWidget
+      left tunable lens:
+        type: tunable_lens
+        driver: exaspim_control.widgets.tunable_lens_widget
+        module: TunableLensWidget
+        updating_properties:
+          - temperature_c
+      pcie-6738:
+        type: daq
+        driver: exaspim_control.widgets.ni_widget
+        module: NIWidget
+        init:
+            advanced_user: False
+            exposed_branches:
+              tasks.ao_task.ports.left tunable lens:
+                parameters.amplitude_volts.channels:
+                      - "488"
+                      - "561"
+                      - "639"
+                parameters.offset_volts.channels:
+                      - "488"
+                      - "561"
+                      - "639"
+              tasks.ao_task.ports.right tunable lens:
+                parameters.amplitude_volts.channels:
+                      - "488"
+                      - "561"
+                      - "639"
+                parameters.offset_volts.channels:
+                      - "488"
+                      - "561"
+                      - "639"
+acquisition_view:
+  coordinate_plane: [ "-x", "y", "z" ]
+  acquisition_widgets:
+    channel_plan:
+      init:
+        properties:
+          cameras: [ binning, pixel_type ]
+          lasers: [ power_setpoint_mw ]
+          focusing_stages: [ position_mm ]
+          filter_wheels: [ filter ]
+          round_z_mm:
+            delegate: combo
+            type: str
+            items: ["64", "128", "256", "512", "1024", "2048"]
+            initial_value: "2048"
+          prechecks:
+            delegate: combo
+            type: str
+            items: ["on", "off"]
+            initial_value: "off"
+          repeats:
+            delegate: spin
+            type: int
+            minimum: 1
+            maximum: 100
+            initial_value: 1
+          start_delay:
+            delegate: spin
+            type: float
+            minimum: 0
+            maximum: 1000
+            initial_value: 0
+  operation_widgets: {}

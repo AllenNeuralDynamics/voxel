@@ -19,7 +19,7 @@ class GPUToolsRankDownSample2D(BaseDownSample):
     If rank = size[0] x size[1] x size[2] - 1 (or -1) then the maximum is returned
     """
 
-    def __init__(self, binning: int, rank: Optional[int] = None, data_type: Optional[str] = None) -> None:
+    def __init__(self, binning: int, rank: int | None = None, data_type: str | None = None) -> None:
         """
         Module for handling 2D rank-based downsampling processes.
 

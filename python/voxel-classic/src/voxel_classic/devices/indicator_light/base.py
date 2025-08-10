@@ -11,6 +11,20 @@ class BaseIndicatorLight(VoxelDevice):
     def __init__(self):
         """Initialization of the BaseIndicatorLight class."""
 
+    @abstractmethod
+    def enable(self) -> None:
+        """
+        Enable the indicator light.
+        """
+        pass
+
+    @abstractmethod
+    def disable(self) -> None:
+        """
+        Disable the indicator light.
+        """
+        pass
+
     @property
     @abstractmethod
     def settings(self) -> dict:
@@ -24,12 +38,12 @@ class BaseIndicatorLight(VoxelDevice):
 
     @settings.setter
     @abstractmethod
-    def settings(self, value: dict) -> None:
+    def settings(self, settings: dict) -> None:
         """
         Set the active settings.
 
-        :param value: Active setings.
-        :type value: dict
+        :param settings: Active settings.
+        :type settings: dict
         """
         pass
 

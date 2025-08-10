@@ -33,7 +33,7 @@ class MetadataLaunch:
         acquisition: ExASPIMAcquisition,
         instrument_view: ExASPIMInstrumentView,
         acquisition_view: ExASPIMAcquisitionView,
-        log_filename: str = None,
+        log_filename: str | None = None,
     ):
         """
         Initialize the MetadataLaunch object.
@@ -71,65 +71,87 @@ class MetadataLaunch:
         """
         Finalize the acquisition process.
         """
+
+        def _rearrange_external_directory(save_to: str):
+            os.makedirs(Path(save_to, "exaSPIM"))
+            os.makedirs(Path(save_to, "derivatives"))
+            for file in os.listdir(save_to):
+                if file.endswith(".ims") or file.endswith(".zarr"):
+                    os.rename(str(Path(save_to, file)), str(Path(save_to, "exaSPIM", file)))
+                if file.endswith(".tiff") or file.endswith(".log") or file.endswith(".yaml"):
+                    os.rename(str(Path(save_to, file)), str(Path(save_to, "derivatives", file)))
+
         self.log.info("Finalizing acquisition")
         # create and save acquisition.json
-        if getattr(self.acquisition, "file_transfers", {}) != {}:  # save to external paths
-            for device_name, transfer_dict in getattr(self.acquisition, "file_transfers", {}).items():
+        file_transfers = self.acquisition.file_transfers
+        if file_transfers is not None and file_transfers != {}:
+            for device_name, transfer_dict in file_transfers.items():
+                status = "pending"
+                status_time = datetime.now()
+                processing_manifest = {
+                    "dataset_status": {
+                        "status": status,
+                        "status_date": f"{status_time.year:02d}-{status_time.month:02d}-{status_time.day:02d}",
+                        "status_time": f"{status_time.hour:02d}-{status_time.minute:02d}-{status_time.second:02d}",
+                    }
+                }
+                save_to_done = set()
                 for transfer in transfer_dict.values():
                     save_to = str(Path(transfer.external_path, transfer.acquisition_name))
-                    acquisition_model = self.parse_metadata(
-                        external_drive=save_to, local_drive=str(Path(transfer.local_path, transfer.acquisition_name))
-                    )
-                    acquisition_model.write_standard_file(output_directory=save_to, prefix=None)
-                    # move the log file
-                    self.log.info(f"copying {self.log_filename} to {save_to}")
-                    shutil.copy(
-                        self.log_filename,
-                        str(Path(save_to, self.log_filename)),
-                    )
-            # create and save processing_manifest.json
-            status = "pending"
-            status_time = datetime.now()
-            processing_manifest = {
-                "dataset_status": {
-                    "status": status,
-                    "status_date": f"{status_time.year:02d}-{status_time.month:02d}-{status_time.day:02d}",
-                    "status_time": f"{status_time.hour:02d}-{status_time.minute:02d}-{status_time.second:02d}"
-                }
-            }
-            with open(Path(save_to, "processing_manifest.json"), "w", encoding="utf-8") as f:
-                json.dump(processing_manifest, f, indent=4, ensure_ascii=False)
-            # re-arrange external directory
-            os.makedirs(Path(save_to, "exaSPIM"))
-            os.makedirs(Path(save_to, "derivatives"))
-            for file in os.listdir(save_to):
-                if file.endswith(".ims") or file.endswith(".zarr"):
-                    os.rename(str(Path(save_to, file)), str(Path(save_to, "exaSPIM", file)))
-                if file.endswith(".tiff") or file.endswith(".log") or file.endswith(".yaml"):
-                    os.rename(str(Path(save_to, file)), str(Path(save_to, "derivatives", file)))
-            # delete local directory
-            self.log.info(f"deleting {str(Path(transfer.local_path, transfer.acquisition_name))}")
-            shutil.rmtree(str(Path(transfer.local_path, transfer.acquisition_name)))
-        else:  # no transfers so save locally
+                    if save_to not in save_to_done:
+                        save_to_done.add(save_to)
+                        acquisition_model = self.parse_metadata(
+                            external_drive=save_to,
+                            local_drive=str(Path(transfer.local_path, transfer.acquisition_name)),
+                        )
+                        acquisition_model.write_standard_file(output_directory=save_to, prefix=None)
+                        if self.log_filename is not None:
+                            # move the log file
+                            self.log.info(f"copying {self.log_filename} to {save_to}")
+                            shutil.copy(
+                                self.log_filename,
+                                str(Path(save_to, self.log_filename)),
+                            )
+                        # Save processing_manifest.json
+                        with open(Path(save_to, "processing_manifest.json"), "w", encoding="utf-8") as f:
+                            json.dump(processing_manifest, f, indent=4, ensure_ascii=False)
+                        # re-arrange external directory
+                        os.makedirs(Path(save_to, "exaSPIM"))
+                        os.makedirs(Path(save_to, "derivatives"))
+                        for file in os.listdir(save_to):
+                            if file.endswith(".ims") or file.endswith(".zarr"):
+                                os.rename(str(Path(save_to, file)), str(Path(save_to, "exaSPIM", file)))
+                            if file.endswith(".tiff") or file.endswith(".log") or file.endswith(".yaml"):
+                                os.rename(str(Path(save_to, file)), str(Path(save_to, "derivatives", file)))
+                    # delete local directory
+                    self.log.info(f"deleting {str(Path(transfer.local_path, transfer.acquisition_name))}")
+                    shutil.rmtree(str(Path(transfer.local_path, transfer.acquisition_name)))
+        else:
+            # Transfer not available, save locally
             for device_name, writer_dict in self.acquisition.writers.items():
+                save_to_done = set()
                 for writer in writer_dict.values():
                     save_to = str(Path(writer.path, writer.acquisition_name))
-                    acquisition_model = self.parse_metadata(external_drive=save_to, local_drive=save_to)
-                    acquisition_model.write_standard_file(output_directory=save_to, prefix="exaspim")
-                    # move the log file
-                    self.log.info(f"copying {self.log_filename} to {save_to}")
-                    shutil.copy(
-                        self.log_filename,
-                        str(Path(save_to, self.log_filename)),
-                    )
-            # re-arrange external directory
-            os.makedirs(Path(save_to, "exaSPIM"))
-            os.makedirs(Path(save_to, "derivatives"))
-            for file in os.listdir(save_to):
-                if file.endswith(".ims") or file.endswith(".zarr"):
-                    os.rename(str(Path(save_to, file)), str(Path(save_to, "exaSPIM", file)))
-                if file.endswith(".tiff") or file.endswith(".log") or file.endswith(".yaml"):
-                    os.rename(str(Path(save_to, file)), str(Path(save_to, "derivatives", file)))
+                    if save_to not in save_to_done:
+                        save_to_done.add(save_to)
+                        acquisition_model = self.parse_metadata(external_drive=save_to, local_drive=save_to)
+                        acquisition_model.write_standard_file(output_directory=save_to, prefix="exaspim")
+                        if self.log_filename is not None:
+                            # move the log file
+                            self.log.info(f"copying {self.log_filename} to {save_to}")
+                            shutil.copy(
+                                self.log_filename,
+                                str(Path(save_to, self.log_filename)),
+                            )
+                        _rearrange_external_directory(save_to)
+                        # re-arrange external directory
+                        os.makedirs(Path(save_to, "exaSPIM"))
+                        os.makedirs(Path(save_to, "derivatives"))
+                        for file in os.listdir(save_to):
+                            if file.endswith(".ims") or file.endswith(".zarr"):
+                                os.rename(str(Path(save_to, file)), str(Path(save_to, "exaSPIM", file)))
+                            if file.endswith(".tiff") or file.endswith(".log") or file.endswith(".yaml"):
+                                os.rename(str(Path(save_to, file)), str(Path(save_to, "derivatives", file)))
 
     def parse_metadata(self, external_drive: str, local_drive: str) -> acquisition.Acquisition:
         """

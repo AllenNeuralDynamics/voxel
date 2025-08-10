@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Any
 import numpy as np
 from voxel_classic.devices.base import VoxelDevice
 
@@ -10,7 +11,7 @@ class BaseCamera(VoxelDevice):
 
     def __init__(self):
         """Initialization of the BaseCamera class."""
-        self._um_px = None
+        self._um_px = 0.0
         self._frame_number = 0
 
     @property
@@ -26,12 +27,11 @@ class BaseCamera(VoxelDevice):
 
     @exposure_time_ms.setter
     @abstractmethod
-    def exposure_time_ms(self, value: int) -> None:
+    def exposure_time_ms(self, exposure_time_ms: int) -> None:
         """
         Set the exposure time in milliseconds.
 
-        :param value: The exposure time in milliseconds.
-        :type value: int
+        :param exposure_time_ms: The exposure time in milliseconds.
         """
         pass
 
@@ -48,12 +48,11 @@ class BaseCamera(VoxelDevice):
 
     @width_px.setter
     @abstractmethod
-    def width_px(self, value: int) -> None:
+    def width_px(self, width_px: int) -> None:
         """
         Set the width in pixels.
 
-        :param value: The width in pixels.
-        :type value: int
+        :param width_px: The width in pixels.
         """
         pass
 
@@ -70,12 +69,11 @@ class BaseCamera(VoxelDevice):
 
     @width_offset_px.setter
     @abstractmethod
-    def width_offset_px(self, value: int) -> None:
+    def width_offset_px(self, width_offset_px: int) -> None:
         """
         Set the width offset in pixels.
 
-        :param value: The width offset in pixels.
-        :type value: int
+        :param width_offset_px: The width offset in pixels.
         """
         pass
 
@@ -92,12 +90,11 @@ class BaseCamera(VoxelDevice):
 
     @height_px.setter
     @abstractmethod
-    def height_px(self, value: int) -> None:
+    def height_px(self, height_px: int) -> None:
         """
         Set the height in pixels.
 
-        :param value: The height in pixels.
-        :type value: int
+        :param height_px: The height in pixels.
         """
         pass
 
@@ -114,12 +111,11 @@ class BaseCamera(VoxelDevice):
 
     @height_offset_px.setter
     @abstractmethod
-    def height_offset_px(self, value: int) -> None:
+    def height_offset_px(self, height_offset_px: int) -> None:
         """
         Set the height offset in pixels.
 
-        :param value: The height offset in pixels.
-        :type value: int
+        :param height_offset_px: The height offset in pixels.
         """
         pass
 
@@ -136,23 +132,21 @@ class BaseCamera(VoxelDevice):
 
     @pixel_type.setter
     @abstractmethod
-    def pixel_type(self, value: str) -> None:
+    def pixel_type(self, pixel_type_bits: str) -> None:
         """
         Set the pixel type.
 
-        :param value: The pixel type.
-        :type value: str
+        :param pixel_type_bits: The pixel type.
         """
         pass
 
     @property
     @abstractmethod
-    def line_interval_us(self) -> int:
+    def line_interval_us(self) -> float:
         """
         Get the line interval in microseconds.
 
         :return: The line interval in microseconds.
-        :rtype: int
         """
         pass
 
@@ -168,41 +162,29 @@ class BaseCamera(VoxelDevice):
         pass
 
     @property
-    @readout_mode.setter
-    def readout_mode(self, value) -> None:
-        """
-        Set the readout mode.
-
-        :param value: The readout mode.
-        :type value: str
-        """
-        pass
-
-    @property
     @abstractmethod
-    def trigger(self) -> str:
+    def trigger(self) -> dict[str, str]:
         """
-        Get the trigger mode.
+        Get the trigger mode, source and polarity/activation.
 
-        :return: The trigger mode.
-        :rtype: str
+        :return: The trigger configuration.
+        :rtype: dict[str, str]
         """
         pass
 
     @trigger.setter
     @abstractmethod
-    def trigger(self, value: str) -> None:
+    def trigger(self, trigger: dict[str, str]) -> None:
         """
-        Set the trigger mode.
+        Set the trigger mode, source and polarity/activation.
 
-        :param value: The trigger mode.
-        :type value: str
+        :param trigger: The trigger configuration.
         """
         pass
 
     @property
     @abstractmethod
-    def binning(self) -> str:
+    def binning(self) -> int:
         """
         Get the binning mode.
 
@@ -213,12 +195,12 @@ class BaseCamera(VoxelDevice):
 
     @binning.setter
     @abstractmethod
-    def binning(self, value: str) -> None:
+    def binning(self, binning: int) -> None:
         """
         Set the binning mode.
 
-        :param value: The binning mode.
-        :type value: str
+        :param binning: The binning mode.
+        :type binning: int
         """
         pass
 
@@ -246,12 +228,11 @@ class BaseCamera(VoxelDevice):
 
     @property
     @abstractmethod
-    def frame_time_ms(self) -> int:
+    def frame_time_ms(self) -> float:
         """
         Get the frame time in milliseconds.
 
         :return: The frame time in milliseconds.
-        :rtype: int
         """
         pass
 
@@ -425,7 +406,7 @@ class BaseCamera(VoxelDevice):
         pass
 
     @abstractmethod
-    def acquisition_state(self) -> None:
+    def acquisition_state(self) -> dict[str, Any]:
         """
         Return the acquisition state of the camera.
         """

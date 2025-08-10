@@ -9,14 +9,23 @@ import time
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from threading import Lock
+from typing import Any, TYPE_CHECKING
 import inflection
 import numpy
 from gputools import get_device
 from psutil import virtual_memory
 from ruamel.yaml import YAML
 from voxel_classic.acquisition.acquisition import Acquisition
+from voxel_classic.devices.camera.base import BaseCamera
+from voxel_classic.devices.daq.ni import NIDAQ
+from voxel_classic.devices.stage.asi.tiger import TigerStage
 from voxel_classic.instruments.instrument import Instrument
+from voxel_classic.writers.base import BaseWriter
 from voxel_classic.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
+
+if TYPE_CHECKING:
+    from voxel_classic.file_transfers.base import BaseFileTransfer
+    from voxel.devices.base import VoxelDevice
 
 
 DIRECTORY = Path(__file__).parent.resolve()
@@ -48,7 +57,7 @@ class ExASPIMAcquisition(Acquisition):
         super().__init__(instrument, DIRECTORY / Path(config_filename), yaml_handler, log_level)
 
         # store initial stage positions
-        self.initial_position_mm = dict()
+        self.initial_position_mm = {}
 
     def run(self) -> None:
         """
@@ -66,21 +75,27 @@ class ExASPIMAcquisition(Acquisition):
         self._create_directories()
 
         # initialize threads and buffers
-        file_transfer_threads = dict()
+        file_transfer_threads = {}
 
         # store devices and routines
-        self.camera, camera_name = self._grab_first(self.instrument.cameras)  # only 1 camera for exaspim
-        self.scanning_stage, _ = self._grab_first(self.instrument.scanning_stages)  # only 1 scanning stage for exaspim
-        self.daq, _ = self._grab_first(self.instrument.daqs)  # only 1 daq for exaspim
-        self.writer, _ = self._grab_first(self.writers[camera_name])  # only 1 writer for exaspim
-        if self.file_transfers:
-            file_transfer, _ = self._grab_first(self.file_transfers[camera_name])  # only 1 file transfer for exaspim
-        else:
-            file_transfer = dict()
-        if self.processes:
-            processes = self.processes[camera_name]  # processes could be > so leave as a dictionary
-        else:
-            processes = dict()
+        try:
+            camera_name, self.camera = next(iter(self.instrument.cameras.items()))  # only 1 camera for exaspim
+        except StopIteration as e:
+            raise RuntimeError(f"No cameras found for instrument {self.instrument}. Error: {e}")
+
+        try:
+            camera_writers = self.writers.get(camera_name, {})
+            self.writer = next(iter(camera_writers.values()))  # only 1 writer for exaspim
+        except (AttributeError, StopIteration) as e:
+            raise RuntimeError(f"No writers found for camera {camera_name}. Error: {e}")
+
+        camera_file_transfers = self.file_transfers.get(camera_name, {})
+        file_transfer = next(iter(camera_file_transfers.values())) if camera_file_transfers else {}
+
+        self.scanning_stage = next(iter(self.instrument.scanning_stages.values()))  # only 1 scanning stage for exaspim
+        self.daq = next(iter(self.instrument.daqs.values()))  # only 1 daq for exaspim
+
+        self.processes = self.processes[camera_name] if self.processes else {}
 
         # tiling stages
         for tiling_stage_id, tiling_stage in self.instrument.tiling_stages.items():
@@ -291,9 +306,9 @@ class ExASPIMAcquisition(Acquisition):
                     # create and start transfer threads from previous tile
                     if file_transfer:
                         if tile_num not in file_transfer_threads:
-                            file_transfer_threads[tile_num] = dict()
+                            file_transfer_threads[tile_num] = {}
                         if tile_channel not in file_transfer_threads[tile_num]:
-                            file_transfer_threads[tile_num][tile_channel] = dict()
+                            file_transfer_threads[tile_num][tile_channel] = {}
                         file_transfer_threads[tile_num][tile_channel][repeat] = copy.deepcopy(file_transfer)
                         file_transfer_threads[tile_num][tile_channel][repeat].filename = base_filename
                         self.log.info(f"starting file transfer for {base_filename}")
@@ -376,7 +391,14 @@ class ExASPIMAcquisition(Acquisition):
                 daq.close()
 
     def acquisition_engine(
-        self, tile: dict, base_filename: str, camera, daq, writer, processes: dict, scanning_stage
+        self,
+        tile: dict,
+        base_filename: str,
+        camera: BaseCamera,
+        daq: NIDAQ,
+        writer: BaseWriter,
+        processes: dict,
+        scanning_stage: TigerStage,
     ) -> None:
         """
         Run the acquisition engine.
@@ -398,11 +420,11 @@ class ExASPIMAcquisition(Acquisition):
         """
         # initatlized shared double buffer and processes
         self.log.info("setting up buffers")
-        process_buffers = dict()
+        process_buffers = {}
         chunk_lock = Lock()
         img_buffer = SharedDoubleBuffer(
             (writer.chunk_count_px, camera.image_height_px, camera.image_width_px),
-            dtype=writer.data_type,
+            dtype=str(writer.data_type),
         )
 
         # setup processes
@@ -451,7 +473,7 @@ class ExASPIMAcquisition(Acquisition):
                 laser_name = self.instrument.channels[tile["channel"]]["lasers"][0]
                 laser = self.instrument.lasers[laser_name]
                 memory_info = virtual_memory()
-                self.log.info(f"RAM in use = {memory_info.used / (1024 ** 3):.2f} GB")
+                self.log.info(f"RAM in use = {memory_info.used / (1024**3):.2f} GB")
                 self.log.info(f"laser {laser.id} power = {laser.power_mw:.2f} [mW]")
                 self.log.info(f"laser {laser.id} temperature = {laser.temperature_c:.2f} [mW]")
 
@@ -529,24 +551,19 @@ class ExASPIMAcquisition(Acquisition):
             buffer.unlink()
             del buffer
 
-    def check_local_disk_space(self, writer: object, compression_ratio: float = 1) -> bool:
+    def check_local_disk_space(self, writer: "BaseWriter", compression_ratio: float = 1) -> bool:
         """
         Check if there is enough local disk space for the next tile.
 
         :param writer: Writer object
-        :type writer: object
+        :type writer: BaseWriter
         :param compression_ratio: Compression ratio, defaults to 1
         :type compression_ratio: float, optional
         :return: True if there is enough disk space, False otherwise
         :rtype: bool
         """
-        # if windows
-        if platform.system() == "Windows":
-            drive = os.path.splitdrive(writer.path)[0]
-        # if unix
-        else:
-            # not completed, needs to be fixed
-            drive = "/"
+        # not completed, needs to be fixed
+        drive = os.path.splitdrive(writer.path)[0] if platform.system() == "Windows" else "/"
         self.log.info("checking local storage directory space for next tile")
         required_size_gb = writer.get_stack_size_mb() / compression_ratio / 1024
         self.log.info(f"required disk space = {required_size_gb:.1f} [GB] on drive {drive}")
@@ -557,26 +574,32 @@ class ExASPIMAcquisition(Acquisition):
             return False
         return True
 
-    def check_external_disk_space(self, writer: object, file_transfer: object, compression_ratio: float = 1) -> bool:
+    def _get_drive_from_path(self, path: str) -> str:
+        """
+        Get the drive letter from a file path.
+
+        :param path: File path
+        :type path: str
+        :return: Drive letter
+        :rtype: str
+        """
+        return os.path.splitdrive(path)[0] if platform.system() == "Windows" else "/"
+
+    def check_external_disk_space(
+        self, writer: "BaseWriter", file_transfer: "BaseFileTransfer", compression_ratio: float = 1
+    ) -> bool:
         """
         Check if there is enough external disk space for the next tile.
 
         :param writer: Writer object
-        :type writer: object
         :param file_transfer: File transfer object
-        :type file_transfer: object
         :param compression_ratio: Compression ratio, defaults to 1
         :type compression_ratio: float, optional
         :return: True if there is enough disk space, False otherwise
         :rtype: bool
         """
-        # if windows
-        if platform.system() == "Windows":
-            drive = os.path.splitdrive(file_transfer.external_path)[0]
-        # if unix
-        else:
-            # not completed, needs to be fixed
-            drive = "/"
+        drive = self._get_drive_from_path(file_transfer.external_path)
+
         self.log.info("checking external storage directory space for next tile")
         required_size_gb = writer.get_stack_size_mb() / compression_ratio / 1024
         self.log.info(f"required disk space = {required_size_gb:.1f} [GB] on drive {drive}")
@@ -587,12 +610,11 @@ class ExASPIMAcquisition(Acquisition):
             return False
         return True
 
-    def check_system_memory(self, writer: object) -> None:
+    def check_system_memory(self, writer: "BaseWriter") -> None:
         """
         Check if there is enough system memory for the acquisition.
 
-        :param writer: Writer object
-        :type writer: object
+        :param writer: Writer
         :raises MemoryError: If there is not enough system memory
         """
         self.log.info("checking available system memory")
@@ -606,9 +628,9 @@ class ExASPIMAcquisition(Acquisition):
 
     def check_write_speed(
         self,
-        writer: object,
-        daq: object,
-        file_transfer: object = None,
+        writer: "BaseWriter",
+        daq: "NIDAQ",
+        file_transfer: "BaseFileTransfer | None" = None,
         compression_ratio: float = 1,
         size: str = "16Gb",
         bs: str = "1M",
@@ -664,8 +686,8 @@ class ExASPIMAcquisition(Acquisition):
         required_write_speed_mb_s = camera_speed_mb_s / compression_ratio
         self.log.info(f"required write speed = {required_write_speed_mb_s:.1f} [MB/sec] to directory {local_drive}")
         test_filename = str(Path(f"{writer.path}/{writer.acquisition_name}/iotest").absolute())
-        f = open(test_filename, "a")  # Create empty file to check reading/writing speed
-        f.close()
+        with open(test_filename, "a"):
+            pass  # Create empty file to check reading/writing speed
         try:
             output = subprocess.check_output(
                 rf"fio --name=test --filename={test_filename} --size={size} --rw=write --bs={bs} "
@@ -720,12 +742,11 @@ class ExASPIMAcquisition(Acquisition):
                 # Delete test file
                 os.remove(test_filename)
 
-    def check_gpu_memory(self, writer: object) -> None:
+    def check_gpu_memory(self, writer: "BaseWriter") -> None:
         """
         Check if there is enough GPU memory for the acquisition.
 
-        :param writer: Writer object
-        :type writer: object
+        :param writer: Writer
         :raises ValueError: If there is not enough GPU memory
         """
         # check GPU resources for downscaling
@@ -738,14 +759,14 @@ class ExASPIMAcquisition(Acquisition):
                 f"{required_memory_gb} [GB] GPU RAM requested but only {total_gpu_memory_gb} [GB] available"
             )
 
-    def check_compression_ratio(self, camera: object, writer: object) -> float:
+    def check_compression_ratio(self, camera: "BaseCamera", writer: "BaseWriter") -> float:
         """
         Estimate the compression ratio for the acquisition.
 
         :param camera: Camera object
-        :type camera: object
+        :type camera: BaseCamera
         :param writer: Writer object
-        :type writer: object
+        :type writer: BaseWriter
         :return: Estimated compression ratio
         :rtype: float
         """
@@ -822,22 +843,22 @@ class ExASPIMAcquisition(Acquisition):
 
         return compression_ratio
 
-    def _setup_class(self, device: object, settings: dict) -> None:
+    def _setup_class(self, device: "VoxelDevice", properties: dict[str, Any]) -> None:
         """
         Overwrite to allow metadata class to pass in acquisition_name to devices that require it.
 
         :param device: Device object
-        :type device: object
-        :param settings: Settings dictionary
-        :type settings: dict
+        :type device: VoxelDevice
+        :param properties: Properties dictionary
+        :type properties: dict
         """
-        super()._setup_class(device, settings)
+        super()._setup_class(device, properties)
 
         # set acquisition_name attribute if it exists for object
         if hasattr(device, "acquisition_name") and self.metadata is not None:
             setattr(device, "acquisition_name", self.metadata.acquisition_name)
 
-    def _grab_first(self, object_dict: dict) -> object:
+    def _grab_first(self, object_dict: dict[str, Any]) -> tuple[Any, str]:
         """
         Grab the first object from a dictionary.
 
@@ -874,8 +895,8 @@ class ExASPIMAcquisition(Acquisition):
                 if not os.path.isdir(local_path):
                     os.makedirs(local_path)
         # check if external directories exist and create if not
-        if self.file_transfers:
-            for file_transfer_dictionary in self.file_transfers.values():
+        if self._file_transfers:
+            for file_transfer_dictionary in self._file_transfers.values():
                 for file_transfer in file_transfer_dictionary.values():
                     external_path = Path(file_transfer.external_path, self.acquisition_name)
                     if not os.path.isdir(external_path):
@@ -895,7 +916,7 @@ class ExASPIMAcquisition(Acquisition):
 
         # check that there is an associated writer for each camera
         for camera_id, camera in self.instrument.cameras.items():
-            if camera_id not in self.writers.keys():
+            if camera_id not in self.writers:
                 raise ValueError(f"no writer found for camera {camera_id}. check yaml files.")
 
         # check that files won't be overwritten if multiple writers/transfers per device

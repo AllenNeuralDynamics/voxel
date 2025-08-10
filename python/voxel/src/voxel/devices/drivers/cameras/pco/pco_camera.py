@@ -417,7 +417,7 @@ class PCOCamera(VoxelCamera):
 
         Note:  \n
         - Use dataclass.asdict(camera.acquisition_state) to get a dictionary of the acquisition state \n
-            or camera.acquisition_state.dict() \n
+            or camera.acquisition_state.{} \n
 
         :return: The acquisition state
         :rtype: AcquisitionState

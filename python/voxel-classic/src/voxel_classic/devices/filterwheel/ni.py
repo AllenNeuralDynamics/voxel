@@ -20,7 +20,7 @@ class DAQFilterWheel(BaseFilterWheel):
     FilterWheel class for handling simulated filter wheel devices.
     """
 
-    def __init__(self, filters: dict, ports: dict, daq: NIDAQ = None) -> None:
+    def __init__(self, filters: dict[str, int], ports: dict, daq: NIDAQ) -> None:
         """
         Initialize the FilterWheel object.
 
@@ -35,7 +35,7 @@ class DAQFilterWheel(BaseFilterWheel):
         self.id = daq.id
         self.dev = daq
         self.ports = ports
-        self.filters = filters
+        self._filters = filters
         for filter in filters:
             FILTERS.append(filter)
             if filter not in list(ports.keys()):
@@ -47,6 +47,13 @@ class DAQFilterWheel(BaseFilterWheel):
                 raise ValueError(f"Port {value} not in device channels: {daq.dev.ao_physical_chans.channel_names}")
         # force homing of the wheel to first position
         self.filter = FILTERS[0]
+
+    @property
+    def filters(self) -> dict[str, int]:
+        """
+        Get the list of available filters.
+        """
+        return self._filters
 
     @property
     def filter(self) -> str:

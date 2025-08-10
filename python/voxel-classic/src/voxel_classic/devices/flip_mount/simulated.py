@@ -1,120 +1,84 @@
 from time import sleep
-from typing import Literal, Dict
+from collections.abc import Sequence
 
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.flip_mount.base import BaseFlipMount
 
-VALID_POSITIONS = [0, 1]
+# The simulated hardware currently supports two discrete positions (0 / 1).
+VALID_POSITIONS: Sequence[int] = (0, 1)
 FLIP_TIME_RANGE_MS = (500.0, 2800.0, 100.0)  # min, max, step
-POSITIONS = dict()
 
 
 class SimulatedFlipMount(BaseFlipMount):
-    """
-    SimulatedFlipMount class for handling simulated flip mount devices.
-    """
-
-    def __init__(self, id: str, conn: object, positions: Dict[str, int]) -> None:
-        """
-        Initialize the SimulatedFlipMount object.
-
-        :param id: Flip mount ID
-        :type id: str
-        :param conn: Connection object
-        :type conn: object
-        :param positions: Dictionary of positions
-        :type positions: dict
-        :raises ValueError: If an invalid position is provided
-        """
+    def __init__(self, id: str, conn: object, positions: dict[str, int]) -> None:
         super().__init__(id)
+        if not positions:
+            raise ValueError("positions mapping must contain at least one entry")
+        # Validate values & preserve insertion order for deterministic toggling.
+        bad = {k: v for k, v in positions.items() if v not in VALID_POSITIONS}
+        if bad:
+            raise ValueError(f"Invalid numeric positions {bad}. Allowed numeric values are {list(VALID_POSITIONS)}")
+        # Enforce uniqueness of numeric values so we do not have ambiguous reverse lookup.
+        if len({v for v in positions.values()}) != len(positions.values()):
+            raise ValueError("Duplicate numeric position values are not allowed in simulated flip mount")
+
         self._conn = conn
-        self._positions = positions
-        self._inst: Literal[0, 1] = None
-        for key, value in positions.items():
-            if value not in VALID_POSITIONS:
-                raise ValueError(
-                    f"Invalid position {key} for Thorlabs flip mount.\
-                    Valid positions are {VALID_POSITIONS}"
-                )
-            POSITIONS[key] = value
-        self._connect()
+        # Internal state containers
+        self._positions: dict[str, int] = dict(positions)
+        self._order: list[str] = list(self._positions.keys())
+        self._current_key: str = self._order[0]  # default first key
+        self._flip_time_ms: float = FLIP_TIME_RANGE_MS[0]
 
-    def _connect(self) -> None:
-        """
-        Connect to the flip mount.
-        """
-        self.position = next(iter(self._positions))  # set to first position
-        self.flip_time_ms: float = FLIP_TIME_RANGE_MS[0]  # min flip time
-
+    # ------------- Public API -------------
     def close(self) -> None:
-        """
-        Close the flip mount connection.
-        """
-        self._inst = None
+        """Close the simulated device (reset to first position)."""
+        self._current_key = self._order[0]
 
     def wait(self) -> None:
-        """
-        Wait for the flip mount to finish flipping.
-        """
-        sleep(self.flip_time_ms * 1e-3)
+        """Simulate mechanical settling time after a movement."""
+        sleep(self._flip_time_ms * 1e-3)
 
     def toggle(self, wait: bool = False) -> None:
-        """
-        Toggle the flip mount position.
+        """Cycle to the next defined position (wraps around).
 
-        :param wait: Whether to wait for the flip mount to finish moving, defaults to False
-        :type wait: bool, optional
+        For the current two-position simulation this simply flips between the two.
         """
-        new_pos = 0 if self._inst == 1 else 1
-        self._inst = new_pos
+        idx = self._order.index(self._current_key)
+        self._current_key = self._order[(idx + 1) % len(self._order)]
         if wait:
             self.wait()
 
     @property
-    def position(self) -> str:
-        """
-        Get the current position of the flip mount.
-
-        :return: Current position of the flip mount
-        :rtype: str
-        """
-        return next((key for key, value in self._positions.items() if value == self._inst), "Unknown")
+    def position(self) -> str | None:
+        """Return the current *name* of the position."""
+        return self._current_key
 
     @position.setter
-    def position(self, new_position: str) -> None:
-        """
-        Set the flip mount to a specific position.
+    def position(self, position_name: str) -> None:
+        if position_name not in self._positions:
+            raise ValueError(f"Invalid position {position_name}. Valid positions are {list(self._positions.keys())}")
+        self._current_key = position_name
 
-        :param new_position: New position name
-        :type new_position: str
-        :raises ValueError: If an invalid position is provided
-        :raises Exception: If any other error occurs
-        """
-        try:
-            self._inst = self._positions[new_position]
-        except KeyError:
-            raise ValueError(f"Invalid position {new_position}. Valid positions are {list(self._positions.keys())}")
-        except Exception as e:
-            raise e
+    @property
+    def numeric_position(self) -> int:
+        return self._positions[self._current_key]
 
     @DeliminatedProperty(minimum=FLIP_TIME_RANGE_MS[0], maximum=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:
-        """
-        Get the time it takes to flip the mount in milliseconds.
-
-        :return: Flip time in milliseconds
-        :rtype: float
-        """
         return self._flip_time_ms
 
     @flip_time_ms.setter
     def flip_time_ms(self, time_ms: float) -> None:
-        """
-        Set the time it takes to flip the mount in milliseconds.
-
-        :param time_ms: Flip time in milliseconds
-        :type time_ms: float
-        """
         self.log.info(f"Setting flip_time_ms to {time_ms}")
-        self.log.info(f"FLIP_TIME_RANGE_MS is {FLIP_TIME_RANGE_MS}")
         self._flip_time_ms = time_ms
+
+    # ------------- Introspection / helpers -------------
+    def available_positions(self) -> list[str]:
+        """List available position *names* (in toggle order)."""
+        return list(self._order)
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return (
+            f"SimulatedFlipMount(id={self.id!r}, position={self.position!r}, "
+            f"numeric={self.numeric_position}, flip_time_ms={self.flip_time_ms})"
+        )

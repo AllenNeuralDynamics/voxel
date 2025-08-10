@@ -1,8 +1,6 @@
 import logging
-import time
-import multiprocessing
-from multiprocessing import Event, Process, Queue, Value
-from typing import Dict, Any
+from multiprocessing import Event
+from typing import Any
 
 import numpy
 
@@ -83,7 +81,7 @@ class SimulatedCamera(BaseCamera):
         return self._exposure_time_ms
 
     @exposure_time_ms.setter
-    def exposure_time_ms(self, exposure_time_ms: float) -> None:
+    def exposure_time_ms(self, exposure_time_ms: float) -> None:  # type: ignore
         """Set the exposure time in milliseconds.
 
         :param exposure_time_ms: Exposure time in milliseconds
@@ -109,7 +107,7 @@ class SimulatedCamera(BaseCamera):
         return self._width_px
 
     @width_px.setter
-    def width_px(self, value: int) -> None:
+    def width_px(self, value: int) -> None:  # type: ignore
         """Set the width in pixels.
 
         :param value: Width in pixels
@@ -128,7 +126,7 @@ class SimulatedCamera(BaseCamera):
         return self._width_offset_px
 
     @width_offset_px.setter
-    def width_offset_px(self, value: int) -> None:
+    def width_offset_px(self, value: int) -> None:  # type: ignore
         """Set the width offset in pixels.
 
         :param value: Width offset in pixels
@@ -151,7 +149,7 @@ class SimulatedCamera(BaseCamera):
         return self._height_px
 
     @height_px.setter
-    def height_px(self, value: int) -> None:
+    def height_px(self, value: int) -> None:  # type: ignore
         """Set the height in pixels.
 
         :param value: Height in pixels
@@ -170,7 +168,7 @@ class SimulatedCamera(BaseCamera):
         return self._height_offset_px
 
     @height_offset_px.setter
-    def height_offset_px(self, value: int) -> None:
+    def height_offset_px(self, value: int) -> None:  # type: ignore
         """Set the height offset in pixels.
 
         :param value: Height offset in pixels
@@ -186,7 +184,7 @@ class SimulatedCamera(BaseCamera):
         self.log.info(f"height offset set to: {value} px")
 
     @property
-    def trigger(self) -> Dict[str, str]:
+    def trigger(self) -> dict[str, str]:
         """Get the trigger settings.
 
         :return: Trigger settings
@@ -195,7 +193,7 @@ class SimulatedCamera(BaseCamera):
         return self._trigger
 
     @trigger.setter
-    def trigger(self, trigger: Dict[str, str]) -> None:
+    def trigger(self, trigger: dict[str, str]) -> None:
         """Set the trigger settings.
 
         :param trigger: Trigger settings
@@ -253,7 +251,7 @@ class SimulatedCamera(BaseCamera):
         return self._pixel_type
 
     @pixel_type.setter
-    def pixel_type(self, pixel_type: str) -> None:
+    def pixel_type(self, pixel_type_bits: str) -> None:
         """Set the pixel type.
 
         :param pixel_type: Pixel type
@@ -261,12 +259,12 @@ class SimulatedCamera(BaseCamera):
         :raises ValueError: If invalid pixel type is set
         """
         valid = list(PIXEL_TYPES.keys())
-        if pixel_type not in valid:
+        if pixel_type_bits not in valid:
             raise ValueError("pixel_type must be one of %r." % valid)
 
-        self._pixel_type = pixel_type
-        self._line_interval_us = LINE_INTERVALS_US[pixel_type]
-        self.log.info(f"pixel type set_to: {pixel_type}")
+        self._pixel_type = pixel_type_bits
+        self._line_interval_us = LINE_INTERVALS_US[pixel_type_bits]
+        self.log.info(f"pixel type set_to: {pixel_type_bits}")
 
     @property
     def line_interval_us(self) -> float:
@@ -372,7 +370,10 @@ class SimulatedCamera(BaseCamera):
         :rtype: numpy.ndarray
         """
         image = numpy.random.randint(
-            low=128, high=256, size=(self.image_height_px, self.image_width_px), dtype=PIXEL_TYPES[self._pixel_type]
+            low=128,
+            high=256,
+            size=(self.image_height_px, self.image_width_px),
+            dtype=numpy.dtype(PIXEL_TYPES[self._pixel_type]),
         )
         self._latest_frame = numpy.copy(image)
         self.frame_number += 1
@@ -391,7 +392,7 @@ class SimulatedCamera(BaseCamera):
         # return latest frame from internal queue buffer
         return self._latest_frame
 
-    def acquisition_state(self) -> Dict[str, Any]:
+    def acquisition_state(self) -> dict[str, Any]:
         """Return the acquisition state of the camera.
 
         :return: Acquisition state
@@ -401,15 +402,12 @@ class SimulatedCamera(BaseCamera):
         state = {}
         state["Frame Index"] = self.frame_number
         state["Input Buffer Size"] = 0
-        state["Output Buffer Size"] = BUFFER_SIZE_FRAMES
-        # number of underrun, i.e. dropped frames
-        state["Dropped Frames"] = 0
         state["Data Rate [MB/s]"] = (
             1.0
             / (self.frame_time_ms / 1000)
             * self._width_px
             * self._height_px
-            * numpy.dtype(self._pixel_type).itemsize
+            * numpy.dtype(PIXEL_TYPES[self._pixel_type]).itemsize
             / self._binning**2
             / 1024**2
         )

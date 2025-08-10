@@ -8,7 +8,7 @@ from voxel_classic.devices.flip_mount.base import BaseFlipMount
 
 VALID_POSITIONS = [0, 1]
 FLIP_TIME_RANGE_MS = (500, 2800, 100)
-POSITIONS = dict()
+POSITIONS = {}
 
 
 class MFF101FlipMount(BaseFlipMount):
@@ -27,8 +27,12 @@ class MFF101FlipMount(BaseFlipMount):
         :raises ValueError: If an invalid position is provided
         """
         super().__init__(id)
-        self._inst: Optional[Thorlabs.MFF] = None
-        self._connect()
+        try:
+            self._inst = Thorlabs.MFF(conn=self.id)
+            self.flip_time_ms = FLIP_TIME_RANGE_MS[0]  # min flip time
+        except Exception as e:
+            self.log.error(f"Could not connect to flip mount {self.id}: {e}")
+            raise e
         for key, value in positions.items():
             if value not in VALID_POSITIONS:
                 raise ValueError(
@@ -38,19 +42,6 @@ class MFF101FlipMount(BaseFlipMount):
             POSITIONS[key] = value
         position_idx = self._inst.get_state()
         self._position = next((key for key, value in POSITIONS.items() if value == position_idx), "Unknown")
-
-    def _connect(self) -> None:
-        """
-        Connect to the flip mount.
-
-        :raises Exception: If connection to the flip mount fails
-        """
-        try:
-            self._inst = Thorlabs.MFF(conn=self.id)
-            self.flip_time_ms = FLIP_TIME_RANGE_MS[0]  # min flip time
-        except Exception as e:
-            self.log.error(f"Could not connect to flip mount {self.id}: {e}")
-            raise e
 
     def _disconnect(self) -> None:
         """
@@ -83,7 +74,7 @@ class MFF101FlipMount(BaseFlipMount):
             self.wait()
 
     @property
-    def position(self) -> Optional[str]:
+    def position(self) -> str | None:
         """
         Get the current position of the flip mount.
 

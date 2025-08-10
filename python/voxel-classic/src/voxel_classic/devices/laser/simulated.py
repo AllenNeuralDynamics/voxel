@@ -3,7 +3,6 @@ import random
 
 import numpy
 from serial import Serial
-from typing import Dict, List
 
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.laser.base import BaseLaser
@@ -46,7 +45,7 @@ class SimulatedLaser(BaseLaser):
         self._modulation_mode = "digital"
         self._temperature = 20.0
         self._cdrh = "ON"
-        self._status: List[str] = []
+        self._status: list[str] = []
 
     def enable(self) -> None:
         """
@@ -71,14 +70,13 @@ class SimulatedLaser(BaseLaser):
         return self._simulated_power_setpoint_mw
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float) -> None:
+    def power_setpoint_mw(self, power_setpoint_mw: float) -> None:  # type: ignore
         """
         Set the power setpoint in milliwatts.
 
-        :param value: Power setpoint in milliwatts
-        :type value: float
+        :param power_setpoint_mw: Power setpoint in milliwatts
         """
-        self._simulated_power_setpoint_mw = value
+        self._simulated_power_setpoint_mw = power_setpoint_mw
 
     @property
     def power_mw(self) -> float:
@@ -109,7 +107,7 @@ class SimulatedLaser(BaseLaser):
         :type value: str
         :raises ValueError: If the modulation mode is not valid
         """
-        if value not in MODULATION_MODES.keys():
+        if value not in MODULATION_MODES:
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         for attribute, state in MODULATION_MODES[value].items():
             setattr(self, attribute, state)
@@ -125,7 +123,7 @@ class SimulatedLaser(BaseLaser):
         """
         return self._temperature + numpy.random.normal(0, 1)
 
-    def status(self) -> List[str]:
+    def status(self) -> list[str]:
         """
         Get the status of the laser.
 

@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Tuple
 
 from voxel_classic.devices.base import VoxelDevice
 
@@ -42,18 +41,18 @@ class BaseStage(VoxelDevice):
 
     @property
     @abstractmethod
-    def position_mm(self) -> float:
+    def position_mm(self) -> float | None:
         """
         Get the current position of the stage in millimeters.
 
         :return: Current position in millimeters
-        :rtype: float
+        :rtype: float | None
         """
         pass
 
     @property
     @abstractmethod
-    def limits_mm(self) -> Tuple[float, float]:
+    def limits_mm(self) -> tuple[float, float]:
         """
         Get the limits of the stage in millimeters.
 
@@ -97,12 +96,12 @@ class BaseStage(VoxelDevice):
 
     @speed_mm_s.setter
     @abstractmethod
-    def speed_mm_s(self, speed: float) -> None:
+    def speed_mm_s(self, speed_mm_s: float) -> None:
         """
         Set the speed of the stage in millimeters per second.
 
-        :param speed: Speed in millimeters per second
-        :type speed: float
+        :param speed_mm_s: Speed in millimeters per second
+        :type speed_mm_s: float
         """
         pass
 
@@ -141,7 +140,7 @@ class BaseStage(VoxelDevice):
 
     @mode.setter
     @abstractmethod
-    def mode(self, mode: str | int) -> None:
+    def mode(self, mode: str) -> None:
         """
         Set the mode of the stage.
 

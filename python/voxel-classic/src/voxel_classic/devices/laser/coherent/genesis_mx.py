@@ -1,6 +1,6 @@
 import logging
 
-from coherent_lasers.genesis_mx.commands import OperationModes
+from coherent_lasers.genesis_mx.commands import OperationMode
 from coherent_lasers.genesis_mx.driver import GenesisMX
 
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
@@ -28,12 +28,12 @@ class GenesisMXLaser(BaseLaser):
         self._conn = id
         try:
             self._inst = GenesisMX(serial=id)
-            assert self._inst.head.serial == id
-            self._inst.mode = OperationModes.PHOTO
+            assert self._inst.info.serial == id
+            self._inst.mode = OperationMode.PHOTO
         except AssertionError:
             raise ValueError(f"Error initializing laser {self._conn}, serial number mismatch")
         self.enable()
-        self.power_setpoint_mw = INIT_POWER_MW
+        self.power = INIT_POWER_MW
         type(self).power_setpoint_mw.maximum = maximum_power_mw
         self._wavelength = wavelength
 
@@ -68,32 +68,34 @@ class GenesisMXLaser(BaseLaser):
         :return: The current power of the laser in milliwatts.
         :rtype: float
         """
-        return self._inst.power_mw
+        res = self._inst.power.value
+        return res if res is not None else 0.0
 
-    @DeliminatedProperty(minimum=0, maximum=float("inf"))
+    @DeliminatedProperty(minimum=0, maximum=float(1000))
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint of the laser.
 
         :return: The power setpoint of the laser in milliwatts.
         :rtype: float
         """
-        return self._inst.power_setpoint_mw
+        res = self._inst.power.setpoint
+        return res if res is not None else 0.0
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float) -> None:
+    def power_setpoint_mw(self, value: float) -> None:  # type: ignore
         """Set the power setpoint of the laser.
 
         :param value: The desired power setpoint in milliwatts.
         :type value: float
         """
         self.log.info(f"setting power to {value} mW")
-        self._inst.power_mw = value
+        self._inst.power = value
 
     @property
-    def temperature_c(self) -> float:
+    def temperature_c(self) -> float | None:
         """Get the temperature of the laser.
 
         :return: The temperature of the laser in degrees Celsius.
         :rtype: float
         """
-        return self._inst.temperature_c
+        return self._inst.temperature

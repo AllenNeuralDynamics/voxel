@@ -1,10 +1,35 @@
 import ctypes as C
 import logging
 import os
+from typing import Protocol, Any, cast
 
 from voxel_classic.devices.temperature_sensor.base import BaseTemperatureSensor
 
 CHANNELS = {"Main": 11, "TH1": 12, "TH2": 13}
+
+
+class _TspbDll(Protocol):  # protocol for vendor + wrapped DLL functions we assign
+    # vendor-exported symbols (raw names from DLL)
+    TLTSPB_errorMessage: Any
+    TLTSPB_findRsrc: Any
+    TLTSPB_getRsrcName: Any
+    TLTSPB_init: Any
+    TLTSPB_reset: Any
+    TLTSPB_getRsrcInfo: Any
+    TLTSPB_measHumidity: Any
+    TLTSPB_measTemperature: Any
+    TLTSPB_close: Any
+
+    # wrapped / convenience names we bind below
+    get_error_message: Any
+    get_device_count: Any
+    get_device_name: Any
+    get_device_handle: Any
+    get_device_info: Any
+    get_humidity: Any
+    get_temperture: Any  # vendor spelling kept
+    reset: Any
+    close: Any
 
 
 class TSP01BTemperatureSensor(BaseTemperatureSensor):
@@ -27,16 +52,20 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         """
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.id = id
+        # forward attribute declaration for type checkers
+        self._dll: _TspbDll  # set in _load_dll
         self.channel = channel
         self._load_dll()
         device_count = C.c_uint32()
-        self.dll.get_device_count(0, device_count)
-        self.device_number_to_handle = dict()
+        # second argument is a pointer; pass byref for clarity / typing
+        self._dll.get_device_count(0, C.byref(device_count))
+        self.device_number_to_handle = {}
         for device in range(device_count.value):
             device_name = (256 * C.c_char)()
-            self.dll.get_device_name(0, device, device_name)
+            self._dll.get_device_name(0, device, device_name)
             device_handle = C.c_uint32()
-            self.dll.get_device_handle(device_name, 0, 0, device_handle)
+            # IDQuery / resetDevice -> False / False (c_bool)
+            self._dll.get_device_handle(device_name, False, False, C.byref(device_handle))
             self.device_number_to_handle[device] = device_handle
             _, serial_number, _, _ = self.get_device_info(device, device_handle)
             if serial_number.value.decode("ascii") == self.id:
@@ -49,7 +78,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         Reset the temperature sensor.
         """
         self.log.info("reseting temperature sensor")
-        self.dll.reset(self.device_handle)
+        self._dll.reset(self.device_handle)
 
     def get_device_info(self, device: int, device_handle: C.c_uint32) -> tuple:
         """
@@ -66,7 +95,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         serial_number = (256 * C.c_char)()
         manufacturer = (256 * C.c_char)()
         in_use = C.c_bool()
-        self.dll.get_device_info(device_handle, device, model, serial_number, manufacturer, in_use)
+        self._dll.get_device_info(device_handle, device, model, serial_number, manufacturer, C.byref(in_use))
         return model, serial_number, manufacturer, in_use
 
     @property
@@ -102,7 +131,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         :rtype: float
         """
         humidity = C.c_double()
-        self.dll.get_humidity(self.device_handle, humidity)
+        self._dll.get_humidity(self.device_handle, C.byref(humidity))
         return humidity.value
 
     @property
@@ -114,7 +143,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         :rtype: float
         """
         temperature = C.c_double()
-        self.dll.get_temperture(self.device_handle, CHANNELS[self.channel], temperature)
+        self._dll.get_temperture(self.device_handle, CHANNELS[self.channel], C.byref(temperature))
         return temperature.value
 
     def close(self) -> None:
@@ -122,7 +151,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         Close the temperature sensor.
         """
         self.log.info("closing temperature sensor")
-        self.dll.close(self.device_handle)
+        self._dll.close(self.device_handle)
 
     def _load_dll(self) -> None:
         """
@@ -132,7 +161,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         path = os.path.dirname(os.path.realpath(__file__))
         with os.add_dll_directory(path):
             # needs "TLTSPB_64.dll" in directory
-            self.dll = C.cdll.LoadLibrary("TLTSPB_64.dll")
+            self._dll = cast(_TspbDll, C.cdll.LoadLibrary("TLTSPB_64.dll"))
         self._setup_dll()
 
     def _setup_dll(self) -> None:
@@ -153,48 +182,49 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
             :rtype: int
             """
             if error_code != 0:
-                self.log.info("error message from thorlabs TSP01B: ", end="")
+                # logging.Logger.info doesn't support 'end'; log prefix separately
+                self.log.info("error message from thorlabs TSP01B:")
                 error_message = (512 * C.c_char)()
-                self.dll.get_error_message(0, error_code, error_message)
+                self._dll.get_error_message(0, error_code, error_message)
                 self.log.info(error_message.value.decode("ascii"))
                 raise UserWarning("thorlabs TSP01B error: %i; see above for details." % (error_code))
             return error_code
 
-        self.dll.get_error_message = self.dll.TLTSPB_errorMessage
-        self.dll.get_error_message.argtypes = [
+        self._dll.get_error_message = self._dll.TLTSPB_errorMessage
+        self._dll.get_error_message.argtypes = [
             C.c_uint32,  # instrumentHandle
             C.c_uint32,  # statusCode
             C.c_char_p,
         ]  # description[]
-        self.dll.get_error_message.restype = C.c_uint32
+        self._dll.get_error_message.restype = C.c_uint32
 
-        self.dll.get_device_count = self.dll.TLTSPB_findRsrc
-        self.dll.get_device_count.argtypes = [C.c_uint32, C.POINTER(C.c_uint32)]  # instrumentHandle  # deviceCount
-        self.dll.get_device_count.restype = check_error
+        self._dll.get_device_count = self._dll.TLTSPB_findRsrc
+        self._dll.get_device_count.argtypes = [C.c_uint32, C.POINTER(C.c_uint32)]  # instrumentHandle  # deviceCount
+        self._dll.get_device_count.restype = check_error
 
-        self.dll.get_device_name = self.dll.TLTSPB_getRsrcName
-        self.dll.get_device_name.argtypes = [
+        self._dll.get_device_name = self._dll.TLTSPB_getRsrcName
+        self._dll.get_device_name.argtypes = [
             C.c_uint32,  # instrumentHandle
             C.c_uint32,  # deviceIndex
             C.c_char_p,
         ]  # resourceName[]
-        self.dll.get_device_name.restype = check_error
+        self._dll.get_device_name.restype = check_error
 
-        self.dll.get_device_handle = self.dll.TLTSPB_init
-        self.dll.get_device_handle.argtypes = [
+        self._dll.get_device_handle = self._dll.TLTSPB_init
+        self._dll.get_device_handle.argtypes = [
             C.c_char_p,  # resourceName
             C.c_bool,  # IDQuery
             C.c_bool,  # resetDevice
             C.POINTER(C.c_uint32),
         ]  # instrumentHandle
-        self.dll.get_device_handle.restype = check_error
+        self._dll.get_device_handle.restype = check_error
 
-        self.dll.reset = self.dll.TLTSPB_reset
-        self.dll.reset.argtypes = [C.c_uint32]  # instrumentHandle
-        self.dll.reset.restype = check_error
+        self._dll.reset = self._dll.TLTSPB_reset
+        self._dll.reset.argtypes = [C.c_uint32]  # instrumentHandle
+        self._dll.reset.restype = check_error
 
-        self.dll.get_device_info = self.dll.TLTSPB_getRsrcInfo
-        self.dll.get_device_info.argtypes = [
+        self._dll.get_device_info = self._dll.TLTSPB_getRsrcInfo
+        self._dll.get_device_info.argtypes = [
             C.c_uint32,  # instrumentHandle
             C.c_uint32,  # deviceIndex
             C.c_char_p,  # modelName
@@ -202,20 +232,20 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
             C.c_char_p,  # manufacturerName
             C.POINTER(C.c_bool),
         ]  # resourceInUse
-        self.dll.get_device_info.restype = check_error
+        self._dll.get_device_info.restype = check_error
 
-        self.dll.get_humidity = self.dll.TLTSPB_measHumidity
-        self.dll.get_humidity.argtypes = [C.c_uint32, C.POINTER(C.c_double)]  # instrumentHandle  # humidityValue
-        self.dll.get_humidity.restype = check_error
+        self._dll.get_humidity = self._dll.TLTSPB_measHumidity
+        self._dll.get_humidity.argtypes = [C.c_uint32, C.POINTER(C.c_double)]  # instrumentHandle  # humidityValue
+        self._dll.get_humidity.restype = check_error
 
-        self.dll.get_temperture = self.dll.TLTSPB_measTemperature
-        self.dll.get_temperture.argtypes = [
+        self._dll.get_temperture = self._dll.TLTSPB_measTemperature
+        self._dll.get_temperture.argtypes = [
             C.c_uint32,  # instrumentHandle
             C.c_uint16,  # channel
             C.POINTER(C.c_double),
         ]  # temperatureValue
-        self.dll.get_temperture.restype = check_error
+        self._dll.get_temperture.restype = check_error
 
-        self.dll.close = self.dll.TLTSPB_close
-        self.dll.close.argtypes = [C.c_uint32]  # instrumentHandle
-        self.dll.close.restype = check_error
+        self._dll.close = self._dll.TLTSPB_close
+        self._dll.close.argtypes = [C.c_uint32]  # instrumentHandle
+        self._dll.close.restype = check_error

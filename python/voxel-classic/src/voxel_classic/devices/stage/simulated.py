@@ -1,6 +1,5 @@
 import logging
 import time
-from typing import Tuple, Dict
 
 from voxel_classic.devices.stage.base import BaseStage
 
@@ -108,14 +107,14 @@ class SimulatedStage(BaseStage):
         pass
 
     @property
-    def limits_mm(self) -> Tuple[int, int]:
+    def limits_mm(self) -> tuple[int, int]:
         """
         Get the limits of the stage in millimeters.
 
         :return: Limits in millimeters
         :rtype: tuple
         """
-        return self._limits_mm
+        return self._limits_mm[0], self._limits_mm[1]
 
     @property
     def position_mm(self) -> float:
@@ -179,12 +178,12 @@ class SimulatedStage(BaseStage):
         self.log.info(f"set backlash to: {backlash} mm.")
 
     @property
-    def acceleration_ms(self) -> Dict[str, float]:
+    def acceleration_ms(self) -> dict[str, float]:  # type: ignore
         """
         Get the acceleration of the stage in millimeters per second squared.
 
         :return: Acceleration in millimeters per second squared
-        :rtype: Dict[str, float]
+        :rtype: dict[str, float]
         """
         return {self.instrument_axis.lower(): self._acceleration_ms}
 
@@ -251,10 +250,7 @@ class SimulatedStage(BaseStage):
         :return: True if the axis is moving, False otherwise
         :rtype: bool
         """
-        if time.time() < self.move_end_time_s:
-            return True
-        else:
-            return False
+        return time.time() < self.move_end_time_s
 
     def zero_in_place(self) -> None:
         """

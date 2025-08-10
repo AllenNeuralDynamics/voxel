@@ -3,15 +3,15 @@ import os
 import sys
 from ctypes import c_wchar
 from math import ceil
-from multiprocessing import Array, Process, Value, Queue
+from multiprocessing import Array, Process, Queue
 from multiprocessing.shared_memory import SharedMemory
+from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import List
+from typing import cast
 
 import numpy as np
 import tifffile
-
 from voxel_classic.writers.base import BaseWriter
 
 CHUNK_COUNT_PX = 64
@@ -34,6 +34,7 @@ class TiffWriter(BaseWriter):
         :type path: str
         """
         super().__init__(path)
+        self._frame_count_px: int = 0
         self._compression = None  # initialize as no compression
 
     @property
@@ -43,7 +44,7 @@ class TiffWriter(BaseWriter):
         :return: Frame number in pixels
         :rtype: int
         """
-        return self._frame_count_px_px
+        return self._frame_count_px
 
     @frame_count_px.setter
     def frame_count_px(self, frame_count_px: int) -> None:
@@ -53,7 +54,7 @@ class TiffWriter(BaseWriter):
         :type value: int
         """
         self.log.info(f"setting frame count to: {frame_count_px} [px]")
-        self._frame_count_px_px = frame_count_px
+        self._frame_count_px = frame_count_px
 
     @property
     def chunk_count_px(self) -> int:
@@ -122,13 +123,24 @@ class TiffWriter(BaseWriter):
             "z": CHUNK_COUNT_PX,
         }
         shm_shape = [chunk_shape_map[x] for x in chunk_dim_order]
-        shm_nbytes = int(np.prod(shm_shape, dtype=np.int64) * np.dtype(self._data_type).itemsize)
+        # Validate that all dimensions are set (not None) and cast to int for type checking
+        if any(v is None for v in shm_shape):
+            raise ValueError("Writer dimension attributes must be set before prepare().")
+        # After validation, inform the type checker that values are not None
+        shape_ints = [int(cast("int", v)) for v in shm_shape]
+        shm_nbytes = int(np.prod(shape_ints, dtype=np.int64) * np.dtype(self._data_type).itemsize)
         self._process = Process(
             target=self._run,
             args=(shm_shape, shm_nbytes, self._progress, self._log_queue),
         )
 
-    def _run(self, shm_shape: List[int], shm_nbytes: int, shared_progress: Value, shared_log_queue: Queue) -> None:
+    def _run(
+        self,
+        shm_shape: list[int],
+        shm_nbytes: int,
+        shared_progress: Synchronized,
+        shared_log_queue: Queue,
+    ) -> None:
         """
         Main run function of the Tiff writer.
 
@@ -149,7 +161,7 @@ class TiffWriter(BaseWriter):
         log_handler = logging.StreamHandler(sys.stdout)
         log_handler.setFormatter(log_formatter)
         logger.addHandler(log_handler)
-        filepath = Path(self._path, self._acquisition_name, self._filename).absolute()
+        filepath = Path(self._path, (self._acquisition_name or ""), self._filename).absolute()
 
         writer = tifffile.TiffWriter(filepath, bigtiff=True)
 
@@ -172,7 +184,7 @@ class TiffWriter(BaseWriter):
             },
         }
 
-        chunk_total = ceil(self._frame_count_px_px / CHUNK_COUNT_PX)
+        chunk_total = ceil(self._frame_count_px / CHUNK_COUNT_PX)
         for chunk_num in range(chunk_total):
             # Wait for new data.
             while self.done_reading.is_set():
@@ -181,12 +193,12 @@ class TiffWriter(BaseWriter):
             shm = SharedMemory(self.shm_name, create=False, size=shm_nbytes)
             frames = np.ndarray(shm_shape, self._data_type, buffer=shm.buf)
             shared_log_queue.put(
-                f"{self._filename}: writing chunk " f"{chunk_num + 1}/{chunk_total} of size {frames.shape}."
+                f"{self._filename}: writing chunk {chunk_num + 1}/{chunk_total} of size {frames.shape}."
             )
             start_time = perf_counter()
             writer.write(data=frames, metadata=metadata, compression=self._compression)
             frames = None
-            shared_log_queue.put(f"{self._filename}: writing chunk took " f"{perf_counter() - start_time:.2f} [s]")
+            shared_log_queue.put(f"{self._filename}: writing chunk took {perf_counter() - start_time:.2f} [s]")
             shm.close()
             self.done_reading.set()
             shared_progress.value = (chunk_num + 1) / chunk_total
@@ -210,5 +222,8 @@ class TiffWriter(BaseWriter):
 
     def delete_files(self) -> None:
         """Delete the files."""
+        if self._acquisition_name is None:
+            self.log.warning("Acquisition name is not set. Cannot delete files.")
+            return
         filepath = Path(self._path, self._acquisition_name, self._filename).absolute()
         os.remove(filepath)

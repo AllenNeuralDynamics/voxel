@@ -1,4 +1,4 @@
-from voxel_classic.metadata.metadata_class import MetadataClass
+from .metadata_class import MetadataClass
 
 X_ANATOMICAL_DIRECTIONS = {
     "Anterior to Posterior": "Anterior_to_posterior",
@@ -27,3 +27,5 @@ class AINDMetadataClass(MetadataClass):
     """
     Metadata class that includes inputs for anatomical directions and mediums.
     """
+
+    pass

@@ -30,7 +30,7 @@ class BaseFlipMount(VoxelDevice):
 
     @position.setter
     @abstractmethod
-    def position(self, position_name: str, wait: bool = False) -> None:
+    def position(self, position_name: str) -> None:
         """
         Set the flip mount to a specific position.
 

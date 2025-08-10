@@ -669,7 +669,7 @@ class Recorder:
         """
         Set parameter for compression mode
 
-        :param compr_param: dict()
+        :param compr_param: {}
         """
 
         parameter = PCO_RECORDER_COMPRESSION_PARAMETER()

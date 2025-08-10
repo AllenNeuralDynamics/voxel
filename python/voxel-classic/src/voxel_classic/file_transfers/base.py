@@ -2,7 +2,6 @@ import logging
 import threading
 from abc import abstractmethod
 from pathlib import Path
-from typing import Optional
 
 from imohash import hashfile
 
@@ -35,7 +34,7 @@ class BaseFileTransfer:
         self._local_path = Path(local_path)
         if self._external_path == self._local_path:
             raise ValueError("External path and local path cannot be the same")
-        self._filename: Optional[str] = None
+        self._filename: str | None = None
         self._max_retry: int = 0
         self._acquisition_name: Path = Path()
         self._verify_transfer: bool = False
@@ -45,12 +44,12 @@ class BaseFileTransfer:
 
     @property
     @abstractmethod
-    def filename(self) -> str:
+    def filename(self) -> str | None:
         """
         The base filename of files to be transferred.
 
         :return: The base filename
-        :rtype: str
+        :rtype: str | None
         """
         return self._filename
 

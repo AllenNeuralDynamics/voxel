@@ -47,14 +47,14 @@ class RobocopyFileTransfer(BaseFileTransfer):
             # generate a list of subdirs and files in the parent local dir to delete at the end
             delete_list = []
             for name in os.listdir(local_directory.absolute()):
-                if self.filename in name:
+                if self.filename and self.filename in name:
                     delete_list.append(name)
             # generate a list of files to copy
             # path is the entire experiment path
             # subdirs is any tile specific subdir i.e. zarr store
             # files are any tile specific files
             # file list generation if  not zarr
-            file_list = dict()
+            file_list = {}
             # check if subdir for valid zarr store
             for item in os.listdir(local_directory.absolute()):
                 if os.path.isdir(os.path.join(local_directory, item)):
@@ -70,7 +70,7 @@ class RobocopyFileTransfer(BaseFileTransfer):
             # otherwise not a zarr store
             for path, _, files in os.walk(local_directory.absolute()):
                 for name in files:
-                    if self.filename in name and name != log_path:
+                    if self.filename and self.filename in name and name != log_path:
                         file_list[os.path.join(path, name)] = os.path.getsize(os.path.join(path, name)) / 1024**2
             total_size_mb = sum(file_list.values())
             # sort the file list based on the file sizes and create a list for transfers
@@ -81,8 +81,9 @@ class RobocopyFileTransfer(BaseFileTransfer):
                 transfer_complete = True
             # if not, try to initiate transfer again
             else:
+                subprocess = None
                 num_files = len(sorted_file_list)
-                self.log.info(f"attempt {retry_num+1}/{self._max_retry}, tranferring {num_files} files.")
+                self.log.info(f"attempt {retry_num + 1}/{self._max_retry}, tranferring {num_files} files.")
                 for file_path, file_size_mb in sorted_file_list.items():
                     # transfer just one file and iterate
                     # split filename and path
@@ -161,6 +162,8 @@ class RobocopyFileTransfer(BaseFileTransfer):
                     # f is a relative path, convert to absolute
                     local_file_path = os.path.join(local_directory.absolute(), file)
                     external_file_path = os.path.join(external_directory.absolute(), file)
+
+                    local_dir = os.path.dirname(local_file_path)
                     # .zarr is directory but os.path.isdir will return False
                     if os.path.isdir(local_file_path) or ".zarr" in local_dir:
                         # TODO how to hash check zarr -> directory instead of file?
@@ -192,5 +195,6 @@ class RobocopyFileTransfer(BaseFileTransfer):
                 end_time = time.time()
                 total_time = end_time - start_time
                 self.log.info(f"{self.filename} transfer complete, total time: {total_time:.2f} [s]")
-                subprocess.kill()
+                if subprocess:
+                    subprocess.kill()
                 retry_num += 1

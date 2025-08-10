@@ -1,4 +1,5 @@
-from typing import Callable, Optional, Any, Union
+from typing import Any
+from collections.abc import Callable
 
 
 class _DeliminatedProperty(property):
@@ -9,12 +10,12 @@ class _DeliminatedProperty(property):
     def __init__(
         self,
         fget: Callable[[Any], Any],
-        fset: Optional[Callable[[Any, Any], None]] = None,
-        fdel: Optional[Callable[[Any], None]] = None,
-        minimum: Union[float, Callable[[Any], float]] = float("-inf"),
-        maximum: Union[float, Callable[[Any], float]] = float("inf"),
-        step: Optional[float] = None,
-        unit: Optional[str] = None,
+        fset: Callable[[Any, Any], None] | None = None,
+        fdel: Callable[[Any], None] | None = None,
+        minimum: float | Callable[[Any], float] = float("-inf"),
+        maximum: float | Callable[[Any], float] = float("inf"),
+        step: float | None = None,
+        unit: str | None = None,
     ):
         """
         Initialize the _DeliminatedProperty.
@@ -45,7 +46,7 @@ class _DeliminatedProperty(property):
         self._fset = fset
         self._fdel = fdel
 
-    def __get__(self, instance: Any, owner: Optional[type] = None) -> Any:
+    def __get__(self, instance: Any, owner: type | None = None) -> Any:
         """
         Get the property value.
 
@@ -137,7 +138,7 @@ class _DeliminatedProperty(property):
         return type(self)(self._fget, self._fset, fdel, self.minimum, self.maximum, self.step, self.unit)
 
     @property
-    def fset(self) -> Optional[Callable[[Any, Any], None]]:
+    def fset(self) -> Callable[[Any, Any], None] | None:  # type: ignore
         """
         Get the setter function.
 
@@ -149,8 +150,8 @@ class _DeliminatedProperty(property):
 
 # wrap _DeliminatedProperty to allow for deferred calling
 def DeliminatedProperty(
-    fget: Optional[Callable[[Any], Any]] = None, *args, **kwargs
-) -> Union[_DeliminatedProperty, Callable[[Callable[[Any], Any]], _DeliminatedProperty]]:
+    fget: Callable[[Any], Any] | None = None, *args, **kwargs
+) -> _DeliminatedProperty | Callable[[Callable[[Any], Any]], _DeliminatedProperty]:
     """
     Create a _DeliminatedProperty instance or a wrapper for deferred calling.
 

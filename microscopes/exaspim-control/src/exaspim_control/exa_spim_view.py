@@ -99,7 +99,7 @@ class ExASPIMInstrumentView(InstrumentView):
         self.viewer.camera.events.center.connect(self.camera_position)
 
         # create cache for contrast limit values
-        self.contrast_limits = dict()
+        self.contrast_limits = {}
         for key in self.channels.keys():
             self.contrast_limits[key] = [self.intensity_min, self.intensity_max]
 
@@ -277,10 +277,8 @@ class ExASPIMInstrumentView(InstrumentView):
         """
         Update the image layer in the viewer.
 
-        :param args: Tuple containing image and camera name
-        :type args: tuple
+        :param args: tuple containing image and camera name
         :param snapshot: Whether the image is a snapshot, defaults to False
-        :type snapshot: bool, optional
         """
 
         (image, camera_name) = args

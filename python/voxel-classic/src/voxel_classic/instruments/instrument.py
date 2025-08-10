@@ -2,22 +2,33 @@ import copy
 import importlib
 import inspect
 import logging
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 from threading import Lock, RLock
-from typing import Any, Dict, Optional, Type
+from typing import TYPE_CHECKING, Any
 
 import inflection
 from ruamel.yaml import YAML
 from serial import Serial
-
 from voxel_classic.descriptors.deliminated_property import _DeliminatedProperty
+
+
+if TYPE_CHECKING:
+    from voxel_classic.devices.daq.ni import NIDAQ
+    from voxel_classic.devices.camera.base import BaseCamera
+    from voxel_classic.devices.filter.base import BaseFilter
+    from voxel_classic.devices.filterwheel.base import BaseFilterWheel
+    from voxel_classic.devices.flip_mount.base import BaseFlipMount
+    from voxel_classic.devices.laser.base import BaseLaser
+    from voxel_classic.devices.stage.asi.tiger import TigerStage
+    from voxel_classic.devices.indicator_light.base import BaseIndicatorLight
 
 
 class Instrument:
     """Represents an instrument with various devices and configurations."""
 
-    def __init__(self, config_path: str, yaml_handler: Optional[YAML] = None, log_level: str = "INFO"):
+    def __init__(self, config_path: str | Path, yaml_handler: YAML | None = None, log_level: str = "INFO"):
         """
         Initialize the Instrument class.
 
@@ -38,8 +49,20 @@ class Instrument:
         self.config = self.yaml.load(self.config_path)
 
         # store a dict of {device name: device type} for convenience
-        self.channels: Dict[str, Any] = {}
+        self.channels: dict[str, Any] = {}
         self.stage_axes: list = []
+
+        self.cameras: dict[str, BaseCamera] = {}
+        self.lasers: dict[str, BaseLaser] = {}
+        self.filters: dict[str, BaseFilter] = {}
+        self.filter_wheels: dict[str, BaseFilterWheel] = {}
+        self.daqs: dict[str, NIDAQ] = {}
+        self.scanning_stages: dict[str, TigerStage] = {}
+        self.tiling_stages: dict[str, TigerStage] = {}
+        self.flip_mounts: dict[str, BaseFlipMount] = {}
+        self.focusing_stages: dict[str, TigerStage] = {}
+        self.controllers: dict[str, Any] = {}
+        self.indicator_lights: dict[str, BaseIndicatorLight] = {}
 
         # construct microscope
         self._construct()
@@ -64,16 +87,18 @@ class Instrument:
         # construct and verify channels
         for channel in self.config["instrument"]["channels"].values():
             for laser_name in channel.get("lasers", []):
-                if laser_name not in self.lasers.keys():
+                if laser_name not in self.lasers:
                     raise ValueError(f"laser {laser_name} not in {self.lasers.keys()}")
             for filter in channel.get("filters", []):
-                if filter not in self.filters.keys():
+                if filter not in self.filters:
                     raise ValueError(f"filter wheel {filter} not in {self.filters.keys()}")
                 if filter not in sum([list(v.filters.keys()) for v in self.filter_wheels.values()], []):
                     raise ValueError(f"filter {filter} not associated with any filter wheel: {self.filter_wheels}")
         self.channels = self.config["instrument"]["channels"]
 
-    def _construct_device(self, device_name: str, device_specs: Dict[str, Any], lock: Optional[Lock] = None) -> None:
+    def _construct_device(
+        self, device_name: str, device_specs: dict[str, Any], lock: Lock | RLock | None = None
+    ) -> None:
         """
         Construct a device based on its specifications.
 
@@ -114,7 +139,7 @@ class Instrument:
             self._construct_subdevice(device_object, subdevice_name, copy.deepcopy(subdevice_specs), lock)
 
     def _construct_subdevice(
-        self, device_object: Any, subdevice_name: str, subdevice_specs: Dict[str, Any], lock: Lock
+        self, device_object: Any, subdevice_name: str, subdevice_specs: dict[str, Any], lock: Lock | RLock
     ) -> None:
         """
         Construct a subdevice based on its specifications.
@@ -135,13 +160,13 @@ class Instrument:
             # If subdevice init needs a serial port, add device's serial port to init arguments
             if parameter.annotation == Serial and Serial in [type(v) for v in device_object.__dict__.values()]:
                 # assuming only one relevant serial port in parent
-                subdevice_specs["init"][name] = [v for v in device_object.__dict__.values() if type(v) == Serial][0]
+                subdevice_specs["init"][name] = [v for v in device_object.__dict__.values() if isinstance(v, Serial)][0]
             # If subdevice init needs parent object type, add device object to init arguments
-            elif parameter.annotation == type(device_object):
+            elif parameter.annotation is type(device_object):
                 subdevice_specs["init"][name] = device_object
         self._construct_device(subdevice_name, subdevice_specs, lock)
 
-    def _load_device(self, driver: str, module: str, kwds: Dict[str, Any], lock: Lock) -> Any:
+    def _load_device(self, driver: str, module: str, kwds: dict[str, Any], lock: Lock | RLock) -> Any:
         """
         Load a device class and make it thread-safe.
 
@@ -161,7 +186,7 @@ class Instrument:
         thread_safe_device_class = for_all_methods(lock, device_class)
         return thread_safe_device_class(**kwds)
 
-    def _setup_device(self, device: Any, properties: Dict[str, Any]) -> None:
+    def _setup_device(self, device: Any, properties: dict[str, Any]) -> None:
         """
         Set up a device with its properties.
 
@@ -188,7 +213,7 @@ class Instrument:
             for attr_name in dir(device):
                 attr = getattr(type(device), attr_name, None)
                 if (
-                    isinstance(attr, property) or isinstance(inspect.unwrap(attr), property)
+                    attr is not None and (isinstance(attr, property) or isinstance(inspect.unwrap(attr), property))
                 ) and attr_name != "latest_frame":
                     properties[attr_name] = getattr(device, attr_name)
             device_specs["properties"] = properties
@@ -210,7 +235,7 @@ class Instrument:
         pass
 
 
-def for_all_methods(lock: Lock, cls: Type) -> Type:
+def for_all_methods(lock: Lock | RLock, cls: type) -> type:
     """
     Apply a lock to all methods of a class to make them thread-safe.
 
@@ -225,8 +250,8 @@ def for_all_methods(lock: Lock, cls: Type) -> Type:
         if attr_name == "__init__":
             continue
         attr = getattr(cls, attr_name)
-        if type(attr) == _DeliminatedProperty:
-            attr._fset = lock_methods(attr._fset, lock)
+        if isinstance(attr, _DeliminatedProperty):
+            attr._fset = lock_methods(attr._fset, lock) if attr._fset is not None else None
             attr._fget = lock_methods(attr._fget, lock)
         elif isinstance(attr, property):
             wrapped_getter = lock_methods(getattr(attr, "fget"), lock)
@@ -238,14 +263,14 @@ def for_all_methods(lock: Lock, cls: Type) -> Type:
     return cls
 
 
-def lock_methods(fn: callable, lock: Lock) -> callable:
+def lock_methods(fn: Callable, lock: Lock | RLock) -> Callable:
     """
     Apply a lock to a method to make it thread-safe.
 
     :param fn: Function to apply the lock to.
     :type fn: function
     :param lock: Lock for thread safety.
-    :type lock: Lock
+    :type lock: Lock | RLock
     :return: Thread-safe function.
     :rtype: function
     """

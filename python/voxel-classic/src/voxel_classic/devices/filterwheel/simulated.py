@@ -1,10 +1,7 @@
 import logging
 import time
-from typing import Dict
 
 from voxel_classic.devices.filterwheel.base import BaseFilterWheel
-
-FILTERS = list()
 
 SWITCH_TIME_S = 0.1  # estimated timing
 
@@ -14,7 +11,7 @@ class SimulatedFilterWheel(BaseFilterWheel):
     FilterWheel class for handling simulated filter wheel devices.
     """
 
-    def __init__(self, id: str, filters: Dict[str, int]) -> None:
+    def __init__(self, id: str, filters: dict[str, int]) -> None:
         """
         Initialize the FilterWheel object.
 
@@ -25,11 +22,16 @@ class SimulatedFilterWheel(BaseFilterWheel):
         """
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.id = id
-        self.filters = filters
-        for filter in filters:
-            FILTERS.append(filter)
+        self._filters = filters
         # force homing of the wheel to first position
-        self.filter = FILTERS[0]
+        self.filter = next(iter(filters))
+
+    @property
+    def filters(self) -> dict[str, int]:
+        """
+        Get the list of available filters.
+        """
+        return self._filters
 
     @property
     def filter(self) -> str:
@@ -50,8 +52,8 @@ class SimulatedFilterWheel(BaseFilterWheel):
         :type filter_name: str
         """
         self.log.info(f"setting filter to {filter_name}")
-        if filter_name not in FILTERS:
-            raise ValueError(f"Filter {filter_name} not in filter list: {FILTERS}")
+        if filter_name not in self._filters:
+            raise ValueError(f"Filter {filter_name} not in filter list: {self._filters}")
         self._filter = filter_name
         time.sleep(SWITCH_TIME_S)
 

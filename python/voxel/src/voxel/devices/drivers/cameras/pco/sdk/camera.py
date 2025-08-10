@@ -28,9 +28,9 @@ BUFFER_SIZE_MB = 2400
 BINNING = {1: 1, 2: 2, 4: 4}
 
 # generate modes by querying pco sdk
-TRIGGERS = {"modes": dict(), "sources": {"internal": "auto", "external": "external"}, "polarity": None}
+TRIGGERS = {"modes": {}, "sources": {"internal": "auto", "external": "external"}, "polarity": None}
 
-READOUT_MODES = dict()
+READOUT_MODES = {}
 
 
 class exception(Exception):

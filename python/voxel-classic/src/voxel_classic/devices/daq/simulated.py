@@ -3,9 +3,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy
 from matplotlib.ticker import AutoMinorLocator
-from scipy import signal, interpolate
-from typing import Dict, Optional
-
+from scipy import interpolate, signal
 from voxel_classic.devices.daq.base import BaseDAQ
 
 # lets just simulate the PCIe-6738
@@ -62,8 +60,59 @@ DO_WAVEFORMS = ["square wave"]
 AO_WAVEFORMS = ["square wave", "sawtooth", "triangle wave", "nonlinear sawtooth"]
 
 
+class SimulatedTask:
+    def start(self) -> None:
+        """
+        Start the task.
+        """
+        pass
+
+    def stop(self) -> None:
+        """
+        Stop the task.
+        """
+        pass
+
+    def close(self) -> None:
+        """
+        Close the task.
+        """
+        pass
+
+    def restart(self) -> None:
+        """
+        Restart the task.
+        """
+        self.stop()
+        self.start()
+
+    def wait_until_done(self, timeout: float) -> None:
+        """
+        Wait until the task is done.
+
+        :param timeout: Timeout in seconds
+        :type timeout: float
+        """
+        pass
+
+    def is_task_done(self) -> bool:
+        """
+        Check if the task is done.
+
+        :return: True if task is done, False otherwise
+        :rtype: bool
+        """
+        return True
+
+
 class SimulatedDAQ(BaseDAQ):
     """DAQ class for handling simulated DAQ devices."""
+
+    # Type hints for dynamically set attributes
+    ao_total_time_ms: float
+    do_total_time_ms: float
+    ao_sampling_frequency_hz: float
+    do_sampling_frequency_hz: float
 
     def __init__(self, dev: str) -> None:
         """
@@ -72,17 +121,17 @@ class SimulatedDAQ(BaseDAQ):
         :param dev: Device name
         :type dev: str
         """
-        self.do_task: Optional[dict] = None
-        self.ao_task: Optional[dict] = None
-        self.co_task: Optional[dict] = None
-        self._tasks: Optional[Dict[str, dict]] = None
+        self.do_task: SimulatedTask | None = None
+        self.ao_task: SimulatedTask | None = None
+        self.co_task: SimulatedTask | None = None
+        self._tasks: dict[str, dict] = {}
 
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self.id = dev
-        self.ao_physical_chans = list()
-        self.co_physical_chans = list()
-        self.do_physical_chans = list()
-        self.dio_ports = list()
+        self.ao_physical_chans = []
+        self.co_physical_chans = []
+        self.do_physical_chans = []
+        self.dio_ports = []
         for channel in AO_PHYSICAL_CHANS:
             self.ao_physical_chans.append(f"{self.id}/{channel}")
         for channel in CO_PHYSICAL_CHANS:
@@ -97,12 +146,12 @@ class SimulatedDAQ(BaseDAQ):
         self.max_ao_volts = MAX_AO_VOLTS
         self.min_ao_volts = MIN_AO_VOLTS
         self.log.info("resetting nidaq")
-        self.task_time_s = dict()
-        self.ao_waveforms = dict()
-        self.do_waveforms = dict()
+        self.task_time_s = {}
+        self.ao_waveforms = {}
+        self.do_waveforms = {}
 
     @property
-    def tasks(self) -> Optional[Dict[str, dict]]:
+    def tasks(self) -> dict[str, dict]:
         """
         Get the tasks dictionary.
 
@@ -112,7 +161,7 @@ class SimulatedDAQ(BaseDAQ):
         return self._tasks
 
     @tasks.setter
-    def tasks(self, tasks_dict: Dict[str, dict]) -> None:
+    def tasks(self, tasks_dict: dict[str, dict]) -> None:
         """
         Set the tasks dictionary.
 
@@ -121,7 +170,7 @@ class SimulatedDAQ(BaseDAQ):
         """
         self._tasks = tasks_dict
 
-    def add_task(self, task_type: str, pulse_count: Optional[int] = None) -> None:
+    def add_task(self, task_type: str, pulse_count: int | None = None) -> None:
         """
         Add a task to the DAQ.
 
@@ -137,14 +186,15 @@ class SimulatedDAQ(BaseDAQ):
 
         task = self.tasks[f"{task_type}_task"]
 
-        if old_task := getattr(self, f"{task_type}_task", False):
-            old_task.close()  # close old task
+        if old_task := getattr(self, f"{task_type}_task", None):
+            if hasattr(old_task, "close"):
+                old_task.close()  # close old task
             delattr(self, f"{task_type}_task")  # Delete previously configured tasks
         timing = task["timing"]
 
         for k, v in timing.items():
             global_var = globals().get(k.upper(), {})
-            valid = list(global_var.keys()) if type(global_var) == dict else global_var
+            valid = list(global_var.keys()) if isinstance(global_var, dict) else global_var
             if v not in valid and valid != []:
                 raise ValueError(f"{k} must be one of {valid}")
 
@@ -171,7 +221,7 @@ class SimulatedDAQ(BaseDAQ):
 
         else:  # co channel
             if timing["frequency_hz"] < 0:
-                raise ValueError(f"frequency must be >0 Hz")
+                raise ValueError("frequency must be >0 Hz")
 
             for channel_number in task["counters"]:
                 if f"{self.id}/{channel_number}" not in self.co_physical_chans:
@@ -251,6 +301,9 @@ class SimulatedDAQ(BaseDAQ):
             end_time_ms = channel["parameters"]["end_time_ms"]["channels"][wavelength]
             if end_time_ms > timing["period_time_ms"] + timing["rest_time_ms"] or end_time_ms < start_time_ms:
                 raise ValueError("end time must be < period time and > start time")
+
+            # Initialize voltages array
+            voltages: numpy.ndarray = numpy.array([])
 
             if waveform == "square wave":
                 try:
@@ -642,7 +695,9 @@ class SimulatedDAQ(BaseDAQ):
             for waveform in self.do_waveforms:
                 plt.plot(time_ms, self.do_waveforms[waveform], label=waveform)
 
-        plt.axis([0, numpy.max([self.ao_total_time_ms, self.do_total_time_ms]), -0.2, 5.2])
+        max_time = max(self.ao_total_time_ms, self.do_total_time_ms)
+        plt.xlim(0, max_time)
+        plt.ylim(-0.2, 5.2)
         ax.xaxis.set_minor_locator(AutoMinorLocator())
         ax.yaxis.set_minor_locator(AutoMinorLocator())
         ax.spines[["right", "top"]].set_visible(False)
@@ -719,30 +774,3 @@ class SimulatedDAQ(BaseDAQ):
             else:
                 pass
         return True
-
-
-class SimulatedTask:
-    def start(self) -> None:
-        """
-        Start the task.
-        """
-        pass
-
-    def stop(self) -> None:
-        """
-        Stop the task.
-        """
-        pass
-
-    def close(self) -> None:
-        """
-        Close the task.
-        """
-        pass
-
-    def restart(self) -> None:
-        """
-        Restart the task.
-        """
-        self.stop()
-        self.start()

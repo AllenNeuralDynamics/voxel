@@ -1,0 +1,86 @@
+acquisition:
+  metadata:
+    driver: exaspim_control.metadata.aind_metadata_class
+    module: AINDMetadataClass
+    init:
+      metadata_dictionary:
+        instrument_type: exaSPIM
+        subject_id: '123456'
+        experimenter_full_name: [adam glaser]
+        chamber_immersion:
+          medium: other
+          refractive_index: 1.33
+        x_anatomical_direction: Anterior_to_posterior
+        y_anatomical_direction: Inferior_to_superior
+        z_anatomical_direction: Left_to_right
+      date_format: Year/Month/Day/Hour/Minute/Second
+      name_specs:
+        deliminator: _
+        format: [ instrument_type, subject_id ]
+  operations:
+    vp-151mx:
+      imaris:
+        type: writer
+        driver: voxel.writers.imaris
+        module: ImarisWriter
+        init:
+          path: D:\\
+        properties:
+          compression: lz4shuffle
+          data_type: uint16
+      # tiff:
+      #   type: writer
+      #   driver: voxel.writers.tiff
+      #   module: TiffWriter
+      #   init:
+      #     path: D:\\
+      #   properties:
+      #     compression: none
+      #     data_type: uint16
+      # aqz:
+      #   type: writer
+      #   driver: voxel.writers.zarr
+      #   module: ZarrWriter
+      #   init:
+      #     path: D:\\
+      #   properties:
+      #     compression: zstd
+      #     data_type: uint16
+      #     chunk_size_x_px: 128
+      #     chunk_size_y_px: 128
+      #     chunk_size_z_px: 32
+      #     shuffle: True
+      #     multiscale: True
+      #     version: v3
+      robocopy:
+        type: file_transfer
+        driver: voxel.file_transfers.robocopy
+        module: RobocopyFileTransfer
+        init:
+          external_path: Z:\\stage\\exaSPIM
+          local_path: D:\\
+        properties:
+          verify_transfer: True
+          max_retry: 3
+          timeout_s: 60
+      # max_projection:
+      #   type: process
+      #   driver: voxel.processes.max_projection.cpu.numpy
+      #   module: CPUMaxProjection
+      #   init:
+      #     path: D:\\
+      #   properties:
+      #     data_type: uint16
+      #     x_projection_count_px: 3548
+      #     y_projection_count_px: 2660
+      #     z_projection_count_px: 2048
+      # background_collection:
+      #   type: routine
+      #   driver: exaspim_control.routines.background_collection
+      #   module: BackgroundCollection
+      #   init:
+      #     path: D:\\
+      #   properties:
+      #     data_type: uint16
+      #     frame_count_px: 20
+  tiles: []

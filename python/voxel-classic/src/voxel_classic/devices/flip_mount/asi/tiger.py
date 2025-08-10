@@ -1,6 +1,5 @@
 import time
 import logging
-from typing import Dict, Optional
 
 from voxel_classic.devices.controller.asi.tiger import TigerController
 
@@ -8,7 +7,7 @@ from voxel_classic.devices.flip_mount.base import BaseFlipMount
 
 STEPS_PER_UM = 10
 
-POSITIONS = dict()
+POSITIONS = {}
 
 
 class TigerFlipMount(BaseFlipMount):
@@ -16,7 +15,7 @@ class TigerFlipMount(BaseFlipMount):
     ThorlabsFlipMount class for handling Thorlabs flip mount devices.
     """
 
-    def __init__(self, axis: str, tigerbox: TigerController, positions: Dict[str, int]) -> None:
+    def __init__(self, axis: str, tigerbox: TigerController, positions: dict[str, int]) -> None:
         """
         Initialize the ThorlabsFlipMount object.
 
@@ -30,16 +29,16 @@ class TigerFlipMount(BaseFlipMount):
         """
         self.id = f"tiger flip mount: axis = {axis}"
         self.axis = axis.upper()
-        super().__init__(id)
+        super().__init__(f"tiger_flipmount_{axis}")
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.tigerbox = tigerbox
         for key, value in positions.items():
             POSITIONS[key] = value
         # default to starting in first position
-        self._position = self.tigerbox.get_position_mm()[self.axis.upper()]
+        self._position = self.tigerbox.get_current_positions()[self.axis.upper()]
 
     @property
-    def position(self) -> Optional[str]:
+    def position(self) -> str | None:
         """
         Get the current position of the flip mount.
         :return: Current position of the flip mount

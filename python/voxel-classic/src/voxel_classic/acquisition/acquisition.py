@@ -2,19 +2,29 @@ import inspect
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, Optional
 
 import inflection
 from ruamel.yaml import YAML
 
 from voxel_classic.instruments.instrument import Instrument
+from typing import TYPE_CHECKING, Any
+
+from exaspim_control.metadata.metadata_class import MetadataClass
+
+if TYPE_CHECKING:
+    from voxel_classic.writers.base import BaseWriter
+    from voxel_classic.file_transfers.base import BaseFileTransfer
 
 
 class Acquisition:
     """Handles the acquisition process for the instrument."""
 
     def __init__(
-        self, instrument: Instrument, config_filename: str, yaml_handler: Optional[YAML] = None, log_level: str = "INFO"
+        self,
+        instrument: Instrument,
+        config_filename: str | Path,
+        yaml_handler: YAML | None = None,
+        log_level: str = "INFO",
     ):
         """
         Initializes the Acquisition class.
@@ -38,23 +48,27 @@ class Acquisition:
         self.config = self.yaml.load(Path(self.config_path))
 
         self.instrument = instrument
-        self.file_transfers = dict()  # initialize file_transfers attribute
-        self.processes = dict()  # initialize processes attribute
-        self.routines = dict()  # initialize routines attribute
+        self.file_transfers: dict[str, dict[str, BaseFileTransfer]] = {}  # initialize file_transfers attribute
+        self.writers: dict[str, dict[str, BaseWriter]] = {}  # initialize writers attribute
+        self.processes: dict[str, dict[str, Any]] = {}  # initialize processes attribute
+        self.routines: dict[str, dict[str, Any]] = {}  # initialize routines attribute
 
         # initialize metadata attribute. NOT a dictionary since only one metadata class can exist in acquisition
         # TODO: Validation of config should check that metadata exists and only one
-        self.metadata = self._construct_class(self.config["acquisition"]["metadata"])
-        self.acquisition_name: Optional[str] = (
-            None  # initialize acquisition_name that will be populated at start of acquisition
-        )
+        metadata = self._construct_class(self.config["acquisition"]["metadata"])
+        if metadata and isinstance(metadata, MetadataClass):
+            self.metadata: MetadataClass = metadata
+        else:
+            raise ValueError("Invalid metadata configuration")
+        # initialize acquisition_name that will be populated at start of acquisition
+        self.acquisition_name: str | None = None
 
         # initialize operations
         for operation_type, operation_dict in self.config["acquisition"]["operations"].items():
-            setattr(self, operation_type, dict())
+            setattr(self, operation_type, {})
             self._construct_operations(operation_type, operation_dict)
 
-    def _load_class(self, driver: str, module: str, kwds: Dict = dict()) -> object:
+    def _load_class(self, driver: str, module: str, kwds: dict | None = None) -> object:
         """
         Loads a class dynamically.
 
@@ -62,23 +76,25 @@ class Acquisition:
         :type driver: str
         :param module: The class name within the module.
         :type module: str
-        :param kwds: Additional keyword arguments for class initialization, defaults to dict().
+        :param kwds: Additional keyword arguments for class initialization, defaults to {}.
         :type kwds: dict, optional
         :return: The initialized class object.
         :rtype: object
         """
         self.log.info(f"loading {driver}.{module}")
+        if kwds is None:
+            kwds = {}
         __import__(driver)
         device_class = getattr(sys.modules[driver], module)
         return device_class(**kwds)
 
-    def _setup_class(self, device: object, properties: Dict) -> None:
+    def _setup_class(self, device: Any, properties: dict[str, Any]) -> None:
         """
         Sets up a class with given properties.
 
         :param device: The device object to set up.
-        :type device: object
-        :param properties: Dictionary of properties to set on the device.
+        :type device: VoxelDevice
+        :param properties: dictionary of properties to set on the device.
         :type properties: dict
         """
         self.log.info(f"setting up {device}")
@@ -89,13 +105,13 @@ class Acquisition:
             else:
                 raise ValueError(f"{device} property {key} has no setter")
 
-    def _construct_operations(self, device_name: str, operation_dictionary: Dict) -> None:
+    def _construct_operations(self, device_name: str, operation_dictionary: dict) -> None:
         """
         Constructs operations for a given device.
 
         :param device_name: The name of the device.
         :type device_name: str
-        :param operation_dictionary: Dictionary of operations to construct.
+        :param operation_dictionary: dictionary of operations to construct.
         :type operation_dictionary: dict
         """
         for operation_name, operation_specs in operation_dictionary.items():
@@ -109,11 +125,11 @@ class Acquisition:
                 getattr(self, operation_type)[device_name] = {}
             getattr(self, operation_type)[device_name][operation_name] = operation_object
 
-    def _construct_class(self, class_specs: Dict) -> object:
+    def _construct_class(self, class_specs: dict) -> object:
         """
         Constructs a class from specifications.
 
-        :param class_specs: Dictionary containing class specifications.
+        :param class_specs: dictionary containing class specifications.
         :type class_specs: dict
         :return: The constructed class object.
         :rtype: object
@@ -134,13 +150,13 @@ class Acquisition:
 
         :param obj: Object to collect properties from.
         :type obj: object
-        :return: Dictionary of properties.
+        :return: dictionary of properties.
         :rtype: dict
         """
         properties = {}
         for attr_name in dir(obj):
             attr = getattr(type(obj), attr_name, None)
-            if isinstance(attr, property) or isinstance(inspect.unwrap(attr), property):
+            if attr is not None and (isinstance(attr, property) or isinstance(inspect.unwrap(attr), property)):
                 properties[attr_name] = getattr(obj, attr_name)
         return properties
 

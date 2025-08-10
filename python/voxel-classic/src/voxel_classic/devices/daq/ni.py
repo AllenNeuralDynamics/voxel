@@ -3,12 +3,10 @@ import math
 import matplotlib.pyplot as plt
 import nidaqmx
 import numpy as np
-import time
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
 from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, AOIdleOutputBehavior
 from scipy import signal, interpolate
-from typing import Dict, Optional
 
 from voxel_classic.devices.daq.base import BaseDAQ
 
@@ -33,6 +31,13 @@ RETRIGGERABLE = {"on": True, "off": False}
 class NIDAQ(BaseDAQ):
     """DAQ class for handling NI DAQ devices."""
 
+    ao_total_time_ms: float
+    do_total_time_ms: float
+    ao_sampling_frequency_hz: float
+    do_sampling_frequency_hz: float
+    ao_waveforms: dict
+    do_waveforms: dict
+
     def __init__(self, dev: str) -> None:
         """
         Initialize the DAQ object.
@@ -41,13 +46,13 @@ class NIDAQ(BaseDAQ):
         :type dev: str
         :raises ValueError: If the device name is not found in the system
         """
-        self.do_task: Optional[nidaqmx.Task] = None
-        self.ao_task: Optional[nidaqmx.Task] = None
-        self.co_task: Optional[nidaqmx.Task] = None
-        self._tasks: Optional[Dict[str, dict]] = None
+        self.do_task: nidaqmx.Task | None = None
+        self.ao_task: nidaqmx.Task | None = None
+        self.co_task: nidaqmx.Task | None = None
+        self._tasks: dict[str, dict] = {}
 
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
-        self.devs = list()
+        self.devs = []
         for device in nidaqmx.system.System.local().devices:
             self.devs.append(device.name)
         if dev not in self.devs:
@@ -66,12 +71,12 @@ class NIDAQ(BaseDAQ):
         self.max_do_rate = self.dev.do_max_rate
         self.max_ao_volts = self.dev.ao_voltage_rngs[1]
         self.min_ao_volts = self.dev.ao_voltage_rngs[0]
-        self.task_time_s = dict()
-        self.ao_waveforms = dict()
-        self.do_waveforms = dict()
+        self.task_time_s = {}
+        self.ao_waveforms = {}
+        self.do_waveforms = {}
 
     @property
-    def tasks(self) -> Optional[Dict[str, dict]]:
+    def tasks(self) -> dict[str, dict]:
         """
         Get the tasks dictionary.
 
@@ -81,7 +86,7 @@ class NIDAQ(BaseDAQ):
         return self._tasks
 
     @tasks.setter
-    def tasks(self, tasks_dict: Dict[str, dict]) -> None:
+    def tasks(self, tasks_dict: dict[str, dict]) -> None:
         """
         Set the tasks dictionary.
 
@@ -102,7 +107,7 @@ class NIDAQ(BaseDAQ):
         #                         fset=lambda NIDAQ, value: {value}, fdel=lambda NIDAQ: None))"
         #                     )
 
-    def add_task(self, task_type: str, pulse_count: Optional[int] = None) -> None:
+    def add_task(self, task_type: str, pulse_count: int | None = None) -> None:
         """
         Add a task to the DAQ.
 
@@ -119,14 +124,15 @@ class NIDAQ(BaseDAQ):
         task = self.tasks[f"{task_type}_task"]
 
         if old_task := getattr(self, f"{task_type}_task", False):
-            old_task.close()  # close old task
+            if old_task and not isinstance(old_task, bool):
+                old_task.close()  # close old task
             delattr(self, f"{task_type}_task")  # Delete previously configured tasks
         daq_task = nidaqmx.Task(task["name"])
         timing = task["timing"]
 
         for k, v in timing.items():
             global_var = globals().get(k.upper(), {})
-            valid = list(global_var.keys()) if type(global_var) == dict else global_var
+            valid = list(global_var.keys()) if isinstance(global_var, dict) else global_var
             if v not in valid and valid != []:
                 raise ValueError(f"{k} must be one of {valid}")
 
@@ -149,7 +155,7 @@ class NIDAQ(BaseDAQ):
                 if task_type == "ao":
                     try:
                         channel.ao_idle_output_behavior = AOIdleOutputBehavior.ZERO_VOLTS
-                    except Exception as e:
+                    except Exception:
                         self.log.debug(
                             "could not set AOIdleOutputBehavior to MAINTAIN_EXISTING_VALUE "
                             f"on channel {physical_name} for {channel}."
@@ -186,6 +192,7 @@ class NIDAQ(BaseDAQ):
             if timing["frequency_hz"] < 0:
                 raise ValueError("frequency must be >0 Hz")
 
+            # configure counter output channels
             for channel_number in task["counters"]:
                 if f"{self.id}/{channel_number}" not in self.co_physical_chans:
                     raise ValueError("co number must be one of %r." % self.co_physical_chans)
@@ -193,16 +200,16 @@ class NIDAQ(BaseDAQ):
                 co_chan = daq_task.co_channels.add_co_pulse_chan_freq(
                     counter=physical_name, units=FrequencyUnits.HZ, freq=timing["frequency_hz"], duty_cycle=0.5
                 )
-                co_chan.co_pulse_term = f'/{self.id}/{timing["output_port"]}'
-                pulse_count = (
-                    {"sample_mode": AcqType.FINITE, "samps_per_chan": pulse_count}
-                    if pulse_count is not None
-                    else {"sample_mode": AcqType.CONTINUOUS}
-                )
+                co_chan.co_pulse_term = f"/{self.id}/{timing['output_port']}"
+            timing_args = (
+                {"sample_mode": AcqType.FINITE, "samps_per_chan": pulse_count}
+                if pulse_count is not None
+                else {"sample_mode": AcqType.CONTINUOUS}
+            )
             if timing["trigger_mode"] == "off":
-                daq_task.timing.cfg_implicit_timing(**pulse_count)
+                daq_task.timing.cfg_implicit_timing(**timing_args)
             else:
-                raise ValueError(f"triggering not support for counter output tasks.")
+                raise ValueError("triggering not support for counter output tasks.")
 
             # store the total task time
             self.task_time_s[task["name"]] = 1 / timing["frequency_hz"]
@@ -274,6 +281,8 @@ class NIDAQ(BaseDAQ):
             end_time_ms = channel["parameters"]["end_time_ms"]["channels"][wavelength]
             if end_time_ms > timing["period_time_ms"] + timing["rest_time_ms"] or end_time_ms < start_time_ms:
                 raise ValueError("end time must be < period time and > start time")
+
+            voltages = np.zeros((timing["period_time_ms"],))
 
             if waveform == "square wave":
                 try:
@@ -378,7 +387,10 @@ class NIDAQ(BaseDAQ):
         :type rereserve_buffer: bool, optional
         """
         ao_voltages = np.array(list(self.ao_waveforms.values()))
-        self.ao_task.write(np.array(ao_voltages))
+        if self.ao_task:
+            self.ao_task.write(np.array(ao_voltages))
+        else:
+            self.log.error("AO task is not available. Cannot write waveforms.")
 
     def write_do_waveforms(self, rereserve_buffer: bool = True) -> None:
         """
@@ -389,7 +401,10 @@ class NIDAQ(BaseDAQ):
         """
         do_voltages = np.array(list(self.do_waveforms.values()))
         do_voltages = do_voltages.astype("uint32")[0] if len(do_voltages) == 1 else do_voltages.astype("uint32")
-        self.do_task.write(do_voltages)
+        if self.do_task:
+            self.do_task.write(do_voltages)
+        else:
+            self.log.error("DO task is not available. Cannot write waveforms.")
 
     def sawtooth(
         self,
@@ -674,8 +689,12 @@ class NIDAQ(BaseDAQ):
             )
             for waveform in self.do_waveforms:
                 plt.plot(time_ms, self.do_waveforms[waveform], label=waveform)
+        max_time = max(self.ao_total_time_ms, self.do_total_time_ms)
+        plt.xlim(0, max_time)
+        plt.ylim(-0.2, 5.2)
 
-        plt.axis([0, np.max([self.ao_total_time_ms, self.do_total_time_ms]), -0.2, 5.2])
+        ax.xaxis.set_minor_locator(AutoMinorLocator())
+        # plt.axis([0, np.max([self.ao_total_time_ms, self.do_total_time_ms]), -0.2, 5.2])
         ax.xaxis.set_minor_locator(AutoMinorLocator())
         ax.yaxis.set_minor_locator(AutoMinorLocator())
         ax.spines[["right", "top"]].set_visible(False)

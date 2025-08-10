@@ -13,7 +13,7 @@ class ExASPIM(Instrument):
     Class for handling ExASPIM instrument configuration and verification.
     """
 
-    def __init__(self, config_filename: str, yaml_handler: YAML, log_level: str = "INFO") -> None:
+    def __init__(self, config_filename: str | Path, yaml_handler: YAML, log_level: str = "INFO") -> None:
         """
         Initialize the ExASPIM object.
 

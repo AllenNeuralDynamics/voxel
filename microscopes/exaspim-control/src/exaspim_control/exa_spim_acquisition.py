@@ -9,6 +9,7 @@ import copy
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from threading import Event, Lock
+from typing import Any
 
 import inflection
 import numpy
@@ -26,7 +27,7 @@ DIRECTORY = Path(__file__).parent.resolve()
 class ExASPIMAcquisition(Acquisition):
     """Class for handling ExASPIM acquisition."""
 
-    def __init__(self, instrument: Instrument, config_filename: str, yaml_handler: YAML, log_level="INFO"):
+    def __init__(self, instrument: Instrument, config_filename: str | Path, yaml_handler: YAML, log_level="INFO"):
         """
         Initialize the ExASPIMAcquisition object.
 
@@ -39,13 +40,13 @@ class ExASPIMAcquisition(Acquisition):
         :param log_level: Logging level, defaults to "INFO"
         :type log_level: str, optional
         """
-        self.metadata = None  # initialize as none since setting up metadata class with call setup_class
+        # self.metadata = None  # initialize as none since setting up metadata class with call setup_class # handled in acquisition
         super().__init__(instrument, DIRECTORY / Path(config_filename), yaml_handler, log_level)
 
         # initialize stop engine event
         self.stop_engine = Event()
         # store initial stage positions
-        self.initial_position_mm = dict()
+        self.initial_position_mm = {}
 
     def run(self) -> None:
         """
@@ -63,27 +64,32 @@ class ExASPIMAcquisition(Acquisition):
         self._create_directories()
 
         # initialize threads and buffers
-        file_transfer_threads = dict()
+        file_transfer_threads = {}
 
         # store devices and routines
-        if hasattr(self.instrument, "indicator_lights"):
-            self.indicator_light, _ = self._grab_first(
-                self.instrument.indicator_lights
-            )  # only 1 indicator light for exaspim
-        else:
-            self.indicator_light = None
-        self.camera, camera_name = self._grab_first(self.instrument.cameras)  # only 1 camera for exaspim
-        self.scanning_stage, _ = self._grab_first(self.instrument.scanning_stages)  # only 1 scanning stage for exaspim
-        self.daq, _ = self._grab_first(self.instrument.daqs)  # only 1 daq for exaspim
-        self.writer, _ = self._grab_first(self.writers[camera_name])  # only 1 writer for exaspim
-        if self.file_transfers:
-            file_transfer, _ = self._grab_first(self.file_transfers[camera_name])  # only 1 file transfer for exaspim
-        else:
-            file_transfer = dict()
-        if self.processes:
-            processes = self.processes[camera_name]  # processes could be > so leave as a dictionary
-        else:
-            processes = dict()
+        try:
+            camera_name, self.camera = next(iter(self.instrument.cameras.items()))  # only 1 camera for exaspim
+        except StopIteration as e:
+            raise RuntimeError(f"No cameras found for instrument {self.instrument}. Error: {e}")
+
+        try:
+            camera_writers = self.writers.get(camera_name, {})
+            self.writer = next(iter(camera_writers.values()))  # only 1 writer for exaspim
+        except (AttributeError, StopIteration) as e:
+            raise RuntimeError(f"No writers found for camera {camera_name}. Error: {e}")
+
+        camera_file_transfers = self.file_transfers.get(camera_name, {})
+        file_transfer = next(iter(camera_file_transfers.values())) if camera_file_transfers else {}
+
+        self.scanning_stage = next(iter(self.instrument.scanning_stages.values()))  # only 1 scanning stage for exaspim
+        self.daq = next(iter(self.instrument.daqs.values()))  # only 1 daq for exaspim
+        # only 1 indicator light for exaspim
+        self.indicator_light = (
+            next(iter(self.instrument.indicator_lights.values())) if self.instrument.indicator_lights else None
+        )
+
+        # processes could be > so leave as a dictionary
+        self.processes = self.processes[camera_name] if self.processes else {}
 
         # tiling stages
         for tiling_stage_id, tiling_stage in self.instrument.tiling_stages.items():
@@ -94,7 +100,7 @@ class ExASPIMAcquisition(Acquisition):
         self.initial_position_mm[instrument_axis] = self.scanning_stage.position_mm
 
         # turn on indicator light
-        if self.indicator_light:
+        if self.indicator_light is not None:
             self.log.info("turning on indicator light")
             self.indicator_light.enable()
         for tile in self.config["acquisition"]["tiles"]:
@@ -186,17 +192,18 @@ class ExASPIMAcquisition(Acquisition):
                                 setattr(device, setting, value)
                                 self.log.info(f"{setting} for {device_type} {device_name} set to {value}")
 
+                    if not self.daq.tasks:  # make sure daq tasks are defined
+                        raise RuntimeError("No DAQ tasks found.")
+
                     # update etl offsets if in channel plan table
-                    if "etl_left_offset" in tile:
-                        if tile["etl_left_offset"] is not None:
-                            self.daq.tasks["ao_task"]["ports"]["left tunable lens"]["parameters"]["offset_volts"][
-                                "channels"
-                            ][tile_channel] = tile["etl_left_offset"]
-                    if "etl_right_offset" in tile:
-                        if tile["etl_right_offset"] is not None:
-                            self.daq.tasks["ao_task"]["ports"]["right tunable lens"]["parameters"]["offset_volts"][
-                                "channels"
-                            ][tile_channel] = tile["etl_right_offset"]
+                    if "etl_left_offset" in tile and tile["etl_left_offset"] is not None:
+                        self.daq.tasks["ao_task"]["ports"]["left tunable lens"]["parameters"]["offset_volts"][
+                            "channels"
+                        ][tile_channel] = tile["etl_left_offset"]
+                    if "etl_right_offset" in tile and tile["etl_right_offset"] is not None:
+                        self.daq.tasks["ao_task"]["ports"]["right tunable lens"]["parameters"]["offset_volts"][
+                            "channels"
+                        ][tile_channel] = tile["etl_right_offset"]
 
                     # setup daq
                     time.sleep(1.0)
@@ -309,9 +316,9 @@ class ExASPIMAcquisition(Acquisition):
                     # create and start transfer threads from previous tile
                     if file_transfer:
                         if tile_num not in file_transfer_threads:
-                            file_transfer_threads[tile_num] = dict()
+                            file_transfer_threads[tile_num] = {}
                         if tile_channel not in file_transfer_threads[tile_num]:
-                            file_transfer_threads[tile_num][tile_channel] = dict()
+                            file_transfer_threads[tile_num][tile_channel] = {}
                         file_transfer_threads[tile_num][tile_channel][repeat] = copy.deepcopy(file_transfer)
                         file_transfer_threads[tile_num][tile_channel][repeat].filename = base_filename
                         self.log.info(f"starting file transfer for {base_filename}")
@@ -396,7 +403,7 @@ class ExASPIMAcquisition(Acquisition):
         """
         # initatlized shared double buffer and processes
         self.log.info("setting up buffers")
-        process_buffers = dict()
+        process_buffers = {}
         chunk_lock = Lock()
         img_buffer = SharedDoubleBuffer(
             (writer.chunk_count_px, camera.image_height_px, camera.image_width_px),
@@ -451,7 +458,7 @@ class ExASPIMAcquisition(Acquisition):
                 laser_name = self.instrument.channels[tile["channel"]]["lasers"][0]
                 laser = self.instrument.lasers[laser_name]
                 memory_info = virtual_memory()
-                self.log.info(f"RAM in use = {memory_info.used / (1024 ** 3):.2f} GB")
+                self.log.info(f"RAM in use = {memory_info.used / (1024**3):.2f} GB")
                 self.log.info(f"laser {laser.id} power = {laser.power_mw:.2f} [mW]")
                 self.log.info(f"laser {laser.id} temperature = {laser.temperature_c:.2f} [mW]")
                 # self.log.info(f"camera {camera.id} sensor temperature = {camera.sensor_temperature_c:.2f} [C]")
@@ -567,7 +574,19 @@ class ExASPIMAcquisition(Acquisition):
         self.log.info("stopping acquisition")
         self.stop_engine.set()
 
-    def check_local_disk_space(self, writer: object, compression_ratio: float = 1) -> bool:
+    def _get_drive(self, path: str) -> str:
+        """
+        Get the drive path for the writer.
+
+        :param writer: Writer object
+        :type writer: object
+        :return: Drive path
+        :rtype: str
+        """
+        # TODO: for non-windows - not completed, needs to be fixed
+        return os.path.splitdrive(path)[0] if platform.system() == "Windows" else "/"
+
+    def check_local_disk_space(self, writer, compression_ratio: float = 1) -> bool:
         """
         Check if there is enough local disk space for the next tile.
 
@@ -578,13 +597,7 @@ class ExASPIMAcquisition(Acquisition):
         :return: True if there is enough disk space, False otherwise
         :rtype: bool
         """
-        # if windows
-        if platform.system() == "Windows":
-            drive = os.path.splitdrive(writer.path)[0]
-        # if unix
-        else:
-            # not completed, needs to be fixed
-            drive = "/"
+        drive = self._get_drive(writer.path)
         self.log.info("checking local storage directory space for next tile")
         required_size_gb = writer.get_stack_size_mb() / compression_ratio / 1024
         self.log.info(f"required disk space = {required_size_gb:.1f} [GB] on drive {drive}")
@@ -595,7 +608,7 @@ class ExASPIMAcquisition(Acquisition):
             return False
         return True
 
-    def check_external_disk_space(self, writer: object, file_transfer: object, compression_ratio: float = 1) -> bool:
+    def check_external_disk_space(self, writer, file_transfer, compression_ratio: float = 1) -> bool:
         """
         Check if there is enough external disk space for the next tile.
 
@@ -608,13 +621,8 @@ class ExASPIMAcquisition(Acquisition):
         :return: True if there is enough disk space, False otherwise
         :rtype: bool
         """
-        # if windows
-        if platform.system() == "Windows":
-            drive = os.path.splitdrive(file_transfer.external_path)[0]
-        # if unix
-        else:
-            # not completed, needs to be fixed
-            drive = "/"
+        drive = self._get_drive(file_transfer.external_path)
+
         self.log.info("checking external storage directory space for next tile")
         required_size_gb = writer.get_stack_size_mb() / compression_ratio / 1024
         self.log.info(f"required disk space = {required_size_gb:.1f} [GB] on drive {drive}")
@@ -625,7 +633,7 @@ class ExASPIMAcquisition(Acquisition):
             return False
         return True
 
-    def check_system_memory(self, writer: object) -> None:
+    def check_system_memory(self, writer) -> None:
         """
         Check if there is enough system memory for the acquisition.
 
@@ -644,9 +652,9 @@ class ExASPIMAcquisition(Acquisition):
 
     def check_write_speed(
         self,
-        writer: object,
-        daq: object,
-        file_transfer: object = None,
+        writer: Any,
+        daq: Any,
+        file_transfer: Any | None = None,
         compression_ratio: float = 1,
         size: str = "16Gb",
         bs: str = "1M",
@@ -686,15 +694,12 @@ class ExASPIMAcquisition(Acquisition):
         if platform.system() == "Windows":
             ioengine = "windowsaio"
             local_drive = os.path.splitdrive(writer.path)[0]
-            if file_transfer:
-                external_drive = os.path.splitdrive(file_transfer.external_path)[0]
+            external_drive = os.path.splitdrive(writer.path)[0] if not file_transfer else None
         # unix ioengine
         else:
             ioengine = "posixaio"
             local_drive = "/"
-            if file_transfer:
-                # not completed, needs to be fixed
-                external_drive = "/"
+            external_drive = "/" if file_transfer else None  # TODO: not completed needs to be fixed
 
         # get the required write speed
         acquisition_rate_hz = 1.0 / daq.co_frequency_hz
@@ -702,8 +707,8 @@ class ExASPIMAcquisition(Acquisition):
         required_write_speed_mb_s = camera_speed_mb_s / compression_ratio
         self.log.info(f"required write speed = {required_write_speed_mb_s:.1f} [MB/sec] to directory {local_drive}")
         test_filename = str(Path(f"{writer.path}/{writer.acquisition_name}/iotest").absolute())
-        f = open(test_filename, "a")  # Create empty file to check reading/writing speed
-        f.close()
+        with open(test_filename, "a"):
+            pass  # Create empty file to check reading/writing speed
         try:
             output = subprocess.check_output(
                 rf"fio --name=test --filename={test_filename} --size={size} --rw=write --bs={bs} "
@@ -733,8 +738,8 @@ class ExASPIMAcquisition(Acquisition):
             test_filename = str(
                 Path(f"{file_transfer.external_path}/{file_transfer.acquisition_name}/iotest").absolute()
             )
-            f = open(test_filename, "a")  # Create empty file to check reading/writing speed
-            f.close()
+            with open(test_filename, "a"):
+                pass  # Create empty file to check reading/writing speed
             try:
                 output = subprocess.check_output(
                     rf"fio --name=test --filename={test_filename} --size={size} --rw=write --bs={bs} "
@@ -758,7 +763,7 @@ class ExASPIMAcquisition(Acquisition):
                 # Delete test file
                 os.remove(test_filename)
 
-    def check_gpu_memory(self, writer: object) -> None:
+    def check_gpu_memory(self, writer: Any) -> None:
         """
         Check if there is enough GPU memory for the acquisition.
 
@@ -874,7 +879,7 @@ class ExASPIMAcquisition(Acquisition):
         if hasattr(device, "acquisition_name") and self.metadata is not None:
             setattr(device, "acquisition_name", self.metadata.acquisition_name)
 
-    def _grab_first(self, object_dict: dict) -> object:
+    def _grab_first(self, object_dict: dict[str, object]) -> object:
         """
         Grab the first object from a dictionary.
 
@@ -911,8 +916,8 @@ class ExASPIMAcquisition(Acquisition):
                 if not os.path.isdir(local_path):
                     os.makedirs(local_path)
         # check if external directories exist and create if not
-        if self.file_transfers:
-            for file_transfer_dictionary in self.file_transfers.values():
+        if self._file_transfers:
+            for file_transfer_dictionary in self._file_transfers.values():
                 for file_transfer in file_transfer_dictionary.values():
                     external_path = Path(file_transfer.external_path, self.acquisition_name)
                     if not os.path.isdir(external_path):

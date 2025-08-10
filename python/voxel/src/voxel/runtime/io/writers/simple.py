@@ -36,12 +36,12 @@ class SimpleWriter(VoxelWriter):
 
     def _initialize(self) -> None:
         with self._output_file.open("w") as f:
-            f.write(f"{'-'*80}\n")
+            f.write(f"{'-' * 80}\n")
             f.write(f"Initialized: {datetime.now().astimezone():%Y-%m-%d %H:%M:%S}\n")
-            f.write(f"{'-'*80}\n")
+            f.write(f"{'-' * 80}\n")
             f.write("Metadata:\n")
             f.write(f"{json.dumps(self.config.to_dict(), indent=2)}\n")
-            f.write(f"{'-'*80}\n")
+            f.write(f"{'-' * 80}\n")
         self.log.info(f"Initialized. Expecting {self.config.frame_count} frames in {self.batch_size_px} px batches")
 
     def _process_batch(self, batch_data) -> None:
@@ -58,7 +58,7 @@ class SimpleWriter(VoxelWriter):
         with self._output_file.open("a") as f:
             f.write(f"\nBatch: {self.batch_count:03d} [{start_frame}-{start_frame + num_frames - 1}]\n")
             f.write(f"\n{json.dumps(stats, indent=2)}\n\n")
-            f.write(f"{'-'*80}\n")
+            f.write(f"{'-' * 80}\n")
 
         self.log.info(
             f"Batch: {self.batch_count:2d} | {start_frame}-{start_frame + num_frames - 1} frames | "
@@ -69,7 +69,7 @@ class SimpleWriter(VoxelWriter):
         with self._output_file.open("a") as f:
             # f.write(f"\n{'-'*80}\n")
             f.write(f"Finalized: {datetime.now().astimezone():%Y-%m-%d %H:%M:%S} \n")
-            f.write(f"{'-'*80}\n\n")
+            f.write(f"{'-' * 80}\n\n")
         self.log.info("Finalized...")
 
 

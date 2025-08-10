@@ -49,11 +49,11 @@ class BDVWriter(VoxelWriter):
         self.current_channel_num = 0
         self.tile_list = list()
         self.channel_list = list()
-        self.dataset_dict = dict()
-        self.voxel_size_dict = dict()
-        self.affine_deskew_dict = dict()
-        self.affine_scale_dict = dict()
-        self.affine_shift_dict = dict()
+        self.dataset_dict = {}
+        self.voxel_size_dict = {}
+        self.affine_deskew_dict = {}
+        self.affine_scale_dict = {}
+        self.affine_shift_dict = {}
 
     @property
     def theta_deg(self):

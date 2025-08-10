@@ -1,6 +1,6 @@
 import ctypes as ct
 import logging
-from typing import Dict
+from typing import Any
 
 import numpy
 import numpy as np
@@ -10,7 +10,6 @@ from egrabber import (
     INFO_DATATYPE_PTR,
     INFO_DATATYPE_SIZET,
     STREAM_INFO_NUM_AWAIT_DELIVERY,
-    STREAM_INFO_NUM_DELIVERED,
     STREAM_INFO_NUM_QUEUED,
     STREAM_INFO_NUM_UNDERRUN,
     Buffer,
@@ -35,7 +34,7 @@ BUFFER_SIZE_MB = 2400
 #  "3": "X3",
 #  "4": "X4"...
 # }
-BINNINGS = dict()
+BINNINGS = {}
 
 # generate valid pixel types by querying egrabber
 # should be of the form
@@ -43,7 +42,7 @@ BINNINGS = dict()
 #  "mono12": "Mono12",
 #  "mono16": "Mono16"...
 # }
-PIXEL_TYPES = dict()
+PIXEL_TYPES = {}
 
 # generate bit packing modes by querying egrabber
 # should be of the form
@@ -51,7 +50,7 @@ PIXEL_TYPES = dict()
 #  "lsb": "Lsb",
 #  "none": "None" ...
 # }
-BIT_PACKING_MODES = dict()
+BIT_PACKING_MODES = {}
 
 # generate triggers by querying egrabber
 # should be of the form
@@ -62,9 +61,9 @@ BIT_PACKING_MODES = dict()
 #  "polarity": {"risingedge": "RisingEdge",
 #               "fallingedge": "FallingEdge"}
 # }
-MODES = dict()
-SOURCES = dict()
-POLARITIES = dict()
+MODES = {}
+SOURCES = {}
+POLARITIES = {}
 
 
 @thread_safe_singleton
@@ -91,7 +90,7 @@ class VieworksCamera(BaseCamera):
         self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.id = str(id)  # convert to string incase serial # is entered as int
         self.gentl = get_egentl_singleton()
-        self._latest_frame = None
+        self._latest_frame: np.ndarray = np.empty((0, 0, 0), dtype=np.uint16)
 
         discovery = EGrabberDiscovery(self.gentl)
         discovery.discover()
@@ -130,7 +129,7 @@ class VieworksCamera(BaseCamera):
             self.log.error(f"no grabber found for S/N: {self.id}")
             raise ValueError(f"no grabber found for S/N: {self.id}")
 
-        del grabber
+        # del grabber
         # IMPORTANT: call stop here in the event that the camera previously crashed
         # if not called, the camera may not respond via the SDK
         self.grabber.remote.execute("AcquisitionStop")
@@ -150,7 +149,7 @@ class VieworksCamera(BaseCamera):
         return self.grabber.remote.get("ExposureTime") / 1000
 
     @exposure_time_ms.setter
-    def exposure_time_ms(self, exposure_time_ms: float) -> None:
+    def exposure_time_ms(self, exposure_time_ms: float) -> None:  # type: ignore
         """Set the exposure time in milliseconds.
 
         :param exposure_time_ms: Exposure time in milliseconds
@@ -172,7 +171,7 @@ class VieworksCamera(BaseCamera):
         return self.grabber.remote.get("Width")
 
     @width_px.setter
-    def width_px(self, value: int) -> None:
+    def width_px(self, value: int) -> None:  # type: ignore
         """Set the width in pixels.
 
         :param value: Width in pixels
@@ -196,6 +195,16 @@ class VieworksCamera(BaseCamera):
         """
         return self.grabber.remote.get("OffsetX")
 
+    @width_offset_px.setter
+    def width_offset_px(self, width_offset_px: int) -> None:
+        """Set the width offset in pixels.
+
+        :param width_offset_px: Width offset in pixels
+        :type width_offset_px: int
+        """
+        self.grabber.remote.set("OffsetX", width_offset_px)
+        self.log.info(f"width offset set to: {width_offset_px} px")
+
     @DeliminatedProperty(minimum=float("-inf"), maximum=float("inf"))
     def height_px(self) -> int:
         """Get the height in pixels.
@@ -206,19 +215,19 @@ class VieworksCamera(BaseCamera):
         return self.grabber.remote.get("Height")
 
     @height_px.setter
-    def height_px(self, value: int) -> None:
+    def height_px(self, height_px: int) -> None:  # type: ignore
         """Set the height in pixels.
 
-        :param value: Height in pixels
-        :type value: int
+        :param height_px: Height in pixels
+        :type height_px: int
         """
         # reset offset to (0,0)
         self.grabber.remote.set("OffsetY", 0)
-        self.grabber.remote.set("Height", value)
-        centered_offset_px = round((self.max_height_px / 2 - value / 2) / self.step_height_px) * self.step_height_px
+        self.grabber.remote.set("Height", height_px)
+        centered_offset_px = round((self.max_height_px / 2 - height_px / 2) / self.step_height_px) * self.step_height_px
         self.grabber.remote.set("OffsetY", centered_offset_px)
-        self.grabber.remote.set("Height", value)
-        self.log.info(f"height set to: {value} px")
+        self.grabber.remote.set("Height", height_px)
+        self.log.info(f"height set to: {height_px} px")
         # refresh parameter values
         self._get_min_max_step_values()
 
@@ -230,6 +239,16 @@ class VieworksCamera(BaseCamera):
         :rtype: int
         """
         return self.grabber.remote.get("OffsetY")
+
+    @height_offset_px.setter
+    def height_offset_px(self, height_offset_px: int) -> None:
+        """Set the height offset in pixels.
+
+        :param height_offset_px: Height offset in pixels
+        :type height_offset_px: int
+        """
+        self.grabber.remote.set("OffsetY", height_offset_px)
+        self.log.info(f"height offset set to: {height_offset_px} px")
 
     @property
     def pixel_type(self) -> str:
@@ -298,10 +317,7 @@ class VieworksCamera(BaseCamera):
         # line rate = (width * height)/(data rate * height)
         data_rate_mb_s = self.grabber.remote.get("DeviceLinkThroughputLimit")
         # determine bits to bytes
-        if self.pixel_type == "mono8":
-            bit_to_byte = 1
-        else:
-            bit_to_byte = 2
+        bit_to_byte = 1 if self.pixel_type == "mono8" else 2
         # calculate line interval in us
         # egrabber uses 1000 instead of 1024 for byte calculation
         line_interval_us = (
@@ -324,10 +340,7 @@ class VieworksCamera(BaseCamera):
         # line interval is indirectly set via DeviceLinkThroughputLimit
         # data rate = (width * height)/(line rate * height)
         # determine bits to bytes
-        if self.pixel_type == "mono8":
-            bit_to_byte = 1
-        else:
-            bit_to_byte = 2
+        bit_to_byte = 1 if self.pixel_type == "mono8" else 2
         # calculate data rate in MB/s
         # egrabber uses 1000 instead of 1024 for byte calculation
         data_rate_mb_s = (
@@ -347,11 +360,11 @@ class VieworksCamera(BaseCamera):
         return (self.line_interval_us * self.height_px) / 1000 + self.exposure_time_ms
 
     @property
-    def trigger(self) -> Dict[str, str]:
+    def trigger(self) -> dict[str, str]:
         """Get the trigger settings.
 
         :return: Trigger settings
-        :rtype: dict
+        :rtype: dict[str, str]
         """
         mode = self.grabber.remote.get("TriggerMode")
         source = self.grabber.remote.get("TriggerSource")
@@ -363,7 +376,7 @@ class VieworksCamera(BaseCamera):
         }
 
     @trigger.setter
-    def trigger(self, trigger: Dict[str, str]) -> None:
+    def trigger(self, trigger: dict[str, str]) -> None:
         """Set the trigger settings.
 
         :param trigger: Trigger settings
@@ -418,12 +431,12 @@ class VieworksCamera(BaseCamera):
         if not isinstance(BINNINGS[binning], int):
             try:
                 self.grabber.remote.set("BinningHorizontal", BINNINGS[binning])
-            except:
-                self.log.warning("cannot set horizontal binning")
+            except Exception as e:
+                self.log.warning(f"cannot set horizontal binning: {e}")
             try:
                 self.grabber.remote.set("BinningVertical", BINNINGS[binning])
-            except:
-                self.log.warning("cannot set vertical binning")
+            except Exception as e:
+                self.log.warning(f"cannot set vertical binning: {e}")
         # initialize the opencl binning program
         else:
             self.gpu_binning = GPUToolsDownSample2D(binning=int(self._binning), mode="sum")
@@ -448,8 +461,6 @@ class VieworksCamera(BaseCamera):
         :rtype: int
         """
         return self.max_width_px
-
-    from typing import Dict, Any
 
     @property
     def sensor_height_px(self) -> int:
@@ -486,10 +497,7 @@ class VieworksCamera(BaseCamera):
         """Prepare the camera for acquisition."""
         self.log.info("preparing camera")
         # determine bits to bytes
-        if self.pixel_type == "mono8":
-            bit_to_byte = 1
-        else:
-            bit_to_byte = 2
+        bit_to_byte = 1 if self.pixel_type == "mono8" else 2
         # software binning, so frame size is independent of binning factor
         # egrabber uses 1000 instead of 1024 for byte calculation
         frame_size_mb = self.width_px * self.height_px * bit_to_byte / 1000**2
@@ -581,11 +589,11 @@ class VieworksCamera(BaseCamera):
         """
         return self._latest_frame
 
-    def acquisition_state(self) -> Dict[str, Any]:
+    def acquisition_state(self) -> dict[str, Any]:
         """Return a dict with the state of the acquisition buffers.
 
         :return: State of the acquisition buffers
-        :rtype: dict
+        :rtype: dict[str, Any]
         """
         # Detailed description of constants here:
         # https://documentation.euresys.com/Products/Coaxlink/Coaxlink/en-us/Content/IOdoc/egrabber-reference/
@@ -619,47 +627,58 @@ class VieworksCamera(BaseCamera):
         for category in categories:
             features = self.grabber.device.get(query.features_of(category))
             for feature in features:
-                if self.grabber.device.get(query.available(feature)):
-                    if self.grabber.device.get(query.readable(feature)):
-                        if not self.grabber.device.get(query.command(feature)):
-                            self.log.info(f"device, {feature}, {self.grabber.device.get(feature)}")
+                if (
+                    self.grabber.device.get(query.available(feature))
+                    and self.grabber.device.get(query.readable(feature))
+                    and not self.grabber.device.get(query.command(feature))
+                ):
+                    self.log.info(f"device, {feature}, {self.grabber.device.get(feature)}")
 
         categories = self.grabber.remote.get(query.categories())
         for category in categories:
             features = self.grabber.remote.get(query.features_of(category))
             for feature in features:
-                if self.grabber.remote.get(query.available(feature)):
-                    if self.grabber.remote.get(query.readable(feature)):
-                        if not self.grabber.remote.get(query.command(feature)):
-                            if feature != "BalanceRatioSelector" and feature != "BalanceWhiteAuto":
-                                self.log.info(f"remote, {feature}, {self.grabber.remote.get(feature)}")
+                if (
+                    self.grabber.remote.get(query.available(feature))
+                    and self.grabber.remote.get(query.readable(feature))
+                    and not self.grabber.remote.get(query.command(feature))
+                    and feature != "BalanceRatioSelector"
+                    and feature != "BalanceWhiteAuto"
+                ):
+                    self.log.info(f"remote, {feature}, {self.grabber.remote.get(feature)}")
 
         categories = self.grabber.stream.get(query.categories())
         for category in categories:
             features = self.grabber.stream.get(query.features_of(category))
             for feature in features:
-                if self.grabber.stream.get(query.available(feature)):
-                    if self.grabber.stream.get(query.readable(feature)):
-                        if not self.grabber.stream.get(query.command(feature)):
-                            self.log.info(f"stream, {feature}, {self.grabber.stream.get(feature)}")
+                if (
+                    self.grabber.stream.get(query.available(feature))
+                    and self.grabber.stream.get(query.readable(feature))
+                    and not self.grabber.stream.get(query.command(feature))
+                ):
+                    self.log.info(f"stream, {feature}, {self.grabber.stream.get(feature)}")
 
         categories = self.grabber.interface.get(query.categories())
         for category in categories:
             features = self.grabber.interface.get(query.features_of(category))
             for feature in features:
-                if self.grabber.interface.get(query.available(feature)):
-                    if self.grabber.interface.get(query.readable(feature)):
-                        if not self.grabber.interface.get(query.command(feature)):
-                            self.log.info(f"interface, {feature}, {self.grabber.interface.get(feature)}")
+                if (
+                    self.grabber.interface.get(query.available(feature))
+                    and self.grabber.interface.get(query.readable(feature))
+                    and not self.grabber.interface.get(query.command(feature))
+                ):
+                    self.log.info(f"interface, {feature}, {self.grabber.interface.get(feature)}")
 
         categories = self.grabber.system.get(query.categories())
         for category in categories:
             features = self.grabber.system.get(query.features_of(category))
             for feature in features:
-                if self.grabber.system.get(query.available(feature)):
-                    if self.grabber.system.get(query.readable(feature)):
-                        if not self.grabber.system.get(query.command(feature)):
-                            self.log.info(f"system, {feature}, {self.grabber.system.get(feature)}")
+                if (
+                    self.grabber.system.get(query.available(feature))
+                    and self.grabber.system.get(query.readable(feature))
+                    and not self.grabber.system.get(query.command(feature))
+                ):
+                    self.log.info(f"system, {feature}, {self.grabber.system.get(feature)}")
 
     def _update_parameters(self) -> None:
         """Update the camera parameters."""
@@ -728,28 +747,28 @@ class VieworksCamera(BaseCamera):
         # minimum offset x
         try:
             self.min_offset_x_px = self.grabber.remote.get("OffsetX.Min")
-            type(self).offset_x_px.minimum = self.min_offset_x_px
+            type(self).width_offset_px.minimum = self.min_offset_x_px  # type: ignore
             self.log.debug(f"min offset x is: {self.min_offset_x_px} px")
         except Exception:
             self.log.debug(f"min offset x not available for camera {self.id}")
         # maximum offset x
         try:
             self.max_offset_x_px = self.grabber.remote.get("OffsetX.Max")
-            type(self).offset_x_px.maximum = self.max_offset_x_px
+            type(self).width_offset_px.maximum = self.max_offset_x_px  # type: ignore
             self.log.debug(f"max offset x is: {self.max_offset_x_px} px")
         except Exception:
             self.log.debug(f"max offset x not available for camera {self.id}")
         # minimum offset y
         try:
             self.min_offset_y_px = self.grabber.remote.get("OffsetY.Min")
-            type(self).offset_y_px.minimum = self.min_offset_y_px
+            type(self).height_offset_px.minimum = self.min_offset_y_px  # type: ignore
             self.log.debug(f"min offset y is: {self.min_offset_y_px} px")
         except Exception:
             self.log.debug(f"min offset y not available for camera {self.id}")
         # maximum offset y
         try:
             self.max_offset_y_px = self.grabber.remote.get("OffsetY.Max")
-            type(self).offset_y_px.maximum = self.max_offset_y_px
+            type(self).height_offset_px.maximum = self.max_offset_y_px  # type: ignore
             self.log.debug(f"max offset y is: {self.max_offset_y_px} px")
         except Exception:
             self.log.debug(f"max offset y not available for camera {self.id}")
@@ -778,14 +797,14 @@ class VieworksCamera(BaseCamera):
         # step offset x
         try:
             self.step_offset_x_px = self.grabber.remote.get("OffsetX.Inc")
-            type(self).offset_x_px.step = self.step_offset_x_px
+            type(self).width_offset_px.step = self.step_offset_x_px  # type: ignore
             self.log.debug(f"step offset x is: {self.step_offset_x_px} px")
         except Exception:
             self.log.debug(f"step offset x not available for camera {self.id}")
         # step offset y
         try:
             self.step_offset_y_px = self.grabber.remote.get("OffsetY.Inc")
-            type(self).offset_y_px.step = self.step_offset_y_px
+            type(self).height_offset_px.step = self.step_offset_y_px  # type: ignore
             self.log.debug(f"step offset y is: {self.step_offset_y_px} px")
         except Exception:
             self.log.debug(f"step offset y not available for camera {self.id}")
@@ -799,7 +818,7 @@ class VieworksCamera(BaseCamera):
             else:
                 line_interval_us = (1 / max_frame_rate) / self.height_px * 1e6
             self.min_line_interval_us = line_interval_us
-            type(self).line_interval_us.minimum = self.min_line_interval_us
+            type(self).line_interval_us.minimum = self.min_line_interval_us  # type: ignore
             self.log.debug(f"min line interval is: {self.min_line_interval_us} [us]")
         except Exception:
             self.log.debug(f"min line interval is not available for camera {self.id}")
@@ -813,7 +832,7 @@ class VieworksCamera(BaseCamera):
             else:
                 line_interval_us = (1 / min_frame_rate) / self.height_px * 1e6
             self.max_line_interval_us = line_interval_us
-            type(self).line_interval_us.maximum = self.max_line_interval_us
+            type(self).line_interval_us.maximum = self.max_line_interval_us  # type: ignore
             self.log.debug(f"max line interval is: {self.max_line_interval_us} [us]")
         except Exception:
             self.log.debug(f"max line interval is not available for camera {self.id}")
