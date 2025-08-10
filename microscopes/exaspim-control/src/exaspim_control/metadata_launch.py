@@ -1,4 +1,3 @@
-import logging
 import os
 import shutil
 from datetime import datetime
@@ -10,6 +9,7 @@ from aind_data_schema.core import acquisition
 from exaspim_control.exa_spim_acquisition import ExASPIMAcquisition
 from exaspim_control.exa_spim_instrument import ExASPIM
 from exaspim_control.exa_spim_view import ExASPIMAcquisitionView, ExASPIMInstrumentView
+from voxel.utils.log import VoxelLogging
 
 X_ANATOMICAL_DIRECTIONS = {"Left to Right": "Right_to_left", "Right to Left": "Left_to_right"}
 
@@ -50,7 +50,7 @@ class MetadataLaunch:
         :type log_filename: str, optional
         """
         # logger
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
         # instrument
         self.instrument = instrument
         # acquisition

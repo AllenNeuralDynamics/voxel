@@ -1,10 +1,9 @@
-import logging
 import threading
 from abc import abstractmethod
 from pathlib import Path
 
 from imohash import hashfile
-
+from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 
 
@@ -29,7 +28,7 @@ class BaseFileTransfer:
         :type local_path: str
         :raises ValueError: If the file path is not valid.
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self._external_path = Path(external_path)
         self._local_path = Path(local_path)
         if self._external_path == self._local_path:

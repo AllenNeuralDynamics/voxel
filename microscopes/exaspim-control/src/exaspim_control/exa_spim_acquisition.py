@@ -1,3 +1,4 @@
+import copy
 import math
 import os
 import platform
@@ -5,24 +6,23 @@ import shutil
 import subprocess
 import threading
 import time
-import copy
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from threading import Event, Lock
-from typing import Any
-import numpy as np
+from typing import TYPE_CHECKING, Any
 
 import inflection
 import numpy
 from gputools import get_device
 from psutil import virtual_memory
 from ruamel.yaml import YAML
-
 from voxel_classic.acquisition.acquisition import Acquisition
-from voxel_classic.devices.camera.base import BaseCamera
 from voxel_classic.instruments.instrument import Instrument
-from voxel_classic.writers.base import BaseWriter
 from voxel_classic.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
+
+if TYPE_CHECKING:
+    from voxel_classic.devices.camera.base import BaseCamera
+    from voxel_classic.writers.base import BaseWriter
 
 DIRECTORY = Path(__file__).parent.resolve()
 
@@ -43,7 +43,6 @@ class ExASPIMAcquisition(Acquisition):
         :param log_level: Logging level, defaults to "INFO"
         :type log_level: str, optional
         """
-        # self.metadata = None  # initialize as none since setting up metadata class with call setup_class # handled in acquisition
         super().__init__(instrument, DIRECTORY / Path(config_filename), yaml_handler, log_level)
 
         # initialize stop engine event
@@ -447,14 +446,13 @@ class ExASPIMAcquisition(Acquisition):
         for process in processes.values():
             process.start()
 
-        frame_index = 0
         last_frame_index = tile["steps"] - 1
 
         # Images arrive serialized in repeating channel order.
-        for stack_index in range(tile["steps"]):
+        for frame_index in range(tile["steps"]):
             if self.stop_engine.is_set():
                 break
-            chunk_index = stack_index % writer.chunk_count_px
+            chunk_index = frame_index % writer.chunk_count_px
             # Start a batch of pulses to generate more frames and movements.
             if chunk_index == 0:
                 # log metrics from devices
@@ -501,7 +499,7 @@ class ExASPIMAcquisition(Acquisition):
 
             # Dispatch either a full chunk of frames or the last chunk,
             # which may not be a multiple of the chunk size.
-            if chunk_index + 1 == writer.chunk_count_px or stack_index == last_frame_index:
+            if chunk_index + 1 == writer.chunk_count_px or frame_index == last_frame_index:
                 daq.stop()
                 # Toggle double buffer to continue writing images.
                 while not writer.done_reading.is_set() and not self.stop_engine.is_set():
@@ -907,6 +905,9 @@ class ExASPIMAcquisition(Acquisition):
         """
         Sets the acquisition name for all operations.
         """
+        if self.metadata is None:
+            self.log.error("Metadata is not set. Cannot set acquisition name.")
+            return
         self.acquisition_name = self.metadata.acquisition_name
         for device_name, operation_dict in self.config["acquisition"]["operations"].items():
             for op_name, op_specs in operation_dict.items():
@@ -951,7 +952,7 @@ class ExASPIMAcquisition(Acquisition):
 
         # check that there is an associated writer for each camera
         for camera_id, camera in self.instrument.cameras.items():
-            if camera_id not in self.writers.keys():
+            if camera_id not in self.writers:
                 raise ValueError(f"no writer found for camera {camera_id}. check yaml files.")
 
         # check that files won't be overwritten if multiple writers/transfers per device

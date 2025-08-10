@@ -104,15 +104,22 @@ class ExASPIMInstrumentView(InstrumentView):
         self.downsampler = GPUToolsRankDownSample2D(binning=2, rank=-2, data_type="uint16")
 
         # setup and connect viewer camera events
-        self.viewer.window.qt_viewer.view.camera.reset()
-        self.viewer_state = self.viewer.window.qt_viewer.view.camera.get_state()
+        # Reset camera to default state
+        self.viewer.camera.zoom = 1.0
+        self.viewer.camera.center = (0, 0)
+        self.viewer.camera.angles = (0, 0, 0)
+        self.viewer_state = {
+            "zoom": self.viewer.camera.zoom,
+            "center": self.viewer.camera.center,
+            "angles": self.viewer.camera.angles,
+        }
         self.previous_layer = None
         self.viewer.camera.events.zoom.connect(self.camera_zoom)
         self.viewer.camera.events.center.connect(self.camera_position)
 
         # create cache for contrast limit values
         self.contrast_limits = {}
-        for key in self.channels.keys():
+        for key in self.channels:
             self.contrast_limits[key] = [self.intensity_min, self.intensity_max]
 
     def setup_camera_widgets(self) -> None:
@@ -223,14 +230,14 @@ class ExASPIMInstrumentView(InstrumentView):
         laser_combo_box = QComboBox(widget)
         laser_combo_box.addItems(self.channels.keys())
         laser_combo_box.currentTextChanged.connect(lambda value: self.change_channel(value))
-        laser_combo_box.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        laser_combo_box.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         laser_combo_box.setCurrentIndex(0)  # initialize to first channel index
         self.laser_combo_box = laser_combo_box
         self.livestream_channel = laser_combo_box.currentText()  # initialize livestream channel
         layout.addWidget(label)
         layout.addWidget(laser_combo_box)
         widget.setLayout(layout)
-        widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Minimum)
+        widget.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
         self.viewer.window.add_dock_widget(widget, area="bottom", name="Channels")
 
     def change_channel(self, channel: str) -> None:
@@ -285,20 +292,6 @@ class ExASPIMInstrumentView(InstrumentView):
             yield multiscale, camera_name
             i += 1
 
-    def camera_position(self, event: Event):
-        # store viewer state anytime camera moves and there is a layer
-        if self.previous_layer in self.viewer.layers:
-            self.viewer_state = self.viewer.window.qt_viewer.view.camera.get_state()
-
-    def camera_zoom(self, event: Event):
-        # store viewer state anytime camera zooms and there is a layer
-        if self.previous_layer in self.viewer.layers:
-            self.viewer_state = self.viewer.window.qt_viewer.view.camera.get_state()
-
-    def viewer_contrast_limits(self, event: Event):
-        # store viewer contrast limits anytime contrast limits change
-        self.contrast_limits[self.livestream_channel] = self.viewer.layers[self.livestream_channel].contrast_limits
-
     def update_layer(self, args: tuple, snapshot: bool = False) -> None:
         """
         Update the image layer in the viewer.
@@ -338,7 +331,9 @@ class ExASPIMInstrumentView(InstrumentView):
                     layer.events.contrast_limits.connect(self.viewer_contrast_limits)
                     # only reset state if there is a previous layer, otherwise pass
                     if self.previous_layer:
-                        self.viewer_state = self.viewer.window.qt_viewer.view.camera.set_state(self.viewer_state)
+                        self.viewer.camera.zoom = self.viewer_state["zoom"]
+                        self.viewer.camera.center = self.viewer_state["center"]
+                        self.viewer.camera.angles = self.viewer_state["angles"]
                     # update previous layer name
                     self.previous_layer = layer_name
                     layer.mouse_drag_callbacks.append(self.save_image)
@@ -449,12 +444,20 @@ class ExASPIMInstrumentView(InstrumentView):
     def camera_position(self, event: Event) -> None:
         """Store viewer state anytime camera moves and there is a layer."""
         if self.previous_layer and self.previous_layer in self.viewer.layers:
-            self.viewer_state = self.viewer.window.qt_viewer.view.camera.get_state()
+            self.viewer_state = {
+                "zoom": self.viewer.camera.zoom,
+                "center": self.viewer.camera.center,
+                "angles": self.viewer.camera.angles,
+            }
 
     def camera_zoom(self, event: Event) -> None:
         """Store viewer state anytime camera zooms and there is a layer."""
         if self.previous_layer and self.previous_layer in self.viewer.layers:
-            self.viewer_state = self.viewer.window.qt_viewer.view.camera.get_state()
+            self.viewer_state = {
+                "zoom": self.viewer.camera.zoom,
+                "center": self.viewer.camera.center,
+                "angles": self.viewer.camera.angles,
+            }
 
     def viewer_contrast_limits(self, event: Event) -> None:
         """Store viewer contrast limits anytime contrast limits change."""
@@ -501,11 +504,10 @@ class ExASPIMInstrumentView(InstrumentView):
             self.viewer.layers.clear()
 
         if hasattr(self.grab_frames_worker, "is_running") and self.grab_frames_worker.is_running:
-            if frames == 1:  # create snapshot layer with the latest image
-                if f"{camera_name} {self.livestream_channel}" in self.viewer.layers:
-                    layer = self.viewer.layers[f"{camera_name} {self.livestream_channel}"]
-                    image = layer.data[0] if hasattr(layer, "multiscale") and layer.multiscale else layer.data
-                    self.update_layer((image, camera_name), snapshot=True)
+            if frames == 1 and f"{camera_name} {self.livestream_channel}" in self.viewer.layers:
+                layer = self.viewer.layers[f"{camera_name} {self.livestream_channel}"]
+                image = layer.data[0] if hasattr(layer, "multiscale") and layer.multiscale else layer.data
+                self.update_layer((image, camera_name), snapshot=True)
             return
 
         self.grab_frames_worker = self.grab_frames(camera_name, frames)
@@ -538,8 +540,11 @@ class ExASPIMInstrumentView(InstrumentView):
 
         # TODO fix this, messy way to figure out FOV dimensions from camera properties
         if hasattr(self.instrument, "indicator_lights"):
-            first_indicator_light_key = list(self.instrument.indicator_lights.keys())[0]
-            self.instrument.indicator_lights[first_indicator_light_key].enable()
+            try:
+                first_indicator_light_key = list(self.instrument.indicator_lights.keys())[0]
+                self.instrument.indicator_lights[first_indicator_light_key].enable()
+            except IndexError:
+                self.log.error("View: No indicator lights found")
 
         for daq_name, daq in self.instrument.daqs.items():
             if daq.tasks.get("ao_task", None) is not None:
@@ -687,38 +692,25 @@ class ExASPIMAcquisitionView(AcquisitionView):
         camera = self.instrument.cameras[first_camera_key]
         fov_height_mm = camera.fov_height_mm
         fov_width_mm = camera.fov_width_mm
-        camera_rotation = (
-            self.config["instrument_view"]["properties"]["camera_rotation_deg"]
-            if "camera_rotation_deg" in self.config["instrument_view"]["properties"]
-            else 0
-        )
+        camera_rotation = self.config["instrument_view"]["properties"].get("camera_rotation_deg", 0)
         if camera_rotation in [-270, -90, 90, 270]:
             fov_dimensions = [fov_height_mm, fov_width_mm, 0]
         else:
             fov_dimensions = [fov_width_mm, fov_height_mm, 0]
 
-        acquisition_widget = QSplitter(Qt.Vertical)
+        acquisition_widget = QSplitter(Qt.Orientation.Vertical)
         acquisition_widget.setChildrenCollapsible(False)
 
         # create volume plan
         self.volume_plan = VolumePlanWidget(
-            instrument=self.instrument,
             limits=limits,
             fov_dimensions=fov_dimensions,
             coordinate_plane=self.coordinate_plane,
             unit=self.unit,
-            default_overlap=(
-                self.config["acquisition_view"]["default_overlap"]
-                if "default_overlap" in self.config["acquisition_view"]
-                else 15.0
-            ),
-            default_order=(
-                self.config["acquisition_view"]["default_tile_order"]
-                if "default_tile_order" in self.config["acquisition_view"]
-                else "row_wise"
-            ),
+            default_overlap=self.config["acquisition_view"].get("default_overlap", 15.0),
+            default_order=self.config["acquisition_view"].get("default_tile_order", "row_wise"),
         )
-        self.volume_plan.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Minimum)
+        self.volume_plan.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
 
         # create volume model
         self.volume_model = VolumeModel(
@@ -744,7 +736,7 @@ class ExASPIMAcquisitionView(AcquisitionView):
             **self.config["acquisition_view"]["acquisition_widgets"].get("channel_plan", {}).get("init", {}),
         )
         # place volume_plan.tile_table and channel plan table side by side
-        table_splitter = QSplitter(Qt.Horizontal)
+        table_splitter = QSplitter(Qt.Orientation.Horizontal)
         table_splitter.setChildrenCollapsible(False)
         table_splitter.setHandleWidth(20)
 
@@ -759,7 +751,7 @@ class ExASPIMAcquisitionView(AcquisitionView):
         line = QFrame(handle)
         line.setStyleSheet("QFrame {border: 1px dotted grey;}")
         line.setFixedHeight(50)
-        line.setFrameShape(QFrame.VLine)
+        line.setFrameShape(QFrame.Shape.VLine)
         handle_layout.addWidget(line)
 
         # add tables to layout
@@ -816,7 +808,7 @@ class ExASPIMAcquisitionView(AcquisitionView):
             y_center_um = image.shape[0] // 2 * pixel_size_um
             x_center_um = image.shape[1] // 2 * pixel_size_um
 
-            layer_name = f"acquisition"
+            layer_name = "acquisition"
             if layer_name in self.instrument_view.viewer.layers:
                 layer = self.instrument_view.viewer.layers[layer_name]
                 layer.data = image
@@ -862,7 +854,7 @@ class ExASPIMAcquisitionView(AcquisitionView):
 
         # write correct daq values if different from livestream
         for daq_name, daq in self.instrument.daqs.items():
-            if daq_name in self.config["acquisition_view"].get("data_acquisition_tasks", {}).keys():
+            if daq_name in self.config["acquisition_view"].get("data_acquisition_tasks", {}):
                 daq.tasks = self.config["acquisition_view"]["data_acquisition_tasks"][daq_name]["tasks"]
 
         # anchor grid in volume widget

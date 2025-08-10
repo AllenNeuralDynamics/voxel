@@ -1,5 +1,4 @@
 import ctypes as ct
-import logging
 from typing import Any
 
 import numpy
@@ -19,6 +18,7 @@ from egrabber import (
     query,
 )
 
+from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.camera.base import BaseCamera
 from voxel_classic.devices.utils.singleton import thread_safe_singleton
@@ -87,7 +87,7 @@ class VieworksCamera(BaseCamera):
         :raises ValueError: If no valid cameras are found or no grabber is found for the given ID
         """
         super().__init__()
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = str(id)  # convert to string incase serial # is entered as int
         self.gentl = get_egentl_singleton()
         self._latest_frame: np.ndarray = np.empty((0, 0, 0), dtype=np.uint16)
@@ -113,21 +113,43 @@ class VieworksCamera(BaseCamera):
         if not egrabber_list["grabbers"]:
             raise ValueError("no valid cameras found. check connections and close any software.")
 
-        try:
-            for egrabber in egrabber_list["grabbers"]:
-                grabber = EGrabber(
-                    self.gentl, egrabber["interface"], egrabber["device"], egrabber["stream"], remote_required=True
-                )
-                # note the framegrabber serial number is also available through:
-                # grabber.interface.get('DeviceSerialNumber)
-                if grabber.remote.get("DeviceSerialNumber") == self.id:
-                    self.log.info(f"grabber found for S/N: {self.id}")
-                    self.grabber = grabber
-                    self.egrabber = egrabber
-                    break
-        except Exception:
+        def _get_grabber(egrabbers: dict) -> tuple[EGrabber, dict] | None:
+            for egrabber in egrabbers["grabbers"]:
+                try:
+                    grabber = EGrabber(
+                        self.gentl, egrabber["interface"], egrabber["device"], egrabber["stream"], remote_required=True
+                    )
+                    if grabber.remote.get("DeviceSerialNumber") == self.id:
+                        self.log.info(f"grabber found for S/N: {self.id}")
+                        return grabber, egrabber
+                except Exception:
+                    continue
+            return None
+
+        result = _get_grabber(egrabber_list)
+        if result is not None:
+            matching_grabber, egrabber_info = result
+            self.grabber = matching_grabber
+            self.egrabber = egrabber_info
+        else:
             self.log.error(f"no grabber found for S/N: {self.id}")
             raise ValueError(f"no grabber found for S/N: {self.id}")
+
+        # try:
+        #     for egrabber in egrabber_list["grabbers"]:
+        #         grabber = EGrabber(
+        #             self.gentl, egrabber["interface"], egrabber["device"], egrabber["stream"], remote_required=True
+        #         )
+        #         # note the framegrabber serial number is also available through:
+        #         # grabber.interface.get('DeviceSerialNumber)
+        #         if grabber.remote.get("DeviceSerialNumber") == self.id:
+        #             self.log.info(f"grabber found for S/N: {self.id}")
+        #             self.grabber = grabber
+        #             self.egrabber = egrabber
+        #             break
+        # except Exception:
+        #     self.log.error(f"no grabber found for S/N: {self.id}")
+        #     raise ValueError(f"no grabber found for S/N: {self.id}")
 
         # del grabber
         # IMPORTANT: call stop here in the event that the camera previously crashed

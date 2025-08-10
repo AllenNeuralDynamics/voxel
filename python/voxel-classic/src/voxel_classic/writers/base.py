@@ -1,13 +1,17 @@
-from ctypes import c_wchar
-import logging
 from abc import abstractmethod
-from multiprocessing import Event, Process, Queue, Value
-from multiprocessing import Array  # local import to avoid global dependency
+from ctypes import c_wchar
+from multiprocessing import (
+    Array,  # local import to avoid global dependency
+    Event,
+    Process,
+    Value,
+)
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from multiprocessing.sharedctypes import SynchronizedArray
@@ -25,7 +29,7 @@ class BaseWriter:
         :param path: The path for the data writer.
         :type path: str
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self._path = Path(path)
         self._channel: str | None = None
         self._acquisition_name: Path | None = None
@@ -49,7 +53,7 @@ class BaseWriter:
         # share values to update inside process
         self._progress = Value("d", 0.0)
         # share queue for passing logs out of process
-        self._log_queue = Queue()
+        self._log_queue = VoxelLogging.get_queue()
         # Flow control attributes to synchronize inter-process communication.
         self.done_reading = Event()
         self.done_reading.set()  # Set after processing all data in shared mem.

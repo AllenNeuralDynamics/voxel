@@ -1,9 +1,6 @@
-import logging
-
 import multiprocessing as mp
 import os
 import re
-import sys
 from ctypes import c_wchar
 from datetime import datetime
 from math import ceil
@@ -16,7 +13,6 @@ from time import perf_counter, sleep
 import numpy as np
 from matplotlib.colors import hex2color
 from PyImarisWriter import PyImarisWriter as pw
-
 from voxel_classic.writers.base import BaseWriter
 
 CHUNK_COUNT_PX = 64
@@ -349,14 +345,20 @@ class ImarisWriter(BaseWriter):
         :param shared_log_queue: Shared queue for passing log statements
         :type shared_log_queue: multiprocessing.Queue
         """
-        # internal logger for process
-        logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
-        fmt = "%(asctime)s.%(msecs)03d %(levelname)s %(name)s: %(message)s"
-        datefmt = "%Y-%m-%d,%H:%M:%S"
-        log_formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
-        log_handler = logging.StreamHandler(sys.stdout)
-        log_handler.setFormatter(log_formatter)
-        logger.addHandler(log_handler)
+        from voxel.utils.log import VoxelLogging
+
+        self.log = VoxelLogging.get_logger(object=self)
+        VoxelLogging.redirect([self.log], self._log_queue)
+
+        # # internal logger for process
+        # logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        # fmt = "%(asctime)s.%(msecs)03d %(levelname)s %(name)s: %(message)s"
+        # datefmt = "%Y-%m-%d,%H:%M:%S"
+        # log_formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
+        # log_handler = logging.StreamHandler(sys.stdout)
+        # log_handler.setFormatter(log_formatter)
+        # logger.addHandler(log_handler)
+
         filepath = Path(self._path, (self._acquisition_name or ""), self._filename).absolute()
 
         application_name = "PyImarisWriter"

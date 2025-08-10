@@ -145,18 +145,19 @@ class PropertyUpdater:
         Thread to continuously query properties.
         """
         while not self.get_properties.is_set():
-            if self.get_properties:
-                try:
-                    position_mm = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
-                    self.position_mm.update(position_mm)
-                except Exception:
-                    self.log.error("could not update axes positions")
-                try:
-                    axes_status = self.tigerbox.are_axes_moving()
-                    self.axes_status.update(axes_status)
-                except Exception:
-                    self.log.error("could not update axes status")
-                time.sleep(1.0 / UPDATE_RATE_HZ)
+            try:
+                position_steps = self.tigerbox.get_position(*self.tigerbox.ordered_axes)
+                # Convert from steps to millimeters (steps are in 1/10 um units)
+                position_mm = {axis: pos / (STEPS_PER_UM * 1000) for axis, pos in position_steps.items()}
+                self.position_mm.update(position_mm)
+            except Exception:
+                self.log.error("could not update axes positions")
+            try:
+                axes_status = self.tigerbox.are_axes_moving()
+                self.axes_status.update(axes_status)
+            except Exception:
+                self.log.error("could not update axes status")
+            time.sleep(1.0 / UPDATE_RATE_HZ)
 
     def close(self) -> None:
         """

@@ -1,8 +1,7 @@
-import logging
 from pathlib import Path
 
 from ruamel.yaml import YAML
-
+from voxel.utils.log import VoxelLogging
 from voxel_classic.instruments.instrument import Instrument
 
 DIRECTORY = Path(__file__).parent.resolve()
@@ -24,7 +23,7 @@ class ExASPIM(Instrument):
         :param log_level: Logging level, defaults to "INFO"
         :type log_level: str, optional
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.log.setLevel(log_level)
 
         # current working directory

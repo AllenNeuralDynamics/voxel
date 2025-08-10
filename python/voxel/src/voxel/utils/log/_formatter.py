@@ -51,7 +51,7 @@ class CustomFormatter(logging.Formatter):
     def _build_fmt(self, detailed: bool) -> str:
         # time | level | (name) message [filename:lineno]
         out = f"{colorize('%(asctime)s', Color.GREEN)} | %(levelname)-8s | "
-        out += f"{colorize('(%(name)s)', Color.DIM_CYAN)} %(message)s"
+        out += f"{colorize('%(name)s >>', Color.GRAY)} %(message)s"
         if detailed:
             out += f" {colorize('%(filename)s:%(lineno)d', Color.GRAY)}"
         return out

@@ -63,10 +63,10 @@ class StageWidget(BaseDeviceWidget):
         textbox = QScrollableLineEdit(str(value))
         if float in value_type.__mro__:
             validator = QDoubleValidator()
-            validator.setNotation(QDoubleValidator.StandardNotation)
+            validator.setNotation(QDoubleValidator.Notation.StandardNotation)
             validator.setDecimals(3)
             textbox.setValidator(validator)
-            textbox.setValue(round(cast(float, value), 3))
+            textbox.setValue(round(cast("float", value), 3))
         elif int in value_type.__mro__:
             validator = QIntValidator()
             textbox.setValidator(validator)

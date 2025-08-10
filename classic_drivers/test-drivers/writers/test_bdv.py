@@ -6,8 +6,8 @@ import time
 
 import numpy
 
-from instrument.writers import BDVWriter
-from instrument.writers import SharedDoubleBuffer
+from voxel_classic.writers. import BDVWriter
+from voxel_classic.writers import SharedDoubleBuffer
 
 if __name__ == "__main__":
 

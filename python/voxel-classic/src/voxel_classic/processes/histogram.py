@@ -1,10 +1,10 @@
-import logging
 from multiprocessing import Event, Process
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 
 import numpy as np
 from fast_histogram import histogram1d
+from voxel.utils.log import VoxelLogging
 
 
 class HistogramProjection:
@@ -28,7 +28,7 @@ class HistogramProjection:
         :param path: The path to the file or directory.
         :type path: str
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self._path = Path(path)
         self._column_count_px = None
         self._row_count_px = None

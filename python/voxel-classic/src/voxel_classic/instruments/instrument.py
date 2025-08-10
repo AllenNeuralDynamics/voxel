@@ -1,7 +1,6 @@
 import copy
 import importlib
 import inspect
-import logging
 from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
@@ -11,18 +10,18 @@ from typing import TYPE_CHECKING, Any
 import inflection
 from ruamel.yaml import YAML
 from serial import Serial
+from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import _DeliminatedProperty
 
-
 if TYPE_CHECKING:
-    from voxel_classic.devices.daq.ni import NIDAQ
     from voxel_classic.devices.camera.base import BaseCamera
+    from voxel_classic.devices.daq.ni import NIDAQ
     from voxel_classic.devices.filter.base import BaseFilter
     from voxel_classic.devices.filterwheel.base import BaseFilterWheel
     from voxel_classic.devices.flip_mount.base import BaseFlipMount
+    from voxel_classic.devices.indicator_light.base import BaseIndicatorLight
     from voxel_classic.devices.laser.base import BaseLaser
     from voxel_classic.devices.stage.asi.tiger import TigerStage
-    from voxel_classic.devices.indicator_light.base import BaseIndicatorLight
 
 
 class Instrument:
@@ -39,7 +38,7 @@ class Instrument:
         :param log_level: Logging level, defaults to "INFO".
         :type log_level: str, optional
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.log.setLevel(log_level)
 
         # create yaml object to use when loading and dumping config
@@ -96,9 +95,7 @@ class Instrument:
                     raise ValueError(f"filter {filter} not associated with any filter wheel: {self.filter_wheels}")
         self.channels = self.config["instrument"]["channels"]
 
-    def _construct_device(
-        self, device_name: str, device_specs: dict[str, Any], lock: Lock | RLock | None = None
-    ) -> None:
+    def _construct_device(self, device_name: str, device_specs: dict[str, Any], lock: "RLock | None" = None) -> None:
         """
         Construct a device based on its specifications.
 
@@ -116,9 +113,22 @@ class Instrument:
         driver = device_specs["driver"]
         module = device_specs["module"]
         init = device_specs.get("init", {})
-        device_object = self._load_device(driver, module, init, lock)
+
+        device_class = getattr(importlib.import_module(driver), module)
+        thread_safe_device_class = for_all_methods(lock, device_class)
+        self.log.debug(f"Imported thread-safe device class for {driver}.{module}")
+        device_object = thread_safe_device_class(**init)
+        self.log.debug(f"Constructed thread-safe device instance for {driver}.{module}")
+
         properties = device_specs.get("properties", {})
         self._setup_device(device_object, properties)
+        self.log.debug(f"Setup properties for device '{device_name}': {properties}")
+
+        # Add subdevices under device and fill in any needed keywords to init
+        for subdevice_name, subdevice_specs in device_specs.get("subdevices", {}).items():
+            # copy so config is not altered by adding in parent devices
+            self.log.debug(f"Constructing subdevice '{subdevice_name}' for parent '{device_name}'")
+            self._construct_subdevice(device_object, subdevice_name, copy.deepcopy(subdevice_specs), lock)
 
         # create device dictionary if it doesn't already exist and add device to dictionary
         if not hasattr(self, device_type):
@@ -133,19 +143,14 @@ class Instrument:
             else:
                 self.stage_axes.append(instrument_axis)
 
-        # Add subdevices under device and fill in any needed keywords to init
-        for subdevice_name, subdevice_specs in device_specs.get("subdevices", {}).items():
-            # copy so config is not altered by adding in parent devices
-            self._construct_subdevice(device_object, subdevice_name, copy.deepcopy(subdevice_specs), lock)
-
     def _construct_subdevice(
-        self, device_object: Any, subdevice_name: str, subdevice_specs: dict[str, Any], lock: Lock | RLock
+        self, parent_object: Any, subdevice_name: str, subdevice_specs: dict[str, Any], lock: RLock
     ) -> None:
         """
         Construct a subdevice based on its specifications.
 
-        :param device_object: Parent device object.
-        :type device_object: object
+        :param parent_object: Parent device object.
+        :type parent_object: Any
         :param subdevice_name: Name of the subdevice.
         :type subdevice_name: str
         :param subdevice_specs: Specifications of the subdevice.
@@ -158,15 +163,38 @@ class Instrument:
         subdevice_needs = inspect.signature(subdevice_class.__init__).parameters
         for name, parameter in subdevice_needs.items():
             # If subdevice init needs a serial port, add device's serial port to init arguments
-            if parameter.annotation == Serial and Serial in [type(v) for v in device_object.__dict__.values()]:
+            if parameter.annotation == Serial and Serial in [type(v) for v in parent_object.__dict__.values()]:
                 # assuming only one relevant serial port in parent
-                subdevice_specs["init"][name] = [v for v in device_object.__dict__.values() if isinstance(v, Serial)][0]
+                subdevice_specs["init"][name] = [v for v in parent_object.__dict__.values() if isinstance(v, Serial)][0]
             # If subdevice init needs parent object type, add device object to init arguments
-            elif parameter.annotation is type(device_object):
-                subdevice_specs["init"][name] = device_object
+            # Check by annotation type, parameter name, or if parent is instance of expected type
+            elif (
+                parameter.annotation is type(parent_object)
+                or name in ["tigerbox", "parent", "controller", "daq"]
+                or (
+                    hasattr(parameter.annotation, "__name__")
+                    and parameter.annotation.__name__ in type(parent_object).__name__
+                )
+            ):
+                subdevice_specs["init"][name] = parent_object
+            else:
+                # Safely check isinstance, handling parameterized generics
+                try:
+                    if hasattr(parameter.annotation, "__origin__"):
+                        # Skip parameterized generics like List[str], Dict[str, Any], etc.
+                        is_parent_instance = False
+                    else:
+                        is_parent_instance = isinstance(parent_object, parameter.annotation)
+
+                    if is_parent_instance:
+                        subdevice_specs["init"][name] = parent_object
+                except (TypeError, AttributeError):
+                    # Handle cases where isinstance fails (e.g., parameterized generics)
+                    pass
+        self.log.debug(f"Constructing subdevice '{subdevice_name}' with specs: {subdevice_specs}")
         self._construct_device(subdevice_name, subdevice_specs, lock)
 
-    def _load_device(self, driver: str, module: str, kwds: dict[str, Any], lock: Lock | RLock) -> Any:
+    def _load_device(self, driver: str, module: str, kwds: dict[str, Any], lock: RLock) -> Any:
         """
         Load a device class and make it thread-safe.
 
@@ -184,6 +212,7 @@ class Instrument:
         self.log.info(f"loading {driver}.{module}")
         device_class = getattr(importlib.import_module(driver), module)
         thread_safe_device_class = for_all_methods(lock, device_class)
+        self.log.debug(f"Constructed thread-safe device class for {driver}.{module}")
         return thread_safe_device_class(**kwds)
 
     def _setup_device(self, device: Any, properties: dict[str, Any]) -> None:
@@ -235,7 +264,7 @@ class Instrument:
         pass
 
 
-def for_all_methods(lock: Lock | RLock, cls: type) -> type:
+def for_all_methods(lock: RLock, cls: type) -> type:
     """
     Apply a lock to all methods of a class to make them thread-safe.
 
@@ -263,14 +292,14 @@ def for_all_methods(lock: Lock | RLock, cls: type) -> type:
     return cls
 
 
-def lock_methods(fn: Callable, lock: Lock | RLock) -> Callable:
+def lock_methods(fn: Callable, lock: RLock) -> Callable:
     """
     Apply a lock to a method to make it thread-safe.
 
     :param fn: Function to apply the lock to.
     :type fn: function
     :param lock: Lock for thread safety.
-    :type lock: Lock | RLock
+    :type lock: RLock
     :return: Thread-safe function.
     :rtype: function
     """

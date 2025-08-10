@@ -1,8 +1,6 @@
-import logging
-
 from coherent_lasers.genesis_mx.commands import OperationMode
 from coherent_lasers.genesis_mx.driver import GenesisMX
-
+from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.laser.base import BaseLaser
 
@@ -23,7 +21,7 @@ class GenesisMXLaser(BaseLaser):
         :type maximum_power_mw: int
         :raises ValueError: If the serial number does not match.
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         super().__init__(id)
         self._conn = id
         try:

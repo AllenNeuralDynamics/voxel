@@ -1,9 +1,8 @@
-import logging
-
 import matplotlib.pyplot as plt
 import numpy
 from matplotlib.ticker import AutoMinorLocator
 from scipy import interpolate, signal
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.daq.base import BaseDAQ
 
 # lets just simulate the PCIe-6738
@@ -126,7 +125,7 @@ class SimulatedDAQ(BaseDAQ):
         self.co_task: SimulatedTask | None = None
         self._tasks: dict[str, dict] = {}
 
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = dev
         self.ao_physical_chans = []
         self.co_physical_chans = []

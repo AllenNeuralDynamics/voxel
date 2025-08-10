@@ -17,10 +17,10 @@ class TunableLensWidget(BaseDeviceWidget):
         super().__init__(type(tunable_lens), self.tunable_lens_properties)
 
         modes = self.property_widgets["mode"].layout().itemAt(1).widget()
-        modes.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        modes.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
 
         temperature = self.property_widgets["temperature_c"].layout().itemAt(1).widget()
-        temperature.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        temperature.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
 
         central_widget = self.centralWidget()
         central_widget.layout().setSpacing(0)  # remove space between central widget and newly formatted widgets

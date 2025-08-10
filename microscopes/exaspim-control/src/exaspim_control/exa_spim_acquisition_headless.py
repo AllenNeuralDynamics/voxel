@@ -461,12 +461,11 @@ class ExASPIMAcquisition(Acquisition):
         for process in processes.values():
             process.start()
 
-        frame_index = 0
         last_frame_index = tile["steps"] - 1
 
         # Images arrive serialized in repeating channel order.
-        for stack_index in range(tile["steps"]):
-            chunk_index = stack_index % writer.chunk_count_px
+        for frame_index in range(tile["steps"]):
+            chunk_index = frame_index % writer.chunk_count_px
             # Start a batch of pulses to generate more frames and movements.
             if chunk_index == 0:
                 # log metrics from devices
@@ -501,7 +500,7 @@ class ExASPIMAcquisition(Acquisition):
 
             # Dispatch either a full chunk of frames or the last chunk,
             # which may not be a multiple of the chunk size.
-            if chunk_index + 1 == writer.chunk_count_px or stack_index == last_frame_index:
+            if chunk_index + 1 == writer.chunk_count_px or frame_index == last_frame_index:
                 daq.stop()
                 # Toggle double buffer to continue writing images.
                 while not writer.done_reading.is_set():
@@ -517,8 +516,6 @@ class ExASPIMAcquisition(Acquisition):
                     time.sleep(0.1)
                 process.buffer_image[:, :] = current_frame
                 process.new_image.set()
-
-            frame_index += 1
 
         # stop the camera and set frame number back to 0
         camera.stop()
@@ -734,8 +731,8 @@ class ExASPIMAcquisition(Acquisition):
             test_filename = str(
                 Path(f"{file_transfer.external_path}/{file_transfer.acquisition_name}/iotest").absolute()
             )
-            f = open(test_filename, "a")  # Create empty file to check reading/writing speed
-            f.close()
+            with open(test_filename, "a"):  # Create empty file to check reading/writing speed
+                pass
             try:
                 output = subprocess.check_output(
                     rf"fio --name=test --filename={test_filename} --size={size} --rw=write --bs={bs} "
@@ -899,6 +896,9 @@ class ExASPIMAcquisition(Acquisition):
         """
         Sets the acquisition name for all operations.
         """
+        if not self.metadata:
+            self.log.warning("No metadata found. Acquisition name will not be set.")
+            return
         self.acquisition_name = self.metadata.acquisition_name
         for device_name, operation_dict in self.config["acquisition"]["operations"].items():
             for op_name, op_specs in operation_dict.items():

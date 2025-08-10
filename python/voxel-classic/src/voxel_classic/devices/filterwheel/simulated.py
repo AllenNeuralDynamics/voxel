@@ -1,6 +1,6 @@
-import logging
 import time
 
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.filterwheel.base import BaseFilterWheel
 
 SWITCH_TIME_S = 0.1  # estimated timing
@@ -20,7 +20,7 @@ class SimulatedFilterWheel(BaseFilterWheel):
         :param filters: Dictionary of filters
         :type filters: dict
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = id
         self._filters = filters
         # force homing of the wheel to first position

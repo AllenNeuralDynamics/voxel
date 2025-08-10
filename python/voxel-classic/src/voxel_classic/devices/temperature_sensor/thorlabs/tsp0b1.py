@@ -1,8 +1,9 @@
 import ctypes as C
-import logging
 import os
-from typing import Protocol, Any, cast
+import sys
+from typing import Any, Protocol, cast
 
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.temperature_sensor.base import BaseTemperatureSensor
 
 CHANNELS = {"Main": 11, "TH1": 12, "TH2": 13}
@@ -50,7 +51,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         :param channel: Initial channel to set
         :type channel: str
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = id
         # forward attribute declaration for type checkers
         self._dll: _TspbDll  # set in _load_dll
@@ -157,11 +158,15 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         """
         Load the DLL for the temperature sensor.
         """
+        # if not on windows raise error
+        if not sys.platform.startswith("win"):
+            raise OSError("This driver is only supported on Windows.")
+
         # DLL must be in same directory as this driver file
         path = os.path.dirname(os.path.realpath(__file__))
         with os.add_dll_directory(path):
             # needs "TLTSPB_64.dll" in directory
-            self._dll = cast(_TspbDll, C.cdll.LoadLibrary("TLTSPB_64.dll"))
+            self._dll = cast("_TspbDll", C.cdll.LoadLibrary("TLTSPB_64.dll"))
         self._setup_dll()
 
     def _setup_dll(self) -> None:

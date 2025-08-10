@@ -24,7 +24,7 @@ class VoxelLogging:
         if handlers is None:
             handlers = [get_default_console_handler(), get_default_json_handler()]
 
-        log_queue = VoxelLogging.log_queue()
+        log_queue = VoxelLogging.get_queue()
 
         root = logging.getLogger()
         root.setLevel(level)
@@ -76,7 +76,7 @@ class VoxelLogging:
         return logger
 
     @staticmethod
-    def log_queue() -> Queue:
+    def get_queue() -> Queue:
         """
         Get the log queue.
         :return: The log queue.

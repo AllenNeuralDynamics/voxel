@@ -1,7 +1,5 @@
-import logging
-
 import numpy
-
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.temperature_sensor.base import BaseTemperatureSensor
 
 
@@ -17,7 +15,7 @@ class SimulatedTemperatureSensor(BaseTemperatureSensor):
         :param channel: Sensor channel
         :type channel: str
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = id
         self.channel = channel
 

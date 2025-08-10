@@ -1,5 +1,4 @@
 from time import sleep
-from typing import Dict, Optional
 
 from pylablib.devices import Thorlabs
 
@@ -16,7 +15,7 @@ class MFF101FlipMount(BaseFlipMount):
     ThorlabsFlipMount class for handling Thorlabs flip mount devices.
     """
 
-    def __init__(self, id: str, positions: Dict[str, int]) -> None:
+    def __init__(self, id: str, positions: dict[str, int]) -> None:
         """
         Initialize the ThorlabsFlipMount object.
 

@@ -1,7 +1,8 @@
 """Base class for all voxel devices."""
 
-import logging
 from abc import ABC, abstractmethod
+
+from voxel.utils.log import VoxelLogging
 
 
 class VoxelDevice(ABC):
@@ -15,7 +16,7 @@ class VoxelDevice(ABC):
         :type id: str
         """
         self.id = id
-        self.log = logging.getLogger(f"{self.__class__.__name__}[{self.id}]")
+        self.log = VoxelLogging.get_logger(object=self)
 
     @abstractmethod
     def close(self) -> None:

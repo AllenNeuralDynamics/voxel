@@ -1,6 +1,6 @@
-import logging
 import time
 
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.stage.base import BaseStage
 
 MODES = ["step shoot", "off", "stage scan"]
@@ -20,7 +20,7 @@ class SimulatedStage(BaseStage):
         :param instrument_axis: Instrument axis
         :type instrument_axis: str
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
         self._hardware_axis = hardware_axis.upper()
         self._instrument_axis = instrument_axis.lower()
         self.id = self.instrument_axis

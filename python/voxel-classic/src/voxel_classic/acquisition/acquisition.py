@@ -1,19 +1,17 @@
 import inspect
-import logging
 import sys
 from pathlib import Path
-
-import inflection
-from ruamel.yaml import YAML
-
-from voxel_classic.instruments.instrument import Instrument
 from typing import TYPE_CHECKING, Any
 
+import inflection
 from exaspim_control.metadata.metadata_class import MetadataClass
+from ruamel.yaml import YAML
+from voxel.utils.log import VoxelLogging
+from voxel_classic.instruments.instrument import Instrument
 
 if TYPE_CHECKING:
-    from voxel_classic.writers.base import BaseWriter
     from voxel_classic.file_transfers.base import BaseFileTransfer
+    from voxel_classic.writers.base import BaseWriter
 
 
 class Acquisition:
@@ -38,7 +36,7 @@ class Acquisition:
         :param log_level: Logging level, defaults to "INFO".
         :type log_level: str, optional
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.log.setLevel(log_level)
 
         # create yaml object to use when loading and dumping config
@@ -55,9 +53,10 @@ class Acquisition:
 
         # initialize metadata attribute. NOT a dictionary since only one metadata class can exist in acquisition
         # TODO: Validation of config should check that metadata exists and only one
+        self.metadata: MetadataClass | None = None
         metadata = self._construct_class(self.config["acquisition"]["metadata"])
         if metadata and isinstance(metadata, MetadataClass):
-            self.metadata: MetadataClass = metadata
+            self.metadata = metadata
         else:
             raise ValueError("Invalid metadata configuration")
         # initialize acquisition_name that will be populated at start of acquisition

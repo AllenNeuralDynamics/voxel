@@ -1,9 +1,10 @@
 import ctypes
-import logging
 import os
 import platform
 from ctypes import c_int, c_ubyte, c_ushort
 from enum import IntEnum
+
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.indicator_light.base import BaseIndicatorLight
 
 
@@ -158,7 +159,7 @@ class TL50IndicatorLight(BaseIndicatorLight):
         :type com_port: int
         """
         super().__init__()
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = str(com_port)
 
         # load DLL

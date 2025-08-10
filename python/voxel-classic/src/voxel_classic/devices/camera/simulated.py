@@ -1,9 +1,9 @@
-import logging
 from multiprocessing import Event
 from typing import Any
 
 import numpy
 
+from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.camera.base import BaseCamera
 from voxel_classic.processes.downsample.gpu.gputools.downsample_2d import GPUToolsDownSample2D
@@ -57,7 +57,7 @@ class SimulatedCamera(BaseCamera):
         :type id: str
         """
         super().__init__()
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = id
         self.terminate_frame_grab = Event()
         self.terminate_frame_grab.clear()

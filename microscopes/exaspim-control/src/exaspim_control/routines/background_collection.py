@@ -1,9 +1,8 @@
-import logging
 from pathlib import Path
 
 import numpy as np
 import tifffile
-
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.camera.base import BaseCamera
 
 
@@ -18,7 +17,7 @@ class BackgroundCollection:
         :type path: str
         """
         super().__init__()
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self._path = Path(path)
         self._frame_count_px = 1
         self._filename = None

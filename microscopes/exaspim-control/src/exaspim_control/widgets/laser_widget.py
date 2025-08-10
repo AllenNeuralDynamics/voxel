@@ -46,50 +46,51 @@ class LaserWidget(BaseDeviceWidget):
         power = self.power_mw_widget
         temperature = self.property_widgets["temperature_c"].layout().itemAt(1).widget()
 
-        if type(setpoint.validator()) == QDoubleValidator:
+        if isinstance(setpoint.validator(), QDoubleValidator):
             setpoint.validator().setRange(0.0, self.max_power_mw, decimals=2)
             power.validator().setRange(0.0, self.max_power_mw, decimals=2)
-        elif type(setpoint.validator()) == QIntValidator:
+        elif isinstance(setpoint.validator(), QIntValidator):
             setpoint.validator().setRange(0, self.max_power_mw)
             power.validator().setRange(0.0, self.max_power_mw)
 
         power.setEnabled(False)
-        power.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        power.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
         power.setMinimumWidth(60)
         power.setMaximumWidth(60)
 
         setpoint.validator().fixup = self.power_slider_fixup
         setpoint.editingFinished.connect(lambda: slider.setValue(round(float(setpoint.text()))))
-        setpoint.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        setpoint.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
         setpoint.setMinimumWidth(60)
         setpoint.setMaximumWidth(60)
 
         power_mw_label = self.property_widgets["power_mw"].layout().itemAt(0).widget()
         power_mw_label.setVisible(False)  # hide power_mw label
 
-        slider = QScrollableFloatSlider(orientation=Qt.Horizontal)
-        slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        slider = QScrollableFloatSlider(orientation=Qt.Orientation.Horizontal)
+        slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # active slider color
-        hsv_active_color = list(QColor(self.slider_color).getHsv())
-        active_color = QColor.fromHsv(*tuple(hsv_active_color)).name()
+        hsv_values = QColor(self.slider_color).getHsv()
+        hsv_active_color = [h if h is not None else 0 for h in hsv_values[:4]]  # Handle None values
+        active_color = QColor.fromHsv(*hsv_active_color).name()
 
         # inactive slide color
-        hsv_inactive_color = hsv_active_color
+        hsv_inactive_color = hsv_active_color.copy()
         hsv_inactive_color[2] = hsv_inactive_color[2] // 4
-        inactive_color = QColor.fromHsv(*tuple(hsv_inactive_color)).name()
+        inactive_color = QColor.fromHsv(*hsv_inactive_color).name()
 
         # border color
-        hsv_border_color = hsv_active_color
+        hsv_border_color = hsv_active_color.copy()
         hsv_border_color[2] = 100
         hsv_border_color[1] = 100
-        border_color = QColor.fromHsv(*tuple(hsv_border_color)).name()
+        border_color = QColor.fromHsv(*hsv_border_color).name()
 
         # handle color
-        hsv_handle_color = hsv_active_color
+        hsv_handle_color = hsv_active_color.copy()
         hsv_handle_color[2] = 128
         hsv_handle_color[1] = 64
-        handle_color = QColor.fromHsv(*tuple(hsv_handle_color)).name()
+        handle_color = QColor.fromHsv(*hsv_handle_color).name()
 
         slider.setStyleSheet(
             f"QSlider::groove:horizontal {{background: {inactive_color}; border: 2px solid {border_color};height: 10px;border-radius: 6px;}}"
@@ -106,7 +107,7 @@ class LaserWidget(BaseDeviceWidget):
         slider.sliderReleased.connect(lambda: setattr(self, "power_setpoint_mw", float(slider.value())))
         slider.sliderReleased.connect(lambda: self.ValueChangedInside.emit("power_setpoint_mw"))
 
-        temperature.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
+        temperature.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Maximum)
         temperature.setMinimumWidth(50)
         temperature.setMaximumWidth(50)
 

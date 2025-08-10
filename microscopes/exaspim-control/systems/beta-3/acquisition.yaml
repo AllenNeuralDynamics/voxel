@@ -5,7 +5,7 @@ acquisition:
     init:
       metadata_dictionary:
         instrument_type: exaSPIM
-        subject_id: '123456'
+        subject_id: "123456"
         experimenter_full_name: [adam glaser]
         chamber_immersion:
           medium: other
@@ -16,12 +16,12 @@ acquisition:
       date_format: Year/Month/Day/Hour/Minute/Second
       name_specs:
         deliminator: _
-        format: [ instrument_type, subject_id ]
+        format: [instrument_type, subject_id]
   operations:
     vp-151mx:
       imaris:
         type: writer
-        driver: voxel.writers.imaris
+        driver: voxel_classic.writers.imaris
         module: ImarisWriter
         init:
           path: D:\\
@@ -30,7 +30,7 @@ acquisition:
           data_type: uint16
       # tiff:
       #   type: writer
-      #   driver: voxel.writers.tiff
+      #   driver: voxel_classic.writers.tiff
       #   module: TiffWriter
       #   init:
       #     path: D:\\
@@ -39,7 +39,7 @@ acquisition:
       #     data_type: uint16
       # aqz:
       #   type: writer
-      #   driver: voxel.writers.zarr
+      #   driver: voxel_classic.writers.zarr
       #   module: ZarrWriter
       #   init:
       #     path: D:\\
@@ -54,7 +54,7 @@ acquisition:
       #     version: v3
       robocopy:
         type: file_transfer
-        driver: voxel.file_transfers.robocopy
+        driver: voxel_classic.file_transfers.robocopy
         module: RobocopyFileTransfer
         init:
           external_path: Z:\\stage\\exaSPIM
@@ -65,7 +65,7 @@ acquisition:
           timeout_s: 60
       # max_projection:
       #   type: process
-      #   driver: voxel.processes.max_projection.cpu.numpy
+      #   driver: voxel_classic.processes.max_projection.cpu.numpy
       #   module: CPUMaxProjection
       #   init:
       #     path: D:\\

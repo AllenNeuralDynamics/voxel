@@ -1,6 +1,4 @@
-import logging
 import os
-import sys
 from ctypes import c_wchar
 from math import ceil
 from multiprocessing import Array, Process, Queue
@@ -153,14 +151,11 @@ class TiffWriter(BaseWriter):
         :param shared_log_queue: Shared queue for passing log statements
         :type shared_log_queue: multiprocessing.Queue
         """
-        # internal logger for process
-        logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
-        fmt = "%(asctime)s.%(msecs)03d %(levelname)s %(name)s: %(message)s"
-        datefmt = "%Y-%m-%d,%H:%M:%S"
-        log_formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
-        log_handler = logging.StreamHandler(sys.stdout)
-        log_handler.setFormatter(log_formatter)
-        logger.addHandler(log_handler)
+        from voxel.utils.log import VoxelLogging
+
+        self.log = VoxelLogging.get_logger(object=self)
+        VoxelLogging.redirect([self.log], self._log_queue)
+
         filepath = Path(self._path, (self._acquisition_name or ""), self._filename).absolute()
 
         writer = tifffile.TiffWriter(filepath, bigtiff=True)
@@ -183,6 +178,7 @@ class TiffWriter(BaseWriter):
                 "PositionZUnit": "um",
             },
         }
+        self.log.info(f"Subprocess: Writing TIFF file to {filepath}")
 
         chunk_total = ceil(self._frame_count_px / CHUNK_COUNT_PX)
         for chunk_num in range(chunk_total):

@@ -1,4 +1,4 @@
-from qtpy.QtCore import Qt  # type: ignore
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QPushButton, QSizePolicy, QStyle, QVBoxLayout, QWidget
 
 from view.widgets.base_device_widget import BaseDeviceWidget, create_widget, scan_for_properties
@@ -67,7 +67,7 @@ class CameraWidget(BaseDeviceWidget):
             self.property_widgets["mainboard_temperature_c"].setVisible(True)
 
             _ = QWidget()  # dummy widget
-            direct = Qt.FindDirectChildrenOnly
+            direct = Qt.FindChildOption.FindDirectChildrenOnly
 
             # reformat timing widgets
             timing_widgets = create_widget(
@@ -154,14 +154,14 @@ class CameraWidget(BaseDeviceWidget):
 
             # reformat temperature widgets
             sensor_temperature_c = self.property_widgets["sensor_temperature_c"].layout().itemAt(1).widget()
-            sensor_temperature_c.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
+            sensor_temperature_c.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Maximum)
             sensor_temperature_c.setMinimumWidth(40)
             sensor_temperature_c.setMaximumWidth(40)
 
             textbox_mainboard_temperature_c = (
                 self.property_widgets["mainboard_temperature_c"].layout().itemAt(1).widget()
             )
-            textbox_mainboard_temperature_c.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
+            textbox_mainboard_temperature_c.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Maximum)
             textbox_mainboard_temperature_c.setMinimumWidth(40)
             textbox_mainboard_temperature_c.setMaximumWidth(40)
 

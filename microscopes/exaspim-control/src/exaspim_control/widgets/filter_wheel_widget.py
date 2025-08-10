@@ -2,7 +2,7 @@ from math import atan, cos, degrees, pi, radians, sin
 from collections.abc import Callable
 
 from pyqtgraph import PlotWidget, ScatterPlotItem, TextItem, mkBrush, mkPen, setConfigOptions
-from qtpy.QtCore import QObject, QTimer, Signal, Slot  # type: ignore
+from PyQt6.QtCore import pyqtSlot as Slot, pyqtSignal as Signal, QObject, QTimer
 from qtpy.QtGui import QColor, QFont
 from qtpy.QtWidgets import QGraphicsEllipseItem, QSizePolicy
 
@@ -35,19 +35,28 @@ class FilterWheelWidget(BaseDeviceWidget):
         super().__init__(type(filter_wheel), properties)
 
         self.filters = filter_wheel.filters
-        self.filter_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        filter_widget = getattr(self, "filter_widget")
+        filter_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Add back to property widget
-        self.property_widgets["filter"].layout().addWidget(self.filter_widget)
+        property_widgets = getattr(self, "property_widgets", {})
+        if "filter" in property_widgets and property_widgets["filter"].layout():
+            property_widgets["filter"].layout().addWidget(filter_widget)
 
         # Create wheel widget and connect to signals
         self.wheel_widget = FilterWheelGraph(self.filters, colors if colors else {})
-        self.wheel_widget.ValueChangedInside[str].connect(lambda v: self.filter_widget.setCurrentText(f"{v}"))
-        self.wheel_widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.wheel_widget.ValueChangedInside[str].connect(lambda v: filter_widget.setText(f"{v}"))
+        self.wheel_widget.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
 
-        self.filter_widget.currentTextChanged.connect(lambda val: self.wheel_widget.move_wheel(val))
-        self.ValueChangedOutside[str].connect(lambda name: self.wheel_widget.move_wheel(self.filter))
-        self.centralWidget().layout().addWidget(self.wheel_widget)
+        filter_widget.editingFinished.connect(lambda: self.wheel_widget.move_wheel(filter_widget.text()))
+        self.ValueChangedOutside[str].connect(lambda name: self.wheel_widget.move_wheel(getattr(self, "filter", "")))
+
+        # Get the central widget and add the wheel widget to its layout
+        central_widget = self.centralWidget()
+        if central_widget and hasattr(central_widget, "layout"):
+            layout = central_widget.layout()
+            if layout and hasattr(layout, "addWidget"):
+                layout.addWidget(self.wheel_widget)
 
         if not advanced_user:
             self.wheel_widget.setDisabled(True)
@@ -141,19 +150,22 @@ class FilterWheelGraph(PlotWidget):
 
         self.filter_path = self.diameter - 3
         # calculate diameter of filters based on quantity
-        l = len(self.filters)
+        num_filters = len(self.filters)
         max_diameter = (self.diameter - self.filter_path - 0.5) * 2
-        del_filter = self.filter_path * cos((pi / 2) - (2 * pi / l)) - max_diameter  # dist between two filter points
-        filter_diameter = max_diameter if del_filter > 0 or l == 2 else self.filter_path * cos((pi / 2) - (2 * pi / l))
+        del_filter = (
+            self.filter_path * cos((pi / 2) - (2 * pi / num_filters)) - max_diameter
+        )  # dist between two filter points
+        filter_diameter = (
+            max_diameter
+            if del_filter > 0 or num_filters == 2
+            else self.filter_path * cos((pi / 2) - (2 * pi / num_filters))
+        )
 
-        angles = [pi / 2 + (2 * pi / l * i) for i in range(l)]
+        angles = [pi / 2 + (2 * pi / num_filters * i) for i in range(num_filters)]
         self.points = {}
         for angle, (i, filter) in zip(angles, (enumerate(self.filters))):
             color = colors.get(filter, "black")
-            if type(color) is str:
-                color = QColor(color).getRgb()
-            else:
-                color = QColor().fromRgb(*color).getRgb()
+            color = QColor(color).getRgb() if type(color) is str else QColor().fromRgb(*color).getRgb()
             color = list(color)
             pos = [self.filter_path * cos(angle), self.filter_path * sin(angle)]
             # create scatter point filter
@@ -266,7 +278,7 @@ class TimeLine(QObject):
 
     frameChanged = Signal(float)
 
-    def __init__(self, interval: int = 60, loopCount: int = 1, step_size: float = 1, parent: QObject = None):
+    def __init__(self, interval: int = 60, loopCount: int = 1, step_size: float = 1, parent: QObject | None = None):
         """
         Initialize the TimeLine.
 
@@ -284,7 +296,8 @@ class TimeLine(QObject):
         self._startFrame = 0
         self._endFrame = 0
         self._loopCount = loopCount
-        self._timer = QTimer(self, timeout=self.on_timeout)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.on_timeout)
         self._counter = 0
         self._loop_counter = 0
         self.setInterval(interval)
@@ -301,9 +314,8 @@ class TimeLine(QObject):
         else:
             self._counter = 0
             self._loop_counter += 1
-        if self._loopCount > 0:
-            if self._loop_counter >= self.loopCount():
-                self._timer.stop()
+        if self._loopCount > 0 and self._loop_counter >= self.loopCount():
+            self._timer.stop()
 
     def setLoopCount(self, loopCount: int) -> None:
         """

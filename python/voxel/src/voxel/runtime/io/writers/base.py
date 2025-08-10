@@ -51,7 +51,7 @@ class VoxelWriter:
         """
         self.name = name
         self.log = VoxelLogging.get_logger(object=self)
-        self._log_queue = VoxelLogging.log_queue()
+        self._log_queue = VoxelLogging.get_queue()
 
         self.dimension_order = Pixels_DimensionOrder.XYZCT
         self.voxel_size_unit = UnitsLength.MICROMETER

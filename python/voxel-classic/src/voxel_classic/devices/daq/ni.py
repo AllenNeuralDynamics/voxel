@@ -1,13 +1,13 @@
-import logging
 import math
+
 import matplotlib.pyplot as plt
 import nidaqmx
 import numpy as np
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
-from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, AOIdleOutputBehavior
-from scipy import signal, interpolate
-
+from nidaqmx.constants import AOIdleOutputBehavior, Edge, FrequencyUnits, Level, Slope
+from scipy import interpolate, signal
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.daq.base import BaseDAQ
 
 DO_WAVEFORMS = ["square wave"]
@@ -52,7 +52,8 @@ class NIDAQ(BaseDAQ):
         self.co_task: nidaqmx.Task | None = None
         self._tasks: dict[str, dict] = {}
 
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
+
         self.devs = []
         for device in nidaqmx.system.System.local().devices:
             self.devs.append(device.name)

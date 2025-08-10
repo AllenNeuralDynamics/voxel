@@ -1,5 +1,4 @@
-import logging
-
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.filter.base import BaseFilter
 from voxel_classic.devices.filterwheel.ni import DAQFilterWheel
 
@@ -18,7 +17,7 @@ class Filter(BaseFilter):
         :param id: Filter ID
         :type id: str
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = id
         self.wheel = wheel
 

@@ -1,7 +1,7 @@
-import logging
 from time import sleep
 
 from tigerasi.device_codes import JoystickInput, JoystickPolarity, RingBufferMode, ScanPattern, TTLIn0Mode, TTLOut0Mode
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.controller.asi.tiger import TigerController
 from voxel_classic.devices.stage.base import BaseStage
 
@@ -59,7 +59,7 @@ class TigerStage(BaseStage):
         :type log_level: str, optional
         :raises ValueError: If both tigerbox and port are None
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
         self.log.setLevel(log_level)
 
         if tigerbox is None:

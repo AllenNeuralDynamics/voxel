@@ -1,8 +1,8 @@
-import logging
 from abc import abstractmethod
-from typing import Callable
+from collections.abc import Callable
 
 import numpy
+from voxel.utils.log import VoxelLogging
 
 
 class BaseDownSample:
@@ -18,7 +18,7 @@ class BaseDownSample:
         :type binning: int
         """
         self._binning = binning
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
 
     @abstractmethod
     def run(self, method: Callable[[numpy.ndarray], numpy.ndarray], image: numpy.ndarray) -> numpy.ndarray:

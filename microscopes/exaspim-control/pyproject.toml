@@ -32,6 +32,7 @@ dependencies = [
     "voxel-classic",
     "view @ git+https://github.com/AllenNeuralDynamics/view.git",
     "aind_data_schema >= 0.26.7",
+    "pyqt6>=6.9.1",
 ]
 
 [tool.uv.sources]

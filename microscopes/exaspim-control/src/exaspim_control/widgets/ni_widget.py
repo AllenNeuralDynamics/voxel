@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 from random import randint
+from typing import TYPE_CHECKING
 
 import numpy as np
 import qtpy.QtGui as QtGui
 from qtpy.QtCore import Qt, Slot  # type: ignore
-from qtpy.QtWidgets import QComboBox, QSizePolicy, QTreeWidgetItem, QWidget
+from qtpy.QtWidgets import QComboBox, QSizePolicy, QTreeWidgetItem
 from scipy import signal
 
 from view.widgets.base_device_widget import BaseDeviceWidget, create_widget, label_maker, pathGet
 from view.widgets.device_widgets.waveform_widget import WaveformWidget
 from view.widgets.miscellaneous_widgets.q_non_scrollable_tree_widget import QNonScrollableTreeWidget
 from view.widgets.miscellaneous_widgets.q_scrollable_float_slider import QScrollableFloatSlider
-from view.widgets.miscellaneous_widgets.q_scrollable_line_edit import QScrollableLineEdit
+
+if TYPE_CHECKING:
+    from view.widgets.miscellaneous_widgets.q_scrollable_line_edit import QScrollableLineEdit
 
 
 class NIWidget(BaseDeviceWidget):
@@ -72,7 +75,7 @@ class NIWidget(BaseDeviceWidget):
         self.setCentralWidget(self.tree)
         self.tree.expandAll()
 
-        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
 
     def update_waveform(self, channel_name: str) -> None:
         """
@@ -242,36 +245,37 @@ class NIWidget(BaseDeviceWidget):
         :type name: str
         """
         textbox = getattr(self, f"{name}_widget")
-        textbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        textbox.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
         textbox.setMinimumWidth(40)
         textbox.setMaximumWidth(40)
 
-        slider = QScrollableFloatSlider(orientation=Qt.Horizontal)
-        slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        slider = QScrollableFloatSlider(orientation=Qt.Orientation.Horizontal)
+        slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         slider.setMinimumWidth(200)
         slider.setMaximumWidth(200)
 
         slider_color = "#a0b596"
         # active slider color
-        hsv_active_color = list(QtGui.QColor(slider_color).getHsv())
-        active_color = QtGui.QColor.fromHsv(*tuple(hsv_active_color)).name()
+        hsv_values = QtGui.QColor(slider_color).getHsv()
+        hsv_active_color = [h if h is not None else 0 for h in hsv_values[:4]]  # Handle None values
+        active_color = QtGui.QColor.fromHsv(*hsv_active_color).name()
 
         # inactive slide color
-        hsv_inactive_color = hsv_active_color
+        hsv_inactive_color = hsv_active_color.copy()
         hsv_inactive_color[2] = hsv_inactive_color[2] // 4
-        inactive_color = QtGui.QColor.fromHsv(*tuple(hsv_inactive_color)).name()
+        inactive_color = QtGui.QColor.fromHsv(*hsv_inactive_color).name()
 
         # border color
-        hsv_border_color = hsv_active_color
+        hsv_border_color = hsv_active_color.copy()
         hsv_border_color[2] = 100
         hsv_border_color[1] = 100
-        border_color = QtGui.QColor.fromHsv(*tuple(hsv_border_color)).name()
+        border_color = QtGui.QColor.fromHsv(*hsv_border_color).name()
 
         # handle color
-        hsv_handle_color = hsv_active_color
+        hsv_handle_color = hsv_active_color.copy()
         hsv_handle_color[2] = 128
         hsv_handle_color[1] = 64
-        handle_color = QtGui.QColor.fromHsv(*tuple(hsv_handle_color)).name()
+        handle_color = QtGui.QColor.fromHsv(*hsv_handle_color).name()
 
         slider.setStyleSheet(
             f"QSlider::groove:horizontal {{background: {inactive_color}; border: 2px solid {border_color};height: 10px;border-radius: 6px;}}"
@@ -391,7 +395,7 @@ class NIWidget(BaseDeviceWidget):
         try:
             dictionary = pathGet(dictionary, path)
         except KeyError:
-            if ".".join(path[0:2]) in dictionary.keys():
+            if ".".join(path[0:2]) in dictionary:
                 dictionary = self.mappedpathGet(dictionary[".".join(path[0:2])], path[2:])
             else:
                 dictionary = self.mappedpathGet(dictionary, [".".join(path[0:2]), *path[2:]])

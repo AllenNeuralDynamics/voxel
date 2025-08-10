@@ -17,10 +17,10 @@ class FlipMountWidget(BaseDeviceWidget):
         super().__init__(type(flip_mount), self.flip_mount_properties)
 
         positions = self.property_widgets["position"].layout().itemAt(1).widget()
-        positions.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        positions.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
 
         flip_time = self.property_widgets["flip_time_ms"].layout().itemAt(1).widget()
-        flip_time.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        flip_time.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
 
         central_widget = self.centralWidget()
         central_widget.layout().setSpacing(0)  # remove space between central widget and newly formatted widgets

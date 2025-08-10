@@ -1,9 +1,8 @@
-import logging
 import random
 
 import numpy
 from serial import Serial
-
+from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.laser.base import BaseLaser
 
@@ -35,7 +34,7 @@ class SimulatedLaser(BaseLaser):
         :type maximum_power_mw: float, optional
         """
         super().__init__(id)
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
 
         self.prefix = prefix
         self.ser = Serial

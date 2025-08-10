@@ -1,8 +1,8 @@
-import logging
 from datetime import datetime
 from typing import Any
 
 import inflection
+from voxel.utils.log import VoxelLogging
 
 from .base import BaseMetadata
 
@@ -30,7 +30,7 @@ class MetadataClass(BaseMetadata):
         :param name_specs: Specifications for the acquisition name format, defaults to {}.
         :type name_specs: dict, optional
         """
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
 
         super().__init__()
 

@@ -1,8 +1,7 @@
 import time
-import logging
 
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.controller.asi.tiger import TigerController
-
 from voxel_classic.devices.flip_mount.base import BaseFlipMount
 
 STEPS_PER_UM = 10
@@ -30,7 +29,7 @@ class TigerFlipMount(BaseFlipMount):
         self.id = f"tiger flip mount: axis = {axis}"
         self.axis = axis.upper()
         super().__init__(f"tiger_flipmount_{axis}")
-        self.log = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(object=self)
         self.tigerbox = tigerbox
         for key, value in positions.items():
             POSITIONS[key] = value

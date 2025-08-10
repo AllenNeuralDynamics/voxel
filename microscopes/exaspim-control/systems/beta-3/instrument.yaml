@@ -22,7 +22,7 @@ instrument:
       driver: voxel_classic.devices.camera.vieworks.egrabber
       module: VieworksCamera
       init:
-        id: MP151BBX006
+        id: MP151BDZ014
       properties:
         exposure_time_ms: 10.0
         pixel_type: mono16
@@ -41,7 +41,7 @@ instrument:
       module: GenesisMXLaser
       color: blue
       init:
-        id: A700467EP203
+        id: A679409EM263
         wavelength: 488
         maximum_power_mw: 1000
     561 nm:
@@ -50,7 +50,7 @@ instrument:
       module: GenesisMXLaser
       color: blue
       init:
-        id: J687424BP914
+        id: J718583CM887
         wavelength: 561
         maximum_power_mw: 1000
     639 nm:
@@ -59,15 +59,15 @@ instrument:
       module: GenesisMXLaser
       color: blue
       init:
-        id: R708588EQ173
+        id: R689368EQ167
         wavelength: 639
         maximum_power_mw: 1000
     tiger controller:
       type: stage
-      driver: tigerasi.tiger_controller
+      driver: voxel_classic.devices.controller.asi.tiger
       module: TigerController
       init:
-        com_port: COM5
+        com_port: COM3
       subdevices:
         z:
           type: scanning_stage
@@ -234,14 +234,14 @@ instrument:
       driver: voxel_classic.devices.daq.ni
       module: NIDAQ
       init:
-        dev: Dev2
+        dev: Dev3
       subdevices:
         filter wheel:
           type: filter_wheel
           driver: voxel_classic.devices.filterwheel.ni
           module: DAQFilterWheel
           init:
-            dev: Dev2
+            # dev: Dev2
             filters:
               500LP: 0
               655LP: 4

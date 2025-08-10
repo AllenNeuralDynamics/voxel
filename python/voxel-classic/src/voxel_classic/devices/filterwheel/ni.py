@@ -1,9 +1,8 @@
-import logging
 import nidaqmx
 import numpy
-import time
 
-from nidaqmx.constants import AcquisitionType as AcqType, AOIdleOutputBehavior
+from nidaqmx.constants import AcquisitionType as AcqType
+from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.daq.ni import NIDAQ
 from voxel_classic.devices.filterwheel.base import BaseFilterWheel
 
@@ -12,7 +11,7 @@ SAMPLING_FREQUENCY_HZ = 10000
 PERIOD_TIME_MS = 100
 DUTY_CYCLE_PERCENT = 50
 
-FILTERS = list()
+FILTERS = []
 
 
 class DAQFilterWheel(BaseFilterWheel):
@@ -31,7 +30,7 @@ class DAQFilterWheel(BaseFilterWheel):
         :param daq: NI-DAQmx device
         :type daq: NIDAQ
         """
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(object=self)
         self.id = daq.id
         self.dev = daq
         self.ports = ports
