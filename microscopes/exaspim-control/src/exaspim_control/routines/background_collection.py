@@ -23,7 +23,7 @@ class BackgroundCollection:
         self._frame_count_px = 1
         self._filename = None
         self._acquisition_name = Path()
-        self._data_type = None
+        self._data_type = np.dtype(np.uint16)
 
     @property
     def frame_count_px(self) -> int:
@@ -109,7 +109,7 @@ class BackgroundCollection:
         self.log.info(f"setting acquisition name to: {acquisition_name}")
 
     @property
-    def filename(self) -> str:
+    def filename(self) -> str | None:
         """
         Get the filename.
 

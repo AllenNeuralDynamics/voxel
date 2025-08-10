@@ -53,7 +53,7 @@ class ExASPIMAcquisition(Acquisition):
         :param log_level: Logging level, defaults to "INFO"
         :type log_level: str, optional
         """
-        self.metadata = None  # initialize as none since setting up metadata class with call setup_class
+        # self.metadata = None  # initialize as none since setting up metadata class with call setup_class
         super().__init__(instrument, DIRECTORY / Path(config_filename), yaml_handler, log_level)
 
         # store initial stage positions
@@ -90,7 +90,7 @@ class ExASPIMAcquisition(Acquisition):
             raise RuntimeError(f"No writers found for camera {camera_name}. Error: {e}")
 
         camera_file_transfers = self.file_transfers.get(camera_name, {})
-        file_transfer = next(iter(camera_file_transfers.values())) if camera_file_transfers else {}
+        file_transfer = next(iter(camera_file_transfers.values())) if camera_file_transfers else None
 
         self.scanning_stage = next(iter(self.instrument.scanning_stages.values()))  # only 1 scanning stage for exaspim
         self.daq = next(iter(self.instrument.daqs.values()))  # only 1 daq for exaspim
@@ -277,7 +277,7 @@ class ExASPIMAcquisition(Acquisition):
                     # check local disk space and run if enough disk space
                     if self.check_local_disk_space(self.writer, compression_ratio):
                         self.acquisition_engine(
-                            tile, base_filename, self.camera, self.daq, self.writer, processes, self.scanning_stage
+                            tile, base_filename, self.camera, self.daq, self.writer, self.processes, self.scanning_stage
                         )
                     # if not enough local disk space, but file transfers are running
                     # wait for them to finish, because this will free up disk space
@@ -565,7 +565,11 @@ class ExASPIMAcquisition(Acquisition):
         # not completed, needs to be fixed
         drive = os.path.splitdrive(writer.path)[0] if platform.system() == "Windows" else "/"
         self.log.info("checking local storage directory space for next tile")
-        required_size_gb = writer.get_stack_size_mb() / compression_ratio / 1024
+        stack_size_mb = writer.get_stack_size_mb()
+        if not stack_size_mb:
+            self.log.warning("Could not check local disk space: Unable to get writer stack size or it is 0")
+            return False
+        required_size_gb = stack_size_mb / compression_ratio / 1024
         self.log.info(f"required disk space = {required_size_gb:.1f} [GB] on drive {drive}")
         free_size_gb = shutil.disk_usage(drive).free / 1024**3
         self.log.info(f"available disk space = {free_size_gb:.1f} [GB] on drive {drive}")
@@ -601,7 +605,11 @@ class ExASPIMAcquisition(Acquisition):
         drive = self._get_drive_from_path(file_transfer.external_path)
 
         self.log.info("checking external storage directory space for next tile")
-        required_size_gb = writer.get_stack_size_mb() / compression_ratio / 1024
+        stack_size_mb = writer.get_stack_size_mb()
+        if not stack_size_mb:
+            self.log.warning("Could not check external disk space: Unable to get writer stack size or it is 0")
+            return False
+        required_size_gb = stack_size_mb / compression_ratio / 1024
         self.log.info(f"required disk space = {required_size_gb:.1f} [GB] on drive {drive}")
         free_size_gb = shutil.disk_usage(drive).free / 1024**3
         self.log.info(f"available disk space = {free_size_gb:.1f} [GB] on drive {drive}")
@@ -618,8 +626,12 @@ class ExASPIMAcquisition(Acquisition):
         :raises MemoryError: If there is not enough system memory
         """
         self.log.info("checking available system memory")
+        frame_size_mb = writer.get_frame_size_mb()
+        if not frame_size_mb:
+            self.log.warning("Could not check system memory: Unable to get writer frame size or it is 0")
+            return
         # factor of 2 for concurrent chunks being written/read
-        required_memory_gb = 2 * writer.chunk_count_px * writer.get_frame_size_mb() / 1024
+        required_memory_gb = 2 * writer.chunk_count_px * frame_size_mb / 1024
         self.log.info(f"required RAM = {required_memory_gb:.2f} [GB]")
         free_memory_gb = virtual_memory()[1] / 1024**3
         self.log.info(f"available RAM = {free_memory_gb:.2f} [GB]")
@@ -666,6 +678,7 @@ class ExASPIMAcquisition(Acquisition):
         :raises ValueError: If the write speed is too slow
         """
         self.log.info("checking write speed to local and external directories")
+        external_drive: str | None = None
         # windows ioengine
         if platform.system() == "Windows":
             ioengine = "windowsaio"
@@ -682,7 +695,11 @@ class ExASPIMAcquisition(Acquisition):
 
         # get the required write speed
         acquisition_rate_hz = 1.0 / daq.co_frequency_hz
-        camera_speed_mb_s = writer.get_frame_size_mb() / acquisition_rate_hz
+        frame_size_mb = writer.get_frame_size_mb()
+        if not frame_size_mb:
+            self.log.warning("Could not check system memory: Unable to get writer frame size or it is 0")
+            return
+        camera_speed_mb_s = frame_size_mb / acquisition_rate_hz
         required_write_speed_mb_s = camera_speed_mb_s / compression_ratio
         self.log.info(f"required write speed = {required_write_speed_mb_s:.1f} [MB/sec] to directory {local_drive}")
         test_filename = str(Path(f"{writer.path}/{writer.acquisition_name}/iotest").absolute())
@@ -750,7 +767,11 @@ class ExASPIMAcquisition(Acquisition):
         :raises ValueError: If there is not enough GPU memory
         """
         # check GPU resources for downscaling
-        required_memory_gb = writer.get_frame_size_mb() / 1024
+        frame_size_mb = writer.get_frame_size_mb()
+        if not frame_size_mb:
+            self.log.warning("Could not check GPU memory: Unable to get writer frame size or it is 0")
+            return
+        required_memory_gb = frame_size_mb / 1024
         total_gpu_memory_gb = get_device().get_info("MAX_MEM_ALLOC_SIZE") / 1024**3
         self.log.info(f"required GPU RAM = {required_memory_gb:.1f} [GB]")
         self.log.info(f"available GPU RAM = {total_gpu_memory_gb:.1f} [GB]")
@@ -788,7 +809,7 @@ class ExASPIMAcquisition(Acquisition):
             chunk_lock = threading.Lock()
             img_buffer = SharedDoubleBuffer(
                 (chunk_size, camera.image_height_px, camera.image_width_px),
-                dtype=writer.data_type,
+                dtype=str(writer.data_type),
             )
 
             # set up and start writer and camera
@@ -828,8 +849,12 @@ class ExASPIMAcquisition(Acquisition):
             compressed_file_size_mb = os.stat(filepath).st_size / (1024**2)
             # calculate the raw file size
             raw_file_size_mb = writer.get_stack_size_mb()
-            # calculate the compression ratio
-            compression_ratio = raw_file_size_mb / compressed_file_size_mb
+            if raw_file_size_mb:
+                # calculate the compression ratio
+                compression_ratio = raw_file_size_mb / compressed_file_size_mb
+            else:
+                self.log.warning("Unable to fetch writer raw_stack_size_mb. defaulting compression ratio of 1.0")
+                compression_ratio = 1.0
             # delete the files
             writer.delete_files()
             # reset the trigger, frame count, and filename
@@ -891,16 +916,22 @@ class ExASPIMAcquisition(Acquisition):
         # check if local directories exist and create if not
         for writer_dictionary in self.writers.values():
             for writer in writer_dictionary.values():
-                local_path = Path(writer.path, self.acquisition_name)
-                if not os.path.isdir(local_path):
-                    os.makedirs(local_path)
+                if self.acquisition_name:
+                    local_path = Path(writer.path, self.acquisition_name)
+                    if not os.path.isdir(local_path):
+                        os.makedirs(local_path)
+                else:
+                    self.log.error("Could not create local directory. Acquisition name is not set.")
         # check if external directories exist and create if not
-        if self._file_transfers:
-            for file_transfer_dictionary in self._file_transfers.values():
+        if self.file_transfers:
+            for file_transfer_dictionary in self.file_transfers.values():
                 for file_transfer in file_transfer_dictionary.values():
-                    external_path = Path(file_transfer.external_path, self.acquisition_name)
-                    if not os.path.isdir(external_path):
-                        os.makedirs(external_path)
+                    if self.acquisition_name:
+                        external_path = Path(file_transfer.external_path, self.acquisition_name)
+                        if not os.path.isdir(external_path):
+                            os.makedirs(external_path)
+                    else:
+                        self.log.error("Could not create external directory. Acquisition name is not set.")
 
     def _verify_acquisition(self) -> None:
         """

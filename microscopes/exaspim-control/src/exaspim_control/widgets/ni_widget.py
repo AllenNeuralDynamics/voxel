@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 from random import randint
-from typing import Dict, List, Optional, Union
 
 import numpy as np
 import qtpy.QtGui as QtGui
-from qtpy.QtCore import Qt, Slot
-from qtpy.QtWidgets import QComboBox, QSizePolicy, QTreeWidgetItem
+from qtpy.QtCore import Qt, Slot  # type: ignore
+from qtpy.QtWidgets import QComboBox, QSizePolicy, QTreeWidgetItem, QWidget
 from scipy import signal
 
 from view.widgets.base_device_widget import BaseDeviceWidget, create_widget, label_maker, pathGet
@@ -19,7 +20,7 @@ class NIWidget(BaseDeviceWidget):
     Widget for National Instruments (NI) device control.
     """
 
-    def __init__(self, daq, exposed_branches: Optional[Dict] = None, advanced_user: bool = True) -> None:
+    def __init__(self, daq, exposed_branches: dict | None = None, advanced_user: bool = True) -> None:
         """
         Initialize the NIWidget.
 
@@ -141,7 +142,7 @@ class NIWidget(BaseDeviceWidget):
             kwargs["device_min_volts"] = getattr(self, f"{port_name}.device_min_volts")
 
         if item := getattr(self, f"{port_name}.{wl}_plot_item", False):
-            color = item.color
+            color = getattr(item, "color", "blue")  # Safe attribute access with default
             self.waveform_widget.removeDraggableGraphItem(item)
         else:
             colors = QtGui.QColor.colorNames()
@@ -185,17 +186,17 @@ class NIWidget(BaseDeviceWidget):
         self.ValueChangedInside.emit(name)
 
     def remodel_timing_widgets(
-        self, name: str, widget: Union[QComboBox, QScrollableLineEdit]
-    ) -> Union[QComboBox, QScrollableLineEdit]:
+        self, name: str, widget: QComboBox | QScrollableLineEdit
+    ) -> QComboBox | QScrollableLineEdit:
         """
         Remodel timing widgets based on the name.
 
         :param name: The name of the widget
         :type name: str
         :param widget: The widget to remodel
-        :type widget: Union[QComboBox, QScrollableLineEdit]
+        :type widget: QComboBox | QScrollableLineEdit
         :return: The remodeled widget
-        :rtype: Union[QComboBox, QScrollableLineEdit]
+        :rtype: QComboBox | QScrollableLineEdit
         """
         path = name.split(".")
         if options := self.check_driver_variables(path[-1]):
@@ -207,17 +208,17 @@ class NIWidget(BaseDeviceWidget):
         return widget
 
     def remodel_port_widgets(
-        self, name: str, widget: Union[QComboBox, QScrollableLineEdit]
-    ) -> Union[QComboBox, QScrollableLineEdit]:
+        self, name: str, widget: QComboBox | QScrollableLineEdit
+    ) -> QComboBox | QScrollableLineEdit:
         """
         Remodel port widgets based on the name.
 
         :param name: The name of the widget
         :type name: str
         :param widget: The widget to remodel
-        :type widget: Union[QComboBox, QScrollableLineEdit]
+        :type widget: QComboBox | QScrollableLineEdit
         :return: The remodeled widget
-        :rtype: Union[QComboBox, QScrollableLineEdit]
+        :rtype: QComboBox | QScrollableLineEdit
         """
         path = name.split(".")
         task = "ao" if "ao_task" in path else "do"
@@ -315,7 +316,7 @@ class NIWidget(BaseDeviceWidget):
             slider.sliderMoved.connect(lambda: self.update_waveform(name))
         setattr(self, f"{name}_slider", slider)
 
-    def create_tree_widget(self, name: str, parent: Optional[QTreeWidgetItem] = None) -> List[QTreeWidgetItem]:
+    def create_tree_widget(self, name: str, parent: QTreeWidgetItem | None = None) -> list[QTreeWidgetItem]:
         """
         Create a tree widget for the given name.
 
@@ -324,7 +325,7 @@ class NIWidget(BaseDeviceWidget):
         :param parent: The parent widget, defaults to None
         :type parent: QTreeWidgetItem, optional
         :return: A list of QTreeWidgetItems
-        :rtype: List[QTreeWidgetItem]
+        :rtype: list[QTreeWidgetItem]
         """
         parent = self.tree if parent is None else parent
         iterable = self.mappedpathGet(self.exposed_branches.copy(), name.split("."))
@@ -376,16 +377,16 @@ class NIWidget(BaseDeviceWidget):
                 self.check_to_hide(id, item)
         return items
 
-    def mappedpathGet(self, dictionary: Dict, path: List[str]) -> Dict:
+    def mappedpathGet(self, dictionary: dict, path: list[str]) -> dict:
         """
         Get the value from the dictionary at the given path.
 
         :param dictionary: The dictionary to get the value from
-        :type dictionary: Dict
+        :type dictionary: dict
         :param path: The path to the value
-        :type path: List[str]
+        :type path: list[str]
         :return: The value at the given path
-        :rtype: Dict
+        :rtype: dict
         """
         try:
             dictionary = pathGet(dictionary, path)
@@ -397,7 +398,7 @@ class NIWidget(BaseDeviceWidget):
         finally:
             return dictionary
 
-    def check_to_hide(self, name: str, item: QTreeWidgetItem, dictionary: Optional[Dict] = None) -> None:
+    def check_to_hide(self, name: str, item: QTreeWidgetItem, dictionary: dict | None = None) -> None:
         """
         Check if the item should be hidden.
 
@@ -406,7 +407,7 @@ class NIWidget(BaseDeviceWidget):
         :param item: The item to check
         :type item: QTreeWidgetItem
         :param dictionary: The dictionary to check against, defaults to None
-        :type dictionary: Dict, optional
+        :type dictionary: dict | None, optional
         """
         dictionary = self.exposed_branches.copy() if dictionary is None else dictionary
         try:
@@ -451,15 +452,18 @@ class NIWidget(BaseDeviceWidget):
         pathGet(self.__dict__, name_lst[0:-1]).__setitem__(name_lst[-1], value)
         self.update_waveform(name)
 
-    def textbox_fixup(self, value: Union[float, str], name: str) -> None:
+    def textbox_fixup(self, value: float | str | None, name: str) -> None:
         """
         Fix the value in the textbox.
 
         :param value: The value to fix
-        :type value: Union[float, str]
+        :type value: float | str | None
         :param name: The name of the parameter
         :type name: str
         """
+        if value is None:
+            return
+
         textbox = getattr(self, f"{name}_widget")
         slider = getattr(self, f"{name}_slider")
         maximum = slider.maximum()
@@ -499,12 +503,8 @@ def sawtooth(
     :return: The generated sawtooth waveform
     :rtype: np.ndarray
     """
-    time_samples_ms = np.linspace(
-        0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
-    )
-    waveform = offset_volts + amplitude_volts * signal.sawtooth(
-        t=time_samples_ms, width=end_time_ms / period_time_ms
-    )
+    time_samples_ms = np.linspace(0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz))
+    waveform = offset_volts + amplitude_volts * signal.sawtooth(t=time_samples_ms, width=end_time_ms / period_time_ms)
     # add in delay
     delay_samples = int((start_time_ms / 1000) * sampling_frequency_hz)
     waveform = np.pad(

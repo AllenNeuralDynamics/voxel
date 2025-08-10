@@ -37,6 +37,7 @@ class NIDAQ(BaseDAQ):
     do_sampling_frequency_hz: float
     ao_waveforms: dict
     do_waveforms: dict
+    co_frequency_hz: float
 
     def __init__(self, dev: str) -> None:
         """

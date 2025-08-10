@@ -1,16 +1,18 @@
 import importlib
+from typing import cast
 
 from qtpy.QtGui import QDoubleValidator, QIntValidator
 from qtpy.QtWidgets import QLabel
 
 from view.widgets.base_device_widget import BaseDeviceWidget, scan_for_properties
 from view.widgets.miscellaneous_widgets.q_scrollable_line_edit import QScrollableLineEdit
+from voxel_classic.devices.stage.asi.tiger import TigerStage
 
 
 class StageWidget(BaseDeviceWidget):
     """Widget for handling stage properties and controls."""
 
-    def __init__(self, stage: object, advanced_user: bool = True):
+    def __init__(self, stage: TigerStage, advanced_user: bool = True):
         """
         Initialize the StageWidget object.
 
@@ -59,14 +61,14 @@ class StageWidget(BaseDeviceWidget):
         """
         value_type = type(value)
         textbox = QScrollableLineEdit(str(value))
-        textbox.editingFinished.connect(lambda: self.textbox_edited(name))
         if float in value_type.__mro__:
             validator = QDoubleValidator()
             validator.setNotation(QDoubleValidator.StandardNotation)
             validator.setDecimals(3)
             textbox.setValidator(validator)
-            textbox.setValue(round(value, 3))
+            textbox.setValue(round(cast(float, value), 3))
         elif int in value_type.__mro__:
             validator = QIntValidator()
             textbox.setValidator(validator)
+        return textbox
         return textbox

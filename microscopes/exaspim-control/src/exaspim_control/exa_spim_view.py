@@ -1,13 +1,15 @@
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
-import ruamel
+from collections.abc import Iterator
+from typing import Any
+import ruamel.yaml
 import numpy as np
 import inflection
-from napari.qt.threading import thread_worker, create_worker
+from napari.qt.threading import thread_worker, create_worker, WorkerBase
 from napari.utils.events import Event
-from qtpy.QtCore import Qt, Signal
+
+from qtpy.QtCore import Qt, Signal  # type: ignore #
 from qtpy.QtWidgets import (
     QComboBox,
     QFrame,
@@ -21,6 +23,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from ruamel.yaml import RoundTripRepresenter
 
 from view.acquisition_view import AcquisitionView
 from view.instrument_view import InstrumentView
@@ -31,7 +34,7 @@ from view.widgets.base_device_widget import create_widget, disable_button
 from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 
 
-class NonAliasingRTRepresenter(ruamel.yaml.RoundTripRepresenter):
+class NonAliasingRTRepresenter(RoundTripRepresenter):
     """
     Custom representer for ruamel.yaml to ignore aliases.
     This class is used to ensure that YAML files do not contain aliases,
@@ -51,7 +54,7 @@ class NonAliasingRTRepresenter(ruamel.yaml.RoundTripRepresenter):
 class ExASPIMInstrumentView(InstrumentView):
     """Class for handling ExASPIM instrument view."""
 
-    def __init__(self, instrument: object, config_path: Path, log_level: str = "INFO"):
+    def __init__(self, instrument: object, config_path: Path, log_level: str = "INFO") -> None:
         """
         Initialize the ExASPIMInstrumentView object.
 
@@ -62,7 +65,16 @@ class ExASPIMInstrumentView(InstrumentView):
         :param log_level: Logging level, defaults to "INFO"
         :type log_level: str, optional
         """
-        self.flip_mount_widgets = {}
+        self.flip_mount_widgets: dict[str, Any] = {}
+
+        # Initialize button attributes to avoid None type errors
+        self.snapshot_button: QPushButton | None = None
+        self.alignment_button: QPushButton | None = None
+        self.crosshairs_button: QPushButton | None = None
+        self.laser_combo_box: QComboBox | None = None
+        self.filter_wheel_widget: QWidget | None = None
+        self.grab_frames_worker: WorkerBase = create_worker(lambda: None)
+
         super().__init__(instrument, config_path, log_level)
         # other setup taken care of in base instrumentview class
         self.setup_flip_mount_widgets()
@@ -109,29 +121,41 @@ class ExASPIMInstrumentView(InstrumentView):
         """
         for camera_name, camera_widget in self.camera_widgets.items():
             # Add functionality to snapshot button
-            self.snapshot_button = getattr(camera_widget, "snapshot_button", QPushButton())
-            self.snapshot_button.pressed.connect(
-                lambda button=self.snapshot_button: disable_button(button)
-            )  # disable to avoid spamming
-            self.snapshot_button.pressed.connect(lambda camera=camera_name: self.setup_live(camera, 1))
+            snapshot_button = getattr(camera_widget, "snapshot_button", None)
+            if snapshot_button is not None:
+                self.snapshot_button = snapshot_button
+                snapshot_button.pressed.connect(
+                    lambda button=snapshot_button: disable_button(button)
+                )  # disable to avoid spamming
+                snapshot_button.pressed.connect(lambda camera=camera_name: self.setup_live(camera, 1))
 
             # Add functionality to live button
-            live_button = getattr(camera_widget, "live_button", QPushButton())
-            live_button.pressed.connect(lambda button=live_button: disable_button(button))  # disable to avoid spamming
-            live_button.pressed.connect(lambda camera=camera_name: self.setup_live(camera))
-            live_button.pressed.connect(lambda camera=camera_name: self.toggle_live_button(camera))
+            live_button = getattr(camera_widget, "live_button", None)
+            if live_button is not None:
+                live_button.pressed.connect(
+                    lambda button=live_button: disable_button(button)
+                )  # disable to avoid spamming
+                live_button.pressed.connect(lambda camera=camera_name: self.setup_live(camera))
+                live_button.pressed.connect(lambda camera=camera_name: self.toggle_live_button(camera))
 
             # Add functionality to the edges button
-            self.alignment_button = getattr(camera_widget, "alignment_button", QPushButton())
-            self.alignment_button.setCheckable(True)
-            self.alignment_button.released.connect(self.enable_alignment_mode)
+            alignment_button = getattr(camera_widget, "alignment_button", None)
+            if alignment_button is not None:
+                self.alignment_button = alignment_button
+                alignment_button.setCheckable(True)
+                alignment_button.released.connect(self.enable_alignment_mode)
 
             # Add functionality to the crosshairs button
-            self.crosshairs_button = getattr(camera_widget, "crosshairs_button", QPushButton())
-            self.crosshairs_button.setCheckable(True)
+            crosshairs_button = getattr(camera_widget, "crosshairs_button", None)
+            if crosshairs_button is not None:
+                self.crosshairs_button = crosshairs_button
+                crosshairs_button.setCheckable(True)
 
-            self.alignment_button.setDisabled(True)  # disable alignment button
-            self.crosshairs_button.setDisabled(True)  # disable crosshairs button
+            # Disable buttons if they exist
+            if self.alignment_button is not None:
+                self.alignment_button.setDisabled(True)  # disable alignment button
+            if self.crosshairs_button is not None:
+                self.crosshairs_button.setDisabled(True)  # disable crosshairs button
 
         stacked = self.stack_device_widgets("camera")
         self.viewer.window.add_dock_widget(stacked, area="right", name="Cameras", add_vertical_stretch=False)
@@ -242,7 +266,9 @@ class ExASPIMInstrumentView(InstrumentView):
         self.viewer.text_overlay.text = f"{fps:1.1f} fps"
 
     @thread_worker
-    def grab_frames(self, camera_name: str, frames=float("inf")) -> Iterator[tuple[np.ndarray, str]]:
+    def grab_frames(
+        self, camera_name: str, frames: int | float = float("inf")
+    ) -> Iterator[tuple[list[np.ndarray], str]]:
         """
         Grab frames from camera
         :param frames: how many frames to take
@@ -420,23 +446,46 @@ class ExASPIMInstrumentView(InstrumentView):
                     rotate=self.camera_rotation,
                 )
 
+    def camera_position(self, event: Event) -> None:
+        """Store viewer state anytime camera moves and there is a layer."""
+        if self.previous_layer and self.previous_layer in self.viewer.layers:
+            self.viewer_state = self.viewer.window.qt_viewer.view.camera.get_state()
+
+    def camera_zoom(self, event: Event) -> None:
+        """Store viewer state anytime camera zooms and there is a layer."""
+        if self.previous_layer and self.previous_layer in self.viewer.layers:
+            self.viewer_state = self.viewer.window.qt_viewer.view.camera.get_state()
+
+    def viewer_contrast_limits(self, event: Event) -> None:
+        """Store viewer contrast limits anytime contrast limits change."""
+        if self.livestream_channel in self.viewer.layers:
+            self.contrast_limits[self.livestream_channel] = list(
+                self.viewer.layers[self.livestream_channel].contrast_limits
+            )
+
+    def toggle_live_button(self, camera_name: str) -> None:
+        """Toggle live button state for the given camera."""
+        pass
+
     def enable_alignment_mode(self) -> None:
         """
         Enable alignment mode.
         """
-        if not self.grab_frames_worker.is_running:
+        if not hasattr(self.grab_frames_worker, "is_running") or not self.grab_frames_worker.is_running:
             return
 
         self.viewer.layers.clear()
 
-        if self.alignment_button.isChecked():
-            self.grab_frames_worker.yielded.disconnect()
-            self.grab_frames_worker.yielded.connect(self.dissect_image)
+        if self.alignment_button is not None and self.alignment_button.isChecked():
+            if hasattr(self.grab_frames_worker, "yielded"):
+                self.grab_frames_worker.yielded.disconnect()
+                self.grab_frames_worker.yielded.connect(self.dissect_image)
         else:
-            self.grab_frames_worker.yielded.disconnect()
-            self.grab_frames_worker.yielded.connect(self.update_layer)
+            if hasattr(self.grab_frames_worker, "yielded"):
+                self.grab_frames_worker.yielded.disconnect()
+                self.grab_frames_worker.yielded.connect(self.update_layer)
 
-    def setup_live(self, camera_name: str, frames=float("inf")) -> None:
+    def setup_live(self, camera_name: str, frames: int | float = float("inf")) -> None:
         """
         Set up for either livestream or snapshot
         :param camera_name: name of camera to set up
@@ -451,19 +500,22 @@ class ExASPIMInstrumentView(InstrumentView):
         if layer_list and layer_name not in layer_list:
             self.viewer.layers.clear()
 
-        if self.grab_frames_worker.is_running:
+        if hasattr(self.grab_frames_worker, "is_running") and self.grab_frames_worker.is_running:
             if frames == 1:  # create snapshot layer with the latest image
-                layer = self.viewer.layers[f"{camera_name} {self.livestream_channel}"]
-                image = layer.data[0] if layer.multiscale else image.data
-                self.update_layer((image, camera_name), snapshot=True)
+                if f"{camera_name} {self.livestream_channel}" in self.viewer.layers:
+                    layer = self.viewer.layers[f"{camera_name} {self.livestream_channel}"]
+                    image = layer.data[0] if hasattr(layer, "multiscale") and layer.multiscale else layer.data
+                    self.update_layer((image, camera_name), snapshot=True)
             return
 
         self.grab_frames_worker = self.grab_frames(camera_name, frames)
 
         if frames == 1:  # pass in optional argument that this image is a snapshot
-            self.grab_frames_worker.yielded.connect(lambda args: self.update_layer(args, snapshot=True))
+            if hasattr(self.grab_frames_worker, "yielded"):
+                self.grab_frames_worker.yielded.connect(lambda args: self.update_layer(args, snapshot=True))
         else:
-            self.grab_frames_worker.yielded.connect(lambda args: self.update_layer(args))
+            if hasattr(self.grab_frames_worker, "yielded"):
+                self.grab_frames_worker.yielded.connect(lambda args: self.update_layer(args))
 
         self.grab_frames_worker.finished.connect(lambda: self.dismantle_live(camera_name))
         self.grab_frames_worker.start()
@@ -504,11 +556,16 @@ class ExASPIMInstrumentView(InstrumentView):
 
             daq.start()
 
-        self.filter_wheel_widget.setDisabled(True)  # disable filter wheel widget
-        self.laser_combo_box.setDisabled(True)  # disable channel widget
-        self.alignment_button.setDisabled(False)  # enable alignment button
-        self.crosshairs_button.setDisabled(False)  # enable crosshairs button
-        self.snapshot_button.setDisabled(True)  # disable crosshairs button
+        if self.filter_wheel_widget is not None:
+            self.filter_wheel_widget.setDisabled(True)  # disable filter wheel widget
+        if self.laser_combo_box is not None:
+            self.laser_combo_box.setDisabled(True)  # disable channel widget
+        if self.alignment_button is not None:
+            self.alignment_button.setDisabled(False)  # enable alignment button
+        if self.crosshairs_button is not None:
+            self.crosshairs_button.setDisabled(False)  # enable crosshairs button
+        if self.snapshot_button is not None:
+            self.snapshot_button.setDisabled(True)  # disable crosshairs button
 
     def dismantle_live(self, camera_name: str) -> None:
         """
@@ -542,13 +599,18 @@ class ExASPIMInstrumentView(InstrumentView):
             first_indicator_light_key = list(self.instrument.indicator_lights.keys())[0]
             self.instrument.indicator_lights[first_indicator_light_key].disable()
 
-        self.filter_wheel_widget.setDisabled(False)  # enable filter wheel widget
-        self.laser_combo_box.setDisabled(False)
-        self.alignment_button.setDisabled(True)  # disable alignment button
-        self.alignment_button.setChecked(False)
-        self.crosshairs_button.setDisabled(True)  # disable crosshairs button
-        self.crosshairs_button.setChecked(False)
-        self.snapshot_button.setDisabled(False)  # enable crosshairs button
+        if self.filter_wheel_widget is not None:
+            self.filter_wheel_widget.setDisabled(False)  # enable filter wheel widget
+        if self.laser_combo_box is not None:
+            self.laser_combo_box.setDisabled(False)
+        if self.alignment_button is not None:
+            self.alignment_button.setDisabled(True)  # disable alignment button
+            self.alignment_button.setChecked(False)
+        if self.crosshairs_button is not None:
+            self.crosshairs_button.setDisabled(True)  # disable crosshairs button
+            self.crosshairs_button.setChecked(False)
+        if self.snapshot_button is not None:
+            self.snapshot_button.setDisabled(False)  # enable crosshairs button
 
     def close(self) -> None:
         """
@@ -599,7 +661,7 @@ class ExASPIMAcquisitionView(AcquisitionView):
         self.grab_frames_worker = create_worker(lambda: None)  # dummy thread
         self.setWindowTitle("ExA-SPIM control")
 
-    def create_acquisition_widget(self) -> QSplitter:
+    def create_acquisition_widget(self):
         """
         Create the acquisition widget.
 
@@ -845,7 +907,7 @@ class ExASPIMAcquisitionView(AcquisitionView):
         super().acquisition_ended()
         self.acquisitionEnded.emit()
 
-    def create_start_button(self) -> QPushButton:
+    def create_start_button(self):
         """
         Create the start button.
 
@@ -857,7 +919,7 @@ class ExASPIMAcquisitionView(AcquisitionView):
         start.setStyleSheet("background-color: #55a35d; color: black; border-radius: 10px;")
         return start
 
-    def create_stop_button(self) -> QPushButton:
+    def create_stop_button(self):
         """
         Create the stop button.
 

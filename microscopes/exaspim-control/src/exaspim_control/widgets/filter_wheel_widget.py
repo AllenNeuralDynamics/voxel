@@ -1,14 +1,13 @@
 from math import atan, cos, degrees, pi, radians, sin
-from typing import Callable, Union
+from collections.abc import Callable
 
-from pyqtgraph import (PlotWidget, ScatterPlotItem, TextItem, mkBrush, mkPen,
-                       setConfigOptions)
-from qtpy.QtCore import Property, QObject, QTimer, Signal, Slot
+from pyqtgraph import PlotWidget, ScatterPlotItem, TextItem, mkBrush, mkPen, setConfigOptions
+from qtpy.QtCore import QObject, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtGui import QColor, QFont
-from qtpy.QtWidgets import QComboBox, QGraphicsEllipseItem, QSizePolicy
+from qtpy.QtWidgets import QGraphicsEllipseItem, QSizePolicy
 
-from view.widgets.base_device_widget import (BaseDeviceWidget,
-                                             scan_for_properties)
+from view.widgets.base_device_widget import BaseDeviceWidget, scan_for_properties
+from voxel_classic.devices.filterwheel.base import BaseFilterWheel
 
 setConfigOptions(antialias=True)
 
@@ -16,7 +15,7 @@ setConfigOptions(antialias=True)
 class FilterWheelWidget(BaseDeviceWidget):
     """Widget for controlling a filter wheel device."""
 
-    def __init__(self, filter_wheel: object, colors: dict = None, advanced_user: bool = True):
+    def __init__(self, filter_wheel: BaseFilterWheel, colors: dict | None = None, advanced_user: bool = True):
         """
         Initialize the FilterWheelWidget.
 
@@ -43,14 +42,10 @@ class FilterWheelWidget(BaseDeviceWidget):
 
         # Create wheel widget and connect to signals
         self.wheel_widget = FilterWheelGraph(self.filters, colors if colors else {})
-        self.wheel_widget.ValueChangedInside[str].connect(
-            lambda v: self.filter_widget.setCurrentText(f"{v}")
-        )
+        self.wheel_widget.ValueChangedInside[str].connect(lambda v: self.filter_widget.setCurrentText(f"{v}"))
         self.wheel_widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
 
-        self.filter_widget.currentTextChanged.connect(
-            lambda val: self.wheel_widget.move_wheel(val)
-        )
+        self.filter_widget.currentTextChanged.connect(lambda val: self.wheel_widget.move_wheel(val))
         self.ValueChangedOutside[str].connect(lambda name: self.wheel_widget.move_wheel(self.filter))
         self.centralWidget().layout().addWidget(self.wheel_widget)
 
@@ -230,7 +225,7 @@ class FilterWheelGraph(PlotWidget):
 
         self._timelines = []
         # create timelines for all filters and labels
-        filter_index = self.filters.index(name)
+        filter_index = list(self.filters.keys()).index(name)
         filters = [
             self.filters[(filter_index + i) % len(self.filters)] for i in range(len(self.filters))
         ]  # reorder filters starting with filter selected
@@ -248,14 +243,14 @@ class FilterWheelGraph(PlotWidget):
             timeline.start()
 
     @Slot(float)
-    def move_point(self, angle: float, point: Union[FilterItem, TextItem]) -> None:
+    def move_point(self, angle: float, point: FilterItem | TextItem) -> None:
         """
         Move a point to a new angle.
 
         :param angle: The angle to move the point to.
         :type angle: float
         :param point: The point to move.
-        :type point: Union[FilterItem, TextItem]
+        :type point: FilterItem | TextItem
         """
         pos = [self.filter_path * cos(radians(angle)), self.filter_path * sin(radians(angle))]
         if type(point) is FilterItem:

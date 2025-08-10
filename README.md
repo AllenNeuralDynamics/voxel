@@ -13,17 +13,14 @@ SPIM Software Stack Monorepo
 
 ```markdown
 voxel/
-├── CONTRIBUTING.md            # How to get started, workspace setup, coding conventions
-├── README.md                  # High-level overview + quickstart
-├── libs/
-│   ├── python/
-│   │   ├── core/              # python package: voxel-core
-│   │   ├── drivers/           # python package: voxel-drivers
-│   │   ├── web-backend/       # python package: voxel-web-backend
-│   │   └── qt-widgets/        # python package: voxel-qt
-│   └── js/
-│       ├── svelte-widgets/    # npm package: voxel-svelte-widgets
-│       └── react-widgets/     # npm package: voxel-react-widgets
+├── python/
+│   ├── core/              # python package: voxel-core
+│   ├── drivers/           # python package: voxel-drivers
+│   ├── web-backend/       # python package: voxel-web-backend
+│   └── qt-widgets/        # python package: voxel-qt
+├── js/
+│   ├── svelte-widgets/    # npm package: voxel-svelte-widgets
+│   └── react-widgets/     # npm package: voxel-react-widgets
 │
 ├── microscopes/
 │   ├── exaspim/
@@ -33,13 +30,15 @@ voxel/
 │       ├── backend/
 │       └── frontend/
 │
-├── config/                     # shared YAML schemas & examples
+├── config/                    # shared YAML schemas & examples
 ├── docs/                      # deeper architecture and development guides
 ├── examples/                  # runnable demos & templates
 ├── scripts/                   # tooling helpers (bootstrapping, codegen)
 ├── tests/                     # integration tests covering Python & JS
+├── CONTRIBUTING.md            # How to get started, workspace setup, coding conventions
 ├── pyproject.toml             # uv workspace: `libs/python/*` and `microscopes/*/backend` (python)
-└── package.json               # pnpm workspace: `libs/js/*` and `microscopes/*/frontend` (javascript)
+├── package.json               # pnpm workspace: `libs/js/*` and `microscopes/*/frontend` (javascript)
+└── README.md                  # High-level overview + quickstart
 ```
 
 ### Inter Package Dependency Graph

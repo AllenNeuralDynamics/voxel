@@ -10,6 +10,7 @@ from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from threading import Event, Lock
 from typing import Any
+import numpy as np
 
 import inflection
 import numpy
@@ -18,7 +19,9 @@ from psutil import virtual_memory
 from ruamel.yaml import YAML
 
 from voxel_classic.acquisition.acquisition import Acquisition
+from voxel_classic.devices.camera.base import BaseCamera
 from voxel_classic.instruments.instrument import Instrument
+from voxel_classic.writers.base import BaseWriter
 from voxel_classic.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
 
 DIRECTORY = Path(__file__).parent.resolve()
@@ -287,7 +290,7 @@ class ExASPIMAcquisition(Acquisition):
                     # check local disk space and run if enough disk space
                     if self.check_local_disk_space(self.writer, compression_ratio):
                         self.acquisition_engine(
-                            tile, base_filename, self.camera, self.daq, self.writer, processes, self.scanning_stage
+                            tile, base_filename, self.camera, self.daq, self.writer, self.processes, self.scanning_stage
                         )
                     # if not enough local disk space, but file transfers are running
                     # wait for them to finish, because this will free up disk space
@@ -307,7 +310,7 @@ class ExASPIMAcquisition(Acquisition):
                     if self.daq.co_task:
                         self.daq.co_task.stop()
                     # sleep to allow last ao to play with 10% buffer
-                    time.sleep(1.0 / self.daq.co_frequency_hz * 1.1)
+                    time.sleep(1.0 / (self.daq.co_frequency_hz or 1) * 1.1)
                     # stop the ao task
                     if self.daq.ao_task:
                         self.daq.ao_task.stop()
@@ -521,11 +524,17 @@ class ExASPIMAcquisition(Acquisition):
             # wait for daq tasks to finish - prevents devices from stopping in
             # unsafe state, i.e. lasers still on
             self.log.info("stopping daq")
-            self.daq.co_task.stop()
+            if self.daq.co_task:
+                self.daq.co_task.stop()
+            else:
+                self.log.warning("Could not stop CO task because it is not running")
             # sleep to allow last ao to play with 10% buffer
-            time.sleep(1.0 / self.daq.co_frequency_hz * 1.1)
+            time.sleep(1.0 / (self.daq.co_frequency_hz or 1) * 1.1)
             # stop the ao task
-            self.daq.ao_task.stop()
+            if self.daq.ao_task:
+                self.daq.ao_task.stop()
+            else:
+                self.log.warning("Could not stop AO task because it is not running")
             self.daq.close()
             self.log.info("stopping scanning stage")
             self.scanning_stage.halt()
@@ -533,7 +542,7 @@ class ExASPIMAcquisition(Acquisition):
             self.camera.abort()
             # need to directly terminate writer process
             self.log.info("stopping writer")
-            self.writer._process.terminate()
+            self.writer._process.terminate() if self.writer._process else None
             self.stop_engine.clear()
         else:
             # stop the camera and set frame number back to 0
@@ -781,7 +790,7 @@ class ExASPIMAcquisition(Acquisition):
                 f"{required_memory_gb} [GB] GPU RAM requested but only {total_gpu_memory_gb} [GB] available"
             )
 
-    def check_compression_ratio(self, camera: object, writer: object) -> float:
+    def check_compression_ratio(self, camera: "BaseCamera", writer: "BaseWriter") -> float:
         """
         Estimate the compression ratio for the acquisition.
 
@@ -809,7 +818,7 @@ class ExASPIMAcquisition(Acquisition):
             chunk_size = writer.chunk_count_px
             chunk_lock = threading.Lock()
             img_buffer = SharedDoubleBuffer(
-                (chunk_size, camera.image_height_px, camera.image_width_px), dtype=writer.data_type
+                (chunk_size, camera.image_height_px, camera.image_width_px), dtype=str(writer.data_type)
             )
 
             # set up and start writer and camera
@@ -850,7 +859,10 @@ class ExASPIMAcquisition(Acquisition):
             # calculate the raw file size
             raw_file_size_mb = writer.get_stack_size_mb()
             # calculate the compression ratio
-            compression_ratio = raw_file_size_mb / compressed_file_size_mb
+            if raw_file_size_mb := writer.get_stack_size_mb():
+                compression_ratio = raw_file_size_mb / compressed_file_size_mb
+            else:
+                compression_ratio = 1.0
             # delete the files
             writer.delete_files()
             # reset the trigger, frame count, and filename
@@ -864,16 +876,16 @@ class ExASPIMAcquisition(Acquisition):
 
         return compression_ratio
 
-    def _setup_class(self, device: object, settings: dict) -> None:
+    def _setup_class(self, device: object, properties: dict) -> None:
         """
         Overwrite to allow metadata class to pass in acquisition_name to devices that require it.
 
         :param device: Device object
         :type device: object
-        :param settings: Settings dictionary
-        :type settings: dict
+        :param properties: Properties dictionary
+        :type properties: dict
         """
-        super()._setup_class(device, settings)
+        super()._setup_class(device, properties)
 
         # set acquisition_name attribute if it exists for object
         if hasattr(device, "acquisition_name") and self.metadata is not None:
@@ -912,16 +924,18 @@ class ExASPIMAcquisition(Acquisition):
         # check if local directories exist and create if not
         for writer_dictionary in self.writers.values():
             for writer in writer_dictionary.values():
-                local_path = Path(writer.path, self.acquisition_name)
-                if not os.path.isdir(local_path):
-                    os.makedirs(local_path)
+                if self.acquisition_name:
+                    local_path = Path(writer.path, self.acquisition_name)
+                    if not os.path.isdir(local_path):
+                        os.makedirs(local_path)
         # check if external directories exist and create if not
-        if self._file_transfers:
-            for file_transfer_dictionary in self._file_transfers.values():
+        if self.file_transfers:
+            for file_transfer_dictionary in self.file_transfers.values():
                 for file_transfer in file_transfer_dictionary.values():
-                    external_path = Path(file_transfer.external_path, self.acquisition_name)
-                    if not os.path.isdir(external_path):
-                        os.makedirs(external_path)
+                    if self.acquisition_name:
+                        external_path = Path(file_transfer.external_path, self.acquisition_name)
+                        if not os.path.isdir(external_path):
+                            os.makedirs(external_path)
 
     def _verify_acquisition(self) -> None:
         """

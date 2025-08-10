@@ -1,9 +1,12 @@
 <h1>
     <div>
-        <img src="../../../voxel-logo.png" alt="Voxel Logo" width="50" height="50">
+        <img src="../../voxel-logo.png" alt="Voxel Logo" width="50" height="50">
     </div>
     Voxel
 </h1>
+
+> [!Warning]
+> 🚧 Under Construction: APIs, configuration schemas, device drivers, and documentation are actively evolving. 🚧
 
 - [Overview](#overview)
   - [Instrument](#instrument)

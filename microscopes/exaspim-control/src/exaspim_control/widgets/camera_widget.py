@@ -1,13 +1,14 @@
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt  # type: ignore
 from qtpy.QtWidgets import QPushButton, QSizePolicy, QStyle, QVBoxLayout, QWidget
 
 from view.widgets.base_device_widget import BaseDeviceWidget, create_widget, scan_for_properties
+from voxel_classic.devices.camera.base import BaseCamera
 
 
 class CameraWidget(BaseDeviceWidget):
     """Widget for handling camera properties and controls."""
 
-    def __init__(self, camera: object, advanced_user: bool = True):
+    def __init__(self, camera: BaseCamera, advanced_user: bool = True):
         """
         Initialize the CameraWidget object.
 
@@ -186,7 +187,7 @@ class CameraWidget(BaseDeviceWidget):
         if hasattr(self, "exposure_time_ms_widget") and self.exposure_time_ms_widget.validator() is not None:
             self.exposure_time_ms_widget.validator().setDecimals(2)  # set exposure time decimals to 2
 
-    def create_live_button(self) -> QPushButton:
+    def create_live_button(self):
         """
         Create the live button.
 
@@ -199,7 +200,7 @@ class CameraWidget(BaseDeviceWidget):
 
         return button
 
-    def create_snapshot_button(self) -> QPushButton:
+    def create_snapshot_button(self):
         """
         Create the snapshot button.
 
@@ -211,7 +212,7 @@ class CameraWidget(BaseDeviceWidget):
         button.setIcon(icon)
         return button
 
-    def create_alignment_button(self) -> QPushButton:
+    def create_alignment_button(self):
         """
         Create the alignment button.
 
@@ -223,7 +224,7 @@ class CameraWidget(BaseDeviceWidget):
         button.setIcon(icon)
         return button
 
-    def create_crosshairs_button(self) -> QPushButton:
+    def create_crosshairs_button(self):
         """
         Create the crosshairs button.
 

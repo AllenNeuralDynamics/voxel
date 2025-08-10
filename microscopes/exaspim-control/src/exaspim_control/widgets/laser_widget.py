@@ -1,17 +1,18 @@
 import importlib
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt  # type: ignore
 from qtpy.QtGui import QDoubleValidator, QIntValidator, QColor
 from qtpy.QtWidgets import QSizePolicy
 
 from view.widgets.base_device_widget import BaseDeviceWidget, create_widget, scan_for_properties
 from view.widgets.miscellaneous_widgets.q_scrollable_float_slider import QScrollableFloatSlider
+from voxel_classic.devices.laser.base import BaseLaser
 
 
 class LaserWidget(BaseDeviceWidget):
     """Widget for handling laser properties and controls."""
 
-    def __init__(self, laser: object, color: str = "blue", advanced_user: bool = True):
+    def __init__(self, laser: BaseLaser, color: str = "blue", advanced_user: bool = True):
         """
         Initialize the LaserWidget object.
 
