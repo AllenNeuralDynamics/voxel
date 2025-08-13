@@ -5,7 +5,7 @@ import nidaqmx
 import numpy as np
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
-from nidaqmx.constants import AOIdleOutputBehavior, Edge, FrequencyUnits, Level, Slope
+from nidaqmx.constants import AOIdleOutputBehavior, Edge, FrequencyUnits, Slope
 from scipy import interpolate, signal
 from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.daq.base import BaseDAQ
@@ -163,7 +163,7 @@ class NIDAQ(BaseDAQ):
                             f"on channel {physical_name} for {channel}."
                         )
 
-            total_time_ms = timing["period_time_ms"] + timing["rest_time_ms"]
+            total_time_ms = float(timing["period_time_ms"]) + float(timing["rest_time_ms"])
             daq_samples = int(((total_time_ms) / 1000) * timing["sampling_frequency_hz"])
 
             if timing["trigger_mode"] == "on":
@@ -184,8 +184,8 @@ class NIDAQ(BaseDAQ):
                     samps_per_chan=int((timing["period_time_ms"] / 1000) / timing["sampling_frequency_hz"]),
                 )
 
-            setattr(daq_task, f"{task_type}_line_states_done_state", Level.LOW)
-            setattr(daq_task, f"{task_type}_line_states_paused_state", Level.LOW)
+            # Note: Removed obsolete line_states_done_state and line_states_paused_state setters
+            # These attributes don't exist on nidaqmx Task objects
 
             # store the total task time
             self.task_time_s[task["name"]] = total_time_ms / 1000
@@ -281,10 +281,13 @@ class NIDAQ(BaseDAQ):
             if start_time_ms > timing["period_time_ms"]:
                 raise ValueError("start time must be < period time")
             end_time_ms = channel["parameters"]["end_time_ms"]["channels"][wavelength]
-            if end_time_ms > timing["period_time_ms"] + timing["rest_time_ms"] or end_time_ms < start_time_ms:
+            if (
+                end_time_ms > float(timing["period_time_ms"]) + float(timing["rest_time_ms"])
+                or end_time_ms < start_time_ms
+            ):
                 raise ValueError("end time must be < period time and > start time")
 
-            voltages = np.zeros((timing["period_time_ms"],))
+            voltages = np.zeros((int(timing["period_time_ms"]),))
 
             if waveform == "square wave":
                 try:
@@ -377,7 +380,7 @@ class NIDAQ(BaseDAQ):
 
         # store these values
         setattr(self, f"{task_type}_sampling_frequency_hz", timing["sampling_frequency_hz"])
-        setattr(self, f"{task_type}_total_time_ms", timing["period_time_ms"] + timing["rest_time_ms"])
+        setattr(self, f"{task_type}_total_time_ms", float(timing["period_time_ms"]) + float(timing["rest_time_ms"]))
         setattr(self, f"{task_type}_active_edge", TRIGGER_POLARITY[timing["trigger_polarity"]])
         setattr(self, f"{task_type}_sample_mode", SAMPLE_MODE[timing["sample_mode"]])
 

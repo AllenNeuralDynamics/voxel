@@ -28,3 +28,6 @@ members = [
     "microscopes/extreme",
     "microscopes/exaspim-control",
 ]
+
+[tool.uv.sources]
+"view" = { workspace = true }

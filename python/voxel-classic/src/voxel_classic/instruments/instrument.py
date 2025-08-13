@@ -4,7 +4,7 @@ import inspect
 from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
-from threading import Lock, RLock
+from threading import RLock
 from typing import TYPE_CHECKING, Any
 
 import inflection

@@ -8,13 +8,8 @@ class BaseFilterWheel(VoxelDevice):
     Base class for filter wheel devices.
     """
 
-    def __init__(self) -> None:
-        """
-        Initialize the BaseFilterWheel object.
-        """
-        self.filter_list: list = []
-
     @property
+    @abstractmethod
     def filters(self) -> dict[str, int]:
         """
         Get the list of filters in the filter wheel.
@@ -22,7 +17,7 @@ class BaseFilterWheel(VoxelDevice):
         :return: Dictionary of filter names and their positions
         :rtype: dict[str, int]
         """
-        return {filter_name: i for i, filter_name in enumerate(self.filter_list)}
+        ...
 
     @property
     @abstractmethod

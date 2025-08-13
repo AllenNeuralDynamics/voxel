@@ -1,8 +1,9 @@
 import time
 from datetime import datetime
 from pathlib import Path
-from collections.abc import Iterator
+from collections.abc import Iterator, Generator
 from typing import Any
+import contextlib
 import ruamel.yaml
 import numpy as np
 import inflection
@@ -20,6 +21,7 @@ from qtpy.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -75,7 +77,7 @@ class ExASPIMInstrumentView(InstrumentView):
         self.filter_wheel_widget: QWidget | None = None
         self.grab_frames_worker: WorkerBase = create_worker(lambda: None)
 
-        super().__init__(instrument, config_path, log_level)
+        super().__init__(instrument, config_path, log_level)  # type: ignore
         # other setup taken care of in base instrumentview class
         self.setup_flip_mount_widgets()
 
@@ -192,7 +194,8 @@ class ExASPIMInstrumentView(InstrumentView):
 
         stage_axes_widget = create_widget("V", *stage_widgets)
         stage_axes_widget.setContentsMargins(0, 0, 0, 0)
-        stage_axes_widget.layout().setSpacing(6)
+        if stage_axes_widget.layout() is not None:
+            stage_axes_widget.layout().setSpacing(6)  # type: ignore
 
         stage_scroll = QScrollArea()
         stage_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -217,7 +220,9 @@ class ExASPIMInstrumentView(InstrumentView):
             layout.addWidget(create_widget("H", label, widget))
             laser_widgets.append(layout)
         self.laser_widget = create_widget("V", *laser_widgets)
-        self.laser_widget.layout().setSpacing(12)
+        laser_layout = self.laser_widget.layout()
+        if laser_layout is not None:
+            laser_layout.setSpacing(12)
         self.viewer.window.add_dock_widget(self.laser_widget, area="bottom", name="Lasers")
 
     def setup_channel_widget(self) -> None:
@@ -229,7 +234,7 @@ class ExASPIMInstrumentView(InstrumentView):
         label = QLabel("Active Channel")
         laser_combo_box = QComboBox(widget)
         laser_combo_box.addItems(self.channels.keys())
-        laser_combo_box.currentTextChanged.connect(lambda value: self.change_channel(value))
+        laser_combo_box.currentTextChanged.connect(lambda value: self.change_channel(True, value))
         laser_combo_box.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         laser_combo_box.setCurrentIndex(0)  # initialize to first channel index
         self.laser_combo_box = laser_combo_box
@@ -240,13 +245,18 @@ class ExASPIMInstrumentView(InstrumentView):
         widget.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
         self.viewer.window.add_dock_widget(widget, area="bottom", name="Channels")
 
-    def change_channel(self, channel: str) -> None:
+    def change_channel(self, checked: bool, channel: str) -> None:
         """
         Change the livestream channel.
 
+        :param checked: Whether the channel is checked
+        :type checked: bool
         :param channel: Name of the channel
         :type channel: str
         """
+        if not checked:  # Only process when channel is selected
+            return
+
         if self.grab_frames_worker.is_running:  # livestreaming is going
             for old_laser_name in self.channels[self.livestream_channel].get("lasers", []):
                 self.log.info(f"Disabling laser {old_laser_name}")
@@ -275,7 +285,7 @@ class ExASPIMInstrumentView(InstrumentView):
     @thread_worker
     def grab_frames(
         self, camera_name: str, frames: int | float = float("inf")
-    ) -> Iterator[tuple[list[np.ndarray], str]]:
+    ) -> Generator[tuple[list[np.ndarray], str], None, None]:
         """
         Grab frames from camera
         :param frames: how many frames to take
@@ -318,6 +328,10 @@ class ExASPIMInstrumentView(InstrumentView):
                     layer.scale = (pixel_size_um, pixel_size_um)
                     layer.translate = (-x_center_um, y_center_um)
                 else:
+                    # Store current camera state BEFORE adding image to prevent auto-fit
+                    current_zoom = self.viewer.camera.zoom
+                    current_center = self.viewer.camera.center
+
                     contrast_limits = self.contrast_limits[self.livestream_channel]
                     layer = self.viewer.add_image(
                         image,
@@ -329,6 +343,15 @@ class ExASPIMInstrumentView(InstrumentView):
                     )
                     # connect contrast limits event
                     layer.events.contrast_limits.connect(self.viewer_contrast_limits)
+
+                    # Restore camera view to prevent window resizing, except for very first image
+                    if hasattr(self, "viewer_initialized") and self.viewer_initialized:
+                        self.viewer.camera.zoom = current_zoom
+                        self.viewer.camera.center = current_center
+                    else:
+                        # For the first image, let it fit but mark as initialized
+                        self.viewer_initialized = True
+
                     # only reset state if there is a previous layer, otherwise pass
                     if self.previous_layer:
                         self.viewer.camera.zoom = self.viewer_state["zoom"]
@@ -468,7 +491,58 @@ class ExASPIMInstrumentView(InstrumentView):
 
     def toggle_live_button(self, camera_name: str) -> None:
         """Toggle live button state for the given camera."""
-        pass
+        # Find the live button for this camera
+        if camera_name in self.camera_widgets:
+            camera_widget = self.camera_widgets[camera_name]
+            live_button = getattr(camera_widget, "live_button", None)
+
+            if live_button is not None:
+                # Use button text to determine current state, not worker state
+                current_text = live_button.text()
+
+                if current_text == "Live":
+                    # Change to Stop button and start live view
+                    self.set_button_to_stop_state(live_button, camera_name)
+                    self.setup_live(camera_name)
+                else:
+                    # Change to Live button and stop live view
+                    self.set_button_to_live_state(live_button, camera_name)
+                    self.stop_live_view(camera_name)
+
+    def set_button_to_stop_state(self, live_button, camera_name: str) -> None:
+        """Set button to Stop state."""
+        live_button.setText("Stop")
+        style = self.style()
+        if style is not None:
+            live_button.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MediaStop))
+        # Reconnect to stop functionality
+        with contextlib.suppress(TypeError):
+            live_button.pressed.disconnect()
+        live_button.pressed.connect(lambda: self.toggle_live_button(camera_name))
+
+    def set_button_to_live_state(self, live_button, camera_name: str) -> None:
+        """Set button to Live state."""
+        live_button.setText("Live")
+        style = self.style()
+        if style is not None:
+            live_button.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        # Reconnect to live functionality
+        with contextlib.suppress(TypeError):
+            live_button.pressed.disconnect()
+        live_button.pressed.connect(lambda: self.toggle_live_button(camera_name))
+
+    def stop_live_view(self, camera_name: str) -> None:
+        """Stop the live view for the given camera."""
+        if hasattr(self.grab_frames_worker, "is_running") and self.grab_frames_worker.is_running:
+            # Stop the camera first
+            if camera_name in self.instrument.cameras:
+                try:
+                    self.instrument.cameras[camera_name].stop()
+                except Exception as e:
+                    self.log.warning(f"Error stopping camera {camera_name}: {e}")
+
+            # Then quit the worker - dismantle_live will be called by the finished signal
+            self.grab_frames_worker.quit()
 
     def enable_alignment_mode(self) -> None:
         """
@@ -529,10 +603,15 @@ class ExASPIMInstrumentView(InstrumentView):
             self.log.info(f"Enabling laser {laser}")
             self.instrument.lasers[laser].enable()
             for child in self.laser_widget.children()[1::]:  # skip first child widget
-                laser_name = child.children()[1].text()  # first child is label widget
-                if laser != laser_name:
-                    child.setDisabled(True)
-                    child.children()[2].setDisabled(True)
+                if hasattr(child, "children") and len(child.children()) > 1:
+                    label_widget = child.children()[1]
+                    if hasattr(label_widget, "text"):
+                        laser_name = label_widget.text()  # type: ignore
+                        if laser != laser_name:
+                            if hasattr(child, "setDisabled"):
+                                child.setDisabled(True)  # type: ignore
+                            if len(child.children()) > 2 and hasattr(child.children()[2], "setDisabled"):
+                                child.children()[2].setDisabled(True)  # type: ignore
 
         for filter in self.channels[self.livestream_channel].get("filters", []):
             self.log.info(f"Enabling filter {filter}")
@@ -594,15 +673,20 @@ class ExASPIMInstrumentView(InstrumentView):
 
         for laser in self.channels[self.livestream_channel].get("lasers", []):
             for child in self.laser_widget.children()[1::]:  # skip first child widget
-                laser_name = child.children()[1].text()  # first child is label widget
-                if laser != laser_name:
-                    child.setDisabled(False)
-                    child.children()[2].setDisabled(False)
+                if hasattr(child, "children") and len(child.children()) > 1:
+                    label_widget = child.children()[1]
+                    if hasattr(label_widget, "text"):
+                        laser_name = label_widget.text()  # type: ignore
+                        if laser != laser_name:
+                            if hasattr(child, "setDisabled"):
+                                child.setDisabled(False)  # type: ignore
+                            if len(child.children()) > 2 and hasattr(child.children()[2], "setDisabled"):
+                                child.children()[2].setDisabled(False)  # type: ignore
 
         # TODO fix this, messy way to figure out FOV dimensions from camera properties
-        if hasattr(self.instrument, "indicator_lights"):
-            first_indicator_light_key = list(self.instrument.indicator_lights.keys())[0]
-            self.instrument.indicator_lights[first_indicator_light_key].disable()
+        # if hasattr(self.instrument, "indicator_lights"):
+        #     first_indicator_light_key = list(self.instrument.indicator_lights.keys())[0]
+        #     self.instrument.indicator_lights[first_indicator_light_key].disable()
 
         if self.filter_wheel_widget is not None:
             self.filter_wheel_widget.setDisabled(False)  # enable filter wheel widget
@@ -617,7 +701,14 @@ class ExASPIMInstrumentView(InstrumentView):
         if self.snapshot_button is not None:
             self.snapshot_button.setDisabled(False)  # enable crosshairs button
 
-    def close(self) -> None:
+        # Reset the live button to "Live" state directly
+        if camera_name in self.camera_widgets:
+            camera_widget = self.camera_widgets[camera_name]
+            live_button = getattr(camera_widget, "live_button", None)
+            if live_button is not None:
+                self.set_button_to_live_state(live_button, camera_name)
+
+    def close(self) -> bool:
         """
         Close instruments and end threads
         """
@@ -640,6 +731,7 @@ class ExASPIMInstrumentView(InstrumentView):
             except AttributeError:
                 self.log.debug(f"{device_name} does not have close function")
         self.instrument.close()
+        return True
 
 
 class ExASPIMAcquisitionView(AcquisitionView):
@@ -690,19 +782,20 @@ class ExASPIMAcquisitionView(AcquisitionView):
         # TODO fix this, messy way to figure out FOV dimensions from camera properties
         first_camera_key = list(self.instrument.cameras.keys())[0]
         camera = self.instrument.cameras[first_camera_key]
-        fov_height_mm = camera.fov_height_mm
-        fov_width_mm = camera.fov_width_mm
+        fov_height_mm = float(camera.fov_height_mm)
+        fov_width_mm = float(camera.fov_width_mm)
         camera_rotation = self.config["instrument_view"]["properties"].get("camera_rotation_deg", 0)
         if camera_rotation in [-270, -90, 90, 270]:
-            fov_dimensions = [fov_height_mm, fov_width_mm, 0]
+            fov_dimensions: list[float] = [fov_height_mm, fov_width_mm, 0.0]
         else:
-            fov_dimensions = [fov_width_mm, fov_height_mm, 0]
+            fov_dimensions: list[float] = [fov_width_mm, fov_height_mm, 0.0]
 
         acquisition_widget = QSplitter(Qt.Orientation.Vertical)
         acquisition_widget.setChildrenCollapsible(False)
 
         # create volume plan
         self.volume_plan = VolumePlanWidget(
+            instrument=self.instrument,
             limits=limits,
             fov_dimensions=fov_dimensions,
             coordinate_plane=self.coordinate_plane,

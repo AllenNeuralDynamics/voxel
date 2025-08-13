@@ -19,12 +19,12 @@ class DAQFilterWheel(BaseFilterWheel):
     FilterWheel class for handling simulated filter wheel devices.
     """
 
-    def __init__(self, filters: dict[str, int], ports: dict, daq: NIDAQ) -> None:
+    def __init__(self, filters: list[str], ports: dict, daq: NIDAQ) -> None:
         """
         Initialize the FilterWheel object.
 
-        :param filters: Dictionary of filters
-        :type filters: dict
+        :param filters: List of filter names
+        :type filters: list[str]
         :param ports: Dictionary of filter ports
         :type ports: dict
         :param daq: NI-DAQmx device
@@ -34,7 +34,7 @@ class DAQFilterWheel(BaseFilterWheel):
         self.id = daq.id
         self.dev = daq
         self.ports = ports
-        self._filters = filters
+        self._filters: dict[str, int] = {filter_name: i for i, filter_name in enumerate(filters)}
         for filter in filters:
             FILTERS.append(filter)
             if filter not in list(ports.keys()):

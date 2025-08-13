@@ -11,18 +11,18 @@ class SimulatedFilterWheel(BaseFilterWheel):
     FilterWheel class for handling simulated filter wheel devices.
     """
 
-    def __init__(self, id: str, filters: dict[str, int]) -> None:
+    def __init__(self, id: str, filters: list[str]) -> None:
         """
         Initialize the FilterWheel object.
 
         :param id: Filter wheel ID
         :type id: str
-        :param filters: Dictionary of filters
-        :type filters: dict
+        :param filters: List of filter names
+        :type filters: list[str]
         """
         self.log = VoxelLogging.get_logger(object=self)
         self.id = id
-        self._filters = filters
+        self._filters: dict[str, int] = {filter_name: i for i, filter_name in enumerate(filters)}
         # force homing of the wheel to first position
         self.filter = next(iter(filters))
 

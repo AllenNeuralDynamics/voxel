@@ -33,6 +33,7 @@ dependencies = [
     "view @ git+https://github.com/AllenNeuralDynamics/view.git",
     "aind_data_schema >= 0.26.7",
     "pyqt6>=6.9.1",
+    "rich>=14.1.0",
 ]
 
 [tool.uv.sources]
@@ -43,7 +44,7 @@ dependencies = [
 "Homepage" = "https://github.com/AllenNeuralDynamics/exaspim-control"
 
 [project.scripts]
-"exaspim" = "exaspim_control.app:cli"
+"exaspim" = "exaspim_control.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]

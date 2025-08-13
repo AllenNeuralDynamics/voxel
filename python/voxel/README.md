@@ -217,7 +217,7 @@ devices can be accessed with. The above example uses all simulated device
 classes.
 
 ```python
-from voxel.instruments.instrument import Instrument
+from voxel_classic.instruments.instrument import Instrument
 
 instrument = Instrument(config_path='example.yaml')
 instrument.cameras['vp-151mx camera']
