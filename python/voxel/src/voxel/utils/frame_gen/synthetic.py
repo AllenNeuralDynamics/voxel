@@ -99,7 +99,7 @@ class CheckeredGenerator(FrameGenerator):
         max_val = np.iinfo(self.dtype).max
 
         # Calculate all checker sizes for the batch
-        t = np.linspace(0, 1, num=nframes)
+        t = np.linspace(0, 1, num=nframes, retstep=False)
         checker_sizes = self.initial_size + (self.final_size - self.initial_size) * t
         checker_sizes = np.maximum(1, np.round(checker_sizes)).astype(np.int32)
 

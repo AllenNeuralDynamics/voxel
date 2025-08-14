@@ -126,7 +126,7 @@ def generate_multi_point_waveform(
     points: list[list[float]],
     voltage_range: VoltageRange,
 ) -> np.ndarray:
-    t_interp = np.linspace(0, 1, n, endpoint=False)
+    t_interp = np.linspace(0, 1, n, endpoint=False, retstep=False)
 
     # Unzip points for interpolation
     t_points, v_points_norm = zip(*points)

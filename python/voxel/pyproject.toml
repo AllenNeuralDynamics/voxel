@@ -97,16 +97,3 @@ voxel-remote = "voxel.startup.remote:main"
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]
 build-backend = "uv_build"
-
-[tool.tach]
-source_roots = ["**/src"]
-exclude = ["**/sdk/"]
-external.rename = [
-    "ruamel:ruamel_yaml",
-    "serial:pyserial",
-    "pylablib:pylablib_lightweight",
-    "pyvisa:pyvisa_py",
-    "cv2:opencv_python",
-    "skimage:scikit_image",
-    "PyImarisWriter:pyimariswriter",
-]

@@ -2,7 +2,6 @@
 name = "exaspim-control"
 version = "0.1.0"
 description = "Control software for the ExaSPIM microscope"
-# requires-python = ">=3.10, <3.12"
 requires-python = ">=3.12, <3.13"
 authors = [
     { name = "Micah Woodard", email = "micah.woodard@alleninstitute.org" },
@@ -30,14 +29,12 @@ keywords = [
 
 dependencies = [
     "voxel-classic",
-    "view @ git+https://github.com/AllenNeuralDynamics/view.git",
+    "voxel-qt-widgets",
     "aind_data_schema >= 0.26.7",
     "pyqt6>=6.9.1",
     "rich>=14.1.0",
+    "napari>=0.6.3",
 ]
-
-[tool.uv.sources]
-"voxel-classic" = { workspace = true }
 
 
 [project.urls]

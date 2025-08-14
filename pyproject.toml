@@ -30,4 +30,19 @@ members = [
 ]
 
 [tool.uv.sources]
-"view" = { workspace = true }
+"voxel" = { workspace = true }
+"voxel-qt-widgets" = { workspace = true }
+"voxel-classic" = { workspace = true }
+
+[tool.tach]
+source_roots = ["**/src"]
+exclude = ["**/sdk/"]
+external.rename = [
+    "ruamel:ruamel_yaml",
+    "serial:pyserial",
+    "pylablib:pylablib_lightweight",
+    "pyvisa:pyvisa_py",
+    "cv2:opencv_python",
+    "skimage:scikit_image",
+    "PyImarisWriter:pyimariswriter",
+]

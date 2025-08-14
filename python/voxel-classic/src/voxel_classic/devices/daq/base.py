@@ -7,40 +7,35 @@ class BaseDAQ(VoxelDevice):
     """Base class for DAQ devices."""
 
     @abstractmethod
-    def add_task(self, task_type: str, pulse_count: int | None = None) -> None:
+    def add_ao_task(self) -> None:
         """
         Add a task to the DAQ.
+        """
+        pass
 
-        :param task_type: Type of the task ('ao', 'co', 'do')
-        :type task_type: str
+    @abstractmethod
+    def add_co_task(self, pulse_count: int | None = None) -> None:
+        """
+        Add a task to the DAQ.
         :param pulse_count: Number of pulses for the task, defaults to None
         :type pulse_count: int, optional
         """
         pass
 
     @abstractmethod
-    def generate_waveforms(self, task_type: str, wavelength: str) -> None:
+    def generate_waveforms(self, wavelength: str) -> None:
         """
         Generate waveforms for the task.
 
-        :param task_type: Type of the task ('ao', 'do')
-        :type task_type: str
-        :param wavelength: Wavelength for the waveform
+        :param wavelength: Wavelength for the waveform (channel)
         :type wavelength: str
         """
         pass
 
     @abstractmethod
-    def write_ao_waveforms(self) -> None:
+    def write_waveforms(self) -> None:
         """
-        Write analog output waveforms to the DAQ.
-        """
-        pass
-
-    @abstractmethod
-    def write_do_waveforms(self) -> None:
-        """
-        Write digital output waveforms to the DAQ.
+        Write output waveforms to the DAQ.
         """
         pass
 

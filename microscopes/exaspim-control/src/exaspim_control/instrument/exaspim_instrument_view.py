@@ -6,8 +6,9 @@ import time
 from collections.abc import Generator, Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
+from exaspim_control.instrument.base import ChannelInfo
 import inflection
 import napari
 import numpy as np
@@ -36,18 +37,19 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 from ruamel.yaml import RoundTripRepresenter
-from view.widgets.base_device_widget import BaseDeviceWidget, create_widget, disable_button, scan_for_properties
-from view.widgets.device_widgets.camera_widget import CameraWidget
-from view.widgets.device_widgets.filter_wheel_widget import FilterWheelWidget
-from view.widgets.device_widgets.flip_mount_widget import FlipMountWidget
-from view.widgets.device_widgets.laser_widget import LaserWidget
-from view.widgets.device_widgets.ni_widget import NIWidget
-from view.widgets.device_widgets.stage_widget import StageWidget
+from voxel_classic.devices.daq.ni import NIDAQ
+from voxel_qt_widgets.base_device_widget import BaseDeviceWidget, create_widget, disable_button, scan_for_properties
+from voxel_qt_widgets.device_widgets.camera_widget import CameraWidget
+from voxel_qt_widgets.device_widgets.filter_wheel_widget import FilterWheelWidget
+from voxel_qt_widgets.device_widgets.flip_mount_widget import FlipMountWidget
+from voxel_qt_widgets.device_widgets.laser_widget import LaserWidget
+from voxel_qt_widgets.device_widgets.ni_widget import NIWidget
+from voxel_qt_widgets.device_widgets.stage_widget import StageWidget
 from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.base import VoxelDevice
 from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 
-from exaspim_control.exa_spim_instrument import ExASPIM
+from exaspim_control.instrument.exaspim_instrument import ExASPIM
 
 
 class NonAliasingRTRepresenter(RoundTripRepresenter):
@@ -67,17 +69,8 @@ class NonAliasingRTRepresenter(RoundTripRepresenter):
         return True
 
 
-class ChannelInfo(TypedDict):
-    """TypedDict for channel information."""
-
-    lasers: list[str]
-    cameras: list[str]
-    focusing_stages: list[str]
-    filters: list[str]
-
-
 class ExASPIMInstrumentView(QWidget):
-    """Class for handling ExASPIM instrument view."""
+    """Class for handling ExASPIM instrument voxel_qt_widgets."""
 
     snapshotTaken = Signal((np.ndarray, list))
     contrastChanged = Signal((np.ndarray, list))
@@ -121,8 +114,8 @@ class ExASPIMInstrumentView(QWidget):
         # Right
         self.camera_widgets: dict[str, CameraWidget] = self._create_camera_widgets()
         # Initialize the live_button state
-        for camera_name in self.camera_widgets:
-            self._set_camera_live_button_to_start(camera_name)
+        for camera_widget in self.camera_widgets.values():
+            self._set_camera_live_button_to_start(camera_widget)
         self.viewer.window.add_dock_widget(
             self._stack_device_widgets(device_widgets=self.camera_widgets),
             area="right",
@@ -163,46 +156,6 @@ class ExASPIMInstrumentView(QWidget):
 
         # add undocked widget so everything closes together
         self._add_undocked_widgets()
-
-        # Set app events
-        app = QApplication.instance()
-
-        def _update_config_on_quit() -> None:
-            """
-            Add functionality to close function to save device properties to instrument config
-            """
-
-            msgBox = QMessageBox()
-            msgBox.setIcon(QMessageBox.Icon.Question)
-            msgBox.setText(
-                f"Do you want to update the instrument configuration file at {self.config_save_to} "
-                f"to current instrument state?"
-            )
-            msgBox.setWindowTitle("Updating Configuration")
-            msgBox.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
-            save_elsewhere = QPushButton("Change Directory")
-            msgBox.addButton(save_elsewhere, QMessageBox.ButtonRole.DestructiveRole)
-
-            def _select_directory(pressed: bool):
-                fname = QFileDialog()
-                folder = fname.getSaveFileName(directory=str(self.instrument.config_path))
-                if folder[0] != "":  # user pressed cancel
-                    msgBox.setText(
-                        f"Do you want to update the instrument configuration file at {folder[0]} to current instrument state?"
-                    )
-                    self.config_save_to = Path(folder[0])
-
-            save_elsewhere.pressed.connect(lambda: _select_directory(True))
-
-            return_value = msgBox.exec()
-            if return_value == QMessageBox.StandardButton.Ok:
-                self.instrument.update_current_state_config()
-                self.instrument.save_config(self.config_save_to)
-
-        if isinstance(app, QApplication):
-            app.aboutToQuit.connect(_update_config_on_quit)
-            self.config_save_to = self.instrument.config_path
-            app.lastWindowClosed.connect(self.close)
 
         # Configure Viewer
         self.intensity_min = self.config["instrument_view"]["properties"]["intensity_min"]
@@ -270,16 +223,50 @@ class ExASPIMInstrumentView(QWidget):
         for key in self.instrument.channels:
             self.contrast_limits[key] = [self.intensity_min, self.intensity_max]
 
+        # Set app events
+        app = QApplication.instance()
+
+        def _update_config_on_quit() -> None:
+            """
+            Add functionality to close function to save device properties to instrument config
+            """
+
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Icon.Question)
+            msgBox.setText(
+                f"Do you want to update the instrument configuration file at {self._config_save_path} "
+                f"to current instrument state?"
+            )
+            msgBox.setWindowTitle("Updating Configuration")
+            msgBox.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+            save_elsewhere = QPushButton("Change Directory")
+            msgBox.addButton(save_elsewhere, QMessageBox.ButtonRole.DestructiveRole)
+
+            def _select_directory(pressed: bool):
+                fname = QFileDialog()
+                folder = fname.getSaveFileName(directory=str(self.instrument.config_path))
+                if folder[0] != "":  # user pressed cancel
+                    msgBox.setText(
+                        f"Do you want to update the instrument configuration file at {folder[0]} to current instrument state?"
+                    )
+                    self._config_save_path = Path(folder[0])
+
+            save_elsewhere.pressed.connect(lambda: _select_directory(True))
+
+            return_value = msgBox.exec()
+            if return_value == QMessageBox.StandardButton.Ok:
+                self.instrument.update_current_state_config()
+                self.instrument.save_config(self._config_save_path)
+
+        if isinstance(app, QApplication):
+            app.aboutToQuit.connect(_update_config_on_quit)
+            self._config_save_path = self.instrument.config_path
+            app.lastWindowClosed.connect(self.close)
+
     @property
     def active_channel(self) -> ChannelInfo | None:
         """Get the active channel information."""
-        if (channel := self.instrument.channels.get(self.livestream_channel)) is not None:
-            return ChannelInfo(
-                lasers=channel.get("lasers", []),
-                cameras=channel.get("cameras", []),
-                focusing_stages=channel.get("focusing_stages", []),
-                filters=channel.get("filters", []),
-            )
+        return self.instrument.channel_infos.get(self.livestream_channel)
 
     def _create_laser_widgets(self) -> tuple[QWidget, dict[str, LaserWidget]]:
         laser_widgets = {}
@@ -398,20 +385,15 @@ class ExASPIMInstrumentView(QWidget):
         def _change_channel(channel: str):
             chan = self.instrument.channels.get(channel)
             if not self.grab_frames_worker.is_running and chan is not None:  # livestreaming is not going
-                chan_filters = chan.get("filters", [])
+                for daq in self.instrument.daqs.values():
+                    daq.close_acq_tasks()  # incase shared with filter_wheel_task
+
                 # change filter
-                for filter in chan_filters:
-                    self.log.info(f"Enabling filter {filter}")
+                for filter in chan.get("filters", []):
                     self.instrument.filters[filter].enable()
 
-                for daq_name, daq in self.instrument.daqs.items():
-                    self.log.info(f"Writing new waveforms for {daq_name}")
-                    if daq.ao_task is not None:
-                        daq.generate_waveforms("ao", self.livestream_channel)
-                        daq.write_ao_waveforms(rereserve_buffer=False)
-                    if daq.do_task is not None:
-                        daq.generate_waveforms("do", self.livestream_channel)
-                        daq.write_do_waveforms(rereserve_buffer=False)
+                for daq in self.instrument.daqs.values():
+                    self._configure_daq_waveforms(daq)
 
                 self.livestream_channel = channel
 
@@ -544,6 +526,15 @@ class ExASPIMInstrumentView(QWidget):
                 if getattr(widget, "property_widgets", False) == {}:
                     undocked_widget.setVisible(False)
 
+    def _configure_daq_waveforms(self, daq: NIDAQ):
+        if daq.tasks.get("ao_task") is not None:
+            daq.add_ao_task()
+        daq.generate_waveforms(self.livestream_channel)
+        daq.write_waveforms()
+        if daq.tasks.get("co_task") is not None:
+            pulse_count = daq.tasks["co_task"]["timing"].get("pulse_count", None)
+            daq.add_co_task(pulse_count)
+
     def _setup_live(self, frames: int | None = None) -> None:
         """
         Set up for either livestream or snapshot
@@ -562,20 +553,18 @@ class ExASPIMInstrumentView(QWidget):
                 f"Cannot start live view for channel {self.livestream_channel} - camera {camera_name} not found"
             )
             return
+        camera_widget = self.camera_widgets.get(camera_name, None)
+        if not camera_widget:
+            self.log.error(
+                f"Cannot start live view for channel {self.livestream_channel} - camera widget {camera_name} not found"
+            )
+            return
         chan_lasers = self.instrument.channels[self.livestream_channel].get("lasers", [])
         chan_filters = self.instrument.channels[self.livestream_channel].get("filters", [])
         self.log.info(
             f"Starting live view for channel {self.livestream_channel}: "
             f"camera: {camera_name} lasers: {chan_lasers} filters: {chan_filters}"
         )
-
-        layer_list = self.viewer.layers
-
-        layer_name = self.livestream_channel
-
-        # check if switching channels
-        if layer_list and layer_name not in layer_list:
-            self.viewer.layers.clear()
 
         if self.grab_frames_worker.is_running:
             self.log.warning("Cannot start live view: grab frames worker is already running.")
@@ -587,14 +576,59 @@ class ExASPIMInstrumentView(QWidget):
                 self._set_camera_live_button_to_stop(wgt)
             return
 
+        layer_list = self.viewer.layers
+
+        layer_name = self.livestream_channel
+
+        # check if switching channels
+        if layer_list and layer_name not in layer_list:
+            self.viewer.layers.clear()
+
         def _frame_grabber_generator() -> Generator[tuple[list[np.ndarray], str], None, None]:
+            camera_btns = [
+                camera_widget.snapshot_button,
+                camera_widget.alignment_button,
+                camera_widget.crosshairs_button,
+            ]
+            for btn in camera_btns + [camera_widget.live_button]:
+                btn.setDisabled(True)  # disable buttons while starting
+                btn.setEnabled(False)
+
             camera_device.prepare()
             camera_device.start(frames)
+
+            for name, laser_device in self.instrument.lasers.items():
+                laser_device.enable() if name in chan_lasers else laser_device.disable()
+
+            for name, wgt in self.laser_widgets.items():
+                wgt.setEnabled(True) if name in chan_lasers else wgt.setEnabled(False)
+
+            if self.laser_combo_box is not None:
+                self.laser_combo_box.setDisabled(True)  # disable channel widget
+
+            for wgt in self.filter_wheel_widgets.values():  # disable filter wheel widgets
+                wgt.setDisabled(True)
+
+            for btn in camera_btns + [camera_widget.live_button]:
+                btn.setEnabled(True)
+                btn.setDisabled(False)
+            self._set_camera_live_button_to_stop(camera_widget)  # enables live button after starting
+
+            for light in self.instrument.indicator_lights:
+                self.log.info(f"Enabling indicator light {light}")
+                self.instrument.indicator_lights[light].enable()
+
+            for daq in self.instrument.daqs.values():
+                self._configure_daq_waveforms(daq)
+                daq.start()
+
+            self.log.info("Grabber setup complete - beginning to collect frames")
+
             total_frames = frames if frames is not None else float("inf")
             i = 0
             while i < total_frames:  # while loop since frames can == inf
                 time.sleep(0.5)
-                multiscale = [self.instrument.cameras[camera_name].grab_frame()]
+                multiscale = [camera_device.grab_frame()]
                 for binning in range(1, self.resolution_levels):
                     downsampled_frame = multiscale[-1][::2, ::2]
                     multiscale.append(downsampled_frame)
@@ -603,60 +637,10 @@ class ExASPIMInstrumentView(QWidget):
 
         self.grab_frames_worker = create_worker(_frame_grabber_generator)
 
-        if frames == 1:  # pass in optional argument that this image is a snapshot
-            if hasattr(self.grab_frames_worker, "yielded"):
-                self.grab_frames_worker.yielded.connect(lambda args: self._update_layer(args, snapshot=True))
-        else:
-            if hasattr(self.grab_frames_worker, "yielded"):
-                self.grab_frames_worker.yielded.connect(lambda args: self._update_layer(args))
-
+        self.grab_frames_worker.yielded.connect(lambda args: self._update_layer(args, snapshot=frames == 1))
         self.grab_frames_worker.finished.connect(camera_device.stop)
         self.grab_frames_worker.start()
-
-        for k, wgt in self.camera_widgets.items():
-            self._set_camera_live_button_to_stop(wgt)
-
-        if (camera_widget := self.camera_widgets.get(camera_name)) is not None:
-            camera_widget.snapshot_button.setDisabled(True)
-            camera_widget.crosshairs_button.setDisabled(True)
-            camera_widget.alignment_button.setDisabled(True)
-
-        for k, v in self.instrument.lasers.items():
-            if k in chan_lasers:
-                self.log.info(f"Enabling laser {k}")
-                v.enable()
-                if (wgt := self.laser_widgets.get(k)) is not None:
-                    wgt.setEnabled(True)
-            else:
-                self.log.info(f"Disabling laser {k}")
-                v.disable()
-                if (wgt := self.laser_widgets.get(k)) is not None:
-                    wgt.setEnabled(False)
-
-        if self.laser_combo_box is not None:
-            self.laser_combo_box.setDisabled(True)  # disable channel widget
-
-        for wgt in self.filter_wheel_widgets.values():  # disable filter wheel widgets
-            wgt.setDisabled(True)
-
-        for light in self.instrument.indicator_lights:
-            self.log.info(f"Enabling indicator light {light}")
-            self.instrument.indicator_lights[light].enable()
-
-        for daq in self.instrument.daqs.values():
-            if daq.tasks.get("ao_task") is not None:
-                daq.add_task("ao")
-                daq.generate_waveforms("ao", self.livestream_channel)
-                daq.write_ao_waveforms()
-            # if daq.tasks.get("do_task") is not None:
-            #     daq.add_task("do")
-            #     daq.generate_waveforms("do", self.livestream_channel)
-            #     daq.write_do_waveforms()
-            if daq.tasks.get("co_task") is not None:
-                pulse_count = daq.tasks["co_task"]["timing"].get("pulse_count", None)
-                daq.add_task("co", pulse_count)
-
-            daq.start()
+        self.log.info(f"Channel {self.livestream_channel} live stream grabber started")
 
     def _dismantle_live(self) -> None:
         """Dismantle live view for the specified camera."""
@@ -664,28 +648,19 @@ class ExASPIMInstrumentView(QWidget):
         if chan is None:
             self.log.error("Cannot dismantle live view: active channel is None.")
             return
-        # camera_name = self.instrument.channels
+
+        camera_widgets: dict[str, CameraWidget] = {
+            name: self.camera_widgets[name] for name in chan["cameras"] if name in self.camera_widgets
+        }
+        for wgt in camera_widgets.values():
+            for btn in [wgt.live_button, wgt.snapshot_button, wgt.alignment_button, wgt.crosshairs_button]:
+                btn.setDisabled(True)  # disable buttons while stopping
+                btn.setEnabled(False)
+
         self.grab_frames_worker.quit()
 
-        time.sleep(0.25)
-        while self.grab_frames_worker.is_running:
-            time.sleep(0.25)
-            self.log.warning("Dismantle Live is waiting for grab_frames_worker to finish...")
-
-        # self.instrument.cameras[camera_name].stop()
         for daq in self.instrument.daqs.values():
-            # wait for daq tasks to finish - prevents devices from stopping in
-            # unsafe state, i.e. lasers still on
-            if (co := daq.co_task) is not None:
-                co.stop()
-                co.close()
-
-            # sleep to allow last ao to play with 10% buffer
-            time.sleep(1.0 / daq.co_frequency_hz * 1.1)
-
-            if (ao := daq.ao_task) is not None:
-                ao.stop()
-                ao.close()
+            daq.stop_acq_tasks()
 
         for laser in self.instrument.lasers.values():
             laser.disable()
@@ -693,13 +668,6 @@ class ExASPIMInstrumentView(QWidget):
         for name, light in self.instrument.indicator_lights.items():
             light.disable()
             self.log.info(f"Disabling indicator light {name}")
-
-        for camera_name in chan["cameras"]:
-            self._set_camera_live_button_to_start(camera_name)
-            if (camera_widget := self.camera_widgets.get(camera_name)) is not None:
-                camera_widget.snapshot_button.setDisabled(False)
-                camera_widget.crosshairs_button.setDisabled(False)
-                camera_widget.alignment_button.setDisabled(False)
 
         for wgt in self.laser_widgets.values():
             wgt.setEnabled(True)
@@ -711,23 +679,34 @@ class ExASPIMInstrumentView(QWidget):
         for wgt in self.filter_wheel_widgets.values():
             wgt.setDisabled(False)
 
-    def _set_camera_live_button_to_start(self, camera_name: str) -> None:
+        for camera_widget in self.camera_widgets.values():
+            self._set_camera_live_button_to_start(camera_widget)  # re-enable live button after stopping
+            for btn in [
+                camera_widget.snapshot_button,
+                camera_widget.crosshairs_button,
+                camera_widget.alignment_button,
+            ]:
+                btn.setDisabled(False)
+                btn.setEnabled(True)
+
+    def _set_camera_live_button_to_start(self, camera_widget: CameraWidget) -> None:
         """
         Set the live button of the specified camera to the start state.
 
-        :param camera_name: Camera name
-        :type camera_name: str
+        :param camera_name: Camera widget
+        :type camera_name: CameraWidget
         """
-        if (camera_widget := self.camera_widgets.get(camera_name)) is not None:
-            live_btn = camera_widget.live_button
-            live_btn.setEnabled(True)
-            live_btn.setText("Live")
-            style = live_btn.style()
-            if style is not None:
-                start_icon = style.standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
-                live_btn.setIcon(start_icon)
-            live_btn.pressed.connect(lambda: disable_button(live_btn))
-            live_btn.pressed.connect(self._setup_live)
+        live_btn = camera_widget.live_button
+        live_btn.disconnect()
+
+        live_btn.setText("Live")
+        style = live_btn.style()
+        if style is not None:
+            start_icon = style.standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+            live_btn.setIcon(start_icon)
+
+        live_btn.pressed.connect(lambda: disable_button(live_btn))
+        live_btn.pressed.connect(self._setup_live)
 
     def _set_camera_live_button_to_stop(self, widget: CameraWidget) -> None:
         # configure live_button to stop
@@ -739,8 +718,8 @@ class ExASPIMInstrumentView(QWidget):
         if style is not None:
             stop_icon = style.standardIcon(QStyle.StandardPixmap.SP_MediaStop)
             live_btn.setIcon(stop_icon)
+
         live_btn.pressed.connect(lambda: disable_button(live_btn))
-        # live_btn.pressed.connect(self.grab_frames_worker.quit)
         live_btn.pressed.connect(self._dismantle_live)
 
     def _update_layer(self, args: tuple, snapshot: bool = False) -> None:

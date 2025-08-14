@@ -71,7 +71,7 @@ class ImagingRuntime:
 
     # --- Live View ---
     def _on_live_view_stop(self, frame_count: int):
-        self.log.info(f"Viewer has stopped live view. Frames captured: {frame_count}")
+        self.log.info(f"Viewer has stopped live voxel_qt_widgets. Frames captured: {frame_count}")
 
     def start_live_view(self, channel_name: str) -> None:
         self._active_live_viewer = LiveViewer(

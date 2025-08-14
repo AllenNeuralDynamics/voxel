@@ -50,6 +50,7 @@ dependencies = [
     "sympy>=1.12.1",
     "numpy>2.0.0",
     "siphash24>=1.7",
+    "voxel",
 ]
 
 

@@ -5,7 +5,7 @@ acquisition:
     init:
       metadata_dictionary:
         instrument_type: exaSPIM
-        subject_id: '123456'
+        subject_id: "123456"
         experimenter_full_name: [adam glaser]
         chamber_immersion:
           medium: other
@@ -16,7 +16,7 @@ acquisition:
       date_format: Year/Month/Day/Hour/Minute/Second
       name_specs:
         deliminator: _
-        format: [ instrument_type, subject_id ]
+        format: [instrument_type, subject_id]
   operations:
     vp-151mx:
       imaris:

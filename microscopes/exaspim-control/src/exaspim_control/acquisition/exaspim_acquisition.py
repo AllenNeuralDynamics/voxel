@@ -11,13 +11,13 @@ from pathlib import Path
 from threading import Event, Lock
 from typing import TYPE_CHECKING, Any
 
+from exaspim_control.instrument.exaspim_instrument import ExASPIM
 import inflection
 import numpy
 from gputools import get_device
 from psutil import virtual_memory
 from ruamel.yaml import YAML
-from voxel_classic.acquisition.acquisition import Acquisition
-from voxel_classic.instruments.instrument import Instrument
+from exaspim_control.acquisition.base import Acquisition
 from voxel_classic.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
 
 if TYPE_CHECKING:
@@ -30,7 +30,7 @@ DIRECTORY = Path(__file__).parent.resolve()
 class ExASPIMAcquisition(Acquisition):
     """Class for handling ExASPIM acquisition."""
 
-    def __init__(self, instrument: Instrument, config_filename: str | Path, yaml_handler: YAML, log_level="INFO"):
+    def __init__(self, instrument: ExASPIM, config_filename: str | Path, yaml_handler: YAML, log_level="INFO"):
         """
         Initialize the ExASPIMAcquisition object.
 
@@ -212,20 +212,14 @@ class ExASPIMAcquisition(Acquisition):
                     self.log.info("setting up daq")
                     if self.daq.tasks.get("ao_task", None) is not None:
                         self.log.info("adding ao task")
-                        self.daq.add_task("ao")
-                        self.log.info("generating ao waveforms")
-                        self.daq.generate_waveforms("ao", tile_channel)
-                        self.log.info("writing ao waveforms")
-                        self.daq.write_ao_waveforms()
-                    if self.daq.tasks.get("do_task", None) is not None:
-                        self.daq.add_task("do")
-                        self.daq.generate_waveforms("do", tile_channel)
-                        self.daq.write_do_waveforms()
+                        self.daq.add_ao_task()
+                    self.daq.generate_waveforms(tile_channel)
+                    self.daq.write_waveforms()
                     if self.daq.tasks.get("co_task", None) is not None:
                         pulse_count = (
                             self.writer.chunk_count_px
                         )  # number of pulses matched to number of frames in a chunk
-                        self.daq.add_task("co", pulse_count)
+                        self.daq.add_co_task(pulse_count)
 
                     # log daq values
                     for name, port_values in self.daq.tasks["ao_task"]["ports"].items():

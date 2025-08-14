@@ -73,7 +73,7 @@ class LiveViewer:
                 # Let's rely on the thread's finally block for the primary on_stop call.
                 pass
             return
-        self.log.info("Stopping live view...")
+        self.log.info("Stopping live voxel_qt_widgets...")
         self._live_view_halt_event.set()
 
         thread_to_join = self._live_view_thread

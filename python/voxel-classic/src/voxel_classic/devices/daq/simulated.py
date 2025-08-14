@@ -169,19 +169,12 @@ class SimulatedDAQ(BaseDAQ):
         """
         self._tasks = tasks_dict
 
-    def add_task(self, task_type: str, pulse_count: int | None = None) -> None:
+    def add_ao_task(self) -> None:
         """
         Add a task to the DAQ.
-
-        :param task_type: Type of the task ('ao', 'co', 'do')
-        :type task_type: str
-        :param pulse_count: Number of pulses for the task, defaults to None
-        :type pulse_count: int, optional
-        :raises ValueError: If the task type is invalid or if any parameter is out of range
         """
-        # check task type
-        if task_type not in ["ao", "co", "do"]:
-            raise ValueError(f"{task_type} must be one of {['ao', 'co', 'do']}")
+
+        task_type = "ao"
 
         task = self.tasks[f"{task_type}_task"]
 
@@ -199,42 +192,63 @@ class SimulatedDAQ(BaseDAQ):
 
         channel_options = {"ao": self.ao_physical_chans, "do": self.do_physical_chans, "co": self.co_physical_chans}
 
-        if task_type in ["ao", "do"]:
-            self._timing_checks(task_type)
+        self._timing_checks(task_type)
 
-            for port, specs in task["ports"].items():
-                # add channel to task
-                channel_port = specs["port"]
-                if f"{self.id}/{channel_port}" not in channel_options[task_type]:
-                    raise ValueError(f"{task_type} number must be one of {channel_options[task_type]}")
+        for port, specs in task["ports"].items():
+            # add channel to task
+            channel_port = specs["port"]
+            if f"{self.id}/{channel_port}" not in channel_options[task_type]:
+                raise ValueError(f"{task_type} number must be one of {channel_options[task_type]}")
 
-            total_time_ms = timing["period_time_ms"] + timing["rest_time_ms"]
+        total_time_ms = timing["period_time_ms"] + timing["rest_time_ms"]
 
-            if timing["trigger_mode"] == "on":
-                pass
-            else:
-                pass
+        if timing["trigger_mode"] == "on":
+            pass
+        else:
+            pass
 
-            # store the total task time
-            self.task_time_s[task["name"]] = total_time_ms / 1000
+        # store the total task time
+        self.task_time_s[task["name"]] = total_time_ms / 1000
 
-        else:  # co channel
-            if timing["frequency_hz"] < 0:
-                raise ValueError("frequency must be >0 Hz")
+        self.ao_task = SimulatedTask()
 
-            for channel_number in task["counters"]:
-                if f"{self.id}/{channel_number}" not in self.co_physical_chans:
-                    raise ValueError("co number must be one of %r." % self.co_physical_chans)
-            if timing["trigger_mode"] == "off":
-                pass
-            else:
-                raise ValueError("triggering not support for counter output tasks.")
+    def add_co_task(self, pulse_count: int | None = None) -> None:
+        """
+        Add a co task to the DAQ.
+        """
 
-            # store the total task time
-            self.task_time_s[task["name"]] = 1 / timing["frequency_hz"]
-            setattr(self, f"{task_type}_frequency_hz", timing["frequency_hz"])
+        task_type = "co"
 
-        setattr(self, f"{task_type}_task", SimulatedTask())  # set task attribute
+        task = self.tasks[f"{task_type}_task"]
+
+        if old_task := getattr(self, f"{task_type}_task", None):
+            if hasattr(old_task, "close"):
+                old_task.close()  # close old task
+            delattr(self, f"{task_type}_task")  # Delete previously configured tasks
+        timing = task["timing"]
+
+        for k, v in timing.items():
+            global_var = globals().get(k.upper(), {})
+            valid = list(global_var.keys()) if isinstance(global_var, dict) else global_var
+            if v not in valid and valid != []:
+                raise ValueError(f"{k} must be one of {valid}")
+
+        if timing["frequency_hz"] < 0:
+            raise ValueError("frequency must be >0 Hz")
+
+        for channel_number in task["counters"]:
+            if f"{self.id}/{channel_number}" not in self.co_physical_chans:
+                raise ValueError("co number must be one of %r." % self.co_physical_chans)
+        if timing["trigger_mode"] == "off":
+            pass
+        else:
+            raise ValueError("triggering not support for counter output tasks.")
+
+        # store the total task time
+        self.task_time_s[task["name"]] = 1 / timing["frequency_hz"]
+        self.co_frequency_hz = timing["frequency_hz"]
+
+        self.co_task = SimulatedTask()
 
     def _timing_checks(self, task_type: str) -> None:
         """
@@ -264,151 +278,146 @@ class SimulatedDAQ(BaseDAQ):
                                          <{getattr(self, f'{task_type}_max_rate')} Hz!"
             )
 
-    def generate_waveforms(self, task_type: str, wavelength: str) -> None:
+    def generate_waveforms(self, wavelength: str) -> None:
         """
         Generate waveforms for the task.
-
-        :param task_type: Type of the task ('ao', 'do')
-        :type task_type: str
         :param wavelength: Wavelength for the waveform
         :type wavelength: str
         :raises ValueError: If any parameter is invalid or out of range
         """
-        # check task type
-        if task_type not in ["ao", "do"]:
-            raise ValueError(f"{task_type} must be one of {['ao', 'do']}")
-        task = self.tasks[f"{task_type}_task"]
-        self._timing_checks(task_type)
 
-        timing = task["timing"]
+        task_types = ["ao", "do"]
+        for task_type in task_types:
+            task = self.tasks.get(f"{task_type}_task")
+            if task is None:
+                continue
+            self._timing_checks(task_type)
 
-        waveform_attribute = getattr(self, f"{task_type}_waveforms")
-        for name, channel in task["ports"].items():
-            # load waveform and variables
-            port = channel["port"]
-            device_min_volts = channel.get("device_min_volts", 0)
-            device_max_volts = channel.get("device_max_volts", 5)
-            waveform = channel["waveform"]
+            timing = task["timing"]
 
-            valid = globals().get(f"{task_type.upper()}_WAVEFORMS")
-            if waveform not in valid:
-                raise ValueError("waveform must be one of %r." % valid)
+            waveform_attribute = getattr(self, f"{task_type}_waveforms")
+            for name, channel in task["ports"].items():
+                # load waveform and variables
+                port = channel["port"]
+                device_min_volts = channel.get("device_min_volts", 0)
+                device_max_volts = channel.get("device_max_volts", 5)
+                waveform = channel["waveform"]
 
-            start_time_ms = channel["parameters"]["start_time_ms"]["channels"][wavelength]
-            if start_time_ms > timing["period_time_ms"]:
-                raise ValueError("start time must be < period time")
-            end_time_ms = channel["parameters"]["end_time_ms"]["channels"][wavelength]
-            if end_time_ms > timing["period_time_ms"] + timing["rest_time_ms"] or end_time_ms < start_time_ms:
-                raise ValueError("end time must be < period time and > start time")
+                valid = globals().get(f"{task_type.upper()}_WAVEFORMS")
+                if waveform not in valid:
+                    raise ValueError("waveform must be one of %r." % valid)
 
-            # Initialize voltages array
-            voltages: numpy.ndarray = numpy.array([])
+                start_time_ms = channel["parameters"]["start_time_ms"]["channels"][wavelength]
+                if start_time_ms > timing["period_time_ms"]:
+                    raise ValueError("start time must be < period time")
+                end_time_ms = channel["parameters"]["end_time_ms"]["channels"][wavelength]
+                if end_time_ms > timing["period_time_ms"] + timing["rest_time_ms"] or end_time_ms < start_time_ms:
+                    raise ValueError("end time must be < period time and > start time")
 
-            if waveform == "square wave":
-                try:
-                    max_volts = channel["parameters"]["max_volts"]["channels"][wavelength] if task_type == "ao" else 5
-                    if max_volts > self.max_ao_volts:
-                        raise ValueError(f"max volts must be < {self.max_ao_volts} volts")
-                    min_volts = channel["parameters"]["min_volts"]["channels"][wavelength] if task_type == "ao" else 0
-                    if min_volts < self.min_ao_volts:
-                        raise ValueError(f"min volts must be > {self.min_ao_volts} volts")
-                except AttributeError:
-                    raise ValueError("missing input parameter for square wave")
-                voltages = self.square_wave(
-                    timing["sampling_frequency_hz"],
-                    timing["period_time_ms"],
-                    start_time_ms,
-                    end_time_ms,
-                    timing["rest_time_ms"],
-                    max_volts,
-                    min_volts,
-                )
+                # Initialize voltages array
+                voltages: numpy.ndarray = numpy.array([])
 
-            if waveform == "sawtooth" or waveform == "triangle wave":  # setup is same for both waves, only be ao task
-                try:
-                    amplitude_volts = channel["parameters"]["amplitude_volts"]["channels"][wavelength]
-                    offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    if offset_volts < self.min_ao_volts or offset_volts > self.max_ao_volts:
-                        raise ValueError(
-                            f"min volts must be > {self.min_ao_volts} volts and < {self.max_ao_volts} volts"
+                if waveform == "square wave":
+                    try:
+                        max_volts = (
+                            channel["parameters"]["max_volts"]["channels"][wavelength] if task_type == "ao" else 5
                         )
-                    cutoff_frequency_hz = channel["parameters"]["cutoff_frequency_hz"]["channels"][wavelength]
-                    if cutoff_frequency_hz < 0:
-                        raise ValueError("cutoff frequnecy must be > 0 Hz")
-                except AttributeError:
-                    raise ValueError(f"missing input parameter for {waveform}")
-
-                waveform_function = getattr(self, waveform.replace(" ", "_"))
-                voltages = waveform_function(
-                    timing["sampling_frequency_hz"],
-                    timing["period_time_ms"],
-                    start_time_ms,
-                    end_time_ms,
-                    timing["rest_time_ms"],
-                    amplitude_volts,
-                    offset_volts,
-                    cutoff_frequency_hz,
-                )
-
-            if waveform == "nonlinear sawtooth":
-                try:
-                    amplitude_volts = channel["parameters"]["amplitude_volts"]["channels"][wavelength]
-                    offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    t0_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    t50_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    t100_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
-                    if offset_volts < self.min_ao_volts or offset_volts > self.max_ao_volts:
-                        raise ValueError(
-                            f"min volts must be > {self.min_ao_volts} volts and < {self.max_ao_volts} volts"
+                        if max_volts > self.max_ao_volts:
+                            raise ValueError(f"max volts must be < {self.max_ao_volts} volts")
+                        min_volts = (
+                            channel["parameters"]["min_volts"]["channels"][wavelength] if task_type == "ao" else 0
                         )
-                except AttributeError:
-                    raise ValueError(f"missing input parameter for {waveform}")
+                        if min_volts < self.min_ao_volts:
+                            raise ValueError(f"min volts must be > {self.min_ao_volts} volts")
+                    except AttributeError:
+                        raise ValueError("missing input parameter for square wave")
+                    voltages = self.square_wave(
+                        timing["sampling_frequency_hz"],
+                        timing["period_time_ms"],
+                        start_time_ms,
+                        end_time_ms,
+                        timing["rest_time_ms"],
+                        max_volts,
+                        min_volts,
+                    )
 
-                waveform_function = getattr(self, waveform.replace(" ", "_"))
-                print(waveform_function)
-                voltages = self.nonlinear_sawtooth(
-                    timing["sampling_frequency_hz"],
-                    timing["period_time_ms"],
-                    start_time_ms,
-                    end_time_ms,
-                    timing["rest_time_ms"],
-                    amplitude_volts,
-                    offset_volts,
-                    t0_offset_volts,
-                    t50_offset_volts,
-                    t100_offset_volts,
-                )
+                if (
+                    waveform == "sawtooth" or waveform == "triangle wave"
+                ):  # setup is same for both waves, only be ao task
+                    try:
+                        amplitude_volts = channel["parameters"]["amplitude_volts"]["channels"][wavelength]
+                        offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
+                        if offset_volts < self.min_ao_volts or offset_volts > self.max_ao_volts:
+                            raise ValueError(
+                                f"min volts must be > {self.min_ao_volts} volts and < {self.max_ao_volts} volts"
+                            )
+                        cutoff_frequency_hz = channel["parameters"]["cutoff_frequency_hz"]["channels"][wavelength]
+                        if cutoff_frequency_hz < 0:
+                            raise ValueError("cutoff frequnecy must be > 0 Hz")
+                    except AttributeError:
+                        raise ValueError(f"missing input parameter for {waveform}")
 
-            # sanity check voltages for ni card range
-            max = getattr(self, "max_ao_volts", 5)
-            min = getattr(self, "min_ao_volts", 0)
-            if numpy.max(voltages[:]) > max or numpy.min(voltages[:]) < min:
-                raise ValueError(f"voltages are out of ni card range [{max}, {min}] volts")
+                    waveform_function = getattr(self, waveform.replace(" ", "_"))
+                    voltages = waveform_function(
+                        timing["sampling_frequency_hz"],
+                        timing["period_time_ms"],
+                        start_time_ms,
+                        end_time_ms,
+                        timing["rest_time_ms"],
+                        amplitude_volts,
+                        offset_volts,
+                        cutoff_frequency_hz,
+                    )
 
-            # sanity check voltages for device range
-            if numpy.max(voltages[:]) > device_max_volts or numpy.min(voltages[:]) < device_min_volts:
-                raise ValueError(f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts")
+                if waveform == "nonlinear sawtooth":
+                    try:
+                        amplitude_volts = channel["parameters"]["amplitude_volts"]["channels"][wavelength]
+                        offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
+                        t0_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
+                        t50_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
+                        t100_offset_volts = channel["parameters"]["offset_volts"]["channels"][wavelength]
+                        if offset_volts < self.min_ao_volts or offset_volts > self.max_ao_volts:
+                            raise ValueError(
+                                f"min volts must be > {self.min_ao_volts} volts and < {self.max_ao_volts} volts"
+                            )
+                    except AttributeError:
+                        raise ValueError(f"missing input parameter for {waveform}")
 
-            # store 1d voltage array into 2d waveform array
-            waveform_attribute[f"{port}: {name}"] = voltages
+                    waveform_function = getattr(self, waveform.replace(" ", "_"))
+                    print(waveform_function)
+                    voltages = self.nonlinear_sawtooth(
+                        timing["sampling_frequency_hz"],
+                        timing["period_time_ms"],
+                        start_time_ms,
+                        end_time_ms,
+                        timing["rest_time_ms"],
+                        amplitude_volts,
+                        offset_volts,
+                        t0_offset_volts,
+                        t50_offset_volts,
+                        t100_offset_volts,
+                    )
 
-        # store these values as properties for plotting purposes
-        setattr(self, f"{task_type}_sampling_frequency_hz", timing["sampling_frequency_hz"])
-        setattr(self, f"{task_type}_total_time_ms", timing["period_time_ms"] + timing["rest_time_ms"])
+                # sanity check voltages for ni card range
+                max = getattr(self, "max_ao_volts", 5)
+                min = getattr(self, "min_ao_volts", 0)
+                if numpy.max(voltages[:]) > max or numpy.min(voltages[:]) < min:
+                    raise ValueError(f"voltages are out of ni card range [{max}, {min}] volts")
 
-    def write_ao_waveforms(self, rereserve_buffer: bool = True) -> None:
+                # sanity check voltages for device range
+                if numpy.max(voltages[:]) > device_max_volts or numpy.min(voltages[:]) < device_min_volts:
+                    raise ValueError(f"voltages are out of device range [{device_min_volts}, {device_max_volts}] volts")
+
+                # store 1d voltage array into 2d waveform array
+                waveform_attribute[f"{port}: {name}"] = voltages
+
+            # store these values as properties for plotting purposes
+            setattr(self, f"{task_type}_sampling_frequency_hz", timing["sampling_frequency_hz"])
+            setattr(self, f"{task_type}_total_time_ms", timing["period_time_ms"] + timing["rest_time_ms"])
+
+    def write_waveforms(self, rereserve_buffer: bool = True) -> None:
         """
-        Write analog output waveforms to the DAQ.
-
-        :param rereserve_buffer: Whether to re-reserve the buffer, defaults to True
-        :type rereserve_buffer: bool, optional
-        """
-        if rereserve_buffer:  # don't need to rereseve when rewriting already running tasks
-            pass
-
-    def write_do_waveforms(self, rereserve_buffer: bool = True) -> None:
-        """
-        Write digital output waveforms to the DAQ.
+        Write waveforms to the DAQ.
 
         :param rereserve_buffer: Whether to re-reserve the buffer, defaults to True
         :type rereserve_buffer: bool, optional
@@ -450,7 +459,7 @@ class SimulatedDAQ(BaseDAQ):
         :rtype: numpy.ndarray
         """
         time_samples_ms = numpy.linspace(
-            0, 2 * numpy.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
+            0, 2 * numpy.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz), retstep=False
         )
         waveform = offset_volts + amplitude_volts * signal.sawtooth(
             t=time_samples_ms, width=end_time_ms / period_time_ms

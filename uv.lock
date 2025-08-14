@@ -11,9 +11,9 @@ resolution-markers = [
 members = [
     "exaspim-control",
     "extreme",
-    "view",
     "voxel",
     "voxel-classic",
+    "voxel-qt-widgets",
     "voxelstack",
 ]
 
@@ -435,19 +435,21 @@ version = "0.1.0"
 source = { editable = "microscopes/exaspim-control" }
 dependencies = [
     { name = "aind-data-schema" },
+    { name = "napari" },
     { name = "pyqt6" },
     { name = "rich" },
-    { name = "view" },
     { name = "voxel-classic" },
+    { name = "voxel-qt-widgets" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "aind-data-schema", specifier = ">=0.26.7" },
+    { name = "napari", specifier = ">=0.6.3" },
     { name = "pyqt6", specifier = ">=6.9.1" },
     { name = "rich", specifier = ">=14.1.0" },
-    { name = "view", editable = "python/view" },
     { name = "voxel-classic", editable = "python/voxel-classic" },
+    { name = "voxel-qt-widgets", editable = "python/voxel-qt-widgets" },
 ]
 
 [[package]]
@@ -2965,33 +2967,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a8/fe/1ea0ba0896dfa47186692655b86db3214c4b7c9e0e76c7b1dc257d101ab1/varint-1.0.2.tar.gz", hash = "sha256:a6ecc02377ac5ee9d65a6a8ad45c9ff1dac8ccee19400a5950fb51d594214ca5", size = 1886, upload-time = "2016-02-24T20:42:38.5Z" }
 
 [[package]]
-name = "view"
-version = "0.1.0"
-source = { editable = "python/view" }
-dependencies = [
-    { name = "inflection" },
-    { name = "napari" },
-    { name = "numpy" },
-    { name = "pint" },
-    { name = "pymmcore-widgets" },
-    { name = "pyqt6" },
-    { name = "pyqtgraph" },
-    { name = "schema" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "inflection", specifier = ">=0.5.1" },
-    { name = "napari", specifier = ">=0.6.3" },
-    { name = "numpy", specifier = ">=1.23.5" },
-    { name = "pint", specifier = ">=0.24" },
-    { name = "pymmcore-widgets", specifier = ">=0.7.1" },
-    { name = "pyqt6", specifier = ">=2.2.0" },
-    { name = "pyqtgraph", specifier = ">=0.12.4" },
-    { name = "schema", specifier = ">=0.7.7" },
-]
-
-[[package]]
 name = "vispy"
 version = "0.15.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3154,9 +3129,9 @@ requires-dist = [
     { name = "torch", specifier = ">=2.4.1" },
     { name = "tqdm", marker = "extra == 'bdv'", specifier = ">=4.66.5" },
     { name = "vortran-laser", marker = "extra == 'vortran'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
-    { name = "voxel", extras = ["aaopto", "etl-opto", "egrabber"], marker = "extra == 'from-wheelhouse'" },
-    { name = "voxel", extras = ["bdv", "imaris"], marker = "extra == 'writers'" },
-    { name = "voxel", extras = ["cobolt", "coherent", "vortran", "oxxius", "obis"], marker = "extra == 'from-git'" },
+    { name = "voxel", extras = ["aaopto", "etl-opto", "egrabber"], marker = "extra == 'from-wheelhouse'", editable = "python/voxel" },
+    { name = "voxel", extras = ["bdv", "imaris"], marker = "extra == 'writers'", editable = "python/voxel" },
+    { name = "voxel", extras = ["cobolt", "coherent", "vortran", "oxxius", "obis"], marker = "extra == 'from-git'", editable = "python/voxel" },
     { name = "zerorpc", specifier = ">=0.6.3" },
     { name = "zmq", specifier = ">=0.0.0" },
 ]
@@ -3189,6 +3164,7 @@ dependencies = [
     { name = "siphash24" },
     { name = "sympy" },
     { name = "tensorstore" },
+    { name = "voxel" },
 ]
 
 [package.optional-dependencies]
@@ -3304,13 +3280,39 @@ requires-dist = [
     { name = "tigerasi", marker = "extra == 'tigerasi-controller'" },
     { name = "tqdm", marker = "extra == 'bdv'", specifier = ">=4.66.5" },
     { name = "vortran-laser", marker = "extra == 'vortran'" },
-    { name = "voxel-classic", extras = ["aaopto", "etl-opto", "egrabber"], marker = "extra == 'from-wheelhouse'" },
-    { name = "voxel-classic", extras = ["bdv", "imaris", "tifffile-writer", "acquire-zarr-writer"], marker = "extra == 'writers'" },
-    { name = "voxel-classic", extras = ["cobolt", "coherent", "vortran", "oxxius", "obis"], marker = "extra == 'from-git'" },
-    { name = "voxel-classic", extras = ["ximea-camera"], marker = "extra == 'cameras'" },
+    { name = "voxel", editable = "python/voxel" },
+    { name = "voxel-classic", extras = ["aaopto", "etl-opto", "egrabber"], marker = "extra == 'from-wheelhouse'", editable = "python/voxel-classic" },
+    { name = "voxel-classic", extras = ["bdv", "imaris", "tifffile-writer", "acquire-zarr-writer"], marker = "extra == 'writers'", editable = "python/voxel-classic" },
+    { name = "voxel-classic", extras = ["cobolt", "coherent", "vortran", "oxxius", "obis"], marker = "extra == 'from-git'", editable = "python/voxel-classic" },
+    { name = "voxel-classic", extras = ["ximea-camera"], marker = "extra == 'cameras'", editable = "python/voxel-classic" },
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
 provides-extras = ["bdv", "imaris", "tifffile-writer", "acquire-zarr-writer", "writers", "ximea-camera", "cameras", "tigerasi-controller", "scikit-tensor", "cobolt", "coherent", "vortran", "oxxius", "obis", "from-git", "aaopto", "etl-opto", "egrabber", "from-wheelhouse"]
+
+[[package]]
+name = "voxel-qt-widgets"
+version = "0.1.0"
+source = { editable = "python/voxel-qt-widgets" }
+dependencies = [
+    { name = "inflection" },
+    { name = "numpy" },
+    { name = "pint" },
+    { name = "pymmcore-widgets" },
+    { name = "pyqt6" },
+    { name = "pyqtgraph" },
+    { name = "schema" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "inflection", specifier = ">=0.5.1" },
+    { name = "numpy", specifier = ">=1.23.5" },
+    { name = "pint", specifier = ">=0.24" },
+    { name = "pymmcore-widgets", specifier = ">=0.7.1" },
+    { name = "pyqt6", specifier = ">=2.2.0" },
+    { name = "pyqtgraph", specifier = ">=0.12.4" },
+    { name = "schema", specifier = ">=0.7.7" },
+]
 
 [[package]]
 name = "voxelstack"

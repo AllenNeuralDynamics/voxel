@@ -384,7 +384,7 @@ def generate_spiral_frames(frame_count, frame_shape, dtype, logger: "LoggerType 
     min_tile_size = 2
     max_tile_size = min(frame_shape.x, frame_shape.y) // 12
 
-    tile_sizes = np.linspace(min_tile_size, max_tile_size, num=frame_count, dtype=int)
+    tile_sizes = np.linspace(min_tile_size, max_tile_size, num=frame_count, dtype=int, retstep=False)
 
     # Create indices centered on the frame (precomputed)
     y_indices = np.arange(frame_shape.y) - frame_shape.y // 2

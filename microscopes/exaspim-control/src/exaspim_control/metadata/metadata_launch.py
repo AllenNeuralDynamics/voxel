@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 import json
 from aind_data_schema.core import acquisition
-from exaspim_control.exa_spim_acquisition import ExASPIMAcquisition
-from exaspim_control.exa_spim_instrument import ExASPIM
-from exaspim_control.exa_spim_instrument_view import ExASPIMInstrumentView
-from exaspim_control.exa_spim_acquisition_view import ExASPIMAcquisitionView
+from exaspim_control.acquisition.exaspim_acquisition import ExASPIMAcquisition
+from exaspim_control.instrument.exaspim_instrument import ExASPIM
+from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
+from exaspim_control.acquisition.exaspim_acquisition_view import ExASPIMAcquisitionView
 from voxel.utils.log import VoxelLogging
 
 X_ANATOMICAL_DIRECTIONS = {"Left to Right": "Right_to_left", "Right to Left": "Left_to_right"}

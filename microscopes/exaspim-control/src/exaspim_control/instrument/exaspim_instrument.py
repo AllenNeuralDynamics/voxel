@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import inflection
+from exaspim_control.instrument.base import Instrument
 from ruamel.yaml import YAML
 from voxel.utils.log import VoxelLogging
-from voxel_classic.instruments.instrument import Instrument
+from voxel_classic.devices.stage.asi.tiger import TigerStage
 
 DIRECTORY = Path(__file__).parent.resolve()
 
@@ -32,6 +33,16 @@ class ExASPIM(Instrument):
 
         # verify exaspim microscope
         self._verify_instrument()
+
+    @property
+    def positioning_stages(self) -> dict[str, TigerStage]:
+        """
+        Get the positioning stages of the instrument. i.e. scanning and tiling
+
+        :return: Dictionary of positioning stages.
+        :rtype: dict[str, TigerStage]
+        """
+        return {**self.scanning_stages, **self.tiling_stages}
 
     def _verify_instrument(self) -> None:
         """

@@ -10,8 +10,8 @@ from voxel.utils.log import VoxelLogging, get_default_console_handler, get_defau
 
 # from exaspim_control.exa_spim_acquisition import ExASPIMAcquisition
 # from exaspim_control.exa_spim_acquisition_view import ExASPIMAcquisitionView
-from exaspim_control.exa_spim_instrument import ExASPIM
-from exaspim_control.exa_spim_instrument_view import ExASPIMInstrumentView
+from exaspim_control.instrument.exaspim_instrument import ExASPIM
+from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
 # from exaspim_control.metadata_launch import MetadataLaunch
 
 SYSTEMS_DIR = Path(__file__).resolve().parent.parent.parent / "systems"
@@ -96,7 +96,7 @@ def launch(system_dir: Path, log_file_name: str) -> None:
 
 
 def main(systems_dir: Path = SYSTEMS_DIR) -> None:
-    SYSTEM_NAME = "beta-3"
+    SYSTEM_NAME = "aind-beta-3"
     log_file_name = f"{SYSTEM_NAME}_output_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     file_handler = logging.FileHandler(log_file_name, "w")
     VoxelLogging.setup(
