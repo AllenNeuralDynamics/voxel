@@ -48,7 +48,7 @@ instrument:
       type: laser
       driver: voxel_classic.devices.laser.coherent.genesis_mx
       module: GenesisMXLaser
-      color: blue
+      color: green
       init:
         id: J718583CM887
         wavelength: 561
@@ -57,7 +57,7 @@ instrument:
       type: laser
       driver: voxel_classic.devices.laser.coherent.genesis_mx
       module: GenesisMXLaser
-      color: blue
+      color: red
       init:
         id: R689368EQ167
         wavelength: 639

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import inflection
 from ruamel.yaml import YAML
 from voxel.utils.log import VoxelLogging
 from voxel_classic.instruments.instrument import Instrument
@@ -61,3 +62,12 @@ class ExASPIM(Instrument):
             raise ValueError("x tiling stage is required")
         if not self.tiling_stages["y"]:
             raise ValueError("y tiling stage is required")
+
+    def close(self):
+        for device_name, device_specs in self.config["instrument"]["devices"].items():
+            device_type = device_specs["type"]
+            device = getattr(self, inflection.pluralize(device_type))[device_name]
+            try:
+                device.close()
+            except AttributeError:
+                self.log.debug(f"{device_name} does not have close function")

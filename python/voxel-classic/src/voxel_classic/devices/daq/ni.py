@@ -9,6 +9,7 @@ from nidaqmx.constants import AOIdleOutputBehavior, Edge, FrequencyUnits, Slope
 from scipy import interpolate, signal
 from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.daq.base import BaseDAQ
+import contextlib
 
 DO_WAVEFORMS = ["square wave"]
 
@@ -734,7 +735,8 @@ class NIDAQ(BaseDAQ):
         self.log.info("closing daq.")
         for task in [self.ao_task, self.do_task, self.co_task]:
             if task is not None:
-                task.close()
+                with contextlib.suppress(nidaqmx.DaqError):
+                    task.close()
 
     def restart(self) -> None:
         """

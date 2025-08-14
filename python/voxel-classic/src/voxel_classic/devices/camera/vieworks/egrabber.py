@@ -208,7 +208,7 @@ class VieworksCamera(BaseCamera):
         # refresh parameter values
         self._get_min_max_step_values()
 
-    @property
+    @DeliminatedProperty(minimum=float("-inf"), maximum=float("inf"))
     def width_offset_px(self) -> int:
         """Get the width offset in pixels.
 
@@ -218,7 +218,7 @@ class VieworksCamera(BaseCamera):
         return self.grabber.remote.get("OffsetX")
 
     @width_offset_px.setter
-    def width_offset_px(self, width_offset_px: int) -> None:
+    def width_offset_px(self, width_offset_px: int) -> None:  # type: ignore
         """Set the width offset in pixels.
 
         :param width_offset_px: Width offset in pixels
@@ -253,7 +253,7 @@ class VieworksCamera(BaseCamera):
         # refresh parameter values
         self._get_min_max_step_values()
 
-    @property
+    @DeliminatedProperty(minimum=float("-inf"), maximum=float("inf"))
     def height_offset_px(self) -> int:
         """Get the height offset in pixels.
 
@@ -263,7 +263,7 @@ class VieworksCamera(BaseCamera):
         return self.grabber.remote.get("OffsetY")
 
     @height_offset_px.setter
-    def height_offset_px(self, height_offset_px: int) -> None:
+    def height_offset_px(self, height_offset_px: int) -> None:  # type: ignore
         """Set the height offset in pixels.
 
         :param height_offset_px: Height offset in pixels
@@ -528,14 +528,14 @@ class VieworksCamera(BaseCamera):
         self.grabber.realloc_buffers(self.buffer_size_frames)  # allocate RAM buffer N frames
         self.log.info(f"buffer set to: {self.buffer_size_frames} frames")
 
-    def start(self, frame_count: int = GENTL_INFINITE) -> None:
+    def start(self, frame_count: int | None = None) -> None:
         """Start the camera acquisition.
 
         :param frame_count: Number of frames to acquire, defaults to GENTL_INFINITE
         :type frame_count: int, optional
         """
         self.log.info("starting camera")
-        if frame_count == float("inf"):
+        if frame_count == float("inf") or frame_count is None:
             frame_count = GENTL_INFINITE
         self.grabber.start(frame_count=frame_count)
 

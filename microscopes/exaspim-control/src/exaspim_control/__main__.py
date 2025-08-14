@@ -8,10 +8,11 @@ from PyQt6.QtWidgets import QApplication
 from ruamel.yaml import YAML
 from voxel.utils.log import VoxelLogging, get_default_console_handler, get_default_json_handler
 
-from exaspim_control.exa_spim_acquisition import ExASPIMAcquisition
+# from exaspim_control.exa_spim_acquisition import ExASPIMAcquisition
+# from exaspim_control.exa_spim_acquisition_view import ExASPIMAcquisitionView
 from exaspim_control.exa_spim_instrument import ExASPIM
-from exaspim_control.exa_spim_view import ExASPIMAcquisitionView, ExASPIMInstrumentView
-from exaspim_control.metadata_launch import MetadataLaunch
+from exaspim_control.exa_spim_instrument_view import ExASPIMInstrumentView
+# from exaspim_control.metadata_launch import MetadataLaunch
 
 SYSTEMS_DIR = Path(__file__).resolve().parent.parent.parent / "systems"
 
@@ -24,6 +25,12 @@ _yaml.representer.add_representer(Path, lambda obj, val: obj.represent_str(str(v
 _yaml.representer.add_representer(WindowsPath, lambda obj, val: obj.represent_str(str(val)))
 
 logger = VoxelLogging.get_logger("ExASPIM Control")
+
+
+def load_yaml_config(path: Path) -> dict:
+    with open(path, "r") as file:
+        config = _yaml.load(file)
+    return config
 
 
 def launch(system_dir: Path, log_file_name: str) -> None:
@@ -44,44 +51,46 @@ def launch(system_dir: Path, log_file_name: str) -> None:
 
     log_level = logging.getLevelName(logger.getEffectiveLevel())
 
+    app = QApplication(sys.argv)
+
     try:
         instrument = ExASPIM(config_filename=instrument_yaml, yaml_handler=_yaml, log_level=log_level)
     except Exception as e:
         logger.error(f"Failed to initialize ExASPIM: \n {e}")
         return
 
-    try:
-        acquisition = ExASPIMAcquisition(
-            instrument=instrument,
-            config_filename=acquisition_yaml,
-            yaml_handler=_yaml,
-            log_level=log_level,
-        )
-    except Exception as e:
-        logger.error(f"Failed to initialize ExASPIMAcquisition: \n {e}")
-        return
+    _ = ExASPIMInstrumentView(instrument=instrument, config=load_yaml_config(gui_yaml))
+    logger.info("ExASPIMInstrumentView initialized successfully.")
 
-    app = QApplication(sys.argv)
+    # try:
+    # except Exception as e:
+    #     logger.error(f"Failed to initialize ExASPIMInstrumentView: \n {e}")
+    #     return
 
-    try:
-        instrument_view = ExASPIMInstrumentView(instrument=instrument, config_path=gui_yaml, log_level=log_level)
-    except Exception as e:
-        logger.error(f"Failed to initialize ExASPIMInstrumentView: \n {e}")
-        return
+    # try:
+    #     acquisition = ExASPIMAcquisition(
+    #         instrument=instrument,
+    #         config_filename=acquisition_yaml,
+    #         yaml_handler=_yaml,
+    #         log_level=log_level,
+    #     )
+    # except Exception as e:
+    #     logger.error(f"Failed to initialize ExASPIMAcquisition: \n {e}")
+    #     return
 
-    try:
-        acquisition_view = ExASPIMAcquisitionView(acquisition=acquisition, instrument_view=instrument_view)
-    except Exception as e:
-        logger.error(f"Failed to initialize ExASPIMAcquisitionView: \n {e}")
-        return
+    # try:
+    #     acquisition_view = ExASPIMAcquisitionView(acquisition=acquisition, instrument_view=instrument_view)
+    # except Exception as e:
+    #     logger.error(f"Failed to initialize ExASPIMAcquisitionView: \n {e}")
+    #     return
 
-    MetadataLaunch(
-        instrument=instrument,
-        acquisition=acquisition,
-        instrument_view=instrument_view,
-        acquisition_view=acquisition_view,
-        log_filename=log_file_name,
-    )
+    # MetadataLaunch(
+    #     instrument=instrument,
+    #     acquisition=acquisition,
+    #     instrument_view=instrument_view,
+    #     acquisition_view=acquisition_view,
+    #     log_filename=log_file_name,
+    # )
 
     sys.exit(app.exec())
 

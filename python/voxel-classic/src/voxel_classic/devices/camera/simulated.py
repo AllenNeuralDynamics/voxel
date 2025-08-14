@@ -340,7 +340,7 @@ class SimulatedCamera(BaseCamera):
         """
         return "rolling shutter"
 
-    def start(self, frames=float("inf")) -> None:
+    def start(self, frame_count=float("inf")) -> None:
         """Start camera."""
         self.log.info("simulated camera starting...")
 

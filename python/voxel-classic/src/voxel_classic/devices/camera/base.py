@@ -375,7 +375,7 @@ class BaseCamera(VoxelDevice):
         pass
 
     @abstractmethod
-    def start(self) -> None:
+    def start(self, frame_count: int | None = None) -> None:
         """
         Start the camera acquisition.
         """
