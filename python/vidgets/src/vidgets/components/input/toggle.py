@@ -6,20 +6,21 @@ https://www.pythonguis.com/tutorials/PySide6-animated-widgets/
 """
 
 from collections.abc import Callable
+
 from PySide6.QtCore import (
-    Qt,
-    QSize,
+    Property,
+    QEasingCurve,
     QPoint,
     QPointF,
-    QRectF,
-    QEasingCurve,
     QPropertyAnimation,
+    QRectF,
     QSequentialAnimationGroup,
+    QSize,
+    Qt,
     Slot,
-    Property,
 )
-from PySide6.QtWidgets import QCheckBox, QWidget, QSizePolicy, QVBoxLayout
-from PySide6.QtGui import QColor, QBrush, QPaintEvent, QPen, QPainter
+from PySide6.QtGui import QBrush, QColor, QPainter, QPaintEvent, QPen
+from PySide6.QtWidgets import QCheckBox, QSizePolicy, QVBoxLayout, QWidget
 
 
 class _AnimatedToggle(QCheckBox):
@@ -187,9 +188,10 @@ class VToggle(QWidget):
 
     def __init__(
         self,
-        text: str = "",
+        setter: Callable[[bool], None],
         getter: Callable[[], bool] | None = None,
-        setter: Callable[[bool], None] | None = None,
+        *,
+        text: str = "",
         parent: QWidget | None = None,
         bar_color: Qt.GlobalColor | str = Qt.GlobalColor.gray,
         checked_color: str = "#0078D4",  # Microsoft blue
@@ -291,3 +293,45 @@ class VToggle(QWidget):
     def toggled(self):
         """Forward the toggled signal from the underlying toggle."""
         return self.toggle.toggled
+
+
+if __name__ == "__main__":
+    import sys
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication, QLabel, QStyle, QVBoxLayout, QWidget
+
+    def main():
+        """Quick test of VToggle animation."""
+        app = QApplication(sys.argv)
+        app.setWindowIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_DialogYesButton))
+        window = QWidget()
+        window.setWindowTitle("VToggle Quick Test")
+        window.setGeometry(300, 300, 300, 200)
+
+        layout = QVBoxLayout(window)
+
+        label = QLabel("VToggle Animation Test")
+        layout.addWidget(label)
+
+        # Update status when toggled
+        def update_status(checked):
+            status.setText(f"Toggle: {'ON' if checked else 'OFF'}")
+            print(f"VToggle state changed: {'ON' if checked else 'OFF'}")
+
+        # Create a VToggle
+        toggle = VToggle(setter=update_status)
+        layout.addWidget(toggle, 0, Qt.AlignmentFlag.AlignCenter)
+
+        # Status label
+        status = QLabel("Toggle: OFF")
+        layout.addWidget(status)
+
+        window.show()
+
+        print("VToggle test window opened. Click the toggle to test animation!")
+        print("The toggle should smoothly animate between states with a pulse effect.")
+
+        return app.exec()
+
+    sys.exit(main())

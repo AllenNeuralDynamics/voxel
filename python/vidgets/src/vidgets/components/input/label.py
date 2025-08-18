@@ -31,7 +31,7 @@ class LiveValueLabel[T: str | int | float]:
         suffix: str = "",
         format_func: Callable[[T], str] | None = None,
         poll_interval: int = 1000,
-        parent=None,
+        parent: QWidget | None = None,
     ):
         self._getter = getter
         self._prefix = prefix
@@ -39,13 +39,13 @@ class LiveValueLabel[T: str | int | float]:
         self._format_func = format_func or str
 
         # Create the label widget
-        self._label = QLabel(parent)
+        self._label = VLabel(parent=parent)
 
         self._value_watcher = ValueWatcher(callback=self.update_value, interval=poll_interval, parent=parent)
 
     @property
-    def widget(self) -> QLabel:
-        """Access to the underlying QLabel widget for layout and styling"""
+    def widget(self) -> VLabel:
+        """Access to the underlying VLabel widget for layout and styling"""
         return self._label
 
     @property

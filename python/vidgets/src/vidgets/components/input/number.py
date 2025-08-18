@@ -20,7 +20,7 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
     def __init__(
         self,
         getter: Callable[[], T],
-        setter: Callable[[T], None],
+        onchange: Callable[[T], None],
         *,
         parent: QWidget,
         min_value: T | None = None,
@@ -32,7 +32,7 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
     ):
         super().__init__(
             getter=getter,
-            setter=setter,
+            setter=onchange,
             debounce_delay=debounce_delay,
             watch_interval=watch_interval,
             settle_delay=settle_delay,

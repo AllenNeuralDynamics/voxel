@@ -261,7 +261,7 @@ class BoundInput[T: str | int | float, W: QWidget](ABC):
 
     Args:
         getter: Function to read current value from hardware
-        setter: Function to write new value to hardware
+        onchange: Function to write new value to hardware and run any side-effects
         debounce_delay: Milliseconds to wait before sending commands after user stops typing.
                        Higher values reduce command frequency but feel less responsive.
                        Typical values: 100-500ms for fast hardware, 500-1000ms for slow hardware.
@@ -294,7 +294,6 @@ class BoundInput[T: str | int | float, W: QWidget](ABC):
         debounce_delay: int = 500,
         watch_interval: int | None = None,
         settle_delay: int = 100,
-        parent: QWidget | None = None,
     ):
         self._binding = ValueBinding(
             getter=getter,
@@ -338,6 +337,9 @@ class BoundInput[T: str | int | float, W: QWidget](ABC):
     def stop_watching(self) -> None:
         """Stop watching for external changes"""
         self._binding.stop_watching()
+
+
+# TODO: Consider if there is any use for the ValidatedValueBinding
 
 
 def _compare_num_with_tolerance(value: float, target: float, tolerance: float | None) -> bool:

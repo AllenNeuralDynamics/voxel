@@ -63,7 +63,7 @@ class VoltageWidget(QGroupBox):
         # Use VNumberInput[float] for voltage control
         self.voltage_spinbox: VNumberInput[float] = VNumberInput[float](
             getter=getter,
-            setter=setter,
+            onchange=setter,
             debounce_delay=300,  # Debounce voltage changes
             watch_interval=None,  # No continuous monitoring for voltage
             parent=self,
@@ -112,7 +112,7 @@ class PositionWidget(QGroupBox):
         # Use VNumberInput[int] for position control
         self.pos_spinbox: VNumberInput[int] = VNumberInput[int](
             getter=getter,
-            setter=setter,
+            onchange=setter,
             debounce_delay=300,  # Debounce position changes
             watch_interval=None,  # No continuous monitoring for position
             parent=self,
@@ -156,7 +156,7 @@ class TemperatureWidget(QGroupBox):
         # Use VNumberInput[float] for target temperature control
         self.target_spinbox: VNumberInput[float] = VNumberInput[float](
             getter=lambda: self.hardware.target_temperature,
-            setter=lambda x: setattr(self.hardware, "target_temperature", x),
+            onchange=lambda x: setattr(self.hardware, "target_temperature", x),
             debounce_delay=300,  # Debounce temperature changes
             watch_interval=1000,  # Continuous monitoring needed for target temp
             parent=self,

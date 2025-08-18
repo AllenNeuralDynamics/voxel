@@ -10,10 +10,9 @@ import json
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QGroupBox,
     QHBoxLayout,
     QMainWindow,
@@ -24,7 +23,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from vidgets.components.extras.drawer import SlidingDrawer
 from vidgets.components.input.input_group import FlowDirection, create_input_group
 from vidgets.components.input.label import VLabel
 from vidgets.components.input.number import VNumberInput
@@ -88,7 +86,7 @@ class MicroscopeControlInterface(QMainWindow):
         self.temp_label = None
         self.humidity_label = None
         self.ready_label = None
-        self.drawer = None
+        self.event_log = None
 
         self.setup_ui()
         self.setup_status_updates()
@@ -107,40 +105,10 @@ class MicroscopeControlInterface(QMainWindow):
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(0)
 
-        # Create top header with toggle button
+        # Create top header
         header_layout = QHBoxLayout()
-        header_layout.addStretch()  # Push button to the right
+        header_layout.addStretch()  # This can be used for future header content
 
-        # Toggle checkbox styled as button in top right corner
-        self.log_toggle_button = QCheckBox("📋")
-        self.log_toggle_button.setFixedSize(40, 30)
-        self.log_toggle_button.setStyleSheet("""
-            QCheckBox {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 16px;
-            }
-            QCheckBox:hover {
-                background-color: #45a049;
-            }
-            QCheckBox:checked {
-                background-color: #2196F3;
-            }
-            QCheckBox:checked:hover {
-                background-color: #1976D2;
-            }
-            QCheckBox::indicator {
-                width: 0px;
-                height: 0px;
-            }
-        """)
-        self.log_toggle_button.setToolTip("Toggle Event Log (Ctrl+L)")
-        self.log_toggle_button.toggled.connect(self.toggle_log_drawer)
-
-        header_layout.addWidget(self.log_toggle_button)
         main_layout.addLayout(header_layout)
 
         # Create controls and status panels
@@ -163,18 +131,10 @@ class MicroscopeControlInterface(QMainWindow):
 
         main_layout.addWidget(content_widget)
 
-        # Create the sliding drawer (50% of window width)
-        drawer_width = int(self.width() * 0.5)
-        self.drawer = SlidingDrawer(central_widget, width=drawer_width)
-
-        # Status bar (no toggle button now)
+        # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("System Ready | Press Ctrl+L to toggle Event Log")
-
-        # Add keyboard shortcut for toggling log (Ctrl+L)
-        self.log_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
-        self.log_shortcut.activated.connect(self.keyboard_toggle_log)
+        self.status_bar.showMessage("System Ready")
 
     def create_controls_panel(self) -> QWidget:
         """Create the left panel with all control groups."""
@@ -205,9 +165,9 @@ class MicroscopeControlInterface(QMainWindow):
         stage_group = self.create_stage_group()
         layout.addWidget(stage_group)
 
-        # Toggle Demos Group
-        toggle_group = self.create_toggle_demos_group()
-        layout.addWidget(toggle_group)
+        # # Toggle Demos Group
+        # toggle_group = self.create_toggle_demos_group()
+        # layout.addWidget(toggle_group)
 
         # Action Buttons
         buttons_group = self.create_action_buttons()
@@ -259,14 +219,14 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=10.0,
                     decimals=3,
                     getter=lambda: self.state.exposure_time,
-                    setter=self.make_callback("exposure_time"),
+                    onchange=self.make_callback("exposure_time"),
                     parent=self,
                 ),
                 "Gain": VNumberInput(
                     min_value=1,
                     max_value=1000,
                     getter=lambda: self.state.gain,
-                    setter=self.make_callback("gain"),
+                    onchange=self.make_callback("gain"),
                     parent=self,
                 ),
                 "Binning": VSelect(
@@ -295,7 +255,7 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=50.0,
                     decimals=1,
                     getter=lambda: self.state.laser_405_power,
-                    setter=self.make_callback("laser_405_power"),
+                    onchange=self.make_callback("laser_405_power"),
                     parent=self,
                 ),
             },
@@ -313,7 +273,7 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=100.0,
                     decimals=1,
                     getter=lambda: self.state.laser_488_power,
-                    setter=self.make_callback("laser_488_power"),
+                    onchange=self.make_callback("laser_488_power"),
                     parent=self,
                 ),
             },
@@ -331,7 +291,7 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=75.0,
                     decimals=1,
                     getter=lambda: self.state.laser_561_power,
-                    setter=self.make_callback("laser_561_power"),
+                    onchange=self.make_callback("laser_561_power"),
                     parent=self,
                 ),
             },
@@ -355,7 +315,7 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=25000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_x,
-                    setter=self.make_callback("stage_x"),
+                    onchange=self.make_callback("stage_x"),
                     parent=self,
                 ),
                 "Y (μm)": VNumberInput(
@@ -363,7 +323,7 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=25000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_y,
-                    setter=self.make_callback("stage_y"),
+                    onchange=self.make_callback("stage_y"),
                     parent=self,
                 ),
                 "Z (μm)": VNumberInput(
@@ -371,7 +331,7 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=1000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_z,
-                    setter=self.make_callback("stage_z"),
+                    onchange=self.make_callback("stage_z"),
                     parent=self,
                 ),
                 "Step Size (μm)": VNumberInput(
@@ -379,7 +339,7 @@ class MicroscopeControlInterface(QMainWindow):
                     max_value=1000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_step_size,
-                    setter=self.make_callback("stage_step_size"),
+                    onchange=self.make_callback("stage_step_size"),
                     parent=self,
                 ),
             },
@@ -387,81 +347,6 @@ class MicroscopeControlInterface(QMainWindow):
         )
 
         layout.addWidget(position_controls)
-        return group
-
-    def create_toggle_demos_group(self) -> QGroupBox:
-        """Create toggle demonstrations group."""
-        group = QGroupBox("Animated Toggles Demo")
-        layout = QVBoxLayout(group)
-
-        # Basic VToggle examples
-        toggles_layout = QHBoxLayout()
-
-        # Standard toggle with default blue theme
-        standard_toggle = VToggle()
-        standard_toggle.setChecked(True)
-        standard_label = VLabel("Standard Toggle")
-
-        # Custom colored toggle (green theme)
-        green_toggle = VToggle(checked_color="#4CAF50", pulse_checked_color="#444CAF50")
-        green_label = VLabel("Green Toggle")
-
-        # Custom colored toggle (orange theme)
-        orange_toggle = VToggle(checked_color="#FF9800", pulse_checked_color="#44FF9800")
-        orange_label = VLabel("Orange Toggle")
-
-        # Add toggles with labels
-        standard_container = QVBoxLayout()
-        standard_container.addWidget(standard_label)
-        standard_container.addWidget(standard_toggle, 0, Qt.AlignmentFlag.AlignCenter)
-
-        green_container = QVBoxLayout()
-        green_container.addWidget(green_label)
-        green_container.addWidget(green_toggle, 0, Qt.AlignmentFlag.AlignCenter)
-
-        orange_container = QVBoxLayout()
-        orange_container.addWidget(orange_label)
-        orange_container.addWidget(orange_toggle, 0, Qt.AlignmentFlag.AlignCenter)
-
-        # Create containers
-        standard_widget = QWidget()
-        standard_widget.setLayout(standard_container)
-        green_widget = QWidget()
-        green_widget.setLayout(green_container)
-        orange_widget = QWidget()
-        orange_widget.setLayout(orange_container)
-
-        toggles_layout.addWidget(standard_widget)
-        toggles_layout.addWidget(green_widget)
-        toggles_layout.addWidget(orange_widget)
-        toggles_layout.addStretch()
-
-        # VToggleSwitch examples with functional callbacks
-        functional_layout = QVBoxLayout()
-        functional_label = VLabel("Functional Toggles (with callbacks)")
-        functional_layout.addWidget(functional_label)
-
-        # Auto-focus toggle
-        autofocus_toggle = VToggle(
-            text="Auto Focus",
-            getter=lambda: getattr(self.state, "autofocus_enabled", False),
-            setter=lambda checked: self.log_message(f"Auto-focus {'enabled' if checked else 'disabled'}"),
-            checked_color="#2196F3",
-        )
-
-        # Live preview toggle
-        preview_toggle = VToggle(
-            text="Live Preview",
-            getter=lambda: getattr(self.state, "preview_enabled", True),
-            setter=lambda checked: self.log_message(f"Live preview {'enabled' if checked else 'disabled'}"),
-            checked_color="#9C27B0",
-        )
-
-        functional_layout.addWidget(autofocus_toggle, 0, Qt.AlignmentFlag.AlignLeft)
-        functional_layout.addWidget(preview_toggle, 0, Qt.AlignmentFlag.AlignLeft)
-
-        layout.addLayout(toggles_layout)
-        layout.addLayout(functional_layout)
         return group
 
     def create_action_buttons(self) -> QGroupBox:
@@ -495,7 +380,7 @@ class MicroscopeControlInterface(QMainWindow):
         return group
 
     def create_status_panel(self) -> QWidget:
-        """Create the right panel with status information (no log - now in drawer)."""
+        """Create the right panel with status information and event log."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
@@ -512,7 +397,11 @@ class MicroscopeControlInterface(QMainWindow):
         status_layout.addWidget(self.ready_label)
         layout.addWidget(status_group)
 
-        # Current configuration display (takes more space now)
+        # Create vertical splitter for config display and event log
+        vertical_splitter = QSplitter(Qt.Orientation.Vertical)
+        layout.addWidget(vertical_splitter)
+
+        # Current configuration display
         config_group = QGroupBox("Current Configuration")
         config_layout = QVBoxLayout(config_group)
 
@@ -521,7 +410,42 @@ class MicroscopeControlInterface(QMainWindow):
         self.config_display.setFont(QFont("Courier", 9))
         config_layout.addWidget(self.config_display)
 
-        layout.addWidget(config_group)
+        vertical_splitter.addWidget(config_group)
+
+        # Event log display
+        log_group = QGroupBox("Event Log")
+        log_layout = QVBoxLayout(log_group)
+
+        self.event_log = QTextEdit()
+        self.event_log.setReadOnly(True)
+        self.event_log.setFont(QFont("Courier", 9))
+        self.event_log.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                padding: 8px;
+                font-family: 'Courier New', monospace;
+                font-size: 10px;
+            }
+            QScrollBar:vertical {
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: palette(button);
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: palette(highlight);
+            }
+        """)
+        log_layout.addWidget(self.event_log)
+
+        vertical_splitter.addWidget(log_group)
+
+        # Set initial splitter sizes - config display gets 60%, event log gets 40%
+        vertical_splitter.setSizes([300, 200])
 
         return widget
 
@@ -546,27 +470,14 @@ class MicroscopeControlInterface(QMainWindow):
 
         return callback
 
-    def toggle_log_drawer(self, checked):
-        """Toggle the event log drawer based on checkbox state."""
-        if not self.drawer:
-            return
-
-        # Only toggle if the checkbox state doesn't match the drawer state
-        if checked != self.drawer.is_open:
-            self.drawer.toggle()
-
-    def keyboard_toggle_log(self):
-        """Handle keyboard shortcut (Ctrl+L) for toggling the drawer."""
-        if not self.drawer:
-            return
-        # Toggle the drawer and update checkbox to match
-        self.drawer.toggle()
-        self.log_toggle_button.setChecked(self.drawer.is_open)
-
     def log_message(self, message: str):
-        """Add a message to the event log (now in the drawer)."""
-        if hasattr(self, "drawer") and self.drawer:
-            self.drawer.add_log_message(message)
+        """Add a message to the event log."""
+        if self.event_log is not None:
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            log_entry = f"[{timestamp}] {message}"
+            self.event_log.append(log_entry)
 
     def update_status_display(self):
         """Update the status indicators."""
@@ -611,15 +522,6 @@ class MicroscopeControlInterface(QMainWindow):
     def load_configuration(self):
         """Load saved configuration."""
         self.log_message("Configuration loaded")
-
-    def resizeEvent(self, a0):
-        """Handle window resize to update drawer width."""
-        super().resizeEvent(a0)
-        if hasattr(self, "drawer") and self.drawer:
-            # Update drawer width to 50% of new window width
-            new_drawer_width = int(self.width() * 0.5)
-            self.drawer.drawer_width = new_drawer_width
-            self.drawer.setFixedWidth(new_drawer_width)
 
     def closeEvent(self, event):
         """Handle window close to clean up resources."""
