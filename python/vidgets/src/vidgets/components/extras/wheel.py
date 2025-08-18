@@ -3,7 +3,7 @@ import math
 import colorsys
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QRectF, QTimer, Signal, QEasingCurve
-from PySide6.QtGui import QPainter
+from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtSvg import QSvgRenderer
 
 
@@ -23,39 +23,42 @@ class WheelWidget(QWidget):
 
         Args:
             num_slots: Total number of slots on the wheel
-            members: Dictionary mapping position -> label string
+            members: Dictionary mapping position -> label string (1-based indexing)
             hue_mapping: Dictionary mapping label -> hue value (0-360). Defaults to grey if not found.
             parent: Parent widget
         """
         super().__init__(parent)
         self.setMinimumSize(200, 200)
 
-        # Validate member positions
+        # Validate member positions (1-based indexing)
         if members is None:
             members = {}
         if hue_mapping is None:
             hue_mapping = {}
 
         for position in members:
-            if not (0 <= position < num_slots):
-                raise ValueError(f"Member position {position} must be within 0 to {num_slots - 1}")
+            if not (1 <= position <= num_slots):
+                raise ValueError(f"Member position {position} must be within 1 to {num_slots} (1-based indexing)")
 
-        # Core widget data (public)
+        # Core widget data
         self.num_slots = num_slots
-        self.members = members  # Dict[int, str] - position -> label
-        self.hue_mapping = hue_mapping  # Dict[str, float] - label -> hue
+        self.members = members  # position -> label
+        self.hue_mapping = hue_mapping
         self.default_hue = 0  # Grey for unmapped labels
-        self.orbit_radius = 40
-        self.desired_spacing = 4.0  # Desired spacing between members in SVG units
+        self.orbit_radius = 60
+        self.desired_spacing = 12.0  # Desired spacing between members in SVG units
+        self.show_info_text = False
 
-        # Display and rendering (public/internal)
+        # Display and rendering
         self.renderer = QSvgRenderer()
-        self.member_positions = []  # Will store (x, y, radius, member_index) tuples for click detection
+        self.member_positions: list[
+            tuple[float, float, float, int]
+        ] = []  # (x, y, radius, member_index) tuples for click detection
 
-        # Rotation state (public)
+        # Rotation state
         self.angle_offset = 0
 
-        # Animation system (private - internal implementation details)
+        # Animation system
         self._target_angle = 0
         self._animation_timer = QTimer()
         self._animation_timer.timeout.connect(self._animate_step)
@@ -66,9 +69,9 @@ class WheelWidget(QWidget):
         self._animation_elapsed = 0
         self._easing_curve = QEasingCurve(QEasingCurve.Type.InOutCubic)
 
-        # User interaction state (private - UI tracking)
-        self._active_member = -1  # Track which is currently active
-        self._hovered_member = -1
+        # User interaction state
+        self._active_member = 0  # Track which is currently active (0 means none)
+        self._hovered_member = 0  # 0 means none
 
         # Enable mouse tracking for hover effects
         self.setMouseTracking(True)
@@ -96,21 +99,42 @@ class WheelWidget(QWidget):
         """Get the automatically calculated member size"""
         return self._calculate_member_size()
 
+    def _get_theme_colors(self):
+        """Get theme-appropriate colors for the wheel"""
+        palette = self.palette()
+
+        # Get base colors from theme
+        button_color = palette.color(QPalette.ColorRole.Button)
+        # text_color = palette.color(QPalette.ColorRole.Text)
+
+        return {
+            "wheel_light": button_color.lighter(110).name(),
+            "wheel_base": button_color.name(),
+            "wheel_dark": button_color.darker(120).name(),
+            "wheel_stroke": button_color.darker(60).name(),
+        }
+
     def update_svg(self):
         """Generate SVG with members at current rotation"""
         circles = []
         center_x, center_y = 100, 100  # SVG center
 
+        # Get theme colors
+        colors = self._get_theme_colors()
+
+        # Get text color from theme
+        text_color = self.palette().color(QPalette.ColorRole.Text).name()
+
         # Clear previous member positions
         self.member_positions = []
-        selected_member = -1
+        selected_member = 0  # 0 means no member selected
 
-        for i in range(self.num_slots):
+        for i in range(1, self.num_slots + 1):  # 1-based indexing
             # Calculate angle for this slot (start at 12 o'clock = -90°)
-            base_angle = (360 / self.num_slots) * i if self.num_slots > 0 else 0
+            # Subtract 1 from i for angle calculation since angles are 0-based
+            base_angle = (360 / self.num_slots) * (i - 1) if self.num_slots > 0 else 0
             current_angle = base_angle + self.angle_offset - 90  # -90 to start at 12 o'clock
 
-            # Convert to radians
             angle_rad = math.radians(current_angle)
 
             # Calculate position
@@ -130,23 +154,20 @@ class WheelWidget(QWidget):
             angle_diff = min(
                 abs(normalized_angle - 270), abs(normalized_angle - 270 + 360), abs(normalized_angle - 270 - 360)
             )
-            is_active = angle_diff < (360 / self.num_slots / 2)  # Within half a step of 12 o'clock
+            is_active = angle_diff < (360 / self.num_slots / 4)  # Within a quarter of a step of 12 o'clock
 
             if is_active and has_member:
-                selected_member = i  # Position (slot number)
+                selected_member = i  # Position (slot number, 1-based)
 
-            # Determine if this slot is being hovered
             is_hovered = i == self._hovered_member
 
             if has_member:
-                # Get hue from mapping or use default (grey)
-                label = member  # member is now just the label string
+                label = member
                 hue = self.hue_mapping.get(label, self.default_hue)
 
-                # Use member's hue for color - convert HSL to RGB for better compatibility
                 h = hue / 360.0
-                s = 0.7  # 70% saturation
-                lightness = 0.6  # 60% lightness
+                s = 0.7
+                lightness = 0.6
                 r, g, b = colorsys.hls_to_rgb(h, lightness, s)
                 stroke_color = f"rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})"
 
@@ -159,34 +180,78 @@ class WheelWidget(QWidget):
                 else:
                     # Inactive: only stroke, no fill
                     fill_color = "none"
-                    stroke_opacity = 1.0 if is_hovered else 0.75
+                    stroke_opacity = 1.0 if is_hovered else 0.5
                     stroke_width = 2
             else:
-                # Empty slot: transparent with very dim stroke
+                # Empty slot: transparent with very dim stroke using theme color
                 fill_color = "none"
-                stroke_color = "#999"
-                stroke_opacity = 0.2
+                stroke_color = colors["wheel_stroke"]
+                stroke_opacity = 0.5
                 stroke_width = 1
 
-            # Add circle (no text labels anymore - will use tooltips)
             circles.append(f'''
-                <circle cx="{x:.1f}" cy="{y:.1f}" r="{self.member_size:.1f}"
-                        fill="{fill_color}" stroke="{stroke_color}"
-                        stroke-width="{stroke_width}" stroke-opacity="{stroke_opacity}"/>
+                <circle
+                    cx="{x:.1f}" cy="{y:.1f}" r="{self.member_size:.1f}"
+                    fill="{fill_color}" stroke="{stroke_color}"
+                    stroke-width="{stroke_width}" stroke-opacity="{stroke_opacity}"
+                />
             ''')
+
+        # Calculate the outer wheel radius and cutout properties
+        wheel_outer_radius = self.orbit_radius + self.member_size * 1.5  # Wheel extends beyond member orbit
+        wheel_inner_radius = 10  # Inner hole radius
+        cutout_radius = self.member_size + self.desired_spacing / 2  # Active Cutout slightly larger than member circles
+        cutout_center_x = center_x  # Cutout at 12 o'clock position
+        cutout_center_y = center_y - self.orbit_radius  # At 12 o'clock on the orbit
+
+        # Wheel with cutout using SVG path - outer circle minus the inner hole and the cutout
+        wheel_path = f"""
+            M {center_x - wheel_outer_radius} {center_y}
+            A {wheel_outer_radius} {wheel_outer_radius} 0 1 1 {center_x + wheel_outer_radius} {center_y}
+            A {wheel_outer_radius} {wheel_outer_radius} 0 1 1 {center_x - wheel_outer_radius} {center_y}
+            Z
+            M {center_x - wheel_inner_radius} {center_y}
+            A {wheel_inner_radius} {wheel_inner_radius} 0 1 0 {center_x + wheel_inner_radius} {center_y}
+            A {wheel_inner_radius} {wheel_inner_radius} 0 1 0 {center_x - wheel_inner_radius} {center_y}
+            Z
+            M {cutout_center_x - cutout_radius} {cutout_center_y}
+            A {cutout_radius} {cutout_radius} 0 1 0 {cutout_center_x + cutout_radius} {cutout_center_y}
+            A {cutout_radius} {cutout_radius} 0 1 0 {cutout_center_x - cutout_radius} {cutout_center_y}
+            Z
+        """
+
+        info_text = f"""
+            <text x="100" y="25" text-anchor="middle" font-size="12" fill="{text_color}">
+                {self.num_slots} slots, {len(self.members)} members, {self.angle_offset}°
+            </text>
+        """
 
         svg_data = f"""
         <svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <!-- Gradient for the wheel using theme colors -->
+                <radialGradient id="wheelGradient" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" style="stop-color:{colors["wheel_light"]};stop-opacity:1" />
+                    <stop offset="85%" style="stop-color:{colors["wheel_base"]};stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:{colors["wheel_dark"]};stop-opacity:1" />
+                </radialGradient>
+            </defs>
+
+            <!-- Outer wheel with cutouts -->
+            <path d="{wheel_path}"
+                  fill="url(#wheelGradient)"
+                  stroke="{colors["wheel_stroke"]}"
+                  stroke-width="1"
+                  fill-rule="evenodd"/>
+
             <!-- Central point -->
-            <circle cx="100" cy="100" r="3" fill="#333" opacity="0.7"/>
+            <circle cx="100" cy="100" r="3" fill="{text_color}" opacity="0.7"/>
 
             <!-- Member circles -->
             {"".join(circles)}
 
             <!-- Info text -->
-            <text x="100" y="25" text-anchor="middle" font-size="12" fill="#333">
-                {self.num_slots} slots, {len(self.members)} members, {self.angle_offset}°
-            </text>
+            {info_text if self.show_info_text else ""}
         </svg>
         """
 
@@ -196,16 +261,16 @@ class WheelWidget(QWidget):
         # Emit signal if active member changed
         if selected_member != self._active_member:
             self._active_member = selected_member
-            if selected_member >= 0:  # Only emit if we have a valid active member
+            if selected_member > 0:  # Only emit if we have a valid active member (1-based)
                 self.active_changed.emit(selected_member)
 
     def get_active_member(self):
-        """Get the currently active member position (0-based slot index), returns -1 if none"""
+        """Get the currently active member position (1-based slot index), returns 0 if none"""
         return self._active_member
 
     def get_active_member_label(self):
         """Get the currently active member label, returns None if none"""
-        if 0 <= self._active_member < self.num_slots and self._active_member in self.members:
+        if self._active_member > 0 and self._active_member in self.members:
             return self.members[self._active_member]
         return None
 
@@ -221,7 +286,7 @@ class WheelWidget(QWidget):
             # Get all member positions in reverse sorted order for clockwise visual rotation
             member_positions = sorted(self.members.keys(), reverse=True)
 
-            if current_position >= 0 and current_position in member_positions:
+            if current_position > 0 and current_position in member_positions:
                 # Find current position in the list
                 current_index = member_positions.index(current_position)
                 # Get next position for clockwise visual rotation
@@ -241,7 +306,7 @@ class WheelWidget(QWidget):
             # Get all member positions in normal sorted order for counter-clockwise visual rotation
             member_positions = sorted(self.members.keys())
 
-            if current_position >= 0 and current_position in member_positions:
+            if current_position > 0 and current_position in member_positions:
                 # Find current position in the list
                 current_index = member_positions.index(current_position)
                 # Get next position for counter-clockwise visual rotation
@@ -285,16 +350,17 @@ class WheelWidget(QWidget):
         """Start animation to target position with easing
 
         Args:
-            position: The position to rotate to (0 to num_slots-1)
+            position: The position to rotate to (1 to num_slots)
             clockwise: Direction to rotate. If None, uses shortest path.
                       If True, forces clockwise rotation.
                       If False, forces counter-clockwise rotation.
         """
-        if not (0 <= position < self.num_slots):
+        if not (1 <= position <= self.num_slots):
             return
 
         # Calculate the angle needed to move this position to 12 o'clock
-        position_base_angle = (360 / self.num_slots) * position
+        # Convert 1-based position to 0-based for angle calculation
+        position_base_angle = (360 / self.num_slots) * (position - 1)
         # We want this position at angle 0 (after the -90 offset in update_svg)
         target_angle = (-position_base_angle) % 360
 
@@ -355,7 +421,7 @@ class WheelWidget(QWidget):
     def mousePressEvent(self, event):
         """Handle mouse clicks to select members"""
         member_position = self._get_member_at_position(event.position().x(), event.position().y())
-        if member_position >= 0:
+        if member_position > 0:
             self.set_active(member_position)
 
     def mouseMoveEvent(self, event):
@@ -367,7 +433,7 @@ class WheelWidget(QWidget):
             self.update_svg()
 
             # Set tooltip
-            if member_position >= 0 and member_position in self.members:
+            if member_position > 0 and member_position in self.members:
                 label = self.members[member_position]
                 self.setToolTip(f"{label}")
             else:
@@ -375,13 +441,13 @@ class WheelWidget(QWidget):
 
     def leaveEvent(self, event):
         """Handle mouse leaving the widget"""
-        if self._hovered_member >= 0:
-            self._hovered_member = -1
+        if self._hovered_member > 0:
+            self._hovered_member = 0
             self.update_svg()
             self.setToolTip("")
 
     def _get_member_at_position(self, x, y):
-        """Get the member position at the given widget coordinates, returns -1 if none"""
+        """Get the member position at the given widget coordinates, returns 0 if none"""
         # Convert to SVG coordinates
         widget_width = self.width()
         widget_height = self.height()
@@ -400,7 +466,7 @@ class WheelWidget(QWidget):
                 if distance <= member_radius + 5:  # Add some tolerance
                     return member_position
 
-        return -1
+        return 0
 
 
 # Demo code - runs when script is executed directly
@@ -413,9 +479,10 @@ if __name__ == "__main__":
         QHBoxLayout,
         QWidget,
         QPushButton,
-        QSpinBox,
         QLabel,
+        QStyle,
     )
+    from PySide6.QtCore import Qt
 
     class WheelDemo(QMainWindow):
         def __init__(self):
@@ -428,13 +495,13 @@ if __name__ == "__main__":
             self.setCentralWidget(main_widget)
             layout = QVBoxLayout(main_widget)
 
-            # Create test members with specific hues that match their names - sparse placement
+            # Create test members with specific hues that match their names - sparse placement (1-based)
             members = {
-                0: "Red",  # Position 0
-                2: "Green",  # Position 2 (skip 1)
-                3: "Blue",  # Position 3
-                6: "Yellow",  # Position 6 (skip 4, 5)
-                7: "Purple",  # Position 7
+                1: "Red",  # Position 1
+                3: "Green",  # Position 3 (skip 2)
+                4: "Blue",  # Position 4
+                5: "Yellow",  # Position 5
+                7: "Purple",  # Position 7 (skip 6)
             }
 
             # Create hue mapping
@@ -446,63 +513,55 @@ if __name__ == "__main__":
                 "Purple": 300,  # Purple/magenta
             }
 
-            # Create the wheel widget with 8 slots, 5 members, and hue mapping
-            self.wheel = WheelWidget(8, members, hue_mapping)
+            self.wheel = WheelWidget(7, members, hue_mapping)
             self.wheel.active_changed.connect(self.on_member_changed)
 
             # Create controls
-            controls_layout = QHBoxLayout()
-
-            # Spacing control (affects auto-calculated member size)
-            spacing_label = QLabel("Spacing:")
-            self.spacing_spinbox = QSpinBox()
-            self.spacing_spinbox.setRange(1, 10)
-            self.spacing_spinbox.setValue(2)
-            self.spacing_spinbox.valueChanged.connect(self.on_spacing_changed)
-
-            # Navigation buttons
-            prev_btn = QPushButton("Previous")
-            next_btn = QPushButton("Next")
-            reset_btn = QPushButton("Reset")
-
+            prev_btn = QPushButton("◀")
+            prev_btn.setToolTip("Previous member")
             prev_btn.clicked.connect(self.wheel.step_to_previous)
+
+            next_btn = QPushButton("▶")
+            next_btn.setToolTip("Next member")
             next_btn.clicked.connect(self.wheel.step_to_next)
+
+            reset_btn = QPushButton("⟳")
+            reset_btn.setToolTip("Reset wheel rotation")
             reset_btn.clicked.connect(self.wheel.reset_rotation)
 
-            controls_layout.addWidget(spacing_label)
-            controls_layout.addWidget(self.spacing_spinbox)
-            controls_layout.addStretch()
-            controls_layout.addWidget(prev_btn)
-            controls_layout.addWidget(next_btn)
-            controls_layout.addWidget(reset_btn)
+            controls_layout = QVBoxLayout()
+            controls_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            back_forth_layout = QHBoxLayout()
 
-            # Status label
+            back_forth_layout.addWidget(prev_btn)
+            back_forth_layout.addStretch()
+            back_forth_layout.addWidget(next_btn)
+
+            status_layout = QHBoxLayout()
             self.status_label = QLabel("Hover over circles to see labels, click to select")
+            status_layout.addWidget(self.status_label)
+            status_layout.addStretch()
+            status_layout.addWidget(reset_btn)
+
+            controls_layout.addLayout(back_forth_layout)
+            controls_layout.addLayout(status_layout)
 
             # Add to main layout
             layout.addWidget(self.wheel)
             layout.addLayout(controls_layout)
-            layout.addWidget(self.status_label)
 
         def on_member_changed(self, member_position):
             """Handle member selection"""
             member_label = self.wheel.get_active_member_label()
             if member_label:
                 hue = self.wheel.hue_mapping.get(member_label, self.wheel.default_hue)
-                size = self.wheel.member_size
-                self.status_label.setText(
-                    f"Selected: {member_label} (position {member_position}, hue {hue:.0f}°, size {size:.1f})"
-                )
+                self.status_label.setText(f"Selected: {member_label} (position {member_position}, hue {hue:.0f}°")
             else:
                 self.status_label.setText("Hover over circles to see labels, click to select")
 
-        def on_spacing_changed(self, spacing):
-            """Handle spacing change - updates member size automatically"""
-            self.wheel.desired_spacing = float(spacing)
-            self.wheel.update_svg()  # Refresh to recalculate member sizes
-
     # Run the demo
     app = QApplication(sys.argv)
+    app.setWindowIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
     demo = WheelDemo()
     demo.show()
     sys.exit(app.exec())
