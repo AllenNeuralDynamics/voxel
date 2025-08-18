@@ -1,9 +1,9 @@
 from abc import abstractmethod
 
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
 
 
-class BaseIndicatorLight(VoxelDevice):
+class BaseIndicatorLight(BaseDevice):
     """
     Base class for indicator light devices.
     """

@@ -41,10 +41,10 @@ class TigerStage(BaseStage):
 
     def __init__(
         self,
+        uid: str,
         tigerbox: TigerController,
         hardware_axis: str,
         instrument_axis: str,
-        log_level: str = "INFO",
     ) -> None:
         """
         Initialize the Stage object.
@@ -59,14 +59,10 @@ class TigerStage(BaseStage):
         :type log_level: str, optional
         :raises ValueError: If both tigerbox and port are None
         """
-        self.log = VoxelLogging.get_logger(object=self)
-        self.log.setLevel(log_level)
-
-        if tigerbox is None:
-            raise ValueError("Tigerbox cannot be none")
+        super().__init__(uid=uid)
 
         self.tigerbox = tigerbox
-        self.tigerbox.log.setLevel(log_level)
+        self.tigerbox.log.setLevel(VoxelLogging.log_level())
 
         self.hardware_axis = hardware_axis.upper()
         self.instrument_axis = instrument_axis.lower()

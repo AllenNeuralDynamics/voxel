@@ -31,4 +31,4 @@ class Filter(BaseFilter):
         """
         Close the filter device.
         """
-        self.wheel.close()
+        pass

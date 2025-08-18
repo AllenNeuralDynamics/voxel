@@ -6,7 +6,7 @@ authors = [
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.12, <3.13"
+requires-python = ">=3.12.7"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -31,7 +31,7 @@ members = [
 
 [tool.uv.sources]
 "voxel" = { workspace = true }
-"voxel-qt-widgets" = { workspace = true }
+"vidgets" = { workspace = true }
 "voxel-classic" = { workspace = true }
 
 [tool.tach]

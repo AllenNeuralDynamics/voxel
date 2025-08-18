@@ -1,28 +1,26 @@
 instrument:
   id: exaspim-01
   channels:
-    "561":
-      lasers: [561 nm]
-      cameras: [vp-151mx]
-      focusing_stages: [left, right, camera]
-      filters: [620/60BP]
-    "639":
-      lasers: [639 nm]
-      cameras: [vp-151mx]
-      focusing_stages: [left, right, camera]
-      filters: [655LP]
+    # "561":
+    #   lasers: [561 nm]
+    #   cameras: [vp-151mx]
+    #   focusing_stages: [left, right, camera]
+    #   filters: [620/60BP]
     "488":
       lasers: [488 nm]
       cameras: [vp-151mx]
       focusing_stages: [left, right, camera]
       filters: [500LP]
+    "639":
+      lasers: [639 nm]
+      cameras: [vp-151mx]
+      filters: [655LP]
+      focusing_stages: [left, right, camera]
   devices:
     vp-151mx:
-      type: camera
-      driver: voxel_classic.devices.camera.vieworks.egrabber
-      module: VieworksCamera
-      init:
-        id: MP151BDZ014
+      target: voxel_classic.devices.camera.vieworks.egrabber.VieworksCamera
+      kwargs:
+        serial_number: MP151BDZ014
       properties:
         exposure_time_ms: 10.0
         pixel_type: mono16
@@ -36,239 +34,151 @@ instrument:
         binning: 1
         um_px: 0.748
     488 nm:
-      type: laser
-      driver: voxel_classic.devices.laser.coherent.genesis_mx
-      module: GenesisMXLaser
+      target: voxel_classic.devices.laser.coherent.genesis_mx.GenesisMXLaser
       color: blue
-      init:
-        id: A679409EM263
+      kwargs:
+        serial_number: A679409EM263
         wavelength: 488
         maximum_power_mw: 1000
-    561 nm:
-      type: laser
-      driver: voxel_classic.devices.laser.coherent.genesis_mx
-      module: GenesisMXLaser
-      color: green
-      init:
-        id: J718583CM887
-        wavelength: 561
-        maximum_power_mw: 1000
+    # 561 nm:
+    #   type: laser
+    #   target: voxel_classic.devices.laser.coherent.genesis_mx.GenesisMXLaser
+    #   kwargs:
+    #     serial_number: J718583CM887
+    #     wavelength: 561
+    #     maximum_power_mw: 1000
     639 nm:
       type: laser
-      driver: voxel_classic.devices.laser.coherent.genesis_mx
-      module: GenesisMXLaser
-      color: red
-      init:
-        id: R689368EQ167
+      target: voxel_classic.devices.laser.coherent.genesis_mx.GenesisMXLaser
+      kwargs:
+        serial_number: R689368EQ167
         wavelength: 639
         maximum_power_mw: 1000
-    tiger controller:
+    tiger_controller:
       type: stage
-      driver: voxel_classic.devices.controller.asi.tiger
-      module: TigerController
-      init:
+      target: voxel_classic.devices.controller.asi.tiger.TigerController
+      kwargs:
         com_port: COM3
-      subdevices:
-        z:
-          type: scanning_stage
-          driver: voxel_classic.devices.stage.asi.tiger
-          module: TigerStage
-          init:
-            hardware_axis: z
-            instrument_axis: z
-          properties:
-            mode: step shoot
-            speed_mm_s: 1.0
-            backlash_mm: 0.0
-            acceleration_ms: 200.0
-        x:
-          type: tiling_stage
-          driver: voxel_classic.devices.stage.asi.tiger
-          module: TigerStage
-          init:
-            hardware_axis: x
-            instrument_axis: x
-          properties:
-            mode: off
-            speed_mm_s: 1.0
-            backlash_mm: 0.004
-            acceleration_ms: 200.0
-        y:
-          type: tiling_stage
-          driver: voxel_classic.devices.stage.asi.tiger
-          module: TigerStage
-          init:
-            hardware_axis: v
-            instrument_axis: y
-          properties:
-            mode: off
-            speed_mm_s: 1.0
-            backlash_mm: 0.004
-            acceleration_ms: 200.0
-        theta:
-          type: focusing_stage
-          driver: voxel_classic.devices.stage.asi.tiger
-          module: TigerStage
-          init:
-            hardware_axis: t
-            instrument_axis: t
-          properties:
-            mode: off
-            speed_mm_s: 0.3
-            backlash_mm: 0.004
-            acceleration_ms: 200.0
-        left:
-          type: focusing_stage
-          driver: voxel_classic.devices.stage.asi.tiger
-          module: TigerStage
-          init:
-            hardware_axis: a
-            instrument_axis: a
-          properties:
-            mode: off
-            speed_mm_s: 0.01
-            backlash_mm: 0.004
-            acceleration_ms: 5.0
-        right:
-          type: focusing_stage
-          driver: voxel_classic.devices.stage.asi.tiger
-          module: TigerStage
-          init:
-            hardware_axis: b
-            instrument_axis: b
-          properties:
-            mode: off
-            speed_mm_s: 0.01
-            backlash_mm: 0.004
-            acceleration_ms: 5.0
-        camera:
-          type: focusing_stage
-          driver: voxel_classic.devices.stage.asi.tiger
-          module: TigerStage
-          init:
-            hardware_axis: m
-            instrument_axis: m
-          properties:
-            mode: off
-            speed_mm_s: 0.01
-            backlash_mm: 0.004
-            acceleration_ms: 20.0
-        # joystick:
-        #    type: joystick
-        #    driver: voxel_classic.devices.joystick.asi
-        #    module: Joystick
-        #    init:
-        #      joystick_mapping:
-        #        joystick_x:
-        #          instrument_axis: x
-        #          polarity: default
-        #        joystick_y:
-        #          instrument_axis: z
-        #          polarity: default
-        #        wheel_z:
-        #          instrument_axis: a
-        #          polarity: default
-        #        wheel_f:
-        #          instrument_axis: b
-        #          polarity: default
-        #      axis_mapping:
-        #        x: x
-        #        y: v
-        #        z: z
-        #        t: t
-        #        a: a
-        #        b: b
-        #        m: m
-    # temperature_sensor:
-    #   type: temperature_sensor
-    #   driver: voxel_classic.devices.temperature_sensor.thorlabs.tsp0b1
-    #   module: TSP01BTemperatureSensor
-    #   init:
-    #     id: M01221847
-    #     channel: TH1
-    # power meter:
-    #   type: power_meter
-    #   driver: voxel_classic.devices.power_meter.thorlabs.pm100
-    #   module: PM100Meter
-    #   init:
-    #     id: pm100d
-    #     conn: P0044066
-    # flip mount:
-    #   type: flip_mount
-    #   driver: voxel_classic.devices.flip_mount.thorlabs.mff101
-    #   module: MFF1101FlipMount
-    #   init:
-    #     id: powell lens
-    #     conn: "37008111"
-    #     positions:
-    #       alignment mode: 0
-    #       imaging mode: 1
-    #   properties:
-    #     flip_time_ms: 2800
-    # aotf:
-    #   type: aotf
-    #   driver: voxel_classic.devices.aotf.aaopto.aotfnc
-    #   module: AAOptoAOTF
-    #   init:
-    #     port: COM20
-    # left tunable lens:
-    #   type: tunable_lens
-    #   driver: voxel_classic.devices.tunable_lens.optotune.icc4c
-    #   module: ICC4CTunableLens
-    #   init:
-    #     port: COM19
-    #     channel: 0
-    #   properties:
-    #     mode: external
-    # right tunable lens:
-    #   type: tunable_lens
-    #   driver: voxel_classic.devices.aotf.optotune.icc4c
-    #   module: ICC4CTunableLens
-    #   init:
-    #     port: COM19
-    #     channel: 1
-    #   properties:
-    #     mode: external
-    pcie-6738:
+    z:
+      type: scanning_stage
+      target: voxel_classic.devices.stage.asi.tiger.TigerStage
+      kwargs:
+        tigerbox: tiger_controller
+        hardware_axis: z
+        instrument_axis: z
+      properties:
+        mode: step shoot
+        speed_mm_s: 1.0
+        backlash_mm: 0.0
+        acceleration_ms: 200.0
+    x:
+      type: tiling_stage
+      target: voxel_classic.devices.stage.asi.tiger.TigerStage
+      kwargs:
+        tigerbox: tiger_controller
+        hardware_axis: x
+        instrument_axis: x
+      properties:
+        mode: off
+        speed_mm_s: 1.0
+        backlash_mm: 0.004
+        acceleration_ms: 200.0
+    y:
+      type: tiling_stage
+      target: voxel_classic.devices.stage.asi.tiger.TigerStage
+      kwargs:
+        tigerbox: tiger_controller
+        hardware_axis: v
+        instrument_axis: y
+      properties:
+        mode: off
+        speed_mm_s: 1.0
+        backlash_mm: 0.004
+        acceleration_ms: 200.0
+    theta:
+      type: focusing_stage
+      target: voxel_classic.devices.stage.asi.tiger.TigerStage
+      kwargs:
+        tigerbox: tiger_controller
+        hardware_axis: t
+        instrument_axis: t
+      properties:
+        mode: off
+        speed_mm_s: 0.3
+        backlash_mm: 0.004
+        acceleration_ms: 200.0
+    left:
+      type: focusing_stage
+      target: voxel_classic.devices.stage.asi.tiger.TigerStage
+      kwargs:
+        tigerbox: tiger_controller
+        hardware_axis: a
+        instrument_axis: a
+      properties:
+        mode: off
+        speed_mm_s: 0.01
+        backlash_mm: 0.004
+        acceleration_ms: 5.0
+    right:
+      type: focusing_stage
+      target: voxel_classic.devices.stage.asi.tiger.TigerStage
+      kwargs:
+        tigerbox: tiger_controller
+        hardware_axis: b
+        instrument_axis: b
+      properties:
+        mode: off
+        speed_mm_s: 0.01
+        backlash_mm: 0.004
+        acceleration_ms: 5.0
+    camera:
+      type: focusing_stage
+      target: voxel_classic.devices.stage.asi.tiger.TigerStage
+      kwargs:
+        tigerbox: tiger_controller
+        hardware_axis: m
+        instrument_axis: m
+      properties:
+        mode: off
+        speed_mm_s: 0.01
+        backlash_mm: 0.004
+        acceleration_ms: 20.0
+    filter_wheel:
+      type: filter_wheel
+      target: voxel_classic.devices.filterwheel.ni.DAQFilterWheel
+      kwargs:
+        filters:
+          500LP: 0
+          655LP: 4
+          # 620/60BP: 6
+        ports:
+          500LP: ao23
+          655LP: ao19
+          # 620/60BP: ao29
+        daq: pcie_6738
+    # 500LP:
+    #   type: filter
+    #   target: voxel_classic.devices.filter.ni.Filter
+    #   kwargs:
+    #     id: 500LP
+    #     wheel: filter_wheel
+    # 655LP:
+    #   type: filter
+    #   target: voxel_classic.devices.filter.ni.Filter
+    #   kwargs:
+    #     id: 655LP
+    #     wheel: filter_wheel
+    # 620/60BP:
+    #   type: filter
+    #   target: voxel_classic.devices.filter.ni.Filter
+    #   kwargs:
+    #     id: 620/60BP
+    #     wheel: filter_wheel
+    pcie_6738:
       type: daq
-      driver: voxel_classic.devices.daq.ni
-      module: NIDAQ
-      init:
+      target: voxel_classic.devices.daq.ni.NIDAQ
+      kwargs:
         dev: Dev3
-      subdevices:
-        filter wheel:
-          type: filter_wheel
-          driver: voxel_classic.devices.filterwheel.ni
-          module: DAQFilterWheel
-          init:
-            # dev: Dev2
-            filters:
-              500LP: 0
-              655LP: 4
-              620/60BP: 6
-            ports:
-              500LP: ao23
-              655LP: ao19
-              620/60BP: ao29
-          subdevices:
-            500LP:
-              type: filter
-              driver: voxel_classic.devices.filter.ni
-              module: Filter
-              init:
-                id: 500LP
-            655LP:
-              type: filter
-              driver: voxel_classic.devices.filter.ni
-              module: Filter
-              init:
-                id: 655LP
-            620/60BP:
-              type: filter
-              driver: voxel_classic.devices.filter.ni
-              module: Filter
-              init:
-                id: 620/60BP
       properties:
         tasks:
           ao_task:
@@ -561,3 +471,23 @@ instrument:
               frequency_hz: 1.4
               output_port: PFI0
               trigger_mode: "off"
+    # temperature_sensor:
+    #   type: temperature_sensor
+    #   target: voxel_classic.devices.temperature_sensor.thorlabs.tsp0b1
+    #   module: TSP01BTemperatureSensor
+    #   kwargs:
+    #     id: M01221847
+    #     channel: TH1
+
+    # flip mount:
+    #   type: flip_mount
+    #   target: voxel_classic.devices.flip_mount.thorlabs.mff101
+    #   module: MFF1101FlipMount
+    #   kwargs:
+    #     id: powell lens
+    #     conn: "37008111"
+    #     positions:
+    #       alignment mode: 0
+    #       imaging mode: 1
+    #   properties:
+    #     flip_time_ms: 2800

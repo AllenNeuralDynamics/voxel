@@ -1,12 +1,48 @@
+from dataclasses import dataclass
 from pathlib import Path
 
-import inflection
 from exaspim_control.instrument.base import Instrument
 from ruamel.yaml import YAML
 from voxel.utils.log import VoxelLogging
+from voxel_classic.devices.camera.base import BaseCamera
+from voxel_classic.devices.daq.ni import NIDAQ
+from voxel_classic.devices.filterwheel.base import BaseFilterWheel
 from voxel_classic.devices.stage.asi.tiger import TigerStage
 
 DIRECTORY = Path(__file__).parent.resolve()
+
+
+@dataclass
+class ThreeAxisStage:
+    x: TigerStage
+    y: TigerStage
+    z: TigerStage
+
+    @property
+    def axes_names(self):
+        return [self.x.uid, self.y.uid, self.z.uid]
+
+    def __getitem__(self, axis_name: str) -> TigerStage:
+        if axis_name == "x":
+            return self.x
+        elif axis_name == "y":
+            return self.y
+        elif axis_name == "z":
+            return self.z
+        else:
+            raise KeyError(f"Unknown axis name: {axis_name}")
+
+    def stop(self) -> None:
+        self.x.halt()
+        self.y.halt()
+        self.z.halt()
+
+
+@dataclass
+class ExASPIMChannel:
+    name: str
+    laser: str
+    filter: str
 
 
 class ExASPIM(Instrument):
@@ -31,53 +67,112 @@ class ExASPIM(Instrument):
         # current working directory
         super().__init__(DIRECTORY / Path(config_filename), yaml_handler, log_level)
 
-        # verify exaspim microscope
-        self._verify_instrument()
+        camera = next(iter(self.cameras.values()), None)
+        scanning_stage = next(iter(self.scanning_stages.values()), None)
+
+        daq = next(iter(self.daqs.values()), None)
+        x_axis_stage = next(
+            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith("x")), None
+        )
+
+        y_axis_stage = next(
+            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith("y")), None
+        )
+
+        filter_wheel = next(iter(self.filter_wheels.values()), None)
+
+        if (
+            camera is None
+            or daq is None
+            or scanning_stage is None
+            or x_axis_stage is None
+            or y_axis_stage is None
+            or filter_wheel is None
+        ):
+            missing = []
+            if camera is None:
+                missing.append("camera")
+            if daq is None:
+                missing.append("DAQ")
+            if filter_wheel is None:
+                missing.append("filter wheel")
+            if scanning_stage is None:
+                missing.append("scanning stage")
+            if x_axis_stage is None:
+                missing.append("x axis stage")
+            if y_axis_stage is None:
+                missing.append("y axis stage")
+            raise ValueError(f" Exaspim missing required components: {', '.join(missing)}")
+        else:
+            self._camera = camera
+            self._daq = daq
+            self._filter_wheel = filter_wheel
+            self._stage = ThreeAxisStage(x=x_axis_stage, y=y_axis_stage, z=scanning_stage)
+
+        self._channels = self._initialize_channels()
+        self._active_channel = next(iter(self._channels.values()))
 
     @property
-    def positioning_stages(self) -> dict[str, TigerStage]:
-        """
-        Get the positioning stages of the instrument. i.e. scanning and tiling
+    def camera(self) -> BaseCamera:
+        return self._camera
 
-        :return: Dictionary of positioning stages.
-        :rtype: dict[str, TigerStage]
-        """
-        return {**self.scanning_stages, **self.tiling_stages}
+    @property
+    def stage(self) -> ThreeAxisStage:
+        return self._stage
 
-    def _verify_instrument(self) -> None:
-        """
-        Verify the ExASPIM instrument configuration.
+    @property
+    def daq(self) -> NIDAQ:
+        return self._daq
 
-        :raises ValueError: If the number of scanning stages is not 1
-        :raises ValueError: If the number of cameras is not 1
-        :raises ValueError: If the number of DAQs is not 1
-        :raises ValueError: If there are no lasers
-        :raises ValueError: If the x tiling stage is not defined
-        :raises ValueError: If the y tiling stage is not defined
+    @property
+    def filter_wheel(self) -> BaseFilterWheel:
+        return self._filter_wheel
+
+    @property
+    def channels(self) -> dict[str, ExASPIMChannel]:
+        return self._channels
+
+    @property
+    def active_channel(self) -> ExASPIMChannel:
+        return self._active_channel
+
+    def activate_channel(self, channel_name: str) -> None:
+        if self.active_channel.name == channel_name:
+            self.log.warning(f"Channel {channel_name} is already active.")
+            return
+        channel = self.channels.get(channel_name)
+        if channel is None:
+            self.log.warning(f"Channel {channel_name} not found.")
+            return
+        self.daq.close_acq_tasks()
+        self.filter_wheel.filter = channel.filter
+        self.daq.configure_acq_waveforms(channel.name)
+        laser = self.lasers.get(channel.laser)
+        if laser is not None:
+            laser.enable()  # AOTF is used to actually turn the lasers on. Enable now since the process is slow to warm up.
+        self._active_channel = channel
+
+    def _initialize_channels(self) -> dict[str, ExASPIMChannel]:
         """
-        # assert that only one scanning stage is allowed
-        self.log.info("verifying instrument configuration")
-        num_scanning_stages = len(self.scanning_stages)
-        if len(self.scanning_stages) != 1:
-            raise ValueError(f"one scanning stage must be defined but {num_scanning_stages} detected")
-        num_cameras = len(self.cameras)
-        if len(self.cameras) != 1:
-            raise ValueError(f"one camera must be defined but {num_cameras} detected")
-        num_daqs = len(self.daqs)
-        if len(self.daqs) != 1:
-            raise ValueError(f"one daq must be defined but {num_daqs} detected")
-        num_lasers = len(self.lasers)
-        if num_lasers < 1:
-            raise ValueError(f"at least one laser is required but {num_lasers} detected")
-        if not self.tiling_stages["x"]:
-            raise ValueError("x tiling stage is required")
-        if not self.tiling_stages["y"]:
-            raise ValueError("y tiling stage is required")
+        Initialize the channels for the ExASPIM instrument.
+
+        :return: A list of ExASPIMChannel objects.
+        :rtype: list[ExASPIMChannel]
+        """
+        channels = {}
+        for channel_name, channel_info in self.config["instrument"]["channels"].items():
+            lasers = channel_info.get("lasers")
+            filters = channel_info.get("filters")
+            if lasers is not None and filters is not None:
+                channels[channel_name] = ExASPIMChannel(
+                    name=channel_name,
+                    laser=lasers[0],
+                    filter=filters[0],
+                )
+        return channels
 
     def close(self):
-        for device_name, device_specs in self.config["instrument"]["devices"].items():
-            device_type = device_specs["type"]
-            device = getattr(self, inflection.pluralize(device_type))[device_name]
+        for device_name, device in self._devices.items():
             try:
                 device.close()
             except AttributeError:

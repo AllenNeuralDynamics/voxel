@@ -182,7 +182,7 @@ class ExASPIMAcquisition(Acquisition):
 
                     # setup channel i.e. laser and filter wheels
                     self.log.info(f"setting up channel: {tile_channel}")
-                    channel = self.instrument.channels[tile_channel]
+                    channel = self.instrument.channels_config[tile_channel]
                     for device_type, devices in channel.items():
                         for device_name in devices:
                             device = getattr(self.instrument, device_type)[device_name]
@@ -450,12 +450,12 @@ class ExASPIMAcquisition(Acquisition):
             # Start a batch of pulses to generate more frames and movements.
             if chunk_index == 0:
                 # log metrics from devices
-                laser_name = self.instrument.channels[tile["channel"]]["lasers"][0]
+                laser_name = self.instrument.channels[tile["channel"]].laser
                 laser = self.instrument.lasers[laser_name]
                 memory_info = virtual_memory()
                 self.log.info(f"RAM in use = {memory_info.used / (1024**3):.2f} GB")
-                self.log.info(f"laser {laser.id} power = {laser.power_mw:.2f} [mW]")
-                self.log.info(f"laser {laser.id} temperature = {laser.temperature_c:.2f} [mW]")
+                self.log.info(f"laser {laser.uid} power = {laser.power_mw:.2f} [mW]")
+                self.log.info(f"laser {laser.uid} temperature = {laser.temperature_c:.2f} [mW]")
                 # self.log.info(f"camera {camera.id} sensor temperature = {camera.sensor_temperature_c:.2f} [C]")
                 # self.log.info(f"camera {camera.id} mainboard temperature = {camera.mainboard_temperature_c:.2f} [C]")
                 # try:

@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path, WindowsPath
 
 import numpy as np
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 from ruamel.yaml import YAML
 from voxel.utils.log import VoxelLogging, get_default_console_handler, get_default_json_handler
 

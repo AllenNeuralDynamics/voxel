@@ -2,7 +2,6 @@ import random
 
 import numpy
 from serial import Serial
-from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.laser.base import BaseLaser
 
@@ -20,7 +19,7 @@ class SimulatedLaser(BaseLaser):
     SimulatedLaser class for handling simulated laser devices.
     """
 
-    def __init__(self, id: str, wavelength: int, prefix: str = "", maximum_power_mw: float = 100) -> None:
+    def __init__(self, uid: str, id: str, wavelength: int, maximum_power_mw: float = 100) -> None:
         """
         Initialize the SimulatedLaser object.
 
@@ -33,10 +32,9 @@ class SimulatedLaser(BaseLaser):
         :param maximum_power_mw: Maximum power for the laser in mW
         :type maximum_power_mw: float, optional
         """
-        super().__init__(id)
-        self.log = VoxelLogging.get_logger(object=self)
+        super().__init__(uid)
+        self._id = id
 
-        self.prefix = prefix
         self.ser = Serial
         self._wavelength = wavelength
         self._simulated_power_setpoint_mw = 10.0

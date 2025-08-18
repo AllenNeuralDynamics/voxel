@@ -1,10 +1,13 @@
 from abc import abstractmethod
 
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
 
 
-class BaseDAQ(VoxelDevice):
+class BaseDAQ(BaseDevice):
     """Base class for DAQ devices."""
+
+    def __init__(self, uid: str):
+        super().__init__(uid)
 
     @abstractmethod
     def add_ao_task(self) -> None:

@@ -1,12 +1,15 @@
 from abc import abstractmethod
 
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
 
 
-class BaseFilter(VoxelDevice):
+class BaseFilter(BaseDevice):
     """
     Base class for filter devices.
     """
+
+    def __init__(self, uid: str) -> None:
+        super().__init__(uid)
 
     @abstractmethod
     def enable(self) -> None:

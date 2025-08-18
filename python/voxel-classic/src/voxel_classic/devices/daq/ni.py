@@ -8,7 +8,6 @@ from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
 from nidaqmx.constants import AOIdleOutputBehavior, Edge, FrequencyUnits, Slope
 from scipy import interpolate, signal
-from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.daq.base import BaseDAQ
 
 DO_WAVEFORMS = ["square wave"]
@@ -40,7 +39,7 @@ class NIDAQ(BaseDAQ):
     do_waveforms: dict
     co_frequency_hz: float
 
-    def __init__(self, dev: str) -> None:
+    def __init__(self, uid: str, dev: str) -> None:
         """
         Initialize the DAQ object.
 
@@ -48,12 +47,11 @@ class NIDAQ(BaseDAQ):
         :type dev: str
         :raises ValueError: If the device name is not found in the system
         """
+        super().__init__(uid)
         self.do_task: nidaqmx.Task | None = None
         self.ao_task: nidaqmx.Task | None = None
         self.co_task: nidaqmx.Task | None = None
         self._tasks: dict[str, dict] = {}
-
-        self.log = VoxelLogging.get_logger(object=self)
 
         self.devs = []
         for device in nidaqmx.system.System.local().devices:
@@ -109,6 +107,17 @@ class NIDAQ(BaseDAQ):
                                 f"setattr(NIDAQ, '{parameter_name}', property(fget=lambda NIDAQ: {value}, \
                                 fset=lambda NIDAQ, value: {value}, fdel=lambda NIDAQ: None))"
                             )
+
+    def configure_acq_waveforms(self, channel_name: str):
+        if self.tasks.get("ao_task") is None and self.tasks.get("co_task") is None:
+            self.log.warning("Unable to configure daq waveforms. No AO or CO task configured in DAQ.")
+            return
+        self.add_ao_task()
+        self.generate_waveforms(channel_name)
+        self.write_waveforms()
+
+        pulse_count = self.tasks["co_task"]["timing"].get("pulse_count", None)
+        self.add_co_task(pulse_count)
 
     def add_ao_task(self) -> None:
         """

@@ -1,12 +1,15 @@
 from abc import abstractmethod
 
-from ..base import VoxelDevice
+from ..base import BaseDevice
 
 
-class BaseFilterWheel(VoxelDevice):
+class BaseFilterWheel(BaseDevice):
     """
     Base class for filter wheel devices.
     """
+
+    def __init__(self, uid: str) -> None:
+        super().__init__(uid)
 
     @property
     @abstractmethod

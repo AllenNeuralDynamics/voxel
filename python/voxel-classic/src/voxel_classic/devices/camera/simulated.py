@@ -3,7 +3,6 @@ from typing import Any
 
 import numpy
 
-from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.camera.base import BaseCamera
 from voxel_classic.processes.downsample.gpu.gputools.downsample_2d import GPUToolsDownSample2D
@@ -50,15 +49,14 @@ class SimulatedCamera(BaseCamera):
     :rtype: Camera
     """
 
-    def __init__(self, id: str) -> None:
+    def __init__(self, uid: str) -> None:
         """Initialize the Camera instance.
 
         :param id: Identifier for the camera
         :type id: str
         """
-        super().__init__()
-        self.log = VoxelLogging.get_logger(object=self)
-        self.id = id
+        super().__init__(uid=uid)
+        self.id = uid
         self.terminate_frame_grab = Event()
         self.terminate_frame_grab.clear()
         self._pixel_type = "mono16"

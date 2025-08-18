@@ -5,23 +5,25 @@ from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import Any, TypedDict
 
 import inflection
 from ruamel.yaml import YAML
 from serial import Serial
+from voxel.factory.object_graph_builder import build_object_graph
+from voxel.factory.specs import BuildSpec, BuildSpecs
+from voxel.reporting.errors import tabulate_report
 from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import _DeliminatedProperty
-
-if TYPE_CHECKING:
-    from voxel_classic.devices.camera.base import BaseCamera
-    from voxel_classic.devices.daq.ni import NIDAQ
-    from voxel_classic.devices.filter.base import BaseFilter
-    from voxel_classic.devices.filterwheel.base import BaseFilterWheel
-    from voxel_classic.devices.flip_mount.base import BaseFlipMount
-    from voxel_classic.devices.indicator_light.base import BaseIndicatorLight
-    from voxel_classic.devices.laser.base import BaseLaser
-    from voxel_classic.devices.stage.asi.tiger import TigerStage
+from voxel_classic.devices.base import BaseDevice
+from voxel_classic.devices.camera.base import BaseCamera
+from voxel_classic.devices.daq.ni import NIDAQ
+from voxel_classic.devices.filter.base import BaseFilter
+from voxel_classic.devices.filterwheel.base import BaseFilterWheel
+from voxel_classic.devices.flip_mount.base import BaseFlipMount
+from voxel_classic.devices.indicator_light.base import BaseIndicatorLight
+from voxel_classic.devices.laser.base import BaseLaser
+from voxel_classic.devices.stage.asi.tiger import TigerStage
 
 
 class ChannelInfo(TypedDict):
@@ -57,7 +59,7 @@ class Instrument:
         self.config = self.yaml.load(self.config_path)
 
         # store a dict of {device name: device type} for convenience
-        self.channels: dict[str, Any] = {}
+
         self.stage_axes: list = []
 
         self.cameras: dict[str, BaseCamera] = {}
@@ -71,27 +73,82 @@ class Instrument:
         self.focusing_stages: dict[str, TigerStage] = {}
         self.controllers: dict[str, Any] = {}
         self.indicator_lights: dict[str, BaseIndicatorLight] = {}
+        self.other_devices: dict[str, BaseDevice] = {}
+
+        devices_specs: BuildSpecs = {}
+        for k, v in self.config["instrument"]["devices"].items():
+            try:
+                specs = BuildSpec(**v)
+                devices_specs[k] = specs
+            except Exception as e:
+                self.log.error(f"Error loading device spec for {k}: {e}")
+
+        res = build_object_graph(devices_specs, BaseDevice)
+
+        if res.errors:
+            self.log.error(f"Errors occurred while building device graph: \n {tabulate_report(res.report())} \n")
+            return
+
+        self._devices = res.items
+
+        self._initialize_devices()
+
+        self.channels_config: dict[str, Any] = self.config["instrument"].get("channels", {})
 
         # construct microscope
-        self._construct()
+        # self._construct()
 
-    @property
-    def channel_infos(self) -> dict[str, ChannelInfo]:
-        """
-        Get channel information for the instrument.
+    # @property
+    # def channel_infos(self) -> dict[str, ChannelInfo]:
+    #     """
+    #     Get channel information for the instrument.
 
-        :return: A dictionary containing channel information.
-        :rtype: dict[str, ChannelInfo]
+    #     :return: A dictionary containing channel information.
+    #     :rtype: dict[str, ChannelInfo]
+    #     """
+    #     return {
+    #         channel_name: ChannelInfo(
+    #             lasers=channel.get("lasers", []),
+    #             cameras=channel.get("cameras", []),
+    #             focusing_stages=channel.get("focusing_stages", []),
+    #             filters=channel.get("filters", []),
+    #         )
+    #         for channel_name, channel in self.channels.items()
+    #     }
+
+    def _initialize_devices(self) -> None:
         """
-        return {
-            channel_name: ChannelInfo(
-                lasers=channel.get("lasers", []),
-                cameras=channel.get("cameras", []),
-                focusing_stages=channel.get("focusing_stages", []),
-                filters=channel.get("filters", []),
-            )
-            for channel_name, channel in self.channels.items()
-        }
+        Parse the devices from the configuration and initialize them.
+        """
+        for device_name, device in self._devices.items():
+            self.log.info(f"Parsing device {device_name}")
+            name_lower = device_name.lower()
+            if isinstance(device, BaseCamera):
+                self.cameras[device_name] = device
+            elif isinstance(device, BaseLaser):
+                self.lasers[device_name] = device
+            elif isinstance(device, BaseFilter):
+                self.filters[device_name] = device
+            elif isinstance(device, BaseFilterWheel):
+                self.filter_wheels[device_name] = device
+            elif isinstance(device, NIDAQ):
+                self.daqs[device_name] = device
+            elif isinstance(device, TigerStage) and name_lower.startswith("z"):
+                self.scanning_stages[device_name] = device
+            elif isinstance(device, TigerStage) and (name_lower.startswith("x") or name_lower.startswith("y")):
+                self.tiling_stages[device_name] = device
+            elif isinstance(device, BaseFlipMount):
+                self.flip_mounts[device_name] = device
+            elif isinstance(device, TigerStage):
+                self.focusing_stages[device_name] = device
+            elif isinstance(device, BaseIndicatorLight):
+                self.indicator_lights[device_name] = device
+            else:
+                self.log.warning(f"Unknown device type {device.__class__.__name__} for device {device_name}")
+                self.other_devices[device_name] = device
+            props = self.config["instrument"]["devices"][device_name].get("properties", {})
+            for prop_name, prop_value in props.items():
+                setattr(device, prop_name, prop_value)
 
     def _construct(self) -> None:
         """

@@ -7,10 +7,10 @@ import numpy as np
 from napari.qt import get_stylesheet
 from napari.qt.threading import create_worker, thread_worker
 from napari.settings import get_settings
-from PyQt6.QtCore import Qt
-from PyQt6.QtCore import pyqtSignal as Signal
-from PyQt6.QtCore import pyqtSlot as Slot
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtCore import Signal
+from PySide6.QtCore import Slot
+from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDockWidget,
@@ -27,17 +27,17 @@ from PyQt6.QtWidgets import (
 )
 from ruamel.yaml import YAML, RoundTripRepresenter
 from voxel.utils.log import VoxelLogging
-from voxel_qt_widgets.acquisition_widgets.channel_plan_widget import ChannelPlanWidget
-from voxel_qt_widgets.acquisition_widgets.metadata_widget import MetadataWidget
-from voxel_qt_widgets.acquisition_widgets.volume_model import VolumeModel
-from voxel_qt_widgets.acquisition_widgets.volume_plan_widget import (
+from vidgets.acquisition_widgets.channel_plan_widget import ChannelPlanWidget
+from vidgets.acquisition_widgets.metadata_widget import MetadataWidget
+from vidgets.acquisition_widgets.volume_model import VolumeModel
+from vidgets.acquisition_widgets.volume_plan_widget import (
     GridFromEdges,
     GridRowsColumns,
     GridWidthHeight,
     VolumePlanWidget,
 )
-from voxel_qt_widgets.base_device_widget import create_widget, scan_for_properties
-from voxel_qt_widgets.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
+from vidgets.base_device_widget import create_widget, scan_for_properties
+from vidgets.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
 
 from exaspim_control.acquisition.exaspim_acquisition import ExASPIMAcquisition
 from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
@@ -64,7 +64,7 @@ class ExASPIMAcquisitionView(QWidget):
     """Class for handling ExASPIM acquisition view with all merged functionality."""
 
     acquisitionEnded = Signal()
-    acquisitionStarted = Signal((datetime,))
+    acquisitionStarted = Signal(datetime)
 
     def __init__(self, acquisition: ExASPIMAcquisition, instrument_view: ExASPIMInstrumentView):
         """
@@ -271,7 +271,7 @@ class ExASPIMAcquisitionView(QWidget):
         self.volume_plan.tile_table.setDisabled(True)
         self.channel_plan.setDisabled(True)
 
-        # disable acquisition voxel_qt_widgets. Can't disable whole thing so stop button can be functional
+        # disable acquisition vidgets. Can't disable whole thing so stop button can be functional
         self.start_button.setEnabled(False)
         self.metadata_widget.setEnabled(False)
         for operation in ["writer", "transfer", "process", "routine"]:
@@ -347,7 +347,7 @@ class ExASPIMAcquisitionView(QWidget):
 
         visible = QComboBox()
         visible.currentTextChanged.connect(lambda text: self.hide_devices(text, device_widgets))
-        visible.addItems(device_widgets.keys())
+        visible.addItems(list(device_widgets.keys()))
         visible.setCurrentIndex(0)
         overlap_layout.addWidget(visible, 0, 0)
 
@@ -369,7 +369,7 @@ class ExASPIMAcquisitionView(QWidget):
         :return: widget for metadata
         """
         metadata_widget = MetadataWidget(self.acquisition.metadata)
-        metadata_widget.ValueChangedInside[str].connect(
+        metadata_widget.ValueChangedInside.connect(
             lambda name: setattr(self.acquisition.metadata, name, getattr(metadata_widget, name))
         )
         for name, widget in metadata_widget.property_widgets.items():
@@ -509,14 +509,13 @@ class ExASPIMAcquisitionView(QWidget):
         """Move stage to specified FOV position"""
         for axis, position in zip(self.coordinate_plane[:2], fov_position):
             stage_name = axis.strip("-")
-            if stage_name in self.instrument.positioning_stages:
-                stage = self.instrument.positioning_stages[stage_name]
+            if stage_name in self.instrument.stage.axes_names:
+                stage = self.instrument.stage[stage_name]
                 stage.position_mm = position
 
     def stop_stage(self) -> None:
         """Stop all stage movement"""
-        for stage in self.instrument.positioning_stages.values():
-            stage.halt()
+        self.instrument.stage.stop()
 
     def setup_fov_position(self) -> None:
         """Setup FOV position monitoring"""
@@ -535,8 +534,8 @@ class ExASPIMAcquisitionView(QWidget):
             positions = []
             for axis in self.coordinate_plane[:2]:
                 stage_name = axis.strip("-")
-                if stage_name in self.instrument.positioning_stages:
-                    stage = self.instrument.positioning_stages[stage_name]
+                if stage_name in self.instrument.stage.axes_names:
+                    stage = self.instrument.stage[stage_name]
                     position = stage.position_mm
                     if position and axis.startswith("-"):
                         position = -position

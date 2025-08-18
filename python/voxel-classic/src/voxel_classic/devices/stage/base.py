@@ -1,9 +1,9 @@
 from abc import abstractmethod
 
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
 
 
-class BaseStage(VoxelDevice):
+class BaseStage(BaseDevice):
     """
     Base class for stage devices.
     """

@@ -1,6 +1,6 @@
-from qtpy.QtCore import Signal, Slot, QTimer
-from qtpy.QtGui import QIntValidator, QDoubleValidator
-from qtpy.QtWidgets import (
+from PySide6.QtCore import Signal, Slot, QTimer
+from PySide6.QtGui import QIntValidator, QDoubleValidator
+from PySide6.QtWidgets import (
     QWidget,
     QLabel,
     QComboBox,
@@ -27,8 +27,8 @@ from typing import Literal
 
 
 class BaseDeviceWidget(QMainWindow):
-    ValueChangedOutside = Signal((str,))
-    ValueChangedInside = Signal((str,))
+    ValueChangedOutside = Signal(str)
+    ValueChangedInside = Signal(str)
 
     def __init__(self, device_type: object = None, properties: dict = {}):
         """Base widget for devices like camera, laser, stage, ect. Widget will scan properties of
@@ -50,7 +50,7 @@ class BaseDeviceWidget(QMainWindow):
 
         widget = create_widget("V", **self.property_widgets)
         self.setCentralWidget(widget)
-        self.ValueChangedOutside[str].connect(self.update_property_widget)  # Trigger update when property value changes
+        self.ValueChangedOutside.connect(self.update_property_widget)  # Trigger update when property value changes
 
     def create_property_widgets(self, properties: dict, widget_group):
         """Create input widgets based on properties

@@ -18,7 +18,6 @@ from egrabber import (
     query,
 )
 
-from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import DeliminatedProperty
 from voxel_classic.devices.camera.base import BaseCamera
 from voxel_classic.devices.utils.singleton import thread_safe_singleton
@@ -79,16 +78,15 @@ def get_egentl_singleton() -> EGenTL:
 class VieworksCamera(BaseCamera):
     """Camera class for handling Vieworks eGrabber operations."""
 
-    def __init__(self, id: str) -> None:
+    def __init__(self, uid: str, serial_number: str) -> None:
         """Initialize the Camera instance.
 
         :param id: Camera ID
         :type id: str
         :raises ValueError: If no valid cameras are found or no grabber is found for the given ID
         """
-        super().__init__()
-        self.log = VoxelLogging.get_logger(object=self)
-        self.id = str(id)  # convert to string incase serial # is entered as int
+        super().__init__(uid=uid)
+        self._serial_id = str(serial_number)  # convert to string incase serial # is entered as int
         self.gentl = get_egentl_singleton()
         self._latest_frame: np.ndarray = np.empty((0, 0, 0), dtype=np.uint16)
 
@@ -119,8 +117,8 @@ class VieworksCamera(BaseCamera):
                     grabber = EGrabber(
                         self.gentl, egrabber["interface"], egrabber["device"], egrabber["stream"], remote_required=True
                     )
-                    if grabber.remote.get("DeviceSerialNumber") == self.id:
-                        self.log.info(f"grabber found for S/N: {self.id}")
+                    if grabber.remote.get("DeviceSerialNumber") == self._serial_id:
+                        self.log.info(f"grabber found for S/N: {self._serial_id}")
                         return grabber, egrabber
                 except Exception:
                     continue
@@ -132,8 +130,8 @@ class VieworksCamera(BaseCamera):
             self.grabber = matching_grabber
             self.egrabber = egrabber_info
         else:
-            self.log.error(f"no grabber found for S/N: {self.id}")
-            raise ValueError(f"no grabber found for S/N: {self.id}")
+            self.log.error(f"no grabber found for S/N: {self._serial_id}")
+            raise ValueError(f"no grabber found for S/N: {self._serial_id}")
 
         # try:
         #     for egrabber in egrabber_list["grabbers"]:
@@ -631,7 +629,7 @@ class VieworksCamera(BaseCamera):
         state["Data Rate [MB/s]"] = self.grabber.stream.get("StatisticsDataRate") / self._binning**2
         state["Frame Rate [fps]"] = self.grabber.stream.get("StatisticsFrameRate")
         self.log.info(
-            f"id: {self.id}, "
+            f"id: {self._serial_id}, "
             f"frame: {state['Frame Index']}, "
             f"input: {state['Input Buffer Size']}, "
             f"output: {state['Output Buffer Size']}, "
@@ -729,7 +727,7 @@ class VieworksCamera(BaseCamera):
             type(self).exposure_time_ms.minimum = self.min_exposure_time_ms
             self.log.debug(f"min exposure time is: {self.min_exposure_time_ms} ms")
         except Exception:
-            self.log.debug(f"min exposure time not available for camera {self.id}")
+            self.log.debug(f"min exposure time not available for camera {self._serial_id}")
         # maximum exposure time
         # convert from us to ms
         try:
@@ -737,63 +735,63 @@ class VieworksCamera(BaseCamera):
             type(self).exposure_time_ms.maximum = self.max_exposure_time_ms
             self.log.debug(f"max exposure time is: {self.max_exposure_time_ms} ms")
         except Exception:
-            self.log.debug(f"max exposure time not available for camera {self.id}")
+            self.log.debug(f"max exposure time not available for camera {self._serial_id}")
         # minimum width
         try:
             self.min_width_px = self.grabber.remote.get("Width.Min")
             type(self).width_px.minimum = self.min_width_px
             self.log.debug(f"min width is: {self.min_width_px} px")
         except Exception:
-            self.log.debug(f"min width not available for camera {self.id}")
+            self.log.debug(f"min width not available for camera {self._serial_id}")
         # maximum width
         try:
             self.max_width_px = self.grabber.remote.get("Width.Max")
             type(self).width_px.maximum = self.max_width_px
             self.log.debug(f"max width is: {self.max_width_px} px")
         except Exception:
-            self.log.debug(f"max width not available for camera {self.id}")
+            self.log.debug(f"max width not available for camera {self._serial_id}")
         # minimum height
         try:
             self.min_height_px = self.grabber.remote.get("Height.Min")
             type(self).height_px.minimum = self.min_height_px
             self.log.debug(f"min height is: {self.min_height_px} px")
         except Exception:
-            self.log.debug(f"min height not available for camera {self.id}")
+            self.log.debug(f"min height not available for camera {self._serial_id}")
         # maximum height
         try:
             self.max_height_px = self.grabber.remote.get("Height.Max")
             type(self).height_px.maximum = self.max_height_px
             self.log.debug(f"max height is: {self.max_height_px} px")
         except Exception:
-            self.log.debug(f"max height not available for camera {self.id}")
+            self.log.debug(f"max height not available for camera {self._serial_id}")
         # minimum offset x
         try:
             self.min_offset_x_px = self.grabber.remote.get("OffsetX.Min")
             type(self).width_offset_px.minimum = self.min_offset_x_px  # type: ignore
             self.log.debug(f"min offset x is: {self.min_offset_x_px} px")
         except Exception:
-            self.log.debug(f"min offset x not available for camera {self.id}")
+            self.log.debug(f"min offset x not available for camera {self._serial_id}")
         # maximum offset x
         try:
             self.max_offset_x_px = self.grabber.remote.get("OffsetX.Max")
             type(self).width_offset_px.maximum = self.max_offset_x_px  # type: ignore
             self.log.debug(f"max offset x is: {self.max_offset_x_px} px")
         except Exception:
-            self.log.debug(f"max offset x not available for camera {self.id}")
+            self.log.debug(f"max offset x not available for camera {self._serial_id}")
         # minimum offset y
         try:
             self.min_offset_y_px = self.grabber.remote.get("OffsetY.Min")
             type(self).height_offset_px.minimum = self.min_offset_y_px  # type: ignore
             self.log.debug(f"min offset y is: {self.min_offset_y_px} px")
         except Exception:
-            self.log.debug(f"min offset y not available for camera {self.id}")
+            self.log.debug(f"min offset y not available for camera {self._serial_id}")
         # maximum offset y
         try:
             self.max_offset_y_px = self.grabber.remote.get("OffsetY.Max")
             type(self).height_offset_px.maximum = self.max_offset_y_px  # type: ignore
             self.log.debug(f"max offset y is: {self.max_offset_y_px} px")
         except Exception:
-            self.log.debug(f"max offset y not available for camera {self.id}")
+            self.log.debug(f"max offset y not available for camera {self._serial_id}")
         # step exposure time
         # convert from us to ms
         try:
@@ -801,35 +799,35 @@ class VieworksCamera(BaseCamera):
             type(self).exposure_time_ms.step = self.step_exposure_time_ms
             self.log.debug(f"step exposure time is: {self.step_exposure_time_ms} ms")
         except Exception:
-            self.log.debug(f"step exposure time not available for camera {self.id}")
+            self.log.debug(f"step exposure time not available for camera {self._serial_id}")
         # step width
         try:
             self.step_width_px = self.grabber.remote.get("Width.Inc")
             type(self).width_px.step = self.step_width_px
             self.log.debug(f"step width is: {self.step_width_px} px")
         except Exception:
-            self.log.debug(f"step width not available for camera {self.id}")
+            self.log.debug(f"step width not available for camera {self._serial_id}")
         # step height
         try:
             self.step_height_px = self.grabber.remote.get("Height.Inc")
             type(self).height_px.step = self.step_height_px
             self.log.debug(f"step height is: {self.step_height_px} px")
         except Exception:
-            self.log.debug(f"step height not available for camera {self.id}")
+            self.log.debug(f"step height not available for camera {self._serial_id}")
         # step offset x
         try:
             self.step_offset_x_px = self.grabber.remote.get("OffsetX.Inc")
             type(self).width_offset_px.step = self.step_offset_x_px  # type: ignore
             self.log.debug(f"step offset x is: {self.step_offset_x_px} px")
         except Exception:
-            self.log.debug(f"step offset x not available for camera {self.id}")
+            self.log.debug(f"step offset x not available for camera {self._serial_id}")
         # step offset y
         try:
             self.step_offset_y_px = self.grabber.remote.get("OffsetY.Inc")
             type(self).height_offset_px.step = self.step_offset_y_px  # type: ignore
             self.log.debug(f"step offset y is: {self.step_offset_y_px} px")
         except Exception:
-            self.log.debug(f"step offset y not available for camera {self.id}")
+            self.log.debug(f"step offset y not available for camera {self._serial_id}")
         # minimum line interval
         try:
             max_frame_rate = self.grabber.remote.get("AcquisitionFrameRate.Max")
@@ -843,7 +841,7 @@ class VieworksCamera(BaseCamera):
             type(self).line_interval_us.minimum = self.min_line_interval_us  # type: ignore
             self.log.debug(f"min line interval is: {self.min_line_interval_us} [us]")
         except Exception:
-            self.log.debug(f"min line interval is not available for camera {self.id}")
+            self.log.debug(f"min line interval is not available for camera {self._serial_id}")
         # maximum line interval
         try:
             min_frame_rate = self.grabber.remote.get("AcquisitionFrameRate.Min")
@@ -857,7 +855,7 @@ class VieworksCamera(BaseCamera):
             type(self).line_interval_us.maximum = self.max_line_interval_us  # type: ignore
             self.log.debug(f"max line interval is: {self.max_line_interval_us} [us]")
         except Exception:
-            self.log.debug(f"max line interval is not available for camera {self.id}")
+            self.log.debug(f"max line interval is not available for camera {self._serial_id}")
         # step line interval
         # not implemented in egrabber
 

@@ -13,7 +13,7 @@ from voxel.utils.log import VoxelLogging
 from voxel.utils.vec import Vec2D, Vec3D
 
 if TYPE_CHECKING:
-    from voxel.daq.task import WaveGenChannel
+    from voxel.daq.acq_task import WaveGenChannel
 
 
 class VoxelDeviceType(StrEnum):

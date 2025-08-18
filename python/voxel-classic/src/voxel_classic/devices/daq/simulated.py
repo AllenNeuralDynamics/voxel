@@ -113,13 +113,14 @@ class SimulatedDAQ(BaseDAQ):
     ao_sampling_frequency_hz: float
     do_sampling_frequency_hz: float
 
-    def __init__(self, dev: str) -> None:
+    def __init__(self, uid: str, dev: str) -> None:
         """
         Initialize the DAQ object.
 
         :param dev: Device name
         :type dev: str
         """
+        super().__init__(uid)
         self.do_task: SimulatedTask | None = None
         self.ao_task: SimulatedTask | None = None
         self.co_task: SimulatedTask | None = None

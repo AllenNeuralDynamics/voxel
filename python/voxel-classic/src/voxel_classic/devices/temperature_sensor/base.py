@@ -1,9 +1,9 @@
 from abc import abstractmethod
 
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
 
 
-class BaseTemperatureSensor(VoxelDevice):
+class BaseTemperatureSensor(BaseDevice):
     """Base class for temperature sensors."""
 
     def __init__(self, id: str, channel: str):

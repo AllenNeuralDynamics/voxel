@@ -1,0 +1,31 @@
+[project]
+name = "vidgets"
+version = "0.1.0"
+description = "A python package providing a GUI and widgets for Voxel"
+license = { text = "MIT" }
+requires-python = ">=3.12.7"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.mwaniki@alleninstitute.org" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+readme = "README.md"
+keywords = ["lightsheet", "microscopy", "gui", "widgets"]
+dependencies = [
+    'pyqtgraph >= 0.12.4',
+    'numpy >= 1.23.5',
+    'inflection >= 0.5.1',
+    'pymmcore-widgets >= 0.7.1',
+    'pint >= 0.24',
+    'schema >= 0.7.7',
+    "pyside6>=6.9.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.2,<0.9.0"]
+build-backend = "uv_build"

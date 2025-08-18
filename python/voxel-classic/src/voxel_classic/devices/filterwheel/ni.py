@@ -1,8 +1,6 @@
 import nidaqmx
 import numpy
-
 from nidaqmx.constants import AcquisitionType as AcqType
-from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.daq.ni import NIDAQ
 from voxel_classic.devices.filterwheel.base import BaseFilterWheel
 
@@ -11,15 +9,13 @@ SAMPLING_FREQUENCY_HZ = 10000
 PERIOD_TIME_MS = 100
 DUTY_CYCLE_PERCENT = 50
 
-FILTERS = []
-
 
 class DAQFilterWheel(BaseFilterWheel):
     """
     FilterWheel class for handling simulated filter wheel devices.
     """
 
-    def __init__(self, filters: list[str], ports: dict, daq: NIDAQ) -> None:
+    def __init__(self, uid: str, filters: dict[str, int], ports: dict[str, str], daq: NIDAQ) -> None:
         """
         Initialize the FilterWheel object.
 
@@ -30,22 +26,23 @@ class DAQFilterWheel(BaseFilterWheel):
         :param daq: NI-DAQmx device
         :type daq: NIDAQ
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        super().__init__(uid)
+
         self.id = daq.id
         self.dev = daq
         self.ports = ports
-        self._filters: dict[str, int] = {filter_name: i for i, filter_name in enumerate(filters)}
-        for filter in filters:
-            FILTERS.append(filter)
-            if filter not in list(ports.keys()):
-                raise ValueError(f"Filter {filter} not in port keys: {list(ports.keys())}")
-        for key, value in list(ports.items()):
-            if key not in filters:
-                raise ValueError(f"Port {key} not in filter list: {filters}")
-            if f"{daq.id}/{value}" not in daq.dev.ao_physical_chans.channel_names:
-                raise ValueError(f"Port {value} not in device channels: {daq.dev.ao_physical_chans.channel_names}")
+        filters_keys = set(filters.keys())
+        ports_keys = set(ports.keys())
+        difference = filters_keys.symmetric_difference(ports_keys)
+        if difference:
+            raise ValueError(f"Filters and ports keys do not match: {difference}")
+
+        for port in ports.values():
+            if f"{daq.id}/{port}" not in daq.dev.ao_physical_chans.channel_names:
+                raise ValueError(f"Port {port} not in device channels: {daq.dev.ao_physical_chans.channel_names}")
         # force homing of the wheel to first position
-        self.filter = FILTERS[0]
+        self._filters: dict[str, int] = {filter_name: i for i, filter_name in enumerate(filters)}
+        self.filter = next(iter(self._filters.keys()))
 
     @property
     def filters(self) -> dict[str, int]:
@@ -73,17 +70,17 @@ class DAQFilterWheel(BaseFilterWheel):
         :type filter_name: str
         """
         self.log.info(f"setting filter to {filter_name}")
-        if filter_name not in FILTERS:
-            raise ValueError(f"Filter {filter_name} not in filter list: {FILTERS}")
+        if filter_name not in self._filters:
+            raise ValueError(f"Filter {filter_name} not in filter list: {self._filters}")
         channel_port = self.ports[filter_name]
         self._filter = filter_name
-        self.log.info("creating change position task")
+        self.log.debug("creating change position task")
         filter_position_task = nidaqmx.Task("filter_position_task")
         physical_name = f"/{self.id}/{channel_port}"
-        self.log.info("adding port to change position task")
+        self.log.debug("adding port to change position task")
         filter_position_task.ao_channels.add_ao_voltage_chan(physical_name)
         # channel_options.ao_idle_output_behavior = AOIdleOutputBehavior.ZERO_VOLTS
-        self.log.info("configuring change position task timing")
+        self.log.debug("configuring change position task timing")
         period_samples = int(PERIOD_TIME_MS / 1000 * SAMPLING_FREQUENCY_HZ)
         filter_position_task.timing.cfg_samp_clk_timing(
             rate=SAMPLING_FREQUENCY_HZ,
@@ -92,15 +89,15 @@ class DAQFilterWheel(BaseFilterWheel):
         )
         ao_voltages = numpy.zeros(period_samples)
         ao_voltages[0 : int(period_samples * DUTY_CYCLE_PERCENT / 100)] = MAX_VOLTS
-        self.log.info("writing change position voltages to task")
+        self.log.debug("writing change position voltages to task")
         filter_position_task.write(ao_voltages)
-        self.log.info("starting change position task")
+        self.log.debug("starting change position task")
         filter_position_task.start()
-        self.log.info("waiting on change position task")
+        self.log.debug("waiting on change position task")
         filter_position_task.wait_until_done()
-        self.log.info("stopping change position task")
+        self.log.debug("stopping change position task")
         filter_position_task.stop()
-        self.log.info("closing change position task")
+        self.log.debug("closing change position task")
         filter_position_task.close()
         self.log.info(f"filter set to {filter_name}")
 

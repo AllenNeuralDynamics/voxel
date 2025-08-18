@@ -1,16 +1,17 @@
 from abc import abstractmethod
 from typing import Any
 import numpy as np
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
 
 
-class BaseCamera(VoxelDevice):
+class BaseCamera(BaseDevice):
     """
     Base class for camera devices.
     """
 
-    def __init__(self):
+    def __init__(self, uid: str) -> None:
         """Initialization of the BaseCamera class."""
+        super().__init__(uid=uid)
         self._um_px = 0.0
         self._frame_number = 0
 

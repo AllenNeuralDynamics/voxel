@@ -1,9 +1,9 @@
 from abc import abstractmethod
 
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
 
 
-class BaseFlipMount(VoxelDevice):
+class BaseFlipMount(BaseDevice):
     """
     Base class for flip mount devices.
     """

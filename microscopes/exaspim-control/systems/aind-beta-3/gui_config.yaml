@@ -8,7 +8,7 @@ instrument_view:
   device_widgets:
     vp-151mx:
       type: camera
-      driver: voxel_qt_widgets.device_widgets.camera_widget
+      driver: vidgets.device_widgets.camera_widget
       module: CameraWidget
       init:
         advanced_user: True
@@ -17,7 +17,7 @@ instrument_view:
       #   - mainboard_temperature_c
     488 nm:
       type: laser
-      driver: voxel_qt_widgets.device_widgets.laser_widget
+      driver: vidgets.device_widgets.laser_widget
       module: LaserWidget
       init:
         color: "#1FB3E0"
@@ -27,7 +27,7 @@ instrument_view:
         - temperature_c
     561 nm:
       type: laser
-      driver: voxel_qt_widgets.device_widgets.laser_widget
+      driver: vidgets.device_widgets.laser_widget
       module: LaserWidget
       init:
         color: "#32A852"
@@ -37,7 +37,7 @@ instrument_view:
         - temperature_c
     639 nm:
       type: laser
-      driver: voxel_qt_widgets.device_widgets.laser_widget
+      driver: vidgets.device_widgets.laser_widget
       module: LaserWidget
       init:
         color: "#C44157"
@@ -47,7 +47,7 @@ instrument_view:
         - temperature_c
     z:
       type: scanning_stage
-      driver: voxel_qt_widgets.device_widgets.stage_widget
+      driver: vidgets.device_widgets.stage_widget
       module: StageWidget
       init:
         advanced_user: False
@@ -55,7 +55,7 @@ instrument_view:
         - position_mm
     y:
       type: tiling_stage
-      driver: voxel_qt_widgets.device_widgets.stage_widget
+      driver: vidgets.device_widgets.stage_widget
       module: StageWidget
       init:
         advanced_user: False
@@ -63,7 +63,7 @@ instrument_view:
         - position_mm
     x:
       type: tiling_stage
-      driver: voxel_qt_widgets.device_widgets.stage_widget
+      driver: vidgets.device_widgets.stage_widget
       module: StageWidget
       init:
         advanced_user: False
@@ -71,7 +71,7 @@ instrument_view:
         - position_mm
     theta:
       type: focusing_stage
-      driver: voxel_qt_widgets.device_widgets.stage_widget
+      driver: vidgets.device_widgets.stage_widget
       module: StageWidget
       init:
         advanced_user: False
@@ -79,7 +79,7 @@ instrument_view:
         - position_mm
     left:
       type: focusing_stage
-      driver: voxel_qt_widgets.device_widgets.stage_widget
+      driver: vidgets.device_widgets.stage_widget
       module: StageWidget
       init:
         advanced_user: False
@@ -87,7 +87,7 @@ instrument_view:
         - position_mm
     right:
       type: focusing_stage
-      driver: voxel_qt_widgets.device_widgets.stage_widget
+      driver: vidgets.device_widgets.stage_widget
       module: StageWidget
       init:
         advanced_user: False
@@ -95,7 +95,7 @@ instrument_view:
         - position_mm
     camera:
       type: focusing_stage
-      driver: voxel_qt_widgets.device_widgets.stage_widget
+      driver: vidgets.device_widgets.stage_widget
       module: StageWidget
       init:
         advanced_user: False
@@ -103,13 +103,13 @@ instrument_view:
         - position_mm
     filter wheel:
       type: filter_wheel
-      driver: voxel_qt_widgets.device_widgets.filter_wheel_widget
+      driver: vidgets.device_widgets.filter_wheel_widget
       module: FilterWheelWidget
       init:
         advanced_user: True
     pcie-6738:
       type: daq
-      driver: voxel_qt_widgets.device_widgets.ni_widget
+      driver: vidgets.device_widgets.ni_widget
       module: NIWidget
       init:
         advanced_user: False

@@ -1,19 +1,29 @@
 from abc import abstractmethod
 
-from voxel_classic.devices.base import VoxelDevice
+from voxel_classic.devices.base import BaseDevice
+
+# map of wavelength ranges to color
+WAVELENGTH_COLOR_MAP = {
+    (400, 450): "violet",
+    (450, 495): "blue",
+    (495, 570): "green",
+    (570, 590): "yellow",
+    (590, 620): "orange",
+    (620, 750): "red",
+}
 
 
-class BaseLaser(VoxelDevice):
+class BaseLaser(BaseDevice):
     """Base class for all voxel laser devices."""
 
-    def __init__(self, id: str) -> None:
+    def __init__(self, uid: str) -> None:
         """
         Initialize the BaseLaser object.
 
         :param id: Laser ID
         :type id: str
         """
-        super().__init__(id)
+        super().__init__(uid)
 
     @abstractmethod
     def enable(self) -> None:
@@ -39,6 +49,19 @@ class BaseLaser(VoxelDevice):
         :rtype: int
         """
         pass
+
+    @property
+    def color(self) -> str:
+        """
+        Get the color of the laser based on its wavelength.
+
+        :return: Color of the laser
+        :rtype: str
+        """
+        for (start, end), color in WAVELENGTH_COLOR_MAP.items():
+            if start <= self.wavelength < end:
+                return color
+        return "unknown"
 
     @property
     @abstractmethod

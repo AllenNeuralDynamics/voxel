@@ -10,8 +10,8 @@ FLIP_TIME_RANGE_MS = (500.0, 2800.0, 100.0)  # min, max, step
 
 
 class SimulatedFlipMount(BaseFlipMount):
-    def __init__(self, id: str, conn: object, positions: dict[str, int]) -> None:
-        super().__init__(id)
+    def __init__(self, uid: str, conn: object, positions: dict[str, int]) -> None:
+        super().__init__(uid)
         if not positions:
             raise ValueError("positions mapping must contain at least one entry")
         # Validate values & preserve insertion order for deterministic toggling.
@@ -19,7 +19,7 @@ class SimulatedFlipMount(BaseFlipMount):
         if bad:
             raise ValueError(f"Invalid numeric positions {bad}. Allowed numeric values are {list(VALID_POSITIONS)}")
         # Enforce uniqueness of numeric values so we do not have ambiguous reverse lookup.
-        if len({v for v in positions.values()}) != len(positions.values()):
+        if len(set(positions.values())) != len(positions.values()):
             raise ValueError("Duplicate numeric position values are not allowed in simulated flip mount")
 
         self._conn = conn
@@ -79,6 +79,6 @@ class SimulatedFlipMount(BaseFlipMount):
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return (
-            f"SimulatedFlipMount(id={self.id!r}, position={self.position!r}, "
+            f"SimulatedFlipMount(id={self.uid!r}, position={self.position!r}, "
             f"numeric={self.numeric_position}, flip_time_ms={self.flip_time_ms})"
         )
