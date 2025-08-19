@@ -24,12 +24,17 @@ class FilterWheelWidget(QWidget):
         if hues is not None:
             self._hues.update(hues)
 
-        assignments: dict[int, str] = {v + 1: k for k, v in filter_wheel.filters.items()}
+        assignments: dict[int, str] = {v: k for k, v in filter_wheel.filters.items()}
         print(f"Assignments: {assignments}")
 
         self._fw = filter_wheel
 
-        self._graphic = WheelGraphic(num_slots=max(assignments.keys()), assignments=assignments, hue_mapping=self._hues)
+        self._graphic = WheelGraphic(
+            num_slots=max(assignments.keys()) + 1,
+            start_index=min(assignments.keys()),
+            assignments=assignments,
+            hue_mapping=self._hues,
+        )
         self._graphic.active_changed.connect(lambda: self._update_filter())
         self._status_label = QLabel("Hover over circles to see labels, click to select")
 

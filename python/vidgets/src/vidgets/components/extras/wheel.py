@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from functools import cached_property
 import math
 import colorsys
 from PySide6.QtWidgets import QWidget
@@ -17,6 +18,7 @@ class WheelGraphic(QWidget):
         num_slots: int,
         assignments: dict[int, str] | None = None,
         hue_mapping: Mapping[str, float | int] | None = None,
+        start_index: int = 1,
         parent: QWidget | None = None,
     ):
         """Initialize the wheel widget
@@ -30,14 +32,18 @@ class WheelGraphic(QWidget):
         super().__init__(parent)
         self.setMinimumSize(200, 200)
 
+        self._start_index = start_index
+        self._num_slots = num_slots
+
+        print(f"Start: {self._start_index}, End: {self.slots[-1]}")
+
         assignments = assignments if assignments else {}
         for position in assignments:
-            if not (1 <= position <= num_slots):
-                raise ValueError(f"Slot position {position} must be within 1 to {num_slots} (1-based indexing)")
+            if position not in self.slots:
+                raise ValueError(f"Slot position {position} must be within {self.slots}")
 
         # Core widget data
-        self.num_slots = num_slots
-        self.assignments = {i: assignments.get(i, None) for i in range(1, self.num_slots + 1)}
+        self.assignments = {i: assignments.get(i, None) for i in self.slots}
 
         self.default_hue = 0  # Grey for unmapped labels
         self.hue_mapping = hue_mapping if hue_mapping else {}
@@ -75,6 +81,10 @@ class WheelGraphic(QWidget):
 
         self.update_svg()
 
+    @cached_property
+    def slots(self) -> list[int]:
+        return [self._start_index + k for k in range(self._num_slots)]
+
     @property
     def slot_size(self) -> float:
         """Get the automatically calculated slot size"""
@@ -86,36 +96,52 @@ class WheelGraphic(QWidget):
         return self._active_slot
 
     @active_slot.setter
-    def active_slot(self, position: int):
+    def active_slot(self, slot: int):
         """Set the currently active slot (1-based index)"""
-        position = int(min(max(position, 0), self.num_slots))
-        self._rotate_to_position(position=position, clockwise=None)
+        slot = int(min(max(slot, 0), self._num_slots))
+        self._rotate_to_position(slot=slot, clockwise=None)
+
+    def get_slot_label(self, slot_index) -> str:
+        """Get the label for a slot at the given position"""
+        label = self.assignments.get(slot_index)
+        return label if label is not None else "Empty"
 
     def get_active_slot_label(self) -> str:
         """Get the currently active slot label, returns None if none"""
-        return self._get_slot_label_from_position(self._active_slot)
+        return self.get_slot_label(self._active_slot)
 
     def reset_rotation(self):
         """Reset rotation to put the first slot at 12 o'clock"""
-        self.active_slot = 1
+        self.active_slot = self._start_index
 
     def step_to_next(self):
-        if self.num_slots <= 0:
+        if self._num_slots <= 0:
             return
-        if self.active_slot <= 0:
-            self.reset_rotation()
-            return
-        next_slot = self.active_slot + 1 if self.active_slot < self.num_slots else 1
-        self._rotate_to_position(position=next_slot, clockwise=None)
+        last_idx = self.slots[-1]
+        next_potential = self.active_slot + 1
+        if next_potential > last_idx:
+            next_potential = self._start_index
+        elif next_potential < self._start_index:
+            next_potential = last_idx
+        self._rotate_to_position(slot=next_potential, clockwise=None)
 
     def step_to_previous(self):
-        if self.num_slots <= 0:
+        if self._num_slots <= 0:
             return
-        if self.active_slot <= 0:
-            self.reset_rotation()
-            return
-        prev_slot = self.active_slot - 1 if self.active_slot > 1 else self.num_slots
-        self._rotate_to_position(position=prev_slot, clockwise=None)
+
+        last_idx = self.slots[-1]
+        next_potential = self.active_slot - 1
+        if next_potential < self._start_index:
+            next_potential = last_idx
+        elif next_potential > last_idx:
+            next_potential = self._start_index
+        self._rotate_to_position(slot=next_potential, clockwise=None)
+
+    def _normalized_index(self, index: int) -> int:
+        """Compute a normalized index for the given slot index."""
+        if self._num_slots <= 0:
+            return 0
+        return (index - self._start_index) % self._num_slots
 
     def update_svg(self):
         """Generate SVG with members at current rotation"""
@@ -132,34 +158,32 @@ class WheelGraphic(QWidget):
         self.slot_positions = []
         selected_slot = 0  # 0 means no slot selected
 
-        for i in range(1, self.num_slots + 1):  # 1-based indexing
-            # Calculate angle for this slot (start at 12 o'clock = -90°)
-            # Subtract 1 from i for angle calculation since angles are 0-based
-            base_angle = (360 / self.num_slots) * (i - 1) if self.num_slots > 0 else 0
-            current_angle = base_angle + self.angle_offset - 90  # -90 to start at 12 o'clock
-
+        for slot_idx in self.slots:
+            # Angle step from 0..N-1 based on offset
+            base_angle = (360 / self._num_slots) * self._normalized_index(slot_idx)
+            current_angle = base_angle + self.angle_offset - 90
             angle_rad = math.radians(current_angle)
 
             # Calculate position
             x = center_x + self.orbit_radius * math.cos(angle_rad)
             y = center_y + self.orbit_radius * math.sin(angle_rad)
 
-            self.slot_positions.append((x, y, self.slot_size, i))  # for click detection
+            self.slot_positions.append((x, y, self.slot_size, slot_idx))  # for click detection
 
             # Check if this slot is hovered
-            is_hovered = i == self._hovered_member
+            is_hovered = slot_idx == self._hovered_member
 
             # Determine if this slot is at 12 o'clock (active)
             normalized_angle = (current_angle + 360) % 360
             angle_diff = min(
                 abs(normalized_angle - 270), abs(normalized_angle - 270 + 360), abs(normalized_angle - 270 - 360)
             )
-            is_active = angle_diff < (360 / self.num_slots / 4)  # Within a quarter of a step of 12 o'clock
+            is_active = angle_diff < (360 / self._num_slots / 4)  # Within a quarter of a step of 12 o'clock
 
             if is_active:
-                selected_slot = i
+                selected_slot = slot_idx
 
-            if (filled_slot_label := self.assignments.get(i)) is not None:
+            if (filled_slot_label := self.assignments.get(slot_idx)) is not None:
                 label = filled_slot_label
                 hue = self.hue_mapping.get(label, self.default_hue)
 
@@ -220,7 +244,7 @@ class WheelGraphic(QWidget):
 
         info_text = f"""
         <text x="100" y="25" text-anchor="middle" font-size="12" fill="{text_color}">
-            {self.num_slots} slots, {sum(1 for v in self.assignments.values() if v is not None)} filled, {self.angle_offset}°
+            {self._num_slots} slots, {sum(1 for v in self.assignments.values() if v is not None)} filled, {self.angle_offset}°
         </text>
         """
 
@@ -284,7 +308,7 @@ class WheelGraphic(QWidget):
 
         self.update_svg()
 
-    def _rotate_to_position(self, position, clockwise=None):
+    def _rotate_to_position(self, slot, clockwise=None):
         """Start animation to target position with easing
 
         Args:
@@ -293,11 +317,11 @@ class WheelGraphic(QWidget):
                       If True, forces clockwise rotation.
                       If False, forces counter-clockwise rotation.
         """
-        if not (1 <= position <= self.num_slots):
+        if slot not in self.slots:
             return
         # Calculate the angle needed to move this position to 12 o'clock
         # Convert 1-based position to 0-based for angle calculation
-        position_base_angle = (360 / self.num_slots) * (position - 1)
+        position_base_angle = (360 / self._num_slots) * self._normalized_index(slot)
         # We want this position at angle 0 (after the -90 offset in update_svg)
         target_angle = (-position_base_angle) % 360
 
@@ -357,36 +381,32 @@ class WheelGraphic(QWidget):
 
     def mousePressEvent(self, event):
         """Handle mouse clicks to select slots"""
-        slot_position = self._get_slot_at_position(event.position().x(), event.position().y())
-        if slot_position > 0:
-            self.active_slot = slot_position
+        slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
+        print(f"Clicked on slot {slot_idx}")
+        if slot_idx in self.slots:
+            self.active_slot = slot_idx
 
     def mouseMoveEvent(self, event):
         """Handle mouse movement for hover effects"""
-        member_position = self._get_slot_at_position(event.position().x(), event.position().y())
+        slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
 
-        if member_position != self._hovered_member:
-            self._hovered_member = member_position
+        if slot_idx != self._hovered_member:
+            self._hovered_member = slot_idx
             self.update_svg()
 
             # Set tooltip
-            if member_position > 0:
-                label = self._get_slot_label_from_position(member_position)
+            if slot_idx in self.slots:
+                label = self.get_slot_label(slot_idx)
                 self.setToolTip(f"{label}")
             else:
                 self.setToolTip("")
 
     def leaveEvent(self, event):
         """Handle mouse leaving the widget"""
-        if self._hovered_member > 0:
-            self._hovered_member = 0
-            self.update_svg()
-            self.setToolTip("")
-
-    def _get_slot_label_from_position(self, position) -> str:
-        """Get the label for a slot at the given position"""
-        label = self.assignments.get(position)
-        return label if label is not None else "Empty"
+        # if self._hovered_member >= self._start_index:
+        self._hovered_member = self._start_index - 1
+        self.update_svg()
+        self.setToolTip("")
 
     def _get_slot_at_position(self, x, y):
         """Get the slot position at the given widget coordinates, returns 0 if none"""
@@ -412,12 +432,12 @@ class WheelGraphic(QWidget):
 
     def _compute_slot_radius(self) -> float:
         """Calculate optimal slot size based on number of slots and desired spacing"""
-        if self.num_slots <= 1:
+        if self._num_slots <= 1:
             return 15.0  # Default for single or no slots
 
         # Calculate circumference and available space per slot
         circumference = 2 * math.pi * self.orbit_radius
-        space_per_slot = circumference / self.num_slots
+        space_per_slot = circumference / self._num_slots
 
         # Reserve space for spacing, use the rest for the member size (diameter)
         available_diameter = space_per_slot - self.desired_spacing
