@@ -16,13 +16,27 @@ class VoxelLogging:
     _log_queue = Queue(-1)
 
     @staticmethod
-    def setup(level: str | int = logging.DEBUG, handlers: list[logging.Handler] | None = None):
+    def setup(
+        level: str | int = logging.DEBUG,
+        handlers: list[logging.Handler] | None = None,
+        *,
+        default_console: bool = True,
+        default_json: bool = False,
+    ):
         """
         Setup the queue logging with optional handlers.
+        :param level: The logging level to set.
         :param handlers: List of logging handlers to use.
+        :param default_console: Whether to include the default console handler.
+        :param default_json: Whether to include the default JSON handler.
         """
         if handlers is None:
-            handlers = [get_default_console_handler(), get_default_json_handler()]
+            default_console = True
+        handlers = []
+        if default_console:
+            handlers.append(get_default_console_handler())
+        if default_json:
+            handlers.append(get_default_json_handler())
 
         log_queue = VoxelLogging.get_queue()
 
