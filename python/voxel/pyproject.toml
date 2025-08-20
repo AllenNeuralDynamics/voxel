@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Core library for building SPIM software"
 requires-python = ">=3.12, <3.13"
 readme = "README.md"
-license = { file = "LICENSE" }
+license-files = ["LICENSE"]
 authors = [
     { name = "Adam Glaser", email = "adam.glaser@alleninstitute.org" },
     { name = "Walter Mwaniki", email = "walter.mwaniki@alleninstitute.org" },
@@ -14,7 +14,6 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 keywords = ["microscopy", "light-sheet", "lightsheet", "microscope", "imaging"]
