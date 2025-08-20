@@ -16,7 +16,7 @@ class WheelGraphic(QWidget):
     def __init__(
         self,
         num_slots: int,
-        assignments: dict[int, str] | None = None,
+        assignments: Mapping[int, str | None],
         hue_mapping: Mapping[str, float | int] | None = None,
         start_index: int = 1,
         parent: QWidget | None = None,
@@ -37,13 +37,12 @@ class WheelGraphic(QWidget):
 
         print(f"Start: {self._start_index}, End: {self.slots[-1]}")
 
-        assignments = assignments if assignments else {}
         for position in assignments:
             if position not in self.slots:
                 raise ValueError(f"Slot position {position} must be within {self.slots}")
 
         # Core widget data
-        self.assignments = {i: assignments.get(i, None) for i in self.slots}
+        self.assignments = {i: assignments.get(i) for i in self.slots}
 
         self.default_hue = 0  # Grey for unmapped labels
         self.hue_mapping = hue_mapping if hue_mapping else {}

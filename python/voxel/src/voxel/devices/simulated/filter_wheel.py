@@ -1,30 +1,79 @@
+from collections.abc import Mapping
+import threading
+import time
 from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
-from voxel.utils.descriptors.enumerated import enumerated_string
 
 
 class SimulatedFilterWheel(VoxelFilterWheel):
-    def __init__(self, name: str, filters: dict[int, str]) -> None:
-        super().__init__(name=name)
-        self._filters = filters
-        self._current_filter = self._filters[0] if filters else "None"
+    def __init__(
+        self,
+        uid: str,
+        labels: Mapping[int, str | None],  # e.g. {1: "GFP", 2: "RFP", 3: None}
+        slot_count: int | None = None,
+        start_pos: int = 1,
+        settle_seconds: float = 0.05,
+    ) -> None:
+        super().__init__(uid=uid)
+
+        # --- normalize/validate labels & size ---
+        max_idx = max(labels) if labels else 0
+        self._slot_count = slot_count or max(max_idx, 0)
+        if self._slot_count <= 0:
+            raise ValueError("slot_count must be > 0")
+
+        # Fill missing indices with None; enforce 1-based contiguous indices
+        self._labels: dict[int, str | None] = {i: labels.get(i) for i in range(1, self._slot_count + 1)}
+
+        if not (1 <= start_pos <= self._slot_count):
+            raise ValueError("start_pos out of range")
+
+        self._position = start_pos
+        self._is_moving = False
+        self._settle = float(settle_seconds)
+
+    # --------- metadata ----------
+    @property
+    def slot_count(self) -> int:
+        return self._slot_count
 
     @property
-    def filters(self) -> dict[int, str]:
-        """Return a dictionary of filter names and their corresponding positions."""
-        return self._filters
+    def labels(self) -> Mapping[int, str | None]:
+        return self._labels
 
-    @enumerated_string(options=lambda self: self._filters.values())
-    def current_filter(self) -> str:
-        return self._current_filter
+    # --------- state ----------
+    @property
+    def position(self) -> int:
+        return self._position
 
-    @current_filter.setter
-    def current_filter(self, filter_name: str) -> None:
-        if filter_name in self._filters:
-            self._current_filter = filter_name
+    @property
+    def is_moving(self) -> bool:
+        return self._is_moving
+
+    # --------- commands ----------
+    def move(self, slot: int, *, wait: bool = True, timeout: float | None = 5.0) -> None:
+        if not (1 <= slot <= self._slot_count):
+            raise ValueError(f"Invalid slot {slot}; valid range is 1..{self._slot_count}")
+
+        self._is_moving = True
+        self._position = slot
+        self._log.debug(f"SimulatedFilterWheel {self.uid}: Moving to slot {slot} ({self._labels.get(slot)})")
+
+        if wait:
+            time.sleep(self._settle)
+            self._is_moving = False
         else:
-            raise ValueError(f"Filter '{filter_name}' not found in the filter wheel.")
+            # non-blocking path: schedule reset
+            threading.Timer(self._settle, self._finish_move).start()
+
+    def _finish_move(self) -> None:
+        self._is_moving = False
+
+    def home(self, *, wait: bool = True, timeout: float | None = 10.0) -> None:
+        self.move(1, wait=wait, timeout=timeout)
+
+    @property
+    def name(self) -> str | None:
+        return self._labels.get(self._position)
 
     def close(self) -> None:
-        """Simulated close method."""
-        self._log.info("Closed.")
-        self._current_filter = "None"
+        pass

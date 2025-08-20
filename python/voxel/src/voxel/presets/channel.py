@@ -62,7 +62,7 @@ class ChannelDefinition(BaseDefinition):
                     )
                     continue
 
-                if filter_name not in fw_device.filters:
+                if filter_name not in fw_device.labels.values():
                     errors.append(
                         ErrorInfo(
                             name=f"channel_{self.uid}_filter_{filter_name}",
@@ -124,7 +124,7 @@ class ChannelsProvider(DefinitionsProviderBase[ChannelDefinition]):
         """Generate channel build options based on available devices."""
         # Get filter wheels
         filter_wheels = [
-            FilterWheelOption(uid=uid, filters=list(fw.filters.values()))
+            FilterWheelOption(uid=uid, filters=[name for name in fw.labels.values() if name is not None])
             for uid, fw in self._inst.filter_wheels.items()
         ]
 

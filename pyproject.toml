@@ -17,6 +17,7 @@ classifiers = [
 keywords = ["microscopy", "light-sheet", "lightsheet", "microscope", "imaging"]
 version = "0.1.0"
 
+dependencies = ["voxel", "vidgets"]
 
 [dependency-groups]
 dev = ["ruff>=0.8.0", "pytest>=8.2.1"]

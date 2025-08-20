@@ -13,7 +13,7 @@ class ASIFilterWheel(VoxelFilterWheel):
     """Filter Wheel Abstraction from an ASI Tiger Controller."""
 
     def __init__(self, name: str, tigerbox: TigerController, wheel_id: str, filters: dict[int, str]):
-        super().__init__(name=name)
+        super().__init__(uid=name)
         self.tigerbox = tigerbox
         self.wheel_id = wheel_id
         self._filters: dict[int, str] = filters
@@ -26,12 +26,12 @@ class ASIFilterWheel(VoxelFilterWheel):
         return self._filters
 
     @enumerated_string(options=lambda self: self.filters.keys())
-    def current_filter(self) -> str:
+    def active_filter(self) -> str:
         """Return the name of the currently active filter, or None if no filter is active."""
         return self._filters.get(self._current_filter, "Error")
 
-    @current_filter.setter
-    def current_filter(self, filter_name: str) -> None:
+    @active_filter.setter
+    def active_filter(self, filter_name: str) -> None:
         """Set the current filter to the specified filter name."""
         if self._is_closed:
             raise VoxelDeviceError("Filter wheel is closed and cannot be operated.")

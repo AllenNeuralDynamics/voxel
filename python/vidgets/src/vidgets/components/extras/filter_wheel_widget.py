@@ -1,5 +1,6 @@
 from vidgets.components.extras.wheel import WheelGraphic
-from voxel_classic.devices.filterwheel.base import BaseFilterWheel
+from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
+
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -14,7 +15,7 @@ from PySide6.QtCore import Qt
 
 
 class FilterWheelWidget(QWidget):
-    def __init__(self, filter_wheel: BaseFilterWheel, hues: dict[str, int | float] | None = None):
+    def __init__(self, filter_wheel: VoxelFilterWheel, hues: dict[str, int | float] | None = None):
         super().__init__()
         self._hues: dict[str, float | int] = {
             "655LP": 0,  # red (0 degrees)
@@ -24,15 +25,13 @@ class FilterWheelWidget(QWidget):
         if hues is not None:
             self._hues.update(hues)
 
-        assignments: dict[int, str] = {v: k for k, v in filter_wheel.filters.items()}
-        print(f"Assignments: {assignments}")
-
         self._fw = filter_wheel
 
+        print(f"Assignments: {self._fw.labels}")
+
         self._graphic = WheelGraphic(
-            num_slots=max(assignments.keys()) + 1,
-            start_index=min(assignments.keys()),
-            assignments=assignments,
+            num_slots=self._fw.slot_count,
+            assignments=self._fw.labels,
             hue_mapping=self._hues,
         )
         self._graphic.active_changed.connect(lambda: self._update_filter())
@@ -44,7 +43,7 @@ class FilterWheelWidget(QWidget):
         self.setLayout(layout)
 
     def _update_filter(self):
-        self._fw.filter = self._graphic.get_active_slot_label()
+        self._fw.select(self._graphic.get_active_slot_label())
 
     def _create_controls_ui(self) -> QVBoxLayout:
         # Create controls
@@ -94,7 +93,7 @@ if __name__ == "__main__":
         QStyle,
     )
     from PySide6.QtCore import Qt
-    from voxel_classic.devices.filterwheel.simulated import SimulatedFilterWheel
+    from voxel.devices.simulated.filter_wheel import SimulatedFilterWheel
     from voxel.utils.log import VoxelLogging
 
     class FilterWheelWidgetDemo(QMainWindow):
@@ -108,7 +107,7 @@ if __name__ == "__main__":
             self.setCentralWidget(main_widget)
             layout = QVBoxLayout(main_widget)
 
-            fw = SimulatedFilterWheel(uid="simulated-filter_wheel", id="fw1", filters=["655LP", "620/60BP", "500LP"])
+            fw = SimulatedFilterWheel(uid="simulated-filter_wheel", labels={1: "655LP", 2: "620/60BP", 3: "500LP"})
             fw_wgt = FilterWheelWidget(fw)
             layout.addWidget(fw_wgt)
 
