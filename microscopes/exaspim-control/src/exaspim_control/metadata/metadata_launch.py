@@ -105,7 +105,7 @@ class MetadataLaunch:
                             external_drive=save_to,
                             local_drive=str(Path(transfer.local_path, transfer.acquisition_name)),
                         )
-                        acquisition_model.write_standard_file(output_directory=save_to, prefix=None)
+                        acquisition_model.write_standard_file(output_directory=Path(save_to), prefix=None)
                         if self.log_filename is not None:
                             # move the log file
                             self.log.info(f"copying {self.log_filename} to {save_to}")
@@ -136,7 +136,7 @@ class MetadataLaunch:
                     if save_to not in save_to_done:
                         save_to_done.add(save_to)
                         acquisition_model = self.parse_metadata(external_drive=save_to, local_drive=save_to)
-                        acquisition_model.write_standard_file(output_directory=save_to, prefix="exaspim")
+                        acquisition_model.write_standard_file(output_directory=Path(save_to), prefix="exaspim")
                         if self.log_filename is not None:
                             # move the log file
                             self.log.info(f"copying {self.log_filename} to {save_to}")
@@ -239,4 +239,4 @@ class MetadataLaunch:
             )
         acq_dict["tiles"] = tiles
 
-        return acquisition.Acquisition(**acq_dict)
+        return acquisition.Acquisition(**acq_dict)  # type: ignore

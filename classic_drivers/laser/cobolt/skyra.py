@@ -228,7 +228,7 @@ class SkyraLaser(BaseLaser):
         :type value: str
         :raises ValueError: If the modulation mode is not valid
         """
-        if value not in MODULATION_MODES.keys():
+        if value not in MODULATION_MODES:
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         external_control_mode = MODULATION_MODES[value]["external_control_mode"]
         digital_modulation = MODULATION_MODES[value]["digital_modulation"]

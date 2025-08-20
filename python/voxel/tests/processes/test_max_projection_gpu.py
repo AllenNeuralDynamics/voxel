@@ -1,7 +1,7 @@
 import numpy
 import time
 from multiprocessing.shared_memory import SharedMemory
-from voxel.utils.processing.max_projection.gpu.max_projection import GPUMaxProjection
+from voxel.utils.processing.max_projection.gpu.pyclesperanto import GPUMaxProjection
 
 if __name__ == "__main__":
     num_frames = 256

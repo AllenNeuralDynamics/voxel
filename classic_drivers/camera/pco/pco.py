@@ -386,7 +386,7 @@ class PCOCamera(BaseCamera):
         """
         # pco api prepares buffer and autostarts. api call is in start()
         # pco only 16-bit A/D
-        self.log.info(f"preparing camera")
+        self.log.info("preparing camera")
         bit_to_byte = 2
         frame_size_mb = self.width_px * self.height_px / self.binning**2 * bit_to_byte / 1024**2
         self.buffer_size_frames = round(BUFFER_SIZE_MB / frame_size_mb)
@@ -399,7 +399,7 @@ class PCOCamera(BaseCamera):
         """
         Start the camera acquisition.
         """
-        self.log.info(f"starting camera")
+        self.log.info("starting camera")
         self.pre_frame_time = 0
         self.pre_frame_count_px = 0
         self.pco.start()
@@ -408,14 +408,14 @@ class PCOCamera(BaseCamera):
         """
         Stop the camera acquisition.
         """
-        self.log.info(f"stopping camera")
+        self.log.info("stopping camera")
         self.pco.stop()
 
     def close(self) -> None:
         """
         Close the camera connection.
         """
-        self.log.info(f"closing camera")
+        self.log.info("closing camera")
         self.pco.close()
 
     def grab_frame(self) -> np.ndarray:

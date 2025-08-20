@@ -1,1 +1,1 @@
-from .pco_camera import PCOCamera
+from .pco_camera import PCOCamera as PCOCamera

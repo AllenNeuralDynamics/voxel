@@ -34,7 +34,6 @@ class BaseWriter:
         self._channel: str | None = None
         self._acquisition_name: Path | None = None
         self._data_type: np.dtype = np.dtype(np.uint16)
-        self._compression: str | None = None
         self._row_count_px: int | None = None
         self._column_count_px: int | None = None
         self._frame_count_px_px: int | None = None

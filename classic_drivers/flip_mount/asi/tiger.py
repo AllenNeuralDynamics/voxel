@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Dict, Optional
+from typing import Dict
 
 from voxel_classic.devices.controller.asi.tiger import TigerController
 
@@ -90,5 +90,5 @@ class TigerFlipMount(BaseFlipMount):
         """
         Close the stage.
         """
-        self.log.info(f"closing flip mount.")
+        self.log.info("closing flip mount.")
         pass

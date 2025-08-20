@@ -171,7 +171,7 @@ class SimulatedDAQ(BaseDAQ):
 
         else:  # co channel
             if timing["frequency_hz"] < 0:
-                raise ValueError(f"frequency must be >0 Hz")
+                raise ValueError("frequency must be >0 Hz")
 
             for channel_number in task["counters"]:
                 if f"{self.id}/{channel_number}" not in self.co_physical_chans:

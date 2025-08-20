@@ -72,11 +72,11 @@ class ASIJoystick(BaseJoystick):
         # grab the instrument to hardware axis mapping for the joystick device
         for joystick_id, joystick_dict in self.joystick_mapping.items():
             # check that the joystick ids are valid
-            if joystick_id not in JOYSTICK_AXES.keys():
+            if joystick_id not in JOYSTICK_AXES:
                 raise ValueError(f"{joystick_id} must be in {JOYSTICK_AXES.keys()}")
             # check that the polarities are valid
             joystick_polarity = joystick_dict["polarity"]
-            if joystick_polarity not in POLARITIES.keys():
+            if joystick_polarity not in POLARITIES:
                 raise ValueError(f"{joystick_polarity} must be in {POLARITIES.keys()}")
             instrument_axis = joystick_dict["instrument_axis"]
             hardware_axis = self.axis_mapping[instrument_axis]
@@ -117,11 +117,11 @@ class ASIJoystick(BaseJoystick):
         """
         for joystick_id, joystick_dict in joystick_mapping.items():
             # check that the joystick ids are valid
-            if joystick_id not in JOYSTICK_AXES.keys():
+            if joystick_id not in JOYSTICK_AXES:
                 raise ValueError(f"{joystick_id} must be in {JOYSTICK_AXES.keys()}")
             # check that the polarities are valid
             joystick_polarity = joystick_dict["polarity"]
-            if joystick_polarity not in POLARITIES.keys():
+            if joystick_polarity not in POLARITIES:
                 raise ValueError(f"{joystick_polarity} must be in {POLARITIES.keys()}")
 
             instrument_axis = joystick_dict["instrument_axis"]

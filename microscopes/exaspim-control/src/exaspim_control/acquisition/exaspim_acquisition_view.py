@@ -27,17 +27,17 @@ from PySide6.QtWidgets import (
 )
 from ruamel.yaml import YAML, RoundTripRepresenter
 from voxel.utils.log import VoxelLogging
-from vidgets.acquisition_widgets.channel_plan_widget import ChannelPlanWidget
-from vidgets.acquisition_widgets.metadata_widget import MetadataWidget
-from vidgets.acquisition_widgets.volume_model import VolumeModel
-from vidgets.acquisition_widgets.volume_plan_widget import (
+from vidgets.view.acquisition_widgets.channel_plan_widget import ChannelPlanWidget
+from vidgets.view.acquisition_widgets.metadata_widget import MetadataWidget
+from vidgets.view.acquisition_widgets.volume_model import VolumeModel
+from vidgets.view.acquisition_widgets.volume_plan_widget import (
     GridFromEdges,
     GridRowsColumns,
     GridWidthHeight,
     VolumePlanWidget,
 )
-from vidgets.base_device_widget import create_widget, scan_for_properties
-from vidgets.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
+from vidgets.view.base_device_widget import create_widget, scan_for_properties
+from vidgets.view.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
 
 from exaspim_control.acquisition.exaspim_acquisition import ExASPIMAcquisition
 from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
@@ -97,7 +97,7 @@ class ExASPIMAcquisitionView(QWidget):
         # Eventual threads
         self.grab_fov_positions_worker = None
         self.property_workers = []
-        self.acquisition_thread = create_worker(self.acquisition.run)
+        self.acquisition_thread = create_worker(self.acquisition.run)  # type: ignore
         self.grab_frames_worker = create_worker(lambda: None)  # dummy thread
 
         # Create device widgets for operations
@@ -108,10 +108,10 @@ class ExASPIMAcquisitionView(QWidget):
 
         # create workers for latest image taken by cameras
         for camera_name, camera in self.instrument.cameras.items():
-            worker = create_worker(self.grab_property_value, camera, "last_image", None)
+            worker = create_worker(self.grab_property_value, camera, "last_image", None)  # type: ignore
             worker.yielded.connect(lambda x: self.update_acquisition_layer(x[0], camera_name))
             worker.start()
-            worker.pause()
+            worker.pause()  # type: ignore
             self.property_workers.append(worker)
 
         for device_name, operation_dictionary in self.acquisition.config["acquisition"]["operations"].items():
@@ -283,9 +283,9 @@ class ExASPIMAcquisitionView(QWidget):
 
         # Start acquisition
         self.instrument_view.setDisabled(False)
-        self.acquisition_thread = create_worker(self.acquisition.run)
+        self.acquisition_thread = create_worker(self.acquisition.run)  # type: ignore
         self.acquisition_thread.start()
-        self.acquisition_thread.finished.connect(self.acquisition_ended)
+        self.acquisition_thread.finished.connect(self.acquisition_ended)  # type: ignore
 
         # start all workers
         for worker in self.property_workers:
@@ -373,10 +373,10 @@ class ExASPIMAcquisitionView(QWidget):
             lambda name: setattr(self.acquisition.metadata, name, getattr(metadata_widget, name))
         )
         for name, widget in metadata_widget.property_widgets.items():
-            property_worker = create_worker(self.grab_property_value, self.acquisition.metadata, name, widget)
+            property_worker = create_worker(self.grab_property_value, self.acquisition.metadata, name, widget)  # type: ignore
             property_worker.yielded.connect(lambda x: self.update_property_value(x[0], x[1]))
             property_worker.start()
-            property_worker.pause()
+            property_worker.pause()  # type: ignore
             self.property_workers.append(property_worker)
         metadata_widget.setWindowTitle("Metadata")
         return metadata_widget
@@ -522,7 +522,7 @@ class ExASPIMAcquisitionView(QWidget):
         if hasattr(self, "grab_fov_positions_worker") and self.grab_fov_positions_worker is not None:
             self.grab_fov_positions_worker.quit()
 
-        self.grab_fov_positions_worker = create_worker(self.grab_fov_positions)
+        self.grab_fov_positions_worker = create_worker(self.grab_fov_positions)  # type: ignore
         self.grab_fov_positions_worker.yielded.connect(self.volume_model.set_current_fov_position)
         self.grab_fov_positions_worker.start()
 
@@ -586,7 +586,7 @@ class ExASPIMAcquisitionView(QWidget):
             if layer_name in self.instrument_view.viewer.layers:
                 layer = self.instrument_view.viewer.layers[layer_name]
                 layer.data = image
-                layer.scale = (pixel_size_um, pixel_size_um)
+                layer.scale = np.array([pixel_size_um, pixel_size_um])
                 layer.translate = (-x_center_um, y_center_um)
             else:
                 layer = self.instrument_view.viewer.add_image(

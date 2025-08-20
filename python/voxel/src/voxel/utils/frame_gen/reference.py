@@ -55,12 +55,14 @@ class UpsampleReferenceGenerator(BaseReferenceGenerator):
     """Generates a frame by upsampling/resizing the reference image."""
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
-        return skimage_resize(
-            image,
-            output_shape=(self.height, self.width),
-            order=1,
-            preserve_range=True,
-            anti_aliasing=False,
+        return np.array(
+            skimage_resize(
+                image,
+                output_shape=(self.height, self.width),
+                order=1,
+                preserve_range=True,
+                anti_aliasing=False,
+            )
         )
 
 
@@ -118,7 +120,8 @@ class ReferenceGenerator(FrameGenerator):
             self._processed_base_image = resized
 
         # 2. Broadcast the cached image to the desired frame count using NumPy
-        frame_batch = np.broadcast_to(self._processed_base_image, (nframes, self.height, self.width))
+        base_image = np.array(self._processed_base_image, dtype=self.dtype)
+        frame_batch = np.broadcast_to(base_image, (nframes, self.height, self.width))
         return frame_batch.astype(self.dtype)
 
 

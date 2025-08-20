@@ -680,7 +680,11 @@ class VieworksCamera(VoxelCamera):
             binning_options = self._remote.get("@ee BinningHorizontal", dtype=list)
             for binning in binning_options:
                 try:
-                    lut[self._remote.set("BinningHorizontal", binning)] = int(binning[1:])
+                    key = self._remote.set("BinningHorizontal", binning)
+                    if key is not None:
+                        lut[key] = int(binning[1:])
+                    else:
+                        raise ValueError(f"Failed to set binning option: {binning}")
                 except GenTLException as e:
                     skipped_options.append(binning)
                     self.log.debug(f"Binning option: {binning} skipped. Not settable on this device. Error: {str(e)}")

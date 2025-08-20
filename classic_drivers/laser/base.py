@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from voxel_classic.devices.base import VoxelDevice
 

@@ -463,7 +463,7 @@ class SimulatedDAQ(BaseDAQ):
             0, 2 * numpy.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz), retstep=False
         )
         waveform = offset_volts + amplitude_volts * signal.sawtooth(
-            t=time_samples_ms, width=end_time_ms / period_time_ms
+            t=time_samples_ms, width=int(end_time_ms / period_time_ms)
         )
 
         # add in delay
@@ -485,7 +485,7 @@ class SimulatedDAQ(BaseDAQ):
         )
 
         # bessel filter order 6, cutoff frequency is normalied from 0-1 by nyquist frequency
-        b, a = signal.bessel(6, cutoff_frequency_hz / (sampling_frequency_hz / 2), btype="low")
+        b, a = signal.bessel(6, cutoff_frequency_hz / (sampling_frequency_hz / 2), btype="low")  # type: ignore
 
         # pad before filtering with last value
         padding = int(2 / (cutoff_frequency_hz / (sampling_frequency_hz)))
@@ -504,7 +504,7 @@ class SimulatedDAQ(BaseDAQ):
         if padding > 0:
             waveform = waveform[padding:-padding]
 
-        return waveform
+        return numpy.asarray(waveform)
 
     def nonlinear_sawtooth(
         self,
@@ -550,7 +550,7 @@ class SimulatedDAQ(BaseDAQ):
             0, 2 * numpy.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
         )
         waveform = offset_volts + amplitude_volts * signal.sawtooth(
-            t=time_samples_ms, width=end_time_ms / period_time_ms
+            t=time_samples_ms, width=int(end_time_ms / period_time_ms)
         )
         waveform[-1] = waveform[-2]  # force last value to not snap back
 
@@ -570,6 +570,7 @@ class SimulatedDAQ(BaseDAQ):
         v100 = v100 + t100_offset_volts
         f = interpolate.interp1d([t0, t25, t50, t75, t100], [v0, v25, v50, v75, v100], kind="quadratic")
         waveform = f(time_samples_ms)
+        waveform = numpy.asarray(waveform)
 
         # add in delay
         delay_samples = int((start_time_ms / 1000) * sampling_frequency_hz)

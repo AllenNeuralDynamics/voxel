@@ -1,6 +1,6 @@
 from oxxius_laser import LBX, BoolVal
 from serial import Serial
-from sympy import Expr, solve, symbols
+from sympy import Expr, solve, symbols, S
 
 from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
@@ -37,20 +37,24 @@ class OxxiusLBXLaser(VoxelLaser):
     @deliminated_float(min_value=0, max_value=lambda self: self.max_power)
     def power_setpoint_mw(self):
         if self._inst.constant_current == "ON":
-            return int(round(self._coefficients_curve().subs(symbols("x"), self._inst.current_setpoint)))
+            val = self._coefficients_curve().subs(symbols("x"), self._inst.current_setpoint)
+            return int(round(float(val)))  # type: ignore
         else:
             return int(self._inst.power_setpoint)
 
     @power_setpoint_mw.setter
     def power_setpoint_mw(self, value: float):
         if self._inst.constant_current == "ON":
-            solutions = solve(self._coefficients_curve() - value)  # solutions for laser value
+            solutions = solve(self._coefficients_curve() - S(value))
             for sol in solutions:
-                if round(sol) in range(0, 101):
-                    self._inst.current_setpoint = int(round(sol))  # setpoint must be integer
+                try:
+                    cur = float(sol)
+                except TypeError:
+                    cur = float(sol.evalf())
+                if round(cur) in range(0, 101):
+                    self._inst.current_setpoint = int(round(cur))
                     return
-            # If no value exists, alert user
-            self._log.error(f"Cannot set laser to {value}mW because " f"no current percent correlates to {value} mW")
+            self._log.error(f"Cannot set laser to {value}mW because no current percent correlates to {value} mW")
         else:
             self._inst.power_setpoint = value
 
@@ -71,29 +75,30 @@ class OxxiusLBXLaser(VoxelLaser):
             setattr(self._inst, attribute, state)
 
     def status(self):
-        return self._inst.faults()
+        return self._inst.faults
 
     def close(self):
-        self._inst.close()
+        self._inst.ser.close()
 
     @property
     def power_mw(self) -> float:
-        return self._inst.power
+        return float(self._inst.power)
 
     @property
-    def temperature_c(self):
-        return self._inst.temperature
+    def temperature_c(self) -> float:
+        return float(self._inst.temperature)
 
     def _coefficients_curve(self) -> Expr:
         x = symbols("x")
         func: Expr = x
         for order, co in self._coefficients.items():
-            func = func + float(co) * x ** int(order)
+            func = func + S(float(co)) * x ** int(order)
         return func
 
     @property
     def max_power(self):
         if self._inst.constant_current == "ON":
-            return int((round(self._coefficients_curve().subs(symbols("x"), 100), 1)))
+            val = self._coefficients_curve().subs(symbols("x"), 100)
+            return int(round(float(val), 1))  # type: ignore
         else:
             return self._inst.max_power

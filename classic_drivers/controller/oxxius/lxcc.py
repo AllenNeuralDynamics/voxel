@@ -1,10 +1,10 @@
 import logging
 import threading
 from enum import IntEnum, StrEnum
-from time import perf_counter, sleep
+from time import perf_counter
 from typing import Any, Callable
 
-from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException, SerialException
+from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
 
 
 class CombinerCmd(StrEnum):

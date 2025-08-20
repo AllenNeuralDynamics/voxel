@@ -103,7 +103,12 @@ class PreviewFrame:
         Pack the PreviewFrame into a bytes representation for transmission or storage.
         This includes both the metadata and the compressed frame data.
         """
-        return msgpack.packb({"metadata": self.metadata.model_dump(), "frame": self.frame}, default=mpack_numpy.encode)
+        packed = msgpack.packb(
+            {"metadata": self.metadata.model_dump(), "frame": self.frame}, default=mpack_numpy.encode
+        )
+        if packed is None:
+            raise ValueError("Packing PreviewFrame failed: msgpack.packb returned None")
+        return packed
 
 
 type NewFrameCallback = Callable[[PreviewFrame], None]

@@ -774,7 +774,7 @@ class ExASPIMAcquisition(Acquisition):
         """
         # check GPU resources for downscaling
         required_memory_gb = writer.get_frame_size_mb() / 1024
-        total_gpu_memory_gb = get_device().get_info("MAX_MEM_ALLOC_SIZE") / 1024**3
+        total_gpu_memory_gb = float(str(get_device().get_info("MAX_MEM_ALLOC_SIZE"))) / 1024**3
         self.log.info(f"required GPU RAM = {required_memory_gb:.1f} [GB]")
         self.log.info(f"available GPU RAM = {total_gpu_memory_gb:.1f} [GB]")
         if required_memory_gb >= total_gpu_memory_gb:

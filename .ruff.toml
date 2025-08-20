@@ -31,8 +31,13 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
-    "sdk",
+    "**/sdk",
+    "**/sdks",
+    # To clean up later - exclude from linting till then
+    "classic_drivers",
+    "python/voxel/tests/processes",
+    "python/vidgets/src/vidgets/view",
 ]
 
 lint.extend-select = ["C4", "SIM", "TC"]
-fixable = ["ALL"]
+lint.fixable = ["ALL"]

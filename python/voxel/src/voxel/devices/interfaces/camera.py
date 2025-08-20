@@ -4,12 +4,9 @@ from enum import IntEnum, StrEnum
 from functools import cached_property
 
 import numpy as np
-import zerorpc
 
-from voxel.devices.base import VoxelPropertyValue
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int
-from voxel.utils.log import VoxelLogging
 from voxel.utils.vec import Vec2D
 
 from ..base import VoxelDevice, VoxelDeviceType, VoxelPropertyDetails
@@ -539,195 +536,198 @@ class VoxelCamera(VoxelDevice):
         pass
 
 
-class VoxelCameraProxy(VoxelCamera):
-    """
-    A proxy for a remote VoxelCamera service.
-
-    This class implements the public interface defined by VoxelCamera by forwarding
-    method calls over ZeroRPC to a remote service that implements VoxelCamera.
-    It does not inherit from VoxelCamera, but is registered as a virtual subclass,
-    so that consumers of a VoxelCamera can use it interchangeably.
-    """
-
-    def __init__(self, remote_address: str):
-        """
-        :param remote_address: The ZeroRPC address of the remote VoxelCamera service,
-                               e.g. "tcp://192.168.1.10:4242"
-        """
-        self.client = zerorpc.Client()
-        self.client.connect(remote_address)
-        self.log = VoxelLogging.get_logger(object=self)
-
-    # -- Methods --
-    def prepare(self) -> None:
-        return self.client.prepare()
-
-    def start(self, frame_count: int | None = None) -> None:
-        """
-        Start the camera acquisition.
-
-        :param frame_count: The number of frames to acquire. If None, the remote
-                            service should interpret this as indefinite acquisition.
-        """
-        fc = frame_count if frame_count is not None else 0
-        return self.client.start(fc)
-
-    def stop(self) -> None:
-        """Stop the camera by forwarding to the remote service."""
-        return self.client.stop()
-
-    def grab_frame(self) -> np.ndarray:
-        """
-        Grab a frame from the remote camera.
-
-        The remote service should return a serializable frame (e.g. a nested list),
-        which is then converted to a NumPy array.
-        """
-        frame_serialized = self.client.grab_frame()
-        return np.array(frame_serialized)
-
-    def reset_roi(self) -> None:
-        return self.client.reset_roi()
-
-    # -- Properties --
-
-    @property
-    def uid(self) -> str:
-        return self.client.name
-
-    @cached_property
-    def details(self) -> dict[str, VoxelPropertyDetails]:
-        return self.client.details
-
-    @property
-    def pixel_size_um(self) -> Vec2D[float]:
-        return self.client.pixel_size_um
-
-    @pixel_size_um.setter
-    @property
-    def objective(self) -> float:
-        return self.client.objective
-
-    @property
-    def fov_um(self) -> Vec2D[float]:
-        return self.client.fov_um
-
-    @cached_property
-    def sensor_size_px(self) -> Vec2D[int]:
-        return Vec2D(*self.client.sensor_size_px)
-
-    @property
-    def roi_size_px(self) -> Vec2D[int]:
-        return Vec2D(*self.client.roi_size_px)
-
-    @property
-    def roi_size_um(self) -> Vec2D[float]:
-        return Vec2D(*self.client.roi_size_um)
-
-    @deliminated_int()
-    def roi_width_px(self) -> int:
-        return self.client.roi_width_px
-
-    @roi_width_px.setter
-    def roi_width_px(self, width_px: int) -> None:
-        self.client.roi_width_px = width_px
-
-    @deliminated_int()
-    def roi_width_offset_px(self) -> int:
-        return self.client.roi_width_offset_px
-
-    @roi_width_offset_px.setter
-    def roi_width_offset_px(self, width_offset_px: int) -> None:
-        self.client.roi_width_offset_px = width_offset_px
-
-    @deliminated_int()
-    def roi_height_px(self) -> int:
-        return self.client.roi_height_px
-
-    @roi_height_px.setter
-    def roi_height_px(self, height_px: int) -> None:
-        self.client.roi_height_px = height_px
-
-    @deliminated_int()
-    def roi_height_offset_px(self) -> int:
-        return self.client.roi_height_offset_px
-
-    @roi_height_offset_px.setter
-    def roi_height_offset_px(self, height_offset_px: int) -> None:
-        self.client.roi_height_offset_px = height_offset_px
-
-    @enumerated_int(options=VoxelCamera._BINNING_OPTIONS)
-    def binning(self) -> int:
-        return self.client.binning
-
-    @binning.setter
-    def binning(self, binning: int) -> None:
-        self.client.binning = binning
-
-    @property
-    def pixel_type(self) -> PixelType:
-        return PixelType(self.client.pixel_type)
-
-    @property
-    def frame_size_px(self) -> Vec2D[int]:
-        return Vec2D(*self.client.frame_size_px)
-
-    @property
-    def frame_size_mb(self) -> float:
-        return self.client.frame_size_mb
-
-    @deliminated_float()
-    def exposure_time_ms(self) -> float:
-        return self.client.exposure_time_ms
-
-    @exposure_time_ms.setter
-    def exposure_time_ms(self, exposure_time_ms: float) -> None:
-        self.client.exposure_time_ms = exposure_time_ms
-
-    @deliminated_float()
-    def line_interval_us(self) -> float:
-        return self.client.line_interval_us
-
-    @line_interval_us.setter
-    def line_interval_us(self, value: float) -> None:
-        self.client.line_interval_us = value
-
-    @property
-    def frame_time_ms(self) -> float:
-        return self.client.frame_time_ms
-
-    @deliminated_float()
-    def frame_rate_hz(self) -> float:
-        return self.client.frame_rate_hz
-
-    @property
-    def trigger_setting(self) -> TriggerSetting:
-        return TriggerSetting(self.client.trigger_setting)
-
-    @trigger_setting.setter
-    def trigger_setting(self, mode: TriggerSetting | str) -> None:
-        self.client.trigger_setting = TriggerSetting(mode)
-
-    @property
-    def acquisition_state(self) -> AcquisitionState:
-        state = self.client.acquisition_state
-        return AcquisitionState(
-            frame_index=state[0],
-            input_buffer_size=state[1],
-            output_buffer_size=state[2],
-            dropped_frames=state[3],
-            frame_rate_fps=state[4],
-            data_rate_mbs=state[5],
-        )
-
-    @property
-    def sensor_temperature_c(self) -> float:
-        return self.client.sensor_temperature_c
-
-    def snapshot(self) -> dict[str, VoxelPropertyValue]:
-        """Get the latest frame from the camera."""
-        return self.client.snapshot()
+# import zerorpc
 
 
-# Register VoxelCameraProxy as a virtual subclass of VoxelCamera.
-VoxelCamera.register(VoxelCameraProxy)
+# class VoxelCameraProxy(VoxelCamera):
+#     """
+#     A proxy for a remote VoxelCamera service.
+
+#     This class implements the public interface defined by VoxelCamera by forwarding
+#     method calls over ZeroRPC to a remote service that implements VoxelCamera.
+#     It does not inherit from VoxelCamera, but is registered as a virtual subclass,
+#     so that consumers of a VoxelCamera can use it interchangeably.
+#     """
+
+#     def __init__(self, remote_address: str):
+#         """
+#         :param remote_address: The ZeroRPC address of the remote VoxelCamera service,
+#                                e.g. "tcp://192.168.1.10:4242"
+#         """
+#         self.client = zerorpc.Client()
+#         self.client.connect(remote_address)
+#         self.log = VoxelLogging.get_logger(object=self)
+
+#     # -- Methods --
+#     def prepare(self) -> None:
+#         return self.client.prepare()
+
+#     def start(self, frame_count: int | None = None) -> None:
+#         """
+#         Start the camera acquisition.
+
+#         :param frame_count: The number of frames to acquire. If None, the remote
+#                             service should interpret this as indefinite acquisition.
+#         """
+#         fc = frame_count if frame_count is not None else 0
+#         return self.client.start(fc)
+
+#     def stop(self) -> None:
+#         """Stop the camera by forwarding to the remote service."""
+#         return self.client.stop()
+
+#     def grab_frame(self) -> np.ndarray:
+#         """
+#         Grab a frame from the remote camera.
+
+#         The remote service should return a serializable frame (e.g. a nested list),
+#         which is then converted to a NumPy array.
+#         """
+#         frame_serialized = self.client.grab_frame()
+#         return np.array(frame_serialized)
+
+#     def reset_roi(self) -> None:
+#         return self.client.reset_roi()
+
+#     # -- Properties --
+
+#     @property
+#     def uid(self) -> str:
+#         return self.client.name
+
+#     @cached_property
+#     def details(self) -> dict[str, VoxelPropertyDetails]:
+#         return self.client.details
+
+#     @property
+#     def pixel_size_um(self) -> Vec2D[float]:
+#         return self.client.pixel_size_um
+
+#     @pixel_size_um.setter
+#     @property
+#     def objective(self) -> float:
+#         return self.client.objective
+
+#     @property
+#     def fov_um(self) -> Vec2D[float]:
+#         return self.client.fov_um
+
+#     @cached_property
+#     def sensor_size_px(self) -> Vec2D[int]:
+#         return Vec2D(*self.client.sensor_size_px)
+
+#     @property
+#     def roi_size_px(self) -> Vec2D[int]:
+#         return Vec2D(*self.client.roi_size_px)
+
+#     @property
+#     def roi_size_um(self) -> Vec2D[float]:
+#         return Vec2D(*self.client.roi_size_um)
+
+#     @deliminated_int()
+#     def roi_width_px(self) -> int:
+#         return self.client.roi_width_px
+
+#     @roi_width_px.setter
+#     def roi_width_px(self, width_px: int) -> None:
+#         self.client.roi_width_px = width_px
+
+#     @deliminated_int()
+#     def roi_width_offset_px(self) -> int:
+#         return self.client.roi_width_offset_px
+
+#     @roi_width_offset_px.setter
+#     def roi_width_offset_px(self, width_offset_px: int) -> None:
+#         self.client.roi_width_offset_px = width_offset_px
+
+#     @deliminated_int()
+#     def roi_height_px(self) -> int:
+#         return self.client.roi_height_px
+
+#     @roi_height_px.setter
+#     def roi_height_px(self, height_px: int) -> None:
+#         self.client.roi_height_px = height_px
+
+#     @deliminated_int()
+#     def roi_height_offset_px(self) -> int:
+#         return self.client.roi_height_offset_px
+
+#     @roi_height_offset_px.setter
+#     def roi_height_offset_px(self, height_offset_px: int) -> None:
+#         self.client.roi_height_offset_px = height_offset_px
+
+#     @enumerated_int(options=VoxelCamera._BINNING_OPTIONS)
+#     def binning(self) -> int:
+#         return self.client.binning
+
+#     @binning.setter
+#     def binning(self, binning: int) -> None:
+#         self.client.binning = binning
+
+#     @property
+#     def pixel_type(self) -> PixelType:
+#         return PixelType(self.client.pixel_type)
+
+#     @property
+#     def frame_size_px(self) -> Vec2D[int]:
+#         return Vec2D(*self.client.frame_size_px)
+
+#     @property
+#     def frame_size_mb(self) -> float:
+#         return self.client.frame_size_mb
+
+#     @deliminated_float()
+#     def exposure_time_ms(self) -> float:
+#         return self.client.exposure_time_ms
+
+#     @exposure_time_ms.setter
+#     def exposure_time_ms(self, exposure_time_ms: float) -> None:
+#         self.client.exposure_time_ms = exposure_time_ms
+
+#     @deliminated_float()
+#     def line_interval_us(self) -> float:
+#         return self.client.line_interval_us
+
+#     @line_interval_us.setter
+#     def line_interval_us(self, value: float) -> None:
+#         self.client.line_interval_us = value
+
+#     @property
+#     def frame_time_ms(self) -> float:
+#         return self.client.frame_time_ms
+
+#     @deliminated_float()
+#     def frame_rate_hz(self) -> float:
+#         return self.client.frame_rate_hz
+
+#     @property
+#     def trigger_setting(self) -> TriggerSetting:
+#         return TriggerSetting(self.client.trigger_setting)
+
+#     @trigger_setting.setter
+#     def trigger_setting(self, mode: TriggerSetting | str) -> None:
+#         self.client.trigger_setting = TriggerSetting(mode)
+
+#     @property
+#     def acquisition_state(self) -> AcquisitionState:
+#         state = self.client.acquisition_state
+#         return AcquisitionState(
+#             frame_index=state[0],
+#             input_buffer_size=state[1],
+#             output_buffer_size=state[2],
+#             dropped_frames=state[3],
+#             frame_rate_fps=state[4],
+#             data_rate_mbs=state[5],
+#         )
+
+#     @property
+#     def sensor_temperature_c(self) -> float:
+#         return self.client.sensor_temperature_c
+
+#     def snapshot(self) -> dict[str, VoxelPropertyValue]:
+#         """Get the latest frame from the camera."""
+#         return self.client.snapshot()
+
+
+# # Register VoxelCameraProxy as a virtual subclass of VoxelCamera.
+# VoxelCamera.register(VoxelCameraProxy)

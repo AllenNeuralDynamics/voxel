@@ -88,5 +88,5 @@ class TigerFlipMount(BaseFlipMount):
         """
         Close the stage.
         """
-        self.log.info(f"closing flip mount.")
+        self.log.info("closing flip mount.")
         pass

@@ -37,7 +37,7 @@ def test_position(simulated):
 
 def test_toggle(simulated):
     def next_pos(curr):
-        return next(key for key in POSITIONS.keys() if key != curr)
+        return next(key for key in POSITIONS if key != curr)
 
     for _ in range(4):
         current_pos = simulated.position

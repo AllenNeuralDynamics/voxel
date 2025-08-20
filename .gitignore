@@ -134,7 +134,7 @@ bootstrap.*
 .DS_Store
 
 # IDE
-.vscode/
+# .vscode/ # allow so that Python analysis settings are shared
 .run/
 .idea/
 

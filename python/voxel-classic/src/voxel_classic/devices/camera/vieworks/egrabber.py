@@ -117,7 +117,7 @@ class VieworksCamera(BaseCamera):
                     grabber = EGrabber(
                         self.gentl, egrabber["interface"], egrabber["device"], egrabber["stream"], remote_required=True
                     )
-                    if grabber.remote.get("DeviceSerialNumber") == self._serial_id:
+                    if grabber.remote and grabber.remote.get("DeviceSerialNumber") == self._serial_id:
                         self.log.info(f"grabber found for S/N: {self._serial_id}")
                         return grabber, egrabber
                 except Exception:
@@ -152,7 +152,32 @@ class VieworksCamera(BaseCamera):
         # del grabber
         # IMPORTANT: call stop here in the event that the camera previously crashed
         # if not called, the camera may not respond via the SDK
-        self.grabber.remote.execute("AcquisitionStop")
+        if self.grabber.remote is not None:
+            self._remote = self._remote
+        else:
+            raise RuntimeError("Grabber has no remote module")
+
+        if self.grabber.device is not None:
+            self._device_module = self._device_module
+        else:
+            raise RuntimeError("Grabber has no device module")
+
+        if self.grabber.stream is not None:
+            self._stream_module = self._stream_module
+        else:
+            raise RuntimeError("Grabber has no stream module")
+
+        if self.grabber.interface is not None:
+            self._interface_module = self._interface_module
+        else:
+            raise RuntimeError("Grabber has no interface module")
+
+        if self.grabber.system is not None:
+            self._system_module = self._system_module
+        else:
+            raise RuntimeError("Grabber has no system module")
+
+        self._remote.execute("AcquisitionStop")
         # initialize parameter values
         self._update_parameters()
         # initialize binning as 1
@@ -166,7 +191,7 @@ class VieworksCamera(BaseCamera):
         :rtype: float
         """
         # us to ms conversion
-        return self.grabber.remote.get("ExposureTime") / 1000
+        return self._remote.get("ExposureTime") / 1000
 
     @exposure_time_ms.setter
     def exposure_time_ms(self, exposure_time_ms: float) -> None:  # type: ignore
@@ -176,7 +201,7 @@ class VieworksCamera(BaseCamera):
         :type exposure_time_ms: float
         """
         # Note: round ms to nearest us
-        self.grabber.remote.set("ExposureTime", round(exposure_time_ms * 1e3, 1))
+        self._remote.set("ExposureTime", round(exposure_time_ms * 1e3, 1))
         self.log.info(f"exposure time set to: {exposure_time_ms} ms")
         # refresh parameter values
         self._get_min_max_step_values()
@@ -188,7 +213,7 @@ class VieworksCamera(BaseCamera):
         :return: Width in pixels
         :rtype: int
         """
-        return self.grabber.remote.get("Width")
+        return self._remote.get("Width")
 
     @width_px.setter
     def width_px(self, value: int) -> None:  # type: ignore
@@ -198,10 +223,10 @@ class VieworksCamera(BaseCamera):
         :type value: int
         """
         # reset offset to (0,0)
-        self.grabber.remote.set("OffsetX", 0)
-        self.grabber.remote.set("Width", value)
+        self._remote.set("OffsetX", 0)
+        self._remote.set("Width", value)
         centered_offset_px = round((self.max_width_px / 2 - value / 2) / self.step_width_px) * self.step_width_px
-        self.grabber.remote.set("OffsetX", centered_offset_px)
+        self._remote.set("OffsetX", centered_offset_px)
         self.log.info(f"width set to: {value} px")
         # refresh parameter values
         self._get_min_max_step_values()
@@ -213,7 +238,7 @@ class VieworksCamera(BaseCamera):
         :return: Width offset in pixels
         :rtype: int
         """
-        return self.grabber.remote.get("OffsetX")
+        return self._remote.get("OffsetX")
 
     @width_offset_px.setter
     def width_offset_px(self, width_offset_px: int) -> None:  # type: ignore
@@ -222,7 +247,7 @@ class VieworksCamera(BaseCamera):
         :param width_offset_px: Width offset in pixels
         :type width_offset_px: int
         """
-        self.grabber.remote.set("OffsetX", width_offset_px)
+        self._remote.set("OffsetX", width_offset_px)
         self.log.info(f"width offset set to: {width_offset_px} px")
 
     @DeliminatedProperty(minimum=float("-inf"), maximum=float("inf"))
@@ -232,7 +257,7 @@ class VieworksCamera(BaseCamera):
         :return: Height in pixels
         :rtype: int
         """
-        return self.grabber.remote.get("Height")
+        return self._remote.get("Height")
 
     @height_px.setter
     def height_px(self, height_px: int) -> None:  # type: ignore
@@ -242,11 +267,11 @@ class VieworksCamera(BaseCamera):
         :type height_px: int
         """
         # reset offset to (0,0)
-        self.grabber.remote.set("OffsetY", 0)
-        self.grabber.remote.set("Height", height_px)
+        self._remote.set("OffsetY", 0)
+        self._remote.set("Height", height_px)
         centered_offset_px = round((self.max_height_px / 2 - height_px / 2) / self.step_height_px) * self.step_height_px
-        self.grabber.remote.set("OffsetY", centered_offset_px)
-        self.grabber.remote.set("Height", height_px)
+        self._remote.set("OffsetY", centered_offset_px)
+        self._remote.set("Height", height_px)
         self.log.info(f"height set to: {height_px} px")
         # refresh parameter values
         self._get_min_max_step_values()
@@ -258,7 +283,7 @@ class VieworksCamera(BaseCamera):
         :return: Height offset in pixels
         :rtype: int
         """
-        return self.grabber.remote.get("OffsetY")
+        return self._remote.get("OffsetY")
 
     @height_offset_px.setter
     def height_offset_px(self, height_offset_px: int) -> None:  # type: ignore
@@ -267,7 +292,7 @@ class VieworksCamera(BaseCamera):
         :param height_offset_px: Height offset in pixels
         :type height_offset_px: int
         """
-        self.grabber.remote.set("OffsetY", height_offset_px)
+        self._remote.set("OffsetY", height_offset_px)
         self.log.info(f"height offset set to: {height_offset_px} px")
 
     @property
@@ -277,7 +302,7 @@ class VieworksCamera(BaseCamera):
         :return: Pixel type
         :rtype: str
         """
-        pixel_type = self.grabber.remote.get("PixelFormat")
+        pixel_type = self._remote.get("PixelFormat")
         # invert the dictionary and find the abstracted key to output
         return next(key for key, value in PIXEL_TYPES.items() if value == pixel_type)
 
@@ -293,7 +318,7 @@ class VieworksCamera(BaseCamera):
         if pixel_type_bits not in valid:
             raise ValueError("pixel_type_bits must be one of %r." % valid)
         # note: for the Vieworks VP-151MX camera, the pixel type also controls line interval
-        self.grabber.remote.set("PixelFormat", PIXEL_TYPES[pixel_type_bits])
+        self._remote.set("PixelFormat", PIXEL_TYPES[pixel_type_bits])
         self.log.info(f"pixel type set to: {pixel_type_bits}")
         # refresh parameter values
         self._update_parameters()
@@ -305,7 +330,7 @@ class VieworksCamera(BaseCamera):
         :return: Bit packing mode
         :rtype: str
         """
-        bit_packing = self.grabber.stream.get("UnpackingMode")
+        bit_packing = self._stream_module.get("UnpackingMode")
         # invert the dictionary and find the abstracted key to output
         return next(key for key, value in BIT_PACKING_MODES.items() if value == bit_packing)
 
@@ -320,7 +345,7 @@ class VieworksCamera(BaseCamera):
         valid = list(BIT_PACKING_MODES.keys())
         if bit_packing not in valid:
             raise ValueError("bit_packing_mode must be one of %r." % valid)
-        self.grabber.stream.set("UnpackingMode", BIT_PACKING_MODES[bit_packing])
+        self._stream_module.set("UnpackingMode", BIT_PACKING_MODES[bit_packing])
         self.log.info(f"bit packing mode set to: {bit_packing}")
         # refresh parameter values
         self._get_min_max_step_values()
@@ -335,7 +360,7 @@ class VieworksCamera(BaseCamera):
         # line interval is indirectly set via DeviceLinkThroughputLimit
         # we can check the line interval indirectly by querying the max frame rate
         # line rate = (width * height)/(data rate * height)
-        data_rate_mb_s = self.grabber.remote.get("DeviceLinkThroughputLimit")
+        data_rate_mb_s = self._remote.get("DeviceLinkThroughputLimit")
         # determine bits to bytes
         bit_to_byte = 1 if self.pixel_type == "mono8" else 2
         # calculate line interval in us
@@ -366,7 +391,7 @@ class VieworksCamera(BaseCamera):
         data_rate_mb_s = (
             (self.width_px * self.height_px * bit_to_byte) / 1000**2 / (line_interval_us / 1e6 * self.height_px)
         )
-        self.grabber.remote.set("DeviceLinkThroughputLimit", data_rate_mb_s)
+        self._remote.set("DeviceLinkThroughputLimit", data_rate_mb_s)
         self._get_min_max_step_values()
         self.log.info(f"line interval set to: {line_interval_us} [us]")
 
@@ -386,9 +411,9 @@ class VieworksCamera(BaseCamera):
         :return: Trigger settings
         :rtype: dict[str, str]
         """
-        mode = self.grabber.remote.get("TriggerMode")
-        source = self.grabber.remote.get("TriggerSource")
-        polarity = self.grabber.remote.get("TriggerActivation")
+        mode = self._remote.get("TriggerMode")
+        source = self._remote.get("TriggerSource")
+        polarity = self._remote.get("TriggerActivation")
         return {
             "mode": next(key for key, value in MODES.items() if value == mode),
             "source": next(key for key, value in SOURCES.items() if value == source),
@@ -418,10 +443,10 @@ class VieworksCamera(BaseCamera):
         if polarity not in valid_polarity:
             raise ValueError("polarity must be one of %r." % valid_polarity)
         # note: Setting TriggerMode if it's already correct will throw an error
-        if self.grabber.remote.get("TriggerMode") != mode:  # set camera to external trigger mode
-            self.grabber.remote.set("TriggerMode", MODES[mode])
-        self.grabber.remote.set("TriggerSource", SOURCES[source])
-        self.grabber.remote.set("TriggerActivation", POLARITIES[polarity])
+        if self._remote.get("TriggerMode") != mode:  # set camera to external trigger mode
+            self._remote.set("TriggerMode", MODES[mode])
+        self._remote.set("TriggerSource", SOURCES[source])
+        self._remote.set("TriggerActivation", POLARITIES[polarity])
         self.log.info(f"trigger set to, mode: {mode}, source: {source}, polarity: {polarity}")
         # refresh parameter values
         self._get_min_max_step_values()
@@ -450,11 +475,11 @@ class VieworksCamera(BaseCamera):
         # if binning is not an integer, do it in hardware
         if not isinstance(BINNINGS[binning], int):
             try:
-                self.grabber.remote.set("BinningHorizontal", BINNINGS[binning])
+                self._remote.set("BinningHorizontal", BINNINGS[binning])
             except Exception as e:
                 self.log.warning(f"cannot set horizontal binning: {e}")
             try:
-                self.grabber.remote.set("BinningVertical", BINNINGS[binning])
+                self._remote.set("BinningVertical", BINNINGS[binning])
             except Exception as e:
                 self.log.warning(f"cannot set vertical binning: {e}")
         # initialize the opencl binning program
@@ -498,8 +523,8 @@ class VieworksCamera(BaseCamera):
         :return: Mainboard temperature in degrees Celsius
         :rtype: float
         """
-        self.grabber.remote.set("DeviceTemperatureSelector", "Mainboard")
-        temperature = self.grabber.remote.get("DeviceTemperature")
+        self._remote.set("DeviceTemperatureSelector", "Mainboard")
+        temperature = self._remote.get("DeviceTemperature")
         return temperature
 
     @property
@@ -509,8 +534,8 @@ class VieworksCamera(BaseCamera):
         :return: Sensor temperature in degrees Celsius
         :rtype: float
         """
-        self.grabber.remote.set("DeviceTemperatureSelector", "Sensor")
-        temperature = self.grabber.remote.get("DeviceTemperature")
+        self._remote.set("DeviceTemperatureSelector", "Sensor")
+        temperature = self._remote.get("DeviceTemperature")
         return temperature
 
     def prepare(self) -> None:
@@ -542,10 +567,10 @@ class VieworksCamera(BaseCamera):
         self.log.info("stopping camera")
         self.grabber.stop()
         # reset stream
-        bit_packing_mode = self.grabber.stream.get("UnpackingMode")
-        self.grabber.stream.execute("StreamReset")
+        bit_packing_mode = self._stream_module.get("UnpackingMode")
+        self._stream_module.execute("StreamReset")
         # reset bitpacking mode -> only stream property
-        self.grabber.stream.set("UnpackingMode", bit_packing_mode)
+        self._stream_module.set("UnpackingMode", bit_packing_mode)
 
     def abort(self) -> None:
         """Abort the camera acquisition."""
@@ -577,14 +602,14 @@ class VieworksCamera(BaseCamera):
         # Note: creating the buffer and then "pushing" it at the end has the
         #   effect of moving the internal camera frame buffer from the output
         #   pool back to the input pool, so it can be reused.
-        column_count = self.grabber.remote.get("Width")
-        row_count = self.grabber.remote.get("Height")
+        column_count = self._remote.get("Width")
+        row_count = self._remote.get("Height")
         timeout_ms = 5000
         try:
             with Buffer(self.grabber, timeout=timeout_ms) as buffer:
                 ptr = buffer.get_info(BUFFER_INFO_BASE, INFO_DATATYPE_PTR)  # grab pointer to new frame
                 # grab frame data
-                data = ct.cast(ptr, ct.POINTER(ct.c_ubyte * column_count * row_count * 2)).contents
+                data = ct.cast(ptr, ct.POINTER(ct.c_ubyte * column_count * row_count * 2)).contents  # type: ignore
                 # cast data to numpy array of correct size/datatype:
                 image = numpy.frombuffer(data, count=int(column_count * row_count), dtype=numpy.uint16).reshape(
                     (row_count, column_count)
@@ -619,15 +644,15 @@ class VieworksCamera(BaseCamera):
         # https://documentation.euresys.com/Products/Coaxlink/Coaxlink/en-us/Content/IOdoc/egrabber-reference/
         # namespace_gen_t_l.html#a6b498d9a4c08dea2c44566722699706e
         state = {}
-        # state["Frame Index"] = self.grabber.stream.get_info(STREAM_INFO_NUM_DELIVERED, INFO_DATATYPE_SIZET)
+        # state["Frame Index"] = self._stream_module.get_info(STREAM_INFO_NUM_DELIVERED, INFO_DATATYPE_SIZET)
         state["Frame Index"] = self.frame_number  # frame number is not taken from the camera due to start/stop
-        state["Input Buffer Size"] = self.grabber.stream.get_info(STREAM_INFO_NUM_QUEUED, INFO_DATATYPE_SIZET)
-        state["Output Buffer Size"] = self.grabber.stream.get_info(STREAM_INFO_NUM_AWAIT_DELIVERY, INFO_DATATYPE_SIZET)
+        state["Input Buffer Size"] = self._stream_module.get_info(STREAM_INFO_NUM_QUEUED, INFO_DATATYPE_SIZET)
+        state["Output Buffer Size"] = self._stream_module.get_info(STREAM_INFO_NUM_AWAIT_DELIVERY, INFO_DATATYPE_SIZET)
         # number of underrun, i.e. dropped frames
-        state["Dropped Frames"] = self.grabber.stream.get_info(STREAM_INFO_NUM_UNDERRUN, INFO_DATATYPE_SIZET)
+        state["Dropped Frames"] = self._stream_module.get_info(STREAM_INFO_NUM_UNDERRUN, INFO_DATATYPE_SIZET)
         # adjust data rate based on internal software binning
-        state["Data Rate [MB/s]"] = self.grabber.stream.get("StatisticsDataRate") / self._binning**2
-        state["Frame Rate [fps]"] = self.grabber.stream.get("StatisticsFrameRate")
+        state["Data Rate [MB/s]"] = self._stream_module.get("StatisticsDataRate") / self._binning**2
+        state["Frame Rate [fps]"] = self._stream_module.get("StatisticsFrameRate")
         self.log.info(
             f"id: {self._serial_id}, "
             f"frame: {state['Frame Index']}, "
@@ -643,62 +668,62 @@ class VieworksCamera(BaseCamera):
         """Log camera metadata with the schema tag."""
         # log egrabber camera settings
         self.log.info("egrabber camera parameters")
-        categories = self.grabber.device.get(query.categories())
+        categories = self._device_module.get(query.categories())
         for category in categories:
-            features = self.grabber.device.get(query.features_of(category))
+            features = self._device_module.get(query.features_of(category))
             for feature in features:
                 if (
-                    self.grabber.device.get(query.available(feature))
-                    and self.grabber.device.get(query.readable(feature))
-                    and not self.grabber.device.get(query.command(feature))
+                    self._device_module.get(query.available(feature))
+                    and self._device_module.get(query.readable(feature))
+                    and not self._device_module.get(query.command(feature))
                 ):
-                    self.log.info(f"device, {feature}, {self.grabber.device.get(feature)}")
+                    self.log.info(f"device, {feature}, {self._device_module.get(feature)}")
 
-        categories = self.grabber.remote.get(query.categories())
+        categories = self._remote.get(query.categories())
         for category in categories:
-            features = self.grabber.remote.get(query.features_of(category))
+            features = self._remote.get(query.features_of(category))
             for feature in features:
                 if (
-                    self.grabber.remote.get(query.available(feature))
-                    and self.grabber.remote.get(query.readable(feature))
-                    and not self.grabber.remote.get(query.command(feature))
+                    self._remote.get(query.available(feature))
+                    and self._remote.get(query.readable(feature))
+                    and not self._remote.get(query.command(feature))
                     and feature != "BalanceRatioSelector"
                     and feature != "BalanceWhiteAuto"
                 ):
-                    self.log.info(f"remote, {feature}, {self.grabber.remote.get(feature)}")
+                    self.log.info(f"remote, {feature}, {self._remote.get(feature)}")
 
-        categories = self.grabber.stream.get(query.categories())
+        categories = self._stream_module.get(query.categories())
         for category in categories:
-            features = self.grabber.stream.get(query.features_of(category))
+            features = self._stream_module.get(query.features_of(category))
             for feature in features:
                 if (
-                    self.grabber.stream.get(query.available(feature))
-                    and self.grabber.stream.get(query.readable(feature))
-                    and not self.grabber.stream.get(query.command(feature))
+                    self._stream_module.get(query.available(feature))
+                    and self._stream_module.get(query.readable(feature))
+                    and not self._stream_module.get(query.command(feature))
                 ):
-                    self.log.info(f"stream, {feature}, {self.grabber.stream.get(feature)}")
+                    self.log.info(f"stream, {feature}, {self._stream_module.get(feature)}")
 
-        categories = self.grabber.interface.get(query.categories())
+        categories = self._interface_module.get(query.categories())
         for category in categories:
-            features = self.grabber.interface.get(query.features_of(category))
+            features = self._interface_module.get(query.features_of(category))
             for feature in features:
                 if (
-                    self.grabber.interface.get(query.available(feature))
-                    and self.grabber.interface.get(query.readable(feature))
-                    and not self.grabber.interface.get(query.command(feature))
+                    self._interface_module.get(query.available(feature))
+                    and self._interface_module.get(query.readable(feature))
+                    and not self._interface_module.get(query.command(feature))
                 ):
-                    self.log.info(f"interface, {feature}, {self.grabber.interface.get(feature)}")
+                    self.log.info(f"interface, {feature}, {self._interface_module.get(feature)}")
 
-        categories = self.grabber.system.get(query.categories())
+        categories = self._system_module.get(query.categories())
         for category in categories:
-            features = self.grabber.system.get(query.features_of(category))
+            features = self._system_module.get(query.features_of(category))
             for feature in features:
                 if (
-                    self.grabber.system.get(query.available(feature))
-                    and self.grabber.system.get(query.readable(feature))
-                    and not self.grabber.system.get(query.command(feature))
+                    self._system_module.get(query.available(feature))
+                    and self._system_module.get(query.readable(feature))
+                    and not self._system_module.get(query.command(feature))
                 ):
-                    self.log.info(f"system, {feature}, {self.grabber.system.get(feature)}")
+                    self.log.info(f"system, {feature}, {self._system_module.get(feature)}")
 
     def _update_parameters(self) -> None:
         """Update the camera parameters."""
@@ -723,7 +748,7 @@ class VieworksCamera(BaseCamera):
         # minimum exposure time
         # convert from us to ms
         try:
-            self.min_exposure_time_ms = self.grabber.remote.get("ExposureTime.Min") / 1e3
+            self.min_exposure_time_ms = self._remote.get("ExposureTime.Min") / 1e3
             type(self).exposure_time_ms.minimum = self.min_exposure_time_ms
             self.log.debug(f"min exposure time is: {self.min_exposure_time_ms} ms")
         except Exception:
@@ -731,63 +756,63 @@ class VieworksCamera(BaseCamera):
         # maximum exposure time
         # convert from us to ms
         try:
-            self.max_exposure_time_ms = self.grabber.remote.get("ExposureTime.Max") / 1e3
+            self.max_exposure_time_ms = self._remote.get("ExposureTime.Max") / 1e3
             type(self).exposure_time_ms.maximum = self.max_exposure_time_ms
             self.log.debug(f"max exposure time is: {self.max_exposure_time_ms} ms")
         except Exception:
             self.log.debug(f"max exposure time not available for camera {self._serial_id}")
         # minimum width
         try:
-            self.min_width_px = self.grabber.remote.get("Width.Min")
+            self.min_width_px = self._remote.get("Width.Min")
             type(self).width_px.minimum = self.min_width_px
             self.log.debug(f"min width is: {self.min_width_px} px")
         except Exception:
             self.log.debug(f"min width not available for camera {self._serial_id}")
         # maximum width
         try:
-            self.max_width_px = self.grabber.remote.get("Width.Max")
+            self.max_width_px = self._remote.get("Width.Max")
             type(self).width_px.maximum = self.max_width_px
             self.log.debug(f"max width is: {self.max_width_px} px")
         except Exception:
             self.log.debug(f"max width not available for camera {self._serial_id}")
         # minimum height
         try:
-            self.min_height_px = self.grabber.remote.get("Height.Min")
+            self.min_height_px = self._remote.get("Height.Min")
             type(self).height_px.minimum = self.min_height_px
             self.log.debug(f"min height is: {self.min_height_px} px")
         except Exception:
             self.log.debug(f"min height not available for camera {self._serial_id}")
         # maximum height
         try:
-            self.max_height_px = self.grabber.remote.get("Height.Max")
+            self.max_height_px = self._remote.get("Height.Max")
             type(self).height_px.maximum = self.max_height_px
             self.log.debug(f"max height is: {self.max_height_px} px")
         except Exception:
             self.log.debug(f"max height not available for camera {self._serial_id}")
         # minimum offset x
         try:
-            self.min_offset_x_px = self.grabber.remote.get("OffsetX.Min")
+            self.min_offset_x_px = self._remote.get("OffsetX.Min")
             type(self).width_offset_px.minimum = self.min_offset_x_px  # type: ignore
             self.log.debug(f"min offset x is: {self.min_offset_x_px} px")
         except Exception:
             self.log.debug(f"min offset x not available for camera {self._serial_id}")
         # maximum offset x
         try:
-            self.max_offset_x_px = self.grabber.remote.get("OffsetX.Max")
+            self.max_offset_x_px = self._remote.get("OffsetX.Max")
             type(self).width_offset_px.maximum = self.max_offset_x_px  # type: ignore
             self.log.debug(f"max offset x is: {self.max_offset_x_px} px")
         except Exception:
             self.log.debug(f"max offset x not available for camera {self._serial_id}")
         # minimum offset y
         try:
-            self.min_offset_y_px = self.grabber.remote.get("OffsetY.Min")
+            self.min_offset_y_px = self._remote.get("OffsetY.Min")
             type(self).height_offset_px.minimum = self.min_offset_y_px  # type: ignore
             self.log.debug(f"min offset y is: {self.min_offset_y_px} px")
         except Exception:
             self.log.debug(f"min offset y not available for camera {self._serial_id}")
         # maximum offset y
         try:
-            self.max_offset_y_px = self.grabber.remote.get("OffsetY.Max")
+            self.max_offset_y_px = self._remote.get("OffsetY.Max")
             type(self).height_offset_px.maximum = self.max_offset_y_px  # type: ignore
             self.log.debug(f"max offset y is: {self.max_offset_y_px} px")
         except Exception:
@@ -795,45 +820,45 @@ class VieworksCamera(BaseCamera):
         # step exposure time
         # convert from us to ms
         try:
-            self.step_exposure_time_ms = self.grabber.remote.get("ExposureTime.Inc") / 1e3
+            self.step_exposure_time_ms = self._remote.get("ExposureTime.Inc") / 1e3
             type(self).exposure_time_ms.step = self.step_exposure_time_ms
             self.log.debug(f"step exposure time is: {self.step_exposure_time_ms} ms")
         except Exception:
             self.log.debug(f"step exposure time not available for camera {self._serial_id}")
         # step width
         try:
-            self.step_width_px = self.grabber.remote.get("Width.Inc")
+            self.step_width_px = self._remote.get("Width.Inc")
             type(self).width_px.step = self.step_width_px
             self.log.debug(f"step width is: {self.step_width_px} px")
         except Exception:
             self.log.debug(f"step width not available for camera {self._serial_id}")
         # step height
         try:
-            self.step_height_px = self.grabber.remote.get("Height.Inc")
+            self.step_height_px = self._remote.get("Height.Inc")
             type(self).height_px.step = self.step_height_px
             self.log.debug(f"step height is: {self.step_height_px} px")
         except Exception:
             self.log.debug(f"step height not available for camera {self._serial_id}")
         # step offset x
         try:
-            self.step_offset_x_px = self.grabber.remote.get("OffsetX.Inc")
+            self.step_offset_x_px = self._remote.get("OffsetX.Inc")
             type(self).width_offset_px.step = self.step_offset_x_px  # type: ignore
             self.log.debug(f"step offset x is: {self.step_offset_x_px} px")
         except Exception:
             self.log.debug(f"step offset x not available for camera {self._serial_id}")
         # step offset y
         try:
-            self.step_offset_y_px = self.grabber.remote.get("OffsetY.Inc")
+            self.step_offset_y_px = self._remote.get("OffsetY.Inc")
             type(self).height_offset_px.step = self.step_offset_y_px  # type: ignore
             self.log.debug(f"step offset y is: {self.step_offset_y_px} px")
         except Exception:
             self.log.debug(f"step offset y not available for camera {self._serial_id}")
         # minimum line interval
         try:
-            max_frame_rate = self.grabber.remote.get("AcquisitionFrameRate.Max")
+            max_frame_rate = self._remote.get("AcquisitionFrameRate.Max")
             # vp-151mx camera uses the sony imx411 camera which has 10640 active rows
             # but 10802 total rows. from the manual 10760 are used during readout
-            if self.grabber.remote.get("DeviceModelName") == "VP-151MX-M6H0":
+            if self._remote.get("DeviceModelName") == "VP-151MX-M6H0":
                 line_interval_us = (1 / max_frame_rate) / (self.height_px + 120) * 1e6
             else:
                 line_interval_us = (1 / max_frame_rate) / self.height_px * 1e6
@@ -844,10 +869,10 @@ class VieworksCamera(BaseCamera):
             self.log.debug(f"min line interval is not available for camera {self._serial_id}")
         # maximum line interval
         try:
-            min_frame_rate = self.grabber.remote.get("AcquisitionFrameRate.Min")
+            min_frame_rate = self._remote.get("AcquisitionFrameRate.Min")
             # vp-151mx camera uses the sony imx411 camera which has 10640 active rows
             # but 10802 total rows. from the manual 10760 are used during readout
-            if self.grabber.remote.get("DeviceModelName") == "VP-151MX-M6H0":
+            if self._remote.get("DeviceModelName") == "VP-151MX-M6H0":
                 line_interval_us = (1 / min_frame_rate) / (self.height_px + 120) * 1e6
             else:
                 line_interval_us = (1 / min_frame_rate) / self.height_px * 1e6
@@ -863,11 +888,11 @@ class VieworksCamera(BaseCamera):
         """Query the available binning options."""
         # egrabber defines 1 as 'X1', 2 as 'X2', 3 as 'X3'...
         # check only vertical since we will use same binning for horizontal
-        binning_options = self.grabber.remote.get("@ee BinningVertical", dtype=list)
-        init_binning = self.grabber.remote.get("BinningVertical")
+        binning_options = self._remote.get("@ee BinningVertical", dtype=list)
+        init_binning = self._remote.get("BinningVertical")
         for binning in binning_options:
             try:
-                self.grabber.remote.set("BinningVertical", binning)
+                self._remote.set("BinningVertical", binning)
                 # generate integer key
                 key = int(binning.replace("X", ""))
                 BINNINGS[key] = binning
@@ -879,16 +904,16 @@ class VieworksCamera(BaseCamera):
                     key = int(binning.replace("X", ""))
                     BINNINGS[key] = key
         # reset to initial value
-        self.grabber.remote.set("BinningVertical", init_binning)
+        self._remote.set("BinningVertical", init_binning)
 
     def _query_pixel_types(self) -> None:
         """Query the available pixel types."""
         # egrabber defines as 'Mono8', 'Mono12', 'Mono16'...
-        pixel_type_options = self.grabber.remote.get("@ee PixelFormat", dtype=list)
-        init_pixel_type = self.grabber.remote.get("PixelFormat")
+        pixel_type_options = self._remote.get("@ee PixelFormat", dtype=list)
+        init_pixel_type = self._remote.get("PixelFormat")
         for pixel_type in pixel_type_options:
             try:
-                self.grabber.remote.set("PixelFormat", pixel_type)
+                self._remote.set("PixelFormat", pixel_type)
                 # generate lowercase string key
                 key = pixel_type.lower()
                 PIXEL_TYPES[key] = pixel_type
@@ -896,34 +921,34 @@ class VieworksCamera(BaseCamera):
                 self.log.debug(f"{pixel_type} not avaiable on this camera")
 
         # reset to initial value
-        self.grabber.remote.set("PixelFormat", init_pixel_type)
+        self._remote.set("PixelFormat", init_pixel_type)
 
     def _query_bit_packing_modes(self) -> None:
         """Query the available bit packing modes."""
         # egrabber defines as 'Msb', 'Lsb', 'None'...
-        bit_packing_options = self.grabber.stream.get("@ee UnpackingMode", dtype=list)
-        init_bit_packing = self.grabber.stream.get("UnpackingMode")
+        bit_packing_options = self._stream_module.get("@ee UnpackingMode", dtype=list)
+        init_bit_packing = self._stream_module.get("UnpackingMode")
         for bit_packing in bit_packing_options:
             try:
-                self.grabber.stream.set("UnpackingMode", bit_packing)
+                self._stream_module.set("UnpackingMode", bit_packing)
                 # generate lowercase string key
                 key = bit_packing.lower()
                 BIT_PACKING_MODES[key] = bit_packing
             except Exception:
                 self.log.debug(f"{bit_packing} not avaiable on this camera")
         # reset to initial value
-        self.grabber.stream.set("UnpackingMode", init_bit_packing)
+        self._stream_module.set("UnpackingMode", init_bit_packing)
 
     def _query_trigger_modes(self) -> None:
         """Query the available trigger modes."""
-        trigger_mode_options = self.grabber.remote.get("@ee TriggerMode", dtype=list)
-        init_trigger_mode = self.grabber.remote.get("TriggerMode")
+        trigger_mode_options = self._remote.get("@ee TriggerMode", dtype=list)
+        init_trigger_mode = self._remote.get("TriggerMode")
         for trigger_mode in trigger_mode_options:
             # note: setting TriggerMode to the already set value throws an error
             # so check the current value and only set if new value
-            if self.grabber.remote.get("TriggerMode") != trigger_mode:  # set camera to external trigger mode
+            if self._remote.get("TriggerMode") != trigger_mode:  # set camera to external trigger mode
                 try:
-                    self.grabber.remote.set("TriggerMode", trigger_mode)
+                    self._remote.set("TriggerMode", trigger_mode)
                     # generate lowercase string key
                     key = trigger_mode.lower()
                     MODES[key] = trigger_mode
@@ -934,34 +959,34 @@ class VieworksCamera(BaseCamera):
                 key = trigger_mode.lower()
                 MODES[key] = trigger_mode
         # reset to initial value
-        self.grabber.remote.set("TriggerMode", init_trigger_mode)
+        self._remote.set("TriggerMode", init_trigger_mode)
 
     def _query_trigger_sources(self) -> None:
         """Query the available trigger sources."""
-        trigger_source_options = self.grabber.remote.get("@ee TriggerSource", dtype=list)
-        init_trigger_source = self.grabber.remote.get("TriggerSource")
+        trigger_source_options = self._remote.get("@ee TriggerSource", dtype=list)
+        init_trigger_source = self._remote.get("TriggerSource")
         for trigger_source in trigger_source_options:
             try:
-                self.grabber.remote.set("TriggerSource", trigger_source)
+                self._remote.set("TriggerSource", trigger_source)
                 # generate lowercase string key
                 key = trigger_source.lower()
                 SOURCES[key] = trigger_source
             except Exception:
                 self.log.debug(f"{trigger_source} not avaiable on this camera")
         # reset to initial value
-        self.grabber.remote.set("TriggerSource", init_trigger_source)
+        self._remote.set("TriggerSource", init_trigger_source)
 
     def _query_trigger_polarities(self) -> None:
         """Query the available trigger polarities."""
-        trigger_polarity_options = self.grabber.remote.get("@ee TriggerActivation", dtype=list)
-        init_trigger_polarity = self.grabber.remote.get("TriggerActivation")
+        trigger_polarity_options = self._remote.get("@ee TriggerActivation", dtype=list)
+        init_trigger_polarity = self._remote.get("TriggerActivation")
         for trigger_polarity in trigger_polarity_options:
             try:
-                self.grabber.remote.set("TriggerActivation", trigger_polarity)
+                self._remote.set("TriggerActivation", trigger_polarity)
                 # generate lowercase string key
                 key = trigger_polarity.lower()
                 POLARITIES[key] = trigger_polarity
             except Exception:
                 self.log.debug(f"{trigger_polarity} not avaiable on this camera")
         # reset to initial value
-        self.grabber.remote.set("TriggerActivation", init_trigger_polarity)
+        self._remote.set("TriggerActivation", init_trigger_polarity)

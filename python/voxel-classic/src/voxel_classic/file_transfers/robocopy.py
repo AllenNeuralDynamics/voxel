@@ -43,7 +43,7 @@ class RobocopyFileTransfer(BaseFileTransfer):
         transfer_complete = False
         retry_num = 0
         # loop over number of attempts in the event that a file transfer fails
-        while transfer_complete == False and retry_num <= self._max_retry - 1:
+        while not transfer_complete and retry_num <= self._max_retry - 1:
             # generate a list of subdirs and files in the parent local dir to delete at the end
             delete_list = []
             for name in os.listdir(local_directory.absolute()):

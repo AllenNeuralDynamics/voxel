@@ -3,14 +3,14 @@ import time
 from collections.abc import Generator, Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import napari
 import numpy as np
 import tifffile
 from exaspim_control.instrument.exaspim_instrument import ExASPIM, ExASPIMChannel
 from napari.layers import Image
-from napari.qt.threading import FunctionWorker, GeneratorWorker, create_worker
+from napari.qt.threading import WorkerBase, FunctionWorker, create_worker
 from napari.utils.events import Event
 from napari.utils.theme import get_theme
 from PySide6.QtCore import Qt
@@ -32,13 +32,13 @@ from PySide6.QtWidgets import (
 )
 from ruamel.yaml import RoundTripRepresenter
 from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
-from vidgets.base_device_widget import create_widget
-from vidgets.device_widgets.camera_widget import CameraWidget
-from vidgets.device_widgets.filter_wheel_widget import FilterWheelWidget
-from vidgets.device_widgets.flip_mount_widget import FlipMountWidget
-from vidgets.device_widgets.laser_widget import LaserWidget
-from vidgets.device_widgets.ni_widget import NIWidget
-from vidgets.device_widgets.stage_widget import StageWidget
+from vidgets.view.base_device_widget import create_widget
+from vidgets.view.device_widgets.camera_widget import CameraWidget
+from vidgets.view.device_widgets.filter_wheel_widget import FilterWheelWidget
+from vidgets.view.device_widgets.flip_mount_widget import FlipMountWidget
+from vidgets.view.device_widgets.laser_widget import LaserWidget
+from vidgets.view.device_widgets.ni_widget import NIWidget
+from vidgets.view.device_widgets.stage_widget import StageWidget
 
 
 class NonAliasingRTRepresenter(RoundTripRepresenter):
@@ -56,6 +56,12 @@ class NonAliasingRTRepresenter(RoundTripRepresenter):
 
     def ignore_aliases(self, data):
         return True
+
+
+class _ViewerState(TypedDict):
+    zoom: float
+    center: tuple[float, float] | tuple[float, float, float]
+    angles: tuple[float, float, float]
 
 
 class ExASPIMInstrumentView(QWidget):
@@ -89,7 +95,7 @@ class ExASPIMInstrumentView(QWidget):
         self.viewer = napari.Viewer(title="ExA-SPIM control", ndisplay=2, axis_labels=("x", "y"))
 
         self.property_workers: dict[str, FunctionWorker] = {}
-        self.grab_frames_worker: GeneratorWorker = create_worker(lambda: None)
+        self.grab_frames_worker: WorkerBase = create_worker(lambda: None)
 
         # Add widget groups ---------------------------------------------------
 
@@ -191,7 +197,7 @@ class ExASPIMInstrumentView(QWidget):
         self.viewer.camera.zoom = 1.0
         self.viewer.camera.center = (0, 0)
         self.viewer.camera.angles = (0, 0, 0)
-        self.viewer_state = {
+        self.viewer_state: _ViewerState = {
             "zoom": self.viewer.camera.zoom,
             "center": self.viewer.camera.center,
             "angles": self.viewer.camera.angles,
@@ -418,7 +424,7 @@ class ExASPIMInstrumentView(QWidget):
                     undocked_widget.setVisible(False)
 
     def _start_live_stream(self) -> None:
-        self.grab_frames_worker = create_worker(self._run_live_stream)
+        self.grab_frames_worker = create_worker(lambda: self._run_live_stream())
         self.grab_frames_worker.yielded.connect(self._update_layer)
         self.grab_frames_worker.finished.connect(self._dismantle_live_stream)
 
@@ -478,7 +484,7 @@ class ExASPIMInstrumentView(QWidget):
             yield multiscale, self.instrument.camera.uid
             i += 1
 
-    def _dismantle_live_stream(self) -> None:
+    def _dismantle_live_stream(self, result=None) -> None:
         """Dismantle live view for the specified camera."""
         chan = self.active_channel
         if chan is None:
@@ -534,7 +540,7 @@ class ExASPIMInstrumentView(QWidget):
                 if layer_name in layer_list:
                     layer = layer_list[layer_name]
                     layer.data = image
-                    layer.scale = (pixel_size_um, pixel_size_um)
+                    layer.scale = np.array([pixel_size_um, pixel_size_um])
                     layer.translate = (-x_center_um, y_center_um)
                 else:
                     # Store current camera state BEFORE adding image to prevent auto-fit
@@ -554,11 +560,12 @@ class ExASPIMInstrumentView(QWidget):
                     # connect contrast limits event
                     def _viewer_contrast_limits(event: Event) -> None:
                         if self.livestream_channel in self.viewer.layers:
-                            self.contrast_limits[self.livestream_channel] = list(
-                                self.viewer.layers[self.livestream_channel].contrast_limits
-                            )
+                            live_stream_layer = self.viewer.layers[self.livestream_channel]
+                            if isinstance(live_stream_layer, Image):
+                                self.contrast_limits[self.livestream_channel] = list(live_stream_layer.contrast_limits)
 
-                    layer.events.contrast_limits.connect(_viewer_contrast_limits)
+                    if isinstance(layer, Image):
+                        layer.events.contrast_limits.connect(_viewer_contrast_limits)
 
                     # Restore camera view to prevent window resizing, except for very first image
                     if hasattr(self, "viewer_initialized") and self.viewer_initialized:
@@ -575,13 +582,13 @@ class ExASPIMInstrumentView(QWidget):
                         self.viewer.camera.angles = self.viewer_state["angles"]
                     # update previous layer name
                     self.previous_layer = layer_name
-                    layer.mouse_drag_callbacks.append(self.save_image)
+                    if isinstance(layer, Image):
+                        layer.mouse_drag_callbacks.append(self.save_image)
                 for layer in layer_list:
                     if layer.name == layer_name:
-                        layer.selected = True
+                        self.viewer.layers.selection = [layer]
                         layer.visible = True
                     else:
-                        layer.selected = False
                         layer.visible = False
             else:
                 layer = self.viewer.add_image(
@@ -595,9 +602,10 @@ class ExASPIMInstrumentView(QWidget):
                     translate=(-x_center_um, y_center_um),
                     rotate=self.camera_rotation,
                 )
-                self.snapshotTaken.emit(np.copy(np.rot90(image[-1], k=2)), layer.contrast_limits)
-                layer.selected = False
-                layer.visible = False
+                if isinstance(layer, Image):
+                    self.snapshotTaken.emit(np.copy(np.rot90(image[-1], k=2)), layer.contrast_limits)
+                    self.viewer.layers.selection = [layer]
+                    layer.visible = False
 
     def _dissect_image(self, args: tuple) -> None:
         """
@@ -718,7 +726,7 @@ class ExASPIMInstrumentView(QWidget):
                 )
             )
             if folder[0] != "":  # user pressed cancel
-                tifffile.imwrite(f"{folder[0]}.tiff", image, imagej=True)
+                tifffile.imwrite(f"{folder[0]}.tiff", np.array(image), imagej=True)
 
     # def _create_device_widgets(self, device_name: str, device_specs: dict) -> None:
     #     """

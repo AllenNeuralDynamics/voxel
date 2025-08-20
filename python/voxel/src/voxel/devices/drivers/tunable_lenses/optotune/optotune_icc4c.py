@@ -50,10 +50,13 @@ class OptotuneICC4CTunableLens(VoxelTunableLens):
         self.tunable_lens.SetControlMode(MODES[mode])
 
     @property
-    def temperature_c(self):
+    def temperature_c(self) -> float | None:
         """Get the temperature in deg C."""
-        temp = self.tunable_lens.TemperatureManager.GetDeviceTemperature()
-        return temp
+        try:
+            raw_temp = self.tunable_lens.TemperatureManager.GetDeviceTemperature()
+            return float(raw_temp) if raw_temp is not None else None
+        except (ValueError, TypeError):
+            return None
 
     def log_metadata(self):
         return {
@@ -63,4 +66,4 @@ class OptotuneICC4CTunableLens(VoxelTunableLens):
         }
 
     def close(self):
-        self.icc4c.close()
+        self.icc4c.disconnect()

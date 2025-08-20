@@ -150,5 +150,5 @@ class MFF101FlipMount(BaseFlipMount):
 
     def close(self) -> None:
         """Close the flip mount connection."""
-        self.log.info(f"closing flip mount.")
+        self.log.info("closing flip mount.")
         self._disconnect()

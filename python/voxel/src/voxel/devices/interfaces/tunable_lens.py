@@ -33,6 +33,6 @@ class VoxelTunableLens(VoxelDevice):
 
     @property
     @abstractmethod
-    def temperature_c(self) -> float:
+    def temperature_c(self) -> float | None:
         """Get the temperature in deg C."""
         pass

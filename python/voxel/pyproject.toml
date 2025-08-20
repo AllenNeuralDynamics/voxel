@@ -75,6 +75,8 @@ etl-opto = ["optoicc", "optokummenberg"]
 egrabber = ["egrabber"]
 from-wheelhouse = ["voxel[aaopto, etl-opto, egrabber]"]
 
+all = ["voxel[from-git, from-wheelhouse, writers]"]
+
 
 [tool.uv.sources]
 pycobolt = { git = "https://github.com/cobolt-lasers/pycobolt.git" }

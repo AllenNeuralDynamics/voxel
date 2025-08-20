@@ -118,7 +118,6 @@ class ThorlabsFlipMount(VoxelFlipMount):
         """Disconnect from the flip mount."""
         if self._inst is not None:
             self._inst.close()
-            self._inst = None
         self._log.info(f"Flip mount {self.uid} shutdown")
 
     def _get_hardware_inst(self) -> Thorlabs.MFF:

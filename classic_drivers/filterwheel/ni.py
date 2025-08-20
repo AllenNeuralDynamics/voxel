@@ -1,9 +1,8 @@
 import logging
 import nidaqmx
 import numpy
-import time
 
-from nidaqmx.constants import AcquisitionType as AcqType, AOIdleOutputBehavior
+from nidaqmx.constants import AcquisitionType as AcqType
 from voxel_classic.devices.daq.ni import NIDAQ
 from voxel_classic.devices.filterwheel.base import BaseFilterWheel
 

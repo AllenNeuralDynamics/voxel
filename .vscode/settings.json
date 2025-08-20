@@ -1,0 +1,50 @@
+{
+    "python.analysis.diagnosticMode": "workspace",
+    "python.testing.pytestEnabled": true,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportRedeclaration": false, // Ignore issue caused by deliminated property and similar patterns
+    },
+    "python.analysis.exclude": [
+        "**/.venv",
+        "**/sdk",
+        "**/sdks",
+        "./classic_drivers",
+        "./python/voxel-classic/src/voxel_classic/processes",
+        "./python/voxel/src/voxel/utils/processing",
+        "./python/voxel/tests/processes",
+        "./python/vidgets/src/vidgets/view",
+        "**/miscellaneous_widgets"
+    ],
+    // "python.analysis.useLibraryCodeForTypes": false,
+    // "python.analysis.extraPaths": [
+    //     ".venv/**/site-packages"
+    // ],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.ruff_cache": true,
+        "**/.tach": true
+    },
+    /*--------------------------------------------
+    * Extra Python analysis settings
+    *-------------------------------------------*/
+    "ruff.configurationPreference": "filesystemFirst",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "python.analysis.inlayHints.callArgumentNames": "partial",
+    "python.analysis.inlayHints.pytestParameters": true,
+    "python.analysis.supportDocstringTemplate": true,
+    "python.analysis.typeCheckingMode": "standard",
+    "python.analysis.typeEvaluation.deprecateTypingAliases": true,
+    "python.analysis.typeEvaluation.enableReachabilityAnalysis": true,
+    "python.analysis.typeEvaluation.strictDictionaryInference": true,
+    "python.analysis.typeEvaluation.strictListInference": true,
+    "python.analysis.typeEvaluation.strictSetInference": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "python.terminal.focusAfterLaunch": true,
+    "python.terminal.shellIntegration.enabled": true,
+    "python.analysis.enableTroubleshootMissingImports": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.autoFormatStrings": true,
+}

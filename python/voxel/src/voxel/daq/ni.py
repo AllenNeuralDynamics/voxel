@@ -3,7 +3,7 @@ from enum import StrEnum
 import numpy as np
 from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.errors import DaqError
-from nidaqmx.system import System
+from nidaqmx.system import System as NiSystem
 from nidaqmx.system.device import Device as NiDevice
 from nidaqmx.task import Task as NiTask
 from nidaqmx.task.channels import AOChannel as NiAOChannel
@@ -56,7 +56,7 @@ class NiDAQTaskWrapper:
 
     def get_channel_names(self) -> list[str]:
         """Get the names of the channels in the task."""
-        return self._inst.channels.channel_names
+        return self._inst.channels.channel_names if self._inst.channels else []
 
     def cfg_samp_clk_timing(self, rate: float, sample_mode: "AcqSampleMode", samps_per_chan: int) -> None:
         """Configure sample clock timing."""
@@ -82,11 +82,10 @@ class VoxelNiDAQ(BaseDaq):
         self._uid = uid
         self._name = conn
         self._log = VoxelLogging.get_logger(object=self)
-        self.system = System.local()
+        self.system = NiSystem.local()
         self._inst, self.model = self._connect(name=self._name)
 
-        # self.tasks: dict[str, "VoxelDaqTask"] = {}
-        self._task_ints: dict[str, NiTask] = {}
+        self._task_insts: dict[str, NiDAQTaskWrapper] = {}
 
         self.channel_map: dict[str, PinInfo] = {}
         self.assigned_channels: set[str] = set()
@@ -96,7 +95,7 @@ class VoxelNiDAQ(BaseDaq):
     def __repr__(self) -> str:
         return f"DAQ Device - Uid: {self._uid} - Name: {self._name} - Model: {self.model}"
 
-    def _connect(self, name: str) -> NiDevice:
+    def _connect(self, name: str) -> tuple[NiDevice, NiDaqModel]:
         """Connect to DAQ device."""
         try:
             nidaq = NiDevice(name)
@@ -145,9 +144,9 @@ class VoxelNiDAQ(BaseDaq):
 
     def get_task_inst(self, task_name: str) -> "DaqTaskInst":
         """Get a new task instance for the DAQ device."""
-        if task_name not in self._task_ints:
-            self._task_ints[task_name] = NiDAQTaskWrapper(task_name)
-        return self._task_ints[task_name]
+        if task_name not in self._task_insts:
+            self._task_insts[task_name] = NiDAQTaskWrapper(task_name)
+        return self._task_insts[task_name]
 
     def get_pfi_path(self, pin: str | PinInfo) -> str:
         """Get the PFI path for a given pin."""

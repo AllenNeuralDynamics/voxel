@@ -649,8 +649,7 @@ class TigerController(BaseDevice):
                                       y=JoystickInput.CONTROL_KNOB)
 
         """
-        axes = {x: js_input.value for x, js_input in axes.items()}
-        self._set_cmd_args_and_kwds(Cmds.J, **axes)
+        self._set_cmd_args_and_kwds(Cmds.J, **{x: js_input.value for x, js_input in axes.items()}, wait=True)
 
     @thread_locked
     @axis_check()
@@ -1188,8 +1187,8 @@ class TigerController(BaseDevice):
     @thread_locked
     def set_ttl_pin_modes(
         self,
-        in0_mode: TTLIn0Mode = None,
-        out0_mode: TTLOut0Mode = None,
+        in0_mode: TTLIn0Mode | None = None,
+        out0_mode: TTLOut0Mode | None = None,
         reverse_output_polarity: bool = False,
         aux_io_state: int | None = None,
         aux_io_mask: int | None = None,

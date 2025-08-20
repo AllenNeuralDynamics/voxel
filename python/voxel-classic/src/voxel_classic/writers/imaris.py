@@ -124,7 +124,10 @@ class ImarisWriter(BaseWriter):
         if compression not in valid:
             raise ValueError("compression type must be one of %r." % valid)
         self.log.info(f"setting compression mode to: {compression}")
-        self._compression = COMPRESSIONS[compression]
+        if (c := COMPRESSIONS.get(compression)) is not None:
+            self._compression = c
+        else:
+            self._compression = COMPRESSIONS["none"]
 
     @property
     def filename(self) -> str:
@@ -252,7 +255,8 @@ class ImarisWriter(BaseWriter):
         dim_map = {"x": 0, "y": 1, "z": 2, "c": 3, "t": 4}
         # name parameters
         parameters = pw.Parameters()
-        parameters.set_channel_name(0, self._channel)
+        if self._channel:
+            parameters.set_channel_name(0, self._channel)
         # create options object
         opts = pw.Options()
         opts.mEnableLogProgress = True
@@ -365,12 +369,12 @@ class ImarisWriter(BaseWriter):
         application_version = "1.0.0"
 
         converter = pw.ImageConverter(
-            self._data_type,
+            str(self._data_type),
             image_size,
             sample_size,
             dimension_sequence,
             block_size,
-            filepath,
+            str(filepath.absolute()),
             opts,
             application_name,
             application_version,

@@ -7,7 +7,6 @@ from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
 from nidaqmx.constants import Edge, FrequencyUnits, Level, Slope, AOIdleOutputBehavior
 from scipy import signal, interpolate
-from typing import Dict, Optional
 
 from voxel_classic.devices.daq.base import BaseDAQ
 
@@ -148,7 +147,7 @@ class NIDAQ(BaseDAQ):
                 if task_type == "ao":
                     try:
                         channel.ao_idle_output_behavior = AOIdleOutputBehavior.ZERO_VOLTS
-                    except Exception as e:
+                    except Exception:
                         self.log.debug(
                             "could not set AOIdleOutputBehavior to MAINTAIN_EXISTING_VALUE "
                             f"on channel {physical_name} for {channel}."
@@ -201,7 +200,7 @@ class NIDAQ(BaseDAQ):
             if timing["trigger_mode"] == "off":
                 daq_task.timing.cfg_implicit_timing(**pulse_count)
             else:
-                raise ValueError(f"triggering not support for counter output tasks.")
+                raise ValueError("triggering not support for counter output tasks.")
 
             # store the total task time
             self.task_time_s[task["name"]] = 1 / timing["frequency_hz"]

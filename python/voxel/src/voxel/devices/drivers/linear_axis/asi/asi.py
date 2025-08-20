@@ -39,7 +39,7 @@ class ASITigerLinearAxis(VoxelLinearAxis):
         dimension: LinearAxisDimension,
         tigerbox: ASITigerBox,
         joystick_polarity: Literal[1, -1] = 1,
-        joystick_input: ASIJoystickInput | None = None,
+        joystick_input: ASIJoystickInput = ASIJoystickInput.NONE,
     ):
         super().__init__(name, dimension)
         self._tigerbox = tigerbox

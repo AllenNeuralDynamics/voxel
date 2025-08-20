@@ -7,6 +7,8 @@ import numpy as np
 from matplotlib.ticker import AutoMinorLocator
 from nidaqmx.constants import AcquisitionType as AcqType
 from nidaqmx.constants import AOIdleOutputBehavior, Edge, FrequencyUnits, Slope
+from nidaqmx.system.system import System as NIDAQSystem
+from nidaqmx.system.device import Device as NIDAQDevice
 from scipy import interpolate, signal
 from voxel_classic.devices.daq.base import BaseDAQ
 
@@ -18,9 +20,9 @@ TRIGGER_MODE = ["on", "off"]
 
 SAMPLE_MODE = {"finite": AcqType.FINITE, "continuous": AcqType.CONTINUOUS}
 
-TRIGGER_POLARITY = {"rising": Edge.RISING, "falling": Edge.FALLING}
+TRIGGER_EDGE = {"rising": Edge.RISING, "falling": Edge.FALLING}
 
-TRIGGER_EDGE = {
+TRIGGER_POLARITY = {
     "rising": Slope.RISING,
     "falling": Slope.FALLING,
 }
@@ -54,12 +56,12 @@ class NIDAQ(BaseDAQ):
         self._tasks: dict[str, dict] = {}
 
         self.devs = []
-        for device in nidaqmx.system.System.local().devices:
+        for device in NIDAQSystem.local().devices:
             self.devs.append(device.name)
         if dev not in self.devs:
             raise ValueError("dev name must be one of %r." % self.devs)
         self.id = dev
-        self.dev = nidaqmx.system.device.Device(self.id)
+        self.dev = NIDAQDevice(self.id)
         self.log.info("resetting nidaq")
         self.dev.reset_device()
         self.ao_physical_chans = self.dev.ao_physical_chans.channel_names
@@ -149,10 +151,6 @@ class NIDAQ(BaseDAQ):
                 raise ValueError(f"{k} must be one of {valid}")
 
         channel_options = {"ao": self.ao_physical_chans, "do": self.do_physical_chans, "co": self.co_physical_chans}
-        add_task_options = {
-            "ao": self.ao_task.ao_channels.add_ao_voltage_chan,
-            "do": self.ao_task.do_channels.add_do_chan,
-        }
 
         self._timing_checks("ao")
 
@@ -164,7 +162,7 @@ class NIDAQ(BaseDAQ):
             if f"{self.id}/{channel_port}" not in channel_options["ao"]:
                 raise ValueError(f"ao number must be one of {channel_options['ao']}")
             physical_name = f"/{self.id}/{channel_port}"
-            channel = add_task_options["ao"](physical_name)
+            channel = self.ao_task.ao_channels.add_ao_voltage_chan(physical_name)
             # maintain last voltage value
             try:
                 channel.ao_idle_output_behavior = AOIdleOutputBehavior.ZERO_VOLTS
@@ -180,13 +178,10 @@ class NIDAQ(BaseDAQ):
         if timing["trigger_mode"] == "on":
             self.ao_task.timing.cfg_samp_clk_timing(
                 rate=timing["sampling_frequency_hz"],
-                active_edge=TRIGGER_POLARITY[timing["trigger_polarity"]],
                 sample_mode=SAMPLE_MODE[timing["sample_mode"]],
                 samps_per_chan=daq_samples,
             )
-            self.ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
-                trigger_source=f"/{self.id}/{trigger_port}", trigger_edge=TRIGGER_EDGE[timing["trigger_polarity"]]
-            )
+            self.ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(trigger_source=f"/{self.id}/{trigger_port}")
             self.ao_task.triggers.start_trigger.retriggerable = RETRIGGERABLE[timing["retriggerable"]]
         else:
             self.ao_task.timing.cfg_samp_clk_timing(
@@ -233,13 +228,12 @@ class NIDAQ(BaseDAQ):
                 counter=physical_name, units=FrequencyUnits.HZ, freq=timing["frequency_hz"], duty_cycle=0.5
             )
             co_chan.co_pulse_term = f"/{self.id}/{timing['output_port']}"
-        timing_args = (
-            {"sample_mode": AcqType.FINITE, "samps_per_chan": pulse_count}
-            if pulse_count is not None
-            else {"sample_mode": AcqType.CONTINUOUS}
-        )
+
         if timing["trigger_mode"] == "off":
-            self.co_task.timing.cfg_implicit_timing(**timing_args)
+            if pulse_count is not None:
+                self.co_task.timing.cfg_implicit_timing(sample_mode=AcqType.FINITE, samps_per_chan=pulse_count)
+            else:
+                self.co_task.timing.cfg_implicit_timing(sample_mode=AcqType.CONTINUOUS)
         else:
             raise ValueError("triggering not support for counter output tasks.")
 
@@ -482,7 +476,7 @@ class NIDAQ(BaseDAQ):
             0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz)
         )
         waveform = offset_volts + amplitude_volts * signal.sawtooth(
-            t=time_samples_ms, width=end_time_ms / period_time_ms
+            t=time_samples_ms, width=int(end_time_ms / period_time_ms)
         )
 
         # add in delay
@@ -504,7 +498,7 @@ class NIDAQ(BaseDAQ):
         )
 
         # bessel filter order 6, cutoff frequency is normalied from 0-1 by nyquist frequency
-        b, a = signal.bessel(6, cutoff_frequency_hz / (sampling_frequency_hz / 2), btype="low")
+        b, a = signal.bessel(6, cutoff_frequency_hz / (sampling_frequency_hz / 2), btype="low")  # type: ignore
 
         # pad before filtering with last value
         padding = math.ceil(2 / (cutoff_frequency_hz / (sampling_frequency_hz)))
@@ -524,7 +518,7 @@ class NIDAQ(BaseDAQ):
         if padding > 0:
             waveform = waveform[padding : padding + waveform_length_samples]
 
-        return waveform
+        return np.asarray(waveform)
 
     def nonlinear_sawtooth(
         self,
@@ -571,7 +565,7 @@ class NIDAQ(BaseDAQ):
             0, 2 * np.pi, int(((period_time_ms - start_time_ms) / 1000) * sampling_frequency_hz), retstep=False
         )
         waveform = offset_volts + amplitude_volts * signal.sawtooth(
-            t=time_samples_ms, width=end_time_ms / period_time_ms
+            t=time_samples_ms, width=int(end_time_ms / period_time_ms)
         )
         waveform[-1] = waveform[-2]  # force last value to not snap back
 

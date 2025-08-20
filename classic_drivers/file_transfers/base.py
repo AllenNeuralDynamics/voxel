@@ -2,7 +2,6 @@ import logging
 import threading
 from abc import abstractmethod
 from pathlib import Path
-from typing import Optional
 
 from imohash import hashfile
 

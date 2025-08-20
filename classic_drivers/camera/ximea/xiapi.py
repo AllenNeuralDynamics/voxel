@@ -415,14 +415,14 @@ class XIAPICamera(BaseCamera):
         :param frame_count: Number of frames to acquire, defaults to None
         :type frame_count: int, optional
         """
-        self.log.info(f"starting camera")
+        self.log.info("starting camera")
         self.camera.start_acquisition()
 
     def stop(self) -> None:
         """
         Stop the camera acquisition.
         """
-        self.log.info(f"stopping camera")
+        self.log.info("stopping camera")
         self.camera.stop_acquisition()
 
     def abort(self) -> None:
@@ -435,14 +435,14 @@ class XIAPICamera(BaseCamera):
         """
         Close the camera connection.
         """
-        self.log.info(f"closing camera")
+        self.log.info("closing camera")
         self.camera.close_device()
 
     def reset(self) -> None:
         """
         Reset the camera.
         """
-        self.log.info(f"resetting camera")
+        self.log.info("resetting camera")
         self.camera.set_device_reset()
 
     def grab_frame(self) -> np.ndarray:

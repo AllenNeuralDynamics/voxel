@@ -124,7 +124,7 @@ class OxxiusLBXLaser(BaseLaser):
             for sol in solutions:
                 if round(sol) in range(0, 101):
                     if 0 > value > 100:
-                        reason = "exceeds 100%" if value > self.max_power else f"is below 0%"
+                        reason = "exceeds 100%" if value > self.max_power else "is below 0%"
                         self.log.error(f"Cannot set laser to {value}ml because it {reason}")
                     else:
                         if self._get_constant_current() == BoolVal.OFF:
@@ -173,7 +173,7 @@ class OxxiusLBXLaser(BaseLaser):
         :raises ValueError: If the modulation mode is not valid.
         :return: None
         """
-        if value not in MODULATION_MODES.keys():
+        if value not in MODULATION_MODES:
             raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
         states = MODULATION_MODES[value]
         # needs to be set first otherwise digital ON is rejected

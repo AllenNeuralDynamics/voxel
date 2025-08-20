@@ -29,7 +29,7 @@ class StradusLaser(VoxelLaser):
         self._inst.disable()
 
     def close(self):
-        self._inst.close()
+        self._inst.ser.close()
 
     @deliminated_float(min_value=0, max_value=lambda self: self._inst.max_power)
     def power_setpoint_mw(self):
@@ -57,11 +57,11 @@ class StradusLaser(VoxelLaser):
 
     @property
     def power_mw(self) -> float:
-        return self._inst.power
+        return float(self._inst.power)
 
     @property
     def temperature_c(self) -> float:
-        return self._inst.temperature
+        return float(self._inst.temperature)
 
     @property
     def status(self):

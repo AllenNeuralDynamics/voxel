@@ -44,7 +44,7 @@ class BdvBase:
                     image_file = Path(filename).parent.joinpath(image_file_name)
                     self.filename_h5 = image_file
                     self.filename_xml = filename
-                except Exception as e:
+                except Exception:
                     raise ValueError(f"Could no parse XML file {filename}")
             else:  # to create a new file pair H5/XML
                 self.filename_h5 = filename[:-3] + "h5"
