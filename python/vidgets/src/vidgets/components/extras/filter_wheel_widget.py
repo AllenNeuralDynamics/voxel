@@ -34,7 +34,7 @@ class FilterWheelWidget(QWidget):
             assignments=self._fw.labels,
             hue_mapping=self._hues,
         )
-        self._graphic.active_changed.connect(lambda: self._update_filter())
+        self._graphic.selected_changed.connect(lambda: self._update_filter())
         self._status_label = QLabel("Hover over circles to see labels, click to select")
 
         layout = QVBoxLayout()
@@ -43,7 +43,7 @@ class FilterWheelWidget(QWidget):
         self.setLayout(layout)
 
     def _update_filter(self):
-        self._fw.select(self._graphic.get_active_slot_label())
+        self._fw.move(self._graphic.selected_slot)
 
     def _create_controls_ui(self) -> QVBoxLayout:
         # Create controls
@@ -107,7 +107,11 @@ if __name__ == "__main__":
             self.setCentralWidget(main_widget)
             layout = QVBoxLayout(main_widget)
 
-            fw = SimulatedFilterWheel(uid="simulated-filter_wheel", labels={1: "655LP", 2: "620/60BP", 3: "500LP"})
+            fw = SimulatedFilterWheel(
+                uid="simulated-filter_wheel",
+                labels={1: "655LP", 2: "620/60BP", 3: "500LP"},
+                slot_count=6,
+            )
             fw_wgt = FilterWheelWidget(fw)
             layout.addWidget(fw_wgt)
 

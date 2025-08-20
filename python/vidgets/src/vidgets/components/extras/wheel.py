@@ -11,7 +11,8 @@ from PySide6.QtSvg import QSvgRenderer
 class WheelGraphic(QWidget):
     """A refined wheel widget with predefined members and no dynamic addition/removal"""
 
-    active_changed = Signal(int)  # Emits the position
+    selected_changed = Signal(int)  # Emits the position
+    highlighted_changed = Signal(int)  # Emits the position of the highlighted slot
 
     def __init__(
         self,
@@ -72,8 +73,10 @@ class WheelGraphic(QWidget):
         self._easing_curve = QEasingCurve(QEasingCurve.Type.InOutCubic)
 
         # User interaction state
-        self._active_slot: int = 0  # Track which is currently active (0 means none)
-        self._hovered_member = 0  # 0 means none
+        self._selected_slot: int | None = None  # Track which is currently active (None means none)
+        self._highlighted_slot: int | None = None
+        self._pending_slot: int | None = None  # Slot that is pending selection after animation
+        self._hovered_slot: int | None = None  # None means none
 
         # Enable mouse tracking for hover effects
         self.setMouseTracking(True)
@@ -90,14 +93,15 @@ class WheelGraphic(QWidget):
         return self._compute_slot_radius()
 
     @property
-    def active_slot(self):
+    def selected_slot(self):
         """Get the currently active slot (1-based index), returns 0 if none"""
-        return self._active_slot
+        return self._selected_slot
 
-    @active_slot.setter
-    def active_slot(self, slot: int):
+    @selected_slot.setter
+    def selected_slot(self, slot: int):
         """Set the currently active slot (1-based index)"""
-        slot = int(min(max(slot, 0), self._num_slots))
+        lo, hi = self._start_index, self.slots[-1]
+        slot = int(min(max(slot, lo), hi))
         self._rotate_to_position(slot=slot, clockwise=None)
 
     def get_slot_label(self, slot_index) -> str:
@@ -105,19 +109,20 @@ class WheelGraphic(QWidget):
         label = self.assignments.get(slot_index)
         return label if label is not None else "Empty"
 
-    def get_active_slot_label(self) -> str:
+    def get_selected_slot_label(self) -> str:
         """Get the currently active slot label, returns None if none"""
-        return self.get_slot_label(self._active_slot)
+        return self.get_slot_label(self._selected_slot)
 
     def reset_rotation(self):
         """Reset rotation to put the first slot at 12 o'clock"""
-        self.active_slot = self._start_index
+        self.selected_slot = self._start_index
 
     def step_to_next(self):
         if self._num_slots <= 0:
             return
         last_idx = self.slots[-1]
-        next_potential = self.active_slot + 1
+        current_slot = self.selected_slot if self.selected_slot is not None else self._start_index - 1
+        next_potential = current_slot + 1
         if next_potential > last_idx:
             next_potential = self._start_index
         elif next_potential < self._start_index:
@@ -129,7 +134,8 @@ class WheelGraphic(QWidget):
             return
 
         last_idx = self.slots[-1]
-        next_potential = self.active_slot - 1
+        current_slot = self.selected_slot if self.selected_slot is not None else self._start_index - 1
+        next_potential = current_slot - 1
         if next_potential < self._start_index:
             next_potential = last_idx
         elif next_potential > last_idx:
@@ -155,8 +161,7 @@ class WheelGraphic(QWidget):
 
         # Clear previous slot positions
         self.slot_positions = []
-        selected_slot = 0  # 0 means no slot selected
-
+        highlighted_slot = self._nearest_top_slot()
         for slot_idx in self.slots:
             # Angle step from 0..N-1 based on offset
             base_angle = (360 / self._num_slots) * self._normalized_index(slot_idx)
@@ -170,17 +175,7 @@ class WheelGraphic(QWidget):
             self.slot_positions.append((x, y, self.slot_size, slot_idx))  # for click detection
 
             # Check if this slot is hovered
-            is_hovered = slot_idx == self._hovered_member
-
-            # Determine if this slot is at 12 o'clock (active)
-            normalized_angle = (current_angle + 360) % 360
-            angle_diff = min(
-                abs(normalized_angle - 270), abs(normalized_angle - 270 + 360), abs(normalized_angle - 270 - 360)
-            )
-            is_active = angle_diff < (360 / self._num_slots / 4)  # Within a quarter of a step of 12 o'clock
-
-            if is_active:
-                selected_slot = slot_idx
+            is_hovered = slot_idx == self._hovered_slot
 
             if (filled_slot_label := self.assignments.get(slot_idx)) is not None:
                 label = filled_slot_label
@@ -193,13 +188,14 @@ class WheelGraphic(QWidget):
                 stroke_color = f"rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})"
 
                 # Set visual properties based on state
-                if is_active:
-                    # Active: filled circle with full opacity
+                # if is_highlighted:
+                if slot_idx == highlighted_slot:
+                    # Highlighted: filled circle with full opacity
                     fill_color = stroke_color
                     stroke_opacity = 1.0
                     stroke_width = 2
                 else:
-                    # Inactive: only stroke, no fill
+                    # Not highlighted: only stroke, no fill
                     fill_color = "none"
                     stroke_opacity = 1.0 if is_hovered else 0.5
                     stroke_width = 2
@@ -221,7 +217,7 @@ class WheelGraphic(QWidget):
         # Calculate the outer wheel radius and cutout properties
         wheel_outer_radius = self.orbit_radius + self.slot_size * 1.5  # Wheel extends beyond member orbit
         wheel_inner_radius = 10  # Inner hole radius
-        cutout_radius = self.slot_size + self.desired_spacing / 2  # Active Cutout slightly larger than member circles
+        cutout_radius = self.slot_size + self.desired_spacing / 2  # Selected Cutout slightly larger than member circles
         cutout_center_x = center_x  # Cutout at 12 o'clock position
         cutout_center_y = center_y - self.orbit_radius  # At 12 o'clock on the orbit
 
@@ -279,11 +275,10 @@ class WheelGraphic(QWidget):
         self.renderer.load(svg_data.encode("utf-8"))
         self.update()
 
-        # Emit signal if active member changed
-        if selected_slot != self._active_slot:
-            self._active_slot = selected_slot
-            if selected_slot > 0:  # Only emit if we have a valid active member (1-based)
-                self.active_changed.emit(selected_slot)
+        if highlighted_slot != self._highlighted_slot:
+            self._highlighted_slot = highlighted_slot
+            if highlighted_slot in self.slots:
+                self.highlighted_changed.emit(highlighted_slot)
 
     def _animate_step(self):
         """Animation step with Qt easing curve transition"""
@@ -294,6 +289,7 @@ class WheelGraphic(QWidget):
             self.angle_offset = self._target_angle
             self._animation_timer.stop()
             self._is_animating = False
+            self._emit_selection_change()
         else:
             # Calculate progress (0.0 to 1.0)
             progress = self._animation_elapsed / self._animation_duration
@@ -307,6 +303,12 @@ class WheelGraphic(QWidget):
 
         self.update_svg()
 
+    def _emit_selection_change(self):
+        if self._pending_slot is not None and self._pending_slot != self._selected_slot:
+            self._selected_slot = self._pending_slot
+            self.selected_changed.emit(self._selected_slot)
+            self._pending_slot = None
+
     def _rotate_to_position(self, slot, clockwise=None):
         """Start animation to target position with easing
 
@@ -318,6 +320,7 @@ class WheelGraphic(QWidget):
         """
         if slot not in self.slots:
             return
+        self._pending_slot = slot
         # Calculate the angle needed to move this position to 12 o'clock
         # Convert 1-based position to 0-based for angle calculation
         position_base_angle = (360 / self._num_slots) * self._normalized_index(slot)
@@ -344,6 +347,7 @@ class WheelGraphic(QWidget):
         # Skip animation if distance is very small
         if abs(self._animation_total_distance) < 1:
             self.angle_offset = self._target_angle
+            self._emit_selection_change()
             return
 
         # Set up animation
@@ -383,14 +387,14 @@ class WheelGraphic(QWidget):
         slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
         print(f"Clicked on slot {slot_idx}")
         if slot_idx in self.slots:
-            self.active_slot = slot_idx
+            self.selected_slot = slot_idx
 
     def mouseMoveEvent(self, event):
         """Handle mouse movement for hover effects"""
         slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
 
-        if slot_idx != self._hovered_member:
-            self._hovered_member = slot_idx
+        if slot_idx != self._hovered_slot:
+            self._hovered_slot = slot_idx
             self.update_svg()
 
             # Set tooltip
@@ -403,7 +407,7 @@ class WheelGraphic(QWidget):
     def leaveEvent(self, event):
         """Handle mouse leaving the widget"""
         # if self._hovered_member >= self._start_index:
-        self._hovered_member = self._start_index - 1
+        self._hovered_slot = self._start_index - 1
         self.update_svg()
         self.setToolTip("")
 
@@ -460,6 +464,32 @@ class WheelGraphic(QWidget):
             "wheel_stroke": button_color.darker(60).name(),
         }
 
+    def _nearest_top_slot(self) -> int:
+        """Return the slot whose angle is closest to the 12 o'clock cutout."""
+        if self._num_slots <= 0:
+            return self._start_index
+
+        step = 360.0 / self._num_slots
+        target = 270.0  # top (because of the -90° shift in current_angle)
+
+        def ang_err(a: float, b: float) -> float:
+            # smallest signed distance a->b in degrees, then abs
+            return abs(((a - b + 180.0) % 360.0) - 180.0)
+
+        best_slot = self.slots[0]
+        best_err = float("inf")
+
+        for slot_idx in self.slots:
+            base = step * self._normalized_index(slot_idx)
+            current = (base + self.angle_offset - 90.0) % 360.0
+            err = ang_err(current, target)
+            # Stable tie-breaker: prefer pending target, else lower index
+            if err < best_err or (err == best_err and slot_idx == (self._pending_slot or best_slot)):
+                best_err = err
+                best_slot = slot_idx
+
+        return best_slot
+
 
 # Demo code - runs when script is executed directly
 if __name__ == "__main__":
@@ -506,7 +536,7 @@ if __name__ == "__main__":
             }
 
             self.wheel = WheelGraphic(7, members, hue_mapping)
-            self.wheel.active_changed.connect(self.on_member_changed)
+            self.wheel.selected_changed.connect(self.on_member_changed)
 
             # Create controls
             prev_btn = QPushButton("◀")
@@ -544,7 +574,7 @@ if __name__ == "__main__":
 
         def on_member_changed(self, member_position):
             """Handle member selection"""
-            member_label = self.wheel.get_active_slot_label()
+            member_label = self.wheel.get_selected_slot_label()
             if member_label:
                 hue = self.wheel.hue_mapping.get(member_label, self.wheel.default_hue)
                 self.status_label.setText(f"Selected: {member_label} (position {member_position}, hue {hue:.0f}°")

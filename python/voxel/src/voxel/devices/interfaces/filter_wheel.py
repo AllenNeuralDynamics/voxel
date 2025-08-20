@@ -1,30 +1,6 @@
 from abc import abstractmethod
 from collections.abc import Mapping
 from voxel.devices.base import VoxelDevice, VoxelDeviceType
-# from voxel.utils.descriptors.enumerated import enumerated_string
-
-
-# class VoxelFilterWheel(VoxelDevice):
-#     def __init__(self, uid: str) -> None:
-#         super().__init__(uid=uid, device_type=VoxelDeviceType.FILTER_WHEEL)
-
-#     @property
-#     @abstractmethod
-#     def filters(self) -> dict[int, str | None]:
-#         """Return a dictionary of slot indices to filter names. A slot may have no filter (None)."""
-#         pass
-
-#     @enumerated_string(options=lambda self: self.filters.values())
-#     @abstractmethod
-#     def active_filter(self) -> str:
-#         """Return the name of the currently active filter, or None if no filter is active."""
-#         pass
-
-#     @active_filter.setter
-#     @abstractmethod
-#     def active_filter(self, filter_name: str | int | None) -> None:
-#         """Set the active filter to the specified filter name or slot index. Use None to deactivate any filter."""
-#         pass
 
 
 class VoxelFilterWheel(VoxelDevice):
