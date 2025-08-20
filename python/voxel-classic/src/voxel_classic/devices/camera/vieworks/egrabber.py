@@ -150,33 +150,33 @@ class VieworksCamera(BaseCamera):
         #     raise ValueError(f"no grabber found for S/N: {self.id}")
 
         # del grabber
-        # IMPORTANT: call stop here in the event that the camera previously crashed
-        # if not called, the camera may not respond via the SDK
         if self.grabber.remote is not None:
-            self._remote = self._remote
+            self._remote = self.grabber.remote
         else:
             raise RuntimeError("Grabber has no remote module")
 
         if self.grabber.device is not None:
-            self._device_module = self._device_module
+            self._device_module = self.grabber.device
         else:
             raise RuntimeError("Grabber has no device module")
 
         if self.grabber.stream is not None:
-            self._stream_module = self._stream_module
+            self._stream_module = self.grabber.stream
         else:
             raise RuntimeError("Grabber has no stream module")
 
         if self.grabber.interface is not None:
-            self._interface_module = self._interface_module
+            self._interface_module = self.grabber.interface
         else:
             raise RuntimeError("Grabber has no interface module")
 
         if self.grabber.system is not None:
-            self._system_module = self._system_module
+            self._system_module = self.grabber.system
         else:
             raise RuntimeError("Grabber has no system module")
 
+        # IMPORTANT: call stop here in the event that the camera previously crashed
+        # if not called, the camera may not respond via the SDK
         self._remote.execute("AcquisitionStop")
         # initialize parameter values
         self._update_parameters()
