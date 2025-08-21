@@ -11,13 +11,13 @@ from pathlib import Path
 from threading import Event, Lock
 from typing import TYPE_CHECKING, Any
 
-from exaspim_control.instrument.exaspim_instrument import ExASPIM
 import inflection
 import numpy
+from exaspim_control.acquisition.base import Acquisition
+from exaspim_control.instrument.exaspim_instrument import ExASPIM
 from gputools import get_device
 from psutil import virtual_memory
 from ruamel.yaml import YAML
-from exaspim_control.acquisition.base import Acquisition
 from voxel_classic.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
 
 if TYPE_CHECKING:
@@ -72,13 +72,13 @@ class ExASPIMAcquisition(Acquisition):
         try:
             camera_name, self.camera = next(iter(self.instrument.cameras.items()))  # only 1 camera for exaspim
         except StopIteration as e:
-            raise RuntimeError(f"No cameras found for instrument {self.instrument}. Error: {e}")
+            raise RuntimeError(f"No cameras found for instrument {self.instrument}.") from e
 
         try:
             camera_writers = self.writers.get(camera_name, {})
             self.writer = next(iter(camera_writers.values()))  # only 1 writer for exaspim
         except (AttributeError, StopIteration) as e:
-            raise RuntimeError(f"No writers found for camera {camera_name}. Error: {e}")
+            raise RuntimeError(f"No writers found for camera {camera_name}.") from e
 
         camera_file_transfers = self.file_transfers.get(camera_name, {})
         file_transfer = next(iter(camera_file_transfers.values())) if camera_file_transfers else {}
@@ -94,7 +94,7 @@ class ExASPIMAcquisition(Acquisition):
         self.processes = self.processes[camera_name] if self.processes else {}
 
         # tiling stages
-        for tiling_stage_id, tiling_stage in self.instrument.tiling_stages.items():
+        for tiling_stage in self.instrument.tiling_stages.values():
             instrument_axis = tiling_stage.instrument_axis
             self.initial_position_mm[instrument_axis] = tiling_stage.position_mm
         # scanning stage
@@ -289,8 +289,8 @@ class ExASPIMAcquisition(Acquisition):
                     # wait for them to finish, because this will free up disk space
                     elif len(file_transfer_threads) != 0:
                         # check if any transfer threads are still running, if so wait on them
-                        for tile_num, threads_dict in file_transfer_threads.items():
-                            for tile_channel, transfer_thread in threads_dict.items():
+                        for threads_dict in file_transfer_threads.values():
+                            for transfer_thread in threads_dict.values():
                                 if transfer_thread.is_alive():
                                     transfer_thread.wait_until_finished()
                     # otherwise this is the first tile and there is simply not enough disk space
@@ -322,15 +322,15 @@ class ExASPIMAcquisition(Acquisition):
 
         # wait for last tiles file transfer
         if file_transfer:
-            for tile_num, threads_dict in file_transfer_threads.items():
-                for tile_channel, repeat_dict in threads_dict.items():
-                    for repeat, thread in repeat_dict.items():
+            for threads_dict in file_transfer_threads.values():
+                for repeat_dict in threads_dict.values():
+                    for thread in repeat_dict.values():
                         if thread.is_alive():
                             thread.wait_until_finished()
 
         if getattr(self, "file_transfers", {}) != {}:  # save to external paths
             # save acquisition config
-            for device_name, transfer_dict in getattr(self, "file_transfers", {}).items():
+            for transfer_dict in getattr(self, "file_transfers", {}).values():
                 for transfer in transfer_dict.values():
                     self.update_current_state_config()
                     self.save_config(
@@ -338,7 +338,7 @@ class ExASPIMAcquisition(Acquisition):
                     )
 
             # save instrument config
-            for device_name, transfer_dict in getattr(self, "file_transfers", {}).items():
+            for transfer_dict in getattr(self, "file_transfers", {}).values():
                 for transfer in transfer_dict.values():
                     self.instrument.update_current_state_config()
                     self.instrument.save_config(
@@ -347,13 +347,13 @@ class ExASPIMAcquisition(Acquisition):
 
         else:  # no transfers so save locally
             # save acquisition config
-            for device_name, writer_dict in self.writers.items():
+            for writer_dict in self.writers.values():
                 for writer in writer_dict.values():
                     self.update_current_state_config()
                     self.save_config(Path(writer.path, writer.acquisition_name) / "acquisition_config.yaml")
 
             # save instrument config
-            for device_name, writer_dict in self.writers.items():
+            for writer_dict in self.writers.values():
                 for writer in writer_dict.values():
                     self.instrument.update_current_state_config()
                     self.instrument.save_config(Path(writer.path, writer.acquisition_name) / "instrument_config.yaml")
@@ -364,7 +364,8 @@ class ExASPIMAcquisition(Acquisition):
             instrument_axis = tiling_stage.instrument_axis
             tiling_stage.position_mm = self.initial_position_mm[instrument_axis]
             self.log.info(
-                f"moving stage {tiling_stage_id} to {instrument_axis} = {self.initial_position_mm[instrument_axis]:.3f} mm"
+                f"moving stage {tiling_stage_id} to "
+                f"{instrument_axis} = {self.initial_position_mm[instrument_axis]:.3f} mm"
             )
         # scanning stage
         instrument_axis = self.scanning_stage.instrument_axis
@@ -464,7 +465,8 @@ class ExASPIMAcquisition(Acquisition):
                 #         f"sensor {temperature_sensor.id} temperature = {temperature_sensor.temperature_c:.2f} [C]"
                 #     )
                 #     self.log.info(
-                #         f"sensor {temperature_sensor.id} humidity = {temperature_sensor.relative_humidity_percent:.2f} [%]"
+                #         f"sensor {temperature_sensor.id} humidity = {temperature_sensor.relative_humidity_percent:.2f}
+                # [%]"
                 #     )
                 # except Exception:
                 #     self.log.info("no temperature humidity sensor detected")
@@ -820,7 +822,7 @@ class ExASPIMAcquisition(Acquisition):
             writer.start()
             camera.start()
 
-            for frame_index in range(writer.chunk_count_px):
+            for _frame_index in range(writer.chunk_count_px):
                 # grab camera frame
                 current_frame = camera.grab_frame()
                 img_buffer.add_image(current_frame)
@@ -868,12 +870,12 @@ class ExASPIMAcquisition(Acquisition):
 
         return compression_ratio
 
-    def _setup_class(self, device: object, properties: dict) -> None:
+    def _setup_class(self, device: Any, properties: dict) -> None:
         """
         Overwrite to allow metadata class to pass in acquisition_name to devices that require it.
 
         :param device: Device object
-        :type device: object
+        :type device: Any
         :param properties: Properties dictionary
         :type properties: dict
         """
@@ -881,7 +883,7 @@ class ExASPIMAcquisition(Acquisition):
 
         # set acquisition_name attribute if it exists for object
         if hasattr(device, "acquisition_name") and self.metadata is not None:
-            setattr(device, "acquisition_name", self.metadata.acquisition_name)
+            device.acquisition_name = self.metadata.acquisition_name
 
     def _grab_first(self, object_dict: dict[str, object]) -> object:
         """
@@ -908,7 +910,7 @@ class ExASPIMAcquisition(Acquisition):
                 op_type = inflection.pluralize(op_specs["type"])
                 operation = getattr(self, op_type)[device_name][op_name]
                 if hasattr(operation, "acquisition_name"):
-                    setattr(operation, "acquisition_name", self.acquisition_name)
+                    operation.acquisition_name = self.acquisition_name
 
     def _create_directories(self) -> None:
         """
@@ -945,7 +947,7 @@ class ExASPIMAcquisition(Acquisition):
         self.log.info("verifying acquisition configuration")
 
         # check that there is an associated writer for each camera
-        for camera_id, camera in self.instrument.cameras.items():
+        for camera_id in self.instrument.cameras:
             if camera_id not in self.writers:
                 raise ValueError(f"no writer found for camera {camera_id}. check yaml files.")
 

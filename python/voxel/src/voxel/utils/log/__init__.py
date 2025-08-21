@@ -5,7 +5,6 @@ from multiprocessing import Queue
 
 from ._handlers import get_default_console_handler, get_default_json_handler
 
-
 type LoggerType = logging.Logger | logging.LoggerAdapter
 
 
@@ -67,7 +66,7 @@ class VoxelLogging:
             logger.propagate = False
 
     @staticmethod
-    def get_logger(name: str | None = None, *, object: object | None = None, extra: dict | None = None) -> "LoggerType":
+    def get_logger(name: str | None = None, *, obj: object | None = None, extra: dict | None = None) -> "LoggerType":
         """
         Get a logger with the specified name.
         :param name: The name of the logger.
@@ -75,14 +74,13 @@ class VoxelLogging:
         :param extra: Extra attributes to include in the log records.
         :return: A logger instance.
         """
-        if object is not None:
-            name = f"{object.__class__.__name__}"
-            uid = getattr(object, "uid", None)
+        if obj is not None:
+            name = f"{obj.__class__.__name__}"
+            uid = getattr(obj, "uid", None)
             if uid is None:
-                uid = getattr(object, "_uid", None)
+                uid = getattr(obj, "_uid", None)
             if uid:
                 name += f"[{uid}]"
-            VoxelLogging.get_logger(name, extra=extra)
 
         logger = logging.getLogger(name) if name else logging.getLogger()
         if extra:

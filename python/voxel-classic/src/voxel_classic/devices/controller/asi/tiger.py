@@ -131,7 +131,7 @@ class PropertyUpdater:
         :param log_level: Logging level, defaults to "INFO"
         :type log_level: str, optional
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.log.setLevel(log_level)
         self.tigerbox = tigerbox
         self.get_properties = threading.Event()

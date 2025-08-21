@@ -50,7 +50,7 @@ class VoxelWriter:
         :type name: str
         """
         self.name = name
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._log_queue = VoxelLogging.get_queue()
 
         self.dimension_order = Pixels_DimensionOrder.XYZCT
@@ -184,7 +184,7 @@ class VoxelWriter:
         except Exception as e:
             if self._dbl_buf:
                 self._dbl_buf.close_and_unlink()
-            raise RuntimeError(f"Failed to configure writer: {e}")
+            raise RuntimeError(f"Failed to configure writer: {e}") from e
 
     def start(self) -> None:
         """Start the writer with the given configuration
@@ -213,7 +213,7 @@ class VoxelWriter:
             self.log.debug(f"Writer started. Write buffer idx: {self._dbl_buf.write_mem_block_idx.value}")
             self.log.debug(f"Start - Info: Added: {self.frames_added}, Processed: {self.frames_processed}")
         except Exception as e:
-            raise RuntimeError(f"Failed to start writer: {e}")
+            raise RuntimeError(f"Failed to start writer: {e}") from e
 
     def add_frame(self, frame: np.ndarray) -> None:
         """Add a frame to the writer

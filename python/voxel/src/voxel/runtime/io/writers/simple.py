@@ -101,7 +101,7 @@ def test_writer():
 
     frame_gen = CheckeredGenerator(height_px=frame_shape.y, width_px=frame_shape.x, initial_size=2, final_size=20)
 
-    for i in range(NUM_BATCHES):
+    for _ in range(NUM_BATCHES):
         batch = frame_gen.generate(nframes=writer.batch_size_px)
         for frame in batch:
             writer.add_frame(frame)

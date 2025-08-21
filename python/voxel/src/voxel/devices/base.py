@@ -98,7 +98,7 @@ class VoxelDevice(ABC):
         parent_registry_to_copy = {}
         for parent in cls.mro()[1:]:
             if hasattr(parent, "_voxel_property_metadata"):
-                parent_reg_attr = getattr(parent, "_voxel_property_metadata")
+                parent_reg_attr = parent._voxel_property_metadata
                 if isinstance(parent_reg_attr, dict):
                     parent_registry_to_copy = {
                         k: v.model_copy(deep=True) if isinstance(v, VoxelPropertyDetails) else v
@@ -137,7 +137,7 @@ class VoxelDevice(ABC):
         :type name: str
         """
         self._uid = uid
-        self._log = VoxelLogging.get_logger(object=self)
+        self._log = VoxelLogging.get_logger(obj=self)
         self._acq_daq_channel: "WaveGenChannel"
         self._device_type: VoxelDeviceType = device_type
 

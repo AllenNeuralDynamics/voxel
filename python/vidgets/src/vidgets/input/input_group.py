@@ -45,7 +45,10 @@ def create_input_group(
     """
     group = QWidget()
 
-    widgets = {label: input if isinstance(input, QWidget) else input.widget for label, input in inputs.items()}
+    widgets = {
+        label: input_widget if isinstance(input_widget, QWidget) else input_widget.widget
+        for label, input_widget in inputs.items()
+    }
 
     # Choose layout and label positioning based on flow direction
     if flow == FlowDirection.VERTICAL:

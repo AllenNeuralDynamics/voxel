@@ -1,10 +1,8 @@
 import time
 
 from tigerasi.tiger_controller import TigerController
-
 from voxel.devices import VoxelDeviceError
 from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
-from voxel.utils.descriptors.enumerated import enumerated_string
 
 SWITCH_TIME_S = 0.1  # estimated timing
 
@@ -21,33 +19,57 @@ class ASIFilterWheel(VoxelFilterWheel):
         self._is_closed = False
 
     @property
-    def filters(self) -> dict[int, str]:
+    def slot_count(self) -> int:
+        """Return the number of filter slots in the wheel."""
+        return len(self._filters)
+
+    @property
+    def labels(self) -> dict[int, str]:
         """Return a dictionary of filter names and their corresponding positions."""
         return self._filters
 
-    @enumerated_string(options=lambda self: self.filters.keys())
-    def active_filter(self) -> str:
-        """Return the name of the currently active filter, or None if no filter is active."""
-        return self._filters.get(self._current_filter, "Error")
+    @property
+    def position(self) -> int:
+        """Return the current position of the filter wheel."""
+        return self._current_filter
 
-    @active_filter.setter
-    def active_filter(self, filter_name: str) -> None:
-        """Set the current filter to the specified filter name."""
+    @property
+    def label(self) -> str | None:
+        """Return the label of the current filter position, or None if unlabeled."""
+        return self.labels.get(self.position)
+
+    @property
+    def is_moving(self) -> bool:
+        """Return whether the filter wheel is currently moving."""
+        # TODO: Implement actual movement status check using tigerbox API
+        return False
+
+    def move(self, slot: int, *, wait: bool = True, timeout: float | None = 5.0) -> None:
+        if not (1 <= slot <= self.slot_count):
+            raise ValueError(f"Invalid slot {slot}; valid range is 1..{self.slot_count}")
+
         if self._is_closed:
             raise VoxelDeviceError("Filter wheel is closed and cannot be operated.")
-        # Find the position of the filter
-        position = next((pos for pos, name in self.filters.items() if name == filter_name), None)
-        if position is None:
-            raise VoxelDeviceError(f"Filter '{filter_name}' not found in the filter wheel.")
 
-        if self._current_filter == position:
-            return  # Filter is already active, no need to change
+        if self._current_filter == slot:
+            return  # Already in the desired position
 
-        self._send_set_filter_cmd(position)
+        self._send_set_filter_cmd(slot)
+
+        if wait:
+            # Simple wait loop; in a real implementation, this might check hardware status
+            start_time = time.time()
+            while self.is_moving:
+                if timeout is not None and (time.time() - start_time) > timeout:
+                    raise TimeoutError(f"Timeout while moving to slot {slot}")
+                time.sleep(0.01)
+
+    def home(self, *, wait: bool = True, timeout: float | None = 10.0) -> None:
+        self.move(next(iter(self.labels.keys())), wait=wait, timeout=timeout)
 
     def _send_set_filter_cmd(self, position: int) -> None:
         """Set the filterwheel to the specified filter."""
-        cmd_str = f"MP {self.filters[position]}\r\n"
+        cmd_str = f"MP {self.labels[position]}\r\n"
         self._log.info(f"Setting filter to {self._filters[position]} (position {position})")
         self.tigerbox.send(f"FW {self.wheel_id}\r\n", read_until=f"\n\r{self.wheel_id}>")
         self.tigerbox.send(cmd_str, read_until=f"\n\r{self.wheel_id}>")

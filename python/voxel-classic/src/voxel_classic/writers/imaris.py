@@ -351,7 +351,7 @@ class ImarisWriter(BaseWriter):
         """
         from voxel.utils.log import VoxelLogging
 
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         VoxelLogging.redirect([self.log], self._log_queue)
 
         # # internal logger for process

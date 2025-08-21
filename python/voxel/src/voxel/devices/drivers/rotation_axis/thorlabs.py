@@ -1,7 +1,6 @@
 import time
 
 from pylablib.devices import Thorlabs
-
 from voxel.devices import VoxelDeviceConnectionError, VoxelRotationAxis
 
 MIN_POSITION_DEG = 0
@@ -40,7 +39,7 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         except Exception as e:
             raise VoxelDeviceConnectionError(
                 f"Could not initialize rotation mount with serial number {serial_number} - Error: {str(e)}"
-            )
+            ) from e
 
     @property
     def position_deg(self) -> float:
@@ -57,9 +56,9 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         :type position_deg: float
         """
         if value < MIN_POSITION_DEG or value > MAX_POSITION_DEG:
-            raise ValueError(f"Position {value} must be between " f"{MIN_POSITION_DEG} and {MAX_POSITION_DEG}")
+            raise ValueError(f"Position {value} must be between {MIN_POSITION_DEG} and {MAX_POSITION_DEG}")
         self._instance.move_to(value)
-        self._log.info(f"Rotation mount {self.serial_number} commanded " f"to move to position {value} deg")
+        self._log.info(f"Rotation mount {self.serial_number} commanded to move to position {value} deg")
 
     @property
     def speed_deg_s(self) -> float:
@@ -77,9 +76,9 @@ class ThorlabsRotationAxis(VoxelRotationAxis):
         :type speed_deg_s: float
         """
         if value < MIN_SPEED_DEG_S or value > MAX_SPEED_DEG_S:
-            raise ValueError(f"Speed {value} deg/s must be between " f"{MIN_SPEED_DEG_S} and {MAX_SPEED_DEG_S} deg/s")
+            raise ValueError(f"Speed {value} deg/s must be between {MIN_SPEED_DEG_S} and {MAX_SPEED_DEG_S} deg/s")
         self._instance.set_velocity_parameters(max_velocity=value)
-        self._log.info(f"Rotation mount {self.serial_number} set " f"to speed {value} deg/s")
+        self._log.info(f"Rotation mount {self.serial_number} set to speed {value} deg/s")
 
     @property
     def is_moving(self) -> bool:

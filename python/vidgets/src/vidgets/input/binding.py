@@ -4,43 +4,50 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
-from PySide6 import QtCore
+from PySide6.QtCore import QTimer, Signal, QObject, Property
 from PySide6.QtWidgets import QWidget
+from typing import TypedDict
+
+
+class BindingPreset(TypedDict):
+    debounce_delay: int
+    settle_delay: int
+    watch_interval: int | None
 
 
 class BindingPresets:
     """Common configuration presets for hardware bindings"""
 
     # Fast responding hardware (modern digital devices)
-    FAST_HARDWARE = {
+    FAST_HARDWARE: BindingPreset = {
         "debounce_delay": 100,
         "settle_delay": 50,
         "watch_interval": None,
     }
 
     # Slow mechanical hardware (motors, old instruments)
-    SLOW_HARDWARE = {
+    SLOW_HARDWARE: BindingPreset = {
         "debounce_delay": 1000,
         "settle_delay": 500,
         "watch_interval": None,
     }
 
     # Continuous monitoring (temperature sensors, positions)
-    MONITORED = {
+    MONITORED: BindingPreset = {
         "debounce_delay": 300,
         "settle_delay": 100,
         "watch_interval": 1000,
     }
 
     # High precision instruments (need time to stabilize)
-    PRECISION = {
+    PRECISION: BindingPreset = {
         "debounce_delay": 500,
         "settle_delay": 1000,
         "watch_interval": 2000,
     }
 
     # Responsive UI elements
-    RESPONSIVE = {
+    RESPONSIVE: BindingPreset = {
         "debounce_delay": 150,
         "settle_delay": 100,
         "watch_interval": None,
@@ -63,7 +70,7 @@ class ValueWatcher[T]:
         parent: QWidget | None = None,
     ):
         self._callback = callback
-        self._timer = QtCore.QTimer(parent=parent)
+        self._timer = QTimer(parent=parent)
         self._timer.timeout.connect(self._callback)
         self._timer.setInterval(interval)
 
@@ -79,7 +86,7 @@ class ValueWatcher[T]:
         self._timer.stop()
 
 
-class ValueBinding[T](QtCore.QObject):
+class ValueBinding[T](QObject):
     """Simple binding with debouncing and optional continuous monitoring (no verification)"""
 
     class State(Enum):
@@ -88,8 +95,8 @@ class ValueBinding[T](QtCore.QObject):
         WATCHING = "watching"
 
     # Signals for different states
-    value_changed = QtCore.Signal(object)  # When display value changes
-    command_sent = QtCore.Signal(object)  # When command sent to hardware
+    value_changed = Signal(object)  # When display value changes
+    command_sent = Signal(object)  # When command sent to hardware
 
     def __init__(
         self,
@@ -116,7 +123,7 @@ class ValueBinding[T](QtCore.QObject):
         self._state = self.State.WATCHING if self._watch_interval is not None else self.State.IDLE
 
         # Single timer for watching
-        self._timer = QtCore.QTimer(self)
+        self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_timer_tick)
 
         if self._watch_interval is not None and self._watch_interval > 0:
@@ -124,7 +131,7 @@ class ValueBinding[T](QtCore.QObject):
 
         # Debounce timer for user input (only create if debouncing enabled)
         if self._debounce_delay > 0:
-            self._debounce_timer = QtCore.QTimer(self)
+            self._debounce_timer = QTimer(self)
             self._debounce_timer.setSingleShot(True)
             self._debounce_timer.timeout.connect(self._send_command)
         else:
@@ -132,7 +139,7 @@ class ValueBinding[T](QtCore.QObject):
 
         # Settle timer for delayed refresh after commanding (only create if settle delay enabled)
         if self._settle_delay > 0:
-            self._settle_timer = QtCore.QTimer(self)
+            self._settle_timer = QTimer(self)
             self._settle_timer.setSingleShot(True)
             self._settle_timer.timeout.connect(self._on_settle_complete)
         else:
@@ -253,7 +260,7 @@ class ValueBinding[T](QtCore.QObject):
         return fresh_value
 
     # Qt Property for widget binding
-    value = QtCore.Property(object, fget=get_value, fset=set_value)
+    value = Property(object, fget=get_value, fset=set_value)
 
 
 class BoundInput[T: str | int | float, W: QWidget](ABC):
@@ -348,7 +355,7 @@ def _compare_num_with_tolerance(value: float, target: float, tolerance: float | 
     return abs(value - target) <= tolerance
 
 
-class ValidatedValueBinding[T](QtCore.QObject):
+class ValidatedValueBinding[T: int | float](QObject):
     """Smart binding with command verification and optional continuous monitoring"""
 
     class State(Enum):
@@ -358,9 +365,9 @@ class ValidatedValueBinding[T](QtCore.QObject):
         WATCHING = "watching"
 
     # Signals for different states
-    value_changed = QtCore.Signal(object)  # When display value changes
-    command_sent = QtCore.Signal(object)  # When command sent to hardware
-    verification_completed = QtCore.Signal(bool)  # True if verified, False if mismatch
+    value_changed = Signal(object)  # When display value changes
+    command_sent = Signal(object)  # When command sent to hardware
+    verification_completed = Signal(bool)  # True if verified, False if mismatch
 
     def __init__(
         self,
@@ -392,14 +399,14 @@ class ValidatedValueBinding[T](QtCore.QObject):
 
         self._state = self.State.WATCHING if self._watch_interval is not None else self.State.IDLE
 
-        self._timer = QtCore.QTimer(self)
+        self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_timer_tick)
 
         if self._watch_interval is not None and self._watch_interval > 0:
             self._start_watching()
 
         if self._debounce_delay > 0:
-            self._debounce_timer = QtCore.QTimer(self)
+            self._debounce_timer = QTimer(self)
             self._debounce_timer.setSingleShot(True)
             self._debounce_timer.timeout.connect(self._send_command)
         else:
@@ -549,4 +556,4 @@ class ValidatedValueBinding[T](QtCore.QObject):
         return fresh_value
 
     # Qt Property for widget binding
-    value = QtCore.Property(object, fget=get_value, fset=set_value)
+    value = Property(object, fget=get_value, fset=set_value)

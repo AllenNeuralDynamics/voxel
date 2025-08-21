@@ -1,8 +1,8 @@
 import copy
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
 import rpyc
+from pydantic import BaseModel
 
 from voxel.instrument import InstrumentNode, InstrumentNodeType
 from voxel.runtime.io import IOManager
@@ -31,7 +31,7 @@ def remote_full_copy_dict[T: BaseModel](data: dict[str, T]) -> dict[str, T]:
 class RemoteNodeService(rpyc.SlaveService):
     def __init__(self, uid: str):
         self._uid: str = uid
-        self._log = VoxelLogging.get_logger(object=self)
+        self._log = VoxelLogging.get_logger(obj=self)
         self._active_connection: "rpyc.Connection | None" = None
         self._preview_publisher: PreviewFrameRelay | None = None
         self._io_manager = IOManager()

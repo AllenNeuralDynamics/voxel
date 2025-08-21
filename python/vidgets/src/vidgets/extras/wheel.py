@@ -1,11 +1,12 @@
+import colorsys
+import math
 from collections.abc import Mapping
 from functools import cached_property
-import math
-import colorsys
-from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QRectF, QTimer, Signal, QEasingCurve
+
+from PySide6.QtCore import QEasingCurve, QRectF, QTimer, Signal
 from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWidgets import QWidget
 from voxel.utils.log import VoxelLogging
 
 
@@ -241,7 +242,7 @@ class WheelGraphic(QWidget):
 
         info_text = f"""
         <text x="100" y="25" text-anchor="middle" font-size="12" fill="{text_color}">
-            {self._num_slots} slots, {sum(1 for v in self.assignments.values() if v is not None)} filled, {self.angle_offset}°
+            {self._num_slots} slots, Selected: {self.selected_slot} ({self.get_selected_slot_label()})
         </text>
         """
 
@@ -496,17 +497,18 @@ class WheelGraphic(QWidget):
 # Demo code - runs when script is executed directly
 if __name__ == "__main__":
     import sys
+
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
         QApplication,
-        QMainWindow,
-        QVBoxLayout,
         QHBoxLayout,
-        QWidget,
-        QPushButton,
         QLabel,
+        QMainWindow,
+        QPushButton,
         QStyle,
+        QVBoxLayout,
+        QWidget,
     )
-    from PySide6.QtCore import Qt
 
     class WheelGraphicDemo(QMainWindow):
         def __init__(self):

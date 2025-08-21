@@ -28,7 +28,7 @@ class BaseFileTransfer:
         :type local_path: str
         :raises ValueError: If the file path is not valid.
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._external_path = Path(external_path)
         self._local_path = Path(local_path)
         if self._external_path == self._local_path:

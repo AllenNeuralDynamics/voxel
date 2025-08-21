@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..base import VoxelWriter, WriterConfig
-
 from .sdk import npy2bdv
 
 if TYPE_CHECKING:
@@ -90,8 +89,10 @@ class BdvWriter(VoxelWriter):
         compression = None if compression == "none" else compression
         try:
             self._compression = BdvCompression(compression)
-        except ValueError:
-            raise ValueError(f"Invalid compression codec: {compression}. Must be one of {BdvCompression.__members__}")
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid compression codec: {compression}. Must be one of {BdvCompression.__members__}"
+            ) from e
 
     @property
     def batch_size_px(self) -> int:

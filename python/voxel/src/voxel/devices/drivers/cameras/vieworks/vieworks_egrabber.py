@@ -1,5 +1,6 @@
 from enum import StrEnum
-from functools import cached_property, lru_cache
+from functools import cached_property
+from typing import final
 
 import numpy as np
 from egrabber import (
@@ -21,7 +22,6 @@ from egrabber import (
     ct,
     query,
 )
-
 from voxel.devices.base import VoxelDeviceConnectionError, VoxelDeviceError, VoxelPropertyDetails
 from voxel.devices.interfaces.camera import AcquisitionState, PixelType, TriggerSetting, VoxelCamera
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
@@ -96,6 +96,7 @@ def _get_camera_grabber(serial_number: str) -> EGrabber:
     raise VoxelDeviceConnectionError(f"No grabber found for S/N: {serial_number}")
 
 
+@final
 class VieworksCamera(VoxelCamera):
     """VoxelCamera implementation for Vieworks cameras using the EGrabber SDK.
     :param name: Voxel ID for the device.
@@ -122,11 +123,12 @@ class VieworksCamera(VoxelCamera):
             "ExposureTime": {"Min": None, "Max": None, "Inc": None},
         }
 
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
 
         # LUTs
         self._binning_lut: dict[str, int] = self._get_binning_lut()
         self._pixel_format_options: list[str] = self._get_pixel_format_options()
+        self._line_interval_cache = {}
         super().__init__(name, pixel_size_um, magnification)
         self.log.debug("Vieworks camera initialized successfully.")
 
@@ -457,7 +459,7 @@ class VieworksCamera(VoxelCamera):
         self.reset_roi()
         self.trigger_setting = TriggerSetting.OFF
         self.pixel_format = "Mono8"
-        self.binning = next(iter(self._binning_lut.keys()))
+        self.binning = int(next(iter(self._binning_lut.values())))
         max_frame_rate = self._remote.get("AcquisitionFrameRate.Max", dtype=int)
         self._remote.set("AcquisitionFrameRate", max_frame_rate)
 
@@ -732,27 +734,27 @@ class VieworksCamera(VoxelCamera):
             self.log.debug(f"Completed querying pixel format options: {options}")
         return options
 
-    @lru_cache(maxsize=16)
     def _get_line_interval_us(self, pixel_format: str) -> float:
+        cache = self._line_interval_cache
+        if pixel_format in cache:
+            return cache[pixel_format]
+
         def get_line_interval() -> float:
-            # check max acquisition rate, used to determine line interval
             max_frame_rate = self._remote.get("AcquisitionFrameRate.Max")
-            # vp-151mx camera uses the sony imx411 camera
-            # which has 10640 active rows but 10802 total rows.
-            # from the manual 10760 are used during readout
-            # Line interval doesn't change when roi_height is updated.
-            # No need to regenerate the lut.
             device_model = self._remote.get("DeviceModelName")
             height = self.roi_height_px + 120 if device_model == "VP-151MX-M6H0" else self.sensor_size_px.y
             return (1 / max_frame_rate) / height * 1e6
 
         if pixel_format == self.pixel_format:
-            return get_line_interval()
-        initial_pixel_format = self._remote.get("PixelFormat")
-        self._remote.set("PixelFormat", pixel_format)
-        line_interval = get_line_interval()
-        self._remote.set("PixelFormat", initial_pixel_format)
-        return line_interval
+            interval = get_line_interval()
+        else:
+            initial_pixel_format = self._remote.get("PixelFormat")
+            self._remote.set("PixelFormat", pixel_format)
+            interval = get_line_interval()
+            self._remote.set("PixelFormat", initial_pixel_format)
+
+        cache[pixel_format] = interval
+        return interval
 
     def _get_bit_packing_mode_options(self) -> list[str]:
         """

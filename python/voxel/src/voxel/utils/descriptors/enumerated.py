@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Protocol, Any, Self, runtime_checkable
 from collections.abc import Callable, Sequence
+from typing import Any, Protocol, Self, runtime_checkable  # , Any
+
 from voxel.utils.log import VoxelLogging
 
 
@@ -52,7 +53,7 @@ class EnumeratedProperty[T: int | str, S](ABC):
 
         self.log = VoxelLogging.get_logger(__name__ + "." + self.__class__.__name__)
 
-    def __set_name__(self, owner, name) -> None:
+    def __set_name__(self, owner: type, name: str) -> None:
         """
         Keep track of the property name and its owner.
         """
@@ -60,7 +61,7 @@ class EnumeratedProperty[T: int | str, S](ABC):
         self._full_name = f"{owner.__name__}.{name}"
 
     @abstractmethod
-    def __get__(self, obj, objtype=None) -> EnumeratedValue:
+    def __get__(self, obj: S, objtype: type | None = None) -> EnumeratedValue[T]:
         pass
 
     def __set__(self, obj: S, value: T) -> None:
@@ -75,18 +76,18 @@ class EnumeratedProperty[T: int | str, S](ABC):
 
         self.fset(obj, value)
 
-    def setter(self, fset) -> Self:
+    def setter(self, fset: Callable[[S, T], None]) -> Self:
         return type(self)(self._options, self.fget, fset)
 
     @staticmethod
-    def _unwrap_dynamic_attribute(attr: Sequence[T] | Callable[[Any], Sequence[T]], obj: S) -> Sequence[T]:
+    def _unwrap_dynamic_attribute(attr: Sequence[T] | Callable[[S], Sequence[T]], obj: S) -> Sequence[T]:
         if callable(attr):
             return list(attr(obj))
         return list(attr)
 
 
-class EnumeratedStrProperty(EnumeratedProperty):
-    def __get__(self, obj, objtype=None) -> EnumeratedString:
+class EnumeratedStrProperty[S](EnumeratedProperty[str, S]):
+    def __get__(self, obj: S, objtype: type | None = None) -> EnumeratedString:
         if obj is None:
             raise AttributeError("Can't access attribute from the class.")
         if self.fget is None:
@@ -95,8 +96,8 @@ class EnumeratedStrProperty(EnumeratedProperty):
         return EnumeratedString(value=self.fget(obj), options=[str(option) for option in options])
 
 
-class EnumeratedIntProperty(EnumeratedProperty):
-    def __get__(self, obj, objtype=None) -> EnumeratedInt:
+class EnumeratedIntProperty[S: Any](EnumeratedProperty[int, S]):
+    def __get__(self, obj: S, objtype: type | None = None) -> EnumeratedInt:
         if obj is None:
             raise AttributeError("Can't access attribute from the class.")
         if self.fget is None:
@@ -105,15 +106,15 @@ class EnumeratedIntProperty(EnumeratedProperty):
         return EnumeratedInt(value=int(self.fget(obj)), options=options)
 
 
-def enumerated_int[S](options: list[int] | Callable[[Any], list[int]]) -> Callable[..., EnumeratedIntProperty]:
-    def decorator(fget: Callable[[S], Any]) -> EnumeratedIntProperty:
+def enumerated_int(options: list[int] | Callable[[Any], list[int]]) -> Callable[..., EnumeratedIntProperty[Any]]:
+    def decorator(fget: Callable[[Any], int]) -> EnumeratedIntProperty[Any]:
         return EnumeratedIntProperty(options=options, fget=fget)
 
     return decorator
 
 
-def enumerated_string[S](options: list[str] | Callable[[Any], list[str]]) -> Callable[..., EnumeratedStrProperty]:
-    def decorator(fget: Callable[[S], Any]) -> EnumeratedStrProperty:
+def enumerated_string(options: list[str] | Callable[[Any], list[str]]) -> Callable[..., EnumeratedStrProperty[Any]]:
+    def decorator(fget: Callable[[Any], str]) -> EnumeratedStrProperty[Any]:
         return EnumeratedStrProperty(options=options, fget=fget)
 
     return decorator

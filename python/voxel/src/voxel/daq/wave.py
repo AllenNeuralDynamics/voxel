@@ -129,7 +129,7 @@ def generate_multi_point_waveform(
     t_interp = np.linspace(0, 1, n, endpoint=False, retstep=False)
 
     # Unzip points for interpolation
-    t_points, v_points_norm = zip(*points)
+    t_points, v_points_norm = zip(*points, strict=True)
 
     # Interpolate the normalized shape
     v_interp_norm = np.interp(t_interp, t_points, v_points_norm)

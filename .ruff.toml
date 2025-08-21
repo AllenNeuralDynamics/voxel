@@ -2,7 +2,6 @@ line-length = 120
 show-fixes = true
 
 target-version = "py312"
-
 exclude = [
     ".bzr",
     ".direnv",
@@ -34,10 +33,20 @@ exclude = [
     "**/sdk",
     "**/sdks",
     # To clean up later - exclude from linting till then
-    "classic_drivers",
+    "python/voxel/src/voxel/utils/processing",
     "python/voxel/tests/processes",
+    "python/voxel-classic",
     "python/vidgets/src/vidgets/view",
+    "classic_drivers",
 ]
 
-lint.extend-select = ["C4", "SIM", "TC"]
-lint.fixable = ["ALL"]
+[format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+indent-style = "space"
+
+[lint]
+extend-select = ["A", "B", "E", "C4", "SIM", "TC"]
+unfixable = ["B"]
+fixable = ["ALL"]
+flake8-builtins.ignorelist = ["print"]

@@ -19,7 +19,7 @@ class LiveViewer:
         on_stop: Callable[[int], None] | None = None,
     ):
         self.name = f"{camera.uid} Live Viewer"
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._camera = camera
         self._previewer = previewer
 

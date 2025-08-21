@@ -16,7 +16,7 @@ class BaseDevice(ABC):
         :type id: str
         """
         self._uid = uid
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
 
     @property
     def uid(self) -> str:

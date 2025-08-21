@@ -1,7 +1,6 @@
 from time import sleep
 
 from pylablib.devices import Thorlabs
-
 from voxel.devices import VoxelDeviceError
 from voxel.devices.interfaces.flip_mount import VoxelFlipMount
 from voxel.utils.descriptors.deliminated import deliminated_float
@@ -90,8 +89,8 @@ class ThorlabsFlipMount(VoxelFlipMount):
         try:
             parameters = self._inst.get_flipper_parameters()
             flip_time_ms: float = parameters.transit_time * 1e3
-        except Exception:
-            raise VoxelDeviceError(f"Unable to get flip time for device: {self.uid}")
+        except Exception as e:
+            raise VoxelDeviceError(f"Unable to get flip time for device: {self.uid}") from e
         return flip_time_ms
 
     @flip_time_ms.setter
@@ -112,7 +111,7 @@ class ThorlabsFlipMount(VoxelFlipMount):
             self._inst.setup_flipper(transit_time=clamped_time_ms / 1000)
             self._log.debug(f"Flip mount {self.uid} switch time set to {clamped_time_ms} ms")
         except Exception as e:
-            raise VoxelDeviceError(f"Could not set flip time: {e}")
+            raise VoxelDeviceError(f"Could not set flip time: {e}") from e
 
     def close(self):
         """Disconnect from the flip mount."""

@@ -34,7 +34,7 @@ def update_yaml_content(file_path: str, new_content: dict[str, Any]) -> None:
                 yaml.dump({key: value}, file)
                 file.write("\n")
     except Exception as e:
-        raise ValueError(f"Error updating YAML content: {e}")
+        raise ValueError(f"Error updating YAML content: {e}") from e
 
 
 def get_available_disk_space_mb(path: str) -> int:

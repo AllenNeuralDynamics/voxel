@@ -10,11 +10,10 @@ import numpy as np
 import tifffile
 from exaspim_control.instrument.exaspim_instrument import ExASPIM, ExASPIMChannel
 from napari.layers import Image
-from napari.qt.threading import WorkerBase, FunctionWorker, create_worker
+from napari.qt.threading import FunctionWorker, WorkerBase, create_worker
 from napari.utils.events import Event
 from napari.utils.theme import get_theme
-from PySide6.QtCore import Qt
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,7 +30,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ruamel.yaml import RoundTripRepresenter
-from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 from vidgets.view.base_device_widget import create_widget
 from vidgets.view.device_widgets.camera_widget import CameraWidget
 from vidgets.view.device_widgets.filter_wheel_widget import FilterWheelWidget
@@ -39,6 +37,7 @@ from vidgets.view.device_widgets.flip_mount_widget import FlipMountWidget
 from vidgets.view.device_widgets.laser_widget import LaserWidget
 from vidgets.view.device_widgets.ni_widget import NIWidget
 from vidgets.view.device_widgets.stage_widget import StageWidget
+from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 
 
 class NonAliasingRTRepresenter(RoundTripRepresenter):
@@ -254,7 +253,8 @@ class ExASPIMInstrumentView(QWidget):
                 folder = fname.getSaveFileName(dir=str(self.instrument.config_path))
                 if folder[0] != "":  # user pressed cancel
                     msgBox.setText(
-                        f"Do you want to update the instrument configuration file at {folder[0]} to current instrument state?"
+                        f"Do you want to update the instrument configuration file at {folder[0]} "
+                        f"to the current instrument state?"
                     )
                     self._config_save_path = Path(folder[0])
 
@@ -478,7 +478,7 @@ class ExASPIMInstrumentView(QWidget):
         while i < total_frames:  # while loop since frames can == inf
             time.sleep(0.5)
             multiscale = [self.instrument.camera.grab_frame()]
-            for binning in range(1, self.resolution_levels):
+            for _ in range(1, self.resolution_levels):
                 downsampled_frame = multiscale[-1][::2, ::2]
                 multiscale.append(downsampled_frame)
             yield multiscale, self.instrument.camera.uid

@@ -1,10 +1,9 @@
-from functools import cached_property
 import time
 from collections.abc import Mapping
+from functools import cached_property
 from typing import Any, Literal
 
 from voxel.devices import VoxelDeviceConnectionError
-from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.devices.drivers.cameras.pco.definitions import (
     ReadoutMode,
     TriggerMode,
@@ -12,6 +11,7 @@ from voxel.devices.drivers.cameras.pco.definitions import (
     TriggerSource,
 )
 from voxel.devices.drivers.cameras.pco.sdk import Camera
+from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
 from voxel.utils.descriptors.enumerated import enumerated_int
 from voxel.utils.vec import Vec2D
@@ -47,7 +47,7 @@ class PCOCamera(VoxelCamera):
         try:
             self._camera = Camera(self._conn)
         except Exception as e:
-            raise VoxelDeviceConnectionError(f"Could not connect to camera: {e}")
+            raise VoxelDeviceConnectionError(f"Could not connect to camera: {e}") from e
 
         # cached props
         self._delimination_props = self._get_delimination_props()

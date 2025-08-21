@@ -4,7 +4,6 @@ from functools import cached_property
 from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
-
 from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors import deliminated_float, enumerated_int, enumerated_string
 from voxel.utils.descriptors.deliminated import deliminated_int
@@ -55,7 +54,7 @@ class SimulatedCamera(VoxelCamera):
     _step_exposure_time_ms: float = 1.0
     _init_exposure_time_ms: float = 10
     _line_interval_us_lut = {"MONO8": 8.00, "MONO16": 12.00}
-    _binning_lut = {"1x1": 1, "2x2": 2, "4x4": 4}
+    _binning_lut = {1: "1x1", 2: "2x2", 4: "4x4"}
     PIXEL_FORMATS = ["MONO16", "MONO8"]
     PIXEL_TYPE_MAP = {"MONO8": PixelType.UINT8, "MONO16": PixelType.UINT16}
 
@@ -80,7 +79,7 @@ class SimulatedCamera(VoxelCamera):
         self._roi_width_offset_px = 0
         self._roi_height_offset_px = 0
         self._exposure_time_ms = self._init_exposure_time_ms
-        self._binning = "1x1"
+        self._binning = 1
         self._pixel_format = self.PIXEL_FORMATS[0]
         self._max_frame_time_ms = 1 / max_frame_rate * 1000
         self._last_grab_frame_time = 0
@@ -105,12 +104,12 @@ class SimulatedCamera(VoxelCamera):
         self._strategy = value
         self._invalidate_generator()
 
-    @enumerated_int(options=list(_binning_lut.values()))
+    @enumerated_int(options=list(_binning_lut.keys()))
     def binning(self) -> int:
-        return self._binning_lut[self._binning]
+        return self._binning
 
     @binning.setter
-    def binning(self, binning: str) -> None:
+    def binning(self, binning: int) -> None:
         self._binning = binning
         self._invalidate_generator()
 
@@ -204,9 +203,7 @@ class SimulatedCamera(VoxelCamera):
     def frame_time_ms(self) -> float:
         readout_time_ms = self._line_interval_us_lut[self.pixel_format] * self.roi_height_px / 1000
         self._log.debug(
-            f"Readout: {readout_time_ms} ms, "
-            f"exposure: {self.exposure_time_ms} ms, "
-            f"max: {self._max_frame_time_ms} ms"
+            f"Readout: {readout_time_ms} ms, exposure: {self.exposure_time_ms} ms, max: {self._max_frame_time_ms} ms"
         )
         # return min(max(self.exposure_time_ms, readout_time_ms), self._max_frame_time_ms) * 0.75
         return max(self.exposure_time_ms, readout_time_ms)

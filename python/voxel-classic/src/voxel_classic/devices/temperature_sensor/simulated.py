@@ -15,7 +15,7 @@ class SimulatedTemperatureSensor(BaseTemperatureSensor):
         :param channel: Sensor channel
         :type channel: str
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.id = id
         self.channel = channel
 

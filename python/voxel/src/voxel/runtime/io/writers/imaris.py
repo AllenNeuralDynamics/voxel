@@ -6,13 +6,14 @@ from math import ceil
 import numpy as np
 from PyImarisWriter import PyImarisWriter as pw
 
+from voxel.utils.vec import Vec2D, Vec3D
+
 from .base import (
     Pixels_DimensionOrder,
     PixelType,
     VoxelWriter,
     WriterConfig,
 )
-from voxel.utils.vec import Vec2D, Vec3D
 
 
 class ImarisCompression(Enum):
@@ -241,9 +242,9 @@ class ImarisWriter(VoxelWriter):
                 self.log.warning(
                     f"Frames added ({self.frames_added}) is less than frames processed ({self.frames_processed})"
                 )
-
+            _frames_processed_str = f"Frames processed: {self.frames_processed}/{self.config.frame_count}"
             self.log.info(
-                f"Finished writing {self.batch_count} batches with a total of {self.frames_processed}/{self.config.frame_count} frames written, "
+                f"Finished writing {self.batch_count} batches | {_frames_processed_str} | "
                 f"Avg. Rate: {self.avg_write_speed_fps:.2f} fps | {self.avg_write_speed_mb_s:.2f} MB/s"
             )
         except Exception as e:

@@ -47,7 +47,7 @@ class RobocopyFileTransfer(VoxelFileTransfer):
             # subdirs is any tile specific subdir i.e. zarr store
             # files are any tile specific files
             file_list = {}
-            for path, subdirs, files in os.walk(local_directory.absolute()):
+            for path, _subdirs, files in os.walk(local_directory.absolute()):
                 for name in files:
                     # check and only add if filename matches tranfer's filename but not the log file
                     if self.filename in name and name != log_path:

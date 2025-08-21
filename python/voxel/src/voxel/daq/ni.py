@@ -8,7 +8,7 @@ from nidaqmx.system.device import Device as NiDevice
 from nidaqmx.task import Task as NiTask
 from nidaqmx.task.channels import AOChannel as NiAOChannel
 
-from voxel.daq.base import AOChannelInst, AcqSampleMode, BaseDaq, DaqTaskInst, PinInfo
+from voxel.daq.base import AcqSampleMode, AOChannelInst, BaseDaq, DaqTaskInst, PinInfo
 from voxel.utils.log import VoxelLogging
 
 from .quantity import VoltageRange
@@ -81,7 +81,7 @@ class VoxelNiDAQ(BaseDaq):
     def __init__(self, uid: str, conn: str) -> None:
         self._uid = uid
         self._name = conn
-        self._log = VoxelLogging.get_logger(object=self)
+        self._log = VoxelLogging.get_logger(obj=self)
         self.system = NiSystem.local()
         self._inst, self.model = self._connect(name=self._name)
 
@@ -109,7 +109,7 @@ class VoxelNiDAQ(BaseDaq):
                 self._log.warning(f"Daq Device: {nidaq.product_type} might not be fully supported.")
             return nidaq, model
         except DaqError as e:
-            raise RuntimeError(f"Unable to connect to DAQ device: {e}")
+            raise RuntimeError("Unable to connect to DAQ device") from e
 
     def _initialize_channel_mappings(self) -> None:
         """Initialize comprehensive channel mappings."""

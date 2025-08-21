@@ -2,9 +2,10 @@ import errno
 import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
-from voxel.utils.log import VoxelLogging
 
 import rpyc
+
+from voxel.utils.log import VoxelLogging
 
 from .service import RemoteNodeService
 
@@ -63,7 +64,7 @@ class INodeServerRunner(ABC):
     def __init__(self, uid: str, config: "RemoteNodeConfig"):
         self._uid = uid
         self._config = config
-        self._log = VoxelLogging.get_logger(object=self)
+        self._log = VoxelLogging.get_logger(obj=self)
 
     @property
     def uid(self) -> str:

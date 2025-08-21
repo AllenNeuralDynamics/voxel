@@ -5,7 +5,7 @@ from typing import Any
 
 from ._colors import Color, LevelColor, colorize, strip_colors
 
-STANDARD_LOGRECORD_ATTRS = {
+STANDARD_LOGRECORD_ATTRS: set[str] = {
     "args",
     "asctime",
     "created",
@@ -50,10 +50,10 @@ class CustomFormatter(logging.Formatter):
 
     def _build_fmt(self, detailed: bool) -> str:
         # time | level | (name) message [filename:lineno]
-        out = f"{colorize('%(asctime)s', Color.GREEN)} | %(levelname)-8s | "
-        out += f"{colorize('%(name)s >>', Color.GRAY)} %(message)s"
+        out = f"{colorize('%(asctime)s', color=Color.GREEN)} | %(levelname)-8s | "
+        out += f"{colorize('%(name)s >>', color=Color.GRAY)} %(message)s"
         if detailed:
-            out += f" {colorize('%(filename)s:%(lineno)d', Color.GRAY)}"
+            out += f" {colorize('%(filename)s:%(lineno)d', color=Color.GRAY)}"
         return out
 
     def format(self, record: logging.LogRecord) -> str:

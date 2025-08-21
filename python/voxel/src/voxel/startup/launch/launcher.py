@@ -7,18 +7,18 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from voxel.instrument import Instrument, InstrumentNode, InstrumentNodeType
+from voxel.reporting.errors import ErrorInfo, pydantic_to_error_info
 from voxel.runtime.io.manager import IOManager
 from voxel.runtime.preview.publisher import PreviewManager
-from voxel.startup.remote.client import RemoteNodeSession
-from voxel.reporting.errors import ErrorInfo, pydantic_to_error_info
 from voxel.startup.config import SystemConfig
+from voxel.startup.remote.client import RemoteNodeSession
 
 from .context import LaunchContext
 from .step import (
+    BasicLaunchStepResult,
     InitializeInstrumentNodesResult,
     LaunchStep,
     LaunchStepResult,
-    BasicLaunchStepResult,
     StartRemoteSessionsResult,
 )
 
@@ -163,8 +163,6 @@ class Launcher:
                             message=f"Failed to build local node {node_id}: {exc}",
                         )
                     )
-                finally:
-                    continue
             session = next((s for s in ctx.remote_sessions.values() if s.uid == node_id), None)
             if session is None:
                 result.add_error(

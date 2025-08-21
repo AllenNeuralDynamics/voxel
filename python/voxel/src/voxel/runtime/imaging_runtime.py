@@ -1,5 +1,5 @@
-from enum import StrEnum
 import threading
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from voxel.utils.log import VoxelLogging
@@ -24,7 +24,7 @@ class ImagingRuntimeMode(StrEnum):
 class ImagingRuntime:
     def __init__(self, camera: "VoxelCamera", io_manager: "IOManager", preview_pub: PreviewFramePublisher):
         self.name = f"{camera.uid} Pipeline"
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._camera = camera
         self._io_manager = io_manager
 

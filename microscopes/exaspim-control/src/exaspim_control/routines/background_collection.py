@@ -17,7 +17,7 @@ class BackgroundCollection:
         :type path: str
         """
         super().__init__()
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._path = Path(path)
         self._frame_count_px = 1
         self._filename = None

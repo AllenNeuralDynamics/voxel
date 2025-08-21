@@ -1,9 +1,8 @@
-from functools import cached_property
 import time
+from functools import cached_property
 from typing import Any, Literal
 
 import numpy as np
-
 from voxel.devices import VoxelDeviceConnectionError
 from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int
@@ -23,7 +22,7 @@ from .definitions import (
     DcamTriggerSource,
 )
 from .sdk.dcam import DCAM_IDSTR, DCAMCAP_TRANSFERINFO, DCAMERR, Dcam, Dcamapi, byref, dcamcap_transferinfo
-from .sdk.dcamapi4 import DCAMPROP_ATTR, DCAM_PIXELTYPE
+from .sdk.dcamapi4 import DCAM_PIXELTYPE, DCAMPROP_ATTR
 
 type LimitType = Literal["min", "max", "step"]
 
@@ -58,14 +57,14 @@ def discover_dcam(provider: Dcamapi, serial_number: str) -> tuple[Dcam, int]:
             cam_id: str | Literal[False] = dcam.dev_getstring(DCAM_IDSTR.CAMERAID)
             if cam_id is False:
                 raise VoxelDeviceConnectionError(
-                    f"Failed to discover camera. DcamapiSingleton.init() fails with error {DCAMERR(provider.lasterr()).name}"
+                    f"DcamapiSingleton.init() fails with error {DCAMERR(provider.lasterr()).name}"
                 )
             serial_numbers.append(cam_id.replace("S/N: ", ""))
             if cam_id.replace("S/N: ", "") == serial_number:
                 dcam.dev_close()  # make sure camera is closed before returning
                 return dcam, cam_num
         raise VoxelDeviceConnectionError(
-            f"Camera with serial number {serial_number} not found." f" Found cameras: {serial_numbers}"
+            f"Camera with serial number {serial_number} not found. Found cameras: {serial_numbers}"
         )
     except Exception as e:
         raise VoxelDeviceConnectionError(
@@ -90,7 +89,7 @@ def reset_dcam(provider: Dcamapi, dcam_idx: int) -> Dcam:
         return dcam
     except Exception as e:
         raise VoxelDeviceConnectionError(
-            "Failed to reset camera. " "DcamapiSingleton.init() fails with error {}".format(DCAMERR(provider.lasterr()))
+            "Failed to reset camera. DcamapiSingleton.init() fails with error {}".format(DCAMERR(provider.lasterr()))
         ) from e
 
 
@@ -737,7 +736,7 @@ class HamamatsuCamera(VoxelCamera):
             res = self._dcam.prop_getattr(DELIMINATED_PROPERTIES[name])
             if type(res) is not DCAMPROP_ATTR:
                 self._log.error(
-                    f"Failed to fetch delimination prop: {name}. " f"Error: {DCAMERR(self._dcam_provider.lasterr())}"
+                    f"Failed to fetch delimination prop: {name}. Error: {DCAMERR(self._dcam_provider.lasterr())}"
                 )
                 return None
             return res

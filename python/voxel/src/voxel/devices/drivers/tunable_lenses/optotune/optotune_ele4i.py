@@ -1,7 +1,6 @@
 import struct
 
 import serial
-
 from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 
 # constants for Optotune EL-E-4i controller
@@ -16,7 +15,7 @@ def crc_16(s):
     crc = 0x0000
     for c in s:
         crc = crc ^ c
-        for i in range(0, 8):
+        for _ in range(0, 8):
             crc = (crc >> 1) ^ 0xA001 if (crc & 1) > 0 else crc >> 1
 
     return crc

@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
-from colorama import Fore
 import rpyc
+from colorama import Fore
 
 from voxel.utils.log import VoxelLogging
 
@@ -26,7 +26,7 @@ class RemoteNodeSession:
         allow_public_attrs: bool = True,
     ):
         self._uid = uid
-        self._log = VoxelLogging.get_logger(object=self)
+        self._log = VoxelLogging.get_logger(obj=self)
         self._config = config
 
         self._server_runner: INodeServerRunner

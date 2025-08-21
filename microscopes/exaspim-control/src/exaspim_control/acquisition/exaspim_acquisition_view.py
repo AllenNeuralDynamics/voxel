@@ -4,12 +4,12 @@ from datetime import datetime
 
 import inflection
 import numpy as np
+from exaspim_control.acquisition.exaspim_acquisition import ExASPIMAcquisition
+from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
 from napari.qt import get_stylesheet
 from napari.qt.threading import create_worker, thread_worker
 from napari.settings import get_settings
-from PySide6.QtCore import Qt
-from PySide6.QtCore import Signal
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ruamel.yaml import YAML, RoundTripRepresenter
-from voxel.utils.log import VoxelLogging
 from vidgets.view.acquisition_widgets.channel_plan_widget import ChannelPlanWidget
 from vidgets.view.acquisition_widgets.metadata_widget import MetadataWidget
 from vidgets.view.acquisition_widgets.volume_model import VolumeModel
@@ -38,9 +37,7 @@ from vidgets.view.acquisition_widgets.volume_plan_widget import (
 )
 from vidgets.view.base_device_widget import create_widget, scan_for_properties
 from vidgets.view.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
-
-from exaspim_control.acquisition.exaspim_acquisition import ExASPIMAcquisition
-from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
+from voxel.utils.log import VoxelLogging
 
 
 class NonAliasingRTRepresenter(RoundTripRepresenter):
@@ -77,7 +74,7 @@ class ExASPIMAcquisitionView(QWidget):
         :param log_level: level to set logger at
         """
         super().__init__()
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
 
         # Set ExASPIM-specific configuration
         instrument_view.config["acquisition_view"]["unit"] = "mm"
@@ -109,7 +106,7 @@ class ExASPIMAcquisitionView(QWidget):
         # create workers for latest image taken by cameras
         for camera_name, camera in self.instrument.cameras.items():
             worker = create_worker(self.grab_property_value, camera, "last_image", None)  # type: ignore
-            worker.yielded.connect(lambda x: self.update_acquisition_layer(x[0], camera_name))
+            worker.yielded.connect(lambda x, camera_name=camera_name: self.update_acquisition_layer(x[0], camera_name))
             worker.start()
             worker.pause()  # type: ignore
             self.property_workers.append(worker)
@@ -158,7 +155,7 @@ class ExASPIMAcquisitionView(QWidget):
         splitter.addWidget(dock)
 
         # create dock widget for operations
-        for i, operation in enumerate(["writer", "file_transfer", "process", "routine"]):
+        for _i, operation in enumerate(["writer", "file_transfer", "process", "routine"]):
             operation_name = operation if operation != "file_transfer" else "transfer"
             if hasattr(self, f"{operation_name}_widgets") and getattr(self, f"{operation_name}_widgets"):
                 operation_widget = self.stack_device_widgets(operation_name)
@@ -265,7 +262,7 @@ class ExASPIMAcquisitionView(QWidget):
                 daq.tasks = self.config["acquisition_view"]["data_acquisition_tasks"][daq_name]["tasks"]
 
         # anchor grid in volume widget
-        for anchor, widget in zip(self.volume_plan.anchor_widgets, self.volume_plan.grid_offset_widgets):
+        for anchor, widget in zip(self.volume_plan.anchor_widgets, self.volume_plan.grid_offset_widgets, strict=False):
             anchor.setChecked(True)
             widget.setDisabled(True)
         self.volume_plan.tile_table.setDisabled(True)
@@ -311,7 +308,7 @@ class ExASPIMAcquisitionView(QWidget):
                 daq.tasks = self.config["instrument_view"]["data_acquisition_tasks"][daq_name]["tasks"]
 
         # unanchor grid in volume widget
-        for anchor, widget in zip(self.volume_plan.anchor_widgets, self.volume_plan.grid_offset_widgets):
+        for anchor, widget in zip(self.volume_plan.anchor_widgets, self.volume_plan.grid_offset_widgets, strict=False):
             anchor.setChecked(False)
             widget.setDisabled(False)
         self.volume_plan.tile_table.setDisabled(False)
@@ -341,7 +338,7 @@ class ExASPIMAcquisitionView(QWidget):
 
         overlap_layout = QGridLayout()
         overlap_layout.addWidget(QWidget(), 1, 0)  # spacer widget
-        for name, widget in device_widgets.items():
+        for widget in device_widgets.values():
             widget.hide()
             overlap_layout.addWidget(widget, 1, 0)
 
@@ -392,15 +389,15 @@ class ExASPIMAcquisitionView(QWidget):
         # find limits of all axes
         lim_dict = {}
         # add tiling stages
-        for name, stage in self.instrument.tiling_stages.items():
+        for stage in self.instrument.tiling_stages.values():
             lim_dict.update({f"{stage.instrument_axis}": stage.limits_mm})
         # last axis should be scanning axis
         ((scan_name, scan_stage),) = self.instrument.scanning_stages.items()
         lim_dict.update({f"{scan_stage.instrument_axis}": scan_stage.limits_mm})
         try:
             limits = [lim_dict[x.strip("-")] for x in self.coordinate_plane]
-        except KeyError:
-            raise KeyError("Coordinate plane must match instrument axes in tiling_stages")
+        except KeyError as e:
+            raise KeyError("Coordinate plane must match instrument axes in tiling_stages") from e
 
         # TODO fix this, messy way to figure out FOV dimensions from camera properties
         first_camera_key = list(self.instrument.cameras.keys())[0]
@@ -507,7 +504,7 @@ class ExASPIMAcquisitionView(QWidget):
 
     def move_stage(self, fov_position: list[float]) -> None:
         """Move stage to specified FOV position"""
-        for axis, position in zip(self.coordinate_plane[:2], fov_position):
+        for axis, position in zip(self.coordinate_plane[:2], fov_position, strict=False):
             stage_name = axis.strip("-")
             if stage_name in self.instrument.stage.axes_names:
                 stage = self.instrument.stage[stage_name]

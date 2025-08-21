@@ -61,7 +61,7 @@ class ExASPIM(Instrument):
         :param log_level: Logging level, defaults to "INFO"
         :type log_level: str, optional
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.log.setLevel(log_level)
 
         # current working directory
@@ -149,7 +149,7 @@ class ExASPIM(Instrument):
         self.daq.configure_acq_waveforms(channel.name)
         laser = self.lasers.get(channel.laser)
         if laser is not None:
-            laser.enable()  # AOTF is used to actually turn the lasers on. Enable now since the process is slow to warm up.
+            laser.enable()  # AOTF is used to 'turn on' the lasers. Enable now since the process is slow to warm up.
         self._active_channel = channel
 
     def _initialize_channels(self) -> dict[str, ExASPIMChannel]:

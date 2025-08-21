@@ -26,7 +26,7 @@ class VoxelFileTransfer:
 
     def __init__(self, external_path: str, local_path: str, name: str = "voxel_file_transfer") -> None:
         self.name = name
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._external_path = Path(external_path)
         self._local_path = Path(local_path)
         if self._external_path == self._local_path:

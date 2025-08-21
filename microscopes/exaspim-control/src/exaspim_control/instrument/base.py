@@ -49,7 +49,7 @@ class Instrument:
         :param log_level: Logging level, defaults to "INFO".
         :type log_level: str, optional
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.log.setLevel(log_level)
 
         # create yaml object to use when loading and dumping config
@@ -160,9 +160,8 @@ class Instrument:
         # grab instrument id
         try:
             self.id = self.config["instrument"]["id"]
-        except KeyError:
-            raise ValueError("no instrument id defined. check yaml file.")
-        # construct devices
+        except KeyError as e:
+            raise ValueError("no instrument id defined. check yaml file. Missing key") from e  # construct devices
         for device_name, device_specs in self.config["instrument"]["devices"].items():
             self._construct_device(device_name, device_specs)
 
@@ -172,11 +171,13 @@ class Instrument:
             for laser_name in channel.get("lasers", []):
                 if laser_name not in self.lasers:
                     raise ValueError(f"laser {laser_name} not in {self.lasers.keys()}")
-            for filter in channel.get("filters", []):
-                if filter not in self.filters:
-                    raise ValueError(f"filter wheel {filter} not in {self.filters.keys()}")
-                if filter not in sum([list(v.filters.keys()) for v in self.filter_wheels.values()], []):
-                    raise ValueError(f"filter {filter} not associated with any filter wheel: {self.filter_wheels}")
+            for channel_filter in channel.get("filters", []):
+                if channel_filter not in self.filters:
+                    raise ValueError(f"filter wheel {channel_filter} not in {self.filters.keys()}")
+                if channel_filter not in sum([list(v.filters.keys()) for v in self.filter_wheels.values()], []):
+                    raise ValueError(
+                        f"filter {channel_filter} not associated with any filter wheel: {self.filter_wheels}"
+                    )
         self.channels = self.config["instrument"]["channels"]
 
     def _construct_device(self, device_name: str, device_specs: dict[str, Any], lock: "RLock | None" = None) -> None:
@@ -367,9 +368,9 @@ def for_all_methods(lock: RLock, cls: type) -> type:
             attr._fset = lock_methods(attr._fset, lock) if attr._fset is not None else None
             attr._fget = lock_methods(attr._fget, lock)
         elif isinstance(attr, property):
-            wrapped_getter = lock_methods(getattr(attr, "fget"), lock)
+            wrapped_getter = lock_methods(attr.fget, lock)  # type: ignore
             # don't wrap setters if none
-            wrapped_setter = lock_methods(getattr(attr, "fset"), lock) if getattr(attr, "fset") is not None else None
+            wrapped_setter = lock_methods(attr.fset, lock) if attr.fset is not None else None
             setattr(cls, attr_name, property(wrapped_getter, wrapped_setter))
         elif callable(attr) and not isinstance(inspect.getattr_static(cls, attr_name), staticmethod):
             setattr(cls, attr_name, lock_methods(attr, lock))

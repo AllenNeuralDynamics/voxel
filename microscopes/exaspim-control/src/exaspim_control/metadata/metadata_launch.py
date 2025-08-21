@@ -1,15 +1,15 @@
+import json
 import os
 import shutil
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import json
 from aind_data_schema.core import acquisition
 from exaspim_control.acquisition.exaspim_acquisition import ExASPIMAcquisition
+from exaspim_control.acquisition.exaspim_acquisition_view import ExASPIMAcquisitionView
 from exaspim_control.instrument.exaspim_instrument import ExASPIM
 from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
-from exaspim_control.acquisition.exaspim_acquisition_view import ExASPIMAcquisitionView
 from voxel.utils.log import VoxelLogging
 
 X_ANATOMICAL_DIRECTIONS = {"Left to Right": "Right_to_left", "Right to Left": "Left_to_right"}
@@ -51,7 +51,7 @@ class MetadataLaunch:
         :type log_filename: str, optional
         """
         # logger
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         # instrument
         self.instrument = instrument
         # acquisition
@@ -86,7 +86,7 @@ class MetadataLaunch:
         # create and save acquisition.json
         file_transfers = self.acquisition.file_transfers
         if file_transfers is not None and file_transfers != {}:
-            for device_name, transfer_dict in file_transfers.items():
+            for _device_name, transfer_dict in file_transfers.items():
                 status = "pending"
                 status_time = datetime.now()
                 processing_manifest = {
@@ -129,7 +129,7 @@ class MetadataLaunch:
                     shutil.rmtree(str(Path(transfer.local_path, transfer.acquisition_name)))
         else:
             # Transfer not available, save locally
-            for device_name, writer_dict in self.acquisition.writers.items():
+            for _device_name, writer_dict in self.acquisition.writers.items():
                 save_to_done = set()
                 for writer in writer_dict.values():
                     save_to = str(Path(writer.path, writer.acquisition_name))

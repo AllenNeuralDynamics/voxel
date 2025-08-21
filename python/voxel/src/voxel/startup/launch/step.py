@@ -146,7 +146,7 @@ class StartRemoteSessionsResult(LaunchStepResult[dict[str, "RemoteNodeSession"]]
     def report(self) -> list[LaunchReportEntry]:
         """Generate a report of the session start results."""
         success = []
-        for uid, session in self._sessions.items():
+        for uid in self._sessions:
             success.append(
                 LaunchReportEntry(
                     name=uid,

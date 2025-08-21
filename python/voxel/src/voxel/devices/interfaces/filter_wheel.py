@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from collections.abc import Mapping
+
 from voxel.devices.base import VoxelDevice, VoxelDeviceType
 
 
@@ -36,7 +37,7 @@ class VoxelFilterWheel(VoxelDevice):
         """Current slot index (1..slot_count)."""
 
     @property
-    def name(self) -> str | None:
+    def label(self) -> str | None:
         """Convenience: current label derived from position."""
         return self.labels.get(self.position)
 

@@ -37,8 +37,7 @@ class SimulatedPowerMeter(VoxelPowerMeter):
     @property
     def power_mw(self) -> float:
         """
-        Returns:
-        float: The power in milliwatts if the power meter is connected, otherwise raises an exception.
+        :rtype: float: The power in milliwatts if the power meter is connected, otherwise raises an exception.
         """
         self._check_connection()
         return max(min(random.gauss(500, 50), 1000), 0)
@@ -46,8 +45,7 @@ class SimulatedPowerMeter(VoxelPowerMeter):
     @property
     def wavelength_nm(self) -> float:
         """
-        Returns:
-        float: The wavelength in nanometers if the power meter is connected, otherwise raises an exception.
+        :rtype: float: The wavelength in nanometers if the power meter is connected, otherwise raises an exception.
         """
         self._check_connection()
         return self._wavelength_nm
@@ -55,8 +53,7 @@ class SimulatedPowerMeter(VoxelPowerMeter):
     @wavelength_nm.setter
     def wavelength_nm(self, wavelength: float) -> None:
         """
-        Parameters:
-        wavelength (float): The new wavelength in nanometers if the power meter is connected, otherwise raises an exception.
+        :param: wavelength (float): The new wavelength in nanometers
         """
         self._check_connection()
         self._wavelength_nm = wavelength

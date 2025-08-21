@@ -37,8 +37,8 @@ class SharedDoubleBuffer:
                 SharedMemory(create=True, size=self.nbytes),
                 SharedMemory(create=True, size=self.nbytes),
             ]
-        except FileExistsError:
-            raise MemoryError("Failed to create shared memory segments")
+        except FileExistsError as e:
+            raise MemoryError("Failed to create shared memory segments") from e
 
         self.write_mem_block_idx = Value("i", 0)
         self.read_mem_block_idx = Value("i", 1)

@@ -153,7 +153,7 @@ class TiffWriter(BaseWriter):
         """
         from voxel.utils.log import VoxelLogging
 
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         VoxelLogging.redirect([self.log], self._log_queue)
 
         filepath = Path(self._path, (self._acquisition_name or ""), self._filename).absolute()

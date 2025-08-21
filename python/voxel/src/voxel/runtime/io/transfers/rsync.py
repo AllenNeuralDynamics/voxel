@@ -64,7 +64,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
             # subdirs is any tile specific subdir i.e. zarr store
             # files are any tile specific files
             file_list = {}
-            for path, subdirs, files in os.walk(local_directory.absolute()):
+            for path, _subdirs, files in os.walk(local_directory.absolute()):
                 for name in files:
                     # check and only add if filename matches tranfer's filename
                     if self.filename in name and name != log_path:
@@ -78,7 +78,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
                 transfer_complete = True
             # if not, try to initiate transfer again
             else:
-                self.log.info(f"starting file transfer attempt {retry_num+1}/{self._max_retry}")
+                self.log.info(f"starting file transfer attempt {retry_num + 1}/{self._max_retry}")
                 for file_path, file_size_mb in sorted_file_list.items():
                     # transfer just one file and iterate
                     # split filename and path

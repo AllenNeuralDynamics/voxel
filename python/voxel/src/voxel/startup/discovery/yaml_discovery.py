@@ -99,8 +99,8 @@ class YAMLInstrumentLoader(InstrumentConfigLoader):
         for file in required_files:
             if not (path / file).is_file():
                 missing.append(f"Missing file: {path / file}")
-        for dir in required_dirs:
-            dir_path = path / dir
+        for directory in required_dirs:
+            dir_path = path / directory
             if not dir_path.is_dir():
                 missing.append(f"Missing directory: {dir_path}")
             else:

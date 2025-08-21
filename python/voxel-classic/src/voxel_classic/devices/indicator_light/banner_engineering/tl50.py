@@ -159,7 +159,7 @@ class TL50IndicatorLight(BaseIndicatorLight):
         :type com_port: int
         """
         super().__init__()
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.id = str(com_port)
 
         # load DLL

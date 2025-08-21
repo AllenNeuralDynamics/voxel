@@ -1,6 +1,7 @@
-from collections.abc import Mapping
 import threading
 import time
+from collections.abc import Mapping
+
 from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
 
 
@@ -72,7 +73,7 @@ class SimulatedFilterWheel(VoxelFilterWheel):
         self.move(1, wait=wait, timeout=timeout)
 
     @property
-    def name(self) -> str | None:
+    def label(self) -> str | None:
         return self._labels.get(self._position)
 
     def close(self) -> None:

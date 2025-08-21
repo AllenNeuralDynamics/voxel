@@ -51,7 +51,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         :param channel: Initial channel to set
         :type channel: str
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.id = id
         # forward attribute declaration for type checkers
         self._dll: _TspbDll  # set in _load_dll

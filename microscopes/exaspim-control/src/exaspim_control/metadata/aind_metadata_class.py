@@ -32,7 +32,12 @@ class AINDMetadataClass:
     Metadata class for handling metadata properties and generating acquisition names.
     """
 
-    def __init__(self, metadata_dictionary: dict[str, Any], date_format: str = "None", name_specs: dict[str, Any] = {}):
+    def __init__(
+        self,
+        metadata_dictionary: dict[str, Any],
+        date_format: str = "None",
+        name_specs: dict[str, Any] | None = None,
+    ):
         """
         Initialize the MetadataClass.
 
@@ -43,7 +48,8 @@ class AINDMetadataClass:
         :param name_specs: Specifications for the acquisition name format, defaults to {}.
         :type name_specs: dict, optional
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        name_specs = name_specs or {}
+        self.log = VoxelLogging.get_logger(obj=self)
 
         for key, value in metadata_dictionary.items():
             # create properties from keyword entries
@@ -109,17 +115,17 @@ class AINDMetadataClass:
         return self._date_format
 
     @date_format.setter
-    def date_format(self, format: str) -> None:
+    def date_format(self, fmt: str) -> None:
         """
         Set the date format.
 
-        :param format: The date format to set.
-        :type format: str
+        :param fmt: The date format to set.
+        :type fmt: str
         :raises ValueError: If the date format is not valid.
         """
-        if format not in list(DATE_FORMATS.keys()):
-            raise ValueError(f"{format} is not a valid datetime format. Please choose from {DATE_FORMATS.keys()}")
-        self._date_format = DATE_FORMATS[format]
+        if fmt not in list(DATE_FORMATS.keys()):
+            raise ValueError(f"{fmt} is not a valid datetime format. Please choose from {DATE_FORMATS.keys()}")
+        self._date_format = DATE_FORMATS[fmt]
 
     @property
     def acquisition_name_format(self) -> list:
