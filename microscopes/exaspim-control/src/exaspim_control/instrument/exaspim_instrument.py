@@ -23,14 +23,14 @@ class ThreeAxisStage:
         return [self.x.uid, self.y.uid, self.z.uid]
 
     def __getitem__(self, axis_name: str) -> TigerStage:
-        if axis_name == "x":
+        if axis_name == 'x':
             return self.x
-        elif axis_name == "y":
+        if axis_name == 'y':
             return self.y
-        elif axis_name == "z":
+        if axis_name == 'z':
             return self.z
-        else:
-            raise KeyError(f"Unknown axis name: {axis_name}")
+        msg = f'Unknown axis name: {axis_name}'
+        raise KeyError(msg)
 
     def stop(self) -> None:
         self.x.halt()
@@ -46,13 +46,11 @@ class ExASPIMChannel:
 
 
 class ExASPIM(Instrument):
-    """
-    Class for handling ExASPIM instrument configuration and verification.
+    """Class for handling ExASPIM instrument configuration and verification.
     """
 
-    def __init__(self, config_filename: str | Path, yaml_handler: YAML, log_level: str = "INFO") -> None:
-        """
-        Initialize the ExASPIM object.
+    def __init__(self, config_filename: str | Path, yaml_handler: YAML, log_level: str = 'INFO') -> None:
+        """Initialize the ExASPIM object.
 
         :param config_filename: Configuration filename
         :type config_filename: str
@@ -72,11 +70,11 @@ class ExASPIM(Instrument):
 
         daq = next(iter(self.daqs.values()), None)
         x_axis_stage = next(
-            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith("x")), None
+            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith('x')), None,
         )
 
         y_axis_stage = next(
-            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith("y")), None
+            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith('y')), None,
         )
 
         filter_wheel = next(iter(self.filter_wheels.values()), None)
@@ -91,23 +89,23 @@ class ExASPIM(Instrument):
         ):
             missing = []
             if camera is None:
-                missing.append("camera")
+                missing.append('camera')
             if daq is None:
-                missing.append("DAQ")
+                missing.append('DAQ')
             if filter_wheel is None:
-                missing.append("filter wheel")
+                missing.append('filter wheel')
             if scanning_stage is None:
-                missing.append("scanning stage")
+                missing.append('scanning stage')
             if x_axis_stage is None:
-                missing.append("x axis stage")
+                missing.append('x axis stage')
             if y_axis_stage is None:
-                missing.append("y axis stage")
-            raise ValueError(f" Exaspim missing required components: {', '.join(missing)}")
-        else:
-            self._camera = camera
-            self._daq = daq
-            self._filter_wheel = filter_wheel
-            self._stage = ThreeAxisStage(x=x_axis_stage, y=y_axis_stage, z=scanning_stage)
+                missing.append('y axis stage')
+            msg = f" Exaspim missing required components: {', '.join(missing)}"
+            raise ValueError(msg)
+        self._camera = camera
+        self._daq = daq
+        self._filter_wheel = filter_wheel
+        self._stage = ThreeAxisStage(x=x_axis_stage, y=y_axis_stage, z=scanning_stage)
 
         self._channels = self._initialize_channels()
         self._active_channel = next(iter(self._channels.values()))
@@ -138,11 +136,11 @@ class ExASPIM(Instrument):
 
     def activate_channel(self, channel_name: str) -> None:
         if self.active_channel.name == channel_name:
-            self.log.warning(f"Channel {channel_name} is already active.")
+            self.log.warning(f'Channel {channel_name} is already active.')
             return
         channel = self.channels.get(channel_name)
         if channel is None:
-            self.log.warning(f"Channel {channel_name} not found.")
+            self.log.warning(f'Channel {channel_name} not found.')
             return
         self.daq.close_acq_tasks()
         self.filter_wheel.filter = channel.filter
@@ -153,16 +151,15 @@ class ExASPIM(Instrument):
         self._active_channel = channel
 
     def _initialize_channels(self) -> dict[str, ExASPIMChannel]:
-        """
-        Initialize the channels for the ExASPIM instrument.
+        """Initialize the channels for the ExASPIM instrument.
 
         :return: A list of ExASPIMChannel objects.
         :rtype: list[ExASPIMChannel]
         """
         channels = {}
-        for channel_name, channel_info in self.config["instrument"]["channels"].items():
-            lasers = channel_info.get("lasers")
-            filters = channel_info.get("filters")
+        for channel_name, channel_info in self.config['instrument']['channels'].items():
+            lasers = channel_info.get('lasers')
+            filters = channel_info.get('filters')
             if lasers is not None and filters is not None:
                 channels[channel_name] = ExASPIMChannel(
                     name=channel_name,
@@ -176,4 +173,4 @@ class ExASPIM(Instrument):
             try:
                 device.close()
             except AttributeError:
-                self.log.debug(f"{device_name} does not have close function")
+                self.log.debug(f'{device_name} does not have close function')

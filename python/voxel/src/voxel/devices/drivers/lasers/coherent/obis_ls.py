@@ -1,18 +1,16 @@
 from obis_laser import ObisLS
 from serial import Serial
-
 from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 from .obis_lx import obis_modulation_getter, obis_modulation_setter
 
-MODULATION_MODES = {"off": "CWP", "analog": "ANALOG", "digital": "DIGITAL", "mixed": "MIXED"}
+MODULATION_MODES = {'off': 'CWP', 'analog': 'ANALOG', 'digital': 'DIGITAL', 'mixed': 'MIXED'}
 
 
 class ObisLSLaser(VoxelLaser):
     def __init__(self, name: str, wavelength: int, port: Serial | str, prefix: str | None = None) -> None:
-        """
-        Communicate with specific LS laser.
+        """Communicate with specific LS laser.
 
         :param port: comm port for lasers.
         :param wavelength: wavelength of laser
@@ -36,27 +34,30 @@ class ObisLSLaser(VoxelLaser):
         return self._inst.power_setpoint
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float | int):
+    def power_setpoint_mw(self, value: float):
         self._inst.power_setpoint = value
 
     @property
-    def modulation_mode(self):
-        """
-        The modulation mode of the laser can be one of two categories:
+    def modulation_mode(self) -> str | None:
+        """Get the modulation mode of the laser.
 
-        External Control - Analog, Digital, Mixed
-
-        Internal Control - off: CWP
+        Can be one of two categories:
+            - External Control - Analog, Digital, Mixed
+            - Internal Control - off: CWP
         """
-        return obis_modulation_getter(self._inst, self._log, modes=MODULATION_MODES)
+        return obis_modulation_getter(self._inst, self.log, modes=MODULATION_MODES)
 
     @modulation_mode.setter
     def modulation_mode(self, mode: str) -> None:
-        """
-        The modulation mode of the laser can be one of two categories:   \n
-        External Control - Analog, Digital, Mixed \n
-        Internal Control - off: CWP \n
-        :param mode: str
+        """Set the modulation mode of the laser.
+
+        Can be one of two categories:
+            - External Control - Analog, Digital, Mixed
+            - Internal Control - off: CWP
+
+        Args:
+            mode: Modulation mode as a string.
+
         """
         obis_modulation_setter(self._inst, mode, modes=MODULATION_MODES)
 

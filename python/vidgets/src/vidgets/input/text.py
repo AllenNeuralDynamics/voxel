@@ -36,7 +36,7 @@ class VTextInput(QWidget):
 
     def __init__(
         self,
-        placeholder: str = "",
+        placeholder: str = '',
         getter: Callable[[], str] | None = None,
         setter: Callable[[str], None] | None = None,
         parent: QWidget | None = None,

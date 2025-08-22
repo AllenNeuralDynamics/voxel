@@ -12,7 +12,17 @@ if TYPE_CHECKING:
 class MockChannelInst(AOChannelInst):
     """Mock implementation of an analog output channel instance."""
 
-    def __init__(self, name: str, path: str):
+    def __init__(self, name: str, path: str) -> None:
+        """Initialize a mock AOChannel Inst with a name and path, and set the default voltage range.
+
+        Args:
+            name : The name of the channel.
+            path : The file path associated with the object.
+
+        Attributes:
+            voltage_range (VoltageRange): Voltage range with min=0.0 and max=5.0.
+
+        """
         self._name = name
         self._path = path
         self.voltage_range = VoltageRange(min=0.0, max=5.0)
@@ -23,7 +33,7 @@ class MockChannelInst(AOChannelInst):
 
 
 class MockDaqTaskInst:
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self._name = name
         self._channels: set[MockChannelInst] = set()
 
@@ -38,29 +48,24 @@ class MockDaqTaskInst:
 
     def start(self) -> None:
         """Start the DAQ task."""
-        ...
 
     def stop(self) -> None:
         """Stop the DAQ task."""
-        ...
 
     def close(self) -> None:
         """Close the DAQ task."""
-        ...
 
-    def add_ao_voltage_chan(self, path: str, name: str) -> "AOChannelInst":
+    def add_ao_voltage_chan(self, path: str, name: str) -> 'AOChannelInst':
         """Add an analog output voltage channel."""
         channel = MockChannelInst(name, path)
         self._channels.add(channel)
         return channel
 
-    def cfg_samp_clk_timing(self, rate: float, sample_mode: "AcqSampleMode", samps_per_chan: int) -> None:
+    def cfg_samp_clk_timing(self, rate: float, sample_mode: 'AcqSampleMode', samps_per_chan: int) -> None:
         """Configure sample clock timing."""
-        pass
 
-    def cfg_dig_edge_start_trig(self, trigger_source: str, retriggerable: bool) -> None:
+    def cfg_dig_edge_start_trig(self, trigger_source: str, *, retriggerable: bool) -> None:
         """Configure digital edge start trigger."""
-        pass
 
     def get_channel_names(self) -> list[str]:
         """Get the names of the channels in the task."""
@@ -70,19 +75,19 @@ class MockDaqTaskInst:
 class MockDaq(BaseDaq):
     """A mock DAQ device for testing purposes."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._tasks: dict[str, MockDaqTaskInst] = {}
 
     def assign_pin(self, pin: str) -> PinInfo:
-        return PinInfo(pin=pin, path=f"Mock/{pin}", pfi=None)
+        return PinInfo(pin=pin, path=f'Mock/{pin}', pfi=None)
 
     def release_pin(self, pin: PinInfo) -> bool:
-        print(f"Released pin {pin}")
+        print(f'Released pin {pin}')
         return True
 
     def get_pfi_path(self, pin: str) -> str:
         """Get the PFI path for a given pin."""
-        return f"Mock/{pin}/PFI"
+        return f'Mock/{pin}/PFI'
 
     def get_task_inst(self, task_name: str) -> MockDaqTaskInst:
         """Get a new task instance for the DAQ device."""

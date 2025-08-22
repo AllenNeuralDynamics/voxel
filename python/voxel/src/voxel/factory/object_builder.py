@@ -7,19 +7,23 @@ from voxel.reporting.errors import ErrorInfo
 from .models import SpinnerErrorType
 from .specs import BuildSpec
 
-DEFAULT_UID_PARAMS = {"uid", "unique_id", "name", "identifier"}
+DEFAULT_UID_PARAMS = {'uid', 'unique_id', 'name', 'identifier'}
+
+
+class ObjectBuildError(Exception):
+    """Custom exception for errors during object building."""
 
 
 class ObjectBuilder[T: object]:
-    """
-    Builds a single object from a BuildSpec with pre-resolved dependencies.
+    """Builds a single object from a BuildSpec with pre-resolved dependencies.
 
     Handles auto-injection and validation but does not perform dependency resolution.
 
     Example:
-        >>> spec = BuildSpec(target="devices.Camera", kwargs={"resolution": "4K"})
-        >>> builder = ObjectBuilder(spec, uid="main_camera")
+        >>> spec = BuildSpec(target='devices.Camera', kwargs={'resolution': '4K'})
+        >>> builder = ObjectBuilder(spec, uid='main_camera')
         >>> camera = builder.build()
+
     """
 
     def __init__(
@@ -31,8 +35,7 @@ class ObjectBuilder[T: object]:
         uid_params: set[str] | None = None,
         base: type[T] = object,
     ):
-        """
-        Initialize the object builder.
+        """Initialize the object builder.
 
         Args:
             spec: BuildSpec defining what to build
@@ -40,7 +43,9 @@ class ObjectBuilder[T: object]:
             base_class: Base class that the built object must inherit from
             id_params: Parameter names to auto-inject with uid
             uid: Name to inject into matching parameters (if None, no auto-injection)
-            logger: Logger for debug output
+            uid_params: Parameter names to consider for UID auto-injection
+            base: Base class that the built object must inherit from
+
         """
         self._spec = spec
         self._dependencies = dependencies or {}
@@ -52,8 +57,8 @@ class ObjectBuilder[T: object]:
         """Build the object from the specification."""
         try:
             cls = self._spec.get_class()
-        except Exception as e:
-            name = self._uid or "unknown"
+        except Exception as e:  # noqa: BLE001
+            name = self._uid or 'unknown'
             return ErrorInfo(name=name, category=SpinnerErrorType.MODULE, message=str(e))
 
         resolved = self._resolve_args_and_kwargs()
@@ -64,9 +69,8 @@ class ObjectBuilder[T: object]:
         if self._uid:
             self._auto_inject_object_key(cls, args, kwargs, self._uid)
 
-        name = self._uid or "unknown"
-        instance = self._create_instance(cls, args, kwargs, name)
-        return instance
+        name = self._uid or 'unknown'
+        return self._create_instance(cls, args, kwargs, name)
 
     def _resolve_args_and_kwargs(self) -> tuple[list, dict] | ErrorInfo:
         """Resolve args and kwargs using pre-built dependencies."""
@@ -90,7 +94,7 @@ class ObjectBuilder[T: object]:
         """Resolve a value using the dependencies dict."""
         if isinstance(value, str) and value in self._dependencies:
             return self._dependencies[value]
-        elif isinstance(value, list):
+        if isinstance(value, list):
             resolved = []
             for item in value:
                 result = self._resolve_value(item)
@@ -98,7 +102,7 @@ class ObjectBuilder[T: object]:
                     return result
                 resolved.append(result)
             return resolved
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             resolved = {}
             for key, val in value.items():
                 result = self._resolve_value(val)
@@ -106,8 +110,7 @@ class ObjectBuilder[T: object]:
                     return result
                 resolved[key] = result
             return resolved
-        else:
-            return value
+        return value
 
     def _create_instance(self, cls: type, args: list, kwargs: dict, name: str) -> T | ErrorInfo:
         """Create and validate instance, classifying any errors."""
@@ -115,14 +118,14 @@ class ObjectBuilder[T: object]:
             instance = cls(*args, **kwargs)
         except TypeError as e:
             return ErrorInfo(name=name, category=SpinnerErrorType.from_type_error(e), message=str(e))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             return ErrorInfo(name=name, category=SpinnerErrorType.OTHER, message=str(e))
 
         if not isinstance(instance, self._base):
             return ErrorInfo(
                 name=name,
                 category=SpinnerErrorType.INIT,
-                message=(f"instance is not of expected type {self._base.__name__}, got {type(instance).__name__}"),
+                message=(f'instance is not of expected type {self._base.__name__}, got {type(instance).__name__}'),
             )
 
         return instance
@@ -154,15 +157,16 @@ class ObjectBuilder[T: object]:
     def is_param_fulfilled_by_args(sig: Signature, param_name: str, args: list, kwargs: dict) -> bool:
         """Check if a parameter is satisfied by current positional arguments."""
         try:
-            params_without_self = [p for name, p in sig.parameters.items() if name != "self"]
+            params_without_self = [p for name, p in sig.parameters.items() if name != 'self']
             sig_without_self = sig.replace(parameters=params_without_self)
 
             bound = sig_without_self.bind_partial(*args, **kwargs)
             bound.apply_defaults()
 
-            return param_name in bound.arguments
         except TypeError:
             return False
+        else:
+            return param_name in bound.arguments
 
 
 def build_object[T](
@@ -173,8 +177,7 @@ def build_object[T](
     base: type[T] = object,
     uid_params: set[str] | None = None,
 ) -> T | ErrorInfo:
-    """
-    Build a single object from a BuildSpec with pre-resolved dependencies.
+    """Build a single object from a BuildSpec with pre-resolved dependencies.
 
     Args:
         spec: BuildSpec defining what to build
@@ -185,6 +188,7 @@ def build_object[T](
 
     Returns:
         The built object or an error information object
+
     """
     builder = ObjectBuilder(spec=spec, dependencies=dependencies, base=base, uid_params=uid_params, uid=uid)
     return builder.build()

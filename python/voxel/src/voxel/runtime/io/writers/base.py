@@ -29,22 +29,22 @@ class WriterConfig:
 
     def to_dict(self) -> dict:
         return {
-            "path": str(self.path),
-            "frame_count": self.frame_count,
-            "frame_shape": self.frame_shape.to_str(),
-            "position_um": self.position_um.to_str(),
-            "file_name": self.file_name,
-            "channel_name": self.channel_name,
-            "channel_idx": self.channel_idx,
-            "voxel_size": self.voxel_size.to_str(),
+            'path': str(self.path),
+            'frame_count': self.frame_count,
+            'frame_shape': self.frame_shape.to_str(),
+            'position_um': self.position_um.to_str(),
+            'file_name': self.file_name,
+            'channel_name': self.channel_name,
+            'channel_idx': self.channel_idx,
+            'voxel_size': self.voxel_size.to_str(),
         }
 
 
 class VoxelWriter:
-    """Writer class for voxel data with double buffering"""
+    """Writer class for voxel data with double buffering."""
 
     def __init__(self, name: str) -> None:
-        """Initialize the writer
+        """Initialize the writer.
 
         :param name: Name of the writer instance
         :type name: str
@@ -69,11 +69,11 @@ class VoxelWriter:
         self._needs_processing = Event()
 
         self._frame_shape: Vec2D
-        self._frames_added = Value("i", 0)
-        self._frames_processed = Value("i", 0)
-        self._batch_count = Value("i", 0)
-        self._avg_rate = Value("d", 0.0)
-        self._avg_fps = Value("d", 0.0)
+        self._frames_added = Value('i', 0)
+        self._frames_processed = Value('i', 0)
+        self._batch_count = Value('i', 0)
+        self._avg_rate = Value('d', 0.0)
+        self._avg_fps = Value('d', 0.0)
 
         self._expected_batches = 0
         self._total_data_written = 0
@@ -87,7 +87,7 @@ class VoxelWriter:
 
     @property
     def axes(self) -> str:
-        return "".join([axis for axis in self.dimension_order.value if axis in "ZCYX"])[::-1]
+        return ''.join([axis for axis in self.dimension_order.value if axis in 'ZCYX'])[::-1]
 
     @property
     def is_running(self) -> bool:
@@ -121,7 +121,6 @@ class VoxelWriter:
         :return: Size of batch in Z dimension
         :rtype: int
         """
-        pass
 
     @property
     @abstractmethod
@@ -131,44 +130,40 @@ class VoxelWriter:
         :return: Pixel type
         :rtype: PixelType
         """
-        pass
 
     @abstractmethod
     def _initialize(self) -> None:
         """Initialize the writer. Called in subprocess after spawning."""
-        pass
 
     @abstractmethod
     def _process_batch(self, batch_data: np.ndarray) -> None:
-        """Process a batch of data with validation and metrics
+        """Process a batch of data with validation and metrics.
 
         :param batch_data: The batch of frame data to process
         :type batch_data: np.ndarray
         """
-        pass
 
     @abstractmethod
     def _finalize(self) -> None:
         """Finalize the writer. Called before joining the writer subprocess."""
-        pass
 
     @abstractmethod
     def configure(self, config: WriterConfig) -> None:
         """Configure the writer with the given properties.
         Ensure that self._props is assigned in this method.
         :param props: Configuration properties
-        :type props: WriterProps
+        :type props: WriterProps.
         """
         self.config = config
         self.dir = Path(self.config.path)
         if not self.dir.exists():
             self.dir.mkdir(parents=True, exist_ok=True)
-            self.log.warning(f"Directory {self.dir} did not exist. Created it.")
-        self.log.info(f"Configured writer with output directory: {self.dir}")
+            self.log.warning(f'Directory {self.dir} did not exist. Created it.')
+        self.log.info(f'Configured writer with output directory: {self.dir}')
 
         self._expected_batches = ceil(self.config.frame_count / self.batch_size_px)
 
-        if hasattr(self, "_dbl_buf") and self._dbl_buf:
+        if hasattr(self, '_dbl_buf') and self._dbl_buf:
             self._dbl_buf.close_and_unlink()
             del self._dbl_buf
         batch_shape = (
@@ -177,26 +172,27 @@ class VoxelWriter:
             self.config.frame_shape.x,
         )
         self._dbl_buf = SharedDoubleBuffer(batch_shape, self.dtype)
-        self.log.info(f"Allocated buffer with shape: {self._dbl_buf.shape}")
-        self.log.info(f"Expecting: {self._expected_batches} batches of <= {self.batch_size_px} frames")
+        self.log.info(f'Allocated buffer with shape: {self._dbl_buf.shape}')
+        self.log.info(f'Expecting: {self._expected_batches} batches of <= {self.batch_size_px} frames')
         try:
             self._proc = Process(name=self.name, target=self._run)
         except Exception as e:
             if self._dbl_buf:
                 self._dbl_buf.close_and_unlink()
-            raise RuntimeError(f"Failed to configure writer: {e}") from e
+            msg = f'Failed to configure writer: {e}'
+            raise RuntimeError(msg) from e
 
     def start(self) -> None:
-        """Start the writer with the given configuration
+        """Start the writer with the given configuration.
 
         :param props: Configuration properties
         :type props: WriterProps
         :raises RuntimeError: If writer fails to start
         """
         if not self.config:
-            raise RuntimeError("Writer properties not set. Call configure() before starting the writer.")
+            raise RuntimeError('Writer properties not set. Call configure() before starting the writer.')
         if not self._dbl_buf:
-            self.log.critical("Unable to start writer. Buffer not allocated.")
+            self.log.critical('Unable to start writer. Buffer not allocated.')
         try:
             self.ome = self._generate_ome_metadata()
             self._ome_xml = self.ome.to_xml()
@@ -210,22 +206,23 @@ class VoxelWriter:
             self._avg_fps.value = 0
             self._proc = Process(name=self.name, target=self._run)
             self._proc.start()
-            self.log.debug(f"Writer started. Write buffer idx: {self._dbl_buf.write_mem_block_idx.value}")
-            self.log.debug(f"Start - Info: Added: {self.frames_added}, Processed: {self.frames_processed}")
+            self.log.debug(f'Writer started. Write buffer idx: {self._dbl_buf.write_mem_block_idx.value}')
+            self.log.debug(f'Start - Info: Added: {self.frames_added}, Processed: {self.frames_processed}')
         except Exception as e:
-            raise RuntimeError(f"Failed to start writer: {e}") from e
+            msg = f'Failed to start writer: {e}'
+            raise RuntimeError(msg) from e
 
     def add_frame(self, frame: np.ndarray) -> None:
-        """Add a frame to the writer
+        """Add a frame to the writer.
 
         :param frame: Frame data to add
         :type frame: np.ndarray
         """
         if not self._dbl_buf:
-            raise RuntimeError("Buffer not allocated. Call configure() before starting and adding frames to writer.")
+            raise RuntimeError('Buffer not allocated. Call configure() before starting and adding frames to writer.')
 
         if not self._is_running.is_set():
-            raise RuntimeError("Writer not running. Call start() before adding frames.")
+            raise RuntimeError('Writer not running. Call start() before adding frames.')
 
         self._dbl_buf.add_frame(frame)
         self._frames_added.value += 1
@@ -238,14 +235,14 @@ class VoxelWriter:
             self._switch_buffers()
 
         if is_last_frame:
-            self.log.info(f"Added last frame {self.frames_added} to buffer. Waiting for processing to complete...")
+            self.log.info(f'Added last frame {self.frames_added} to buffer. Waiting for processing to complete...')
             while self.frames_added > self.frames_processed:
                 time.sleep(0.1)
 
     def _switch_buffers(self) -> None:
-        """Switch read and write buffers with proper synchronization"""
+        """Switch read and write buffers with proper synchronization."""
         if not self._dbl_buf:
-            raise RuntimeError("Buffer not allocated. Call configure() before starting and adding frames to writer.")
+            raise RuntimeError('Buffer not allocated. Call configure() before starting and adding frames to writer.')
 
         # Wait for any ongoing processing to complete
         while self._needs_processing.is_set():
@@ -253,18 +250,18 @@ class VoxelWriter:
 
         # Toggle buffers
         self._dbl_buf.toggle_buffers()
-        self.log.debug(f"Switched buffers. Write buffer: {self._dbl_buf.write_mem_block_idx.value}")
+        self.log.debug(f'Switched buffers. Write buffer: {self._dbl_buf.write_mem_block_idx.value}')
 
         # Signal that new data needs processing
         self._needs_processing.set()
 
         # Wait for processing to start before continuing
         while not self._needs_processing.is_set():
-            self.log.debug(f"Waiting for processing to start on batch {self.batch_count}")
+            self.log.debug(f'Waiting for processing to start on batch {self.batch_count}')
             time.sleep(0.001)
 
     def _run(self) -> None:
-        """Main writer loop"""
+        """Main writer loop."""
         from voxel.utils.log import VoxelLogging
 
         VoxelLogging.redirect([self.log], self._log_queue)
@@ -273,7 +270,7 @@ class VoxelWriter:
 
         while self._is_running.is_set():
             if not self._dbl_buf:
-                self.log.error("Buffer not allocated. Exiting writer loop.", exc_info=True)
+                self.log.error('Buffer not allocated. Exiting writer loop.', exc_info=True)
                 break
             if self._needs_processing.is_set():
                 mem_block = self._dbl_buf.mem_blocks[self._dbl_buf.read_mem_block_idx.value]
@@ -291,14 +288,13 @@ class VoxelWriter:
         self._finalize()
 
     def _timed_batch_processing(self, batch_data: np.ndarray) -> None:
-        """Process a batch of data with timing information
+        """Process a batch of data with timing information.
 
         :param batch_data: The batch of frame data to process
         :type batch_data: np.ndarray
         :param batch_count: Current batch number (1-based)
         :type batch_count: int
         """
-
         try:
             batch_start_time = time.time()
             self._process_batch(batch_data)
@@ -314,18 +310,17 @@ class VoxelWriter:
             self._avg_rate.value = (self._avg_rate.value * (self.batch_count - 1) + rate_mbps) / (self.batch_count or 1)
             self._avg_fps.value = (self._avg_fps.value * (self.batch_count - 1) + rate_fps) / (self.batch_count or 1)
 
-            self.log.info(f"Batch {self.batch_count}/{self._expected_batches} Complete, Frames: {batch_data.shape[0]}")
-            self.log.info(f"\tTime: {time_taken:.2f} s, Size: {data_size_mb_s:.2f} MB")
-            self.log.info(f"\tRate: {rate_mbps:.2f} MB/s | {rate_fps:.2f} fps")
-            self.log.info(f"\tAvg Rate: {self.avg_write_speed_mb_s:.2f} MB/s | {self.avg_write_speed_fps:.2f} fps")
+            self.log.info(f'Batch {self.batch_count}/{self._expected_batches} Complete, Frames: {batch_data.shape[0]}')
+            self.log.info(f'\tTime: {time_taken:.2f} s, Size: {data_size_mb_s:.2f} MB')
+            self.log.info(f'\tRate: {rate_mbps:.2f} MB/s | {rate_fps:.2f} fps')
+            self.log.info(f'\tAvg Rate: {self.avg_write_speed_mb_s:.2f} MB/s | {self.avg_write_speed_fps:.2f} fps')
         except Exception as e:
-            self.log.error(f"Error processing batch: {e}", exc_info=True)
+            self.log.error(f'Error processing batch: {e}', exc_info=True)
 
     def stop(self) -> None:
-        """Stop the writer and clean up resources"""
-
+        """Stop the writer and clean up resources."""
         while self._needs_processing.is_set() or self.frames_added > self.frames_processed:
-            self.log.info("Waiting for processing to complete before stopping writer.")
+            self.log.info('Waiting for processing to complete before stopping writer.')
             time.sleep(1)
 
         self._is_running.clear()
@@ -333,10 +328,10 @@ class VoxelWriter:
         self._proc.join()
         # del self._proc
 
-        self.log.info(f"Writer stopped. Avg write speed: {self.avg_write_speed_mb_s:.2f} MB/s")
+        self.log.info(f'Writer stopped. Avg write speed: {self.avg_write_speed_mb_s:.2f} MB/s')
 
     def close(self) -> None:
-        """Close the writer and clean up resources"""
+        """Close the writer and clean up resources."""
         if self._is_running:
             self.stop()
         if self._dbl_buf:
@@ -348,15 +343,15 @@ class VoxelWriter:
         # Create Channel object
         channels = [
             Channel(
-                id=f"Channel:0:{self.config.channel_idx}",
+                id=f'Channel:0:{self.config.channel_idx}',
                 name=self.config.channel_name,
                 samples_per_pixel=1,
-            )
+            ),
         ]
 
         # Create Pixels object
         pixels = Pixels(
-            id="Pixels:0",
+            id='Pixels:0',
             dimension_order=self.dimension_order,
             type=self.pixel_type,
             size_x=int(self.config.frame_shape.x),
@@ -375,12 +370,11 @@ class VoxelWriter:
 
         # Create Image object
         image = Image(
-            id="Image:0",
+            id='Image:0',
             name=self.config.file_name,
             pixels=pixels,
         )
 
         # Create OME object
-        ome = OME(images=[image])
+        return OME(images=[image])
 
-        return ome

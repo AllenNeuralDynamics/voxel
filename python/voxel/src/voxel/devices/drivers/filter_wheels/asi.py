@@ -46,10 +46,11 @@ class ASIFilterWheel(VoxelFilterWheel):
 
     def move(self, slot: int, *, wait: bool = True, timeout: float | None = 5.0) -> None:
         if not (1 <= slot <= self.slot_count):
-            raise ValueError(f"Invalid slot {slot}; valid range is 1..{self.slot_count}")
+            msg = f'Invalid slot {slot}; valid range is 1..{self.slot_count}'
+            raise ValueError(msg)
 
         if self._is_closed:
-            raise VoxelDeviceError("Filter wheel is closed and cannot be operated.")
+            raise VoxelDeviceError('Filter wheel is closed and cannot be operated.')
 
         if self._current_filter == slot:
             return  # Already in the desired position
@@ -61,7 +62,8 @@ class ASIFilterWheel(VoxelFilterWheel):
             start_time = time.time()
             while self.is_moving:
                 if timeout is not None and (time.time() - start_time) > timeout:
-                    raise TimeoutError(f"Timeout while moving to slot {slot}")
+                    msg = f'Timeout while moving to slot {slot}'
+                    raise TimeoutError(msg)
                 time.sleep(0.01)
 
     def home(self, *, wait: bool = True, timeout: float | None = 10.0) -> None:
@@ -69,10 +71,10 @@ class ASIFilterWheel(VoxelFilterWheel):
 
     def _send_set_filter_cmd(self, position: int) -> None:
         """Set the filterwheel to the specified filter."""
-        cmd_str = f"MP {self.labels[position]}\r\n"
-        self._log.info(f"Setting filter to {self._filters[position]} (position {position})")
-        self.tigerbox.send(f"FW {self.wheel_id}\r\n", read_until=f"\n\r{self.wheel_id}>")
-        self.tigerbox.send(cmd_str, read_until=f"\n\r{self.wheel_id}>")
+        cmd_str = f'MP {self.labels[position]}\r\n'
+        self.log.info('Setting filter to %s (position %d)', self._filters[position], position)
+        self.tigerbox.send(f'FW {self.wheel_id}\r\n', read_until=f'\n\r{self.wheel_id}>')
+        self.tigerbox.send(cmd_str, read_until=f'\n\r{self.wheel_id}>')
         time.sleep(SWITCH_TIME_S)
         self._current_filter = position
 

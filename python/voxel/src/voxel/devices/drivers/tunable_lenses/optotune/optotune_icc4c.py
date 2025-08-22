@@ -1,6 +1,5 @@
 import optoICC
 from optoKummenberg.tools.definitions import UnitType
-
 from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 
 # constants for Optotune ICC-4C controller
@@ -22,7 +21,7 @@ class OptotuneICC4CTunableLens(VoxelTunableLens):
         :param channel: channel number for the tunable lens.
         :type name: str
         :type port: str
-        :type channel: int
+        :type channel: int.
         """
         super().__init__(name)
         self.icc4c = optoICC.connect(port=port)
@@ -32,7 +31,7 @@ class OptotuneICC4CTunableLens(VoxelTunableLens):
         self.tunable_lens = self.icc4c.channel[self.channel]
         # start lens in internal mode
         self.tunable_lens.SetControlMode(UnitType.FP)
-        self._mode = "internal"
+        self._mode = 'internal'
 
     @property
     def channel(self):
@@ -60,9 +59,9 @@ class OptotuneICC4CTunableLens(VoxelTunableLens):
 
     def log_metadata(self):
         return {
-            "name": self.uid,
-            "mode": self.mode,
-            "temperature_c": self.temperature_c,
+            'name': self.uid,
+            'mode': self.mode,
+            'temperature_c': self.temperature_c,
         }
 
     def close(self):

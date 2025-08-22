@@ -38,9 +38,8 @@ class ChannelInfo(TypedDict):
 class Instrument:
     """Represents an instrument with various devices and configurations."""
 
-    def __init__(self, config_path: str | Path, yaml_handler: YAML | None = None, log_level: str = "INFO"):
-        """
-        Initialize the Instrument class.
+    def __init__(self, config_path: str | Path, yaml_handler: YAML | None = None, log_level: str = 'INFO'):
+        """Initialize the Instrument class.
 
         :param config_path: Path to the configuration file.
         :type config_path: str
@@ -53,7 +52,7 @@ class Instrument:
         self.log.setLevel(log_level)
 
         # create yaml object to use when loading and dumping config
-        self.yaml = yaml_handler if yaml_handler is not None else YAML(typ="safe")
+        self.yaml = yaml_handler if yaml_handler is not None else YAML(typ='safe')
 
         self.config_path = Path(config_path)
         self.config = self.yaml.load(self.config_path)
@@ -76,24 +75,24 @@ class Instrument:
         self.other_devices: dict[str, BaseDevice] = {}
 
         devices_specs: BuildSpecs = {}
-        for k, v in self.config["instrument"]["devices"].items():
+        for k, v in self.config['instrument']['devices'].items():
             try:
                 specs = BuildSpec(**v)
                 devices_specs[k] = specs
             except Exception as e:
-                self.log.error(f"Error loading device spec for {k}: {e}")
+                self.log.error(f'Error loading device spec for {k}: {e}')
 
         res = build_object_graph(devices_specs, BaseDevice)
 
         if res.errors:
-            self.log.error(f"Errors occurred while building device graph: \n {tabulate_report(res.report())} \n")
+            self.log.error(f'Errors occurred while building device graph: \n {tabulate_report(res.report())} \n')
             return
 
         self._devices = res.items
 
         self._initialize_devices()
 
-        self.channels_config: dict[str, Any] = self.config["instrument"].get("channels", {})
+        self.channels_config: dict[str, Any] = self.config['instrument'].get('channels', {})
 
         # construct microscope
         # self._construct()
@@ -117,11 +116,10 @@ class Instrument:
     #     }
 
     def _initialize_devices(self) -> None:
-        """
-        Parse the devices from the configuration and initialize them.
+        """Parse the devices from the configuration and initialize them.
         """
         for device_name, device in self._devices.items():
-            self.log.info(f"Parsing device {device_name}")
+            self.log.info(f'Parsing device {device_name}')
             name_lower = device_name.lower()
             if isinstance(device, BaseCamera):
                 self.cameras[device_name] = device
@@ -133,9 +131,9 @@ class Instrument:
                 self.filter_wheels[device_name] = device
             elif isinstance(device, NIDAQ):
                 self.daqs[device_name] = device
-            elif isinstance(device, TigerStage) and name_lower.startswith("z"):
+            elif isinstance(device, TigerStage) and name_lower.startswith('z'):
                 self.scanning_stages[device_name] = device
-            elif isinstance(device, TigerStage) and (name_lower.startswith("x") or name_lower.startswith("y")):
+            elif isinstance(device, TigerStage) and (name_lower.startswith('x') or name_lower.startswith('y')):
                 self.tiling_stages[device_name] = device
             elif isinstance(device, BaseFlipMount):
                 self.flip_mounts[device_name] = device
@@ -144,45 +142,46 @@ class Instrument:
             elif isinstance(device, BaseIndicatorLight):
                 self.indicator_lights[device_name] = device
             else:
-                self.log.warning(f"Unknown device type {device.__class__.__name__} for device {device_name}")
+                self.log.warning(f'Unknown device type {device.__class__.__name__} for device {device_name}')
                 self.other_devices[device_name] = device
-            props = self.config["instrument"]["devices"][device_name].get("properties", {})
+            props = self.config['instrument']['devices'][device_name].get('properties', {})
             for prop_name, prop_value in props.items():
                 setattr(device, prop_name, prop_value)
 
     def _construct(self) -> None:
-        """
-        Construct the instrument from the configuration file.
+        """Construct the instrument from the configuration file.
 
         :raises ValueError: If the instrument ID or device configurations are invalid.
         """
-        self.log.info(f"constructing instrument from {self.config_path}")
+        self.log.info(f'constructing instrument from {self.config_path}')
         # grab instrument id
         try:
-            self.id = self.config["instrument"]["id"]
+            self.id = self.config['instrument']['id']
         except KeyError as e:
-            raise ValueError("no instrument id defined. check yaml file. Missing key") from e  # construct devices
-        for device_name, device_specs in self.config["instrument"]["devices"].items():
+            raise ValueError('no instrument id defined. check yaml file. Missing key') from e  # construct devices
+        for device_name, device_specs in self.config['instrument']['devices'].items():
             self._construct_device(device_name, device_specs)
 
         # TODO: need somecheck to make sure if multiple filters, they don't come from the same wheel
         # construct and verify channels
-        for channel in self.config["instrument"]["channels"].values():
-            for laser_name in channel.get("lasers", []):
+        for channel in self.config['instrument']['channels'].values():
+            for laser_name in channel.get('lasers', []):
                 if laser_name not in self.lasers:
-                    raise ValueError(f"laser {laser_name} not in {self.lasers.keys()}")
-            for channel_filter in channel.get("filters", []):
+                    msg = f'laser {laser_name} not in {self.lasers.keys()}'
+                    raise ValueError(msg)
+            for channel_filter in channel.get('filters', []):
                 if channel_filter not in self.filters:
-                    raise ValueError(f"filter wheel {channel_filter} not in {self.filters.keys()}")
+                    msg = f'filter wheel {channel_filter} not in {self.filters.keys()}'
+                    raise ValueError(msg)
                 if channel_filter not in sum([list(v.filters.keys()) for v in self.filter_wheels.values()], []):
+                    msg = f'filter {channel_filter} not associated with any filter wheel: {self.filter_wheels}'
                     raise ValueError(
-                        f"filter {channel_filter} not associated with any filter wheel: {self.filter_wheels}"
+                        msg,
                     )
-        self.channels = self.config["instrument"]["channels"]
+        self.channels = self.config['instrument']['channels']
 
-    def _construct_device(self, device_name: str, device_specs: dict[str, Any], lock: "RLock | None" = None) -> None:
-        """
-        Construct a device based on its specifications.
+    def _construct_device(self, device_name: str, device_specs: dict[str, Any], lock: 'RLock | None' = None) -> None:
+        """Construct a device based on its specifications.
 
         :param device_name: Name of the device.
         :type device_name: str
@@ -192,25 +191,25 @@ class Instrument:
         :type lock: Lock, optional
         :raises ValueError: If the device configuration is invalid.
         """
-        self.log.info(f"constructing {device_name}")
+        self.log.info(f'constructing {device_name}')
         lock = RLock() if lock is None else lock
-        device_type = inflection.pluralize(device_specs["type"])
-        driver = device_specs["driver"]
-        module = device_specs["module"]
-        init = device_specs.get("init", {})
+        device_type = inflection.pluralize(device_specs['type'])
+        driver = device_specs['driver']
+        module = device_specs['module']
+        init = device_specs.get('init', {})
 
         device_class = getattr(importlib.import_module(driver), module)
         thread_safe_device_class = for_all_methods(lock, device_class)
-        self.log.debug(f"Imported thread-safe device class for {driver}.{module}")
+        self.log.debug(f'Imported thread-safe device class for {driver}.{module}')
         device_object = thread_safe_device_class(**init)
-        self.log.debug(f"Constructed thread-safe device instance for {driver}.{module}")
+        self.log.debug(f'Constructed thread-safe device instance for {driver}.{module}')
 
-        properties = device_specs.get("properties", {})
+        properties = device_specs.get('properties', {})
         self._setup_device(device_object, properties)
         self.log.debug(f"Setup properties for device '{device_name}': {properties}")
 
         # Add subdevices under device and fill in any needed keywords to init
-        for subdevice_name, subdevice_specs in device_specs.get("subdevices", {}).items():
+        for subdevice_name, subdevice_specs in device_specs.get('subdevices', {}).items():
             # copy so config is not altered by adding in parent devices
             self.log.debug(f"Constructing subdevice '{subdevice_name}' for parent '{device_name}'")
             self._construct_subdevice(device_object, subdevice_name, copy.deepcopy(subdevice_specs), lock)
@@ -221,18 +220,17 @@ class Instrument:
         getattr(self, device_type)[device_name] = device_object
 
         # added logic for stages to store and check stage axes
-        if device_type == "tiling_stages" or device_type == "scanning_stages":
-            instrument_axis = device_specs["init"]["instrument_axis"]
+        if device_type == 'tiling_stages' or device_type == 'scanning_stages':
+            instrument_axis = device_specs['init']['instrument_axis']
             if instrument_axis in self.stage_axes:
-                raise ValueError(f"{instrument_axis} is duplicated and already exists!")
-            else:
-                self.stage_axes.append(instrument_axis)
+                msg = f'{instrument_axis} is duplicated and already exists!'
+                raise ValueError(msg)
+            self.stage_axes.append(instrument_axis)
 
     def _construct_subdevice(
-        self, parent_object: Any, subdevice_name: str, subdevice_specs: dict[str, Any], lock: RLock
+        self, parent_object: Any, subdevice_name: str, subdevice_specs: dict[str, Any], lock: RLock,
     ) -> None:
-        """
-        Construct a subdevice based on its specifications.
+        """Construct a subdevice based on its specifications.
 
         :param parent_object: Parent device object.
         :type parent_object: Any
@@ -244,35 +242,35 @@ class Instrument:
         :type lock: Lock
         """
         # Import subdevice class in order to access keyword argument required in the init of the device
-        subdevice_class = getattr(importlib.import_module(subdevice_specs["driver"]), subdevice_specs["module"])
+        subdevice_class = getattr(importlib.import_module(subdevice_specs['driver']), subdevice_specs['module'])
         subdevice_needs = inspect.signature(subdevice_class.__init__).parameters
         for name, parameter in subdevice_needs.items():
             # If subdevice init needs a serial port, add device's serial port to init arguments
             if parameter.annotation == Serial and Serial in [type(v) for v in parent_object.__dict__.values()]:
                 # assuming only one relevant serial port in parent
-                subdevice_specs["init"][name] = [v for v in parent_object.__dict__.values() if isinstance(v, Serial)][0]
+                subdevice_specs['init'][name] = [v for v in parent_object.__dict__.values() if isinstance(v, Serial)][0]
             # If subdevice init needs parent object type, add device object to init arguments
             # Check by annotation type, parameter name, or if parent is instance of expected type
             elif (
                 parameter.annotation is type(parent_object)
-                or name in ["tigerbox", "parent", "controller", "daq"]
+                or name in ['tigerbox', 'parent', 'controller', 'daq']
                 or (
-                    hasattr(parameter.annotation, "__name__")
+                    hasattr(parameter.annotation, '__name__')
                     and parameter.annotation.__name__ in type(parent_object).__name__
                 )
             ):
-                subdevice_specs["init"][name] = parent_object
+                subdevice_specs['init'][name] = parent_object
             else:
                 # Safely check isinstance, handling parameterized generics
                 try:
-                    if hasattr(parameter.annotation, "__origin__"):
+                    if hasattr(parameter.annotation, '__origin__'):
                         # Skip parameterized generics like List[str], Dict[str, Any], etc.
                         is_parent_instance = False
                     else:
                         is_parent_instance = isinstance(parent_object, parameter.annotation)
 
                     if is_parent_instance:
-                        subdevice_specs["init"][name] = parent_object
+                        subdevice_specs['init'][name] = parent_object
                 except (TypeError, AttributeError):
                     # Handle cases where isinstance fails (e.g., parameterized generics)
                     pass
@@ -280,8 +278,7 @@ class Instrument:
         self._construct_device(subdevice_name, subdevice_specs, lock)
 
     def _load_device(self, driver: str, module: str, kwds: dict[str, Any], lock: RLock) -> Any:
-        """
-        Load a device class and make it thread-safe.
+        """Load a device class and make it thread-safe.
 
         :param driver: Driver module of the device.
         :type driver: str
@@ -294,64 +291,59 @@ class Instrument:
         :return: Thread-safe device object.
         :rtype: object
         """
-        self.log.info(f"loading {driver}.{module}")
+        self.log.info(f'loading {driver}.{module}')
         device_class = getattr(importlib.import_module(driver), module)
         thread_safe_device_class = for_all_methods(lock, device_class)
-        self.log.debug(f"Constructed thread-safe device class for {driver}.{module}")
+        self.log.debug(f'Constructed thread-safe device class for {driver}.{module}')
         return thread_safe_device_class(**kwds)
 
     def _setup_device(self, device: Any, properties: dict[str, Any]) -> None:
-        """
-        Set up a device with its properties.
+        """Set up a device with its properties.
 
         :param device: Device object.
         :type device: object
         :param properties: Properties to set on the device.
         :type properties: dict
         """
-        self.log.info(f"setting up {device}")
+        self.log.info(f'setting up {device}')
         # successively iterate through properties keys and if there is setter, set
         for key, value in properties.items():
             if hasattr(device, key):
                 setattr(device, key, value)
             else:
-                raise ValueError(f"{device} property {key} has no setter")
+                msg = f'{device} property {key} has no setter'
+                raise ValueError(msg)
 
     def update_current_state_config(self) -> None:
+        """Update the current state configuration of the instrument.
         """
-        Update the current state configuration of the instrument.
-        """
-        for device_name, device_specs in self.config["instrument"]["devices"].items():
-            device = getattr(self, inflection.pluralize(device_specs["type"]))[device_name]
+        for device_name, device_specs in self.config['instrument']['devices'].items():
+            device = getattr(self, inflection.pluralize(device_specs['type']))[device_name]
             properties = {}
             for attr_name in dir(device):
                 attr = getattr(type(device), attr_name, None)
                 if (
                     attr is not None and (isinstance(attr, property) or isinstance(inspect.unwrap(attr), property))
-                ) and attr_name != "latest_frame":
+                ) and attr_name != 'latest_frame':
                     properties[attr_name] = getattr(device, attr_name)
-            device_specs["properties"] = properties
+            device_specs['properties'] = properties
 
     def save_config(self, path: Path) -> None:
-        """
-        Save the current configuration to a file.
+        """Save the current configuration to a file.
 
         :param path: Path to save the configuration file.
         :type path: Path
         """
-        with path.open("w") as f:
+        with path.open('w') as f:
             self.yaml.dump(self.config, f)
 
     def close(self) -> None:
+        """Close the instrument and release any resources.
         """
-        Close the instrument and release any resources.
-        """
-        pass
 
 
 def for_all_methods(lock: RLock, cls: type) -> type:
-    """
-    Apply a lock to all methods of a class to make them thread-safe.
+    """Apply a lock to all methods of a class to make them thread-safe.
 
     :param lock: Lock for thread safety.
     :type lock: Lock
@@ -361,7 +353,7 @@ def for_all_methods(lock: RLock, cls: type) -> type:
     :rtype: type
     """
     for attr_name in cls.__dict__:
-        if attr_name == "__init__":
+        if attr_name == '__init__':
             continue
         attr = getattr(cls, attr_name)
         if isinstance(attr, _DeliminatedProperty):
@@ -378,8 +370,7 @@ def for_all_methods(lock: RLock, cls: type) -> type:
 
 
 def lock_methods(fn: Callable, lock: RLock) -> Callable:
-    """
-    Apply a lock to a method to make it thread-safe.
+    """Apply a lock to a method to make it thread-safe.
 
     :param fn: Function to apply the lock to.
     :type fn: function
@@ -391,8 +382,7 @@ def lock_methods(fn: Callable, lock: RLock) -> Callable:
 
     @wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        """
-        Wrapper function to apply the lock.
+        """Wrapper function to apply the lock.
 
         :return: Result of the original function.
         :rtype: Any

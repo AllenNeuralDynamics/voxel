@@ -5,7 +5,7 @@ from voxel.utils.descriptors.deliminated import deliminated_float
 class SimulatedLinearAxis(VoxelLinearAxis):
     """Simulated Linear Axis implementation.
     :param name: Unique identifier for the device
-    :param dimension: The dimension of the stage
+    :param dimension: The dimension of the stage.
     """
 
     def __init__(self, name: str, dimension: LinearAxisDimension):
@@ -17,7 +17,7 @@ class SimulatedLinearAxis(VoxelLinearAxis):
         super().__init__(name, dimension)
 
     def configure_scan(self, config: ScanConfig) -> None:
-        self._log.info(f"Configuring scan: {config}")
+        self.log.info(f'Configuring scan: {config}')
 
     def start_scan(self) -> None:
         pass

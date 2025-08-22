@@ -32,7 +32,7 @@ class RemoteNodeService(rpyc.SlaveService):
     def __init__(self, uid: str):
         self._uid: str = uid
         self._log = VoxelLogging.get_logger(obj=self)
-        self._active_connection: "rpyc.Connection | None" = None
+        self._active_connection: rpyc.Connection | None = None
         self._preview_publisher: PreviewFrameRelay | None = None
         self._io_manager = IOManager()
         self._node: InstrumentNode | None = None
@@ -40,29 +40,29 @@ class RemoteNodeService(rpyc.SlaveService):
 
     def on_connect(self, conn):
         if self._active_connection is not None:
-            self._log.warning("Refusing new connection: already connected to a client.")
+            self._log.warning('Refusing new connection: already connected to a client.')
             conn.close()
             return
         self._active_connection = conn
         super().on_connect(conn)
-        self._log.info(f"Client {id(conn)} connected.")
+        self._log.info(f'Client {id(conn)} connected.')
 
     def on_disconnect(self, conn):
         super().on_disconnect(conn)
         if self._active_connection == conn:
-            self._log.info(f"Client {id(conn)} disconnected.")
+            self._log.info(f'Client {id(conn)} disconnected.')
             self._active_connection = None
 
     def initialize(self, options: PreviewRelayOptions):
         if self._preview_publisher:
             self._preview_publisher.close()
         self._preview_publisher = PreviewFrameRelay(
-            options=options, logger=VoxelLogging.get_logger(f"PreviewRelay{self._uid}")
+            options=options, logger=VoxelLogging.get_logger(f'PreviewRelay{self._uid}'),
         )
 
-    def configure(self, device_specs: "BuildSpecs"):
+    def configure(self, device_specs: 'BuildSpecs'):
         if self._preview_publisher is None:
-            raise RuntimeError("RemoteNodeService has not been initialized. Call initialize() first.")
+            raise RuntimeError('RemoteNodeService has not been initialized. Call initialize() first.')
         specs_copy = remote_full_copy_dict(device_specs)
         self._node = InstrumentNode(
             uid=self._uid,
@@ -75,7 +75,7 @@ class RemoteNodeService(rpyc.SlaveService):
     @property
     def node(self) -> InstrumentNode:
         if self._node is None:
-            raise RuntimeError("Remote node has not been initialized.")
+            raise RuntimeError('Remote node has not been initialized.')
         return self._node
 
     def shutdown(self) -> None:

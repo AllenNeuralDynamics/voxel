@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from ..base import VoxelDevice, VoxelDeviceType
+from voxel.devices.base import VoxelDevice, VoxelDeviceType
 
 
 class VoxelAOTF(VoxelDevice):
@@ -27,12 +27,12 @@ class VoxelAOTF(VoxelDevice):
 
     @property
     @abstractmethod
-    def power_dbm(self):
+    def power_dbm(self) -> float:
         pass
 
     @power_dbm.setter
     @abstractmethod
-    def power_dbm(self, power_dbm: float):
+    def power_dbm(self, power_dbm: float) -> None:
         pass
 
     @abstractmethod

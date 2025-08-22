@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from voxel.reporting.errors import ErrorInfo
 
-from .common import BaseDefinition, DefinitionStore, DefinitionsProviderBase, Repository
+from .common import BaseDefinition, DefinitionsProviderBase, DefinitionStore, Repository
 
 if TYPE_CHECKING:
     from voxel.instrument import Instrument
@@ -14,16 +14,16 @@ if TYPE_CHECKING:
 class ProfileDefinition(BaseDefinition):
     channels: list[str]
 
-    def validate_definition(self, instrument: "Instrument") -> Sequence[ErrorInfo]:
+    def validate_definition(self, instrument: 'Instrument') -> Sequence[ErrorInfo]:
         errors = []
 
         if not instrument.layout:
             errors.append(
                 ErrorInfo(
-                    name=f"profile_{self.uid}",
-                    category="layout_missing",
-                    message="Layout is not defined in the context",
-                )
+                    name=f'profile_{self.uid}',
+                    category='layout_missing',
+                    message='Layout is not defined in the context',
+                ),
             )
             return errors
 
@@ -35,19 +35,19 @@ class ProfileDefinition(BaseDefinition):
                     error_messages = [err.message for err in chan_errors]
                     errors.append(
                         ErrorInfo(
-                            name=f"profile_{self.uid}_channel_{channel_id}",
-                            category="channel_validation_failed",
+                            name=f'profile_{self.uid}_channel_{channel_id}',
+                            category='channel_validation_failed',
                             message=f"Channel '{channel_id}' validation failed: {error_messages}",
-                            details={"channel_errors": chan_errors},
-                        )
+                            details={'channel_errors': chan_errors},
+                        ),
                     )
             else:
                 errors.append(
                     ErrorInfo(
-                        name=f"profile_{self.uid}_channel_{channel_id}",
-                        category="channel_not_found",
+                        name=f'profile_{self.uid}_channel_{channel_id}',
+                        category='channel_not_found',
                         message=f"Channel '{channel_id}' not found in instrument",
-                    )
+                    ),
                 )
 
         return errors

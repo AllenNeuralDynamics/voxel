@@ -1,6 +1,6 @@
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-import math
 from typing import Any, Protocol, Self
 
 from voxel.utils.log import VoxelLogging
@@ -43,7 +43,7 @@ class DeliminatedFloat(float):
         return obj
 
     def __str__(self):
-        return f"{super().__str__()} " f"(min={self.min_value}, max={self.max_value}, step={self.step})"
+        return f'{super().__str__()} (min={self.min_value}, max={self.max_value}, step={self.step})'
 
 
 class DeliminatedInt(int):
@@ -72,7 +72,7 @@ class DeliminatedInt(int):
         return obj
 
     def __str__(self):
-        return f"{super().__str__()} " f"(min={self.min_value}, max={self.max_value}, step={self.step})"
+        return f'{super().__str__()} (min={self.min_value}, max={self.max_value}, step={self.step})'
 
 
 class DeliminatedProperty(ABC):
@@ -90,7 +90,7 @@ class DeliminatedProperty(ABC):
         self._max = max_value
         self._step = step
 
-        self.log = VoxelLogging.get_logger(__name__ + "." + self.__class__.__name__)
+        self.log = VoxelLogging.get_logger(__name__ + '.' + self.__class__.__name__)
 
     def get_minimum(self, instance: object) -> Number | None:
         return self._unwrap_dynamic_attribute(self._min, instance)
@@ -113,7 +113,7 @@ class DeliminatedProperty(ABC):
 
     def __set_name__(self, owner, name) -> None:
         self._name = name
-        self._full_name = f"{owner.__name__}.{name}"
+        self._full_name = f'{owner.__name__}.{name}'
 
     def setter(self, fset) -> Self:
         return type(self)(self.fget, fset, self._min, self._max, self._step)
@@ -130,7 +130,7 @@ class DeliminatedFloatProperty(DeliminatedProperty):
         if not obj:
             raise AttributeError("Can't access attribute from class")
         if self.fget is None:
-            raise AttributeError("unreadable attribute")
+            raise AttributeError('unreadable attribute')
         value = self.fget(obj)
         return DeliminatedFloat(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
 
@@ -140,8 +140,8 @@ class DeliminatedFloatProperty(DeliminatedProperty):
         adjusted_value = DeliminatedFloat(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
         if value != adjusted_value:
             self.log.warning(
-                f"Value {value} was adjusted to {adjusted_value} to match constraints. "
-                f"Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}"
+                f'Value {value} was adjusted to {adjusted_value} to match constraints. '
+                f'Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}',
             )
         self.fset(obj, float(adjusted_value))
 
@@ -151,7 +151,7 @@ class DeliminatedIntProperty(DeliminatedProperty):
         if not obj:
             raise AttributeError("Can't access attribute from class")
         if self.fget is None:
-            raise AttributeError("unreadable attribute")
+            raise AttributeError('unreadable attribute')
         value = self.fget(obj)
         return DeliminatedInt(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
 
@@ -161,8 +161,8 @@ class DeliminatedIntProperty(DeliminatedProperty):
         adjusted_value = DeliminatedInt(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
         if value != adjusted_value:
             self.log.warning(
-                f"Value {value} was adjusted to {adjusted_value} to match constraints. "
-                f"Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}"
+                f'Value {value} was adjusted to {adjusted_value} to match constraints. '
+                f'Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}',
             )
         self.fset(obj, int(adjusted_value))
 

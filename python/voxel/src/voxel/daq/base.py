@@ -42,19 +42,17 @@ class DaqTaskInst(Protocol):
         """Close the DAQ task."""
         ...
 
-    def add_ao_voltage_chan(self, path: str, name: str) -> "AOChannelInst":
+    def add_ao_voltage_chan(self, path: str, name: str) -> 'AOChannelInst':
         """Add an analog output voltage channel."""
         ...
 
-    def cfg_samp_clk_timing(self, rate: float, sample_mode: "AcqSampleMode", samps_per_chan: int) -> None:
+    def cfg_samp_clk_timing(self, rate: float, sample_mode: 'AcqSampleMode', samps_per_chan: int) -> None:
         """Configure sample clock timing."""
         ...
-        # self._sample_mode = NiAcqType.FINITE if self.trigger_task else NiAcqType.CONTINUOUS
 
-    def cfg_dig_edge_start_trig(self, trigger_source: str, retriggerable: bool) -> None:
+    def cfg_dig_edge_start_trig(self, trigger_source: str, *, retriggerable: bool) -> None:
         """Configure digital edge start trigger."""
         ...
-        # self.inst.triggers.start_trigger.retriggerable = retriggerable
 
     def get_channel_names(self) -> list[str]:
         """Get the names of the channels in the task."""
@@ -71,33 +69,28 @@ class PinInfo:
 
 
 class AcqSampleMode(StrEnum):
-    CONTINUOUS = "continuous"
-    FINITE = "finite"
+    CONTINUOUS = 'continuous'
+    FINITE = 'finite'
 
 
 class BaseDaq(ABC):
     @abstractmethod
-    def assign_pin(self, pin: str) -> "PinInfo":
+    def assign_pin(self, pin: str) -> 'PinInfo':
         """Assign a pin to the DAQ device and return its information."""
-        pass
 
     @abstractmethod
     def release_pin(self, pin: PinInfo) -> bool:
         """Release a previously assigned pin."""
-        pass
 
     @abstractmethod
     def get_pfi_path(self, pin: str) -> str:
         """Get the PFI path for a given pin."""
-        pass
 
     @abstractmethod
-    def get_task_inst(self, task_name: str) -> "DaqTaskInst":
+    def get_task_inst(self, task_name: str) -> 'DaqTaskInst':
         """Get a new task instance for the DAQ device."""
-        pass
 
     @property
     @abstractmethod
-    def ao_voltage_range(self) -> "VoltageRange":
+    def ao_voltage_range(self) -> 'VoltageRange':
         """Get the analog output voltage range."""
-        pass

@@ -1,7 +1,6 @@
 import time
 
 import serial
-
 from voxel.devices.interfaces.chiller import VoxelChiller
 
 from . import SMCCommand, SMCControl
@@ -12,7 +11,7 @@ SER_TIMEOUT = 1  # in seconds
 
 
 class SMCChiller(VoxelChiller):
-    def __init__(self, conn: str, name: str = "", unit=None, persist=True):
+    def __init__(self, conn: str, name: str = '', unit=None, persist=True):
         super().__init__(name)
         self.port = conn
         self.baudrate = BAUD_RATE
@@ -30,19 +29,19 @@ class SMCChiller(VoxelChiller):
         )
 
         if not self._validate_connection():
-            raise Exception("Failed to validate connection with the SMC Chiller.")
+            raise Exception('Failed to validate connection with the SMC Chiller.')
 
     def _validate_connection(self):
         try:
             response = self._read_value(SMCCommand.READ_INTERNAL_SENSOR)
             return bool(response)
         except Exception as e:
-            print(f"Validation error: {e}")
+            print(f'Validation error: {e}')
             return False
 
     def _complete_packet(self, packet):
         if self.unit is not None:
-            unit_code = ord("0") + self.unit
+            unit_code = ord('0') + self.unit
             packet = [SMCControl.SOH.value, unit_code] + packet
         checksum = sum(packet) & 0xFF
         return packet + [checksum, SMCControl.CR.value]
@@ -81,7 +80,7 @@ class SMCChiller(VoxelChiller):
     @temperature_c.setter
     def temperature_c(self, value: float) -> None:
         SMCcommand = SMCCommand.SET_TEMPERATURE_FRAM if self.persist else SMCCommand.SET_TEMPERATURE_NO_FRAM
-        temp_str = f"{int(value * 10):04d}"
+        temp_str = f'{int(value * 10):04d}'
         data = [ord(c) for c in temp_str]
         self._send_SMCcommand(SMCcommand, data)
 
@@ -97,7 +96,7 @@ class SMCChiller(VoxelChiller):
 
     def set_offset(self, offset):
         SMCcommand = SMCCommand.SET_OFFSET_FRAM if self.persist else SMCCommand.SET_OFFSET_NO_FRAM
-        offset_str = f"{int(offset * 100):04d}"
+        offset_str = f'{int(offset * 100):04d}'
         data = [ord(c) for c in offset_str]
         self._send_SMCcommand(SMCcommand, data)
 
@@ -106,23 +105,23 @@ class SMCChiller(VoxelChiller):
 
 
 # Example usage
-if __name__ == "__main__":
-    chiller = SMCChiller("test-chiller", "COM1")
+if __name__ == '__main__':
+    chiller = SMCChiller('test-chiller', 'COM1')
 
-    print("Internal Sensor Temperature:", chiller.temperature_c)
+    print('Internal Sensor Temperature:', chiller.temperature_c)
 
-    print("External Sensor Temperature:", chiller.external_temperature_c)
+    print('External Sensor Temperature:', chiller.external_temperature_c)
 
-    print("Alarm Status:", chiller.alarm_status)
+    print('Alarm Status:', chiller.alarm_status)
 
     chiller.temperature_c = 25.0
-    print("Temperature set to 25.0°C and persisted.")
+    print('Temperature set to 25.0°C and persisted.')
 
     chiller.persist = False
     chiller.temperature_c = 25.0
-    print("Temperature set to 25.0°C without persisting.")
+    print('Temperature set to 25.0°C without persisting.')
 
     chiller.persist = True
     chiller.set_offset(2.5)
-    print("Offset set to 2.5°C and persisted.")
+    print('Offset set to 2.5°C and persisted.')
     chiller.close()

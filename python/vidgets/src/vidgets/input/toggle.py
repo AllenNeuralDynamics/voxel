@@ -1,5 +1,4 @@
-"""
-VToggle - An animated toggle switch component for the Voxel library.
+"""VToggle - An animated toggle switch component for the Voxel library.
 
 Based on the PySide6 animated widgets tutorial:
 https://www.pythonguis.com/tutorials/PySide6-animated-widgets/
@@ -24,8 +23,7 @@ from PySide6.QtWidgets import QCheckBox, QSizePolicy, QVBoxLayout, QWidget
 
 
 class _AnimatedToggle(QCheckBox):
-    """
-    An animated toggle switch component that provides a smooth, animated alternative to QCheckBox.
+    """An animated toggle switch component that provides a smooth, animated alternative to QCheckBox.
 
     Features:
     - Smooth sliding animation with customizable easing
@@ -44,13 +42,12 @@ class _AnimatedToggle(QCheckBox):
         self,
         parent: QWidget | None = None,
         bar_color: Qt.GlobalColor | str = Qt.GlobalColor.gray,
-        checked_color: str = "#0078D4",  # Microsoft blue
+        checked_color: str = '#0078D4',  # Microsoft blue
         handle_color: Qt.GlobalColor = Qt.GlobalColor.white,
-        pulse_unchecked_color: str = "#44999999",
-        pulse_checked_color: str = "#440078D4",
+        pulse_unchecked_color: str = '#44999999',
+        pulse_checked_color: str = '#440078D4',
     ):
-        """
-        Initialize the VToggle component.
+        """Initialize the VToggle component.
 
         Args:
             parent: Parent widget
@@ -59,6 +56,7 @@ class _AnimatedToggle(QCheckBox):
             handle_color: Color of the toggle handle when unchecked
             pulse_unchecked_color: Color of the pulse effect when unchecked
             pulse_checked_color: Color of the pulse effect when checked
+
         """
         super().__init__(parent)
 
@@ -83,11 +81,11 @@ class _AnimatedToggle(QCheckBox):
         self.setFixedSize(self.sizeHint())
 
         # Setup animations
-        self.animation = QPropertyAnimation(self, b"handle_position", self)
+        self.animation = QPropertyAnimation(self, b'handle_position', self)
         self.animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
         self.animation.setDuration(200)  # time in ms
 
-        self.pulse_anim = QPropertyAnimation(self, b"pulse_radius", self)
+        self.pulse_anim = QPropertyAnimation(self, b'pulse_radius', self)
         self.pulse_anim.setDuration(350)  # time in ms
         self.pulse_anim.setStartValue(10)
         self.pulse_anim.setEndValue(20)
@@ -181,8 +179,7 @@ class _AnimatedToggle(QCheckBox):
 
 
 class VToggle(QWidget):
-    """
-    A wrapper widget that combines AnimatedToggle with functional behavior,
+    """A wrapper widget that combines AnimatedToggle with functional behavior,
     similar to VSwitch but using the animated toggle component.
     """
 
@@ -191,16 +188,15 @@ class VToggle(QWidget):
         setter: Callable[[bool], None],
         getter: Callable[[], bool] | None = None,
         *,
-        text: str = "",
+        text: str = '',
         parent: QWidget | None = None,
         bar_color: Qt.GlobalColor | str = Qt.GlobalColor.gray,
-        checked_color: str = "#0078D4",  # Microsoft blue
+        checked_color: str = '#0078D4',  # Microsoft blue
         handle_color: Qt.GlobalColor = Qt.GlobalColor.white,
-        pulse_unchecked_color: str = "#44999999",
-        pulse_checked_color: str = "#440078D4",
+        pulse_unchecked_color: str = '#44999999',
+        pulse_checked_color: str = '#440078D4',
     ):
-        """
-        Initialize the VToggle.
+        """Initialize the VToggle.
 
         Args:
             text: Text label for the toggle (currently not displayed)
@@ -212,6 +208,7 @@ class VToggle(QWidget):
             handle_color: Color of the toggle handle when unchecked
             pulse_unchecked_color: Color of the pulse effect when unchecked
             pulse_checked_color: Color of the pulse effect when checked
+
         """
         super().__init__(parent=parent)
         self.text = text
@@ -239,7 +236,6 @@ class VToggle(QWidget):
         pulse_checked_color: str,
     ):
         """Set up the user interface with the animated toggle."""
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -295,7 +291,7 @@ class VToggle(QWidget):
         return self.toggle.toggled
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import sys
 
     from PySide6.QtCore import Qt
@@ -306,12 +302,12 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         app.setWindowIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_DialogYesButton))
         window = QWidget()
-        window.setWindowTitle("VToggle Quick Test")
+        window.setWindowTitle('VToggle Quick Test')
         window.setGeometry(300, 300, 300, 200)
 
         layout = QVBoxLayout(window)
 
-        label = QLabel("VToggle Animation Test")
+        label = QLabel('VToggle Animation Test')
         layout.addWidget(label)
 
         # Update status when toggled
@@ -324,13 +320,13 @@ if __name__ == "__main__":
         layout.addWidget(toggle, 0, Qt.AlignmentFlag.AlignCenter)
 
         # Status label
-        status = QLabel("Toggle: OFF")
+        status = QLabel('Toggle: OFF')
         layout.addWidget(status)
 
         window.show()
 
-        print("VToggle test window opened. Click the toggle to test animation!")
-        print("The toggle should smoothly animate between states with a pulse effect.")
+        print('VToggle test window opened. Click the toggle to test animation!')
+        print('The toggle should smoothly animate between states with a pulse effect.')
 
         return app.exec()
 

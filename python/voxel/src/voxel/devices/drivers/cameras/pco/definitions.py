@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
-
 READOUT_OUTPUT = {
-    "light sheet forward": 0,
-    "rolling in": 256,
-    "rolling out": 512,
-    "rolling up": 768,
-    "rolling down": 1024,
-    "light sheet backward": 1280,
+    'light sheet forward': 0,
+    'rolling in': 256,
+    'rolling out': 512,
+    'rolling up': 768,
+    'rolling down': 1024,
+    'light sheet backward': 1280,
 }
 
 
@@ -36,22 +35,22 @@ class ReadoutMode(IntEnum):
 class TriggerMode(StrEnum):
     """The trigger mode of the camera."""
 
-    OFF = "auto sequence"
-    SOFTWARE = "software trigger"
-    EXTERNAL_START_SOFTWARE = "external exposure start & software trigger"
-    EXTERNAL_EXPOSURE_CONTROL = "external exposure control"
-    EXTERNAL_SYNCHRONIZED = "external synchronized"
-    FAST_EXTERNAL_EXPOSURE_CONTROL = "fast external exposure control"
-    EXTERNAL_CDS_CONTROL = "external CDS control"
-    SLOW_EXTERNAL_EXPOSURE_CONTROL = "slow external exposure control"
-    EXTERNAL_SYNCHRONIZED_HDSDI = "external synchronized HDSDI"
+    OFF = 'auto sequence'
+    SOFTWARE = 'software trigger'
+    EXTERNAL_START_SOFTWARE = 'external exposure start & software trigger'
+    EXTERNAL_EXPOSURE_CONTROL = 'external exposure control'
+    EXTERNAL_SYNCHRONIZED = 'external synchronized'
+    FAST_EXTERNAL_EXPOSURE_CONTROL = 'fast external exposure control'
+    EXTERNAL_CDS_CONTROL = 'external CDS control'
+    SLOW_EXTERNAL_EXPOSURE_CONTROL = 'slow external exposure control'
+    EXTERNAL_SYNCHRONIZED_HDSDI = 'external synchronized HDSDI'
 
 
 class TriggerSource(StrEnum):
     """The trigger source of the camera."""
 
-    INTERNAL = "auto"
-    EXTERNAL = "external"
+    INTERNAL = 'auto'
+    EXTERNAL = 'external'
 
 
 @dataclass

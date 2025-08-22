@@ -1,5 +1,5 @@
-from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 from voxel.devices.drivers.hubs.tigerbox import ASITigerBox, TigerBoxETLControlMode
+from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 
 
 class ASITunableLens(VoxelTunableLens):
@@ -38,7 +38,7 @@ class ASITunableLens(VoxelTunableLens):
             case TigerBoxETLControlMode.TG1000_INPUT_NO_TEMP_COMPENSATION:
                 return ETLControlMode.INTERNAL
             case _:
-                raise ValueError("mode must be one of %r." % ETLControlMode)
+                raise ValueError('mode must be one of %r.' % ETLControlMode)
 
     @mode.setter
     def mode(self, mode: ETLControlMode):
@@ -46,21 +46,22 @@ class ASITunableLens(VoxelTunableLens):
         match mode:
             case ETLControlMode.EXTERNAL:
                 self._tigerbox.set_axis_control_mode(
-                    self.uid, TigerBoxETLControlMode.EXTERNAL_INPUT_NO_TEMP_COMPENSATION
+                    self.uid,
+                    TigerBoxETLControlMode.EXTERNAL_INPUT_NO_TEMP_COMPENSATION,
                 )
             case ETLControlMode.INTERNAL:
                 self._tigerbox.set_axis_control_mode(self.uid, TigerBoxETLControlMode.TG1000_INPUT_NO_TEMP_COMPENSATION)
             case _:
-                raise ValueError("mode must be one of %r." % ETLControlMode)
+                raise ValueError('mode must be one of %r.' % ETLControlMode)
 
     def log_metadata(self):
-        self._log.info("tiger hardware axis parameters")
+        self.log.info('tiger hardware axis parameters')
         build_config = self._tigerbox.build_config
-        self._log.debug(f"{build_config}")
+        self.log.debug('%s', build_config)
         axis_settings = self._tigerbox.get_axis_info(self.uid)
-        self._log.info(f"{self.uid} axis settings")
+        self.log.info('%s axis settings', self.uid)
         for setting in axis_settings:
-            self._log.info(f"{self.uid} axis, {setting}, {axis_settings[setting]}")
+            self.log.info('%s axis, %s, %s', self.uid, setting, axis_settings[setting])
 
     def close(self):
         self._tigerbox.deregister_device(self.uid)

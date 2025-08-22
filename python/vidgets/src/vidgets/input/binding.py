@@ -2,11 +2,10 @@ import contextlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
-from typing import Any
+from typing import Any, TypedDict
 
-from PySide6.QtCore import QTimer, Signal, QObject, Property
+from PySide6.QtCore import Property, QObject, QTimer, Signal
 from PySide6.QtWidgets import QWidget
-from typing import TypedDict
 
 
 class BindingPreset(TypedDict):
@@ -16,46 +15,46 @@ class BindingPreset(TypedDict):
 
 
 class BindingPresets:
-    """Common configuration presets for hardware bindings"""
+    """Common configuration presets for hardware bindings."""
 
     # Fast responding hardware (modern digital devices)
     FAST_HARDWARE: BindingPreset = {
-        "debounce_delay": 100,
-        "settle_delay": 50,
-        "watch_interval": None,
+        'debounce_delay': 100,
+        'settle_delay': 50,
+        'watch_interval': None,
     }
 
     # Slow mechanical hardware (motors, old instruments)
     SLOW_HARDWARE: BindingPreset = {
-        "debounce_delay": 1000,
-        "settle_delay": 500,
-        "watch_interval": None,
+        'debounce_delay': 1000,
+        'settle_delay': 500,
+        'watch_interval': None,
     }
 
     # Continuous monitoring (temperature sensors, positions)
     MONITORED: BindingPreset = {
-        "debounce_delay": 300,
-        "settle_delay": 100,
-        "watch_interval": 1000,
+        'debounce_delay': 300,
+        'settle_delay': 100,
+        'watch_interval': 1000,
     }
 
     # High precision instruments (need time to stabilize)
     PRECISION: BindingPreset = {
-        "debounce_delay": 500,
-        "settle_delay": 1000,
-        "watch_interval": 2000,
+        'debounce_delay': 500,
+        'settle_delay': 1000,
+        'watch_interval': 2000,
     }
 
     # Responsive UI elements
     RESPONSIVE: BindingPreset = {
-        "debounce_delay": 150,
-        "settle_delay": 100,
-        "watch_interval": None,
+        'debounce_delay': 150,
+        'settle_delay': 100,
+        'watch_interval': None,
     }
 
     @classmethod
     def get_preset(cls, name: str) -> dict[str, Any]:
-        """Get a preset configuration by name"""
+        """Get a preset configuration by name."""
         return getattr(cls, name.upper())
 
 
@@ -87,12 +86,12 @@ class ValueWatcher[T]:
 
 
 class ValueBinding[T](QObject):
-    """Simple binding with debouncing and optional continuous monitoring (no verification)"""
+    """Simple binding with debouncing and optional continuous monitoring (no verification)."""
 
     class State(Enum):
-        IDLE = "idle"
-        COMMANDING = "commanding"
-        WATCHING = "watching"
+        IDLE = 'idle'
+        COMMANDING = 'commanding'
+        WATCHING = 'watching'
 
     # Signals for different states
     value_changed = Signal(object)  # When display value changes
@@ -146,11 +145,11 @@ class ValueBinding[T](QObject):
             self._settle_timer = None
 
     def get_value(self) -> T:
-        """Get the current value"""
+        """Get the current value."""
         return self._current_value
 
     def set_value(self, value: T) -> None:
-        """Set a new value with optional debouncing"""
+        """Set a new value with optional debouncing."""
         # Stop watching during command sequence
         self._stop_watching()
 
@@ -165,9 +164,9 @@ class ValueBinding[T](QObject):
             self._send_command(value)
 
     def _send_command(self, value: T | None = None) -> None:
-        """Actually send the command to hardware"""
+        """Actually send the command to hardware."""
         # Get value from debounce or direct call
-        command_value = value if value is not None else getattr(self, "_pending_value", None)
+        command_value = value if value is not None else getattr(self, '_pending_value', None)
         if command_value is None:
             return
 
@@ -190,7 +189,7 @@ class ValueBinding[T](QObject):
             raise e
 
     def _on_settle_complete(self) -> None:
-        """Called after hardware settle delay to refresh the value"""
+        """Called after hardware settle delay to refresh the value."""
         try:
             # Change state before refreshing so signals can be emitted
             self._state = self.State.IDLE
@@ -201,45 +200,44 @@ class ValueBinding[T](QObject):
             self._resume_watching()
 
     def _on_timer_tick(self) -> None:
-        """Timer callback for watching"""
+        """Timer callback for watching."""
         if self._state == self.State.WATCHING:
             with contextlib.suppress(Exception):
                 self.refresh()
 
     def _values_match(self, value1: T | None, value2: T | None) -> bool:
-        """Check if two values match within tolerance"""
+        """Check if two values match within tolerance."""
         if value1 is None or value2 is None:
             return bool(value1 is None and value2 is None)
-        else:
-            try:
-                return self._equals_fn(value1, value2)
-            except (ValueError, TypeError):
-                return value1 == value2
+        try:
+            return self._equals_fn(value1, value2)
+        except (ValueError, TypeError):
+            return value1 == value2
 
     def _resume_watching(self) -> None:
-        """Resume watching if enabled"""
+        """Resume watching if enabled."""
         if self._watch_interval is not None and self._watch_interval > 0:
             self._start_watching()
         else:
             self._state = self.State.IDLE
 
     def _start_watching(self) -> None:
-        """Start the watching timer"""
+        """Start the watching timer."""
         if self._watch_interval is not None and self._watch_interval > 0:
             self._state = self.State.WATCHING
             self._timer.start(self._watch_interval)
 
     def _stop_watching(self) -> None:
-        """Stop the timer"""
+        """Stop the timer."""
         self._timer.stop()
 
     def start_watching(self) -> None:
-        """Enable continuous monitoring"""
+        """Enable continuous monitoring."""
         if self._watch_interval is not None and self._watch_interval > 0:
             self._start_watching()
 
     def stop_watching(self) -> None:
-        """Disable continuous monitoring"""
+        """Disable continuous monitoring."""
         self._stop_watching()
         if self._state == self.State.WATCHING:
             self._state = self.State.IDLE
@@ -291,6 +289,7 @@ class BoundInput[T: str | int | float, W: QWidget](ABC):
         # Using presets
         from .binding import BindingPresets
         BoundSpinBox(getter, setter, **BindingPresets.FAST_HARDWARE)
+
     """
 
     def __init__(
@@ -314,35 +313,33 @@ class BoundInput[T: str | int | float, W: QWidget](ABC):
 
     @abstractmethod
     def _update_display(self, value: T) -> None:
-        """Update the input widget to reflect the new value from the binding"""
-        pass
+        """Update the input widget to reflect the new value from the binding."""
 
     @property
     @abstractmethod
     def widget(self) -> W:
-        """Get the underlying input widget"""
-        pass
+        """Get the underlying input widget."""
 
     @property
     def value(self) -> T:
-        """Get current value from binding (hardware state)"""
+        """Get current value from binding (hardware state)."""
         return self._binding.get_value()
 
     @value.setter
     def value(self, value: T) -> None:
-        """Set value through binding (with debouncing)"""
+        """Set value through binding (with debouncing)."""
         self._binding.set_value(value)
 
     def refresh(self) -> T:
-        """Refresh value from hardware"""
+        """Refresh value from hardware."""
         return self._binding.refresh()
 
     def start_watching(self) -> None:
-        """Start watching for external changes"""
+        """Start watching for external changes."""
         self._binding.start_watching()
 
     def stop_watching(self) -> None:
-        """Stop watching for external changes"""
+        """Stop watching for external changes."""
         self._binding.stop_watching()
 
 
@@ -356,13 +353,13 @@ def _compare_num_with_tolerance(value: float, target: float, tolerance: float | 
 
 
 class ValidatedValueBinding[T: int | float](QObject):
-    """Smart binding with command verification and optional continuous monitoring"""
+    """Smart binding with command verification and optional continuous monitoring."""
 
     class State(Enum):
-        IDLE = "idle"
-        COMMANDING = "commanding"
-        VERIFYING = "verifying"
-        WATCHING = "watching"
+        IDLE = 'idle'
+        COMMANDING = 'commanding'
+        VERIFYING = 'verifying'
+        WATCHING = 'watching'
 
     # Signals for different states
     value_changed = Signal(object)  # When display value changes
@@ -413,11 +410,11 @@ class ValidatedValueBinding[T: int | float](QObject):
             self._debounce_timer = None
 
     def get_value(self) -> T:
-        """Get the current value"""
+        """Get the current value."""
         return self._current_value
 
     def set_value(self, value: T) -> None:
-        """Set a new value with optional debouncing and verification"""
+        """Set a new value with optional debouncing and verification."""
         if self._state == self.State.COMMANDING:
             # New command while previous one is in progress - replace it
             pass
@@ -436,7 +433,7 @@ class ValidatedValueBinding[T: int | float](QObject):
             self._send_command()
 
     def _send_command(self) -> None:
-        """Actually send the command to hardware"""
+        """Actually send the command to hardware."""
         if self._pending_command is None:
             return
 
@@ -464,7 +461,7 @@ class ValidatedValueBinding[T: int | float](QObject):
             raise e
 
     def _on_timer_tick(self) -> None:
-        """Unified timer callback - handles both verification and watching"""
+        """Unified timer callback - handles both verification and watching."""
         if self._state == self.State.VERIFYING:
             self._verify_command()
         elif self._state == self.State.WATCHING:
@@ -472,7 +469,7 @@ class ValidatedValueBinding[T: int | float](QObject):
                 self.refresh()
 
     def _verify_command(self) -> None:
-        """Verify that the command was successful using refresh mechanism"""
+        """Verify that the command was successful using refresh mechanism."""
         try:
             # Use refresh to get the current value
             actual_value = self.refresh()
@@ -502,39 +499,38 @@ class ValidatedValueBinding[T: int | float](QObject):
             self._resume_watching()
 
     def _values_match(self, value1: T | None, value2: T | None) -> bool:
-        """Check if two values match within tolerance"""
+        """Check if two values match within tolerance."""
         if value1 is None or value2 is None:
             return bool(value1 is None and value2 is None)
-        else:
-            try:
-                return self._equals_fn(value1, value2, self._tolerance)
-            except (ValueError, TypeError):
-                return value1 == value2
+        try:
+            return self._equals_fn(value1, value2, self._tolerance)
+        except (ValueError, TypeError):
+            return value1 == value2
 
     def _resume_watching(self) -> None:
-        """Resume watching if enabled"""
+        """Resume watching if enabled."""
         if self._watch_interval is not None and self._watch_interval > 0:
             self._start_watching()
         else:
             self._state = self.State.IDLE
 
     def _start_watching(self) -> None:
-        """Start the watching timer"""
+        """Start the watching timer."""
         if self._watch_interval is not None and self._watch_interval > 0:
             self._state = self.State.WATCHING
             self._timer.start(self._watch_interval)
 
     def _stop_watching(self) -> None:
-        """Stop the unified timer"""
+        """Stop the unified timer."""
         self._timer.stop()
 
     def start_watching(self) -> None:
-        """Enable continuous monitoring"""
+        """Enable continuous monitoring."""
         if self._watch_interval is not None and self._watch_interval > 0:
             self._start_watching()
 
     def stop_watching(self) -> None:
-        """Disable continuous monitoring"""
+        """Disable continuous monitoring."""
         self._stop_watching()
         if self._state == self.State.WATCHING:
             self._state = self.State.IDLE

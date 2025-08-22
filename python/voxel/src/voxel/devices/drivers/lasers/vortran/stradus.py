@@ -1,20 +1,18 @@
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusVortran
-
 from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 MODULATION_MODES = {
-    "off": {"external_control": BoolVal.OFF, "digital_modulation": BoolVal.OFF},
-    "analog": {"external_control": BoolVal.ON, "digital_modulation": BoolVal.OFF},
-    "digital": {"external_control": BoolVal.OFF, "digital_modulation": BoolVal.ON},
+    'off': {'external_control': BoolVal.OFF, 'digital_modulation': BoolVal.OFF},
+    'analog': {'external_control': BoolVal.ON, 'digital_modulation': BoolVal.OFF},
+    'digital': {'external_control': BoolVal.OFF, 'digital_modulation': BoolVal.ON},
 }
 
 
 class StradusLaser(VoxelLaser):
     def __init__(self, name: str, port: str, wavelength: int):
-        """
-        Communicate with stradus laser.
+        """Communicate with stradus laser.
 
         :param port: comm port for lasers.
         :param wavelength: wavelength of laser
@@ -36,22 +34,21 @@ class StradusLaser(VoxelLaser):
         return self._inst.power_setpoint
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float | int):
+    def power_setpoint_mw(self, value: float):
         self._inst.power_setpoint = value
 
     @property
     def modulation_mode(self):
         if self._inst.external_control == BoolVal.ON:
-            return "analog"
-        elif self._inst.digital_modulation == BoolVal.ON:
-            return "digital"
-        else:
-            return "off"
+            return 'analog'
+        if self._inst.digital_modulation == BoolVal.ON:
+            return 'digital'
+        return 'off'
 
     @modulation_mode.setter
     def modulation_mode(self, value: str):
         if value not in MODULATION_MODES:
-            raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
+            raise ValueError('mode must be one of %r.' % MODULATION_MODES.keys())
         for attribute, state in MODULATION_MODES[value].items():
             setattr(self._inst, attribute, state)
 

@@ -1,15 +1,15 @@
 from abc import abstractmethod
 from enum import StrEnum
 
-from ..base import VoxelDevice, VoxelDeviceType
+from voxel.devices.base import VoxelDevice, VoxelDeviceType
 
 
 class ETLControlMode(StrEnum):
     """Tunable lens control modes."""
 
-    INTERNAL = "internal"
-    EXTERNAL = "external"
-    UNKNOWN = "unknown"
+    INTERNAL = 'internal'
+    EXTERNAL = 'external'
+    UNKNOWN = 'unknown'
 
 
 class VoxelTunableLens(VoxelDevice):
@@ -20,19 +20,17 @@ class VoxelTunableLens(VoxelDevice):
     @abstractmethod
     def mode(self) -> ETLControlMode:
         """Get the tunable lens control mode."""
-        pass
 
     @mode.setter
     @abstractmethod
     def mode(self, mode: ETLControlMode) -> None:
         """Set the tunable lens control mode.
+
         :param mode: one of "internal" or "external".
-        :type mode: str
+        :type mode: str.
         """
-        pass
 
     @property
     @abstractmethod
     def temperature_c(self) -> float | None:
         """Get the temperature in deg C."""
-        pass

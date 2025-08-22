@@ -8,13 +8,13 @@ def clean_yaml_file(file_path: str) -> None:
     # remove extra newlines at the end of each section
     with open(file_path) as f:
         lines = f.readlines()
-    with open(file_path, "w") as f:
-        f.writelines([line for line in lines if line.strip() != ""])
+    with open(file_path, 'w') as f:
+        f.writelines([line for line in lines if line.strip() != ''])
 
 
 def update_yaml_content(file_path: str, new_content: dict[str, Any]) -> None:
     try:
-        yaml = YAML(typ="safe")
+        yaml = YAML(typ='safe')
         yaml.default_flow_style = False
         yaml.indent(mapping=2, sequence=4, offset=2)
 
@@ -29,12 +29,13 @@ def update_yaml_content(file_path: str, new_content: dict[str, Any]) -> None:
         data.update(new_content)
 
         # Write updated content
-        with open(file_path, "w") as file:
+        with open(file_path, 'w') as file:
             for key, value in data.items():
                 yaml.dump({key: value}, file)
-                file.write("\n")
+                file.write('\n')
     except Exception as e:
-        raise ValueError(f"Error updating YAML content: {e}") from e
+        msg = f'Error updating YAML content: {e}'
+        raise ValueError(msg) from e
 
 
 def get_available_disk_space_mb(path: str) -> int:
@@ -49,7 +50,7 @@ def merge_dicts(dict1: dict, dict2: dict) -> dict:
     :return: merged dictionary. updated dict1
     :type dict1: dict
     :type dict2: dict
-    :rtype: dict
+    :rtype: dict.
     """
     for key, value in dict2.items():
         if key in dict1 and isinstance(value, dict) and isinstance(dict1[key], dict):

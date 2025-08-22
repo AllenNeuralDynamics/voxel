@@ -13,10 +13,10 @@ from vidgets.input.toggle import VToggle
 class FlowDirection(Enum):
     """Simplified layout options that are actually useful."""
 
-    VERTICAL = "vertical"  # Vertical stack with labels on top (classic forms)
-    HORIZONTAL = "horizontal"  # Horizontal row with labels on top (toolbars)
-    FORM = "form"  # Vertical with labels on left (Qt optimized)
-    GRID = "grid"  # 2D grid layout with configurable columns
+    VERTICAL = 'vertical'  # Vertical stack with labels on top (classic forms)
+    HORIZONTAL = 'horizontal'  # Horizontal row with labels on top (toolbars)
+    FORM = 'form'  # Vertical with labels on left (Qt optimized)
+    GRID = 'grid'  # 2D grid layout with configurable columns
 
 
 type VInputComponent = VSelect | VTextInput | VNumberInput | VToggle | VSwitch
@@ -29,8 +29,7 @@ def create_input_group(
     margins: int = 10,
     grid_columns: int = 2,
 ) -> QWidget:
-    """
-    Create a group of labeled input widgets with simplified, useful layout options.
+    """Create a group of labeled input widgets with simplified, useful layout options.
 
     Args:
         inputs: Dictionary of label->input pairs
@@ -42,6 +41,7 @@ def create_input_group(
         spacing: Space between elements in pixels
         margins: Margin around the entire group in pixels
         grid_columns: Number of columns when using grid layout
+
     """
     group = QWidget()
 

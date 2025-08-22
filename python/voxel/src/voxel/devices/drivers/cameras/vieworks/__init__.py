@@ -1,14 +1,13 @@
-"""
-This module provides a class to control voxel compliant Vieworks cameras.
+"""This module provides a class to control voxel compliant Vieworks cameras.
 Supported cameras include:
-    - Vieworks Camera using eGrabber SDK
+    - Vieworks Camera using eGrabber SDK.
 """
 
-from .vieworks_egrabber import VieworksCamera, BitPackingMode
+from .vieworks_egrabber import BitPackingMode, VieworksCamera
 
 
 class VieworksSettings:
     BitPackingMode = BitPackingMode
 
 
-__all__ = ["VieworksCamera", "VieworksSettings"]
+__all__ = ['VieworksCamera', 'VieworksSettings']

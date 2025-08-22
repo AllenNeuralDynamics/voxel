@@ -6,7 +6,7 @@ from voxel.devices.interfaces.rotation_axis import VoxelRotationAxis
 class SimulatedRotationAxis(VoxelRotationAxis):
     """Simulated rotation axis implementation.
     :param name: Unique identifier for the device
-    :type name: str
+    :type name: str.
     """
 
     def __init__(self, name: str) -> None:
@@ -21,14 +21,15 @@ class SimulatedRotationAxis(VoxelRotationAxis):
     def position_deg(self) -> float:
         """Return the current position of the rotation axis in degrees.
         :return: The current position in degrees
-        :rtype: float
+        :rtype: float.
         """
         if self._movement_start_time is not None:
             elapsed_time = time.time() - self._movement_start_time
             distance = self._speed_deg_s * elapsed_time
             direction = 1 if self._target_position_deg > self._position_deg else -1
             current_position = self._position_deg + direction * min(
-                distance, abs(self._target_position_deg - self._position_deg)
+                distance,
+                abs(self._target_position_deg - self._position_deg),
             )
 
             if abs(current_position - self._target_position_deg) < 0.01:
@@ -43,7 +44,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
     def position_deg(self, value: float) -> None:
         """Set the position of the rotation axis in degrees.
         :param position: The new position in degrees
-        :type position: float
+        :type position: float.
         """
         self._target_position_deg = value
         self._movement_start_time = time.time()
@@ -52,7 +53,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
     def speed_deg_s(self) -> float:
         """Return the speed of the rotation axis in degrees per second.
         :return: The speed in degrees per second
-        :rtype: float
+        :rtype: float.
         """
         return self._speed_deg_s
 
@@ -60,17 +61,17 @@ class SimulatedRotationAxis(VoxelRotationAxis):
     def speed_deg_s(self, value: float) -> None:
         """Set the speed of the rotation axis in degrees per second.
         :param speed: The new speed in degrees per second
-        :type speed: float
+        :type speed: float.
         """
         if value <= 0:
-            raise ValueError("Speed must be positive")
+            raise ValueError('Speed must be positive')
         self._speed_deg_s = value
 
     @property
     def is_moving(self) -> bool:
         """Check if the rotation axis is moving.
         :return: True if moving, False otherwise
-        :rtype: bool
+        :rtype: bool.
         """
         return self._movement_start_time is not None
 
@@ -79,13 +80,13 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         :param timeout: Maximum time to wait for the rotation axis to stop moving
         :param check_interval: Time interval between checks
         :type timeout: float
-        :type check_interval: float
+        :type check_interval: float.
         """
         # Current implementation does not support timeout
         while self.is_moving:
-            self._log.debug(
-                f"\n\tMoving to {self._target_position_deg} degrees"
-                f"\n\tCurrent position: {self.position_deg:.2f} degrees"
+            self.log.debug(
+                f'\n\tMoving to {self._target_position_deg} degrees'
+                f'\n\tCurrent position: {self.position_deg:.2f} degrees',
             )
             time.sleep(check_interval)
             _ = self.position_deg  # This updates the position
@@ -93,4 +94,4 @@ class SimulatedRotationAxis(VoxelRotationAxis):
     def close(self) -> None:
         """Close the connection to the rotation axis."""
         self._movement_start_time = None
-        self._log.info(f"Rotation axis {self.uid} closed.")
+        self.log.info(f'Rotation axis {self.uid} closed.')

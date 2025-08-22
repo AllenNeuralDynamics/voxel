@@ -1,20 +1,22 @@
 from importlib import metadata
+
 from voxel.utils.log import VoxelLogging
-from .writers.base import VoxelWriter
+
 from .transfers.base import VoxelFileTransfer
+from .writers.base import VoxelWriter
 
 
 class BaseRegistry[T]:
     """A generic registry for discovering and managing plugins."""
 
     def __init__(self, group: str, base_class: type[T]):
-        self._log = VoxelLogging.get_logger(f"{self.__class__.__name__}")
+        self._log = VoxelLogging.get_logger(f'{self.__class__.__name__}')
         self._plugins: dict[str, type[T]] = {}
         self._group = group
         self._base_class = base_class
 
         self._discover_plugins()
-        self._log.debug(f"{self._group} discovery found: {list(self.available)}")
+        self._log.debug(f'{self._group} discovery found: {list(self.available)}')
 
     @property
     def available(self) -> set[str]:
@@ -24,14 +26,16 @@ class BaseRegistry[T]:
     def get_instance(self, name: str) -> T:
         """Gets an instance of a plugin by name."""
         if name not in self._plugins:
-            raise ValueError(f"Plugin '{name}' is not available in group '{self._group}'.")
+            msg = f"Plugin '{name}' is not available in group '{self._group}'."
+            raise ValueError(msg)
         plugin_class = self._plugins[name]
         return plugin_class()
 
     def register(self, name: str, plugin_class: type[T]):
         """Manually registers a plugin class."""
         if not issubclass(plugin_class, self._base_class):
-            raise TypeError(f"Provided class is not a valid subclass of {self._base_class.__name__}.")
+            msg = f'Provided class is not a valid subclass of {self._base_class.__name__}.'
+            raise TypeError(msg)
         if name in self._plugins:
             self._log.warning(f"Overwriting registration for '{name}' in group '{self._group}'.")
 
@@ -52,11 +56,11 @@ class WriterRegistry(BaseRegistry[VoxelWriter]):
     """Manages all VoxelWriter plugins."""
 
     def __init__(self):
-        super().__init__(group="voxel.writers", base_class=VoxelWriter)
+        super().__init__(group='voxel.writers', base_class=VoxelWriter)
 
 
 class TransferRegistry(BaseRegistry[VoxelFileTransfer]):
     """Manages all VoxelTransfer plugins."""
 
     def __init__(self):
-        super().__init__(group="voxel.transfers", base_class=VoxelFileTransfer)
+        super().__init__(group='voxel.transfers', base_class=VoxelFileTransfer)

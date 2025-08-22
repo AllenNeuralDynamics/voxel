@@ -15,10 +15,10 @@ class SimulatedFlipMount(VoxelFlipMount):
     :type conn: str
     :type position_1: str
     :type position_2: str
-    :type name: str
+    :type name: str.
     """
 
-    def __init__(self, conn, position_1: str, position_2: str, name: str = ""):
+    def __init__(self, conn, position_1: str, position_2: str, name: str = ''):
         super().__init__(name)
         self._conn = conn
         self._position_1 = self._sanitize_string(position_1)
@@ -33,12 +33,13 @@ class SimulatedFlipMount(VoxelFlipMount):
 
     def wait(self):
         """Wait for the flip mount to finish flipping.
-        Note: This function is blocking."""
+        Note: This function is blocking.
+        """
         sleep(self.flip_time_ms * 1e-3)
 
     def toggle(self, wait=False):
         """Toggle the flip mount position. \n
-        :param wait: Wait for the flip mount to finish flipping. Default: False
+        :param wait: Wait for the flip mount to finish flipping. Default: False.
         """
         self._inst = 0 if self._inst else 1
         if wait:
@@ -48,7 +49,7 @@ class SimulatedFlipMount(VoxelFlipMount):
     def position(self) -> str:
         """Position of the flip mount. \n
         :return: Name of the current position.
-        :rtype: str
+        :rtype: str.
         """
         return self._positions[self._inst]
 
@@ -61,16 +62,16 @@ class SimulatedFlipMount(VoxelFlipMount):
         """
         position_name = position_name.lower()
         if new_position := next((k for k, v in self._positions.items() if v == position_name.lower()), None):
-            assert new_position in [0, 1], f"Invalid position {position_name}. Valid positions are {self._positions}"
+            assert new_position in [0, 1], f'Invalid position {position_name}. Valid positions are {self._positions}'
             self._inst = new_position
         else:
-            self._log.error(f"Invalid position {position_name}. Valid positions are {self._positions}")
+            self.log.error(f'Invalid position {position_name}. Valid positions are {self._positions}')
 
     @deliminated_float(min_value=FLIP_TIME_RANGE_MS[0], max_value=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:
         """Time it takes to flip the mount in milliseconds.
         :return: Time in milliseconds
-        :rtype: float
+        :rtype: float.
         """
         return self._flip_time_ms
 
@@ -78,10 +79,10 @@ class SimulatedFlipMount(VoxelFlipMount):
     def flip_time_ms(self, time_ms: float):
         """Set the flip time in milliseconds. \n
         :param time_ms: Time in milliseconds to flip the mount.
-        :type time_ms: float
+        :type time_ms: float.
         """
         self._flip_time_ms = time_ms
 
     @staticmethod
     def _sanitize_string(string: str) -> str:
-        return string.lower().replace(" ", "_")
+        return string.lower().replace(' ', '_')

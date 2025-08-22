@@ -15,23 +15,24 @@ class Vec2D[T: Number]:
     y: T
 
     def __post_init__(self) -> None:
-        for attr in ["x", "y"]:
+        for attr in ['x', 'y']:
             if not isinstance(getattr(self, attr), (int, float)):
-                raise TypeError(f"Unsupported type for {attr}: {type(getattr(self, attr))}")
+                msg = f'Unsupported type for {attr}: {type(getattr(self, attr))}'
+                raise TypeError(msg)
 
     def to_str(self) -> str:
-        return f"({self.x}, {self.y})"
+        return f'({self.x}, {self.y})'
 
     def dict(self) -> dict[str, T]:
-        return {"x": self.x, "y": self.y}
+        return {'x': self.x, 'y': self.y}
 
     def to_tuple(self) -> tuple[T, T]:
         return (self.x, self.y)
 
     @classmethod
     def from_str(cls, data: str) -> Self:
-        split = data.strip(" ()").split(",")
-        if any("." in s for s in split):
+        split = data.strip(' ()').split(',')
+        if any('.' in s for s in split):
             x, y = float(split[0]), float(split[1])
         else:
             x, y = int(split[0]), int(split[1])
@@ -46,10 +47,10 @@ class Vec2D[T: Number]:
     def __hash__(self) -> int:
         return hash((self.x, self.y))
 
-    def __add__(self, other: "Vec2D") -> "Vec2D[T]":
+    def __add__(self, other: Vec2D) -> Vec2D[T]:
         return Vec2D(self.x + other.x, self.y + other.y)
 
-    def __sub__(self, other: "Vec2D") -> "Vec2D[T]":
+    def __sub__(self, other: Vec2D) -> Vec2D[T]:
         return Vec2D(self.x - other.x, self.y - other.y)
 
     def __matmul__(self, other: Vec2D) -> float:  # @
@@ -73,20 +74,21 @@ class Vec3D[T: Number]:
     z: T
 
     def __post_init__(self):
-        for attr in ["x", "y", "z"]:
+        for attr in ['x', 'y', 'z']:
             if not isinstance(getattr(self, attr), (int, float)):
-                raise TypeError(f"Unsupported type for {attr}: {type(getattr(self, attr))}")
+                msg = f'Unsupported type for {attr}: {type(getattr(self, attr))}'
+                raise TypeError(msg)
 
     def to_str(self):
-        return f"({self.x}, {self.y}, {self.z})"
+        return f'({self.x}, {self.y}, {self.z})'
 
     def dict(self) -> dict[str, T]:
-        return {"x": self.x, "y": self.y, "z": self.z}
+        return {'x': self.x, 'y': self.y, 'z': self.z}
 
     @classmethod
     def from_str(cls, data: str) -> Vec3D:
-        split = data.strip(" ()").split(",")
-        if any("." in s for s in split):
+        split = data.strip(' ()').split(',')
+        if any('.' in s for s in split):
             x, y, z = float(split[0]), float(split[1]), float(split[2])
         else:
             x, y, z = int(split[0]), int(split[1]), int(split[2])
@@ -98,10 +100,10 @@ class Vec3D[T: Number]:
     def __hash__(self):
         return hash((self.x, self.y, self.z))
 
-    def __add__(self, other: "Vec3D") -> "Vec3D":
+    def __add__(self, other: Vec3D) -> Vec3D:
         return Vec3D(self.x + other.x, self.y + other.y, self.z + other.z)
 
-    def __sub__(self, other: "Vec3D") -> "Vec3D":
+    def __sub__(self, other: Vec3D) -> Vec3D:
         return Vec3D(self.x - other.x, self.y - other.y, self.z - other.z)
 
 
@@ -115,4 +117,4 @@ class Plane:
         return self.min_corner + Vec3D(self.size.x, self.size.y, 0)
 
     def __repr__(self) -> str:
-        return f"Plane(min_corner={self.min_corner}, size={self.size})"
+        return f'Plane(min_corner={self.min_corner}, size={self.size})'

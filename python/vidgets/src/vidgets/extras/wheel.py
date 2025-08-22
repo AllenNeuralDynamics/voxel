@@ -11,7 +11,7 @@ from voxel.utils.log import VoxelLogging
 
 
 class WheelGraphic(QWidget):
-    """A refined wheel widget with predefined members and no dynamic addition/removal"""
+    """A refined wheel widget with predefined members and no dynamic addition/removal."""
 
     selected_changed = Signal(int)  # Emits the position
     highlighted_changed = Signal(int)  # Emits the position of the highlighted slot
@@ -24,26 +24,28 @@ class WheelGraphic(QWidget):
         start_index: int = 1,
         parent: QWidget | None = None,
     ):
-        """Initialize the wheel widget
+        """Initialize the wheel widget.
 
         Args:
             num_slots: Total number of slots on the wheel
             assignments: Dictionary mapping position -> label string (1-based indexing)
             hue_mapping: Dictionary mapping label -> hue value (0-360). Defaults to grey if not found.
             parent: Parent widget
+
         """
         super().__init__(parent)
-        self.log = VoxelLogging.get_logger("WheelGraphic")
+        self.log = VoxelLogging.get_logger('WheelGraphic')
         self.setMinimumSize(200, 200)
 
         self._start_index = start_index
         self._num_slots = num_slots
 
-        self.log.debug(f"Slots: {self.slots}")
+        self.log.debug(f'Slots: {self.slots}')
 
         for position in assignments:
             if position not in self.slots:
-                raise ValueError(f"Slot position {position} must be within {self.slots}")
+                msg = f'Slot position {position} must be within {self.slots}'
+                raise ValueError(msg)
 
         # Core widget data
         self.assignments = {i: assignments.get(i) for i in self.slots}
@@ -92,32 +94,32 @@ class WheelGraphic(QWidget):
 
     @property
     def slot_size(self) -> float:
-        """Get the automatically calculated slot size"""
+        """Get the automatically calculated slot size."""
         return self._compute_slot_radius()
 
     @property
     def selected_slot(self):
-        """Get the currently active slot (1-based index), returns 0 if none"""
+        """Get the currently active slot (1-based index), returns 0 if none."""
         return self._selected_slot
 
     @selected_slot.setter
     def selected_slot(self, slot: int):
-        """Set the currently active slot (1-based index)"""
+        """Set the currently active slot (1-based index)."""
         lo, hi = self._start_index, self.slots[-1]
         slot = int(min(max(slot, lo), hi))
         self._rotate_to_position(slot=slot, clockwise=None)
 
     def get_slot_label(self, slot_index) -> str:
-        """Get the label for a slot at the given position"""
+        """Get the label for a slot at the given position."""
         label = self.assignments.get(slot_index)
-        return label if label is not None else "Empty"
+        return label if label is not None else 'Empty'
 
     def get_selected_slot_label(self) -> str:
-        """Get the currently active slot label, returns None if none"""
+        """Get the currently active slot label, returns None if none."""
         return self.get_slot_label(self._selected_slot)
 
     def reset_rotation(self):
-        """Reset rotation to put the first slot at 12 o'clock"""
+        """Reset rotation to put the first slot at 12 o'clock."""
         self.selected_slot = self._start_index
 
     def step_to_next(self):
@@ -152,7 +154,7 @@ class WheelGraphic(QWidget):
         return (index - self._start_index) % self._num_slots
 
     def update_svg(self):
-        """Generate SVG with members at current rotation"""
+        """Generate SVG with members at current rotation."""
         circles = []
         center_x, center_y = 100, 100  # SVG center
 
@@ -188,7 +190,7 @@ class WheelGraphic(QWidget):
                 s = 0.7
                 lightness = 0.6
                 r, g, b = colorsys.hls_to_rgb(h, lightness, s)
-                stroke_color = f"rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})"
+                stroke_color = f'rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})'
 
                 # Set visual properties based on state
                 # if is_highlighted:
@@ -199,23 +201,23 @@ class WheelGraphic(QWidget):
                     stroke_width = 2
                 else:
                     # Not highlighted: only stroke, no fill
-                    fill_color = "none"
+                    fill_color = 'none'
                     stroke_opacity = 1.0 if is_hovered else 0.5
                     stroke_width = 2
             else:
                 # Empty slot: transparent with very dim stroke using theme color
-                fill_color = "none"
-                stroke_color = colors["wheel_stroke"]
+                fill_color = 'none'
+                stroke_color = colors['wheel_stroke']
                 stroke_opacity = 0.5
                 stroke_width = 1
 
-            circles.append(f'''
+            circles.append(f"""
                 <circle
                     cx="{x:.1f}" cy="{y:.1f}" r="{self.slot_size:.1f}"
                     fill="{fill_color}" stroke="{stroke_color}"
                     stroke-width="{stroke_width}" stroke-opacity="{stroke_opacity}"
                 />
-            ''')
+            """)
 
         # Calculate the outer wheel radius and cutout properties
         wheel_outer_radius = self.orbit_radius + self.slot_size * 1.5  # Wheel extends beyond member orbit
@@ -275,7 +277,7 @@ class WheelGraphic(QWidget):
         </svg>
         """
 
-        self.renderer.load(svg_data.encode("utf-8"))
+        self.renderer.load(svg_data.encode('utf-8'))
         self.update()
 
         if highlighted_slot != self._highlighted_slot:
@@ -284,7 +286,7 @@ class WheelGraphic(QWidget):
                 self.highlighted_changed.emit(highlighted_slot)
 
     def _animate_step(self):
-        """Animation step with Qt easing curve transition"""
+        """Animation step with Qt easing curve transition."""
         self._animation_elapsed += 50  # 50ms per frame
 
         if self._animation_elapsed >= self._animation_duration:
@@ -313,13 +315,14 @@ class WheelGraphic(QWidget):
             self._pending_slot = None
 
     def _rotate_to_position(self, slot, clockwise=None):
-        """Start animation to target position with easing
+        """Start animation to target position with easing.
 
         Args:
             position: The position to rotate to (1 to num_slots)
             clockwise: Direction to rotate. If None, uses shortest path.
                       If True, forces clockwise rotation.
                       If False, forces counter-clockwise rotation.
+
         """
         if slot not in self.slots:
             return
@@ -366,7 +369,7 @@ class WheelGraphic(QWidget):
             self._animation_timer.start(50)  # 50ms = ~20 FPS
 
     def paintEvent(self, event):
-        """Render the wheel widget with maintained aspect ratio"""
+        """Render the wheel widget with maintained aspect ratio."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -386,14 +389,14 @@ class WheelGraphic(QWidget):
             self.renderer.render(painter, QRectF(x, y, size, size))
 
     def mousePressEvent(self, event):
-        """Handle mouse clicks to select slots"""
+        """Handle mouse clicks to select slots."""
         slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
-        self.log.debug(f"Clicked on slot {slot_idx}")
+        self.log.debug(f'Clicked on slot {slot_idx}')
         if slot_idx in self.slots:
             self.selected_slot = slot_idx
 
     def mouseMoveEvent(self, event):
-        """Handle mouse movement for hover effects"""
+        """Handle mouse movement for hover effects."""
         slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
 
         if slot_idx != self._hovered_slot:
@@ -403,19 +406,19 @@ class WheelGraphic(QWidget):
             # Set tooltip
             if slot_idx in self.slots:
                 label = self.get_slot_label(slot_idx)
-                self.setToolTip(f"{label}")
+                self.setToolTip(f'{label}')
             else:
-                self.setToolTip("")
+                self.setToolTip('')
 
     def leaveEvent(self, event):
-        """Handle mouse leaving the widget"""
+        """Handle mouse leaving the widget."""
         # if self._hovered_member >= self._start_index:
         self._hovered_slot = self._start_index - 1
         self.update_svg()
-        self.setToolTip("")
+        self.setToolTip('')
 
     def _get_slot_at_position(self, x, y):
-        """Get the slot position at the given widget coordinates, returns 0 if none"""
+        """Get the slot position at the given widget coordinates, returns 0 if none."""
         # Convert to SVG coordinates
         widget_width = self.width()
         widget_height = self.height()
@@ -437,7 +440,7 @@ class WheelGraphic(QWidget):
         return 0
 
     def _compute_slot_radius(self) -> float:
-        """Calculate optimal slot size based on number of slots and desired spacing"""
+        """Calculate optimal slot size based on number of slots and desired spacing."""
         if self._num_slots <= 1:
             return 15.0  # Default for single or no slots
 
@@ -453,7 +456,7 @@ class WheelGraphic(QWidget):
         return max(3.0, min(20.0, radius))
 
     def _get_theme_colors(self):
-        """Get theme-appropriate colors for the wheel"""
+        """Get theme-appropriate colors for the wheel."""
         palette = self.palette()
 
         # Get base colors from theme
@@ -461,10 +464,10 @@ class WheelGraphic(QWidget):
         # text_color = palette.color(QPalette.ColorRole.Text)
 
         return {
-            "wheel_light": button_color.lighter(110).name(),
-            "wheel_base": button_color.name(),
-            "wheel_dark": button_color.darker(120).name(),
-            "wheel_stroke": button_color.darker(60).name(),
+            'wheel_light': button_color.lighter(110).name(),
+            'wheel_base': button_color.name(),
+            'wheel_dark': button_color.darker(120).name(),
+            'wheel_stroke': button_color.darker(60).name(),
         }
 
     def _nearest_top_slot(self) -> int:
@@ -480,7 +483,7 @@ class WheelGraphic(QWidget):
             return abs(((a - b + 180.0) % 360.0) - 180.0)
 
         best_slot = self.slots[0]
-        best_err = float("inf")
+        best_err = float('inf')
 
         for slot_idx in self.slots:
             base = step * self._normalized_index(slot_idx)
@@ -495,7 +498,7 @@ class WheelGraphic(QWidget):
 
 
 # Demo code - runs when script is executed directly
-if __name__ == "__main__":
+if __name__ == '__main__':
     import sys
 
     from PySide6.QtCore import Qt
@@ -513,7 +516,7 @@ if __name__ == "__main__":
     class WheelGraphicDemo(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("WheelWidget Demo - Auto-Sizing with Spacing Control")
+            self.setWindowTitle('WheelWidget Demo - Auto-Sizing with Spacing Control')
             self.setGeometry(100, 100, 600, 400)
 
             # Create main widget and layout
@@ -523,36 +526,36 @@ if __name__ == "__main__":
 
             # Create test members with specific hues that match their names - sparse placement (1-based)
             members = {
-                1: "Red",  # Position 1
-                3: "Green",  # Position 3 (skip 2)
-                4: "Blue",  # Position 4
-                5: "Yellow",  # Position 5
-                7: "Purple",  # Position 7 (skip 6)
+                1: 'Red',  # Position 1
+                3: 'Green',  # Position 3 (skip 2)
+                4: 'Blue',  # Position 4
+                5: 'Yellow',  # Position 5
+                7: 'Purple',  # Position 7 (skip 6)
             }
 
             # Create hue mapping
             hue_mapping = {
-                "Red": 0,  # Pure red
-                "Green": 120,  # Pure green
-                "Blue": 240,  # Pure blue
-                "Yellow": 60,  # Pure yellow
-                "Purple": 300,  # Purple/magenta
+                'Red': 0,  # Pure red
+                'Green': 120,  # Pure green
+                'Blue': 240,  # Pure blue
+                'Yellow': 60,  # Pure yellow
+                'Purple': 300,  # Purple/magenta
             }
 
             self.wheel = WheelGraphic(7, members, hue_mapping)
             self.wheel.selected_changed.connect(self.on_member_changed)
 
             # Create controls
-            prev_btn = QPushButton("◀")
-            prev_btn.setToolTip("Spin left")
+            prev_btn = QPushButton('◀')
+            prev_btn.setToolTip('Spin left')
             prev_btn.clicked.connect(self.wheel.step_to_next)
 
-            next_btn = QPushButton("▶")
-            next_btn.setToolTip("Spin right")
+            next_btn = QPushButton('▶')
+            next_btn.setToolTip('Spin right')
             next_btn.clicked.connect(self.wheel.step_to_previous)
 
-            reset_btn = QPushButton("⟳")
-            reset_btn.setToolTip("Reset wheel rotation")
+            reset_btn = QPushButton('⟳')
+            reset_btn.setToolTip('Reset wheel rotation')
             reset_btn.clicked.connect(self.wheel.reset_rotation)
 
             controls_layout = QVBoxLayout()
@@ -564,7 +567,7 @@ if __name__ == "__main__":
             back_forth_layout.addWidget(next_btn)
 
             status_layout = QHBoxLayout()
-            self.status_label = QLabel("Hover over circles to see labels, click to select")
+            self.status_label = QLabel('Hover over circles to see labels, click to select')
             status_layout.addWidget(self.status_label)
             status_layout.addStretch()
             status_layout.addWidget(reset_btn)
@@ -577,13 +580,13 @@ if __name__ == "__main__":
             layout.addLayout(controls_layout)
 
         def on_member_changed(self, member_position):
-            """Handle member selection"""
+            """Handle member selection."""
             member_label = self.wheel.get_selected_slot_label()
             if member_label:
                 hue = self.wheel.hue_mapping.get(member_label, self.wheel.default_hue)
-                self.status_label.setText(f"Selected: {member_label} (position {member_position}, hue {hue:.0f}°")
+                self.status_label.setText(f'Selected: {member_label} (position {member_position}, hue {hue:.0f}°')
             else:
-                self.status_label.setText("Hover over circles to see labels, click to select")
+                self.status_label.setText('Hover over circles to see labels, click to select')
 
     # Run the demo
     app = QApplication(sys.argv)

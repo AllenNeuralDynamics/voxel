@@ -10,6 +10,6 @@ def get_default_console_handler() -> logging.StreamHandler:
 
 
 def get_default_json_handler() -> logging.FileHandler:
-    handler = logging.FileHandler("app.log.jsonl", mode="a")
+    handler = logging.FileHandler('app.log.jsonl', mode='a')
     handler.setFormatter(JSONFormatter())
     return handler

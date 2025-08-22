@@ -5,8 +5,7 @@ from voxel.devices.base import VoxelDevice, VoxelDeviceType
 
 
 class VoxelFilterWheel(VoxelDevice):
-    """
-    Driver abstraction for a discrete-position filter wheel.
+    """Driver abstraction for a discrete-position filter wheel.
 
     Conventions:
       - Slots are 1-based and contiguous: 1..slot_count.
@@ -25,10 +24,7 @@ class VoxelFilterWheel(VoxelDevice):
     @property
     @abstractmethod
     def labels(self) -> Mapping[int, str | None]:
-        """
-        Map slot index -> human label (or None if unlabeled).
-        Length must equal slot_count.
-        """
+        """Map slot index -> human label (or None if unlabeled). Length must equal slot_count."""
 
     # --------- State ----------
     @property
@@ -49,27 +45,33 @@ class VoxelFilterWheel(VoxelDevice):
     # --------- Commands ----------
     @abstractmethod
     def move(self, slot: int, *, wait: bool = True, timeout: float | None = 5.0) -> None:
-        """
-        Move to slot index.
-        Raises: ValueError (invalid slot), TimeoutError (if wait and not settled).
+        """Move to slot index.
+
+        Raises:
+            ValueError: If an invalid slot is specified.
+            TimeoutError: If wait is True and the move does not settle within the timeout period.
         """
 
     def select(self, label: str | None, *, wait: bool = True, timeout: float | None = 5.0) -> None:
-        """
-        Move by label (or clear with None -> first unlabeled slot if defined).
-        Raises: KeyError if label not found, ValueError/TimeoutError as in `move`.
+        """Move by label (or clear with None -> first unlabeled slot if defined).
+
+        Raises:
+            KeyError: If label not found.
+            ValueError: If an invalid slot is specified.
+            TimeoutError: If the move operation times out.
         """
         if label is None:
             # choose first unlabeled slot
             for i in range(1, self.slot_count + 1):
                 if self.labels.get(i) is None:
                     return self.move(i, wait=wait, timeout=timeout)
-            raise KeyError("No unlabeled slot available")
+            raise KeyError('No unlabeled slot available')
         # choose first matching label (allow duplicates deterministically)
         for i in range(1, self.slot_count + 1):
             if self.labels.get(i) == label:
                 return self.move(i, wait=wait, timeout=timeout)
-        raise KeyError(f"Label not found: {label!r}")
+        error_msg = f'Label not found: {label!r}'
+        raise KeyError(error_msg)
 
     @abstractmethod
     def home(self, *, wait: bool = True, timeout: float | None = 10.0) -> None:

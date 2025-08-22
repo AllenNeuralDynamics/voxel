@@ -1,12 +1,13 @@
 import math
-from PySide6.QtWidgets import QWidget
+
 from PySide6.QtCore import QRectF, QTimer, Signal
 from PySide6.QtGui import QPainter
 from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWidgets import QWidget
 
 
 class InteractiveCirclesWidget(QWidget):
-    """Interactive circles with manual control over count, size, and rotation"""
+    """Interactive circles with manual control over count, size, and rotation."""
 
     # Signal emitted when the active circle changes
     active_circle_changed = Signal(int)  # Emits the 1-based circle number
@@ -34,7 +35,7 @@ class InteractiveCirclesWidget(QWidget):
         self.update_svg()
 
     def calculate_circle_size(self):
-        """Auto-compute circle size based on number of circles"""
+        """Auto-compute circle size based on number of circles."""
         # More circles = smaller circles to avoid overlap
         # Formula: base size inversely proportional to sqrt of count
         base_size = 12
@@ -42,7 +43,7 @@ class InteractiveCirclesWidget(QWidget):
         return max(3, min(15, base_size / size_factor))
 
     def update_svg(self):
-        """Generate SVG with circles at current rotation"""
+        """Generate SVG with circles at current rotation."""
         circles = []
         center_x, center_y = 100, 100  # SVG center
         circle_size = self.calculate_circle_size()
@@ -70,7 +71,7 @@ class InteractiveCirclesWidget(QWidget):
             # Normalize angle to 0-360 and check if it's close to 270° (12 o'clock in our coordinate system)
             normalized_angle = (current_angle + 360) % 360
             angle_diff = min(
-                abs(normalized_angle - 270), abs(normalized_angle - 270 + 360), abs(normalized_angle - 270 - 360)
+                abs(normalized_angle - 270), abs(normalized_angle - 270 + 360), abs(normalized_angle - 270 - 360),
             )
             is_active = angle_diff < (360 / self.num_circles / 2)  # Within half a step of 12 o'clock
 
@@ -83,16 +84,16 @@ class InteractiveCirclesWidget(QWidget):
 
             # Create unique color for each circle
             hue = (i * 360 / max(1, self.num_circles)) % 360
-            color = f"hsl({hue}, 70%, 60%)"
+            color = f'hsl({hue}, 70%, 60%)'
 
             # Add circle with varying opacity
-            circles.append(f'''
+            circles.append(f"""
                 <circle cx="{x:.1f}" cy="{y:.1f}" r="{circle_size:.1f}"
                         fill="{color}" stroke="white" stroke-width="1" opacity="{opacity}"/>
                 <text x="{x:.1f}" y="{y + 2:.1f}" text-anchor="middle"
                       font-size="{max(8, circle_size * 0.8):.0f}"
                       fill="white" font-weight="bold" opacity="{text_opacity}">{i + 1}</text>
-            ''')
+            """)
 
         svg_data = f"""
         <svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
@@ -112,7 +113,7 @@ class InteractiveCirclesWidget(QWidget):
         </svg>
         """
 
-        self.renderer.load(svg_data.encode("utf-8"))
+        self.renderer.load(svg_data.encode('utf-8'))
         self.update()
 
         # Emit signal if active circle changed
@@ -122,23 +123,23 @@ class InteractiveCirclesWidget(QWidget):
                 self.active_circle_changed.emit(current_active_circle)
 
     def get_active_circle(self):
-        """Get the currently active circle (1-based), returns -1 if none"""
+        """Get the currently active circle (1-based), returns -1 if none."""
         return self._previous_active_circle
 
     def add_circle(self):
-        """Add a circle (max 20)"""
+        """Add a circle (max 20)."""
         if self.num_circles < 20:
             self.num_circles += 1
             self.update_svg()
 
     def remove_circle(self):
-        """Remove a circle (min 1)"""
+        """Remove a circle (min 1)."""
         if self.num_circles > 1:
             self.num_circles -= 1
             self.update_svg()
 
     def _animate_step(self):
-        """Animation step - move towards target angle"""
+        """Animation step - move towards target angle."""
         if abs(self.target_angle - self.angle_offset) < self.animation_speed:
             # Close enough, snap to target and stop
             self.angle_offset = self.target_angle
@@ -162,47 +163,47 @@ class InteractiveCirclesWidget(QWidget):
         self.update_svg()
 
     def _animate_to_angle(self, target_angle):
-        """Start animation to target angle"""
+        """Start animation to target angle."""
         self.target_angle = target_angle % 360
         if not self.is_animating:
             self.is_animating = True
             self.animation_timer.start(50)  # 50ms = ~20 FPS
 
     def step_rotation(self, degrees):
-        """Step the rotation by specified degrees"""
+        """Step the rotation by specified degrees."""
         target = (self.angle_offset + degrees) % 360
         self._animate_to_angle(target)
 
     def step_to_next_circle(self):
-        """Rotate to put the next circle at 12 o'clock position"""
+        """Rotate to put the next circle at 12 o'clock position."""
         if self.num_circles > 1:
             step_angle = 360 / self.num_circles
             target = (self.angle_offset + step_angle) % 360
             self._animate_to_angle(target)
 
     def step_to_previous_circle(self):
-        """Rotate to put the previous circle at 12 o'clock position"""
+        """Rotate to put the previous circle at 12 o'clock position."""
         if self.num_circles > 1:
             step_angle = 360 / self.num_circles
             target = (self.angle_offset - step_angle) % 360
             self._animate_to_angle(target)
 
     def reset_rotation(self):
-        """Reset rotation to 0 degrees"""
+        """Reset rotation to 0 degrees."""
         self._animate_to_angle(0)
 
     def set_active_circle(self, circle_number):
-        """Set the active circle by its number (1-based)"""
+        """Set the active circle by its number (1-based)."""
         if 1 <= circle_number <= self.num_circles:
             self.rotate_to_circle(circle_number - 1)  # Convert to 0-based index
 
     def set_circle_count(self, count):
-        """Set exact circle count"""
+        """Set exact circle count."""
         self.num_circles = max(1, min(20, count))
         self.update_svg()
 
     def paintEvent(self, event):
-        """Render the interactive circles with maintained aspect ratio"""
+        """Render the interactive circles with maintained aspect ratio."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -222,7 +223,7 @@ class InteractiveCirclesWidget(QWidget):
             self.renderer.render(painter, QRectF(x, y, size, size))
 
     def mousePressEvent(self, event):
-        """Handle mouse clicks to select circles"""
+        """Handle mouse clicks to select circles."""
         # Get click position
         click_x = event.position().x()
         click_y = event.position().y()
@@ -247,7 +248,7 @@ class InteractiveCirclesWidget(QWidget):
                     break
 
     def rotate_to_circle(self, circle_index):
-        """Rotate to make the specified circle active at 12 o'clock"""
+        """Rotate to make the specified circle active at 12 o'clock."""
         if self.num_circles > 0:
             # Calculate the angle needed to move this circle to 12 o'clock
             circle_base_angle = (360 / self.num_circles) * circle_index

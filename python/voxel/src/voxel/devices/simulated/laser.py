@@ -1,41 +1,37 @@
 import random
 
 from serial import Serial
-
 from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 MODULATION_MODES = {
-    "off": {"external_control_mode": "OFF", "digital_modulation": "OFF"},
-    "analog": {"external_control_mode": "ON", "digital_modulation": "OFF"},
-    "digital": {"external_control_mode": "OFF", "digital_modulation": "ON"},
+    'off': {'external_control_mode': 'OFF', 'digital_modulation': 'OFF'},
+    'analog': {'external_control_mode': 'ON', 'digital_modulation': 'OFF'},
+    'digital': {'external_control_mode': 'OFF', 'digital_modulation': 'ON'},
 }
 
 MAX_POWER_MW = 100
 
 
 class SimulatedLaser(VoxelLaser):
-    def __init__(self, wavelength: int, name: str = "simulated_laser", prefix: str = ""):
-        """
-        Communicate with specific Simulated laser in Simulated Combiner box.
+    def __init__(self, wavelength: int, name: str = 'simulated_laser', prefix: str = ''):
+        """Communicate with specific Simulated laser in Simulated Combiner box.
 
         :param name: voxel device name for this laser.
         :param prefix: prefix specic to laser.
         """
-
         self.prefix = prefix
         self.ser = Serial
         self._simulated_power_setpoint_mw = 10.0
         self._max_power_mw = 100.0
-        self._modulation_mode = "digital"
+        self._modulation_mode = 'digital'
         self._temperature = 20.0
-        self._cdrh = "ON"
+        self._cdrh = 'ON'
         self._status = []
         super().__init__(name=name, wavelength=wavelength)
 
     def enable(self):
-        self._log.info(f"Enabling {self.uid} laser")
-        pass
+        self.log.info(f'Enabling {self.uid} laser')
 
     def disable(self):
         pass
@@ -59,7 +55,7 @@ class SimulatedLaser(VoxelLaser):
     @modulation_mode.setter
     def modulation_mode(self, value: str):
         if value not in MODULATION_MODES:
-            raise ValueError("mode must be one of %r." % MODULATION_MODES.keys())
+            raise ValueError('mode must be one of %r.' % MODULATION_MODES.keys())
         for attribute, state in MODULATION_MODES[value].items():
             setattr(self, attribute, state)
             self._modulation_mode = value

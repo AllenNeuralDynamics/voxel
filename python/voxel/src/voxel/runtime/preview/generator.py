@@ -32,8 +32,7 @@ class PreviewGenerator:
         channel_name: str,
         apply_transform: bool = False,
     ) -> PreviewFrame:
-        """
-        Generate a PreviewFrame from the raw frame using the current preview_settings.
+        """Generate a PreviewFrame from the raw frame using the current preview_settings.
         The method crops the raw frame to the ROI (using normalized coordinates) and then
         resizes the cropped image to the target preview dimensions. It also applies black/white
         point and gamma adjustments to produce an 8-bit preview.

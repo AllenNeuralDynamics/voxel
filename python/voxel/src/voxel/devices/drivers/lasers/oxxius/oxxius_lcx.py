@@ -1,14 +1,12 @@
 from oxxius_laser import LCX
 from serial import Serial
-
 from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 
 class OxxiusLCXLaser(VoxelLaser):
     def __init__(self, name: str, port: Serial | str, prefix: str, wavelength: int):
-        """
-        Communicate with specific LBX laser in L6CC Combiner box.
+        """Communicate with specific LBX laser in L6CC Combiner box.
 
         :param port: comm port for lasers.
         :param prefix: prefix specic to laser.
@@ -29,7 +27,7 @@ class OxxiusLCXLaser(VoxelLaser):
         return float(self._inst.power_setpoint)
 
     @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float | int):
+    def power_setpoint_mw(self, value: float):
         self._inst.power_setpoint = value
 
     @property

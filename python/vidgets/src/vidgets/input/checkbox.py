@@ -1,5 +1,6 @@
 from collections.abc import Callable
-from PySide6.QtWidgets import QVBoxLayout, QWidget, QCheckBox
+
+from PySide6.QtWidgets import QCheckBox, QVBoxLayout, QWidget
 
 
 class VCheckBox(QCheckBox):
@@ -41,7 +42,7 @@ class VSwitch(QWidget):
 
     def __init__(
         self,
-        text: str = "",
+        text: str = '',
         getter: Callable[[], bool] | None = None,
         setter: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,

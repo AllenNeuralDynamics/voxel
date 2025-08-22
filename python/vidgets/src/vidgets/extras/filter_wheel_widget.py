@@ -1,26 +1,25 @@
-from vidgets.extras.wheel import WheelGraphic
-from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
-
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
-    QMainWindow,
-    QVBoxLayout,
     QHBoxLayout,
-    QWidget,
-    QPushButton,
     QLabel,
+    QMainWindow,
+    QPushButton,
     QStyle,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt
+from vidgets.extras.wheel import WheelGraphic
+from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
 
 
 class FilterWheelWidget(QWidget):
     def __init__(self, filter_wheel: VoxelFilterWheel, hues: dict[str, int | float] | None = None):
         super().__init__()
         self._hues: dict[str, float | int] = {
-            "655LP": 0,  # red (0 degrees)
-            "620/60BP": 120,  # green (120 degrees)
-            "500LP": 230,  # blue (240 degrees)
+            '655LP': 0,  # red (0 degrees)
+            '620/60BP': 120,  # green (120 degrees)
+            '500LP': 230,  # blue (240 degrees)
         }
         if hues is not None:
             self._hues.update(hues)
@@ -33,7 +32,7 @@ class FilterWheelWidget(QWidget):
             hue_mapping=self._hues,
         )
         self._graphic.selected_changed.connect(lambda: self._update_filter())
-        self._status_label = QLabel("Hover over circles to see labels, click to select")
+        self._status_label = QLabel('Hover over circles to see labels, click to select')
 
         layout = QVBoxLayout()
         layout.addWidget(self._graphic)
@@ -50,12 +49,12 @@ class FilterWheelWidget(QWidget):
         controls_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         # - Row 1 - Step controls
-        left_btn = QPushButton("◀")
-        left_btn.setToolTip("Spin left")
+        left_btn = QPushButton('◀')
+        left_btn.setToolTip('Spin left')
         left_btn.clicked.connect(self._graphic.step_to_next)
 
-        right_btn = QPushButton("▶")
-        right_btn.setToolTip("Spin right")
+        right_btn = QPushButton('▶')
+        right_btn.setToolTip('Spin right')
         right_btn.clicked.connect(self._graphic.step_to_previous)
 
         row_1_layout = QHBoxLayout()
@@ -64,8 +63,8 @@ class FilterWheelWidget(QWidget):
         row_1_layout.addWidget(right_btn)
 
         # - Row 2 - Reset jand Status
-        reset_btn = QPushButton("⟳")
-        reset_btn.setToolTip("Reset wheel rotation")
+        reset_btn = QPushButton('⟳')
+        reset_btn.setToolTip('Reset wheel rotation')
         reset_btn.clicked.connect(self._graphic.reset_rotation)
 
         row_2_layout = QHBoxLayout()
@@ -79,26 +78,27 @@ class FilterWheelWidget(QWidget):
         return controls_layout
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import sys
+
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
         QApplication,
-        QMainWindow,
-        QVBoxLayout,
         QHBoxLayout,
-        QWidget,
-        QPushButton,
         QLabel,
+        QMainWindow,
+        QPushButton,
         QStyle,
+        QVBoxLayout,
+        QWidget,
     )
-    from PySide6.QtCore import Qt
     from voxel.devices.simulated.filter_wheel import SimulatedFilterWheel
     from voxel.utils.log import VoxelLogging
 
     class FilterWheelWidgetDemo(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("Filter Wheel Widget Demo")
+            self.setWindowTitle('Filter Wheel Widget Demo')
             self.setGeometry(100, 100, 800, 600)
 
             # Create main widget and layout
@@ -107,14 +107,14 @@ if __name__ == "__main__":
             layout = QVBoxLayout(main_widget)
 
             fw = SimulatedFilterWheel(
-                uid="simulated-filter_wheel",
-                labels={1: "655LP", 2: "620/60BP", 3: "500LP"},
+                uid='simulated-filter_wheel',
+                labels={1: '655LP', 2: '620/60BP', 3: '500LP'},
                 slot_count=6,
             )
             fw_wgt = FilterWheelWidget(fw)
             layout.addWidget(fw_wgt)
 
-    VoxelLogging.setup(level="DEBUG")
+    VoxelLogging.setup(level='DEBUG')
 
     app = QApplication(sys.argv)
     app.setWindowIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))

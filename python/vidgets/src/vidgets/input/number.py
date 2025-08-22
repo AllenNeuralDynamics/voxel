@@ -44,8 +44,8 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
         if isinstance(sample_value, float):
             self._spinbox = QDoubleSpinBox(parent)
             self._spinbox.setRange(
-                float(min_value) if min_value is not None else float("-inf"),
-                float(max_value) if max_value is not None else float("inf"),
+                float(min_value) if min_value is not None else float('-inf'),
+                float(max_value) if max_value is not None else float('inf'),
             )
             self._spinbox.setDecimals(decimals if decimals is not None else 2)
             self._spinbox.setValue(float(sample_value))
@@ -57,14 +57,15 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
             )
             self._spinbox.setValue(int(sample_value))
         else:
-            raise ValueError(f"Unsupported type: {type(sample_value)}. Sample value: {sample_value}")
+            msg = f'Unsupported type: {type(sample_value)}. Sample value: {sample_value}'
+            raise ValueError(msg)
 
         # Connect spinbox to binding (user input -> hardware)
         self._spinbox.valueChanged.connect(self._binding.set_value)
         self._binding.setParent(self._spinbox)
 
     def _update_display(self, value: T) -> None:
-        """Update spinbox display when binding value changes (from external sources)"""
+        """Update spinbox display when binding value changes (from external sources)."""
         self._spinbox.blockSignals(True)
         if isinstance(self._spinbox, QDoubleSpinBox):
             self._spinbox.setValue(float(value))
@@ -74,27 +75,27 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
 
     @property
     def widget(self) -> QSpinBox | QDoubleSpinBox:
-        """Access to the underlying spinbox widget for layout and styling"""
+        """Access to the underlying spinbox widget for layout and styling."""
         return self._spinbox
 
     # Forward common spinbox methods for convenience
     def setRange(self, min_val: T, max_val: T) -> None:
-        """Set the range of the spinbox"""
+        """Set the range of the spinbox."""
         if isinstance(self._spinbox, QDoubleSpinBox):
             self._spinbox.setRange(float(min_val), float(max_val))
         else:
             self._spinbox.setRange(int(min_val), int(max_val))
 
     def setSuffix(self, suffix: str) -> None:
-        """Set the suffix of the spinbox"""
+        """Set the suffix of the spinbox."""
         self._spinbox.setSuffix(suffix)
 
     def setPrefix(self, prefix: str) -> None:
-        """Set the prefix of the spinbox"""
+        """Set the prefix of the spinbox."""
         self._spinbox.setPrefix(prefix)
 
     def setSingleStep(self, step: T) -> None:
-        """Set the single step of the spinbox"""
+        """Set the single step of the spinbox."""
         if isinstance(self._spinbox, QDoubleSpinBox):
             self._spinbox.setSingleStep(float(step))
         else:
@@ -102,12 +103,12 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
 
     # Additional methods specific to QDoubleSpinBox
     def setDecimals(self, decimals: int) -> None:
-        """Set the number of decimal places (QDoubleSpinBox only)"""
+        """Set the number of decimal places (QDoubleSpinBox only)."""
         if isinstance(self._spinbox, QDoubleSpinBox):
             self._spinbox.setDecimals(decimals)
 
     def is_double_spinbox(self) -> bool:
-        """Check if this is using a QDoubleSpinBox"""
+        """Check if this is using a QDoubleSpinBox."""
         return isinstance(self._spinbox, QDoubleSpinBox)
 
 

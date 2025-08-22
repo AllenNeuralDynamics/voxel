@@ -1,4 +1,11 @@
-from .base import VoxelDevice, VoxelDeviceType, VoxelDeviceError, VoxelDeviceConnectionError
+"""Holds all device-related classes and interfaces serving as a Hardware Abstraction Layer (HAL).
+
+For each supported device type, there is a corresponding interface class that defines the expected behavior and
+properties.
+Each device inherits from `VoxelDevice`
+"""
+
+from .base import VoxelDevice, VoxelDeviceConnectionError, VoxelDeviceError, VoxelDeviceType
 from .interfaces.aotf import VoxelAOTF
 from .interfaces.camera import VoxelCamera
 from .interfaces.chiller import VoxelChiller
@@ -11,19 +18,19 @@ from .interfaces.rotation_axis import VoxelRotationAxis
 from .interfaces.tunable_lens import VoxelTunableLens
 
 __all__ = [
-    "VoxelDevice",
-    "VoxelDeviceType",
-    "VoxelDeviceError",
-    "VoxelDeviceConnectionError",
-    "VoxelAOTF",
-    "VoxelCamera",
-    "VoxelChiller",
-    "VoxelFilterWheel",
-    "VoxelFlipMount",
-    "VoxelLaser",
-    "VoxelLinearAxis",
-    "VoxelRotationAxis",
-    "LinearAxisDimension",
-    "VoxelPowerMeter",
-    "VoxelTunableLens",
+    'LinearAxisDimension',
+    'VoxelAOTF',
+    'VoxelCamera',
+    'VoxelChiller',
+    'VoxelDevice',
+    'VoxelDeviceConnectionError',
+    'VoxelDeviceError',
+    'VoxelDeviceType',
+    'VoxelFilterWheel',
+    'VoxelFlipMount',
+    'VoxelLaser',
+    'VoxelLinearAxis',
+    'VoxelPowerMeter',
+    'VoxelRotationAxis',
+    'VoxelTunableLens',
 ]

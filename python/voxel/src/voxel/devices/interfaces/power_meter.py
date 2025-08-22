@@ -1,12 +1,10 @@
 from abc import abstractmethod
 
-from ..base import VoxelDevice, VoxelDeviceType
+from voxel.devices.base import VoxelDevice, VoxelDeviceType
 
 
 class VoxelPowerMeter(VoxelDevice):
-    """
-    Abstract base class for a voxel power meter.
-    """
+    """Abstract base class for a voxel power meter."""
 
     def __init__(self, name: str) -> None:
         super().__init__(device_type=VoxelDeviceType.POWER_METER, uid=name)
@@ -14,26 +12,18 @@ class VoxelPowerMeter(VoxelDevice):
     @property
     @abstractmethod
     def power_mw(self) -> float:
-        """
-        Returns:
-        float: The power in milliwatts.
-        """
-        pass
+        """The power in milliwatts."""
 
     @property
     @abstractmethod
     def wavelength_nm(self) -> float:
-        """
-        Returns:
-        int: The wavelength in nanometers.
-        """
-        pass
+        """The wavelength in nanometers."""
 
     @wavelength_nm.setter
     @abstractmethod
-    def wavelength_nm(self, wavelength: float):
+    def wavelength_nm(self, wavelength: float) -> None:
+        """Set the wavelength in nanometers.
+
+        Args:
+            wavelength (float): The new wavelength in nanometers.
         """
-        Parameters:
-        wavelength (int): The new wavelength in nanometers.
-        """
-        pass

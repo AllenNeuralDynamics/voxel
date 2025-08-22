@@ -1,7 +1,7 @@
 import time
 from enum import StrEnum
 from functools import cached_property
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, ClassVar, TypedDict
 
 import numpy as np
 from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
@@ -26,22 +26,35 @@ class ImageModelParams(TypedDict):
 
 
 DEFAULT_IMAGE_MODEL: ImageModelParams = {
-    "qe": 0.85,
-    "gain": 0.08,
-    "dark_noise": 6.89,
-    "bitdepth": 12,
-    "baseline": 0,
+    'qe': 0.85,
+    'gain': 0.08,
+    'dark_noise': 6.89,
+    'bitdepth': 12,
+    'baseline': 0,
 }
 
 
 class FrameGenStrategy(StrEnum):
     """Enumeration of available frame generation strategies."""
 
-    TILE = "tile"
-    UPSAMPLE = "upsample"
-    RIPPLE = "ripple"
-    SPIRAL = "spiral"
-    CHECKERED = "checkered"
+    TILE = 'tile'
+    UPSAMPLE = 'upsample'
+    RIPPLE = 'ripple'
+    SPIRAL = 'spiral'
+    CHECKERED = 'checkered'
+
+
+class FrameGenConfig(TypedDict):
+    strategy: FrameGenStrategy
+    reference_path: str
+    max_frame_rate: int
+
+
+DEFAULT_FRAME_GEN_CONFIG: FrameGenConfig = {
+    'strategy': FrameGenStrategy.TILE,
+    'reference_path': 'voxel/utils/frame_gen/reference_image.tif',
+    'max_frame_rate': 15,
+}
 
 
 class SimulatedCamera(VoxelCamera):
@@ -53,47 +66,43 @@ class SimulatedCamera(VoxelCamera):
     _max_exposure_time_ms: float = 1e2
     _step_exposure_time_ms: float = 1.0
     _init_exposure_time_ms: float = 10
-    _line_interval_us_lut = {"MONO8": 8.00, "MONO16": 12.00}
-    _binning_lut = {1: "1x1", 2: "2x2", 4: "4x4"}
-    PIXEL_FORMATS = ["MONO16", "MONO8"]
-    PIXEL_TYPE_MAP = {"MONO8": PixelType.UINT8, "MONO16": PixelType.UINT16}
+    _line_interval_us_lut: ClassVar[dict[str, float]] = {'MONO8': 8.00, 'MONO16': 12.00}
+    _binning_lut: ClassVar[dict[int, str]] = {1: '1x1', 2: '2x2', 4: '4x4'}
+    PIXEL_FORMATS: ClassVar[list[str]] = ['MONO16', 'MONO8']
+    PIXEL_TYPE_MAP: ClassVar[dict[str, PixelType]] = {'MONO8': PixelType.UINT8, 'MONO16': PixelType.UINT16}
 
     def __init__(
         self,
-        name: str,
-        pixel_size_um: tuple[float, float] | str,
+        uid: str,
+        pixel_size_um: Vec2D[float] | str,
         magnification: float = 1,
-        sensor_width_px: int = VP_151MX_M6H0.x,
-        sensor_height_px: int = VP_151MX_M6H0.y,
-        strategy: FrameGenStrategy = FrameGenStrategy.TILE,
-        image_model_params: ImageModelParams = DEFAULT_IMAGE_MODEL,
-        max_frame_rate: int = 15,
-        reference_path: str = "voxel/utils/frame_gen/reference_image.tif",
+        sensor_size_px: Vec2D[int] | str = VP_151MX_M6H0,
+        frame_gen: FrameGenConfig | None = None,
     ) -> None:
-        self._image_model_params = image_model_params
-        self._strategy = strategy
-        self._reference_path = reference_path  # Store strategy-specific params
-        self._sensor_size_px = Vec2D(sensor_width_px, sensor_height_px)
-        self._roi_width_px = sensor_width_px
-        self._roi_height_px = sensor_height_px
+        frame_gen = frame_gen or DEFAULT_FRAME_GEN_CONFIG
+        self._strategy = frame_gen['strategy']
+        self._reference_path = frame_gen['reference_path']
+        self._sensor_size_px = Vec2D.from_str(sensor_size_px) if isinstance(sensor_size_px, str) else sensor_size_px
+        self._roi_width_px = self._sensor_size_px.x
+        self._roi_height_px = self._sensor_size_px.y
         self._roi_width_offset_px = 0
         self._roi_height_offset_px = 0
         self._exposure_time_ms = self._init_exposure_time_ms
         self._binning = 1
         self._pixel_format = self.PIXEL_FORMATS[0]
-        self._max_frame_time_ms = 1 / max_frame_rate * 1000
+        self._max_frame_time_ms = 1 / frame_gen['max_frame_rate'] * 1000
         self._last_grab_frame_time = 0
         self._is_running = False
         self._frame_count = 0
         self._requested_frame_count = -1
-        self._generator: "FrameGenerator | None" = None
+        self._generator: FrameGenerator | None = None
 
-        super().__init__(name=name, pixel_size_um=pixel_size_um, magnification=magnification)
+        super().__init__(uid=uid, pixel_size_um=pixel_size_um, magnification=magnification)
 
     def _invalidate_generator(self):
         """Invalidates the current generator, forcing recreation on next grab."""
         self._generator = None
-        self._log.debug("Frame generator invalidated due to setting change.")
+        self.log.debug('Frame generator invalidated due to setting change.')
 
     @property
     def strategy(self) -> FrameGenStrategy:
@@ -157,7 +166,9 @@ class SimulatedCamera(VoxelCamera):
         self._invalidate_generator()
 
     @deliminated_int(
-        min_value=0, max_value=lambda self: self.sensor_size_px.x, step=lambda self: self._roi_step_width_px
+        min_value=0,
+        max_value=lambda self: self.sensor_size_px.x,
+        step=lambda self: self._roi_step_width_px,
     )
     def roi_width_offset_px(self) -> int:
         return self._roi_width_offset_px
@@ -168,7 +179,9 @@ class SimulatedCamera(VoxelCamera):
         self._invalidate_generator()
 
     @deliminated_int(
-        min_value=0, max_value=lambda self: self.sensor_size_px.y, step=lambda self: self._roi_step_height_px
+        min_value=0,
+        max_value=lambda self: self.sensor_size_px.y,
+        step=lambda self: self._roi_step_height_px,
     )
     def roi_height_offset_px(self) -> int:
         return self._roi_height_offset_px
@@ -202,25 +215,28 @@ class SimulatedCamera(VoxelCamera):
     @property
     def frame_time_ms(self) -> float:
         readout_time_ms = self._line_interval_us_lut[self.pixel_format] * self.roi_height_px / 1000
-        self._log.debug(
-            f"Readout: {readout_time_ms} ms, exposure: {self.exposure_time_ms} ms, max: {self._max_frame_time_ms} ms"
+        self.log.debug(
+            'Readout: %f ms, exposure: %f ms, max: %f ms',
+            readout_time_ms,
+            self.exposure_time_ms,
+            self._max_frame_time_ms,
         )
         # return min(max(self.exposure_time_ms, readout_time_ms), self._max_frame_time_ms) * 0.75
         return max(self.exposure_time_ms, readout_time_ms)
 
     def prepare(self) -> None:
-        self._log.info("Preparing simulated camera. Generating reference image")
+        self.log.info('Preparing simulated camera. Generating reference image')
 
     def start(self, frame_count: int | None = None) -> None:
         if self._is_running:
-            self._log.warning("Camera is already running. Ignoring start command.")
+            self.log.warning('Camera is already running. Ignoring start command.')
             return
         self._is_running = True
         self._frame_count = 0
         self._requested_frame_count = frame_count if frame_count is not None else -1
         self._last_grab_frame_time = 0
-        frame_msg = f"{frame_count}" if frame_count else "infinite"
-        self._log.info(f"Simulated camera started. Ready to acquire {frame_msg} frames.")
+        frame_msg = f'{frame_count}' if frame_count else 'infinite'
+        self.log.info('Simulated camera started. Ready to acquire %s frames.', frame_msg)
 
     def stop(self) -> None:
         self._is_running = False
@@ -228,11 +244,11 @@ class SimulatedCamera(VoxelCamera):
 
     def grab_frame(self) -> np.ndarray:
         if not self._is_running:
-            self._log.critical("Attempted to grab frame while camera is not running")
+            self.log.critical('Attempted to grab frame while camera is not running')
             return np.zeros((int(self.frame_size_px.x), int(self.frame_size_px.y)), dtype=self.pixel_type.dtype)
 
         if self._generator is None:
-            self._log.debug("No valid generator. Creating a new one.")
+            self.log.debug('No valid generator. Creating a new one.')
 
             # Efficiently calculate final frame size post-binning
             width = self.roi_width_px // self.binning
@@ -288,16 +304,17 @@ class SimulatedCamera(VoxelCamera):
 
     @property
     def sensor_temperature_c(self) -> float:
-        return np.random.uniform(49, 55)
+        rng = np.random.default_rng()
+        return rng.uniform(49, 55)
 
     def _configure_free_running_mode(self) -> None:
-        self._log.info("Simulated camera does not support free running mode")
+        self.log.info('Simulated camera does not support free running mode')
 
     def _configure_software_triggering(self) -> None:
-        self._log.info("Simulated camera does not support software triggering")
+        self.log.info('Simulated camera does not support software triggering')
 
     def _configure_hardware_triggering(self) -> None:
-        self._log.info("Simulated camera does not support hardware triggering")
+        self.log.info('Simulated camera does not support hardware triggering')
 
     def close(self):
         self.stop()

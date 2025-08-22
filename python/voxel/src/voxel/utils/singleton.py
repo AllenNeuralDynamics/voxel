@@ -1,10 +1,10 @@
 from functools import wraps
 from threading import Lock
+from typing import ClassVar
 
 
 def thread_safe_singleton(func):
-    """
-    A decorator that makes a function a thread-safe singleton.
+    """A decorator that makes a function a thread-safe singleton.
     The decorated function will only be executed once, and its result
     will be cached and returned for all subsequent calls.
     """
@@ -24,11 +24,9 @@ def thread_safe_singleton(func):
 
 
 class Singleton(type):
-    """
-    This is a thread-safe implementation of Singleton.
-    """
+    """This is a thread-safe implementation of Singleton."""
 
-    _instances = {}
+    _instances: ClassVar = {}
 
     _lock: Lock = Lock()
     """
@@ -37,8 +35,7 @@ class Singleton(type):
     """
 
     def __call__(cls, *args, **kwargs):
-        """
-        Possible changes to the value of the `__init__` argument do not affect
+        """Possible changes to the value of the `__init__` argument do not affect
         the returned instance.
         """
         # Now, imagine that the program has just been launched. Since there's no

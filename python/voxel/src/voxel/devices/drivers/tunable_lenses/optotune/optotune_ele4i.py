@@ -6,8 +6,8 @@ from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLe
 # constants for Optotune EL-E-4i controller
 
 MODES = {
-    ETLControlMode.EXTERNAL: ["MwDA", ">xxx"],
-    ETLControlMode.INTERNAL: ["MwCA", ">xxxBhh"],
+    ETLControlMode.EXTERNAL: ['MwDA', '>xxx'],
+    ETLControlMode.INTERNAL: ['MwCA', '>xxxBhh'],
 }
 
 
@@ -15,7 +15,7 @@ def crc_16(s):
     crc = 0x0000
     for c in s:
         crc = crc ^ c
-        for _ in range(0, 8):
+        for _ in range(8):
             crc = (crc >> 1) ^ 0xA001 if (crc & 1) > 0 else crc >> 1
 
     return crc
@@ -29,24 +29,31 @@ class OptotuneELE4ITunableLens(VoxelTunableLens):
 
         self._ser = serial.Serial(port=port, baudrate=115200, timeout=1)
         self._ser.flush()
-        res = self._send_command("X", ">x8s")
+        res = self._send_command('X', '>x8s')
         if res:
             try:
-                self.serial_number = res[0].decode("ascii")
+                self.serial_number = res[0].decode('ascii')
             except IndexError:
-                self._log.error(f"Error reading serial number: {res}")
+                self.log.exception('Error reading serial number: %s', res)
 
     @property
     def mode(self) -> ETLControlMode:
         """Get the tunable lens control mode."""
         mode = ETLControlMode.UNKNOWN
-        if res := self._send_command("MMA", ">xxxB"):
+        if res := self._send_command('MMA', '>xxxB'):
+            mode_ranges: dict[int, ETLControlMode] = {
+                1: ETLControlMode.INTERNAL,
+                2: ETLControlMode.EXTERNAL,
+                3: ETLControlMode.EXTERNAL,
+                4: ETLControlMode.EXTERNAL,
+                5: ETLControlMode.EXTERNAL,
+            }
             try:
                 res = res[0]
-                mode = ETLControlMode.INTERNAL if res == 1 else ETLControlMode.EXTERNAL if res == 5 else mode
-                self._log.debug(f"Mode: {mode}")
+                mode = mode_ranges.get(res, ETLControlMode.UNKNOWN)
+                self.log.debug('Mode: %s', mode)
             except IndexError:
-                self._log.error(f"Error reading mode: {res}")
+                self.log.exception('Error reading mode: %s', res)
         return mode
 
     @mode.setter
@@ -59,46 +66,46 @@ class OptotuneELE4ITunableLens(VoxelTunableLens):
     def temperature_c(self) -> float:
         """Get the temperature in deg C."""
         temp: float = -9999.0
-        if temp_res := self._send_command("TCA", ">xxxh"):
+        if temp_res := self._send_command('TCA', '>xxxh'):
             try:
                 temp = temp_res[0] * 0.0625 if temp_res else temp
-                self._log.debug(f"Temperature: {temp}")
+                self.log.debug('Temperature: %s', temp)
             except IndexError:
-                self._log.error(f"Error reading temperature: {temp_res}")
+                self.log.exception('Error reading temperature: %s', temp_res)
 
         return temp
 
     def _send_command(self, command, reply_fmt=None):
         if type(command) is not bytes:
-            command = bytes(command, encoding="ascii")
-        command += struct.pack("<H", crc_16(command))
+            command = bytes(command, encoding='ascii')
+        command += struct.pack('<H', crc_16(command))
         if self.debug:
-            commandhex = " ".join("{:02x}".format(c) for c in command)
-            print("{:<50} ¦ {}".format(commandhex, command))
+            commandhex = ' '.join(f'{c:02x}' for c in command)
+            print(f'{commandhex:<50} ¦ {command}')
         self._ser.write(command)
 
         if reply_fmt is not None:
             response_size = struct.calcsize(reply_fmt)
             response = self._ser.read(response_size + 4)
             if self.debug:
-                responsehex = " ".join("{:02x}".format(c) for c in response)
-                print("{:>50} ¦ {}".format(responsehex, response))
+                responsehex = ' '.join(f'{c:02x}' for c in response)
+                print(f'{responsehex:>50} ¦ {response}')
 
             if not response:
-                raise Exception("Expected response not received")
+                raise RuntimeError('Expected response not received')
 
-            data, crc, newline = struct.unpack("<{}sH2s".format(response_size), response)
-            if crc != crc_16(data) or newline != b"\r\n":
-                raise Exception("Response CRC not correct")
+            data, crc, newline = struct.unpack(f'<{response_size}sH2s', response)
+            if crc != crc_16(data) or newline != b'\r\n':
+                raise RuntimeError('Response CRC not correct')
 
             return struct.unpack(reply_fmt, data)
 
     def log_metadata(self):
         return {
-            "name": self.uid,
-            "serial_number": self.serial_number,
-            "mode": self.mode,
-            "temperature_c": self.temperature_c,
+            'name': self.uid,
+            'serial_number': self.serial_number,
+            'mode': self.mode,
+            'temperature_c': self.temperature_c,
         }
 
     def close(self):

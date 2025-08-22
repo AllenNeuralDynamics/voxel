@@ -20,13 +20,13 @@ class SimulatedFilterWheel(VoxelFilterWheel):
         max_idx = max(labels) if labels else 0
         self._slot_count = slot_count or max(max_idx, 0)
         if self._slot_count <= 0:
-            raise ValueError("slot_count must be > 0")
+            raise ValueError('slot_count must be > 0')
 
         # Fill missing indices with None; enforce 1-based contiguous indices
         self._labels: dict[int, str | None] = {i: labels.get(i) for i in range(1, self._slot_count + 1)}
 
         if not (1 <= start_pos <= self._slot_count):
-            raise ValueError("start_pos out of range")
+            raise ValueError('start_pos out of range')
 
         self._position = start_pos
         self._is_moving = False
@@ -53,11 +53,12 @@ class SimulatedFilterWheel(VoxelFilterWheel):
     # --------- commands ----------
     def move(self, slot: int, *, wait: bool = True, timeout: float | None = 5.0) -> None:
         if not (1 <= slot <= self._slot_count):
-            raise ValueError(f"Invalid slot {slot}; valid range is 1..{self._slot_count}")
+            msg = f'Invalid slot {slot}; valid range is 1..{self._slot_count}'
+            raise ValueError(msg)
 
         self._is_moving = True
         self._position = slot
-        self._log.debug(f"SimulatedFilterWheel {self.uid}: Moving to slot {slot} ({self._labels.get(slot)})")
+        self.log.debug(f'SimulatedFilterWheel {self.uid}: Moving to slot {slot} ({self._labels.get(slot)})')
 
         if wait:
             time.sleep(self._settle)

@@ -10,12 +10,11 @@ if TYPE_CHECKING:
     from voxel.instrument import Instrument
     from voxel.reporting.errors import ErrorInfo
 
-_yaml = YAML(typ="safe")
+_yaml = YAML(typ='safe')
 
 
 class BaseDefinition(BaseModel, ABC):
-    """
-    Base class for all definitions that can be persisted.
+    """Base class for all definitions that can be persisted.
     It should have a unique identifier (uid) and can be extended by other models.
     """
 
@@ -23,10 +22,10 @@ class BaseDefinition(BaseModel, ABC):
     description: str | None = None
 
     class Config:
-        extra = "forbid"  # Disallow extra fields not defined in the model
+        extra = 'forbid'  # Disallow extra fields not defined in the model
 
     @abstractmethod
-    def validate_definition(self, instrument: "Instrument") -> Sequence["ErrorInfo"]:
+    def validate_definition(self, instrument: 'Instrument') -> Sequence['ErrorInfo']:
         """Validate this definition against the given instrument. Returns sequence of error objects."""
         ...
 
@@ -81,14 +80,13 @@ class DefinitionStore[T: BaseDefinition]:
 
 
 class DefinitionsProviderBase[T: BaseDefinition](ABC):
-    """
-    Manages an in-memory cache of T plus an optional persistence layer.
+    """Manages an in-memory cache of T plus an optional persistence layer.
     Subclasses must implement `get_build_options()` to expose the schema/options.
     """
 
     def __init__(
         self,
-        instrument: "Instrument",
+        instrument: 'Instrument',
         persistence: Repository[T],
     ):
         self._inst = instrument
@@ -110,9 +108,8 @@ class DefinitionsProviderBase[T: BaseDefinition](ABC):
         with self._lock:
             return dict(self._cache)
 
-    def add(self, obj: T) -> Sequence["ErrorInfo"]:
-        """
-        Validate then add to the cache (and persist if configured).
+    def add(self, obj: T) -> Sequence['ErrorInfo']:
+        """Validate then add to the cache (and persist if configured).
         Expects T to implement `validate_definition(instrument)`.
         Returns sequence of error objects if validation fails, empty sequence if successful.
         """
@@ -134,4 +131,3 @@ class DefinitionsProviderBase[T: BaseDefinition](ABC):
     @abstractmethod
     def get_build_options(self) -> BaseModel:
         """Return a BaseModel that exposes the available schema/options to build T."""
-        pass

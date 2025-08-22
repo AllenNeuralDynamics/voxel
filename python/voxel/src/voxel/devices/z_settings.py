@@ -10,7 +10,7 @@ from pydantic import BaseModel, RootModel, model_validator
 class ZPoint(BaseModel):
     z: float
     value: float
-    model_config = {"frozen": True}
+    model_config = {'frozen': True}
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ZPoint):
@@ -24,16 +24,19 @@ class ZPoint(BaseModel):
             return False
         return self.z < other.z
 
+    def __hash__(self) -> int:
+        return hash((self.z, self.value))
+
 
 class ZSetting(RootModel[list[ZPoint]]):
     @property
     def points(self) -> list[ZPoint]:
         return self.root
 
-    @model_validator(mode="after")
+    @model_validator(mode='after')
     def check_and_sort_points(self) -> Self:
         if not self.root:
-            raise ValueError("ZSetting points cannot be empty")
+            raise ValueError('ZSetting points cannot be empty')
         self.root.sort()
         return self
 
@@ -58,8 +61,8 @@ class ZSetting(RootModel[list[ZPoint]]):
         bisect.insort_left(self.points, point)
 
     def merge(self, other: Self) -> None:
-        """
-        Merges another ZSetting into this one.
+        """Merges another ZSetting into this one.
+
         Points from the other setting are added to this one.
         If a point with the same z-coordinate exists, it is replaced.
         """
@@ -67,8 +70,8 @@ class ZSetting(RootModel[list[ZPoint]]):
             self.add_point(point)
 
     def get_value(self, z: float | None = None) -> float:
-        """
-        Retrieves the value at a given z-coordinate.
+        """Retrieves the value at a given z-coordinate.
+
         - If z is None, it returns the value of the point with the median z-coordinate.
           (Or, if values are non-numeric, the value of the middle point by index).
         - If only one point exists, its value is returned.
@@ -78,7 +81,7 @@ class ZSetting(RootModel[list[ZPoint]]):
           If no such point, returns the value of the first point (smallest z).
         """
         if not self.points:
-            raise ValueError("ZSetting has no points from which to get a value.")
+            raise ValueError('ZSetting has no points from which to get a value.')
 
         # if only one point is present, return its value
         if len(self.points) == 1:
@@ -96,18 +99,19 @@ class ZSetting(RootModel[list[ZPoint]]):
         return float(np.interp(z, self.z_coords, setting_vals_np).item())
 
     def remove_point(self, z: float) -> None:
-        """
-        Removes a point with the specified z-coordinate unless it is the only point.
+        """Removes a point with the specified z-coordinate unless it is the only point.
+
         Raises IndexError if the point is the only one in the list.
         Raises ValueError if no such point exists.
         """
         if len(self.points) == 1:
-            raise IndexError("Cannot remove the only point in the ZSetting.")
+            raise IndexError('Cannot remove the only point in the ZSetting.')
         for i, p in enumerate(self.points):
             if p.z == z:
                 del self.points[i]
                 return
-        raise ValueError(f"No point found with z-coordinate {z}.")
+        error_msg = f'No point found with z-coordinate {z}.'
+        raise ValueError(error_msg)
 
 
 type ZSettingsCollection = dict[str, ZSetting]  # prop_name -> ZSetting for that property

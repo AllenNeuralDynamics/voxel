@@ -1,52 +1,84 @@
 line-length = 120
 show-fixes = true
 
-target-version = "py312"
+target-version = 'py312'
 exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".gitignore",
-    ".git-rewrite",
-    ".hg",
-    ".ipynb_checkpoints",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pyenv",
-    ".pytest_cache",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    ".vscode",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "site-packages",
-    "venv",
-    "**/sdk",
-    "**/sdks",
+    # '.bzr',
+    # '.direnv',
+    # '.eggs',
+    # '.git',
+    # '.gitignore',
+    # '.git-rewrite',
+    # '.hg',
+    # '.ipynb_checkpoints',
+    # '.mypy_cache',
+    # '.nox',
+    # '.pants.d',
+    # '.pyenv',
+    # '.pytest_cache',
+    # '.pytype',
+    # '.ruff_cache',
+    # '.svn',
+    # '.tox',
+    # '.venv',
+    # '.vscode',
+    # '__pypackages__',
+    # '_build',
+    # 'buck-out',
+    # 'build',
+    # 'dist',
+    # 'node_modules',
+    # 'site-packages',
+    # 'venv',
+    '**/sdk',
+    '**/sdks',
     # To clean up later - exclude from linting till then
-    "python/voxel/src/voxel/utils/processing",
-    "python/voxel/tests/processes",
-    "python/voxel-classic",
-    "python/vidgets/src/vidgets/view",
-    "classic_drivers",
+    'python/voxel/src/voxel/utils/processing',
+    'python/voxel/tests/processes',
+    'python/voxel-classic',
+    'python/vidgets/src/vidgets/view',
+    'classic_drivers',
 ]
 
 [format]
 docstring-code-format = true
-docstring-code-line-length = "dynamic"
-indent-style = "space"
+docstring-code-line-length = 'dynamic'
+indent-style = 'space'
+quote-style = 'single'
 
 [lint]
-extend-select = ["A", "B", "E", "C4", "SIM", "TC"]
-unfixable = ["B"]
-fixable = ["ALL"]
-flake8-builtins.ignorelist = ["print"]
+select = ['ALL']
+ignore = [
+    'ANN',     # Missing type annotations
+    'ANN401',  # Dynamically typed expressions (typing.Any) are disallowed in {name}
+    'D100',    # Missing docstring in public module
+    'D101',    # Missing docstring in public class
+    'D102',    # Missing docstring in public method
+    'D103',    # Missing docstring in public function
+    'D104',    # Missing docstring in public package
+    'D105',    # Missing docstring in magic method
+    'D107',    # Missing docstring in __init__ method
+    'D205',    # One blank line required between summary line and description
+    'T201',    # 'Print' found
+    'TRY003',  # Specifying long messages outside the exception class (Also EM101, EM102)
+    'EM101',   #
+    'S101',    # Assert detected
+    'FBT001',  # Boolean-typed positional argument in function definition
+    'FBT002',  # Boolean-typed default value in function definition
+    'ERA001',  # Commented out code
+    'TD',      # Missing issue link for this TODO, Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>:
+    'FIX002',  # Line contains TODO, consider resolving the issue
+    'RET503',  # Missing explicit `return` at the end of function able to return non-`None` value
+    'UP031',   # Use format specifiers instead of percent format
+    'INP001',  # implicit-namespace-package
+    'PLR0913', # Too many arguments in function definition
+]
+# extend-select = ['A', 'B', 'E', 'C4', 'SIM', 'TC']
+unfixable = ['B']
+fixable = ['ALL']
+extend-safe-fixes = ['D415', 'D205']
+flake8-builtins.ignorelist = ['print']
+flake8-quotes = { inline-quotes = 'single', multiline-quotes = 'double' }
+# isort = { known-first-party = ['pydantic', 'tests'] }
+# mccabe = { max-complexity = 14 }
+pydocstyle = { convention = 'google' }

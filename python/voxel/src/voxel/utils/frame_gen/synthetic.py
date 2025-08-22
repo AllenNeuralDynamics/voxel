@@ -7,7 +7,7 @@ class RippleGenerator(FrameGenerator):
     """Generates frames with a concentric ripple pattern."""
 
     def __init__(
-        self, height_px: int, width_px: int, data_type: np.dtype, ring_count: int = 20, duty_cycle: float = 0.5
+        self, height_px: int, width_px: int, data_type: np.dtype, ring_count: int = 20, duty_cycle: float = 0.5,
     ):
         self.height = height_px
         self.width = width_px
@@ -47,8 +47,7 @@ class SpiralGenerator(FrameGenerator):
         self.z_pos = 0
 
     def generate(self, nframes: int = 1) -> np.ndarray:
-        """
-        Generates a stack of frames with an expanding spiral pattern.
+        """Generates a stack of frames with an expanding spiral pattern.
 
         Note: This generator is stateful. Each call to generate continues
         the pattern from where it left off.

@@ -9,7 +9,6 @@ from tigerasi.device_codes import (
     TTLOut0Mode,
 )
 from tigerasi.tiger_controller import TigerController
-
 from voxel.devices import VoxelDevice, VoxelDeviceConnectionError, VoxelDeviceType
 from voxel.devices.interfaces.linear_axis import LinearAxisDimension, ScanState
 
@@ -19,16 +18,16 @@ type DimensionsMap = dict[LinearAxisDimension, str]  # LinearAxisDimension -> ax
 
 
 class TigerBoxETLControlMode(StrEnum):
-    TG1000_INPUT_NO_TEMP_COMPENSATION = "0"
-    EXTERNAL_INPUT_NO_TEMP_COMPENSATION = "1"
-    TG1000_INPUT_WITH_TEMP_COMPENSATION = "2"
+    TG1000_INPUT_NO_TEMP_COMPENSATION = '0'
+    EXTERNAL_INPUT_NO_TEMP_COMPENSATION = '1'
+    TG1000_INPUT_WITH_TEMP_COMPENSATION = '2'
 
 
 STEPS_PER_UM = 10
 
 
 class ASITigerBox(VoxelDevice):
-    def __init__(self, port: str, name: str = "tigerbox") -> None:
+    def __init__(self, port: str, name: str = 'tigerbox') -> None:
         super().__init__(name, device_type=VoxelDeviceType.HUB)
         self.tiger_controller = TigerController(port)
         self.axis_map = {}
@@ -50,7 +49,7 @@ class ASITigerBox(VoxelDevice):
         self.axis_step_backlash_mm = 0.01
 
         self.log = self.tiger_controller.log
-        self.log.debug(f"Connected to TigerBox on port {port}. Hardware Configuration: {self.build_config}")
+        self.log.debug('Connected to TigerBox on port %s. Hardware Configuration: %s', port, self.build_config)
 
     @property
     def hardware_axes(self) -> list[str]:
@@ -65,24 +64,30 @@ class ASITigerBox(VoxelDevice):
         hardware_mapping = self.tiger_controller.get_joystick_axis_mapping()
         return {axis_name: hardware_mapping[hardware_axis] for axis_name, hardware_axis in self.axis_map.items()}
 
-    def register_device(self, axis_name: str, hardware_axis: str):
+    def register_device(self, axis_name: str, hardware_axis: str) -> None:
         """Register a device with the TigerBox controller.
+
         :param axis_name: unique axis identifier
         :param hardware_axis: hardware axis name, must be one of the available axes on the connected TigerBox
         :raises VoxelDeviceConnectionError: if the hardware axis is not found in the connected TigerBox
-        or if the axis ID is already registered
+        or if the axis ID is already registered.
         """
         if hardware_axis not in self.hardware_axes:
+            msg = (
+                f'Hardware axis {hardware_axis} not found in the connected tigerbox. '
+                f'Available axes: {self.hardware_axes}'
+            )
             raise VoxelDeviceConnectionError(
-                f"Hardware axis {hardware_axis} not found in the connected tigerbox. "
-                f"Available axes: {self.hardware_axes}"
+                msg,
             )
 
         for axis, hw_axis in self.axis_map.items():
             if hw_axis == hardware_axis:
-                raise VoxelDeviceConnectionError(f"Hardware axis {hardware_axis} already registered as {axis}")
+                msg = f'Hardware axis {hardware_axis} already registered as {axis}'
+                raise VoxelDeviceConnectionError(msg)
             if axis_name == axis:
-                raise VoxelDeviceConnectionError(f"Axis ID {axis_name} already registered as {hw_axis}")
+                msg = f'Axis ID {axis_name} already registered as {hw_axis}'
+                raise VoxelDeviceConnectionError(msg)
 
         self.axis_map[axis_name] = hardware_axis
 
@@ -93,22 +98,24 @@ class ASITigerBox(VoxelDevice):
         dimension: LinearAxisDimension,
         joystick_polarity: Literal[-1, 1] = 1,
         joystick_input: JoystickInput = JoystickInput.NONE,
-    ):
+    ) -> None:
         """Register a linear axis with the TigerBox controller.
+
         :param axis_name: unique axis identifier
         :param hardware_axis: hardware axis name, must be one of the available axes on the connected TigerBox
         :param dimension: LinearAxisDimension, X, Y, Z, or N
         :param joystick_input: JoystickInput, the joystick input to bind to this axis
         :param joystick_polarity: 1 for DEFAULT, -1 for INVERTED
         :raises VoxelDeviceConnectionError: if the hardware axis is not found in the connected TigerBox
-        or if the axis ID is already registered
+        or if the axis ID is already registered.
         """
         self.register_device(axis_name, hardware_axis)
 
         # there can be only one X, Y, Z axis but multiple N axes
         if dimension != LinearAxisDimension.N:
             if dimension in self.dimensions_map:
-                raise ValueError(f"Dimension {dimension} already registered as {self.dimensions_map[dimension]}")
+                msg = f'Dimension {dimension} already registered as {self.dimensions_map[dimension]}'
+                raise ValueError(msg)
             self.dimensions_map[dimension] = axis_name
 
         joystick_input = joystick_input or self._default_joystick_input(dimension)
@@ -119,7 +126,7 @@ class ASITigerBox(VoxelDevice):
 
         # self.disable_zero_button(axis_name)
 
-    def deregister_device(self, axis_name: str):
+    def deregister_device(self, axis_name: str) -> None:
         if axis_name in self.axis_map:
             self.axis_map.pop(axis_name)
 
@@ -144,7 +151,8 @@ class ASITigerBox(VoxelDevice):
 
     def move_absolute_mm(self, axis_name: str, position_mm: float) -> None:
         self.tiger_controller.move_absolute(
-            **{self.axis_map[axis_name]: int(round(position_mm * 1000 * STEPS_PER_UM))}, wait=True
+            **{self.axis_map[axis_name]: round(position_mm * 1000 * STEPS_PER_UM)},
+            wait=True,
         )
 
     def await_movement(self) -> None:
@@ -240,10 +248,11 @@ class ASITigerBox(VoxelDevice):
                 aux_io_state=0,
             )
             self.scan_state = ScanState.CONFIGURED
-            return True
-        except Exception as e:
-            self.log.error(f"Failed to setup step-and-shoot scan: {e}")
+        except Exception:
+            self.log.exception('Failed to setup step-and-shoot scan')
             return False
+        else:
+            return True
 
     # TODO Unfinished implementation of stage scan.
     def setup_stage_scan(
@@ -276,13 +285,19 @@ class ASITigerBox(VoxelDevice):
         # TODO: if position is unspecified, we should set is as
         #  "current position" from hardware.
         # Get the axis name in machine coordinate frame.
+        max_retrace_speed_percent = 100
+        if retrace_speed_percent <= 0 or retrace_speed_percent > max_retrace_speed_percent:
+            msg = (
+                f'Invalid retrace_speed_percent: {retrace_speed_percent}. '
+                f'Must be between 1 and {max_retrace_speed_percent}.'
+            )
+            raise ValueError(msg)
 
-        assert 100 >= retrace_speed_percent > 0
         fast_axis = self.axis_map[LinearAxisDimension.X]
         slow_axis = self.axis_map[LinearAxisDimension.Y]
 
         # Stop any existing scan. Apply machine coordinate frame scan params.
-        self.log.debug(f"fast axis start: {fast_axis_start_position},slow axis start: {slow_axis_start_position}")
+        self.log.debug('fast axis start: %s, slow axis start: %s', fast_axis_start_position, slow_axis_start_position)
 
         self.tiger_controller.setup_scan(fast_axis, slow_axis, pattern)
         self.tiger_controller.scanr(
@@ -292,7 +307,9 @@ class ASITigerBox(VoxelDevice):
             retrace_speed_percent=retrace_speed_percent,
         )
         self.tiger_controller.scanv(
-            scan_start_mm=slow_axis_start_position, scan_stop_mm=slow_axis_stop_position, line_count=strip_count
+            scan_start_mm=slow_axis_start_position,
+            scan_stop_mm=slow_axis_stop_position,
+            line_count=strip_count,
         )
 
     def start_scan(self, wait: bool = True) -> None:
@@ -332,7 +349,7 @@ class ASITigerBox(VoxelDevice):
     def set_axis_joystick_polarity(self, axis_name: str, polarity: int) -> None:
         """Set the polarity of the joystick axis.
         :param axis_name: axis ID
-        :param polarity: 1 for DEFAULT, -1 for INVERTED
+        :param polarity: 1 for DEFAULT, -1 for INVERTED.
         """
         if polarity < 0:
             self.tiger_controller.set_joystick_axis_polarity(**{self.axis_map[axis_name]: JoystickPolarity.INVERTED})
@@ -341,13 +358,13 @@ class ASITigerBox(VoxelDevice):
 
     def enable_axis_joystick_input(self, axis_name: str) -> None:
         """Enable the joystick input for the specified axis.
-        :param axis_name: axis ID
+        :param axis_name: axis ID.
         """
         self.tiger_controller.enable_joystick_inputs(self.axis_map[axis_name])
 
     def disable_axis_joystick_input(self, axis_name: str) -> None:
         """Disable the joystick input for the specified axis.
-        :param axis_name: axis ID
+        :param axis_name: axis ID.
         """
         self.tiger_controller.disable_joystick_inputs(self.axis_map[axis_name])
 

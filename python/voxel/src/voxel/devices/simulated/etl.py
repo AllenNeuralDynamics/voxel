@@ -19,9 +19,9 @@ class SimulatedTunableLens(VoxelTunableLens):
 
     def log_metadata(self):
         return {
-            "name": self.uid,
-            "mode": self.mode,
-            "temperature_c": self.temperature_c,
+            'name': self.uid,
+            'mode': self.mode,
+            'temperature_c': self.temperature_c,
         }
 
     def close(self):

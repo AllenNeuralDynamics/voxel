@@ -24,17 +24,18 @@ from .definitions import (
 from .sdk.dcam import DCAM_IDSTR, DCAMCAP_TRANSFERINFO, DCAMERR, Dcam, Dcamapi, byref, dcamcap_transferinfo
 from .sdk.dcamapi4 import DCAM_PIXELTYPE, DCAMPROP_ATTR
 
-type LimitType = Literal["min", "max", "step"]
+type LimitType = Literal['min', 'max', 'step']
 
 BYTES_PER_MB = 1_048_576
 
 
 class DcamapiSingleton(Dcamapi, metaclass=Singleton):
     def __init__(self) -> None:
-        """Singleton wrapper around the DCAM SDK. Ensures the same DCAM \n
+        """Singleton wrapper around the DCAM SDK. Ensures the same DCAM.
+
         instance is returned anytime DCAM is initialized.
         """
-        super(DcamapiSingleton, self).__init__()
+        super().__init__()
 
 
 def discover_dcam(provider: Dcamapi, serial_number: str) -> tuple[Dcam, int]:
@@ -48,28 +49,34 @@ def discover_dcam(provider: Dcamapi, serial_number: str) -> tuple[Dcam, int]:
     :rtype: tuple[Dcam, int]
     :raises VoxelDeviceConnectionError: Failed to discover camera.
     """
-    try:
+
+    def find_matching_camera() -> tuple[Dcam, int]:
+        """Find the camera with the given serial number."""
         provider.init()
         num_cams = provider.get_devicecount()
         serial_numbers = []
-        for cam_num in range(0, num_cams):
-            dcam = Dcam(cam_num)
+        for i in range(num_cams):
+            dcam = Dcam(i)
+            # dcam.dev_open()
             cam_id: str | Literal[False] = dcam.dev_getstring(DCAM_IDSTR.CAMERAID)
             if cam_id is False:
-                raise VoxelDeviceConnectionError(
-                    f"DcamapiSingleton.init() fails with error {DCAMERR(provider.lasterr()).name}"
-                )
-            serial_numbers.append(cam_id.replace("S/N: ", ""))
-            if cam_id.replace("S/N: ", "") == serial_number:
-                dcam.dev_close()  # make sure camera is closed before returning
-                return dcam, cam_num
-        raise VoxelDeviceConnectionError(
-            f"Camera with serial number {serial_number} not found. Found cameras: {serial_numbers}"
-        )
+                msg = f'DcamapiSingleton.init() fails with error {DCAMERR(provider.lasterr()).name}'
+                raise VoxelDeviceConnectionError(msg)
+            serial_numbers.append(cam_id.replace('S/N: ', ''))
+            if cam_id.replace('S/N: ', '') == serial_number:
+                return dcam, i
+            dcam.dev_close()  # make sure camera is closed before returning
+        msg = f'Camera with serial number {serial_number} not found. Found cameras: {serial_numbers}'
+        raise VoxelDeviceConnectionError(msg)
+
+    try:
+        return find_matching_camera()
     except Exception as e:
-        raise VoxelDeviceConnectionError(
-            f"Failed to discover camera. DcamapiSingleton.init() fails with error {DCAMERR(provider.lasterr()).name}"
-        ) from e
+        msg = (
+            f'Failed to discover camera with serial number {serial_number}. '
+            f'DcamapiSingleton.init() fails with error {DCAMERR(provider.lasterr()).name}'
+        )
+        raise VoxelDeviceConnectionError(msg) from e
 
 
 # TODO: FIgure out how to do resets on dcam instances
@@ -86,15 +93,16 @@ def reset_dcam(provider: Dcamapi, dcam_idx: int) -> Dcam:
         dcam = Dcam(dcam_idx)
         dcam.dev_open()
         dcam.dev_close()
-        return dcam
     except Exception as e:
-        raise VoxelDeviceConnectionError(
-            "Failed to reset camera. DcamapiSingleton.init() fails with error {}".format(DCAMERR(provider.lasterr()))
-        ) from e
+        error_msg = f'Failed to reset camera. DcamapiSingleton.init() fails with error {DCAMERR(provider.lasterr())}'
+        raise VoxelDeviceConnectionError(error_msg) from e
+    else:
+        return dcam
 
 
 class HamamatsuCamera(VoxelCamera):
-    """Voxel driver for Hamamatsu cameras. \n
+    """Voxel driver for Hamamatsu cameras.
+
     :param serial_number: Serial number of the camera.
     :param name: Unique voxel identifier for the camera. Empty string by default.
     :raises VoxelDeviceConnectionError: Failed to initialize DCAM API or no camera found.
@@ -109,9 +117,9 @@ class HamamatsuCamera(VoxelCamera):
     try:
         _dcam_provider: Dcamapi = DcamapiSingleton()
     except Exception as e:
-        raise VoxelDeviceConnectionError("Failed to initialize DCAM API") from e
+        raise VoxelDeviceConnectionError('Failed to initialize DCAM API') from e
 
-    def __init__(self, serial_number: str, pixel_size_um: tuple[float, float], name: str = "") -> None:
+    def __init__(self, serial_number: str, pixel_size_um: Vec2D[float], name: str = '') -> None:
         """Voxel driver for Hamamatsu cameras.
 
         :param name: Unique voxel identifier for the camera. Empty string by default.
@@ -119,17 +127,17 @@ class HamamatsuCamera(VoxelCamera):
         :param pixel_size_um: The pixel size in micrometers.
         :type name: str
         :type serial_number: str
-        :type pixel_size_um: tuple[float, float]
+        :type pixel_size_um: Vec2D[float]
         :raises ValueError: No camera found.
         """
         super().__init__(name, pixel_size_um)
 
-        self._log.info(f"Initializing Hamamatsu camera with name: {self.uid} and serial number: {serial_number}")
+        self.log.info('Initializing Hamamatsu camera with name: %s and serial number: %s', self.uid, serial_number)
 
         self.serial_number = serial_number
         self._dcam, self._dcam_idx = discover_dcam(self._dcam_provider, self.serial_number)
         self._dcam.dev_open()
-        self._log.debug(f"Hamamatsu camera found with serial number: {self.serial_number}")
+        self.log.debug('Hamamatsu camera found with serial number: %s', self.serial_number)
 
         # private properties
         self._buffer_size_frames = self.BUFFER_SIZE_MB
@@ -142,37 +150,37 @@ class HamamatsuCamera(VoxelCamera):
 
         # Bool is returned when the dcam instance is not opened. make sure dcam.dev_open() is called before accessing
         self._delimination_props: dict[str, DCAMPROP_ATTR | None] = {
-            "exposure_time_s": None,
-            "line_interval_s": None,
-            "image_width_px": None,  # image_width
-            "image_height_px": None,  # image_height
-            "roi_width_px": None,  # subarray_hsize
-            "roi_height_px": None,  # subarray_vsize
-            "roi_width_offset_px": None,  # subarray_hpos
-            "roi_height_offset_px": None,  # subarray_vpos
+            'exposure_time_s': None,
+            'line_interval_s': None,
+            'image_width_px': None,  # image_width
+            'image_height_px': None,  # image_height
+            'roi_width_px': None,  # subarray_hsize
+            'roi_height_px': None,  # subarray_vsize
+            'roi_width_offset_px': None,  # subarray_hpos
+            'roi_height_offset_px': None,  # subarray_vpos
         }
         self._fetch_delimination_props()
 
-        self._log.info("Completed initialization of Hamamatsu camera with name: {self.name}")
+        self.log.info('Completed initialization of Hamamatsu camera with uid: %s', self.uid)
 
     def __repr__(self):
         return (
-            f"Serial Number:        {self.serial_number}\n"
-            f"Sensor Size:          {self.sensor_size_px}\n"
-            f"Roi Size:             ({self.roi_width_px}, {self.roi_height_px})\n"
-            f"Roi Offset:           ({self.roi_width_offset_px}, {self.roi_height_offset_px})\n"
-            f"Binning:              {self.binning}\n"
-            f"Image Size:           {self.frame_size_px}\n"
-            f"Exposure Time:        {self.exposure_time_ms} ms\n"
-            f"Line Interval:        {self.line_interval_us} us\n"
-            f"Frame Time:           {self.frame_time_ms} ms\n"
-            f"Pixel Type:           {self.pixel_format}\n"
-            f"Sensor Mode:          {self.sensor_mode}\n"
-            f"Readout Direction:    {self.readout_direction}\n"
-            f"Trigger Mode:         {self.trigger_mode}\n"
-            f"Trigger Source:       {self.trigger_source}\n"
-            f"Trigger Polarity:     {self.trigger_polarity}\n"
-            f"Trigger Active:       {self.trigger_active}\n"
+            f'Serial Number:        {self.serial_number}\n'
+            f'Sensor Size:          {self.sensor_size_px}\n'
+            f'Roi Size:             ({self.roi_width_px}, {self.roi_height_px})\n'
+            f'Roi Offset:           ({self.roi_width_offset_px}, {self.roi_height_offset_px})\n'
+            f'Binning:              {self.binning}\n'
+            f'Image Size:           {self.frame_size_px}\n'
+            f'Exposure Time:        {self.exposure_time_ms} ms\n'
+            f'Line Interval:        {self.line_interval_us} us\n'
+            f'Frame Time:           {self.frame_time_ms} ms\n'
+            f'Pixel Type:           {self.pixel_format}\n'
+            f'Sensor Mode:          {self.sensor_mode}\n'
+            f'Readout Direction:    {self.readout_direction}\n'
+            f'Trigger Mode:         {self.trigger_mode}\n'
+            f'Trigger Source:       {self.trigger_source}\n'
+            f'Trigger Polarity:     {self.trigger_polarity}\n'
+            f'Trigger Active:       {self.trigger_active}\n'
         )
 
     # Public Properties ################################################################################################
@@ -183,12 +191,12 @@ class HamamatsuCamera(VoxelCamera):
     def sensor_size_px(self) -> Vec2D:
         """Get the sensor size in pixels.
         :return: The sensor size in pixels.
-        :rtype: Vec2D
+        :rtype: Vec2D.
         """
-        x = self._get_delimination_prop_value("image_width_px")
-        y = self._get_delimination_prop_value("image_height_px")
+        x = self._get_delimination_prop_value('image_width_px')
+        y = self._get_delimination_prop_value('image_height_px')
         if not x or not y:
-            raise RuntimeError(f"Failed to get sensor size. Error: {self._dcam.lasterr()}")
+            raise RuntimeError('Failed to get sensor size. Error: %s', self._dcam.lasterr())
         return Vec2D(int(x), int(y))
 
     # Image properties _________________________________________________________________________________________________
@@ -197,11 +205,11 @@ class HamamatsuCamera(VoxelCamera):
     def binning(self) -> int:
         """Get the binning value.
         :return: The binning value.
-        :rtype: Binning
+        :rtype: Binning.
         """
-        res = self._dcam.prop_getvalue("binning")
+        res = self._dcam.prop_getvalue('binning')
         if not res:
-            raise RuntimeError(f"Failed to get binning. Error: {self._dcam.lasterr()}")
+            raise RuntimeError('Failed to get binning. Error: %s', self._dcam.lasterr())
 
         return int(res)
 
@@ -209,18 +217,18 @@ class HamamatsuCamera(VoxelCamera):
     def binning(self, value: int) -> None:
         """Set the binning value.
         :param value: The binning value.
-        :type value: Binning
+        :type value: Binning.
         """
-        res = self._dcam.prop_setvalue("binning", value)
+        res = self._dcam.prop_setvalue('binning', value)
         if not res:
-            self._log.error(f"Failed to set binning. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to set binning. Error: %s', self._dcam.lasterr())
         self._invalidate_delimination_props()
 
     @property
     def frame_size_px(self) -> Vec2D:
         """Get the image size in pixels.
         :return: The image size in pixels.
-        :rtype: Vec2D
+        :rtype: Vec2D.
         """
         return Vec2D(self.roi_width_px, self.roi_height_px)
 
@@ -236,166 +244,167 @@ class HamamatsuCamera(VoxelCamera):
     def frame_size_mb(self) -> float:
         """Get the frame size in megabytes.
         :return: The frame size in megabytes.
-        :rtype: float
+        :rtype: float.
         """
-        frame_size_bytes = self.frame_width_px * self.frame_height_px * self.pixel_type.bytes
+        pixel_type = self.pixel_type or PixelType.UINT16
+        frame_size_bytes = self.frame_width_px * self.frame_height_px * pixel_type.bytes
         return frame_size_bytes / BYTES_PER_MB
 
     # ROI properties ___________________________________________________________________________________________________
 
     @deliminated_int(
-        min_value=lambda self: self._get_delimination_prop_limit("roi_width_px", "min"),
-        max_value=lambda self: self._get_delimination_prop_limit("roi_width_px", "max"),
-        step=lambda self: self._get_delimination_prop_limit("roi_width_px", "step"),
+        min_value=lambda self: self._get_delimination_prop_limit('roi_width_px', 'min'),
+        max_value=lambda self: self._get_delimination_prop_limit('roi_width_px', 'max'),
+        step=lambda self: self._get_delimination_prop_limit('roi_width_px', 'step'),
     )
     def roi_width_px(self) -> int:
         """Get the region of interest width in pixels.
         :return: The region of interest width in pixels.
-        :rtype: int
+        :rtype: int.
         """
-        roi_width_value = self._get_delimination_prop_value("roi_width_px")
+        roi_width_value = self._get_delimination_prop_value('roi_width_px')
         if not roi_width_value:
-            raise RuntimeError(f"Failed to get roi width. Error: {self._dcam.lasterr()}")
-        return int(self._get_delimination_prop_value("roi_width_px"))
+            raise RuntimeError('Failed to get roi width. Error: %s', self._dcam.lasterr())
+        return int(self._get_delimination_prop_value('roi_width_px'))
 
     @roi_width_px.setter
     def roi_width_px(self, value: int) -> None:
         """Set the region of interest width in pixels.
         :param value: The region of interest width in pixels.
-        :type value: int
+        :type value: int.
         """
         self.roi_width_offset_px = 0
-        self._set_delimination_prop_value("roi_width_px", value)
+        self._set_delimination_prop_value('roi_width_px', value)
 
         # center the width
         offset = int((self.sensor_size_px.x - value) // 2)
         self.roi_width_offset_px = offset
 
-        self._invalidate_delimination_props(["roi_width_px"])
+        self._invalidate_delimination_props(['roi_width_px'])
 
     @deliminated_int(
         min_value=0,
         max_value=lambda self: self.sensor_size_px.x - self.roi_width_px,
-        step=lambda self: self._get_delimination_prop_limit("roi_width_offset_px", "step"),
+        step=lambda self: self._get_delimination_prop_limit('roi_width_offset_px', 'step'),
     )
     def roi_width_offset_px(self) -> int:
         """Get the region of interest width offset in pixels.
         :return: The region of interest width offset in pixels.
-        :rtype: int
+        :rtype: int.
         """
-        return int(self._get_delimination_prop_value("roi_width_offset_px"))
+        return int(self._get_delimination_prop_value('roi_width_offset_px'))
 
     @roi_width_offset_px.setter
     def roi_width_offset_px(self, value: int) -> None:
         """Set the region of interest width offset in pixels.
         :param value: The region of interest width offset in pixels.
-        :type value: int
+        :type value: int.
         """
-        self._set_delimination_prop_value("roi_width_offset_px", value)
-        self._log.info(f"Set roi width offset to {value} px")
-        self._invalidate_delimination_props(["roi_width_offset_px"])
+        self._set_delimination_prop_value('roi_width_offset_px', value)
+        self.log.info('Set roi width offset to %d px', value)
+        self._invalidate_delimination_props(['roi_width_offset_px'])
 
     @deliminated_int(
-        min_value=lambda self: self._get_delimination_prop_limit("roi_height_px", "min"),
-        max_value=lambda self: self._get_delimination_prop_limit("roi_height_px", "max"),
-        step=lambda self: self._get_delimination_prop_limit("roi_height_px", "step"),
+        min_value=lambda self: self._get_delimination_prop_limit('roi_height_px', 'min'),
+        max_value=lambda self: self._get_delimination_prop_limit('roi_height_px', 'max'),
+        step=lambda self: self._get_delimination_prop_limit('roi_height_px', 'step'),
     )
     def roi_height_px(self) -> int:
         """Get the region of interest height in pixels.
         :return: The region of interest height in pixels.
-        :rtype: int
+        :rtype: int.
         """
-        return int(self._get_delimination_prop_value("roi_height_px"))
+        return int(self._get_delimination_prop_value('roi_height_px'))
 
     @roi_height_px.setter
     def roi_height_px(self, value: int) -> None:
         """Set the region of interest height in pixels.
         :param value: The region of interest height in pixels.
-        :type value: int
+        :type value: int.
         """
         self.roi_height_offset_px = 0
-        self._set_delimination_prop_value("roi_height_px", value)
+        self._set_delimination_prop_value('roi_height_px', value)
 
         # center the height
         offset = int((self.sensor_size_px.y - value) // 2)
         self.roi_height_offset_px = offset
 
-        self._invalidate_delimination_props(["roi_height_px"])
-        self._invalidate_delimination_props(["roi_height_offset_px"])
+        self._invalidate_delimination_props(['roi_height_px'])
+        self._invalidate_delimination_props(['roi_height_offset_px'])
 
     @deliminated_int(
         min_value=0,
         max_value=lambda self: self.sensor_size_px.y - self.roi_height_px,
-        step=lambda self: self._get_delimination_prop_limit("roi_height_px", "step"),
+        step=lambda self: self._get_delimination_prop_limit('roi_height_px', 'step'),
     )
     def roi_height_offset_px(self) -> int:
         """Get the region of interest height offset in pixels.
         :return: The region of interest height offset in pixels.
-        :rtype: int
+        :rtype: int.
         """
-        return int(self._get_delimination_prop_value("roi_height_offset_px"))
+        return int(self._get_delimination_prop_value('roi_height_offset_px'))
 
     @roi_height_offset_px.setter
     def roi_height_offset_px(self, value: int) -> None:
         """Set the region of interest height offset in pixels.
         :param value: The region of interest height offset in pixels.
-        :type value: int
+        :type value: int.
         """
-        self._set_delimination_prop_value("roi_height_offset_px", value)
-        self._log.info(f"Set roi height offset to {value} px")
-        self._invalidate_delimination_props(["roi_height_px", "roi_height_offset_px"])
+        self._set_delimination_prop_value('roi_height_offset_px', value)
+        self.log.info('Set roi height offset to %d px', value)
+        self._invalidate_delimination_props(['roi_height_px', 'roi_height_offset_px'])
 
     # Acquisition properties ___________________________________________________________________________________________
 
     @deliminated_float(
-        min_value=lambda self: self._get_delimination_prop_limit("exposure_time_s", "min") * 1e3,
-        max_value=lambda self: self._get_delimination_prop_limit("exposure_time_s", "max") * 1e3,
-        step=lambda self: self._get_delimination_prop_limit("exposure_time_s", "step") * 1e3,
+        min_value=lambda self: self._get_delimination_prop_limit('exposure_time_s', 'min') * 1e3,
+        max_value=lambda self: self._get_delimination_prop_limit('exposure_time_s', 'max') * 1e3,
+        step=lambda self: self._get_delimination_prop_limit('exposure_time_s', 'step') * 1e3,
     )
     def exposure_time_ms(self) -> int:
         """Get the exposure time in milliseconds.
         :return: The exposure time in milliseconds.
-        :rtype: int
+        :rtype: int.
         """
-        return int(self._get_delimination_prop_value("exposure_time_s") * 1e3)
+        return int(self._get_delimination_prop_value('exposure_time_s') * 1e3)
 
     @exposure_time_ms.setter
     def exposure_time_ms(self, value: int) -> None:
         """Set the exposure time in milliseconds.
         :param value: The exposure time in milliseconds.
-        :type value: int
+        :type value: int.
         """
-        self._set_delimination_prop_value("exposure_time_s", value * 1e-3)
-        self._log.info(f"Set exposure time to {value} ms")
-        self._invalidate_delimination_props(["exposure_time_s"])
+        self._set_delimination_prop_value('exposure_time_s', value * 1e-3)
+        self.log.info('Set exposure time to %d ms', value)
+        self._invalidate_delimination_props(['exposure_time_s'])
 
     @deliminated_float(
-        min_value=lambda self: self._get_delimination_prop_limit("line_interval_s", "min") * 1e6,
-        max_value=lambda self: self._get_delimination_prop_limit("line_interval_s", "max") * 1e6,
-        step=lambda self: self._get_delimination_prop_limit("line_interval_s", "step") * 1e6,
+        min_value=lambda self: self._get_delimination_prop_limit('line_interval_s', 'min') * 1e6,
+        max_value=lambda self: self._get_delimination_prop_limit('line_interval_s', 'max') * 1e6,
+        step=lambda self: self._get_delimination_prop_limit('line_interval_s', 'step') * 1e6,
     )
     def line_interval_us(self) -> float:
         """Get the line interval in microseconds.
         :return: The line interval in microseconds.
-        :rtype: float
+        :rtype: float.
         """
-        return float(self._get_delimination_prop_value("line_interval_s") * 1e6)
+        return float(self._get_delimination_prop_value('line_interval_s') * 1e6)
 
     @line_interval_us.setter
     def line_interval_us(self, value: float) -> None:
         """Set the line interval in microseconds.
         :param value: The line interval in microseconds.
-        :type value: float
+        :type value: float.
         """
-        self._set_delimination_prop_value("line_interval_s", value * 1e-6)
-        self._log.info(f"Set line interval to {value} us")
-        self._invalidate_delimination_props(["line_interval_s"])
+        self._set_delimination_prop_value('line_interval_s', value * 1e-6)
+        self.log.info('Set line interval to %f us', value)
+        self._invalidate_delimination_props(['line_interval_s'])
 
     @property
     def frame_time_ms(self) -> float:
         """Get the frame time in milliseconds.
         :return: The frame time in milliseconds.
-        :rtype: int
+        :rtype: int.
         """
         frame_time_ms = (self.line_interval_us * self.roi_height_px) / 1e3 + self.exposure_time_ms
         match self.readout_direction:
@@ -409,25 +418,27 @@ class HamamatsuCamera(VoxelCamera):
                 return frame_time_ms
 
     @property
-    def pixel_type(self) -> PixelType:
+    def pixel_type(self) -> PixelType | None:
         """Get the pixel type.
+
         :return: The pixel type.
-        :rtype: str
+        :rtype: PixelType.
         """
         if self.pixel_format == DCAM_PIXELTYPE.MONO8:
             return PixelType.UINT8
-        else:
-            return PixelType.UINT16
+            # return PixelType.UINT16
+        return None
 
     @property
     def pixel_format(self) -> DCAM_PIXELTYPE | None:
-        """Get the pixel type.
+        """Get the pixel format.
+
         :return: The pixel type.
-        :rtype: str
+        :rtype: str.
         """
-        res = self._dcam.prop_getvalue("pixel_type")
+        res = self._dcam.prop_getvalue('pixel_type')
         if not res:
-            self._log.error(f"Failed to get pixel type. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to get pixel type. Error: %s', self._dcam.lasterr())
         else:
             return DCAM_PIXELTYPE(int(res))
 
@@ -435,20 +446,20 @@ class HamamatsuCamera(VoxelCamera):
     def pixel_format(self, value: DCAM_PIXELTYPE) -> None:
         """Set the pixel type.
         :param value: The pixel type.
-        :type value: str
+        :type value: str.
         """
-        self._set_enumerated_prop_value("pixel_type", value)
+        self._set_enumerated_prop_value('pixel_type', value)
         self._invalidate_delimination_props()
 
     @property
     def sensor_mode(self) -> DcamSensorMode | None:
         """Get the sensor mode.
         :return: The sensor mode.
-        :rtype: SensorMode
+        :rtype: SensorMode.
         """
-        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["sensor_mode"])
+        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES['sensor_mode'])
         if not res:
-            self._log.error(f"Failed to get sensor mode. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to get sensor mode. Error: %s', self._dcam.lasterr())
         else:
             return DcamSensorMode(int(res))
 
@@ -456,20 +467,20 @@ class HamamatsuCamera(VoxelCamera):
     def sensor_mode(self, value: DcamSensorMode) -> None:
         """Set the sensor mode.
         :param value: The sensor mode.
-        :type value: SensorMode
+        :type value: SensorMode.
         """
-        self._set_enumerated_prop_value("sensor_mode", value)
+        self._set_enumerated_prop_value('sensor_mode', value)
         self._invalidate_delimination_props()
 
     @property
     def readout_direction(self) -> DcamReadoutDirection | None:
         """Get the readout direction.
         :return: The readout direction.
-        :rtype: ReadoutDirection
+        :rtype: ReadoutDirection.
         """
-        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["readout_direction"])
+        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES['readout_direction'])
         if not res:
-            self._log.error(f"Failed to get readout direction. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to get readout direction. Error: %s', self._dcam.lasterr())
         else:
             return DcamReadoutDirection(int(res))
 
@@ -477,19 +488,19 @@ class HamamatsuCamera(VoxelCamera):
     def readout_direction(self, value: DcamReadoutDirection) -> None:
         """Set the readout direction.
         :param value: The readout direction.
-        :type value: ReadoutDirection
+        :type value: ReadoutDirection.
         """
-        self._set_enumerated_prop_value("readout_direction", value)
+        self._set_enumerated_prop_value('readout_direction', value)
 
     @property
     def trigger_mode(self) -> DcamTriggerMode | None:
         """Get the trigger mode.
         :return: The trigger mode.
-        :rtype: TriggerMode
+        :rtype: TriggerMode.
         """
-        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_mode"])
+        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES['trigger_mode'])
         if not res:
-            self._log.error(f"Failed to get trigger mode. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to get trigger mode. Error: %s', self._dcam.lasterr())
         else:
             return DcamTriggerMode(int(res))
 
@@ -497,20 +508,20 @@ class HamamatsuCamera(VoxelCamera):
     def trigger_mode(self, value: DcamTriggerMode) -> None:
         """Set the trigger mode.
         :param value: The trigger mode.
-        :type value: TriggerMode
+        :type value: TriggerMode.
         """
-        self._set_enumerated_prop_value("trigger_mode", value)
+        self._set_enumerated_prop_value('trigger_mode', value)
         self._invalidate_delimination_props()
 
     @property
     def trigger_source(self) -> DcamTriggerSource | None:
         """Get the trigger source.
         :return: The trigger source.
-        :rtype: TriggerSource
+        :rtype: TriggerSource.
         """
-        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_source"])
+        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES['trigger_source'])
         if not res:
-            self._log.error(f"Failed to get trigger source. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to get trigger source. Error: %s', self._dcam.lasterr())
         else:
             return DcamTriggerSource(int(res))
 
@@ -518,20 +529,20 @@ class HamamatsuCamera(VoxelCamera):
     def trigger_source(self, value: DcamTriggerSource) -> None:
         """Set the trigger source.
         :param value: The trigger source.
-        :type value: TriggerSource
+        :type value: TriggerSource.
         """
-        self._set_enumerated_prop_value("trigger_source", value)
+        self._set_enumerated_prop_value('trigger_source', value)
         self._invalidate_delimination_props()
 
     @property
     def trigger_polarity(self) -> DcamTriggerPolarity | None:
         """Get the trigger polarity.
         :return: The trigger polarity.
-        :rtype: TriggerPolarity
+        :rtype: TriggerPolarity.
         """
-        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_polarity"])
+        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES['trigger_polarity'])
         if not res:
-            self._log.error(f"Failed to get trigger polarity. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to get trigger polarity. Error: %s', self._dcam.lasterr())
         else:
             return DcamTriggerPolarity(int(res))
 
@@ -539,20 +550,20 @@ class HamamatsuCamera(VoxelCamera):
     def trigger_polarity(self, value: DcamTriggerPolarity) -> None:
         """Set the trigger polarity.
         :param value: The trigger polarity.
-        :type value: TriggerPolarity
+        :type value: TriggerPolarity.
         """
-        self._set_enumerated_prop_value(prop_name="trigger_polarity", value=value)
+        self._set_enumerated_prop_value(prop_name='trigger_polarity', value=value)
         self._invalidate_delimination_props()
 
     @property
     def trigger_active(self) -> DcamTriggerActive | None:
         """Get the trigger active.
         :return: The trigger active.
-        :rtype: TriggerActive
+        :rtype: TriggerActive.
         """
-        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES["trigger_active"])
+        res = self._dcam.prop_getvalue(ENUMERATED_PROPERTIES['trigger_active'])
         if not res:
-            self._log.error(f"Failed to get trigger active. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to get trigger active. Error: %s', self._dcam.lasterr())
         else:
             return DcamTriggerActive(int(res))
 
@@ -560,33 +571,33 @@ class HamamatsuCamera(VoxelCamera):
     def trigger_active(self, value: DcamTriggerActive) -> None:
         """Set the trigger active.
         :param value: The trigger active.
-        :type value: TriggerActive
+        :type value: TriggerActive.
         """
-        self._set_enumerated_prop_value(prop_name="trigger_active", value=value)
+        self._set_enumerated_prop_value(prop_name='trigger_active', value=value)
         self._invalidate_delimination_props()
 
     def _set_enumerated_prop_value(self, prop_name: str, value: Any) -> None:
         res = self._dcam.prop_setvalue(ENUMERATED_PROPERTIES[prop_name], value)
         if not res:
-            self._log.error(f"Failed to set {prop_name}. Error: {self._dcam.lasterr()}")
+            self.log.error('Failed to set %s. Error: %s', prop_name, self._dcam.lasterr())
 
     def _configure_hardware_triggering(self) -> None:
-        raise NotImplementedError("Hardware triggering is not added yet")
+        raise NotImplementedError('Hardware triggering is not added yet')
 
     @property
     def sensor_temperature_c(self) -> float:
         """Get the sensor temperature in degrees Celsius.
         :return: The sensor temperature in degrees Celsius.
-        :rtype: float
+        :rtype: float.
         """
-        return self._dcam.prop_getvalue(PROPERTIES["sensor_temperature"])
+        return self._dcam.prop_getvalue(PROPERTIES['sensor_temperature'])
 
     @property
     def mainboard_temperature_c(self) -> float:
         """Get the mainboard temperature in degrees Celsius.
         For Hamamatsu cameras, returning sensor temperature instead.
         :return: The mainboard temperature in degrees Celsius.
-        :rtype: float
+        :rtype: float.
         """
         return self.sensor_temperature_c
 
@@ -599,27 +610,26 @@ class HamamatsuCamera(VoxelCamera):
         self._buffer_size_frames = round(self.BUFFER_SIZE_MB / self.frame_size_mb)
         self._dcam.buf_alloc(self._buffer_size_frames)
         self._buffer_allocated = True
-        self._log.info(f"Allocated buffer for {self._buffer_size_frames} frames")
+        self.log.info('Allocated buffer for %d frames', self._buffer_size_frames)
 
     def start(self, frame_count: int | None = None) -> None:
         """Start the camera."""
-        self._dropped_frames = 0
-        self._current_frame = 0
-        self._current_frame_start_time = time.time()
-        self._dcam.cap_start()
+        if frame_count == 1:
+            self._dcam.cap_snapshot()
+        else:
+            self._dropped_frames = 0
+            self._current_frame = 0
+            self._current_frame_start_time = time.time()
+            self._dcam.cap_start()
 
     def stop(self) -> None:
-        """
-        Stop the camera.
-        """
+        """Stop the camera."""
         self._dcam.buf_release()
         self._buffer_allocated = False
         self._dcam.cap_stop()
 
     def reset(self) -> None:
-        """
-        Reset the camera.
-        """
+        """Reset the camera."""
         if self._dcam.is_opened():
             self._dcam.dev_close()
             DcamapiSingleton.uninit()
@@ -629,8 +639,7 @@ class HamamatsuCamera(VoxelCamera):
                 self._dcam.dev_open()
 
     def grab_frame(self) -> np.ndarray:
-        """
-        Grab a frame from the camera buffer.
+        """Grab a frame from the camera buffer.
 
         :return: The camera frame of size (height, width).
         :rtype: numpy.array
@@ -641,13 +650,12 @@ class HamamatsuCamera(VoxelCamera):
         timeout_ms = 1000
         if self._dcam.wait_capevent_frameready(timeout_ms) and (image := self._dcam.buf_getlastframedata()):
             return image
-        self._log.warning("Timeout waiting for frame ready event")
-        raise RuntimeError("Timeout waiting for frame ready event")
+        self.log.warning('Timeout waiting for frame ready event')
+        raise RuntimeError('Timeout waiting for frame ready event')
 
     @property
     def acquisition_state(self) -> AcquisitionState:
-        """
-        Get the current acquisition state of the camera.
+        """Get the current acquisition state of the camera.
         :return: The acquisition state.
         :rtype: AcquisitionState
         Notes:
@@ -662,7 +670,7 @@ class HamamatsuCamera(VoxelCamera):
         cap_info = DCAMCAP_TRANSFERINFO()
         # __hdcam inside class Dcam referenced as _Dcam__hdcam
         # noinspection PyProtectedMember,PyUnresolvedReferences
-        dcamcap_transferinfo(self._dcam._Dcam__hdcam, byref(cap_info))  # type: ignore
+        dcamcap_transferinfo(self._dcam._Dcam__hdcam, byref(cap_info))  # pyright: ignore[reportAttributeAccessIssue] # noqa: SLF001
         current_time = time.time()
         frame_index = cap_info.nFrameCount
         out_buffer_size = frame_index - self._current_frame
@@ -686,17 +694,14 @@ class HamamatsuCamera(VoxelCamera):
         return acquisition_state
 
     def log_metadata(self) -> None:
-        """
-        Log all metadata from the camera to the logger.
-        """
-
+        """Log all metadata from the camera to the logger."""
         # log dcam camera settings
-        self._log.info("dcam camera parameters")
+        self.log.info('dcam camera parameters')
         idprop = self._dcam.prop_getnextid(0)
         while idprop is not False:
             propname = self._dcam.prop_getname(idprop)
             propvalue = self._dcam.prop_getvalue(idprop)
-            self._log.info(f"{propname}, {propvalue}")
+            self.log.info('%s, %s', propname, propvalue)
             idprop = self._dcam.prop_getnextid(idprop)
 
     def close(self) -> None:
@@ -709,13 +714,12 @@ class HamamatsuCamera(VoxelCamera):
     def _get_binning_options(self) -> list[int]:
         """Get the binning options for the camera.
         :return: The binning options.
-        :rtype: list[int]
+        :rtype: list[int].
         """
         options = []
-        prop_attr = self._dcam.prop_getattr("binning")
+        prop_attr = self._dcam.prop_getattr('binning')
         if type(prop_attr) is DCAMPROP_ATTR:
-            for prop_value in range(int(prop_attr.valuemin), int(prop_attr.valuemax + 1)):
-                options.append(prop_value)
+            options = list(range(int(prop_attr.valuemin), int(prop_attr.valuemax + 1)))
         return options
 
     # Deliminated properties ___________________________________________________________________________________________
@@ -735,17 +739,19 @@ class HamamatsuCamera(VoxelCamera):
 
             res = self._dcam.prop_getattr(DELIMINATED_PROPERTIES[name])
             if type(res) is not DCAMPROP_ATTR:
-                self._log.error(
-                    f"Failed to fetch delimination prop: {name}. Error: {DCAMERR(self._dcam_provider.lasterr())}"
+                self.log.error(
+                    'Failed to fetch delimination prop: %s. Error: %s',
+                    name,
+                    DCAMERR(self._dcam_provider.lasterr()),
                 )
                 return None
             return res
 
-        if prop_name is None or prop_name == [] or prop_name == ["all"]:
+        if prop_name is None or prop_name in ([], ['all']):
             prop_name = list(self._delimination_props.keys())
         for prop in prop_name:
             self._delimination_props[prop] = get_delimination_prop_attr(prop)
-            self._log.debug(f"Fetched delimination prop: {prop_name}")
+            self.log.debug('Fetched delimination prop: %s', prop)
 
     def _invalidate_delimination_props(self, prop_names: list[str] | None = None) -> None:
         """Invalidate a list of delimination properties.
@@ -753,11 +759,11 @@ class HamamatsuCamera(VoxelCamera):
         :param prop_names: The property names. Default is all properties.
         :type prop_names: Optional[list[str]]
         """
-        if prop_names is None or prop_names == [] or prop_names == ["all"]:
+        if prop_names is None or prop_names in ([], ['all']):
             prop_names = list(self._delimination_props.keys())
         for prop_name in prop_names:
             self._delimination_props[prop_name] = None
-            self._log.debug(f"Invalidated delimination prop: {prop_name}")
+            self.log.debug('Invalidated delimination prop: %s', prop_name)
 
     def _get_delimination_prop_limit(self, prop_name: str, limit_type: LimitType) -> float | None:
         """Query the min, max, and step of a delimination property.
@@ -776,17 +782,17 @@ class HamamatsuCamera(VoxelCamera):
             return None
         try:
             match limit_type:
-                case "min":
+                case 'min':
                     return delimination_prop.valuemin
-                case "max":
+                case 'max':
                     return delimination_prop.valuemax
-                case "step":
+                case 'step':
                     return delimination_prop.valuestep
                 case _:
-                    self._log.error(f"Invalid limit type: {limit_type}")
+                    self.log.error('Invalid limit type: %s.', limit_type)
                     return None
-        except Exception as e:
-            self._log.error(f"Failed to query delimination property: {prop_name}. Error: {e}")
+        except Exception:
+            self.log.exception('Failed to query delimination property: %s.', prop_name)
             return None
 
     def _get_delimination_prop_value(self, prop_name: str) -> float | int:
@@ -799,12 +805,12 @@ class HamamatsuCamera(VoxelCamera):
         """
         value = self._dcam.prop_getvalue(DELIMINATED_PROPERTIES[prop_name])
         if value is None:
-            self._log.error(f"Failed to get dcam property: {prop_name}")
+            self.log.error('Failed to get dcam property: %s.', prop_name)
             return -1
-        self._log.debug(f"Fetched camera property, {prop_name}: {value}")
+        self.log.debug('Fetched camera property, %s: %s', prop_name, value)
         return value
 
-    def _set_delimination_prop_value(self, prop_name: str, value: int | float) -> None:
+    def _set_delimination_prop_value(self, prop_name: str, value: float) -> None:
         """Set the value of a delimination property.
 
         :param prop_name: The property name.
@@ -813,4 +819,4 @@ class HamamatsuCamera(VoxelCamera):
         :type value: int | float
         """
         self._dcam.prop_setvalue(DELIMINATED_PROPERTIES[prop_name], value)
-        self._log.debug(f"Set camera property: {prop_name} to {value}")
+        self.log.debug('Set camera property: %s to %s', prop_name, value)

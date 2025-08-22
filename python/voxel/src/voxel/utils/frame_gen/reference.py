@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from pathlib import Path
+
 import numpy as np
 import tifffile
 from skimage.transform import resize as skimage_resize
@@ -8,8 +9,7 @@ from .base import FrameGenerator
 
 
 class BaseReferenceGenerator(FrameGenerator):
-    """
-    An abstract base class for reference image generators.
+    """An abstract base class for reference image generators.
     Handles caching, noise, and the overall generation algorithm.
     """
 
@@ -24,14 +24,13 @@ class BaseReferenceGenerator(FrameGenerator):
         self.height = height_px
         self.width = width_px
         self.dtype = data_type if data_type is not None else np.dtype(np.uint16)
-        self.path = path or str(Path(__file__).parent / "default_reference.tif")
+        self.path = path or str(Path(__file__).parent / 'default_reference.tif')
         self.apply_noise = apply_noise
         self._processed_base_image = None  # For caching
 
     @abstractmethod
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
-        """
-        Abstract method for resizing. Subclasses must implement this.
+        """Abstract method for resizing. Subclasses must implement this.
         """
         raise NotImplementedError
 
@@ -62,7 +61,7 @@ class UpsampleReferenceGenerator(BaseReferenceGenerator):
                 order=1,
                 preserve_range=True,
                 anti_aliasing=False,
-            )
+            ),
         )
 
 
@@ -77,8 +76,7 @@ class TileReferenceGenerator(BaseReferenceGenerator):
 
 
 class ReferenceGenerator(FrameGenerator):
-    """
-    Generates frames from a reference TIFF image using only NumPy and Scikit-image.
+    """Generates frames from a reference TIFF image using only NumPy and Scikit-image.
     This version is NOT dependent on JAX.
     """
 

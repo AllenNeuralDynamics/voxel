@@ -14,12 +14,12 @@ class LayoutValidator:
     """Validates instrument layout definitions against available devices."""
 
     @staticmethod
-    def validate_layout(layout: LayoutDefinition, devices: dict[str, "VoxelDevice"]) -> Sequence[ErrorInfo]:
+    def validate_layout(layout: LayoutDefinition, devices: dict[str, 'VoxelDevice']) -> Sequence[ErrorInfo]:
         """Validate the layout definition and return a sequence of layout-specific errors."""
         validator = LayoutValidator()
         return validator._validate(layout, devices)
 
-    def _validate(self, layout: LayoutDefinition, devices: dict[str, "VoxelDevice"]) -> list[ErrorInfo]:
+    def _validate(self, layout: LayoutDefinition, devices: dict[str, 'VoxelDevice']) -> list[ErrorInfo]:
         """Internal validation method."""
         # Get device type mappings
         all_device_ids = set(devices.keys())
@@ -43,7 +43,7 @@ class LayoutValidator:
         return errors
 
     def _validate_stage(
-        self, layout: LayoutDefinition, linear_axis_ids: set[str], rotational_axis_ids: set[str]
+        self, layout: LayoutDefinition, linear_axis_ids: set[str], rotational_axis_ids: set[str],
     ) -> list[ErrorInfo]:
         """Validate stage device configuration."""
         errors = []
@@ -54,10 +54,10 @@ class LayoutValidator:
             for axis in missing_linear_axes:
                 errors.append(
                     ErrorInfo(
-                        name=f"stage_axis_{axis}",
-                        category="stage_device_missing",
+                        name=f'stage_axis_{axis}',
+                        category='stage_device_missing',
                         message=f"Linear axis '{axis}' not found in devices",
-                    )
+                    ),
                 )
 
         # Check optional rotational axes
@@ -68,16 +68,16 @@ class LayoutValidator:
             for axis in missing_rotational_axes:
                 errors.append(
                     ErrorInfo(
-                        name=f"stage_axis_{axis}",
-                        category="stage_axis_missing",
+                        name=f'stage_axis_{axis}',
+                        category='stage_axis_missing',
                         message=f"Rotational axis '{axis}' not found in devices",
-                    )
+                    ),
                 )
 
         return errors
 
     def _validate_illumination(
-        self, layout: LayoutDefinition, laser_ids: set[str], allowed_aux_devices: set[str]
+        self, layout: LayoutDefinition, laser_ids: set[str], allowed_aux_devices: set[str],
     ) -> list[ErrorInfo]:
         """Validate illumination path configuration."""
         errors = []
@@ -88,10 +88,10 @@ class LayoutValidator:
             for path in paths_without_laser:
                 errors.append(
                     ErrorInfo(
-                        name=f"illumination_path_{path}",
-                        category="illumination_device_missing",
+                        name=f'illumination_path_{path}',
+                        category='illumination_device_missing',
                         message=f"Illumination path '{path}' has no corresponding laser device",
-                    )
+                    ),
                 )
 
         # Check all lasers have illumination paths
@@ -99,10 +99,10 @@ class LayoutValidator:
             for laser in lasers_without_path:
                 errors.append(
                     ErrorInfo(
-                        name=f"laser_{laser}",
-                        category="illumination_device_missing",
+                        name=f'laser_{laser}',
+                        category='illumination_device_missing',
                         message=f"Laser '{laser}' is missing illumination path",
-                    )
+                    ),
                 )
 
         # Check auxiliary devices in illumination paths
@@ -111,16 +111,16 @@ class LayoutValidator:
             for device in disallowed_aux_device:
                 errors.append(
                     ErrorInfo(
-                        name=f"illumination_aux_{device}",
-                        category="illumination_aux_missing",
+                        name=f'illumination_aux_{device}',
+                        category='illumination_aux_missing',
                         message=f"Auxiliary device '{device}' not allowed in illumination paths",
-                    )
+                    ),
                 )
 
         return errors
 
     def _validate_detection(
-        self, layout: LayoutDefinition, camera_ids: set[str], filter_wheel_ids: set[str], allowed_aux_devices: set[str]
+        self, layout: LayoutDefinition, camera_ids: set[str], filter_wheel_ids: set[str], allowed_aux_devices: set[str],
     ) -> list[ErrorInfo]:
         """Validate detection path configuration."""
         errors = []
@@ -131,10 +131,10 @@ class LayoutValidator:
             for path in paths_without_camera:
                 errors.append(
                     ErrorInfo(
-                        name=f"detection_path_{path}",
-                        category="detection_device_missing",
+                        name=f'detection_path_{path}',
+                        category='detection_device_missing',
                         message=f"Detection path '{path}' has no corresponding camera device",
-                    )
+                    ),
                 )
 
         # Check all cameras have detection paths
@@ -142,10 +142,10 @@ class LayoutValidator:
             for camera in cameras_without_path:
                 errors.append(
                     ErrorInfo(
-                        name=f"camera_{camera}",
-                        category="detection_device_missing",
+                        name=f'camera_{camera}',
+                        category='detection_device_missing',
                         message=f"Camera '{camera}' is missing detection path",
-                    )
+                    ),
                 )
 
         # Check filter wheels exist
@@ -154,10 +154,10 @@ class LayoutValidator:
             for fw in invalid_filter_wheels:
                 errors.append(
                     ErrorInfo(
-                        name=f"filter_wheel_{fw}",
-                        category="detection_filter_wheel_missing",
+                        name=f'filter_wheel_{fw}',
+                        category='detection_filter_wheel_missing',
                         message=f"Filter wheel '{fw}' not found in devices",
-                    )
+                    ),
                 )
 
         # Check auxiliary devices in detection paths
@@ -166,16 +166,16 @@ class LayoutValidator:
             for device in disallowed_aux_device:
                 errors.append(
                     ErrorInfo(
-                        name=f"detection_aux_{device}",
-                        category="device_type_mismatch",
+                        name=f'detection_aux_{device}',
+                        category='device_type_mismatch',
                         message=f"Auxiliary device '{device}' not allowed in detection paths",
-                    )
+                    ),
                 )
 
         return errors
 
     def _get_valid_stage_axis_ids(
-        self, layout: LayoutDefinition, linear_axis_ids: set[str], rotational_axis_ids: set[str]
+        self, layout: LayoutDefinition, linear_axis_ids: set[str], rotational_axis_ids: set[str],
     ) -> set[str]:
         """Get the set of valid stage axis device IDs."""
         listed_linear_axes = {layout.stage.x, layout.stage.y, layout.stage.z}
@@ -185,6 +185,6 @@ class LayoutValidator:
         return (listed_linear_axes & linear_axis_ids) | (listed_rotational_axes & rotational_axis_ids)
 
     @staticmethod
-    def _get_devices_of_type[T: "VoxelDevice"](devices: dict[str, "VoxelDevice"], device_type: type[T]) -> dict[str, T]:
+    def _get_devices_of_type[T: 'VoxelDevice'](devices: dict[str, 'VoxelDevice'], device_type: type[T]) -> dict[str, T]:
         """Get all devices of a specific type."""
         return {uid: dev for uid, dev in devices.items() if isinstance(dev, device_type)}

@@ -25,28 +25,27 @@ from .step import (
 if TYPE_CHECKING:
     from ..discovery import InstrumentConfigLoader
 
-type LaunchStepFn[T] = Callable[["LaunchContext"], LaunchStepResult[T]]
+type LaunchStepFn[T] = Callable[['LaunchContext'], LaunchStepResult[T]]
 
 
 def launch_step[T](step: LaunchStep):
-    """
-    Decorator for pipeline methods.
+    """Decorator for pipeline methods.
     - Expects the wrapped method to have signature
          def foo(ctx: LaunchContext) -> LaunchStepResult[...]
     - Enforces ctx.can_advance(step)
     - Calls ctx.advance(result) for you
-    - Returns the ctx
+    - Returns the ctx.
     """
 
-    def decorator(fn: LaunchStepFn[T]) -> Callable[["LaunchContext"], "LaunchContext"]:
+    def decorator(fn: LaunchStepFn[T]) -> Callable[['LaunchContext'], 'LaunchContext']:
         @wraps(fn)
         def wrapper(ctx: LaunchContext) -> LaunchContext:
             # 1) guard ordering
             if not ctx.can_advance(step):
                 err = ErrorInfo(
                     name=step,
-                    category="invalid_state",
-                    message=f"Cannot run step {step.value!r} in state {ctx.latest.step.value!r}",
+                    category='invalid_state',
+                    message=f'Cannot run step {step.value!r} in state {ctx.latest.step.value!r}',
                 )
                 result = BasicLaunchStepResult(step=step, errors=[err])
                 ctx.advance(result)
@@ -68,11 +67,11 @@ def launch_step[T](step: LaunchStep):
 
 class Launcher:
     @staticmethod
-    def get_context(loader: "InstrumentConfigLoader") -> "LaunchContext":
+    def get_context(loader: 'InstrumentConfigLoader') -> 'LaunchContext':
         return LaunchContext(loader)
 
     @staticmethod
-    def fast_boot(loader: "InstrumentConfigLoader") -> "LaunchContext":
+    def fast_boot(loader: 'InstrumentConfigLoader') -> 'LaunchContext':
         """Fast boot process for launching an instrument.
         - Remote nodes using localhost are started in the background.
         """
@@ -91,8 +90,7 @@ class Launcher:
     @staticmethod
     @launch_step(LaunchStep.FETCH_CONFIG)
     def fetch_config(ctx: LaunchContext) -> LaunchStepResult:
-        """
-        Fetch and validate the system configuration.
+        """Fetch and validate the system configuration.
         """
         try:
             raw = ctx.loader.get_system_config()
@@ -106,15 +104,15 @@ class Launcher:
         except Exception as e:
             err = ErrorInfo(
                 name=LaunchStep.FETCH_CONFIG,
-                category="parse_error",
-                message=f"Unexpected error parsing system config: {e}",
-                details={"exception_type": type(e).__name__},
+                category='parse_error',
+                message=f'Unexpected error parsing system config: {e}',
+                details={'exception_type': type(e).__name__},
             )
             return BasicLaunchStepResult(step=LaunchStep.FETCH_CONFIG, errors=[err])
 
     @staticmethod
     @launch_step(LaunchStep.SETUP_REMOTE_SESSIONS)
-    def setup_remote_sessions(ctx: LaunchContext) -> LaunchStepResult[dict[str, "RemoteNodeSession"]]:
+    def setup_remote_sessions(ctx: LaunchContext) -> LaunchStepResult[dict[str, 'RemoteNodeSession']]:
         """Start remote servers based on the system configuration."""
         cfg = ctx.system_config
         result = StartRemoteSessionsResult()
@@ -127,9 +125,9 @@ class Launcher:
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.SETUP_REMOTE_SESSIONS,
-                        category="server_error",
-                        message=f"Failed to start remote session for {uid}: {exc}",
-                    )
+                        category='server_error',
+                        message=f'Failed to start remote session for {uid}: {exc}',
+                    ),
                 )
 
         return result
@@ -138,7 +136,6 @@ class Launcher:
     @launch_step(LaunchStep.INITIALIZE_INSTRUMENT_NODES)
     def initialize_instrument_nodes(ctx: LaunchContext) -> LaunchStepResult[dict[str, InstrumentNode]]:
         """Initialize nodes with their devices and runtimes."""
-
         result = InitializeInstrumentNodesResult()
 
         preview_manager = PreviewManager(options=ctx.system_config.preview)
@@ -159,18 +156,18 @@ class Launcher:
                     result.add_error(
                         ErrorInfo(
                             name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,
-                            category="local_error",
-                            message=f"Failed to build local node {node_id}: {exc}",
-                        )
+                            category='local_error',
+                            message=f'Failed to build local node {node_id}: {exc}',
+                        ),
                     )
             session = next((s for s in ctx.remote_sessions.values() if s.uid == node_id), None)
             if session is None:
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,
-                        category="missing_session",
-                        message=f"No remote session found for node {node_id}",
-                    )
+                        category='missing_session',
+                        message=f'No remote session found for node {node_id}',
+                    ),
                 )
                 continue
             try:
@@ -180,9 +177,9 @@ class Launcher:
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,
-                        category="remote_error",
-                        message=f"Failed to build remote node {node_id}: {exc}",
-                    )
+                        category='remote_error',
+                        message=f'Failed to build remote node {node_id}: {exc}',
+                    ),
                 )
         return result
 

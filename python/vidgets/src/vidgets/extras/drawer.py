@@ -1,8 +1,9 @@
-from PySide6.QtWidgets import QVBoxLayout, QWidget, QTextEdit
-from PySide6.QtCore import QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QFont
-from vidgets.input.label import VLabel
 from datetime import datetime
+
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
+from vidgets.input.label import VLabel
 
 
 class SlidingDrawer(QWidget):
@@ -28,7 +29,7 @@ class SlidingDrawer(QWidget):
         drawer_layout.setContentsMargins(12, 12, 12, 12)
 
         # Create simple header (no close button)
-        self.title_label = VLabel("Event Log")
+        self.title_label = VLabel('Event Log')
         self.title_label.setStyleSheet("""
             QLabel {
                 color: palette(windowText);
@@ -71,14 +72,14 @@ class SlidingDrawer(QWidget):
         self.hide()
 
         # Animation for sliding
-        self.animation = QPropertyAnimation(self, b"geometry")
+        self.animation = QPropertyAnimation(self, b'geometry')
         self.animation.setDuration(300)
         self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 
     def add_log_message(self, message: str):
         """Add a message to the log display."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {message}"
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        log_entry = f'[{timestamp}] {message}'
         self.log_display.append(log_entry)
 
     def toggle(self):

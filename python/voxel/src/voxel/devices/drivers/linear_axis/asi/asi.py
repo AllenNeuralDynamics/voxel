@@ -2,9 +2,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from tigerasi.device_codes import JoystickInput as ASIJoystickInput
-
-from voxel.devices.interfaces.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
 from voxel.devices.drivers.hubs.tigerbox import ASITigerBox
+from voxel.devices.interfaces.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
 from voxel.utils.descriptors.deliminated import deliminated_float
 
 
@@ -29,7 +28,7 @@ class ASITigerLinearAxis(VoxelLinearAxis):
     :type tigerbox: ASITigerBox
     :type joystick_polarity: Literal[1, -1]
     :type joystick_input: ASIJoystickInput
-    :raises DeviceConnectionError: If the stage with the specified hardware axis is not found or is already registered
+    :raises DeviceConnectionError: If the stage with the specified hardware axis is not found or is already registered.
     """
 
     def __init__(
@@ -45,7 +44,11 @@ class ASITigerLinearAxis(VoxelLinearAxis):
         self._tigerbox = tigerbox
         self._hardware_axis = hardware_axis.upper()
         self._tigerbox.register_linear_axis(
-            self.uid, self._hardware_axis, self.dimension, joystick_polarity, joystick_input
+            self.uid,
+            self._hardware_axis,
+            self.dimension,
+            joystick_polarity,
+            joystick_input,
         )
 
     def close(self):
@@ -55,15 +58,15 @@ class ASITigerLinearAxis(VoxelLinearAxis):
 
     def configure_scan(self, config: ScanConfig):
         if not self.dimension == LinearAxisDimension.Z:
-            raise ValueError("Unable to configure scan. This axis is not used for scanning.")
+            raise ValueError('Unable to configure scan. This axis is not used for scanning.')
         if config.scan_type == ScanConfig.ScanType.STEP_AND_SHOOT:
             self._tigerbox.setup_step_shoot_scan(self.uid, config.step_size_um)
         elif config.scan_type == ScanConfig.ScanType.CONTINUOUS:
-            self._log.warning("Continuous scans are not yet implemented.")
+            self.log.warning('Continuous scans are not yet implemented.')
 
     def start_scan(self):
         if self.scan_state != ScanState.CONFIGURED:
-            raise ValueError("Scan not configured. Call configure_scan first.")
+            raise ValueError('Scan not configured. Call configure_scan first.')
         self._tigerbox.start_scan()
 
     def stop_scan(self):
@@ -115,7 +118,7 @@ class ASITigerLinearAxis(VoxelLinearAxis):
     def await_movement(self):
         while self.is_moving:
             pass
-        self._log.info(f"Axis {self.uid} has stopped moving. Current position: {self.position_mm}")
+        self.log.info('Axis %s has stopped moving. Current position: %s', self.uid, self.position_mm)
 
     @property
     def home_position_mm(self) -> float:
@@ -136,7 +139,7 @@ class ASITigerLinearAxis(VoxelLinearAxis):
             self.await_movement()
 
     def zero_in_place(self) -> None:
-        """Set the current position as the zero position"""
+        """Set the current position as the zero position."""
         return self._tigerbox.zero_in_place(self.uid)
 
     def go_to_origin(self, wait=False) -> None:
