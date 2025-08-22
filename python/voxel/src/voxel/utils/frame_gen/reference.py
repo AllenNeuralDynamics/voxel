@@ -30,8 +30,7 @@ class BaseReferenceGenerator(FrameGenerator):
 
     @abstractmethod
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
-        """Abstract method for resizing. Subclasses must implement this.
-        """
+        """Abstract method for resizing. Subclasses must implement this."""
         raise NotImplementedError
 
     def generate(self, nframes: int = 1) -> np.ndarray:

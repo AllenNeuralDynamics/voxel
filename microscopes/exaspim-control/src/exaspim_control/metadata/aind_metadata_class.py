@@ -28,8 +28,7 @@ DATE_FORMATS = {
 
 
 class AINDMetadataClass:
-    """Metadata class for handling metadata properties and generating acquisition names.
-    """
+    """Metadata class for handling metadata properties and generating acquisition names."""
 
     def __init__(
         self,
@@ -140,7 +139,8 @@ class AINDMetadataClass:
         """
         for prop_name in form:
             if not isinstance(
-                getattr(type(self), prop_name, None), property,
+                getattr(type(self), prop_name, None),
+                property,
             ):  # check if prop name is metadata property
                 msg = f'{prop_name} is not a metadata property. Please choose from {self.__dir__()}'
                 raise ValueError(msg)
@@ -188,7 +188,8 @@ class AINDMetadataClass:
         name = []
         for prop_name in form:
             if not isinstance(
-                getattr(type(self), prop_name, None), property,
+                getattr(type(self), prop_name, None),
+                property,
             ):  # check if prop name is metadata property
                 msg = f'{prop_name} is not a metadata property. Please choose from {self.__dir__()}'
                 raise ValueError(msg)

@@ -138,7 +138,9 @@ class ObjectGraphBuilder[T: object]:
 
 
 def build_object_graph[T](
-    specs: BuildSpecs, base_class: type[T], id_params: set[str] | None = None,
+    specs: BuildSpecs,
+    base_class: type[T],
+    id_params: set[str] | None = None,
 ) -> SpinnerResults[T]:
     """Build a graph of objects from the specification collection."""
     return ObjectGraphBuilder(base_class=base_class, uid_params=id_params).build(specs)

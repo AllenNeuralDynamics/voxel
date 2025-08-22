@@ -57,7 +57,8 @@ class RemoteNodeService(rpyc.SlaveService):
         if self._preview_publisher:
             self._preview_publisher.close()
         self._preview_publisher = PreviewFrameRelay(
-            options=options, logger=VoxelLogging.get_logger(f'PreviewRelay{self._uid}'),
+            options=options,
+            logger=VoxelLogging.get_logger(f'PreviewRelay{self._uid}'),
         )
 
     def configure(self, device_specs: 'BuildSpecs'):

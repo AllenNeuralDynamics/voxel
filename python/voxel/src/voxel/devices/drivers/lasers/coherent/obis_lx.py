@@ -47,7 +47,7 @@ class ObisLXLaser(VoxelLaser):
         self._inst.disable()
 
     def close(self):
-        self._inst.close()
+        self._inst.ser.close()
 
     @deliminated_float(min_value=0, max_value=lambda self: self._inst.max_power)
     def power_setpoint_mw(self):

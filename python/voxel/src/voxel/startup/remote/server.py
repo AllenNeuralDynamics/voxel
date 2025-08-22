@@ -100,7 +100,9 @@ class BackgroundNodeServerRunner(INodeServerRunner):
     def start(self) -> None:
         self._server = RemoteNodeServer.get(host=self._config.host, port=self._config.rpc_port)
         thread = threading.Thread(
-            target=self._server.start, daemon=True, name=f'RPC-Server-{self._config.host}:{self._config.rpc_port}',
+            target=self._server.start,
+            daemon=True,
+            name=f'RPC-Server-{self._config.host}:{self._config.rpc_port}',
         )
         thread.start()
         self._thread = thread

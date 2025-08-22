@@ -56,7 +56,7 @@ class VoxelFileTransfer:
         :param filename: The base filename
         :type filename: str
         """
-        self.log.info(f'setting filename to: {filename}')
+        self.log.info('setting filename to: %s', filename)
         self._filename = filename
 
     @property
@@ -78,7 +78,7 @@ class VoxelFileTransfer:
         :type acquisition_name: str
         """
         self._acquisition_name = Path(acquisition_name)
-        self.log.info(f'setting acquisition name to: {acquisition_name}')
+        self.log.info('setting acquisition name to: %s', acquisition_name)
 
     @property
     @abstractmethod
@@ -99,7 +99,7 @@ class VoxelFileTransfer:
         :type local_path: str
         """
         self._local_path = Path(local_path)
-        self.log.info(f'setting local path to: {local_path}')
+        self.log.info('setting local path to: %s', local_path)
 
     @property
     @abstractmethod
@@ -120,7 +120,7 @@ class VoxelFileTransfer:
         :type external_path: str
         """
         self._external_path = Path(external_path)
-        self.log.info(f'setting local path to: {external_path}')
+        self.log.info('setting local path to: %s', external_path)
 
     @property
     def verify_transfer(self) -> bool:
@@ -140,7 +140,7 @@ class VoxelFileTransfer:
         :type verify_transfer: bool
         """
         self._verify_transfer = verify_transfer
-        self.log.info(f'setting verify transfer to: {verify_transfer}')
+        self.log.info('setting verify transfer to: %s', verify_transfer)
 
     @property
     @abstractmethod
@@ -161,7 +161,7 @@ class VoxelFileTransfer:
         :type max_retry: int
         """
         self._max_retry = max_retry
-        self.log.info(f'setting max retry to: {max_retry}')
+        self.log.info('setting max retry to: %s', max_retry)
 
     @property
     @abstractmethod
@@ -182,7 +182,7 @@ class VoxelFileTransfer:
         :type timeout_s: float
         """
         self._timeout_s = timeout_s
-        self.log.info(f'setting timeout to: {timeout_s}')
+        self.log.info('setting timeout to: %s', timeout_s)
 
     @property
     @abstractmethod
@@ -195,21 +195,19 @@ class VoxelFileTransfer:
         # state = {}
         # state["Transfer Progress [%]"] = self.progress
         # return state
-        self.log.info(f'{self._filename} transfer progress: {self.progress:.2f} [%]')
+        self.log.info('%s transfer progress: %.2f [%%]', self._filename, self.progress)
         return self.progress
 
     @abstractmethod
     def start(self):
-        """Start the transfer process.
-        """
-        self.log.info(f'transferring from {self._local_path} to {self._external_path}')
+        """Start the transfer process."""
+        self.log.info('transferring from %s to %s', self._local_path, self._external_path)
         self.thread = threading.Thread(target=self._run)
         self.thread.start()
 
     @abstractmethod
     def wait_until_finished(self):
-        """Wait for the transfer process to finish.
-        """
+        """Wait for the transfer process to finish."""
         self.thread.join()
 
     @abstractmethod
@@ -239,14 +237,13 @@ class VoxelFileTransfer:
         local_hash = hashfile(local_file_path, sample_size=1 << 14)
         external_hash = hashfile(external_file_path, sample_size=1 << 14)
         if local_hash == external_hash:
-            self.log.info(f'{local_file_path} and {external_file_path} hashes match')
+            self.log.info('%s and %s hashes match', local_file_path, external_file_path)
             return True
-        self.log.info(f'hash mismatch for {local_file_path} and {external_file_path}')
-        self.log.info(f'{local_file_path} hash = {local_hash}')
-        self.log.info(f'{external_file_path} hash = {external_hash}')
+        self.log.info('hash mismatch for %s and %s', local_file_path, external_file_path)
+        self.log.info('%s hash = %s', local_file_path, local_hash)
+        self.log.info('%s hash = %s', external_file_path, external_hash)
         return False
 
     @abstractmethod
     def _run(self):
-        """Internal function that runs the transfer process.
-        """
+        """Internal function that runs the transfer process."""

@@ -146,7 +146,7 @@ class YAMLInstrumentDiscovery(InstrumentDiscovery):
             Dictionary where keys are instrument names and values are their InstrumentLauncher objects
 
         """
-        self.logger.info(f"🔍 Discovering instruments in '{self.root_path}'")
+        self.logger.info("🔍 Discovering instruments in '%s'", self.root_path)
         self._loaders.clear()
         instrument_paths = [
             p
@@ -154,17 +154,19 @@ class YAMLInstrumentDiscovery(InstrumentDiscovery):
             if p.is_dir() and (not p.stem.startswith('.')) and (p / 'system.yaml').exists()
         ]
 
-        self.logger.info(f'✔ Found {len(instrument_paths)} potential instrument configuration directories')
+        self.logger.info('✔ Found %s potential instrument configuration directories', len(instrument_paths))
         if instrument_paths:
             for instrument_path in instrument_paths:
                 try:
                     self._loaders[instrument_path.name] = YAMLInstrumentLoader(instrument_path)
                 except FileNotFoundError as e:
-                    self.logger.error(f"✗ Skipped invalid instrument configuration in '{instrument_path}': {e}")
+                    self.logger.error("✗ Skipped invalid instrument configuration in '%s': %s", instrument_path, e)
 
         success_count = len(self._loaders)
         total_count = len(instrument_paths)
         self.logger.info(
-            f'🎯 Instrument discovery completed: {success_count}/{total_count} instruments loaded successfully',
+            '🎯 Instrument discovery completed: %s/%s instruments loaded successfully',
+            success_count,
+            total_count,
         )
         return self._loaders

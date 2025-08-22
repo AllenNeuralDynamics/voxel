@@ -70,7 +70,7 @@ class ImagingRuntime:
 
     # --- Live View ---
     def _on_live_view_stop(self, frame_count: int):
-        self.log.info(f'Viewer has stopped live vidgets. Frames captured: {frame_count}')
+        self.log.info('Viewer has stopped live vidgets. Frames captured: %s', frame_count)
 
     def start_live_view(self, channel_name: str) -> None:
         self._active_live_viewer = LiveViewer(
@@ -89,18 +89,21 @@ class ImagingRuntime:
 
     # --- Stack Acquisition ---
     def prepare_stack_acquisition(
-        self, config: 'StackAcquisitionConfig', writer_name: str, transfer_name: str | None = None,
+        self,
+        config: 'StackAcquisitionConfig',
+        writer_name: str,
+        transfer_name: str | None = None,
     ) -> None:
         if self._active_live_viewer is not None:
             self.log.warning('Preparing stack acquisition while live view is active. Stopping live view first.')
             self.stop_live_view()
 
         if self._active_acq_runner is not None:
-            self.log.warning(f'Unable to prepare stack {config.channel_name}. Another runner is already active.')
+            self.log.warning('Unable to prepare stack %s. Another runner is already active.', config.channel_name)
             return
 
         try:
-            self.log.info(f'Preparing stack acquisition: {config.channel_name}')
+            self.log.info('Preparing stack acquisition: %s', config.channel_name)
             writer = self._io_manager.get_writer_instance(writer_name)
             transfer = self._io_manager.get_transfer_instance(transfer_name) if transfer_name else None
 
@@ -111,9 +114,9 @@ class ImagingRuntime:
                 preview_generator=self._previewer,
                 transfer=transfer,
             )
-            self.log.info(f'Stack acquisition prepared for {config.channel_name}.')
+            self.log.info('Stack acquisition prepared for %s.', config.channel_name)
         except Exception as e:
-            self.log.error(f'Failed to prepare stack acquisition: {e}', exc_info=True)
+            self.log.error('Failed to prepare stack acquisition: %s', e, exc_info=True)
             self._active_acq_runner = None
             raise
 
@@ -139,12 +142,14 @@ class ImagingRuntime:
             return
 
         runner = self._active_acq_runner
-        self.log.info(f'Finalizing stack acquisition for runner {runner._writer.config.channel_name}. Aborted: {abort}')
+        self.log.info(
+            'Finalizing stack acquisition for runner %s. Aborted: %s', runner._writer.config.channel_name, abort
+        )
         try:
             if abort:
                 runner.abort_batch_acquisition()
             runner.finalize()
         except Exception as e:
-            self.log.error(f'Error during runner finalization via pipeline: {e}', exc_info=True)
+            self.log.error('Error during runner finalization via pipeline: %s', e, exc_info=True)
         finally:
             self._active_acq_runner = None

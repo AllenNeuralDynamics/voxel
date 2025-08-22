@@ -87,12 +87,12 @@ class VToggleDemo(QMainWindow):
 
     def on_dark_mode_changed(self, checked: bool):
         """Handle dark mode toggle."""
-        print(f"Dark mode {'enabled' if checked else 'disabled'}")
+        print(f'Dark mode {"enabled" if checked else "disabled"}')
         self.update_state_display()
 
     def on_notifications_changed(self, checked: bool):
         """Handle notifications toggle."""
-        print(f"Notifications {'enabled' if checked else 'disabled'}")
+        print(f'Notifications {"enabled" if checked else "disabled"}')
         self.update_state_display()
 
     def update_state_display(self):
@@ -105,7 +105,7 @@ class VToggleDemo(QMainWindow):
             states.append('Notifications')
 
         if states:
-            self.state_label.setText(f"Active Toggles: {', '.join(states)}")
+            self.state_label.setText(f'Active Toggles: {", ".join(states)}')
         else:
             self.state_label.setText('Toggle States: All unchecked')
 

@@ -216,16 +216,14 @@ class ExASPIMAcquisitionView(QWidget):
         return save
 
     def stop_acquisition(self) -> None:
-        """Stop the acquisition process.
-        """
+        """Stop the acquisition process."""
         if hasattr(self, 'acquisition_thread'):
             self.acquisition_thread.quit()
         self.acquisition.stop_acquisition()
         self.acquisition_ended()
 
     def save_acquisition(self) -> None:
-        """Save a tile configuration to a YAML file.
-        """
+        """Save a tile configuration to a YAML file."""
         # create YAML handler with non-aliasing representer
         yaml = YAML()
         yaml.Representer = NonAliasingRTRepresenter
@@ -240,8 +238,7 @@ class ExASPIMAcquisitionView(QWidget):
                 yaml.dump(self.acquisition.config, file)
 
     def start_acquisition(self) -> None:
-        """Start acquisition and disable widgets.
-        """
+        """Start acquisition and disable widgets."""
         # add tiles to acquisition config
         self.update_tiles()
 
@@ -283,8 +280,7 @@ class ExASPIMAcquisitionView(QWidget):
         self.acquisitionStarted.emit(datetime.now())
 
     def acquisition_ended(self) -> None:
-        """Handle the end of the acquisition process.
-        """
+        """Handle the end of the acquisition process."""
         # enable acquisition view
         self.start_button.setEnabled(True)
         self.metadata_widget.setEnabled(True)

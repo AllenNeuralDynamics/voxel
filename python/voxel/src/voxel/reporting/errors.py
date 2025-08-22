@@ -72,7 +72,8 @@ class ResultsReportEntry(BaseModel):
     message: str
 
     @field_validator('category', mode='before')
-    def validate_category(self, value):
+    @classmethod
+    def validate_category(cls, value) -> str:
         return str(value)
 
 

@@ -46,7 +46,7 @@ class LaunchStepResult[T](ABC):
     def report(self) -> list[LaunchReportEntry]: ...
 
     def __repr__(self) -> str:
-        return f"{self.step.name} - {'OK' if self.ok() else 'ERROR'}"
+        return f'{self.step.name} - {"OK" if self.ok() else "ERROR"}'
 
 
 class BasicLaunchStepResult[T](LaunchStepResult[T]):

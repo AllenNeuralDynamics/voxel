@@ -68,8 +68,7 @@ class MetadataLaunch:
         self.acquisition_view.acquisitionEnded.connect(self.finalize_acquisition)
 
     def finalize_acquisition(self) -> None:
-        """Finalize the acquisition process.
-        """
+        """Finalize the acquisition process."""
 
         def _rearrange_external_directory(save_to: str):
             os.makedirs(Path(save_to, 'exaSPIM'))
@@ -106,7 +105,7 @@ class MetadataLaunch:
                         acquisition_model.write_standard_file(output_directory=Path(save_to), prefix=None)
                         if self.log_filename is not None:
                             # move the log file
-                            self.log.info(f'copying {self.log_filename} to {save_to}')
+                            self.log.info('copying %s to %s', self.log_filename, save_to)
                             shutil.copy(
                                 self.log_filename,
                                 str(Path(save_to, self.log_filename)),
@@ -123,7 +122,7 @@ class MetadataLaunch:
                             if file.endswith('.tiff') or file.endswith('.log') or file.endswith('.yaml'):
                                 os.rename(str(Path(save_to, file)), str(Path(save_to, 'derivatives', file)))
                     # delete local directory
-                    self.log.info(f'deleting {Path(transfer.local_path, transfer.acquisition_name)!s}')
+                    self.log.info('deleting %s', Path(transfer.local_path, transfer.acquisition_name))
                     shutil.rmtree(str(Path(transfer.local_path, transfer.acquisition_name)))
         else:
             # Transfer not available, save locally
@@ -137,7 +136,7 @@ class MetadataLaunch:
                         acquisition_model.write_standard_file(output_directory=Path(save_to), prefix='exaspim')
                         if self.log_filename is not None:
                             # move the log file
-                            self.log.info(f'copying {self.log_filename} to {save_to}')
+                            self.log.info('copying %s to %s', self.log_filename, save_to)
                             shutil.copy(
                                 self.log_filename,
                                 str(Path(save_to, self.log_filename)),
@@ -214,7 +213,7 @@ class MetadataLaunch:
             addtional_devices = np.array([item for sublist in nested_device_list for item in sublist]).flatten()
             tiles.append(
                 {
-                    'file_name': f"{tile['prefix']}_{tile['tile_number']:06}_ch_{tile_ch}.ims",
+                    'file_name': f'{tile["prefix"]}_{tile["tile_number"]:06}_ch_{tile_ch}.ims',
                     'coordinate_transformations': [
                         {'type': 'scale', 'scale': [f'{voxel_size_x_um}', f'{voxel_size_y_um}', f'{voxel_size_z_um}']},
                         {

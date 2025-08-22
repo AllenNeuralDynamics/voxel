@@ -51,7 +51,7 @@ class OMETiffWriter(VoxelWriter):
         num_frames = f'Configured OME-TIFF writer with {self.config.frame_count} frames'
         frame_shape = f'of shape {self.config.frame_shape.x}px x {self.config.frame_shape.y}px'
         batch_size = f'in batches of {self._batch_size_px}.'
-        self.log.info(f'{num_frames} {frame_shape} {batch_size}')
+        self.log.info('%s %s %s', num_frames, frame_shape, batch_size)
 
     def _initialize(self) -> None:
         if self.output_file.exists():
@@ -78,16 +78,22 @@ class OMETiffWriter(VoxelWriter):
         current_file_size = self.output_file.stat().st_size / (1024 * 1024)  # File size in MB
 
         self.log.info(
-            f'Batch {self.batch_count} written to {self.output_file} | Current file size: {current_file_size:.2f} MB',
+            'Batch %s written to %s | Current file size: %.2f MB',
+            self.batch_count,
+            self.output_file,
+            current_file_size,
         )
 
     def _finalize(self) -> None:
         try:
             self.tiff_writer.close()
         except Exception as e:
-            self.log.error(f'Failed to close TiffWriter: {e}')
+            self.log.error('Failed to close TiffWriter: %s', e)
         self.log.info(
-            f'Processed {self.config.frame_count} frames in {self._batch_count} batches. Saved to {self.output_file}.',
+            'Processed %s frames in %s batches. Saved to %s.',
+            self.config.frame_count,
+            self._batch_count,
+            self.output_file,
         )
 
 
@@ -113,7 +119,9 @@ def test_tiffwriter():
     )
 
     writer.configure(config)
-    writer.log.info(f'Expecting: {frame_count} frames of {frame_shape.x}x{frame_shape.y} in {NUM_BATCHES} batches')
+    writer.log.info(
+        'Expecting: %s frames of %sx%s in %s batches', frame_count, frame_shape.x, frame_shape.y, NUM_BATCHES
+    )
     writer.start()
 
     try:
@@ -121,7 +129,7 @@ def test_tiffwriter():
         for frame in frame_gen.generate(nframes=frame_count):
             writer.add_frame(frame)
     except Exception as e:
-        writer.log.error(f'Test failed: {e}')
+        writer.log.error('Test failed: %s', e)
     finally:
         writer.stop()
 

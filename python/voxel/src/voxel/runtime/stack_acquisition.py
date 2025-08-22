@@ -120,7 +120,7 @@ class StackAcquisitionRunner:
         transfer: VoxelFileTransfer | None = None,
     ):
         self.log = VoxelLogging.get_logger(
-            f'StackRunner.{config.channel_name}.{config.stack.idx.x}_{config.stack.idx.y}',
+            f'StackRunner.{config.channel_name}.{config.stack.idx.x}_{config.stack.idx.y}'
         )
         self._camera = camera
         self._writer = writer
@@ -156,7 +156,7 @@ class StackAcquisitionRunner:
                     position_um=config.stack.pos_um,
                     channel_name=config.channel_name,
                     channel_idx=config.channel_idx,
-                    file_name=f'tile_{config.stack.idx.x}_{config.stack.idx.y}_{config.channel_name}',
+                    file_name='tile_%s_%s_%s' % (config.stack.idx.x, config.stack.idx.y, config.channel_name),
                 ),
             )
             self._wait_for_disk_space(self._writer.config.path)
@@ -166,7 +166,7 @@ class StackAcquisitionRunner:
             self._captured_frames = 0
 
         except Exception as e:
-            self.log.error(f'Error during stack acquisition preparation: {e}')
+            self.log.error('Error during stack acquisition preparation: %s', e)
             self._writer.close()
             raise
 
@@ -207,11 +207,11 @@ class StackAcquisitionRunner:
         requested_batch = self._get_batch(start_idx, end_idx)
 
         if requested_batch is None:
-            msg = f'Batch {requested_batch} not found in the list of batches.'
+            msg = 'Batch %s not found in the list of batches.' % requested_batch
             raise RuntimeError(msg)
 
         if requested_batch.status not in (BatchStatus.READY, BatchStatus.ERROR, BatchStatus.ABORTED):
-            msg = f'Batch {requested_batch} is not ready for acquisition. Status: {requested_batch.status}'
+            msg = 'Batch %s is not ready for acquisition. Status: %s' % (requested_batch, requested_batch.status)
             raise RuntimeError(
                 msg,
             )
@@ -231,13 +231,13 @@ class StackAcquisitionRunner:
                     self._batch_completion_event,
                 ),
                 daemon=False,
-                name=f'BatchAcquisitionThread-{start_idx}-{end_idx}',
+                name='BatchAcquisitionThread-%s-%s' % (start_idx, end_idx),
             )
             self._batch_capture_thread.start()
             self._current_batch.status = BatchStatus.ARMED
             return self._batch_completion_event
         except Exception as e:
-            self.log.error(f'Error starting batch acquisition: {e}')
+            self.log.error('Error starting batch acquisition: %s', e)
             self._writer.close()
             requested_batch.status = BatchStatus.ERROR
             raise
@@ -252,7 +252,7 @@ class StackAcquisitionRunner:
         It will acquire frames from start_idx to end_idx, adding them to the writer and updating the preview manager.
         """
         if not self._current_batch:
-            self.log.error(f'Current batch {self._current_batch} not found. Aborting acquisition.')
+            self.log.error('Current batch %s not found. Aborting acquisition.', self._current_batch)
             completion_notifier.set()
             return
 
@@ -265,7 +265,7 @@ class StackAcquisitionRunner:
 
         start_idx, end_idx = self._current_batch.start, self._current_batch.end
 
-        self.log.info(f'Starting batch acquisition from {start_idx} to {end_idx}.')
+        self.log.info('Starting batch acquisition from %s to %s.', start_idx, end_idx)
         self._current_batch.status = BatchStatus.CAPTURING
         try:
             for frame_idx in range(start_idx, end_idx + 1):
@@ -278,7 +278,7 @@ class StackAcquisitionRunner:
                 self._preview_generator.set_new_frame(frame=frame, frame_idx=frame_idx, channel_name=channel_name)
                 self._captured_frames += 1
         except Exception as e:
-            self.log.error(f'Error during batch acquisition: {e}', exc_info=True)
+            self.log.error('Error during batch acquisition: %s', e, exc_info=True)
             self._current_batch.status = BatchStatus.ERROR
         finally:
             completion_notifier.set()
@@ -287,7 +287,7 @@ class StackAcquisitionRunner:
             self._batch_halt_event.clear()  # Reset the halt event for future acquisitions
             self._current_batch = None
             self._batch_capture_thread = None
-            self.log.info(f'Batch acquisition complete. Captured {self._captured_frames} frames.')
+            self.log.info('Batch acquisition complete. Captured %s frames.', self._captured_frames)
 
     def abort_batch_acquisition(self) -> None:
         """Cancel the current batch acquisition if it is running."""
@@ -300,7 +300,7 @@ class StackAcquisitionRunner:
             try:
                 self._camera.stop()
             except Exception as e:
-                self.log.error(f'Error stopping camera during batch acquisition abort: {e}', exc_info=True)
+                self.log.error('Error stopping camera during batch acquisition abort: %s', e, exc_info=True)
 
     def finalize(self) -> None:
         self.log.info('Finalizing stack...')
@@ -323,7 +323,7 @@ class StackAcquisitionRunner:
             self._writer.close()
             self.log.info('Stack finalized.')
         except Exception as e:
-            self.log.error(f'Error during finalization: {e}')
+            self.log.error('Error during finalization: %s', e)
             raise
 
     # TODO: complete this implementation
@@ -336,4 +336,4 @@ class StackAcquisitionRunner:
             try:
                 self._camera.stop()
             except Exception as e:
-                self.log.error(f'Error stopping camera during batch acquisition abort: {e}', exc_info=True)
+                self.log.error('Error stopping camera during batch acquisition abort: %s', e, exc_info=True)

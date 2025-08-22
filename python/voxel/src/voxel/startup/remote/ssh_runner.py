@@ -36,8 +36,8 @@ def rsync_repo(local_path: Path, remote_path: str, config: 'RemoteNodeConfig') -
     ignore_patterns = ['.git', '.venv', '.voxel', '.vscode', '__pycache__', '.DS_Store']
     exclude_args = [arg for pat in ignore_patterns for arg in ('--exclude', pat)]
 
-    src = f"{local_path.as_posix().rstrip('/')}/"  # trailing slash => copy contents
-    dst = f"{user}@{host}:{remote_path.rstrip('/')}/"
+    src = f'{local_path.as_posix().rstrip("/")}/'  # trailing slash => copy contents
+    dst = f'{user}@{host}:{remote_path.rstrip("/")}/'
 
     rsync = local['rsync'][
         '-az',

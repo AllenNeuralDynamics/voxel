@@ -98,6 +98,5 @@ class SharedDoubleBuffer:
                     pass  # Already unlinked
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Cleanup called automatically if opened using a 'with' statement.
-        """
+        """Cleanup called automatically if opened using a 'with' statement."""
         self.close_and_unlink()

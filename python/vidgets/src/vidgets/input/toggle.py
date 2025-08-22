@@ -312,8 +312,8 @@ if __name__ == '__main__':
 
         # Update status when toggled
         def update_status(checked):
-            status.setText(f"Toggle: {'ON' if checked else 'OFF'}")
-            print(f"VToggle state changed: {'ON' if checked else 'OFF'}")
+            status.setText(f'Toggle: {"ON" if checked else "OFF"}')
+            print(f'VToggle state changed: {"ON" if checked else "OFF"}')
 
         # Create a VToggle
         toggle = VToggle(setter=update_status)

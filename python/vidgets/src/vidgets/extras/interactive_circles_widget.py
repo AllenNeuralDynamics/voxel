@@ -71,7 +71,9 @@ class InteractiveCirclesWidget(QWidget):
             # Normalize angle to 0-360 and check if it's close to 270° (12 o'clock in our coordinate system)
             normalized_angle = (current_angle + 360) % 360
             angle_diff = min(
-                abs(normalized_angle - 270), abs(normalized_angle - 270 + 360), abs(normalized_angle - 270 - 360),
+                abs(normalized_angle - 270),
+                abs(normalized_angle - 270 + 360),
+                abs(normalized_angle - 270 - 360),
             )
             is_active = angle_diff < (360 / self.num_circles / 2)  # Within half a step of 12 o'clock
 
@@ -101,7 +103,7 @@ class InteractiveCirclesWidget(QWidget):
             <circle cx="100" cy="100" r="3" fill="#333" opacity="0.7"/>
 
             <!-- Revolving circles -->
-            {"".join(circles)}
+            {''.join(circles)}
 
             <!-- Info text -->
             <text x="100" y="25" text-anchor="middle" font-size="12" fill="#333">

@@ -58,7 +58,7 @@ class SimulatedFilterWheel(VoxelFilterWheel):
 
         self._is_moving = True
         self._position = slot
-        self.log.debug(f'SimulatedFilterWheel {self.uid}: Moving to slot {slot} ({self._labels.get(slot)})')
+        self.log.debug('SimulatedFilterWheel %s: Moving to slot %s (%s)', self.uid, slot, self._labels.get(slot))
 
         if wait:
             time.sleep(self._settle)

@@ -24,8 +24,7 @@ class PreviewCompression(StrEnum):
 
 
 def convert_to_jpeg(frame: np.ndarray, quality: int = 100) -> bytes:
-    """Convert a NumPy array (BGR image) to JPEG-encoded bytes using OpenCV.
-    """
+    """Convert a NumPy array (BGR image) to JPEG-encoded bytes using OpenCV."""
     encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
     success, encoded_image = cv2.imencode('.jpg', frame, encode_params)
     if not success:
@@ -34,8 +33,7 @@ def convert_to_jpeg(frame: np.ndarray, quality: int = 100) -> bytes:
 
 
 def convert_to_png(frame: np.ndarray) -> bytes:
-    """Convert a NumPy array (BGR image) to PNG-encoded bytes using OpenCV.
-    """
+    """Convert a NumPy array (BGR image) to PNG-encoded bytes using OpenCV."""
     encode_params = [int(cv2.IMWRITE_PNG_COMPRESSION), 0]
     success, encoded_image = cv2.imencode('.png', frame, encode_params)
     if not success:

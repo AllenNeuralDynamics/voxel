@@ -97,7 +97,7 @@ class CustomFormatter(logging.Formatter):
 
         for i, field in enumerate(fields):
             separator = ' - ' if i < len(fields) - 1 else ''
-            base_format += f"{self.FIELD_COLORS.get(field, '')}%({field})s{LogColor.RESET.value}{separator}"
+            base_format += f'{self.FIELD_COLORS.get(field, "")}%({field})s{LogColor.RESET.value}{separator}'
 
         if self.detailed:
             base_format += f' - {LogColor.CYAN.value}%(filename)s:%(lineno)d{LogColor.RESET.value}'

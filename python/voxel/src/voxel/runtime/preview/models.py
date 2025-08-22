@@ -56,8 +56,7 @@ class PreviewConfig(BaseModel):
 
 
 class PreviewMetadata(BaseModel):
-    """Contains the preview configuration settings for a frame including the config used to generate it.
-    """
+    """Contains the preview configuration settings for a frame including the config used to generate it."""
 
     frame_idx: int = Field(..., ge=0, description='Frame index of the captured image.')
     channel_name: str = Field(..., description='Name of the channel from which the frame was captured.')
@@ -98,7 +97,8 @@ class PreviewFrame:
         This includes both the metadata and the compressed frame data.
         """
         packed = msgpack.packb(
-            {'metadata': self.metadata.model_dump(), 'frame': self.frame}, default=mpack_numpy.encode,
+            {'metadata': self.metadata.model_dump(), 'frame': self.frame},
+            default=mpack_numpy.encode,
         )
         if packed is None:
             raise ValueError('Packing PreviewFrame failed: msgpack.packb returned None')

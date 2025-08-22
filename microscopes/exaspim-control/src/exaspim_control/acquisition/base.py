@@ -78,7 +78,7 @@ class Acquisition:
         :return: The initialized class object.
         :rtype: object
         """
-        self.log.info(f'loading {driver}.{module}')
+        self.log.info('loading %s.%s', driver, module)
         if kwds is None:
             kwds = {}
         __import__(driver)
@@ -93,7 +93,7 @@ class Acquisition:
         :param properties: dictionary of properties to set on the device.
         :type properties: dict
         """
-        self.log.info(f'setting up {device}')
+        self.log.info('setting up %s', device)
         # successively iterate through properties keys and if there is setter, set
         for key, value in properties.items():
             if hasattr(device, key):
@@ -134,7 +134,7 @@ class Acquisition:
         init = class_specs.get('init', {})
         class_object = self._load_class(driver, module, init)
         properties = class_specs.get('properties', {})
-        self.log.info(f'constructing {driver}')
+        self.log.info('constructing %s', driver)
         self._setup_class(class_object, properties)
         return class_object
 
@@ -155,12 +155,10 @@ class Acquisition:
         return properties
 
     def run(self) -> None:
-        """Runs the acquisition process.
-        """
+        """Runs the acquisition process."""
 
     def update_current_state_config(self) -> None:
-        """Update the current state configuration.
-        """
+        """Update the current state configuration."""
         # update properties of operations
         for device_name, op_dict in self.config['acquisition']['operations'].items():
             for op_name, op_specs in op_dict.items():
@@ -186,5 +184,4 @@ class Acquisition:
         raise RuntimeError
 
     def close(self) -> None:
-        """Close the acquisition.
-        """
+        """Close the acquisition."""

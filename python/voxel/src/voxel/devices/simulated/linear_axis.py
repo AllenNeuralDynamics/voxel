@@ -17,7 +17,7 @@ class SimulatedLinearAxis(VoxelLinearAxis):
         super().__init__(name, dimension)
 
     def configure_scan(self, config: ScanConfig) -> None:
-        self.log.info(f'Configuring scan: {config}')
+        self.log.info('Configuring scan: %s', config)
 
     def start_scan(self) -> None:
         pass

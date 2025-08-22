@@ -57,7 +57,7 @@ class BackgroundCollection:
         :param data_type: Data type
         :type data_type: np.dtype
         """
-        self.log.info(f'setting data type to: {data_type}')
+        self.log.info('setting data type to: %s', data_type)
         self._data_type = data_type
 
     @property
@@ -77,7 +77,7 @@ class BackgroundCollection:
         :type path: str
         """
         self._path = Path(path)
-        self.log.info(f'setting path to: {path}')
+        self.log.info('setting path to: %s', path)
 
     @property
     def acquisition_name(self) -> Path:
@@ -96,7 +96,7 @@ class BackgroundCollection:
         :type acquisition_name: str
         """
         self._acquisition_name = Path(acquisition_name)
-        self.log.info(f'setting acquisition name to: {acquisition_name}')
+        self.log.info('setting acquisition name to: %s', acquisition_name)
 
     @property
     def filename(self) -> str | None:
@@ -119,7 +119,7 @@ class BackgroundCollection:
             if filename.endswith('.tiff') or filename.endswith('.tif')
             else f'{filename}'
         )
-        self.log.info(f'setting filename to: {filename}')
+        self.log.info('setting filename to: %s', filename)
 
     def start(self, device: BaseCamera) -> None:
         """Start the background collection process.
@@ -150,5 +150,6 @@ class BackgroundCollection:
         # average and save the image
         background_image = np.mean(background_stack, axis=0)
         tifffile.imwrite(
-            Path(self.path, self._acquisition_name, f'{self.filename}.tiff'), background_image.astype(self._data_type),
+            Path(self.path, self._acquisition_name, f'{self.filename}.tiff'),
+            background_image.astype(self._data_type),
         )

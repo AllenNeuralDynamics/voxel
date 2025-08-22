@@ -30,7 +30,7 @@ class RobocopyFileTransfer(VoxelFileTransfer):
         start_time = time.time()
         local_directory = Path(self._local_path, self._acquisition_name)
         external_directory = Path(self._external_path, self._acquisition_name)
-        log_path = Path(local_directory, f'{self._filename}.log')
+        log_path = Path(local_directory, '%s.log' % self._filename)
         transfer_complete = False
         retry_num = 0
         subprocess: Popen | None = None
@@ -61,12 +61,12 @@ class RobocopyFileTransfer(VoxelFileTransfer):
             # if not, try to initiate transfer again
             else:
                 num_files = len(sorted_file_list)
-                self.log.info(f'attempt {retry_num + 1}/{self._max_retry}, tranferring {num_files} files.')
+                self.log.info('attempt %s/%s, tranferring %s files.', retry_num + 1, self._max_retry, num_files)
                 for file_path, file_size_mb in sorted_file_list.items():
                     # transfer just one file and iterate
                     # split filename and path
                     [local_dir, filename] = os.path.split(file_path)
-                    self.log.info(f'transfering {filename}')
+                    self.log.info('transfering %s', filename)
                     # specify external directory
                     # need to change directories to str because they are Path objects
                     external_dir = local_dir.replace(str(local_directory), str(external_directory))
@@ -76,8 +76,13 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                     # /if move only the specified filename
                     # /njh no job header in log file
                     # /njs no job summary in log file
-                    cmd_with_args = f'{self._protocol} {local_dir} {external_dir} \
-                        /j /if {filename} /njh /njs /log:{log_path}'
+                    cmd_with_args = '%s %s %s /j /if %s /njh /njs /log:%s' % (
+                        self._protocol,
+                        local_dir,
+                        external_dir,
+                        filename,
+                        log_path,
+                    )
                     # stdout to PIPE will cause malloc errors on exist
                     # no stdout will print subprocess to python
                     # stdout to DEVNULL will supresss subprocess output
@@ -86,7 +91,7 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                     time.sleep(1.0)
                     # lets monitor the progress of the individual file if size > 1 GB
                     if file_size_mb > 1024:
-                        self.log.info(f'{filename} is > 1 GB')
+                        self.log.info('%s is > 1 GB', filename)
                         # wait for subprocess to start otherwise log file won't exist yet
                         time.sleep(1.0)
                         file_progress = 0
@@ -120,14 +125,14 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                             else:
                                 stuck_time_s = 0
                             previous_progress = self.progress
-                            self.log.info(f'file transfer is {self.progress:.2f} % complete.')
+                            self.log.info('file transfer is %.2f %% complete.', self.progress)
                             # pause for 10 sec
                             time.sleep(10.0)
                     else:
                         subprocess.wait()
                         self.progress = (total_transferred_mb + file_size_mb) / total_size_mb * 100
-                        self.log.info(f'file transfer is {self.progress:.2f} % complete.')
-                    self.log.info(f'{filename} transfer complete')
+                        self.log.info('file transfer is %.2f %% complete.', self.progress)
+                    self.log.info('%s transfer complete', filename)
                     # wait for process to finish before cleaning log file
                     time.sleep(10.0)
                     # clean up and remove the temporary log file
@@ -151,24 +156,24 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                                 # if hash is verified delete file
                                 if self._verify_file(local_file_path, external_file_path):
                                     # remove local file
-                                    self.log.info(f'deleting {local_file_path}')
+                                    self.log.info('deleting %s', local_file_path)
                                     os.remove(local_file_path)
                                 # if has fails, external file is corrupt
                                 else:
                                     # remove external file, try again
-                                    self.log.info(f'hashes did not match, deleting {external_file_path}')
+                                    self.log.info('hashes did not match, deleting %s', external_file_path)
                                     os.remove(external_file_path)
                             except FileNotFoundError:
-                                self.log.warning(f'no external file exists at {external_file_path}')
+                                self.log.warning('no external file exists at %s', external_file_path)
                         else:
                             # remove local file
-                            self.log.info(f'deleting {local_file_path}')
+                            self.log.info('deleting %s', local_file_path)
                             os.remove(local_file_path)
                     else:
-                        msg = f'{local_file_path} is not a file or directory.'
+                        msg = '%s is not a file or directory.' % local_file_path
                         raise ValueError(msg)
                 end_time = time.time()
                 total_time = end_time - start_time
-                self.log.info(f'transfer complete, total time: {total_time} sec')
+                self.log.info('transfer complete, total time: %s sec', total_time)
                 subprocess.kill() if subprocess else None
                 retry_num += 1

@@ -196,7 +196,7 @@ class VoxelNiDAQ(BaseDaq):
         info = self.channel_map[pin]
         if info.path in self.assigned_channels:
             names = [n for n in (info.pin, info.pfi) if n]
-            other_str = f" (also known as {', '.join(names)})" if names else ''
+            other_str = f' (also known as {", ".join(names)})' if names else ''
             err_msg = f'Pin {pin}{other_str} is already assigned'
             raise ValueError(err_msg)
 

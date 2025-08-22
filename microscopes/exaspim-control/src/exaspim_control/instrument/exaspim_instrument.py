@@ -46,8 +46,7 @@ class ExASPIMChannel:
 
 
 class ExASPIM(Instrument):
-    """Class for handling ExASPIM instrument configuration and verification.
-    """
+    """Class for handling ExASPIM instrument configuration and verification."""
 
     def __init__(self, config_filename: str | Path, yaml_handler: YAML, log_level: str = 'INFO') -> None:
         """Initialize the ExASPIM object.
@@ -70,11 +69,13 @@ class ExASPIM(Instrument):
 
         daq = next(iter(self.daqs.values()), None)
         x_axis_stage = next(
-            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith('x')), None,
+            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith('x')),
+            None,
         )
 
         y_axis_stage = next(
-            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith('y')), None,
+            (stage for key, stage in self.tiling_stages.items() if str(key).lower().startswith('y')),
+            None,
         )
 
         filter_wheel = next(iter(self.filter_wheels.values()), None)
@@ -100,7 +101,7 @@ class ExASPIM(Instrument):
                 missing.append('x axis stage')
             if y_axis_stage is None:
                 missing.append('y axis stage')
-            msg = f" Exaspim missing required components: {', '.join(missing)}"
+            msg = f' Exaspim missing required components: {", ".join(missing)}'
             raise ValueError(msg)
         self._camera = camera
         self._daq = daq
@@ -136,11 +137,11 @@ class ExASPIM(Instrument):
 
     def activate_channel(self, channel_name: str) -> None:
         if self.active_channel.name == channel_name:
-            self.log.warning(f'Channel {channel_name} is already active.')
+            self.log.warning('Channel %s is already active.', channel_name)
             return
         channel = self.channels.get(channel_name)
         if channel is None:
-            self.log.warning(f'Channel {channel_name} not found.')
+            self.log.warning('Channel %s not found.', channel_name)
             return
         self.daq.close_acq_tasks()
         self.filter_wheel.filter = channel.filter
@@ -173,4 +174,4 @@ class ExASPIM(Instrument):
             try:
                 device.close()
             except AttributeError:
-                self.log.debug(f'{device_name} does not have close function')
+                self.log.debug('%s does not have close function', device_name)

@@ -90,8 +90,7 @@ class Launcher:
     @staticmethod
     @launch_step(LaunchStep.FETCH_CONFIG)
     def fetch_config(ctx: LaunchContext) -> LaunchStepResult:
-        """Fetch and validate the system configuration.
-        """
+        """Fetch and validate the system configuration."""
         try:
             raw = ctx.loader.get_system_config()
             cfg = SystemConfig.model_validate(raw)

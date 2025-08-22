@@ -27,7 +27,7 @@ class PreviewManager(PreviewFramePublisher):
 
     def __init__(self, *, options: PreviewManagerOptions, observers: list[NewFrameCallback] | None = None) -> None:
         self.log = VoxelLogging.get_logger('PreviewManager')
-        self._bind_address = f'tcp://{socket.gethostbyname(socket.gethostname())}:{options.listening_port}'
+        self._bind_address = 'tcp://%s:%s' % (socket.gethostbyname(socket.gethostname()), options.listening_port)
         self._target_width = options.target_width
         self._new_frame_observers = observers or []
         self._observers_lock = threading.Lock()
@@ -38,7 +38,7 @@ class PreviewManager(PreviewFramePublisher):
         self._sub.setsockopt_string(zmq.SUBSCRIBE, '')
         self._sub.setsockopt(zmq.LINGER, 0)
         self._sub.bind(self._bind_address)
-        self.log.info(f'PreviewManager: bound SUB socket on {self._bind_address}')
+        self.log.info('PreviewManager: bound SUB socket on %s', self._bind_address)
 
         self._halt_event = threading.Event()
         self._receive_thread: threading.Thread | None = None
@@ -48,20 +48,18 @@ class PreviewManager(PreviewFramePublisher):
         return self._target_width
 
     def add_observer(self, callback: NewFrameCallback) -> None:
-        """Register a new observer to receive preview frames.
-        """
+        """Register a new observer to receive preview frames."""
         with self._observers_lock:
             if callback not in self._new_frame_observers:
                 self._new_frame_observers.append(callback)
-                self.log.info(f'Observer {id(callback)} added. Total observers: {len(self._new_frame_observers)}')
+                self.log.info('Observer %s added. Total observers: %s', id(callback), len(self._new_frame_observers))
 
     def remove_observer(self, callback: NewFrameCallback) -> None:
-        """Unregister an observer from receiving preview frames.
-        """
+        """Unregister an observer from receiving preview frames."""
         with self._observers_lock:
             if callback in self._new_frame_observers:
                 self._new_frame_observers.remove(callback)
-                self.log.info(f'Observer {id(callback)} removed. Total observers: {len(self._new_frame_observers)}')
+                self.log.info('Observer %s removed. Total observers: %s', id(callback), len(self._new_frame_observers))
 
     def _setup_subscribe_socket(self) -> zmq.Socket:
         if not self._context:
@@ -108,8 +106,9 @@ class PreviewManager(PreviewFramePublisher):
             return
         if frame.metadata.preview_width != self._target_width:
             self.log.warning(
-                f'Frame width {frame.metadata.preview_width} does not match target width {self._target_width}. '
-                'This may lead to unexpected behavior.',
+                'Frame width %s does not match target width %s. This may lead to unexpected behavior.',
+                frame.metadata.preview_width,
+                self._target_width,
             )
         with self._observers_lock:
             for callback in self._new_frame_observers:
@@ -117,8 +116,11 @@ class PreviewManager(PreviewFramePublisher):
                     callback(frame)
                 except Exception as e:
                     self.log.error(
-                        f'Error in observer {id(callback)} while processing frame '
-                        f'{frame.metadata.frame_idx} ({frame.metadata.channel_name}): {e}',
+                        'Error in observer %s while processing frame %s (%s): %s',
+                        id(callback),
+                        frame.metadata.frame_idx,
+                        frame.metadata.channel_name,
+                        e,
                     )
 
     def _receive_loop(self):
@@ -144,16 +146,16 @@ class PreviewManager(PreviewFramePublisher):
                         preview_frame = PreviewFrame.from_packed(packed_frame)
                         self.publish_frame(preview_frame)  # Publish to local observers
                     except Exception as e_unpack:
-                        self.log.error(f'Publisher: Error unpacking/processing received remote frame: {e_unpack}')
+                        self.log.error('Publisher: Error unpacking/processing received remote frame: %s', e_unpack)
             except zmq.ZMQError as e:
                 if e.errno == zmq.ETERM or self._halt_event.is_set():
                     self.log.info('Publisher: Receive loop: Context terminated or halt signaled.')
                     break
-                self.log.error(f'Publisher: Receive loop ZMQError: {e}')
+                self.log.error('Publisher: Receive loop ZMQError: %s', e)
                 if not self._halt_event.is_set():
                     time.sleep(0.1)
             except Exception as e:
-                self.log.error(f'Publisher: Unexpected error in receive loop: {e}', exc_info=True)
+                self.log.error('Publisher: Unexpected error in receive loop: %s', e, exc_info=True)
                 if self._halt_event.is_set():
                     break
                 time.sleep(1)
@@ -176,14 +178,14 @@ class PreviewFrameRelay(PreviewFramePublisher):
 
     def __init__(self, options: PreviewRelayOptions, logger: 'LoggerType') -> None:
         self.log = logger
-        self._publish_address = f'tcp://{options.manager_ip}:{options.publish_port}'
+        self._publish_address = 'tcp://%s:%s' % (options.manager_ip, options.publish_port)
         self._target_width = options.target_width
 
         self._context = zmq.Context()
 
         self._publish_socket = self._context.socket(zmq.PUB)
         self._publish_socket.connect(self._publish_address)
-        self.log.info(f'Publishing frames on {self._publish_address}')
+        self.log.info('Publishing frames on %s', self._publish_address)
 
     @property
     def target_width(self) -> int:
@@ -194,9 +196,9 @@ class PreviewFrameRelay(PreviewFramePublisher):
             packed_frame = frame.pack()
             self._publish_socket.send(packed_frame)
         except zmq.ZMQError as e:
-            self.log.error(f'ZMQError publishing frame: {e}')
+            self.log.error('ZMQError publishing frame: %s', e)
         except Exception as e:
-            self.log.error(f'Error packing/publishing frame: {e}')
+            self.log.error('Error packing/publishing frame: %s', e)
 
     def close(self) -> None:
         """Close the publisher and release resources."""

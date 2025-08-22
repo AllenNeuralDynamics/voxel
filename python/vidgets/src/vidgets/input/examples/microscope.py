@@ -183,7 +183,8 @@ class MicroscopeControlInterface(QMainWindow):
         controls = create_input_group(
             {
                 'Experiment Name': VTextInput(
-                    getter=lambda: self.state.experiment_name, setter=self.make_callback('experiment_name'),
+                    getter=lambda: self.state.experiment_name,
+                    setter=self.make_callback('experiment_name'),
                 ),
                 'Sample ID': VTextInput(getter=lambda: self.state.sample_id, setter=self.make_callback('sample_id')),
                 'Objective': VSelect(
@@ -211,7 +212,8 @@ class MicroscopeControlInterface(QMainWindow):
         controls = create_input_group(
             {
                 'Camera Enable': VToggle(
-                    getter=lambda: self.state.camera_enabled, setter=self.make_callback('camera_enabled'),
+                    getter=lambda: self.state.camera_enabled,
+                    setter=self.make_callback('camera_enabled'),
                 ),
                 'Exposure (s)': VNumberInput(
                     min_value=0.001,
@@ -229,7 +231,9 @@ class MicroscopeControlInterface(QMainWindow):
                     parent=self,
                 ),
                 'Binning': VSelect(
-                    ['1x1', '2x2', '4x4'], getter=lambda: self.state.binning, setter=self.make_callback('binning'),
+                    ['1x1', '2x2', '4x4'],
+                    getter=lambda: self.state.binning,
+                    setter=self.make_callback('binning'),
                 ),
             },
             flow=FlowDirection.FORM,
@@ -247,7 +251,8 @@ class MicroscopeControlInterface(QMainWindow):
         laser_405 = create_input_group(
             {
                 '405nm Enable': VToggle(
-                    getter=lambda: self.state.laser_405_enabled, setter=self.make_callback('laser_405_enabled'),
+                    getter=lambda: self.state.laser_405_enabled,
+                    setter=self.make_callback('laser_405_enabled'),
                 ),
                 'Power (mW)': VNumberInput(
                     min_value=0.0,
@@ -265,7 +270,8 @@ class MicroscopeControlInterface(QMainWindow):
         laser_488 = create_input_group(
             {
                 '488nm Enable': VToggle(
-                    getter=lambda: self.state.laser_488_enabled, setter=self.make_callback('laser_488_enabled'),
+                    getter=lambda: self.state.laser_488_enabled,
+                    setter=self.make_callback('laser_488_enabled'),
                 ),
                 'Power (mW)': VNumberInput(
                     min_value=0.0,
@@ -283,7 +289,8 @@ class MicroscopeControlInterface(QMainWindow):
         laser_561 = create_input_group(
             {
                 '561nm Enable': VToggle(
-                    getter=lambda: self.state.laser_561_enabled, setter=self.make_callback('laser_561_enabled'),
+                    getter=lambda: self.state.laser_561_enabled,
+                    setter=self.make_callback('laser_561_enabled'),
                 ),
                 'Power (mW)': VNumberInput(
                     min_value=0.0,

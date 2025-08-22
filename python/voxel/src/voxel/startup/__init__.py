@@ -77,7 +77,7 @@ def launch_mock(instrument_uid: str = 'mock') -> None:
             raise ValueError(msg)
 
         ctx = Launcher.fast_boot(loader=loader)
-        logger.info(f'Launch context Result:\n\n{ctx.table()}\n')
+        logger.info('Launch context Result:\n\n%s\n', ctx.table())
 
         if not ctx.latest.ok():
             msg = f'Launch failed at step {len(ctx.latest.step)}'
@@ -85,26 +85,26 @@ def launch_mock(instrument_uid: str = 'mock') -> None:
 
         try:
             instrument = ctx.instrument
-            logger.info(f"Instrument '{instrument_uid}' launched successfully!")
-            logger.info(f"Available channels: {', '.join(instrument.channels.list())}")
-            logger.info(f"Available profiles: {', '.join(instrument.profiles.list())}")
-            logger.info(f"Instrument devices: {', '.join(instrument.devices.keys())}")
+            logger.info("Instrument '%s' launched successfully!", instrument_uid)
+            logger.info('Available channels: %s', ', '.join(instrument.channels.list()))
+            logger.info('Available profiles: %s', ', '.join(instrument.profiles.list()))
+            logger.info('Instrument devices: %s', ', '.join(instrument.devices.keys()))
             for camera in instrument.cameras.values():
-                logger.info(f" \tCamera '{camera.uid}': Sensor size {camera.sensor_size_px}, ")
+                logger.info(" \tCamera '%s': Sensor size %s, ", camera.uid, camera.sensor_size_px)
                 exp_time = camera.exposure_time_ms
-                logger.info(f' \t\tExposure Time {exp_time}, ')
+                logger.info(' \t\tExposure Time %s, ', exp_time)
                 camera.exposure_time_ms = exp_time.max_value or 200
-                logger.info(f' \t\tExposure Time (New) {camera.exposure_time_ms}, ')
+                logger.info(' \t\tExposure Time (New) %s, ', camera.exposure_time_ms)
         except RuntimeError as e:
-            logger.error(f"Failed to launch instrument '{instrument_uid}': {ctx.latest.errors}")
-            logger.error(f'Error retrieving instrument: {e}')
+            logger.error("Failed to launch instrument '%s': %s", instrument_uid, ctx.latest.errors)
+            logger.error('Error retrieving instrument: %s', e)
     except Exception as e:
-        logger.error(f'Error during launch test: {e}')
+        logger.error('Error during launch test: %s', e)
     finally:
         if ctx:
             for session in ctx.remote_sessions.values():
                 try:
                     session.shutdown()
                 except Exception as close_error:
-                    logger.error(f'Error closing session {session.uid}: {close_error}')
+                    logger.error('Error closing session %s: %s', session.uid, close_error)
         logger.info('Launch mock test completed.')

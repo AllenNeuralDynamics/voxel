@@ -140,8 +140,12 @@ class DeliminatedFloatProperty(DeliminatedProperty):
         adjusted_value = DeliminatedFloat(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
         if value != adjusted_value:
             self.log.warning(
-                f'Value {value} was adjusted to {adjusted_value} to match constraints. '
-                f'Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}',
+                'Value %s was adjusted to %s to match constraints. Min: %s, Max: %s, Step: %s',
+                value,
+                adjusted_value,
+                adjusted_value.min_value,
+                adjusted_value.max_value,
+                adjusted_value.step,
             )
         self.fset(obj, float(adjusted_value))
 
@@ -161,8 +165,12 @@ class DeliminatedIntProperty(DeliminatedProperty):
         adjusted_value = DeliminatedInt(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
         if value != adjusted_value:
             self.log.warning(
-                f'Value {value} was adjusted to {adjusted_value} to match constraints. '
-                f'Min: {adjusted_value.min_value}, Max: {adjusted_value.max_value}, Step: {adjusted_value.step}',
+                'Value %s was adjusted to %s to match constraints. Min: %s, Max: %s, Step: %s',
+                value,
+                adjusted_value,
+                adjusted_value.min_value,
+                adjusted_value.max_value,
+                adjusted_value.step,
             )
         self.fset(obj, int(adjusted_value))
 

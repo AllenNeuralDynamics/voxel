@@ -72,6 +72,7 @@ ignore = [
     'UP031',   # Use format specifiers instead of percent format
     'INP001',  # implicit-namespace-package
     'PLR0913', # Too many arguments in function definition
+    'COM812',  # (Redundant when using formatter) missing-trailing-comma
 ]
 # extend-select = ['A', 'B', 'E', 'C4', 'SIM', 'TC']
 unfixable = ['B']

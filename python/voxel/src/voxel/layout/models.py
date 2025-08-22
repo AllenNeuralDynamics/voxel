@@ -28,7 +28,6 @@ class IlluminationPathDefinition(OpticalPathDefinition):
     """Definition for illumination optical paths."""
 
 
-
 class LayoutDefinition(BaseModel):
     """Complete layout definition for an instrument."""
 

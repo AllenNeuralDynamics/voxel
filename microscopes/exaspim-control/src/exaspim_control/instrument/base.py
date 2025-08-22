@@ -80,12 +80,12 @@ class Instrument:
                 specs = BuildSpec(**v)
                 devices_specs[k] = specs
             except Exception as e:
-                self.log.error(f'Error loading device spec for {k}: {e}')
+                self.log.error('Error loading device spec for %s: %s', k, e)
 
         res = build_object_graph(devices_specs, BaseDevice)
 
         if res.errors:
-            self.log.error(f'Errors occurred while building device graph: \n {tabulate_report(res.report())} \n')
+            self.log.error('Errors occurred while building device graph: \n %s \n', tabulate_report(res.report()))
             return
 
         self._devices = res.items
@@ -116,10 +116,9 @@ class Instrument:
     #     }
 
     def _initialize_devices(self) -> None:
-        """Parse the devices from the configuration and initialize them.
-        """
+        """Parse the devices from the configuration and initialize them."""
         for device_name, device in self._devices.items():
-            self.log.info(f'Parsing device {device_name}')
+            self.log.info('Parsing device %s', device_name)
             name_lower = device_name.lower()
             if isinstance(device, BaseCamera):
                 self.cameras[device_name] = device
@@ -142,7 +141,7 @@ class Instrument:
             elif isinstance(device, BaseIndicatorLight):
                 self.indicator_lights[device_name] = device
             else:
-                self.log.warning(f'Unknown device type {device.__class__.__name__} for device {device_name}')
+                self.log.warning('Unknown device type %s for device %s', device.__class__.__name__, device_name)
                 self.other_devices[device_name] = device
             props = self.config['instrument']['devices'][device_name].get('properties', {})
             for prop_name, prop_value in props.items():
@@ -153,7 +152,7 @@ class Instrument:
 
         :raises ValueError: If the instrument ID or device configurations are invalid.
         """
-        self.log.info(f'constructing instrument from {self.config_path}')
+        self.log.info('constructing instrument from %s', self.config_path)
         # grab instrument id
         try:
             self.id = self.config['instrument']['id']
@@ -191,7 +190,7 @@ class Instrument:
         :type lock: Lock, optional
         :raises ValueError: If the device configuration is invalid.
         """
-        self.log.info(f'constructing {device_name}')
+        self.log.info('constructing %s', device_name)
         lock = RLock() if lock is None else lock
         device_type = inflection.pluralize(device_specs['type'])
         driver = device_specs['driver']
@@ -200,18 +199,18 @@ class Instrument:
 
         device_class = getattr(importlib.import_module(driver), module)
         thread_safe_device_class = for_all_methods(lock, device_class)
-        self.log.debug(f'Imported thread-safe device class for {driver}.{module}')
+        self.log.debug('Imported thread-safe device class for %s.%s', driver, module)
         device_object = thread_safe_device_class(**init)
-        self.log.debug(f'Constructed thread-safe device instance for {driver}.{module}')
+        self.log.debug('Constructed thread-safe device instance for %s.%s', driver, module)
 
         properties = device_specs.get('properties', {})
         self._setup_device(device_object, properties)
-        self.log.debug(f"Setup properties for device '{device_name}': {properties}")
+        self.log.debug("Setup properties for device '%s': %s", device_name, properties)
 
         # Add subdevices under device and fill in any needed keywords to init
         for subdevice_name, subdevice_specs in device_specs.get('subdevices', {}).items():
             # copy so config is not altered by adding in parent devices
-            self.log.debug(f"Constructing subdevice '{subdevice_name}' for parent '{device_name}'")
+            self.log.debug("Constructing subdevice '%s' for parent '%s'", subdevice_name, device_name)
             self._construct_subdevice(device_object, subdevice_name, copy.deepcopy(subdevice_specs), lock)
 
         # create device dictionary if it doesn't already exist and add device to dictionary
@@ -228,7 +227,11 @@ class Instrument:
             self.stage_axes.append(instrument_axis)
 
     def _construct_subdevice(
-        self, parent_object: Any, subdevice_name: str, subdevice_specs: dict[str, Any], lock: RLock,
+        self,
+        parent_object: Any,
+        subdevice_name: str,
+        subdevice_specs: dict[str, Any],
+        lock: RLock,
     ) -> None:
         """Construct a subdevice based on its specifications.
 
@@ -274,7 +277,7 @@ class Instrument:
                 except (TypeError, AttributeError):
                     # Handle cases where isinstance fails (e.g., parameterized generics)
                     pass
-        self.log.debug(f"Constructing subdevice '{subdevice_name}' with specs: {subdevice_specs}")
+        self.log.debug("Constructing subdevice '%s' with specs: %s", subdevice_name, subdevice_specs)
         self._construct_device(subdevice_name, subdevice_specs, lock)
 
     def _load_device(self, driver: str, module: str, kwds: dict[str, Any], lock: RLock) -> Any:
@@ -291,10 +294,10 @@ class Instrument:
         :return: Thread-safe device object.
         :rtype: object
         """
-        self.log.info(f'loading {driver}.{module}')
+        self.log.info('loading %s.%s', driver, module)
         device_class = getattr(importlib.import_module(driver), module)
         thread_safe_device_class = for_all_methods(lock, device_class)
-        self.log.debug(f'Constructed thread-safe device class for {driver}.{module}')
+        self.log.debug('Constructed thread-safe device class for %s.%s', driver, module)
         return thread_safe_device_class(**kwds)
 
     def _setup_device(self, device: Any, properties: dict[str, Any]) -> None:
@@ -305,7 +308,7 @@ class Instrument:
         :param properties: Properties to set on the device.
         :type properties: dict
         """
-        self.log.info(f'setting up {device}')
+        self.log.info('setting up %s', device)
         # successively iterate through properties keys and if there is setter, set
         for key, value in properties.items():
             if hasattr(device, key):
@@ -315,8 +318,7 @@ class Instrument:
                 raise ValueError(msg)
 
     def update_current_state_config(self) -> None:
-        """Update the current state configuration of the instrument.
-        """
+        """Update the current state configuration of the instrument."""
         for device_name, device_specs in self.config['instrument']['devices'].items():
             device = getattr(self, inflection.pluralize(device_specs['type']))[device_name]
             properties = {}
@@ -338,8 +340,7 @@ class Instrument:
             self.yaml.dump(self.config, f)
 
     def close(self) -> None:
-        """Close the instrument and release any resources.
-        """
+        """Close the instrument and release any resources."""
 
 
 def for_all_methods(lock: RLock, cls: type) -> type:

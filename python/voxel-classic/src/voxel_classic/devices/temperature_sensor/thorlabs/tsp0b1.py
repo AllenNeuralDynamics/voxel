@@ -164,10 +164,14 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
 
         # DLL must be in same directory as this driver file
         path = os.path.dirname(os.path.realpath(__file__))
-        with os.add_dll_directory(path):
-            # needs "TLTSPB_64.dll" in directory
-            self._dll = cast("_TspbDll", C.cdll.LoadLibrary("TLTSPB_64.dll"))
-        self._setup_dll()
+        if os.name == "nt":
+            with os.add_dll_directory(path):
+                # needs "TLTSPB_64.dll" in directory
+                self._dll = cast("_TspbDll", C.cdll.LoadLibrary("TLTSPB_64.dll"))
+            self._setup_dll()
+        else:
+            raise OSError("This driver is only supported on Windows.")
+
 
     def _setup_dll(self) -> None:
         """

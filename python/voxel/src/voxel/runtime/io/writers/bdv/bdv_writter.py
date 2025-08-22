@@ -185,7 +185,7 @@ class BdvWriter(VoxelWriter):
                 voxel_units='um',
             )
 
-        self.log.info(f'Initialized. Writing to {self._output_file}')
+        self.log.info('Initialized. Writing to %s', self._output_file)
 
     def _process_batch(self, batch_data) -> None:
         self._npy2bdv.append_substack(
@@ -223,4 +223,4 @@ class BdvWriter(VoxelWriter):
             )
         self._npy2bdv.close()
         self._tile_idx += 1
-        self.log.info(f'Finalized. Wrote {self.config.frame_count} frames to {self._output_file}')
+        self.log.info('Finalized. Wrote %s frames to %s', self.config.frame_count, self._output_file)

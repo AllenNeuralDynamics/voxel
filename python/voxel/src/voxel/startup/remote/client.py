@@ -58,8 +58,7 @@ class RemoteNodeSession:
         return self._uid
 
     def shutdown(self) -> None:
-        """Shutdown the remote service; Close the RPyC connection; Stop the server runner.
-        """
+        """Shutdown the remote service; Close the RPyC connection; Stop the server runner."""
         self._log.info(Fore.YELLOW + 'Shutting down remote node session...' + Fore.RESET)
         try:
             self._service.shutdown()

@@ -40,7 +40,7 @@ class WheelGraphic(QWidget):
         self._start_index = start_index
         self._num_slots = num_slots
 
-        self.log.debug(f'Slots: {self.slots}')
+        self.log.debug('Slots: %s', self.slots)
 
         for position in assignments:
             if position not in self.slots:
@@ -253,16 +253,16 @@ class WheelGraphic(QWidget):
             <defs>
                 <!-- Gradient for the wheel using theme colors -->
                 <radialGradient id="wheelGradient" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" style="stop-color:{colors["wheel_light"]};stop-opacity:1" />
-                    <stop offset="85%" style="stop-color:{colors["wheel_base"]};stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:{colors["wheel_dark"]};stop-opacity:1" />
+                    <stop offset="0%" style="stop-color:{colors['wheel_light']};stop-opacity:1" />
+                    <stop offset="85%" style="stop-color:{colors['wheel_base']};stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:{colors['wheel_dark']};stop-opacity:1" />
                 </radialGradient>
             </defs>
 
             <!-- Outer wheel with cutouts -->
             <path d="{wheel_path}"
                   fill="url(#wheelGradient)"
-                  stroke="{colors["wheel_stroke"]}"
+                  stroke="{colors['wheel_stroke']}"
                   stroke-width="1"
                   fill-rule="evenodd"/>
 
@@ -270,10 +270,10 @@ class WheelGraphic(QWidget):
             <circle cx="100" cy="100" r="3" fill="{text_color}" opacity="0.7"/>
 
             <!-- Member circles -->
-            {"".join(circles)}
+            {''.join(circles)}
 
             <!-- Info text -->
-            {info_text if self.show_info_text else ""}
+            {info_text if self.show_info_text else ''}
         </svg>
         """
 
@@ -391,7 +391,7 @@ class WheelGraphic(QWidget):
     def mousePressEvent(self, event):
         """Handle mouse clicks to select slots."""
         slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
-        self.log.debug(f'Clicked on slot {slot_idx}')
+        self.log.debug('Clicked on slot %s', slot_idx)
         if slot_idx in self.slots:
             self.selected_slot = slot_idx
 

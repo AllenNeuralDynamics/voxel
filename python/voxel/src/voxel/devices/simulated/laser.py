@@ -31,7 +31,7 @@ class SimulatedLaser(VoxelLaser):
         super().__init__(name=name, wavelength=wavelength)
 
     def enable(self):
-        self.log.info(f'Enabling {self.uid} laser')
+        self.log.info('Enabling %s laser', self.uid)
 
     def disable(self):
         pass

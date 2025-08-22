@@ -44,10 +44,10 @@ def launch(system_dir: Path, log_file_name: str) -> None:
             missing_files.append(yaml_file.name)
 
     if missing_files:
-        logger.error(f'YAML files missing in {system_dir}: {missing_files}')
+        logger.error('YAML files missing in %s: %s', system_dir, missing_files)
         return
 
-    logger.info(f'All required YAML files found in {system_dir.stem}')
+    logger.info('All required YAML files found in %s', system_dir.stem)
 
     log_level = logging.getLevelName(logger.getEffectiveLevel())
 
@@ -56,7 +56,7 @@ def launch(system_dir: Path, log_file_name: str) -> None:
     try:
         instrument = ExASPIM(config_filename=instrument_yaml, yaml_handler=_yaml, log_level=log_level)
     except Exception as e:
-        logger.error(f'Failed to initialize ExASPIM: \n {e}')
+        logger.error('Failed to initialize ExASPIM: \n %s', e)
         return
 
     _ = ExASPIMInstrumentView(instrument=instrument, config=load_yaml_config(gui_yaml))
@@ -97,7 +97,7 @@ def launch(system_dir: Path, log_file_name: str) -> None:
 
 def main(systems_dir: Path = SYSTEMS_DIR) -> None:
     SYSTEM_NAME = 'aind-beta-3'
-    log_file_name = f"{SYSTEM_NAME}_output_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file_name = f'{SYSTEM_NAME}_output_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log'
     file_handler = logging.FileHandler(log_file_name, 'w')
     VoxelLogging.setup(
         level=logging.INFO,

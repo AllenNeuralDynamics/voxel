@@ -30,19 +30,21 @@ class SimpleWriter(VoxelWriter):
         self._output_file = self.dir / f'{config.file_name}.txt'
 
         self.log.info(
-            f'Configured writer with {self.config.frame_count} frames '
-            f'of shape: {self.config.frame_shape.x}x{self.config.frame_shape.y}',
+            'Configured writer with %s frames of shape: %sx%s',
+            self.config.frame_count,
+            self.config.frame_shape.x,
+            self.config.frame_shape.y,
         )
 
     def _initialize(self) -> None:
         with self._output_file.open('w') as f:
-            f.write(f"{'-' * 80}\n")
+            f.write(f'{"-" * 80}\n')
             f.write(f'Initialized: {datetime.now().astimezone():%Y-%m-%d %H:%M:%S}\n')
-            f.write(f"{'-' * 80}\n")
+            f.write(f'{"-" * 80}\n')
             f.write('Metadata:\n')
             f.write(f'{json.dumps(self.config.to_dict(), indent=2)}\n')
-            f.write(f"{'-' * 80}\n")
-        self.log.info(f'Initialized. Expecting {self.config.frame_count} frames in {self.batch_size_px} px batches')
+            f.write(f'{"-" * 80}\n')
+        self.log.info('Initialized. Expecting %s frames in %s px batches', self.config.frame_count, self.batch_size_px)
 
     def _process_batch(self, batch_data) -> None:
         num_frames = int(batch_data.shape[0])
@@ -58,18 +60,23 @@ class SimpleWriter(VoxelWriter):
         with self._output_file.open('a') as f:
             f.write(f'\nBatch: {self.batch_count:03d} [{start_frame}-{start_frame + num_frames - 1}]\n')
             f.write(f'\n{json.dumps(stats, indent=2)}\n\n')
-            f.write(f"{'-' * 80}\n")
+            f.write(f'{"-" * 80}\n')
 
         self.log.info(
-            f"Batch: {self.batch_count:2d} | {start_frame}-{start_frame + num_frames - 1} frames | "
-            f"Min: {stats['min_value']:3f} | Mean: {stats['mean_value']:.1f} | Max: {stats['max_value']:3f}",
+            'Batch: %2d | %d-%d frames | Min: %3f | Mean: %.1f | Max: %3f',
+            self.batch_count,
+            start_frame,
+            start_frame + num_frames - 1,
+            stats['min_value'],
+            stats['mean_value'],
+            stats['max_value'],
         )
 
     def _finalize(self) -> None:
         with self._output_file.open('a') as f:
             # f.write(f"\n{'-'*80}\n")
             f.write(f'Finalized: {datetime.now().astimezone():%Y-%m-%d %H:%M:%S} \n')
-            f.write(f"{'-' * 80}\n\n")
+            f.write(f'{"-" * 80}\n\n')
         self.log.info('Finalized...')
 
 

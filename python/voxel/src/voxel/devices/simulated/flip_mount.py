@@ -65,7 +65,7 @@ class SimulatedFlipMount(VoxelFlipMount):
             assert new_position in [0, 1], f'Invalid position {position_name}. Valid positions are {self._positions}'
             self._inst = new_position
         else:
-            self.log.error(f'Invalid position {position_name}. Valid positions are {self._positions}')
+            self.log.error('Invalid position %s. Valid positions are %s', position_name, self._positions)
 
     @deliminated_float(min_value=FLIP_TIME_RANGE_MS[0], max_value=FLIP_TIME_RANGE_MS[1], step=FLIP_TIME_RANGE_MS[2])
     def flip_time_ms(self) -> float:

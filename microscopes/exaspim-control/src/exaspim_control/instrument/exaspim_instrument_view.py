@@ -231,8 +231,7 @@ class ExASPIMInstrumentView(QWidget):
         app = QApplication.instance()
 
         def _update_config_on_quit() -> None:
-            """Add functionality to close function to save device properties to instrument config.
-            """
+            """Add functionality to close function to save device properties to instrument config."""
             msgBox = QMessageBox()
             msgBox.setIcon(QMessageBox.Icon.Question)
             msgBox.setText(
@@ -318,7 +317,6 @@ class ExASPIMInstrumentView(QWidget):
 
         return create_widget('V', xyz_widget, n_widget)
 
-
     def _create_camera_widget(self) -> CameraWidget:
         camera = self.instrument.camera
         wgt = CameraWidget(camera=camera, advanced_user=True)
@@ -348,10 +346,10 @@ class ExASPIMInstrumentView(QWidget):
         def _change_channel(channel: str):
             chan = self.instrument.channels.get(channel)
             if chan is None:
-                self.log.warning(f'Channel {channel} not found.')
+                self.log.warning('Channel %s not found.', channel)
                 return
             if self.grab_frames_worker.is_running:
-                self.log.warning(f'Cannot change channel to {channel} while livestreaming is active.')
+                self.log.warning('Cannot change channel to %s while livestreaming is active.', channel)
             else:
                 self.instrument.activate_channel(channel)
 
@@ -400,8 +398,7 @@ class ExASPIMInstrumentView(QWidget):
         return overlap_widget
 
     def _add_undocked_widgets(self) -> None:
-        """Add undocked widget so all windows close when closing napari viewer.
-        """
+        """Add undocked widget so all windows close when closing napari viewer."""
         widgets = []
         for key, dictionary in self.__dict__.items():
             if '_widgets' in key:
@@ -444,7 +441,7 @@ class ExASPIMInstrumentView(QWidget):
         self.filter_wheel_widget.setDisabled(True)
 
         for light in self.instrument.indicator_lights:
-            self.log.info(f'Enabling indicator light {light}')
+            self.log.info('Enabling indicator light %s', light)
             self.instrument.indicator_lights[light].enable()
 
         self.instrument.daq.configure_acq_waveforms(self.active_channel.name)
@@ -494,7 +491,7 @@ class ExASPIMInstrumentView(QWidget):
 
         for name, light in self.instrument.indicator_lights.items():
             light.disable()
-            self.log.info(f'Disabling indicator light {name}')
+            self.log.info('Disabling indicator light %s', name)
 
         for wgt in self.laser_widgets.values():
             wgt.setEnabled(True)
@@ -677,8 +674,7 @@ class ExASPIMInstrumentView(QWidget):
                 )
 
     def close(self) -> bool:
-        """Close instruments and end threads.
-        """
+        """Close instruments and end threads."""
         for worker in self.property_workers.values():
             if worker.is_running:
                 worker.quit()
@@ -706,7 +702,7 @@ class ExASPIMInstrumentView(QWidget):
             folder = fname.getSaveFileName(
                 dir=str(
                     Path(__file__).parent.resolve()
-                    / Path(rf"\{single_layer.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tiff"),
+                    / Path(rf'\{single_layer.name}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.tiff'),
                 ),
             )
             if folder[0] != '':  # user pressed cancel

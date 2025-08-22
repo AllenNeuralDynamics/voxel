@@ -56,8 +56,7 @@ class EnumeratedProperty[T: int | str, S](ABC):
         self.log = VoxelLogging.get_logger(__name__ + '.' + self.__class__.__name__)
 
     def __set_name__(self, owner: type, name: str) -> None:
-        """Keep track of the property name and its owner.
-        """
+        """Keep track of the property name and its owner."""
         self._name = name
         self._full_name = f'{owner.__name__}.{name}'
 

@@ -275,7 +275,7 @@ class RevolvingCirclesWidget(QWidget):
             <circle cx="100" cy="100" r="2" fill="#333" opacity="0.5"/>
 
             <!-- Revolving circles -->
-            {"".join(circles)}
+            {''.join(circles)}
 
             <!-- Optional loading text -->
             <text x="100" y="170" text-anchor="middle" font-size="12" fill="#666">Loading...</text>

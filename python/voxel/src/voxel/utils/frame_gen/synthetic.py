@@ -7,7 +7,12 @@ class RippleGenerator(FrameGenerator):
     """Generates frames with a concentric ripple pattern."""
 
     def __init__(
-        self, height_px: int, width_px: int, data_type: np.dtype, ring_count: int = 20, duty_cycle: float = 0.5,
+        self,
+        height_px: int,
+        width_px: int,
+        data_type: np.dtype,
+        ring_count: int = 20,
+        duty_cycle: float = 0.5,
     ):
         self.height = height_px
         self.width = width_px
