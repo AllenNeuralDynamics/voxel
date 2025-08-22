@@ -4,7 +4,7 @@ from enum import Enum
 from math import ceil
 
 import numpy as np
-from PyImarisWriter import PyImarisWriter as pw
+from PyImarisWriter import PyImarisWriter as imaris  # noqa: N813
 
 from voxel.utils.vec import Vec2D, Vec3D
 
@@ -17,24 +17,24 @@ from .base import (
 
 
 class ImarisCompression(Enum):
-    LZ4SHUFFLE = pw.eCompressionAlgorithmShuffleLZ4
-    NONE = pw.eCompressionAlgorithmNone
+    LZ4SHUFFLE = imaris.eCompressionAlgorithmShuffleLZ4
+    NONE = imaris.eCompressionAlgorithmNone
 
 
 # TODO: UPdate the progress checker to integrate properly with Voxel
-class ImarisProgressChecker(pw.CallbackClass):
+class ImarisProgressChecker(imaris.CallbackClass):
     """Adapter to map VoxelWriter progress to ImarisWriter progress callback."""
 
     def __init__(self, writer: 'ImarisWriter'):
         self.writer = writer
 
-    def RecordProgress(self, progress: float, total_bytes_written: int):
+    def RecordProgress(self, progress: float, total_bytes_written: int):  # noqa: N802
         """Called by ImarisWriter SDK to report progress."""
         self.writer.progress = progress
 
         # log progress every 10%
         if progress * 100 % 10 == 0:
-            self.writer.log.debug(f'Progress: {progress * 100:.2f}% | Bytes Written: {total_bytes_written}')
+            self.writer.log.debug('Progress: %s%.2f%% | Bytes Written: %d', '%', progress * 100, total_bytes_written)
 
 
 class ImarisWriter(VoxelWriter):
@@ -47,7 +47,11 @@ class ImarisWriter(VoxelWriter):
     DEFAULT_BATCH_SIZE = 128
 
     def __init__(
-        self, *, name: str = 'ImarisWriter', batch_size_px=DEFAULT_BATCH_SIZE, compression=DEFAULT_COMPRESSION,
+        self,
+        *,
+        name: str = 'ImarisWriter',
+        batch_size_px=DEFAULT_BATCH_SIZE,
+        compression=DEFAULT_COMPRESSION,
     ) -> None:
         super().__init__(name=name)
         self._compression = compression
@@ -60,8 +64,8 @@ class ImarisWriter(VoxelWriter):
         self._z_blocks_written = 0
 
         # Imaris objects
-        self._image_converter: pw.ImageConverter
-        self._blocks_per_batch: pw.ImageSize
+        self._image_converter: imaris.ImageConverter
+        self._blocks_per_batch: imaris.ImageSize
         self._callback_class = ImarisProgressChecker(self)
 
     @property
@@ -107,15 +111,17 @@ class ImarisWriter(VoxelWriter):
             self._output_file.unlink()
 
         # options
-        opts = pw.Options()
+        opts = imaris.Options()
         opts.mEnableLogProgress = True
         opts.mNumberOfThreads = self.THREAD_COUNT
         # self.log.warning(f"Cores: {mp.cpu_count()}, Threads: {opts.mNumberOfThreads}")
         opts.mCompressionAlgorithmType = self._compression.value
 
-        dimension_sequence = pw.DimensionSequence(*self.dimension_order.value.lower())  # XYZCT most efficient
+        dimension_sequence = imaris.DimensionSequence(
+            *self.dimension_order.value.lower(),
+        )  # XYZCT most efficient
 
-        block_size = pw.ImageSize(
+        block_size = imaris.ImageSize(
             x=self.block_size.x,
             y=self.block_size.y,
             z=self.block_size.z,
@@ -123,7 +129,7 @@ class ImarisWriter(VoxelWriter):
             t=1,
         )
 
-        batch_size = pw.ImageSize(
+        batch_size = imaris.ImageSize(
             x=self.config.frame_shape.x,
             y=self.config.frame_shape.y,
             z=self._batch_size_px,
@@ -138,9 +144,9 @@ class ImarisWriter(VoxelWriter):
 
         self.log.debug(f'Image size: {image_size} - Blocks per batch: {self._blocks_per_batch}')
 
-        sample_size = pw.ImageSize(x=1, y=1, z=1, c=1, t=1)
+        sample_size = imaris.ImageSize(x=1, y=1, z=1, c=1, t=1)
 
-        self._image_converter = pw.ImageConverter(
+        self._image_converter = imaris.ImageConverter(
             datatype=self.pixel_type.numpy_dtype,
             image_size=image_size,
             sample_size=sample_size,
@@ -168,7 +174,7 @@ class ImarisWriter(VoxelWriter):
         if not self._image_converter:
             raise RuntimeError('ImageConverter not initialized')
 
-        block_index = pw.ImageSize(x=0, y=0, z=0, c=0, t=0)
+        block_index = imaris.ImageSize(x=0, y=0, z=0, c=0, t=0)
         for z in range(self._blocks_per_batch.z):
             z0 = z * self.block_size.z
             zf = z0 + self._block_size.z
@@ -206,7 +212,7 @@ class ImarisWriter(VoxelWriter):
         try:
             if not self._image_converter:
                 return
-            image_extents = pw.ImageExtents(
+            image_extents = imaris.ImageExtents(
                 minX=self.config.position_um.x,
                 minY=self.config.position_um.y,
                 minZ=self.config.position_um.z,
@@ -215,11 +221,11 @@ class ImarisWriter(VoxelWriter):
                 maxZ=self.config.position_um.z + self.config.voxel_size.z * self.config.frame_count,
             )
 
-            parameters = pw.Parameters()
+            parameters = imaris.Parameters()
             parameters.set_channel_name(self.config.channel_idx, self.config.channel_name)
 
-            color_infos = [pw.ColorInfo()]
-            color_infos[0].set_base_color(pw.Color(1.0, 1.0, 1.0, 1.0))
+            color_infos = [imaris.ColorInfo()]
+            color_infos[0].set_base_color(imaris.Color(1.0, 1.0, 1.0, 1.0))
 
             self.log.debug('Finalizing ImageExtents and finishing ImageConverter')
             # Finish writing
@@ -271,7 +277,7 @@ def test_imaris_writer():
             frame_count=writer.batch_size_px * NUM_BATCHES,
             frame_shape=VP_151MX_M6H0,
             position_um=Vec3D(0, 0, 0),
-            file_name=f"D:/voxel_test/voxel_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            file_name=f'D:/voxel_test/voxel_data_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
             voxel_size=Vec3D(0.1, 0.1, 1.0),
             channel_name='Channel0',
             batch_size=BATCH_SIZE,

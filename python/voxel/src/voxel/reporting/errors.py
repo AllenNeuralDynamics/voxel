@@ -24,6 +24,9 @@ class ErrorInfo(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+MAX_INPUT_REPR_LENGTH = 100
+
+
 def pydantic_to_error_info(validation_error: ValidationError, base_name: str = 'validation') -> dict[str, ErrorInfo]:
     """Convert Pydantic ValidationError to a dict of ErrorInfo objects keyed by error name.
 
@@ -50,7 +53,7 @@ def pydantic_to_error_info(validation_error: ValidationError, base_name: str = '
         if 'input' in error:
             # Only show input if it's reasonably sized to avoid noise
             input_repr = repr(error['input'])
-            if len(input_repr) < 100:  # Keep it reasonable
+            if len(input_repr) < MAX_INPUT_REPR_LENGTH:  # Keep it reasonable
                 message += f' (received: {input_repr})'
 
         errors[name] = ErrorInfo(
@@ -69,7 +72,7 @@ class ResultsReportEntry(BaseModel):
     message: str
 
     @field_validator('category', mode='before')
-    def validate_category(cls, value):
+    def validate_category(self, value):
         return str(value)
 
 
@@ -95,10 +98,10 @@ def tabulate_report(report: dict[str, ResultsReportEntry]) -> str:
 
     lines = []
     header = (
-        f"{'Name':<{name_width}} | "
-        f"{'Status':<{status_width}} | "
-        f"{'Category':<{category_width}} | "
-        f"{'Message':<{message_width}}"
+        f'{"Name":<{name_width}} | '
+        f'{"Status":<{status_width}} | '
+        f'{"Category":<{category_width}} | '
+        f'{"Message":<{message_width}}'
     )
     lines.append(header)
     lines.append('-' * len(header))

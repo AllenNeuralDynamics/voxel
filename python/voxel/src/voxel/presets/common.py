@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from ruamel.yaml import YAML
 
 if TYPE_CHECKING:
@@ -21,8 +21,7 @@ class BaseDefinition(BaseModel, ABC):
     uid: str
     description: str | None = None
 
-    class Config:
-        extra = 'forbid'  # Disallow extra fields not defined in the model
+    model_config = ConfigDict(extra='forbid')
 
     @abstractmethod
     def validate_definition(self, instrument: 'Instrument') -> Sequence['ErrorInfo']:

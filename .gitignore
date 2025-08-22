@@ -141,3 +141,7 @@ bootstrap.*
 .old/
 *.log.jsonl
 *.log.json
+
+
+# testing
+test_output/

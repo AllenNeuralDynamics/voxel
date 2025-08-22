@@ -1,6 +1,6 @@
 import time
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import ceil
 from multiprocessing import Event, Process, Value
 from pathlib import Path
@@ -25,7 +25,7 @@ class WriterConfig:
     channel_name: str
     batch_size: int
     channel_idx: int = 0
-    voxel_size: Vec3D[float] = Vec3D(1.0, 1.0, 1.0)
+    voxel_size: Vec3D[float] = field(default_factory=lambda: Vec3D(1.0, 1.0, 1.0))
 
     def to_dict(self) -> dict:
         return {
@@ -158,8 +158,8 @@ class VoxelWriter:
         self.dir = Path(self.config.path)
         if not self.dir.exists():
             self.dir.mkdir(parents=True, exist_ok=True)
-            self.log.warning(f'Directory {self.dir} did not exist. Created it.')
-        self.log.info(f'Configured writer with output directory: {self.dir}')
+            self.log.warning('Directory %s did not exist. Created it.', self.dir)
+        self.log.info('Configured writer with output directory: %s', self.dir)
 
         self._expected_batches = ceil(self.config.frame_count / self.batch_size_px)
 
@@ -172,8 +172,8 @@ class VoxelWriter:
             self.config.frame_shape.x,
         )
         self._dbl_buf = SharedDoubleBuffer(batch_shape, self.dtype)
-        self.log.info(f'Allocated buffer with shape: {self._dbl_buf.shape}')
-        self.log.info(f'Expecting: {self._expected_batches} batches of <= {self.batch_size_px} frames')
+        self.log.info('Allocated buffer with shape: %s', self._dbl_buf.shape)
+        self.log.info('Expecting: %d batches of <= %d frames', self._expected_batches, self.batch_size_px)
         try:
             self._proc = Process(name=self.name, target=self._run)
         except Exception as e:
@@ -206,8 +206,8 @@ class VoxelWriter:
             self._avg_fps.value = 0
             self._proc = Process(name=self.name, target=self._run)
             self._proc.start()
-            self.log.debug(f'Writer started. Write buffer idx: {self._dbl_buf.write_mem_block_idx.value}')
-            self.log.debug(f'Start - Info: Added: {self.frames_added}, Processed: {self.frames_processed}')
+            self.log.debug('Writer started. Write buffer idx: %d', self._dbl_buf.write_mem_block_idx.value)
+            self.log.debug('Start - Info: Added: %d, Processed: %d', self.frames_added, self.frames_processed)
         except Exception as e:
             msg = f'Failed to start writer: {e}'
             raise RuntimeError(msg) from e
@@ -235,7 +235,7 @@ class VoxelWriter:
             self._switch_buffers()
 
         if is_last_frame:
-            self.log.info(f'Added last frame {self.frames_added} to buffer. Waiting for processing to complete...')
+            self.log.info('Added last frame %d to buffer. Waiting for processing to complete...', self.frames_added)
             while self.frames_added > self.frames_processed:
                 time.sleep(0.1)
 
@@ -250,19 +250,19 @@ class VoxelWriter:
 
         # Toggle buffers
         self._dbl_buf.toggle_buffers()
-        self.log.debug(f'Switched buffers. Write buffer: {self._dbl_buf.write_mem_block_idx.value}')
+        self.log.debug('Switched buffers. Write buffer: %d', self._dbl_buf.write_mem_block_idx.value)
 
         # Signal that new data needs processing
         self._needs_processing.set()
 
         # Wait for processing to start before continuing
         while not self._needs_processing.is_set():
-            self.log.debug(f'Waiting for processing to start on batch {self.batch_count}')
+            self.log.debug('Waiting for processing to start on batch %d', self.batch_count)
             time.sleep(0.001)
 
     def _run(self) -> None:
         """Main writer loop."""
-        from voxel.utils.log import VoxelLogging
+        # from voxel.utils.log import VoxelLogging
 
         VoxelLogging.redirect([self.log], self._log_queue)
 
@@ -270,7 +270,7 @@ class VoxelWriter:
 
         while self._is_running.is_set():
             if not self._dbl_buf:
-                self.log.error('Buffer not allocated. Exiting writer loop.', exc_info=True)
+                self.log.error('Buffer not allocated. Exiting writer loop.')
                 break
             if self._needs_processing.is_set():
                 mem_block = self._dbl_buf.mem_blocks[self._dbl_buf.read_mem_block_idx.value]
@@ -310,12 +310,17 @@ class VoxelWriter:
             self._avg_rate.value = (self._avg_rate.value * (self.batch_count - 1) + rate_mbps) / (self.batch_count or 1)
             self._avg_fps.value = (self._avg_fps.value * (self.batch_count - 1) + rate_fps) / (self.batch_count or 1)
 
-            self.log.info(f'Batch {self.batch_count}/{self._expected_batches} Complete, Frames: {batch_data.shape[0]}')
-            self.log.info(f'\tTime: {time_taken:.2f} s, Size: {data_size_mb_s:.2f} MB')
-            self.log.info(f'\tRate: {rate_mbps:.2f} MB/s | {rate_fps:.2f} fps')
-            self.log.info(f'\tAvg Rate: {self.avg_write_speed_mb_s:.2f} MB/s | {self.avg_write_speed_fps:.2f} fps')
-        except Exception as e:
-            self.log.error(f'Error processing batch: {e}', exc_info=True)
+            self.log.info(
+                'Batch %d/%d Complete, Frames: %d',
+                self.batch_count,
+                self._expected_batches,
+                batch_data.shape[0],
+            )
+            self.log.info('\tTime: %.2f s, Size: %.2f MB', time_taken, data_size_mb_s)
+            self.log.info('\tRate: %.2f MB/s | %.2f fps', rate_mbps, rate_fps)
+            self.log.info('\tAvg Rate: %.2f MB/s | %.2f fps', self.avg_write_speed_mb_s, self.avg_write_speed_fps)
+        except Exception:
+            self.log.exception('Error processing batch')
 
     def stop(self) -> None:
         """Stop the writer and clean up resources."""
@@ -328,7 +333,7 @@ class VoxelWriter:
         self._proc.join()
         # del self._proc
 
-        self.log.info(f'Writer stopped. Avg write speed: {self.avg_write_speed_mb_s:.2f} MB/s')
+        self.log.info('Writer stopped. Avg write speed: %.2f MB/s', self.avg_write_speed_mb_s)
 
     def close(self) -> None:
         """Close the writer and clean up resources."""
@@ -377,4 +382,3 @@ class VoxelWriter:
 
         # Create OME object
         return OME(images=[image])
-
