@@ -141,3 +141,5 @@ bootstrap.*
 .old/
 *.log.jsonl
 *.log.json
+
+WARP.md
