@@ -82,7 +82,9 @@ class SimulatedCamera(VoxelCamera):
         frame_gen = frame_gen or DEFAULT_FRAME_GEN_CONFIG
         self._strategy = frame_gen['strategy']
         self._reference_path = frame_gen['reference_path']
-        self._sensor_size_px = Vec2D.from_str(sensor_size_px) if isinstance(sensor_size_px, str) else sensor_size_px
+        self._sensor_size_px = (
+            Vec2D.from_str(sensor_size_px).as_int() if isinstance(sensor_size_px, str) else sensor_size_px
+        )
         self._roi_width_px = self._sensor_size_px.x
         self._roi_height_px = self._sensor_size_px.y
         self._roi_width_offset_px = 0
@@ -192,7 +194,7 @@ class SimulatedCamera(VoxelCamera):
         self._invalidate_generator()
 
     @property
-    def frame_size_px(self) -> Vec2D[float]:
+    def frame_size_px(self) -> Vec2D[int]:
         return Vec2D(self.roi_width_px // self.binning, self.roi_height_px // self.binning)
 
     @property

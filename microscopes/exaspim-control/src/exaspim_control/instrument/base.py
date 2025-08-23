@@ -79,8 +79,8 @@ class Instrument:
             try:
                 specs = BuildSpec(**v)
                 devices_specs[k] = specs
-            except Exception as e:
-                self.log.error('Error loading device spec for %s: %s', k, e)
+            except Exception:
+                self.log.exception('Error loading device spec for %s', k)
 
         res = build_object_graph(devices_specs, BaseDevice)
 
@@ -361,7 +361,7 @@ def for_all_methods(lock: RLock, cls: type) -> type:
             attr._fset = lock_methods(attr._fset, lock) if attr._fset is not None else None
             attr._fget = lock_methods(attr._fget, lock)
         elif isinstance(attr, property):
-            wrapped_getter = lock_methods(attr.fget, lock)  # type: ignore
+            wrapped_getter = lock_methods(attr.fget, lock)  # pyright: ignore[reportArgumentType]
             # don't wrap setters if none
             wrapped_setter = lock_methods(attr.fset, lock) if attr.fset is not None else None
             setattr(cls, attr_name, property(wrapped_getter, wrapped_setter))

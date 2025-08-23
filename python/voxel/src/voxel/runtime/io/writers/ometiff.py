@@ -87,8 +87,8 @@ class OMETiffWriter(VoxelWriter):
     def _finalize(self) -> None:
         try:
             self.tiff_writer.close()
-        except Exception as e:
-            self.log.error('Failed to close TiffWriter: %s', e)
+        except Exception:
+            self.log.exception('Failed to close TiffWriter: %s')
         self.log.info(
             'Processed %s frames in %s batches. Saved to %s.',
             self.config.frame_count,
@@ -128,8 +128,8 @@ def test_tiffwriter():
         frame_gen = SpiralGenerator(height_px=frame_shape.y, width_px=frame_shape.x)
         for frame in frame_gen.generate(nframes=frame_count):
             writer.add_frame(frame)
-    except Exception as e:
-        writer.log.error('Test failed: %s', e)
+    except Exception:
+        writer.log.exception('Test failed: %s')
     finally:
         writer.stop()
 

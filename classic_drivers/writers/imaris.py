@@ -4,7 +4,7 @@ import os
 import re
 import sys
 from ctypes import c_wchar
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 from multiprocessing import Array, Process
 from multiprocessing.shared_memory import SharedMemory
@@ -234,7 +234,7 @@ class ImarisWriter(BaseWriter):
         color_infos[0].set_base_color(pw.Color(*(*hex2color(self._color), 1.0)))
         adjust_color_range = False
         # date time parameters
-        time_infos = [datetime.today()]
+        time_infos = [datetime.now(timezone.utc)]
         # create run process
         self._process = Process(
             target=self._run,

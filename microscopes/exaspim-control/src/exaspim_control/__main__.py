@@ -1,6 +1,6 @@
 import logging
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path, WindowsPath
 
 import numpy as np
@@ -55,8 +55,8 @@ def launch(system_dir: Path, log_file_name: str) -> None:
 
     try:
         instrument = ExASPIM(config_filename=instrument_yaml, yaml_handler=_yaml, log_level=log_level)
-    except Exception as e:
-        logger.error('Failed to initialize ExASPIM: \n %s', e)
+    except Exception:
+        logger.exception('Failed to initialize ExASPIM: \n')
         return
 
     _ = ExASPIMInstrumentView(instrument=instrument, config=load_yaml_config(gui_yaml))
@@ -95,9 +95,11 @@ def launch(system_dir: Path, log_file_name: str) -> None:
     sys.exit(app.exec())
 
 
+SYSTEM_NAME = 'aind-beta-3'
+
+
 def main(systems_dir: Path = SYSTEMS_DIR) -> None:
-    SYSTEM_NAME = 'aind-beta-3'
-    log_file_name = f'{SYSTEM_NAME}_output_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log'
+    log_file_name = f'{SYSTEM_NAME}_output_{datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")}.log'
     file_handler = logging.FileHandler(log_file_name, 'w')
     VoxelLogging.setup(
         level=logging.INFO,

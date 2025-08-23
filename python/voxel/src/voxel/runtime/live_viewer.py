@@ -52,12 +52,12 @@ class LiveViewer:
             if self._on_start:
                 self._on_start()
             self.log.info("%s: Live view active for channel '%s'.", self.name, channel_name)
-        except Exception as e:
-            self.log.error('Error starting live view: %s', e)
+        except Exception:
+            self.log.exception('Error starting live view')
             try:
                 self._camera.stop()
-            except Exception as e_stop:
-                self.log.error('%s: Error stopping camera after failed live view start: %s', self.name, e_stop)
+            except Exception:
+                self.log.exception('%s: Error stopping camera after failed live view start', self.name)
             if self._on_stop:
                 self._on_stop(self._frame_count)
             raise  # Re-raise the original exception
@@ -84,8 +84,8 @@ class LiveViewer:
                 # Force camera stop as a last resort if thread is stuck
                 try:
                     self._camera.stop()
-                except Exception as e_stop:
-                    self.log.error('%s: Error force stopping camera: %s', self.name, e_stop)
+                except Exception:
+                    self.log.exception('%s: Error force stopping camera', self.name)
 
         self.log.info('%s: Stop request processed.', self.name)
 
@@ -97,19 +97,19 @@ class LiveViewer:
                     frame = self._camera.grab_frame()
                     self._previewer.set_new_frame(frame=frame, frame_idx=self._frame_count, channel_name=channel_name)
                     self._frame_count += 1
-                except Exception as e_grab:
-                    self.log.error('Error in live view grab: %s', e_grab, exc_info=True)
+                except Exception:
+                    self.log.exception('Error in live view grab')
                     if self._live_view_halt_event.wait(0.1):
                         break
             self.log.info('Live view loop terminated. Frames: %s', self._frame_count)
-        except Exception as e_thread:
-            self.log.error('Error in live view thread: %s', e_thread, exc_info=True)
+        except Exception:
+            self.log.exception('Error in live view thread')
         finally:
             self.log.debug('Live view thread finishing...')
             try:
                 self._camera.stop()
-            except Exception as e_stop:
-                self.log.error('%s: Error stopping camera in live view thread finally block: %s', self.name, e_stop)
+            except Exception:
+                self.log.exception('%s: Error stopping camera in live view thread finally block.', self.name)
             if self._on_stop:
                 self._on_stop(self._frame_count)
             self._live_view_halt_event.clear()  # Clear the halt event for potential reuse

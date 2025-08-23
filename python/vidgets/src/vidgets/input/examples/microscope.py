@@ -7,6 +7,7 @@ with state management, status indicators, and organized control panels.
 
 import json
 from collections.abc import Callable
+from datetime import UTC
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
@@ -481,7 +482,7 @@ class MicroscopeControlInterface(QMainWindow):
         if self.event_log is not None:
             from datetime import datetime
 
-            timestamp = datetime.now().strftime('%H:%M:%S')
+            timestamp = datetime.now(UTC).strftime('%H:%M:%S')
             log_entry = f'[{timestamp}] {message}'
             self.event_log.append(log_entry)
 

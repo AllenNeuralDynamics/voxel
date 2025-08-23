@@ -1,7 +1,7 @@
 import json
 import os
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -62,9 +62,9 @@ class MetadataLaunch:
         self.log_filename = log_filename
         # start and finish the acquisition
         self.acquisition_start_time = None  # variable will be filled when acquisitionStarted signal is emitted
-        self.acquisition_end_time = None  # variable will be filled when acquisitionStarted signal is emitted
+        self.acquisition_end_time = None  # variable will be filled when acquisitionEnded signal is emitted
         self.acquisition_view.acquisitionStarted.connect(lambda value: setattr(self, 'acquisition_start_time', value))
-        self.acquisition_view.acquisitionEnded.connect(lambda: setattr(self, 'acquisition_end_time', datetime.now()))
+        self.acquisition_view.acquisitionEnded.connect(lambda: setattr(self, 'acquisition_end_time', datetime.now(UTC)))
         self.acquisition_view.acquisitionEnded.connect(self.finalize_acquisition)
 
     def finalize_acquisition(self) -> None:
@@ -85,7 +85,7 @@ class MetadataLaunch:
         if file_transfers is not None and file_transfers != {}:
             for _device_name, transfer_dict in file_transfers.items():
                 status = 'pending'
-                status_time = datetime.now()
+                status_time = datetime.now(UTC)
                 processing_manifest = {
                     'dataset_status': {
                         'status': status,
@@ -143,8 +143,8 @@ class MetadataLaunch:
                             )
                         _rearrange_external_directory(save_to)
                         # re-arrange external directory
-                        os.makedirs(Path(save_to, 'exaSPIM'))
-                        os.makedirs(Path(save_to, 'derivatives'))
+                        Path(save_to, 'exaSPIM').mkdir(parents=True, exist_ok=True)
+                        Path(save_to, 'derivatives').mkdir(parents=True, exist_ok=True)
                         for file in os.listdir(save_to):
                             if file.endswith('.ims') or file.endswith('.zarr'):
                                 os.rename(str(Path(save_to, file)), str(Path(save_to, 'exaSPIM', file)))
@@ -235,4 +235,4 @@ class MetadataLaunch:
             )
         acq_dict['tiles'] = tiles
 
-        return acquisition.Acquisition(**acq_dict)  # type: ignore
+        return acquisition.Acquisition(**acq_dict)  # pyright: ignore[reportArgumentType]

@@ -2,7 +2,7 @@ import multiprocessing as mp
 import os
 import re
 from ctypes import c_wchar
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 from multiprocessing import Array, Process
 from multiprocessing.shared_memory import SharedMemory
@@ -65,7 +65,7 @@ class ImarisWriter(BaseWriter):
         """
         super().__init__(path)
         self._frame_count_px: int = 0
-        self._filename: str = f"new_{datetime.now().strftime('%Y%m%d_%H%M%S')}.ims"
+        self._filename: str = f"new_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.ims"
         self._compression = pw.eCompressionAlgorithmNone  # initialize as no compression
         self._color = "#ffffff"  # initialize as white
         # Internal flow control attributes to monitor compression progress
@@ -270,7 +270,7 @@ class ImarisWriter(BaseWriter):
         color_infos[0].set_base_color(pw.Color(*(*hex2color(self._color), 1.0)))
         adjust_color_range = False
         # date time parameters
-        time_infos = [datetime.today()]
+        time_infos = [datetime.now(timezone.utc)]
         # create run process
         self._process = Process(
             target=self._run,

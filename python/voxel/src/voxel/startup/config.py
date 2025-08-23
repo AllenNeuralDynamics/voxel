@@ -42,17 +42,20 @@ class SystemConfig(BaseModel):
     layout: LayoutDefinition
 
     @field_validator('nodes', mode='before')
+    @classmethod
     def set_missing_defaults(cls, raw_nodes):
         """Ensure all nodes have a type and default to remote if not specified."""
         out = {}
         for name, node in raw_nodes.items():
             if isinstance(node, dict) and 'type' not in node:
                 node_type = 'remote' if 'host' in node and 'rpc_port' in node else 'local'
-                node = {**node, 'type': node_type}  # copy so we don’t mutate the user’s dict in-place
-            out[name] = node
+                out[name] = {**node, 'type': node_type}  # copy so we don't mutate the user's dict in-place
+            else:
+                out[name] = node
         return out
 
     @field_validator('nodes', mode='after')
+    @classmethod
     def check_one_local_node(cls, nodes):
         locals_ = [name for name, node in nodes.items() if node.type == 'local']
         if len(locals_) != 1:

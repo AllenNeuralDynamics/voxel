@@ -17,6 +17,7 @@ class FrameStack(BaseModel):
         return math.ceil(self.size_um.z / self.step_size_um)
 
     @field_validator('idx', 'pos_um', 'size_um', mode='before')
+    @classmethod
     def validate_vec(cls, value: str | Vec2D | Vec3D) -> Vec2D | Vec3D:
         if isinstance(value, str):
             return Vec2D.from_str(value) if 'x' in value else Vec3D.from_str(value)

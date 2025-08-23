@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -29,17 +29,18 @@ class Vec2D[T: Number]:
     def to_tuple(self) -> tuple[T, T]:
         return (self.x, self.y)
 
-    @classmethod
-    def from_str(cls, data: str) -> Self:
+    @staticmethod
+    def from_str(data: str) -> Vec2D[int] | Vec2D[float]:
         split = data.strip(' ()').split(',')
         if any('.' in s for s in split):
-            x, y = float(split[0]), float(split[1])
-        else:
-            x, y = int(split[0]), int(split[1])
-        return cls(x, y)  # type: ignore
+            return Vec2D(float(split[0]), float(split[1]))
+        return Vec2D(int(split[0]), int(split[1]))
 
-    def __int__(self) -> Vec2D[int]:
+    def as_int(self) -> Vec2D[int]:
         return Vec2D(int(self.x), int(self.y))
+
+    def as_float(self) -> Vec2D[float]:
+        return Vec2D(float(self.x), float(self.y))
 
     def __repr__(self) -> str:
         return self.to_str()
@@ -53,7 +54,7 @@ class Vec2D[T: Number]:
     def __sub__(self, other: Vec2D) -> Vec2D[T]:
         return Vec2D(self.x - other.x, self.y - other.y)
 
-    def __matmul__(self, other: Vec2D) -> float:  # @
+    def __matmul__(self, other: Vec2D) -> float:
         return self.x * other.y - self.y * other.x
 
     def __truediv__(self, other: T) -> Vec2D[float]:
@@ -73,37 +74,41 @@ class Vec3D[T: Number]:
     y: T
     z: T
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for attr in ['x', 'y', 'z']:
             if not isinstance(getattr(self, attr), (int, float)):
                 msg = f'Unsupported type for {attr}: {type(getattr(self, attr))}'
                 raise TypeError(msg)
 
-    def to_str(self):
+    def to_str(self) -> str:
         return f'({self.x}, {self.y}, {self.z})'
 
     def dict(self) -> dict[str, T]:
         return {'x': self.x, 'y': self.y, 'z': self.z}
 
-    @classmethod
-    def from_str(cls, data: str) -> Vec3D:
+    @staticmethod
+    def from_str(data: str) -> Vec3D[int] | Vec3D[float]:
         split = data.strip(' ()').split(',')
         if any('.' in s for s in split):
-            x, y, z = float(split[0]), float(split[1]), float(split[2])
-        else:
-            x, y, z = int(split[0]), int(split[1]), int(split[2])
-        return cls(x, y, z)  # type: ignore
+            return Vec3D(float(split[0]), float(split[1]), float(split[2]))
+        return Vec3D(int(split[0]), int(split[1]), int(split[2]))
+
+    def as_int(self) -> Vec3D[int]:
+        return Vec3D(int(self.x), int(self.y), int(self.z))
+
+    def as_float(self) -> Vec3D[float]:
+        return Vec3D(float(self.x), float(self.y), float(self.z))
 
     def __iter__(self) -> Iterator[T]:
         return iter((self.x, self.y, self.z))
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.x, self.y, self.z))
 
-    def __add__(self, other: Vec3D) -> Vec3D:
+    def __add__(self, other: Vec3D) -> Vec3D[T]:
         return Vec3D(self.x + other.x, self.y + other.y, self.z + other.z)
 
-    def __sub__(self, other: Vec3D) -> Vec3D:
+    def __sub__(self, other: Vec3D) -> Vec3D[T]:
         return Vec3D(self.x - other.x, self.y - other.y, self.z - other.z)
 
 

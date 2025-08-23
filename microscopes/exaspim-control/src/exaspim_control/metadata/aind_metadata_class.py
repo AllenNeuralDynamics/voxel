@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import inflection
@@ -143,7 +143,7 @@ class AINDMetadataClass:
                 property,
             ):  # check if prop name is metadata property
                 msg = f'{prop_name} is not a metadata property. Please choose from {self.__dir__()}'
-                raise ValueError(msg)
+                raise TypeError(msg)
         self._acquisition_name_format = form
 
     @property
@@ -192,8 +192,8 @@ class AINDMetadataClass:
                 property,
             ):  # check if prop name is metadata property
                 msg = f'{prop_name} is not a metadata property. Please choose from {self.__dir__()}'
-                raise ValueError(msg)
+                raise TypeError(msg)
             name.append(str(getattr(self, prop_name)))
         if self._date_format is not None:
-            name.append(datetime.now().strftime(self._date_format))
+            name.append(datetime.now(UTC).strftime(self._date_format))
         return f'{delimiter}'.join(name)

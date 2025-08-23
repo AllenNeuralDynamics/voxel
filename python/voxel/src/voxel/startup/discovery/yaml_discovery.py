@@ -159,8 +159,8 @@ class YAMLInstrumentDiscovery(InstrumentDiscovery):
             for instrument_path in instrument_paths:
                 try:
                     self._loaders[instrument_path.name] = YAMLInstrumentLoader(instrument_path)
-                except FileNotFoundError as e:
-                    self.logger.error("✗ Skipped invalid instrument configuration in '%s': %s", instrument_path, e)
+                except FileNotFoundError:
+                    self.logger.exception("✗ Skipped invalid instrument configuration in '%s'", instrument_path)
 
         success_count = len(self._loaders)
         total_count = len(instrument_paths)

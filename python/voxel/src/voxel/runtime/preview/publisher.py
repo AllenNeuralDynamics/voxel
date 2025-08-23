@@ -114,16 +114,15 @@ class PreviewManager(PreviewFramePublisher):
             for callback in self._new_frame_observers:
                 try:
                     callback(frame)
-                except Exception as e:
-                    self.log.error(
-                        'Error in observer %s while processing frame %s (%s): %s',
+                except Exception:
+                    self.log.exception(
+                        'Error in observer %s while processing frame %s (%s).',
                         id(callback),
                         frame.metadata.frame_idx,
                         frame.metadata.channel_name,
-                        e,
                     )
 
-    def _receive_loop(self):
+    def _receive_loop(self) -> None:  # noqa: C901
         if not self._subscribe_socket:
             self.log.error('Receive loop started without a subscribe socket.')
             return
@@ -145,17 +144,17 @@ class PreviewManager(PreviewFramePublisher):
                         # Assuming PreviewFrame.from_packed is defined
                         preview_frame = PreviewFrame.from_packed(packed_frame)
                         self.publish_frame(preview_frame)  # Publish to local observers
-                    except Exception as e_unpack:
-                        self.log.error('Publisher: Error unpacking/processing received remote frame: %s', e_unpack)
+                    except Exception:
+                        self.log.exception('Publisher: Error unpacking/processing received remote frame')
             except zmq.ZMQError as e:
                 if e.errno == zmq.ETERM or self._halt_event.is_set():
                     self.log.info('Publisher: Receive loop: Context terminated or halt signaled.')
                     break
-                self.log.error('Publisher: Receive loop ZMQError: %s', e)
+                self.log.exception('Publisher: Receive loop ZMQError')
                 if not self._halt_event.is_set():
                     time.sleep(0.1)
-            except Exception as e:
-                self.log.error('Publisher: Unexpected error in receive loop: %s', e, exc_info=True)
+            except Exception:
+                self.log.exception('Publisher: Unexpected error in receive loop')
                 if self._halt_event.is_set():
                     break
                 time.sleep(1)
@@ -195,10 +194,10 @@ class PreviewFrameRelay(PreviewFramePublisher):
         try:
             packed_frame = frame.pack()
             self._publish_socket.send(packed_frame)
-        except zmq.ZMQError as e:
-            self.log.error('ZMQError publishing frame: %s', e)
-        except Exception as e:
-            self.log.error('Error packing/publishing frame: %s', e)
+        except zmq.ZMQError:
+            self.log.exception('ZMQError publishing frame')
+        except Exception:
+            self.log.exception('Error packing/publishing frame')
 
     def close(self) -> None:
         """Close the publisher and release resources."""

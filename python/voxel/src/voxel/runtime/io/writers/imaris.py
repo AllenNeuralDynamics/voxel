@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from math import ceil
 
@@ -240,7 +240,7 @@ class ImarisWriter(VoxelWriter):
             self._image_converter.Finish(
                 image_extents=image_extents,
                 parameters=parameters,
-                time_infos=[datetime.today()],
+                time_infos=[datetime.now(UTC)],
                 color_infos=color_infos,
                 adjust_color_range=False,
             )
@@ -267,8 +267,8 @@ class ImarisWriter(VoxelWriter):
                 self.avg_write_speed_fps,
                 self.avg_write_speed_mb_s,
             )
-        except Exception as e:
-            self.log.error('Failed to finalize ImarisWriter: %s', e)
+        except Exception:
+            self.log.exception('Failed to finalize ImarisWriter: %s')
 
 
 def test_imaris_writer():
@@ -292,7 +292,7 @@ def test_imaris_writer():
             frame_count=writer.batch_size_px * NUM_BATCHES,
             frame_shape=VP_151MX_M6H0,
             position_um=Vec3D(0, 0, 0),
-            file_name='D:/voxel_test/voxel_data_%s' % datetime.now().strftime('%Y%m%d_%H%M%S'),
+            file_name='D:/voxel_test/voxel_data_%s' % datetime.now(UTC).strftime('%Y%m%d_%H%M%S'),
             voxel_size=Vec3D(0.1, 0.1, 1.0),
             channel_name='Channel0',
             batch_size=BATCH_SIZE,

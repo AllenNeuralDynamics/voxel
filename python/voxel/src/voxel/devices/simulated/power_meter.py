@@ -38,7 +38,7 @@ class SimulatedPowerMeter(VoxelPowerMeter):
 
     @property
     def wavelength_nm(self) -> float:
-        """:rtype: float: The wavelength in nanometers if the power meter is connected, otherwise raises an exception."""
+        """Get wavelength in nanometers if the power meter is connected, otherwise raises an exception."""
         self._check_connection()
         return self._wavelength_nm
 

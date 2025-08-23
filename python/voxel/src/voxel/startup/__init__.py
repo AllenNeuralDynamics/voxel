@@ -14,7 +14,7 @@ Example:
     # 2) Create a new, empty launch context
     ctx = Launcher.get_context(loader)
 
-    # 3) Step‐by‐step launch
+    # 3) Step-by-step launch
     ctx = Launcher.fetch_config(ctx)
     if not ctx.latest.ok():
         raise RuntimeError(f"Config error: {ctx.latest.errors}")
@@ -35,7 +35,7 @@ Example:
     if not ctx.latest.ok():
         raise RuntimeError(f"Instrument build error: {ctx.latest.errors}")
 
-    # At this point ctx.latest.data is your fully‐built Instrument
+    # At this point ctx.latest.data is your fully-built Instrument
     instrument = ctx.latest.data
 
     # 4) Or just do it all in one go:
@@ -48,41 +48,44 @@ Example:
 
 """
 
+from voxel.utils.log import VoxelLogging
+
 from .discovery import YAMLInstrumentDiscovery, YAMLInstrumentLoader
-from .launch import LaunchContext, Launcher
+from .launch import Launcher
 
 __all__ = ('Launcher', 'YAMLInstrumentDiscovery', 'YAMLInstrumentLoader')
 
 
 def launch_mock(instrument_uid: str = 'mock') -> None:
     """Test function to ensure the launch module is working correctly.
+
     Uses .voxel directory in the project root and assumes an instrument named 'mock' is available.
     """
-    from voxel.utils.log import VoxelLogging
-
     VoxelLogging.setup()
-
     logger = VoxelLogging.get_logger('launch_mock')
 
-    ctx: LaunchContext | None = None
-    try:
-        discovery = YAMLInstrumentDiscovery('.voxel/instruments')
-        loaders = discovery.run_discovery()
-        if not loaders:
-            raise ValueError('No instrument configurations found in .voxel/instruments')
+    def _close_ctx(ctx):
+        for session in ctx.remote_sessions.values():
+            try:
+                session.shutdown()
+            except Exception:
+                logger.exception('Error closing session %s', session.uid)
 
-        loader = loaders.get(instrument_uid)
-        if not loader:
-            msg = f"No instrument configuration found for '{instrument_uid}' in .voxel/instruments"
-            raise ValueError(msg)
+    discovery = YAMLInstrumentDiscovery('.voxel/instruments')
+    loaders = discovery.run_discovery()
+    if not loaders:
+        logger.error('No instrument configurations found in .voxel/instruments')
+        return
 
-        ctx = Launcher.fast_boot(loader=loader)
-        logger.info('Launch context Result:\n\n%s\n', ctx.table())
+    loader = loaders.get(instrument_uid)
+    if not loader:
+        logger.error("No instrument configuration found for '%s' in .voxel/instruments", instrument_uid)
+        return
 
-        if not ctx.latest.ok():
-            msg = f'Launch failed at step {len(ctx.latest.step)}'
-            raise RuntimeError(msg)
+    ctx = Launcher.fast_boot(loader=loader)
+    logger.info('Launch context Result:\n\n%s\n', ctx.table())
 
+    if ctx.latest.ok():
         try:
             instrument = ctx.instrument
             logger.info("Instrument '%s' launched successfully!", instrument_uid)
@@ -95,16 +98,7 @@ def launch_mock(instrument_uid: str = 'mock') -> None:
                 logger.info(' \t\tExposure Time %s, ', exp_time)
                 camera.exposure_time_ms = exp_time.max_value or 200
                 logger.info(' \t\tExposure Time (New) %s, ', camera.exposure_time_ms)
-        except RuntimeError as e:
-            logger.error("Failed to launch instrument '%s': %s", instrument_uid, ctx.latest.errors)
-            logger.error('Error retrieving instrument: %s', e)
-    except Exception as e:
-        logger.error('Error during launch test: %s', e)
-    finally:
-        if ctx:
-            for session in ctx.remote_sessions.values():
-                try:
-                    session.shutdown()
-                except Exception as close_error:
-                    logger.error('Error closing session %s: %s', session.uid, close_error)
-        logger.info('Launch mock test completed.')
+        except Exception:
+            logger.exception('Error during launch test: %s')
+    _close_ctx(ctx)
+    logger.info('Launch mock test completed.')

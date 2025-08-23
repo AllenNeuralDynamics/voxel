@@ -1,6 +1,6 @@
 import time
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 
 import inflection
 import numpy as np
@@ -92,7 +92,7 @@ class ExASPIMAcquisitionView(QWidget):
         # Eventual threads
         self.grab_fov_positions_worker = None
         self.property_workers = []
-        self.acquisition_thread = create_worker(self.acquisition.run)  # type: ignore
+        self.acquisition_thread = create_worker(self.acquisition.run)  # pyright: ignore[reportArgumentType]
         self.grab_frames_worker = create_worker(lambda: None)  # dummy thread
 
         # Create device widgets for operations
@@ -103,10 +103,10 @@ class ExASPIMAcquisitionView(QWidget):
 
         # create workers for latest image taken by cameras
         for camera_name, camera in self.instrument.cameras.items():
-            worker = create_worker(self.grab_property_value, camera, 'last_image', None)  # type: ignore
+            worker = create_worker(self.grab_property_value, camera, 'last_image', None)  # pyright: ignore[reportArgumentType]
             worker.yielded.connect(lambda x, camera_name=camera_name: self.update_acquisition_layer(x[0], camera_name))
             worker.start()
-            worker.pause()  # type: ignore
+            worker.pause()  # pyright: ignore[reportCallIssue]
             self.property_workers.append(worker)
 
         for device_name, operation_dictionary in self.acquisition.config['acquisition']['operations'].items():
@@ -229,7 +229,7 @@ class ExASPIMAcquisitionView(QWidget):
         yaml.Representer = NonAliasingRTRepresenter
 
         # save daq tasks to config
-        daq = self.instrument.daqs[list(self.instrument.daqs.keys())[0]]
+        daq = self.instrument.daqs[next(iter(self.instrument.daqs.keys()))]
         self.acquisition.config['acquisition']['daq'] = daq.tasks
 
         # save the tile configuration to the YAML file
@@ -269,15 +269,15 @@ class ExASPIMAcquisitionView(QWidget):
 
         # Start acquisition
         self.instrument_view.setDisabled(False)
-        self.acquisition_thread = create_worker(self.acquisition.run)  # type: ignore
+        self.acquisition_thread = create_worker(self.acquisition.run)  # pyright: ignore[reportArgumentType]
         self.acquisition_thread.start()
-        self.acquisition_thread.finished.connect(self.acquisition_ended)  # type: ignore
+        self.acquisition_thread.finished.connect(self.acquisition_ended)  # pyright: ignore[reportArgumentType]
 
         # start all workers
         for worker in self.property_workers:
             worker.resume()
             time.sleep(1)
-        self.acquisitionStarted.emit(datetime.now())
+        self.acquisitionStarted.emit(datetime.now(UTC))
 
     def acquisition_ended(self) -> None:
         """Handle the end of the acquisition process."""
@@ -355,10 +355,10 @@ class ExASPIMAcquisitionView(QWidget):
             lambda name: setattr(self.acquisition.metadata, name, getattr(metadata_widget, name)),
         )
         for name, widget in metadata_widget.property_widgets.items():
-            property_worker = create_worker(self.grab_property_value, self.acquisition.metadata, name, widget)  # type: ignore
+            property_worker = create_worker(self.grab_property_value, self.acquisition.metadata, name, widget)  # pyright: ignore[reportArgumentType]
             property_worker.yielded.connect(lambda x: self.update_property_value(x[0], x[1]))
             property_worker.start()
-            property_worker.pause()  # type: ignore
+            property_worker.pause()  # pyright: ignore[reportCallIssue]
             self.property_workers.append(property_worker)
         metadata_widget.setWindowTitle('Metadata')
         return metadata_widget
@@ -384,7 +384,7 @@ class ExASPIMAcquisitionView(QWidget):
             raise KeyError('Coordinate plane must match instrument axes in tiling_stages') from e
 
         # TODO fix this, messy way to figure out FOV dimensions from camera properties
-        first_camera_key = list(self.instrument.cameras.keys())[0]
+        first_camera_key = next(iter(self.instrument.cameras.keys()))
         camera = self.instrument.cameras[first_camera_key]
         fov_height_mm = float(camera.fov_height_mm)
         fov_width_mm = float(camera.fov_width_mm)
@@ -466,8 +466,8 @@ class ExASPIMAcquisitionView(QWidget):
         self.channel_plan.channelChanged.connect(self.update_tiles)
 
         # TODO: This feels like a clunky connection. Works for now but could probably be improved
-        self.volume_plan.header.startChanged.connect(lambda i: self.create_tile_list())
-        self.volume_plan.header.stopChanged.connect(lambda i: self.create_tile_list())
+        self.volume_plan.header.startChanged.connect(lambda: self.create_tile_list())
+        self.volume_plan.header.stopChanged.connect(lambda: self.create_tile_list())
 
         return acquisition_widget
 
@@ -503,7 +503,7 @@ class ExASPIMAcquisitionView(QWidget):
         if hasattr(self, 'grab_fov_positions_worker') and self.grab_fov_positions_worker is not None:
             self.grab_fov_positions_worker.quit()
 
-        self.grab_fov_positions_worker = create_worker(self.grab_fov_positions)  # type: ignore
+        self.grab_fov_positions_worker = create_worker(self.grab_fov_positions)  # pyright: ignore[reportArgumentType]
         self.grab_fov_positions_worker.yielded.connect(self.volume_model.set_current_fov_position)
         self.grab_fov_positions_worker.start()
 

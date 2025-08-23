@@ -137,7 +137,9 @@ class VoxelCamera(VoxelDevice):
         :type uid: str
         :type pixel_size_um: Vec2D[float] | str
         """
-        self._pixel_size_um = Vec2D.from_str(pixel_size_um) if isinstance(pixel_size_um, str) else pixel_size_um
+        self._pixel_size_um = (
+            Vec2D.from_str(pixel_size_um).as_float() if isinstance(pixel_size_um, str) else pixel_size_um
+        )
         self._objective = magnification
 
         self._Trigger_setting_map = {
@@ -178,7 +180,7 @@ class VoxelCamera(VoxelDevice):
         """Get the size of the camera pixel in microns.
 
         :return: The size of the camera pixel in microns.
-        :rtype: Vec2D
+        :rtype: Vec2D[float]
         """
         return self._pixel_size_um
 
@@ -187,7 +189,7 @@ class VoxelCamera(VoxelDevice):
         """Get the field of view of the camera in microns.
 
         :return: The field of view of the camera in microns.
-        :rtype: Vec2D
+        :rtype: Vec2D[float]
         """
         return self.roi_size_um / self.objective
 
@@ -197,7 +199,7 @@ class VoxelCamera(VoxelDevice):
         """Get the size of the camera sensor in pixels.
 
         :return: The size of the camera sensor in pixels.
-        :rtype: Vec2D
+        :rtype: Vec2D[int]
         """
 
     # ROI Configuration Properties
@@ -206,7 +208,7 @@ class VoxelCamera(VoxelDevice):
         """Get the size of the camera region of interest in pixels.
 
         :return: The size of the region of interest in pixels.
-        :rtype: Vec2D
+        :rtype: Vec2D[int]
         """
         return Vec2D(self.roi_width_px, self.roi_height_px)
 
@@ -215,7 +217,7 @@ class VoxelCamera(VoxelDevice):
         """Get the size of the camera region of interest in microns.
 
         :return: The size of the region of interest in microns.
-        :rtype: Vec2D
+        :rtype: Vec2D[float]
         """
         return Vec2D(
             self.roi_width_px * self.pixel_size_um.x,
@@ -333,11 +335,11 @@ class VoxelCamera(VoxelDevice):
 
     @property
     @abstractmethod
-    def frame_size_px(self) -> Vec2D:
+    def frame_size_px(self) -> Vec2D[int]:
         """Get the image size in pixels.
 
         :return: The image size in pixels.
-        :rtype: Vec2D
+        :rtype: Vec2D[int]
         """
 
     @property

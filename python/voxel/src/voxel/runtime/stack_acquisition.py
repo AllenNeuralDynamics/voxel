@@ -37,6 +37,7 @@ class StackAcquisitionConfig(BaseModel):
         self._frame_ranges = self._get_frame_ranges(self.stack.frame_count)
 
     @field_validator('local_path', 'remote_path', mode='before')
+    @classmethod
     def validate_path(cls, value: str | Path) -> Path:
         return Path(value) if isinstance(value, str) else value
 
@@ -165,10 +166,14 @@ class StackAcquisitionRunner:
             self._target_frame_count = config.stack.frame_count
             self._captured_frames = 0
 
-        except Exception as e:
-            self.log.error('Error during stack acquisition preparation: %s', e)
+        except Exception:
+            self.log.exception('Error during stack acquisition preparation')
             self._writer.close()
             raise
+
+    @property
+    def channel_name(self) -> str:
+        return self._writer.config.channel_name
 
     def get_acquisition_status(self) -> dict[tuple[int, int], BatchStatus] | None:
         """Get the current acquisition status of all batches."""
@@ -235,12 +240,13 @@ class StackAcquisitionRunner:
             )
             self._batch_capture_thread.start()
             self._current_batch.status = BatchStatus.ARMED
-            return self._batch_completion_event
-        except Exception as e:
-            self.log.error('Error starting batch acquisition: %s', e)
+        except Exception:
+            self.log.exception('Error starting batch acquisition')
             self._writer.close()
             requested_batch.status = BatchStatus.ERROR
             raise
+        else:
+            return self._batch_completion_event
 
     def _batch_acquisition_loop_target(
         self,
@@ -277,8 +283,8 @@ class StackAcquisitionRunner:
                 self._writer.add_frame(frame)
                 self._preview_generator.set_new_frame(frame=frame, frame_idx=frame_idx, channel_name=channel_name)
                 self._captured_frames += 1
-        except Exception as e:
-            self.log.error('Error during batch acquisition: %s', e, exc_info=True)
+        except Exception:
+            self.log.exception('Error during batch acquisition')
             self._current_batch.status = BatchStatus.ERROR
         finally:
             completion_notifier.set()
@@ -299,8 +305,8 @@ class StackAcquisitionRunner:
             # figure out if we need to explicitly stop the camera
             try:
                 self._camera.stop()
-            except Exception as e:
-                self.log.error('Error stopping camera during batch acquisition abort: %s', e, exc_info=True)
+            except Exception:
+                self.log.exception('Error stopping camera during batch acquisition abort')
 
     def finalize(self) -> None:
         self.log.info('Finalizing stack...')
@@ -322,8 +328,8 @@ class StackAcquisitionRunner:
         try:
             self._writer.close()
             self.log.info('Stack finalized.')
-        except Exception as e:
-            self.log.error('Error during finalization: %s', e)
+        except Exception:
+            self.log.exception('Error during finalization')
             raise
 
     # TODO: complete this implementation
@@ -335,5 +341,5 @@ class StackAcquisitionRunner:
             self.abort_batch_acquisition()
             try:
                 self._camera.stop()
-            except Exception as e:
-                self.log.error('Error stopping camera during batch acquisition abort: %s', e, exc_info=True)
+            except Exception:
+                self.log.exception('Error stopping camera during batch acquisition abort')

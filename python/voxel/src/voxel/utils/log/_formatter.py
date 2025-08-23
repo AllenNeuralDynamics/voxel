@@ -49,8 +49,8 @@ class CustomFormatter(logging.Formatter):
 
     def _build_fmt(self, detailed: bool) -> str:
         # time | level | (name) message [filename:lineno]
-        out = f'{colorize("%(asctime)s", color=Color.GREEN)} | %(levelname)-8s | '
-        out += f'{colorize("%(name)s >>", color=Color.GRAY)} %(message)s'
+        out = f'{colorize("%(asctime)s |", color=Color.GRAY)} %(levelname)s '
+        out += f'{colorize("| %(name)s >>", color=Color.GRAY)} %(message)s'
         if detailed:
             out += f' {colorize("%(filename)s:%(lineno)d", color=Color.GRAY)}'
         return out
@@ -72,7 +72,7 @@ class CustomFormatter(logging.Formatter):
         original_levelname = record.levelname
         original_msg = record.msg
 
-        record.levelname = f'{color}{record.levelname: <8}{LevelColor.RESET}'
+        record.levelname = f'{color}{record.levelname: >8}{LevelColor.RESET}'
 
         # Append the extra data to the main message.
         extra_data = get_extra_data(record)

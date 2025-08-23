@@ -58,7 +58,7 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
             self._spinbox.setValue(int(sample_value))
         else:
             msg = f'Unsupported type: {type(sample_value)}. Sample value: {sample_value}'
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         # Connect spinbox to binding (user input -> hardware)
         self._spinbox.valueChanged.connect(self._binding.set_value)

@@ -115,8 +115,8 @@ class ImagingRuntime:
                 transfer=transfer,
             )
             self.log.info('Stack acquisition prepared for %s.', config.channel_name)
-        except Exception as e:
-            self.log.error('Failed to prepare stack acquisition: %s', e, exc_info=True)
+        except Exception:
+            self.log.exception('Failed to prepare stack acquisition')
             self._active_acq_runner = None
             raise
 
@@ -142,14 +142,12 @@ class ImagingRuntime:
             return
 
         runner = self._active_acq_runner
-        self.log.info(
-            'Finalizing stack acquisition for runner %s. Aborted: %s', runner._writer.config.channel_name, abort
-        )
+        self.log.info('Finalizing stack acquisition for runner %s. Aborted: %s', runner.channel_name, abort)
         try:
             if abort:
                 runner.abort_batch_acquisition()
             runner.finalize()
-        except Exception as e:
-            self.log.error('Error during runner finalization via pipeline: %s', e, exc_info=True)
+        except Exception:
+            self.log.exception('Error during runner finalization via pipeline')
         finally:
             self._active_acq_runner = None
