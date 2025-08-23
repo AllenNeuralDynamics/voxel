@@ -10,10 +10,6 @@ from typing import Any, TypedDict
 import inflection
 from ruamel.yaml import YAML
 from serial import Serial
-from voxel.factory.object_graph_builder import build_object_graph
-from voxel.factory.specs import BuildSpec, BuildSpecs
-from voxel.reporting.errors import tabulate_report
-from voxel.utils.log import VoxelLogging
 from voxel_classic.descriptors.deliminated_property import _DeliminatedProperty
 from voxel_classic.devices.base import BaseDevice
 from voxel_classic.devices.camera.base import BaseCamera
@@ -24,6 +20,11 @@ from voxel_classic.devices.flip_mount.base import BaseFlipMount
 from voxel_classic.devices.indicator_light.base import BaseIndicatorLight
 from voxel_classic.devices.laser.base import BaseLaser
 from voxel_classic.devices.stage.asi.tiger import TigerStage
+
+from voxel.factory.object_graph_builder import build_object_graph
+from voxel.factory.specs import BuildSpec, BuildSpecs
+from voxel.reporting.errors import tabulate_report
+from voxel.utils.log import VoxelLogging
 
 
 class ChannelInfo(TypedDict):

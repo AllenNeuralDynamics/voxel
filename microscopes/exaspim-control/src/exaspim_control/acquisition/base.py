@@ -7,6 +7,7 @@ import inflection
 from exaspim_control.instrument.exaspim_instrument import ExASPIM
 from exaspim_control.metadata.aind_metadata_class import AINDMetadataClass
 from ruamel.yaml import YAML
+
 from voxel.utils.log import VoxelLogging
 
 if TYPE_CHECKING:

@@ -146,3 +146,4 @@ bootstrap.*
 # testing
 test_output/
 WARP.*
+GEMINI.*

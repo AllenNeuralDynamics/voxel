@@ -3,33 +3,6 @@ show-fixes = true
 
 target-version = 'py312'
 exclude = [
-    # '.bzr',
-    # '.direnv',
-    # '.eggs',
-    # '.git',
-    # '.gitignore',
-    # '.git-rewrite',
-    # '.hg',
-    # '.ipynb_checkpoints',
-    # '.mypy_cache',
-    # '.nox',
-    # '.pants.d',
-    # '.pyenv',
-    # '.pytest_cache',
-    # '.pytype',
-    # '.ruff_cache',
-    # '.svn',
-    # '.tox',
-    # '.venv',
-    # '.vscode',
-    # '__pypackages__',
-    # '_build',
-    # 'buck-out',
-    # 'build',
-    # 'dist',
-    # 'node_modules',
-    # 'site-packages',
-    # 'venv',
     '**/sdk',
     '**/sdks',
     # To clean up later - exclude from linting till then
@@ -39,12 +12,6 @@ exclude = [
     'python/vidgets/src/vidgets/view',
     'classic_drivers',
 ]
-
-[format]
-docstring-code-format = true
-docstring-code-line-length = 'dynamic'
-indent-style = 'space'
-quote-style = 'single'
 
 [lint]
 select = ['ALL']
@@ -83,3 +50,10 @@ flake8-quotes = { inline-quotes = 'single', multiline-quotes = 'double' }
 # isort = { known-first-party = ['pydantic', 'tests'] }
 # mccabe = { max-complexity = 14 }
 pydocstyle = { convention = 'google' }
+
+
+[format]
+docstring-code-format = true
+docstring-code-line-length = 'dynamic'
+indent-style = 'space'
+quote-style = 'single'

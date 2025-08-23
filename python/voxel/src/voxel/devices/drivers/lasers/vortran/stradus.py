@@ -1,5 +1,6 @@
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusVortran
+
 from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 

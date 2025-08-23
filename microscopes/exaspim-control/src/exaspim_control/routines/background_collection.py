@@ -2,8 +2,9 @@ from pathlib import Path
 
 import numpy as np
 import tifffile
-from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.camera.base import BaseCamera
+
+from voxel.utils.log import VoxelLogging
 
 
 class BackgroundCollection:

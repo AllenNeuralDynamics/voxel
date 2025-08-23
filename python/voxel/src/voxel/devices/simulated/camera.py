@@ -4,6 +4,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, TypedDict
 
 import numpy as np
+
 from voxel.devices.interfaces.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors import deliminated_float, enumerated_int, enumerated_string
 from voxel.utils.descriptors.deliminated import deliminated_int

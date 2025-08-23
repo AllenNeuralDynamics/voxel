@@ -1,6 +1,7 @@
 from oxxius_laser import LBX, BoolVal
 from serial import Serial
 from sympy import Expr, S, solve, symbols
+
 from voxel.devices.interfaces.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 

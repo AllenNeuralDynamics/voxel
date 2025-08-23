@@ -37,6 +37,7 @@ from vidgets.view.acquisition_widgets.volume_plan_widget import (
 )
 from vidgets.view.base_device_widget import create_widget, scan_for_properties
 from vidgets.view.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
+
 from voxel.utils.log import VoxelLogging
 
 

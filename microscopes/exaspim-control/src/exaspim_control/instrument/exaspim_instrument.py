@@ -3,11 +3,12 @@ from pathlib import Path
 
 from exaspim_control.instrument.base import Instrument
 from ruamel.yaml import YAML
-from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.camera.base import BaseCamera
 from voxel_classic.devices.daq.ni import NIDAQ
 from voxel_classic.devices.filterwheel.base import BaseFilterWheel
 from voxel_classic.devices.stage.asi.tiger import TigerStage
+
+from voxel.utils.log import VoxelLogging
 
 DIRECTORY = Path(__file__).parent.resolve()
 

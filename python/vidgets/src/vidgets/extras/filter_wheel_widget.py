@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from vidgets.extras.wheel import WheelGraphic
+
 from voxel.devices.interfaces.filter_wheel import VoxelFilterWheel
 
 
@@ -92,6 +93,7 @@ if __name__ == '__main__':
         QVBoxLayout,
         QWidget,
     )
+
     from voxel.devices.simulated.filter_wheel import SimulatedFilterWheel
     from voxel.utils.log import VoxelLogging
 

@@ -1,6 +1,7 @@
 import struct
 
 import serial
+
 from voxel.devices.interfaces.tunable_lens import ETLControlMode, VoxelTunableLens
 
 # constants for Optotune EL-E-4i controller

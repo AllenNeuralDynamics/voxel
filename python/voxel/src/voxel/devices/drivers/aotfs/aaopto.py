@@ -1,5 +1,6 @@
 from aaopto_aotf.aotf import MPDS
 from aaopto_aotf.device_codes import BlankingMode, InputMode
+
 from voxel.devices.interfaces.aotf import VoxelAOTF
 from voxel.utils.singleton import thread_safe_singleton
 
