@@ -1,6 +1,7 @@
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 
 import inflection
 import numpy as np
@@ -54,16 +55,17 @@ class NonAliasingRTRepresenter(RoundTripRepresenter):
     """
 
     def ignore_aliases(self, data):
+        _ = data
         return True
 
 
 class ExASPIMAcquisitionView(QWidget):
     """Class for handling ExASPIM acquisition view with all merged functionality."""
 
-    acquisitionEnded = Signal()
-    acquisitionStarted = Signal(datetime)
+    acquisition_ended = Signal()
+    acquisition_started = Signal(datetime)
 
-    def __init__(self, acquisition: ExASPIMAcquisition, instrument_view: ExASPIMInstrumentView):
+    def __init__(self, acquisition: ExASPIMAcquisition, instrument_view: ExASPIMInstrumentView) -> None:
         """Initialize the ExASPIMAcquisitionView object.
 
         :param acquisition: Acquisition object
@@ -221,7 +223,7 @@ class ExASPIMAcquisitionView(QWidget):
         if hasattr(self, 'acquisition_thread'):
             self.acquisition_thread.quit()
         self.acquisition.stop_acquisition()
-        self.acquisition_ended()
+        self._acquisition_ended()
 
     def save_acquisition(self) -> None:
         """Save a tile configuration to a YAML file."""
@@ -235,7 +237,7 @@ class ExASPIMAcquisitionView(QWidget):
 
         # save the tile configuration to the YAML file
         if self.acquisition.metadata is not None:
-            with open(f'{self.acquisition.metadata.acquisition_name}_tiles.yaml', 'w') as file:
+            with Path(f'{self.acquisition.metadata.acquisition_name}_tiles.yaml').open('w') as file:
                 yaml.dump(self.acquisition.config, file)
 
     def start_acquisition(self) -> None:
@@ -272,15 +274,15 @@ class ExASPIMAcquisitionView(QWidget):
         self.instrument_view.setDisabled(False)
         self.acquisition_thread = create_worker(self.acquisition.run)  # pyright: ignore[reportArgumentType]
         self.acquisition_thread.start()
-        self.acquisition_thread.finished.connect(self.acquisition_ended)  # pyright: ignore[reportArgumentType]
+        self.acquisition_thread.finished.connect(self._acquisition_ended)  # pyright: ignore[reportArgumentType]
 
         # start all workers
         for worker in self.property_workers:
             worker.resume()
             time.sleep(1)
-        self.acquisitionStarted.emit(datetime.now(UTC))
+        self.acquisition_started.emit(datetime.now(UTC))
 
-    def acquisition_ended(self) -> None:
+    def _acquisition_ended(self) -> None:
         """Handle the end of the acquisition process."""
         # enable acquisition view
         self.start_button.setEnabled(True)
@@ -311,7 +313,7 @@ class ExASPIMAcquisitionView(QWidget):
         for worker in self.property_workers:
             worker.pause()
 
-        self.acquisitionEnded.emit()
+        self.acquisition_ended.emit()
 
     def stack_device_widgets(self, device_type: str) -> QWidget:
         """Stack like device widgets in layout and hide/unhide with combo box
@@ -456,8 +458,8 @@ class ExASPIMAcquisitionView(QWidget):
         acquisition_widget.addWidget(table_splitter)
 
         # connect signals
-        self.instrument_view.snapshotTaken.connect(self.volume_model.add_fov_image)  # connect snapshot signal
-        self.instrument_view.contrastChanged.connect(
+        self.instrument_view.snapshot_taken.connect(self.volume_model.add_fov_image)  # connect snapshot signal
+        self.instrument_view.contrast_changed.connect(
             self.volume_model.adjust_glimage_contrast,
         )  # connect snapshot adjusted
         self.volume_model.fovHalt.connect(self.stop_stage)  # stop stage if halt button is pressed
@@ -538,6 +540,7 @@ class ExASPIMAcquisitionView(QWidget):
             yield value, widget
 
     def create_operation_widgets(self, device_name: str, operation_name: str, operation_specs: dict) -> None:
+        _ = operation_specs
         """Create widgets for operation specifications."""
         device = getattr(self.instrument, f'{operation_name}s')[device_name]
         # Note: scan_for_properties only takes device parameter
@@ -609,8 +612,7 @@ class ExASPIMAcquisitionView(QWidget):
         tile_positions = []  # Would need to get actual positions from volume_plan
 
         for channel in channels:
-            for tile_position in tile_positions:
-                tiles.append(self.write_tile(channel, tile_position))
+            tiles.extend([self.write_tile(channel, tile_position) for tile_position in tile_positions])
         return tiles
 
     def write_tile(self, channel: str, tile) -> dict:
@@ -619,7 +621,7 @@ class ExASPIMAcquisitionView(QWidget):
             'channel': channel,
             'position': tile,
             'metadata': {
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': datetime.now(tz=UTC).isoformat(),
             },
         }
 
@@ -632,20 +634,21 @@ class ExASPIMAcquisitionView(QWidget):
 
     def update_config_query(self) -> int:
         """Query user about updating configuration."""
-        msgBox = QMessageBox()
-        msgBox.setText('Configuration has been modified.')
-        msgBox.setInformativeText('Do you want to save your changes?')
-        msgBox.setStandardButtons(
+        msg_box = QMessageBox()
+        msg_box.setText('Configuration has been modified.')
+        msg_box.setInformativeText('Do you want to save your changes?')
+        msg_box.setStandardButtons(
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
         )
-        msgBox.setDefaultButton(QMessageBox.StandardButton.Save)
-        return msgBox.exec()
+        msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+        return msg_box.exec()
 
-    def select_directory(self, pressed: bool, msgBox: QMessageBox) -> None:
+    def select_directory(self, pressed: bool, msg_box: QMessageBox) -> None:
         """Select directory for saving files."""
+        _ = pressed
         directory = QFileDialog.getExistingDirectory(self, 'Select Directory')
         if directory:
-            msgBox.accept()
+            msg_box.accept()
 
     def close(self) -> bool:
         """Close the acquisition view."""

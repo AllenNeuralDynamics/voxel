@@ -40,9 +40,9 @@ class InstrumentNode:
         self._build_result = build_object_graph(device_specs, base_class=VoxelDevice)
         self._runtimes: dict[str, ImagingRuntime] = {}
         if devices := self._build_result.items:
-            for uid, device in devices.items():
+            for device_uid, device in devices.items():
                 if isinstance(device, VoxelCamera):
-                    self._runtimes[uid] = ImagingRuntime(
+                    self._runtimes[device_uid] = ImagingRuntime(
                         camera=device,
                         io_manager=io_manager,
                         preview_pub=preview,

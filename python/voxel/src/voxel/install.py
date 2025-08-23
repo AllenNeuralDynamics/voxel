@@ -1,8 +1,8 @@
 # src/voxel/install.py
 
-import os
 import subprocess
 import sys
+from pathlib import Path
 
 EXTRA_TO_WHEELS = {
     'etl-opto': ['optoICC', 'optoKummenberg'],
@@ -19,18 +19,18 @@ def install_optional_wheels():
             requested_extras.update(e.strip() for e in extras_part.split(','))
 
     # Install relevant wheels
-    wheels_dir = os.path.join(os.path.dirname(__file__), '.wheels')
-    if not os.path.exists(wheels_dir):
+    wheels_dir = Path(__file__).parent / '.wheels'
+    if not wheels_dir.exists():
         return
 
     for extra, prefixes in EXTRA_TO_WHEELS.items():
         if extra in requested_extras:
             for prefix in prefixes:
-                matches = [f for f in os.listdir(wheels_dir) if f.startswith(prefix) and f.endswith('.whl')]
+                matches = [f for f in wheels_dir.iterdir() if f.name.startswith(prefix) and f.name.endswith('.whl')]
                 for fname in matches:
-                    full_path = os.path.abspath(os.path.join(wheels_dir, fname))
-                    print(f'[voxel] Installing optional wheel: {fname}')
-                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', full_path])
+                    full_path = (wheels_dir / fname).resolve()
+                    print(f'[voxel] Installing optional wheel: {fname.name}')
+                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', str(full_path)])
 
 
 if __name__ == '__main__':

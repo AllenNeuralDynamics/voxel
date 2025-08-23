@@ -2,7 +2,7 @@ import contextlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
-from typing import Any, TypedDict
+from typing import Any, ClassVar, TypedDict
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal
 from PySide6.QtWidgets import QWidget
@@ -18,35 +18,35 @@ class BindingPresets:
     """Common configuration presets for hardware bindings."""
 
     # Fast responding hardware (modern digital devices)
-    FAST_HARDWARE: BindingPreset = {
+    FAST_HARDWARE: ClassVar[BindingPreset] = {
         'debounce_delay': 100,
         'settle_delay': 50,
         'watch_interval': None,
     }
 
     # Slow mechanical hardware (motors, old instruments)
-    SLOW_HARDWARE: BindingPreset = {
+    SLOW_HARDWARE: ClassVar[BindingPreset] = {
         'debounce_delay': 1000,
         'settle_delay': 500,
         'watch_interval': None,
     }
 
     # Continuous monitoring (temperature sensors, positions)
-    MONITORED: BindingPreset = {
+    MONITORED: ClassVar[BindingPreset] = {
         'debounce_delay': 300,
         'settle_delay': 100,
         'watch_interval': 1000,
     }
 
     # High precision instruments (need time to stabilize)
-    PRECISION: BindingPreset = {
+    PRECISION: ClassVar[BindingPreset] = {
         'debounce_delay': 500,
         'settle_delay': 1000,
         'watch_interval': 2000,
     }
 
     # Responsive UI elements
-    RESPONSIVE: BindingPreset = {
+    RESPONSIVE: ClassVar[BindingPreset] = {
         'debounce_delay': 150,
         'settle_delay': 100,
         'watch_interval': None,
@@ -89,6 +89,8 @@ class ValueBinding[T](QObject):
     """Simple binding with debouncing and optional continuous monitoring (no verification)."""
 
     class State(Enum):
+        """The current state of the binding."""
+
         IDLE = 'idle'
         COMMANDING = 'commanding'
         WATCHING = 'watching'
@@ -183,10 +185,10 @@ class ValueBinding[T](QObject):
                 # No settle delay, refresh immediately
                 self._on_settle_complete()
 
-        except Exception as e:
+        except Exception:
             # Command failed, resume watching if enabled
             self._resume_watching()
-            raise e
+            raise
 
     def _on_settle_complete(self) -> None:
         """Called after hardware settle delay to refresh the value."""
@@ -356,6 +358,8 @@ class ValidatedValueBinding[T: int | float](QObject):
     """Smart binding with command verification and optional continuous monitoring."""
 
     class State(Enum):
+        """The current state of the binding."""
+
         IDLE = 'idle'
         COMMANDING = 'commanding'
         VERIFYING = 'verifying'
@@ -455,10 +459,10 @@ class ValidatedValueBinding[T: int | float](QObject):
                 self._pending_command = None
                 self._resume_watching()
 
-        except Exception as e:
+        except Exception:
             # Command failed, resume watching if enabled
             self._resume_watching()
-            raise e
+            raise
 
     def _on_timer_tick(self) -> None:
         """Unified timer callback - handles both verification and watching."""
@@ -477,7 +481,8 @@ class ValidatedValueBinding[T: int | float](QObject):
 
             if command_successful:
                 # Success - command verified
-                self.verification_completed.emit(True)
+                is_completed = True
+                self.verification_completed.emit(is_completed)
                 self._pending_command = None
                 self._resume_watching()
 
@@ -490,12 +495,14 @@ class ValidatedValueBinding[T: int | float](QObject):
                     pass  # Timer keeps running
                 else:
                     # Give up - actual value is already updated by refresh()
-                    self.verification_completed.emit(False)
+                    is_completed = False
+                    self.verification_completed.emit(is_completed)
                     self._pending_command = None
                     self._resume_watching()
 
-        except Exception:
+        except Exception as e:  # noqa: BLE001
             # Read failed - resume watching and hope for the best
+            print(f'[red]Error in binding: {e}[/red]')
             self._resume_watching()
 
     def _values_match(self, value1: T | None, value2: T | None) -> bool:

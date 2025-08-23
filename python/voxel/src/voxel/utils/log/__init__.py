@@ -56,12 +56,11 @@ class VoxelLogging:
         :param log_queue: The queue to which logs will be sent.
         """
         for logger in loggers:
-            if isinstance(logger, logging.LoggerAdapter):
-                logger = logger.logger
-            logger.handlers.clear()
-            logger.addHandler(QueueHandler(log_queue))
-            logger.setLevel(VoxelLogging._log_level)
-            logger.propagate = False
+            actual_logger = logger.logger if isinstance(logger, logging.LoggerAdapter) else logger
+            actual_logger.handlers.clear()
+            actual_logger.addHandler(QueueHandler(log_queue))
+            actual_logger.setLevel(VoxelLogging._log_level)
+            actual_logger.propagate = False
 
     @staticmethod
     def get_logger(name: str | None = None, *, obj: object | None = None, extra: dict | None = None) -> 'LoggerType':

@@ -79,22 +79,22 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
         return self._spinbox
 
     # Forward common spinbox methods for convenience
-    def setRange(self, min_val: T, max_val: T) -> None:
+    def setRange(self, min_val: T, max_val: T) -> None:  # noqa: N802
         """Set the range of the spinbox."""
         if isinstance(self._spinbox, QDoubleSpinBox):
             self._spinbox.setRange(float(min_val), float(max_val))
         else:
             self._spinbox.setRange(int(min_val), int(max_val))
 
-    def setSuffix(self, suffix: str) -> None:
+    def setSuffix(self, suffix: str) -> None:  # noqa: N802
         """Set the suffix of the spinbox."""
         self._spinbox.setSuffix(suffix)
 
-    def setPrefix(self, prefix: str) -> None:
+    def setPrefix(self, prefix: str) -> None:  # noqa: N802
         """Set the prefix of the spinbox."""
         self._spinbox.setPrefix(prefix)
 
-    def setSingleStep(self, step: T) -> None:
+    def setSingleStep(self, step: T) -> None:  # noqa: N802
         """Set the single step of the spinbox."""
         if isinstance(self._spinbox, QDoubleSpinBox):
             self._spinbox.setSingleStep(float(step))
@@ -102,7 +102,7 @@ class VNumberInput[T: int | float](BoundInput[T, QSpinBox | QDoubleSpinBox]):
             self._spinbox.setSingleStep(int(step))
 
     # Additional methods specific to QDoubleSpinBox
-    def setDecimals(self, decimals: int) -> None:
+    def setDecimals(self, decimals: int) -> None:  # noqa: N802
         """Set the number of decimal places (QDoubleSpinBox only)."""
         if isinstance(self._spinbox, QDoubleSpinBox):
             self._spinbox.setDecimals(decimals)

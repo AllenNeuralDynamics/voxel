@@ -88,7 +88,7 @@ class YAMLInstrumentLoader(InstrumentConfigLoader):
     def _load_raw_system_config(path: Path) -> dict[str, Any]:
         """Load the raw system definition from the YAML file."""
         system_file_path = path / 'system.yaml'
-        with open(system_file_path) as file:
+        with system_file_path.open() as file:
             return _yaml.load(file)
 
     @staticmethod
@@ -100,9 +100,7 @@ class YAMLInstrumentLoader(InstrumentConfigLoader):
             raise FileNotFoundError(msg)
         required_files = ['system.yaml']
         required_dirs = ['channels', 'profiles']
-        for file in required_files:
-            if not (path / file).is_file():
-                missing.append(f'Missing file: {path / file}')
+        missing.extend([f'Missing file: {path / file}' for file in required_files if not (path / file).is_file()])
         for directory in required_dirs:
             dir_path = path / directory
             if not dir_path.is_dir():

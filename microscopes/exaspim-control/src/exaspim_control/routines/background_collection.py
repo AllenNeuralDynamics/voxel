@@ -116,9 +116,7 @@ class BackgroundCollection:
         :type filename: str
         """
         self._filename = (
-            filename.replace('.tiff', '').replace('.tif', '')
-            if filename.endswith('.tiff') or filename.endswith('.tif')
-            else f'{filename}'
+            filename.replace('.tiff', '').replace('.tif', '') if filename.endswith(('.tiff', '.tif')) else f'{filename}'
         )
         self.log.info('setting filename to: %s', filename)
 

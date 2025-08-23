@@ -1,7 +1,7 @@
 import logging
 import time
 from collections.abc import Generator, Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -53,6 +53,7 @@ class NonAliasingRTRepresenter(RoundTripRepresenter):
     """
 
     def ignore_aliases(self, data):
+        _ = data
         return True
 
 
@@ -65,10 +66,10 @@ class _ViewerState(TypedDict):
 class ExASPIMInstrumentView(QWidget):
     """Class for handling ExASPIM instrument vidgets."""
 
-    snapshotTaken = Signal(object, list)
-    contrastChanged = Signal(object, list)
+    snapshot_taken = Signal(object, list)
+    contrast_changed = Signal(object, list)
 
-    def __init__(self, instrument: ExASPIM, config: dict[str, Any]) -> None:
+    def __init__(self, instrument: ExASPIM, config: dict[str, Any]) -> None:  # noqa: C901, PLR0915
         """Initialize the ExASPIMInstrumentView object.
 
         :param instrument: Instrument object
@@ -95,9 +96,6 @@ class ExASPIMInstrumentView(QWidget):
         self.grab_frames_worker: WorkerBase = create_worker(lambda: None)
 
         # Add widget groups ---------------------------------------------------
-
-        # Left
-
         # Right
         self.camera_widget: CameraWidget = self._create_camera_widget()
         self.camera_widget.configure_live_button_to_start(callback=self._start_live_stream)
@@ -162,21 +160,33 @@ class ExASPIMInstrumentView(QWidget):
         self._add_undocked_widgets()
 
         # Configure Viewer
+        min_allowed_intensity = 0
+        max_allowed_intensity = 65535
         self.intensity_min = self.config['instrument_view']['properties']['intensity_min']
-        if self.intensity_min < 0 or self.intensity_min > 65535:
+        if self.intensity_min < min_allowed_intensity or self.intensity_min > max_allowed_intensity:
             raise ValueError('intensity min must be between 0 and 65535')
         self.intensity_max = self.config['instrument_view']['properties']['intensity_max']
-        if self.intensity_max < self.intensity_min or self.intensity_max > 65535:
+        if self.intensity_max < self.intensity_min or self.intensity_max > max_allowed_intensity:
             raise ValueError('intensity max must be between intensity min and 65535')
+
         self.camera_rotation = self.config['instrument_view']['properties']['camera_rotation_deg']
         if self.camera_rotation not in [0, 90, 180, 270, 360, -90, -180, -270]:
             raise ValueError('camera rotation must be 0, 90, 180, 270, -90, -180, -270')
+
+        min_resolution_level = 1
+        max_resolution_level = 10
         self.resolution_levels = self.config['instrument_view']['properties']['resolution_levels']
-        if self.resolution_levels < 1 or self.resolution_levels > 10:
-            raise ValueError('resolution levels must be between 1 and 10')
+        if self.resolution_levels < min_resolution_level or self.resolution_levels > max_resolution_level:
+            err = f'resolution levels must be between {min_resolution_level} and {max_resolution_level}'
+            raise ValueError(err)
+
+        min_alignment_roi_size = 2
+        max_alignment_roi_size = 1024
         self.alignment_roi_size = self.config['instrument_view']['properties']['alignment_roi_size']
-        if self.alignment_roi_size < 2 or self.alignment_roi_size > 1024:
-            raise ValueError('alignment roi size must be between 2 and 1024')
+        if self.alignment_roi_size < min_alignment_roi_size or self.alignment_roi_size > max_alignment_roi_size:
+            err = f'alignment roi size must be between {min_alignment_roi_size} and {max_alignment_roi_size}'
+            raise ValueError(err)
+
         self.viewer.scale_bar.visible = True
         self.viewer.scale_bar.unit = 'um'
         self.viewer.scale_bar.position = 'bottom_left'
@@ -185,7 +195,7 @@ class ExASPIMInstrumentView(QWidget):
         def _update_fps(fps: float) -> None:
             self.viewer.text_overlay.text = f'{fps:1.1f} fps'
 
-        self.viewer.window._qt_viewer.canvas._scene_canvas.measure_fps(callback=_update_fps)
+        self.viewer.window._qt_viewer.canvas._scene_canvas.measure_fps(callback=_update_fps)  # noqa: SLF001
 
         self.downsampler = GPUToolsRankDownSample2D(binning=2, rank=-2, data_type='uint16')
 
@@ -201,7 +211,7 @@ class ExASPIMInstrumentView(QWidget):
         }
         self.previous_layer = None
 
-        def _camera_zoom(event: Event) -> None:
+        def _camera_zoom(event: Event) -> None:  # noqa: ARG001
             """Store viewer state anytime camera zooms and there is a layer."""
             if self.previous_layer and self.previous_layer in self.viewer.layers:
                 self.viewer_state = {
@@ -210,7 +220,7 @@ class ExASPIMInstrumentView(QWidget):
                     'angles': self.viewer.camera.angles,
                 }
 
-        def _camera_position(event: Event) -> None:
+        def _camera_position(event: Event) -> None:  # noqa: ARG001
             """Store viewer state anytime camera moves and there is a layer."""
             if self.previous_layer and self.previous_layer in self.viewer.layers:
                 self.viewer_state = {
@@ -232,30 +242,30 @@ class ExASPIMInstrumentView(QWidget):
 
         def _update_config_on_quit() -> None:
             """Add functionality to close function to save device properties to instrument config."""
-            msgBox = QMessageBox()
-            msgBox.setIcon(QMessageBox.Icon.Question)
-            msgBox.setText(
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Icon.Question)
+            msg_box.setText(
                 f'Do you want to update the instrument configuration file at {self._config_save_path} '
                 f'to current instrument state?',
             )
-            msgBox.setWindowTitle('Updating Configuration')
-            msgBox.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+            msg_box.setWindowTitle('Updating Configuration')
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
             save_elsewhere = QPushButton('Change Directory')
-            msgBox.addButton(save_elsewhere, QMessageBox.ButtonRole.DestructiveRole)
+            msg_box.addButton(save_elsewhere, QMessageBox.ButtonRole.DestructiveRole)
 
-            def _select_directory(pressed: bool):
+            def _select_directory(pressed: bool) -> None:  # noqa: ARG001
                 fname = QFileDialog()
                 folder = fname.getSaveFileName(dir=str(self.instrument.config_path))
                 if folder[0] != '':  # user pressed cancel
-                    msgBox.setText(
+                    msg_box.setText(
                         f'Do you want to update the instrument configuration file at {folder[0]} '
                         f'to the current instrument state?',
                     )
                     self._config_save_path = Path(folder[0])
 
-            save_elsewhere.pressed.connect(lambda: _select_directory(True))
+            save_elsewhere.pressed.connect(lambda: _select_directory(pressed=True))
 
-            return_value = msgBox.exec()
+            return_value = msg_box.exec()
             if return_value == QMessageBox.StandardButton.Ok:
                 self.instrument.update_current_state_config()
                 self.instrument.save_config(self._config_save_path)
@@ -404,7 +414,7 @@ class ExASPIMInstrumentView(QWidget):
             if '_widgets' in key:
                 widgets.extend(dictionary.values())
         for widget in widgets:
-            if widget not in self.viewer.window._qt_window.findChildren(type(widget)):
+            if widget not in self.viewer.window._qt_window.findChildren(type(widget)):  # noqa: SLF001
                 undocked_widget = self.viewer.window.add_dock_widget(widget, name=widget.windowTitle())
                 undocked_widget.setFloating(True)
                 # hide widget if empty property widgets
@@ -474,6 +484,7 @@ class ExASPIMInstrumentView(QWidget):
 
     def _dismantle_live_stream(self, result=None) -> None:
         """Dismantle live view for the specified camera."""
+        _result = result
         chan = self.active_channel
         if chan is None:
             self.log.error('Cannot dismantle live view: active channel is None.')
@@ -505,7 +516,7 @@ class ExASPIMInstrumentView(QWidget):
         self.camera_widget.configure_live_button_to_start(callback=self._start_live_stream)
         self.camera_widget.enable_action_buttons()
 
-    def _update_layer(self, args: tuple, snapshot: bool = False) -> None:
+    def _update_layer(self, args: tuple, snapshot: bool = False) -> None:  # noqa: PLR0912
         """Update the image layer in the viewer.
 
         :param args: tuple containing image and camera name
@@ -544,7 +555,7 @@ class ExASPIMInstrumentView(QWidget):
                     )
 
                     # connect contrast limits event
-                    def _viewer_contrast_limits(event: Event) -> None:
+                    def _viewer_contrast_limits(event: Event) -> None:  # noqa: ARG001
                         if self.livestream_channel in self.viewer.layers:
                             live_stream_layer = self.viewer.layers[self.livestream_channel]
                             if isinstance(live_stream_layer, Image):
@@ -589,7 +600,7 @@ class ExASPIMInstrumentView(QWidget):
                     rotate=self.camera_rotation,
                 )
                 if isinstance(layer, Image):
-                    self.snapshotTaken.emit(np.copy(np.rot90(image[-1], k=2)), layer.contrast_limits)
+                    self.snapshot_taken.emit(np.copy(np.rot90(image[-1], k=2)), layer.contrast_limits)
                     self.viewer.layers.selection = [layer]
                     layer.visible = False
 
@@ -693,7 +704,8 @@ class ExASPIMInstrumentView(QWidget):
         :param layer: layer that was pressed
         :param event: mouse event.
         """
-        if event.button == 2:  # Left click
+        left_click_index = 2
+        if event.button == left_click_index:
             # Handle both single layer and list of layers
             single_layer = layer[0] if isinstance(layer, list) else layer
 
@@ -702,7 +714,7 @@ class ExASPIMInstrumentView(QWidget):
             folder = fname.getSaveFileName(
                 dir=str(
                     Path(__file__).parent.resolve()
-                    / Path(rf'\{single_layer.name}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.tiff'),
+                    / Path(rf'\{single_layer.name}_{datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")}.tiff'),
                 ),
             )
             if folder[0] != '':  # user pressed cancel

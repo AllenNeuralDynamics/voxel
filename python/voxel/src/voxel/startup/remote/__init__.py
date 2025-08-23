@@ -2,7 +2,7 @@ from voxel.startup.remote.server import RemoteNodeServer
 
 
 def main():
-    import argparse
+    import argparse  # noqa: PLC0415
 
     # args are --port <port> --uid <uid>
     parser = argparse.ArgumentParser(description='Start a remote node server.')

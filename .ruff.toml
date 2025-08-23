@@ -13,6 +13,12 @@ exclude = [
     'classic_drivers',
 ]
 
+[format]
+docstring-code-format = true
+docstring-code-line-length = 'dynamic'
+indent-style = 'space'
+quote-style = 'single'
+
 [lint]
 select = ['ALL']
 ignore = [
@@ -28,7 +34,7 @@ ignore = [
     'D205',    # One blank line required between summary line and description
     'T201',    # 'Print' found
     'TRY003',  # Specifying long messages outside the exception class (Also EM101, EM102)
-    'EM101',   #
+    'EM101',   # Exception must not use a string literal, assign to variable first
     'S101',    # Assert detected
     'FBT001',  # Boolean-typed positional argument in function definition
     'FBT002',  # Boolean-typed default value in function definition
@@ -40,20 +46,22 @@ ignore = [
     'INP001',  # implicit-namespace-package
     'PLR0913', # Too many arguments in function definition
     'COM812',  # (Redundant when using formatter) missing-trailing-comma
+    'S603',    # subprocess-without-shell-equals-true
+    'S311',    # Standard pseudo-random generators are not suitable for cryptographic purposes
 ]
-# extend-select = ['A', 'B', 'E', 'C4', 'SIM', 'TC']
-unfixable = ['B']
+
 fixable = ['ALL']
+unfixable = ['B']
 extend-safe-fixes = ['D415', 'D205']
+
 flake8-builtins.ignorelist = ['print']
 flake8-quotes = { inline-quotes = 'single', multiline-quotes = 'double' }
-# isort = { known-first-party = ['pydantic', 'tests'] }
-# mccabe = { max-complexity = 14 }
 pydocstyle = { convention = 'google' }
+mccabe = { max-complexity = 14 }
+pylint = { max-statements = 75 }
 
-
-[format]
-docstring-code-format = true
-docstring-code-line-length = 'dynamic'
-indent-style = 'space'
-quote-style = 'single'
+[lint.per-file-ignores]
+# Ignore `D` rules everywhere except for the `src/` directory.
+"!**/src/**.py" = ["D"]
+'**/examples/**.py' = ['BLE001', 'SLF001']
+'**/vidgets/**.py' = ['PLR2004', 'FBT003']

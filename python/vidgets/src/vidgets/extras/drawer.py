@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QFont
@@ -78,7 +78,7 @@ class SlidingDrawer(QWidget):
 
     def add_log_message(self, message: str):
         """Add a message to the log display."""
-        timestamp = datetime.now().strftime('%H:%M:%S')
+        timestamp = datetime.now(UTC).strftime('%H:%M:%S')
         log_entry = f'[{timestamp}] {message}'
         self.log_display.append(log_entry)
 
@@ -121,7 +121,7 @@ class SlidingDrawer(QWidget):
 
         self.animation.start()
 
-    def resizeEvent(self, a0):
+    def resizeEvent(self, a0):  # noqa: N802
         """Handle parent resize to keep drawer positioned correctly."""
         super().resizeEvent(a0)
         parent_widget = self.parent()

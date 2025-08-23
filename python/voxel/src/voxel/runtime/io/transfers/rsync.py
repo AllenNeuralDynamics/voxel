@@ -11,7 +11,7 @@ from .base import VoxelFileTransfer
 
 
 class RsyncFileTransfer(VoxelFileTransfer):
-    """Voxel driver for Rsync file transfer process.
+    r"""Voxel driver for Rsync file transfer process.
 
     Process will transfer files with the following regex
     format:
@@ -39,7 +39,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
         # --info=progress2 outputs % progress for all files not sequentially for each file
         self._flags = ['--progress', '--recursive', '--info=progress2']
 
-    def _run(self):
+    def _run(self) -> None:  # noqa: C901, PLR0912, PLR0915
         """Internal function that runs the transfer process."""
         start_time = time.time()
         local_directory = Path(self._local_path, self._acquisition_name)
@@ -51,20 +51,13 @@ class RsyncFileTransfer(VoxelFileTransfer):
         # loop over number of attempts in the event that a file transfer fails
         while transfer_complete is False and retry_num <= self._max_retry - 1:
             # generate a list of subdirs and files in the parent local dir to delete at the end
-            delete_list = []
-            for name in os.listdir(local_directory.absolute()):
-                if self.filename in name:
-                    delete_list.append(name)
+            delete_list = [p.name for p in local_directory.iterdir() if self.filename in p.name]
+
             # generate a list of files to copy
-            # path is the entire experiment path
-            # subdirs is any tile specific subdir i.e. zarr store
-            # files are any tile specific files
             file_list = {}
-            for path, _subdirs, files in os.walk(local_directory.absolute()):
-                for name in files:
-                    # check and only add if filename matches tranfer's filename
-                    if self.filename in name and name != log_path:
-                        file_list[os.path.join(path, name)] = os.path.getsize(os.path.join(path, name)) / 1024**2
+            for p in local_directory.glob('**/*'):
+                if p.is_file() and self.filename in p.name and p.name != log_path.name:
+                    file_list[str(p)] = p.stat().st_size / 1024**2
             total_size_mb = sum(file_list.values())
             # sort the file list based on the file sizes and create a list for transfers
             sorted_file_list = dict(sorted(file_list.items(), key=lambda item: item[1]))
@@ -84,8 +77,8 @@ class RsyncFileTransfer(VoxelFileTransfer):
                     # need to change directories to str because they are Path objects
                     external_dir = local_dir.replace(str(local_directory), str(external_directory))
                     # make external directory tree if needed
-                    if not os.path.isdir(external_dir):
-                        os.makedirs(external_dir)
+                    if not Path(external_dir).is_dir():
+                        Path(external_dir).mkdir(parents=True)
                     # setup log file
                     self.log.info('transferring %s from %s to %s', file_path, local_directory, external_directory)
 
@@ -102,8 +95,8 @@ class RsyncFileTransfer(VoxelFileTransfer):
                         # if windows, rsync expects absolute paths with driver letters to use
                         # /cygdrive/drive-letter and / not \
                         # example: /cygdrive/c/test/filename.extension
-                        file_path = file_path.replace('\\', '/').replace(':', '')
-                        file_path = '/cygdrive/' + file_path
+                        _file_path = file_path.replace('\\', '/').replace(':', '')
+                        _file_path = '/cygdrive/' + file_path
                         external_dir = external_dir.replace('\\', '/').replace(':', '')
                         external_dir = '/cygdrive/' + external_dir + '/' + filename
                         cmd_with_args = self._flatten([self._protocol, self._flags, file_path, external_dir])
@@ -113,17 +106,19 @@ class RsyncFileTransfer(VoxelFileTransfer):
 
                     time.sleep(1.0)
                     # lets monitor the progress of the individual file if size > 1 GB
-                    if file_size_mb > 1024:
+                    max_mbs = 1024
+                    max_percent = 100
+                    if file_size_mb > max_mbs:
                         self.log.info('%s is > 1 GB', filename)
                         # wait for subprocess to start otherwise log file won't exist yet
                         time.sleep(10.0)
                         file_progress = 0
                         previous_progress = 0
                         stuck_time_s = 0
-                        while file_progress < 100:
+                        while file_progress < max_percent:
                             start_time_s = time.time()
                             # open the stdout file in a temporary handle with r+ mode
-                            with open(log_path, 'r+') as f:
+                            with log_path.open('r+') as f:
                                 line = f.readlines()[-1]  # read the last line
 
                                 # try to find if there is a % in the last line
@@ -149,7 +144,7 @@ class RsyncFileTransfer(VoxelFileTransfer):
                                         # strip and convert to float
                                         file_progress = float(value.rstrip())
                                 # no lines in the file yet
-                                except Exception:
+                                except (IndexError, ValueError):
                                     file_progress = 0
                                 # sum to transferred amount to track progress
                                 self.progress = (
@@ -175,40 +170,40 @@ class RsyncFileTransfer(VoxelFileTransfer):
                     # wait for process to finish before cleaning log file
                     time.sleep(10.0)
                     # clean up and remove the temporary log file
-                    os.remove(log_path)
+                    log_path.unlink()
                     # update the total transfered amount
                     total_transferred_mb += file_size_mb
                     # self.log.info(f'file transfer is {self.progress:.2f} % complete.')
                 # clean up the local subdirs and files
                 for file in delete_list:
                     # f is a relative path, convert to absolute
-                    local_file_path = os.path.join(local_directory.absolute(), file)
-                    external_file_path = os.path.join(external_directory.absolute(), file)
+                    local_file_path = local_directory / file
+                    external_file_path = external_directory / file
                     # .zarr is directory but os.path.isdir will return False
-                    if os.path.isdir(local_file_path) or '.zarr' in local_file_path:
+                    if local_file_path.is_dir() or '.zarr' in local_file_path.name:
                         # TODO how to hash check zarr -> directory instead of file?
                         shutil.rmtree(local_file_path)
-                    elif os.path.isfile(local_file_path):
+                    elif local_file_path.is_file():
                         # verify transfer with hashlib
                         if self._verify_transfer:
                             # put in try except in case no external file found
                             try:
                                 # if hash is verified delete file
-                                if self._verify_file(local_file_path, external_file_path):
+                                if self._verify_file(str(local_file_path), str(external_file_path)):
                                     # remove local file
                                     self.log.info('deleting %s', local_file_path)
-                                    os.remove(local_file_path)
+                                    local_file_path.unlink()
                                 # if has fails, external file is corrupt
                                 else:
                                     # remove external file, try again
                                     self.log.info('hashes did not match, deleting %s', external_file_path)
-                                    os.remove(external_file_path)
+                                    external_file_path.unlink()
                             except FileNotFoundError:
                                 self.log.warning('no external file exists at %s', external_file_path)
                         else:
                             # remove local file
                             self.log.info('deleting %s', local_file_path)
-                            os.remove(local_file_path)
+                            local_file_path.unlink()
                     else:
                         self.log.warning('%s is not a file or directory.', local_file_path)
                 end_time = time.time()
@@ -223,7 +218,6 @@ class RsyncFileTransfer(VoxelFileTransfer):
         """
         for sublist in lst:
             if isinstance(sublist, list):
-                for item in sublist:
-                    yield item
+                yield from sublist
             else:
                 yield sublist

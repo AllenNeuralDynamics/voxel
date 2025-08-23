@@ -1,7 +1,7 @@
 import errno
 import threading
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import rpyc
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class RemoteNodeServer:
-    _instances: dict[tuple[str, int], 'RemoteNodeServer'] = {}
+    _instances: ClassVar[dict[tuple[str, int], 'RemoteNodeServer']] = {}
     _lock = threading.Lock()
 
     def __init__(self, host: str, port: int, uid: str):
@@ -31,7 +31,7 @@ class RemoteNodeServer:
 
     @classmethod
     def get(cls, host: str, port: int) -> 'RemoteNodeServer':
-        """Singleton–style factory.
+        """Singleton-style factory.
         Returns the existing server for (host,port) or creates+stores a new one.
         """
         key = (host, port)

@@ -82,16 +82,16 @@ class SimpleWriter(VoxelWriter):
 
 def test_writer():
     """Test the writer with power of 2 dimensions."""
-    from voxel.utils.frame_gen import CheckeredGenerator  # generate_checkered_batch
-    from voxel.utils.vec import Vec2D, Vec3D
+    from voxel.utils.frame_gen import CheckeredGenerator  # noqa: PLC0415
+    from voxel.utils.vec import Vec2D, Vec3D  # noqa: PLC0415
 
     writer = SimpleWriter('test')
 
-    NUM_BATCHES = 2
-    BASE_SIZE = 64
+    num_batches = 2
+    base_size = 64
 
-    frame_shape = Vec2D(BASE_SIZE * 10, BASE_SIZE * 10)
-    frame_count = writer.batch_size_px * NUM_BATCHES
+    frame_shape = Vec2D(base_size * 10, base_size * 10)
+    frame_count = writer.batch_size_px * num_batches
 
     writer.configure(
         WriterConfig(
@@ -108,7 +108,7 @@ def test_writer():
 
     frame_gen = CheckeredGenerator(height_px=frame_shape.y, width_px=frame_shape.x, initial_size=2, final_size=20)
 
-    for _ in range(NUM_BATCHES):
+    for _ in range(num_batches):
         batch = frame_gen.generate(nframes=writer.batch_size_px)
         for frame in batch:
             writer.add_frame(frame)

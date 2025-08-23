@@ -39,7 +39,8 @@ class BaseReferenceGenerator(FrameGenerator):
             image = tifffile.imread(self.path).astype(np.float32)
 
             if self.apply_noise:
-                photons = np.random.poisson(image)
+                rng = np.random.default_rng()
+                photons = rng.poisson(image)
                 image = (photons * 0.85 * 0.08).astype(np.float32)
 
             # Call the specific implementation from the subclass
@@ -103,7 +104,8 @@ class ReferenceGenerator(FrameGenerator):
 
             if self.apply_noise:
                 # Use NumPy for the noise model
-                photons = np.random.poisson(image)
+                rng = np.random.default_rng()
+                photons = rng.poisson(image)
                 image = (photons * 0.85 * 0.08).astype(np.float32)
 
             # Use scikit-image for resizing

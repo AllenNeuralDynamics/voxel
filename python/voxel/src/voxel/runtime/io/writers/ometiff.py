@@ -1,3 +1,4 @@
+import time
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -99,46 +100,47 @@ class OMETiffWriter(VoxelWriter):
 
 def test_tiffwriter():
     """Test the OME-TIFF voxel writer with realistic image data."""
-    from voxel.utils.frame_gen import SpiralGenerator  # generate_spiral_frames  # , generate_checkered_frames
-    from voxel.utils.vec import Vec2D, Vec3D
+    from voxel.utils.frame_gen import SpiralGenerator  # noqa: PLC0415
+    from voxel.utils.vec import Vec2D, Vec3D  # noqa: PLC0415
 
     writer = OMETiffWriter(name='tiff_writer', compression='zstd')
 
-    NUM_BATCHES = 5
+    num_batches = 5
     frame_shape = Vec2D(512, 512)
-    frame_count = writer.batch_size_px * NUM_BATCHES
-    config = WriterConfig(
-        path='test_output/ome_tiff_writer',
-        frame_count=frame_count,
-        frame_shape=frame_shape,
-        position_um=Vec3D(0, 0, 0),
-        file_name='voxel_data_compressed',
-        voxel_size=Vec3D(0.1, 0.1, 1.0),
-        channel_name='Channel0',
-        batch_size=128,
-    )
+    frame_count = writer.batch_size_px * num_batches
 
-    writer.configure(config)
-    writer.log.info(
-        'Expecting: %s frames of %sx%s in %s batches', frame_count, frame_shape.x, frame_shape.y, NUM_BATCHES
+    writer.configure(
+        config=WriterConfig(
+            path='test_output',
+            frame_count=frame_count,
+            frame_shape=frame_shape,
+            position_um=Vec3D(0, 0, 0),
+            file_name='voxel_data_compressed',
+            voxel_size=Vec3D(0.1, 0.1, 1.0),
+            channel_name='Channel0',
+            batch_size=writer.batch_size_px,
+        ),
     )
+    for i in range(1):
+        print('Run: %s' % i)
     writer.start()
 
-    try:
-        frame_gen = SpiralGenerator(height_px=frame_shape.y, width_px=frame_shape.x)
-        for frame in frame_gen.generate(nframes=frame_count):
-            writer.add_frame(frame)
-    except Exception:
-        writer.log.exception('Test failed: %s')
-    finally:
+    while not writer.is_running:
+        time.sleep(0.1)
+        writer.log.warning('Waiting for writer to start...')
+
+        spiral_gen = SpiralGenerator(height_px=frame_shape.y, width_px=frame_shape.x)
+        frames = [spiral_gen.generate() for _ in range(writer.batch_size_px)]
+
+        writer.log.info('Generated %s frames', len(frames))
+        time.sleep(2)
+        for _ in range(num_batches):
+            for frame in frames:
+                writer.add_frame(frame=frame)
+
         writer.stop()
 
-    # Verify the OME metadata
-    with tf.TiffFile(writer.output_file) as tif:
-        ome_metadata = tif.ome_metadata
-        print('OME Metadata:')
-        print(ome_metadata)
-    print(f'Axes: {writer.axes}')
+        print('Saved OME-TIFF file to %s' % writer.output_file)
 
 
 if __name__ == '__main__':

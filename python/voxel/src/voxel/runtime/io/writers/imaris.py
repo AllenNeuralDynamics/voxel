@@ -273,36 +273,36 @@ class ImarisWriter(VoxelWriter):
 
 def test_imaris_writer():
     """Test the Imaris IMS voxel writer with realistic image data."""
-    import time
+    import time  # noqa: PLC0415
 
-    from voxel.utils.frame_gen import TileReferenceGenerator, UpsampleReferenceGenerator
-    from voxel.utils.vec import Vec3D
+    from voxel.utils.frame_gen import TileReferenceGenerator, UpsampleReferenceGenerator  # noqa: PLC0415
+    from voxel.utils.vec import Vec3D  # noqa: PLC0415
 
-    VP_151MX_M6H0 = Vec2D(10640, 14192) // 4
+    vp_151mx_m6h0 = Vec2D(10640, 14192) // 4
 
-    BATCH_SIZE = 128
+    batch_size = 128
 
-    NUM_BATCHES = 4
+    num_batches = 4
 
     writer = ImarisWriter(name='imaris_writer')
 
     writer.configure(
         config=WriterConfig(
             path='test_output',
-            frame_count=writer.batch_size_px * NUM_BATCHES,
-            frame_shape=VP_151MX_M6H0,
+            frame_count=writer.batch_size_px * num_batches,
+            frame_shape=vp_151mx_m6h0,
             position_um=Vec3D(0, 0, 0),
             file_name='D:/voxel_test/voxel_data_%s' % datetime.now(UTC).strftime('%Y%m%d_%H%M%S'),
             voxel_size=Vec3D(0.1, 0.1, 1.0),
             channel_name='Channel0',
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
         ),
     )
     for i in range(1):
         print('Run: %s' % i)
         writer.start()
 
-        while not writer._is_running.is_set():
+        while not writer.is_running:
             time.sleep(0.1)
             writer.log.warning('Waiting for writer to start...')
 
@@ -312,17 +312,17 @@ def test_imaris_writer():
         frame_2 = up_gen.generate()
 
         frames = [frame_1, frame_1, frame_2, frame_2]
-        reps = BATCH_SIZE // len(frames)
+        reps = batch_size // len(frames)
 
         writer.log.info('Generated %s frames', len(frames))
         time.sleep(2)
-        for _ in range(NUM_BATCHES * reps):
+        for _ in range(num_batches * reps):
             for frame in frames:
                 writer.add_frame(frame=frame)
 
         writer.stop()
 
-        print('Saved IMS file to %s' % writer._output_file)
+        print('Saved IMS file to %s' % writer.config.file_name)
 
 
 if __name__ == '__main__':

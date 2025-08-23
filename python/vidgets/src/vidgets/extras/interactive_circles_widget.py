@@ -190,21 +190,21 @@ class InteractiveCirclesWidget(QWidget):
             target = (self.angle_offset - step_angle) % 360
             self._animate_to_angle(target)
 
-    def reset_rotation(self):
+    def reset_rotation(self) -> None:
         """Reset rotation to 0 degrees."""
         self._animate_to_angle(0)
 
-    def set_active_circle(self, circle_number):
+    def set_active_circle(self, circle_number) -> None:
         """Set the active circle by its number (1-based)."""
         if 1 <= circle_number <= self.num_circles:
             self.rotate_to_circle(circle_number - 1)  # Convert to 0-based index
 
-    def set_circle_count(self, count):
+    def set_circle_count(self, count) -> None:
         """Set exact circle count."""
         self.num_circles = max(1, min(20, count))
         self.update_svg()
 
-    def paintEvent(self, event):
+    def paintEvent(self, _) -> None:  # noqa: N802
         """Render the interactive circles with maintained aspect ratio."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -224,7 +224,7 @@ class InteractiveCirclesWidget(QWidget):
             # Render SVG in the square area
             self.renderer.render(painter, QRectF(x, y, size, size))
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event):  # noqa: N802
         """Handle mouse clicks to select circles."""
         # Get click position
         click_x = event.position().x()

@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..base import VoxelWriter, WriterConfig
+from voxel.runtime.io.writers.base import VoxelWriter, WriterConfig
+
 from .sdk import npy2bdv
 
 if TYPE_CHECKING:

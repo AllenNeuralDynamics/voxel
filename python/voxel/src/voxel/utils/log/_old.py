@@ -6,6 +6,7 @@ from enum import Enum, StrEnum
 from logging.handlers import QueueHandler, QueueListener
 from multiprocessing import Queue
 from pathlib import Path
+from typing import ClassVar
 
 LOGGING_SUBPROC_SUFFIX = '_sub'
 LOGGING_PROJECT_NAME = 'voxel'
@@ -42,7 +43,7 @@ class LogEmoji(StrEnum):
 class CustomFormatter(logging.Formatter):
     """Enhanced formatter with modular and extendable formatting logic."""
 
-    LEVEL_EMOJIS: dict[int, str] = {
+    LEVEL_EMOJIS: ClassVar[dict[int, str]] = {
         logging.DEBUG: LogEmoji.PURPLE_CIRCLE,
         logging.INFO: LogEmoji.BLUE_CIRCLE,
         logging.WARNING: LogEmoji.YELLOW_CIRCLE,
@@ -50,7 +51,7 @@ class CustomFormatter(logging.Formatter):
         logging.CRITICAL: LogEmoji.CROSS_MARK,
     }
 
-    LEVEL_COLORS: dict[int, LogColor] = {
+    LEVEL_COLORS: ClassVar[dict[int, LogColor]] = {
         logging.DEBUG: LogColor.PURPLE,
         logging.INFO: LogColor.BLUE,
         logging.WARNING: LogColor.YELLOW,
@@ -58,7 +59,7 @@ class CustomFormatter(logging.Formatter):
         logging.CRITICAL: LogColor.BOLD_RED,
     }
 
-    FIELD_COLORS: dict[str, str] = {
+    FIELD_COLORS: ClassVar[dict[str, str]] = {
         'asctime': '%(color_code)s',
         'name': '%(color_code)s',
         'message': '%(color_code)s',
@@ -113,7 +114,7 @@ class CustomFormatter(logging.Formatter):
             record.color_code = self.LEVEL_COLORS.get(record.levelno, LogColor.GREY).value
         return super().format(record)
 
-    def formatException(self, ei) -> str:
+    def formatException(self, ei) -> str:  # noqa: N802
         """Format exception messages with red color."""
         formatted = super().formatException(ei)
         if self.colored and formatted:

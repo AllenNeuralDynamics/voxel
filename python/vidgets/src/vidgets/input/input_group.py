@@ -50,53 +50,58 @@ def create_input_group(
         for label, input_widget in inputs.items()
     }
 
-    # Choose layout and label positioning based on flow direction
-    if flow == FlowDirection.VERTICAL:
+    def add_vertical_widgets() -> QVBoxLayout:
+        """Add widgets to a QVBoxLayout."""
         layout = QVBoxLayout(group)
-    elif flow == FlowDirection.HORIZONTAL:
-        layout = QHBoxLayout(group)
-    elif flow == FlowDirection.GRID:
-        layout = QGridLayout(group)
-    else:
-        layout = QFormLayout(group)  # Default to FORM layout as it's the most commonly useful
-
-    # Configure layout properties
-    layout.setSpacing(spacing)
-    layout.setContentsMargins(margins, margins, margins, margins)
-
-    # Add widgets based on layout type
-    if isinstance(layout, QFormLayout):
         for label_text, widget in widgets.items():
-            layout.addRow(VLabel(label_text), widget)
+            layout.addWidget(VLabel(label_text))
+            layout.addWidget(widget)
+        return layout
 
-    elif isinstance(layout, QGridLayout):
-        # Grid layout with labels on top
+    def add_horizontal_widgets() -> QHBoxLayout:
+        """Add widgets to a QHBoxLayout."""
+        layout = QHBoxLayout(group)
+        for label_text, widget in widgets.items():
+            pair_container = QWidget()
+            pair_layout = QVBoxLayout(pair_container)
+            pair_layout.setContentsMargins(0, 0, 0, 0)
+            pair_layout.setSpacing(4)
+            pair_layout.addWidget(VLabel(label_text))
+            pair_layout.addWidget(widget)
+            layout.addWidget(pair_container)
+        return layout
+
+    def add_grid_widgets() -> QGridLayout:
+        """Add widgets to a QGridLayout."""
+        layout = QGridLayout(group)
         row = 0
         col = 0
         for label_text, widget in widgets.items():
             layout.addWidget(VLabel(label_text), row * 2, col)
             layout.addWidget(widget, row * 2 + 1, col)
-
             col += 1
             if col >= grid_columns:
                 col = 0
                 row += 1
+        return layout
 
-    else:
-        # Linear layouts (vertical/horizontal) with labels on top
+    def add_form_widgets() -> QFormLayout:
+        """Add widgets to a QFormLayout."""
+        layout = QFormLayout(group)
         for label_text, widget in widgets.items():
-            if flow == FlowDirection.HORIZONTAL:
-                # For horizontal layout, create label-widget pairs in containers
-                pair_container = QWidget()
-                pair_layout = QVBoxLayout(pair_container)
-                pair_layout.setContentsMargins(0, 0, 0, 0)
-                pair_layout.setSpacing(4)
-                pair_layout.addWidget(VLabel(label_text))
-                pair_layout.addWidget(widget)
-                layout.addWidget(pair_container)
-            else:
-                # Vertical layout - just stack labels and widgets
-                layout.addWidget(VLabel(label_text))
-                layout.addWidget(widget)
+            layout.addRow(VLabel(label_text), widget)
+        return layout
 
+    if flow == FlowDirection.VERTICAL:
+        layout = add_vertical_widgets()
+    elif flow == FlowDirection.HORIZONTAL:
+        layout = add_horizontal_widgets()
+    elif flow == FlowDirection.GRID:
+        layout = add_grid_widgets()
+    else:
+        layout = add_form_widgets()
+
+    layout.setSpacing(spacing)
+    layout.setContentsMargins(margins, margins, margins, margins)
+    group.setLayout(layout)
     return group

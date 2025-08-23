@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from tabulate import tabulate
 
@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 
 
 class LaunchContext:
-    _IDEMPOTENT: set[LaunchStep] = {LaunchStep.NEW, LaunchStep.FETCH_CONFIG}
-    _ORDER: list[LaunchStep] = [
+    _IDEMPOTENT: ClassVar[set[LaunchStep]] = {LaunchStep.NEW, LaunchStep.FETCH_CONFIG}
+    _ORDER: ClassVar[list[LaunchStep]] = [
         LaunchStep.NEW,
         LaunchStep.FETCH_CONFIG,
         LaunchStep.SETUP_REMOTE_SESSIONS,
@@ -63,7 +63,7 @@ class LaunchContext:
             return False  # unknown step
 
         delta = next_idx - curr_idx
-        # allow forward by one, or re‑run idempotent
+        # allow forward by one, or re-run idempotent
         return (delta == 1) or (delta == 0 and next_step in self._IDEMPOTENT)
 
     def advance(self, result: LaunchStepResult[Any]) -> None:
@@ -82,7 +82,7 @@ class LaunchContext:
                 if isinstance(old, BasicLaunchStepResult):
                     old.undo()
                 self._results[later_step] = None
-        # 4) record this step’s result
+        # 4) record this step's result
         self._results[result.step] = result
         self._current_step = result.step
 
@@ -94,7 +94,7 @@ class LaunchContext:
                 continue
             try:
                 report += result.report()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f'Error generating report for {result.step.name}: {e}')
         return report
 

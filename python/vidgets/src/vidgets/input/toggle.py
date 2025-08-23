@@ -21,6 +21,8 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QBrush, QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QCheckBox, QSizePolicy, QVBoxLayout, QWidget
 
+from voxel.utils.log import VoxelLogging
+
 
 class _AnimatedToggle(QCheckBox):
     """An animated toggle switch component that provides a smooth, animated alternative to QCheckBox.
@@ -97,11 +99,11 @@ class _AnimatedToggle(QCheckBox):
         # Connect to state changes
         self.stateChanged.connect(self.setup_animation)
 
-    def sizeHint(self) -> QSize:
+    def sizeHint(self) -> QSize:  # noqa: N802
         """Return the preferred size for the toggle switch."""
         return QSize(58, 45)
 
-    def hitButton(self, pos: QPoint) -> bool:
+    def hitButton(self, pos: QPoint) -> bool:  # noqa: N802
         """Define the clickable area of the widget."""
         return self.contentsRect().contains(pos)
 
@@ -115,43 +117,43 @@ class _AnimatedToggle(QCheckBox):
             self.animation.setEndValue(0)
         self.animations_group.start()
 
-    def paintEvent(self, a0: QPaintEvent | None):
+    def paintEvent(self, a0: QPaintEvent | None):  # noqa: N802
         """Custom paint event to draw the animated toggle switch."""
         if a0 is None:
             return
-        contRect = self.contentsRect()
-        handleRadius = round(0.24 * contRect.height())
+        cont_rect = self.contentsRect()
+        handle_radius = round(0.24 * cont_rect.height())
 
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         p.setPen(self._transparent_pen)
-        barRect = QRectF(0, 0, contRect.width() - handleRadius, 0.40 * contRect.height())
-        barRect.moveCenter(QPointF(contRect.center()))
-        rounding = barRect.height() / 2
+        bar_rect = QRectF(0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height())
+        bar_rect.moveCenter(QPointF(cont_rect.center()))
+        rounding = bar_rect.height() / 2
 
         # the handle will move along this line
-        trailLength = contRect.width() - 2 * handleRadius
-        xPos = contRect.x() + handleRadius + trailLength * self._handle_position
+        trail_length = cont_rect.width() - 2 * handle_radius
+        x_pos = cont_rect.x() + handle_radius + trail_length * self._handle_position
 
         # Draw pulse effect if animation is running
         if self.pulse_anim.state() == QPropertyAnimation.State.Running:
             p.setBrush(self._pulse_checked_animation if self.isChecked() else self._pulse_unchecked_animation)
-            p.drawEllipse(QPointF(xPos, barRect.center().y()), self._pulse_radius, self._pulse_radius)
+            p.drawEllipse(QPointF(x_pos, bar_rect.center().y()), self._pulse_radius, self._pulse_radius)
 
         # Draw the toggle bar and handle based on state
         if self.isChecked():
             p.setBrush(self._bar_checked_brush)
-            p.drawRoundedRect(barRect, rounding, rounding)
+            p.drawRoundedRect(bar_rect, rounding, rounding)
             p.setBrush(self._handle_checked_brush)
         else:
             p.setBrush(self._bar_brush)
-            p.drawRoundedRect(barRect, rounding, rounding)
+            p.drawRoundedRect(bar_rect, rounding, rounding)
             p.setPen(self._light_grey_pen)
             p.setBrush(self._handle_brush)
 
         # Draw the handle
-        p.drawEllipse(QPointF(xPos, barRect.center().y()), handleRadius, handleRadius)
+        p.drawEllipse(QPointF(x_pos, bar_rect.center().y()), handle_radius, handle_radius)
 
         p.end()
 
@@ -214,6 +216,7 @@ class VToggle(QWidget):
         self.text = text
         self.getter = getter
         self.setter = setter
+        self.log = VoxelLogging.get_logger(f'VToggle[{id(self)}]')
         self._setup_ui(
             bar_color=bar_color,
             checked_color=checked_color,
@@ -260,7 +263,7 @@ class VToggle(QWidget):
                 self.toggle.setChecked(initial_value)
             except Exception:
                 # If getter fails, just continue without setting value
-                pass
+                self.log.exception('Error getting initial value')
 
         # Connect callback if provided
         if self.setter:
@@ -273,15 +276,15 @@ class VToggle(QWidget):
         if self.setter:
             self.setter(checked)
 
-    def isChecked(self) -> bool:
+    def isChecked(self) -> bool:  # noqa: N802
         """Get the current checked state."""
         return self.toggle.isChecked()
 
-    def setChecked(self, checked: bool):
+    def setChecked(self, checked: bool):  # noqa: N802
         """Set the checked state."""
         self.toggle.setChecked(checked)
 
-    def sizeHint(self) -> QSize:
+    def sizeHint(self) -> QSize:  # noqa: N802
         """Return the size hint from the underlying toggle."""
         return self.toggle.sizeHint()
 

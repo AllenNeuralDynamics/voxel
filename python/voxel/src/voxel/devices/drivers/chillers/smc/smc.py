@@ -2,9 +2,8 @@ import time
 
 import serial
 
+from voxel.devices.drivers.chillers.smc.codes import SMCCommand, SMCControl
 from voxel.devices.interfaces.chiller import VoxelChiller
-
-from . import SMCCommand, SMCControl
 
 BAUD_RATE = 1200
 WAIT_TIME = 0.1  # in seconds
@@ -30,35 +29,35 @@ class SMCChiller(VoxelChiller):
         )
 
         if not self._validate_connection():
-            raise Exception('Failed to validate connection with the SMC Chiller.')
+            raise ValueError('Failed to validate connection with the SMC Chiller.')
 
     def _validate_connection(self):
         try:
             response = self._read_value(SMCCommand.READ_INTERNAL_SENSOR)
             return bool(response)
-        except Exception as e:
-            print(f'Validation error: {e}')
+        except Exception:
+            self.log.exception('Error validating connection with SMC Chiller:')
             return False
 
     def _complete_packet(self, packet):
         if self.unit is not None:
             unit_code = ord('0') + self.unit
-            packet = [SMCControl.SOH.value, unit_code] + packet
+            packet = [SMCControl.SOH.value, unit_code, *packet]
         checksum = sum(packet) & 0xFF
-        return packet + [checksum, SMCControl.CR.value]
+        return [*packet, checksum, SMCControl.CR.value]
 
-    def _send_SMCcommand(self, SMCcommand, data):
-        packet = [SMCControl.STX.value, SMCcommand.value] + data + [SMCControl.ETX.value]
-        full_SMCcommand = self._complete_packet(packet)
-        self.ser.write(bytearray(full_SMCcommand))
+    def _send_command(self, cmd: SMCCommand, data):
+        packet = [SMCControl.STX.value, cmd.value, *data, SMCControl.ETX.value]
+        full_cmd = self._complete_packet(packet)
+        self.ser.write(bytearray(full_cmd))
         time.sleep(0.1)
         response = self.ser.read_all()
         return response and response[0] == SMCControl.ACK.value
 
-    def _read_value(self, SMCcommand):
-        packet = [SMCControl.ENQ.value, SMCcommand.value]
-        full_SMCcommand = self._complete_packet(packet)
-        self.ser.write(bytearray(full_SMCcommand))
+    def _read_value(self, cmd: SMCCommand):
+        packet = [SMCControl.ENQ.value, cmd.value]
+        full_cmd = self._complete_packet(packet)
+        self.ser.write(bytearray(full_cmd))
         time.sleep(0.1)
         response = self.ser.read_all()
 
@@ -80,10 +79,10 @@ class SMCChiller(VoxelChiller):
 
     @temperature_c.setter
     def temperature_c(self, value: float) -> None:
-        SMCcommand = SMCCommand.SET_TEMPERATURE_FRAM if self.persist else SMCCommand.SET_TEMPERATURE_NO_FRAM
+        cmd = SMCCommand.SET_TEMPERATURE_FRAM if self.persist else SMCCommand.SET_TEMPERATURE_NO_FRAM
         temp_str = f'{int(value * 10):04d}'
         data = [ord(c) for c in temp_str]
-        self._send_SMCcommand(SMCcommand, data)
+        self._send_command(cmd, data)
 
     @property
     def external_temperature_c(self):
@@ -96,10 +95,10 @@ class SMCChiller(VoxelChiller):
         return response.decode().strip() if response else None
 
     def set_offset(self, offset):
-        SMCcommand = SMCCommand.SET_OFFSET_FRAM if self.persist else SMCCommand.SET_OFFSET_NO_FRAM
+        cmd = SMCCommand.SET_OFFSET_FRAM if self.persist else SMCCommand.SET_OFFSET_NO_FRAM
         offset_str = f'{int(offset * 100):04d}'
         data = [ord(c) for c in offset_str]
-        self._send_SMCcommand(SMCcommand, data)
+        self._send_command(cmd, data)
 
     def close(self):
         self.ser.close()

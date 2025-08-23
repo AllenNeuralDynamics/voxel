@@ -3,6 +3,7 @@ import importlib
 import inspect
 from collections.abc import Callable
 from functools import wraps
+from itertools import chain
 from pathlib import Path
 from threading import RLock
 from typing import Any, TypedDict
@@ -118,9 +119,9 @@ class Instrument:
 
     def _initialize_devices(self) -> None:
         """Parse the devices from the configuration and initialize them."""
-        for device_name, device in self._devices.items():
-            self.log.info('Parsing device %s', device_name)
-            name_lower = device_name.lower()
+
+        def add_to_device_type_map(device_name: str, device: BaseDevice) -> None:
+            """Add a device to the appropriate device type map."""
             if isinstance(device, BaseCamera):
                 self.cameras[device_name] = device
             elif isinstance(device, BaseLaser):
@@ -131,19 +132,24 @@ class Instrument:
                 self.filter_wheels[device_name] = device
             elif isinstance(device, NIDAQ):
                 self.daqs[device_name] = device
-            elif isinstance(device, TigerStage) and name_lower.startswith('z'):
-                self.scanning_stages[device_name] = device
-            elif isinstance(device, TigerStage) and (name_lower.startswith('x') or name_lower.startswith('y')):
-                self.tiling_stages[device_name] = device
+            elif isinstance(device, TigerStage):
+                if device_name.lower().startswith('z'):
+                    self.scanning_stages[device_name] = device
+                elif device_name.lower().startswith(('x', 'y')):
+                    self.tiling_stages[device_name] = device
+                else:
+                    self.focusing_stages[device_name] = device
             elif isinstance(device, BaseFlipMount):
                 self.flip_mounts[device_name] = device
-            elif isinstance(device, TigerStage):
-                self.focusing_stages[device_name] = device
             elif isinstance(device, BaseIndicatorLight):
                 self.indicator_lights[device_name] = device
             else:
                 self.log.warning('Unknown device type %s for device %s', device.__class__.__name__, device_name)
                 self.other_devices[device_name] = device
+
+        for device_name, device in self._devices.items():
+            self.log.info('Parsing device %s', device_name)
+            add_to_device_type_map(device_name, device)
             props = self.config['instrument']['devices'][device_name].get('properties', {})
             for prop_name, prop_value in props.items():
                 setattr(device, prop_name, prop_value)
@@ -173,7 +179,9 @@ class Instrument:
                 if channel_filter not in self.filters:
                     msg = f'filter wheel {channel_filter} not in {self.filters.keys()}'
                     raise ValueError(msg)
-                if channel_filter not in sum([list(v.filters.keys()) for v in self.filter_wheels.values()], []):
+                if channel_filter not in list(
+                    chain.from_iterable([list(v.filters.keys()) for v in self.filter_wheels.values()])
+                ):
                     msg = f'filter {channel_filter} not associated with any filter wheel: {self.filter_wheels}'
                     raise ValueError(
                         msg,
@@ -220,7 +228,7 @@ class Instrument:
         getattr(self, device_type)[device_name] = device_object
 
         # added logic for stages to store and check stage axes
-        if device_type == 'tiling_stages' or device_type == 'scanning_stages':
+        if device_type in ('tiling_stages', 'scanning_stages'):
             instrument_axis = device_specs['init']['instrument_axis']
             if instrument_axis in self.stage_axes:
                 msg = f'{instrument_axis} is duplicated and already exists!'
@@ -252,7 +260,9 @@ class Instrument:
             # If subdevice init needs a serial port, add device's serial port to init arguments
             if parameter.annotation == Serial and Serial in [type(v) for v in parent_object.__dict__.values()]:
                 # assuming only one relevant serial port in parent
-                subdevice_specs['init'][name] = [v for v in parent_object.__dict__.values() if isinstance(v, Serial)][0]
+                subdevice_specs['init'][name] = next(
+                    v for v in parent_object.__dict__.values() if isinstance(v, Serial)
+                )
             # If subdevice init needs parent object type, add device object to init arguments
             # Check by annotation type, parameter name, or if parent is instance of expected type
             elif (
@@ -359,8 +369,8 @@ def for_all_methods(lock: RLock, cls: type) -> type:
             continue
         attr = getattr(cls, attr_name)
         if isinstance(attr, _DeliminatedProperty):
-            attr._fset = lock_methods(attr._fset, lock) if attr._fset is not None else None
-            attr._fget = lock_methods(attr._fget, lock)
+            attr._fset = lock_methods(attr._fset, lock) if attr._fset is not None else None  # noqa: SLF001
+            attr._fget = lock_methods(attr._fget, lock)  # noqa: SLF001
         elif isinstance(attr, property):
             wrapped_getter = lock_methods(attr.fget, lock)  # pyright: ignore[reportArgumentType]
             # don't wrap setters if none

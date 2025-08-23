@@ -3,6 +3,8 @@ from collections.abc import Callable
 from PySide6.QtWidgets import QLabel, QWidget
 from vidgets.input.binding import ValueWatcher
 
+from voxel.utils.log import VoxelLogging
+
 
 class VLabel(QLabel):
     """A styled label component with consistent styling."""
@@ -38,6 +40,7 @@ class LiveValueLabel[T: str | int | float]:
         self._prefix = prefix
         self._suffix = suffix
         self._format_func = format_func or str
+        self.log = VoxelLogging.get_logger(f'LiveLabel[{id(self)}]')
 
         # Create the label widget
         self._label = VLabel(parent=parent)
@@ -62,6 +65,7 @@ class LiveValueLabel[T: str | int | float]:
             display_text = f'{self._prefix}{formatted_value}{self._suffix}'
             self._label.setText(display_text)
         except Exception as e:
+            self.log.exception('Error updating label value')
             self._label.setText(f'{self._prefix}Error: {e}{self._suffix}')
 
     def start_polling(self):
@@ -77,14 +81,14 @@ class LiveValueLabel[T: str | int | float]:
         self.update_value()
 
     # Forward common QLabel methods for convenience
-    def setAlignment(self, alignment) -> None:
+    def setAlignment(self, alignment) -> None:  # noqa: N802
         """Set the alignment of the label."""
         self._label.setAlignment(alignment)
 
-    def setStyleSheet(self, style: str) -> None:
+    def setStyleSheet(self, style: str) -> None:  # noqa: N802
         """Set the style sheet of the label."""
         self._label.setStyleSheet(style)
 
-    def setFont(self, font) -> None:
+    def setFont(self, font) -> None:  # noqa: N802
         """Set the font of the label."""
         self._label.setFont(font)

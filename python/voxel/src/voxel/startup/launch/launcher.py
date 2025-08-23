@@ -23,7 +23,7 @@ from .step import (
 )
 
 if TYPE_CHECKING:
-    from ..discovery import InstrumentConfigLoader
+    from voxel.startup.discovery import InstrumentConfigLoader
 
 type LaunchStepFn[T] = Callable[['LaunchContext'], LaunchStepResult[T]]
 
@@ -100,7 +100,7 @@ class Launcher:
             errors = pydantic_to_error_info(e, LaunchStep.FETCH_CONFIG)
             return BasicLaunchStepResult(step=LaunchStep.FETCH_CONFIG, errors=list(errors.values()))
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             err = ErrorInfo(
                 name=LaunchStep.FETCH_CONFIG,
                 category='parse_error',
@@ -120,7 +120,7 @@ class Launcher:
             try:
                 session = RemoteNodeSession(uid=uid, config=node, preview_relay_opts=cfg.preview_relay_opts)
                 result.add_session(uid, session)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.SETUP_REMOTE_SESSIONS,
@@ -151,7 +151,7 @@ class Launcher:
                         node_type=node_cfg.type,
                     )
                     result.add_node(node_id, node)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     result.add_error(
                         ErrorInfo(
                             name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,
@@ -172,7 +172,7 @@ class Launcher:
             try:
                 session.service.configure(node_cfg.devices)
                 result.add_node(node_id, session.service.node)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,

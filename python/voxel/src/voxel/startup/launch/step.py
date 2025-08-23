@@ -92,16 +92,16 @@ class BasicLaunchStepResult[T](LaunchStepResult[T]):
                     message='Step completed successfully',
                 ),
             )
-        for error in self.errors:
-            results.append(
-                LaunchReportEntry(
-                    name=error.name,
-                    step=self.step,
-                    status='ERROR',
-                    category=error.category,
-                    message=error.message,
-                ),
+        results.extend(
+            LaunchReportEntry(
+                name=error.name,
+                step=self.step,
+                status='ERROR',
+                category=error.category,
+                message=error.message,
             )
+            for error in self.errors
+        )
         return results
 
 
@@ -146,28 +146,26 @@ class StartRemoteSessionsResult(LaunchStepResult[dict[str, 'RemoteNodeSession']]
 
     def report(self) -> list[LaunchReportEntry]:
         """Generate a report of the session start results."""
-        success = []
-        for uid in self._sessions:
-            success.append(
-                LaunchReportEntry(
-                    name=uid,
-                    step=self.step,
-                    status='OK',
-                    category='✓',
-                    message=f'Session {uid} started successfully.',
-                ),
+        success = [
+            LaunchReportEntry(
+                name=uid,
+                step=self.step,
+                status='OK',
+                category='✓',
+                message=f'Session {uid} started successfully.',
             )
-        errors = []
-        for error in self._errors:
-            errors.append(
-                LaunchReportEntry(
-                    name=error.name,
-                    step=self.step,
-                    status='ERROR',
-                    category=error.category,
-                    message=error.message,
-                ),
+            for uid in self._sessions
+        ]
+        errors = [
+            LaunchReportEntry(
+                name=error.name,
+                step=self.step,
+                status='ERROR',
+                category=error.category,
+                message=error.message,
             )
+            for error in self._errors
+        ]
         return success + errors
 
 
@@ -214,27 +212,26 @@ class InitializeInstrumentNodesResult(LaunchStepResult[dict[str, 'InstrumentNode
 
     def report(self) -> list[LaunchReportEntry]:
         success = []
-        for node_uid, node in self._nodes.items():
-            for device in node.devices.values():
-                success.append(
-                    LaunchReportEntry(
-                        name=device.uid,
-                        step=self.step,
-                        status='OK',
-                        category=node_uid,
-                        message=f'Device {node_uid}/{device.uid} initialized successfully.',
-                    ),
-                )
-
-        errors = []
-        for error in self.errors:
-            errors.append(
-                LaunchReportEntry(
-                    name=error.name,
-                    step=self.step,
-                    status='ERROR',
-                    category=error.category,
-                    message=error.message,
-                ),
+        success.extend(
+            LaunchReportEntry(
+                name=device.uid,
+                step=self.step,
+                status='OK',
+                category=node_uid,
+                message=f'Device {node_uid}/{device.uid} initialized successfully.',
             )
+            for node_uid, node in self._nodes.items()
+            for device in node.devices.values()
+        )
+
+        errors = [
+            LaunchReportEntry(
+                name=error.name,
+                step=self.step,
+                status='ERROR',
+                category=error.category,
+                message=error.message,
+            )
+            for error in self.errors
+        ]
         return success + errors

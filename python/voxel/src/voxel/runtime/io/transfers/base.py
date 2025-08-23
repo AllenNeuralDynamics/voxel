@@ -8,7 +8,7 @@ from voxel.utils.log import VoxelLogging
 
 
 class VoxelFileTransfer:
-    """Base class for all voxel file transfer processes.
+    r"""Base class for all voxel file transfer processes.
 
     Process will transfer files with the following regex
     format:
@@ -51,7 +51,7 @@ class VoxelFileTransfer:
     @filename.setter
     @abstractmethod
     def filename(self, filename: str) -> None:
-        """The base filename of files to be transferred.\n.
+        """The base filename of files to be transferred.
 
         :param filename: The base filename
         :type filename: str

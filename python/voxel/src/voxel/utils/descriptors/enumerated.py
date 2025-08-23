@@ -11,6 +11,7 @@ class EnumeratedValue[T](Protocol):
 
 
 class EnumeratedString(str):
+    __slots__ = ()
     options: Sequence[str]
 
     def __new__(cls, value: str, options: list[str]) -> Self:

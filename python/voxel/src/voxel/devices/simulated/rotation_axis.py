@@ -16,6 +16,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         self._target_position_deg = 0.0
         self._speed_deg_s = 10.0
         self._movement_start_time = None
+        self._timeout = 1.0
 
     @property
     def position_deg(self) -> float:
@@ -23,6 +24,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
         :return: The current position in degrees
         :rtype: float.
         """
+        tolerance = 0.01
         if self._movement_start_time is not None:
             elapsed_time = time.time() - self._movement_start_time
             distance = self._speed_deg_s * elapsed_time
@@ -32,7 +34,7 @@ class SimulatedRotationAxis(VoxelRotationAxis):
                 abs(self._target_position_deg - self._position_deg),
             )
 
-            if abs(current_position - self._target_position_deg) < 0.01:
+            if abs(current_position - self._target_position_deg) < tolerance:
                 self._position_deg = self._target_position_deg
                 self._movement_start_time = None
             else:
@@ -77,11 +79,13 @@ class SimulatedRotationAxis(VoxelRotationAxis):
 
     def await_movement(self, timeout: float | None = None, check_interval: float = 1) -> None:
         """Wait until the rotation axis has stopped moving.
+
         :param timeout: Maximum time to wait for the rotation axis to stop moving
         :param check_interval: Time interval between checks
         :type timeout: float
         :type check_interval: float.
         """
+        self._timeout = timeout or 1.0
         # Current implementation does not support timeout
         while self.is_moving:
             self.log.debug(

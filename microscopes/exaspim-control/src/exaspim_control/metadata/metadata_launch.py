@@ -1,5 +1,4 @@
 import json
-import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,27 +63,29 @@ class MetadataLaunch:
         # start and finish the acquisition
         self.acquisition_start_time = None  # variable will be filled when acquisitionStarted signal is emitted
         self.acquisition_end_time = None  # variable will be filled when acquisitionEnded signal is emitted
-        self.acquisition_view.acquisitionStarted.connect(lambda value: setattr(self, 'acquisition_start_time', value))
-        self.acquisition_view.acquisitionEnded.connect(lambda: setattr(self, 'acquisition_end_time', datetime.now(UTC)))
-        self.acquisition_view.acquisitionEnded.connect(self.finalize_acquisition)
+        self.acquisition_view.acquisition_started.connect(lambda value: setattr(self, 'acquisition_start_time', value))
+        self.acquisition_view.acquisition_ended.connect(
+            lambda: setattr(self, 'acquisition_end_time', datetime.now(UTC))
+        )
+        self.acquisition_view.acquisition_ended.connect(self.finalize_acquisition)
 
-    def finalize_acquisition(self) -> None:
+    def finalize_acquisition(self) -> None:  # noqa: C901, PLR0912
         """Finalize the acquisition process."""
 
         def _rearrange_external_directory(save_to: str):
-            os.makedirs(Path(save_to, 'exaSPIM'))
-            os.makedirs(Path(save_to, 'derivatives'))
-            for file in os.listdir(save_to):
-                if file.endswith('.ims') or file.endswith('.zarr'):
-                    os.rename(str(Path(save_to, file)), str(Path(save_to, 'exaSPIM', file)))
-                if file.endswith('.tiff') or file.endswith('.log') or file.endswith('.yaml'):
-                    os.rename(str(Path(save_to, file)), str(Path(save_to, 'derivatives', file)))
+            Path(save_to, 'exaSPIM').mkdir(parents=True)
+            Path(save_to, 'derivatives').mkdir(parents=True)
+            for file in Path(save_to).iterdir():
+                if file.name.endswith('.ims') or file.name.endswith('.zarr'):
+                    file.rename(Path(save_to, 'exaSPIM', file.name))
+                if file.name.endswith('.tiff') or file.name.endswith('.log') or file.name.endswith('.yaml'):
+                    file.rename(Path(save_to, 'derivatives', file.name))
 
         self.log.info('Finalizing acquisition')
         # create and save acquisition.json
         file_transfers = self.acquisition.file_transfers
         if file_transfers is not None and file_transfers != {}:
-            for _device_name, transfer_dict in file_transfers.items():
+            for transfer_dict in file_transfers.values():
                 status = 'pending'
                 status_time = datetime.now(UTC)
                 processing_manifest = {
@@ -112,22 +113,22 @@ class MetadataLaunch:
                                 str(Path(save_to, self.log_filename)),
                             )
                         # Save processing_manifest.json
-                        with open(Path(save_to, 'processing_manifest.json'), 'w', encoding='utf-8') as f:
+                        with Path(save_to, 'processing_manifest.json').open('w', encoding='utf-8') as f:
                             json.dump(processing_manifest, f, indent=4, ensure_ascii=False)
                         # re-arrange external directory
-                        os.makedirs(Path(save_to, 'exaSPIM'))
-                        os.makedirs(Path(save_to, 'derivatives'))
-                        for file in os.listdir(save_to):
-                            if file.endswith('.ims') or file.endswith('.zarr'):
-                                os.rename(str(Path(save_to, file)), str(Path(save_to, 'exaSPIM', file)))
-                            if file.endswith('.tiff') or file.endswith('.log') or file.endswith('.yaml'):
-                                os.rename(str(Path(save_to, file)), str(Path(save_to, 'derivatives', file)))
+                        Path(save_to, 'exaSPIM').mkdir(parents=True)
+                        Path(save_to, 'derivatives').mkdir(parents=True)
+                        for file in Path(save_to).iterdir():
+                            if file.name.endswith('.ims') or file.name.endswith('.zarr'):
+                                file.rename(Path(save_to, 'exaSPIM', file.name))
+                            if file.name.endswith('.tiff') or file.name.endswith('.log') or file.name.endswith('.yaml'):
+                                file.rename(Path(save_to, 'derivatives', file.name))
                     # delete local directory
                     self.log.info('deleting %s', Path(transfer.local_path, transfer.acquisition_name))
                     shutil.rmtree(str(Path(transfer.local_path, transfer.acquisition_name)))
         else:
             # Transfer not available, save locally
-            for _device_name, writer_dict in self.acquisition.writers.items():
+            for writer_dict in self.acquisition.writers.values():
                 save_to_done = set()
                 for writer in writer_dict.values():
                     save_to = str(Path(writer.path, writer.acquisition_name))
@@ -146,11 +147,11 @@ class MetadataLaunch:
                         # re-arrange external directory
                         Path(save_to, 'exaSPIM').mkdir(parents=True, exist_ok=True)
                         Path(save_to, 'derivatives').mkdir(parents=True, exist_ok=True)
-                        for file in os.listdir(save_to):
-                            if file.endswith('.ims') or file.endswith('.zarr'):
-                                os.rename(str(Path(save_to, file)), str(Path(save_to, 'exaSPIM', file)))
-                            if file.endswith('.tiff') or file.endswith('.log') or file.endswith('.yaml'):
-                                os.rename(str(Path(save_to, file)), str(Path(save_to, 'derivatives', file)))
+                        for file in Path(save_to).iterdir():
+                            if file.name.endswith('.ims') or file.name.endswith('.zarr'):
+                                file.rename(Path(save_to, 'exaSPIM', file.name))
+                            if file.name.endswith('.tiff') or file.name.endswith('.log') or file.name.endswith('.yaml'):
+                                file.rename(Path(save_to, 'derivatives', file.name))
 
     def parse_metadata(self, external_drive: str, local_drive: str) -> acquisition.Acquisition:
         """Parse metadata for the acquisition.

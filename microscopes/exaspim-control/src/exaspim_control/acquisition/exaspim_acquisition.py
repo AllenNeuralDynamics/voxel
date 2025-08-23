@@ -12,7 +12,7 @@ from threading import Event, Lock
 from typing import TYPE_CHECKING, Any
 
 import inflection
-import numpy
+import numpy as np
 from exaspim_control.acquisition.base import Acquisition
 from exaspim_control.instrument.exaspim_instrument import ExASPIM
 from gputools import get_device
@@ -49,7 +49,7 @@ class ExASPIMAcquisition(Acquisition):
         # store initial stage positions
         self.initial_position_mm = {}
 
-    def run(self) -> None:
+    def run(self) -> None:  # noqa: C901 PLR0912 PLR0915
         """Run the acquisition process.
 
         :raises ValueError: If there is not enough local disk space.
@@ -396,7 +396,7 @@ class ExASPIMAcquisition(Acquisition):
             self.log.info('turning off indicator light')
             self.indicator_light.disable()
 
-    def acquisition_engine(
+    def acquisition_engine(  # noqa: C901 PLR0912 PLR0915
         self,
         tile: dict,
         base_filename: str,
@@ -440,12 +440,10 @@ class ExASPIMAcquisition(Acquisition):
             process.binning = camera.binning
             process.frame_count_px = tile['steps']
             process.filename = base_filename
-            img_bytes = (
-                numpy.prod(camera.image_height_px * camera.image_width_px) * numpy.dtype(process.data_type).itemsize
-            )
+            img_bytes = np.prod(camera.image_height_px * camera.image_width_px) * np.dtype(process.data_type).itemsize
             buffer = SharedMemory(create=True, size=int(img_bytes))
             process_buffers[process_name] = buffer
-            process.buffer_image = numpy.ndarray(
+            process.buffer_image = np.ndarray(
                 (camera.image_height_px, camera.image_width_px),
                 dtype=process.data_type,
                 buffer=buffer.buf,
@@ -515,8 +513,8 @@ class ExASPIMAcquisition(Acquisition):
             camera.acquisition_state()
 
             # Log the current state of the writer.
-            while not writer._log_queue.empty():
-                self.log.info('writer: %s', writer._log_queue.get_nowait())
+            while not writer._log_queue.empty():  # noqa: SLF001
+                self.log.info('writer: %s', writer._log_queue.get_nowait())  # noqa: SLF001
 
             # Dispatch either a full chunk of frames or the last chunk,
             # which may not be a multiple of the chunk size.
@@ -536,8 +534,6 @@ class ExASPIMAcquisition(Acquisition):
                     time.sleep(0.1)
                 process.buffer_image[:, :] = current_frame
                 process.new_image.set()
-
-            frame_index += 1
 
         if self.stop_engine.is_set():
             # wait for daq tasks to finish - prevents devices from stopping in
@@ -561,7 +557,7 @@ class ExASPIMAcquisition(Acquisition):
             self.camera.abort()
             # need to directly terminate writer process
             self.log.info('stopping writer')
-            self.writer._process.terminate() if self.writer._process else None
+            self.writer._process.terminate() if self.writer._process else None  # noqa: SLF001
             self.stop_engine.clear()
         else:
             # stop the camera and set frame number back to 0
@@ -579,8 +575,8 @@ class ExASPIMAcquisition(Acquisition):
             scanning_stage.mode = 'off'  # turn off step and shoot mode
 
             # log any statements in the writer log queue
-            while not writer._log_queue.empty():
-                self.log.info(writer._log_queue.get_nowait())
+            while not writer._log_queue.empty():  # noqa: SLF001
+                self.log.info(writer._log_queue.get_nowait())  # noqa: SLF001
 
             # wait for the processes to finish
             for process in processes.values():
@@ -728,14 +724,26 @@ class ExASPIMAcquisition(Acquisition):
         required_write_speed_mb_s = camera_speed_mb_s / compression_ratio
         self.log.info('required write speed = %.1f [MB/sec] to directory %s', required_write_speed_mb_s, local_drive)
         test_filename = str(Path(f'{writer.path}/{writer.acquisition_name}/iotest').absolute())
-        with open(test_filename, 'a'):
+        with Path(test_filename).open('a'):
             pass  # Create empty file to check reading/writing speed
         try:
             output = subprocess.check_output(
-                rf'fio --name=test --filename={test_filename} --size={size} --rw=write --bs={bs} '
-                rf'--direct={direct} --numjobs={numjobs} --ioengine={ioengine} --iodepth={iodepth} '
-                rf'--runtime={runtime} --startdelay=0 --thread --group_reporting',
-                shell=True,
+                [  # noqa: S607
+                    'fio',
+                    '--name=test',
+                    f'--filename={test_filename}',
+                    f'--size={size}',
+                    '--rw=write',
+                    f'--bs={bs}',
+                    f'--direct={direct}',
+                    f'--numjobs={numjobs}',
+                    f'--ioengine={ioengine}',
+                    f'--iodepth={iodepth}',
+                    f'--runtime={runtime}',
+                    '--startdelay=0',
+                    '--thread',
+                    '--group_reporting',
+                ]
             )
             out = str(output)
             # converting MiB to MB = (1024**2/2**20)
@@ -754,7 +762,7 @@ class ExASPIMAcquisition(Acquisition):
             self.log.warning('fio not installed on computer. Cannot verify read/write speed')
         finally:
             # Delete test file
-            os.remove(test_filename)
+            Path(test_filename).unlink()
         if file_transfer:
             self.log.info(
                 'required write speed = %.1f [MB/sec] to directory %s',
@@ -764,14 +772,26 @@ class ExASPIMAcquisition(Acquisition):
             test_filename = str(
                 Path(f'{file_transfer.external_path}/{file_transfer.acquisition_name}/iotest').absolute(),
             )
-            with open(test_filename, 'a'):
+            with Path(test_filename).open('a'):
                 pass  # Create empty file to check reading/writing speed
             try:
                 output = subprocess.check_output(
-                    rf'fio --name=test --filename={test_filename} --size={size} --rw=write --bs={bs} '
-                    rf'--direct={direct} --numjobs={numjobs} --ioengine={ioengine} --iodepth={iodepth} '
-                    rf'--runtime={runtime} --startdelay=0 --thread --group_reporting',
-                    shell=True,
+                    [  # noqa: S607
+                        'fio',
+                        '--name=test',
+                        f'--filename={test_filename}',
+                        f'--size={size}',
+                        '--rw=write',
+                        f'--bs={bs}',
+                        f'--direct={direct}',
+                        f'--numjobs={numjobs}',
+                        f'--ioengine={ioengine}',
+                        f'--iodepth={iodepth}',
+                        f'--runtime={runtime}',
+                        '--startdelay=0',
+                        '--thread',
+                        '--group_reporting',
+                    ]
                 )
                 out = str(output)
                 # converting MiB to MB = (1024**2/2**20)
@@ -790,7 +810,7 @@ class ExASPIMAcquisition(Acquisition):
                 self.log.warning('fio not installed on computer. Cannot verify read/write speed')
             finally:
                 # Delete test file
-                os.remove(test_filename)
+                Path(test_filename).unlink()
 
     def check_gpu_memory(self, writer: Any) -> None:
         """Check if there is enough GPU memory for the acquisition.
@@ -875,7 +895,7 @@ class ExASPIMAcquisition(Acquisition):
 
             # check the compressed file size
             filepath = str(Path(writer.path / writer.acquisition_name / writer.filename).absolute())
-            compressed_file_size_mb = os.stat(filepath).st_size / (1024**2)
+            compressed_file_size_mb = Path(filepath).stat().st_size / (1024**2)
             # calculate the raw file size
             raw_file_size_mb = writer.get_stack_size_mb()
             # calculate the compression ratio
@@ -918,7 +938,7 @@ class ExASPIMAcquisition(Acquisition):
         :return: The first device in the dictionary
         :rtype: object
         """
-        object_name = list(object_dict.keys())[0]
+        object_name = next(iter(object_dict.keys()))
         return object_dict[object_name], object_name
 
     def _set_acquisition_name(self) -> None:
@@ -943,16 +963,16 @@ class ExASPIMAcquisition(Acquisition):
             for writer in writer_dictionary.values():
                 if self.acquisition_name:
                     local_path = Path(writer.path, self.acquisition_name)
-                    if not os.path.isdir(local_path):
-                        os.makedirs(local_path)
+                    if not local_path.is_dir():
+                        local_path.mkdir(parents=True)
         # check if external directories exist and create if not
         if self.file_transfers:
             for file_transfer_dictionary in self.file_transfers.values():
                 for file_transfer in file_transfer_dictionary.values():
                     if self.acquisition_name:
                         external_path = Path(file_transfer.external_path, self.acquisition_name)
-                        if not os.path.isdir(external_path):
-                            os.makedirs(external_path)
+                        if not external_path.is_dir():
+                            external_path.mkdir(parents=True)
 
     def _verify_acquisition(self) -> None:
         """Verify the acquisition configuration.

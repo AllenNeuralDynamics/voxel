@@ -31,6 +31,7 @@ class WheelGraphic(QWidget):
             num_slots: Total number of slots on the wheel
             assignments: Dictionary mapping position -> label string (1-based indexing)
             hue_mapping: Dictionary mapping label -> hue value (0-360). Defaults to grey if not found.
+            start_index: The starting index for slots (default is 1)
             parent: Parent widget
 
         """
@@ -319,7 +320,7 @@ class WheelGraphic(QWidget):
         """Start animation to target position with easing.
 
         Args:
-            position: The position to rotate to (1 to num_slots)
+            slot: The position to rotate to (1 to num_slots)
             clockwise: Direction to rotate. If None, uses shortest path.
                       If True, forces clockwise rotation.
                       If False, forces counter-clockwise rotation.
@@ -369,7 +370,7 @@ class WheelGraphic(QWidget):
             self._is_animating = True
             self._animation_timer.start(50)  # 50ms = ~20 FPS
 
-    def paintEvent(self, event):
+    def paintEvent(self, _) -> None:  # noqa: N802
         """Render the wheel widget with maintained aspect ratio."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -389,14 +390,14 @@ class WheelGraphic(QWidget):
             # Render SVG in the square area
             self.renderer.render(painter, QRectF(x, y, size, size))
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event):  # noqa: N802
         """Handle mouse clicks to select slots."""
         slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
         self.log.debug('Clicked on slot %s', slot_idx)
         if slot_idx in self.slots:
             self.selected_slot = slot_idx
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event):  # noqa: N802
         """Handle mouse movement for hover effects."""
         slot_idx = self._get_slot_at_position(event.position().x(), event.position().y())
 
@@ -411,7 +412,7 @@ class WheelGraphic(QWidget):
             else:
                 self.setToolTip('')
 
-    def leaveEvent(self, event):
+    def leaveEvent(self, _) -> None:  # noqa: N802
         """Handle mouse leaving the widget."""
         # if self._hovered_member >= self._start_index:
         self._hovered_slot = self._start_index - 1

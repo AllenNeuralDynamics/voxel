@@ -122,7 +122,7 @@ class PreviewManager(PreviewFramePublisher):
                         frame.metadata.channel_name,
                     )
 
-    def _receive_loop(self) -> None:  # noqa: C901
+    def _receive_loop(self) -> None:
         if not self._subscribe_socket:
             self.log.error('Receive loop started without a subscribe socket.')
             return

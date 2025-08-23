@@ -2,6 +2,8 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QComboBox, QVBoxLayout, QWidget
 
+from voxel.utils.log import VoxelLogging
+
 
 class VComboBox(QComboBox):
     """A styled combobox component with consistent styling."""
@@ -43,6 +45,7 @@ class VSelect(QWidget):
         self.options = options
         self.getter = getter
         self.setter = setter
+        self.log = VoxelLogging.get_logger(f'VSelect[{id(self)}]')
         self._setup_ui()
 
     @property
@@ -71,8 +74,8 @@ class VSelect(QWidget):
                 if initial_value in self.options:
                     self.combobox.setCurrentText(initial_value)
             except Exception:
+                self.log.exception('Error getting initial value')
                 # If getter fails, just continue without setting value
-                pass
 
         layout.addWidget(self.combobox)
 

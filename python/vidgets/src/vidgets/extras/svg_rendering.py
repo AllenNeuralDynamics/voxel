@@ -3,6 +3,7 @@
 This module demonstrates different approaches to rendering SVG elements in Qt applications.
 """
 
+import math
 import sys
 
 from PySide6.QtCore import QRectF, Qt, QTimer
@@ -60,7 +61,7 @@ class SVGFromStringWidget(QWidget):
         self.color = colors[(current_index + 1) % len(colors)]
         self.update_svg()
 
-    def paintEvent(self, event):
+    def paintEvent(self, _):  # noqa: N802
         """Custom paint event to render SVG."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -104,7 +105,7 @@ class InteractiveSVGWidget(QWidget):
         self.renderer.load(svg_data.encode('utf-8'))
         self.update()
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event):  # noqa: N802
         """Update hover position based on mouse (accounting for aspect ratio)."""
         widget_width = self.width()
         widget_height = self.height()
@@ -128,7 +129,7 @@ class InteractiveSVGWidget(QWidget):
 
         self.update_svg()
 
-    def paintEvent(self, event):
+    def paintEvent(self, _) -> None:  # noqa: N802
         """Render the interactive SVG with maintained aspect ratio."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -197,7 +198,7 @@ class SVGIconWidget(QWidget):
         self.color = color
         self.update_svg()
 
-    def paintEvent(self, event):
+    def paintEvent(self, _) -> None:  # noqa: N802
         """Render the icon."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -232,15 +233,14 @@ class RevolvingCirclesWidget(QWidget):
 
     def animate(self):
         """Update the rotation angle for animation."""
+        max_angle = 360
         self.angle_offset += 5  # Degrees per frame
-        if self.angle_offset >= 360:
+        if self.angle_offset >= max_angle:
             self.angle_offset = 0
         self.update_svg()
 
     def update_svg(self):
         """Generate SVG with circles at current rotation."""
-        import math
-
         circles = []
         center_x, center_y = 100, 100  # SVG center
 
@@ -290,25 +290,25 @@ class RevolvingCirclesWidget(QWidget):
         self.num_circles = max(3, min(20, num))  # Limit between 3-20
         self.update_svg()
 
-    def set_orbit_radius(self, radius):
+    def set_orbit_radius(self, radius) -> None:
         """Change the orbit radius."""
         self.orbit_radius = max(10, min(80, radius))  # Limit between 10-80
         self.update_svg()
 
-    def set_circle_size(self, size):
+    def set_circle_size(self, size) -> None:
         """Change the size of individual circles."""
         self.circle_size = max(2, min(15, size))  # Limit between 2-15
         self.update_svg()
 
-    def start_animation(self):
+    def start_animation(self) -> None:
         """Start the animation."""
         self.timer.start(50)
 
-    def stop_animation(self):
+    def stop_animation(self) -> None:
         """Stop the animation."""
         self.timer.stop()
 
-    def paintEvent(self, event):
+    def paintEvent(self, _) -> None:  # noqa: N802
         """Render the revolving circles with maintained aspect ratio."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -332,13 +332,13 @@ class RevolvingCirclesWidget(QWidget):
 class SVGRenderingDemo(QMainWindow):
     """Main demo window showing different SVG rendering approaches."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle('SVG Rendering in Qt - Examples')
         self.setGeometry(100, 100, 800, 600)
         self.setup_ui()
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:  # noqa: PLR0915
         """Setup the demo interface."""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -491,8 +491,8 @@ class SVGRenderingDemo(QMainWindow):
 
         # Circle count controls
         count_controls = QHBoxLayout()
-        minus_btn = QPushButton('➖')
-        plus_btn = QPushButton('➕')
+        minus_btn = QPushButton('-')
+        plus_btn = QPushButton('+')
         reset_btn = QPushButton('Reset')
         count_3_btn = QPushButton('3')
         count_8_btn = QPushButton('8')
@@ -592,8 +592,8 @@ class SVGRenderingDemo(QMainWindow):
             self.circle_combo.setCurrentIndex(current_active - 1)
         elif current_count > 0:
             self.circle_combo.setCurrentIndex(0)
-
-        self.circle_combo.blockSignals(False)
+        block_signals = False
+        self.circle_combo.blockSignals(block_signals)
 
 
 def main():

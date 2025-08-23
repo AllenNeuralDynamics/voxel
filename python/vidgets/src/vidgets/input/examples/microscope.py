@@ -6,8 +6,9 @@ with state management, status indicators, and organized control panels.
 """
 
 import json
+import random
 from collections.abc import Callable
-from datetime import UTC
+from datetime import UTC, datetime
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
@@ -480,8 +481,6 @@ class MicroscopeControlInterface(QMainWindow):
     def log_message(self, message: str):
         """Add a message to the event log."""
         if self.event_log is not None:
-            from datetime import datetime
-
             timestamp = datetime.now(UTC).strftime('%H:%M:%S')
             log_entry = f'[{timestamp}] {message}'
             self.event_log.append(log_entry)
@@ -489,7 +488,6 @@ class MicroscopeControlInterface(QMainWindow):
     def update_status_display(self):
         """Update the status indicators."""
         # Simulate some changing values
-        import random
 
         self.state.temperature = 23.5 + random.uniform(-0.5, 0.5)
         self.state.humidity = 45.0 + random.uniform(-2.0, 2.0)
@@ -530,7 +528,7 @@ class MicroscopeControlInterface(QMainWindow):
         """Load saved configuration."""
         self.log_message('Configuration loaded')
 
-    def closeEvent(self, event):
+    def closeEvent(self, event):  # noqa: N802
         """Handle window close to clean up resources."""
         # Stop the status update timer
         if hasattr(self, 'timer') and self.timer:

@@ -29,19 +29,20 @@ logger = VoxelLogging.get_logger('ExASPIM Control')
 
 
 def load_yaml_config(path: Path) -> dict:
-    with open(path) as file:
+    with path.open() as file:
         return _yaml.load(file)
 
 
-def launch(system_dir: Path, log_file_name: str) -> None:
+def launch(system_dir: Path) -> None:
     acquisition_yaml = system_dir / 'acquisition.yaml'
     instrument_yaml = system_dir / 'instrument.yaml'
     gui_yaml = system_dir / 'gui_config.yaml'
 
-    missing_files = []
-    for yaml_file in [acquisition_yaml, instrument_yaml, gui_yaml]:
-        if not yaml_file.exists():
-            missing_files.append(yaml_file.name)
+    missing_files = [
+        yaml_file.name
+        for yaml_file in [acquisition_yaml, instrument_yaml, gui_yaml]
+        if not yaml_file.exists()
+    ]
 
     if missing_files:
         logger.error('YAML files missing in %s: %s', system_dir, missing_files)
@@ -105,7 +106,7 @@ def main(systems_dir: Path = SYSTEMS_DIR) -> None:
         level=logging.INFO,
         handlers=[file_handler, get_default_console_handler(), get_default_json_handler()],
     )
-    launch(system_dir=systems_dir / SYSTEM_NAME, log_file_name=log_file_name)
+    launch(system_dir=systems_dir / SYSTEM_NAME)
 
 
 if __name__ == '__main__':

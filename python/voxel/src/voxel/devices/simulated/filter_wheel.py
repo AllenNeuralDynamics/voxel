@@ -31,6 +31,7 @@ class SimulatedFilterWheel(VoxelFilterWheel):
         self._position = start_pos
         self._is_moving = False
         self._settle = float(settle_seconds)
+        self._timeout = 1.0
 
     # --------- metadata ----------
     @property
@@ -52,6 +53,7 @@ class SimulatedFilterWheel(VoxelFilterWheel):
 
     # --------- commands ----------
     def move(self, slot: int, *, wait: bool = True, timeout: float | None = 5.0) -> None:
+        self._timeout = timeout or 5.0
         if not (1 <= slot <= self._slot_count):
             msg = f'Invalid slot {slot}; valid range is 1..{self._slot_count}'
             raise ValueError(msg)

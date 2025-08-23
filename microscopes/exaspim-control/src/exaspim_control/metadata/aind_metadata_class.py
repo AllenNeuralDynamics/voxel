@@ -54,7 +54,7 @@ class AINDMetadataClass:
             setattr(self, f'_{key}', value)
             new_property = property(
                 fget=lambda instance, k=key: self.get_class_attribute(instance, k),
-                fset=lambda metadataclass, val, k=key: self.set_class_attribute(val, k),
+                fset=lambda _, val, k=key: self.set_class_attribute(val, k),
             )
             setattr(type(self), key, new_property)
         # initialize properties
@@ -83,7 +83,7 @@ class AINDMetadataClass:
         else:
             setattr(self, f'_{name}', value)
 
-    def get_class_attribute(self, instance: Any, name: str) -> Any:
+    def get_class_attribute(self, _instance: Any, name: str) -> Any:
         """Get the value of a class attribute.
 
         :param instance: The instance of the class.
