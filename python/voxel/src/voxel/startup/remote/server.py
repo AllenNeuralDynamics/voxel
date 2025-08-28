@@ -1,10 +1,11 @@
 import errno
 import threading
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
-from voxel.utils.log import VoxelLogging
+from typing import TYPE_CHECKING, ClassVar
 
 import rpyc
+
+from voxel.utils.log import VoxelLogging
 
 from .service import RemoteNodeService
 
@@ -13,14 +14,14 @@ if TYPE_CHECKING:
 
 
 class RemoteNodeServer:
-    _instances: dict[tuple[str, int], "RemoteNodeServer"] = {}
+    _instances: ClassVar[dict[tuple[str, int], 'RemoteNodeServer']] = {}
     _lock = threading.Lock()
 
     def __init__(self, host: str, port: int, uid: str):
         self._host = host
         self._port = port
         self._uid = uid
-        self._log = VoxelLogging.get_logger(f"RemoteNodeServer[{uid}]")
+        self._log = VoxelLogging.get_logger(f'RemoteNodeServer[{uid}]')
         self._rpyc_server = rpyc.ThreadedServer(RemoteNodeService(uid=uid), hostname=host, port=port)
 
     @property
@@ -29,15 +30,14 @@ class RemoteNodeServer:
         return self._uid
 
     @classmethod
-    def get(cls, host: str, port: int) -> "RemoteNodeServer":
-        """
-        Singleton–style factory.
+    def get(cls, host: str, port: int) -> 'RemoteNodeServer':
+        """Singleton-style factory.
         Returns the existing server for (host,port) or creates+stores a new one.
         """
         key = (host, port)
         with cls._lock:
             if key not in cls._instances:
-                cls._instances[key] = cls(host, port, uid=f"{host}:{port}")
+                cls._instances[key] = cls(host, port, uid=f'{host}:{port}')
             return cls._instances[key]
 
     def start(self):
@@ -45,11 +45,11 @@ class RemoteNodeServer:
             self._rpyc_server.start()
         except OSError as e:
             if e.errno == errno.EADDRINUSE:
-                self._log.error(f"Port {self._port} is already in use. Cannot start server.")
+                self._log.error(f'Port {self._port} is already in use. Cannot start server.')
             else:
-                self._log.error(f"Error starting server on port {self._port}: {e}")
+                self._log.error(f'Error starting server on port {self._port}: {e}')
         except Exception as e:
-            self._log.error(f"Unexpected error starting RemoteNodeServer: {e}")
+            self._log.error(f'Unexpected error starting RemoteNodeServer: {e}')
             raise
 
     def stop(self):
@@ -60,10 +60,10 @@ class RemoteNodeServer:
 
 
 class INodeServerRunner(ABC):
-    def __init__(self, uid: str, config: "RemoteNodeConfig"):
+    def __init__(self, uid: str, config: 'RemoteNodeConfig'):
         self._uid = uid
         self._config = config
-        self._log = VoxelLogging.get_logger(object=self)
+        self._log = VoxelLogging.get_logger(obj=self)
 
     @property
     def uid(self) -> str:
@@ -72,19 +72,15 @@ class INodeServerRunner(ABC):
 
     @abstractmethod
     def start(self) -> None:
-        """
-        Initialize the remote server with local information.
+        """Initialize the remote server with local information.
         This should be implemented by subclasses to handle specific initialization logic.
         """
-        pass
 
     @abstractmethod
     def stop(self) -> None:
-        """
-        Close the remote server connection and clean up resources.
+        """Close the remote server connection and clean up resources.
         This should be implemented by subclasses to handle specific cleanup logic.
         """
-        pass
 
 
 class VoidNodeServerRunner(INodeServerRunner):
@@ -96,7 +92,7 @@ class VoidNodeServerRunner(INodeServerRunner):
 
 
 class BackgroundNodeServerRunner(INodeServerRunner):
-    def __init__(self, uid: str, config: "RemoteNodeConfig"):
+    def __init__(self, uid: str, config: 'RemoteNodeConfig'):
         super().__init__(uid, config)
         self._server: RemoteNodeServer | None = None
         self._thread: threading.Thread | None = None
@@ -104,7 +100,9 @@ class BackgroundNodeServerRunner(INodeServerRunner):
     def start(self) -> None:
         self._server = RemoteNodeServer.get(host=self._config.host, port=self._config.rpc_port)
         thread = threading.Thread(
-            target=self._server.start, daemon=True, name=f"RPC-Server-{self._config.host}:{self._config.rpc_port}"
+            target=self._server.start,
+            daemon=True,
+            name=f'RPC-Server-{self._config.host}:{self._config.rpc_port}',
         )
         thread.start()
         self._thread = thread

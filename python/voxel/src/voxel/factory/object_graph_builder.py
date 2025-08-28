@@ -8,8 +8,7 @@ from .specs import BuildSpec, BuildSpecs
 
 
 class ObjectGraphBuilder[T: object]:
-    """
-    Builds collections of objects from a dictionary of BuildSpecs.
+    """Builds collections of objects from a dictionary of BuildSpecs.
 
     This builder uses a recursive approach with explicit state management to
     resolve dependency graphs. The builder instance is reusable for multiple
@@ -17,10 +16,9 @@ class ObjectGraphBuilder[T: object]:
     """
 
     def __init__(self, *, base_class: type[T] = object, uid_params: set[str] | None = None):
-        """
-        Initialize the graph builder.
+        """Initialize the graph builder.
         :param: base_class: Base class that all built objects must inherit from
-        :param uid_params: Parameter names to auto-inject with the object key
+        :param uid_params: Parameter names to auto-inject with the object key.
         """
         self._base_class = base_class
         self._uid_params = (uid_params or set()) | DEFAULT_UID_PARAMS
@@ -31,14 +29,14 @@ class ObjectGraphBuilder[T: object]:
         self._building: set[str] = set()
 
     def build(self, specs: BuildSpecs) -> SpinnerResults[T]:
-        """
-        Build all objects in the specification collection.
+        """Build all objects in the specification collection.
 
         Args:
             specs: Dictionary mapping object names to their build specifications.
 
         Returns:
             SpinnerResults containing built objects and errors.
+
         """
         # Clear state to ensure the instance is clean for each build run
         self._built.clear()
@@ -140,7 +138,9 @@ class ObjectGraphBuilder[T: object]:
 
 
 def build_object_graph[T](
-    specs: BuildSpecs, base_class: type[T], id_params: set[str] | None = None
+    specs: BuildSpecs,
+    base_class: type[T],
+    id_params: set[str] | None = None,
 ) -> SpinnerResults[T]:
     """Build a graph of objects from the specification collection."""
     return ObjectGraphBuilder(base_class=base_class, uid_params=id_params).build(specs)

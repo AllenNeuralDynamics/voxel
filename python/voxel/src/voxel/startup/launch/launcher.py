@@ -7,46 +7,45 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from voxel.instrument import Instrument, InstrumentNode, InstrumentNodeType
+from voxel.reporting.errors import ErrorInfo, pydantic_to_error_info
 from voxel.runtime.io.manager import IOManager
 from voxel.runtime.preview.publisher import PreviewManager
-from voxel.startup.remote.client import RemoteNodeSession
-from voxel.reporting.errors import ErrorInfo, pydantic_to_error_info
 from voxel.startup.config import SystemConfig
+from voxel.startup.remote.client import RemoteNodeSession
 
 from .context import LaunchContext
 from .step import (
+    BasicLaunchStepResult,
     InitializeInstrumentNodesResult,
     LaunchStep,
     LaunchStepResult,
-    BasicLaunchStepResult,
     StartRemoteSessionsResult,
 )
 
 if TYPE_CHECKING:
-    from ..discovery import InstrumentConfigLoader
+    from voxel.startup.discovery import InstrumentConfigLoader
 
-type LaunchStepFn[T] = Callable[["LaunchContext"], LaunchStepResult[T]]
+type LaunchStepFn[T] = Callable[['LaunchContext'], LaunchStepResult[T]]
 
 
-def launch_step[T](step: LaunchStep):
-    """
-    Decorator for pipeline methods.
+def launch_step[T](step: LaunchStep) -> Callable[..., Callable[[LaunchContext], LaunchContext]]:
+    """Decorator for pipeline methods.
     - Expects the wrapped method to have signature
          def foo(ctx: LaunchContext) -> LaunchStepResult[...]
     - Enforces ctx.can_advance(step)
     - Calls ctx.advance(result) for you
-    - Returns the ctx
+    - Returns the ctx.
     """
 
-    def decorator(fn: LaunchStepFn[T]) -> Callable[["LaunchContext"], "LaunchContext"]:
+    def decorator(fn: LaunchStepFn[T]) -> Callable[['LaunchContext'], 'LaunchContext']:
         @wraps(fn)
         def wrapper(ctx: LaunchContext) -> LaunchContext:
             # 1) guard ordering
             if not ctx.can_advance(step):
                 err = ErrorInfo(
                     name=step,
-                    category="invalid_state",
-                    message=f"Cannot run step {step.value!r} in state {ctx.latest.step.value!r}",
+                    category='invalid_state',
+                    message=f'Cannot run step {step.value!r} in state {ctx.latest.step.value!r}',
                 )
                 result = BasicLaunchStepResult(step=step, errors=[err])
                 ctx.advance(result)
@@ -68,11 +67,11 @@ def launch_step[T](step: LaunchStep):
 
 class Launcher:
     @staticmethod
-    def get_context(loader: "InstrumentConfigLoader") -> "LaunchContext":
+    def get_context(loader: 'InstrumentConfigLoader') -> 'LaunchContext':
         return LaunchContext(loader)
 
     @staticmethod
-    def fast_boot(loader: "InstrumentConfigLoader") -> "LaunchContext":
+    def fast_boot(loader: 'InstrumentConfigLoader') -> 'LaunchContext':
         """Fast boot process for launching an instrument.
         - Remote nodes using localhost are started in the background.
         """
@@ -91,9 +90,7 @@ class Launcher:
     @staticmethod
     @launch_step(LaunchStep.FETCH_CONFIG)
     def fetch_config(ctx: LaunchContext) -> LaunchStepResult:
-        """
-        Fetch and validate the system configuration.
-        """
+        """Fetch and validate the system configuration."""
         try:
             raw = ctx.loader.get_system_config()
             cfg = SystemConfig.model_validate(raw)
@@ -103,18 +100,18 @@ class Launcher:
             errors = pydantic_to_error_info(e, LaunchStep.FETCH_CONFIG)
             return BasicLaunchStepResult(step=LaunchStep.FETCH_CONFIG, errors=list(errors.values()))
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             err = ErrorInfo(
                 name=LaunchStep.FETCH_CONFIG,
-                category="parse_error",
-                message=f"Unexpected error parsing system config: {e}",
-                details={"exception_type": type(e).__name__},
+                category='parse_error',
+                message=f'Unexpected error parsing system config: {e}',
+                details={'exception_type': type(e).__name__},
             )
             return BasicLaunchStepResult(step=LaunchStep.FETCH_CONFIG, errors=[err])
 
     @staticmethod
     @launch_step(LaunchStep.SETUP_REMOTE_SESSIONS)
-    def setup_remote_sessions(ctx: LaunchContext) -> LaunchStepResult[dict[str, "RemoteNodeSession"]]:
+    def setup_remote_sessions(ctx: LaunchContext) -> LaunchStepResult[dict[str, 'RemoteNodeSession']]:
         """Start remote servers based on the system configuration."""
         cfg = ctx.system_config
         result = StartRemoteSessionsResult()
@@ -123,13 +120,13 @@ class Launcher:
             try:
                 session = RemoteNodeSession(uid=uid, config=node, preview_relay_opts=cfg.preview_relay_opts)
                 result.add_session(uid, session)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.SETUP_REMOTE_SESSIONS,
-                        category="server_error",
-                        message=f"Failed to start remote session for {uid}: {exc}",
-                    )
+                        category='server_error',
+                        message=f'Failed to start remote session for {uid}: {exc}',
+                    ),
                 )
 
         return result
@@ -138,7 +135,6 @@ class Launcher:
     @launch_step(LaunchStep.INITIALIZE_INSTRUMENT_NODES)
     def initialize_instrument_nodes(ctx: LaunchContext) -> LaunchStepResult[dict[str, InstrumentNode]]:
         """Initialize nodes with their devices and runtimes."""
-
         result = InitializeInstrumentNodesResult()
 
         preview_manager = PreviewManager(options=ctx.system_config.preview)
@@ -155,36 +151,34 @@ class Launcher:
                         node_type=node_cfg.type,
                     )
                     result.add_node(node_id, node)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     result.add_error(
                         ErrorInfo(
                             name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,
-                            category="local_error",
-                            message=f"Failed to build local node {node_id}: {exc}",
-                        )
+                            category='local_error',
+                            message=f'Failed to build local node {node_id}: {exc}',
+                        ),
                     )
-                finally:
-                    continue
             session = next((s for s in ctx.remote_sessions.values() if s.uid == node_id), None)
             if session is None:
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,
-                        category="missing_session",
-                        message=f"No remote session found for node {node_id}",
-                    )
+                        category='missing_session',
+                        message=f'No remote session found for node {node_id}',
+                    ),
                 )
                 continue
             try:
                 session.service.configure(node_cfg.devices)
                 result.add_node(node_id, session.service.node)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 result.add_error(
                     ErrorInfo(
                         name=LaunchStep.INITIALIZE_INSTRUMENT_NODES,
-                        category="remote_error",
-                        message=f"Failed to build remote node {node_id}: {exc}",
-                    )
+                        category='remote_error',
+                        message=f'Failed to build remote node {node_id}: {exc}',
+                    ),
                 )
         return result
 

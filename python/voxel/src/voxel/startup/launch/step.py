@@ -11,11 +11,11 @@ if TYPE_CHECKING:
 
 
 class LaunchStep(StrEnum):
-    NEW = "NEW"
-    FETCH_CONFIG = "FETCH CONFIG"
-    SETUP_REMOTE_SESSIONS = "SETUP REMOTE SESSIONS"
-    INITIALIZE_INSTRUMENT_NODES = "INITIALIZE NODES"
-    BUILD_INSTRUMENT = "BUILD INSTRUMENT"
+    NEW = 'NEW'
+    FETCH_CONFIG = 'FETCH CONFIG'
+    SETUP_REMOTE_SESSIONS = 'SETUP REMOTE SESSIONS'
+    INITIALIZE_INSTRUMENT_NODES = 'INITIALIZE NODES'
+    BUILD_INSTRUMENT = 'BUILD INSTRUMENT'
 
 
 class LaunchReportEntry(ResultsReportEntry):
@@ -46,7 +46,7 @@ class LaunchStepResult[T](ABC):
     def report(self) -> list[LaunchReportEntry]: ...
 
     def __repr__(self) -> str:
-        return f"{self.step.name} - {'OK' if self.ok() else 'ERROR'}"
+        return f'{self.step.name} - {"OK" if self.ok() else "ERROR"}'
 
 
 class BasicLaunchStepResult[T](LaunchStepResult[T]):
@@ -87,29 +87,29 @@ class BasicLaunchStepResult[T](LaunchStepResult[T]):
                 LaunchReportEntry(
                     name=self.step,
                     step=self.step,
-                    status="OK",
-                    category="✓",
-                    message="Step completed successfully",
-                )
+                    status='OK',
+                    category='✓',
+                    message='Step completed successfully',
+                ),
             )
-        for error in self.errors:
-            results.append(
-                LaunchReportEntry(
-                    name=error.name,
-                    step=self.step,
-                    status="ERROR",
-                    category=error.category,
-                    message=error.message,
-                )
+        results.extend(
+            LaunchReportEntry(
+                name=error.name,
+                step=self.step,
+                status='ERROR',
+                category=error.category,
+                message=error.message,
             )
+            for error in self.errors
+        )
         return results
 
 
-class StartRemoteSessionsResult(LaunchStepResult[dict[str, "RemoteNodeSession"]]):
+class StartRemoteSessionsResult(LaunchStepResult[dict[str, 'RemoteNodeSession']]):
     """Result class for starting remote sessions."""
 
     def __init__(self):
-        self._sessions: dict[str, "RemoteNodeSession"] = {}
+        self._sessions: dict[str, RemoteNodeSession] = {}
         self._errors: list[ErrorInfo] = []  # Errors encountered during session start
 
     @property
@@ -117,7 +117,7 @@ class StartRemoteSessionsResult(LaunchStepResult[dict[str, "RemoteNodeSession"]]
         return LaunchStep.SETUP_REMOTE_SESSIONS
 
     @property
-    def data(self) -> dict[str, "RemoteNodeSession"]:
+    def data(self) -> dict[str, 'RemoteNodeSession']:
         return self._sessions
 
     @property
@@ -129,15 +129,16 @@ class StartRemoteSessionsResult(LaunchStepResult[dict[str, "RemoteNodeSession"]]
 
     def undo(self) -> None:
         """Close all remote sessions."""
-        print("Shutting down remote sessions...")
+        print('Shutting down remote sessions...')
         for session in self._sessions.values():
             session.shutdown()
         self._sessions.clear()
         self._errors.clear()
 
-    def add_session(self, uid: str, session: "RemoteNodeSession") -> None:
+    def add_session(self, uid: str, session: 'RemoteNodeSession') -> None:
         if uid in self._sessions:
-            raise ValueError(f"Session with UID {uid} already exists.")
+            msg = f'Session with UID {uid} already exists.'
+            raise ValueError(msg)
         self._sessions[uid] = session
 
     def add_error(self, error: ErrorInfo) -> None:
@@ -145,34 +146,32 @@ class StartRemoteSessionsResult(LaunchStepResult[dict[str, "RemoteNodeSession"]]
 
     def report(self) -> list[LaunchReportEntry]:
         """Generate a report of the session start results."""
-        success = []
-        for uid, session in self._sessions.items():
-            success.append(
-                LaunchReportEntry(
-                    name=uid,
-                    step=self.step,
-                    status="OK",
-                    category="✓",
-                    message=f"Session {uid} started successfully.",
-                )
+        success = [
+            LaunchReportEntry(
+                name=uid,
+                step=self.step,
+                status='OK',
+                category='✓',
+                message=f'Session {uid} started successfully.',
             )
-        errors = []
-        for error in self._errors:
-            errors.append(
-                LaunchReportEntry(
-                    name=error.name,
-                    step=self.step,
-                    status="ERROR",
-                    category=error.category,
-                    message=error.message,
-                )
+            for uid in self._sessions
+        ]
+        errors = [
+            LaunchReportEntry(
+                name=error.name,
+                step=self.step,
+                status='ERROR',
+                category=error.category,
+                message=error.message,
             )
+            for error in self._errors
+        ]
         return success + errors
 
 
-class InitializeInstrumentNodesResult(LaunchStepResult[dict[str, "InstrumentNode"]]):
+class InitializeInstrumentNodesResult(LaunchStepResult[dict[str, 'InstrumentNode']]):
     def __init__(self):
-        self._nodes: dict[str, "InstrumentNode"] = {}
+        self._nodes: dict[str, InstrumentNode] = {}
         self._node_errors: list[ErrorInfo] = []  # Errors encountered during node initialization
 
     @property
@@ -180,12 +179,13 @@ class InitializeInstrumentNodesResult(LaunchStepResult[dict[str, "InstrumentNode
         return LaunchStep.INITIALIZE_INSTRUMENT_NODES
 
     @property
-    def data(self) -> dict[str, "InstrumentNode"]:
+    def data(self) -> dict[str, 'InstrumentNode']:
         return self._nodes
 
-    def add_node(self, uid: str, node: "InstrumentNode") -> None:
+    def add_node(self, uid: str, node: 'InstrumentNode') -> None:
         if uid in self._nodes:
-            raise ValueError(f"Node with UID {uid} already exists.")
+            msg = f'Node with UID {uid} already exists.'
+            raise ValueError(msg)
         self._nodes[uid] = node
 
     @property
@@ -212,27 +212,26 @@ class InitializeInstrumentNodesResult(LaunchStepResult[dict[str, "InstrumentNode
 
     def report(self) -> list[LaunchReportEntry]:
         success = []
-        for node_uid, node in self._nodes.items():
-            for device in node.devices.values():
-                success.append(
-                    LaunchReportEntry(
-                        name=device.uid,
-                        step=self.step,
-                        status="OK",
-                        category=node_uid,
-                        message=f"Device {node_uid}/{device.uid} initialized successfully.",
-                    )
-                )
-
-        errors = []
-        for error in self.errors:
-            errors.append(
-                LaunchReportEntry(
-                    name=error.name,
-                    step=self.step,
-                    status="ERROR",
-                    category=error.category,
-                    message=error.message,
-                )
+        success.extend(
+            LaunchReportEntry(
+                name=device.uid,
+                step=self.step,
+                status='OK',
+                category=node_uid,
+                message=f'Device {node_uid}/{device.uid} initialized successfully.',
             )
+            for node_uid, node in self._nodes.items()
+            for device in node.devices.values()
+        )
+
+        errors = [
+            LaunchReportEntry(
+                name=error.name,
+                step=self.step,
+                status='ERROR',
+                category=error.category,
+                message=error.message,
+            )
+            for error in self.errors
+        ]
         return success + errors

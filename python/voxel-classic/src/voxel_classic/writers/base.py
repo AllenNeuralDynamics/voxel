@@ -29,7 +29,7 @@ class BaseWriter:
         :param path: The path for the data writer.
         :type path: str
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._path = Path(path)
         self._channel: str | None = None
         self._acquisition_name: Path | None = None

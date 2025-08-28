@@ -1,7 +1,7 @@
 import logging
 import time
 from collections.abc import Generator, Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -10,11 +10,10 @@ import numpy as np
 import tifffile
 from exaspim_control.instrument.exaspim_instrument import ExASPIM, ExASPIMChannel
 from napari.layers import Image
-from napari.qt.threading import WorkerBase, FunctionWorker, create_worker
+from napari.qt.threading import FunctionWorker, WorkerBase, create_worker
 from napari.utils.events import Event
 from napari.utils.theme import get_theme
-from PySide6.QtCore import Qt
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,7 +30,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ruamel.yaml import RoundTripRepresenter
-from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 from vidgets.view.base_device_widget import create_widget
 from vidgets.view.device_widgets.camera_widget import CameraWidget
 from vidgets.view.device_widgets.filter_wheel_widget import FilterWheelWidget
@@ -39,11 +37,11 @@ from vidgets.view.device_widgets.flip_mount_widget import FlipMountWidget
 from vidgets.view.device_widgets.laser_widget import LaserWidget
 from vidgets.view.device_widgets.ni_widget import NIWidget
 from vidgets.view.device_widgets.stage_widget import StageWidget
+from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 
 
 class NonAliasingRTRepresenter(RoundTripRepresenter):
-    """
-    Custom representer for ruamel.yaml to ignore aliases.
+    """Custom representer for ruamel.yaml to ignore aliases.
     This class is used to ensure that YAML files do not contain aliases,
     which can cause issues with certain YAML parsers.
     It overrides the `ignore_aliases` method to always return True.
@@ -55,6 +53,7 @@ class NonAliasingRTRepresenter(RoundTripRepresenter):
     """
 
     def ignore_aliases(self, data):
+        _ = data
         return True
 
 
@@ -67,12 +66,11 @@ class _ViewerState(TypedDict):
 class ExASPIMInstrumentView(QWidget):
     """Class for handling ExASPIM instrument vidgets."""
 
-    snapshotTaken = Signal(object, list)
-    contrastChanged = Signal(object, list)
+    snapshot_taken = Signal(object, list)
+    contrast_changed = Signal(object, list)
 
-    def __init__(self, instrument: ExASPIM, config: dict[str, Any]) -> None:
-        """
-        Initialize the ExASPIMInstrumentView object.
+    def __init__(self, instrument: ExASPIM, config: dict[str, Any]) -> None:  # noqa: C901, PLR0915
+        """Initialize the ExASPIMInstrumentView object.
 
         :param instrument: Instrument object
         :type instrument: Instrument
@@ -84,23 +82,20 @@ class ExASPIMInstrumentView(QWidget):
         self.instrument: ExASPIM = instrument
 
         if isinstance(self.instrument.log, logging.Logger):
-            self.log = self.instrument.log.getChild("View")
+            self.log = self.instrument.log.getChild('View')
         elif isinstance(self.instrument.log, logging.LoggerAdapter):
-            self.log = self.instrument.log.logger.getChild("View")
+            self.log = self.instrument.log.logger.getChild('View')
 
         self.config: dict[str, Any] = config
 
         # Setup napari window
-        self.log.info("Starting napari viewer...")
-        self.viewer = napari.Viewer(title="ExA-SPIM control", ndisplay=2, axis_labels=("x", "y"))
+        self.log.info('Starting napari viewer...')
+        self.viewer = napari.Viewer(title='ExA-SPIM control', ndisplay=2, axis_labels=('x', 'y'))
 
         self.property_workers: dict[str, FunctionWorker] = {}
         self.grab_frames_worker: WorkerBase = create_worker(lambda: None)
 
         # Add widget groups ---------------------------------------------------
-
-        # Left
-
         # Right
         self.camera_widget: CameraWidget = self._create_camera_widget()
         self.camera_widget.configure_live_button_to_start(callback=self._start_live_stream)
@@ -117,22 +112,22 @@ class ExASPIMInstrumentView(QWidget):
 
         self.viewer.window.add_dock_widget(
             self.camera_widget,
-            area="right",
-            name="Camera",
+            area='right',
+            name='Camera',
             add_vertical_stretch=False,
         ).setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
 
         self.viewer.window.add_dock_widget(
-            create_widget("V", self.laser_combo_box, self.filter_wheel_widget),
-            area="right",
-            name="Channel Switching",
+            create_widget('V', self.laser_combo_box, self.filter_wheel_widget),
+            area='right',
+            name='Channel Switching',
             add_vertical_stretch=False,
         ).setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
 
         self.viewer.window.add_dock_widget(
             self.stages_widget,
-            area="right",
-            name="Stages",
+            area='right',
+            name='Stages',
             add_vertical_stretch=True,
         ).setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
 
@@ -152,8 +147,8 @@ class ExASPIMInstrumentView(QWidget):
         self.compound_laser_widget, self.laser_widgets = self._create_laser_widgets()
         self.viewer.window.add_dock_widget(
             self.compound_laser_widget,
-            area="bottom",
-            name="Lasers",
+            area='bottom',
+            name='Lasers',
         ).setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
 
         # for device_name, device in self.instrument.other_devices.items():
@@ -165,32 +160,44 @@ class ExASPIMInstrumentView(QWidget):
         self._add_undocked_widgets()
 
         # Configure Viewer
-        self.intensity_min = self.config["instrument_view"]["properties"]["intensity_min"]
-        if self.intensity_min < 0 or self.intensity_min > 65535:
-            raise ValueError("intensity min must be between 0 and 65535")
-        self.intensity_max = self.config["instrument_view"]["properties"]["intensity_max"]
-        if self.intensity_max < self.intensity_min or self.intensity_max > 65535:
-            raise ValueError("intensity max must be between intensity min and 65535")
-        self.camera_rotation = self.config["instrument_view"]["properties"]["camera_rotation_deg"]
+        min_allowed_intensity = 0
+        max_allowed_intensity = 65535
+        self.intensity_min = self.config['instrument_view']['properties']['intensity_min']
+        if self.intensity_min < min_allowed_intensity or self.intensity_min > max_allowed_intensity:
+            raise ValueError('intensity min must be between 0 and 65535')
+        self.intensity_max = self.config['instrument_view']['properties']['intensity_max']
+        if self.intensity_max < self.intensity_min or self.intensity_max > max_allowed_intensity:
+            raise ValueError('intensity max must be between intensity min and 65535')
+
+        self.camera_rotation = self.config['instrument_view']['properties']['camera_rotation_deg']
         if self.camera_rotation not in [0, 90, 180, 270, 360, -90, -180, -270]:
-            raise ValueError("camera rotation must be 0, 90, 180, 270, -90, -180, -270")
-        self.resolution_levels = self.config["instrument_view"]["properties"]["resolution_levels"]
-        if self.resolution_levels < 1 or self.resolution_levels > 10:
-            raise ValueError("resolution levels must be between 1 and 10")
-        self.alignment_roi_size = self.config["instrument_view"]["properties"]["alignment_roi_size"]
-        if self.alignment_roi_size < 2 or self.alignment_roi_size > 1024:
-            raise ValueError("alignment roi size must be between 2 and 1024")
+            raise ValueError('camera rotation must be 0, 90, 180, 270, -90, -180, -270')
+
+        min_resolution_level = 1
+        max_resolution_level = 10
+        self.resolution_levels = self.config['instrument_view']['properties']['resolution_levels']
+        if self.resolution_levels < min_resolution_level or self.resolution_levels > max_resolution_level:
+            err = f'resolution levels must be between {min_resolution_level} and {max_resolution_level}'
+            raise ValueError(err)
+
+        min_alignment_roi_size = 2
+        max_alignment_roi_size = 1024
+        self.alignment_roi_size = self.config['instrument_view']['properties']['alignment_roi_size']
+        if self.alignment_roi_size < min_alignment_roi_size or self.alignment_roi_size > max_alignment_roi_size:
+            err = f'alignment roi size must be between {min_alignment_roi_size} and {max_alignment_roi_size}'
+            raise ValueError(err)
+
         self.viewer.scale_bar.visible = True
-        self.viewer.scale_bar.unit = "um"
-        self.viewer.scale_bar.position = "bottom_left"
+        self.viewer.scale_bar.unit = 'um'
+        self.viewer.scale_bar.position = 'bottom_left'
         self.viewer.text_overlay.visible = True
 
         def _update_fps(fps: float) -> None:
-            self.viewer.text_overlay.text = f"{fps:1.1f} fps"
+            self.viewer.text_overlay.text = f'{fps:1.1f} fps'
 
-        self.viewer.window._qt_viewer.canvas._scene_canvas.measure_fps(callback=_update_fps)
+        self.viewer.window._qt_viewer.canvas._scene_canvas.measure_fps(callback=_update_fps)  # noqa: SLF001
 
-        self.downsampler = GPUToolsRankDownSample2D(binning=2, rank=-2, data_type="uint16")
+        self.downsampler = GPUToolsRankDownSample2D(binning=2, rank=-2, data_type='uint16')
 
         # setup and connect viewer camera events
         # Reset camera to default state
@@ -198,28 +205,28 @@ class ExASPIMInstrumentView(QWidget):
         self.viewer.camera.center = (0, 0)
         self.viewer.camera.angles = (0, 0, 0)
         self.viewer_state: _ViewerState = {
-            "zoom": self.viewer.camera.zoom,
-            "center": self.viewer.camera.center,
-            "angles": self.viewer.camera.angles,
+            'zoom': self.viewer.camera.zoom,
+            'center': self.viewer.camera.center,
+            'angles': self.viewer.camera.angles,
         }
         self.previous_layer = None
 
-        def _camera_zoom(event: Event) -> None:
+        def _camera_zoom(event: Event) -> None:  # noqa: ARG001
             """Store viewer state anytime camera zooms and there is a layer."""
             if self.previous_layer and self.previous_layer in self.viewer.layers:
                 self.viewer_state = {
-                    "zoom": self.viewer.camera.zoom,
-                    "center": self.viewer.camera.center,
-                    "angles": self.viewer.camera.angles,
+                    'zoom': self.viewer.camera.zoom,
+                    'center': self.viewer.camera.center,
+                    'angles': self.viewer.camera.angles,
                 }
 
-        def _camera_position(event: Event) -> None:
+        def _camera_position(event: Event) -> None:  # noqa: ARG001
             """Store viewer state anytime camera moves and there is a layer."""
             if self.previous_layer and self.previous_layer in self.viewer.layers:
                 self.viewer_state = {
-                    "zoom": self.viewer.camera.zoom,
-                    "center": self.viewer.camera.center,
-                    "angles": self.viewer.camera.angles,
+                    'zoom': self.viewer.camera.zoom,
+                    'center': self.viewer.camera.center,
+                    'angles': self.viewer.camera.angles,
                 }
 
         self.viewer.camera.events.zoom.connect(_camera_zoom)
@@ -234,33 +241,31 @@ class ExASPIMInstrumentView(QWidget):
         app = QApplication.instance()
 
         def _update_config_on_quit() -> None:
-            """
-            Add functionality to close function to save device properties to instrument config
-            """
-
-            msgBox = QMessageBox()
-            msgBox.setIcon(QMessageBox.Icon.Question)
-            msgBox.setText(
-                f"Do you want to update the instrument configuration file at {self._config_save_path} "
-                f"to current instrument state?"
+            """Add functionality to close function to save device properties to instrument config."""
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Icon.Question)
+            msg_box.setText(
+                f'Do you want to update the instrument configuration file at {self._config_save_path} '
+                f'to current instrument state?',
             )
-            msgBox.setWindowTitle("Updating Configuration")
-            msgBox.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
-            save_elsewhere = QPushButton("Change Directory")
-            msgBox.addButton(save_elsewhere, QMessageBox.ButtonRole.DestructiveRole)
+            msg_box.setWindowTitle('Updating Configuration')
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+            save_elsewhere = QPushButton('Change Directory')
+            msg_box.addButton(save_elsewhere, QMessageBox.ButtonRole.DestructiveRole)
 
-            def _select_directory(pressed: bool):
+            def _select_directory(pressed: bool) -> None:  # noqa: ARG001
                 fname = QFileDialog()
                 folder = fname.getSaveFileName(dir=str(self.instrument.config_path))
-                if folder[0] != "":  # user pressed cancel
-                    msgBox.setText(
-                        f"Do you want to update the instrument configuration file at {folder[0]} to current instrument state?"
+                if folder[0] != '':  # user pressed cancel
+                    msg_box.setText(
+                        f'Do you want to update the instrument configuration file at {folder[0]} '
+                        f'to the current instrument state?',
                     )
                     self._config_save_path = Path(folder[0])
 
-            save_elsewhere.pressed.connect(lambda: _select_directory(True))
+            save_elsewhere.pressed.connect(lambda: _select_directory(pressed=True))
 
-            return_value = msgBox.exec()
+            return_value = msg_box.exec()
             if return_value == QMessageBox.StandardButton.Ok:
                 self.instrument.update_current_state_config()
                 self.instrument.save_config(self._config_save_path)
@@ -289,40 +294,38 @@ class ExASPIMInstrumentView(QWidget):
             label = QLabel(laser_name)
             hframe = QFrame()
             layout = QVBoxLayout()
-            layout.addWidget(create_widget("H", label, laser_widget))
+            layout.addWidget(create_widget('H', label, laser_widget))
             hframe.setLayout(layout)
             border_color = get_theme(self.viewer.theme).foreground
-            hframe.setStyleSheet(f".QFrame {{ border:1px solid {border_color}; }} ")
+            hframe.setStyleSheet(f'.QFrame {{ border:1px solid {border_color}; }} ')
 
             hframes.append(hframe)
 
-        compound_widget = create_widget("V", *hframes)
+        compound_widget = create_widget('V', *hframes)
 
         return compound_widget, laser_widgets
 
     def _create_stages_widget(self) -> QWidget:
         xyz_widget = QVBoxLayout()
-        title_label = QLabel("Positioning Stages")
+        title_label = QLabel('Positioning Stages')
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         xyz_widget.addWidget(title_label)
         for stage_name, stage in self.instrument.scanning_stages.items() and self.instrument.tiling_stages.items():
             wgt = StageWidget(stage=stage, advanced_user=False)
             wgt.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            xyz_widget.addWidget(create_widget("H", QLabel(stage_name), wgt))
+            xyz_widget.addWidget(create_widget('H', QLabel(stage_name), wgt))
 
         n_widget = QVBoxLayout()
-        title_label = QLabel("Focusing Stages")
+        title_label = QLabel('Focusing Stages')
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         n_widget.addWidget(title_label)
 
         for stage_name, stage in self.instrument.focusing_stages.items():
             wgt = StageWidget(stage=stage, advanced_user=False)
             wgt.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            n_widget.addWidget(create_widget("H", QLabel(stage_name), wgt))
+            n_widget.addWidget(create_widget('H', QLabel(stage_name), wgt))
 
-        stage_axes_widget = create_widget("V", xyz_widget, n_widget)
-
-        return stage_axes_widget
+        return create_widget('V', xyz_widget, n_widget)
 
     def _create_camera_widget(self) -> CameraWidget:
         camera = self.instrument.camera
@@ -353,19 +356,19 @@ class ExASPIMInstrumentView(QWidget):
         def _change_channel(channel: str):
             chan = self.instrument.channels.get(channel)
             if chan is None:
-                self.log.warning(f"Channel {channel} not found.")
+                self.log.warning('Channel %s not found.', channel)
                 return
             if self.grab_frames_worker.is_running:
-                self.log.warning(f"Cannot change channel to {channel} while livestreaming is active.")
+                self.log.warning('Cannot change channel to %s while livestreaming is active.', channel)
             else:
                 self.instrument.activate_channel(channel)
 
         widget = QWidget()
         layout = QVBoxLayout()
-        label = QLabel("Active Channel")
+        label = QLabel('Active Channel')
         laser_combo_box = QComboBox(widget)
         laser_combo_box.addItems(list(self.instrument.channels.keys()))
-        laser_combo_box.setCurrentText(next(iter(self.instrument.channels.keys()), ""))
+        laser_combo_box.setCurrentText(next(iter(self.instrument.channels.keys()), ''))
         laser_combo_box.currentTextChanged.connect(lambda value: _change_channel(value))
         laser_combo_box.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         laser_combo_box.setCurrentIndex(0)  # initialize to first channel index
@@ -376,12 +379,10 @@ class ExASPIMInstrumentView(QWidget):
         return widget, laser_combo_box
 
     def _stack_device_widgets(self, device_widgets: Mapping[str, QWidget]) -> QWidget:
-        """
-        Stack like device widgets in layout and hide/unhide with combo box
+        """Stack like device widgets in layout and hide/unhide with combo box
         :param device_widgets: Mapping of device names to their widget instances
-        :return: widget containing all widgets pertaining to device type stacked ontop of each other
+        :return: widget containing all widgets pertaining to device type stacked ontop of each other.
         """
-
         overlap_layout = QGridLayout()
         overlap_layout.addWidget(QWidget(), 1, 0)  # spacer widget
         for widget in device_widgets.values():
@@ -407,20 +408,17 @@ class ExASPIMInstrumentView(QWidget):
         return overlap_widget
 
     def _add_undocked_widgets(self) -> None:
-        """
-        Add undocked widget so all windows close when closing napari viewer
-        """
-
+        """Add undocked widget so all windows close when closing napari viewer."""
         widgets = []
         for key, dictionary in self.__dict__.items():
-            if "_widgets" in key:
+            if '_widgets' in key:
                 widgets.extend(dictionary.values())
         for widget in widgets:
-            if widget not in self.viewer.window._qt_window.findChildren(type(widget)):
+            if widget not in self.viewer.window._qt_window.findChildren(type(widget)):  # noqa: SLF001
                 undocked_widget = self.viewer.window.add_dock_widget(widget, name=widget.windowTitle())
                 undocked_widget.setFloating(True)
                 # hide widget if empty property widgets
-                if getattr(widget, "property_widgets", False) == {}:
+                if getattr(widget, 'property_widgets', False) == {}:
                     undocked_widget.setVisible(False)
 
     def _start_live_stream(self) -> None:
@@ -453,7 +451,7 @@ class ExASPIMInstrumentView(QWidget):
         self.filter_wheel_widget.setDisabled(True)
 
         for light in self.instrument.indicator_lights:
-            self.log.info(f"Enabling indicator light {light}")
+            self.log.info('Enabling indicator light %s', light)
             self.instrument.indicator_lights[light].enable()
 
         self.instrument.daq.configure_acq_waveforms(self.active_channel.name)
@@ -463,22 +461,22 @@ class ExASPIMInstrumentView(QWidget):
 
         self.camera_widget.configure_live_button_to_stop(callback=self._stop_live_stream)
         self.camera_widget.enable_action_buttons()
-        self.log.info("Grabber setup complete - beginning to collect frames")
+        self.log.info('Grabber setup complete - beginning to collect frames')
 
     def _stop_live_stream(self) -> None:
         self.grab_frames_worker.quit()
 
     def _take_snapshot(self) -> None:
-        self.log.info("Taking snapshot is not yet implemented")
+        self.log.info('Taking snapshot is not yet implemented')
 
     def _run_live_stream(self) -> Generator[tuple[list[np.ndarray], str], None, None]:
-        self.log.warning("Starting live stream...")
-        total_frames = float("inf")
+        self.log.warning('Starting live stream...')
+        total_frames = float('inf')
         i = 0
         while i < total_frames:  # while loop since frames can == inf
             time.sleep(0.5)
             multiscale = [self.instrument.camera.grab_frame()]
-            for binning in range(1, self.resolution_levels):
+            for _ in range(1, self.resolution_levels):
                 downsampled_frame = multiscale[-1][::2, ::2]
                 multiscale.append(downsampled_frame)
             yield multiscale, self.instrument.camera.uid
@@ -486,9 +484,10 @@ class ExASPIMInstrumentView(QWidget):
 
     def _dismantle_live_stream(self, result=None) -> None:
         """Dismantle live view for the specified camera."""
+        _result = result
         chan = self.active_channel
         if chan is None:
-            self.log.error("Cannot dismantle live view: active channel is None.")
+            self.log.error('Cannot dismantle live view: active channel is None.')
             return
 
         self.camera_widget.disable_action_buttons()
@@ -503,7 +502,7 @@ class ExASPIMInstrumentView(QWidget):
 
         for name, light in self.instrument.indicator_lights.items():
             light.disable()
-            self.log.info(f"Disabling indicator light {name}")
+            self.log.info('Disabling indicator light %s', name)
 
         for wgt in self.laser_widgets.values():
             wgt.setEnabled(True)
@@ -517,14 +516,12 @@ class ExASPIMInstrumentView(QWidget):
         self.camera_widget.configure_live_button_to_start(callback=self._start_live_stream)
         self.camera_widget.enable_action_buttons()
 
-    def _update_layer(self, args: tuple, snapshot: bool = False) -> None:
-        """
-        Update the image layer in the viewer.
+    def _update_layer(self, args: tuple, snapshot: bool = False) -> None:  # noqa: PLR0912
+        """Update the image layer in the viewer.
 
         :param args: tuple containing image and camera name
         :param snapshot: Whether the image is a snapshot, defaults to False
         """
-
         (image, camera_name) = args
 
         # calculate centroid of image
@@ -535,7 +532,7 @@ class ExASPIMInstrumentView(QWidget):
         layer_list = self.viewer.layers
 
         if image is not None:
-            layer_name = self.livestream_channel if not snapshot else f"{self.livestream_channel} snapshot"
+            layer_name = self.livestream_channel if not snapshot else f'{self.livestream_channel} snapshot'
             if not snapshot:
                 if layer_name in layer_list:
                     layer = layer_list[layer_name]
@@ -558,7 +555,7 @@ class ExASPIMInstrumentView(QWidget):
                     )
 
                     # connect contrast limits event
-                    def _viewer_contrast_limits(event: Event) -> None:
+                    def _viewer_contrast_limits(event: Event) -> None:  # noqa: ARG001
                         if self.livestream_channel in self.viewer.layers:
                             live_stream_layer = self.viewer.layers[self.livestream_channel]
                             if isinstance(live_stream_layer, Image):
@@ -568,7 +565,7 @@ class ExASPIMInstrumentView(QWidget):
                         layer.events.contrast_limits.connect(_viewer_contrast_limits)
 
                     # Restore camera view to prevent window resizing, except for very first image
-                    if hasattr(self, "viewer_initialized") and self.viewer_initialized:
+                    if hasattr(self, 'viewer_initialized') and self.viewer_initialized:
                         self.viewer.camera.zoom = current_zoom
                         self.viewer.camera.center = current_center
                     else:
@@ -577,9 +574,9 @@ class ExASPIMInstrumentView(QWidget):
 
                     # only reset state if there is a previous layer, otherwise pass
                     if self.previous_layer:
-                        self.viewer.camera.zoom = self.viewer_state["zoom"]
-                        self.viewer.camera.center = self.viewer_state["center"]
-                        self.viewer.camera.angles = self.viewer_state["angles"]
+                        self.viewer.camera.zoom = self.viewer_state['zoom']
+                        self.viewer.camera.center = self.viewer_state['center']
+                        self.viewer.camera.angles = self.viewer_state['angles']
                     # update previous layer name
                     self.previous_layer = layer_name
                     if isinstance(layer, Image):
@@ -603,13 +600,12 @@ class ExASPIMInstrumentView(QWidget):
                     rotate=self.camera_rotation,
                 )
                 if isinstance(layer, Image):
-                    self.snapshotTaken.emit(np.copy(np.rot90(image[-1], k=2)), layer.contrast_limits)
+                    self.snapshot_taken.emit(np.copy(np.rot90(image[-1], k=2)), layer.contrast_limits)
                     self.viewer.layers.selection = [layer]
                     layer.visible = False
 
     def _dissect_image(self, args: tuple) -> None:
-        """
-        Dissect the image and add to the viewer.
+        """Dissect the image and add to the viewer.
 
         :param args: Tuple containing image and camera name
         :type args: tuple
@@ -674,7 +670,7 @@ class ExASPIMInstrumentView(QWidget):
             combined_roi[:, alignment_roi - 2 : alignment_roi + 2] = 1 << 16 - 1
             combined_roi[:, alignment_roi * 2 - 2 : alignment_roi * 2 + 2] = 1 << 16 - 1
 
-            layer_name = f"{self.livestream_channel} alignment"
+            layer_name = f'{self.livestream_channel} alignment'
             if layer_name in self.viewer.layers:
                 layer = self.viewer.layers[layer_name]
                 layer.data = combined_roi
@@ -689,10 +685,7 @@ class ExASPIMInstrumentView(QWidget):
                 )
 
     def close(self) -> bool:
-        """
-        Close instruments and end threads
-        """
-
+        """Close instruments and end threads."""
         for worker in self.property_workers.values():
             if worker.is_running:
                 worker.quit()
@@ -707,13 +700,12 @@ class ExASPIMInstrumentView(QWidget):
 
     @staticmethod
     def save_image(layer: Image | list[Image], event: QMouseEvent) -> None:
-        """
-        Save image in viewer by right-clicking viewer
+        """Save image in viewer by right-clicking viewer
         :param layer: layer that was pressed
-        :param event: mouse event
+        :param event: mouse event.
         """
-
-        if event.button == 2:  # Left click
+        left_click_index = 2
+        if event.button == left_click_index:
             # Handle both single layer and list of layers
             single_layer = layer[0] if isinstance(layer, list) else layer
 
@@ -722,11 +714,11 @@ class ExASPIMInstrumentView(QWidget):
             folder = fname.getSaveFileName(
                 dir=str(
                     Path(__file__).parent.resolve()
-                    / Path(rf"\{single_layer.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tiff")
-                )
+                    / Path(rf'\{single_layer.name}_{datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")}.tiff'),
+                ),
             )
-            if folder[0] != "":  # user pressed cancel
-                tifffile.imwrite(f"{folder[0]}.tiff", np.array(image), imagej=True)
+            if folder[0] != '':  # user pressed cancel
+                tifffile.imwrite(f'{folder[0]}.tiff', np.array(image), imagej=True)
 
     # def _create_device_widgets(self, device_name: str, device_specs: dict) -> None:
     #     """

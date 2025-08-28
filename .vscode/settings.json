@@ -30,9 +30,16 @@
     *-------------------------------------------*/
     "ruff.configurationPreference": "filesystemFirst",
     "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        },
         "editor.defaultFormatter": "charliermarsh.ruff"
     },
     "python.analysis.inlayHints.callArgumentNames": "partial",
+    "python.analysis.inlayHints.functionReturnTypes": true,
+    "python.analysis.inlayHints.variableTypes": false,
     "python.analysis.inlayHints.pytestParameters": true,
     "python.analysis.supportDocstringTemplate": true,
     "python.analysis.typeCheckingMode": "standard",
@@ -47,4 +54,7 @@
     "python.analysis.enableTroubleshootMissingImports": true,
     "python.analysis.autoImportCompletions": true,
     "python.analysis.autoFormatStrings": true,
+    // experimental
+    // "python.languageServer": "None",
+    // "ty.diagnosticMode": "workspace"
 }

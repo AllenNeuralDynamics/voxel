@@ -126,7 +126,7 @@ class SimulatedDAQ(BaseDAQ):
         self.co_task: SimulatedTask | None = None
         self._tasks: dict[str, dict] = {}
 
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.id = dev
         self.ao_physical_chans = []
         self.co_physical_chans = []

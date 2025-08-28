@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import csv
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Literal
 
@@ -15,8 +15,7 @@ class BaseWaveform(BaseModel, ABC):
     rest_voltage: Voltage = Voltage(0.0)
 
     def get_array(self, total_samples: int) -> np.ndarray:
-        """Generates the waveform array for the entire task duration."""
-
+        """Generate the waveform array for the entire task duration."""
         arr = np.zeros(total_samples, float)
         start_idx = int(self.window.min * total_samples)
         end_idx = int(self.window.max * total_samples)
@@ -31,12 +30,11 @@ class BaseWaveform(BaseModel, ABC):
 
     @abstractmethod
     def _generate_waveform(self, n: int) -> np.ndarray:
-        """n samples covering exactly [window.start, window.end)"""
-        pass
+        """Generate N samples covering exactly [window.min, window.max)."""
 
 
 class SquareWave(BaseWaveform):
-    type: Literal["square"]
+    type: Literal['square']
     duty_cycle: float
     cycles: int | None = None
     frequency: Frequency | None = None
@@ -60,12 +58,11 @@ class SquareWave(BaseWaveform):
         t = np.arange(n) / fs
         phi = (t * freq) % 1.0
 
-        waveform = np.where(phi < self.duty_cycle, self.voltage.max, self.voltage.min)
-        return waveform
+        return np.where(phi < self.duty_cycle, self.voltage.max, self.voltage.min)
 
 
 class SineWave(BaseWaveform):
-    type: Literal["sine"]
+    type: Literal['sine']
     frequency: Frequency
     phase: Angle = Angle(0.0)  # radians
 
@@ -82,7 +79,7 @@ class SineWave(BaseWaveform):
 
 
 class TriangleWave(BaseWaveform):
-    type: Literal["triangle"]
+    type: Literal['triangle']
     frequency: Frequency
     symmetry: float = 0.5
 
@@ -100,7 +97,7 @@ class TriangleWave(BaseWaveform):
 
 
 class SawtoothWave(BaseWaveform):
-    type: Literal["sawtooth"]
+    type: Literal['sawtooth']
     frequency: Frequency
     width: float = 1.0
 
@@ -126,10 +123,18 @@ def generate_multi_point_waveform(
     points: list[list[float]],
     voltage_range: VoltageRange,
 ) -> np.ndarray:
+    """Generate a waveform by interpolating between a series of normalized time-voltage points.
+
+    :param n: Number of samples to generate.
+    :param points: List of [time, voltage] points, both normalized to [0.0, 1.0].
+    :param voltage_range: Voltage range to scale the output waveform.
+    :return: np.ndarray: Array of waveform samples scaled to the specified voltage range.
+
+    """
     t_interp = np.linspace(0, 1, n, endpoint=False, retstep=False)
 
     # Unzip points for interpolation
-    t_points, v_points_norm = zip(*points)
+    t_points, v_points_norm = zip(*points, strict=True)
 
     # Interpolate the normalized shape
     v_interp_norm = np.interp(t_interp, t_points, v_points_norm)
@@ -141,16 +146,18 @@ def generate_multi_point_waveform(
 class MultiPointWaveform(BaseWaveform):
     """A flexible waveform defined by a series of normalized time-voltage points."""
 
-    type: Literal["multi_point"]
-    points: list[list[float]] = Field(..., description="List of [time, voltage] points, normalized from 0.0 to 1.0.")
+    type: Literal['multi_point']
+    points: list[list[float]] = Field(..., description='List of [time, voltage] points, normalized from 0.0 to 1.0.')
 
-    @model_validator(mode="after")
-    def check_points(self) -> "MultiPointWaveform":
+    @model_validator(mode='after')
+    def check_points(self) -> 'MultiPointWaveform':
         if not self.points:
-            raise ValueError("MultiPointWaveform must have at least one point.")
+            err = 'MultiPointWaveform must have at least one point.'
+            raise ValueError(err)
         for p in self.points:
             if not (0.0 <= p[0] <= 1.0 and 0.0 <= p[1] <= 1.0):
-                raise ValueError(f"All points must be normalized between 0.0 and 1.0. Found: {p}")
+                err = f'All points must be normalized between 0.0 and 1.0. Found: {p}'
+                raise ValueError(err)
         return self
 
     def _generate_waveform(self, n: int) -> np.ndarray:
@@ -160,7 +167,7 @@ class MultiPointWaveform(BaseWaveform):
 class PulseWaveform(BaseWaveform):
     """A trapezoidal pulse defined by a start and end time for its peak voltage."""
 
-    type: Literal["pulse"]
+    type: Literal['pulse']
 
     def _generate_waveform(self, n: int) -> np.ndarray:
         points = [[self.window.min, 1.0], [self.window.max, 1.0]]
@@ -170,14 +177,14 @@ class PulseWaveform(BaseWaveform):
 class CSVWaveform(BaseWaveform):
     """A waveform defined by a CSV file containing time-voltage pairs."""
 
-    type: Literal["csv"]
-    csv_file: str = Field(..., description="Path to the CSV file containing time-voltage pairs.")
+    type: Literal['csv']
+    csv_file: str = Field(..., description='Path to the CSV file containing time-voltage pairs.')
     directory: str | None = None
 
     _points: list[list[float]] | None = None
 
-    @model_validator(mode="after")
-    def load_csv_points(self) -> "CSVWaveform":
+    @model_validator(mode='after')
+    def load_csv_points(self) -> 'CSVWaveform':
         self._points = self._load_points()
         return self
 
@@ -186,12 +193,14 @@ class CSVWaveform(BaseWaveform):
         if not csv_path.is_absolute() and self.directory:
             csv_path = Path(self.directory) / csv_path
         if not csv_path.exists():
-            raise FileNotFoundError(f"CSV file not found: {csv_path}, directory: {self.directory}")
+            err_msg = f'CSV file not found: {csv_path}, directory: {self.directory}'
+            raise FileNotFoundError(err_msg)
         return csv_path
 
     def _load_points(self) -> list[list[float]]:
         points = []
-        with open(self._resolve_csv_path(), newline="") as f:
+        csv_path = self._resolve_csv_path()
+        with csv_path.open(newline='') as f:
             reader = csv.reader(f)
             for row in reader:
                 # Skip header if present (non-numeric values)

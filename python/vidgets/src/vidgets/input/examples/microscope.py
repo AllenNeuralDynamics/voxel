@@ -1,5 +1,4 @@
-"""
-Microscope Control Interface Example
+"""Microscope Control Interface Example.
 
 This example demonstrates a realistic microscope control interface built using
 the Voxel input components. It showcases how to create a proper UI application
@@ -7,7 +6,9 @@ with state management, status indicators, and organized control panels.
 """
 
 import json
+import random
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
@@ -39,7 +40,7 @@ class MicroscopeState:
         self.camera_enabled = True
         self.exposure_time = 0.1
         self.gain = 100
-        self.binning = "1x1"
+        self.binning = '1x1'
 
         # Laser settings
         self.laser_405_enabled = False
@@ -56,10 +57,10 @@ class MicroscopeState:
         self.stage_step_size = 10.0
 
         # Experiment settings
-        self.experiment_name = "ExaSPIM_Acquisition"
-        self.sample_id = "Sample_001"
-        self.objective_lens = "20x/0.8 NA"
-        self.acquisition_mode = "Time Series"
+        self.experiment_name = 'ExaSPIM_Acquisition'
+        self.sample_id = 'Sample_001'
+        self.objective_lens = '20x/0.8 NA'
+        self.acquisition_mode = 'Time Series'
 
         # System status
         self.temperature = 23.5
@@ -72,7 +73,7 @@ class MicroscopeState:
 
     def to_dict(self) -> dict:
         """Convert state to dictionary for logging."""
-        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
 
 
 class MicroscopeControlInterface(QMainWindow):
@@ -93,7 +94,7 @@ class MicroscopeControlInterface(QMainWindow):
 
     def setup_ui(self):
         """Set up the user interface."""
-        self.setWindowTitle("ExaSPIM Microscope Control - Voxel Components Demo")
+        self.setWindowTitle('ExaSPIM Microscope Control - Voxel Components Demo')
         self.setGeometry(100, 100, 1200, 800)
 
         # Create central widget with main layout
@@ -134,7 +135,7 @@ class MicroscopeControlInterface(QMainWindow):
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("System Ready")
+        self.status_bar.showMessage('System Ready')
 
     def create_controls_panel(self) -> QWidget:
         """Create the left panel with all control groups."""
@@ -142,7 +143,7 @@ class MicroscopeControlInterface(QMainWindow):
         layout = QVBoxLayout(widget)
 
         # Title
-        title = VLabel("Microscope Controls")
+        title = VLabel('Microscope Controls')
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
@@ -178,24 +179,25 @@ class MicroscopeControlInterface(QMainWindow):
 
     def create_experiment_group(self) -> QGroupBox:
         """Create experiment information controls."""
-        group = QGroupBox("Experiment Setup")
+        group = QGroupBox('Experiment Setup')
         layout = QVBoxLayout(group)
 
         controls = create_input_group(
             {
-                "Experiment Name": VTextInput(
-                    getter=lambda: self.state.experiment_name, setter=self.make_callback("experiment_name")
+                'Experiment Name': VTextInput(
+                    getter=lambda: self.state.experiment_name,
+                    setter=self.make_callback('experiment_name'),
                 ),
-                "Sample ID": VTextInput(getter=lambda: self.state.sample_id, setter=self.make_callback("sample_id")),
-                "Objective": VSelect(
-                    ["10x/0.3 NA", "20x/0.8 NA", "40x/0.9 NA", "63x/1.4 NA"],
+                'Sample ID': VTextInput(getter=lambda: self.state.sample_id, setter=self.make_callback('sample_id')),
+                'Objective': VSelect(
+                    ['10x/0.3 NA', '20x/0.8 NA', '40x/0.9 NA', '63x/1.4 NA'],
                     getter=lambda: self.state.objective_lens,
-                    setter=self.make_callback("objective_lens"),
+                    setter=self.make_callback('objective_lens'),
                 ),
-                "Acquisition Mode": VSelect(
-                    ["Single Image", "Time Series", "Z-Stack", "Tile Scan"],
+                'Acquisition Mode': VSelect(
+                    ['Single Image', 'Time Series', 'Z-Stack', 'Tile Scan'],
                     getter=lambda: self.state.acquisition_mode,
-                    setter=self.make_callback("acquisition_mode"),
+                    setter=self.make_callback('acquisition_mode'),
                 ),
             },
             flow=FlowDirection.FORM,
@@ -206,31 +208,34 @@ class MicroscopeControlInterface(QMainWindow):
 
     def create_camera_group(self) -> QGroupBox:
         """Create camera control panel."""
-        group = QGroupBox("Camera Settings")
+        group = QGroupBox('Camera Settings')
         layout = QVBoxLayout(group)
 
         controls = create_input_group(
             {
-                "Camera Enable": VToggle(
-                    getter=lambda: self.state.camera_enabled, setter=self.make_callback("camera_enabled")
+                'Camera Enable': VToggle(
+                    getter=lambda: self.state.camera_enabled,
+                    setter=self.make_callback('camera_enabled'),
                 ),
-                "Exposure (s)": VNumberInput(
+                'Exposure (s)': VNumberInput(
                     min_value=0.001,
                     max_value=10.0,
                     decimals=3,
                     getter=lambda: self.state.exposure_time,
-                    onchange=self.make_callback("exposure_time"),
+                    onchange=self.make_callback('exposure_time'),
                     parent=self,
                 ),
-                "Gain": VNumberInput(
+                'Gain': VNumberInput(
                     min_value=1,
                     max_value=1000,
                     getter=lambda: self.state.gain,
-                    onchange=self.make_callback("gain"),
+                    onchange=self.make_callback('gain'),
                     parent=self,
                 ),
-                "Binning": VSelect(
-                    ["1x1", "2x2", "4x4"], getter=lambda: self.state.binning, setter=self.make_callback("binning")
+                'Binning': VSelect(
+                    ['1x1', '2x2', '4x4'],
+                    getter=lambda: self.state.binning,
+                    setter=self.make_callback('binning'),
                 ),
             },
             flow=FlowDirection.FORM,
@@ -241,21 +246,22 @@ class MicroscopeControlInterface(QMainWindow):
 
     def create_laser_group(self) -> QGroupBox:
         """Create laser control panel."""
-        group = QGroupBox("Laser Controls")
+        group = QGroupBox('Laser Controls')
         layout = QVBoxLayout(group)
 
         # 405nm Laser
         laser_405 = create_input_group(
             {
-                "405nm Enable": VToggle(
-                    getter=lambda: self.state.laser_405_enabled, setter=self.make_callback("laser_405_enabled")
+                '405nm Enable': VToggle(
+                    getter=lambda: self.state.laser_405_enabled,
+                    setter=self.make_callback('laser_405_enabled'),
                 ),
-                "Power (mW)": VNumberInput(
+                'Power (mW)': VNumberInput(
                     min_value=0.0,
                     max_value=50.0,
                     decimals=1,
                     getter=lambda: self.state.laser_405_power,
-                    onchange=self.make_callback("laser_405_power"),
+                    onchange=self.make_callback('laser_405_power'),
                     parent=self,
                 ),
             },
@@ -265,15 +271,16 @@ class MicroscopeControlInterface(QMainWindow):
         # 488nm Laser
         laser_488 = create_input_group(
             {
-                "488nm Enable": VToggle(
-                    getter=lambda: self.state.laser_488_enabled, setter=self.make_callback("laser_488_enabled")
+                '488nm Enable': VToggle(
+                    getter=lambda: self.state.laser_488_enabled,
+                    setter=self.make_callback('laser_488_enabled'),
                 ),
-                "Power (mW)": VNumberInput(
+                'Power (mW)': VNumberInput(
                     min_value=0.0,
                     max_value=100.0,
                     decimals=1,
                     getter=lambda: self.state.laser_488_power,
-                    onchange=self.make_callback("laser_488_power"),
+                    onchange=self.make_callback('laser_488_power'),
                     parent=self,
                 ),
             },
@@ -283,15 +290,16 @@ class MicroscopeControlInterface(QMainWindow):
         # 561nm Laser
         laser_561 = create_input_group(
             {
-                "561nm Enable": VToggle(
-                    getter=lambda: self.state.laser_561_enabled, setter=self.make_callback("laser_561_enabled")
+                '561nm Enable': VToggle(
+                    getter=lambda: self.state.laser_561_enabled,
+                    setter=self.make_callback('laser_561_enabled'),
                 ),
-                "Power (mW)": VNumberInput(
+                'Power (mW)': VNumberInput(
                     min_value=0.0,
                     max_value=75.0,
                     decimals=1,
                     getter=lambda: self.state.laser_561_power,
-                    onchange=self.make_callback("laser_561_power"),
+                    onchange=self.make_callback('laser_561_power'),
                     parent=self,
                 ),
             },
@@ -305,41 +313,41 @@ class MicroscopeControlInterface(QMainWindow):
 
     def create_stage_group(self) -> QGroupBox:
         """Create stage control panel."""
-        group = QGroupBox("Stage Position")
+        group = QGroupBox('Stage Position')
         layout = QVBoxLayout(group)
 
         position_controls = create_input_group(
             {
-                "X (μm)": VNumberInput(
+                'X (μm)': VNumberInput(
                     min_value=0.0,
                     max_value=25000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_x,
-                    onchange=self.make_callback("stage_x"),
+                    onchange=self.make_callback('stage_x'),
                     parent=self,
                 ),
-                "Y (μm)": VNumberInput(
+                'Y (μm)': VNumberInput(
                     min_value=0.0,
                     max_value=25000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_y,
-                    onchange=self.make_callback("stage_y"),
+                    onchange=self.make_callback('stage_y'),
                     parent=self,
                 ),
-                "Z (μm)": VNumberInput(
+                'Z (μm)': VNumberInput(
                     min_value=0.0,
                     max_value=1000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_z,
-                    onchange=self.make_callback("stage_z"),
+                    onchange=self.make_callback('stage_z'),
                     parent=self,
                 ),
-                "Step Size (μm)": VNumberInput(
+                'Step Size (μm)': VNumberInput(
                     min_value=0.1,
                     max_value=1000.0,
                     decimals=1,
                     getter=lambda: self.state.stage_step_size,
-                    onchange=self.make_callback("stage_step_size"),
+                    onchange=self.make_callback('stage_step_size'),
                     parent=self,
                 ),
             },
@@ -351,25 +359,25 @@ class MicroscopeControlInterface(QMainWindow):
 
     def create_action_buttons(self) -> QGroupBox:
         """Create action buttons group."""
-        group = QGroupBox("Actions")
+        group = QGroupBox('Actions')
         layout = QHBoxLayout(group)
 
-        start_btn = QPushButton("Start Acquisition")
+        start_btn = QPushButton('Start Acquisition')
         start_btn.setStyleSheet(
-            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 8px; }"
+            'QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 8px; }',
         )
         start_btn.clicked.connect(self.start_acquisition)
 
-        stop_btn = QPushButton("Stop")
+        stop_btn = QPushButton('Stop')
         stop_btn.setStyleSheet(
-            "QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px; }"
+            'QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px; }',
         )
         stop_btn.clicked.connect(self.stop_acquisition)
 
-        save_btn = QPushButton("Save Config")
+        save_btn = QPushButton('Save Config')
         save_btn.clicked.connect(self.save_configuration)
 
-        load_btn = QPushButton("Load Config")
+        load_btn = QPushButton('Load Config')
         load_btn.clicked.connect(self.load_configuration)
 
         layout.addWidget(start_btn)
@@ -385,12 +393,12 @@ class MicroscopeControlInterface(QMainWindow):
         layout = QVBoxLayout(widget)
 
         # Status indicators
-        status_group = QGroupBox("System Status")
+        status_group = QGroupBox('System Status')
         status_layout = QVBoxLayout(status_group)
 
-        self.temp_label = VLabel(f"Temperature: {self.state.temperature:.1f} °C")
-        self.humidity_label = VLabel(f"Humidity: {self.state.humidity:.1f} %")
-        self.ready_label = VLabel("System Ready: ✓ Ready" if self.state.system_ready else "System Ready: ✗ Not Ready")
+        self.temp_label = VLabel(f'Temperature: {self.state.temperature:.1f} °C')
+        self.humidity_label = VLabel(f'Humidity: {self.state.humidity:.1f} %')
+        self.ready_label = VLabel('System Ready: ✓ Ready' if self.state.system_ready else 'System Ready: ✗ Not Ready')
 
         status_layout.addWidget(self.temp_label)
         status_layout.addWidget(self.humidity_label)
@@ -402,23 +410,23 @@ class MicroscopeControlInterface(QMainWindow):
         layout.addWidget(vertical_splitter)
 
         # Current configuration display
-        config_group = QGroupBox("Current Configuration")
+        config_group = QGroupBox('Current Configuration')
         config_layout = QVBoxLayout(config_group)
 
         self.config_display = QTextEdit()
         self.config_display.setReadOnly(True)
-        self.config_display.setFont(QFont("Courier", 9))
+        self.config_display.setFont(QFont('Courier', 9))
         config_layout.addWidget(self.config_display)
 
         vertical_splitter.addWidget(config_group)
 
         # Event log display
-        log_group = QGroupBox("Event Log")
+        log_group = QGroupBox('Event Log')
         log_layout = QVBoxLayout(log_group)
 
         self.event_log = QTextEdit()
         self.event_log.setReadOnly(True)
-        self.event_log.setFont(QFont("Courier", 9))
+        self.event_log.setFont(QFont('Courier', 9))
         self.event_log.setStyleSheet("""
             QTextEdit {
                 border: 1px solid palette(mid);
@@ -456,7 +464,7 @@ class MicroscopeControlInterface(QMainWindow):
         self.timer.start(1000)  # Update every second
 
         # Initial log message
-        self.log_message("System initialized")
+        self.log_message('System initialized')
         self.update_config_display()
 
     def make_callback(self, attribute: str) -> Callable:
@@ -465,7 +473,7 @@ class MicroscopeControlInterface(QMainWindow):
         def callback(value):
             old_value = getattr(self.state, attribute)
             setattr(self.state, attribute, value)
-            self.log_message(f"Changed {attribute}: {old_value} → {value}")
+            self.log_message(f'Changed {attribute}: {old_value} → {value}')
             self.update_config_display()
 
         return callback
@@ -473,28 +481,25 @@ class MicroscopeControlInterface(QMainWindow):
     def log_message(self, message: str):
         """Add a message to the event log."""
         if self.event_log is not None:
-            from datetime import datetime
-
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            log_entry = f"[{timestamp}] {message}"
+            timestamp = datetime.now(UTC).strftime('%H:%M:%S')
+            log_entry = f'[{timestamp}] {message}'
             self.event_log.append(log_entry)
 
     def update_status_display(self):
         """Update the status indicators."""
         # Simulate some changing values
-        import random
 
         self.state.temperature = 23.5 + random.uniform(-0.5, 0.5)
         self.state.humidity = 45.0 + random.uniform(-2.0, 2.0)
 
         # Update the status labels (only if UI is ready)
         if self.temp_label is not None:
-            self.temp_label.setText(f"Temperature: {self.state.temperature:.1f} °C")
+            self.temp_label.setText(f'Temperature: {self.state.temperature:.1f} °C')
         if self.humidity_label is not None:
-            self.humidity_label.setText(f"Humidity: {self.state.humidity:.1f} %")
+            self.humidity_label.setText(f'Humidity: {self.state.humidity:.1f} %')
         if self.ready_label is not None:
             self.ready_label.setText(
-                "System Ready: ✓ Ready" if self.state.system_ready else "System Ready: ✗ Not Ready"
+                'System Ready: ✓ Ready' if self.state.system_ready else 'System Ready: ✗ Not Ready',
             )
 
     def update_config_display(self):
@@ -507,36 +512,36 @@ class MicroscopeControlInterface(QMainWindow):
 
     def start_acquisition(self):
         """Start data acquisition."""
-        self.log_message("Starting acquisition...")
-        self.status_bar.showMessage("Acquiring...")
+        self.log_message('Starting acquisition...')
+        self.status_bar.showMessage('Acquiring...')
 
     def stop_acquisition(self):
         """Stop data acquisition."""
-        self.log_message("Stopping acquisition")
-        self.status_bar.showMessage("System Ready")
+        self.log_message('Stopping acquisition')
+        self.status_bar.showMessage('System Ready')
 
     def save_configuration(self):
         """Save current configuration."""
-        self.log_message("Configuration saved")
+        self.log_message('Configuration saved')
 
     def load_configuration(self):
         """Load saved configuration."""
-        self.log_message("Configuration loaded")
+        self.log_message('Configuration loaded')
 
-    def closeEvent(self, event):
+    def closeEvent(self, event) -> None:
         """Handle window close to clean up resources."""
         # Stop the status update timer
-        if hasattr(self, "timer") and self.timer:
+        if hasattr(self, 'timer') and self.timer:
             self.timer.stop()
 
         event.accept()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app = QApplication([])
 
     # Set application style
-    app.setStyle("Fusion")
+    app.setStyle('Fusion')
 
     window = MicroscopeControlInterface()
     window.show()

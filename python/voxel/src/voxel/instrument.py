@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from voxel.devices import VoxelCamera, VoxelFilterWheel, VoxelLaser, VoxelLinearAxis
-from voxel.devices.base import VoxelDevice
+from voxel.devices.device import VoxelDevice
 from voxel.factory import BuildSpecs, build_object_graph
 from voxel.layout import LayoutDefinition, LayoutValidator
 from voxel.presets import ChannelDefinition, ChannelsProvider, ProfileDefinition, ProfilesProvider, Repository
@@ -21,17 +21,17 @@ if TYPE_CHECKING:
 
 
 class InstrumentNodeType(StrEnum):
-    LOCAL = "local"
-    REMOTE = "remote"
+    LOCAL = 'local'
+    REMOTE = 'remote'
 
 
 class InstrumentNode:
     def __init__(
         self,
         uid: str,
-        device_specs: "BuildSpecs",
+        device_specs: 'BuildSpecs',
         preview: PreviewFramePublisher,
-        io_manager: "IOManager",
+        io_manager: 'IOManager',
         node_type: InstrumentNodeType = InstrumentNodeType.LOCAL,
     ):
         self._uid = uid
@@ -40,9 +40,9 @@ class InstrumentNode:
         self._build_result = build_object_graph(device_specs, base_class=VoxelDevice)
         self._runtimes: dict[str, ImagingRuntime] = {}
         if devices := self._build_result.items:
-            for uid, device in devices.items():
+            for device_uid, device in devices.items():
                 if isinstance(device, VoxelCamera):
-                    self._runtimes[uid] = ImagingRuntime(
+                    self._runtimes[device_uid] = ImagingRuntime(
                         camera=device,
                         io_manager=io_manager,
                         preview_pub=preview,
@@ -57,7 +57,7 @@ class InstrumentNode:
         return self._node_type
 
     @property
-    def devices(self) -> dict[str, "VoxelDevice"]:
+    def devices(self) -> dict[str, 'VoxelDevice']:
         return self._build_result.items
 
     @property
@@ -65,13 +65,13 @@ class InstrumentNode:
         return self._build_result.errors
 
     @property
-    def runtimes(self) -> dict[str, "ImagingRuntime"]:
+    def runtimes(self) -> dict[str, 'ImagingRuntime']:
         return self._runtimes
 
     def shutdown(self) -> None:
         """Shutdown the local instrument node."""
         self._runtimes.clear()
-        print(f"LocalInstrumentNode {self._uid} shutdown complete.")
+        print(f'LocalInstrumentNode {self._uid} shutdown complete.')
 
 
 class InstrumentMetadata(BaseModel):
@@ -89,10 +89,10 @@ class Instrument:
         self,
         *,
         metadata: InstrumentMetadata,
-        layout: "LayoutDefinition",
+        layout: 'LayoutDefinition',
         nodes: dict[str, InstrumentNode],
-        channels_repository: "Repository[ChannelDefinition]",
-        profiles_repository: "Repository[ProfileDefinition]",
+        channels_repository: 'Repository[ChannelDefinition]',
+        profiles_repository: 'Repository[ProfileDefinition]',
     ) -> None:
         """Initialize the instrument with devices and layout."""
         self._nodes = nodes
@@ -107,9 +107,9 @@ class Instrument:
                     error_details[error_type] = []
                 error_details[error_type].append(error.message)
 
-            raise RuntimeError("Invalid instrument layout")
+            raise RuntimeError('Invalid instrument layout')
 
-        self._logger = VoxelLogging.get_logger("instrument")
+        self._logger = VoxelLogging.get_logger('instrument')
 
         self._layout_definition = layout
         self._metadata = metadata
@@ -123,7 +123,7 @@ class Instrument:
         return self._metadata
 
     @property
-    def devices(self) -> dict[str, "VoxelDevice"]:
+    def devices(self) -> dict[str, 'VoxelDevice']:
         """Get all device definitions."""
         return {uid: dev for node in self._nodes.values() for uid, dev in node.devices.items()}
 
@@ -152,7 +152,7 @@ class Instrument:
         """Get all filter wheel devices."""
         return self.get_devices_of_type(device_type=VoxelFilterWheel)
 
-    def get_devices_of_type[T: "VoxelDevice"](self, device_type: type[T]) -> dict[str, T]:
+    def get_devices_of_type[T: 'VoxelDevice'](self, device_type: type[T]) -> dict[str, T]:
         """Get all devices of a specific type."""
         return self._get_devices_of_type(devices=self.devices, device_type=device_type)
 
@@ -172,12 +172,12 @@ class Instrument:
         return self._profiles
 
     @staticmethod
-    def _get_devices_of_type[T: "VoxelDevice"](devices: dict[str, "VoxelDevice"], device_type: type[T]) -> dict[str, T]:
+    def _get_devices_of_type[T: 'VoxelDevice'](devices: dict[str, 'VoxelDevice'], device_type: type[T]) -> dict[str, T]:
         """Get all devices of a specific type."""
         return {uid: dev for uid, dev in devices.items() if isinstance(dev, device_type)}
 
     @staticmethod
-    def validate_layout(layout: LayoutDefinition, devices: dict[str, "VoxelDevice"]) -> Sequence[ErrorInfo]:
+    def validate_layout(layout: LayoutDefinition, devices: dict[str, 'VoxelDevice']) -> Sequence[ErrorInfo]:
         """Validate the layout definition and return a sequence of layout-specific errors.
 
         Note: This is a convenience method that delegates to LayoutValidator.

@@ -27,8 +27,6 @@ class DetectionPathDefinition(OpticalPathDefinition):
 class IlluminationPathDefinition(OpticalPathDefinition):
     """Definition for illumination optical paths."""
 
-    pass
-
 
 class LayoutDefinition(BaseModel):
     """Complete layout definition for an instrument."""

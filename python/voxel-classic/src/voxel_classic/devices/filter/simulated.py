@@ -17,7 +17,7 @@ class Filter(BaseFilter):
         :param id: Filter ID
         :type id: str
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.id = id
         self.wheel = wheel
 

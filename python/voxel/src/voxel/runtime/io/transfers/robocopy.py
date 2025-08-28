@@ -8,8 +8,7 @@ from .base import VoxelFileTransfer
 
 
 class RobocopyFileTransfer(VoxelFileTransfer):
-    """
-    Voxel driver for Robocopy file transfer process.
+    r"""Voxel driver for Robocopy file transfer process.
 
     Process will transfer files with the following regex
     format:
@@ -23,35 +22,28 @@ class RobocopyFileTransfer(VoxelFileTransfer):
     :type local_path: str
     """
 
-    def __init__(self, external_path: str, local_path: str, name: str = "robocopy"):
+    def __init__(self, external_path: str, local_path: str, name: str = 'robocopy'):
         super().__init__(external_path, local_path, name)
-        self._protocol = "robocopy"
+        self._protocol = 'robocopy'
 
-    def _run(self):
+    def _run(self) -> None:  # noqa: C901, PLR0912, PLR0915
         start_time = time.time()
         local_directory = Path(self._local_path, self._acquisition_name)
         external_directory = Path(self._external_path, self._acquisition_name)
-        log_path = Path(local_directory, f"{self._filename}.log")
+        log_path = Path(local_directory, '%s.log' % self._filename)
         transfer_complete = False
         retry_num = 0
         subprocess: Popen | None = None
         # loop over number of attempts in the event that a file transfer fails
         while transfer_complete is False and retry_num <= self._max_retry - 1:
             # generate a list of subdirs and files in the parent local dir to delete at the end
-            delete_list = []
-            for name in os.listdir(local_directory.absolute()):
-                if self.filename in name:
-                    delete_list.append(name)
+            delete_list = [p.name for p in local_directory.iterdir() if self.filename in p.name]
+
             # generate a list of files to copy
-            # path is the entire experiment path
-            # subdirs is any tile specific subdir i.e. zarr store
-            # files are any tile specific files
             file_list = {}
-            for path, subdirs, files in os.walk(local_directory.absolute()):
-                for name in files:
-                    # check and only add if filename matches tranfer's filename but not the log file
-                    if self.filename in name and name != log_path:
-                        file_list[os.path.join(path, name)] = os.path.getsize(os.path.join(path, name)) / 1024**2
+            for p in local_directory.glob('**/*'):
+                if p.is_file() and self.filename in p.name and p.name != log_path.name:
+                    file_list[str(p)] = p.stat().st_size / 1024**2
             total_size_mb = sum(file_list.values())
             # sort the file list based on the file sizes and create a list for transfers
             sorted_file_list = dict(sorted(file_list.items(), key=lambda item: item[1]))
@@ -62,12 +54,12 @@ class RobocopyFileTransfer(VoxelFileTransfer):
             # if not, try to initiate transfer again
             else:
                 num_files = len(sorted_file_list)
-                self.log.info(f"attempt {retry_num + 1}/{self._max_retry}, tranferring {num_files} files.")
+                self.log.info('attempt %s/%s, tranferring %s files.', retry_num + 1, self._max_retry, num_files)
                 for file_path, file_size_mb in sorted_file_list.items():
                     # transfer just one file and iterate
                     # split filename and path
                     [local_dir, filename] = os.path.split(file_path)
-                    self.log.info(f"transfering {filename}")
+                    self.log.info('transfering %s', filename)
                     # specify external directory
                     # need to change directories to str because they are Path objects
                     external_dir = local_dir.replace(str(local_directory), str(external_directory))
@@ -77,8 +69,13 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                     # /if move only the specified filename
                     # /njh no job header in log file
                     # /njs no job summary in log file
-                    cmd_with_args = f"{self._protocol} {local_dir} {external_dir} \
-                        /j /if {filename} /njh /njs /log:{log_path}"
+                    cmd_with_args = '%s %s %s /j /if %s /njh /njs /log:%s' % (
+                        self._protocol,
+                        local_dir,
+                        external_dir,
+                        filename,
+                        log_path,
+                    )
                     # stdout to PIPE will cause malloc errors on exist
                     # no stdout will print subprocess to python
                     # stdout to DEVNULL will supresss subprocess output
@@ -86,25 +83,27 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                     # wait one second for process to start before monitoring log file for progress
                     time.sleep(1.0)
                     # lets monitor the progress of the individual file if size > 1 GB
-                    if file_size_mb > 1024:
-                        self.log.info(f"{filename} is > 1 GB")
+                    max_mbs = 1024
+                    max_percent = 100
+                    if file_size_mb > max_mbs:
+                        self.log.info('%s is > 1 GB', filename)
                         # wait for subprocess to start otherwise log file won't exist yet
                         time.sleep(1.0)
                         file_progress = 0
                         previous_progress = 0
                         stuck_time_s = 0
-                        while file_progress < 100:
+                        while file_progress < max_percent:
                             start_time_s = time.time()
 
-                            with open(log_path, "r") as f:
+                            with log_path.open() as f:
                                 line = f.readlines()[-1]  # read the last line
 
                             # try to find if there is a % in the last line
                             try:
                                 # convert the string to a float
-                                file_progress = float(line.replace("%", ""))
+                                file_progress = float(line.replace('%', ''))
                             # line did not contain %
-                            except Exception:
+                            except ValueError:
                                 file_progress = 0
                             # sum to transferred amount to track progress
                             self.progress = (
@@ -116,60 +115,60 @@ class RobocopyFileTransfer(VoxelFileTransfer):
                                 stuck_time_s += end_time_s - start_time_s
                                 # break if exceeds timeout
                                 if stuck_time_s >= self._timeout_s:
-                                    self.log.info("timeout exceeded, restarting file transfer.")
+                                    self.log.info('timeout exceeded, restarting file transfer.')
                                     break
                             else:
                                 stuck_time_s = 0
                             previous_progress = self.progress
-                            self.log.info(f"file transfer is {self.progress:.2f} % complete.")
+                            self.log.info('file transfer is %.2f %% complete.', self.progress)
                             # pause for 10 sec
                             time.sleep(10.0)
                     else:
                         subprocess.wait()
                         self.progress = (total_transferred_mb + file_size_mb) / total_size_mb * 100
-                        self.log.info(f"file transfer is {self.progress:.2f} % complete.")
-                    self.log.info(f"{filename} transfer complete")
+                        self.log.info('file transfer is %.2f %% complete.', self.progress)
+                    self.log.info('%s transfer complete', filename)
                     # wait for process to finish before cleaning log file
                     time.sleep(10.0)
                     # clean up and remove the temporary log file
-                    os.remove(log_path)
+                    log_path.unlink()
                     # update the total transfered amount
                     total_transferred_mb += file_size_mb
                 # clean up the local subdirs and files
                 for file in delete_list:
                     # f is a relative path, convert to absolute
-                    local_file_path = os.path.join(local_directory.absolute(), file)
-                    external_file_path = os.path.join(external_directory.absolute(), file)
+                    local_file_path = local_directory / file
+                    external_file_path = external_directory / file
                     # .zarr is directory but os.path.isdir will return False
-                    if os.path.isdir(local_file_path) or ".zarr" in local_file_path:
+                    if local_file_path.is_dir() or '.zarr' in local_file_path.name:
                         # TODO how to hash check zarr -> directory instead of file?
                         shutil.rmtree(local_file_path)
-                    elif os.path.isfile(local_file_path):
+                    elif local_file_path.is_file():
                         # verify transfer with hashlib
                         if self._verify_transfer:
                             # put in try except in case no external file found
                             try:
                                 # if hash is verified delete file
-                                if self._verify_file(local_file_path, external_file_path):
+                                if self._verify_file(str(local_file_path), str(external_file_path)):
                                     # remove local file
-                                    self.log.info(f"deleting {local_file_path}")
-                                    os.remove(local_file_path)
+                                    self.log.info('deleting %s', local_file_path)
+                                    local_file_path.unlink()
                                 # if has fails, external file is corrupt
                                 else:
                                     # remove external file, try again
-                                    self.log.info(f"hashes did not match, deleting {external_file_path}")
-                                    os.remove(external_file_path)
-                                    pass
+                                    self.log.info('hashes did not match, deleting %s', external_file_path)
+                                    external_file_path.unlink()
                             except FileNotFoundError:
-                                self.log.warning(f"no external file exists at {external_file_path}")
+                                self.log.warning('no external file exists at %s', external_file_path)
                         else:
                             # remove local file
-                            self.log.info(f"deleting {local_file_path}")
-                            os.remove(local_file_path)
+                            self.log.info('deleting %s', local_file_path)
+                            local_file_path.unlink()
                     else:
-                        raise ValueError(f"{local_file_path} is not a file or directory.")
+                        msg = '%s is not a file or directory.' % local_file_path
+                        raise ValueError(msg)
                 end_time = time.time()
                 total_time = end_time - start_time
-                self.log.info(f"transfer complete, total time: {total_time} sec")
+                self.log.info('transfer complete, total time: %s sec', total_time)
                 subprocess.kill() if subprocess else None
                 retry_num += 1

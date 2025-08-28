@@ -2,6 +2,8 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QLineEdit, QVBoxLayout, QWidget
 
+from voxel.utils.log import VoxelLogging
+
 
 class VLineEdit(QLineEdit):
     """A styled text input component - basic styling only."""
@@ -36,7 +38,7 @@ class VTextInput(QWidget):
 
     def __init__(
         self,
-        placeholder: str = "",
+        placeholder: str = '',
         getter: Callable[[], str] | None = None,
         setter: Callable[[str], None] | None = None,
         parent: QWidget | None = None,
@@ -45,6 +47,7 @@ class VTextInput(QWidget):
         self.placeholder = placeholder
         self.getter = getter
         self.setter = setter
+        self.log = VoxelLogging.get_logger(f'VTextInput[{id(self)}]')
         self._setup_ui()
 
     def _setup_ui(self):
@@ -66,8 +69,8 @@ class VTextInput(QWidget):
                 initial_value = self.getter()
                 self.line_edit.setText(initial_value)
             except Exception:
+                self.log.exception('Error getting initial value')
                 # If getter fails, just continue without setting value
-                pass
 
         # Connect callback if provided
         if self.setter:
@@ -84,6 +87,6 @@ class VTextInput(QWidget):
         """Get the current text value."""
         return self.line_edit.text()
 
-    def setText(self, text: str):
+    def setText(self, text: str) -> None:
         """Set the text value."""
         self.line_edit.setText(text)

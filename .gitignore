@@ -142,4 +142,10 @@ bootstrap.*
 *.log.jsonl
 *.log.json
 
+
+# testing
+test_output/
+WARP.*
+GEMINI.*
+
 WARP.md

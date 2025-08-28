@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+
 import numpy as np
 
 
@@ -7,13 +8,11 @@ class FrameGenerator(ABC):
 
     @abstractmethod
     def generate(self, nframes: int = 1) -> np.ndarray:
-        """
-        Generates a specified number of frames.
+        """Generates a specified number of frames.
 
         :param nframes: The number of frames to generate.
         :return: A numpy array with shape (nframes, height, width).
         """
-        pass
 
     def __iter__(self):
         """Allows the generator to be used in a loop, yielding single frames."""

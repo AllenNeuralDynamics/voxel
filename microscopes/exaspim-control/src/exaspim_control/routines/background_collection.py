@@ -2,22 +2,22 @@ from pathlib import Path
 
 import numpy as np
 import tifffile
-from voxel.utils.log import VoxelLogging
 from voxel_classic.devices.camera.base import BaseCamera
+
+from voxel.utils.log import VoxelLogging
 
 
 class BackgroundCollection:
     """Class for handling background collection for ExASPIM."""
 
     def __init__(self, path: str):
-        """
-        Initialize the BackgroundCollection object.
+        """Initialize the BackgroundCollection object.
 
         :param path: Path to save the background images
         :type path: str
         """
         super().__init__()
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self._path = Path(path)
         self._frame_count_px = 1
         self._filename = None
@@ -26,8 +26,7 @@ class BackgroundCollection:
 
     @property
     def frame_count_px(self) -> int:
-        """
-        Get the frame count.
+        """Get the frame count.
 
         :return: Frame count
         :rtype: int
@@ -36,8 +35,7 @@ class BackgroundCollection:
 
     @frame_count_px.setter
     def frame_count_px(self, frame_count_px: int) -> None:
-        """
-        Set the frame count.
+        """Set the frame count.
 
         :param frame_count_px: Frame count
         :type frame_count_px: int
@@ -46,8 +44,7 @@ class BackgroundCollection:
 
     @property
     def data_type(self) -> np.dtype:
-        """
-        Get the data type.
+        """Get the data type.
 
         :return: Data type
         :rtype: np.dtype
@@ -56,19 +53,17 @@ class BackgroundCollection:
 
     @data_type.setter
     def data_type(self, data_type: np.dtype) -> None:
-        """
-        Set the data type.
+        """Set the data type.
 
         :param data_type: Data type
         :type data_type: np.dtype
         """
-        self.log.info(f"setting data type to: {data_type}")
+        self.log.info('setting data type to: %s', data_type)
         self._data_type = data_type
 
     @property
     def path(self) -> Path:
-        """
-        Get the path.
+        """Get the path.
 
         :return: Path
         :rtype: Path
@@ -77,19 +72,17 @@ class BackgroundCollection:
 
     @path.setter
     def path(self, path: str) -> None:
-        """
-        Set the path.
+        """Set the path.
 
         :param path: Path
         :type path: str
         """
         self._path = Path(path)
-        self.log.info(f"setting path to: {path}")
+        self.log.info('setting path to: %s', path)
 
     @property
     def acquisition_name(self) -> Path:
-        """
-        Get the acquisition name.
+        """Get the acquisition name.
 
         :return: Acquisition name
         :rtype: Path
@@ -98,19 +91,17 @@ class BackgroundCollection:
 
     @acquisition_name.setter
     def acquisition_name(self, acquisition_name: str) -> None:
-        """
-        Set the acquisition name.
+        """Set the acquisition name.
 
         :param acquisition_name: Acquisition name
         :type acquisition_name: str
         """
         self._acquisition_name = Path(acquisition_name)
-        self.log.info(f"setting acquisition name to: {acquisition_name}")
+        self.log.info('setting acquisition name to: %s', acquisition_name)
 
     @property
     def filename(self) -> str | None:
-        """
-        Get the filename.
+        """Get the filename.
 
         :return: Filename
         :rtype: str
@@ -119,29 +110,25 @@ class BackgroundCollection:
 
     @filename.setter
     def filename(self, filename: str) -> None:
-        """
-        Set the filename.
+        """Set the filename.
 
         :param filename: Filename
         :type filename: str
         """
         self._filename = (
-            filename.replace(".tiff", "").replace(".tif", "")
-            if filename.endswith(".tiff") or filename.endswith(".tif")
-            else f"{filename}"
+            filename.replace('.tiff', '').replace('.tif', '') if filename.endswith(('.tiff', '.tif')) else f'{filename}'
         )
-        self.log.info(f"setting filename to: {filename}")
+        self.log.info('setting filename to: %s', filename)
 
     def start(self, device: BaseCamera) -> None:
-        """
-        Start the background collection process.
+        """Start the background collection process.
 
         :param device: Camera device
         :type device: BaseCamera
         """
         camera = device
         trigger = camera.trigger
-        trigger["mode"] = "off"
+        trigger['mode'] = 'off'
         camera.trigger = trigger
         # prepare and start camera
         camera.frame_number = 0
@@ -157,10 +144,11 @@ class BackgroundCollection:
         # close writer and camera
         camera.stop()
         # reset the trigger
-        trigger["mode"] = "on"
+        trigger['mode'] = 'on'
         camera.trigger = trigger
         # average and save the image
         background_image = np.mean(background_stack, axis=0)
         tifffile.imwrite(
-            Path(self.path, self._acquisition_name, f"{self.filename}.tiff"), background_image.astype(self._data_type)
+            Path(self.path, self._acquisition_name, f'{self.filename}.tiff'),
+            background_image.astype(self._data_type),
         )

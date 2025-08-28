@@ -1,13 +1,13 @@
 from voxel.utils.frame_gen.base import FrameGenerator
-from .synthetic import RippleGenerator, SpiralGenerator, CheckeredGenerator
-from .reference import UpsampleReferenceGenerator, TileReferenceGenerator
 
+from .reference import TileReferenceGenerator, UpsampleReferenceGenerator
+from .synthetic import CheckeredGenerator, RippleGenerator, SpiralGenerator
 
 __all__ = [
-    "RippleGenerator",
-    "SpiralGenerator",
-    "CheckeredGenerator",
-    "UpsampleReferenceGenerator",
-    "TileReferenceGenerator",
-    "FrameGenerator",
+    'CheckeredGenerator',
+    'FrameGenerator',
+    'RippleGenerator',
+    'SpiralGenerator',
+    'TileReferenceGenerator',
+    'UpsampleReferenceGenerator',
 ]

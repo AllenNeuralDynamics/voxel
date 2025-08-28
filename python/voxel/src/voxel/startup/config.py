@@ -6,16 +6,15 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from voxel.factory import BuildSpecs
+from voxel.instrument import InstrumentMetadata, InstrumentNodeType
 from voxel.layout import LayoutDefinition
 from voxel.presets import ChannelDefinition, ProfileDefinition
-from voxel.instrument import InstrumentNodeType, InstrumentMetadata
 from voxel.runtime.preview.models import PreviewManagerOptions, PreviewRelayOptions
-
-from voxel.factory import BuildSpecs
 
 
 class BaseNodeConfig(BaseModel):
-    devices: BuildSpecs = Field(description="Devices available on the node, keyed by device uid")
+    devices: BuildSpecs = Field(description='Devices available on the node, keyed by device uid')
 
 
 class LocalNodeConfig(BaseNodeConfig):
@@ -31,33 +30,37 @@ class RemoteNodeConfig(BaseNodeConfig):
     ssh_port: int = 22
 
 
-type NodeConfig = Annotated[LocalNodeConfig | RemoteNodeConfig, Field(discriminator="type")]
+type NodeConfig = Annotated[LocalNodeConfig | RemoteNodeConfig, Field(discriminator='type')]
 
 
 class SystemConfig(BaseModel):
     """Complete system definition including metadata and hardware."""
 
     metadata: InstrumentMetadata
-    preview: PreviewManagerOptions = Field(default_factory=PreviewManagerOptions, description="Preview stream options")
+    preview: PreviewManagerOptions = Field(default_factory=PreviewManagerOptions, description='Preview stream options')
     nodes: dict[str, NodeConfig]
     layout: LayoutDefinition
 
-    @field_validator("nodes", mode="before")
-    def set_missing_defaults(cls, raw_nodes):
+    @field_validator('nodes', mode='before')
+    @classmethod
+    def set_missing_defaults(cls, raw_nodes: dict) -> dict:
         """Ensure all nodes have a type and default to remote if not specified."""
         out = {}
         for name, node in raw_nodes.items():
-            if isinstance(node, dict) and "type" not in node:
-                node_type = "remote" if "host" in node and "rpc_port" in node else "local"
-                node = {**node, "type": node_type}  # copy so we don’t mutate the user’s dict in-place
-            out[name] = node
+            if isinstance(node, dict) and 'type' not in node:
+                node_type = 'remote' if 'host' in node and 'rpc_port' in node else 'local'
+                out[name] = {**node, 'type': node_type}  # copy so we don't mutate the user's dict in-place
+            else:
+                out[name] = node
         return out
 
-    @field_validator("nodes", mode="after")
-    def check_one_local_node(cls, nodes):
-        locals_ = [name for name, node in nodes.items() if node.type == "local"]
+    @field_validator('nodes', mode='after')
+    @classmethod
+    def check_one_local_node(cls, nodes: dict) -> dict:
+        locals_ = [name for name, node in nodes.items() if node.type == 'local']
         if len(locals_) != 1:
-            raise ValueError(f"Exactly one local node required; found {len(locals_)}: {locals_}")
+            msg = f'Exactly one local node required; found {len(locals_)}: {locals_}'
+            raise ValueError(msg)
         return nodes
 
     @cached_property
@@ -69,14 +72,13 @@ class SystemConfig(BaseModel):
         )
 
     @cached_property
-    def remote_nodes(self) -> dict[str, "RemoteNodeConfig"]:
+    def remote_nodes(self) -> dict[str, 'RemoteNodeConfig']:
         """Return a list of remote worker nodes. Used to make a NodeClient for each worker."""
-        return {name: node for name, node in self.nodes.items() if node.type == "remote"}
+        return {name: node for name, node in self.nodes.items() if node.type == 'remote'}
 
 
 class InstrumentConfig(BaseModel, frozen=True):
-    """
-    Complete instrument definition including system and presets.
+    """Complete instrument definition including system and presets.
     This is used when starting a new experiment and will be copied to the experiment's working directory for use
     during acquisition.
     """

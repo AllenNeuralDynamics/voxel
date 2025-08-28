@@ -51,7 +51,7 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
         :param channel: Initial channel to set
         :type channel: str
         """
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.id = id
         # forward attribute declaration for type checkers
         self._dll: _TspbDll  # set in _load_dll
@@ -164,10 +164,14 @@ class TSP01BTemperatureSensor(BaseTemperatureSensor):
 
         # DLL must be in same directory as this driver file
         path = os.path.dirname(os.path.realpath(__file__))
-        with os.add_dll_directory(path):
-            # needs "TLTSPB_64.dll" in directory
-            self._dll = cast("_TspbDll", C.cdll.LoadLibrary("TLTSPB_64.dll"))
-        self._setup_dll()
+        if os.name == "nt":
+            with os.add_dll_directory(path):
+                # needs "TLTSPB_64.dll" in directory
+                self._dll = cast("_TspbDll", C.cdll.LoadLibrary("TLTSPB_64.dll"))
+            self._setup_dll()
+        else:
+            raise OSError("This driver is only supported on Windows.")
+
 
     def _setup_dll(self) -> None:
         """

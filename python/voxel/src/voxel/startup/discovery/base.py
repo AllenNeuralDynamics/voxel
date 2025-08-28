@@ -14,28 +14,23 @@ class InstrumentConfigLoader(ABC):
     @abstractmethod
     def instrument_id(self) -> str:
         """Get the unique identifier for the instrument."""
-        pass
 
     @abstractmethod
     def get_system_config(self) -> dict[str, Any]:
         """Get the loaded instrument configuration."""
-        pass
 
     @abstractmethod
     def get_channel_repository(self) -> Repository[ChannelDefinition]:
         """Get the channel repository."""
-        pass
 
     @abstractmethod
     def get_profile_repository(self) -> Repository[ProfileDefinition]:
         """Get the profile repository."""
-        pass
 
 
 class InstrumentDiscovery(ABC):
     """Abstract base class for discovering and parsing instrument configurations."""
 
     @abstractmethod
-    def run_discovery(self) -> Mapping[str, "InstrumentConfigLoader"]:
+    def run_discovery(self) -> Mapping[str, 'InstrumentConfigLoader']:
         """Scan for instrument configurations and create launchers for each."""
-        pass

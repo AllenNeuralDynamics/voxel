@@ -1,10 +1,9 @@
 from .base import InstrumentConfigLoader, InstrumentDiscovery
-from .yaml_discovery import YAMLInstrumentLoader, YAMLInstrumentDiscovery
-
+from .yaml_discovery import YAMLInstrumentDiscovery, YAMLInstrumentLoader
 
 __all__ = (
-    "InstrumentDiscovery",
-    "InstrumentConfigLoader",
-    "YAMLInstrumentLoader",
-    "YAMLInstrumentDiscovery",
+    'InstrumentConfigLoader',
+    'InstrumentDiscovery',
+    'YAMLInstrumentDiscovery',
+    'YAMLInstrumentLoader',
 )

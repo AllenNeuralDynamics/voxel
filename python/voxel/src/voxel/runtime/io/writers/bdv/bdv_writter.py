@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..base import VoxelWriter, WriterConfig
+from voxel.runtime.io.writers.base import VoxelWriter, WriterConfig
 
 from .sdk import npy2bdv
 
@@ -29,10 +29,10 @@ B3D_COMPRESSION_OPTS = (
 
 
 class BdvCompression(StrEnum):
-    NONE = "none"
-    GZIP = "gzip"
-    LZF = "lzf"
-    B3D = "b3d"
+    NONE = 'none'
+    GZIP = 'gzip'
+    LZF = 'lzf'
+    B3D = 'b3d'
 
 
 # TODO: Review this class and test it
@@ -40,7 +40,7 @@ class BdvCompression(StrEnum):
 
 
 class BdvWriter(VoxelWriter):
-    def __init__(self, *, name: str = "bdv_writer", theta_deg: float = 0.0) -> None:
+    def __init__(self, *, name: str = 'bdv_writer', theta_deg: float = 0.0) -> None:
         super().__init__(name)
         self._theta_deg = theta_deg
 
@@ -66,8 +66,7 @@ class BdvWriter(VoxelWriter):
         :return: Compression codec
         :rtype: str
         """
-
-        if self._compression == "none":
+        if self._compression == 'none':
             return None
         return str(self._compression)
 
@@ -87,11 +86,14 @@ class BdvWriter(VoxelWriter):
         :raises ValueError: HDF5 version is >1.8.xx
         """
         compression = compression.lower() if compression else None
-        compression = None if compression == "none" else compression
+        compression = None if compression == 'none' else compression
         try:
             self._compression = BdvCompression(compression)
-        except ValueError:
-            raise ValueError(f"Invalid compression codec: {compression}. Must be one of {BdvCompression.__members__}")
+        except ValueError as e:
+            msg = f'Invalid compression codec: {compression}. Must be one of {BdvCompression.__members__}'
+            raise ValueError(
+                msg,
+            ) from e
 
     @property
     def batch_size_px(self) -> int:
@@ -99,7 +101,7 @@ class BdvWriter(VoxelWriter):
 
     def configure(self, config: WriterConfig) -> None:
         super().configure(config)
-        self._output_file = self.dir / f"{self.config.file_name}.n5"
+        self._output_file = self.dir / f'{self.config.file_name}.n5'
         self._output_file = self._output_file.resolve()
 
         self._tiles_set.add(tuple(self.config.position_um))
@@ -109,7 +111,8 @@ class BdvWriter(VoxelWriter):
         dict_key = (len(self._tiles_set), self.config.channel_idx)
 
         if dict_key in self._tile_shape_dict:
-            raise ValueError(f"Duplicate tile/channel configuration: {dict_key}")
+            msg = f'Duplicate tile/channel configuration: {dict_key}'
+            raise ValueError(msg)
 
         self._tile_shape_dict[dict_key] = (
             self.config.frame_count,
@@ -122,21 +125,21 @@ class BdvWriter(VoxelWriter):
         # shearing based on theta and y/z pixel sizes
         shear = -np.tan(self._theta_deg * np.pi / 180.0) * self.config.voxel_size.y / self.config.voxel_size.z
         self._affine_deskew_dict[dict_key] = np.array(
-            ([1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, shear, 1.0, 0.0])
+            ([1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, shear, 1.0, 0.0]),
         )
 
         scale_x = self.config.voxel_size.x / self.config.voxel_size.y
         scale_y = 1.0
         scale_z = self.config.voxel_size.z / self.config.voxel_size.y
         self._affine_scale_dict[dict_key] = np.array(
-            ([scale_x, 0.0, 0.0, 0.0], [0.0, scale_y, 0.0, 0.0], [0.0, 0.0, scale_z, 0.0])
+            ([scale_x, 0.0, 0.0, 0.0], [0.0, scale_y, 0.0, 0.0], [0.0, 0.0, scale_z, 0.0]),
         )
 
         shift_x = scale_x * (self.config.position_um.x / self.config.voxel_size.x)
         shift_y = scale_y * (self.config.position_um.y / self.config.voxel_size.y)
         shift_z = scale_z * (self.config.position_um.z / self.config.voxel_size.z)
         self._affine_shift_dict[dict_key] = np.array(
-            ([1.0, 0.0, 0.0, shift_x], [0.0, 1.0, 0.0, shift_y], [0.0, 0.0, 1.0, shift_z])
+            ([1.0, 0.0, 0.0, shift_x], [0.0, 1.0, 0.0, shift_y], [0.0, 0.0, 1.0, shift_z]),
         )
 
     def _initialize(self) -> None:
@@ -162,7 +165,7 @@ class BdvWriter(VoxelWriter):
             subsamp=subsamp,
             blockdim=blockdim,
             compression=self._compression,
-            compression_opts=B3D_COMPRESSION_OPTS if self.compression == "b3d" else None,
+            compression_opts=B3D_COMPRESSION_OPTS if self.compression == 'b3d' else None,
             ntiles=len(self._tiles_set),
             nchannels=len(self._channels_set),
             overwrite=False,
@@ -180,12 +183,12 @@ class BdvWriter(VoxelWriter):
                 tile=append_tile,
                 channel=append_channel,
                 voxel_size_xyz=tuple(self.config.voxel_size),
-                voxel_units="um",
+                voxel_units='um',
             )
 
-        self.log.info(f"Initialized. Writing to {self._output_file}")
+        self.log.info('Initialized. Writing to %s', self._output_file)
 
-    def _process_batch(self, batch_data) -> None:
+    def _process_batch(self, batch_data: np.ndarray) -> None:
         self._npy2bdv.append_substack(
             substack=batch_data,
             z_start=self.batch_count * self.batch_size_px,
@@ -199,7 +202,7 @@ class BdvWriter(VoxelWriter):
         for append_tile, append_channel in self._affine_deskew_dict:
             self._npy2bdv.append_affine(
                 m_affine=self._affine_deskew_dict[(append_tile, append_channel)],
-                name_affine="deskew",
+                name_affine='deskew',
                 tile=append_tile,
                 channel=append_channel,
             )
@@ -207,7 +210,7 @@ class BdvWriter(VoxelWriter):
         for append_tile, append_channel in self._affine_scale_dict:
             self._npy2bdv.append_affine(
                 m_affine=self._affine_scale_dict[(append_tile, append_channel)],
-                name_affine="scale",
+                name_affine='scale',
                 tile=append_tile,
                 channel=append_channel,
             )
@@ -215,10 +218,10 @@ class BdvWriter(VoxelWriter):
         for append_tile, append_channel in self._affine_shift_dict:
             self._npy2bdv.append_affine(
                 m_affine=self._affine_shift_dict[(append_tile, append_channel)],
-                name_affine="shift",
+                name_affine='shift',
                 tile=append_tile,
                 channel=append_channel,
             )
         self._npy2bdv.close()
         self._tile_idx += 1
-        self.log.info(f"Finalized. Wrote {self.config.frame_count} frames to {self._output_file}")
+        self.log.info('Finalized. Wrote %s frames to %s', self.config.frame_count, self._output_file)

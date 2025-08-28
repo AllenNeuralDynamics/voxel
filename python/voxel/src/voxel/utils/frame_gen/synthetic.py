@@ -1,4 +1,5 @@
 import numpy as np
+
 from .base import FrameGenerator
 
 
@@ -6,7 +7,12 @@ class RippleGenerator(FrameGenerator):
     """Generates frames with a concentric ripple pattern."""
 
     def __init__(
-        self, height_px: int, width_px: int, data_type: np.dtype, ring_count: int = 20, duty_cycle: float = 0.5
+        self,
+        height_px: int,
+        width_px: int,
+        data_type: np.dtype,
+        ring_count: int = 20,
+        duty_cycle: float = 0.5,
     ):
         self.height = height_px
         self.width = width_px
@@ -37,7 +43,8 @@ class RippleGenerator(FrameGenerator):
 class SpiralGenerator(FrameGenerator):
     """Generates frames with a spiral pattern."""
 
-    def __init__(self, height_px: int, width_px: int, data_type: np.dtype = np.dtype(np.uint16), tile_size: int = 10):
+    def __init__(self, height_px: int, width_px: int, data_type: np.dtype | None = None, tile_size: int = 10):
+        data_type = data_type if data_type else np.dtype(np.uint16)
         self.height = height_px
         self.width = width_px
         self.dtype = data_type
@@ -45,8 +52,7 @@ class SpiralGenerator(FrameGenerator):
         self.z_pos = 0
 
     def generate(self, nframes: int = 1) -> np.ndarray:
-        """
-        Generates a stack of frames with an expanding spiral pattern.
+        """Generates a stack of frames with an expanding spiral pattern.
 
         Note: This generator is stateful. Each call to generate continues
         the pattern from where it left off.
@@ -80,13 +86,13 @@ class CheckeredGenerator(FrameGenerator):
         self,
         height_px: int,
         width_px: int,
-        data_type: np.dtype = np.dtype(np.uint16),
         initial_size: int = 2,
         final_size: int = 20,
+        data_type: np.dtype | None = None,
     ):
         self.height = height_px
         self.width = width_px
-        self.dtype = data_type
+        self.dtype = data_type if data_type else np.dtype(np.uint16)
         self.initial_size = initial_size
         self.final_size = min(width_px // 10, final_size)
         self.z_idx = 0

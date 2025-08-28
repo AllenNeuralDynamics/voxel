@@ -1,5 +1,8 @@
 from collections.abc import Callable
-from PySide6.QtWidgets import QVBoxLayout, QWidget, QCheckBox
+
+from PySide6.QtWidgets import QCheckBox, QVBoxLayout, QWidget
+
+from voxel.utils.log import VoxelLogging
 
 
 class VCheckBox(QCheckBox):
@@ -41,7 +44,7 @@ class VSwitch(QWidget):
 
     def __init__(
         self,
-        text: str = "",
+        text: str = '',
         getter: Callable[[], bool] | None = None,
         setter: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
@@ -50,6 +53,7 @@ class VSwitch(QWidget):
         self.text = text
         self.getter = getter
         self.setter = setter
+        self.log = VoxelLogging.get_logger(f'VSwitch[{id(self)}]')
         self._setup_ui()
 
     @property
@@ -77,7 +81,7 @@ class VSwitch(QWidget):
                 self.checkbox.setChecked(initial_value)
             except Exception:
                 # If getter fails, just continue without setting value
-                pass
+                self.log.exception('Error calling getter for initial value:')
 
         # Connect callback if provided
         if self.setter:
@@ -94,6 +98,6 @@ class VSwitch(QWidget):
         """Get the current checked state."""
         return self.checkbox.isChecked()
 
-    def setChecked(self, checked: bool):
+    def setChecked(self, checked: bool) -> None:
         """Set the checked state."""
         self.checkbox.setChecked(checked)

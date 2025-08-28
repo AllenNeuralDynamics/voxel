@@ -36,6 +36,10 @@ members = [
 "voxel-classic" = { workspace = true }
 "exaspim-control" = { workspace = true }
 
+[build-system]
+requires = ["uv_build>=0.8.2,<0.9.0"]
+build-backend = "uv_build"
+
 [tool.tach]
 source_roots = ["**/src"]
 exclude = ["**/sdk/"]
@@ -49,6 +53,18 @@ external.rename = [
     "PyImarisWriter:pyimariswriter",
 ]
 
-[build-system]
-requires = ["uv_build>=0.8.2,<0.9.0"]
-build-backend = "uv_build"
+[tool.ty.src]
+exclude = [
+    "**/.venv",
+    "**/sdk",
+    "**/sdks",
+    "./classic_drivers",
+    "./python/voxel-classic",
+    "./python/voxel-classic/src/voxel_classic/processes",
+    "./python/voxel/src/voxel/utils/processing",
+    "./python/voxel/tests/processes",
+    "./python/vidgets/src/vidgets/view",
+    "**/miscellaneous_widgets",
+]
+[tool.ty.environment]
+python = "./.venv"

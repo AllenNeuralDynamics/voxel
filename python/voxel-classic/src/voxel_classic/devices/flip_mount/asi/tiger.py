@@ -29,7 +29,7 @@ class TigerFlipMount(BaseFlipMount):
         self.id = f"tiger flip mount: axis = {axis}"
         self.axis = axis.upper()
         super().__init__(f"tiger_flipmount_{axis}")
-        self.log = VoxelLogging.get_logger(object=self)
+        self.log = VoxelLogging.get_logger(obj=self)
         self.tigerbox = tigerbox
         for key, value in positions.items():
             POSITIONS[key] = value

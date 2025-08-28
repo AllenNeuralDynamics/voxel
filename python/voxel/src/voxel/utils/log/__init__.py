@@ -5,7 +5,6 @@ from multiprocessing import Queue
 
 from ._handlers import get_default_console_handler, get_default_json_handler
 
-
 type LoggerType = logging.Logger | logging.LoggerAdapter
 
 
@@ -23,8 +22,7 @@ class VoxelLogging:
         default_console: bool = True,
         default_json: bool = False,
     ):
-        """
-        Setup the queue logging with optional handlers.
+        """Setup the queue logging with optional handlers.
         :param level: The logging level to set.
         :param handlers: List of logging handlers to use.
         :param default_console: Whether to include the default console handler.
@@ -53,36 +51,32 @@ class VoxelLogging:
 
     @staticmethod
     def redirect(loggers: list[LoggerType], log_queue: Queue):
-        """
-        Redirects the specified loggers to the given log queue.
+        """Redirects the specified loggers to the given log queue.
         :param loggers: List of loggers to redirect.
         :param log_queue: The queue to which logs will be sent.
         """
         for logger in loggers:
-            if isinstance(logger, logging.LoggerAdapter):
-                logger = logger.logger
-            logger.handlers.clear()
-            logger.addHandler(QueueHandler(log_queue))
-            logger.setLevel(VoxelLogging._log_level)
-            logger.propagate = False
+            actual_logger = logger.logger if isinstance(logger, logging.LoggerAdapter) else logger
+            actual_logger.handlers.clear()
+            actual_logger.addHandler(QueueHandler(log_queue))
+            actual_logger.setLevel(VoxelLogging._log_level)
+            actual_logger.propagate = False
 
     @staticmethod
-    def get_logger(name: str | None = None, *, object: object | None = None, extra: dict | None = None) -> "LoggerType":
-        """
-        Get a logger with the specified name.
+    def get_logger(name: str | None = None, *, obj: object | None = None, extra: dict | None = None) -> 'LoggerType':
+        """Get a logger with the specified name.
         :param name: The name of the logger.
         :param object: An object to derive the logger name from. If provided alongside `name`, `name` will be ignored.
         :param extra: Extra attributes to include in the log records.
         :return: A logger instance.
         """
-        if object is not None:
-            name = f"{object.__class__.__name__}"
-            uid = getattr(object, "uid", None)
+        if obj is not None:
+            name = f'{obj.__class__.__name__}'
+            uid = getattr(obj, 'uid', None)
             if uid is None:
-                uid = getattr(object, "_uid", None)
+                uid = getattr(obj, '_uid', None)
             if uid:
-                name += f"[{uid}]"
-            VoxelLogging.get_logger(name, extra=extra)
+                name += f'[{uid}]'
 
         logger = logging.getLogger(name) if name else logging.getLogger()
         if extra:
@@ -91,16 +85,14 @@ class VoxelLogging:
 
     @staticmethod
     def get_queue() -> Queue:
-        """
-        Get the log queue.
+        """Get the log queue.
         :return: The log queue.
         """
         return VoxelLogging._log_queue
 
     @staticmethod
     def log_level() -> int:
-        """
-        Get the current log level.
+        """Get the current log level.
         :return: The log level.
         """
         return VoxelLogging._log_level

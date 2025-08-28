@@ -6,7 +6,7 @@ from voxel.utils.log import VoxelLogging
 
 class IOManager:
     def __init__(self):
-        self._log = VoxelLogging.get_logger(f"{self.__class__.__name__}")
+        self._log = VoxelLogging.get_logger(f'{self.__class__.__name__}')
         self._writers = WriterRegistry()
         self._transfers = TransferRegistry()
 
