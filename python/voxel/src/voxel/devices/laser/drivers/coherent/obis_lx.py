@@ -1,7 +1,6 @@
 from obis_laser import ObisLS, ObisLX, OperationalCmd, OperationalQuery
 from obis_laser.obis import SystemStatus
 from serial import Serial
-
 from voxel.devices.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 from voxel.utils.log import LoggerType
@@ -41,7 +40,7 @@ class ObisLXLaser(VoxelLaser):
         :param prefix: prefix specic to laser.
         :param wavelength: wavelength of laser
         """
-        super().__init__(name=name, wavelength=wavelength)
+        super().__init__(uid=name, wavelength=wavelength)
         self.prefix = prefix
         self._inst = ObisLX(port, self.prefix)
 

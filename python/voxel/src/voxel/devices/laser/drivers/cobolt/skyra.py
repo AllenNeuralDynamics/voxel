@@ -14,7 +14,6 @@ from sympy import (
     solve,
 )
 from sympy.core.expr import Expr
-
 from voxel.devices.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
@@ -94,7 +93,7 @@ class SkyraLaser(VoxelLaser):
         :param max_current_ma: Maximum allowed drive current (mA).
         :param coefficients: Polynomial coefficients mapping current (mA) -> power (mW).
         """
-        super().__init__(name=name, wavelength=wavelength)
+        super().__init__(uid=name, wavelength=wavelength)
 
         self._inst = CoboltLaser(port)
         self._prefix = prefix

@@ -7,9 +7,9 @@ from voxel.utils.descriptors.deliminated import deliminated_float
 class VoxelLaser(VoxelDevice):
     """Base class for all voxel laser devices."""
 
-    def __init__(self, name: str, wavelength: int) -> None:
+    def __init__(self, uid: str, wavelength: int) -> None:
         self._wavelength = wavelength
-        super().__init__(device_type=VoxelDeviceType.LASER, uid=name)
+        super().__init__(device_type=VoxelDeviceType.LASER, uid=uid)
 
     def __repr__(self) -> str:
         return (
@@ -27,6 +27,11 @@ class VoxelLaser(VoxelDevice):
     @abstractmethod
     def disable(self) -> None:
         """Turn off the laser."""
+
+    @property
+    @abstractmethod
+    def is_enabled(self) -> bool:
+        """Check if the laser is enabled."""
 
     @property
     def wavelength(self) -> int:

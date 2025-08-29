@@ -3,7 +3,6 @@ from typing import Any, Literal
 from oxxius_laser import LBX, BoolVal
 from serial import Serial
 from sympy import Expr, S, solve, symbols
-
 from voxel.devices.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
@@ -24,7 +23,7 @@ class OxxiusLBXLaser(VoxelLaser):
         :param wavelength: wavelength of laser
         the relationship between current percentage and power mw
         """
-        super().__init__(name=name, wavelength=wavelength)
+        super().__init__(uid=name, wavelength=wavelength)
         self._prefix = prefix
         self._inst = LBX(port, self._prefix)
         self._coefficients = coefficients

@@ -3,7 +3,6 @@ from typing import Literal
 from pyparsing import Any
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusVortran
-
 from voxel.devices.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
@@ -21,7 +20,7 @@ class StradusLaser(VoxelLaser):
         :param port: comm port for lasers.
         :param wavelength: wavelength of laser
         """
-        super().__init__(name=name, wavelength=wavelength)
+        super().__init__(uid=name, wavelength=wavelength)
         self._inst = StradusVortran(port)
 
     def enable(self) -> None:

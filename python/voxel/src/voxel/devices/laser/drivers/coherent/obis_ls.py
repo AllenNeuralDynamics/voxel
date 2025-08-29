@@ -1,6 +1,5 @@
 from obis_laser import ObisLS
 from serial import Serial
-
 from voxel.devices.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import DeliminatedFloat, deliminated_float
 
@@ -17,7 +16,7 @@ class ObisLSLaser(VoxelLaser):
         :param wavelength: wavelength of laser
         :param prefix: prefix specic to laser.
         """
-        super().__init__(name=name, wavelength=wavelength)
+        super().__init__(uid=name, wavelength=wavelength)
         self.prefix = prefix
         self._inst = ObisLS(port, self.prefix)
 

@@ -1,7 +1,6 @@
 from oxxius_laser import LCX
 from pyparsing import Any
 from serial import Serial
-
 from voxel.devices.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import deliminated_float
 
@@ -14,7 +13,7 @@ class OxxiusLCXLaser(VoxelLaser):
         :param prefix: prefix specic to laser.
         :param wavelength: wavelength of laser
         """
-        super().__init__(name=name, wavelength=wavelength)
+        super().__init__(uid=name, wavelength=wavelength)
         self._prefix = prefix
         self._inst = LCX(port, self._prefix)
 

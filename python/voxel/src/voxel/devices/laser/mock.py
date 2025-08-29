@@ -29,15 +29,21 @@ class SimulatedLaser(VoxelLaser):
         self._max_power_mw = MAX_POWER_MW
         self._modulation_mode = 'digital'
         self._temperature = 20.0
+        self._is_enabled = False
         self._cdrh = 'ON'
         self._status = []
-        super().__init__(name=name, wavelength=wavelength)
+        super().__init__(uid=name, wavelength=wavelength)
 
     def enable(self) -> None:
         self.log.info('Enabling %s laser', self.uid)
+        self._is_enabled = True
 
     def disable(self) -> None:
-        pass
+        self._is_enabled = False
+
+    @property
+    def is_enabled(self) -> bool:
+        return self._is_enabled
 
     @deliminated_float(min_value=0, max_value=lambda self: self._max_power_mw, step=POWER_STEP_MW)
     def power_setpoint_mw(self) -> float:
