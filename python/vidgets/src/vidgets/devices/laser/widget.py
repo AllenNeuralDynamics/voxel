@@ -1,7 +1,6 @@
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 from vidgets.devices.laser.adapter import QtLaserAdapter
 from vidgets.devices.laser.power import PowerSetpointInput
-
 from voxel.devices.laser.agent import LaserAgent
 
 
@@ -24,7 +23,6 @@ if __name__ == '__main__':
     from PySide6 import QtAsyncio
     from PySide6.QtWidgets import QApplication, QMainWindow
     from vidgets.devices.laser.adapter import run_adapters
-
     from voxel.devices.laser.mock import SimulatedLaser
     from voxel.utils.log import VoxelLogging
 

@@ -27,7 +27,6 @@ keywords = [
 ]
 
 dependencies = [
-    "voxel-classic",
     "vidgets",
     "aind_data_schema >= 0.26.7",
     "rich>=14.1.0",

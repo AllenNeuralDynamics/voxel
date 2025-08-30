@@ -9,6 +9,14 @@ import napari
 import numpy as np
 import tifffile
 from exaspim_control.instrument.exaspim_instrument import ExASPIM, ExASPIMChannel
+from exaspim_control.view.base_device_widget import create_widget
+from exaspim_control.view.device_widgets.camera_widget import CameraWidget
+from exaspim_control.view.device_widgets.filter_wheel_widget import FilterWheelWidget
+from exaspim_control.view.device_widgets.flip_mount_widget import FlipMountWidget
+from exaspim_control.view.device_widgets.laser_widget import LaserWidget
+from exaspim_control.view.device_widgets.ni_widget import NIWidget
+from exaspim_control.view.device_widgets.stage_widget import StageWidget
+from exaspim_control.voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 from napari.layers import Image
 from napari.qt.threading import FunctionWorker, WorkerBase, create_worker
 from napari.utils.events import Event
@@ -30,14 +38,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ruamel.yaml import RoundTripRepresenter
-from vidgets.view.base_device_widget import create_widget
-from vidgets.view.device_widgets.camera_widget import CameraWidget
-from vidgets.view.device_widgets.filter_wheel_widget import FilterWheelWidget
-from vidgets.view.device_widgets.flip_mount_widget import FlipMountWidget
-from vidgets.view.device_widgets.laser_widget import LaserWidget
-from vidgets.view.device_widgets.ni_widget import NIWidget
-from vidgets.view.device_widgets.stage_widget import StageWidget
-from voxel_classic.processes.downsample.gpu.gputools.rank_downsample_2d import GPUToolsRankDownSample2D
 
 
 class NonAliasingRTRepresenter(RoundTripRepresenter):

@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from tigerasi.device_codes import JoystickInput as ASIJoystickInput
-
 from voxel.devices.hubs.tigerbox import ASITigerBox
 from voxel.devices.linear_axis import LinearAxisDimension, ScanConfig, ScanState, VoxelLinearAxis
 from voxel.utils.descriptors.deliminated import deliminated_float

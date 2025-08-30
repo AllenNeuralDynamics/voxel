@@ -1,7 +1,6 @@
 import time
 
 import serial
-
 from voxel.devices.chiller import VoxelChiller
 from voxel.devices.chiller.drivers.smc.codes import SMCCommand, SMCControl
 

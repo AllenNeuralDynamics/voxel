@@ -7,6 +7,17 @@ import inflection
 import numpy as np
 from exaspim_control.acquisition.exaspim_acquisition import ExASPIMAcquisition
 from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
+from exaspim_control.view.acquisition_widgets.channel_plan_widget import ChannelPlanWidget
+from exaspim_control.view.acquisition_widgets.metadata_widget import MetadataWidget
+from exaspim_control.view.acquisition_widgets.volume_model import VolumeModel
+from exaspim_control.view.acquisition_widgets.volume_plan_widget import (
+    GridFromEdges,
+    GridRowsColumns,
+    GridWidthHeight,
+    VolumePlanWidget,
+)
+from exaspim_control.view.base_device_widget import create_widget, scan_for_properties
+from exaspim_control.view.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
 from napari.qt import get_stylesheet
 from napari.qt.threading import create_worker, thread_worker
 from napari.settings import get_settings
@@ -27,18 +38,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ruamel.yaml import YAML, RoundTripRepresenter
-from vidgets.view.acquisition_widgets.channel_plan_widget import ChannelPlanWidget
-from vidgets.view.acquisition_widgets.metadata_widget import MetadataWidget
-from vidgets.view.acquisition_widgets.volume_model import VolumeModel
-from vidgets.view.acquisition_widgets.volume_plan_widget import (
-    GridFromEdges,
-    GridRowsColumns,
-    GridWidthHeight,
-    VolumePlanWidget,
-)
-from vidgets.view.base_device_widget import create_widget, scan_for_properties
-from vidgets.view.miscellaneous_widgets.q_dock_widget_title_bar import QDockWidgetTitleBar
-
 from voxel.utils.log import VoxelLogging
 
 

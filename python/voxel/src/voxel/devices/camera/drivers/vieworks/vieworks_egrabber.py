@@ -22,7 +22,6 @@ from egrabber import (
     ct,
     query,
 )
-
 from voxel.devices.camera import AcquisitionState, PixelType, TriggerSetting, VoxelCamera
 from voxel.devices.descriptions import AttrDescription
 from voxel.devices.device import VoxelDeviceConnectionError, VoxelDeviceError

@@ -6,12 +6,12 @@ from pathlib import Path, WindowsPath
 import numpy as np
 from PySide6.QtWidgets import QApplication
 from ruamel.yaml import YAML
+from voxel.utils.log import VoxelLogging, get_default_console_handler, get_default_json_handler
 
 # from exaspim_control.exa_spim_acquisition import ExASPIMAcquisition
 # from exaspim_control.exa_spim_acquisition_view import ExASPIMAcquisitionView
 from exaspim_control.instrument.exaspim_instrument import ExASPIM
 from exaspim_control.instrument.exaspim_instrument_view import ExASPIMInstrumentView
-from voxel.utils.log import VoxelLogging, get_default_console_handler, get_default_json_handler
 
 # from exaspim_control.metadata_launch import MetadataLaunch
 

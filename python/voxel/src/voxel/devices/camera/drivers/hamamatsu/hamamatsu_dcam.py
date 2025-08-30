@@ -3,7 +3,6 @@ from functools import cached_property
 from typing import Any, Literal
 
 import numpy as np
-
 from voxel.devices import VoxelDeviceConnectionError
 from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.utils.descriptors.deliminated import deliminated_float, deliminated_int

@@ -1,16 +1,13 @@
-from numbers import Number
 from pathlib import Path
 
-import numpy
+import numpy as np
 from gputools import OCLArray, OCLProgram
 from mako.template import Template
-
 from voxel.utils.processing.downsample.base import BaseDownSample
 
 
 class GPUToolsDownSample3D(BaseDownSample):
-    """
-    Voxel 3D rank order downsampling with gputools.
+    """Voxel 3D rank order downsampling with gputools.
 
     :param binning: Binning factor
     :type binning: int
@@ -23,37 +20,37 @@ class GPUToolsDownSample3D(BaseDownSample):
     If rank = size[0] x size[1] x size[2] - 1 (or -1) then the maximum is returned
     """
 
-    def __init__(self, binning: int, rank=None, data_type=None):
-        super().__init__(binning)
-        self._rank = None
-
-        self._rank = rank
-        # opencl kernel
-        with open(Path(__file__).absolute().parent / "rank_downscale_3d.cl", "r") as f:
-            self._kernel = Template(f.read())
-
+    def __init__(self, binning: int | tuple[int, int, int], rank: int | None = None, data_type: str | None = None):
         # set binning
-        if isinstance(binning, Number):
-            binning = (int(binning),) * 3
+        binning_tuple = binning if isinstance(binning, tuple) else (binning, binning, binning)
+        super().__init__(binning_tuple[0])
 
-        if len(binning) != 3:
-            raise ValueError("size has to be a tuple of 3 ints")
+        self._rank = rank or 0
+        # opencl kernel
+        with (Path(__file__).absolute().parent / 'rank_downscale_3d.cl').open() as f:
+            self._kernel = Template(f.read())  # noqa: S702
 
-        self._binning = tuple(map(int, binning))
+        if len(binning_tuple) != 3:
+            raise ValueError('size has to be a tuple of 3 ints')
+
+        self._binning = tuple(map(int, binning_tuple))
 
         # determine rank order
         if self._rank is None:
-            self._rank = numpy.prod(self._binning) // 2
+            self._rank = np.prod(self._binning) // 2
         else:
-            self._rank = self._rank % numpy.prod(self._binning)
+            self._rank = self._rank % np.prod(self._binning)
+
+        assert self._rank is not None
 
         # determine gpu data type
-        if data_type == "uint16":
-            gpu_dtype = "ushort"
-        elif data_type == "uint8":
-            gpu_dtype = "uchar"
+        if data_type == 'uint16':
+            gpu_dtype = 'ushort'
+        elif data_type == 'uint8':
+            gpu_dtype = 'uchar'
         else:
-            raise ValueError(f"Data type {data_type} not supported")
+            msg = f'Data type {data_type} not supported'
+            raise ValueError(msg)
 
         rendered = self._kernel.render(
             DTYPE=gpu_dtype,
@@ -65,34 +62,33 @@ class GPUToolsDownSample3D(BaseDownSample):
 
         self._prog = OCLProgram(src_str=rendered)
 
-    def run(self, image: numpy.array):
-        """
-        Run function for rank order image downsampling.
+    def run(self, image: np.ndarray):
+        """Run function for rank order image downsampling.
 
         :param image: Input image
-        :type image: numpy.array
+        :type image: np.ndarray
         :return: Downsampled image
-        :rtype: numpy.array
+        :rtype: np.ndarray
         """
-
-        x_g = OCLArray.from_array(image)
-        y_g = OCLArray.empty(tuple(s0 // s for s, s0 in zip(self._binning, x_g.shape)), x_g.dtype)
+        x_g = OCLArray.from_array(image)  # pyright: ignore[reportAttributeAccessIssue]
+        y_g = OCLArray.empty(tuple(s0 // s for s, s0 in zip(self._binning, x_g.shape, strict=True)), x_g.dtype)  # pyright: ignore[reportAttributeAccessIssue]
 
         self._prog.run_kernel(
-            "rank_3",
+            'rank_3',
             y_g.shape[::-1],
             None,
             x_g.data,
             y_g.data,
-            numpy.int32(x_g.shape[2]),
-            numpy.int32(x_g.shape[1]),
-            numpy.int32(x_g.shape[0]),
-            numpy.int32(self._rank),
+            np.int32(x_g.shape[2]),
+            np.int32(x_g.shape[1]),
+            np.int32(x_g.shape[0]),
+            np.int32(self._rank),
         )
         return y_g.get()
 
 
-if __name__ == "__main__":
-    x = numpy.random.randint(3, 11, size=(2048, 2048, 1)).astype(numpy.uint16)
-    downsample = GPUToolsDownSample3D(binning=(2, 2, 1), rank=-2, data_type="uint16")
+if __name__ == '__main__':
+    rng = np.random.default_rng()
+    x = rng.integers(3, 11, size=(2048, 2048, 1), dtype=np.uint16)
+    downsample = GPUToolsDownSample3D(binning=(2, 2, 1), rank=-2, data_type='uint16')
     y = downsample.run(x)

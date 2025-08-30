@@ -7,12 +7,11 @@ import inflection
 from exaspim_control.instrument.exaspim_instrument import ExASPIM
 from exaspim_control.metadata.aind_metadata_class import AINDMetadataClass
 from ruamel.yaml import YAML
-
 from voxel.utils.log import VoxelLogging
 
 if TYPE_CHECKING:
-    from voxel_classic.file_transfers.base import BaseFileTransfer
-    from voxel_classic.writers.base import BaseWriter
+    from exaspim_control.voxel_classic.file_transfers.base import BaseFileTransfer
+    from exaspim_control.voxel_classic.writers.base import BaseWriter
 
 
 class Acquisition:

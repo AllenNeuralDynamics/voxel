@@ -9,16 +9,9 @@
         "**/sdk",
         "**/sdks",
         "./classic_drivers",
-        "./python/voxel-classic/src/voxel_classic/processes",
-        "./python/voxel/src/voxel/utils/processing",
-        "./python/voxel/tests/processes",
-        "./python/vidgets/src/vidgets/view",
-        "**/miscellaneous_widgets"
+        "./microscopes/exaspim-control/src/exaspim_control/voxel_classic",
+        "./microscopes/exaspim-control/src/exaspim_control/view",
     ],
-    // "python.analysis.useLibraryCodeForTypes": false,
-    // "python.analysis.extraPaths": [
-    //     ".venv/**/site-packages"
-    // ],
     "files.exclude": {
         "**/__pycache__": true,
         "**/.pytest_cache": true,
@@ -54,7 +47,4 @@
     "python.analysis.enableTroubleshootMissingImports": true,
     "python.analysis.autoImportCompletions": true,
     "python.analysis.autoFormatStrings": true,
-    // experimental
-    // "python.languageServer": "None",
-    // "ty.diagnosticMode": "workspace"
 }

@@ -15,15 +15,15 @@ import inflection
 import numpy as np
 from exaspim_control.acquisition.base import Acquisition
 from exaspim_control.instrument.exaspim_instrument import ExASPIM
+from exaspim_control.voxel_classic.devices.camera.base import BaseCamera
+from exaspim_control.voxel_classic.devices.daq.ni import NIDAQ
+from exaspim_control.voxel_classic.devices.stage.asi.tiger import TigerStage
+from exaspim_control.voxel_classic.file_transfers.base import BaseFileTransfer
+from exaspim_control.voxel_classic.writers.base import BaseWriter
+from exaspim_control.voxel_classic.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
 from gputools import get_device
 from psutil import virtual_memory
 from ruamel.yaml import YAML
-from voxel_classic.devices.camera.base import BaseCamera
-from voxel_classic.devices.daq.ni import NIDAQ
-from voxel_classic.devices.stage.asi.tiger import TigerStage
-from voxel_classic.file_transfers.base import BaseFileTransfer
-from voxel_classic.writers.base import BaseWriter
-from voxel_classic.writers.data_structures.shared_double_buffer import SharedDoubleBuffer
 
 DIRECTORY = Path(__file__).parent.resolve()
 

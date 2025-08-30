@@ -6,7 +6,6 @@ from vidgets.devices.laser.utils import rgb_to_css_string, wavelength_to_rgb
 
 if TYPE_CHECKING:
     from vidgets.devices.laser.adapter import FieldBinder
-
     from voxel.utils.descriptors.deliminated import DeliminatedFloat
 
 

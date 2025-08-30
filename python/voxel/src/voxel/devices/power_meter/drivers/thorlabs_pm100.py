@@ -1,6 +1,5 @@
 from pyvisa import ResourceManager, VisaIOError
 from pyvisa.resources import MessageBasedResource
-
 from voxel.devices import VoxelDeviceConnectionError
 from voxel.devices.power_meter import VoxelPowerMeter
 

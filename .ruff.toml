@@ -5,12 +5,13 @@ target-version = 'py312'
 exclude = [
     '**/sdk',
     '**/sdks',
-    # To clean up later - exclude from linting till then
-    'python/voxel/src/voxel/utils/processing',
-    'python/voxel/tests/processes',
-    'python/voxel-classic',
-    'python/vidgets/src/vidgets/view',
     'classic_drivers',
+    # To clean up later - exclude from linting till then
+    # 'python/voxel/src/voxel/utils/processing',
+    # 'python/voxel/tests/processes',
+    'microscopes/exaspim-control/src/exaspim_control/voxel_classic',
+    'microscopes/exaspim-control/src/exaspim_control/view',
+    # 'python/vidgets/src/vidgets/view',
 ]
 
 [format]
@@ -44,6 +45,7 @@ ignore = [
     'UP031',   # Use format specifiers instead of percent format
     'INP001',  # implicit-namespace-package
     'PLR0913', # Too many arguments in function definition
+    'PLR2004', # Magic value used in comparison, consider using a constant
     'COM812',  # (Redundant when using formatter) missing-trailing-comma
     'S603',    # subprocess-without-shell-equals-true
     'S311',    # Standard pseudo-random generators are not suitable for cryptographic purposes

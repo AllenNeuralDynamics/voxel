@@ -1,7 +1,6 @@
 from time import sleep
 
 from pylablib.devices import Thorlabs
-
 from voxel.devices import VoxelDeviceError
 from voxel.devices.flip_mount import VoxelFlipMount
 from voxel.utils.descriptors.deliminated import deliminated_float

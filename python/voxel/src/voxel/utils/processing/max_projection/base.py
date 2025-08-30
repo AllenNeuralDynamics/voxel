@@ -3,15 +3,12 @@ from multiprocessing import Event, Process
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 
-import numpy
 import numpy as np
-
 from voxel.utils.log import VoxelLogging
 
 
 class BaseMaxProjection:
-    """
-    Base class for all voxel max projection processes.
+    """Base class for all voxel max projection processes.
 
     :param path: Path for the max projection process
     :type path: str
@@ -19,18 +16,17 @@ class BaseMaxProjection:
 
     def __init__(self, path: str) -> None:
         self._path = path
-        self.log = VoxelLogging.get_logger(f"{__name__}.{self.__class__.__name__}")
+        self.log = VoxelLogging.get_logger(f'{__name__}.{self.__class__.__name__}')
         self._path = Path(path)
-        self._column_count_px = None
-        self._row_count_px = None
-        self._frame_count_px_px = None
-        self._x_projection_count_px = None
-        self._y_projection_count_px = None
-        self._z_projection_count_px = None
-        self._frame_count_px = None
+        self._column_count_px = 0
+        self._row_count_px = 0
+        self._x_projection_count_px = 0
+        self._y_projection_count_px = 0
+        self._z_projection_count_px = 0
+        self._frame_count_px = 0
         self._filename = None
         self._acquisition_name = Path()
-        self._data_type = None
+        self._data_type = np.dtype(np.uint16)
         self.new_image = Event()
         self.new_image.clear()
 
@@ -42,7 +38,6 @@ class BaseMaxProjection:
         :return: Column number in pixels
         :rtype: int
         """
-
         return self._column_count_px
 
     @column_count_px.setter
@@ -53,8 +48,7 @@ class BaseMaxProjection:
         :param column_count_px: Column number in pixels
         :type column_count_px: int
         """
-
-        self.log.info(f"setting column count to: {column_count_px} [px]")
+        self.log.info('setting column count to: %s [px]', column_count_px)
         self._column_count_px = column_count_px
 
     @property
@@ -65,7 +59,6 @@ class BaseMaxProjection:
         :return: Row number in pixels
         :rtype: int
         """
-
         return self._row_count_px
 
     @row_count_px.setter
@@ -76,8 +69,7 @@ class BaseMaxProjection:
         :param row_count_px: Row number in pixels
         :type row_count_px: int
         """
-
-        self.log.info(f"setting row count to: {row_count_px} [px]")
+        self.log.info('setting row count to: %s [px]', row_count_px)
         self._row_count_px = row_count_px
 
     @property
@@ -88,7 +80,6 @@ class BaseMaxProjection:
         :return: Frame number in pixels
         :rtype: int
         """
-
         return self._frame_count_px
 
     @frame_count_px.setter
@@ -99,9 +90,8 @@ class BaseMaxProjection:
         :param frame_count_px: Frame number in pixels
         :type frame_count_px: int
         """
-
-        self.log.info(f"setting frame count to: {frame_count_px} [px]")
-        self._frame_count_px_px = frame_count_px
+        self.log.info('setting frame count to: %s [px]', frame_count_px)
+        self._frame_count_px = frame_count_px
 
     @property
     @abstractmethod
@@ -111,7 +101,6 @@ class BaseMaxProjection:
         :return: Projection count along x dimension in pixels
         :rtype: int
         """
-
         return self._x_projection_count_px
 
     @x_projection_count_px.setter
@@ -122,8 +111,7 @@ class BaseMaxProjection:
         :param x_projection_count_px: Projection count along x dimension in pixels
         :type x_projection_count_px: int
         """
-
-        self.log.info(f"setting projection count to: {x_projection_count_px} [px]")
+        self.log.info('setting projection count to: %s [px]', x_projection_count_px)
         self._x_projection_count_px = x_projection_count_px
 
     @property
@@ -134,7 +122,6 @@ class BaseMaxProjection:
         :return: Projection count along y dimension in pixels
         :rtype: int
         """
-
         return self._y_projection_count_px
 
     @y_projection_count_px.setter
@@ -145,8 +132,7 @@ class BaseMaxProjection:
         :param y_projection_count_px: Projection count along y dimension in pixels
         :type y_projection_count_px: int
         """
-
-        self.log.info(f"setting projection count to: {y_projection_count_px} [px]")
+        self.log.info('setting projection count to: %s [px]', y_projection_count_px)
         self._y_projection_count_px = y_projection_count_px
 
     @property
@@ -157,7 +143,6 @@ class BaseMaxProjection:
         :return: Projection count along z dimension in pixels
         :rtype: int
         """
-
         return self._z_projection_count_px
 
     @z_projection_count_px.setter
@@ -168,31 +153,28 @@ class BaseMaxProjection:
         :param z_projection_count_px: Projection count along z dimension in pixels
         :type z_projection_count_px: int
         """
-
-        self.log.info(f"setting projection count to: {z_projection_count_px} [px]")
+        self.log.info('setting projection count to: %s [px]', z_projection_count_px)
         self._z_projection_count_px = z_projection_count_px
 
     @property
     @abstractmethod
-    def data_type(self) -> numpy.unsignedinteger:
+    def data_type(self) -> np.dtype:
         """Get the data type of the process.
 
         :return: Data type
-        :rtype: numpy.unsignedinteger
+        :rtype: np.dtype
         """
-
         return self._data_type
 
     @data_type.setter
     @abstractmethod
-    def data_type(self, data_type: numpy.unsignedinteger) -> None:
+    def data_type(self, data_type: np.dtype) -> None:
         """Set the data type of the process.
 
         :param data_type: Data type
-        :type data_type: numpy.unsignedinteger
+        :type data_type: np.dtype
         """
-
-        self.log.info(f"setting data type to: {data_type}")
+        self.log.info('setting data type to: %s', data_type)
         self._data_type = data_type
 
     @property
@@ -203,78 +185,63 @@ class BaseMaxProjection:
         :return: Path
         :rtype: Path
         """
-
         return self._path
 
     @property
     def acquisition_name(self):
-        """
-        The base acquisition name of the process.
+        """The base acquisition name of the process.
 
         :return: The base acquisition name
         :rtype: str
         """
-
         return self._acquisition_name
 
     @acquisition_name.setter
     def acquisition_name(self, acquisition_name: str):
-        """
-        The base acquisition name of process.
+        """The base acquisition name of process.
 
         :param value: The base acquisition name
         :type value: str
         """
-
         self._acquisition_name = Path(acquisition_name)
-        self.log.info(f"setting acquisition name to: {acquisition_name}")
+        self.log.info('setting acquisition name to: %s', acquisition_name)
 
     @property
     @abstractmethod
-    def filename(self) -> str:
-        """
-        The base filename of file proess.
+    def filename(self) -> str | None:
+        """The base filename of file proess.
 
         :return: The base filename
-        :rtype: str
+        :rtype: str | None
         """
-
         return self._filename
 
     @filename.setter
     @abstractmethod
     def filename(self, filename: str) -> None:
-        """
-        The base filename of file process.
+        """The base filename of file process.
 
         :param filename: The base filename
         :type filename: str
         """
-
         self._filename = (
-            filename.replace(".tiff", "").replace(".tif", "")
-            if filename.endswith(".tiff") or filename.endswith(".tif")
-            else f"{filename}"
+            filename.replace('.tiff', '').replace('.tif', '') if filename.endswith(('.tiff', '.tif')) else f'{filename}'
         )
-        self.log.info(f"setting filename to: {filename}")
+        self.log.info('setting filename to: %s', filename)
 
     @abstractmethod
     def start(self):
-        """
-        Start the process.
-        """
-        self.log.info(f"{self._filename}: starting max projection process.")
+        """Start the process."""
+        self.log.info('%s: starting max projection process.', self._filename)
         self._process.start()
 
     @abstractmethod
     def prepare(self, shm_name):
-        """
-        Prepare the max projection process.
+        """Prepare the max projection process.
 
         :param shm_name: Shared memory name
         :type shm_name: multiprocessing.shared_memory.SharedMemory
         """
-
         self._process = Process(target=self._run)
         self.shm_shape = (self._row_count_px, self._column_count_px)
         # create attributes to open shared memory in run function
@@ -283,16 +250,10 @@ class BaseMaxProjection:
 
     @abstractmethod
     def wait_to_finish(self):
-        """
-        Wait for the process to finish.
-        """
-
-        self.log.info(f"max projection {self.filename}: waiting to finish.")
+        """Wait for the process to finish."""
+        self.log.info('max projection %s: waiting to finish.', self.filename)
         self._process.join()
 
     @abstractmethod
     def _run(self):
-        """
-        Internal run function of the process.
-        """
-        pass
+        """Internal run function of the process."""

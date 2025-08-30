@@ -17,15 +17,15 @@ classifiers = [
 keywords = ["microscopy", "light-sheet", "lightsheet", "microscope", "imaging"]
 version = "0.1.0"
 
-dependencies = ["voxel[all]", "vidgets", "voxel-classic", "exaspim-control"]
+dependencies = ["voxel[all]", "vidgets", "exaspim-control"]
 
 [dependency-groups]
 dev = ["ruff>=0.8.0", "pytest>=8.2.1"]
 
 [tool.uv.workspace]
 members = [
-    "python/*",
-    "microscopes/*/backend",
+    "python/voxel",
+    "python/vidgets",
     "microscopes/extreme",
     "microscopes/exaspim-control",
 ]
@@ -33,7 +33,6 @@ members = [
 [tool.uv.sources]
 "voxel" = { workspace = true }
 "vidgets" = { workspace = true }
-"voxel-classic" = { workspace = true }
 "exaspim-control" = { workspace = true }
 
 [build-system]
@@ -52,19 +51,3 @@ external.rename = [
     "skimage:scikit_image",
     "PyImarisWriter:pyimariswriter",
 ]
-
-[tool.ty.src]
-exclude = [
-    "**/.venv",
-    "**/sdk",
-    "**/sdks",
-    "./classic_drivers",
-    "./python/voxel-classic",
-    "./python/voxel-classic/src/voxel_classic/processes",
-    "./python/voxel/src/voxel/utils/processing",
-    "./python/voxel/tests/processes",
-    "./python/vidgets/src/vidgets/view",
-    "**/miscellaneous_widgets",
-]
-[tool.ty.environment]
-python = "./.venv"

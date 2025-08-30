@@ -2,8 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import tifffile
-from voxel_classic.devices.camera.base import BaseCamera
-
+from exaspim_control.voxel_classic.devices.camera.base import BaseCamera
 from voxel.utils.log import VoxelLogging
 
 

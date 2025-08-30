@@ -13,7 +13,6 @@ members = [
     "extreme",
     "vidgets",
     "voxel",
-    "voxel-classic",
     "voxelstack",
 ]
 
@@ -28,19 +27,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/86/1e/46bd3ec5ec5a39ecb6906d146fc296258f490663063efd5e9d712da8e380/aaopto_aotf-0.0.11.tar.gz", hash = "sha256:579bd58ba2409a94e7696d96a2d34a4845905dffaf38611d362a1daca8d21ac4", size = 39650, upload-time = "2024-06-13T20:06:01.929Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/18/55/3546776bd907fd6bff0313e3646fa8070bd4a1de0d848c151bc914074041/aaopto_aotf-0.0.11-py3-none-any.whl", hash = "sha256:01db53479b3c91777089b420774f94a1a204709759035c790a8909a4b8cc600f", size = 7904, upload-time = "2024-06-13T20:06:00.589Z" },
-]
-
-[[package]]
-name = "acquire-zarr"
-version = "0.5.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/91/1c/bd9b8668ae888a66ddba2df103f3b82b66ac7eec28f3c94ae63a7d56babb/acquire_zarr-0.5.2.tar.gz", hash = "sha256:30ea500b0c6d5daea70517bcd388328e550e8bc4fb44404e6aa49e6e33af21f1", size = 172379, upload-time = "2025-08-07T14:33:50.119Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/3e/1d16aefe8a6a6387dca494907c79a23c2e4759428e0373634fbdf88c43af/acquire_zarr-0.5.2-cp312-cp312-macosx_13_0_universal2.whl", hash = "sha256:a404bb57b525dce47001a9b28df4a33c49221a2fce5419076140221b434f3059", size = 3480440, upload-time = "2025-08-07T14:33:25.991Z" },
-    { url = "https://files.pythonhosted.org/packages/92/06/f991a5ee0bcb9dadfd9b80477be9475a3d4cab886ab7eaf3345e6a9043d3/acquire_zarr-0.5.2-cp312-cp312-macosx_14_0_universal2.whl", hash = "sha256:2c073ff82b79d935f7bbad36b65c9f0cac02fac924ba5e7d421a34fc924a5910", size = 3558322, upload-time = "2025-08-07T14:33:27.849Z" },
-    { url = "https://files.pythonhosted.org/packages/be/48/8c008d7b1563166c00255f07ed601296870c8016b4cc0d18c64011d33e84/acquire_zarr-0.5.2-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:46a5fc1eae78c9b087a72896ea381ff7abae8b06a6c2735f72996a3b317c41bb", size = 4760388, upload-time = "2025-08-07T14:33:29.488Z" },
-    { url = "https://files.pythonhosted.org/packages/63/3c/3e6212ac0998edc1f29f8ded6f3c1a8731329259a267427238414914dec5/acquire_zarr-0.5.2-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:261d5781fafee8db281e5b912d8b7719bfad26c1494622baebc1b71e66514273", size = 4631976, upload-time = "2025-08-07T14:33:30.966Z" },
-    { url = "https://files.pythonhosted.org/packages/22/56/f115360832c4af13e9a19bf9eb6d4c2062fd303b97f24e2d8be25a2b2c1a/acquire_zarr-0.5.2-cp312-cp312-win_amd64.whl", hash = "sha256:dd64f2d4ac3b161832d8feb2c28de3e4595800a909740b02bee19fb53a9b227a", size = 2732844, upload-time = "2025-08-07T14:33:32.834Z" },
 ]
 
 [[package]]
@@ -437,7 +423,6 @@ dependencies = [
     { name = "pyside6" },
     { name = "rich" },
     { name = "vidgets" },
-    { name = "voxel-classic" },
 ]
 
 [package.metadata]
@@ -447,7 +432,6 @@ requires-dist = [
     { name = "pyside6", specifier = ">=6.9.1" },
     { name = "rich", specifier = ">=14.1.0" },
     { name = "vidgets", editable = "python/vidgets" },
-    { name = "voxel-classic", editable = "python/voxel-classic" },
 ]
 
 [[package]]
@@ -2170,15 +2154,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyusb"
-version = "1.3.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/00/6b/ce3727395e52b7b76dfcf0c665e37d223b680b9becc60710d4bc08b7b7cb/pyusb-1.3.1.tar.gz", hash = "sha256:3af070b607467c1c164f49d5b0caabe8ac78dbed9298d703a8dbf9df4052d17e", size = 77281, upload-time = "2025-01-08T23:45:01.866Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/b8/27e6312e86408a44fe16bd28ee12dd98608b39f7e7e57884a24e8f29b573/pyusb-1.3.1-py3-none-any.whl", hash = "sha256:bf9b754557af4717fe80c2b07cc2b923a9151f5c08d17bdb5345dac09d6a0430", size = 58465, upload-time = "2025-01-08T23:45:00.029Z" },
-]
-
-[[package]]
 name = "pyvisa"
 version = "1.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2468,24 +2443,6 @@ wheels = [
 [package.optional-dependencies]
 data = [
     { name = "pooch" },
-]
-
-[[package]]
-name = "scikit-tensor-py3"
-version = "0.4.1"
-source = { url = "https://github.com/adamkglaser/scikit-tensor-py3/releases/download/v0.1.0/scikit_tensor_py3-0.4.1-py3-none-any.whl" }
-dependencies = [
-    { name = "numpy" },
-    { name = "scipy" },
-]
-wheels = [
-    { url = "https://github.com/adamkglaser/scikit-tensor-py3/releases/download/v0.1.0/scikit_tensor_py3-0.4.1-py3-none-any.whl", hash = "sha256:24ac13f7c2ab1430b91019f7f5d04730ddab1dcdec034bd762eca3ed5b14c908" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.16" },
-    { name = "scipy", specifier = ">=1.3" },
 ]
 
 [[package]]
@@ -3205,158 +3162,6 @@ requires-dist = [
 provides-extras = ["bdv", "imaris", "writers", "cobolt", "coherent", "vortran", "oxxius", "obis", "from-git", "aaopto", "etl-opto", "egrabber", "from-wheelhouse", "all"]
 
 [[package]]
-name = "voxel-classic"
-version = "0.1.0"
-source = { editable = "python/voxel-classic" }
-dependencies = [
-    { name = "fast-histogram" },
-    { name = "gputools" },
-    { name = "h5py" },
-    { name = "imohash" },
-    { name = "inflection" },
-    { name = "matplotlib" },
-    { name = "nidaqmx" },
-    { name = "numpy" },
-    { name = "psutil" },
-    { name = "pyclesperanto" },
-    { name = "pydantic" },
-    { name = "pylablib-lightweight" },
-    { name = "pyserial" },
-    { name = "pyusb" },
-    { name = "pyvisa" },
-    { name = "pyvisa-py" },
-    { name = "ruamel-yaml" },
-    { name = "scikit-image" },
-    { name = "scipy" },
-    { name = "siphash24" },
-    { name = "sympy" },
-    { name = "tensorstore" },
-    { name = "voxel" },
-]
-
-[package.optional-dependencies]
-aaopto = [
-    { name = "aaopto-aotf" },
-]
-acquire-zarr-writer = [
-    { name = "acquire-zarr" },
-]
-bdv = [
-    { name = "h5py" },
-    { name = "tqdm" },
-]
-cameras = [
-    { name = "ximea-python" },
-]
-cobolt = [
-    { name = "pycobolt" },
-]
-coherent = [
-    { name = "coherent-lasers" },
-]
-egrabber = [
-    { name = "egrabber" },
-]
-etl-opto = [
-    { name = "optoicc" },
-    { name = "optokummenberg" },
-]
-from-git = [
-    { name = "coherent-lasers" },
-    { name = "obis-laser" },
-    { name = "oxxius-laser" },
-    { name = "pycobolt" },
-    { name = "vortran-laser" },
-]
-from-wheelhouse = [
-    { name = "aaopto-aotf" },
-    { name = "egrabber" },
-    { name = "optoicc" },
-    { name = "optokummenberg" },
-]
-imaris = [
-    { name = "pyimariswriter" },
-]
-obis = [
-    { name = "obis-laser" },
-]
-oxxius = [
-    { name = "oxxius-laser" },
-]
-scikit-tensor = [
-    { name = "scikit-tensor-py3" },
-]
-tifffile-writer = [
-    { name = "tifffile" },
-]
-tigerasi-controller = [
-    { name = "tigerasi" },
-]
-vortran = [
-    { name = "vortran-laser" },
-]
-writers = [
-    { name = "acquire-zarr" },
-    { name = "h5py" },
-    { name = "pyimariswriter" },
-    { name = "tifffile" },
-    { name = "tqdm" },
-]
-ximea-camera = [
-    { name = "ximea-python" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aaopto-aotf", marker = "extra == 'aaopto'", specifier = ">=0.0.11" },
-    { name = "acquire-zarr", marker = "extra == 'acquire-zarr-writer'", specifier = ">=0.0.5" },
-    { name = "coherent-lasers", marker = "extra == 'coherent'" },
-    { name = "egrabber", marker = "extra == 'egrabber'" },
-    { name = "fast-histogram", specifier = ">=0.14" },
-    { name = "gputools", specifier = ">0.2.14" },
-    { name = "h5py", specifier = ">=3.0.0" },
-    { name = "h5py", marker = "extra == 'bdv'", specifier = ">=3.12.1" },
-    { name = "imohash", specifier = ">=1.0.5" },
-    { name = "inflection", specifier = ">=0.5.1" },
-    { name = "matplotlib", specifier = ">=3.8.2" },
-    { name = "nidaqmx", specifier = ">=1.0.1" },
-    { name = "numpy", specifier = ">2.0.0" },
-    { name = "numpy", specifier = ">=2.1" },
-    { name = "obis-laser", marker = "extra == 'obis'" },
-    { name = "optoicc", marker = "extra == 'etl-opto'" },
-    { name = "optokummenberg", marker = "extra == 'etl-opto'" },
-    { name = "oxxius-laser", marker = "extra == 'oxxius'" },
-    { name = "psutil", specifier = ">=5.9.8" },
-    { name = "pyclesperanto", specifier = ">=0.8.2" },
-    { name = "pycobolt", marker = "extra == 'cobolt'" },
-    { name = "pydantic", specifier = ">=2.7.3" },
-    { name = "pyimariswriter", marker = "extra == 'imaris'", specifier = ">=0.7.0" },
-    { name = "pylablib-lightweight", specifier = ">=1.4.3" },
-    { name = "pyserial", specifier = ">=3.5" },
-    { name = "pyusb", specifier = ">=1.2.1" },
-    { name = "pyvisa", specifier = ">=1.14.1" },
-    { name = "pyvisa-py", specifier = ">=0.7.2" },
-    { name = "ruamel-yaml", specifier = ">=0.18.5" },
-    { name = "scikit-image", specifier = ">=0.20.0" },
-    { name = "scikit-tensor-py3", marker = "extra == 'scikit-tensor'", url = "https://github.com/adamkglaser/scikit-tensor-py3/releases/download/v0.1.0/scikit_tensor_py3-0.4.1-py3-none-any.whl" },
-    { name = "scipy", specifier = ">=1.12.0" },
-    { name = "siphash24", specifier = ">=1.7" },
-    { name = "sympy", specifier = ">=1.12.1" },
-    { name = "tensorstore", specifier = ">=0.1.56" },
-    { name = "tifffile", marker = "extra == 'tifffile-writer'", specifier = ">=2024.1.30" },
-    { name = "tigerasi", marker = "extra == 'tigerasi-controller'" },
-    { name = "tqdm", marker = "extra == 'bdv'", specifier = ">=4.66.5" },
-    { name = "vortran-laser", marker = "extra == 'vortran'" },
-    { name = "voxel", editable = "python/voxel" },
-    { name = "voxel-classic", extras = ["aaopto", "etl-opto", "egrabber"], marker = "extra == 'from-wheelhouse'", editable = "python/voxel-classic" },
-    { name = "voxel-classic", extras = ["bdv", "imaris", "tifffile-writer", "acquire-zarr-writer"], marker = "extra == 'writers'", editable = "python/voxel-classic" },
-    { name = "voxel-classic", extras = ["cobolt", "coherent", "vortran", "oxxius", "obis"], marker = "extra == 'from-git'", editable = "python/voxel-classic" },
-    { name = "voxel-classic", extras = ["ximea-camera"], marker = "extra == 'cameras'", editable = "python/voxel-classic" },
-    { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
-]
-provides-extras = ["bdv", "imaris", "tifffile-writer", "acquire-zarr-writer", "writers", "ximea-camera", "cameras", "tigerasi-controller", "scikit-tensor", "cobolt", "coherent", "vortran", "oxxius", "obis", "from-git", "aaopto", "etl-opto", "egrabber", "from-wheelhouse"]
-
-[[package]]
 name = "voxelstack"
 version = "0.1.0"
 source = { editable = "." }
@@ -3364,7 +3169,6 @@ dependencies = [
     { name = "exaspim-control" },
     { name = "vidgets" },
     { name = "voxel", extra = ["all"] },
-    { name = "voxel-classic" },
 ]
 
 [package.dev-dependencies]
@@ -3378,7 +3182,6 @@ requires-dist = [
     { name = "exaspim-control", editable = "microscopes/exaspim-control" },
     { name = "vidgets", editable = "python/vidgets" },
     { name = "voxel", extras = ["all"], editable = "python/voxel" },
-    { name = "voxel-classic", editable = "python/voxel-classic" },
 ]
 
 [package.metadata.requires-dev]
@@ -3413,14 +3216,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/28/de/49493f962bd3c586ab4b88066e967aa2e0703d6ef2c43aa28cb83bf7b507/wrapt-1.17.3-cp312-cp312-win_amd64.whl", hash = "sha256:e71d5c6ebac14875668a1e90baf2ea0ef5b7ac7918355850c0908ae82bcb297c", size = 38877, upload-time = "2025-08-12T05:53:05.436Z" },
     { url = "https://files.pythonhosted.org/packages/f1/48/0f7102fe9cb1e8a5a77f80d4f0956d62d97034bbe88d33e94699f99d181d/wrapt-1.17.3-cp312-cp312-win_arm64.whl", hash = "sha256:604d076c55e2fdd4c1c03d06dc1a31b95130010517b5019db15365ec4a405fc6", size = 36885, upload-time = "2025-08-12T05:52:54.367Z" },
     { url = "https://files.pythonhosted.org/packages/1f/f6/a933bd70f98e9cf3e08167fc5cd7aaaca49147e48411c0bd5ae701bb2194/wrapt-1.17.3-py3-none-any.whl", hash = "sha256:7171ae35d2c33d326ac19dd8facb1e82e5fd04ef8c6c0e394d7af55a55051c22", size = 23591, upload-time = "2025-08-12T05:53:20.674Z" },
-]
-
-[[package]]
-name = "ximea-python"
-version = "4.29.10"
-source = { url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" }
-wheels = [
-    { url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl", hash = "sha256:90433e1d60a289203bd4721f1433ec09beb7ccca317a7a75a5a3a0c4263911b4" },
 ]
 
 [[package]]

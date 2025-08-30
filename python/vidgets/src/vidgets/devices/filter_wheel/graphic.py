@@ -7,7 +7,6 @@ from PySide6.QtCore import QEasingCurve, QEvent, QRectF, QTimer, Signal
 from PySide6.QtGui import QMouseEvent, QPainter, QPalette
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QWidget
-
 from voxel.utils.log import VoxelLogging
 
 

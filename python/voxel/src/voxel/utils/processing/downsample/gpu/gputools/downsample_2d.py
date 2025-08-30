@@ -1,14 +1,12 @@
 import time
 
-import numpy
+import numpy as np
 from gputools import OCLArray, OCLProgram
-
 from voxel.utils.processing.downsample.base import BaseDownSample
 
 
 class GPUToolsDownSample2D(BaseDownSample):
-    """
-    Voxel 2D downsampling with gputools.
+    """Voxel 2D downsampling with gputools.
 
     :param binning: Binning factor
     :type binning: int
@@ -33,21 +31,20 @@ class GPUToolsDownSample2D(BaseDownSample):
         }
         """
 
-        self._prog = OCLProgram(src_str=self._kernel, build_options=["-D", f"BLOCK={self._binning}"])
+        self._prog = OCLProgram(src_str=self._kernel, build_options=['-D', f'BLOCK={self._binning}'])
 
-    def run(self, image: numpy.array):
-        """
-        Run function for image downsampling.
+    def run(self, image: np.ndarray):
+        """Run function for image downsampling.
 
         :param image: Input image
-        :type image: numpy.array
+        :type image: np.ndarray
         :return: Downsampled image
-        :rtype: numpy.array
+        :rtype: np.ndarray
         """
         start_time = time.time()
-        x_g = OCLArray.from_array(image)
-        y_g = OCLArray.empty(tuple(s // self._binning for s in image.shape), image.dtype)
-        self._prog.run_kernel("downsample2d", y_g.shape[::-1], None, x_g.data, y_g.data)
+        x_g = OCLArray.from_array(image)  # pyright: ignore[reportAttributeAccessIssue]
+        y_g = OCLArray.empty(tuple(s // self._binning for s in image.shape), image.dtype)  # pyright: ignore[reportAttributeAccessIssue]
+        self._prog.run_kernel('downsample2d', y_g.shape[::-1], None, x_g.data, y_g.data)
         end_time = time.time()
         print(end_time - start_time)
         return y_g.get()

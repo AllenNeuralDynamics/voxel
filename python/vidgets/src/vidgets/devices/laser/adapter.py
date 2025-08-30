@@ -5,7 +5,6 @@ from typing import Protocol, Self
 
 from PySide6.QtCore import QObject, Signal, Slot
 from vidgets.input.binding import FieldBinder
-
 from voxel.devices.laser.agent import LaserAgent, LaserState
 from voxel.utils.descriptors.deliminated import DeliminatedFloat
 

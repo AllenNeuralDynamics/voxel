@@ -5,7 +5,6 @@ from functools import cached_property
 from typing import Any, ClassVar, Literal
 
 import numpy as np
-
 from voxel.devices import VoxelDeviceConnectionError
 from voxel.devices.camera import AcquisitionState, PixelType, VoxelCamera
 from voxel.devices.camera.drivers.pco.definitions import (

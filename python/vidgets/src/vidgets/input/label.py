@@ -2,7 +2,6 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QLabel, QWidget
 from vidgets.input.binding import ValueWatcher
-
 from voxel.utils.log import VoxelLogging
 
 

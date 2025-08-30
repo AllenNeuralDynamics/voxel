@@ -1,7 +1,6 @@
 import time
 
 from tigerasi.tiger_controller import TigerController
-
 from voxel.devices import VoxelDeviceError
 from voxel.devices.filter_wheel import VoxelFilterWheel
 

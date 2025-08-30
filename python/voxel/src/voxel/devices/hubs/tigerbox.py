@@ -9,7 +9,6 @@ from tigerasi.device_codes import (
     TTLOut0Mode,
 )
 from tigerasi.tiger_controller import TigerController
-
 from voxel.devices import VoxelDevice, VoxelDeviceConnectionError, VoxelDeviceType
 from voxel.devices.linear_axis import LinearAxisDimension, ScanState
 

@@ -2,7 +2,6 @@ import time
 
 from pylablib.devices import Thorlabs
 from pylablib.devices.Thorlabs.kinesis import KinesisMotor
-
 from voxel.devices import VoxelDeviceConnectionError, VoxelRotationAxis
 
 MIN_POSITION_DEG = 0

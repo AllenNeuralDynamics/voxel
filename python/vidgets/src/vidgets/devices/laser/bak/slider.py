@@ -4,7 +4,6 @@ from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import QDoubleSpinBox, QHBoxLayout, QLabel, QSlider, QVBoxLayout, QWidget
 from vidgets.devices.laser.utils import rgb_to_css_string, wavelength_to_rgb
 from vidgets.input.binding import ValueBinding
-
 from voxel.devices.laser import VoxelLaser
 from voxel.utils.descriptors.deliminated import DeliminatedFloat
 
@@ -160,7 +159,6 @@ if __name__ == '__main__':
         QApplication,
         QMainWindow,
     )
-
     from voxel.devices.laser.mock import SimulatedLaser
     from voxel.utils.log import VoxelLogging
 

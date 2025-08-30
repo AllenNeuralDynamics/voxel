@@ -1,7 +1,6 @@
 from collections.abc import Callable
 
 from PySide6.QtWidgets import QCheckBox, QVBoxLayout, QWidget
-
 from voxel.utils.log import VoxelLogging
 
 

@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from vidgets.devices.filter_wheel.graphic import WheelGraphic
-
 from voxel.devices.filter_wheel import VoxelFilterWheel
 
 
@@ -84,7 +83,6 @@ if __name__ == '__main__':
         QApplication,
         QMainWindow,
     )
-
     from voxel.devices.filter_wheel.mock import SimulatedFilterWheel
     from voxel.utils.log import VoxelLogging
 
