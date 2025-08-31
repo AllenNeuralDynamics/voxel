@@ -1,12 +1,20 @@
 import threading
 from collections.abc import Iterable, Mapping
-from typing import Any, overload
 
 import serial
 
-from voxelstack.asi.enums import TigerParam
-from voxelstack.asi.models import BoxInfo, CommandSpec
-from voxelstack.asi.protocol import ASIProtocol
+from voxelstack.asi.models import ASIBoxInfo
+from voxelstack.asi.operations import (
+    ASIDecodeError,
+    ASIMode,
+    MotionOP,
+    ParamOP,
+    Reply,
+    StatusOP,
+    TigerParam,
+    TigerParams,
+    asi_parse,
+)
 
 
 class SerialTransport:
@@ -30,205 +38,144 @@ class SerialTransport:
 class TigerBox:
     def __init__(self, port: str):
         self.t = SerialTransport(port)
-        self.p = ASIProtocol()
-        self._info: BoxInfo | None = None
-        if not self.enable_tiger_mode():
+        self._info: ASIBoxInfo | None = None
+        self._last_mode: ASIMode | None = None
+        self._tx_lock = threading.Lock()
+        if not self._enable_tiger_mode():
             raise RuntimeError('Failed to enable Tiger mode')
 
-    def current_mode(self) -> str:
-        return self.p.last_mode
+    # ---------- helpers ----------
 
-    def enable_tiger_mode(self, probe_axis: str = 'X') -> bool:
-        # Try addressed then unaddressed (some firmwares vary)
-        for candidate in (self.info().comm_addr, None):
-            self.t.write(self.p.build_set_tiger_mode(candidate))
-            _ = self.t.readline()
-            # verify via probe
-            self.t.write(self.p.build_probe_where(probe_axis))
-            _ = self.p.parse(self.t.readline() or b'', [probe_axis])
-            if self.p.last_mode == 'tiger':
-                return True
-        return False
+    def _tx(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
+        """Send a command and read+parse the reply."""
+        with self._tx_lock:
+            self.t.write(payload)
+            raw = self.t.readline() or b''
+        reply, mode = asi_parse(raw, requested_axes=requested_axes)
+        self._last_mode = mode
+        return reply
+
+    # ---------- public API ----------
+
+    def current_mode(self) -> ASIMode | None:
+        return self._last_mode
 
     # ---- Info / Status ----
 
-    def info(self, *, refresh: bool = False) -> BoxInfo:
+    def info(self, *, refresh: bool = False) -> ASIBoxInfo:
         if self._info is not None and not refresh:
             return self._info
-        # WHO
-        self.t.write(self.p.build_who())
-        r = self.p.parse(self.t.readline() or b'')
-        who_text = r.text or ''
+        # WHO → ASIBoxInfo
+        r = self._tx(StatusOP.Who.encode())
+        who_text = StatusOP.Who.decode(r)
+        self._info = ASIBoxInfo(who_text)
+        return self._info
 
-        cards = self.p.parse_card_infos(who_text)
-        comm = self.p.parse_comm_addr(who_text)
-
-        comm_ver = None
-        if comm is not None:
-            self.t.write(self.p.build_version(comm))
-            vr = self.p.parse(self.t.readline() or b'')
-            comm_ver = (vr.text or '').strip() or None
-
-        return BoxInfo(
-            mode=self.current_mode(),
-            comm_addr=comm,
-            comm_version=comm_ver,
-            who_raw=who_text,
-            cards=cards,
-        )
-
-    def status(self) -> str | None:
-        self.t.write(self.p.build_status())
-        r = self.p.parse(self.t.readline() or b'')
-        if r.kind == 'DATA' and r.text:
-            s = r.text.strip().upper()
-            if s == 'B':
-                return 'BUSY'
-            if s == 'N':
-                return 'NOT_BUSY'
-        return None
-
-    def axes(self, *, refresh: bool = False) -> list[str]:
-        """Return available axis letters. e.g. ['X', 'T', 'Z', 'F', ...].
-
-        Args:
-            refresh (bool): If True, re-run WHO to refresh the information.
-        """
+    def axes(self, *, refresh: bool = False) -> set[str]:
+        """Return available axis letters (e.g. {'X','T','Z','F',...})."""
         return self.info(refresh=refresh).axes_flat
 
-    def axes_by_card(self, *, refresh: bool = False) -> dict[int, list[str]]:
-        """Get axes grouped by card address. e.g. {31: ['X', 'T'], 32: ['Z', 'F']}.
-
-        Args:
-            refresh (bool): If True, re-run WHO to refresh the information.
-
-        Returns:
-            dict[int, list[str]]: A dictionary mapping card addresses to their respective axes.
-        """
+    def axes_by_card(self, *, refresh: bool = False) -> dict[int, set[str]]:
+        """Return axes grouped by card address (e.g. {31:{'X','T'}, 32:{'Z','F'}})."""
         return self.info(refresh=refresh).axes_by_card
 
+    def status(self) -> str | None:
+        r = self._tx(StatusOP.Status.encode())
+        try:
+            return StatusOP.Status.decode(r)  # 'BUSY' | 'NOT_BUSY'
+        except ASIDecodeError:
+            return None
+
     # ---- Motion ----
+
     def where(self, axes: Iterable[str]) -> dict[str, float]:
-        axes = [a.upper() for a in axes]
-        self.t.write(self.p.build_where(axes))
-        r = self.p.parse(self.t.readline() or b'', requested_axes=axes)
-        if r.kind == 'ERR':
-            err_msg = f'WHERE error {r.err}'
-            raise RuntimeError(err_msg)
-        if r.kv:
-            return {k: float(v) for k, v in r.kv.items()}
-        if len(axes) == 1 and r.text:  # unlabeled single
-            return {axes[0]: float(r.text.split()[0])}
-        # per-axis fallback
-        out = {}
-        for a in axes:
-            self.t.write(self.p.build_where([a]))
-            rr = self.p.parse(self.t.readline() or b'', requested_axes=[a])
-            if rr.kv and a in rr.kv:
-                out[a] = float(rr.kv[a])
-            elif rr.text:
-                out[a] = float(rr.text.split()[0])
-        return out
+        axes_u = [a.upper() for a in axes]
+        r = self._tx(
+            MotionOP.Where.encode(axes_u),
+            requested_axes=axes_u,
+        )
+        return MotionOP.Where.decode(r, axes_u)
 
     def move_abs(self, mapping: Mapping[str, float]) -> None:
-        self.t.write(self.p.build_move_abs(mapping))
-        _ = self.t.readline()
+        r = self._tx(MotionOP.MoveAbs.encode(mapping))
+        MotionOP.MoveAbs.decode(r)
 
     def move_rel(self, mapping: Mapping[str, float]) -> None:
-        self.t.write(self.p.build_move_rel(mapping))
-        _ = self.t.readline()
+        r = self._tx(MotionOP.MoveRel.encode(mapping))
+        MotionOP.MoveRel.decode(r)
 
-    def here(self, axes: Iterable[str]) -> None:
-        self.t.write(self.p.build_here(axes))
-        _ = self.t.readline()
+    def here(self, mapping: Mapping[str, float]) -> None:
+        r = self._tx(MotionOP.Here.encode(mapping))
+        MotionOP.Here.decode(r)
 
-    def _resolve_cmd_spec(self, cmd: TigerParam | str | CommandSpec[Any]) -> CommandSpec[Any]:
-        if isinstance(cmd, TigerParam):
-            return cmd.value
-        if isinstance(cmd, CommandSpec):
-            return cmd
-        if isinstance(cmd, str):
-            return CommandSpec(name=cmd, verb=cmd, typ=str)
+    def home(self, axes: Iterable[str]) -> None:
+        r = self._tx(MotionOP.Home.encode([a.upper() for a in axes]))
+        MotionOP.Home.decode(r)
 
-    @overload
-    def get_param[T: int | float | str | bool](self, cmd: CommandSpec[T], axes: Iterable[str]) -> Mapping[str, T]: ...
-    @overload
-    def get_param(self, cmd: TigerParam | str, axes: Iterable[str]) -> Mapping[str, str]: ...
+    def halt(self) -> None:
+        r = self._tx(MotionOP.Halt.encode())
+        MotionOP.Halt.decode(r)
 
-    def get_param[T: int | float | str | bool](
-        self,
-        cmd: CommandSpec[T] | TigerParam | str,
-        axes: Iterable[str],
-    ) -> Mapping[str, T]:
-        cmd = self._resolve_cmd_spec(cmd)
-        axes = [a.upper() for a in axes]
-        self.t.write(self.p.build_param_get(cmd.verb, axes))
-        r = self.p.parse(self.t.readline() or b'', requested_axes=axes)
-        if r.kind == 'ERR':
-            msg = f'{cmd.verb} get error {r.err}'
-            raise RuntimeError(msg)
-        if r.kv:
-            return {k: cmd.typ(v) for k, v in r.kv.items()}
-        if len(axes) == 1 and r.text:
-            return {axes[0]: cmd.typ(r.text.split()[0])}
-        out = {}
-        for a in axes:
-            self.t.write(self.p.build_param_get(cmd.verb, [a]))
-            rr = self.p.parse(self.t.readline() or b'', requested_axes=[a])
-            if rr.kv and a in rr.kv:
-                out[a] = cmd.typ(rr.kv[a])
-            elif rr.text:
-                out[a] = cmd.typ(rr.text.split()[0])
-        return out
+    # ---- Params (typed) ----
 
-    @overload
-    def set_param[T: int | float | str | bool](self, cmd: CommandSpec[T], mapping: Mapping[str, T]) -> None: ...
-    @overload
-    def set_param(self, cmd: TigerParam | str, mapping: Mapping[str, object]) -> None: ...
+    def get_param[T: int | float | str | bool](self, param: TigerParam[T], axes: Iterable[str]) -> Mapping[str, T]:
+        axes_u = [a.upper() for a in axes]
+        r = self._tx(ParamOP.Get.encode(param, axes_u), requested_axes=axes_u)
+        return ParamOP.Get.decode(r, param, axes_u)
 
-    def set_param[T: int | float | str | bool](
-        self,
-        cmd: CommandSpec[T] | TigerParam | str,
-        mapping: Mapping[str, T],
-    ) -> None:
-        cmd = self._resolve_cmd_spec(cmd)
-        self.t.write(self.p.build_param_set(cmd.verb, mapping))
-        r = self.p.parse(self.t.readline() or b'')
-        if r.kind == 'ERR':
-            msg = f'{cmd.verb} set error {r.err}'
-            raise RuntimeError(msg)
+    def set_param[T: int | float | str | bool](self, param: TigerParam, mapping: Mapping[str, T]) -> None:
+        r = self._tx(ParamOP.Set.encode(param, dict(mapping)))
+        ParamOP.Set.decode(r, param)
 
     def close(self) -> None:
         self.t.close()
+
+    def _probe_mode(self, desired_mode: ASIMode = ASIMode.TIGER, probe_axis: str = 'X') -> bool | None:
+        try:
+            _ = self._tx(
+                MotionOP.Where.encode([probe_axis]),
+                requested_axes=[probe_axis],
+            )
+            if self._last_mode == desired_mode:
+                return True
+        except ASIDecodeError:
+            pass
+
+    def _enable_tiger_mode(self, probe_axis: str = 'X') -> bool:
+        """
+        Try unaddressed VB first (most firmwares), then addressed if we can
+        infer a COMM addr from WHO.
+        """
+        # Unaddressed first
+        _ = self._tx(StatusOP.SetMode.encode(ASIMode.TIGER))
+        is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
+        if is_tiger is True:
+            return True
+        # Addressed fallback (some firmwares expect a card prefix)
+        comm = self.info(refresh=True).comm_addr
+        if comm is not None:
+            r = self._tx(StatusOP.SetModeAddr.encode((comm, ASIMode.TIGER)))
+            StatusOP.SetModeAddr.decode(r)
+        is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
+        return is_tiger is True
 
 
 if __name__ == '__main__':
     from rich import print
 
-    SPEED = CommandSpec(name='SPEED', verb='S', typ=float)
-    ACCEL = CommandSpec(name='ACCEL', verb='AC', typ=int)
-    BACKLASH = CommandSpec(name='BACKLASH', verb='B', typ=float)
-
     drv = TigerBox(port='COM3')
 
     print('Current mode:', drv.current_mode())
-
-    print('INFO:', drv.info())
-
-    flat_axes = drv.axes()
-    print('Axes (flat):', flat_axes)
-    print('Axes by card:', drv.axes_by_card())
+    info = drv.info(refresh=True)
+    print('Info:', info)
     print('STATUS:', drv.status())
 
-    # Motion
+    flat_axes = sorted(drv.axes())
     print('POS:', drv.where(flat_axes))
 
-    # Params
-    speeds = drv.get_param(TigerParam.SPEED.value, flat_axes)
+    # Typed params
+    speeds = drv.get_param(TigerParams.SPEED, flat_axes)
     print('Speed:', speeds)
-    print('Accel:', drv.get_param(TigerParam.ACCEL.value, flat_axes))
-    print('Backlash:', drv.get_param(TigerParam.BACKLASH.value, flat_axes))
+    print('Accel:', drv.get_param(TigerParams.ACCEL, flat_axes))
 
-    # drv.move_abs({'X': 1000.0, 'Y': -250.0})
-    # drv.set_param(TigerCMD.SPEED, {'X': 2.0, 'Y': 1.5})
     drv.close()

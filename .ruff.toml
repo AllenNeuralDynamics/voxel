@@ -24,6 +24,7 @@ quote-style = 'single'
 select = ['ALL']
 ignore = [
     'ANN401',  # Dynamically typed expressions (typing.Any) are disallowed in {name}
+    'D',
     'D100',    # Missing docstring in public module
     'D101',    # Missing docstring in public class
     'D102',    # Missing docstring in public method

@@ -3,7 +3,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from voxelstack.asi.models import CardInfo, Reply
+from voxelstack.asi.v1.models import CardInfo, Reply
 
 
 def _ax(a: str) -> str:
@@ -15,42 +15,54 @@ class ASIProtocol:
     _last_mode: str = 'unknown'  # "tiger" | "ms2000" | "unknown"
 
     # -------- builders (ASI grammar) --------
-    def build_where(self, axes: Iterable[str]) -> bytes:
+    @staticmethod
+    def build_where(axes: Iterable[str]) -> bytes:
         return ('W ' + ' '.join(_ax(a) for a in axes) + '\r').encode()
 
-    def build_move_abs(self, mapping: Mapping[str, float]) -> bytes:
+    @staticmethod
+    def build_move_abs(mapping: Mapping[str, float]) -> bytes:
         return ('M ' + ' '.join(f'{_ax(a)}={v:.6f}' for a, v in mapping.items()) + '\r').encode()
 
-    def build_move_rel(self, mapping: Mapping[str, float]) -> bytes:
+    @staticmethod
+    def build_move_rel(mapping: Mapping[str, float]) -> bytes:
         return ('R ' + ' '.join(f'{_ax(a)}={v:.6f}' for a, v in mapping.items()) + '\r').encode()
 
-    def build_here(self, axes: Iterable[str]) -> bytes:
+    @staticmethod
+    def build_here(axes: Iterable[str]) -> bytes:
         return ('H ' + ' '.join(_ax(a) for a in axes) + '\r').encode()
 
-    def build_param_get(self, verb: str, axes: Iterable[str]) -> bytes:
+    @staticmethod
+    def build_param_get(verb: str, axes: Iterable[str]) -> bytes:
         return (f'{verb} ' + ' '.join(f'{_ax(a)}?' for a in axes) + '\r').encode()
 
-    def build_param_set(self, verb: str, mapping: Mapping[str, Any]) -> bytes:
+    @staticmethod
+    def build_param_set(verb: str, mapping: Mapping[str, Any]) -> bytes:
         return (f'{verb} ' + ' '.join(f'{_ax(a)}={mapping[a]}' for a in mapping) + '\r').encode()
 
-    def build_status(self) -> bytes:
+    @staticmethod
+    def build_status() -> bytes:
         return b'/\r'
 
-    def build_version(self, addr: int | None = None) -> bytes:
+    @staticmethod
+    def build_version(addr: int | None = None) -> bytes:
         return (f'{addr if addr is not None else ""}V\r').encode()
 
-    def build_who(self) -> bytes:
+    @staticmethod
+    def build_who() -> bytes:
         return b'N\r'
 
     # Mode toggles (builder only)
-    def build_set_tiger_mode(self, addr: int | None) -> bytes:
+    @staticmethod
+    def build_set_tiger_mode(addr: int | None) -> bytes:
         return (f'{"" if addr is None else addr}VB F=1\r').encode()
 
-    def build_set_ms2000_mode(self, addr: int | None) -> bytes:
+    @staticmethod
+    def build_set_ms2000_mode(addr: int | None) -> bytes:
         return (f'{"" if addr is None else addr}VB F=0\r').encode()
 
-    def build_probe_where(self, axis: str = 'X') -> bytes:
-        return self.build_where([axis])
+    @staticmethod
+    def build_probe_where(axis: str = 'X') -> bytes:
+        return ASIProtocol.build_where([axis])
 
     # -------- parser with auto-detect --------
     def parse(self, raw: bytes, requested_axes: list[str] | None = None) -> Reply:  # noqa: PLR0911, PLR0912
@@ -135,3 +147,38 @@ class ASIProtocol:
     def parse_comm_addr(who_text: str) -> int | None:
         m = re.search(r'At\s+(\d+):\s*Comm\b', who_text, flags=re.IGNORECASE)
         return int(m.group(1)) if m else None
+
+
+# class OpProtocol[ResT](Protocol):
+#     def build(self) -> bytes: ...
+#     def parse(self, r: Reply) -> ResT: ...
+
+# class WhereOp(OpProtocol[dict[str, float]]):
+#     __slots__ = ('_axes_set', '_axes_up')
+
+#     def __init__(self, axes: Sequence[str]):
+#         if not axes:
+#             raise ValueError('WhereOp requires at least one axis')
+#         self._axes_up = tuple(a.strip().upper() for a in axes)
+#         self._axes_set = set(self._axes_up)  # for fast filtering
+
+#     def build(self) -> bytes:
+#         body = 'W ' + ' '.join(self._axes_up)
+#         return (body + '\r').encode('ascii')
+
+#     def parse(self, r: 'Reply') -> dict[str, float]:
+#         if r.kind == 'ERR':
+#             err = f'WHERE error {r.err}'
+#             raise RuntimeError(err)
+
+#         # Labeled (Tiger/MS2000 sometimes provide K=V)
+#         if r.kv:
+#             return {k: float(v) for k, v in r.kv.items() if k in self._axes_set}
+
+#         # Unlabeled numbers, rely on request order
+#         if r.text:
+#             vals = r.text.split()
+#             return {ax: float(val) for ax, val in zip(self._axes_up, vals, strict=False)}
+
+#         # Leave per-axis fallback to the driver?
+#         return {}
