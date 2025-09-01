@@ -1,6 +1,7 @@
 import contextlib
 import threading
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 
 from voxelstack.asi.model import ASIMode, AxisState, BoxInfo, Reply
 from voxelstack.asi.model.box_info import infer_comm_addr_from_who
@@ -13,7 +14,6 @@ from voxelstack.asi.ops.scan import (
     ScanRConfig,
     ScanROp,
     ScanRunOp,
-    ScanSessionState,
     ScanVConfig,
     ScanVOp,
 )
@@ -27,10 +27,33 @@ from voxelstack.asi.ops.status import (
     IsBoxBusyOp,
     SetModeOp,
 )
-from voxelstack.asi.ops.ttl import GetTTLModesOp, ProbeTTLOutOp, ProbeTTLOutOp2, SetTTLModesOp, TTLModes
+from voxelstack.asi.ops.step_shoot import (
+    GetTTLModesOp,
+    LoadBufferedMoveOp,
+    ProbeTTLOutOp,
+    ProbeTTLOutOp2,
+    SetRingBufferModeOp,
+    SetTTLModesOp,
+    StepShootConfig,
+    TTLConfig,
+)
 from voxelstack.asi.protocol.errors import ASIDecodeError
 from voxelstack.asi.protocol.parser import asi_parse
 from voxelstack.asi.transport import SerialTransport
+
+
+@dataclass(frozen=True)
+class StepShootState:
+    card: int
+    axes: list[str]
+
+
+@dataclass(frozen=True)
+class ScanSessionState:
+    card: int
+    fast_axis: str
+    slow_axis: str
+    pattern: ScanPattern
 
 
 class TigerBox:
@@ -38,7 +61,8 @@ class TigerBox:
         self.t = SerialTransport(port)
         self._info: BoxInfo | None = None
         self._last_mode: ASIMode | None = None
-        self._scan_config: ScanSessionState | None = None
+        self._scan_session: ScanSessionState | None = None
+        self._step_shoot_session: StepShootState | None = None
         self._tx_lock = threading.Lock()
         if not self._enable_tiger_mode():
             raise RuntimeError('Failed to enable Tiger mode')
@@ -203,12 +227,12 @@ class TigerBox:
             raise RuntimeError('Cannot determine COMM address from WHO')
         return addr
 
-    def set_ttl_modes(self, mapping: Mapping[str, int]) -> None:
+    def set_ttl_config(self, cfg: TTLConfig) -> None:
         """Set TTL modes on a card. Ex: ttl_set(31, X=12, Y=2, F=1, R=0, T=0)"""
-        r = self._tx(SetTTLModesOp.encode((self._guarantee_comm_addr(), mapping)))
+        r = self._tx(SetTTLModesOp.encode((self._guarantee_comm_addr(), cfg)))
         SetTTLModesOp.decode(r)
 
-    def get_ttl_modes(self) -> TTLModes:
+    def get_ttl_config(self) -> TTLConfig:
         """Return raw TTL mode string: 'X=... Y=... Z=... F=... R=... T=...'."""
         r = self._tx(GetTTLModesOp.encode(self._guarantee_comm_addr()))
         return GetTTLModesOp.decode(r)
@@ -226,21 +250,67 @@ class TigerBox:
             except ASIDecodeError:
                 return None
 
-    # --- Scan ---
-    def _axis_card(self, uid: str) -> int:
-        ax = self.info().axes.get(uid.upper())
+    # -- Step and Shoot ---
+    def _axis_mask_for_card(self, card: int, axes: list[str]) -> int:
+        # Build mask in the card's axis order
+        order = [a for a, ax in self.info().axes.items() if ax.card_hex == card]
+        mask = 0
+        for a in axes:
+            idx = order.index(a.upper())
+            mask |= 1 << idx
+        return mask & 0xFFFF
+
+    def configure_step_shoot(self, cfg: StepShootConfig) -> None:
+        info = self.info()
+        ax = info.axes.get(cfg.axis.upper())
         if not ax or ax.card_hex is None:
-            err = f'Unknown or unassigned axis {uid!r}'
+            err = f'Unknown or unassigned axis {cfg.axis!r}'
             raise ValueError(err)
-        return ax.card_hex
+        card = ax.card_hex
 
-    def _ensure_same_card(self, *uids: str) -> int:
-        cards = {self._axis_card(u) for u in uids if u}
-        if len(cards) != 1:
-            err = f'Axes must be on the same card; got cards {sorted(cards)}'
-            raise RuntimeError(err)
-        return next(iter(cards))
+        # 1) Clear RB (optional)
+        if cfg.clear_buffer_first:
+            r = self._tx(SetRingBufferModeOp.encode(card, clear_buffer=True))
+            SetRingBufferModeOp.decode(r)
 
+        # 2) Enable RB for axis and set ring mode (TTL/ONE_SHOT/REPEATING)
+        mask = self._axis_mask_for_card(card, [cfg.axis])
+        r = self._tx(SetRingBufferModeOp.encode(card, enabled_mask=mask, mode=cfg.ring_mode))
+        SetRingBufferModeOp.decode(r)
+
+        # 3) Configure TTL modes
+        ttl_cfg = TTLConfig(
+            in0_mode=cfg.in0_mode,
+            out0_mode=cfg.out0_mode,
+            aux_state=cfg.aux_state,
+            aux_mask=cfg.aux_mask,
+            aux_mode=cfg.aux_mode,
+            out_polarity_inverted=cfg.out_polarity_inverted,
+        )
+        r = self._tx(SetTTLModesOp.encode((card, ttl_cfg)))
+        SetTTLModesOp.decode(r)
+
+        # cache for subsequent LD calls
+        self._step_shoot_session = StepShootState(card=card, axes=[cfg.axis.upper()])
+
+    def queue_step_shoot(self, positions: Mapping[str, float]) -> None:
+        """
+        Queue a single buffered move (LD) on the configured card.
+        Keys are axis letters; values are the controller units you use with MOVE.
+        """
+        if self._step_shoot_session is None:
+            raise RuntimeError('configure_step_shoot() must be called first.')
+        r = self._tx(LoadBufferedMoveOp.encode((self._step_shoot_session.card, dict(positions))))
+        LoadBufferedMoveOp.decode(r)
+
+    def reset_step_shoot(self) -> None:
+        if self._step_shoot_session is None:
+            return
+        r = self._tx(SetRingBufferModeOp.encode(self._step_shoot_session.card, clear_buffer=True))
+        SetRingBufferModeOp.decode(r)
+        self._step_shoot_session = None
+
+    # --- Scan ---
     def configure_scan(self, fast_axis: str, slow_axis: str, *, pattern: ScanPattern = ScanPattern.RASTER) -> None:
         info = self.info()
         fa = info.axes.get(fast_axis.upper())
@@ -252,7 +322,7 @@ class TigerBox:
         if fa.axis_id is None or sa.axis_id is None:
             raise RuntimeError('Axis IDs are required; ensure BoxInfo was built with ids.')
 
-        self._scan_config = ScanSessionState(
+        self._scan_session = ScanSessionState(
             card=fa.card_hex,
             fast_axis=fa.uid,
             slow_axis=sa.uid,
@@ -264,32 +334,32 @@ class TigerBox:
         )
         ScanBindAxesOp.decode(r)
 
-    def scan_r(self, cfg: ScanRConfig) -> float:
+    def configure_scan_r(self, cfg: ScanRConfig) -> float:
         """Program fast-axis line. Returns actual_interval_um (rounded)."""
-        if self._scan_config is None:
+        if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        kv, actual_um = cfg.to_kv(self.info(), self._scan_config.fast_axis)
-        r = self._tx(ScanROp.encode(self._scan_config.card, kv))
+        kv, actual_um = cfg.to_kv(self.info(), self._scan_session.fast_axis)
+        r = self._tx(ScanROp.encode(self._scan_session.card, kv))
         ScanROp.decode(r)
         return actual_um
 
-    def scan_v(self, cfg: ScanVConfig) -> None:
+    def configure_scan_v(self, cfg: ScanVConfig) -> None:
         """Program slow-axis stepping."""
-        if self._scan_config is None:
+        if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        r = self._tx(ScanVOp.encode(self._scan_config.card, cfg.to_kv()))
+        r = self._tx(ScanVOp.encode(self._scan_session.card, cfg.to_kv()))
         ScanVOp.decode(r)
 
     def start_scan(self) -> None:
-        if self._scan_config is None:
+        if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        r = self._tx(ScanRunOp.encode(self._scan_config.card, 'S'))
+        r = self._tx(ScanRunOp.encode(self._scan_session.card, 'S'))
         ScanRunOp.decode(r)
 
     def stop_scan(self) -> None:
-        if self._scan_config is None:
+        if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        r = self._tx(ScanRunOp.encode(self._scan_config.card, 'P'))
+        r = self._tx(ScanRunOp.encode(self._scan_session.card, 'P'))
         ScanRunOp.decode(r)
 
     # --- Helpers for setting box to tiger mode ---
@@ -360,7 +430,7 @@ if __name__ == '__main__':
     print('Axis State:', drv.get_axis_state(flat_axes[0]))
 
     # TTL
-    print('TTL modes:', drv.get_ttl_modes())
+    print('TTL modes:', drv.get_ttl_config())
     print('TTL out state:', drv.ttl_out_state())
 
     drv.close()

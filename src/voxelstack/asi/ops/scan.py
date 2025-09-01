@@ -115,14 +115,6 @@ class ScanPattern(Enum):
     SERPENTINE = 1
 
 
-@dataclass(frozen=True)
-class ScanSessionState:
-    card: int
-    fast_axis: str
-    slow_axis: str
-    pattern: ScanPattern
-
-
 # --- Ops ---
 
 

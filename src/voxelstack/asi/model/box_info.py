@@ -81,6 +81,22 @@ class BoxInfo:
     def axes_for_card(self, hex_addr: int) -> set[ASIAxis]:
         return {ax for ax in self._axes_by_uid.values() if ax.card_hex == hex_addr}
 
+    def card_for_axis(self, uid: str) -> CardInfo | None:
+        uid = uid.upper()
+        for card in self._who:
+            if uid in card.axes:
+                return card
+        return None
+
+    def are_cards_on_same_axis(self, *uids: str) -> int | None:
+        cards = [self.card_for_axis(uid) for uid in uids]
+        if any(card is None for card in cards):
+            return None
+        hex_addrs = {card.addr for card in cards if card and card.addr is not None}
+        if len(hex_addrs) == 1:
+            return hex_addrs.pop()
+        return None
+
     def __repr__(self) -> str:
         cards_summary = ', '.join(f'{c.addr}:{"".join(c.axes) or "-"}' for c in self._who)
         ctrl = self.controller or '-'
