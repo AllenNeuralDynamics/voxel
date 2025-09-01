@@ -1,40 +1,24 @@
 import threading
 from collections.abc import Iterable, Mapping, Sequence
 
-import serial
-
-from voxelstack.asi.models import AxisState, BoxInfo, BuildReport, TTLModes, infer_comm_addr_from_who
-from voxelstack.asi.operations import (
-    TTLOP,
-    ASIDecodeError,
-    ASIMode,
-    Axes,
-    MotionOP,
-    ParamOP,
-    Reply,
-    StatusOP,
-    TigerParam,
-    TigerParams,
-    asi_parse,
+from voxelstack.asi.model import ASIMode, AxisState, BoxInfo, Reply
+from voxelstack.asi.model.box_info import infer_comm_addr_from_who
+from voxelstack.asi.model.build_report import BuildReport
+from voxelstack.asi.ops.motion import HaltOp, HereOp, HomeOp, IsAxisBusyOp, MoveAbsOp, MoveRelOp, WhereOp
+from voxelstack.asi.ops.params import GetParamOp, SetParamOp, TigerParam, TigerParams
+from voxelstack.asi.ops.status import (
+    GetAxisStateOp,
+    GetBuildOp,
+    GetPiezoInfoOp,
+    GetVersionOp,
+    GetWhoOp,
+    IsBoxBusyOp,
+    SetModeOp,
 )
-
-
-class SerialTransport:
-    def __init__(self, port: str, baud: int = 115200, timeout: float = 0.5):
-        self.ser = serial.Serial(port=port, baudrate=baud, timeout=timeout)
-        self._lock = threading.Lock()
-
-    def write(self, b: bytes) -> None:
-        with self._lock:
-            self.ser.write(b)
-
-    def readline(self) -> bytes | None:
-        line = self.ser.readline()
-        return line if line else None
-
-    def close(self) -> None:
-        if self.ser.is_open:
-            self.ser.close()
+from voxelstack.asi.ops.ttl import GetTTLModesOp, ProbeTTLOutOp, ProbeTTLOutOp2, SetTTLModesOp, TTLModes
+from voxelstack.asi.protocol.errors import ASIDecodeError
+from voxelstack.asi.protocol.parser import asi_parse
+from voxelstack.asi.transport import SerialTransport
 
 
 class TigerBox:
@@ -73,8 +57,8 @@ class TigerBox:
             return self._info
 
         # WHO → WhoReport (list[CardInfo])
-        r = self._tx(StatusOP.Who.encode())
-        who_report = StatusOP.Who.decode(r)
+        r = self._tx(GetWhoOp.encode())
+        who_report = GetWhoOp.decode(r)
 
         # COMM addr inference from WHO
         comm_addr = infer_comm_addr_from_who(who_report)
@@ -83,15 +67,15 @@ class TigerBox:
         build_report: BuildReport | None = None
         if comm_addr is not None:
             try:
-                rr = self._tx(StatusOP.GetBuild.encode(comm_addr))
-                build_report = StatusOP.GetBuild.decode(rr)
+                rr = self._tx(GetBuildOp.encode(comm_addr))
+                build_report = GetBuildOp.decode(rr)
             except ASIDecodeError:
                 pass
         if build_report is None:
             # Unaddressed fallback
-            rr = self._tx(StatusOP.GetBuild.encode(None))
+            rr = self._tx(GetBuildOp.encode(None))
             try:
-                build_report = StatusOP.GetBuild.decode(rr)
+                build_report = GetBuildOp.decode(rr)
             except ASIDecodeError:
                 build_report = BuildReport()  # empty but safe
 
@@ -99,8 +83,8 @@ class TigerBox:
         version: str | None = None
         if comm_addr is not None:
             try:
-                vr = self._tx(StatusOP.VersionAddr.encode(comm_addr))
-                version = StatusOP.VersionAddr.decode(vr).strip() or None
+                vr = self._tx(GetVersionOp.encode(comm_addr))
+                version = GetVersionOp.decode(vr).strip() or None
             except ASIDecodeError:
                 version = None
 
@@ -108,8 +92,8 @@ class TigerBox:
         pzinfo: str | None = None
         if comm_addr is not None:
             try:
-                pzr = self._tx(StatusOP.PZINFO.encode(comm_addr))
-                pzinfo = StatusOP.PZINFO.decode(pzr).strip() or None
+                pzr = self._tx(GetPiezoInfoOp.encode(comm_addr))
+                pzinfo = GetPiezoInfoOp.decode(pzr).strip() or None
             except ASIDecodeError:
                 pzinfo = None
 
@@ -124,60 +108,60 @@ class TigerBox:
         if axis not in self.info().axes:
             err = f'Invalid axis: {axis}'
             raise ValueError(err)
-        r = self._tx(StatusOP.GetAxisState.encode(axis.upper()))
-        return StatusOP.GetAxisState.decode(r)
+        r = self._tx(GetAxisStateOp.encode(axis.upper()))
+        return GetAxisStateOp.decode(r)
 
     def is_busy(self) -> bool | None:
-        r = self._tx(StatusOP.Busy.encode())
+        r = self._tx(IsBoxBusyOp.encode())
         try:
-            return StatusOP.Busy.decode(r)
+            return IsBoxBusyOp.decode(r)
         except ASIDecodeError:
             return None
 
     # ---- Motion ----
 
-    def where(self, axes: Axes) -> dict[str, float]:
+    def where(self, axes: Sequence[str]) -> dict[str, float]:
         axes_u = [a.upper() for a in axes]
         r = self._tx(
-            MotionOP.Where.encode(axes_u),
+            WhereOp.encode(axes_u),
             requested_axes=axes_u,
         )
-        return MotionOP.Where.decode(r, axes_u)
+        return WhereOp.decode(r, axes_u)
 
     def move_abs(self, mapping: Mapping[str, float]) -> None:
-        r = self._tx(MotionOP.MoveAbs.encode(mapping))
-        MotionOP.MoveAbs.decode(r)
+        r = self._tx(MoveAbsOp.encode(mapping))
+        MoveAbsOp.decode(r)
 
     def move_rel(self, mapping: Mapping[str, float]) -> None:
-        r = self._tx(MotionOP.MoveRel.encode(mapping))
-        MotionOP.MoveRel.decode(r)
+        r = self._tx(MoveRelOp.encode(mapping))
+        MoveRelOp.decode(r)
 
     def here(self, mapping: Mapping[str, float]) -> None:
-        r = self._tx(MotionOP.Here.encode(mapping))
-        MotionOP.Here.decode(r)
+        r = self._tx(HereOp.encode(mapping))
+        HereOp.decode(r)
 
     def home(self, axes: Iterable[str]) -> None:
-        r = self._tx(MotionOP.Home.encode([a.upper() for a in axes]))
-        MotionOP.Home.decode(r)
+        r = self._tx(HomeOp.encode([a.upper() for a in axes]))
+        HomeOp.decode(r)
 
     def halt(self) -> None:
-        r = self._tx(MotionOP.Halt.encode())
-        MotionOP.Halt.decode(r)
+        r = self._tx(HaltOp.encode())
+        HaltOp.decode(r)
 
     def is_axis_moving(self, axes: Sequence[str]) -> dict[str, bool]:
-        r = self._tx(MotionOP.AxisBusy.encode(axes))
-        return MotionOP.AxisBusy.decode(r, axes)
+        r = self._tx(IsAxisBusyOp.encode(axes))
+        return IsAxisBusyOp.decode(r, axes)
 
     # ---- Params (typed) ----
 
     def get_param[T: int | float | str | bool](self, param: TigerParam[T], axes: Iterable[str]) -> Mapping[str, T]:
         axes_u = [a.upper() for a in axes]
-        r = self._tx(ParamOP.Get.encode(param, axes_u), requested_axes=axes_u)
-        return ParamOP.Get.decode(r, param, axes_u)
+        r = self._tx(GetParamOp.encode(param, axes_u), requested_axes=axes_u)
+        return GetParamOp.decode(r, param, axes_u)
 
     def set_param[T: int | float | str | bool](self, param: TigerParam, mapping: Mapping[str, T]) -> None:
-        r = self._tx(ParamOP.Set.encode(param, dict(mapping)))
-        ParamOP.Set.decode(r, param)
+        r = self._tx(SetParamOp.encode(param, dict(mapping)))
+        SetParamOp.decode(r, param)
 
     # ---- TTL Modes _______
 
@@ -189,24 +173,24 @@ class TigerBox:
 
     def set_ttl_modes(self, mapping: Mapping[str, int]) -> None:
         """Set TTL modes on a card. Ex: ttl_set(31, X=12, Y=2, F=1, R=0, T=0)"""
-        r = self._tx(TTLOP.SetModes.encode((self._guarantee_comm_addr(), mapping)))
-        TTLOP.SetModes.decode(r)
+        r = self._tx(SetTTLModesOp.encode((self._guarantee_comm_addr(), mapping)))
+        SetTTLModesOp.decode(r)
 
     def get_ttl_modes(self) -> TTLModes:
         """Return raw TTL mode string: 'X=... Y=... Z=... F=... R=... T=...'."""
-        r = self._tx(TTLOP.GetModes.encode(self._guarantee_comm_addr()))
-        return TTLOP.GetModes.decode(r)
+        r = self._tx(GetTTLModesOp.encode(self._guarantee_comm_addr()))
+        return GetTTLModesOp.decode(r)
 
     def ttl_out_state(self) -> bool | None:
         # Not really working. Needs to be fixed or removed.
-        r = self._tx(TTLOP.ReadOut.encode(self._guarantee_comm_addr()))
+        r = self._tx(ProbeTTLOutOp.encode(self._guarantee_comm_addr()))
         try:
-            return TTLOP.ReadOut.decode(r)
+            return ProbeTTLOutOp.decode(r)
         except ASIDecodeError:
             # try legacy
-            r = self._tx(TTLOP.OutState.encode(self.info().comm_addr))
+            r = self._tx(ProbeTTLOutOp2.encode(self.info().comm_addr))
             try:
-                return TTLOP.OutState.decode(r)
+                return ProbeTTLOutOp2.decode(r)
             except ASIDecodeError:
                 return None
 
@@ -215,7 +199,7 @@ class TigerBox:
     def _probe_mode(self, desired_mode: ASIMode = ASIMode.TIGER, probe_axis: str = 'X') -> bool | None:
         try:
             _ = self._tx(
-                MotionOP.Where.encode([probe_axis]),
+                WhereOp.encode([probe_axis]),
                 requested_axes=[probe_axis],
             )
             if self._last_mode == desired_mode:
@@ -229,15 +213,15 @@ class TigerBox:
         infer a COMM addr from WHO.
         """
         # Unaddressed first
-        _ = self._tx(StatusOP.SetMode.encode(ASIMode.TIGER))
+        _ = self._tx(SetModeOp.encode(ASIMode.TIGER))
         is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
         if is_tiger is True:
             return True
         # Addressed fallback (some firmwares expect a card prefix)
         comm = self.info(refresh=True).comm_addr
         if comm is not None:
-            r = self._tx(StatusOP.SetModeAddr.encode((comm, ASIMode.TIGER)))
-            StatusOP.SetModeAddr.decode(r)
+            r = self._tx(SetModeOp.encode(ASIMode.TIGER, comm))
+            SetModeOp.decode(r)
         is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
         return is_tiger is True
 
