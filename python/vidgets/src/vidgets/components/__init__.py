@@ -1,1 +1,1 @@
-from .chip import Chip
+from .chip import Chip as Chip
