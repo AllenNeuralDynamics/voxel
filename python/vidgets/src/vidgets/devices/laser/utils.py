@@ -83,3 +83,42 @@ def rgb_to_css_string(rgb: tuple[float, float, float], alpha: float = 1.0) -> st
 
     # Format the CSS string
     return f'rgba({r_int}, {g_int}, {b_int}, {alpha})'
+
+
+def rgb_to_hex(r: int, g: int, b: int) -> str:
+    """Converts RGB tuple to a hex string."""
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
+def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    """Converts a hex color string to an RGB tuple."""
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return (r, g, b)
+
+
+def lighten_color(r: int, g: int, b: int, factor: float = 0.4) -> tuple[int, int, int]:
+    """Creates a lighter shade of a color."""
+    white_r, white_g, white_b = 255, 255, 255
+    new_r = int(r + (white_r - r) * factor)
+    new_g = int(g + (white_g - g) * factor)
+    new_b = int(b + (white_b - b) * factor)
+    return (new_r, new_g, new_b)
+
+
+def darken_color(r: int, g: int, b: int, factor: float = 0.4) -> tuple[int, int, int]:
+    """Creates a darker shade of a color."""
+    black_r, black_g, black_b = 0, 0, 0
+    new_r = int(r + (black_r - r) * factor)
+    new_g = int(g + (black_g - g) * factor)
+    new_b = int(b + (black_b - b) * factor)
+    return (new_r, new_g, new_b)
+
+
+def lighten_hex_color(hex_color: str, factor: float = 0.4) -> str:
+    """Creates a lighter shade of a hex color."""
+    rgb = hex_to_rgb(hex_color)
+    new_rgb = lighten_color(*rgb, factor=factor)
+    return rgb_to_hex(*new_rgb)

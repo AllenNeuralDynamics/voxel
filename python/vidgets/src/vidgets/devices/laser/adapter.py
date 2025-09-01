@@ -5,7 +5,7 @@ from typing import Protocol, Self
 
 from PySide6.QtCore import QObject, Signal, Slot
 from vidgets.input.binding import FieldBinder
-from voxel.devices.laser.agent import LaserAgent, LaserState
+from voxel.devices.laser.agent import LaserAgent
 from voxel.utils.descriptors.deliminated import DeliminatedFloat
 
 
@@ -16,9 +16,7 @@ class QtLaserAdapter(QObject):
     def __init__(self, agent: LaserAgent, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._agent = agent
-        self._pump: asyncio.Task | None = None
-        self._current: LaserState | None = None
-        self._tasks: set[asyncio.Task] = set()
+        self._pump_task: asyncio.Task | None = None
 
         # Power setpoint: read DeliminatedFloat, write float (mW)
         self.power = FieldBinder[DeliminatedFloat, float](
@@ -41,16 +39,14 @@ class QtLaserAdapter(QObject):
     # ----- lifecycle -----
     async def start(self) -> None:
         await self._agent.start()
-        self._current = await self._agent.get_state()
-        self.state_changed.emit(self._current)
-        self._pump = asyncio.create_task(self._pump_states(), name='laser-pump')
+        self._pump_task = asyncio.create_task(self._pump_states(), name='laser-pump')
 
     async def stop(self) -> None:
-        if self._pump:
-            self._pump.cancel()
+        if self._pump_task:
+            self._pump_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await self._pump
-            self._pump = None
+                await self._pump_task
+            self._pump_task = None
         await self._agent.stop()
 
     async def __aenter__(self) -> Self:
@@ -63,7 +59,6 @@ class QtLaserAdapter(QObject):
     async def _pump_states(self) -> None:
         try:
             async for st in self._agent.states():
-                self._current = st
                 self.state_changed.emit(st)
         except Exception as e:  # noqa: BLE001
             self.fault.emit(f'{e!r}')
@@ -71,19 +66,11 @@ class QtLaserAdapter(QObject):
     # ----- command slots (thin) -----
     @Slot(float)
     def setPower(self, mw: float) -> None:
-        self._spawn(self._agent.set_power(power_mw=mw))
+        self._agent.set_power(power_mw=mw)
 
     @Slot(bool)
     def setEnable(self, on: bool) -> None:
-        self._spawn(self._agent.set_enable(on=on))
-
-    def current(self) -> LaserState | None:
-        return self._current
-
-    def _spawn(self, coro) -> None:
-        t = asyncio.create_task(coro)
-        self._tasks.add(t)
-        t.add_done_callback(self._tasks.discard)
+        self._agent.set_enable(on=on)
 
 
 class AsyncAdapter(Protocol):
@@ -92,8 +79,7 @@ class AsyncAdapter(Protocol):
 
 
 def wait_signal(signal) -> asyncio.Future:
-    loop = asyncio.get_running_loop()
-    fut = loop.create_future()
+    fut = asyncio.Future()
 
     def _handler(*args):
         if not fut.done():
