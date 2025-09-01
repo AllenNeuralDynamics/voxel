@@ -1,7 +1,8 @@
 import re
 
-from voxelstack.asi.model import ASIMode, AxisState, CardInfo, Reply
+from voxelstack.asi.model import ASIMode, AxisState, Reply
 from voxelstack.asi.model.build_report import BuildReport
+from voxelstack.asi.model.card_info import WhoReportItem
 from voxelstack.asi.protocol.errors import ASIDecodeError
 from voxelstack.asi.protocol.linefmt import _line
 
@@ -12,11 +13,11 @@ class GetWhoOp:
         return _line('N')
 
     @staticmethod
-    def decode(r: Reply) -> list[CardInfo]:
+    def decode(r: Reply) -> list[WhoReportItem]:
         who_text = (r.text or '').strip()
         if not who_text:
             return []
-        cards: list[CardInfo] = []
+        items: list[WhoReportItem] = []
         for chunk in re.split(r'(?=At\s+\d+:)', who_text):
             m = re.match(r'At\s+(\d+):\s*(.+)', chunk.strip())
             if not m:
@@ -39,8 +40,8 @@ class GetWhoOp:
             if flags_m := re.search(r'(\[[^\]]+\])', rest):
                 flags = flags_m.group(1)
 
-            cards.append(CardInfo(addr=addr, axes=axes, fw=fw, board=board, date=date, flags=flags))
-        return cards
+            items.append(WhoReportItem(addr=addr, axes=axes, fw=fw, board=board, date=date, flags=flags))
+        return items
 
 
 class IsBoxBusyOp:
@@ -58,19 +59,9 @@ class IsBoxBusyOp:
         raise ASIDecodeError('STATUS', r)
 
 
-# class GetVersionOp:
-#     @staticmethod
-#     def encode() -> bytes:
-#         return _line('V')
-
-#     @staticmethod
-#     def decode(r: Reply) -> str:
-#         return (r.text or '').strip()
-
-
 class GetVersionOp:
     @staticmethod
-    def encode(q: int) -> bytes:
+    def encode(q: int | None) -> bytes:
         return _line('V', None, q)
 
     @staticmethod
@@ -104,6 +95,16 @@ class GetAxisStateOp:
         return AxisState.from_reply(r)
 
 
+class GetPiezoInfoOp:  # '<addr>PZINFO'
+    @staticmethod
+    def encode(addr: int) -> bytes:
+        return _line('PZINFO', None, addr)
+
+    @staticmethod
+    def decode(r: Reply) -> str:
+        return (r.text or '').strip()
+
+
 class GetBuildOp:  # 'BU X' or '<addr>BU X'
     @staticmethod
     def encode(addr: int | None) -> bytes:
@@ -114,11 +115,53 @@ class GetBuildOp:  # 'BU X' or '<addr>BU X'
         return BuildReport.from_reply(r)
 
 
-class GetPiezoInfoOp:  # '<addr>PZINFO'
+class GetCardMods:  # 'BU X' or '<addr>BU X'
     @staticmethod
-    def encode(addr: int) -> bytes:
-        return _line('PZINFO', None, addr)
+    def encode(addr: int | None) -> bytes:
+        return _line('BU X', None, addr)
 
     @staticmethod
-    def decode(r: Reply) -> str:
-        return (r.text or '').strip()
+    def decode(r: Reply) -> set[str]:
+        raw = (r.text or '').strip()
+        return parse_modules_from_build_text(raw)
+
+
+def _norm(s: str) -> str:
+    # collapse runs of spaces
+    return re.sub(r'\s+', ' ', s.strip())
+
+
+def parse_modules_from_build_text(text: str, *, board_name: str | None = None, keep_cmds: bool = True) -> set[str]:
+    mods: set[str] = set()
+
+    # 1) split on CR/LF, but also allow fallback to scanning uppercase spans if line breaks vanish
+    lines = [ln.strip() for ln in re.split(r'[\r\n]+', text or '') if ln.strip()]
+    if not lines:
+        lines = list(re.findall(r'[A-Z0-9][A-Z0-9 _:+/\-]{2,}', text or ''))
+
+    for ln in lines:
+        up = ln.upper()
+        # treat as "module-ish" if it's all uppercase once normalized
+        if _norm(ln) == _norm(up):
+            item = _norm(ln)
+            # optional filters
+            if board_name and item == board_name.upper():
+                continue
+            if not keep_cmds and item.startswith('CMDS:'):
+                continue
+            # skip obvious non-module banners
+            if item.startswith(('AT ', 'TIGER')):
+                continue
+            mods.add(item)
+
+    return mods
+
+
+def parse_modules_from_build_text2(text: str) -> set[str]:
+    mods: set[str] = set()
+    for ln in (text or '').splitlines():
+        sln = ln.strip()
+        # Heuristic used by the reference: uppercase lines signal module names
+        if sln and sln == sln.upper() and not sln.startswith('AT ') and not sln.startswith('TIGER'):
+            mods.add(sln)
+    return mods

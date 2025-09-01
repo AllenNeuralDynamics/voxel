@@ -1,14 +1,26 @@
+import contextlib
 import threading
 from collections.abc import Iterable, Mapping, Sequence
 
 from voxelstack.asi.model import ASIMode, AxisState, BoxInfo, Reply
 from voxelstack.asi.model.box_info import infer_comm_addr_from_who
-from voxelstack.asi.model.build_report import BuildReport
+from voxelstack.asi.model.card_info import CardInfo
 from voxelstack.asi.ops.motion import HaltOp, HereOp, HomeOp, IsAxisBusyOp, MoveAbsOp, MoveRelOp, WhereOp
 from voxelstack.asi.ops.params import GetParamOp, SetParamOp, TigerParam, TigerParams
+from voxelstack.asi.ops.scan import (
+    ScanBindAxesOp,
+    ScanPattern,
+    ScanRConfig,
+    ScanROp,
+    ScanRunOp,
+    ScanSessionState,
+    ScanVConfig,
+    ScanVOp,
+)
 from voxelstack.asi.ops.status import (
     GetAxisStateOp,
     GetBuildOp,
+    GetCardMods,
     GetPiezoInfoOp,
     GetVersionOp,
     GetWhoOp,
@@ -26,6 +38,7 @@ class TigerBox:
         self.t = SerialTransport(port)
         self._info: BoxInfo | None = None
         self._last_mode: ASIMode | None = None
+        self._scan_config: ScanSessionState | None = None
         self._tx_lock = threading.Lock()
         if not self._enable_tiger_mode():
             raise RuntimeError('Failed to enable Tiger mode')
@@ -56,28 +69,31 @@ class TigerBox:
         if self._info is not None and not refresh:
             return self._info
 
-        # WHO → WhoReport (list[CardInfo])
+        rr = self._tx(GetBuildOp.encode(None))
+        build_report = GetBuildOp.decode(rr)
+        card_hex_to_mods: Mapping[int, set[str]] = {}
+        for addr in build_report.hex_addr:
+            rr = self._tx(GetCardMods.encode(addr))
+            card_hex_to_mods[addr] = GetCardMods.decode(rr)
         r = self._tx(GetWhoOp.encode())
-        who_report = GetWhoOp.decode(r)
+        who_items = GetWhoOp.decode(r)
+        card_infos: list[CardInfo] = []
+        for item in who_items:
+            mods = card_hex_to_mods.get(item.addr, set())
+            card_infos.append(
+                CardInfo(
+                    addr=item.addr,
+                    axes=item.axes,
+                    fw=item.fw,
+                    board=item.board,
+                    date=item.date,
+                    flags=item.flags,
+                    mods=mods,
+                )
+            )
 
         # COMM addr inference from WHO
-        comm_addr = infer_comm_addr_from_who(who_report)
-
-        # BuildReport
-        build_report: BuildReport | None = None
-        if comm_addr is not None:
-            try:
-                rr = self._tx(GetBuildOp.encode(comm_addr))
-                build_report = GetBuildOp.decode(rr)
-            except ASIDecodeError:
-                pass
-        if build_report is None:
-            # Unaddressed fallback
-            rr = self._tx(GetBuildOp.encode(None))
-            try:
-                build_report = GetBuildOp.decode(rr)
-            except ASIDecodeError:
-                build_report = BuildReport()  # empty but safe
+        comm_addr = infer_comm_addr_from_who(card_infos)
 
         # Version (addressed only; if missing, leave None)
         version: str | None = None
@@ -97,8 +113,24 @@ class TigerBox:
             except ASIDecodeError:
                 pzinfo = None
 
+        axis_ids: Mapping[str, int] = {}
+        enc_cnts: Mapping[str, float] = {}
+        axes = sorted({ax for c in card_infos for ax in c.axes})
+        if axes:
+            with contextlib.suppress(ASIDecodeError):
+                axis_ids = self.get_param(TigerParams.AXIS_ID, axes)  # {'X': 0, ...}
+            with contextlib.suppress(ASIDecodeError):
+                enc_cnts = self.get_param(TigerParams.ENCODER_CNTS, axes)  # {'X': 10240.0, ...}
+
         # Aggregate & cache
-        self._info = BoxInfo(who=who_report, build=build_report, pzinfo=pzinfo, version=version)
+        self._info = BoxInfo(
+            who=card_infos,
+            build=build_report,
+            pzinfo=pzinfo,
+            version=version,
+            axis_ids=axis_ids,
+            enc_cnts_per_mm=enc_cnts,
+        )
         if issues := self._info.issues:
             for issue in issues:
                 print(f'BoxInfo warning: {issue}')
@@ -194,7 +226,73 @@ class TigerBox:
             except ASIDecodeError:
                 return None
 
-    # Helpers for setting box to tiger mode
+    # --- Scan ---
+    def _axis_card(self, uid: str) -> int:
+        ax = self.info().axes.get(uid.upper())
+        if not ax or ax.card_hex is None:
+            err = f'Unknown or unassigned axis {uid!r}'
+            raise ValueError(err)
+        return ax.card_hex
+
+    def _ensure_same_card(self, *uids: str) -> int:
+        cards = {self._axis_card(u) for u in uids if u}
+        if len(cards) != 1:
+            err = f'Axes must be on the same card; got cards {sorted(cards)}'
+            raise RuntimeError(err)
+        return next(iter(cards))
+
+    def configure_scan(self, fast_axis: str, slow_axis: str, *, pattern: ScanPattern = ScanPattern.RASTER) -> None:
+        info = self.info()
+        fa = info.axes.get(fast_axis.upper())
+        sa = info.axes.get(slow_axis.upper())
+        if not fa or not sa:
+            raise ValueError('Unknown axis uid(s).')
+        if fa.card_hex is None or sa.card_hex is None or fa.card_hex != sa.card_hex:
+            raise RuntimeError('Fast and slow axes must reside on the same card.')
+        if fa.axis_id is None or sa.axis_id is None:
+            raise RuntimeError('Axis IDs are required; ensure BoxInfo was built with ids.')
+
+        self._scan_config = ScanSessionState(
+            card=fa.card_hex,
+            fast_axis=fa.uid,
+            slow_axis=sa.uid,
+            pattern=pattern,
+        )
+
+        r = self._tx(
+            ScanBindAxesOp.encode(fa.card_hex, fast_axis_id=fa.axis_id, slow_axis_id=sa.axis_id, pattern=pattern)
+        )
+        ScanBindAxesOp.decode(r)
+
+    def scan_r(self, cfg: ScanRConfig) -> float:
+        """Program fast-axis line. Returns actual_interval_um (rounded)."""
+        if self._scan_config is None:
+            raise RuntimeError('configure_scan() must be called first.')
+        kv, actual_um = cfg.to_kv(self.info(), self._scan_config.fast_axis)
+        r = self._tx(ScanROp.encode(self._scan_config.card, kv))
+        ScanROp.decode(r)
+        return actual_um
+
+    def scan_v(self, cfg: ScanVConfig) -> None:
+        """Program slow-axis stepping."""
+        if self._scan_config is None:
+            raise RuntimeError('configure_scan() must be called first.')
+        r = self._tx(ScanVOp.encode(self._scan_config.card, cfg.to_kv()))
+        ScanVOp.decode(r)
+
+    def start_scan(self) -> None:
+        if self._scan_config is None:
+            raise RuntimeError('configure_scan() must be called first.')
+        r = self._tx(ScanRunOp.encode(self._scan_config.card, 'S'))
+        ScanRunOp.decode(r)
+
+    def stop_scan(self) -> None:
+        if self._scan_config is None:
+            raise RuntimeError('configure_scan() must be called first.')
+        r = self._tx(ScanRunOp.encode(self._scan_config.card, 'P'))
+        ScanRunOp.decode(r)
+
+    # --- Helpers for setting box to tiger mode ---
 
     def _probe_mode(self, desired_mode: ASIMode = ASIMode.TIGER, probe_axis: str = 'X') -> bool | None:
         try:
@@ -235,6 +333,7 @@ if __name__ == '__main__':
     info = drv.info(refresh=True)
     print('Info:', info)
     print('Axes:', info.axes)
+    # print('Cards:', info.cards)
     print('BUSY:', drv.is_busy())
 
     flat_axes = sorted(drv.info().axes.keys())

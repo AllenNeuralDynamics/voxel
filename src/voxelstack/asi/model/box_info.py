@@ -1,18 +1,11 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from voxelstack.asi.model.build_report import BuildReport
-from voxelstack.asi.model.models import ASIAxis, CardInfo
+from voxelstack.asi.model.card_info import CardInfo
+from voxelstack.asi.model.models import ASIAxis
 
 
 class BoxInfo:
-    """
-    Aggregate static-ish metadata composed from WHO and BU X.
-
-    - `axes_by_uid['X'] -> ASIAxis`
-    - quick accessors for axes/card grouping
-    - retains raw reports for debugging
-    """
-
     def __init__(
         self,
         who: list[CardInfo],
@@ -20,16 +13,21 @@ class BoxInfo:
         *,
         pzinfo: str | None = None,
         version: str | None = None,
+        axis_ids: Mapping[str, int] | None = None,
+        enc_cnts_per_mm: Mapping[str, float] | None = None,
     ) -> None:
         self._who = list(who)
         self._build = build
         self._pzinfo = pzinfo
         self._version = version
+        self._comm_addr = infer_comm_addr_from_who(self._who)
 
-        self._comm_addr: int | None = infer_comm_addr_from_who(self._who)
+        # normalize optional per-axis dicts once
+        self._axis_ids = {k.upper(): v for k, v in (axis_ids or {}).items()}
+        self._enc_cnts = {k.upper(): v for k, v in (enc_cnts_per_mm or {}).items()}
 
-        self._axes_by_uid = _build_axes_map(self._who, self._build)
-        self._diagnostics: list[str] = self._compute_diagnostics()
+        self._axes_by_uid = _build_axes_map(self._who, self._build, self._axis_ids, self._enc_cnts)
+        self._diagnostics = self._compute_diagnostics()
 
     # ---- raw reports ----
 
@@ -135,41 +133,45 @@ def infer_comm_addr_from_who(cards: Iterable[CardInfo]) -> int | None:
         return None
 
 
-def _build_axes_map(who: list[CardInfo], build: BuildReport | None) -> dict[str, ASIAxis]:
-    """Merge WHO + BU X into a single {uid -> ASIAxis} map, compactly."""
-    cards_by_hex: dict[int, CardInfo] = {c.addr: c for c in who}
+def _build_axes_map(
+    who: list[CardInfo],
+    build: BuildReport | None,
+    axis_ids: dict[str, int],
+    enc_cnts_per_mm: dict[str, float],
+) -> dict[str, ASIAxis]:
     who_axes_by_hex: dict[int, set[str]] = {c.addr: {a.upper() for a in c.axes} for c in who if c.axes}
 
     axes_by_uid: dict[str, ASIAxis] = {}
 
-    # 1) Seed from BU X rows (richest source)
+    # 1) Seed from BU X (richest)
     if build and build.motor_axes:
         for uid, t, idx, hx, pr in build.rows():
-            axes_by_uid[uid] = ASIAxis(
-                uid=uid,
+            u = uid.upper()
+            axes_by_uid[u] = ASIAxis(
+                uid=u,
                 type_code=t,
                 card_hex=hx if isinstance(hx, int) else None,
                 card_index=idx if isinstance(idx, int) else None,
                 props=pr if isinstance(pr, int) else None,
                 is_motor=_is_motor_type(t),
-                card=cards_by_hex.get(hx) if isinstance(hx, int) else None,
+                axis_id=axis_ids.get(u),
+                enc_cnts_per_mm=enc_cnts_per_mm.get(u),
             )
 
-    # 2) Add WHO-only axes that BU X didn't list
+    # 2) WHO-only axes
     for hx, uids in who_axes_by_hex.items():
-        for uid in uids:
-            axes_by_uid.setdefault(
-                uid,
-                ASIAxis(
-                    uid=uid,
+        for u in uids:
+            if u not in axes_by_uid:
+                axes_by_uid[u] = ASIAxis(
+                    uid=u,
                     type_code=None,
                     card_hex=hx,
                     card_index=None,
                     props=None,
-                    is_motor=True,  # conservative default
-                    card=cards_by_hex.get(hx),
-                ),
-            )
+                    is_motor=True,
+                    axis_id=axis_ids.get(u),
+                    enc_cnts_per_mm=enc_cnts_per_mm.get(u),
+                )
 
     return axes_by_uid
 
