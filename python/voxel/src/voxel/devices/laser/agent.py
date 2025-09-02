@@ -39,3 +39,6 @@ class LaserAgent(VoxelDeviceAgent[LaserState]):
             power=float(self.laser.power_mw),
             temperature=float(self.laser.temperature_c or 0.0),
         )
+
+    def _shutdown(self) -> None:
+        self.laser.close()

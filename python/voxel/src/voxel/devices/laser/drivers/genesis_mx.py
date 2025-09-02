@@ -26,8 +26,8 @@ class GenesisMXLaser(VoxelLaser):
         self.log = logging.getLogger(f'{__name__}.{self.__class__.__name__}')
         super().__init__(uid, wavelength=wavelength)
         self._inst = GenesisMX(serial=serial_id)
-        if self._inst.head.serial != serial_id:
-            err = f'Error initializing laser {serial_id}: serial number mismatch (got {self._inst.head.serial})'
+        if self._inst.info.serial != serial_id:
+            err = f'Error initializing laser {serial_id}: serial number mismatch (got {self._inst.info.serial})'
             raise ValueError(err)
         self._inst.mode = OperationMode.PHOTO
 
@@ -53,6 +53,11 @@ class GenesisMXLaser(VoxelLaser):
         """Disable the laser."""
         self._inst.disable()
 
+    @property
+    def is_enabled(self) -> bool:
+        """Check if the laser is enabled."""
+        return self._inst.is_enabled or False
+
     def close(self) -> None:
         """Close the connection to the laser."""
         self.log.info('closing laser.')
@@ -65,7 +70,7 @@ class GenesisMXLaser(VoxelLaser):
         :return: The current power of the laser in milliwatts.
         :rtype: float
         """
-        return self._inst.power_mw
+        return self._inst.power.value or -999
 
     def _get_max_power(self) -> float:
         return self._max_power_mw
@@ -77,7 +82,7 @@ class GenesisMXLaser(VoxelLaser):
         :return: The power setpoint of the laser in milliwatts.
         :rtype: float
         """
-        return self._inst.power_setpoint_mw
+        return self._inst.power.setpoint or -999
 
     @power_setpoint_mw.setter
     def power_setpoint_mw(self, value: float) -> None:
@@ -87,13 +92,13 @@ class GenesisMXLaser(VoxelLaser):
         :type value: float
         """
         self.log.info('setting power to %s mW', value)
-        self._inst.power_mw = value
+        self._inst.power = value
 
     @property
-    def temperature_c(self) -> float:
+    def temperature_c(self) -> float | None:
         """Get the temperature of the laser.
 
         :return: The temperature of the laser in degrees Celsius.
         :rtype: float
         """
-        return self._inst.temperature_c
+        return self._inst.temperature

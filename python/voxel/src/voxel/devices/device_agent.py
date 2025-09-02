@@ -65,6 +65,9 @@ class VoxelDeviceAgent[S: DeviceState](ABC):
     @abstractmethod
     def _read_state(self) -> S: ...
 
+    @abstractmethod
+    def _shutdown(self) -> None: ...
+
     # -------- lifecycle --------
     async def start(self) -> None:
         self._stop.clear()
@@ -82,6 +85,7 @@ class VoxelDeviceAgent[S: DeviceState](ABC):
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._executor.shutdown(wait=False, cancel_futures=True)
+        self._shutdown()
 
     # -------- public API --------
     def submit_command(self, write_fn: Callable[[], None]) -> None:
