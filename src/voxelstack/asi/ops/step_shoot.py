@@ -1,5 +1,5 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -38,7 +38,7 @@ class TTLOut0Mode(Enum):
 
 @dataclass(frozen=True)
 class StepShootConfig:
-    axis: str
+    axes: Sequence[str]
     in0_mode: TTLIn0Mode  # ABS or REL stepping (1 or 12) … or any valid enum above
     out0_mode: TTLOut0Mode = TTLOut0Mode.PULSE_AFTER_MOVING
     out_polarity_inverted: bool = False  # TTL F=-1 if True, else F=1
@@ -143,9 +143,8 @@ class SetRingBufferModeOp:  # "RM" / RBMODE
 
 class LoadBufferedMoveOp:  # "LD"
     @staticmethod
-    def encode(q: tuple[int | None, Mapping[str, float]]) -> bytes:
-        addr, kv = q
-        return _line('LD', _fmt_kv(kv), addr)
+    def encode(addr: int | None, mapping: Mapping[str, float]) -> bytes:
+        return _line('LD', _fmt_kv(mapping), addr)
 
     @staticmethod
     def decode(r: Reply) -> None:
@@ -155,8 +154,7 @@ class LoadBufferedMoveOp:  # "LD"
 
 class SetTTLModesOp:  # "TTL"
     @staticmethod
-    def encode(q: tuple[int | None, TTLConfig]) -> bytes:
-        addr, cfg = q
+    def encode(addr: int | None, cfg: TTLConfig) -> bytes:
         return _line('TTL', _fmt_kv(cfg.to_kv()), addr)
 
     @staticmethod

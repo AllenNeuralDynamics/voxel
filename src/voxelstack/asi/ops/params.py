@@ -7,7 +7,7 @@ from voxelstack.asi.protocol.linefmt import _ax
 
 
 @dataclass(frozen=True)
-class TigerParam[T: int | float | str | bool]:
+class TigerParam[T: (int | float | str | bool)]:
     name: str  # logical name ("SPEED")
     verb: str  # ASI verb ("S")
     typ: Callable[[str], T]  # conversion from controller string -> T
@@ -33,11 +33,11 @@ class TigerParams:
 
 class GetParamOp:
     @staticmethod
-    def encode[T: int | float | str | bool](param: TigerParam[T], q: Sequence[str]) -> bytes:
+    def encode[T: (int | float | str | bool)](param: TigerParam[T], q: Sequence[str]) -> bytes:
         return (f'{param.verb} ' + ' '.join(f'{_ax(a)}?' for a in q) + '\r').encode()
 
     @staticmethod
-    def decode[T: int | float | str | bool](r: Reply, param: TigerParam[T], q: Sequence[str]) -> dict[str, T]:
+    def decode[T: (int | float | str | bool)](r: Reply, param: TigerParam[T], q: Sequence[str]) -> dict[str, T]:
         if r.kind == 'ERR':
             op = f'GET {param.verb}'
             raise ASIDecodeError(op, r)
@@ -52,11 +52,11 @@ class GetParamOp:
 
 class SetParamOp:
     @staticmethod
-    def encode[T: int | float | str | bool](param: TigerParam[T], mapping: dict[str, T]) -> bytes:
+    def encode[T: (int | float | str | bool)](param: TigerParam[T], mapping: dict[str, T]) -> bytes:
         return (f'{param.verb} ' + ' '.join(f'{_ax(a)}={mapping[a]}' for a in mapping) + '\r').encode()
 
     @staticmethod
-    def decode[T: int | float | str | bool](r: Reply, param: TigerParam[T]) -> None:
+    def decode[T: (int | float | str | bool)](r: Reply, param: TigerParam[T]) -> None:
         if r.kind == 'ERR':
             op = f'SET {param.verb}'
             raise ASIDecodeError(op, r)

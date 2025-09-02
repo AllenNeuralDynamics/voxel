@@ -13,8 +13,15 @@ class SerialTransport:
             self.ser.write(b)
 
     def readline(self) -> bytes | None:
-        line = self.ser.readline()
+        with self._lock:
+            line = self.ser.readline()
         return line if line else None
+
+    # Might have to switch to this if bugs are present
+    def readline2(self) -> bytes | None:
+        with self._lock:
+            buf = self.ser.read_until(b'\r')
+        return buf or None
 
     def close(self) -> None:
         if self.ser.is_open:

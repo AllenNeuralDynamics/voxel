@@ -179,3 +179,66 @@ class ScanRunOp:
     def decode(r: Reply) -> None:
         if r.kind == 'ERR':
             raise ASIDecodeError('SCAN run/stop', r)
+
+
+# --- Array Scan ---
+@dataclass(frozen=True)
+class ArrayScanConfig:
+    x_points: int = 0
+    delta_x_mm: float = 0.0
+    y_points: int = 0
+    delta_y_mm: float = 0.0
+    theta_deg: float = 0.0
+
+    pattern: ScanPattern = ScanPattern.RASTER
+
+    def to_kv(self) -> dict[str, object]:
+        # AR expects: X=x_points, Y=y_points, Z=Δx, F=Δy, T=θ
+        return {
+            'X': int(self.x_points),
+            'Y': int(self.y_points),
+            'Z': round(self.delta_x_mm, 4),
+            'F': round(self.delta_y_mm, 4),
+            'T': round(self.theta_deg, 3),
+        }
+
+
+class ArrayOp:  # "AR" (ARRAY)
+    """Array / table-style configuration on a card."""
+
+    @staticmethod
+    def encode(addr: int, cfg: ArrayScanConfig | None) -> bytes:
+        payload = _fmt_kv(cfg.to_kv()) if cfg is not None else 'S'  # 'S' to start
+        return _line(verb='AR', payload=payload, addr=addr)
+
+    @staticmethod
+    def decode(r: Reply) -> None:
+        if r.kind == 'ERR':
+            raise ASIDecodeError('AR', r)
+
+
+@dataclass(frozen=True)
+class AutoHomeConfig:
+    x_start_mm: float | None = None
+    y_start_mm: float | None = None
+
+    def to_kv(self) -> dict[str, object]:
+        kv: dict[str, object] = {}
+        if self.x_start_mm is not None:
+            kv['X'] = round(self.x_start_mm, 4)
+        if self.y_start_mm is not None:
+            kv['Y'] = round(self.y_start_mm, 4)
+        return kv
+
+
+class AutoHomeOp:  # "AH" (AHOME)
+    """Per-card auto-home helpers (different from axis '!' HOME)."""
+
+    @staticmethod
+    def encode(addr: int, cfg: AutoHomeConfig) -> bytes:
+        return _line('AH', _fmt_kv(cfg.to_kv()), addr)
+
+    @staticmethod
+    def decode(r: Reply) -> None:
+        if r.kind == 'ERR':
+            raise ASIDecodeError('AH', r)

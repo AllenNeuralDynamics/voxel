@@ -1,169 +1,192 @@
-# ASI Tiger Driver Overview
+# ASI Tiger Driver (voxelstack)
 
-This package implements a structured driver for **ASI Tiger / MS2000 controllers**, with:
+Structured Python driver for **ASI Tiger / MS2000** controllers.
 
-* A `TigerBox` high-level API (serial transport, caching, typed param access).
-* An `operations` module with stateless `encode`/`decode` pairs for every op.
-* A `models` module (`ASIBoxInfo`, `CardInfo`) for parsing `WHO` responses.
-* Strict type conversions via `TigerParam`.
-
-All serial I/O is funneled through `TigerBox._tx()`, which acquires a lock, writes, reads, and passes the reply into `asi_parse`. This ensures thread safety and mode detection (Tiger vs. MS2000).
+* Thread‑safe serial I/O via `TigerBox._tx()`
+* Typed parameter access with `TigerParam`
+* Stateless encode/decode ops
+* Caching for controller info + joystick mappings
 
 ---
 
-## Quick Recipe
+## Quickstart
 
 ```python
 from voxelstack.asi.driver import TigerBox
-from voxelstack.asi.operations import TigerParams
 
-drv = TigerBox(port="COM3")
-
-print("Mode:", drv.current_mode())
-
-# Info
-info = drv.info(refresh=True)
-print("Cards:", info.cards)
-print("Axes:", info.axes())
-
-# Motion
-pos = drv.where(["X", "Z"])
-print("Position:", pos)
-drv.move_abs({"X": 100.0})
-
-# Parameters
-speeds = drv.get_param(TigerParams.SPEED, ["X","Y"])
-print("Speeds:", speeds)
-drv.set_param(TigerParams.ACCEL, {"Z": 200})
-
-drv.close()
+box = TigerBox(port="COM3")
+info = box.info(refresh=True)
+print("Cards:", [c.addr for c in info.cards])
+print("Axes:", sorted(info.axes.keys()))
 ```
 
----
-
-## MotionOP
-
-| Op        | Verb | Input              | Example                      | Reply          | Output            | Notes                |
-| --------- | ---- | ------------------ | ---------------------------- | -------------- | ----------------- | ---------------------|
-| `Where`   | `W`  | `Axes`             | `W X Z\r`                    | `X=10.0 Z=5.0` | `dict[str,float]` | Maps values to axes; |
-| `MoveAbs` | `M`  | `dict[axis,float]` | `M X=1.000000 Y=2.500000\r`  | `:A`           | `None`            | Absolute move.       |
-| `MoveRel` | `R`  | `dict[axis,float]` | `R X=0.010000 Z=-0.050000\r` | `:A`           | `None`            | Relative move.       |
-| `Here`    | `H`  | `dict[axis,float]` | `H X=0.0 Y=0.0\r`            | `:A`           | `None`            | Reset logical origin.|
-| `Home`    | `!`  | `Axes`             | `! X Y\r`                    | `:A`           | `None`            | Start homing.        |
-| `Halt`    | `\\` | none               | `\\\r`                       | `:A`           | `None`            | Immediate stop.      |
-
-Errors always raise `ASIDecodeError("<OP>", reply)`.
-
----
-
-## ParamOP
-
-Param operations take a `TigerParam` spec (verb, type converter).
-
-### Common Parameters
+## Motion
 
 ```python
-SPEED        verb=S    float   # mm/s
-ACCEL        verb=AC   int     # ms or steps/s^2
-BACKLASH     verb=B    float
-HOME_POS     verb=HM   float
-LIMIT_LOW    verb=SL   float
-LIMIT_HIGH   verb=SU   float
-JOYSTICK_MAP verb=J    int
-CONTROL_MODE verb=PM   str
-ENCODER_CNTS verb=CNTS float
-AXIS_ID      verb=Z2B  int
-PID_P        verb=KP   float
-PID_I        verb=KI   float
-PID_D        verb=KD   float
-HOME_SPEED   verb=HS   float
+# Read positions for a subset of axes
+pos = box.get_position(["X", "Y", "Z"])   # {"X":..., "Y":..., "Z":...}
+
+# Absolute / relative moves
+box.move_abs({"X": 10.0, "Y": 5.0}, wait=True)
+box.move_rel({"Z": -0.25}, wait=True)
+
+# Logical coordinates
+box.set_logical_position({"X": 0.0})  # alias for HERE
+box.zero_axes(["X", "Y"])            # convenience: HERE X=0 Y=0
+
+# Homing & halting
+box.home_axes(["X", "Y"], wait=True)
+box.halt()
+
+# Busy state
+box.wait_until_idle(["X", "Y"])       # poll until not moving
+busy = box.is_axis_moving(["X", "Y"])  # {"X": bool, "Y": bool}
 ```
 
-### Get
+## Parameters (typed)
 
-| Op            | Verb           | Input                | Example     | Reply         | Output        |
-| ------------- | -------------- | -------------------- | ----------- | ------------- | ------------- |
-| `ParamOP.Get` | `<verb>` + `?` | `(TigerParam, Axes)` | `S X? Y?\r` | `X=5.5 Y=6.0` | `dict[str,T]` |
+```python
+from voxelstack.asi.ops.params import TigerParams
 
-### Set
+axes = ["X", "Y", "Z"]
 
-| Op            | Verb             | Input                       | Example           | Reply | Output |
-| ------------- | ---------------- | --------------------------- | ----------------- | ----- | ------ |
-| `ParamOP.Set` | `<verb>` + `K=V` | `(TigerParam, dict[str,T])` | `S X=5.5 Y=6.0\r` | `:A`  | `None` |
+# Get multiple params at once
+speeds   = box.get_param(TigerParams.SPEED, axes)         # {axis: float}
+accel    = box.get_param(TigerParams.ACCEL, axes)         # {axis: int}
+backlash = box.get_param(TigerParams.BACKLASH, axes)      # {axis: float}
 
----
+# Set per‑axis
+box.set_param(TigerParams.SPEED, {"X": 5.0, "Y": 7.5})
+box.set_param(TigerParams.ACCEL, {"Z": 200})
+```
 
-## StatusOP
+| Verb | Name          | Type  |
+| ---- | ------------- | ----- |
+| S    | SPEED         | float |
+| AC   | ACCEL         | int   |
+| B    | BACKLASH      | float |
+| HM   | HOME\_POS     | float |
+| SL   | LIMIT\_LOW    | float |
+| SU   | LIMIT\_HIGH   | float |
+| J    | JOYSTICK\_MAP | int   |
+| PM   | CONTROL\_MODE | str   |
+| CNTS | ENCODER\_CNTS | float |
+| Z2B  | AXIS\_ID      | int   |
+| KP   | PID\_P        | float |
+| KI   | PID\_I        | float |
+| KD   | PID\_D        | float |
+| HS   | HOME\_SPEED   | float |
 
-| Op            | Verb       | Input            | Example         | Reply        | Output            | Notes                                            |
-| ------------- | ---------- | ---------------- | --------------- | ------------ | ----------------- | -------------------------------------------------|
-| `Busy`        | `/`        | none             | `/\r`           | `B` / `N`    | `bool`            | Motion state.                                    |
-| `Who`         | `N`        | none             | `N\r`           | roster text  | `str`             | Use `ASIBoxInfo` to parse cards/axes.            |
-| `Version`     | `V`        | none             | `V\r`           | version text | `str`             | Unaddressed version query.                       |
-| `VersionAddr` | `<addr>V`  | `addr`           | `31V\r`         | version text | `str`             | Card-addressed version query.                    |
-| `SetMode`     | `VB`       | \`ASIMode        | bool\`          | `VB F=1\r`   | `:A`              | `None` `True/TIGER → F=1`, `False/MS2000 → F=0`. |
-| `SetModeAddr` | `<addr>VB` | `(addr,ASIMode)` | `31VB F=1\r`    | `:A`         | `None`            | Addressed variant for some firmwares.            |
-| `Rdstat`      | `RS`       | `Axes`           | `RS X? Y? Z?\r` | `BNN`        | `dict[str,bool]`  | `B`=moving, `N`=not moving.                      |
+## Scanning (fast/slow)
 
----
+Short line scans where one axis (fast) sweeps continuously while another (slow) steps between lines. Useful for raster or serpentine imaging.
 
-## Parser
+```python
+from voxelstack.asi.ops.scan import ScanPattern, ScanRConfig, ScanVConfig
 
-* `asi_parse(raw, requested_axes=None)` returns `(Reply, ASIMode)`
-* Handles Tiger vs. MS2000 framing automatically.
-* Filters key–value replies to requested axes when provided.
+# Bind axes on a single card
+box.configure_scan(fast_axis="X", slow_axis="Y", pattern=ScanPattern.SERPENTINE)
 
----
+# Program fast axis (line)
+actual_um = box.configure_scan_r(
+    ScanRConfig(
+        start_mm=0.0,
+        stop_mm=5.0,            # or num_pixels=2048
+        pulse_interval_um=1.0,  # enc‑derived, returns actual interval
+        retrace_speed_percent=67,
+    )
+)
 
-## Models
+# Program slow axis (steps/lines)
+box.configure_scan_v(
+    ScanVConfig(
+        start_mm=0.0,
+        stop_mm=5.0,
+        line_count=100,
+        overshoot_time_ms=5,    # optional
+        overshoot_factor=0.0,   # optional
+    )
+)
 
-* `ASIBoxInfo(who_text)` → card roster with:
+box.start_scan()
+# ... acquire data ...
+box.stop_scan()
+```
 
-  * `.comm_addr` (int | None)
-  * `.axes_flat` (`set[str]`)
-  * `.axes_by_card` (`dict[int,set[str]]`)
-  * `.cards` (list of `CardInfo`)
+## Array scan (+ optional auto‑home)
 
-Pretty-printed `repr` helps with logging/debug.
+Tile‑based stage movement: move to a grid of XY positions with defined spacing and optional auto‑home behavior.
 
-## TTLMode
+```python
+from voxelstack.asi.ops.scan import ArrayScanConfig, AutoHomeConfig
 
-What each TTL field means (from ChatGPT: confirm accuracy with ASI docs)
+arr = ArrayScanConfig(
+    x_points=10,
+    y_points=8,
+    delta_x_mm=0.5,
+    delta_y_mm=0.5,
+)
 
->⚠️ Reality check: exact meanings and enumerations vary by card & firmware. Think of the fields as “slots” that each card interprets. Always verify by round-tripping (SetModes → GetModes) and by watching behavior on the bench.
+home = AutoHomeConfig(x_start_mm=0.0, y_start_mm=0.0)
 
-X — IN0 mode (input function / routing)
+# Card inferred from X/Y if possible (same card required)
+box.configure_array_scan(arr_scan_cfg=arr, auto_home_cfg=home)
+box.start_array_scan()
+```
 
-Selects how the primary TTL input is interpreted (e.g., rising/falling edge trigger, armed gating, start/stop of scan, enable/disable, etc.).
+## Step & Shoot (ring buffer + TTL)
 
-Numeric codes map to firmware-defined behaviors (which differ per card family).
+Queue discrete absolute or relative positions into the controller’s ring buffer. Each hardware TTL pulse (IN0) advances one step. Ideal for triggered acquisitions.
 
-Y — OUT0 mode (output function / routing)
+```python
+from voxelstack.asi.ops.step_shoot import StepShootConfig, TTLIn0Mode
 
-Selects which event is driven onto the primary TTL output (e.g., “move done” pulse, scan line clock, exposure trigger, continuous high/low, etc.).
+cfg = StepShootConfig(
+    axes=["X", "Y"],
+    clear_buffer_first=True,
+    in0_mode=TTLIn0Mode.MOVE_TO_NEXT_ABS_POSITION,  # or MOVE_TO_NEXT_REL_POSITION
+    # out0_mode / aux_* as needed
+)
 
-Again: card/firmware specific enumerations.
+box.configure_step_shoot(cfg)
 
-Z — AUX state / immediate latch
+# Queue targets (ABS mode)
+box.queue_step_shoot_abs({"X": 1.0, "Y": 2.0})
+box.queue_step_shoot_abs({"X": 3.0, "Y": 4.0})
 
-Often a direct “auxiliary” state (write Z=1 to force a line high, Z=0 low), or a small sub-mode latch. On some cards it’s read-only status; on others it’s writeable to poke the output.
+# Hardware pulses on IN0 advance the queue
+```
 
-F — Output polarity / inversion
+## Joystick helpers (mapping cache aware)
 
-Usually 0 = active-high, 1 = active-low (invert). Some cards treat this as a bitmask if multiple lines exist.
+Convenience methods to read, disable, re‑enable, and overwrite joystick axis mappings. Cached state allows toggling without losing user bindings.
 
-R — AUX mask / enable bits
+```python
+# Read mapping
+mapping = box.get_joystick_mapping()
 
-Frequently a bitmask enabling which sub-sources/events feed the TTL logic (e.g., “OR of these axes,” “include scanner busy,” etc.). Values are card-specific.
+# Disable inputs (caches current mapping so you can restore later)
+box.disable_joystick_inputs(["X", "Y"])  # or None for all
 
-T — AUX mode / timing parameter
+# Re‑enable and restore previous bindings for affected axes
+box.enable_joystick_inputs(["X", "Y"])
 
-Commonly a mode selector or timer (e.g., pulse width, debounce time, gating mode). Semantics vary widely by card.
+# Overwrite mapping explicitly
+box.set_joystick_mapping({"X": mapping["X"], "Y": mapping["Y"]})
+```
 
-If you want the canonical truth for a particular card:
+## Status & metadata
 
-Query the card type (Who → parse card list; BuildX sometimes advertises capabilities),
+Helpers to check controller mode, busy state, and detailed axis status or version information.
 
-Read the card’s section in ASI’s Tiger/MS2000 command reference,
+```python
+print("Mode:", box.current_mode())
+print("Busy:", box.is_busy())
+state = box.get_axis_state("X")         # AxisState
+version = box.info().version
+```
 
-Empirically: set a value, GetModes, then watch the physical pin with a scope or LED.
+## Notes
+
+* All methods raise `ASIDecodeError` on firmware errors; blocking helpers raise `TimeoutError`.
+* `TigerBox.TIMEOUT_S` is the default timeout used by blocking calls.
