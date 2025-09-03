@@ -47,7 +47,7 @@ class VoxelLogging:
         listener.start()
         atexit.register(listener.stop)
 
-        VoxelLogging._log_level = logging.getLogger().getEffectiveLevel()
+        VoxelLogging._log_level = level
 
     @staticmethod
     def redirect(loggers: list[LoggerType], log_queue: Queue):
@@ -81,6 +81,7 @@ class VoxelLogging:
         logger = logging.getLogger(name) if name else logging.getLogger()
         if extra:
             logger = logging.LoggerAdapter(logger, extra)
+        logger.setLevel(VoxelLogging._log_level)
         return logger
 
     @staticmethod

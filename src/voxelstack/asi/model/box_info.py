@@ -2,7 +2,7 @@ from collections.abc import Iterable, Mapping
 
 from voxelstack.asi.model.build_report import BuildReport
 from voxelstack.asi.model.card_info import CardInfo
-from voxelstack.asi.model.models import ASIAxis
+from voxelstack.asi.model.models import ASIAxisInfo
 
 
 class BoxInfo:
@@ -62,23 +62,23 @@ class BoxInfo:
         return self._comm_addr
 
     @property
-    def axes(self) -> dict[str, ASIAxis]:
+    def axes(self) -> dict[str, ASIAxisInfo]:
         return dict(self._axes_by_uid)
 
     @property
-    def motor_axes(self) -> dict[str, ASIAxis]:
+    def motor_axes(self) -> dict[str, ASIAxisInfo]:
         return {uid: ax for uid, ax in self._axes_by_uid.items() if ax.is_motor}
 
     @property
-    def axes_by_card(self) -> dict[int, set[ASIAxis]]:
+    def axes_by_card(self) -> dict[int, set[ASIAxisInfo]]:
         """Group ASIAxis objects by hex card address."""
-        axes_by_card: dict[int, set[ASIAxis]] = {}
+        axes_by_card: dict[int, set[ASIAxisInfo]] = {}
         for axis in self._axes_by_uid.values():
             if axis.card_hex is not None:
                 axes_by_card.setdefault(axis.card_hex, set()).add(axis)
         return axes_by_card
 
-    def axes_for_card(self, hex_addr: int) -> set[ASIAxis]:
+    def axes_for_card(self, hex_addr: int) -> set[ASIAxisInfo]:
         return {ax for ax in self._axes_by_uid.values() if ax.card_hex == hex_addr}
 
     def card_for_axis(self, uid: str) -> CardInfo | None:
@@ -154,16 +154,16 @@ def _build_axes_map(
     build: BuildReport | None,
     axis_ids: dict[str, int],
     enc_cnts_per_mm: dict[str, float],
-) -> dict[str, ASIAxis]:
+) -> dict[str, ASIAxisInfo]:
     who_axes_by_hex: dict[int, set[str]] = {c.addr: {a.upper() for a in c.axes} for c in who if c.axes}
 
-    axes_by_uid: dict[str, ASIAxis] = {}
+    axes_by_uid: dict[str, ASIAxisInfo] = {}
 
     # 1) Seed from BU X (richest)
     if build and build.motor_axes:
         for uid, t, idx, hx, pr in build.rows():
             u = uid.upper()
-            axes_by_uid[u] = ASIAxis(
+            axes_by_uid[u] = ASIAxisInfo(
                 uid=u,
                 type_code=t,
                 card_hex=hx if isinstance(hx, int) else None,
@@ -178,7 +178,7 @@ def _build_axes_map(
     for hx, uids in who_axes_by_hex.items():
         for u in uids:
             if u not in axes_by_uid:
-                axes_by_uid[u] = ASIAxis(
+                axes_by_uid[u] = ASIAxisInfo(
                     uid=u,
                     type_code=None,
                     card_hex=hx,
