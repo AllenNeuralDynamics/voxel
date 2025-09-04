@@ -35,6 +35,9 @@ class LinearAxis(VoxelDevice):
     @abstractmethod
     def halt(self) -> None: ...
 
+    @abstractmethod
+    def await_movement(self, timeout_s: float | None = None) -> None: ...
+
     # -- state --
     @property
     @abstractmethod
@@ -53,11 +56,28 @@ class LinearAxis(VoxelDevice):
 
     @property
     @abstractmethod
-    def limits_mm(self) -> tuple[float, float]: ...
+    def upper_limit_mm(self) -> float: ...
+
+    @upper_limit_mm.setter
+    @abstractmethod
+    def upper_limit_mm(self, mm: float) -> None: ...
+
+    @property
+    @abstractmethod
+    def lower_limit_mm(self) -> float: ...
+
+    @lower_limit_mm.setter
+    @abstractmethod
+    def lower_limit_mm(self, mm: float) -> None: ...
+
+    @property
+    def limits_mm(self) -> tuple[float, float]:
+        return self.lower_limit_mm, self.upper_limit_mm
 
     @limits_mm.setter
-    @abstractmethod
-    def limits_mm(self, limits: tuple[float, float]) -> None: ...
+    def limits_mm(self, limits: tuple[float, float]) -> None:
+        self.lower_limit_mm = limits[0]
+        self.upper_limit_mm = limits[1]
 
     @property
     @abstractmethod
@@ -128,7 +148,9 @@ class TigerLinearAxis(LinearAxis):
         self.hub.box.halt()
         self.log.debug('Halting axis %s', self._axis_label)
 
-    # ---- state ----
+    def await_movement(self, timeout_s: float | None = None) -> None:
+        return self.hub.box.wait_until_idle(axes=self._axis_label, timeout_s=timeout_s)
+
     @property
     def position_mm(self) -> float:
         return self.hub.box.get_position([self._axis_label])[self._axis_label] / self._POS_MULT
@@ -146,17 +168,22 @@ class TigerLinearAxis(LinearAxis):
         self.log.debug('Logical position set to %s mm', pos_mm)
 
     @property
-    def limits_mm(self) -> tuple[float, float]:
-        low = self.hub.box.get_param(TigerParams.LIMIT_LOW, [self._axis_label])[self._axis_label]
-        high = self.hub.box.get_param(TigerParams.LIMIT_HIGH, [self._axis_label])[self._axis_label]
-        return (float(low), float(high))
+    def upper_limit_mm(self) -> float:
+        return self.hub.box.get_param(TigerParams.LIMIT_HIGH, [self._axis_label])[self._axis_label]
 
-    @limits_mm.setter
-    def limits_mm(self, limits: tuple[float, float]) -> None:
-        low, high = limits
-        self.hub.box.set_param(TigerParams.LIMIT_LOW, {self._axis_label: float(low)})
-        self.hub.box.set_param(TigerParams.LIMIT_HIGH, {self._axis_label: float(high)})
-        self.log.debug('Limits set to %s', self.limits_mm)
+    @upper_limit_mm.setter
+    def upper_limit_mm(self, mm: float) -> None:
+        self.log.debug('Setting upper limit to %s mm', mm)
+        self.hub.box.set_param(TigerParams.LIMIT_HIGH, {self._axis_label: float(mm)})
+
+    @property
+    def lower_limit_mm(self) -> float:
+        return self.hub.box.get_param(TigerParams.LIMIT_LOW, [self._axis_label])[self._axis_label]
+
+    @lower_limit_mm.setter
+    def lower_limit_mm(self, mm: float) -> None:
+        self.log.debug('Setting lower limit to %s mm', mm)
+        self.hub.box.set_param(TigerParams.LIMIT_LOW, {self._axis_label: float(mm)})
 
     @property
     def speed_mm_s(self) -> float | None:
