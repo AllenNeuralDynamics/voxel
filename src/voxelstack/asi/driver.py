@@ -70,8 +70,11 @@ class ScanSessionState:
     pattern: ScanPattern
 
 
+# TODO: Addd a reset op
+
+
 class TigerBox:
-    TIMEOUT_S: float = 10.0
+    TIMEOUT_S: float = 180.0  # needs to be super long so it doesn't time out when moving long distances
 
     def __init__(self, port: str):
         self.t = SerialTransport(port)
@@ -211,13 +214,13 @@ class TigerBox:
         )
         return WhereOp.decode(r, axes_u)
 
-    def move_abs(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float = TIMEOUT_S) -> None:
+    def move_abs(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
         r = self._tx(MoveAbsOp.encode(mapping))
         MoveAbsOp.decode(r)
         if wait:
             self.wait_until_idle(list(mapping.keys()), timeout_s=timeout_s)
 
-    def move_rel(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float = TIMEOUT_S) -> None:
+    def move_rel(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
         r = self._tx(MoveRelOp.encode(mapping))
         MoveRelOp.decode(r)
         if wait:
@@ -233,7 +236,7 @@ class TigerBox:
         kv = {a.upper(): 0.0 for a in axes}
         self.set_logical_position(kv)
 
-    def home_axes(self, axes: Iterable[str] | None = None, wait: bool = False, timeout_s: float = TIMEOUT_S) -> None:
+    def home_axes(self, axes: Iterable[str] | None = None, wait: bool = False, timeout_s: float | None = None) -> None:
         if axes is None:
             axes = list(self.info().axes.keys())
         r = self._tx(HomeOp.encode([a.upper() for a in axes]))
@@ -254,16 +257,19 @@ class TigerBox:
         axes: Sequence[str] | None = None,
         *,
         poll_s: float = 0.1,
-        timeout_s: float = TIMEOUT_S,
+        timeout_s: float | None = None,
     ) -> None:
         axes = list(axes or self.info().axes.keys())
+        # Resolve timeout at call-time so changes to TIMEOUT_S take effect
+        effective_timeout = self.TIMEOUT_S if timeout_s is None else float(timeout_s)
         t0 = time.monotonic()
         while True:
             busy = self.is_axis_moving(axes)
             if not any(busy.values()):
                 return
-            if time.monotonic() - t0 > timeout_s:
-                err = f'await_axes_movement timed out; busy={busy}'
+            elapsed = time.monotonic() - t0
+            if elapsed > effective_timeout:
+                err = f'wait_until_idle timed out after {elapsed:.3f}s (limit {effective_timeout:.3f}s); busy={busy}'
                 raise TimeoutError(err)
             time.sleep(poll_s)
 
@@ -334,7 +340,7 @@ class TigerBox:
             RuntimeError: if the card has no axes configured.
             ValueError: if any requested axis does not belong to that card.
         """
-        per_card = [(ax.uid, ax.card_index) for ax in self.info().axes.values() if ax.card_hex == card]
+        per_card = [(ax.label, ax.card_index) for ax in self.info().axes.values() if ax.card_hex == card]
         per_card.sort(key=lambda t: (t[1] if t[1] is not None else 10_000))
         order = [uid for uid, _ in per_card]
         if not order:
@@ -475,8 +481,8 @@ class TigerBox:
 
         self._scan_session = ScanSessionState(
             card=fa.card_hex,
-            fast_axis=fa.uid,
-            slow_axis=sa.uid,
+            fast_axis=fa.label,
+            slow_axis=sa.label,
             pattern=pattern,
         )
 
@@ -566,7 +572,7 @@ class TigerBox:
     def _fetch_joystick_mapping(self) -> dict[str, JoystickInput]:
         out: dict[str, JoystickInput] = {}
         for card, axlist in self.info().axes_by_card.items():
-            axes = [a.uid for a in axlist]
+            axes = [a.label for a in axlist]
             r = self._tx(JoystickGetMappingOp.encode(card, axes))
             out |= JoystickGetMappingOp.decode(r, axes)
         return out
@@ -577,7 +583,7 @@ class TigerBox:
         for ax, code in mapping.items():
             a = self.info().axes.get(ax.upper())
             if a and a.card_hex is not None:
-                by_card.setdefault(a.card_hex, {})[a.uid] = code
+                by_card.setdefault(a.card_hex, {})[a.label] = code
         for card, mp in by_card.items():
             r = self._tx(JoystickSetMappingOp.encode(card, mapping=mp))
             JoystickSetMappingOp.decode(r)
@@ -588,7 +594,7 @@ class TigerBox:
         for ax in axes:
             a = self.info().axes.get(ax.upper())
             if a and a.card_hex is not None:
-                by_card.setdefault(a.card_hex, []).append(a.uid)
+                by_card.setdefault(a.card_hex, []).append(a.label)
         return by_card
 
     def enable_joystick_inputs(self, axes: Sequence[str] | None = None) -> dict[str, JoystickInput]:

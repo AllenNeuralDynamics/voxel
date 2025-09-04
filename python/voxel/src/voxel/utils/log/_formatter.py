@@ -82,7 +82,7 @@ class CustomFormatter(logging.Formatter):
         extra_data = get_extra_data(record)
         if extra_data:
             extra_items_str = ', '.join(f'{k}={v}' for k, v in extra_data.items())
-            record.msg = f'{record.msg} {colorize(extra_items_str, Color.DIM_CYAN)}'
+            record.msg = f'{record.msg} {colorize(extra_items_str, Color.CYAN)}'
 
         output = super().format(record)
 

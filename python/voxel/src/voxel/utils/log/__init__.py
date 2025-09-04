@@ -11,7 +11,7 @@ type LoggerType = logging.Logger | logging.LoggerAdapter
 class VoxelLogging:
     """Voxel logging utility that uses a queue to handle log messages."""
 
-    _log_level = logging.DEBUG
+    _log_level: int = logging.DEBUG
     _log_queue = Queue(-1)
 
     @staticmethod
@@ -47,7 +47,7 @@ class VoxelLogging:
         listener.start()
         atexit.register(listener.stop)
 
-        VoxelLogging._log_level = level
+        VoxelLogging._log_level = root.getEffectiveLevel()
 
     @staticmethod
     def redirect(loggers: list[LoggerType], log_queue: Queue):

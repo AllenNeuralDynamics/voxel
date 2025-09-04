@@ -10,6 +10,7 @@ init(autoreset=True)
 class Color:
     GREEN = Fore.GREEN
     GRAY = Fore.LIGHTBLACK_EX
+    CYAN = Fore.CYAN
     DIM_CYAN = Style.DIM + Fore.CYAN
 
 

@@ -1,8 +1,9 @@
+import contextlib
 from collections.abc import Iterable, Mapping
 
 from voxelstack.asi.model.build_report import BuildReport
 from voxelstack.asi.model.card_info import CardInfo
-from voxelstack.asi.model.models import ASIAxisInfo
+from voxelstack.asi.model.models import ASIAxisInfo, ASIDeviceType
 
 
 class BoxInfo:
@@ -109,7 +110,7 @@ class BoxInfo:
         who_axes_by_card: dict[int, set[str]] = {}
         for ax in self._axes_by_uid.values():
             if ax.card_hex is not None:
-                who_axes_by_card.setdefault(ax.card_hex, set()).add(ax.uid)
+                who_axes_by_card.setdefault(ax.card_hex, set()).add(ax.label)
         who_axes = {uid for s in who_axes_by_card.values() for uid in s}
 
         # quick presence checks first (allows fast return)
@@ -157,39 +158,41 @@ def _build_axes_map(
 ) -> dict[str, ASIAxisInfo]:
     who_axes_by_hex: dict[int, set[str]] = {c.addr: {a.upper() for a in c.axes} for c in who if c.axes}
 
-    axes_by_uid: dict[str, ASIAxisInfo] = {}
+    axes_by_label: dict[str, ASIAxisInfo] = {}
 
     # 1) Seed from BU X (richest)
     if build and build.motor_axes:
-        for uid, t, idx, hx, pr in build.rows():
-            u = uid.upper()
-            axes_by_uid[u] = ASIAxisInfo(
-                uid=u,
-                type_code=t,
+        for label, t, idx, hx, pr in build.rows():
+            u = label.upper()
+            device_type = ASIDeviceType.UNKNOWN
+            if t is not None:
+                with contextlib.suppress(ValueError):
+                    device_type = ASIDeviceType(t.lower())
+            axes_by_label[u] = ASIAxisInfo(
+                label=u,
+                device_type=device_type,
                 card_hex=hx if isinstance(hx, int) else None,
                 card_index=idx if isinstance(idx, int) else None,
                 props=pr if isinstance(pr, int) else None,
-                is_motor=_is_motor_type(t),
                 axis_id=axis_ids.get(u),
                 enc_cnts_per_mm=enc_cnts_per_mm.get(u),
             )
 
     # 2) WHO-only axes
-    for hx, uids in who_axes_by_hex.items():
-        for u in uids:
-            if u not in axes_by_uid:
-                axes_by_uid[u] = ASIAxisInfo(
-                    uid=u,
-                    type_code=None,
+    for hx, labels in who_axes_by_hex.items():
+        for u in labels:
+            if u not in axes_by_label:
+                axes_by_label[u] = ASIAxisInfo(
+                    label=u,
+                    device_type=ASIDeviceType.UNKNOWN,
                     card_hex=hx,
                     card_index=None,
                     props=None,
-                    is_motor=True,
                     axis_id=axis_ids.get(u),
                     enc_cnts_per_mm=enc_cnts_per_mm.get(u),
                 )
 
-    return axes_by_uid
+    return axes_by_label
 
 
 def _rule_presence(build: BuildReport | None, who_axes: set[str]) -> list[str]:
@@ -216,13 +219,6 @@ def _rule_lengths(build: BuildReport | None) -> list[str]:
     return [f'BU X: length mismatch: {label}={m} vs Motor Axes={n}' for label, m in fields.items() if m and m != n]
 
 
-_MOTOR_TYPE_CODES = {'x', 'y', 'z', 't', 'c', 'u', 'v', 'w', 'l'}
-
-
-def _is_motor_type(code: str | None) -> bool:
-    return isinstance(code, str) and code.lower() in _MOTOR_TYPE_CODES
-
-
 def _rule_index_alignment(build: BuildReport | None, who_axes_by_card: dict[int, set[str]]) -> list[str]:
     if not build or not build.motor_axes:
         return []
@@ -235,7 +231,7 @@ def _rule_index_alignment(build: BuildReport | None, who_axes_by_card: dict[int,
             issues.append(f'BU X[{i}] {uid}: Hex Addr {hx} not in WHO cards')
         elif uid not in who_axes_by_card[hx]:
             issues.append(f'BU X[{i}] {uid}: WHO says card {hx} axes={sorted(who_axes_by_card[hx])}')
-        if isinstance(t, str) and t.lower() not in _MOTOR_TYPE_CODES:
+        if isinstance(t, str) and t.lower() not in ASIDeviceType._value2member_map_:
             issues.append(f"BU X[{i}] {uid}: unusual Axis Type '{t}'")
         if not isinstance(idx, int) or idx <= 0:
             issues.append(f"BU X[{i}] {uid}: suspicious Axis Addr '{idx}'")
