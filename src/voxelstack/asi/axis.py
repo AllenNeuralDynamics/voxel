@@ -1,129 +1,61 @@
 import logging
-from abc import abstractmethod
+from dataclasses import replace
 from types import TracebackType
 
-from voxel.devices.device import VoxelDevice, VoxelDeviceType
 from voxel.devices.linear_axis.base import LinearAxisDimension
 from voxel.utils.log import VoxelLogging
 
+from voxelstack.asi.base import LinearAxis, TTLStepper
 from voxelstack.asi.driver import AxisState
 from voxelstack.asi.model.models import ASIAxisInfo
 from voxelstack.asi.ops.params import TigerParams
+from voxelstack.asi.ops.step_shoot import StepShootConfig
 
 
-class LinearAxis(VoxelDevice):
-    def __init__(self, uid: str, dimension: LinearAxisDimension) -> None:
-        super().__init__(uid=uid, device_type=VoxelDeviceType.LINEAR_AXIS)
-        self._dimension = dimension
+class TigerTTLStepper(TTLStepper):
+    def __init__(self, axis: 'TigerLinearAxis'):
+        self._axis = axis
+        self._box = axis.hub.box
 
-    @property
-    def dimension(self) -> LinearAxisDimension:
-        return self._dimension
+    def configure(self, cfg: StepShootConfig) -> None:
+        """Configure the hardware for a step-and-shoot operation for this axis."""
+        # Create a new config ensuring it only applies to this one axis.
+        single_axis_cfg = replace(cfg, axes=[self._axis.asi_label])
+        self._box.configure_step_shoot(single_axis_cfg)
 
-    # --- motion ---
-    @abstractmethod
-    def move_abs(self, pos_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None: ...
+    def queue_absolute_move(self, position_mm: float) -> None:
+        """Queue an absolute move to the ring buffer for this axis."""
+        pos_steps = position_mm * self._axis.POS_MULT
+        self._box.queue_step_shoot_abs({self._axis.asi_label: pos_steps})
 
-    @abstractmethod
-    def move_rel(self, delta_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None: ...
+    def queue_relative_move(self, delta_mm: float) -> None:
+        """Queue a relative move to the ring buffer for this axis."""
+        delta_steps = delta_mm * self._axis.POS_MULT
+        self._box.queue_step_shoot_rel({self._axis.asi_label: delta_steps})
 
-    @abstractmethod
-    def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None: ...
-
-    @abstractmethod
-    def halt(self) -> None: ...
-
-    @abstractmethod
-    def await_movement(self, timeout_s: float | None = None) -> None: ...
-
-    # -- state --
-    @property
-    @abstractmethod
-    def position_mm(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def is_moving(self) -> bool: ...
-
-    # -- Configuration ---
-    @abstractmethod
-    def set_zero_here(self) -> None: ...
-
-    @abstractmethod
-    def set_logical_position(self, pos_mm: float) -> None: ...
-
-    @property
-    @abstractmethod
-    def upper_limit_mm(self) -> float: ...
-
-    @upper_limit_mm.setter
-    @abstractmethod
-    def upper_limit_mm(self, mm: float) -> None: ...
-
-    @property
-    @abstractmethod
-    def lower_limit_mm(self) -> float: ...
-
-    @lower_limit_mm.setter
-    @abstractmethod
-    def lower_limit_mm(self, mm: float) -> None: ...
-
-    @property
-    def limits_mm(self) -> tuple[float, float]:
-        return self.lower_limit_mm, self.upper_limit_mm
-
-    @limits_mm.setter
-    def limits_mm(self, limits: tuple[float, float]) -> None:
-        self.lower_limit_mm = limits[0]
-        self.upper_limit_mm = limits[1]
-
-    @property
-    @abstractmethod
-    def speed_mm_s(self) -> float | None: ...
-
-    @speed_mm_s.setter
-    @abstractmethod
-    def speed_mm_s(self, mm_per_s: float) -> None: ...
-
-    @property
-    @abstractmethod
-    def acceleration_mm_s2(self) -> float | None: ...
-
-    @acceleration_mm_s2.setter
-    @abstractmethod
-    def acceleration_mm_s2(self, mm_per_s2: float) -> None: ...
-
-    @property
-    @abstractmethod
-    def backlash_mm(self) -> float | None: ...
-
-    @backlash_mm.setter
-    @abstractmethod
-    def backlash_mm(self, mm: float) -> None: ...
-
-    @property
-    @abstractmethod
-    def home(self) -> float | None: ...
-
-    @home.setter
-    @abstractmethod
-    def home(self, pos_mm: float) -> None: ...
+    def reset(self) -> None:
+        """Resets the step-and-shoot configuration on the card."""
+        self._box.reset_step_shoot()
 
 
 class TigerLinearAxis(LinearAxis):
-    _POS_MULT = 10000
+    POS_MULT = 10000
 
     def __init__(self, uid: str, *, dimension: LinearAxisDimension, hub: 'TigerHub', axis_id: str) -> None:
         super().__init__(uid=uid, dimension=dimension)
         self.hub = hub
         self._axis_label = axis_id.upper()
         self._info = self.hub.reserve_axis(axis_id)
+        self._ttl_stepper = TigerTTLStepper(self)
         # TODO: Determine if we will need to cache limits. Does tigerbox enforce them or do we need to do it here?
-        # self._cached_limits = self._fetch_limits()
 
     @property
     def info(self) -> ASIAxisInfo:
         return self._info
+
+    @property
+    def asi_label(self) -> str:
+        return self._axis_label
 
     @property
     def tiger_axis_state(self) -> AxisState:
@@ -131,11 +63,11 @@ class TigerLinearAxis(LinearAxis):
 
     # ---- motion ----
     def move_abs(self, pos_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        self.hub.box.move_abs({self._axis_label: float(pos_mm * self._POS_MULT)}, wait=wait, timeout_s=timeout_s)
+        self.hub.box.move_abs({self._axis_label: float(pos_mm * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
         self.log.debug('Moving axis %s to absolute position %.3f mm', self._axis_label, pos_mm)
 
     def move_rel(self, delta_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        self.hub.box.move_rel({self._axis_label: float(delta_mm * self._POS_MULT)}, wait=wait, timeout_s=timeout_s)
+        self.hub.box.move_rel({self._axis_label: float(delta_mm * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
         self.log.debug('Moving axis %s by relative distance %.3f mm', self._axis_label, delta_mm)
 
     def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
@@ -152,7 +84,7 @@ class TigerLinearAxis(LinearAxis):
     @property
     def position_mm(self) -> float:
         cached_steps = self.hub.get_axis_state_cached(self._axis_label).get('position_steps', 0.0)
-        return cached_steps / self._POS_MULT
+        return cached_steps / self.POS_MULT
 
     @property
     def is_moving(self) -> bool:
@@ -163,7 +95,7 @@ class TigerLinearAxis(LinearAxis):
         self.hub.box.zero_axes([self._axis_label])
 
     def set_logical_position(self, pos_mm: float) -> None:
-        self.hub.box.set_logical_position({self._axis_label: float(pos_mm * self._POS_MULT)})
+        self.hub.box.set_logical_position({self._axis_label: float(pos_mm * self.POS_MULT)})
         self.log.debug('Logical position set to %s mm', pos_mm)
 
     @property
@@ -230,6 +162,12 @@ class TigerLinearAxis(LinearAxis):
 
     def __exit__(self, exc_tp: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
         self.close()
+
+    # -- Capabilities --
+    def get_ttl_stepper(self) -> TTLStepper | None:
+        # For now, we assume any Tiger axis can be a TTL stepper.
+        # A more robust implementation could check for the RING buffer module on the card.
+        return self._ttl_stepper
 
 
 if __name__ == '__main__':
