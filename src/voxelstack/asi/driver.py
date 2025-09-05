@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from voxelstack.asi.model import ASIMode, AxisState, BoxInfo, Reply
 from voxelstack.asi.model.box_info import infer_comm_addr_from_who
 from voxelstack.asi.model.card_info import CardInfo
+from voxelstack.asi.model.models import ASIAxisInfo
 from voxelstack.asi.ops.joystick import (
     JoystickEnableOp,
     JoystickGetMappingOp,
@@ -62,12 +63,51 @@ class StepShootState:
     is_relative: bool  # True if TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION (12), else False
 
 
-@dataclass(frozen=True)
-class ScanSessionState:
-    card: int
-    fast_axis: str
-    slow_axis: str
-    pattern: ScanPattern
+class ScanSession:
+    def __init__(self):
+        self._fast_axis: ASIAxisInfo | None = None
+        self._slow_axis: ASIAxisInfo | None = None
+        self._pattern: ScanPattern = ScanPattern.RASTER
+        self._initialized = False
+
+    def mark_as_bound(self) -> None:
+        self._initialized = True
+
+    def are_axes_bound(self) -> bool:
+        return self._initialized
+
+    def get_fast_axis(self) -> ASIAxisInfo:
+        if self._fast_axis is None:
+            raise RuntimeError('Fast axis not set')
+        return self._fast_axis
+
+    def get_slow_axis(self) -> ASIAxisInfo:
+        if self._slow_axis is None:
+            raise RuntimeError('Slow axis not set')
+        return self._slow_axis
+
+    def set_fast_axis(self, axis: ASIAxisInfo) -> None:
+        if self._slow_axis is not None and self._slow_axis.card_hex != axis.card_hex:
+            raise RuntimeError('Fast and slow axes must reside on the same card.')
+        self._fast_axis = axis
+
+    def set_slow_axis(self, axis: ASIAxisInfo) -> None:
+        if self._fast_axis is not None and self._fast_axis.card_hex != axis.card_hex:
+            raise RuntimeError('Fast and slow axes must reside on the same card.')
+        self._slow_axis = axis
+
+    def get_card(self) -> int:
+        if self._fast_axis is not None and self._fast_axis.card_hex is not None:
+            return self._fast_axis.card_hex
+        if self._slow_axis is not None and self._slow_axis.card_hex is not None:
+            return self._slow_axis.card_hex
+        raise RuntimeError('No card set for scan session')
+
+    def reset(self) -> None:
+        self._fast_axis = None
+        self._slow_axis = None
+        self._pattern = ScanPattern.RASTER
+        self.initialized = False
 
 
 # TODO: Addd a reset op
@@ -80,7 +120,7 @@ class TigerBox:
         self.t = SerialTransport(port)
         self._info: BoxInfo | None = None
         self._last_mode: ASIMode | None = None
-        self._scan_session: ScanSessionState | None = None
+        self._scan_session: ScanSession = ScanSession()
         self._step_shoot_session: StepShootState | None = None
         self._array_scan_card_addr = None
         self._comm_lock = threading.Lock()
@@ -468,56 +508,81 @@ class TigerBox:
         self._step_shoot_session = None
 
     # --------------------------------------------------- Scan ------------------------------------------------------- #
-    def configure_scan(self, fast_axis: str, slow_axis: str, *, pattern: ScanPattern = ScanPattern.RASTER) -> None:
-        info = self.info()
-        fa = info.axes.get(fast_axis.upper())
-        sa = info.axes.get(slow_axis.upper())
-        if not fa or not sa:
-            raise ValueError('Unknown axis uid(s).')
-        if fa.card_hex is None or sa.card_hex is None or fa.card_hex != sa.card_hex:
-            raise RuntimeError('Fast and slow axes must reside on the same card.')
-        if fa.axis_id is None or sa.axis_id is None:
-            raise RuntimeError('Axis IDs are required; ensure BoxInfo was built with ids.')
+    def set_fast_axis(self, axis: str) -> None:
+        fa = self.info().axes.get(axis.upper())
+        if not fa:
+            err = f'Unknown axis uid: {axis}'
+            raise ValueError(err)
+        self._scan_session.set_fast_axis(fa)
 
-        self._scan_session = ScanSessionState(
-            card=fa.card_hex,
-            fast_axis=fa.label,
-            slow_axis=sa.label,
-            pattern=pattern,
-        )
+    def set_slow_axis(self, axis: str) -> None:
+        sa = self.info().axes.get(axis.upper())
+        if not sa:
+            err = f'Unknown axis uid: {axis}'
+            raise ValueError(err)
+        self._scan_session.set_slow_axis(sa)
 
-        r = self._transact(
-            ScanBindAxesOp.encode(fa.card_hex, fast_axis_id=fa.axis_id, slow_axis_id=sa.axis_id, pattern=pattern)
-        )
-        ScanBindAxesOp.decode(r)
+    def setup_scanrv(self, *, pattern: ScanPattern = ScanPattern.RASTER) -> None:
+        try:
+            r = self._transact(
+                ScanBindAxesOp.encode(
+                    self._scan_session.get_card(),
+                    fast_axis_id=self._scan_session.get_fast_axis().axis_id,
+                    slow_axis_id=self._scan_session.get_slow_axis().axis_id,
+                    pattern=pattern,
+                )
+            )
+            ScanBindAxesOp.decode(r)
+            self._scan_session.mark_as_bound()
+        except Exception as e:
+            raise RuntimeError('Failed to bind scan axes.') from e
+
+    def _check_scanrv_is_setup(self) -> None:
+        if self._scan_session is None or not self._scan_session.are_axes_bound():
+            raise RuntimeError('set_slow_axes and set_fast_axes and setup_scanrv must be called first.')
 
     def configure_scan_r(self, cfg: ScanRConfig) -> float:
         """Program fast-axis line. Returns actual_interval_um (rounded)."""
-        if self._scan_session is None:
-            raise RuntimeError('configure_scan() must be called first.')
-        kv, actual_um = cfg.to_kv(self.info(), self._scan_session.fast_axis)
-        r = self._transact(ScanROp.encode(self._scan_session.card, kv))
-        ScanROp.decode(r)
-        return actual_um
+        try:
+            self._check_scanrv_is_setup()
+            fa = self._scan_session.get_fast_axis()
+            card_addr = self._scan_session.get_card()
+            kv, actual_um = cfg.to_kv(self.info(), fast_axis_uid=fa.label)
+            r = self._transact(ScanROp.encode(card_hex=card_addr, kv=kv))
+            ScanROp.decode(r)
+        except Exception as e:
+            raise RuntimeError('Failed to configure SCANR.') from e
+        else:
+            return actual_um
 
     def configure_scan_v(self, cfg: ScanVConfig) -> None:
         """Program slow-axis stepping."""
-        if self._scan_session is None:
-            raise RuntimeError('configure_scan() must be called first.')
-        r = self._transact(ScanVOp.encode(self._scan_session.card, cfg.to_kv()))
-        ScanVOp.decode(r)
+        try:
+            self._check_scanrv_is_setup()
+            card_addr = self._scan_session.get_card()
+            r = self._transact(ScanVOp.encode(card_hex=card_addr, kv=cfg.to_kv()))
+            ScanVOp.decode(r)
+        except Exception as e:
+            raise RuntimeError('Failed to configure SCANV.') from e
 
     def start_scan(self) -> None:
-        if self._scan_session is None:
-            raise RuntimeError('configure_scan() must be called first.')
-        r = self._transact(ScanRunOp.encode(self._scan_session.card, 'S'))
-        ScanRunOp.decode(r)
+        try:
+            self._check_scanrv_is_setup()
+            card_addr = self._scan_session.get_card()
+            r = self._transact(ScanRunOp.encode(card_addr, 'S'))
+            ScanRunOp.decode(r)
+        except Exception as e:
+            raise RuntimeError('Failed to start scan.') from e
 
     def stop_scan(self) -> None:
         if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        r = self._transact(ScanRunOp.encode(self._scan_session.card, 'P'))
-        ScanRunOp.decode(r)
+        try:
+            card_addr = self._scan_session.get_card()
+            r = self._transact(ScanRunOp.encode(card_addr, 'P'))
+            ScanRunOp.decode(r)
+        except Exception as e:
+            raise RuntimeError('Failed to stop scan.') from e
 
     # --- Array Scan ---
     def configure_array_scan(
