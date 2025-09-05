@@ -83,7 +83,7 @@ class TigerBox:
         self._scan_session: ScanSessionState | None = None
         self._step_shoot_session: StepShootState | None = None
         self._array_scan_card_addr = None
-        self._tx_lock = threading.Lock()
+        self._comm_lock = threading.Lock()
         if not self._enable_tiger_mode():
             raise RuntimeError('Failed to enable Tiger mode')
         self._cached_joystick_mapping = self._fetch_joystick_mapping()
@@ -93,19 +93,19 @@ class TigerBox:
 
     # ---------- helpers ----------
 
-    def _tx_once(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
+    def _t_once(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
         """Send a command and read+parse the reply."""
-        with self._tx_lock:
+        with self._comm_lock:
             self.t.write(payload)
             raw = self.t.readline() or b''
         reply, mode = asi_parse(raw, requested_axes=requested_axes)
         self._last_mode = mode
         return reply
 
-    def _tx(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
+    def _transact(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
         for attempt in (1, 2):
             try:
-                return self._tx_once(payload, requested_axes=requested_axes)
+                return self._t_once(payload, requested_axes=requested_axes)
             except Exception:
                 if attempt == 2:
                     raise
@@ -123,13 +123,13 @@ class TigerBox:
         if self._info is not None and not refresh:
             return self._info
 
-        rr = self._tx(GetBuildOp.encode(None))
+        rr = self._transact(GetBuildOp.encode(None))
         build_report = GetBuildOp.decode(rr)
         card_hex_to_mods: Mapping[int, set[str]] = {}
         for addr in build_report.hex_addr:
-            rr = self._tx(GetCardMods.encode(addr))
+            rr = self._transact(GetCardMods.encode(addr))
             card_hex_to_mods[addr] = GetCardMods.decode(rr)
-        r = self._tx(GetWhoOp.encode())
+        r = self._transact(GetWhoOp.encode())
         who_items = GetWhoOp.decode(r)
         card_infos: list[CardInfo] = []
         for item in who_items:
@@ -153,7 +153,7 @@ class TigerBox:
         version: str | None = None
         if comm_addr is not None:
             try:
-                vr = self._tx(GetVersionOp.encode(comm_addr))
+                vr = self._transact(GetVersionOp.encode(comm_addr))
                 version = GetVersionOp.decode(vr).strip() or None
             except ASIDecodeError:
                 version = None
@@ -162,7 +162,7 @@ class TigerBox:
         pzinfo: str | None = None
         if comm_addr is not None:
             try:
-                pzr = self._tx(GetPiezoInfoOp.encode(comm_addr))
+                pzr = self._transact(GetPiezoInfoOp.encode(comm_addr))
                 pzinfo = GetPiezoInfoOp.decode(pzr).strip() or None
             except ASIDecodeError:
                 pzinfo = None
@@ -194,11 +194,11 @@ class TigerBox:
         if axis not in self.info().axes:
             err = f'Invalid axis: {axis}'
             raise ValueError(err)
-        r = self._tx(GetAxisStateOp.encode(axis.upper()))
+        r = self._transact(GetAxisStateOp.encode(axis.upper()))
         return GetAxisStateOp.decode(r)
 
     def is_busy(self) -> bool | None:
-        r = self._tx(IsBoxBusyOp.encode())
+        r = self._transact(IsBoxBusyOp.encode())
         try:
             return IsBoxBusyOp.decode(r)
         except ASIDecodeError:
@@ -208,26 +208,26 @@ class TigerBox:
 
     def get_position(self, axes: Sequence[str]) -> dict[str, float]:
         axes_u = [a.upper() for a in axes]
-        r = self._tx(
+        r = self._transact(
             WhereOp.encode(axes_u),
             requested_axes=axes_u,
         )
         return WhereOp.decode(r, axes_u)
 
     def move_abs(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
-        r = self._tx(MoveAbsOp.encode(mapping))
+        r = self._transact(MoveAbsOp.encode(mapping))
         MoveAbsOp.decode(r)
         if wait:
             self.wait_until_idle(list(mapping.keys()), timeout_s=timeout_s)
 
     def move_rel(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
-        r = self._tx(MoveRelOp.encode(mapping))
+        r = self._transact(MoveRelOp.encode(mapping))
         MoveRelOp.decode(r)
         if wait:
             self.wait_until_idle(list(mapping.keys()), timeout_s=timeout_s)
 
     def set_logical_position(self, mapping: Mapping[str, float]) -> None:
-        r = self._tx(HereOp.encode(mapping))
+        r = self._transact(HereOp.encode(mapping))
         HereOp.decode(r)
 
     def zero_axes(self, axes: Iterable[str] | None = None) -> None:
@@ -239,17 +239,17 @@ class TigerBox:
     def home_axes(self, axes: Iterable[str] | None = None, wait: bool = False, timeout_s: float | None = None) -> None:
         if axes is None:
             axes = list(self.info().axes.keys())
-        r = self._tx(HomeOp.encode([a.upper() for a in axes]))
+        r = self._transact(HomeOp.encode([a.upper() for a in axes]))
         HomeOp.decode(r)
         if wait:
             self.wait_until_idle(list(axes), timeout_s=timeout_s)
 
     def halt(self) -> None:
-        r = self._tx(HaltOp.encode())
+        r = self._transact(HaltOp.encode())
         HaltOp.decode(r)
 
     def is_axis_moving(self, axes: Sequence[str]) -> dict[str, bool]:
-        r = self._tx(IsAxisBusyOp.encode(axes))
+        r = self._transact(IsAxisBusyOp.encode(axes))
         return IsAxisBusyOp.decode(r, axes)
 
     def wait_until_idle(
@@ -277,32 +277,32 @@ class TigerBox:
 
     def get_param[T: int | float | str | bool](self, param: TigerParam[T], axes: Iterable[str]) -> Mapping[str, T]:
         axes_u = [a.upper() for a in axes]
-        r = self._tx(GetParamOp.encode(param, axes_u), requested_axes=axes_u)
+        r = self._transact(GetParamOp.encode(param, axes_u), requested_axes=axes_u)
         return GetParamOp.decode(r, param, axes_u)
 
     def set_param[T: int | float | str | bool](self, param: TigerParam, mapping: Mapping[str, T]) -> None:
-        r = self._tx(SetParamOp.encode(param, dict(mapping)))
+        r = self._transact(SetParamOp.encode(param, dict(mapping)))
         SetParamOp.decode(r, param)
 
     # ---- TTL Modes _______
     def set_ttl_config(self, card_addr: int, cfg: TTLConfig) -> None:
         """Set TTL modes on a card. Ex: ttl_set(31, X=12, Y=2, F=1, R=0, T=0)"""
-        r = self._tx(SetTTLModesOp.encode(addr=card_addr, cfg=cfg))
+        r = self._transact(SetTTLModesOp.encode(addr=card_addr, cfg=cfg))
         SetTTLModesOp.decode(r)
 
     def get_ttl_config(self, card_addr: int) -> TTLConfig:
         """Return raw TTL mode string: 'X=... Y=... Z=... F=... R=... T=...'."""
-        r = self._tx(GetTTLModesOp.encode(card_addr))
+        r = self._transact(GetTTLModesOp.encode(card_addr))
         return GetTTLModesOp.decode(r)
 
     def ttl_out_state(self, card_addr: int) -> bool | None:
         # Not really working. Needs to be fixed or removed.
-        r = self._tx(ProbeTTLOutOp.encode(card_addr))
+        r = self._transact(ProbeTTLOutOp.encode(card_addr))
         try:
             return ProbeTTLOutOp.decode(r)
         except ASIDecodeError:
             # try legacy
-            r = self._tx(ProbeTTLOutOp2.encode(card_addr))
+            r = self._transact(ProbeTTLOutOp2.encode(card_addr))
             try:
                 return ProbeTTLOutOp2.decode(r)
             except ASIDecodeError:
@@ -390,12 +390,12 @@ class TigerBox:
 
         # 1) Clear RB (optional)
         if cfg.clear_buffer_first:
-            r = self._tx(SetRingBufferModeOp.encode(card, clear_buffer=True))
+            r = self._transact(SetRingBufferModeOp.encode(card, clear_buffer=True))
             SetRingBufferModeOp.decode(r)
 
         # 2) Enable RB for axes and set mode
         mask = self._build_axis_mask_for_card(card, axes)
-        r = self._tx(SetRingBufferModeOp.encode(card, enabled_mask=mask, mode=cfg.ring_mode))
+        r = self._transact(SetRingBufferModeOp.encode(card, enabled_mask=mask, mode=cfg.ring_mode))
         SetRingBufferModeOp.decode(r)
 
         # 3) TTL config
@@ -452,7 +452,7 @@ class TigerBox:
         # NOTE: We can't tell absolute vs relative from the numbers; that is determined by TTL mode.
         # Here we just enforce that the call matches the configured axes and pass the values through.
 
-        r = self._tx(
+        r = self._transact(
             LoadBufferedMoveOp.encode(
                 addr=self._step_shoot_session.card,
                 mapping={k.upper(): float(v) for k, v in mapping.items()},
@@ -463,7 +463,7 @@ class TigerBox:
     def reset_step_shoot(self) -> None:
         if self._step_shoot_session is None:
             return
-        r = self._tx(SetRingBufferModeOp.encode(self._step_shoot_session.card, clear_buffer=True))
+        r = self._transact(SetRingBufferModeOp.encode(self._step_shoot_session.card, clear_buffer=True))
         SetRingBufferModeOp.decode(r)
         self._step_shoot_session = None
 
@@ -486,7 +486,7 @@ class TigerBox:
             pattern=pattern,
         )
 
-        r = self._tx(
+        r = self._transact(
             ScanBindAxesOp.encode(fa.card_hex, fast_axis_id=fa.axis_id, slow_axis_id=sa.axis_id, pattern=pattern)
         )
         ScanBindAxesOp.decode(r)
@@ -496,7 +496,7 @@ class TigerBox:
         if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
         kv, actual_um = cfg.to_kv(self.info(), self._scan_session.fast_axis)
-        r = self._tx(ScanROp.encode(self._scan_session.card, kv))
+        r = self._transact(ScanROp.encode(self._scan_session.card, kv))
         ScanROp.decode(r)
         return actual_um
 
@@ -504,19 +504,19 @@ class TigerBox:
         """Program slow-axis stepping."""
         if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        r = self._tx(ScanVOp.encode(self._scan_session.card, cfg.to_kv()))
+        r = self._transact(ScanVOp.encode(self._scan_session.card, cfg.to_kv()))
         ScanVOp.decode(r)
 
     def start_scan(self) -> None:
         if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        r = self._tx(ScanRunOp.encode(self._scan_session.card, 'S'))
+        r = self._transact(ScanRunOp.encode(self._scan_session.card, 'S'))
         ScanRunOp.decode(r)
 
     def stop_scan(self) -> None:
         if self._scan_session is None:
             raise RuntimeError('configure_scan() must be called first.')
-        r = self._tx(ScanRunOp.encode(self._scan_session.card, 'P'))
+        r = self._transact(ScanRunOp.encode(self._scan_session.card, 'P'))
         ScanRunOp.decode(r)
 
     # --- Array Scan ---
@@ -534,7 +534,7 @@ class TigerBox:
 
         self._array_scan_card_addr = card
         # pattern (via SCAN F=...)
-        self._tx(
+        self._transact(
             payload=ScanBindAxesOp.encode(
                 card_hex=card,
                 fast_axis_id=None,
@@ -543,13 +543,13 @@ class TigerBox:
             )
         )
         if auto_home_cfg is not None:
-            self._tx(AutoHomeOp.encode(addr=card, cfg=auto_home_cfg))
-        self._tx(ArrayOp.encode(addr=card, cfg=arr_scan_cfg))
+            self._transact(AutoHomeOp.encode(addr=card, cfg=auto_home_cfg))
+        self._transact(ArrayOp.encode(addr=card, cfg=arr_scan_cfg))
 
     def start_array_scan(self) -> None:
         if self._array_scan_card_addr is None:
             raise RuntimeError('Array scan card address not set.')
-        self._tx(ArrayOp.encode(self._array_scan_card_addr, cfg=None))  # start
+        self._transact(ArrayOp.encode(self._array_scan_card_addr, cfg=None))  # start
         self._array_scan_card_addr = None
 
     # Might use later to validate that card has specified module e.g. ARRAY and SCAN
@@ -573,7 +573,7 @@ class TigerBox:
         out: dict[str, JoystickInput] = {}
         for card, axlist in self.info().axes_by_card.items():
             axes = [a.label for a in axlist]
-            r = self._tx(JoystickGetMappingOp.encode(card, axes))
+            r = self._transact(JoystickGetMappingOp.encode(card, axes))
             out |= JoystickGetMappingOp.decode(r, axes)
         return out
 
@@ -585,7 +585,7 @@ class TigerBox:
             if a and a.card_hex is not None:
                 by_card.setdefault(a.card_hex, {})[a.label] = code
         for card, mp in by_card.items():
-            r = self._tx(JoystickSetMappingOp.encode(card, mapping=mp))
+            r = self._transact(JoystickSetMappingOp.encode(card, mapping=mp))
             JoystickSetMappingOp.decode(r)
         return self.get_joystick_mapping(refresh=True)
 
@@ -604,7 +604,7 @@ class TigerBox:
             axes = list(self.info().axes.keys())
         by_card = self._build_axis_uids_by_card(axes)
         for card, axlist in by_card.items():
-            r = self._tx(JoystickEnableOp.encode(card, enable_axes=axlist, disable_axes=[]))
+            r = self._transact(JoystickEnableOp.encode(card, enable_axes=axlist, disable_axes=[]))
             JoystickEnableOp.decode(r)
         if self._cached_joystick_mapping:
             subset = {
@@ -622,14 +622,14 @@ class TigerBox:
         self._cached_joystick_mapping = self.get_joystick_mapping(refresh=True)
         by_card = self._build_axis_uids_by_card(axes or list(self.info().axes.keys()))
         for card, axlist in by_card.items():
-            r = self._tx(JoystickEnableOp.encode(card, enable_axes=[], disable_axes=axlist))
+            r = self._transact(JoystickEnableOp.encode(card, enable_axes=[], disable_axes=axlist))
             JoystickEnableOp.decode(r)
         return self._cached_joystick_mapping
 
     def set_joystick_polarity(self, axis: str, inverted: bool) -> None:
         a = self.info().axes.get(axis.upper())
         if a and a.card_hex is not None and a.card_index is not None:
-            r = self._tx(JoystickPolarityOp.encode(a.card_hex, axis_index=a.card_index, inverted=inverted))
+            r = self._transact(JoystickPolarityOp.encode(a.card_hex, axis_index=a.card_index, inverted=inverted))
             JoystickPolarityOp.decode(r)
         else:
             print(f'Cannot set joystick polarity for axis {axis}: missing card info')
@@ -638,7 +638,7 @@ class TigerBox:
 
     def _probe_mode(self, desired_mode: ASIMode = ASIMode.TIGER, probe_axis: str = 'X') -> bool | None:
         try:
-            _ = self._tx(WhereOp.encode([probe_axis]), requested_axes=[probe_axis])
+            _ = self._transact(WhereOp.encode([probe_axis]), requested_axes=[probe_axis])
             if self._last_mode == desired_mode:
                 return True
         except ASIDecodeError:
@@ -650,14 +650,14 @@ class TigerBox:
         infer a COMM addr from WHO.
         """
         # Unaddressed first
-        _ = self._tx(SetModeOp.encode(ASIMode.TIGER))
+        _ = self._transact(SetModeOp.encode(ASIMode.TIGER))
         is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
         if is_tiger is True:
             return True
         # Addressed fallback (some firmwares expect a card prefix)
         comm = self.info(refresh=True).comm_addr
         if comm is not None:
-            r = self._tx(SetModeOp.encode(ASIMode.TIGER, comm))
+            r = self._transact(SetModeOp.encode(ASIMode.TIGER, comm))
             SetModeOp.decode(r)
         is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
         return is_tiger is True
