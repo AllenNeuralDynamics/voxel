@@ -45,7 +45,6 @@ dependencies = [
     "pyclesperanto>=0.16.0",
     "scikit-image>=0.24.0",
     "zerorpc>=0.6.3",
-    "opencv-python>=4.11.0.86",
     "msgpack-numpy>=0.4.8",
     "rpyc>=6.0.2",
     "tabulate>=0.9.0",
@@ -55,6 +54,7 @@ dependencies = [
     "plumbum>=1.9.0",
     "scipy>=1.14.1",
     "plotly>=6.2.0",
+    "opencv-python-headless>=4.11.0.86",
 ]
 
 [project.optional-dependencies]

@@ -1,4 +1,5 @@
 from vidgets.devices.laser.widget import LaserWidget
+from voxel.devices.laser.drivers.genesis_mx import GenesisMXLaser
 
 if __name__ == '__main__':
     import asyncio
@@ -7,7 +8,6 @@ if __name__ == '__main__':
     from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QVBoxLayout, QWidget
     from vidgets.devices.laser.adapter import QtLaserAdapter, run_adapters
     from voxel.devices.laser.agent import LaserAgent
-    from voxel.devices.laser.drivers.genesis_mx import GenesisMXLaser
     from voxel.devices.laser.mock import SimulatedLaser
     from voxel.utils.log import VoxelLogging
 
