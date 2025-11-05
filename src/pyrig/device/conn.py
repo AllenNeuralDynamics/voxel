@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
-import socket
 from pydantic import BaseModel, Field, model_validator, field_validator
 from rich import print
 
@@ -102,20 +101,9 @@ class DeviceAddressINPROC(DeviceAddress):
         return f"{self.proto.value}://{self.pub}"
 
 
-def get_local_ip() -> str:
-    """Get local IP address."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(0.1)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
-
-
 if __name__ == "__main__":
+    from pyrig.utils import get_local_ip
+
     local_ip = get_local_ip()
     print(f"Local IP: {local_ip}")
 

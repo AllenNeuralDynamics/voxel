@@ -1,10 +1,10 @@
 import asyncio
-from pyrig.device import Device, DeviceService, DeviceClient
-from pyrig.device import describe
 import random
+
 import zmq
 import zmq.asyncio
-from pyrig.conn import DeviceAddressTCP
+
+from pyrig.device import Device, DeviceAddressTCP, DeviceClient, DeviceService, describe
 
 
 class Calculator(Device):
@@ -81,9 +81,7 @@ class Calculator(Device):
         return results
 
     @describe(label="calc mixed", desc="Method with regular params, args, and kwargs")
-    def mixed_params(
-        self, multiplier: int = 1, *values: int, **operations: float
-    ) -> dict:
+    def mixed_params(self, multiplier: int = 1, *values: int, **operations: float) -> dict:
         """Method that combines regular params, *args, and **kwargs."""
         total = sum(values) * multiplier
         result = {"total": total, "multiplier": multiplier, "values": list(values)}
@@ -161,12 +159,8 @@ class DataProcessor(Device):
                 self._internal_state += 1
         return {"processor_id": self.processor_id, "config": valid_config}
 
-    @describe(
-        label="advanced process", desc="Advanced processing with mixed parameters"
-    )
-    def advanced_process(
-        self, base_transform: str = "upper", *items: str, **options: str | int
-    ) -> dict:
+    @describe(label="advanced process", desc="Advanced processing with mixed parameters")
+    def advanced_process(self, base_transform: str = "upper", *items: str, **options: str | int) -> dict:
         """Advanced processing combining regular params, *args, and **kwargs."""
         # Process items based on base transform
         if base_transform == "upper":
@@ -186,9 +180,7 @@ class DataProcessor(Device):
         # Process options
         for key, value in options.items():
             if key == "prefix" and isinstance(value, str):
-                result["processed_items"] = [
-                    f"{value}{item}" for item in result["processed_items"]
-                ]
+                result["processed_items"] = [f"{value}{item}" for item in result["processed_items"]]
             elif key == "repeat" and isinstance(value, int):
                 result["processed_items"] = result["processed_items"] * value
 
@@ -221,7 +213,7 @@ class DataProcessorAgent(DeviceService):
 class Laser(Device):
     """A mock laser device for testing property and command interfaces."""
 
-    COMMANDS = {"turn_on", "turn_off"}
+    __COMMANDS__ = {"turn_on", "turn_off"}
 
     def __init__(self, uid: str = "laser"):
         super().__init__(uid=uid)
@@ -453,15 +445,11 @@ async def main():
 
     # Test **kwargs methods
     print("Testing **kwargs methods:")
-    response = await calc_client.call(
-        "flexible_calc", 10, add=5.0, multiply=2.0, divide=2.0
-    )
+    response = await calc_client.call("flexible_calc", 10, add=5.0, multiply=2.0, divide=2.0)
     print(f"Flexible calc result: {response.res}")
     print("-" * 40)
 
-    response = await proc_client.call(
-        "configure", debug=True, max_items=100, log_level="INFO"
-    )
+    response = await proc_client.call("configure", debug=True, max_items=100, log_level="INFO")
     print(f"Configure result: {response.res}")
     print("-" * 40)
 
@@ -471,9 +459,7 @@ async def main():
     print(f"Mixed params result: {response.res}")
     print("-" * 40)
 
-    response = await proc_client.call(
-        "advanced_process", "lower", "Hello", "World", "Test", prefix=">>", repeat=2
-    )
+    response = await proc_client.call("advanced_process", "lower", "Hello", "World", "Test", prefix=">>", repeat=2)
     print(f"Advanced process result: {response.res}")
     print("-" * 40)
 
@@ -499,10 +485,7 @@ async def main():
         agent = DeviceClient(calc.uid, zctx, calc_conn)
         concurrent_clients.append(agent)
 
-    tasks = [
-        client.call("add_numbers", i, i + 1)
-        for i, client in enumerate(concurrent_clients)
-    ]
+    tasks = [client.call("add_numbers", i, i + 1) for i, client in enumerate(concurrent_clients)]
     responses = await asyncio.gather(*tasks)
     results = [resp.res for resp in responses]
     print(f"Concurrent addition results: {results}")

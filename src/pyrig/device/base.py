@@ -1,11 +1,16 @@
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
 import inspect
+from collections.abc import Callable, Mapping, Sequence
+from enum import StrEnum
 from functools import wraps
-from typing import Any, Self, get_args, get_origin, Union, Literal
+from typing import Any, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field
-from rich import print
+
+_REQ_CMD_ = b"REQ"
+_GET_CMD_ = b"GET"
+_SET_CMD_ = b"SET"
+_INT_CMD_ = b"INT"
 
 LABEL_ATTR = "__attr_label__"
 DESC_ATTR = "__attr_desc__"
@@ -41,6 +46,20 @@ def describe(label: str, desc: str | None = None, units: str | None = None) -> C
             return attach_metadata(sync_wrapper)
 
     return decorator
+
+
+class DeviceType(StrEnum):
+    LASER = "laser"
+    CAMERA = "camera"
+    OTHER = "other"
+
+
+class Device:
+    __COMMANDS__: set[str] = set()
+    __DEVICE_TYPE__: DeviceType = DeviceType.OTHER
+
+    def __init__(self, uid: str):
+        self.uid = uid
 
 
 class AttributeInfo(BaseModel):
@@ -181,6 +200,13 @@ class CommandInfo(AttributeInfo):
             )
 
         return cls(name=name, label=label, desc=desc, params=kwargs)
+
+
+class DeviceInterface(BaseModel):
+    uid: str
+    type: DeviceType
+    commands: dict[str, CommandInfo]
+    properties: dict[str, PropertyInfo]
 
 
 class CommandParamsError(Exception):
@@ -334,34 +360,31 @@ def list_commands(*cmds: CommandInfo | Command) -> None:
 
 
 # Example usage
-@describe(label="add", desc="Adds two numbers")
-def add(a: int, b: int) -> int:
-    """This function adds two numbers."""
-    return a + b
-
-
-@describe(label="multiply", desc="Multiplies two numbers")
-def multiply(a: float, b: float = 2.0) -> float:
-    """This function multiplies two numbers."""
-    return a * b
-
-
-def process_data(data: str | int, multiplier: int | float = 1) -> str:
-    """Process data that can be string or int."""
-    if isinstance(data, str):
-        return f"Processed: {data}" * int(multiplier)
-    return f"Processed: {data * multiplier}"
-
-
-@describe(label="optional param", desc="Function with optional parameter")
-def optional_param(required: str, optional: str | None = None) -> str:
-    """Function demonstrating optional parameters."""
-    if optional:
-        return f"{required} with {optional}"
-    return f"Just {required}"
-
-
 if __name__ == "__main__":
+
+    @describe(label="add", desc="Adds two numbers")
+    def add(a: int, b: int) -> int:
+        """This function adds two numbers."""
+        return a + b
+
+    @describe(label="multiply", desc="Multiplies two numbers")
+    def multiply(a: float, b: float = 2.0) -> float:
+        """This function multiplies two numbers."""
+        return a * b
+
+    def process_data(data: str | int, multiplier: int | float = 1) -> str:
+        """Process data that can be string or int."""
+        if isinstance(data, str):
+            return f"Processed: {data}" * int(multiplier)
+        return f"Processed: {data * multiplier}"
+
+    @describe(label="optional param", desc="Function with optional parameter")
+    def optional_param(required: str, optional: str | None = None) -> str:
+        """Function demonstrating optional parameters."""
+        if optional:
+            return f"{required} with {optional}"
+        return f"Just {required}"
+
     # Create command instances for standalone functions
     add_cmd = Command(add)
     mult_cmd = Command(multiply)

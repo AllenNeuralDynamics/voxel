@@ -2,7 +2,7 @@
 
 from typing import Any
 from pydantic import BaseModel, Field
-from pyrig.conn import get_local_ip
+from pyrig.utils import get_local_ip
 from ruyaml import YAML
 from pathlib import Path
 from rich import print

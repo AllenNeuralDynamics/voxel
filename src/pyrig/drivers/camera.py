@@ -1,6 +1,5 @@
 from pathlib import Path
-from pyrig.conn import DeviceAddress
-from pyrig.device import Device, DeviceClient, DeviceService, DeviceType, describe
+from pyrig.device import Device, DeviceClient, DeviceService, DeviceType, describe, DeviceAddress
 import zmq.asyncio
 
 

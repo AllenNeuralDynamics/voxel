@@ -1,21 +1,16 @@
 """Node service for managing devices on local and remote hosts."""
 
 import asyncio
-from typing import Literal
 import sys
-from pydantic import BaseModel
+
 import zmq
 import zmq.asyncio
+from pydantic import BaseModel
 from rich import print
 
-from pyrig.device import Device, DeviceService, DeviceType
-from pyrig.drivers.camera import Camera, CameraService
-from pyrig.conn import DeviceAddressTCP
 from pyrig.config import NodeConfig
-
-
-# Control protocol types
-Action = Literal["provision", "provision_complete", "shutdown", "shutdown_complete"]
+from pyrig.device import Device, DeviceAddressTCP, DeviceService, DeviceType
+from pyrig.drivers.camera import Camera, CameraService
 
 
 class ProvisionResponse(BaseModel):
@@ -49,9 +44,7 @@ def build_devices(cfg: NodeConfig) -> dict[str, Device]:
 class NodeService:
     """Service that manages devices on a node and communicates with the controller."""
 
-    def __init__(
-        self, zctx: zmq.asyncio.Context, node_id: str, start_port: int = 10000
-    ):
+    def __init__(self, zctx: zmq.asyncio.Context, node_id: str, start_port: int = 10000):
         """Initialize NodeService.
 
         Args:
@@ -96,9 +89,7 @@ class NodeService:
                         device_provs: dict[str, ProvisionedDevice] = {}
                         pc = self._start_port
                         for device_id, device in devices.items():
-                            conn = DeviceAddressTCP(
-                                host=node_cfg.hostname, rpc=pc, pub=pc + 1
-                            )
+                            conn = DeviceAddressTCP(host=node_cfg.hostname, rpc=pc, pub=pc + 1)
 
                             if isinstance(device, Camera):
                                 service = CameraService(device, conn, self._zctx)
@@ -106,9 +97,7 @@ class NodeService:
                                 service = DeviceService(device, conn, self._zctx)
 
                             self._device_servers[device_id] = service
-                            device_provs[device_id] = ProvisionedDevice(
-                                conn=conn, device_type=device.__DEVICE_TYPE__
-                            )
+                            device_provs[device_id] = ProvisionedDevice(conn=conn, device_type=device.__DEVICE_TYPE__)
                             pc += 2
 
                         # Report completion
@@ -129,9 +118,7 @@ class NodeService:
                     await self._cleanup()
 
                     # Acknowledge - no payload
-                    await self._control_socket.send_multipart(
-                        [b"", b"shutdown_complete"]
-                    )
+                    await self._control_socket.send_multipart([b"", b"shutdown_complete"])
                     break
         except (asyncio.CancelledError, KeyboardInterrupt):
             # Handle graceful shutdown on interrupt
@@ -162,9 +149,7 @@ async def main():
     """
     if len(sys.argv) < 2:
         print("[red]Usage: python -m pyrig.node <node_id> [controller_addr][/red]")
-        print(
-            "[yellow]Example: python -m pyrig.node camera_1 tcp://localhost:9000[/yellow]"
-        )
+        print("[yellow]Example: python -m pyrig.node camera_1 tcp://localhost:9000[/yellow]")
         sys.exit(1)
 
     node_id = sys.argv[1]

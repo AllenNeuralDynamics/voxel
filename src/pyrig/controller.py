@@ -12,12 +12,7 @@ from pyrig.config import RigConfig
 from pyrig.device import DeviceClient, DeviceType
 from pyrig.drivers.laser import LaserClient
 from pyrig.drivers.camera import CameraClient
-from pyrig.node import (
-    NodeService,
-    ProvisionComplete,
-    ProvisionedDevice,
-    ProvisionResponse,
-)
+from pyrig.node import NodeService, ProvisionComplete, ProvisionedDevice, ProvisionResponse
 
 
 def _run_node_service(node_id: str, controller_addr: str, start_port: int):
