@@ -1,0 +1,33 @@
+[project]
+name = "pyrig"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.12.0",
+    "pyzmq>=27.1.0",
+    "rich>=14.2.0",
+    "ruyaml>=0.91.0",
+]
+
+[project.scripts]
+pyrig = "pyrig:main"
+
+[build-system]
+requires = ["uv_build>=0.8.24,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+
+[tool.pyright]
+typeCheckingMode = "standard"
+# include = ["src"]
+# reportMissingTypeStubs = "none"
+# reportExplicitAny = "none"
+# reportAny = "none"
+# reportImplicitOverride = "none"
