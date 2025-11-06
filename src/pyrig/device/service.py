@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -7,7 +8,6 @@ from typing import Any, Self
 import zmq
 import zmq.asyncio
 from pydantic import ValidationError
-from rich import print
 
 from pyrig.device.base import (
     _GET_CMD_,
@@ -26,6 +26,8 @@ from pyrig.device.base import (
     PropsResponse,
 )
 from pyrig.device.conn import DeviceAddress, DeviceAddressTCP
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceService[D: Device]:
@@ -165,7 +167,7 @@ class DeviceService[D: Device]:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"[red]Heartbeat error: {e}[/red]")
+                logger.error(f"Heartbeat error: {e}")
 
     async def __aenter__(self) -> Self:
         """Async context manager entry."""
@@ -189,7 +191,7 @@ class DeviceService[D: Device]:
                 if isinstance(attr, property) and attr.fget is not None:
                     properties[attr_name] = PropertyInfo.from_attr(attr)
             except Exception as e:
-                print(f"[red]Error accessing attribute '{attr_name}': {e}[/red]")
+                logger.error(f"Error accessing attribute '{attr_name}': {e}")
 
         return properties
 

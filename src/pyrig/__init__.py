@@ -1,3 +1,5 @@
+import logging
+
 # Base classes for building rigs
 from .rig import Rig
 from .node import NodeService
@@ -10,6 +12,9 @@ from .config import RigConfig, NodeConfig
 
 # For custom services
 from .device.conn import DeviceAddress, DeviceAddressTCP
+
+# Set up library logging with NullHandler (users opt-in to see logs)
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __all__ = [
     # Rig layer

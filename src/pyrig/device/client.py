@@ -1,11 +1,11 @@
 import asyncio
+import logging
 import time
 from collections.abc import Callable
 from typing import Any
 
 import zmq
 import zmq.asyncio
-from rich import print
 
 from pyrig.device.base import (
     _GET_CMD_,
@@ -18,6 +18,8 @@ from pyrig.device.base import (
     PropsResponse,
 )
 from pyrig.device.conn import DeviceAddress
+
+logger = logging.getLogger(__name__)
 
 
 def set_tcp_keepalive(socket: zmq.asyncio.Socket):
@@ -164,6 +166,6 @@ class DeviceClient:
                 # Update with local receive time (could parse payload_bytes for server time if needed later)
                 self._last_heartbeat_time = time.time()
             except Exception as e:
-                print(f"[red]Error handling heartbeat: {e}[/red]")
+                logger.error(f"Error handling heartbeat: {e}")
 
         await self.subscribe("heartbeat", handle_heartbeat)

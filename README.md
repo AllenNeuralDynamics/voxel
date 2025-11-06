@@ -80,13 +80,38 @@ nodes:
 
 **Commands/Properties:** REQ/REP sockets  
 **State streaming:** PUB/SUB sockets  
-**Connection monitoring:** Heartbeats
+**Connection monitoring:** Heartbeats  
+**Logging:** PUB/SUB aggregation
 
 Each device service exposes:
 - `REQ` - Execute command
 - `GET` - Read properties
 - `SET` - Write properties  
 - `INT` - Introspection
+
+## Logging
+
+PyRig uses Python's stdlib logging with ZeroMQ log aggregation.
+
+**Enable logging:**
+```python
+import logging
+logging.basicConfig(level=logging.INFO)  # See all pyrig and node logs
+
+from pyrig import Rig, RigConfig
+rig = Rig(zctx, config)
+await rig.start()
+```
+
+The Rig automatically receives logs from all nodes and forwards them to Python's logging system under the `pyrig.nodes` logger. You'll see logs like:
+
+```
+2025-11-05 20:58:00 - pyrig.rig - INFO - Starting MyRig...
+2025-11-05 20:58:00 - pyrig.nodes - INFO - [node.primary.INFO] Node primary started
+2025-11-05 20:58:02 - pyrig.rig - INFO - MyRig ready with 4 devices
+```
+
+Users opt-in by configuring Python logging. No logs appear by default (library best practice).
 
 ## Customization
 

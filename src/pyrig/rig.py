@@ -1,15 +1,17 @@
 """Primary controller for rig orchestration."""
 
 import asyncio
+import logging
 from multiprocessing import Process
 
 import zmq
 import zmq.asyncio
-from rich import print
 
 from pyrig.config import RigConfig
 from pyrig.device import DeviceClient
 from pyrig.node import NodeService, ProvisionComplete, ProvisionedDevice, ProvisionResponse
+
+logger = logging.getLogger(__name__)
 
 
 def _run_node_service(node_id: str, controller_addr: str, start_port: int, service_cls: type[NodeService]):
@@ -59,6 +61,9 @@ class Rig:
 
         self._local_nodes: dict[str, Process] = {}
         self._control_socket = self.zctx.socket(zmq.ROUTER)
+        self._log_socket = self.zctx.socket(zmq.SUB)
+        self._log_socket.subscribe(b"")  # Subscribe to all log messages
+        self._log_watch_task = None
 
     async def start(self, connection_timeout: float = 30.0, provision_timeout: float = 30.0):
         """Complete startup sequence.
@@ -67,11 +72,18 @@ class Rig:
             connection_timeout: How long to wait for all devices to connect
             provision_timeout: How long to wait for nodes to provision
         """
-        print(f"[bold cyan]Starting {self.config.metadata.name}...[/bold cyan]")
+        logger.info(f"Starting {self.config.metadata.name}...")
 
-        # Step 1: Start control listener
+        # Step 1: Start control listener and log aggregator
         control_port = self.config.metadata.control_port
         self._control_socket.bind(f"tcp://*:{control_port}")
+
+        log_port = self.config.metadata.log_port
+        self._log_socket.bind(f"tcp://*:{log_port}")
+        logger.info(f"Log aggregator listening on tcp://localhost:{log_port}")
+
+        # Start log receiver task
+        self._log_watch_task = asyncio.create_task(self._receive_logs())
 
         # Step 2: Start local node subprocesses
         self._local_nodes = await self._spawn_local_nodes()
@@ -85,7 +97,7 @@ class Rig:
         # Step 5: Wait for all devices to send heartbeats
         await self._wait_for_connections(timeout=connection_timeout)
 
-        print(f"[bold green]✓ {self.config.metadata.name} ready with {len(self.devices)} devices[/bold green]")
+        logger.info(f"{self.config.metadata.name} ready with {len(self.devices)} devices")
 
     def create_clients(self) -> None:
         """Create DeviceClients from provisions. Override to customize client types."""
@@ -153,7 +165,7 @@ class Rig:
                     if action == "provision":
                         # Node is requesting config
                         if node_id not in self.config.nodes:
-                            print(f"[red]✗ Unknown node: {node_id}[/red]")
+                            logger.error(f"Unknown node: {node_id}")
                             continue
 
                         node_config = self.config.nodes[node_id]
@@ -177,7 +189,7 @@ class Rig:
 
         except asyncio.TimeoutError:
             missing = expected_nodes - provisioned_nodes
-            print(f"[red]✗ Provisioning timeout. Missing nodes: {missing}[/red]")
+            logger.error(f"Provisioning timeout. Missing nodes: {missing}")
 
             await self._shutdown_nodes(provisioned_nodes)
 
@@ -203,7 +215,7 @@ class Rig:
             try:
                 await self._control_socket.send_multipart([identity, b"", b"shutdown"])
             except Exception as e:
-                print(f"[red]Failed to send shutdown to {node_id}: {e}[/red]")
+                logger.error(f"Failed to send shutdown to {node_id}: {e}")
 
         # Wait for shutdown acknowledgments
         acknowledged = set()
@@ -242,14 +254,41 @@ class Rig:
         failed = []
         for device_id, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
-                print(f"[red]✗ {device_id}: {result}[/red]")
+                logger.error(f"{device_id}: {result}")
                 failed.append(device_id)
             elif not result:  # wait_for_connection returned False
-                print(f"[yellow]✗ {device_id} connection timeout[/yellow]")
+                logger.warning(f"{device_id} connection timeout")
                 failed.append(device_id)
 
         if failed:
-            print(f"[yellow]Warning: {len(failed)}/{len(self.devices)} devices did not connect[/yellow]")
+            logger.warning(f"{len(failed)}/{len(self.devices)} devices did not connect")
+
+    async def _receive_logs(self):
+        """Background task to receive logs from nodes and forward to Python logging."""
+        node_logger = logging.getLogger("pyrig.nodes")
+
+        try:
+            while True:
+                # Receive multipart message: [topic, message]
+                parts = await self._log_socket.recv_multipart()
+                if len(parts) >= 2:
+                    topic = parts[0].decode("utf-8", errors="replace")
+                    message = parts[1].decode("utf-8", errors="replace")
+
+                    # Topic format: "node.{node_id}.{level}"
+                    # Extract level from topic and log appropriately
+                    if ".ERROR" in topic or ".CRITICAL" in topic:
+                        node_logger.error(f"[{topic}] {message}")
+                    elif ".WARNING" in topic:
+                        node_logger.warning(f"[{topic}] {message}")
+                    elif ".DEBUG" in topic:
+                        node_logger.debug(f"[{topic}] {message}")
+                    else:  # INFO or unknown
+                        node_logger.info(f"[{topic}] {message}")
+        except asyncio.CancelledError:
+            pass  # Task cancelled during shutdown
+        except Exception as e:
+            logger.error(f"Error in log receiver: {e}")
 
     def get_agent(self, device_id: str) -> DeviceClient:
         """Get agent for a specific device.
@@ -267,13 +306,22 @@ class Rig:
 
     async def stop(self):
         """Stop all devices and cleanup."""
-        # Step 1: Close all DeviceClients first (disconnect from devices)
+        # Step 1: Stop log receiver
+        if self._log_watch_task:
+            self._log_watch_task.cancel()
+            try:
+                await self._log_watch_task
+            except asyncio.CancelledError:
+                pass
+
+        # Step 2: Close all DeviceClients first (disconnect from devices)
         for device_id, agent in self.devices.items():
             agent.close()
 
-        # Step 2: Shutdown all nodes (send shutdown, wait for ack, terminate processes)
+        # Step 3: Shutdown all nodes (send shutdown, wait for ack, terminate processes)
         all_nodes = set(self.config.nodes.keys())
         await self._shutdown_nodes(all_nodes, timeout=2.0)
 
-        # Step 3: Close control socket
+        # Step 4: Close sockets
         self._control_socket.close()
+        self._log_socket.close()

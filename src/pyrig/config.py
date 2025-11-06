@@ -1,12 +1,15 @@
 """Configuration models for rig startup."""
 
-from typing import Any
-from pydantic import BaseModel, Field
-from pyrig.utils import get_local_ip
-from ruyaml import YAML
+import logging
 from pathlib import Path
-from rich import print
+from typing import Any
 
+from pydantic import BaseModel, Field
+from ruyaml import YAML
+
+from pyrig.utils import get_local_ip
+
+logger = logging.getLogger(__name__)
 yaml = YAML(typ="safe")
 
 
@@ -38,6 +41,7 @@ class NodeConfig(BaseModel):
 class RigMetadata(BaseModel):
     name: str
     control_port: int = Field(default=9000)  # Port for controller ROUTER socket
+    log_port: int = Field(default=9001)  # Port for log aggregation PUB socket
 
 
 class RigConfig(BaseModel):
@@ -53,7 +57,7 @@ class RigConfig(BaseModel):
             data = yaml.load(f)
         # remove the key _anchors
         data.pop("_anchors", None)
-        print(data)
+        logger.debug(f"Loaded config: {data}")
         return cls.model_validate(data)
 
     @property

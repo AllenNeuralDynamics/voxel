@@ -205,17 +205,22 @@ source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
     { name = "pyzmq" },
-    { name = "rich" },
     { name = "ruyaml" },
+]
+
+[package.optional-dependencies]
+examples = [
+    { name = "rich" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "pyzmq", specifier = ">=27.1.0" },
-    { name = "rich", specifier = ">=14.2.0" },
+    { name = "rich", marker = "extra == 'examples'", specifier = ">=14.2.0" },
     { name = "ruyaml", specifier = ">=0.91.0" },
 ]
+provides-extras = ["examples"]
 
 [[package]]
 name = "pyzmq"
