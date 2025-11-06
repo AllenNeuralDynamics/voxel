@@ -55,7 +55,7 @@ class Rig:
         self.config = config
         self.provisions: dict[str, ProvisionedDevice] = {}
 
-        self.agents: dict[str, DeviceClient] = {}
+        self.devices: dict[str, DeviceClient] = {}
 
         self._local_nodes: dict[str, Process] = {}
         self._control_socket = self.zctx.socket(zmq.ROUTER)
@@ -85,13 +85,13 @@ class Rig:
         # Step 5: Wait for all devices to send heartbeats
         await self._wait_for_connections(timeout=connection_timeout)
 
-        print(f"[bold green]✓ {self.config.metadata.name} ready with {len(self.agents)} devices[/bold green]")
+        print(f"[bold green]✓ {self.config.metadata.name} ready with {len(self.devices)} devices[/bold green]")
 
     def create_clients(self) -> None:
         """Create DeviceClients from provisions. Override to customize client types."""
         for device_id, prov in self.provisions.items():
             client = self._create_client(device_id, prov)
-            self.agents[device_id] = client
+            self.devices[device_id] = client
 
     def _create_client(self, device_id: str, prov: ProvisionedDevice) -> DeviceClient:
         """Create a single client. Override for custom client types."""
@@ -234,7 +234,7 @@ class Rig:
     async def _wait_for_connections(self, timeout: float = 30.0):
         """Wait for all agents to receive heartbeats from their devices."""
         # Use wait_for_connection() method from DeviceClient
-        tasks = {device_id: agent.wait_for_connection(timeout=timeout) for device_id, agent in self.agents.items()}
+        tasks = {device_id: agent.wait_for_connection(timeout=timeout) for device_id, agent in self.devices.items()}
 
         results = await asyncio.gather(*tasks.values(), return_exceptions=True)
 
@@ -249,7 +249,7 @@ class Rig:
                 failed.append(device_id)
 
         if failed:
-            print(f"[yellow]Warning: {len(failed)}/{len(self.agents)} devices did not connect[/yellow]")
+            print(f"[yellow]Warning: {len(failed)}/{len(self.devices)} devices did not connect[/yellow]")
 
     def get_agent(self, device_id: str) -> DeviceClient:
         """Get agent for a specific device.
@@ -263,12 +263,12 @@ class Rig:
         Raises:
             KeyError: If device not found
         """
-        return self.agents[device_id]
+        return self.devices[device_id]
 
     async def stop(self):
         """Stop all devices and cleanup."""
         # Step 1: Close all DeviceClients first (disconnect from devices)
-        for device_id, agent in self.agents.items():
+        for device_id, agent in self.devices.items():
             agent.close()
 
         # Step 2: Shutdown all nodes (send shutdown, wait for ack, terminate processes)

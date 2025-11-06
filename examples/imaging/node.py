@@ -18,8 +18,7 @@ Examples:
 import asyncio
 
 from imaging.drivers.camera import Camera, CameraService
-from pyrig.device import Device
-from pyrig.node import NodeService
+from pyrig import Device, NodeService
 
 
 class ImagingNodeService(NodeService):

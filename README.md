@@ -7,8 +7,7 @@ Type-safe remote control of hardware devices across networked nodes with ZeroMQ.
 ## Quick Start
 
 ```python
-from pyrig.rig import Rig
-from pyrig.config import RigConfig
+from pyrig import Rig, RigConfig
 
 config = RigConfig.from_yaml("system.yaml")
 rig = Rig(zctx, config)
@@ -32,6 +31,8 @@ Three layers:
 **Client** - Remote proxy (ZeroMQ client)
 
 ```python
+from pyrig import Device, DeviceService, DeviceClient, describe
+
 # Device (server-side)
 class Camera(Device):
     def capture(self) -> np.ndarray:
@@ -39,6 +40,7 @@ class Camera(Device):
 
 # Service (server-side, optional)
 class CameraService(DeviceService[Camera]):
+    @describe(label="Start Stream", desc="Stream frames to file")
     def start_stream(self, n_frames: int):
         for i in range(n_frames):
             self._writer.write(self.device.capture())

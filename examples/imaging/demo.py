@@ -6,7 +6,7 @@ import zmq.asyncio
 from rich import print
 
 from imaging.rig import ImagingRig
-from pyrig.config import RigConfig
+from pyrig import RigConfig
 
 
 async def main():
@@ -36,7 +36,7 @@ async def main():
 
     # Example: List all devices
     print("\n[cyan]Available devices:[/cyan]")
-    for device_id, agent in controller.agents.items():
+    for device_id, agent in controller.devices.items():
         print(f"  - {device_id}")
         interface = await agent.get_interface()
         print(interface)

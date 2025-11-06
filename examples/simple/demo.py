@@ -16,8 +16,7 @@ import sys
 import zmq.asyncio
 from rich import print
 
-from pyrig.config import RigConfig
-from pyrig.rig import Rig
+from pyrig import Rig, RigConfig
 
 
 async def main():
@@ -49,11 +48,11 @@ async def main():
 
     # List all connected devices
     print("\n[bold green]✓ Rig started successfully![/bold green]")
-    print(f"[cyan]Connected devices: {len(rig.agents)}[/cyan]\n")
+    print(f"[cyan]Connected devices: {len(rig.devices)}[/cyan]\n")
 
     # Show device interfaces
     print("[bold]Device Interfaces:[/bold]")
-    for device_id, agent in rig.agents.items():
+    for device_id, agent in rig.devices.items():
         print(f"\n[yellow]Device: {device_id}[/yellow]")
         interface = await agent.get_interface()
         print(f"  Type: {interface.type}")
@@ -70,8 +69,8 @@ async def main():
     print("\n[bold cyan]=== Demonstrating Generic Device Access ===[/bold cyan]\n")
 
     # Work with temperature controller
-    if "temp_controller" in rig.agents:
-        temp = rig.agents["temp_controller"]
+    if "temp_controller" in rig.devices:
+        temp = rig.devices["temp_controller"]
 
         print("[yellow]Working with Temperature Controller[/yellow]\n")
 
@@ -91,8 +90,8 @@ async def main():
         print(f"Heater power: {props.res['heater_power'].value}%")
 
     # Work with motor stage
-    if "x_stage" in rig.agents:
-        stage = rig.agents["x_stage"]
+    if "x_stage" in rig.devices:
+        stage = rig.devices["x_stage"]
 
         print("\n[yellow]Working with Motor Stage (X-axis)[/yellow]\n")
 
@@ -115,8 +114,8 @@ async def main():
         print(f"New position: {props.res['position'].value} mm")
 
     # Work with pump
-    if "pump_1" in rig.agents:
-        pump = rig.agents["pump_1"]
+    if "pump_1" in rig.devices:
+        pump = rig.devices["pump_1"]
 
         print("\n[yellow]Working with Pump[/yellow]\n")
 
