@@ -66,7 +66,7 @@ class CameraService(DeviceService[Camera]):
 
     def __init__(self, device: Camera, conn: DeviceAddress, zctx: zmq.asyncio.Context):
         super().__init__(device, conn, zctx)
-        tmp_folder = Path(__file__).parent.parent.parent.parent / "tmp"
+        tmp_folder = Path(__file__).parent.parent / "tmp"
         tmp_folder.mkdir(exist_ok=True)
         self._writer = Writer(str(tmp_folder / f"{device.uid}.txt"))
 

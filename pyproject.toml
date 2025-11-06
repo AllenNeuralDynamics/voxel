@@ -1,7 +1,7 @@
 [project]
 name = "pyrig"
 version = "0.1.0"
-description = "Add your description here"
+description = "Distributed device control for experimental rigs"
 readme = "README.md"
 authors = [
     { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }

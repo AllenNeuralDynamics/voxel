@@ -141,8 +141,9 @@ class DeviceClient:
         payload = req.model_dump_json().encode()
         await self._req_socket.send_multipart([_INT_CMD_, payload])
         response_json = await self._req_socket.recv_json()
-        cmd_response: CommandResponse[DeviceInterface] = CommandResponse.model_validate(response_json)
-        return cmd_response.unwrap()
+        cmd_response: CommandResponse[dict] = CommandResponse.model_validate(response_json)
+        interface_dict = cmd_response.unwrap()
+        return DeviceInterface.model_validate(interface_dict)
 
     async def _listen_loop(self):
         """The background loop that receives and dispatches state updates."""

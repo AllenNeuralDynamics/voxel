@@ -2,20 +2,17 @@
 
 import asyncio
 from multiprocessing import Process
-from pathlib import Path
 
 import zmq
 import zmq.asyncio
 from rich import print
 
 from pyrig.config import RigConfig
-from pyrig.device import DeviceClient, DeviceType
-from pyrig.drivers.laser import LaserClient
-from pyrig.drivers.camera import CameraClient
+from pyrig.device import DeviceClient
 from pyrig.node import NodeService, ProvisionComplete, ProvisionedDevice, ProvisionResponse
 
 
-def _run_node_service(node_id: str, controller_addr: str, start_port: int):
+def _run_node_service(node_id: str, controller_addr: str, start_port: int, service_cls: type[NodeService]):
     """Run NodeService in a subprocess.
 
     This function is the target for subprocess.Process.
@@ -30,21 +27,36 @@ def _run_node_service(node_id: str, controller_addr: str, start_port: int):
 
     async def _run():
         zctx = zmq.asyncio.Context()
-        node = NodeService(zctx, node_id, start_port)
+        node = service_cls(zctx, node_id, start_port)
         await node.run(controller_addr)
 
     asyncio.run(_run())
 
 
-class RigController:
+# Architecture:
+# - Controller starts ROUTER socket on control_port (single port for all nodes)
+# - Controller spawns local node subprocesses
+# - All nodes (local and remote) connect to controller:control_port using DEALER sockets
+# - Nodes set their ZMQ identity to node_id
+# - Nodes request config via "provision" action
+# - Controller sends NodeConfig to each node
+# - Nodes create devices and allocate ports automatically
+# - Nodes respond with device addresses via "provision_complete" action
+# - Controller creates DeviceClients and waits for heartbeats
+
+
+class Rig:
     """Primary controller that orchestrates the entire rig."""
+
+    NODE_SERVICE_CLASS: type[NodeService] = NodeService
 
     def __init__(self, zctx: zmq.asyncio.Context, config: RigConfig):
         self.zctx = zctx
         self.config = config
+        self.provisions: dict[str, ProvisionedDevice] = {}
+
         self.agents: dict[str, DeviceClient] = {}
-        self.lasers: dict[str, LaserClient] = {}
-        self.cameras: dict[str, CameraClient] = {}
+
         self._local_nodes: dict[str, Process] = {}
         self._control_socket = self.zctx.socket(zmq.ROUTER)
 
@@ -65,26 +77,25 @@ class RigController:
         self._local_nodes = await self._spawn_local_nodes()
 
         # Step 3: Provision all nodes (local and remote) and get device connections
-        provs = await self._provision_nodes(timeout=provision_timeout)
+        self.provisions = await self._provision_nodes(timeout=provision_timeout)
 
         # Step 4: Create typed DeviceClients based on device type
-        for device_id, prov in provs.items():
-            match prov.device_type:
-                case DeviceType.LASER:
-                    client = LaserClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
-                    self.lasers[device_id] = client
-                case DeviceType.CAMERA:
-                    client = CameraClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
-                    self.cameras[device_id] = client
-                case _:
-                    client = DeviceClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
-
-            self.agents[device_id] = client
+        self.create_clients()
 
         # Step 5: Wait for all devices to send heartbeats
         await self._wait_for_connections(timeout=connection_timeout)
 
         print(f"[bold green]✓ {self.config.metadata.name} ready with {len(self.agents)} devices[/bold green]")
+
+    def create_clients(self) -> None:
+        """Create DeviceClients from provisions. Override to customize client types."""
+        for device_id, prov in self.provisions.items():
+            client = self._create_client(device_id, prov)
+            self.agents[device_id] = client
+
+    def _create_client(self, device_id: str, prov: ProvisionedDevice) -> DeviceClient:
+        """Create a single client. Override for custom client types."""
+        return DeviceClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
 
     async def _spawn_local_nodes(self) -> dict[str, Process]:
         """Spawn local node subprocesses."""
@@ -102,7 +113,7 @@ class RigController:
             # Create subprocess running NodeService
             process = Process(
                 target=_run_node_service,
-                args=(node_id, controller_addr, start_port),
+                args=(node_id, controller_addr, start_port, self.NODE_SERVICE_CLASS),
                 name=f"node-{node_id}",
                 daemon=True,
             )
@@ -266,112 +277,3 @@ class RigController:
 
         # Step 3: Close control socket
         self._control_socket.close()
-
-
-async def main():
-    """Entry point for primary controller."""
-    import sys
-
-    if len(sys.argv) < 2:
-        default_config_path = Path(__file__).parent / "system.yaml"
-        print(f"[yellow]No config file provided. Using default: {default_config_path}[/yellow]")
-        sys.argv.append(str(default_config_path))
-
-    config_path = Path(sys.argv[1])
-
-    if not config_path.exists():
-        print(f"[red]Config file not found: {config_path}[/red]")
-        sys.exit(1)
-
-    # Load configuration
-    config = RigConfig.from_yaml(config_path)
-
-    # Create controller
-    zctx = zmq.asyncio.Context()
-    controller = RigController(zctx, config)
-
-    # Start rig
-    await controller.start()
-
-    # Example: List all devices
-    print("\n[cyan]Available devices:[/cyan]")
-    for device_id, agent in controller.agents.items():
-        print(f"  - {device_id}")
-        interface = await agent.get_interface()
-        print(interface)
-
-    # Showcase typed LaserClient API
-    if controller.lasers:
-        print("\n[cyan]=== Demonstrating Typed LaserClient API ===[/cyan]")
-        laser_id = next(iter(controller.lasers.keys()))
-        laser = controller.lasers[laser_id]
-
-        print(f"\n[yellow]Working with laser: {laser_id}[/yellow]")
-
-        # Type-safe property access
-        print(f"Initial power setpoint: {await laser.get_power_setpoint()}")
-        print(f"Laser is on: {await laser.get_is_on()}")
-
-        # Type-safe command calls with autocomplete
-        print("\nSetting power to 50.0...")
-        await laser.set_power_setpoint(50.0)
-        print(f"New power setpoint: {await laser.get_power_setpoint()}")
-
-        print("\nTurning laser on...")
-        result = await laser.turn_on()
-        print(f"Turn on result: {result}")
-        print(f"Laser is on: {await laser.get_is_on()}")
-
-        print("\nUsing combined command set_power_and_on(75.0)...")
-        msg = await laser.set_power_and_on(75.0)
-        print(f"Result: {msg}")
-        print(f"New power setpoint: {await laser.get_power_setpoint()}")
-
-        print("\nTurning laser off...")
-        await laser.turn_off()
-        print(f"Laser is on: {await laser.get_is_on()}")
-
-        print("\n[green]✓ All typed LaserClient methods work with full autocomplete![/green]")
-
-    # Showcase typed CameraClient API with service-level commands
-    if controller.cameras:
-        print("\n[cyan]=== Demonstrating Typed CameraClient API ===[/cyan]")
-        camera_id = next(iter(controller.cameras.keys()))
-        camera = controller.cameras[camera_id]
-
-        print(f"\n[yellow]Working with camera: {camera_id}[/yellow]")
-
-        # Type-safe property access
-        print(f"Pixel size: {await camera.get_pixel_size()} µm")
-        print(f"Initial exposure time: {await camera.get_exposure_time()} ms")
-        print(f"Frame time: {await camera.get_frame_time()} ms")
-
-        # Set exposure
-        print("\nSetting exposure time to 50.0 ms...")
-        await camera.set_exposure_time(50.0)
-        print(f"New exposure time: {await camera.get_exposure_time()} ms")
-        print(f"New frame time: {await camera.get_frame_time()} ms")
-
-        # Service-level command (streaming)
-        print("\nTesting service-level streaming command...")
-        result = await camera.start_stream(num_frames=5)
-        print(f"Stream result: {result}")
-
-        print("\n[green]✓ CameraClient with service-level commands working![/green]")
-
-    # Keep running
-    try:
-        print("\n[cyan]Rig ready! Press Ctrl+C to exit.[/cyan]")
-        await asyncio.Event().wait()
-    except KeyboardInterrupt:
-        print("\n[yellow]Shutting down...[/yellow]")
-    finally:
-        await controller.stop()
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        # Suppress traceback on Ctrl+C (cleanup already handled in main())
-        pass

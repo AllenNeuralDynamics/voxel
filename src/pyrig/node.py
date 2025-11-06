@@ -10,7 +10,6 @@ from rich import print
 
 from pyrig.config import NodeConfig
 from pyrig.device import Device, DeviceAddressTCP, DeviceService, DeviceType
-from pyrig.drivers.camera import Camera, CameraService
 
 
 class ProvisionResponse(BaseModel):
@@ -36,7 +35,9 @@ def build_devices(cfg: NodeConfig) -> dict[str, Device]:
     devices: dict[str, Device] = {}
     for uid, device_cfg in cfg.devices.items():
         cls = device_cfg.get_device_class()
-        device = cls(uid=uid, **device_cfg.kwargs)
+        if uid not in device_cfg.kwargs:
+            device_cfg.kwargs.update({"uid": uid})
+        device = cls(**device_cfg.kwargs)
         devices[uid] = device
     return devices
 
@@ -61,6 +62,10 @@ class NodeService:
         self._control_socket.setsockopt(zmq.IDENTITY, node_id.encode())
 
         self._device_servers: dict[str, DeviceService] = {}
+
+    def _create_service(self, device: Device, conn) -> DeviceService:
+        """Hook for custom service types."""
+        return DeviceService(device, conn, self._zctx)
 
     async def run(self, controller_addr: str):
         """Connect to controller and handle provisioning.
@@ -90,13 +95,7 @@ class NodeService:
                         pc = self._start_port
                         for device_id, device in devices.items():
                             conn = DeviceAddressTCP(host=node_cfg.hostname, rpc=pc, pub=pc + 1)
-
-                            if isinstance(device, Camera):
-                                service = CameraService(device, conn, self._zctx)
-                            else:
-                                service = DeviceService(device, conn, self._zctx)
-
-                            self._device_servers[device_id] = service
+                            self._device_servers[device_id] = self._create_service(device, conn)
                             device_provs[device_id] = ProvisionedDevice(conn=conn, device_type=device.__DEVICE_TYPE__)
                             pc += 2
 
@@ -137,31 +136,53 @@ class NodeService:
         self._device_servers.clear()
 
 
-async def main():
-    """Entry point for a node.
+async def run_node_service(
+    service_cls: type[NodeService] = NodeService,
+    node_id: str | None = None,
+    controller_addr: str | None = None,
+    start_port: int = 10000,
+):
+    """Run a node service with the given class.
 
-    Usage:
-        uv run node.py <node_id> [controller_addr]
-
-    Examples:
-        uv run node.py camera_1
-        uv run node.py camera_1 tcp://192.168.1.100:9000
+    Args:
+        service_cls: NodeService class to instantiate (default: NodeService)
+        node_id: Node identifier (if None, read from sys.argv[1])
+        controller_addr: Controller address (if None, read from sys.argv[2] or use default)
+        start_port: Starting port for device allocation
     """
-    if len(sys.argv) < 2:
-        print("[red]Usage: python -m pyrig.node <node_id> [controller_addr][/red]")
-        print("[yellow]Example: python -m pyrig.node camera_1 tcp://localhost:9000[/yellow]")
-        sys.exit(1)
+    if node_id is None:
+        if len(sys.argv) < 2:
+            print("[red]Usage: python -m pyrig.node <node_id> [controller_addr][/red]")
+            print("[yellow]Example: python -m pyrig.node camera_1 tcp://localhost:9000[/yellow]")
+            sys.exit(1)
+        node_id = sys.argv[1]
 
-    node_id = sys.argv[1]
-    controller_addr = sys.argv[2] if len(sys.argv) >= 3 else "tcp://localhost:9000"
+    if controller_addr is None:
+        controller_addr = sys.argv[2] if len(sys.argv) >= 3 else "tcp://localhost:9000"
+
+    print(f"[cyan]Starting {service_cls.__name__}: {node_id}[/cyan]")
+    print(f"[cyan]Connecting to controller: {controller_addr}[/cyan]")
 
     zctx = zmq.asyncio.Context()
-    node = NodeService(zctx, node_id)
+    node = service_cls(zctx, node_id, start_port)
 
     try:
         await node.run(controller_addr)
     except KeyboardInterrupt:
         print("\n[yellow]Shutting down...[/yellow]")
+
+
+async def main():
+    """Entry point for base NodeService.
+
+    Usage:
+        python -m pyrig.node <node_id> [controller_addr]
+
+    Examples:
+        python -m pyrig.node camera_1
+        python -m pyrig.node camera_1 tcp://192.168.1.100:9000
+    """
+    await run_node_service()
 
 
 if __name__ == "__main__":
