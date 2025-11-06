@@ -4,20 +4,21 @@ This allows you to run imaging-specific node services (with CameraService suppor
 on remote machines that connect to a central ImagingRig controller.
 
 Usage:
-    python -m pyrig.examples.imaging.node <node_id> [controller_addr]
+    cd examples
+    python -m imaging.node <node_id> [controller_addr]
 
 Examples:
     # Connect to controller on localhost
-    python -m pyrig.examples.imaging.node camera_node_1
+    python -m imaging.node camera_node_1
 
     # Connect to remote controller
-    python -m pyrig.examples.imaging.node camera_node_1 tcp://192.168.1.100:9000
+    python -m imaging.node camera_node_1 tcp://192.168.1.100:9000
 """
 
 import asyncio
 
+from imaging.drivers.camera import Camera, CameraService
 from pyrig.device import Device
-from pyrig.examples.imaging.drivers.camera import Camera, CameraService
 from pyrig.node import NodeService
 
 

@@ -1,11 +1,11 @@
 _anchors:
   - &camera_ip "127.0.0.1"
-  - &laser_target pyrig.examples.imaging.drivers.laser.Laser
-  - &camera_target pyrig.examples.imaging.drivers.camera.Camera
+  - &laser_target imaging.drivers.laser.Laser
+  - &camera_target imaging.drivers.camera.Camera
 
 metadata:
   name: "LightSheetMicroscope_01"
-  control_port: 9000 # Controller ROUTER socket port
+  control_port: 9000
 
 nodes:
   primary:

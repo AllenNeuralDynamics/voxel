@@ -1,11 +1,11 @@
 import asyncio
 from pathlib import Path
 
-from pyrig.examples.imaging.rig import ImagingRig
 import zmq
 import zmq.asyncio
 from rich import print
 
+from imaging.rig import ImagingRig
 from pyrig.config import RigConfig
 
 

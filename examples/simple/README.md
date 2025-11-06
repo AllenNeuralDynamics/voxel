@@ -13,7 +13,8 @@ All accessed through generic `rig.agents` dictionary.
 ## Usage
 
 ```bash
-uv run python -m pyrig.examples.simple.demo
+cd examples
+uv run python -m simple.demo
 ```
 
 ## Device Access

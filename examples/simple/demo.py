@@ -5,7 +5,8 @@ without creating custom Rig or NodeService subclasses. All devices
 are accessed through the generic `agents` dictionary.
 
 Usage:
-    python -m pyrig.examples.simple.demo [config_file]
+    cd examples
+    python -m simple.demo [config_file]
 """
 
 import asyncio

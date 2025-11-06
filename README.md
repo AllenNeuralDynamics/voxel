@@ -115,8 +115,9 @@ class ImagingRig(Rig):
 **Imaging:** Custom rig with typed clients (cameras, lasers)
 
 ```bash
-uv run python -m pyrig.examples.simple.demo
-uv run python -m pyrig.examples.imaging.demo
+cd examples
+uv run python -m simple.demo
+uv run python -m imaging.demo
 ```
 
 ## License

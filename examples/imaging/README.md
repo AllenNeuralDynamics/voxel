@@ -12,16 +12,19 @@ Example implementation for imaging/microscopy systems with cameras and lasers.
 
 **Local demo:**
 ```bash
-uv run python -m pyrig.examples.imaging.demo
+cd examples
+uv run python -m imaging.demo
 ```
 
 **Distributed:**
 ```bash
+cd examples
+
 # Controller
-uv run python -m pyrig.examples.imaging.demo
+uv run python -m imaging.demo
 
 # Remote nodes
-uv run python -m pyrig.examples.imaging.node node_1 tcp://192.168.1.100:9000
+uv run python -m imaging.node node_1 tcp://192.168.1.100:9000
 ```
 
 ## Configuration
@@ -35,13 +38,13 @@ nodes:
   primary:
     devices:
       laser_488:
-        target: pyrig.examples.imaging.drivers.laser.Laser
+        target: imaging.drivers.laser.Laser
         kwargs: { wavelength: 488 }
   
   camera_node:
     hostname: 192.168.1.50
     devices:
       camera_1:
-        target: pyrig.examples.imaging.drivers.camera.Camera
+        target: imaging.drivers.camera.Camera
         kwargs: { pixel_size_um: "0.5, 0.5" }
 ```

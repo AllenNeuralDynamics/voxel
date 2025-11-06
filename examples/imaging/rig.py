@@ -1,11 +1,11 @@
 import zmq
 import zmq.asyncio
 
+from imaging.drivers.camera import CameraClient
+from imaging.drivers.laser import LaserClient
+from imaging.node import ImagingNodeService
 from pyrig.config import RigConfig
 from pyrig.device import DeviceClient, DeviceType
-from pyrig.examples.imaging.drivers.camera import CameraClient
-from pyrig.examples.imaging.drivers.laser import LaserClient
-from pyrig.examples.imaging.node import ImagingNodeService
 from pyrig.node import ProvisionedDevice
 from pyrig.rig import Rig
 
