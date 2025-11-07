@@ -13,8 +13,6 @@ from zmq.log.handlers import PUBHandler
 from pyrig.config import NodeConfig
 from pyrig.device import Device, DeviceAddressTCP, DeviceService, DeviceType
 
-logger = logging.getLogger(__name__)
-
 
 class ProvisionResponse(BaseModel):
     """Payload: Controller sends configuration to node."""
@@ -49,7 +47,7 @@ def build_devices(cfg: NodeConfig) -> dict[str, Device]:
 class NodeService:
     """Service that manages devices on a node and communicates with the controller."""
 
-    def __init__(self, zctx: zmq.asyncio.Context, node_id: str, start_port: int = 10000):
+    def __init__(self, zctx: zmq.asyncio.Context, node_id: str, ctrl_addr: str, start_port: int = 10000):
         """Initialize NodeService.
 
         Args:
@@ -60,43 +58,21 @@ class NodeService:
         self._zctx = zctx
         self._node_id = node_id
         self._start_port = start_port
-        self._control_socket = self._zctx.socket(zmq.DEALER)
 
-        # Set ZMQ identity to node_id
+        # Connect to controller
+        self._control_socket = self._zctx.socket(zmq.DEALER)
         self._control_socket.setsockopt(zmq.IDENTITY, node_id.encode())
+        self._control_socket.connect(ctrl_addr)
 
         self._device_servers: dict[str, DeviceService] = {}
-        self._log_handler = None
+        self.log = logging.getLogger(f"node.{node_id}")
 
     def _create_service(self, device: Device, conn) -> DeviceService:
         """Hook for custom service types."""
         return DeviceService(device, conn, self._zctx)
 
-    async def run(self, controller_addr: str, log_port: int = 9001):
-        """Connect to controller and handle provisioning.
-
-        Args:
-            controller_addr: Address of controller (e.g., "tcp://192.168.1.100:9000")
-            log_port: Port for log aggregation (default: 9001)
-        """
-        self._control_socket.connect(controller_addr)
-
-        # Set up log publishing to controller
-        # Create PUB socket that connects (not binds) to rig's SUB socket
-        controller_host = controller_addr.split("://")[1].split(":")[0]
-        log_addr = f"tcp://{controller_host}:{log_port}"
-
-        log_socket = self._zctx.socket(zmq.PUB)
-        log_socket.connect(log_addr)  # Connect, don't bind
-
-        self._log_handler = PUBHandler(log_socket)
-        self._log_handler.setLevel(logging.DEBUG)
-        self._log_handler.root_topic = f"node.{self._node_id}"
-
-        # Add to root logger so all loggers in this process publish to rig
-        logging.root.addHandler(self._log_handler)
-
-        logger.info(f"Node {self._node_id} started, publishing logs to {log_addr}")
+    async def run(self):
+        """Connect to controller and handle provisioning."""
 
         # Request config - no payload needed (identity tells controller who we are)
         await self._control_socket.send_multipart([b"", b"provision"])
@@ -133,7 +109,7 @@ class NodeService:
                         )
 
                     except Exception as e:
-                        logger.error(f"Failed to provision {self._node_id}: {e}")
+                        self.log.error(f"Failed to provision {self._node_id}: {e}")
                         raise
 
                 elif action == "shutdown":
@@ -154,66 +130,184 @@ class NodeService:
             try:
                 server.close()
             except Exception as e:
-                logger.error(f"Error closing {device_id}: {e}")
+                self.log.error(f"Error closing {device_id}: {e}")
 
         self._device_servers.clear()
 
-        # Remove log handler
-        if self._log_handler:
-            logging.root.removeHandler(self._log_handler)
-            self._log_handler.close()
+
+async def _run_async(
+    node_id: str,
+    ctrl_host: str,
+    ctrl_port: int,
+    log_port: int,
+    start_port: int,
+    service_cls: type[NodeService],
+    remove_console_handlers: bool = False,
+):
+    """Async implementation of node service runner."""
+    # Setup logging infrastructure
+    zctx = zmq.asyncio.Context()
+    log_ctx = zmq.Context()
+    log_socket = log_ctx.socket(zmq.PUB)
+    log_socket.connect(f"tcp://{ctrl_host}:{log_port}")
+    log_handler = PUBHandler(log_socket)
+    log_handler.setLevel(logging.DEBUG)
+    log_handler.root_topic = f"node.{node_id}"
+
+    if remove_console_handlers:
+        # Remove existing console handlers to avoid duplicate logs
+        for handler in logging.root.handlers[:]:
+            if isinstance(handler, logging.StreamHandler):
+                logging.root.removeHandler(handler)
+
+    # Add to root logger so all loggers in this process publish to rig
+    logging.root.addHandler(log_handler)
+
+    logger = logging.getLogger(f"node.{node_id}")
+
+    await asyncio.sleep(0.1)
+
+    logger.info("starting_node_service", extra={"service_class": service_cls.__name__, "node_id": node_id})
+    logger.info("connecting_to_controller", extra={"host": ctrl_host, "ctrl_port": ctrl_port, "log_port": log_port})
+
+    # Create node service (no logging concerns)
+    node = service_cls(zctx, node_id=node_id, ctrl_addr=f"tcp://{ctrl_host}:{ctrl_port}", start_port=start_port)
+    try:
+        await node.run()
+    except KeyboardInterrupt:
+        logger.info("shutting_down")
+    finally:
+        # Cleanup logging infrastructure
+        if log_handler:
+            logging.root.removeHandler(log_handler)
+            log_handler.close()
 
 
-async def run_node_service(
-    service_cls: type[NodeService] = NodeService,
-    node_id: str | None = None,
-    controller_addr: str | None = None,
+def run_node_service(
+    node_id: str,
+    ctrl_host: str = "localhost",
+    ctrl_port: int = 9000,
     log_port: int = 9001,
     start_port: int = 10000,
+    service_cls: type[NodeService] = NodeService,
+    remove_console_handlers: bool = False,
 ):
-    """Run a node service with the given class.
+    """Run a node service (synchronous entry point).
+
+    This function can be used both programmatically (e.g., from rig.py subprocess)
+    and from the CLI (via main()).
 
     Args:
-        service_cls: NodeService class to instantiate (default: NodeService)
-        node_id: Node identifier (if None, read from sys.argv[1])
-        controller_addr: Controller address (if None, read from sys.argv[2] or use default)
+        node_id: Node identifier (required)
+        ctrl_host: Controller hostname
+        ctrl_port: Controller control port (default: 9000)
         log_port: Port for log aggregation (default: 9001)
-        start_port: Starting port for device allocation
+        start_port: Starting port for device allocation (default: 10000)
+        service_cls: NodeService class to instantiate (default: NodeService)
     """
-    if node_id is None:
-        if len(sys.argv) < 2:
-            print("Usage: python -m pyrig.node <node_id> [controller_addr]")
-            print("Example: python -m pyrig.node camera_1 tcp://localhost:9000")
-            sys.exit(1)
-        node_id = sys.argv[1]
 
-    if controller_addr is None:
-        controller_addr = sys.argv[2] if len(sys.argv) >= 3 else "tcp://localhost:9000"
-
-    logger.info(f"Starting {service_cls.__name__}: {node_id}")
-    logger.info(f"Connecting to controller: {controller_addr}")
-
-    zctx = zmq.asyncio.Context()
-    node = service_cls(zctx, node_id, start_port)
-
-    try:
-        await node.run(controller_addr, log_port)
-    except KeyboardInterrupt:
-        logger.info("Shutting down...")
+    asyncio.run(
+        _run_async(
+            node_id=node_id,
+            ctrl_host=ctrl_host,
+            ctrl_port=ctrl_port,
+            log_port=log_port,
+            start_port=start_port,
+            service_cls=service_cls,
+            remove_console_handlers=remove_console_handlers,
+        )
+    )
 
 
-async def main():
-    """Entry point for base NodeService.
+def main(service_cls: type[NodeService] = NodeService):
+    """Entry point for node services.
+
+    This can be used by any NodeService subclass as its CLI entry point.
 
     Usage:
-        python -m pyrig.node <node_id> [controller_addr]
+        python -m pyrig.node <node_id> [controller_host] [control_port] [log_port] [start_port]
 
     Examples:
         python -m pyrig.node camera_1
-        python -m pyrig.node camera_1 tcp://192.168.1.100:9000
+        python -m pyrig.node camera_1 localhost 9000 9001
+
+    Args:
+        service_cls: NodeService class to instantiate (default: NodeService)
     """
-    await run_node_service()
+    if len(sys.argv) < 2:
+        print("Usage: python -m pyrig.node <node_id> [controller_host] [control_port] [log_port] [start_port]")
+        print("Example: python -m pyrig.node camera_1 localhost 9000 9001")
+        sys.exit(1)
+
+    node_id = sys.argv[1]
+    ctrl_host = sys.argv[2] if len(sys.argv) > 2 else "localhost"
+    ctrl_port = int(sys.argv[3]) if len(sys.argv) > 3 else 9000
+    log_port = int(sys.argv[4]) if len(sys.argv) > 4 else 9001
+    start_port = int(sys.argv[5]) if len(sys.argv) > 5 else 10000
+
+    run_node_service(
+        node_id=node_id,
+        ctrl_host=ctrl_host,
+        ctrl_port=ctrl_port,
+        log_port=log_port,
+        start_port=start_port,
+        service_cls=service_cls,
+    )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
+
+# async def run_node_service(
+#     service_cls: type[NodeService] = NodeService,
+#     node_id: str | None = None,
+#     controller_addr: str | None = None,
+#     log_port: int = 9001,
+#     start_port: int = 10000,
+# ):
+#     """Run a node service with the given class.
+
+#     Args:
+#         service_cls: NodeService class to instantiate (default: NodeService)
+#         node_id: Node identifier (if None, read from sys.argv[1])
+#         controller_addr: Controller address (if None, read from sys.argv[2] or use default)
+#         log_port: Port for log aggregation (default: 9001)
+#         start_port: Starting port for device allocation
+#     """
+#     if node_id is None:
+#         if len(sys.argv) < 2:
+#             print("Usage: python -m pyrig.node <node_id> [controller_addr]")
+#             print("Example: python -m pyrig.node camera_1 tcp://localhost:9000")
+#             sys.exit(1)
+#         node_id = sys.argv[1]
+
+#     if controller_addr is None:
+#         controller_addr = sys.argv[2] if len(sys.argv) >= 3 else "tcp://localhost:9000"
+
+#     logger.info(f"Starting {service_cls.__name__}: {node_id}")
+#     logger.info(f"Connecting to controller: {controller_addr}")
+
+#     zctx = zmq.asyncio.Context()
+#     node = service_cls(zctx, node_id, start_port)
+
+#     try:
+#         await node.run(controller_addr, log_port)
+#     except KeyboardInterrupt:
+#         logger.info("Shutting down...")
+
+
+# async def main():
+#     """Entry point for base NodeService.
+
+#     Usage:
+#         python -m pyrig.node <node_id> [controller_addr]
+
+#     Examples:
+#         python -m pyrig.node camera_1
+#         python -m pyrig.node camera_1 tcp://192.168.1.100:9000
+#     """
+#     await run_node_service()
+
+
+# if __name__ == "__main__":
+#     asyncio.run(main())

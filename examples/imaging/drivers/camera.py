@@ -46,6 +46,8 @@ class Camera(Device):
             raise ValueError("Exposure time must be non-negative")
         if value > 100:
             raise ValueError("Exposure time cannot exceed 100")
+        if value != self._exposure_time:
+            self.log.info("exposure_time updated: %.1f -> %.1f ms", self._exposure_time, value)
         self._exposure_time = value
 
 
@@ -73,10 +75,12 @@ class CameraService(DeviceService[Camera]):
     @describe(label="Start Stream", desc="Start streaming frames to file")
     def start_stream(self, num_frames: int = 10) -> str:
         """Start streaming frames."""
+        self.log.info("Starting stream: %d frames -> %s", num_frames, self._writer.file_path.name)
         self._writer.write(f"Starting stream with {num_frames} frames\n")
         for i in range(num_frames):
             self._writer.write(f"Frame {i + 1}\n")
         self._writer.write("Stream complete\n")
+        self.log.info("Stream complete: %d frames written", num_frames)
         return f"Streamed {num_frames} frames to {self._writer.file_path.name}"
 
 
@@ -89,6 +93,7 @@ class CameraClient(DeviceClient):
 
     async def set_exposure_time(self, value: float) -> None:
         """Set the camera exposure time in milliseconds."""
+        self.log.info("Setting exposure_time to %.1f ms", value)
         await self.set_prop("exposure_time", value)
 
     async def get_pixel_size(self) -> tuple[float, float]:
@@ -101,4 +106,5 @@ class CameraClient(DeviceClient):
 
     async def start_stream(self, num_frames: int = 10) -> str:
         """Start streaming frames (service-level command)."""
+        self.log.info("Requesting camera stream for %d frames", num_frames)
         return await self.call("start_stream", num_frames)

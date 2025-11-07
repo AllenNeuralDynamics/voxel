@@ -27,11 +27,10 @@ from pyrig.device.base import (
 )
 from pyrig.device.conn import DeviceAddress, DeviceAddressTCP
 
-logger = logging.getLogger(__name__)
-
 
 class DeviceService[D: Device]:
     def __init__(self, device: D, conn: DeviceAddress, zctx: zmq.asyncio.Context):
+        self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
         self._device = device
         self._client_conn = conn
         self._conn: DeviceAddress = conn.as_open() if isinstance(conn, DeviceAddressTCP) else conn
@@ -90,6 +89,7 @@ class DeviceService[D: Device]:
             err: dict[str, ErrorMsg] = {}
             for prop_name, prop_value in props.items():
                 try:
+                    self.log.debug("Setting property '%s' to %s", prop_name, prop_value)
                     setattr(self._device, prop_name, prop_value)
                     res[prop_name] = PropertyState(value=prop_value)
                 except Exception as e:
@@ -167,7 +167,7 @@ class DeviceService[D: Device]:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Heartbeat error: {e}")
+                self.log.error(f"Heartbeat error: {e}")
 
     async def __aenter__(self) -> Self:
         """Async context manager entry."""
@@ -191,7 +191,7 @@ class DeviceService[D: Device]:
                 if isinstance(attr, property) and attr.fget is not None:
                     properties[attr_name] = PropertyInfo.from_attr(attr)
             except Exception as e:
-                logger.error(f"Error accessing attribute '{attr_name}': {e}")
+                self.log.error(f"Error accessing attribute '{attr_name}': {e}")
 
         return properties
 

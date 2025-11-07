@@ -32,6 +32,7 @@ def set_tcp_keepalive(socket: zmq.asyncio.Socket):
 
 class DeviceClient:
     def __init__(self, uid: str, zctx: zmq.asyncio.Context, conn: DeviceAddress):
+        self.log = logging.getLogger(f"{uid}.{self.__class__.__name__}")
         self._uid = uid
         self._last_heartbeat_time = 0.0
 

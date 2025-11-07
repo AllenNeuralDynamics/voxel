@@ -3,6 +3,7 @@ import inspect
 from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from functools import wraps
+import logging
 from typing import Any, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field
@@ -60,6 +61,7 @@ class Device:
 
     def __init__(self, uid: str):
         self.uid = uid
+        self.log = logging.getLogger(self.uid)
 
 
 class AttributeInfo(BaseModel):

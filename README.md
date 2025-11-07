@@ -26,8 +26,8 @@ await laser.turn_on()  # IDE autocomplete!
 
 Three layers:
 
-**Device** - Hardware abstraction (talks to SDK/driver)  
-**Service** - Network wrapper (ZeroMQ server)  
+**Device** - Hardware abstraction (talks to SDK/driver)
+**Service** - Network wrapper (ZeroMQ server)
 **Client** - Remote proxy (ZeroMQ client)
 
 ```python
@@ -49,7 +49,7 @@ class CameraService(DeviceService[Camera]):
 class CameraClient(DeviceClient):
     async def capture(self) -> np.ndarray:
         return await self.call("capture")
-    
+
     async def start_stream(self, n_frames: int):
         return await self.call("start_stream", n_frames)
 ```
@@ -67,7 +67,7 @@ nodes:
       camera_1:
         target: myrig.devices.Camera
         kwargs: { serial: "12345" }
-  
+
   remote_node:
     hostname: 192.168.1.50
     devices:
@@ -78,15 +78,15 @@ nodes:
 
 ## Communication
 
-**Commands/Properties:** REQ/REP sockets  
-**State streaming:** PUB/SUB sockets  
-**Connection monitoring:** Heartbeats  
+**Commands/Properties:** REQ/REP sockets
+**State streaming:** PUB/SUB sockets
+**Connection monitoring:** Heartbeats
 **Logging:** PUB/SUB aggregation
 
 Each device service exposes:
 - `REQ` - Execute command
 - `GET` - Read properties
-- `SET` - Write properties  
+- `SET` - Write properties
 - `INT` - Introspection
 
 ## Logging
@@ -103,7 +103,7 @@ rig = Rig(zctx, config)
 await rig.start()
 ```
 
-The Rig automatically receives logs from all nodes and forwards them to Python's logging system under the `pyrig.nodes` logger. You'll see logs like:
+The Rig automatically receives logs from all nodes and forwards them to Python's logging system under the `node.<node_id>` logger. You'll see logs like:
 
 ```
 2025-11-05 20:58:00 - pyrig.rig - INFO - Starting MyRig...
@@ -122,12 +122,12 @@ Users opt-in by configuring Python logging. No logs appear by default (library b
 ```python
 class ImagingRig(Rig):
     NODE_SERVICE_CLASS = ImagingNodeService  # Custom services
-    
+
     def __init__(self, zctx, config):
         super().__init__(zctx, config)
         self.lasers: dict[str, LaserClient] = {}
         self.cameras: dict[str, CameraClient] = {}
-    
+
     def _create_client(self, device_id, prov):
         if prov.device_type == DeviceType.LASER:
             client = LaserClient(...)
@@ -138,7 +138,7 @@ class ImagingRig(Rig):
 
 ## Examples
 
-**Simple:** Base classes, generic access  
+**Simple:** Base classes, generic access
 **Imaging:** Custom rig with typed clients (cameras, lasers)
 
 ```bash

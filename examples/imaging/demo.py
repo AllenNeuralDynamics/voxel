@@ -5,13 +5,15 @@ from pathlib import Path
 
 import zmq
 import zmq.asyncio
-from rich import print
 
 from imaging.rig import ImagingRig
 from pyrig import RigConfig
+from pyrig.utils import configure_logging
 
-# Configure logging to see pyrig logs
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+configure_logging(level=logging.INFO, fmt="%(message)s", datefmt="[%X]")
+
+log = logging.getLogger("imaging.demo")
 
 
 async def main():
@@ -19,13 +21,13 @@ async def main():
 
     if len(sys.argv) < 2:
         default_config_path = Path(__file__).parent / "system.yaml"
-        print(f"[yellow]No config file provided. Using default: {default_config_path}[/yellow]")
+        log.warning("No config file provided. Using default: %s", default_config_path)
         sys.argv.append(str(default_config_path))
 
     config_path = Path(sys.argv[1])
 
     if not config_path.exists():
-        print(f"[red]Config file not found: {config_path}[/red]")
+        log.error("Config file not found: %s", config_path)
         sys.exit(1)
 
     # Load configuration
@@ -40,84 +42,80 @@ async def main():
         await controller.start()
 
         # Example: List all devices
-        print("\n[cyan]Available devices:[/cyan]")
+        log.info("Available devices (%d):", len(controller.devices))
         for device_id, agent in controller.devices.items():
-            print(f"  - {device_id}")
+            log.info("  - %s", device_id)
             interface = await agent.get_interface()
-            print(interface)
+            log.debug("Interface for %s:\n%s", device_id, interface)
 
         # Showcase typed LaserClient API
         if controller.lasers:
-            print("\n[cyan]=== Demonstrating Typed LaserClient API ===[/cyan]")
+            log.info("=== Demonstrating Typed LaserClient API ===")
             laser_id = next(iter(controller.lasers.keys()))
             laser = controller.lasers[laser_id]
 
-            print(f"\n[yellow]Working with laser: {laser_id}[/yellow]")
+            log.info("Working with laser: %s", laser_id)
 
             # Type-safe property access
-            print(f"Initial power setpoint: {await laser.get_power_setpoint()}")
-            print(f"Laser is on: {await laser.get_is_on()}")
+            log.info("Initial power setpoint: %.2f", await laser.get_power_setpoint())
+            log.info("Laser is on: %s", await laser.get_is_on())
 
             # Type-safe command calls with autocomplete
-            print("\nSetting power to 50.0...")
+            log.info("Setting power to 50.0...")
             await laser.set_power_setpoint(50.0)
-            print(f"New power setpoint: {await laser.get_power_setpoint()}")
+            log.info("New power setpoint: %.2f", await laser.get_power_setpoint())
 
-            print("\nTurning laser on...")
+            log.info("Turning laser on...")
             result = await laser.turn_on()
-            print(f"Turn on result: {result}")
-            print(f"Laser is on: {await laser.get_is_on()}")
+            log.info("Turn on result: %s", result)
+            log.info("Laser is on: %s", await laser.get_is_on())
 
-            print("\nUsing combined command set_power_and_on(75.0)...")
+            log.info("Using combined command set_power_and_on(75.0)...")
             msg = await laser.set_power_and_on(75.0)
-            print(f"Result: {msg}")
-            print(f"New power setpoint: {await laser.get_power_setpoint()}")
+            log.info("Result: %s", msg)
+            log.info("New power setpoint: %.2f", await laser.get_power_setpoint())
 
-            print("\nTurning laser off...")
+            log.info("Turning laser off...")
             await laser.turn_off()
-            print(f"Laser is on: {await laser.get_is_on()}")
+            log.info("Laser is on: %s", await laser.get_is_on())
 
-            print("\n[green]✓ All typed LaserClient methods work with full autocomplete![/green]")
+            log.info("✓ All typed LaserClient methods work with full autocomplete!")
 
         # Showcase typed CameraClient API with service-level commands
         if controller.cameras:
-            print("\n[cyan]=== Demonstrating Typed CameraClient API ===[/cyan]")
+            log.info("=== Demonstrating Typed CameraClient API ===")
             camera_id = next(iter(controller.cameras.keys()))
             camera = controller.cameras[camera_id]
 
-            print(f"\n[yellow]Working with camera: {camera_id}[/yellow]")
+            log.info("Working with camera: %s", camera_id)
 
             # Type-safe property access
-            print(f"Pixel size: {await camera.get_pixel_size()} µm")
-            print(f"Initial exposure time: {await camera.get_exposure_time()} ms")
-            print(f"Frame time: {await camera.get_frame_time()} ms")
+            log.info("Pixel size: %s µm", await camera.get_pixel_size())
+            log.info("Initial exposure time: %.2f ms", await camera.get_exposure_time())
+            log.info("Frame time: %.2f ms", await camera.get_frame_time())
 
             # Set exposure
-            print("\nSetting exposure time to 50.0 ms...")
+            log.info("Setting exposure time to 50.0 ms...")
             await camera.set_exposure_time(50.0)
-            print(f"New exposure time: {await camera.get_exposure_time()} ms")
-            print(f"New frame time: {await camera.get_frame_time()} ms")
+            log.info("New exposure time: %.2f ms", await camera.get_exposure_time())
+            log.info("New frame time: %.2f ms", await camera.get_frame_time())
 
             # Service-level command (streaming)
-            print("\nTesting service-level streaming command...")
+            log.info("Testing service-level streaming command...")
             result = await camera.start_stream(num_frames=5)
-            print(f"Stream result: {result}")
+            log.info("Stream result: %s", result)
 
-            print("\n[green]✓ CameraClient with service-level commands working![/green]")
+            log.info("✓ CameraClient with service-level commands working!")
 
-        # Keep running
-        print("\n[cyan]Rig ready! Press Ctrl+C to exit.[/cyan]")
-        try:
-            await asyncio.Event().wait()
-        except KeyboardInterrupt:
-            print("\n[yellow]Shutting down...[/yellow]")
+        # # Keep running
+        # print("\n[cyan]Rig ready! Press Ctrl+C to exit.[/cyan]")
+        # try:
+        #     await asyncio.Event().wait()
+        # except KeyboardInterrupt:
+        #     print("\n[yellow]Shutting down...[/yellow]")
     finally:
         await controller.stop()
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        # Suppress traceback on Ctrl+C (cleanup already handled in main())
-        pass
+    asyncio.run(main())

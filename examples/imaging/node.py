@@ -15,10 +15,9 @@ Examples:
     python -m imaging.node camera_node_1 tcp://192.168.1.100:9000
 """
 
-import asyncio
-
 from imaging.drivers.camera import Camera, CameraService
 from pyrig import Device, NodeService
+from pyrig.node import main
 
 
 class ImagingNodeService(NodeService):
@@ -29,12 +28,5 @@ class ImagingNodeService(NodeService):
         return super()._create_service(device, conn)
 
 
-async def main():
-    """Entry point for an imaging node."""
-    from pyrig.node import run_node_service
-
-    await run_node_service(service_cls=ImagingNodeService)
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    main(ImagingNodeService)
