@@ -22,7 +22,7 @@ from pyrig.device.base import (
     DeviceInterface,
     ErrorMsg,
     PropertyInfo,
-    PropertyState,
+    PropertyModel,
     PropsResponse,
 )
 from pyrig.device.conn import DeviceAddress, DeviceAddressTCP
@@ -71,12 +71,12 @@ class DeviceService[D: Device]:
         props_to_get = props or list(self._interface.properties.keys())
 
         def _get_props_sync() -> PropsResponse:
-            res: dict[str, PropertyState] = {}
+            res: dict[str, PropertyModel] = {}
             err: dict[str, ErrorMsg] = {}
             for prop_name in props_to_get:
                 try:
                     val = getattr(self._device, prop_name)
-                    res[prop_name] = PropertyState(value=val)
+                    res[prop_name] = PropertyModel(value=val)
                 except Exception as e:
                     err[prop_name] = ErrorMsg(msg=str(e))
             return PropsResponse(res=res, err=err)
@@ -85,13 +85,13 @@ class DeviceService[D: Device]:
 
     async def _set_props(self, props: dict[str, Any]) -> PropsResponse:
         def _set_props_sync() -> PropsResponse:
-            res: dict[str, PropertyState] = {}
+            res: dict[str, PropertyModel] = {}
             err: dict[str, ErrorMsg] = {}
             for prop_name, prop_value in props.items():
                 try:
                     self.log.debug("Setting property '%s' to %s", prop_name, prop_value)
                     setattr(self._device, prop_name, prop_value)
-                    res[prop_name] = PropertyState(value=prop_value)
+                    res[prop_name] = PropertyModel(value=prop_value)
                 except Exception as e:
                     err[prop_name] = ErrorMsg(msg=str(e))
             return PropsResponse(res=res, err=err)

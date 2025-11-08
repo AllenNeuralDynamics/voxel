@@ -1,12 +1,14 @@
 import asyncio
 import inspect
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from functools import wraps
-import logging
 from typing import Any, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field
+
+from pyrig.descriptors import PropertyModel
 
 _REQ_CMD_ = b"REQ"
 _GET_CMD_ = b"GET"
@@ -129,14 +131,6 @@ class PropertyInfo(AttributeInfo):
             access="rw" if attr.fset else "ro",
             units=str(getattr(attr.fget, UNITS_ATTR)) if hasattr(attr.fget, UNITS_ATTR) else "",
         )
-
-
-class PropertyState(BaseModel):
-    value: Any
-    min_val: float | None = None
-    max_val: float | None = None
-    step: float | None = None
-    options: list[str] | list[int] | list[float] = []
 
 
 class ParamInfo(BaseModel):
@@ -304,7 +298,7 @@ class CommandResponse[T](BaseModel):
 
 
 class PropsResponse(BaseModel):
-    res: dict[str, PropertyState] = Field(default_factory=dict)
+    res: dict[str, PropertyModel] = Field(default_factory=dict)
     err: dict[str, ErrorMsg] = Field(default_factory=dict)
 
 

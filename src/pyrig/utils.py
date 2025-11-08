@@ -1,11 +1,11 @@
-from collections.abc import Sequence
 import logging
 import socket
+from collections.abc import Sequence
 from typing import Any
 
 
 def configure_logging(
-    level: int = logging.INFO,
+    level=logging.INFO,
     fmt: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     datefmt: str = "[%X]",
     handlers: Sequence[logging.Handler] | None = None,
@@ -35,6 +35,7 @@ def configure_logging(
             RichHandler = None  # type: ignore[assignment]
         if RichHandler is not None:
             resolved_handlers.append(RichHandler(rich_tracebacks=rich_tracebacks, markup=rich_markup))
+            fmt = "%(name)s: %(message)s"
     else:
         resolved_handlers.extend(handlers)
 
