@@ -1,7 +1,7 @@
 import random
 
-
 from pyrig.device import Device, DeviceClient, DeviceType, describe
+from pyrig.props import PropertyModel, deliminated_float, enumerated_string
 
 
 class Laser(Device):
@@ -14,6 +14,7 @@ class Laser(Device):
         super().__init__(uid=uid)
         self._wavelength = wavelength
         self._power_setpoint: float = 0.0
+        self._mode = "cw"
         self._is_on: bool = False
 
     @property
@@ -35,7 +36,8 @@ class Laser(Device):
         # Mock some power variation when on
         return random.uniform(self._power_setpoint - 0.1, self._power_setpoint + 0.1)
 
-    @property
+    @deliminated_float(min_value=0.0, max_value=100.0, step=0.5)
+    @describe(label="Power Setpoint", units="%")
     def power_setpoint(self) -> float:
         """Get the laser power setpoint."""
         return self._power_setpoint
@@ -43,13 +45,20 @@ class Laser(Device):
     @power_setpoint.setter
     def power_setpoint(self, value: float) -> None:
         """Set the laser power setpoint."""
-        if value < 0:
-            raise ValueError("Power setpoint must be non-negative")
-        if value > 100:
-            raise ValueError("Power setpoint cannot exceed 100")
         if value != self._power_setpoint:
             self.log.info("power_setpoint updated: %.1f -> %.1f", self._power_setpoint, value)
         self._power_setpoint = value
+
+    @enumerated_string(options=["cw", "pulsed", "burst"])
+    @describe(label="Emission Mode")
+    def mode(self) -> str:
+        """Current emission mode."""
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        self.log.info("mode updated: %s -> %s", self._mode, value)
+        self._mode = value
 
     def turn_on(self) -> bool:
         """Turn on the laser."""
@@ -105,13 +114,21 @@ class LaserClient(DeviceClient):
 
     async def get_power_setpoint(self) -> float:
         """Get the laser power setpoint."""
-        return await self.get_prop("power_setpoint")
+        return await self.get_prop_value("power_setpoint")
 
     async def set_power_setpoint(self, value: float) -> None:
         """Set the laser power setpoint."""
         self.log.info("Setting power_setpoint to %.1f", value)
         await self.set_prop("power_setpoint", value)
 
-    async def get_is_on(self) -> bool:
+    async def get_is_on(self) -> PropertyModel[bool]:
         """Check if laser is on."""
-        return await self.get_prop("is_on")
+        return await self.get_prop_value("is_on")
+
+    async def get_mode(self) -> PropertyModel[str]:
+        """Get emission mode."""
+        return await self.get_prop("mode")
+
+    async def set_mode(self, value: str) -> None:
+        """Set emission mode."""
+        await self.set_prop("mode", value)

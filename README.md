@@ -136,6 +136,34 @@ class ImagingRig(Rig):
         # ...
 ```
 
+## Property Helpers
+
+Many hardware knobs expose constrained values (bounded ranges, enumerated modes). PyRig ships specialized property descriptors under `pyrig.props` so those constraints stay declarative and travel with the data:
+
+- `@deliminated_float` / `@deliminated_int`: clamp values to `min/max/step` and report those bounds to clients.
+- `@enumerated_string` / `@enumerated_int`: restrict values to a predefined list and expose the options in RPC responses.
+
+Descriptors return `PropertyModel` objects, so `DeviceService` and `DeviceClient` automatically serialize both the value and its metadata. UI layers can render sliders or dropdowns without guessing constraints.
+
+```python
+from pyrig.props import deliminated_float, enumerated_string
+
+class Laser(Device):
+    @deliminated_float(min_value=0.0, max_value=100.0, step=0.5)
+    def power_setpoint(self) -> float:
+        return self._power
+
+    @power_setpoint.setter
+    def power_setpoint(self, value: float) -> None:
+        self._power = value
+
+    @enumerated_string(options=["cw", "pulsed", "burst"])
+    def mode(self) -> str:
+        return self._mode
+```
+
+On the client side, call `await client.get_prop("power_setpoint")` to receive the full `PropertyModel` (value + bounds), or `await client.get_prop_value("mode")` for just the primitive.
+
 ## Examples
 
 **Simple:** Base classes, generic access

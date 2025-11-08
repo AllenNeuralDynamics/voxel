@@ -48,7 +48,7 @@ class DeliminatedFloat(float):
     def __str__(self) -> str:
         return f"{super().__str__()} (min={self.min_value}, max={self.max_value}, step={self.step})"
 
-    def to_model(self) -> PropertyModel[float]:
+    def to_property_model(self) -> PropertyModel[float]:
         return PropertyModel(value=float(self), min_val=self.min_value, max_val=self.max_value, step=self.step)
 
 
@@ -86,7 +86,7 @@ class DeliminatedInt(int):
     def __str__(self) -> str:
         return f"{super().__str__()} (min={self.min_value}, max={self.max_value}, step={self.step})"
 
-    def to_model(self, *, readonly: bool = False) -> PropertyModel[int]:
+    def to_prop_model(self) -> PropertyModel[int]:
         return PropertyModel(value=int(self), min_val=self.min_value, max_val=self.max_value, step=self.step)
 
 

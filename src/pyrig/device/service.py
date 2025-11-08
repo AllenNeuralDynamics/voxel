@@ -76,7 +76,7 @@ class DeviceService[D: Device]:
             for prop_name in props_to_get:
                 try:
                     val = getattr(self._device, prop_name)
-                    res[prop_name] = PropertyModel(value=val)
+                    res[prop_name] = PropertyModel.from_value(val)
                 except Exception as e:
                     err[prop_name] = ErrorMsg(msg=str(e))
             return PropsResponse(res=res, err=err)
@@ -91,7 +91,7 @@ class DeviceService[D: Device]:
                 try:
                     self.log.debug("Setting property '%s' to %s", prop_name, prop_value)
                     setattr(self._device, prop_name, prop_value)
-                    res[prop_name] = PropertyModel(value=prop_value)
+                    res[prop_name] = PropertyModel.from_value(prop_value)
                 except Exception as e:
                     err[prop_name] = ErrorMsg(msg=str(e))
             return PropsResponse(res=res, err=err)

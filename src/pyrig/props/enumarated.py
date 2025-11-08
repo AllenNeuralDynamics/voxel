@@ -28,7 +28,7 @@ class EnumeratedString(str):
     def __repr__(self) -> str:
         return f"{super().__repr__()} (options={self.options})"
 
-    def to_model(self) -> PropertyModel[str]:
+    def to_property_model(self) -> PropertyModel[str]:
         return PropertyModel(value=str(self), options=list(self.options))
 
     def __del__(self) -> None:
@@ -53,7 +53,7 @@ class EnumeratedInt(int):
     def __repr__(self) -> str:
         return f"{super().__repr__()} (options={self.options})"
 
-    def to_model(self) -> PropertyModel[int]:
+    def to_property_model(self) -> PropertyModel[int]:
         return PropertyModel(value=int(self), options=list(self.options))
 
     def __del__(self) -> None:

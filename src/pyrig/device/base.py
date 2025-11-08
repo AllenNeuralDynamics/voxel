@@ -8,7 +8,7 @@ from typing import Any, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field
 
-from pyrig.descriptors import PropertyModel
+from pyrig.props import PropertyModel
 
 _REQ_CMD_ = b"REQ"
 _GET_CMD_ = b"GET"

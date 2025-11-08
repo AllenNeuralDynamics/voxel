@@ -18,6 +18,7 @@ from pyrig.device.base import (
     PropsResponse,
 )
 from pyrig.device.conn import DeviceAddress
+from pyrig.props import PropertyModel
 
 logger = logging.getLogger(__name__)
 
@@ -109,12 +110,17 @@ class DeviceClient:
         req = AttributeRequest(node=self.uid, attr=command, args=list(args), kwargs=kwargs)
         return await self.request(req)
 
-    async def get_prop(self, prop_name: str) -> Any:
+    async def get_prop_value(self, prop_name: str) -> Any:
         """Get a single property value, raising on error."""
+        prop = await self.get_prop(prop_name)
+        return prop.value
+
+    async def get_prop(self, prop_name: str) -> PropertyModel:
+        """Get a single property model, raising on error."""
         props = await self.get_props(prop_name)
         if prop_name in props.err:
             raise RuntimeError(f"Failed to get {prop_name}: {props.err[prop_name].msg}")
-        return props.res[prop_name].value
+        return props.res[prop_name]
 
     async def set_prop(self, prop_name: str, value: Any) -> None:
         """Set a single property value, raising on error."""

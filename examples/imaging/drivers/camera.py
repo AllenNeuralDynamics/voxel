@@ -1,6 +1,8 @@
 from pathlib import Path
-from pyrig.device import Device, DeviceClient, DeviceService, DeviceType, describe, DeviceAddress
+
 import zmq.asyncio
+
+from pyrig.device import Device, DeviceAddress, DeviceClient, DeviceService, DeviceType, describe
 
 
 def parse_tuple_str(str: str) -> tuple[float, float]:
@@ -89,7 +91,7 @@ class CameraClient(DeviceClient):
 
     async def get_exposure_time(self) -> float:
         """Get the camera exposure time in milliseconds."""
-        return await self.get_prop("exposure_time")
+        return await self.get_prop_value("exposure_time")
 
     async def set_exposure_time(self, value: float) -> None:
         """Set the camera exposure time in milliseconds."""
@@ -98,11 +100,11 @@ class CameraClient(DeviceClient):
 
     async def get_pixel_size(self) -> tuple[float, float]:
         """Get the pixel size in micrometers."""
-        return await self.get_prop("pixel_size")
+        return await self.get_prop_value("pixel_size")
 
     async def get_frame_time(self) -> float:
         """Get the frame time in milliseconds."""
-        return await self.get_prop("frame_time")
+        return await self.get_prop_value("frame_time")
 
     async def start_stream(self, num_frames: int = 10) -> str:
         """Start streaming frames (service-level command)."""
