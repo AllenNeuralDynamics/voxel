@@ -2,6 +2,8 @@
 
 Distributed device control framework for experimental rigs.
 
+>  🚧 **Heads up:** PyRig is under active development. Expect rapid changes and occasional breaking updates while the core APIs settle.  🚧
+
 Type-safe remote control of hardware devices across networked nodes with ZeroMQ.
 
 ## Quick Start
