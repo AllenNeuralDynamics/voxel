@@ -8,7 +8,11 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "msgpack-numpy>=0.4.8",
+    "numpy>=2.3.4",
     "ome-zarr-writer",
+    "opencv-python-headless>=4.11.0.86",
+    "egrabber"
 ]
 
 [project.scripts]
@@ -20,3 +24,4 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 ome-zarr-writer = { git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" }
+egrabber = { path = ".wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }

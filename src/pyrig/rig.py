@@ -9,8 +9,7 @@ import zmq.asyncio
 
 from pyrig.config import RigConfig
 from pyrig.device import DeviceClient
-from pyrig.node import NodeService, ProvisionComplete, ProvisionedDevice, ProvisionResponse
-
+from pyrig.node import DeviceProvision, NodeService, ProvisionComplete, ProvisionResponse
 
 # Architecture:
 # - Controller starts ROUTER socket on control_port (single port for all nodes)
@@ -22,26 +21,6 @@ from pyrig.node import NodeService, ProvisionComplete, ProvisionedDevice, Provis
 # - Nodes create devices and allocate ports automatically
 # - Nodes respond with device addresses via "provision_complete" action
 # - Controller creates DeviceClients and waits for heartbeats
-
-
-# def _run_node_service(node_id: str, controller_addr: str, start_port: int, service_cls: type[NodeService]):
-#     """Run NodeService in a subprocess.
-
-#     This function is the target for subprocess.Process.
-
-#     Args:
-#         node_id: Unique identifier for this node
-#         controller_addr: Address of controller ROUTER socket
-#     """
-#     import asyncio
-
-#     import zmq.asyncio
-
-#     async def _run():
-#         zctx = zmq.asyncio.Context()
-#         node = service_cls(zctx, node_id, start_port)
-#         await node.run(controller_addr)
-#     asyncio.run(_run())
 
 
 def _run_node_service(node_id: str, ctrl_port: int, log_port: int, start_port: int, service_cls: type[NodeService]):
@@ -79,7 +58,7 @@ class Rig:
         self._control_socket = self.zctx.socket(zmq.ROUTER)
         self._control_socket.bind(f"tcp://*:{self.config.metadata.control_port}")
 
-        self.provisions: dict[str, ProvisionedDevice] = {}
+        self.provisions: dict[str, DeviceProvision] = {}
         self.devices: dict[str, DeviceClient] = {}
         self._local_nodes: dict[str, Process] = {}
 
@@ -104,7 +83,7 @@ class Rig:
 
         self.log.info(f"{self.config.metadata.name} ready with {len(self.devices)} devices")
 
-    def _create_client(self, device_id: str, prov: ProvisionedDevice) -> DeviceClient:
+    def _create_client(self, device_id: str, prov: DeviceProvision) -> DeviceClient:
         """Create a single client. Override for custom client types."""
         return DeviceClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
 
@@ -137,7 +116,7 @@ class Rig:
 
         return processes
 
-    async def _provision_nodes(self, timeout: float = 30.0) -> dict[str, ProvisionedDevice]:
+    async def _provision_nodes(self, timeout: float = 30.0) -> dict[str, DeviceProvision]:
         """Provision all nodes (local and remote).
 
         Arguments:
@@ -149,7 +128,7 @@ class Rig:
         Raises:
             RuntimeError: If provisioning fails or times out
         """
-        all_devices: dict[str, ProvisionedDevice] = {}
+        all_devices: dict[str, DeviceProvision] = {}
         expected_nodes = set(self.config.nodes.keys())
         provisioned_nodes: set[str] = set()
 

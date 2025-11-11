@@ -3,8 +3,8 @@ import zmq.asyncio
 from imaging.drivers.camera import CameraClient
 from imaging.drivers.laser import LaserClient
 from imaging.node import ImagingNodeService
-from pyrig import Rig, RigConfig, DeviceClient, DeviceType
-from pyrig.node import ProvisionedDevice
+from pyrig import DeviceClient, DeviceType, Rig, RigConfig
+from pyrig.node import DeviceProvision
 
 
 class ImagingRig(Rig):
@@ -15,7 +15,7 @@ class ImagingRig(Rig):
         self.lasers: dict[str, LaserClient] = {}
         self.cameras: dict[str, CameraClient] = {}
 
-    def _create_client(self, device_id: str, prov: ProvisionedDevice) -> DeviceClient:
+    def _create_client(self, device_id: str, prov: DeviceProvision) -> DeviceClient:
         """Create a single client. Override for custom client types."""
         match prov.device_type:
             case DeviceType.LASER:

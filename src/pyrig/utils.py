@@ -1,6 +1,8 @@
 import logging
 import socket
 from collections.abc import Sequence
+from functools import wraps
+from threading import Lock
 from typing import Any
 
 
@@ -58,3 +60,23 @@ def get_local_ip() -> str:
         return ip
     except Exception:
         return "127.0.0.1"
+
+
+def thread_safe_singleton(func):
+    """A decorator that makes a function a thread-safe singleton.
+    The decorated function will only be executed once, and its result
+    will be cached and returned for all subsequent calls.
+    """
+    lock = Lock()
+    instance = None
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        nonlocal instance
+        if instance is None:
+            with lock:
+                if instance is None:
+                    instance = func(*args, **kwargs)
+        return instance
+
+    return wrapper

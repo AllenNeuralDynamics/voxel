@@ -1,0 +1,32 @@
+from pyrig.device.client import DeviceClient
+
+# from spim_rig.camera.base import TriggerMode, TriggerPolarity
+from spim_rig.camera.preview import PreviewCrop, PreviewIntensity
+
+
+class CameraClient(DeviceClient):
+    """Client for SpimCamera devices with typed methods."""
+
+    async def start_preview(self, channel_name: str) -> str:
+        """Start camera preview mode.
+
+        Args:
+            channel_name: Channel identifier for this camera
+
+        Returns:
+            Preview address to connect to (e.g., "tcp://camera-host:6000")
+        """
+        result = await self.call("start_preview", channel_name)
+        return result
+
+    async def stop_preview(self) -> None:
+        """Stop camera preview mode."""
+        await self.call("stop_preview")
+
+    async def update_preview_crop(self, crop: PreviewCrop) -> None:
+        """Update preview crop settings."""
+        await self.call("update_preview_crop", crop)
+
+    async def update_preview_intensity(self, intensity: PreviewIntensity) -> None:
+        """Update preview intensity range."""
+        await self.call("update_preview_intensity", intensity)

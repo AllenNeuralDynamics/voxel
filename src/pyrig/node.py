@@ -20,7 +20,7 @@ class ProvisionResponse(BaseModel):
     config: NodeConfig
 
 
-class ProvisionedDevice(BaseModel):
+class DeviceProvision(BaseModel):
     """Bundle of device connection and type information."""
 
     conn: DeviceAddressTCP
@@ -30,7 +30,7 @@ class ProvisionedDevice(BaseModel):
 class ProvisionComplete(BaseModel):
     """Payload: Node reports successful provisioning with device addresses."""
 
-    devices: dict[str, ProvisionedDevice]
+    devices: dict[str, DeviceProvision]
 
 
 def build_devices(cfg: NodeConfig) -> dict[str, Device]:
@@ -90,12 +90,12 @@ class NodeService:
 
                     try:
                         devices: dict[str, Device] = build_devices(node_cfg)
-                        device_provs: dict[str, ProvisionedDevice] = {}
+                        device_provs: dict[str, DeviceProvision] = {}
                         pc = self._start_port
                         for device_id, device in devices.items():
                             conn = DeviceAddressTCP(host=node_cfg.hostname, rpc=pc, pub=pc + 1)
                             self._device_servers[device_id] = self._create_service(device, conn)
-                            device_provs[device_id] = ProvisionedDevice(conn=conn, device_type=device.__DEVICE_TYPE__)
+                            device_provs[device_id] = DeviceProvision(conn=conn, device_type=device.__DEVICE_TYPE__)
                             pc += 2
 
                         # Report completion

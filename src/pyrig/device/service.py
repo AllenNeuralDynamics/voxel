@@ -3,6 +3,7 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
 from typing import Any, Self
 
 import zmq
@@ -26,6 +27,20 @@ from pyrig.device.base import (
     PropsResponse,
 )
 from pyrig.device.conn import DeviceAddress, DeviceAddressTCP
+
+
+def _coerce_property_value(device: Device, prop_name: str, value: Any) -> Any:
+    prop_descriptor = getattr(type(device), prop_name, None)
+    if isinstance(prop_descriptor, property) and prop_descriptor.fget is not None:
+        return_type = prop_descriptor.fget.__annotations__.get("return")
+        if return_type is not None and isinstance(return_type, type) and issubclass(return_type, Enum):
+            if isinstance(value, str):
+                try:
+                    return return_type[value]
+                except KeyError:
+                    valid = [e.name for e in return_type]
+                    raise ValueError(f"Invalid {return_type.__name__} value '{value}'. Valid: {valid}") from None
+    return value
 
 
 class DeviceService[D: Device]:
@@ -90,8 +105,9 @@ class DeviceService[D: Device]:
             for prop_name, prop_value in props.items():
                 try:
                     self.log.debug("Setting property '%s' to %s", prop_name, prop_value)
-                    setattr(self._device, prop_name, prop_value)
-                    res[prop_name] = PropertyModel.from_value(prop_value)
+                    coerced_value = _coerce_property_value(self._device, prop_name, prop_value)
+                    setattr(self._device, prop_name, coerced_value)
+                    res[prop_name] = PropertyModel.from_value(coerced_value)
                 except Exception as e:
                     err[prop_name] = ErrorMsg(msg=str(e))
             return PropsResponse(res=res, err=err)

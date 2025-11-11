@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import NamedTuple
 
 from pydantic import BaseModel, Field, model_validator
 
 
+class Rectangle[N: int | float](NamedTuple):
+    x: N
+    y: N
+    w: N
+    h: N
+
+
+class ROI(Rectangle[int]):
+    pass
+
+
 class ROIError(ValueError): ...
-
-
-class ROIShapeError(ROIError): ...
-
-
-class ROIBoundsError(ROIError): ...
-
-
-class ROIGridError(ROIError): ...
-
-
-class ROIPlacementError(ROIError): ...
 
 
 class ROIAlignmentPolicy(StrEnum):
@@ -34,10 +34,10 @@ class ROIAlignmentPolicy(StrEnum):
 
 
 class ROIConstraints(BaseModel):
-    grid_x: int = Field(..., description="Grid alignment in X")
-    grid_y: int = Field(..., description="Grid alignment in Y")
-    min_x: int = Field(..., description="Minimum ROI width in pixels")
-    min_y: int = Field(..., description="Minimum ROI height in pixels")
+    grid_x: int = Field(..., gt=0, description="Grid alignment in X")
+    grid_y: int = Field(..., gt=0, description="Grid alignment in Y")
+    min_x: int = Field(..., gt=0, description="Minimum ROI width in pixels")
+    min_y: int = Field(..., gt=0, description="Minimum ROI height in pixels")
     max_w: int = Field(..., description="Maximum ROI width in pixels")
     max_h: int = Field(..., description="Maximum ROI height in pixels")
 
@@ -45,48 +45,31 @@ class ROIConstraints(BaseModel):
 
     @model_validator(mode="after")
     def validate_constraints(self) -> ROIConstraints:
-        if self.grid_x <= 0 or self.grid_y <= 0:
-            raise ROIError("Grid must be >= 1.")
-        if self.min_x <= 0 or self.min_y <= 0:
-            raise ROIError("Minimum sizes must be > 0.")
         if self.min_x > self.max_w or self.min_y > self.max_h:
             raise ROIError("Min size exceeds max/sensor size.")
         return self
 
 
-class Rectangle(BaseModel):
-    x: int = Field(..., description="X coordinate")
-    y: int = Field(..., description="Y coordinate")
-    w: int = Field(..., description="Width")
-    h: int = Field(..., description="Height")
-
-    model_config = {"frozen": True}
-
-
-class ROI(Rectangle):
-    pass
-
-
 def assert_positive_size(r: ROI) -> None:
     if r.w <= 0 or r.h <= 0:
-        raise ROIShapeError("ROI width/height must be > 0.")
+        raise ROIError("ROI width/height must be > 0.")
 
 
 def assert_within_bounds(r: ROI, w: int, h: int) -> None:
     if r.x < 0 or r.y < 0 or r.x + r.w > w or r.y + r.h > h:
-        raise ROIBoundsError("ROI is out of bounds.")
+        raise ROIError("ROI is out of bounds.")
 
 
 def assert_min_size(r: ROI, min_w: int, min_h: int) -> None:
     if r.w < min_w or r.h < min_h:
         err = f"ROI smaller than minimum ({min_w}x{min_h})."
-        raise ROIBoundsError(err)
+        raise ROIError(err)
 
 
 def assert_on_grid(r: ROI, gx: int, gy: int) -> None:
     if (r.x % gx) or (r.w % gx) or (r.y % gy) or (r.h % gy):
         err = f"ROI not aligned to grid ({gx},{gy})."
-        raise ROIGridError(err)
+        raise ROIError(err)
 
 
 def validate_strict(r: ROI, caps: ROIConstraints) -> None:
@@ -133,5 +116,5 @@ def coerce_roi(r: ROI, caps: ROIConstraints, policy: ROIAlignmentPolicy) -> ROI:
     try:
         validate_strict(eff, caps)
     except ROIError as e:
-        raise ROIPlacementError("ROI cannot be placed with given constraints") from e
+        raise ROIError("ROI cannot be placed with given constraints") from e
     return eff

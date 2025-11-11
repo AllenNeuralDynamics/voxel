@@ -2,7 +2,7 @@
 
 Distributed device control framework for experimental rigs.
 
->  🚧 **Heads up:** PyRig is under active development. Expect rapid changes and occasional breaking updates while the core APIs settle.  🚧
+> 🚧 **Heads up:** PyRig is under active development. Expect rapid changes and occasional breaking updates while the core APIs settle.  🚧
 
 Type-safe remote control of hardware devices across networked nodes with ZeroMQ.
 
@@ -86,6 +86,7 @@ nodes:
 **Logging:** PUB/SUB aggregation
 
 Each device service exposes:
+
 - `REQ` - Execute command
 - `GET` - Read properties
 - `SET` - Write properties
@@ -96,6 +97,7 @@ Each device service exposes:
 PyRig uses Python's stdlib logging with ZeroMQ log aggregation.
 
 **Enable logging:**
+
 ```python
 import logging
 logging.basicConfig(level=logging.INFO)  # See all pyrig and node logs
@@ -107,7 +109,7 @@ await rig.start()
 
 The Rig automatically receives logs from all nodes and forwards them to Python's logging system under the `node.<node_id>` logger. You'll see logs like:
 
-```
+```txt
 2025-11-05 20:58:00 - pyrig.rig - INFO - Starting MyRig...
 2025-11-05 20:58:00 - pyrig.nodes - INFO - [node.primary.INFO] Node primary started
 2025-11-05 20:58:02 - pyrig.rig - INFO - MyRig ready with 4 devices
