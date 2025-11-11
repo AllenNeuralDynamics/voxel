@@ -158,6 +158,8 @@ class CommandInfo(AttributeInfo):
         # 2. Get the parameters of the function
         kwargs: dict[str, ParamInfo] = {}
         for param_name, param in inspect.signature(func).parameters.items():
+            if param_name == "self":
+                continue
             dtype = cls._parse_type_annotation(param.annotation)
 
             # Determine parameter kind
@@ -194,9 +196,9 @@ class CommandParamsError(Exception):
 
 
 class Command[R]:
-    def __init__(self, func: Callable[..., R]):
+    def __init__(self, func: Callable[..., R], info: CommandInfo | None = None):
         self._func = func
-        self._info = CommandInfo.from_func(self._func)
+        self._info = info or CommandInfo.from_func(self._func)
         self._param_model = self._create_param_model(func)
         self._is_async = asyncio.iscoroutinefunction(func)
 

@@ -253,7 +253,7 @@ class Rig:
                     message = parts[1].decode("utf-8", errors="replace")
                     message = message.rstrip("\r\n")
 
-                    # Topic format: "node.{node_id}.{LEVEL}[.<subtopic>...]"
+                    # Topic format: "<logger_name>.{LEVEL}"
                     tokens = topic.split(".")
                     level_name = tokens[-1].upper() if tokens else "INFO"
                     level = getattr(logging, level_name, logging.INFO)
