@@ -5,6 +5,7 @@ import zmq.asyncio
 
 from pyrig import DeviceClient, DeviceType, Rig, RigConfig
 from pyrig.node import DeviceProvision
+from spim_rig.camera.base import TriggerMode, TriggerPolarity
 from spim_rig.camera.client import CameraClient
 from spim_rig.camera.preview import PreviewFrame
 from spim_rig.node import SpimNodeService
@@ -34,18 +35,33 @@ class SpimRig(Rig):
             case _:
                 return super()._create_client(device_id, prov)
 
-    async def start_preview(self):
+    async def start_preview(
+        self,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ):
         """Start preview mode on all cameras.
 
         Cameras bind their own preview ports and return addresses.
         Rig connects to each camera's preview address.
         Channel names default to camera UIDs.
+
+        Args:
+            trigger_mode: Trigger mode for all cameras (default: TriggerMode.ON)
+            trigger_polarity: Trigger polarity for all cameras (default: TriggerPolarity.RISING_EDGE)
         """
         self.log.info(f"Starting preview on {len(self.cameras)} cameras...")
 
         # Start all cameras in parallel, collect addresses
         results = await asyncio.gather(
-            *[camera.start_preview(channel_name=camera_id) for camera_id, camera in self.cameras.items()],
+            *[
+                camera.start_preview(
+                    channel_name=camera_id,
+                    trigger_mode=trigger_mode,
+                    trigger_polarity=trigger_polarity,
+                )
+                for camera_id, camera in self.cameras.items()
+            ],
             return_exceptions=True,
         )
 

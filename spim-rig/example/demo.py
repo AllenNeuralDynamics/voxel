@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import zmq.asyncio
+from rich import print
 from spim_rig.rig import SpimRig
 
 from pyrig import RigConfig
@@ -64,6 +65,9 @@ async def main():
 
         # Demo: Start preview
         if rig.cameras:
+            for uid, camera in rig.cameras.items():
+                interface = await camera.get_interface()
+                print(interface)
             log.info("\n=== Starting Preview ===")
             await rig.start_preview()
 

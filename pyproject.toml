@@ -17,6 +17,11 @@ examples = [
     "rich>=14.2.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+]
+
 [project.scripts]
 pyrig = "pyrig:main"
 

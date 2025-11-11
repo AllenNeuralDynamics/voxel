@@ -6,7 +6,7 @@ from enum import StrEnum
 from functools import wraps
 from typing import Any, Literal, Self, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, create_model
 
 from pyrig.props import PropertyModel
 
@@ -146,27 +146,6 @@ class ParamInfo(BaseModel):
             return [t.strip() for t in self.dtype.split(" | ")]
         return [self.dtype]
 
-    def validate_value(self, value: Any) -> str | None:
-        """Validate if a value matches this parameter's type requirements."""
-        str_type_map: dict[str, type | None | Any] = {
-            "int": int,
-            "float": float,
-            "str": str,
-            "bool": bool,
-            "list": list,
-            "dict": dict,
-            "tuple": tuple,
-            "any": Any,
-            "none": None,
-        }
-
-        for type_name in self.types:
-            t = str_type_map.get(type_name)
-            if t is Any or (t is None and type_name == "none") or (t is not None and isinstance(value, t)):
-                return None
-
-        return f"Expected {self.dtype}, got {type(value).__name__}"
-
 
 class CommandInfo(AttributeInfo):
     params: dict[str, ParamInfo] = Field(default_factory=dict)
@@ -218,6 +197,7 @@ class Command[R]:
     def __init__(self, func: Callable[..., R]):
         self._func = func
         self._info = CommandInfo.from_func(self._func)
+        self._param_model = self._create_param_model(func)
         self._is_async = asyncio.iscoroutinefunction(func)
 
     def __call__(self, *args, **kwargs) -> R:
@@ -236,36 +216,59 @@ class Command[R]:
         """Convert command to dictionary for JSON serialization."""
         return self.info.model_dump(mode="json")
 
+    def _create_param_model(self, func: Callable) -> type[BaseModel]:
+        """Generate Pydantic model from function signature for validation."""
+        sig = inspect.signature(func)
+        fields = {}
+
+        for param_name, param in sig.parameters.items():
+            # Skip *args and **kwargs - they can't be validated by Pydantic models
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+
+            if param.annotation == inspect.Parameter.empty:
+                # No annotation, use Any
+                annotation = Any
+            else:
+                annotation = param.annotation
+
+            # Determine default value
+            if param.default == inspect.Parameter.empty:
+                default = ...  # Required field in Pydantic
+            else:
+                default = param.default
+
+            fields[param_name] = (annotation, default)
+
+        return create_model(f"{func.__name__}_params", **fields)
+
     def validate_params(self, *args, **kwargs) -> tuple[Sequence, Mapping]:
-        """Validate provided parameters against this command's signature.
+        """Validate provided parameters using Pydantic model.
 
         Returns:
             tuple containing arguments and keyword arguments.
         Raises:
             CommandParamsError: If validation fails.
         """
-        validation_errors = []
-        bound_args = None
+        # If positional args are provided, we need to bind them first
+        if args:
+            try:
+                sig = inspect.signature(self._func)
+                bound_args = sig.bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                kwargs = dict(bound_args.arguments)
+                args = ()
+            except TypeError as e:
+                raise CommandParamsError(self, [f"Parameter binding error: {e}"])
 
+        # Use Pydantic for validation - it handles all type coercion automatically!
         try:
-            sig = inspect.signature(self._func)
-            bound_args = sig.bind(*args, **kwargs)
-            bound_args.apply_defaults()
-
-            # Validate only regular parameters (not *args/**kwargs)
-            for param_name, value in bound_args.arguments.items():
-                if param_name in self.info.params and self.info.params[param_name].kind == "regular":
-                    error_msg = self.info.params[param_name].validate_value(value)
-                    if error_msg is not None:
-                        validation_errors.append(f"{param_name}: {error_msg}")
-
-        except TypeError as e:
-            validation_errors.append(f"Parameter binding error: {e}")
-
-        if validation_errors:
-            raise CommandParamsError(self, validation_errors)
-        args, kwargs = (bound_args.args, bound_args.kwargs) if bound_args else ([], {})
-        return args, kwargs
+            validated = self._param_model(**kwargs)
+            return (), validated.model_dump()
+        except ValidationError as e:
+            # Convert Pydantic errors to CommandParamsError
+            errors = [f"{err['loc'][0]}: {err['msg']}" for err in e.errors()]
+            raise CommandParamsError(self, errors)
 
 
 class AttributeRequest(BaseModel):
@@ -429,22 +432,8 @@ if __name__ == "__main__":
     print("Command as JSON:")
     print(json.dumps(add_cmd.to_dict(), indent=2))
 
-    # Test direct validation methods
-    print("\n=== Testing Direct Validation Methods ===")
-
-    # Test ParamInfo.validate()
-    int_param = ParamInfo(dtype="int", required=True)
-    union_param = ParamInfo(dtype="str | int", required=False, default="default")
-
-    print("Testing ParamInfo.validate():")
-    print(f"int_param.validate(42): {int_param.validate_value(42)}")
-    print(f"int_param.validate('not_int'): {int_param.validate_value('not_int')}")
-    print(f"union_param.validate(42): {union_param.validate_value(42)}")
-    print(f"union_param.validate('hello'): {union_param.validate_value('hello')}")
-    print(f"union_param.validate(3.14): {union_param.validate_value(3.14)}")
-
-    # Test Command.validate_params()
-    print("\nTesting Command.validate_params():")
+    # Test Command.validate_params() with Pydantic validation
+    print("\n=== Testing Command Validation (Pydantic-based) ===")
 
     try:
         add_cmd.validate_params(10, 20)

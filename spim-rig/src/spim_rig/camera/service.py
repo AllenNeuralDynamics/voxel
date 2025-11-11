@@ -5,7 +5,7 @@ import zmq.asyncio
 
 # from ome_zarr_writer import Backend as WriterBackend
 from pyrig import DeviceAddress, DeviceAddressTCP, DeviceService, describe
-from spim_rig.camera.base import SpimCamera  # , TriggerMode, TriggerPolarity
+from spim_rig.camera.base import SpimCamera, TriggerMode, TriggerPolarity  # , TriggerMode, TriggerPolarity
 from spim_rig.camera.preview import PreviewCrop, PreviewFrame, PreviewGenerator, PreviewIntensity
 
 
@@ -60,13 +60,20 @@ class CameraService(DeviceService[SpimCamera]):
         self._previewer.intensity = intensity
 
     @describe(label="Start Preview", desc="Start live preview mode")
-    async def start_preview(self, channel_name: str) -> str:
+    async def start_preview(
+        self,
+        channel_name: str,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> str:
         """Start preview mode - live view before acquisition.
 
         Camera runs continuously in free-running mode, frames published via PUB socket.
 
         Args:
             channel_name: Channel identifier for preview topic and metadata
+            trigger_mode: Trigger mode for preview (default: ON)
+            trigger_polarity: Trigger polarity for preview (default: RISING_EDGE)
 
         Returns:
             Preview address to connect to (e.g., "tcp://192.168.1.10:6000")
@@ -89,9 +96,9 @@ class CameraService(DeviceService[SpimCamera]):
 
         preview_addr = f"tcp://{host}:{preview_port}"
 
-        # Prepare camera for preview (use defaults for now)
+        # Prepare camera for preview with trigger settings
         def _prepare_and_start():
-            self.device.prepare()
+            self.device.prepare(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
             self.device.start(frame_count=None)
 
         await self._exec(_prepare_and_start)
