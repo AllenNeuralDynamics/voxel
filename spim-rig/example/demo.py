@@ -65,9 +65,6 @@ async def main():
 
         # Demo: Start preview
         if rig.cameras:
-            for uid, camera in rig.cameras.items():
-                interface = await camera.get_interface()
-                print(interface)
             log.info("\n=== Starting Preview ===")
             await rig.start_preview()
 
@@ -77,11 +74,11 @@ async def main():
             async for channel, frame in rig.receive_frames():
                 log.info(
                     "Frame %d from %s: %dx%d, fmt=%s",
-                    frame.metadata.frame_idx,
+                    frame.info.frame_idx,
                     channel,
-                    frame.metadata.preview_width,
-                    frame.metadata.preview_height,
-                    frame.metadata.fmt,
+                    frame.info.preview_width,
+                    frame.info.preview_height,
+                    frame.info.fmt,
                 )
                 frame_count += 1
                 if frame_count >= 50:
@@ -89,6 +86,10 @@ async def main():
 
             log.info("Stopping preview...")
             await rig.stop_preview()
+
+            for _, camera in rig.cameras.items():
+                interface = await camera.get_interface()
+                print(interface)
 
         log.info("\n✓ Demo complete!")
 

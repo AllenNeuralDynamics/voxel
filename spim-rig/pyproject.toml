@@ -12,7 +12,9 @@ dependencies = [
     "numpy>=2.3.4",
     "ome-zarr-writer",
     "opencv-python-headless>=4.11.0.86",
-    "egrabber"
+    "egrabber",
+    "fastapi>=0.121.1",
+    "uvicorn>=0.38.0",
 ]
 
 [project.scripts]

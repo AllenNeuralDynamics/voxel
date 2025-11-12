@@ -45,15 +45,15 @@ class PreviewCrop(SchemaModel):
 
 
 class PreviewIntensity(SchemaModel):
-    black: float = Field(default=0.0, ge=0.0, le=1.0, description="black point of the preview")
-    white: float = Field(default=1.0, ge=0.0, le=1.0, description="white point of the preview")
+    min: float = Field(default=0.0, ge=0.0, le=1.0, description="black point of the preview")
+    max: float = Field(default=1.0, ge=0.0, le=1.0, description="white point of the preview")
 
     @property
     def needs_adjustment(self) -> bool:
-        return self.black != 0.0 or self.white != 1.0
+        return self.min != 0.0 or self.max != 1.0
 
 
-class PreviewMetadata(SchemaModel):
+class PreviewFrameInfo(SchemaModel):
     """Contains the preview configuration settings for a frame including the config used to generate it."""
 
     frame_idx: int = Field(..., ge=0, description="Frame index of the captured image.")
@@ -68,16 +68,16 @@ class PreviewMetadata(SchemaModel):
 
 @dataclass(frozen=True)
 class PreviewFrame:
-    metadata: PreviewMetadata
-    frame: bytes
+    info: PreviewFrameInfo
+    data: bytes
 
     @classmethod
-    def from_array(cls, frame_array: np.ndarray, metadata: PreviewMetadata) -> Self:
+    def from_array(cls, frame_array: np.ndarray, info: PreviewFrameInfo) -> Self:
         """Create a PreviewFrame from a NumPy array and metadata.
         The frame is compressed using the specified compression method in metadata.
         """
-        compressed_data = metadata.fmt(frame_array)
-        return cls(metadata=metadata, frame=compressed_data)
+        compressed_data = info.fmt(frame_array)
+        return cls(info=info, data=compressed_data)
 
     @classmethod
     def from_packed(cls, packed_frame: bytes) -> Self:
@@ -85,17 +85,17 @@ class PreviewFrame:
         Returns a new PreviewFrame instance with the decompressed frame data.
         """
         unpacked = msgpack.unpackb(packed_frame, object_hook=mpack_numpy.decode)
-        metadata = PreviewMetadata(**unpacked["metadata"])
+        info = PreviewFrameInfo(**unpacked["metadata"])
         frame_data: bytes = unpacked["frame"]
 
-        return cls(metadata=metadata, frame=frame_data)
+        return cls(info=info, data=frame_data)
 
     def pack(self) -> bytes:
         """Pack the PreviewFrame into a bytes representation for transmission or storage.
         This includes both the metadata and the compressed frame data.
         """
         packed = msgpack.packb(
-            {"metadata": self.metadata.model_dump(), "frame": self.frame},
+            {"metadata": self.info.model_dump(), "frame": self.data},
             default=mpack_numpy.encode,
         )
         if packed is None:
@@ -211,15 +211,15 @@ class PreviewGenerator:
         # 4) Convert to float32 for intensity scaling.
         preview_float = preview_img.astype(np.float32)
 
-        intensity = self.intensity if adjust else PreviewIntensity(black=0.0, white=1.0)
+        intensity = self.intensity if adjust else PreviewIntensity(min=0.0, max=1.0)
 
         if intensity.needs_adjustment:
             # 5) Determine the max possible value from the raw frame's dtype (e.g. 65535 for uint16).
             # 6) Compute the actual black/white values from percentages.
             # 7) Clamp to [black_val..white_val].
             max_val = np.iinfo(raw_frame.dtype).max
-            black_val = intensity.black * max_val
-            white_val = intensity.white * max_val
+            black_val = intensity.min * max_val
+            white_val = intensity.max * max_val
             preview_float = np.clip(preview_float, black_val, white_val)
 
             # 8) Normalize to [0..1].
@@ -230,7 +230,7 @@ class PreviewGenerator:
         preview_float *= 255.0
         preview_uint8 = preview_float.astype(np.uint8)
 
-        metadata = PreviewMetadata(
+        metadata = PreviewFrameInfo(
             frame_idx=frame_idx,
             preview_width=preview_width,
             preview_height=preview_height,
@@ -243,7 +243,7 @@ class PreviewGenerator:
 
         # 11) Return the final 8-bit preview.
         encode_start = time.perf_counter()
-        preview_frame = PreviewFrame.from_array(frame_array=preview_uint8, metadata=metadata)
+        preview_frame = PreviewFrame.from_array(frame_array=preview_uint8, info=metadata)
         encode_time = time.perf_counter() - encode_start
 
         gen_time = time.perf_counter() - gen_start
