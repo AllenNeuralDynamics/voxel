@@ -8,11 +8,8 @@
 // Main Svelte component
 export { default as Preview } from './preview.svelte';
 
-// Manager/controller implementations
-export { PreviewManager } from './manager.svelte';
-export type { ChannelState } from './renderer';
+// controller implementations
 export { Previewer } from './controller.svelte';
-export type { PreviewChannel as ControllerChannel } from './controller.svelte';
 
 // Colormap enum for channel colorization
 export { ColormapType } from './colormap';

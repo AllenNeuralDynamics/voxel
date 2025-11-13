@@ -1,9 +1,5 @@
 /**
  * Previewer: unified controller handling preview streaming + WebGPU rendering.
- *
- * This class hosts both the networking (PreviewClient) and the GPU pipeline that
- * used to live in the separate manager/renderer split. Existing manager/renderer
- * files are kept for reference, but Previewer stands alone.
  */
 
 import { clampTopLeft, getWebGPUDevice } from '$lib/utils';
@@ -14,178 +10,200 @@ import { SvelteMap } from 'svelte/reactivity';
 
 const TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
 
+interface ChannelUniformState {
+	intensityMin: number;
+	intensityMax: number;
+	applyLUT: boolean;
+}
+
+function isCropEqual(a: PreviewCrop, b: PreviewCrop): boolean {
+	return a.k === b.k && a.x === b.x && a.y === b.y;
+}
+
 interface FrameData {
 	info: PreviewFrameInfo;
 	bitmap: ImageBitmap;
 }
 
-interface ChannelUniformState {
-	intensityMin: number;
-	intensityMax: number;
-	applyLUT: boolean;
-	processed: boolean;
+interface FrameSet {
+	frameIdx: number; // The frame_idx these frames represent
+	crop: PreviewCrop; // The crop these frames have
+	frames: (FrameData | null)[]; // Array indexed by channel idx
+}
+
+export class FramesCollector {
+	readonly #maxChannels: number;
+
+	// Current "complete" frame sets
+	#originalSet: FrameSet | null = null; // Frames with crop {0,0,0}
+	#croppedSet: FrameSet | null = null; // Frames with matching crop
+
+	constructor(
+		maxChannels: number,
+		private readonly deviceRef: () => GPUDevice,
+		private readonly formatRef: () => GPUTextureFormat
+	) {
+		this.#maxChannels = maxChannels;
+	}
+
+	/**
+	 * Collect incoming frame - caller provides channel index
+	 */
+	collectFrame(channelIdx: number, info: PreviewFrameInfo, bitmap: ImageBitmap): void {
+		if (channelIdx < 0 || channelIdx >= this.#maxChannels) {
+			console.warn(`Invalid channel index: ${channelIdx}`);
+			return;
+		}
+
+		const frameData: FrameData = { info, bitmap };
+		const crop = info.crop;
+
+		if (crop.k === 0 && crop.x === 0 && crop.y === 0) {
+			this.#collectOriginal(channelIdx, info.frame_idx, frameData);
+		} else {
+			this.#collectCropped(channelIdx, info.frame_idx, crop, frameData);
+		}
+	}
+
+	/**
+	 * Get frame set for desired crop if it has frames for the specified channels
+	 */
+	getCompleteSet(desiredCrop: PreviewCrop, requiredChannels: number[]): FrameSet | null {
+		// Check cropped set first
+		if (this.#croppedSet && FramesCollector.#isCompleteSet(this.#croppedSet, desiredCrop, requiredChannels)) {
+			return this.#croppedSet;
+		}
+		if (this.#originalSet && FramesCollector.#isCompleteSet(this.#originalSet, desiredCrop, requiredChannels)) {
+			return this.#originalSet;
+		}
+		return null;
+	}
+
+	/**
+	 * Get latest frame infos for all channels (returns array indexed by channel idx)
+	 */
+	getLatestFrameInfos(): (PreviewFrameInfo | null)[] {
+		const frameSet = this.#originalSet || this.#croppedSet;
+		if (!frameSet) {
+			return Array(this.#maxChannels).fill(null);
+		}
+
+		return frameSet.frames.map((frameData) => frameData?.info ?? null);
+	}
+
+	// Private helpers
+
+	#collectOriginal(channelIdx: number, frameIdx: number, frameData: FrameData): void {
+		if (!this.#originalSet || frameIdx > this.#originalSet.frameIdx) {
+			this.#originalSet = {
+				frameIdx,
+				crop: { x: 0, y: 0, k: 0 },
+				frames: Array(this.#maxChannels).fill(null)
+			};
+		}
+
+		if (this.#originalSet.frameIdx === frameIdx) {
+			this.#originalSet.frames[channelIdx] = frameData;
+		}
+	}
+
+	#collectCropped(channelIdx: number, frameIdx: number, crop: PreviewCrop, frameData: FrameData): void {
+		if (!this.#croppedSet || frameIdx > this.#croppedSet.frameIdx || !isCropEqual(this.#croppedSet.crop, crop)) {
+			this.#croppedSet = {
+				frameIdx,
+				crop: { ...crop },
+				frames: Array(this.#maxChannels).fill(null)
+			};
+		}
+
+		if (this.#croppedSet.frameIdx === frameIdx && isCropEqual(this.#croppedSet.crop, crop)) {
+			this.#croppedSet.frames[channelIdx] = frameData;
+		}
+	}
+
+	static #isCompleteSet(frameSet: FrameSet, desiredCrop: PreviewCrop, requiredChannels: number[]): boolean {
+		if (frameSet && isCropEqual(frameSet.crop, desiredCrop)) {
+			if (requiredChannels.every((idx) => frameSet.frames[idx] !== null)) {
+				return true;
+			}
+		}
+		return false;
+	}
 }
 
 class FrameStreamTexture {
-	#width = 0;
-	#height = 0;
-	texture: GPUTexture | undefined;
+	#width = 1;
+	#height = 1;
+	texture: GPUTexture;
 
 	constructor(
-		private readonly device: GPUDevice,
-		private readonly format: GPUTextureFormat = TEXTURE_FORMAT
-	) {}
+		private readonly deviceRef: () => GPUDevice,
+		private readonly formatRef: () => GPUTextureFormat
+	) {
+		// Initialize with 1x1 dummy texture
+		this.texture = this.deviceRef().createTexture({
+			size: { width: 1, height: 1 },
+			format: this.formatRef(),
+			usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+		});
+	}
 
 	update(source: ImageBitmap): boolean {
-		const recreate = !this.texture || source.width !== this.#width || source.height !== this.#height;
-		if (recreate || !this.texture) {
-			if (this.texture) this.texture.destroy();
+		const recreate = source.width !== this.#width || source.height !== this.#height;
+		if (recreate) {
+			this.texture.destroy();
 			this.#width = source.width;
 			this.#height = source.height;
-			this.texture = this.device.createTexture({
+			this.texture = this.deviceRef().createTexture({
 				size: { width: this.#width, height: this.#height },
-				format: this.format,
+				format: this.formatRef(),
 				usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
 			});
 		}
 
-		this.device.queue.copyExternalImageToTexture(
+		this.deviceRef().queue.copyExternalImageToTexture(
 			{ source },
-			{ texture: this.texture! },
+			{ texture: this.texture },
 			{ width: this.#width, height: this.#height }
 		);
 		return recreate;
 	}
 
-	createView(): GPUTextureView | undefined {
-		return this.texture?.createView();
+	createView(): GPUTextureView {
+		return this.texture.createView();
 	}
 
 	cleanup() {
-		if (this.texture) {
-			this.texture.destroy();
-			this.texture = undefined;
-		}
+		this.texture.destroy();
 	}
 }
 
-export class PreviewChannel {
+class PreviewChannel {
 	name: string | undefined = $state<string | undefined>(undefined);
 	visible: boolean = $state<boolean>(false);
 	intensityMin: number = $state<number>(0.0);
 	intensityMax: number = $state<number>(1.0);
 	colormap: ColormapType = $state<ColormapType>(ColormapType.GRAY);
-	originalFrameInfo: PreviewFrameInfo | null = $state<PreviewFrameInfo | null>(null);
-	croppedFrameInfo: PreviewFrameInfo | null = $state<PreviewFrameInfo | null>(null);
-	frameInfo = $derived<PreviewFrameInfo | null>(this.croppedFrameInfo ?? this.originalFrameInfo);
+	latestFrameInfo: PreviewFrameInfo | null = $state<PreviewFrameInfo | null>(null);
 
-	isAssigned = $derived<boolean>(this.name != undefined);
-
-	#frameTexture?: FrameStreamTexture;
-	#lutTexture?: GPUTexture;
-	#originalBitmap: ImageBitmap | null = null;
-	#croppedBitmap: ImageBitmap | null = null;
+	#frameTexture: FrameStreamTexture | null = null;
+	#lutTexture: GPUTexture | null = null;
 
 	constructor(
-		private readonly deviceRef: () => GPUDevice,
-		private readonly formatRef: () => GPUTextureFormat,
-		private readonly dummyTextureRef: () => GPUTexture
-	) {
-		this.reset();
-	}
+		public readonly idx: number,
+		private readonly deviceRef: () => GPUDevice | null,
+		private readonly formatRef: () => GPUTextureFormat
+	) {}
 
-	reset(): void {
-		this.name = undefined;
-		this.visible = false;
-		this.intensityMin = 0.0;
-		this.intensityMax = 1.0;
-		this.setColormap(ColormapType.GRAY);
-		this.frameInfo = null;
-	}
-
-	setColormap(colormap: ColormapType): void {
-		this.colormap = colormap;
+	#ensureGpuResources(): void {
 		const device = this.deviceRef();
-		if (!device || !this.#lutTexture) return;
-		const data = generateLUT(this.colormap, 256, false);
-		device.queue.writeTexture({ texture: this.#lutTexture }, data, { bytesPerRow: 256 * 4 }, [256, 1, 1]);
-	}
+		if (!device) return;
 
-	handleFrame(info: PreviewFrameInfo, bitmap: ImageBitmap, uiCrop: PreviewCrop): void {
-		const fc = info.crop;
-		const uc = uiCrop;
-
-		// console.log(`${this.name} frame ${info.frame_idx} recieved:`, info.crop);
-
-		if (fc.k === 0 && fc.x === 0 && fc.y === 0) {
-			this.originalFrameInfo = info;
-			this.#originalBitmap = bitmap;
-			console.debug(`${this.name} original info updated at idx: ${info.frame_idx}`, info.crop);
-		} else if (fc.k === uc.k && fc.x === uc.x && fc.y === uc.y) {
-			this.croppedFrameInfo = info;
-			this.#croppedBitmap = bitmap;
-		} else {
-			this.croppedFrameInfo = null;
-			this.#croppedBitmap = null;
-		}
-	}
-
-	updateTexture(forceOriginal: boolean): { bestFrame: FrameData | null; recreated: boolean; usesProcessed: boolean } {
-		const oBitmap = this.#originalBitmap;
-		const cBitmap = this.#croppedBitmap;
-
-		let bestFrame: FrameData | null = null;
-		let usesProcessed: boolean = false;
-		if (!forceOriginal && cBitmap && this.croppedFrameInfo) {
-			bestFrame = { info: this.croppedFrameInfo, bitmap: cBitmap };
-			usesProcessed = true;
-		} else if (oBitmap && this.originalFrameInfo) {
-			bestFrame = { info: this.originalFrameInfo, bitmap: oBitmap };
-		}
-
-		this.#ensureFrameTexture();
-
-		const recreated: boolean = bestFrame ? (this.#frameTexture?.update(bestFrame.bitmap) ?? false) : false;
-		// const usesProcessed = !forceOriginal && Boolean(cBitmap && bestFrame && bestFrame.bitmap === cBitmap);
-		return { bestFrame: bestFrame, recreated: recreated, usesProcessed: usesProcessed };
-	}
-
-	get textureView(): GPUTextureView {
-		this.#ensureFrameTexture();
-		return this.#frameTexture?.createView() ?? this.#dummyView ?? null;
-	}
-
-	get lutView(): GPUTextureView {
-		this.#ensureLutTexture();
-		return this.#lutTexture?.createView() ?? this.#dummyView ?? null;
-	}
-
-	clearCroppedFrame(): void {
-		// this.#croppedBitmap = null;
-		// this.croppedFrameInfo = null;
-		return;
-	}
-
-	disposeGpuResources(): void {
-		this.#frameTexture?.cleanup();
-		this.#frameTexture = undefined;
-		this.#lutTexture?.destroy();
-		this.#lutTexture = undefined;
-		this.#originalBitmap = null;
-		this.originalFrameInfo = null;
-		this.#croppedBitmap = null;
-		this.croppedFrameInfo = null;
-	}
-
-	#ensureFrameTexture() {
 		if (!this.#frameTexture) {
-			this.#frameTexture = new FrameStreamTexture(this.deviceRef(), this.formatRef());
+			this.#frameTexture = new FrameStreamTexture(this.deviceRef as () => GPUDevice, this.formatRef);
 		}
-	}
-
-	#ensureLutTexture() {
 		if (!this.#lutTexture) {
-			this.#lutTexture = this.deviceRef().createTexture({
+			this.#lutTexture = device.createTexture({
 				size: [256, 1, 1],
 				format: TEXTURE_FORMAT,
 				usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
@@ -193,8 +211,43 @@ export class PreviewChannel {
 		}
 	}
 
-	get #dummyView(): GPUTextureView {
-		return this.dummyTextureRef()?.createView() ?? null;
+	updateTexture(bitmap: ImageBitmap): boolean {
+		this.#ensureGpuResources();
+		return this.#frameTexture?.update(bitmap) ?? false;
+	}
+
+	get textureView(): GPUTextureView | null {
+		this.#ensureGpuResources();
+		return this.#frameTexture?.createView() ?? null;
+	}
+
+	get lutView(): GPUTextureView | null {
+		this.#ensureGpuResources();
+		return this.#lutTexture?.createView() ?? null;
+	}
+
+	setColormap(colormap: ColormapType): void {
+		this.colormap = colormap;
+		this.#ensureGpuResources();
+		const device = this.deviceRef();
+		if (!device || !this.#lutTexture) return;
+		const data = generateLUT(colormap, 256, false);
+		device.queue.writeTexture({ texture: this.#lutTexture }, data, { bytesPerRow: 256 * 4 }, [256, 1, 1]);
+	}
+
+	reset(): void {
+		this.name = undefined;
+		this.visible = false;
+		this.intensityMin = 0.0;
+		this.intensityMax = 1.0;
+		this.colormap = ColormapType.GRAY;
+	}
+
+	disposeGpuResources(): void {
+		this.#frameTexture?.cleanup();
+		this.#lutTexture?.destroy();
+		this.#frameTexture = null;
+		this.#lutTexture = null;
 	}
 }
 
@@ -206,11 +259,12 @@ export class Previewer {
 	public connectionState = $state<boolean>(false);
 	public statusMessage = $state<string>('');
 	public isPanZoomActive = $state<boolean>(false);
-	public crop: PreviewCrop = $state<PreviewCrop>({ x: 0, y: 0, k: 0 });
+	public crop = $state<PreviewCrop>({ x: 0, y: 0, k: 0 });
 
 	public displayMode = 0;
 
 	channels: PreviewChannel[] = [];
+	#framesCollector!: FramesCollector;
 
 	#canvas!: HTMLCanvasElement;
 	#client: PreviewClient;
@@ -235,18 +289,18 @@ export class Previewer {
 	#isRendering = false;
 	#rendererInitialized = false;
 
-	// #panZoomActive = false;
-
 	constructor(wsUrl: string) {
+		// Initialize channels immediately (GPU resources created lazily)
 		this.channels = Array.from(
 			{ length: this.MAX_CHANNELS },
-			() =>
+			(_, idx) =>
 				new PreviewChannel(
-					() => this.#gpuDevice,
-					() => this.#format,
-					() => this.#dummyTexture
+					idx,
+					() => this.#gpuDevice ?? null,
+					() => this.#format
 				)
 		);
+
 		this.#client = new PreviewClient(wsUrl, {
 			onPreviewStatus: (channels, isPreviewing) => this.#handlePreviewStatus(channels, isPreviewing),
 			onFrame: (channel, metadata, bitmap) => this.#handleFrame(channel, metadata, bitmap),
@@ -260,9 +314,18 @@ export class Previewer {
 		this.statusMessage = 'Connecting...';
 
 		try {
-			await this.#client.connect();
 			await this.#initRenderResources(canvas);
 
+			// Initialize frame collector after GPU device is ready
+			this.#framesCollector = new FramesCollector(
+				this.MAX_CHANNELS,
+				() => this.#gpuDevice,
+				() => this.#format
+			);
+
+			await this.#client.connect();
+
+			// Initialize GPU resources for channels (already created in constructor)
 			if (this.channels.length > 0) {
 				for (const channel of this.channels) {
 					channel.setColormap(channel.colormap);
@@ -317,13 +380,18 @@ export class Previewer {
 		this.#queueIntensityUpdate(name, { min, max });
 	}
 
-	// #clearAllCroppedFrames(): void {
-	// 	this.channels.forEach((chan) => chan.clearCroppedFrame());
-	// }
-
 	resetCrop(): void {
 		this.crop = { x: 0, y: 0, k: 0 };
 		this.#queueCropUpdate(this.crop);
+	}
+
+	getLatestFrameInfos(): (PreviewFrameInfo | null)[] {
+		// Guard: Return empty array if collector not initialized yet
+		if (!this.#framesCollector) {
+			return Array(this.MAX_CHANNELS).fill(null);
+		}
+
+		return this.#framesCollector.getLatestFrameInfos();
 	}
 
 	// ===================== PRIVATE: Networking Events =====================
@@ -362,17 +430,22 @@ export class Previewer {
 		}
 	};
 
-	#handleFrame = (channelName: string, metadata: PreviewFrameInfo, bitmap: ImageBitmap): void => {
+	#handleFrame = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
 		const channel = this.channels.find((c) => c.name === channelName);
-		if (!channel || !channel.visible || !this.#canvas || !this.#rendererInitialized) return;
+		if (!channel || !this.#canvas || !this.#rendererInitialized) return;
 
-		if (this.#canvas.width !== metadata.preview_width || this.#canvas.height !== metadata.preview_height) {
-			this.#canvas.width = metadata.preview_width;
-			this.#canvas.height = metadata.preview_height;
-			this.#canvas.style.aspectRatio = `${metadata.preview_width} / ${metadata.preview_height}`;
+		// Update canvas size if needed
+		if (this.#canvas.width !== info.preview_width || this.#canvas.height !== info.preview_height) {
+			this.#canvas.width = info.preview_width;
+			this.#canvas.height = info.preview_height;
+			this.#canvas.style.aspectRatio = `${info.preview_width} / ${info.preview_height}`;
 		}
 
-		channel.handleFrame(metadata, bitmap, this.crop);
+		// Update channel's latest frame info (reactive)
+		channel.latestFrameInfo = info;
+
+		// Collect frame in FramesCollector (no processing, just store)
+		this.#framesCollector.collectFrame(channel.idx, info, bitmap);
 	};
 
 	#handleError = (error: Error): void => {
@@ -460,40 +533,52 @@ export class Previewer {
 	#frameLoop = (): void => {
 		if (!this.#isRendering) return;
 
-		const visibleChannels = this.channels.filter((c) => c.visible).slice(0, this.MAX_CHANNELS);
+		// Get indices of visible channels
+		const visibleIndices = this.channels.filter((c) => c.visible).map((c) => c.idx);
+
+		// When pan/zoom active, use original frames; otherwise use crop-matching frames
+		const requestCrop: PreviewCrop = this.isPanZoomActive ? { x: 0, y: 0, k: 0 } : this.crop;
+
+		// Try to get complete frame set for requested crop
+		let frameSet = this.#framesCollector.getCompleteSet(requestCrop, visibleIndices);
+
+		// If not available, fall back to original (unless we're already requesting original)
+		if (!frameSet && !this.isPanZoomActive) {
+			frameSet = this.#framesCollector.getCompleteSet({ x: 0, y: 0, k: 0 }, visibleIndices);
+		}
+
+		// No frames yet - skip this render
+		if (!frameSet) {
+			this.#animationFrameId = requestAnimationFrame(this.#frameLoop);
+			return;
+		}
+
+		// Update GPU textures and build channel states
 		const channelStates: ChannelUniformState[] = [];
-		let globalDelta: PreviewCrop | null = null;
+		for (const channel of this.channels.filter((c) => c.visible)) {
+			const frameData = frameSet.frames[channel.idx];
+			if (!frameData) continue; // Shouldn't happen if frameSet is complete
 
-		for (const channel of visibleChannels) {
-			// const forceOriginal = this.#panZoomActive;
-			const forceOriginal = this.isPanZoomActive;
-			const { bestFrame, recreated, usesProcessed } = channel.updateTexture(forceOriginal);
-
-			if (!bestFrame) continue;
-
+			const recreated = channel.updateTexture(frameData.bitmap);
 			if (recreated) this.#updateBindGroup();
 
-			const frameCrop = bestFrame.info.crop;
-			const delta: PreviewCrop = {
-				x: this.crop.x - frameCrop.x,
-				y: this.crop.y - frameCrop.y,
-				k: this.crop.k - frameCrop.k
-			};
-			if (!globalDelta) globalDelta = delta;
-
-			const intensity: PreviewIntensity = usesProcessed
-				? { min: 0, max: 1 }
-				: { min: channel.intensityMin, max: channel.intensityMax };
-
 			channelStates.push({
-				intensityMin: intensity.min,
-				intensityMax: intensity.max,
-				applyLUT: channel.colormap !== ColormapType.NONE,
-				processed: usesProcessed
+				intensityMin: channel.intensityMin,
+				intensityMax: channel.intensityMax,
+				applyLUT: channel.colormap !== ColormapType.NONE
 			});
 		}
 
-		this.#updateGlobalSettingsBuffer(channelStates, globalDelta ?? { x: 0, y: 0, k: 0 });
+		// Calculate delta: difference between user's desired view and actual frame crop
+		// this.crop = what the user wants to see (their pan/zoom position)
+		// frameSet.crop = what crop the frames actually have
+		const delta: PreviewCrop = {
+			x: this.crop.x - frameSet.crop.x,
+			y: this.crop.y - frameSet.crop.y,
+			k: this.crop.k - frameSet.crop.k
+		};
+
+		this.#updateGlobalSettingsBuffer(channelStates, delta);
 		this.#executeRenderPass();
 		this.#animationFrameId = requestAnimationFrame(this.#frameLoop);
 	};
@@ -521,8 +606,8 @@ export class Previewer {
 		for (let i = 0; i < this.MAX_CHANNELS; i++) {
 			const channel = visible[i];
 			if (channel) {
-				entries.push({ binding: bindingIndex++, resource: channel.textureView });
-				entries.push({ binding: bindingIndex++, resource: channel.lutView });
+				entries.push({ binding: bindingIndex++, resource: channel.textureView ?? dummyView });
+				entries.push({ binding: bindingIndex++, resource: channel.lutView ?? dummyView });
 			} else {
 				entries.push({ binding: bindingIndex++, resource: dummyView });
 				entries.push({ binding: bindingIndex++, resource: dummyView });
@@ -556,7 +641,7 @@ export class Previewer {
 				floatView[baseIndex + 0] = state.intensityMin;
 				floatView[baseIndex + 1] = state.intensityMax;
 				uintView[baseIndex + 2] = state.applyLUT ? 1 : 0;
-				uintView[baseIndex + 3] = state.processed ? 1 : 0;
+				uintView[baseIndex + 3] = 0; // Padding
 			} else {
 				floatView[baseIndex + 0] = 0;
 				floatView[baseIndex + 1] = 0;
@@ -612,21 +697,20 @@ export class Previewer {
 	}
 
 	#getMaxCropK(): number {
-		let maxPreviewWidth = 0;
-		let maxFullWidth = 0;
+		// Get frame info from any available frame in the collector
+		const visibleIndices = this.channels.filter((c) => c.visible).map((c) => c.idx);
+		const frameSet = this.#framesCollector.getCompleteSet({ x: 0, y: 0, k: 0 }, visibleIndices);
 
-		for (const channel of this.channels) {
-			const info = channel.frameInfo;
-			if (info) {
-				if (info.preview_width > maxPreviewWidth) maxPreviewWidth = info.preview_width;
-				if (info.full_width > maxFullWidth) maxFullWidth = info.full_width;
+		if (frameSet) {
+			// Find any frame with info
+			for (const frameData of frameSet.frames) {
+				if (frameData) {
+					const info = frameData.info;
+					const ratio = info.full_width / info.preview_width;
+					const minViewSize = 1 / ratio;
+					return 1 - minViewSize;
+				}
 			}
-		}
-
-		if (maxPreviewWidth > 0 && maxFullWidth > 0) {
-			const ratio = maxFullWidth / maxPreviewWidth;
-			const minViewSize = 1 / ratio;
-			return 1 - minViewSize;
 		}
 
 		return 0.9;
@@ -656,7 +740,6 @@ export class Previewer {
 			panStartY = e.clientY;
 			startCrop = { ...this.crop };
 			this.isPanZoomActive = true;
-			// this.#clearAllCroppedFrames();
 		};
 
 		const pointerMove = (e: PointerEvent) => {
@@ -684,7 +767,6 @@ export class Previewer {
 			e.preventDefault();
 			const rect = canvas.getBoundingClientRect();
 			this.isPanZoomActive = true;
-			// this.#clearAllCroppedFrames();
 
 			const zoomSensitivity = 0.001;
 			const delta = -e.deltaY * zoomSensitivity;

@@ -121,7 +121,7 @@
 					<p class="text-sm text-zinc-500">No channels available</p>
 				{:else}
 					<div class="space-y-3">
-						{#each previewer.channels as channel, i (channel.name || i)}
+						{#each previewer.channels as channel (channel.idx)}
 							<div class="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
 								<!-- Channel Header -->
 								<div class="mb-3 flex items-center justify-between">
@@ -137,7 +137,7 @@
 									<!-- Visibility toggle -->
 
 									<button
-										onclick={() => toggleChannelVisibility(i)}
+										onclick={() => toggleChannelVisibility(channel.idx)}
 										class="rounded px-2 py-1 text-xs transition-colors {channel.visible
 											? 'bg-emerald-600 hover:bg-emerald-700'
 											: 'bg-zinc-700 hover:bg-zinc-600'}"
@@ -148,28 +148,31 @@
 
 								<!-- Channel Info -->
 								<div class="space-y-2 text-xs text-zinc-400">
-									<div class="flex justify-between">
-										<span>Colormap:</span>
-										<span class="text-zinc-300">{channel.colormap}</span>
-									</div>
-									<div class="flex justify-between">
-										<span>Intensity:</span>
-										<span class="text-zinc-300">
-											{(channel.intensityMin * 100).toFixed(0)}% - {(channel.intensityMax * 100).toFixed(0)}%
-										</span>
-									</div>
-									{#if channel.originalFrameInfo}
-										{@const info = channel.originalFrameInfo}
+									{#if channel.name}
 										<div class="flex justify-between">
-											<span>Frame:</span>
-											<span class="text-zinc-300">#{info.frame_idx}</span>
+											<span>Colormap:</span>
+											<span class="text-zinc-300">{channel.colormap}</span>
 										</div>
 										<div class="flex justify-between">
-											<span>Size:</span>
+											<span>Intensity:</span>
 											<span class="text-zinc-300">
-												{info.preview_width}×{info.preview_height}
+												{(channel.intensityMin * 100).toFixed(0)}% - {(channel.intensityMax * 100).toFixed(0)}%
 											</span>
 										</div>
+										{#if channel.latestFrameInfo}
+											<div class="flex justify-between">
+												<span>Frame:</span>
+												<span class="text-zinc-300">#{channel.latestFrameInfo.frame_idx}</span>
+											</div>
+											<div class="flex justify-between">
+												<span>Size:</span>
+												<span class="text-zinc-300">
+													{channel.latestFrameInfo.preview_width}×{channel.latestFrameInfo.preview_height}
+												</span>
+											</div>
+										{/if}
+									{:else}
+										<p class="text-xs text-zinc-500">Unassigned</p>
 									{/if}
 								</div>
 							</div>

@@ -14,7 +14,7 @@ struct ChannelSettings {
     intensity_min: f32,     // Minimum intensity value (black level) 0.0-1.0
     intensity_max: f32,     // Maximum intensity value (white level) 0.0-1.0
     applyLUT: u32,          // 1u to apply LUT, 0u to skip it.
-    alreadyProcessed: u32,  // 1u if backend already applied intensity stretch.
+    pad: u32,               // Padding for alignment
 };
 
 const MAX_CHANNELS: u32 = 4;
@@ -131,10 +131,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         if (i == 0u) {
             channelColor = textureSample(frameTexture0, frameSampler, input.fragUV);
-            remapped = channelColor.r;
-            if (ch.alreadyProcessed == 0u) {
-                remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
-            }
+            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture0);
             } else {
@@ -142,10 +139,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             }
         } else if (i == 1u) {
             channelColor = textureSample(frameTexture1, frameSampler, input.fragUV);
-            remapped = channelColor.r;
-            if (ch.alreadyProcessed == 0u) {
-                remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
-            }
+            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture1);
             } else {
@@ -153,10 +147,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             }
         } else if (i == 2u) {
             channelColor = textureSample(frameTexture2, frameSampler, input.fragUV);
-            remapped = channelColor.r;
-            if (ch.alreadyProcessed == 0u) {
-                remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
-            }
+            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture2);
             } else {
@@ -164,19 +155,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             }
         } else if (i == 3u) {
             channelColor = textureSample(frameTexture3, frameSampler, input.fragUV);
-            remapped = channelColor.r;
-            if (ch.alreadyProcessed == 0u) {
-                remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
-            }
+            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture3);
             } else {
                 channelColor = vec4<f32>(vec3(remapped), channelColor.a);
             }
         }
-        // Composite the channel color over the final color using a simple "over" operator.
-        finalColor = channelColor + finalColor * (1.0 - channelColor.a);
+        // Additive blending (typical for fluorescence microscopy)
+        finalColor = finalColor + channelColor;
     }
 
-    return finalColor;
+    // Clamp to prevent oversaturation
+    return clamp(finalColor, vec4<f32>(0.0), vec4<f32>(1.0));
 }
