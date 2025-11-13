@@ -66,26 +66,46 @@ async def main():
         # Demo: Start preview
         if rig.cameras:
             log.info("\n=== Starting Preview ===")
-            await rig.start_preview()
 
-            # Receive a few frames
-            log.info("Receiving preview frames...")
+            # Track frame count
             frame_count = 0
-            async for channel, frame in rig.receive_frames():
+            frame_event = asyncio.Event()
+
+            # Define callback to receive frames
+            async def frame_callback(channel: str, packed_frame: bytes):
+                nonlocal frame_count
+
+                # Unpack frame to inspect metadata
+                from spim_rig.camera.preview import PreviewFrame
+
+                frame = PreviewFrame.from_packed(packed_frame)
+
                 log.info(
-                    "Frame %d from %s: %dx%d, fmt=%s",
+                    "Frame %d from %s: %dx%d, fmt=%s, packed_size=%d bytes",
                     frame.info.frame_idx,
                     channel,
                     frame.info.preview_width,
                     frame.info.preview_height,
                     frame.info.fmt,
+                    len(packed_frame),
                 )
+
                 frame_count += 1
                 if frame_count >= 50:
-                    break
+                    frame_event.set()
+
+            # Register callback and start preview
+            rig.preview.register_callback(frame_callback)
+            await rig.start_preview()
+
+            log.info("Receiving preview frames...")
+
+            # Wait until we've received enough frames
+            await frame_event.wait()
 
             log.info("Stopping preview...")
             await rig.stop_preview()
+            rig.preview.unregister_callback(frame_callback)
 
             for _, camera in rig.cameras.items():
                 interface = await camera.get_interface()

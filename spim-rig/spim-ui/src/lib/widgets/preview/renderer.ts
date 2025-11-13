@@ -9,10 +9,25 @@
 
 import { getWebGPUDevice } from '$lib/utils';
 import { ColormapType, generateLUT } from './colormap';
-import type { PreviewCrop } from './client';
+import type { PreviewCrop, PreviewIntensity, PreviewFrameInfo } from './client';
 import shaderCode from './shader.wgsl?raw';
 
 const TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
+
+/**
+ * Frame data with metadata and bitmap.
+ */
+interface FrameData {
+	info: PreviewFrameInfo;
+	bitmap: ImageBitmap;
+}
+
+interface ChannelUniformState {
+	intensityMin: number;
+	intensityMax: number;
+	applyLUT: boolean;
+	processed: boolean;
+}
 
 // Channel interface (matches manager's Channel type)
 export interface ChannelState {
@@ -83,6 +98,7 @@ export class PreviewRenderer {
 	#globalSettingsBuffer!: GPUBuffer;
 	#bindGroup!: GPUBindGroup;
 	#textureSampler!: GPUSampler;
+	#dummyTexture!: GPUTexture;
 	#animationFrameId: number | null = null;
 	#isRunning = false;
 
@@ -90,13 +106,30 @@ export class PreviewRenderer {
 	#textures: Map<string, FrameStreamTexture> = new Map();
 	#colormapTextures: Map<string, GPUTexture> = new Map();
 
+	// Per-channel frame caches
+	#originalFrames: Map<string, FrameData | null> = new Map();
+	#croppedFrames: Map<string, FrameData | null> = new Map();
+	#panZoomActive = false;
+
 	// Reference to manager's channels (for reading during render)
 	#channelsRef!: ChannelState[];
 
 	readonly MAX_CHANNELS = 4;
 	canvas!: HTMLCanvasElement;
-	public transform: PreviewCrop = { x: 0.0, y: 0.0, k: 0.0 };
-	public layout: number = 0;
+	public crop: PreviewCrop = { x: 0.0, y: 0.0, k: 0.0 };
+	public displayMode: number = 0;
+
+	setPanZoomActive(active: boolean): void {
+		const changed = this.#panZoomActive !== active;
+		this.#panZoomActive = active;
+		if ((changed || active) && active) {
+			this.#clearCroppedFrames();
+		}
+	}
+
+	get isPanZoomActive(): boolean {
+		return this.#panZoomActive;
+	}
 
 	/**
 	 * Initialize the renderer with GPU resources for each channel.
@@ -121,13 +154,25 @@ export class PreviewRenderer {
 
 		this.#textureSampler = this.#gpuDevice.createSampler({
 			magFilter: 'linear',
-			minFilter: 'linear'
+			minFilter: 'linear',
+			addressModeU: 'clamp-to-edge',
+			addressModeV: 'clamp-to-edge'
 		});
 
 		// Create GPU resources for each channel
 		for (const name of channelNames) {
 			this.#textures.set(name, new FrameStreamTexture(this.#gpuDevice, this.#format));
-			this.#colormapTextures.set(name, this.#createColormapTexture());
+			// this.#colormapTextures.set(name, this.#createColormapTexture());
+			this.#colormapTextures.set(
+				name,
+				this.#gpuDevice.createTexture({
+					size: [256, 1, 1],
+					format: TEXTURE_FORMAT,
+					usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+				})
+			);
+			this.#originalFrames.set(name, null);
+			this.#croppedFrames.set(name, null);
 		}
 
 		// Configure canvas context
@@ -139,10 +184,17 @@ export class PreviewRenderer {
 		});
 
 		// Create global settings buffer
-		const globalSettingsSize = 32;
+		const globalSettingsSize = 32 + this.MAX_CHANNELS * 16; // 96 bytes total
 		this.#globalSettingsBuffer = this.#gpuDevice.createBuffer({
 			size: globalSettingsSize,
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+		});
+
+		// Create dummy texture for unused channel slots
+		this.#dummyTexture = this.#gpuDevice.createTexture({
+			size: { width: 1, height: 1 },
+			format: TEXTURE_FORMAT,
+			usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
 		});
 
 		// Create shader and pipeline
@@ -162,32 +214,55 @@ export class PreviewRenderer {
 		this.#updateBindGroup();
 	}
 
-	/**
-	 * Create a colormap LUT texture.
-	 */
-	#createColormapTexture(): GPUTexture {
-		return this.#gpuDevice.createTexture({
-			size: [256, 1, 1],
-			format: TEXTURE_FORMAT,
-			usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
-		});
+	getFrameInfo(channelName: string): PreviewFrameInfo | null {
+		const cropped = this.#croppedFrames.get(channelName);
+		if (cropped) {
+			return cropped.info;
+		}
+		const original = this.#originalFrames.get(channelName);
+		return original?.info ?? null;
 	}
 
 	/**
-	 * Update a frame texture for a specific channel.
-	 * Called by manager when a new frame arrives.
+	 * Rebuild the bind group (call when channel visibility changes).
+	 * Public method to allow manager to trigger rebuild.
 	 */
-	updateFrame(channelName: string, bitmap: ImageBitmap): void {
-		const texture = this.#textures.get(channelName);
-		if (!texture) {
-			console.error(`No texture for channel: ${channelName}`);
+	rebuildBindGroup(): void {
+		this.#updateBindGroup();
+	}
+
+	/**
+	 * Receive and select frame immediately (called by manager when frame arrives).
+	 * Determines if frame is original or modified and stores appropriately.
+	 */
+	updateFrame(channelName: string, metadata: PreviewFrameInfo, bitmap: ImageBitmap): void {
+		const channel = this.#channelsRef.find((c) => c.name === channelName);
+		if (!channel) {
+			console.warn(`[Renderer] Channel not found: ${channelName}`);
 			return;
 		}
 
-		const textureRecreated = texture.update(bitmap);
-		if (textureRecreated) {
-			// Texture dimensions changed, rebuild bind group
-			this.#updateBindGroup();
+		const frameData: FrameData = { info: metadata, bitmap };
+		const isOriginal = PreviewRenderer.#isOriginalFrame(metadata);
+
+		console.log(`[Renderer] Received ${isOriginal ? 'original' : 'modified'} frame for ${channelName}`, metadata);
+
+		if (isOriginal) {
+			this.#originalFrames.set(channelName, frameData);
+		} else {
+			const uiCrop = this.crop;
+			const uiIntensity: PreviewIntensity = { min: channel.intensityMin, max: channel.intensityMax };
+			const matches =
+				PreviewRenderer.#cropsEqual(metadata.crop, uiCrop, 0.0005) &&
+				PreviewRenderer.#intensitiesMatch(metadata.intensity, uiIntensity, 0.01);
+
+			if (matches) {
+				console.log(`[Renderer] Modified frame MATCHES UI state for ${channelName}`);
+				this.#croppedFrames.set(channelName, frameData);
+			} else if (this.#croppedFrames.get(channelName)) {
+				console.log(`[Renderer] Dropping mismatched modified frame for ${channelName}`);
+				this.#croppedFrames.set(channelName, null);
+			}
 		}
 	}
 
@@ -212,7 +287,9 @@ export class PreviewRenderer {
 	}
 
 	/**
-	 * Build the bind group with all channel textures and LUTs.
+	 * Build the bind group with visible channel textures and LUTs.
+	 * Always creates all bindings (2-9) using dummy textures for unused slots.
+	 * IMPORTANT: Must match the shader's iteration over visible channels only.
 	 */
 	#updateBindGroup(): void {
 		const entries: GPUBindGroupEntry[] = [
@@ -220,21 +297,24 @@ export class PreviewRenderer {
 			{ binding: 1, resource: this.#textureSampler }
 		];
 
-		// Get channel names in order (up to MAX_CHANNELS)
-		const channelNames = this.#channelsRef.slice(0, this.MAX_CHANNELS).map((c) => c.name);
+		// Use VISIBLE channels to match shader iteration
+		const visibleChannels = this.#channelsRef.filter((c) => c.visible).slice(0, this.MAX_CHANNELS);
+		const dummyView = this.#dummyTexture.createView();
 
 		let bindingIndex = 2;
-		for (const name of channelNames) {
-			const texView = this.#textures.get(name)?.createView();
-			if (texView) {
-				entries.push({ binding: bindingIndex, resource: texView });
-			}
+		for (let i = 0; i < this.MAX_CHANNELS; i++) {
+			const channel = visibleChannels[i];
+
+			// Frame texture (binding 2, 4, 6, 8)
+			const frameTexture = channel ? this.#textures.get(channel.name)?.texture : undefined;
+			const frameView = frameTexture?.createView() ?? dummyView;
+			entries.push({ binding: bindingIndex, resource: frameView });
 			bindingIndex++;
 
-			const lutView = this.#colormapTextures.get(name)?.createView();
-			if (lutView) {
-				entries.push({ binding: bindingIndex, resource: lutView });
-			}
+			// Colormap texture (binding 3, 5, 7, 9)
+			const colormapTexture = channel ? this.#colormapTextures.get(channel.name) : undefined;
+			const colormapView = colormapTexture?.createView() ?? dummyView;
+			entries.push({ binding: bindingIndex, resource: colormapView });
 			bindingIndex++;
 		}
 
@@ -246,35 +326,39 @@ export class PreviewRenderer {
 
 	/**
 	 * Update the global settings uniform buffer.
-	 * Reads current state from channelsRef.
+	 * Reads current state from channelsRef and applies per-channel deltas.
 	 */
-	#updateGlobalSettingsBuffer(): void {
+	#updateGlobalSettingsBuffer(channelStates: ChannelUniformState[], globalDelta: PreviewCrop): void {
 		const globalSettingsSize = 32 + this.MAX_CHANNELS * 16;
 		const buffer = new ArrayBuffer(globalSettingsSize);
 		const floatView = new Float32Array(buffer);
 		const uintView = new Uint32Array(buffer);
 
-		// Global transform
-		floatView[0] = this.transform.k;
-		floatView[1] = this.transform.x;
-		floatView[2] = this.transform.y;
+		floatView[0] = globalDelta.x;
+		floatView[1] = globalDelta.y;
+		floatView[2] = globalDelta.k;
 		floatView[3] = 0.0;
 
-		// Layout and number of channels
-		const visibleChannels = this.#channelsRef.filter((c) => c.visible);
-		uintView[4] = this.layout;
-		uintView[5] = visibleChannels.length;
+		const activeChannels = Math.min(channelStates.length, this.MAX_CHANNELS);
+		uintView[4] = this.displayMode;
+		uintView[5] = activeChannels;
 		uintView[6] = 0;
 		uintView[7] = 0;
 
-		// Per-channel settings (read from manager's state)
-		for (let i = 0; i < Math.min(visibleChannels.length, this.MAX_CHANNELS); i++) {
+		for (let i = 0; i < this.MAX_CHANNELS; i++) {
 			const baseIndex = 8 + i * 4;
-			const channel = visibleChannels[i];
-			floatView[baseIndex + 0] = channel.intensityMin;
-			floatView[baseIndex + 1] = channel.intensityMax;
-			floatView[baseIndex + 2] = channel.colormap !== ColormapType.NONE ? 1.0 : 0.0;
-			floatView[baseIndex + 3] = 0.0;
+			const state = channelStates[i];
+			if (state) {
+				floatView[baseIndex + 0] = state.intensityMin;
+				floatView[baseIndex + 1] = state.intensityMax;
+				uintView[baseIndex + 2] = state.applyLUT ? 1 : 0;
+				uintView[baseIndex + 3] = state.processed ? 1 : 0;
+			} else {
+				floatView[baseIndex + 0] = 0;
+				floatView[baseIndex + 1] = 0;
+				uintView[baseIndex + 2] = 0;
+				uintView[baseIndex + 3] = 0;
+			}
 		}
 
 		this.#gpuDevice.queue.writeBuffer(this.#globalSettingsBuffer, 0, buffer);
@@ -306,12 +390,67 @@ export class PreviewRenderer {
 	}
 
 	/**
-	 * Main render loop.
+	 * Main render loop - pick best frame and render.
 	 */
 	private frameLoop = (): void => {
 		if (!this.#isRunning) return;
 
-		this.#updateGlobalSettingsBuffer();
+		const visibleChannels = this.#channelsRef.filter((c) => c.visible).slice(0, this.MAX_CHANNELS);
+		const channelStates: ChannelUniformState[] = [];
+		let globalDelta: PreviewCrop | null = null;
+
+		for (const channel of visibleChannels) {
+			const originalFrame = this.#originalFrames.get(channel.name) ?? null;
+			const croppedFrame = this.#croppedFrames.get(channel.name) ?? null;
+			const forceOriginal = this.#panZoomActive;
+			const uiCrop = this.crop;
+			const uiIntensity: PreviewIntensity = { min: channel.intensityMin, max: channel.intensityMax };
+
+			let bestFrame: FrameData | null = null;
+			if (forceOriginal) {
+				bestFrame = originalFrame;
+			} else {
+				bestFrame = croppedFrame ?? originalFrame;
+			}
+
+			if (!bestFrame) {
+				console.log(`[Renderer] No frame available for channel ${channel.name}`);
+				continue;
+			}
+
+			const isCroppedFrame = Boolean(croppedFrame && bestFrame === croppedFrame);
+			const usesBackendProcessedFrame = !forceOriginal && isCroppedFrame;
+			console.log(`[Renderer] Rendering ${isCroppedFrame ? 'modified' : 'original'} frame for ${channel.name}`);
+
+			const texture = this.#textures.get(channel.name);
+			if (texture) {
+				const recreated = texture.update(bestFrame.bitmap);
+				if (recreated) {
+					this.#updateBindGroup();
+				}
+			}
+
+			const frameCrop = bestFrame.info.crop;
+			const delta: PreviewCrop = {
+				x: uiCrop.x - frameCrop.x,
+				y: uiCrop.y - frameCrop.y,
+				k: uiCrop.k - frameCrop.k
+			};
+			if (!globalDelta) {
+				globalDelta = delta;
+			}
+
+			const intensitySettings: PreviewIntensity = usesBackendProcessedFrame ? { min: 0, max: 1 } : uiIntensity;
+			channelStates.push({
+				intensityMin: intensitySettings.min,
+				intensityMax: intensitySettings.max,
+				applyLUT: channel.colormap !== ColormapType.NONE,
+				processed: usesBackendProcessedFrame
+			});
+		}
+
+		// Update uniforms and render
+		this.#updateGlobalSettingsBuffer(channelStates, globalDelta ?? { x: 0, y: 0, k: 0 });
 		this.#executeRenderPass();
 
 		this.#animationFrameId = requestAnimationFrame(this.frameLoop);
@@ -359,5 +498,37 @@ export class PreviewRenderer {
 		if (this.#globalSettingsBuffer) {
 			this.#globalSettingsBuffer.destroy();
 		}
+
+		this.#originalFrames.clear();
+		this.#croppedFrames.clear();
+	}
+
+	#clearCroppedFrames(): void {
+		for (const key of this.#croppedFrames.keys()) {
+			this.#croppedFrames.set(key, null);
+		}
+	}
+
+	/* Helpers (static) */
+	/**
+	 * Check if frame is original (unmodified) based on metadata.
+	 */
+	static #isOriginalFrame(info: PreviewFrameInfo): boolean {
+		const EPSILON = 0.001;
+		return Math.abs(info.crop.k) < EPSILON && Math.abs(info.crop.x) < EPSILON && Math.abs(info.crop.y) < EPSILON;
+	}
+
+	/**
+	 * Check if two crops are equal within tolerance.
+	 */
+	static #cropsEqual(a: PreviewCrop, b: PreviewCrop, epsilon = 0.001): boolean {
+		return Math.abs(a.x - b.x) < epsilon && Math.abs(a.y - b.y) < epsilon && Math.abs(a.k - b.k) < epsilon;
+	}
+
+	/**
+	 * Check if two intensity ranges match within tolerance.
+	 */
+	static #intensitiesMatch(a: PreviewIntensity, b: PreviewIntensity, epsilon = 0.01): boolean {
+		return Math.abs(a.min - b.min) < epsilon && Math.abs(a.max - b.max) < epsilon;
 	}
 }

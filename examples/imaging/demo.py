@@ -5,11 +5,11 @@ from pathlib import Path
 
 import zmq
 import zmq.asyncio
+from rich import print
 
 from imaging.rig import ImagingRig
 from pyrig import RigConfig
 from pyrig.utils import configure_logging
-
 
 configure_logging(level=logging.INFO, fmt="%(message)s", datefmt="[%X]")
 
@@ -47,6 +47,7 @@ async def main():
             log.info("  - %s", device_id)
             interface = await agent.get_interface()
             log.debug("Interface for %s:\n%s", device_id, interface)
+            print(interface)
 
         # Showcase typed LaserClient API
         if controller.lasers:

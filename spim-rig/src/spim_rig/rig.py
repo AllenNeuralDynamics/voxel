@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import Coroutine
 
 import zmq.asyncio
 
@@ -7,8 +6,8 @@ from pyrig import DeviceClient, DeviceType, Rig, RigConfig
 from pyrig.node import DeviceProvision
 from spim_rig.camera.base import TriggerMode, TriggerPolarity
 from spim_rig.camera.client import CameraClient
-from spim_rig.camera.preview import PreviewFrame
 from spim_rig.node import SpimNodeService
+from spim_rig.preview_hub import RigPreviewHub
 
 
 class SpimRig(Rig):
@@ -20,10 +19,8 @@ class SpimRig(Rig):
         super().__init__(zctx=zctx, config=config)
         self.cameras: dict[str, CameraClient] = {}
 
-        # Single SUB socket for all camera frames
-        self._preview_sub = zctx.socket(zmq.SUB)
-        self._preview_sub.setsockopt(zmq.RCVHWM, 10)
-        self._preview_sub.subscribe(b"preview/")
+        # Preview management (independent of rig internals)
+        self.preview = RigPreviewHub(zctx, name=f"{self.__class__.__name__}.PreviewManager")
 
     def _create_client(self, device_id: str, prov: DeviceProvision) -> DeviceClient:
         """Create a single client. Override for custom client types."""
@@ -39,20 +36,22 @@ class SpimRig(Rig):
         self,
         trigger_mode: TriggerMode = TriggerMode.ON,
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
-    ):
-        """Start preview mode on all cameras.
+    ) -> None:
+        """Start preview mode on all cameras and begin frame streaming.
 
-        Cameras bind their own preview ports and return addresses.
-        Rig connects to each camera's preview address.
-        Channel names default to camera UIDs.
+        Orchestrates camera preview startup and connects preview manager to camera streams.
 
         Args:
             trigger_mode: Trigger mode for all cameras (default: TriggerMode.ON)
             trigger_polarity: Trigger polarity for all cameras (default: TriggerPolarity.RISING_EDGE)
         """
+        if self.preview.is_active:
+            self.log.warning("Preview already running")
+            return
+
         self.log.info(f"Starting preview on {len(self.cameras)} cameras...")
 
-        # Start all cameras in parallel, collect addresses
+        # Start all cameras in parallel, collect preview addresses
         results = await asyncio.gather(
             *[
                 camera.start_preview(
@@ -65,27 +64,30 @@ class SpimRig(Rig):
             return_exceptions=True,
         )
 
+        # Collect successful preview addresses
+        preview_addrs: dict[str, str] = {}
         for camera_id, result in zip(self.cameras.keys(), results):
             if isinstance(result, BaseException):
                 self.log.error(f"Camera {camera_id} failed to start preview: {result}")
             else:
-                preview_addr = result  # Address returned by camera (e.g., "tcp://127.0.0.1:63495")
-                self._preview_sub.connect(preview_addr)
-                self.log.info(f"Camera {camera_id} preview at {preview_addr}")
+                preview_addrs[camera_id] = result  # Address returned by camera (e.g., "tcp://127.0.0.1:63495")
 
-    async def receive_frames(self):
-        """Async generator yielding (channel, frame) tuples."""
-        while True:
-            topic, payload = await self._preview_sub.recv_multipart()
-            channel = topic.decode().split("/")[1]
-            frame = PreviewFrame.from_packed(payload)
-            yield channel, frame
+        # Start preview manager with collected addresses
+        await self.preview.start(preview_addrs)
 
-    async def stop_preview(self):
-        """Stop preview mode on all cameras."""
-        self.log.info("Stopping preview on all cameras...")
+    async def stop_preview(self) -> None:
+        """Stop preview mode on all cameras and cleanup manager."""
+        if not self.preview.is_active:
+            self.log.warning("Preview not running")
+            return
 
-        tasks: list[Coroutine] = [camera.stop_preview() for camera in self.cameras.values()]
+        self.log.info("Stopping preview...")
+
+        # Stop preview manager first
+        await self.preview.stop()
+
+        # Then stop all cameras
+        tasks = [camera.stop_preview() for camera in self.cameras.values()]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        self.log.info("Preview stopped on all cameras")
+        self.log.info("Preview stopped")

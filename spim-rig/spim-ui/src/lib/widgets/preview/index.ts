@@ -8,9 +8,11 @@
 // Main Svelte component
 export { default as Preview } from './preview.svelte';
 
-// Manager class (state container & coordinator)
+// Manager/controller implementations
 export { PreviewManager } from './manager.svelte';
-export type { Channel, ConnectionState } from './manager.svelte';
+export type { ChannelState } from './renderer';
+export { Previewer } from './controller.svelte';
+export type { PreviewChannel as ControllerChannel } from './controller.svelte';
 
 // Colormap enum for channel colorization
 export { ColormapType } from './colormap';

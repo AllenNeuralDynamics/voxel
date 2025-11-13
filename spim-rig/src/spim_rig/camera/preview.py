@@ -83,19 +83,27 @@ class PreviewFrame:
     def from_packed(cls, packed_frame: bytes) -> Self:
         """Unpack a packed PreviewFrame from bytes.
         Returns a new PreviewFrame instance with the decompressed frame data.
+
+        Supports both old ('metadata'/'frame') and new ('info'/'data') field names.
         """
         unpacked = msgpack.unpackb(packed_frame, object_hook=mpack_numpy.decode)
-        info = PreviewFrameInfo(**unpacked["metadata"])
-        frame_data: bytes = unpacked["frame"]
 
+        # Support both old and new field names for backwards compatibility
+        info_dict = unpacked.get("info") or unpacked.get("metadata")
+        frame_data: bytes = unpacked.get("data") or unpacked.get("frame")
+
+        if info_dict is None or frame_data is None:
+            raise ValueError(f"Invalid packed frame format: {unpacked.keys()}")
+
+        info = PreviewFrameInfo(**info_dict)
         return cls(info=info, data=frame_data)
 
     def pack(self) -> bytes:
         """Pack the PreviewFrame into a bytes representation for transmission or storage.
-        This includes both the metadata and the compressed frame data.
+        Uses 'info' and 'data' field names to match the dataclass structure.
         """
         packed = msgpack.packb(
-            {"metadata": self.info.model_dump(), "frame": self.data},
+            {"info": self.info.model_dump(), "data": self.data},
             default=mpack_numpy.encode,
         )
         if packed is None:
@@ -163,20 +171,20 @@ class PreviewGenerator:
         self._idx = idx
         self._current_frame = frame
 
+        def _sink_frame(adjust: bool = False) -> None:
+            preview_frame = self._generate_preview_frame(raw_frame=frame, frame_idx=idx, adjust=adjust)
+            self._sink(preview_frame)
+
         # send full frame to observers
-        self._sink_frame(raw_frame=frame, idx=idx, adjust=False)
+        _sink_frame(adjust=False)
 
         # if display options are set, publish an optimized preview
         if self.crop.needs_adjustment or self.intensity.needs_adjustment:
-            self._sink_frame(raw_frame=frame, idx=idx, adjust=True)
+            _sink_frame(adjust=True)
 
     def shutdown(self) -> None:
         """Shutdown the preview generator and cleanup resources."""
         self._executor.shutdown(wait=True, cancel_futures=True)
-
-    def _sink_frame(self, raw_frame: np.ndarray, idx: int, adjust: bool = False) -> None:
-        preview_frame = self._generate_preview_frame(raw_frame=raw_frame, frame_idx=idx, adjust=adjust)
-        self._sink(preview_frame)
 
     def _generate_preview_frame(self, raw_frame: np.ndarray, frame_idx: int, adjust: bool = False) -> PreviewFrame:
         """Generate a PreviewFrame from the raw frame using the current preview_settings.

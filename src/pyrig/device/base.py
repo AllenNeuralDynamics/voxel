@@ -266,7 +266,9 @@ class Command[R]:
         # Use Pydantic for validation - it handles all type coercion automatically!
         try:
             validated = self._param_model(**kwargs)
-            return (), validated.model_dump()
+            # Return the field values directly (preserving Pydantic model instances)
+            # instead of converting to dict via model_dump()
+            return (), {k: getattr(validated, k) for k in validated.model_fields.keys()}
         except ValidationError as e:
             # Convert Pydantic errors to CommandParamsError
             errors = [f"{err['loc'][0]}: {err['msg']}" for err in e.errors()]

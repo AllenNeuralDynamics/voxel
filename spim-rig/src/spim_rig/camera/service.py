@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from enum import StrEnum
 
 import zmq.asyncio
@@ -142,7 +141,7 @@ class CameraService(DeviceService[SpimCamera]):
                 self._frame_idx += 1
 
                 # Log actual frame rate periodically using stream_info (every 10 frames)
-                if self._frame_idx > 0 and self._frame_idx % 10 == 0:
+                if self._frame_idx > 0 and self._frame_idx % 100 == 0:
                     stream_info = self.device.stream_info
                     if stream_info:
                         self.log.info(

@@ -47,12 +47,13 @@ interface PreviewFrameMessage {
 }
 
 /**
- * Status update message from backend.
+ * Preview status message from backend (sent on connect and when status changes).
+ * Contains all preview-related state.
  */
 interface PreviewStatusMessage {
-	type: 'status';
-	message: string;
-	connected: boolean;
+	type: 'preview_status';
+	channels: string[];
+	is_previewing: boolean;
 }
 
 /**
@@ -69,14 +70,16 @@ type PreviewMessage = PreviewFrameMessage | PreviewStatusMessage | PreviewErrorM
  * Control messages sent from client to server.
  */
 type ControlMessage =
-	| { type: 'start'; channels: string[] }
+	| { type: 'start' }
 	| { type: 'stop' }
-	| { type: 'transform'; transform: { x: number; y: number; k: number } };
+	| { type: 'crop'; crop: PreviewCrop }
+	| { type: 'intensity'; channel: string; intensity: PreviewIntensity };
 
 export interface PreviewClientCallbacks {
-	onFrame: (channel: string, metadata: PreviewFrameInfo, bitmap: ImageBitmap) => void;
-	onStatus?: (connected: boolean, message: string) => void;
+	onPreviewStatus?: (channels: string[], is_previewing: boolean) => void;
+	onFrame: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	onError?: (error: Error) => void;
+	onConnectionChange?: (connected: boolean) => void;
 }
 
 /**
@@ -110,7 +113,7 @@ export class PreviewClient {
 				this.ws.onopen = () => {
 					console.log('Preview WebSocket connected');
 					this.reconnectAttempts = 0;
-					this.callbacks.onStatus?.(true, 'Connected');
+					this.callbacks.onConnectionChange?.(true);
 					resolve();
 				};
 
@@ -132,7 +135,7 @@ export class PreviewClient {
 
 				this.ws.onclose = (event) => {
 					console.log('Preview WebSocket closed', event.code, event.reason);
-					this.callbacks.onStatus?.(false, 'Disconnected');
+					this.callbacks.onConnectionChange?.(false);
 
 					if (this.shouldReconnect) {
 						this.attemptReconnect();
@@ -145,27 +148,67 @@ export class PreviewClient {
 	}
 
 	/**
-	 * Handles incoming WebSocket messages (msgpack binary format).
+	 * Handles incoming WebSocket messages.
+	 *
+	 * Protocol:
+	 * - JSON messages (string): Control messages (channels, status, error)
+	 * - Hybrid binary messages: JSON envelope + newline + msgpack frame
 	 */
-	private async handleMessage(data: ArrayBuffer): Promise<void> {
-		// Unpack msgpack binary message
-		const message: PreviewMessage = unpack(new Uint8Array(data));
+	private async handleMessage(data: string | ArrayBuffer): Promise<void> {
+		// Check if it's a string (JSON) or binary (hybrid)
+		if (typeof data === 'string') {
+			// JSON control message
+			const message = JSON.parse(data) as PreviewMessage;
 
-		switch (message.type) {
-			case 'preview_frame':
-				await this.handleFrameMessage(message);
-				break;
+			switch (message.type) {
+				case 'preview_status':
+					this.callbacks.onPreviewStatus?.(message.channels, message.is_previewing);
+					break;
 
-			case 'status':
-				this.callbacks.onStatus?.(message.connected, message.message);
-				break;
+				case 'error':
+					this.callbacks.onError?.(new Error(message.error));
+					break;
 
-			case 'error':
-				this.callbacks.onError?.(new Error(message.error));
-				break;
+				default:
+					console.warn('Unknown JSON message type:', message);
+			}
+		} else {
+			// Hybrid message: JSON envelope + newline + msgpack frame
+			// Split at first newline
+			const bytes = new Uint8Array(data);
+			const newlineIndex = bytes.indexOf(10); // '\n' = 10
 
-			default:
-				console.warn('Unknown message type:', message);
+			if (newlineIndex === -1) {
+				console.error('[PreviewClient] Invalid hybrid message: no newline separator');
+				return;
+			}
+
+			// Parse JSON envelope
+			const envelopeBytes = bytes.slice(0, newlineIndex);
+			const envelopeText = new TextDecoder().decode(envelopeBytes);
+			const envelope = JSON.parse(envelopeText) as { type: string; channel: string };
+
+			// Unpack msgpack frame
+			const frameBytes = bytes.slice(newlineIndex + 1);
+			const frame = unpack(frameBytes) as {
+				info: PreviewFrameInfo;
+				data: ArrayBuffer;
+			};
+
+			if (!frame.info || !frame.data) {
+				console.error('[PreviewClient] Invalid frame structure:', frame);
+				return;
+			}
+
+			// Reconstruct as PreviewFrameMessage for handleFrameMessage
+			const message: PreviewFrameMessage = {
+				type: 'preview_frame',
+				channel: envelope.channel,
+				metadata: frame.info,
+				data: frame.data
+			};
+
+			await this.handleFrameMessage(message);
 		}
 	}
 
@@ -237,10 +280,11 @@ export class PreviewClient {
 	}
 
 	/**
-	 * Starts preview streaming for specified channels.
+	 * Starts preview streaming.
+	 * Backend determines which channels to stream.
 	 */
-	startPreview(channels: string[]): void {
-		this.send({ type: 'start', channels });
+	startPreview(): void {
+		this.send({ type: 'start' });
 	}
 
 	/**
@@ -251,10 +295,17 @@ export class PreviewClient {
 	}
 
 	/**
-	 * Sends transform update to server (pan/zoom state).
+	 * Sends crop update to server (pan/zoom state).
 	 */
-	updateTransform(transform: { x: number; y: number; k: number }): void {
-		this.send({ type: 'transform', transform });
+	updateCrop(crop: PreviewCrop): void {
+		this.send({ type: 'crop', crop });
+	}
+
+	/**
+	 * Sends intensity update for a specific channel.
+	 */
+	updateIntensity(channel: string, intensity: PreviewIntensity): void {
+		this.send({ type: 'intensity', channel, intensity });
 	}
 
 	/**
