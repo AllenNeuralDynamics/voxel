@@ -30,10 +30,10 @@
 <style>
 	.preview-canvas {
 		filter: blur(0px);
-		transition: filter 0.5s ease-in-out;
+		transition: filter 0.15s ease-in-out;
 	}
 
 	.preview-canvas.panning {
-		filter: blur(3px);
+		filter: blur(5px);
 	}
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Preview, Previewer, ColormapType } from '$lib/widgets/preview';
+	import { Preview, Previewer } from '$lib/widgets/preview';
+	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import { onMount } from 'svelte';
 
 	// Initialize preview controller
@@ -32,20 +33,11 @@
 		}
 	}
 
-	// Helper to get colormap display color
-	function getColormapColor(colormap: ColormapType): string {
-		const colors: Record<ColormapType, string> = {
-			[ColormapType.NONE]: '#ffffff',
-			[ColormapType.GRAY]: '#888888',
-			[ColormapType.RED]: '#ff0000',
-			[ColormapType.GREEN]: '#00ff00',
-			[ColormapType.BLUE]: '#0000ff',
-			[ColormapType.CYAN]: '#00ffff',
-			[ColormapType.MAGENTA]: '#ff00ff',
-			[ColormapType.YELLOW]: '#ffff00',
-			[ColormapType.ORANGE]: '#ff8800'
-		};
-		return colors[colormap] || '#ffffff';
+	function handleColorChange(channelIdx: number, newColor: string) {
+		const channel = previewer.channels[channelIdx];
+		if (channel) {
+			channel.setColor(newColor);
+		}
 	}
 </script>
 
@@ -126,11 +118,11 @@
 								<!-- Channel Header -->
 								<div class="mb-3 flex items-center justify-between">
 									<div class="flex items-center gap-2">
-										<!-- Color indicator -->
-										<div
-											class="h-4 w-4 rounded-full border border-zinc-600"
-											style="background-color: {getColormapColor(channel.colormap)}"
-										></div>
+										<!-- Color Picker -->
+										<ColorPicker
+											bind:color={channel.color}
+											onColorChange={(newColor) => handleColorChange(channel.idx, newColor)}
+										/>
 										<span class="font-medium">{channel.name}</span>
 									</div>
 
@@ -138,7 +130,7 @@
 
 									<button
 										onclick={() => toggleChannelVisibility(channel.idx)}
-										class="rounded px-2 py-1 text-xs transition-colors {channel.visible
+										class="h-4 rounded px-2 text-[0.65rem] transition-colors {channel.visible
 											? 'bg-emerald-600 hover:bg-emerald-700'
 											: 'bg-zinc-700 hover:bg-zinc-600'}"
 									>
@@ -150,27 +142,25 @@
 								<div class="space-y-2 text-xs text-zinc-400">
 									{#if channel.name}
 										<div class="flex justify-between">
-											<span>Colormap:</span>
-											<span class="text-zinc-300">{channel.colormap}</span>
-										</div>
-										<div class="flex justify-between">
 											<span>Intensity:</span>
 											<span class="text-zinc-300">
 												{(channel.intensityMin * 100).toFixed(0)}% - {(channel.intensityMax * 100).toFixed(0)}%
 											</span>
 										</div>
-										{#if channel.latestFrameInfo}
-											<div class="flex justify-between">
-												<span>Frame:</span>
-												<span class="text-zinc-300">#{channel.latestFrameInfo.frame_idx}</span>
-											</div>
-											<div class="flex justify-between">
-												<span>Size:</span>
-												<span class="text-zinc-300">
-													{channel.latestFrameInfo.preview_width}×{channel.latestFrameInfo.preview_height}
-												</span>
-											</div>
-										{/if}
+										<div class="flex justify-between">
+											<span>Frame idx:</span>
+											<span class="text-zinc-300">
+												{channel.latestFrameInfo ? `#${channel.latestFrameInfo.frame_idx}` : '—'}
+											</span>
+										</div>
+										<div class="flex justify-between">
+											<span>Frame size:</span>
+											<span class="text-zinc-300">
+												{channel.latestFrameInfo
+													? `${channel.latestFrameInfo.preview_width}×${channel.latestFrameInfo.preview_height}`
+													: '—'}
+											</span>
+										</div>
 									{:else}
 										<p class="text-xs text-zinc-500">Unassigned</p>
 									{/if}

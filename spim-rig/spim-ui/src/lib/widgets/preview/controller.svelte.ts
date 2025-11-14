@@ -4,7 +4,7 @@
 
 import { clampTopLeft, getWebGPUDevice } from '$lib/utils';
 import { PreviewClient, type PreviewFrameInfo, type PreviewCrop, type PreviewIntensity } from './client';
-import { ColormapType, generateLUT, COLORMAP_COLORS } from './colormap';
+import { ColormapType, generateLUT, COLORMAP_COLORS, colormapToHex } from './colormap';
 // import shaderCode from './shader.wgsl?raw';
 import { generateShaderCode } from './shader';
 import { SvelteMap } from 'svelte/reactivity';
@@ -163,7 +163,7 @@ class PreviewChannel {
 	visible: boolean = $state<boolean>(false);
 	intensityMin: number = $state<number>(0.0);
 	intensityMax: number = $state<number>(1.0);
-	colormap: ColormapType = $state<ColormapType>(ColormapType.GRAY);
+	color: string = $state<string>('#ffffff'); // Hex color string
 	latestFrameInfo: PreviewFrameInfo | null = $state<PreviewFrameInfo | null>(null);
 
 	#frameTexture: FrameStreamTexture | null = null;
@@ -206,13 +206,24 @@ class PreviewChannel {
 		return this.#lutTexture?.createView() ?? null;
 	}
 
-	setColormap(colormap: ColormapType): void {
-		this.colormap = colormap;
+	setColor(hexColor: string): void {
 		this.#ensureGpuResources();
 		const device = this.deviceRef();
 		if (!device || !this.#lutTexture) return;
-		const data = generateLUT(colormap, 256, false);
-		device.queue.writeTexture({ texture: this.#lutTexture }, data, { bytesPerRow: 256 * 4 }, [256, 1, 1]);
+
+		const data = generateLUT(hexColor, 256, false);
+		if (!data) {
+			console.warn(`Invalid hex color: ${hexColor}`);
+			return;
+		}
+
+		this.color = hexColor;
+		device.queue.writeTexture(
+			{ texture: this.#lutTexture },
+			data as Uint8Array<ArrayBuffer>,
+			{ bytesPerRow: 256 * 4 },
+			[256, 1, 1]
+		);
 	}
 
 	reset(): void {
@@ -220,7 +231,7 @@ class PreviewChannel {
 		this.visible = false;
 		this.intensityMin = 0.0;
 		this.intensityMax = 1.0;
-		this.colormap = ColormapType.GRAY;
+		this.color = '#ffffff';
 	}
 
 	disposeGpuResources(): void {
@@ -302,7 +313,7 @@ export class Previewer {
 			// Initialize GPU resources for channels (already created in constructor)
 			if (this.channels.length > 0) {
 				for (const channel of this.channels) {
-					channel.setColormap(channel.colormap);
+					channel.setColor(channel.color);
 				}
 				this.#updateBindGroup();
 			}
@@ -362,7 +373,7 @@ export class Previewer {
 	// ===================== PRIVATE: Networking Events =====================
 
 	#handlePreviewStatus = async (channels: string[], isPreviewing: boolean) => {
-		const defaultColormaps: ColormapType[] = (Object.keys(COLORMAP_COLORS) as ColormapType[]).slice(2);
+		const defaultColormaps: ColormapType[] = Object.keys(COLORMAP_COLORS) as ColormapType[];
 		const assignedNames = channels ? channels.slice(0, this.MAX_CHANNELS) : [];
 
 		if (channels && channels.length > 0) {
@@ -375,7 +386,7 @@ export class Previewer {
 					slot.visible = true;
 					slot.intensityMin = 0.0;
 					slot.intensityMax = 1.0;
-					slot.setColormap(defaultColormaps[i % defaultColormaps.length]);
+					slot.setColor(colormapToHex(defaultColormaps[i % defaultColormaps.length]));
 				} else {
 					slot.disposeGpuResources();
 				}
@@ -503,17 +514,18 @@ export class Previewer {
 		// Get indices of visible channels
 		const visibleIndices = this.channels.filter((c) => c.visible).map((c) => c.idx);
 
-		// When pan/zoom active, use original frames; otherwise use crop-matching frames
-		const requestCrop: PreviewCrop = this.isPanZoomActive ? { x: 0, y: 0, k: 0 } : this.crop;
+		// // When pan/zoom active, use original frames; otherwise use crop-matching frames
+		// const requestCrop: PreviewCrop = this.isPanZoomActive ? { x: 0, y: 0, k: 0 } : this.crop;
 
-		// Try to get latest frames for requested crop
-		let frameSet = this.#framesCollector.getLatestFrames(requestCrop, visibleIndices);
+		// // Try to get latest frames for requested crop
+		// let frameSet = this.#framesCollector.getLatestFrames(requestCrop, visibleIndices);
 
-		// If not available, fall back to original (unless we're already requesting original)
-		if (!frameSet && !this.isPanZoomActive) {
-			frameSet = this.#framesCollector.getLatestFrames({ x: 0, y: 0, k: 0 }, visibleIndices);
-		}
+		// // If not available, fall back to original (unless we're already requesting original)
+		// if (!frameSet && !this.isPanZoomActive) {
+		// 	frameSet = this.#framesCollector.getLatestFrames({ x: 0, y: 0, k: 0 }, visibleIndices);
+		// }
 
+		const frameSet = this.#framesCollector.getLatestFrames(this.crop, visibleIndices);
 		// Render if we have frames available
 		if (frameSet) {
 			// Update GPU textures and build channel states map indexed by actual channel index
@@ -528,7 +540,7 @@ export class Previewer {
 				channelStates.set(channel.idx, {
 					intensityMin: channel.intensityMin,
 					intensityMax: channel.intensityMax,
-					applyLUT: channel.colormap !== ColormapType.NONE,
+					applyLUT: channel.color.toLowerCase() !== '#ffffff',
 					enabled: true
 				});
 			}
