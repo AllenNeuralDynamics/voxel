@@ -19,6 +19,21 @@
 	});
 </script>
 
-<div class="relative h-full w-full">
-	<canvas bind:this={previewCanvas} class="h-full w-full object-contain"></canvas>
+<div class="relative flex h-full w-full items-start justify-center px-8 py-4">
+	<canvas
+		bind:this={previewCanvas}
+		class="preview-canvas h-full w-full object-contain object-top"
+		class:panning={previewer.isPanZoomActive}
+	></canvas>
 </div>
+
+<style>
+	.preview-canvas {
+		filter: blur(0px);
+		transition: filter 0.5s ease-in-out;
+	}
+
+	.preview-canvas.panning {
+		filter: blur(3px);
+	}
+</style>

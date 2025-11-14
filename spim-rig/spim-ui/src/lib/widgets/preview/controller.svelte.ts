@@ -253,7 +253,7 @@ export class Previewer {
 	// Debouncers
 	#cropUpdateTimer: number | null = null;
 	#intensityUpdateTimers = new SvelteMap<string, number>();
-	readonly #DEBOUNCE_DELAY_MS = 500;
+	readonly #DEBOUNCE_DELAY_MS = 100;
 
 	// GPU resources
 	#gpuDevice!: GPUDevice;
@@ -680,7 +680,7 @@ export class Previewer {
 			}
 		}
 
-		return 0.9;
+		return 0.95;
 	}
 
 	#setupPanZoom(canvas: HTMLCanvasElement): () => void {
