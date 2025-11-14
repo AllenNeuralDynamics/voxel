@@ -238,6 +238,9 @@ class PreviewGenerator:
         preview_float *= 255.0
         preview_uint8 = preview_float.astype(np.uint8)
 
+        # Use actual crop values based on whether adjustment was applied
+        actual_crop = self.crop if adjust else PreviewCrop(x=0.0, y=0.0, k=0.0)
+
         metadata = PreviewFrameInfo(
             frame_idx=frame_idx,
             preview_width=preview_width,
@@ -246,7 +249,7 @@ class PreviewGenerator:
             full_height=full_height,
             intensity=intensity,
             fmt=self._fmt,
-            crop=self.crop,
+            crop=actual_crop,
         )
 
         # 11) Return the final 8-bit preview.

@@ -26,7 +26,7 @@ interface FrameData {
 }
 
 interface FrameSet {
-	frameIdx: number; // The frame_idx these frames represent
+	frameIdx?: number; // The frame_idx these frames represent
 	crop: PreviewCrop; // The crop these frames have
 	frames: (FrameData | null)[]; // Array indexed by channel idx
 }
@@ -34,20 +34,17 @@ interface FrameSet {
 export class FramesCollector {
 	readonly #maxChannels: number;
 
-	// Current "complete" frame sets
-	#originalSet: FrameSet | null = null; // Frames with crop {0,0,0}
-	#croppedSet: FrameSet | null = null; // Frames with matching crop
+	#originalFrames: (FrameData | null)[]; // Frames with crop {0,0,0}
+	#croppedFrames: (FrameData | null)[]; // Frames with current crop
 
-	constructor(
-		maxChannels: number,
-		private readonly deviceRef: () => GPUDevice,
-		private readonly formatRef: () => GPUTextureFormat
-	) {
+	constructor(maxChannels: number) {
 		this.#maxChannels = maxChannels;
+		this.#originalFrames = Array(maxChannels).fill(null);
+		this.#croppedFrames = Array(maxChannels).fill(null);
 	}
 
 	/**
-	 * Collect incoming frame - caller provides channel index
+	 * Collect incoming frame - just store the latest for each channel
 	 */
 	collectFrame(channelIdx: number, info: PreviewFrameInfo, bitmap: ImageBitmap): void {
 		if (channelIdx < 0 || channelIdx >= this.#maxChannels) {
@@ -59,75 +56,56 @@ export class FramesCollector {
 		const crop = info.crop;
 
 		if (crop.k === 0 && crop.x === 0 && crop.y === 0) {
-			this.#collectOriginal(channelIdx, info.frame_idx, frameData);
+			// Original frame - always store
+			this.#originalFrames[channelIdx] = frameData;
 		} else {
-			this.#collectCropped(channelIdx, info.frame_idx, crop, frameData);
+			// Cropped frame - check if crop changed
+			if (this.#currentCrop && !isCropEqual(this.#currentCrop, crop)) {
+				// Crop changed - clear all cropped frames and update crop
+				// this.#croppedFrames = Array(this.#maxChannels).fill(null);
+			}
+			this.#croppedFrames[channelIdx] = frameData;
 		}
 	}
 
-	/**
-	 * Get frame set for desired crop if it has frames for the specified channels
-	 */
-	getCompleteSet(desiredCrop: PreviewCrop, requiredChannels: number[]): FrameSet | null {
-		// Check cropped set first
-		if (this.#croppedSet && FramesCollector.#isCompleteSet(this.#croppedSet, desiredCrop, requiredChannels)) {
-			return this.#croppedSet;
-		}
-		if (this.#originalSet && FramesCollector.#isCompleteSet(this.#originalSet, desiredCrop, requiredChannels)) {
-			return this.#originalSet;
-		}
-		return null;
-	}
-
-	/**
-	 * Get latest frame infos for all channels (returns array indexed by channel idx)
-	 */
-	getLatestFrameInfos(): (PreviewFrameInfo | null)[] {
-		const frameSet = this.#originalSet || this.#croppedSet;
-		if (!frameSet) {
-			return Array(this.#maxChannels).fill(null);
-		}
-
-		return frameSet.frames.map((frameData) => frameData?.info ?? null);
-	}
-
-	// Private helpers
-
-	#collectOriginal(channelIdx: number, frameIdx: number, frameData: FrameData): void {
-		if (!this.#originalSet || frameIdx > this.#originalSet.frameIdx) {
-			this.#originalSet = {
-				frameIdx,
-				crop: { x: 0, y: 0, k: 0 },
-				frames: Array(this.#maxChannels).fill(null)
-			};
-		}
-
-		if (this.#originalSet.frameIdx === frameIdx) {
-			this.#originalSet.frames[channelIdx] = frameData;
-		}
-	}
-
-	#collectCropped(channelIdx: number, frameIdx: number, crop: PreviewCrop, frameData: FrameData): void {
-		if (!this.#croppedSet || frameIdx > this.#croppedSet.frameIdx || !isCropEqual(this.#croppedSet.crop, crop)) {
-			this.#croppedSet = {
-				frameIdx,
-				crop: { ...crop },
-				frames: Array(this.#maxChannels).fill(null)
-			};
-		}
-
-		if (this.#croppedSet.frameIdx === frameIdx && isCropEqual(this.#croppedSet.crop, crop)) {
-			this.#croppedSet.frames[channelIdx] = frameData;
-		}
-	}
-
-	static #isCompleteSet(frameSet: FrameSet, desiredCrop: PreviewCrop, requiredChannels: number[]): boolean {
-		if (frameSet && isCropEqual(frameSet.crop, desiredCrop)) {
-			if (requiredChannels.every((idx) => frameSet.frames[idx] !== null)) {
-				return true;
+	get #currentCrop(): PreviewCrop | null {
+		let crop: PreviewCrop | null = null;
+		for (let i = 0; i < this.#croppedFrames.length; i++) {
+			const frame = this.#croppedFrames[i];
+			if (frame) {
+				if (!crop) {
+					crop = frame.info.crop;
+				} else {
+					if (!isCropEqual(crop, frame.info.crop)) {
+						return null;
+					}
+				}
 			}
 		}
-		return false;
+		return crop;
+	}
+
+	/**
+	 * Get latest frames for desired crop and required channels
+	 * Returns frames even if they don't have matching frame_idx
+	 */
+	getLatestFrames(desiredCrop: PreviewCrop, requiredChannels: number[]): FrameSet | null {
+		const desiresOriginal = desiredCrop.k === 0 && desiredCrop.x === 0 && desiredCrop.y === 0;
+		if (!desiresOriginal && this.#currentCrop && isCropEqual(desiredCrop, this.#currentCrop)) {
+			if (this.#croppedFrames && requiredChannels.every((idx) => this.#croppedFrames[idx] !== null)) {
+				return {
+					crop: this.#currentCrop,
+					frames: this.#croppedFrames
+				};
+			}
+		}
+		if (this.#originalFrames) {
+			return {
+				crop: { x: 0, y: 0, k: 0 },
+				frames: this.#originalFrames
+			};
+		}
+		return null;
 	}
 }
 
@@ -290,6 +268,7 @@ export class Previewer {
 	#rendererInitialized = false;
 
 	constructor(wsUrl: string) {
+		this.#framesCollector = new FramesCollector(this.MAX_CHANNELS);
 		// Initialize channels immediately (GPU resources created lazily)
 		this.channels = Array.from(
 			{ length: this.MAX_CHANNELS },
@@ -315,13 +294,6 @@ export class Previewer {
 
 		try {
 			await this.#initRenderResources(canvas);
-
-			// Initialize frame collector after GPU device is ready
-			this.#framesCollector = new FramesCollector(
-				this.MAX_CHANNELS,
-				() => this.#gpuDevice,
-				() => this.#format
-			);
 
 			await this.#client.connect();
 
@@ -383,15 +355,6 @@ export class Previewer {
 	resetCrop(): void {
 		this.crop = { x: 0, y: 0, k: 0 };
 		this.#queueCropUpdate(this.crop);
-	}
-
-	getLatestFrameInfos(): (PreviewFrameInfo | null)[] {
-		// Guard: Return empty array if collector not initialized yet
-		if (!this.#framesCollector) {
-			return Array(this.MAX_CHANNELS).fill(null);
-		}
-
-		return this.#framesCollector.getLatestFrameInfos();
 	}
 
 	// ===================== PRIVATE: Networking Events =====================
@@ -539,47 +502,46 @@ export class Previewer {
 		// When pan/zoom active, use original frames; otherwise use crop-matching frames
 		const requestCrop: PreviewCrop = this.isPanZoomActive ? { x: 0, y: 0, k: 0 } : this.crop;
 
-		// Try to get complete frame set for requested crop
-		let frameSet = this.#framesCollector.getCompleteSet(requestCrop, visibleIndices);
+		// Try to get latest frames for requested crop
+		let frameSet = this.#framesCollector.getLatestFrames(requestCrop, visibleIndices);
 
 		// If not available, fall back to original (unless we're already requesting original)
 		if (!frameSet && !this.isPanZoomActive) {
-			frameSet = this.#framesCollector.getCompleteSet({ x: 0, y: 0, k: 0 }, visibleIndices);
+			frameSet = this.#framesCollector.getLatestFrames({ x: 0, y: 0, k: 0 }, visibleIndices);
 		}
 
-		// No frames yet - skip this render
-		if (!frameSet) {
-			this.#animationFrameId = requestAnimationFrame(this.#frameLoop);
-			return;
+		// Render if we have frames available
+		if (frameSet) {
+			// Update GPU textures and build channel states
+			const channelStates: ChannelUniformState[] = [];
+			for (const channel of this.channels.filter((c) => c.visible)) {
+				const frameData = frameSet.frames[channel.idx];
+				if (!frameData) continue; // Skip if no frame available for this channel
+
+				const recreated = channel.updateTexture(frameData.bitmap);
+				if (recreated) this.#updateBindGroup();
+
+				channelStates.push({
+					intensityMin: channel.intensityMin,
+					intensityMax: channel.intensityMax,
+					applyLUT: channel.colormap !== ColormapType.NONE
+				});
+			}
+
+			// Calculate delta: difference between user's desired view and actual frame crop
+			// this.crop = what the user wants to see (their pan/zoom position)
+			// frameSet.crop = what crop the frames actually have
+			const delta: PreviewCrop = {
+				x: this.crop.x - frameSet.crop.x,
+				y: this.crop.y - frameSet.crop.y,
+				k: this.crop.k - frameSet.crop.k
+			};
+
+			this.#updateGlobalSettingsBuffer(channelStates, delta);
+			this.#executeRenderPass();
 		}
 
-		// Update GPU textures and build channel states
-		const channelStates: ChannelUniformState[] = [];
-		for (const channel of this.channels.filter((c) => c.visible)) {
-			const frameData = frameSet.frames[channel.idx];
-			if (!frameData) continue; // Shouldn't happen if frameSet is complete
-
-			const recreated = channel.updateTexture(frameData.bitmap);
-			if (recreated) this.#updateBindGroup();
-
-			channelStates.push({
-				intensityMin: channel.intensityMin,
-				intensityMax: channel.intensityMax,
-				applyLUT: channel.colormap !== ColormapType.NONE
-			});
-		}
-
-		// Calculate delta: difference between user's desired view and actual frame crop
-		// this.crop = what the user wants to see (their pan/zoom position)
-		// frameSet.crop = what crop the frames actually have
-		const delta: PreviewCrop = {
-			x: this.crop.x - frameSet.crop.x,
-			y: this.crop.y - frameSet.crop.y,
-			k: this.crop.k - frameSet.crop.k
-		};
-
-		this.#updateGlobalSettingsBuffer(channelStates, delta);
-		this.#executeRenderPass();
+		// Schedule next frame (only once, at the end)
 		this.#animationFrameId = requestAnimationFrame(this.#frameLoop);
 	};
 
@@ -699,7 +661,7 @@ export class Previewer {
 	#getMaxCropK(): number {
 		// Get frame info from any available frame in the collector
 		const visibleIndices = this.channels.filter((c) => c.visible).map((c) => c.idx);
-		const frameSet = this.#framesCollector.getCompleteSet({ x: 0, y: 0, k: 0 }, visibleIndices);
+		const frameSet = this.#framesCollector.getLatestFrames({ x: 0, y: 0, k: 0 }, visibleIndices);
 
 		if (frameSet) {
 			// Find any frame with info
