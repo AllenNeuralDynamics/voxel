@@ -14,7 +14,7 @@ struct ChannelSettings {
     intensity_min: f32,     // Minimum intensity value (black level) 0.0-1.0
     intensity_max: f32,     // Maximum intensity value (white level) 0.0-1.0
     applyLUT: u32,          // 1u to apply LUT, 0u to skip it.
-    pad: u32,               // Padding for alignment
+    enabled: u32,           // 1u if this channel is enabled, 0u otherwise
 };
 
 const MAX_CHANNELS: u32 = 4;
@@ -123,9 +123,15 @@ fn apply_lut(remapped: f32, baseColor: vec4<f32>, lutTex: texture_2d<f32>) -> ve
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var finalColor: vec4<f32> = vec4<f32>(0.0);
 
-    // Use the transformed UV coordinates from the vertex shader.
-    for (var i: u32 = 0u; i < settings.num_channels; i = i + 1u) {
+    // Loop through all possible channels and check if each is active
+    for (var i: u32 = 0u; i < MAX_CHANNELS; i = i + 1u) {
         let ch = settings.channels[i];
+
+        // Skip disabled channels
+        if (ch.enabled == 0u) {
+            continue;
+        }
+
         var channelColor: vec4<f32>;
         var remapped: f32;
 

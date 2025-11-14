@@ -14,6 +14,7 @@ interface ChannelUniformState {
 	intensityMin: number;
 	intensityMax: number;
 	applyLUT: boolean;
+	enabled: boolean;
 }
 
 function isCropEqual(a: PreviewCrop, b: PreviewCrop): boolean {
@@ -512,8 +513,8 @@ export class Previewer {
 
 		// Render if we have frames available
 		if (frameSet) {
-			// Update GPU textures and build channel states
-			const channelStates: ChannelUniformState[] = [];
+			// Update GPU textures and build channel states map indexed by actual channel index
+			const channelStates = new SvelteMap<number, ChannelUniformState>();
 			for (const channel of this.channels.filter((c) => c.visible)) {
 				const frameData = frameSet.frames[channel.idx];
 				if (!frameData) continue; // Skip if no frame available for this channel
@@ -521,10 +522,11 @@ export class Previewer {
 				const recreated = channel.updateTexture(frameData.bitmap);
 				if (recreated) this.#updateBindGroup();
 
-				channelStates.push({
+				channelStates.set(channel.idx, {
 					intensityMin: channel.intensityMin,
 					intensityMax: channel.intensityMax,
-					applyLUT: channel.colormap !== ColormapType.NONE
+					applyLUT: channel.colormap !== ColormapType.NONE,
+					enabled: true
 				});
 			}
 
@@ -561,13 +563,13 @@ export class Previewer {
 			{ binding: 1, resource: this.#textureSampler }
 		];
 
-		const visible = this.channels.filter((c) => c.visible).slice(0, this.MAX_CHANNELS);
 		const dummyView = this.#dummyTexture.createView();
 
 		let bindingIndex = 2;
+		// Bind channels by their actual index, not by filtered visible order
 		for (let i = 0; i < this.MAX_CHANNELS; i++) {
-			const channel = visible[i];
-			if (channel) {
+			const channel = this.channels[i];
+			if (channel && channel.visible) {
 				entries.push({ binding: bindingIndex++, resource: channel.textureView ?? dummyView });
 				entries.push({ binding: bindingIndex++, resource: channel.lutView ?? dummyView });
 			} else {
@@ -579,7 +581,7 @@ export class Previewer {
 		this.#bindGroup = this.#gpuDevice.createBindGroup({ layout: this.#pipeline.getBindGroupLayout(0), entries });
 	}
 
-	#updateGlobalSettingsBuffer(channelStates: ChannelUniformState[], globalDelta: PreviewCrop): void {
+	#updateGlobalSettingsBuffer(channelStates: Map<number, ChannelUniformState>, globalDelta: PreviewCrop): void {
 		const globalSettingsSize = 32 + this.MAX_CHANNELS * 16;
 		const buffer = new ArrayBuffer(globalSettingsSize);
 		const floatView = new Float32Array(buffer);
@@ -590,7 +592,7 @@ export class Previewer {
 		floatView[2] = globalDelta.k;
 		floatView[3] = 0;
 
-		const active = Math.min(channelStates.length, this.MAX_CHANNELS);
+		const active = channelStates.size;
 		uintView[4] = this.displayMode;
 		uintView[5] = active;
 		uintView[6] = 0;
@@ -598,17 +600,17 @@ export class Previewer {
 
 		for (let i = 0; i < this.MAX_CHANNELS; i++) {
 			const baseIndex = 8 + i * 4;
-			const state = channelStates[i];
+			const state = channelStates.get(i);
 			if (state) {
 				floatView[baseIndex + 0] = state.intensityMin;
 				floatView[baseIndex + 1] = state.intensityMax;
 				uintView[baseIndex + 2] = state.applyLUT ? 1 : 0;
-				uintView[baseIndex + 3] = 0; // Padding
+				uintView[baseIndex + 3] = state.enabled ? 1 : 0;
 			} else {
 				floatView[baseIndex + 0] = 0;
 				floatView[baseIndex + 1] = 0;
 				uintView[baseIndex + 2] = 0;
-				uintView[baseIndex + 3] = 0;
+				uintView[baseIndex + 3] = 0; // disabled
 			}
 		}
 
