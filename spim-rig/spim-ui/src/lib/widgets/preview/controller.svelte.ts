@@ -5,7 +5,8 @@
 import { clampTopLeft, getWebGPUDevice } from '$lib/utils';
 import { PreviewClient, type PreviewFrameInfo, type PreviewCrop, type PreviewIntensity } from './client';
 import { ColormapType, generateLUT, COLORMAP_COLORS } from './colormap';
-import shaderCode from './shader.wgsl?raw';
+// import shaderCode from './shader.wgsl?raw';
+import { generateShaderCode } from './shader';
 import { SvelteMap } from 'svelte/reactivity';
 
 const TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
@@ -231,7 +232,7 @@ class PreviewChannel {
 }
 
 export class Previewer {
-	readonly MAX_CHANNELS = 4;
+	readonly MAX_CHANNELS = 2;
 
 	// Streaming + UI state
 	public isPreviewing = $state<boolean>(false);
@@ -453,6 +454,8 @@ export class Previewer {
 			usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
 		});
 
+		// Generate shader code dynamically based on MAX_CHANNELS
+		const shaderCode = generateShaderCode(this.MAX_CHANNELS);
 		const shaderModule = this.#gpuDevice.createShaderModule({ code: shaderCode });
 		this.#pipeline = this.#gpuDevice.createRenderPipeline({
 			layout: 'auto',
