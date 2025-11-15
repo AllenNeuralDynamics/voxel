@@ -142,9 +142,9 @@
 								<div class="space-y-2 text-xs text-zinc-400">
 									{#if channel.name}
 										<div class="flex justify-between">
-											<span>Intensity:</span>
+											<span>Levels:</span>
 											<span class="text-zinc-300">
-												{(channel.intensityMin * 100).toFixed(0)}% - {(channel.intensityMax * 100).toFixed(0)}%
+												{(channel.levelsMin * 100).toFixed(0)}% - {(channel.levelsMax * 100).toFixed(0)}%
 											</span>
 										</div>
 										<div class="flex justify-between">

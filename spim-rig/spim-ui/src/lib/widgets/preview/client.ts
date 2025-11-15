@@ -15,9 +15,9 @@ export interface PreviewCrop {
 	k: number; // Zoom level: 0 = no zoom, 1 = max zoom
 }
 
-export interface PreviewIntensity {
-	min: number; // Minimum intensity value (black level)
-	max: number; // Maximum intensity value (white level)
+export interface PreviewLevels {
+	min: number; // Minimum level value (black level)
+	max: number; // Maximum level value (white level)
 }
 
 /**
@@ -31,7 +31,7 @@ export interface PreviewFrameInfo {
 	full_width: number;
 	full_height: number;
 	crop: PreviewCrop;
-	intensity: PreviewIntensity;
+	levels: PreviewLevels;
 	fmt: 'jpeg' | 'png' | 'uint16'; // Frame format
 }
 
@@ -73,7 +73,7 @@ type ControlMessage =
 	| { type: 'start' }
 	| { type: 'stop' }
 	| { type: 'crop'; crop: PreviewCrop }
-	| { type: 'intensity'; channel: string; intensity: PreviewIntensity };
+	| { type: 'levels'; channel: string; levels: PreviewLevels };
 
 export interface PreviewClientCallbacks {
 	onPreviewStatus?: (channels: string[], is_previewing: boolean) => void;
@@ -307,10 +307,10 @@ export class PreviewClient {
 	}
 
 	/**
-	 * Sends intensity update for a specific channel.
+	 * Sends levels update for a specific channel.
 	 */
-	updateIntensity(channel: string, intensity: PreviewIntensity): void {
-		this.send({ type: 'intensity', channel, intensity });
+	updateChannelLevels(channel: string, levels: PreviewLevels): void {
+		this.send({ type: 'levels', channel, levels: levels });
 	}
 
 	/**

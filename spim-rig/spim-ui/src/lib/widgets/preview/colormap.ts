@@ -1,6 +1,6 @@
 /**
  * Colormap utilities for generating lookup tables (LUTs) for channel coloring.
- * Used in fluorescence microscopy to map intensity values to colors.
+ * Used in fluorescence microscopy to map levels values to colors.
  */
 
 // ===================== Types =====================
@@ -139,7 +139,7 @@ export function colormapToHex(type: ColormapType): string {
 
 /**
  * Generates a monochromatic lookup table (LUT) for channel coloring.
- * Maps intensity values (0-1) to colors (black -> full color).
+ * Maps levels values (0-1) to colors (black -> full color).
  *
  * Perfect for fluorescence microscopy where each channel represents a different fluorophore.
  *
@@ -187,7 +187,7 @@ export function generateLUT(
 	const lutData = new Uint8Array(resolution * 4);
 
 	for (let i = 0; i < resolution; i++) {
-		// Normalized intensity (0.0 to 1.0)
+		// Normalized levels (0.0 to 1.0)
 		let t = i / (resolution - 1);
 
 		// Reverse if requested

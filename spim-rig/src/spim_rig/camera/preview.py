@@ -44,7 +44,7 @@ class PreviewCrop(SchemaModel):
         return self.k != 0.0
 
 
-class PreviewIntensity(SchemaModel):
+class PreviewLevels(SchemaModel):
     min: float = Field(default=0.0, ge=0.0, le=1.0, description="black point of the preview")
     max: float = Field(default=1.0, ge=0.0, le=1.0, description="white point of the preview")
 
@@ -62,7 +62,7 @@ class PreviewFrameInfo(SchemaModel):
     full_width: int = Field(..., gt=0, description="Full image width in pixels (from captured frame).")
     full_height: int = Field(..., gt=0, description="Full image height in pixels (from captured frame).")
     crop: PreviewCrop = Field(default_factory=PreviewCrop)
-    intensity: PreviewIntensity = Field(default_factory=PreviewIntensity)
+    levels: PreviewLevels = Field(default_factory=PreviewLevels)
     fmt: PreviewFmt = Field(default=PreviewFmt.JPEG)
 
 
@@ -123,14 +123,14 @@ class PreviewGenerator:
         target_width: int = 1024,
         fmt: PreviewFmt = PreviewFmt.JPEG,
         crop: PreviewCrop | None = None,
-        intensity: PreviewIntensity | None = None,
+        levels: PreviewLevels | None = None,
     ) -> None:
         self._uid = uid
         self._sink = sink
         self._target_width: int = target_width
         self._fmt: PreviewFmt = fmt or PreviewFmt.JPEG
         self.crop = crop or PreviewCrop()
-        self.intensity = intensity or PreviewIntensity()
+        self.levels = levels or PreviewLevels()
         self._idx: int = 0
         self._current_frame: np.ndarray | None = None
         self.log = logging.getLogger(f"{self._uid}.PreviewGenerator")
@@ -158,7 +158,7 @@ class PreviewGenerator:
         self._sink(preview_frame)
 
         # if display options are set, generate and publish an optimized preview
-        if self.crop.needs_adjustment or self.intensity.needs_adjustment:
+        if self.crop.needs_adjustment or self.levels.needs_adjustment:
             preview_frame = await loop.run_in_executor(self._executor, self._generate_preview_frame, frame, idx, True)
             self._sink(preview_frame)
 
@@ -179,7 +179,7 @@ class PreviewGenerator:
         _sink_frame(adjust=False)
 
         # if display options are set, publish an optimized preview
-        if self.crop.needs_adjustment or self.intensity.needs_adjustment:
+        if self.crop.needs_adjustment or self.levels.needs_adjustment:
             _sink_frame(adjust=True)
 
     def shutdown(self) -> None:
@@ -216,18 +216,18 @@ class PreviewGenerator:
         preview_img = cv2.resize(raw_frame, (preview_width, preview_height), interpolation=cv2.INTER_AREA)
         resize_time = time.perf_counter() - resize_start
 
-        # 4) Convert to float32 for intensity scaling.
+        # 4) Convert to float32 for levels scaling.
         preview_float = preview_img.astype(np.float32)
 
-        intensity = self.intensity if adjust else PreviewIntensity(min=0.0, max=1.0)
+        levels = self.levels if adjust else PreviewLevels(min=0.0, max=1.0)
 
-        if intensity.needs_adjustment:
+        if levels.needs_adjustment:
             # 5) Determine the max possible value from the raw frame's dtype (e.g. 65535 for uint16).
             # 6) Compute the actual black/white values from percentages.
             # 7) Clamp to [black_val..white_val].
             max_val = np.iinfo(raw_frame.dtype).max
-            black_val = intensity.min * max_val
-            white_val = intensity.max * max_val
+            black_val = levels.min * max_val
+            white_val = levels.max * max_val
             preview_float = np.clip(preview_float, black_val, white_val)
 
             # 8) Normalize to [0..1].
@@ -247,7 +247,7 @@ class PreviewGenerator:
             preview_height=preview_height,
             full_width=full_width,
             full_height=full_height,
-            intensity=intensity,
+            levels=levels,
             fmt=self._fmt,
             crop=actual_crop,
         )

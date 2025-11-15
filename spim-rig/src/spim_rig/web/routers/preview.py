@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from spim_rig.camera.base import TriggerMode, TriggerPolarity
-from spim_rig.camera.preview import PreviewCrop, PreviewIntensity
+from spim_rig.camera.preview import PreviewCrop, PreviewLevels
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ async def preview_websocket(websocket: WebSocket):
 
     Protocol:
     1. Backend sends available channels on connection
-    2. Client sends control messages (start, stop, crop, intensity)
+    2. Client sends control messages (start, stop, crop, levels)
     3. Backend streams preview frames via registered callback
     """
     from spim_rig.web.app import get_preview_clients, get_rig
@@ -133,11 +133,11 @@ async def preview_websocket(websocket: WebSocket):
                         for camera in rig.cameras.values():
                             await camera.update_preview_crop(crop)
 
-                    elif msg["type"] == "intensity":
-                        intensity = PreviewIntensity(**msg["intensity"])
+                    elif msg["type"] == "levels":
+                        levels = PreviewLevels(**msg["levels"])
                         channel = msg["channel"]
                         if channel in rig.cameras:
-                            await rig.cameras[channel].update_preview_intensity(intensity)
+                            await rig.cameras[channel].update_preview_levels(levels)
             except WebSocketDisconnect:
                 # Client disconnected - this is expected, just exit gracefully
                 pass

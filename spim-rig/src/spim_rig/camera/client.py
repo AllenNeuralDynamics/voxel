@@ -1,6 +1,6 @@
 from pyrig.device.client import DeviceClient
 from spim_rig.camera.base import TriggerMode, TriggerPolarity
-from spim_rig.camera.preview import PreviewCrop, PreviewIntensity
+from spim_rig.camera.preview import PreviewCrop, PreviewLevels
 
 
 class CameraClient(DeviceClient):
@@ -33,6 +33,6 @@ class CameraClient(DeviceClient):
         """Update preview crop settings."""
         await self.call("update_preview_crop", crop)
 
-    async def update_preview_intensity(self, intensity: PreviewIntensity) -> None:
-        """Update preview intensity range."""
-        await self.call("update_preview_intensity", intensity)
+    async def update_preview_levels(self, levels: PreviewLevels) -> None:
+        """Update preview levels range."""
+        await self.call("update_preview_levels", levels)

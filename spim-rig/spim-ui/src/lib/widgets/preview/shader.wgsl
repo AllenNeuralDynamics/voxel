@@ -11,8 +11,8 @@ struct Transform2D {
 };
 
 struct ChannelSettings {
-    intensity_min: f32,     // Minimum intensity value (black level) 0.0-1.0
-    intensity_max: f32,     // Maximum intensity value (white level) 0.0-1.0
+    levels_min: f32,     // Minimum levels value (black level) 0.0-1.0
+    levels_max: f32,     // Maximum levels value (white level) 0.0-1.0
     applyLUT: u32,          // 1u to apply LUT, 0u to skip it.
     enabled: u32,           // 1u if this channel is enabled, 0u otherwise
 };
@@ -25,7 +25,7 @@ struct GlobalSettings {
     num_channels: u32,      // Number of active channels, must be <= MAX_CHANNELS.
     pad0: u32,              // Padding to align channels to 16 bytes
     pad1: u32,              // Padding to align channels to 16 bytes
-    @align(16) channels: array<ChannelSettings, MAX_CHANNELS>, // Per-channel intensity/LUT settings.
+    @align(16) channels: array<ChannelSettings, MAX_CHANNELS>, // Per-channel levels/LUT settings.
 };
 
 @group(0) @binding(0) var<uniform> settings : GlobalSettings;
@@ -95,19 +95,19 @@ fn vs_main(@builtin(vertex_index) VertexIndex: u32) -> VertexOutput {
 }
 
 //---------------------------------------------------------------------
-// Map raw intensity to display range using min/max intensity values.
+// Map raw levels to display range using min/max levels values.
 // This is the microscopy-friendly way to control dynamic range.
 //
-// intensity: raw pixel value (0.0 - 1.0)
+// levels: raw pixel value (0.0 - 1.0)
 // min: black level - values at or below this map to 0
 // max: white level - values at or above this map to 1
 //
-// Returns: remapped intensity (0.0 - 1.0)
-fn remap_intensity(intensity: f32, min: f32, max: f32) -> f32 {
+// Returns: remapped levels (0.0 - 1.0)
+fn remap_levels(levels: f32, min: f32, max: f32) -> f32 {
     if (max <= min) {
         return 0.0; // Avoid division by zero
     }
-    return clamp((intensity - min) / (max - min), 0.0, 1.0);
+    return clamp((levels - min) / (max - min), 0.0, 1.0);
 }
 
 //---------------------------------------------------------------------
@@ -137,7 +137,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         if (i == 0u) {
             channelColor = textureSample(frameTexture0, frameSampler, input.fragUV);
-            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
+            remapped = remap_levels(channelColor.r, ch.levels_min, ch.levels_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture0);
             } else {
@@ -145,7 +145,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             }
         } else if (i == 1u) {
             channelColor = textureSample(frameTexture1, frameSampler, input.fragUV);
-            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
+            remapped = remap_levels(channelColor.r, ch.levels_min, ch.levels_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture1);
             } else {
@@ -153,7 +153,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             }
         } else if (i == 2u) {
             channelColor = textureSample(frameTexture2, frameSampler, input.fragUV);
-            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
+            remapped = remap_levels(channelColor.r, ch.levels_min, ch.levels_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture2);
             } else {
@@ -161,7 +161,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             }
         } else if (i == 3u) {
             channelColor = textureSample(frameTexture3, frameSampler, input.fragUV);
-            remapped = remap_intensity(channelColor.r, ch.intensity_min, ch.intensity_max);
+            remapped = remap_levels(channelColor.r, ch.levels_min, ch.levels_max);
             if (ch.applyLUT == 1u) {
                 channelColor = apply_lut(remapped, channelColor, colormapTexture3);
             } else {

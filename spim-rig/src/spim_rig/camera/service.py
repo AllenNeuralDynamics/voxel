@@ -6,7 +6,7 @@ import zmq.asyncio
 # from ome_zarr_writer import Backend as WriterBackend
 from pyrig import DeviceAddress, DeviceAddressTCP, DeviceService, describe
 from spim_rig.camera.base import SpimCamera, TriggerMode, TriggerPolarity  # , TriggerMode, TriggerPolarity
-from spim_rig.camera.preview import PreviewCrop, PreviewFrame, PreviewGenerator, PreviewIntensity
+from spim_rig.camera.preview import PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
 
 
 class CameraMode(StrEnum):
@@ -54,10 +54,10 @@ class CameraService(DeviceService[SpimCamera]):
         """Update preview crop settings."""
         self._previewer.crop = crop
 
-    @describe(label="Update Preview Intensity")
-    async def update_preview_intensity(self, intensity: PreviewIntensity):
-        """Update preview intensity range."""
-        self._previewer.intensity = intensity
+    @describe(label="Update Preview Levels")
+    async def update_preview_levels(self, levels: PreviewLevels):
+        """Update preview levels range."""
+        self._previewer.levels = levels
 
     @describe(label="Start Preview", desc="Start live preview mode")
     async def start_preview(

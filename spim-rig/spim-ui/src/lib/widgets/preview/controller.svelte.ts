@@ -3,7 +3,7 @@
  */
 
 import { clampTopLeft, getWebGPUDevice } from '$lib/utils';
-import { PreviewClient, type PreviewFrameInfo, type PreviewCrop, type PreviewIntensity } from './client';
+import { PreviewClient, type PreviewFrameInfo, type PreviewCrop, type PreviewLevels } from './client';
 import { ColormapType, generateLUT, COLORMAP_COLORS, colormapToHex } from './colormap';
 // import shaderCode from './shader.wgsl?raw';
 import { generateShaderCode } from './shader';
@@ -12,8 +12,8 @@ import { SvelteMap } from 'svelte/reactivity';
 const TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
 
 interface ChannelUniformState {
-	intensityMin: number;
-	intensityMax: number;
+	levelsMin: number;
+	levelsMax: number;
 	applyLUT: boolean;
 	enabled: boolean;
 }
@@ -161,8 +161,8 @@ class FrameStreamTexture {
 class PreviewChannel {
 	name: string | undefined = $state<string | undefined>(undefined);
 	visible: boolean = $state<boolean>(false);
-	intensityMin: number = $state<number>(0.0);
-	intensityMax: number = $state<number>(1.0);
+	levelsMin: number = $state<number>(0.0);
+	levelsMax: number = $state<number>(1.0);
 	color: string = $state<string>('#ffffff'); // Hex color string
 	latestFrameInfo: PreviewFrameInfo | null = $state<PreviewFrameInfo | null>(null);
 
@@ -229,8 +229,8 @@ class PreviewChannel {
 	reset(): void {
 		this.name = undefined;
 		this.visible = false;
-		this.intensityMin = 0.0;
-		this.intensityMax = 1.0;
+		this.levelsMin = 0.0;
+		this.levelsMax = 1.0;
 		this.color = '#ffffff';
 	}
 
@@ -263,7 +263,7 @@ export class Previewer {
 
 	// Debouncers
 	#cropUpdateTimer: number | null = null;
-	#intensityUpdateTimers = new SvelteMap<string, number>();
+	#levelsUpdateTimers = new SvelteMap<string, number>();
 	readonly #DEBOUNCE_DELAY_MS = 100;
 
 	// GPU resources
@@ -357,12 +357,12 @@ export class Previewer {
 		this.#stopRendering();
 	}
 
-	setChannelIntensity(name: string, min: number, max: number): void {
+	setChannelLevels(name: string, min: number, max: number): void {
 		const channel = this.channels.find((c) => c.name === name);
 		if (!channel) return;
-		channel.intensityMin = min;
-		channel.intensityMax = max;
-		this.#queueIntensityUpdate(name, { min, max });
+		channel.levelsMin = min;
+		channel.levelsMax = max;
+		this.#queueLevelsUpdate(name, { min, max });
 	}
 
 	resetCrop(): void {
@@ -384,8 +384,8 @@ export class Previewer {
 				if (name) {
 					slot.name = assignedNames[i];
 					slot.visible = true;
-					slot.intensityMin = 0.0;
-					slot.intensityMax = 1.0;
+					slot.levelsMin = 0.0;
+					slot.levelsMax = 1.0;
 					slot.setColor(colormapToHex(defaultColormaps[i % defaultColormaps.length]));
 				} else {
 					slot.disposeGpuResources();
@@ -538,8 +538,8 @@ export class Previewer {
 				if (recreated) this.#updateBindGroup();
 
 				channelStates.set(channel.idx, {
-					intensityMin: channel.intensityMin,
-					intensityMax: channel.intensityMax,
+					levelsMin: channel.levelsMin,
+					levelsMax: channel.levelsMax,
 					applyLUT: channel.color.toLowerCase() !== '#ffffff',
 					enabled: true
 				});
@@ -617,8 +617,8 @@ export class Previewer {
 			const baseIndex = 8 + i * 4;
 			const state = channelStates.get(i);
 			if (state) {
-				floatView[baseIndex + 0] = state.intensityMin;
-				floatView[baseIndex + 1] = state.intensityMax;
+				floatView[baseIndex + 0] = state.levelsMin;
+				floatView[baseIndex + 1] = state.levelsMax;
 				uintView[baseIndex + 2] = state.applyLUT ? 1 : 0;
 				uintView[baseIndex + 3] = state.enabled ? 1 : 0;
 			} else {
@@ -663,16 +663,16 @@ export class Previewer {
 		}, this.#DEBOUNCE_DELAY_MS);
 	}
 
-	#queueIntensityUpdate(channelName: string, intensity: PreviewIntensity): void {
-		const existing = this.#intensityUpdateTimers.get(channelName);
+	#queueLevelsUpdate(channelName: string, levels: PreviewLevels): void {
+		const existing = this.#levelsUpdateTimers.get(channelName);
 		if (existing !== undefined) clearTimeout(existing);
 
 		const timer = window.setTimeout(() => {
-			this.#client.updateIntensity(channelName, intensity);
-			this.#intensityUpdateTimers.delete(channelName);
+			this.#client.updateChannelLevels(channelName, levels);
+			this.#levelsUpdateTimers.delete(channelName);
 		}, this.#DEBOUNCE_DELAY_MS);
 
-		this.#intensityUpdateTimers.set(channelName, timer);
+		this.#levelsUpdateTimers.set(channelName, timer);
 	}
 
 	#getMaxCropK(): number {
