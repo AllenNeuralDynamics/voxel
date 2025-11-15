@@ -158,13 +158,14 @@ class FrameStreamTexture {
 	}
 }
 
-class PreviewChannel {
+export class PreviewChannel {
 	name: string | undefined = $state<string | undefined>(undefined);
 	visible: boolean = $state<boolean>(false);
 	levelsMin: number = $state<number>(0.0);
 	levelsMax: number = $state<number>(1.0);
 	color: string = $state<string>('#ffffff'); // Hex color string
 	latestFrameInfo: PreviewFrameInfo | null = $state<PreviewFrameInfo | null>(null);
+	latestHistogram: number[] | null = $state<number[] | null>(null); // Cache last valid histogram
 
 	#frameTexture: FrameStreamTexture | null = null;
 	#lutTexture: GPUTexture | null = null;
@@ -243,7 +244,7 @@ class PreviewChannel {
 }
 
 export class Previewer {
-	readonly MAX_CHANNELS = 2;
+	readonly MAX_CHANNELS = 4;
 
 	// Streaming + UI state
 	public isPreviewing = $state<boolean>(false);
@@ -420,6 +421,11 @@ export class Previewer {
 		// Update channel's latest frame info (reactive)
 		channel.latestFrameInfo = info;
 
+		// Cache histogram if present (only full frames have histogram data)
+		if (info.histogram) {
+			channel.latestHistogram = info.histogram;
+		}
+
 		// Collect frame in FramesCollector (no processing, just store)
 		this.#framesCollector.collectFrame(channel.idx, info, bitmap);
 	};
@@ -537,9 +543,13 @@ export class Previewer {
 				const recreated = channel.updateTexture(frameData.bitmap);
 				if (recreated) this.#updateBindGroup();
 
+				const backendLevels = frameData.info.levels;
+				const remappedMin = (channel.levelsMin - backendLevels.min) / (backendLevels.max - backendLevels.min);
+				const remappedMax = (channel.levelsMax - backendLevels.min) / (backendLevels.max - backendLevels.min);
+
 				channelStates.set(channel.idx, {
-					levelsMin: channel.levelsMin,
-					levelsMax: channel.levelsMax,
+					levelsMin: remappedMin,
+					levelsMax: remappedMax,
 					applyLUT: channel.color.toLowerCase() !== '#ffffff',
 					enabled: true
 				});

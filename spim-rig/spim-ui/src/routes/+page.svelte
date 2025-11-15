@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Preview, Previewer } from '$lib/widgets/preview';
-	import ColorPicker from '$lib/components/ColorPicker.svelte';
+	import ChannelPreviewControls from '$lib/components/ChannelPreviewControls.svelte';
 	import { onMount } from 'svelte';
 
 	// Initialize preview controller
@@ -26,163 +26,97 @@
 		previewer.resetCrop();
 	}
 
-	function toggleChannelVisibility(i: number) {
-		const channel = previewer.channels[i];
-		if (channel) {
-			channel.visible = !channel.visible;
-		}
-	}
-
-	function handleColorChange(channelIdx: number, newColor: string) {
-		const channel = previewer.channels[channelIdx];
-		if (channel) {
-			channel.setColor(newColor);
-		}
-	}
+	//blue-950
 </script>
 
 <div class="flex h-screen w-full flex-col bg-zinc-950 text-zinc-100">
-	<header class="flex items-center justify-between border-r border-b border-zinc-800 px-6 py-4">
-		<h1 class="text-2xl font-bold">SPIM Preview</h1>
-		<div class="flex items-center gap-4">
-			<div
-				class="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-400"
-			>
-				<div class="flex items-center gap-2">
-					<span
-						class="h-2.5 w-2.5 rounded-full transition-colors {previewer.connectionState
-							? 'bg-emerald-500 shadow-[0_0_0.5rem_--theme(--color-emerald-500/50)]'
-							: 'bg-zinc-500'}"
-					></span>
-					<span>{previewer.statusMessage}</span>
-				</div>
+	<!-- <header class="border-b border-zinc-800 bg-slate-900 px-6 py-1">
+		<h1 class="text-xs font-bold">SPIM PREVIEW</h1>
+	</header> -->
+
+	<main class="flex flex-1 flex-col overflow-hidden">
+		<div class="flex flex-1 overflow-hidden">
+			<aside class="flex w-80 flex-col border-r border-zinc-800">
+				{#if previewer.channels.length === 0}
+					<div class="flex flex-1 items-center justify-center">
+						<p class="text-sm text-zinc-500">No channels available</p>
+					</div>
+				{:else}
+					<div class="flex flex-1 flex-col overflow-y-auto">
+						{#each previewer.channels as channel (channel.idx)}
+							{#if channel.name}
+								<div class="space-y-2 border-b border-zinc-900 px-3 pt-4 pb-6">
+									<!-- Preview Section -->
+									<ChannelPreviewControls {channel} {previewer} />
+
+									<div class="space-y-2">
+										<!-- Detection Section (placeholder) -->
+										<div class="space-y-1">
+											<div class="text-[0.5rem] font-semibold text-zinc-500 uppercase">Detection</div>
+											<div class="h-16 rounded bg-zinc-900/30 p-2">
+												<div class="text-[0.6rem] text-zinc-600">Exposure, gain, binning controls...</div>
+											</div>
+										</div>
+
+										<!-- Illumination Section (placeholder) -->
+										<div class="space-y-1">
+											<div class="text-[0.5rem] font-semibold text-zinc-500 uppercase">Illumination</div>
+											<div class="h-16 rounded bg-zinc-900/30 p-2">
+												<div class="text-[0.6rem] text-zinc-600">Power, focus, shutter controls...</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							{/if}
+						{/each}
+					</div>
+				{/if}
+			</aside>
+
+			<div class="flex-1">
+				<Preview {previewer} />
 			</div>
+		</div>
+
+		<footer class="flex items-center justify-between border-t border-zinc-800 px-6 py-3">
+			<div class="flex items-center gap-2 text-xs text-zinc-400">
+				<span
+					class="h-2.5 w-2.5 rounded-full transition-colors {previewer.connectionState
+						? 'bg-emerald-500 shadow-[0_0_0.5rem_--theme(--color-emerald-500/50)]'
+						: 'bg-zinc-500'}"
+				></span>
+				<span>{previewer.statusMessage}</span>
+			</div>
+
+			<div class="flex items-center gap-4 text-xs text-zinc-400">
+				<span>Zoom: {previewer.crop.k.toFixed(2)}</span>
+				<span>X: {previewer.crop.x.toFixed(2)}</span>
+				<span>Y: {previewer.crop.y.toFixed(2)}</span>
+				<button
+					onclick={handleResetCrop}
+					class="rounded bg-zinc-800 px-2 py-0.5 text-[0.65rem] text-zinc-300 transition-colors hover:bg-zinc-700"
+					aria-label="Reset pan and zoom"
+				>
+					Reset
+				</button>
+			</div>
+
 			<div class="flex gap-2">
 				<button
 					onclick={handleStartPreview}
 					disabled={previewer.isPreviewing}
-					class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+					class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					Start
 				</button>
 				<button
 					onclick={handleStopPreview}
 					disabled={!previewer.isPreviewing}
-					class="rounded bg-rose-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+					class="rounded bg-rose-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					Stop
 				</button>
 			</div>
-		</div>
-	</header>
-
-	<main class="flex flex-1 overflow-hidden">
-		<!-- Channel Controls Sidebar -->
-		<aside class="flex w-80 flex-col border-r border-zinc-800">
-			<div class="flex-1 overflow-y-auto p-4">
-				<!-- Crop Info -->
-				<div class="mb-4 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
-					<div class="mb-2 flex items-center justify-between">
-						<h3 class="text-sm font-medium">View Crop</h3>
-						<button
-							onclick={handleResetCrop}
-							class="rounded bg-zinc-800 px-2 py-1 text-[0.7rem] font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
-						>
-							Reset
-						</button>
-					</div>
-					<div class="space-y-1 text-xs text-zinc-400">
-						<div class="flex justify-between">
-							<span>X (pan):</span>
-							<span class="font-mono text-zinc-300">{previewer.crop.x.toFixed(3)}</span>
-						</div>
-						<div class="flex justify-between">
-							<span>Y (pan):</span>
-							<span class="font-mono text-zinc-300">{previewer.crop.y.toFixed(3)}</span>
-						</div>
-						<div class="flex justify-between">
-							<span>K (zoom):</span>
-							<span class="font-mono text-zinc-300">{previewer.crop.k.toFixed(3)}</span>
-						</div>
-					</div>
-				</div>
-
-				<h2 class="mb-4 text-lg font-semibold">Channels</h2>
-
-				{#if previewer.channels.length === 0}
-					<p class="text-sm text-zinc-500">No channels available</p>
-				{:else}
-					<div class="space-y-3">
-						{#each previewer.channels as channel (channel.idx)}
-							<div class="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
-								<!-- Channel Header -->
-								<div class="mb-3 flex items-center justify-between">
-									<div class="flex items-center gap-2">
-										<!-- Color Picker -->
-										<ColorPicker
-											bind:color={channel.color}
-											onColorChange={(newColor) => handleColorChange(channel.idx, newColor)}
-										/>
-										<span class="font-medium">{channel.name}</span>
-									</div>
-
-									<!-- Visibility toggle -->
-
-									<button
-										onclick={() => toggleChannelVisibility(channel.idx)}
-										class="h-4 rounded px-2 text-[0.65rem] transition-colors {channel.visible
-											? 'bg-emerald-600 hover:bg-emerald-700'
-											: 'bg-zinc-700 hover:bg-zinc-600'}"
-									>
-										{channel.visible ? 'Visible' : 'Hidden'}
-									</button>
-								</div>
-
-								<!-- Channel Info -->
-								<div class="space-y-2 text-xs text-zinc-400">
-									{#if channel.name}
-										<div class="flex justify-between">
-											<span>Levels:</span>
-											<span class="text-zinc-300">
-												{(channel.levelsMin * 100).toFixed(0)}% - {(channel.levelsMax * 100).toFixed(0)}%
-											</span>
-										</div>
-										<div class="flex justify-between">
-											<span>Frame idx:</span>
-											<span class="text-zinc-300">
-												{channel.latestFrameInfo ? `#${channel.latestFrameInfo.frame_idx}` : '—'}
-											</span>
-										</div>
-										<div class="flex justify-between">
-											<span>Frame size:</span>
-											<span class="text-zinc-300">
-												{channel.latestFrameInfo
-													? `${channel.latestFrameInfo.preview_width}×${channel.latestFrameInfo.preview_height}`
-													: '—'}
-											</span>
-										</div>
-									{:else}
-										<p class="text-xs text-zinc-500">Unassigned</p>
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
-			<div class="border-t border-zinc-800 p-4">
-				<button
-					onclick={handleResetCrop}
-					class="w-full rounded bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
-				>
-					Reset View
-				</button>
-			</div>
-		</aside>
-
-		<!-- Preview Canvas -->
-		<div class="flex-1">
-			<Preview {previewer} />
-		</div>
+		</footer>
 	</main>
 </div>

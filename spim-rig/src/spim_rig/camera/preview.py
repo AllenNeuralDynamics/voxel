@@ -64,6 +64,10 @@ class PreviewFrameInfo(SchemaModel):
     crop: PreviewCrop = Field(default_factory=PreviewCrop)
     levels: PreviewLevels = Field(default_factory=PreviewLevels)
     fmt: PreviewFmt = Field(default=PreviewFmt.JPEG)
+    histogram: list[int] | None = Field(
+        default=None,
+        description="256-bin histogram of preview intensity (0-255). Only present in full (non-cropped) frames.",
+    )
 
 
 @dataclass(frozen=True)
@@ -216,10 +220,31 @@ class PreviewGenerator:
         preview_img = cv2.resize(raw_frame, (preview_width, preview_height), interpolation=cv2.INTER_AREA)
         resize_time = time.perf_counter() - resize_start
 
+        # Compute histogram on raw resized data BEFORE any scaling (only for full frames)
+        # This shows the actual data distribution for proper level adjustment
+        hist_data = None
+        if not adjust:
+            # Debug: check what's in the data
+            self.log.debug(
+                f"Preview image stats: dtype={preview_img.dtype}, "
+                f"min={preview_img.min()}, max={preview_img.max()}, "
+                f"mean={preview_img.mean():.2f}, "
+                f"shape={preview_img.shape}"
+            )
+
+            # Compute histogram with reasonable bin count for performance
+            # Use 1024 bins for good detail without overwhelming the frontend
+            max_val = np.iinfo(raw_frame.dtype).max
+            num_bins = 1024
+            histogram, _ = np.histogram(preview_img, bins=num_bins, range=(0, max_val))
+            hist_data = histogram.tolist()
+
         # 4) Convert to float32 for levels scaling.
         preview_float = preview_img.astype(np.float32)
 
-        levels = self.levels if adjust else PreviewLevels(min=0.0, max=1.0)
+        # levels = self.levels if adjust else PreviewLevels(min=0.0, max=1.0)
+        # Always use the current levels setting, regardless of adjust flag
+        levels = self.levels
 
         if levels.needs_adjustment:
             # 5) Determine the max possible value from the raw frame's dtype (e.g. 65535 for uint16).
@@ -250,6 +275,7 @@ class PreviewGenerator:
             levels=levels,
             fmt=self._fmt,
             crop=actual_crop,
+            histogram=hist_data,
         )
 
         # 11) Return the final 8-bit preview.

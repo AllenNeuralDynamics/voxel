@@ -33,6 +33,7 @@ export interface PreviewFrameInfo {
 	crop: PreviewCrop;
 	levels: PreviewLevels;
 	fmt: 'jpeg' | 'png' | 'uint16'; // Frame format
+	histogram?: number[]; // 256-bin histogram (0-255), only present in full frames
 }
 
 /**
