@@ -12,6 +12,7 @@ from pathlib import Path
 
 import zmq.asyncio
 from rich import print
+from spim_rig.camera.base import TriggerMode, TriggerPolarity
 from spim_rig.rig import SpimRig
 
 from pyrig import RigConfig
@@ -96,7 +97,7 @@ async def main():
 
             # Register callback and start preview
             rig.preview.register_callback(frame_callback)
-            await rig.start_preview()
+            await rig.start_preview(TriggerMode.ON, TriggerPolarity.RISING_EDGE)
 
             log.info("Receiving preview frames...")
 

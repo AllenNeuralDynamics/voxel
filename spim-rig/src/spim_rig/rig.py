@@ -18,6 +18,7 @@ class SpimRig(Rig):
     def __init__(self, zctx: zmq.asyncio.Context, config: RigConfig):
         super().__init__(zctx=zctx, config=config)
         self.cameras: dict[str, CameraClient] = {}
+        self.lasers: dict[str, DeviceClient] = {}
 
         # Preview management (independent of rig internals)
         self.preview = RigPreviewHub(zctx, name=f"{self.__class__.__name__}.PreviewManager")
@@ -29,14 +30,14 @@ class SpimRig(Rig):
                 client = CameraClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
                 self.cameras[device_id] = client
                 return client
+            case DeviceType.LASER:
+                client = super()._create_client(device_id, prov)
+                self.lasers[device_id] = client
+                return client
             case _:
                 return super()._create_client(device_id, prov)
 
-    async def start_preview(
-        self,
-        trigger_mode: TriggerMode = TriggerMode.ON,
-        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
-    ) -> None:
+    async def start_preview(self, trigger_mode: TriggerMode, trigger_polarity: TriggerPolarity) -> None:
         """Start preview mode on all cameras and begin frame streaming.
 
         Orchestrates camera preview startup and connects preview manager to camera streams.

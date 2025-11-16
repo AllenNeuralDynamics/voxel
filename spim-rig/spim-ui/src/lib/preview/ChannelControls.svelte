@@ -33,17 +33,10 @@
 </script>
 
 <div class="space-y-2">
-	<!-- Channel name, frame info, and controls -->
+	<!-- Channel name and controls -->
 	<div class="flex items-center justify-between">
 		<span class="font-medium">{channel.name ? sanitizeString(channel.name) : 'Unknown'}</span>
 		<div class="flex items-center gap-2">
-			{#if channel.latestFrameInfo}
-				<div class="flex items-center gap-2 px-1 font-mono text-[0.6rem] text-zinc-400">
-					<span>{channel.latestFrameInfo.preview_width} × {channel.latestFrameInfo.preview_height} px</span>
-					<span># {channel.latestFrameInfo.frame_idx}</span>
-				</div>
-				<div class="h-3 w-px bg-zinc-500"></div>
-			{/if}
 			<button
 				onclick={handleVisibilityToggle}
 				class="flex items-center rounded p-1 transition-colors {channel.visible

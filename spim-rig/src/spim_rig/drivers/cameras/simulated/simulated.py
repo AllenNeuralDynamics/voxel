@@ -13,11 +13,11 @@ from spim_rig.camera.base import (
     TriggerPolarity,
 )
 from spim_rig.camera.roi import ROI, ROIConstraints
-from spim_rig.drivers.cameras.mock.frame_gen import ReferenceFrameGenerator
+from spim_rig.drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 
 from pyrig.props import deliminated_float, enumerated_int, enumerated_string
 
-VP_151MX_M6H0 = Vec2D(x=14192, y=10640)
+VP_151MX_M6H0 = Vec2D(x=14192, y=10640) // 3
 
 
 @final

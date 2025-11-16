@@ -4,6 +4,7 @@
 		min?: number;
 		max?: number;
 		step?: number;
+		decimals?: number; // Number of decimal places to display
 		placeholder?: string;
 		numCharacters?: number; // Number of characters wide
 		color?: string; // Text color
@@ -16,12 +17,21 @@
 		min = -Infinity,
 		max = Infinity,
 		step = 1,
+		decimals,
 		placeholder = '',
 		numCharacters = 4,
 		color = 'inherit',
 		align = 'left',
 		onValueChange
 	}: Props = $props();
+
+	// Compute display value with proper decimal formatting
+	let displayValue = $derived(() => {
+		if (decimals !== undefined) {
+			return value.toFixed(decimals);
+		}
+		return value.toString();
+	});
 
 	let isDragging = $state(false);
 	let isPotentialDrag = $state(false);
@@ -127,12 +137,9 @@
 </script>
 
 <input
-	type="number"
-	{min}
-	{max}
-	{step}
+	type="text"
 	{placeholder}
-	{value}
+	value={displayValue()}
 	oninput={handleInput}
 	onmousedown={handleMouseDown}
 	onwheel={handleWheel}

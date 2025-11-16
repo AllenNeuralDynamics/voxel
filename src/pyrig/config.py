@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from pydantic import BaseModel, Field
 from ruyaml import YAML
@@ -51,7 +51,7 @@ class RigConfig(BaseModel):
     nodes: dict[str, NodeConfig]
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "RigConfig":
+    def from_yaml(cls, path: str | Path) -> Self:
         """Load configuration from YAML file."""
         with open(path, "r") as f:
             data = yaml.load(f)

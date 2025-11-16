@@ -9,7 +9,7 @@ import zmq.asyncio
 
 from pyrig.config import RigConfig
 from pyrig.device import DeviceClient
-from pyrig.node import DeviceProvision, NodeService, ProvisionComplete, ProvisionResponse
+from pyrig.node import DeviceBuildError, DeviceProvision, NodeService, ProvisionComplete, ProvisionResponse
 
 # Architecture:
 # - Controller starts ROUTER socket on control_port (single port for all nodes)
@@ -60,6 +60,7 @@ class Rig:
 
         self.provisions: dict[str, DeviceProvision] = {}
         self.devices: dict[str, DeviceClient] = {}
+        self.build_errors: dict[str, DeviceBuildError] = {}
         self._local_nodes: dict[str, Process] = {}
 
     async def start(self, connection_timeout: float = 30.0, provision_timeout: float = 30.0):
@@ -73,7 +74,7 @@ class Rig:
 
         self._local_nodes = await self._spawn_local_nodes()
 
-        self.provisions = await self._provision_nodes(timeout=provision_timeout)
+        self.provisions, self.build_errors = await self._provision_nodes(timeout=provision_timeout)
 
         for device_id, prov in self.provisions.items():
             client = self._create_client(device_id, prov)
@@ -81,7 +82,16 @@ class Rig:
 
         await self._wait_for_connections(timeout=connection_timeout)
 
-        self.log.info(f"{self.config.metadata.name} ready with {len(self.devices)} devices")
+        # Log summary
+        if self.build_errors:
+            self.log.warning(
+                f"{self.config.metadata.name} ready with {len(self.devices)} devices, "
+                f"{len(self.build_errors)} failed to build"
+            )
+            for uid, error in self.build_errors.items():
+                self.log.error(f"  {uid}: {error.message}")
+        else:
+            self.log.info(f"{self.config.metadata.name} ready with {len(self.devices)} devices")
 
     def _create_client(self, device_id: str, prov: DeviceProvision) -> DeviceClient:
         """Create a single client. Override for custom client types."""
@@ -116,19 +126,22 @@ class Rig:
 
         return processes
 
-    async def _provision_nodes(self, timeout: float = 30.0) -> dict[str, DeviceProvision]:
+    async def _provision_nodes(
+        self, timeout: float = 30.0
+    ) -> tuple[dict[str, DeviceProvision], dict[str, DeviceBuildError]]:
         """Provision all nodes (local and remote).
 
         Arguments:
             timeout: How long to wait for all nodes to provision
 
         Returns:
-            Dictionary mapping device_id to DeviceAddressTCP
+            Tuple of (device_provisions, build_errors)
 
         Raises:
             RuntimeError: If provisioning fails or times out
         """
         all_devices: dict[str, DeviceProvision] = {}
+        all_errors: dict[str, DeviceBuildError] = {}
         expected_nodes = set(self.config.nodes.keys())
         provisioned_nodes: set[str] = set()
 
@@ -163,6 +176,7 @@ class Rig:
                         payload = parts[3]
                         complete = ProvisionComplete.model_validate_json(payload)
                         all_devices.update(complete.devices)
+                        all_errors.update(complete.errors)
                         provisioned_nodes.add(node_id)
 
         except asyncio.TimeoutError:
@@ -175,7 +189,7 @@ class Rig:
                 f"Rig startup failed. Missing nodes: {missing}. All provisioned nodes have been shut down."
             )
 
-        return all_devices
+        return all_devices, all_errors
 
     async def _shutdown_nodes(self, node_ids: set[str], timeout: float = 5.0):
         """Send shutdown command to specific nodes and wait for acknowledgment.

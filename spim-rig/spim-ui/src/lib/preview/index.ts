@@ -10,6 +10,8 @@ export { default as PreviewCanvas } from './PreviewCanvas.svelte';
 
 export { default as PreviewChannelControls } from './ChannelControls.svelte';
 
+export { default as PreviewInfo } from './PreviewInfo.svelte';
+
 // controller implementations
 export { Previewer } from './controller.svelte';
 

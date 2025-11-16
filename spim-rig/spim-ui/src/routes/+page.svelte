@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { PreviewCanvas, Previewer, PreviewChannelControls } from '$lib/preview';
+	import { PreviewCanvas, Previewer, PreviewChannelControls, PreviewInfo } from '$lib/preview';
 	import { onMount } from 'svelte';
 
 	// Initialize preview controller
@@ -19,10 +19,6 @@
 
 	function handleStopPreview() {
 		previewer.stopPreview();
-	}
-
-	function handleResetCrop() {
-		previewer.resetCrop();
 	}
 
 	//blue-950
@@ -87,18 +83,7 @@
 				<span>{previewer.statusMessage}</span>
 			</div>
 
-			<div class="flex items-center gap-4 text-xs text-zinc-400">
-				<span>Zoom: {previewer.crop.k.toFixed(2)}</span>
-				<span>X: {previewer.crop.x.toFixed(2)}</span>
-				<span>Y: {previewer.crop.y.toFixed(2)}</span>
-				<button
-					onclick={handleResetCrop}
-					class="rounded bg-zinc-800 px-2 py-0.5 text-[0.65rem] text-zinc-300 transition-colors hover:bg-zinc-700"
-					aria-label="Reset pan and zoom"
-				>
-					Reset
-				</button>
-			</div>
+			<PreviewInfo {previewer} />
 
 			<div class="flex gap-2">
 				<button
