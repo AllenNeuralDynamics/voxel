@@ -377,21 +377,32 @@ export class Previewer {
 		const defaultColormaps: ColormapType[] = Object.keys(COLORMAP_COLORS) as ColormapType[];
 		const assignedNames = channels ? channels.slice(0, this.MAX_CHANNELS) : [];
 
-		if (channels && channels.length > 0) {
-			for (let i = 0; i < this.MAX_CHANNELS; i++) {
-				const slot = this.channels[i];
-				const name = assignedNames[i];
-				slot.reset();
-				if (name) {
-					slot.name = assignedNames[i];
-					slot.visible = true;
-					slot.levelsMin = 0.0;
-					slot.levelsMax = 1.0;
-					slot.setColor(colormapToHex(defaultColormaps[i % defaultColormaps.length]));
-				} else {
-					slot.disposeGpuResources();
-				}
+		if (!channels || channels.length === 0) return;
+
+		for (let i = 0; i < this.MAX_CHANNELS; i++) {
+			const slot = this.channels[i];
+			const newChannelName = assignedNames[i];
+			const channelChanged = slot.name !== newChannelName;
+
+			// No channel assigned to this slot
+			if (!newChannelName) {
+				slot.disposeGpuResources();
+				continue;
 			}
+
+			// Same channel - preserve user settings, just ensure visible
+			if (!channelChanged) {
+				slot.visible = true;
+				continue;
+			}
+
+			// New/different channel - reset and initialize with defaults
+			slot.reset();
+			slot.name = newChannelName;
+			slot.visible = true;
+			slot.levelsMin = 0.0;
+			slot.levelsMax = 1.0;
+			slot.setColor(colormapToHex(defaultColormaps[i % defaultColormaps.length]));
 		}
 
 		// Refresh GPU bindings if the renderer is ready

@@ -99,6 +99,24 @@
 		}
 	}
 
+	function handleWheel(e: WheelEvent) {
+		e.preventDefault();
+
+		// Scroll up (negative deltaY) increases value, scroll down decreases
+		const direction = e.deltaY < 0 ? 1 : -1;
+		let newValue = value + direction * step;
+
+		// Clamp to min/max
+		newValue = Math.max(min, Math.min(max, newValue));
+
+		value = newValue;
+
+		// Call callback if provided
+		if (onValueChange) {
+			onValueChange(newValue);
+		}
+	}
+
 	// Cleanup on destroy
 	$effect(() => {
 		return () => {
@@ -117,6 +135,7 @@
 	{value}
 	oninput={handleInput}
 	onmousedown={handleMouseDown}
+	onwheel={handleWheel}
 	style:width="{numCharacters + 1}ch"
 	style:color
 	style:text-align={align}

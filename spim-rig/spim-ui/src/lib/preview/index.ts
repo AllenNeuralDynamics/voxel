@@ -6,7 +6,9 @@
  */
 
 // Main Svelte component
-export { default as Preview } from './preview.svelte';
+export { default as PreviewCanvas } from './PreviewCanvas.svelte';
+
+export { default as PreviewChannelControls } from './ChannelControls.svelte';
 
 // controller implementations
 export { Previewer } from './controller.svelte';

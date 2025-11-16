@@ -20,6 +20,22 @@ export function sanitizeString(str: string): string {
 		.join(' ');
 }
 
+/**
+ * Validates if a string is a valid hex color code.
+ *
+ * @param color - The color string to validate (e.g., "#ff00ff", "#f0f")
+ * @returns True if the color is a valid hex code, false otherwise
+ *
+ * @example
+ * isValidHex("#ff00ff") // true
+ * isValidHex("#f0f") // true
+ * isValidHex("ff00ff") // false (missing #)
+ * isValidHex("#gg00ff") // false (invalid characters)
+ */
+export function isValidHex(color: string): boolean {
+	return /^#([0-9A-Fa-f]{3}){1,2}$/.test(color);
+}
+
 export async function getWebGPUDevice(lossHandler?: (info: GPUDeviceLostInfo) => void): Promise<GPUDevice> {
 	if (!navigator.gpu) {
 		throw new Error('WebGPU is not supported in this browser.');

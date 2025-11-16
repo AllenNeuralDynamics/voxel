@@ -1,20 +1,18 @@
 <script lang="ts">
 	import { Popover } from 'bits-ui';
-	import { COLORMAP_COLORS, isValidHex } from '$lib/widgets/preview/colormap';
+	import { isValidHex } from '$lib/utils';
 	import type { PopoverContentProps } from 'bits-ui';
 
 	interface Props {
 		color: string;
+		presetColors?: string[];
 		onColorChange: (color: string) => void;
 		align?: PopoverContentProps['align'];
 	}
 
-	let { color = $bindable('#ffffff'), onColorChange, align = 'start' }: Props = $props();
+	let { color = $bindable('#ffffff'), presetColors = [], onColorChange, align = 'start' }: Props = $props();
 
 	let customColorInput = $state(color);
-
-	// Get preset colors from the colormap
-	const presetColors = Object.values(COLORMAP_COLORS);
 
 	function handlePresetClick(hexColor: string) {
 		color = hexColor;
@@ -50,7 +48,7 @@
 
 <Popover.Root>
 	<Popover.Trigger
-		class="h-2.5 w-2.5 rounded-full border border-zinc-600/50 transition-all hover:scale-110 hover:border-zinc-500"
+		class="h-2.5 w-2.5 rounded-full border border-zinc-600/50 transition-all hover:border-zinc-300"
 		style="background-color: {color}"
 		aria-label="Pick color"
 	/>
@@ -60,26 +58,28 @@
 		sideOffset={4}
 		{align}
 	>
-		<!-- Preset colors -->
-		<div class="mb-2">
-			<div class="grid grid-cols-4 gap-1.5">
-				{#each presetColors as presetColor (presetColor)}
-					<button
-						type="button"
-						onclick={() => handlePresetClick(presetColor)}
-						class="h-5 w-5 rounded-full border transition-all hover:scale-110 {color.toLowerCase() ===
-						presetColor.toLowerCase()
-							? 'border-zinc-300 ring-1 ring-zinc-400'
-							: 'border-zinc-600/50 hover:border-zinc-500'}"
-						style="background-color: {presetColor}"
-						aria-label="Select preset color"
-					></button>
-				{/each}
+		{#if presetColors.length > 0}
+			<!-- Preset colors -->
+			<div class="mb-2">
+				<div class="grid grid-cols-4 gap-1.5">
+					{#each presetColors as presetColor (presetColor)}
+						<button
+							type="button"
+							onclick={() => handlePresetClick(presetColor)}
+							class="h-5 w-5 rounded-full border transition-all hover:scale-110 {color.toLowerCase() ===
+							presetColor.toLowerCase()
+								? 'border-zinc-300 ring-1 ring-zinc-400'
+								: 'border-zinc-600/50 hover:border-zinc-500'}"
+							style="background-color: {presetColor}"
+							aria-label="Select preset color"
+						></button>
+					{/each}
+				</div>
 			</div>
-		</div>
+		{/if}
 
 		<!-- Custom color -->
-		<div class="border-t border-zinc-700 pt-2">
+		<div class={presetColors.length > 0 ? 'border-t border-zinc-700 pt-2' : ''}>
 			<div class="flex gap-1.5">
 				<!-- Native color picker -->
 				<input
@@ -95,7 +95,8 @@
 					oninput={handleCustomInputChange}
 					onblur={handleCustomInputBlur}
 					placeholder="#ff00ff"
-					class="h-6 flex-1 rounded border border-zinc-600 bg-zinc-800 px-1.5 font-mono text-[0.65rem] text-zinc-200 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none"
+					size="7"
+					class="h-6 min-w-0 rounded border border-zinc-600 bg-zinc-800 px-1.5 font-mono text-[0.65rem] text-zinc-200 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none"
 				/>
 			</div>
 		</div>

@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { Preview, Previewer } from '$lib/widgets/preview';
-	import ChannelPreviewControls from '$lib/components/ChannelPreviewControls.svelte';
+	import { PreviewCanvas, Previewer, PreviewChannelControls } from '$lib/preview';
 	import { onMount } from 'svelte';
 
 	// Initialize preview controller
@@ -36,7 +35,7 @@
 
 	<main class="flex flex-1 flex-col overflow-hidden">
 		<div class="flex flex-1 overflow-hidden">
-			<aside class="flex w-80 flex-col border-r border-zinc-800">
+			<aside class="flex w-80 flex-col border-r border-zinc-800 bg-zinc-900/50">
 				{#if previewer.channels.length === 0}
 					<div class="flex flex-1 items-center justify-center">
 						<p class="text-sm text-zinc-500">No channels available</p>
@@ -45,24 +44,24 @@
 					<div class="flex flex-1 flex-col overflow-y-auto">
 						{#each previewer.channels as channel (channel.idx)}
 							{#if channel.name}
-								<div class="space-y-2 border-b border-zinc-900 px-3 pt-4 pb-6">
+								<div class="space-y-2 border-b border-zinc-800 px-3 pt-4 pb-6">
 									<!-- Preview Section -->
-									<ChannelPreviewControls {channel} {previewer} />
+									<PreviewChannelControls {channel} {previewer} />
 
-									<div class="space-y-2">
+									<div class="space-y-2 pt-2">
 										<!-- Detection Section (placeholder) -->
 										<div class="space-y-1">
-											<div class="text-[0.5rem] font-semibold text-zinc-500 uppercase">Detection</div>
-											<div class="h-16 rounded bg-zinc-900/30 p-2">
-												<div class="text-[0.6rem] text-zinc-600">Exposure, gain, binning controls...</div>
+											<div class="text-[0.5rem] font-semibold text-zinc-400 uppercase">Detection</div>
+											<div class="h-16 py-1">
+												<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
 											</div>
 										</div>
 
 										<!-- Illumination Section (placeholder) -->
 										<div class="space-y-1">
-											<div class="text-[0.5rem] font-semibold text-zinc-500 uppercase">Illumination</div>
-											<div class="h-16 rounded bg-zinc-900/30 p-2">
-												<div class="text-[0.6rem] text-zinc-600">Power, focus, shutter controls...</div>
+											<div class="text-[0.5rem] font-semibold text-zinc-400 uppercase">Illumination</div>
+											<div class="h-16 py-1">
+												<div class="text-[0.6rem] text-zinc-500">Power, focus, shutter controls...</div>
 											</div>
 										</div>
 									</div>
@@ -74,7 +73,7 @@
 			</aside>
 
 			<div class="flex-1">
-				<Preview {previewer} />
+				<PreviewCanvas {previewer} />
 			</div>
 		</div>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import DraggableNumberInput from './DraggableNumberInput.svelte';
+	import DraggableNumberInput from '$lib/components/DraggableNumberInput.svelte';
 
 	interface Props {
 		histData: number[] | undefined | null; // Allow null/undefined
@@ -22,10 +22,15 @@
 	// Display window (what range of intensities to show in the histogram)
 	let displayWindowMin = $state(0);
 	let displayWindowMax = $state(dataTypeMax);
+	let hasAutoFit = $state(false);
 
 	// --- NEW: Check for valid data ---
 	// Support variable-length histograms (256 for uint8, 65536 for uint16, etc.)
 	const hasValidData = $derived(!!histogram && histogram.length > 0);
+
+	// Shared button styling for ghost/inline action buttons
+	const ghostButtonClass =
+		'min-w-14 justify-self-center rounded-sm px-1.5 py-[0.25] text-[0.5rem] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-0';
 
 	// SVG dimensions
 	let width = $state(256); // Default, will be updated by bind:clientWidth
@@ -163,10 +168,49 @@
 		onLevelsChange(minBin / (numBins - 1), maxBin / (numBins - 1));
 	}
 
-	// function resetDisplayWindow() {
-	// 	displayWindowMin = 0;
-	// 	displayWindowMax = dataTypeMax;
-	// }
+	function handleFitDisplayWindow() {
+		if (!hasValidData || !histogram) return;
+
+		// Find first and last non-zero bins
+		let minBin = 0;
+		let maxBin = numBins - 1;
+
+		// Find first bin with data
+		for (let i = 0; i < numBins; i++) {
+			if (histogram[i] > 0) {
+				minBin = i;
+				break;
+			}
+		}
+
+		// Find last bin with data
+		for (let i = numBins - 1; i >= 0; i--) {
+			if (histogram[i] > 0) {
+				maxBin = i;
+				break;
+			}
+		}
+
+		// Add 15% padding on each side
+		const range = maxBin - minBin;
+		const padding = range * 0.15;
+
+		const paddedMinBin = Math.max(0, minBin - padding);
+		const paddedMaxBin = Math.min(numBins - 1, maxBin + padding);
+
+		// Convert bins to intensity values
+		displayWindowMin = Math.round((paddedMinBin / (numBins - 1)) * dataTypeMax);
+		displayWindowMax = Math.round((paddedMaxBin / (numBins - 1)) * dataTypeMax);
+		hasAutoFit = true;
+	}
+
+	// Auto-fit on init when histogram data first becomes available
+	$effect(() => {
+		if (hasValidData && !hasAutoFit && onLevelsChange) {
+			handleFitDisplayWindow();
+			handleAutoLevels();
+		}
+	});
 
 	// Calculate handle positions (clamped to display window edges if outside)
 	const minHandlePos = $derived(() => {
@@ -197,7 +241,7 @@
 				value={minIntensity}
 				min={0}
 				max={maxIntensity - 1}
-				step={1}
+				step={100}
 				numCharacters={5}
 				align="left"
 				onValueChange={(newValue) => {
@@ -210,12 +254,7 @@
 		{/if}
 
 		{#if onLevelsChange}
-			<button
-				type="button"
-				onclick={handleAutoLevels}
-				disabled={!hasValidData}
-				class="justify-self-center rounded-sm px-1.5 py-[0.25] text-[0.5rem] text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400"
-			>
+			<button type="button" onclick={handleAutoLevels} disabled={!hasValidData} class={ghostButtonClass}>
 				auto levels
 			</button>
 		{/if}
@@ -225,7 +264,7 @@
 				value={maxIntensity}
 				min={minIntensity + 1}
 				max={dataTypeMax}
-				step={1}
+				step={100}
 				numCharacters={5}
 				align="right"
 				onValueChange={(newValue) => {
@@ -238,7 +277,7 @@
 		{/if}
 	</div>
 
-	<div class="border border-zinc-800/50 bg-transparent">
+	<div class="border border-zinc-700 bg-transparent">
 		{#if hasValidData}
 			{@const histData = displayHistogram()}
 			{@const { startBin } = visibleBins()}
@@ -348,7 +387,7 @@
 			</svg>
 		{:else}
 			<div class="flex items-center justify-center" style="height: {height}px;">
-				<span class="my-auto text-[0.65rem] text-zinc-700">No histogram data</span>
+				<span class="my-auto text-[0.65rem] text-zinc-600">No histogram data</span>
 			</div>
 		{/if}
 	</div>
@@ -362,6 +401,9 @@
 			numCharacters={5}
 			align="left"
 		/>
+		<button type="button" onclick={handleFitDisplayWindow} disabled={!hasValidData} class={ghostButtonClass}>
+			auto fit
+		</button>
 		<DraggableNumberInput
 			bind:value={displayWindowMax}
 			min={displayWindowMin + 1}
