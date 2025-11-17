@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from functools import wraps
-from typing import Any, Literal, Self, Union, get_args, get_origin
+from typing import Any, ClassVar, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field, ValidationError, create_model
 
@@ -51,15 +51,9 @@ def describe(label: str, desc: str | None = None, units: str | None = None) -> C
     return decorator
 
 
-class DeviceType(StrEnum):
-    LASER = "laser"
-    CAMERA = "camera"
-    OTHER = "other"
-
-
-class Device:
+class Device[T: StrEnum]:
     __COMMANDS__: set[str] = set()
-    __DEVICE_TYPE__: DeviceType = DeviceType.OTHER
+    __DEVICE_TYPE__: ClassVar[str] = "generic"
 
     def __init__(self, uid: str):
         self.uid = uid
@@ -181,7 +175,7 @@ class CommandInfo(AttributeInfo):
 
 class DeviceInterface(BaseModel):
     uid: str
-    type: DeviceType
+    type: str
     commands: dict[str, CommandInfo]
     properties: dict[str, PropertyInfo]
 

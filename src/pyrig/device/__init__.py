@@ -1,17 +1,19 @@
-from .service import DeviceService
+from .base import Device, DeviceInterface, describe
 from .client import DeviceClient
-from .base import Device, DeviceInterface, DeviceType, describe
-from .conn import DeviceAddressTCP, DeviceAddress
+from .conn import DeviceAddress, DeviceAddressTCP
+from .service import DeviceService
 
-__all__ = ["DeviceService", "Device", "DeviceInterface", "DeviceType", "DeviceAddress", "DeviceAddressTCP", "describe"]
+__all__ = ["DeviceService", "Device", "DeviceInterface", "DeviceAddress", "DeviceAddressTCP", "describe"]
 
 
 # Example Usage
 if __name__ == "__main__":
     import asyncio
     import random
-    from rich import print
+
     import zmq.asyncio
+    from rich import print
+
     from pyrig.device.base import CommandResponse
 
     class DataProcessor(Device):

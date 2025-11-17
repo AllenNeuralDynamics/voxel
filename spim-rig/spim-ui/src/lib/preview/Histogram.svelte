@@ -119,6 +119,22 @@
 		}
 	}
 
+	// Expand display window when levels move beyond current boundaries
+	$effect(() => {
+		const minIntensityValue = Math.round(levelsMin * dataTypeMax);
+		const maxIntensityValue = Math.round(levelsMax * dataTypeMax);
+
+		// Expand window min if level min goes below it
+		if (minIntensityValue < displayWindowMin) {
+			displayWindowMin = Math.max(0, minIntensityValue);
+		}
+
+		// Expand window max if level max goes above it
+		if (maxIntensityValue > displayWindowMax) {
+			displayWindowMax = Math.min(dataTypeMax, maxIntensityValue);
+		}
+	});
+
 	function handleMouseUp() {
 		isDraggingMin = false;
 		isDraggingMax = false;

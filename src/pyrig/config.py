@@ -61,6 +61,11 @@ class RigConfig(BaseModel):
         return cls.model_validate(data)
 
     @property
+    def device_uids(self) -> set[str]:
+        """All device UIDs across all nodes."""
+        return {device_id for node in self.nodes.values() for device_id in node.devices.keys()}
+
+    @property
     def local_nodes(self) -> dict[str, NodeConfig]:
         local_hostnames = [get_local_ip(), "localhost", "127.0.0.1", "::1", None]
         return {uid: cfg for uid, cfg in self.nodes.items() if cfg.hostname in local_hostnames}

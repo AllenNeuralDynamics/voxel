@@ -17,7 +17,11 @@ from spim_rig.drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 
 from pyrig.props import deliminated_float, enumerated_int, enumerated_string
 
-VP_151MX_M6H0 = Vec2D(x=14192, y=10640) // 3
+VP_151MX_M6H0 = Vec2D(y=10_640, x=14_192)
+
+_FACTOR = 0.75
+
+DEFAULT_SENSOR_SIZE = Vec2D(y=int(VP_151MX_M6H0.y * _FACTOR), x=int(VP_151MX_M6H0.x * _FACTOR))
 
 
 @final
@@ -36,7 +40,7 @@ class SimulatedCamera(SpimCamera):
         self,
         uid: str,
         pixel_size_um: Vec2D[float] = Vec2D(y=1.0, x=1.0),
-        sensor_size_px: Vec2D[int] = VP_151MX_M6H0,
+        sensor_size_px: Vec2D[int] = DEFAULT_SENSOR_SIZE,
     ):
         super().__init__(uid=uid)
         self._pixel_size_um = pixel_size_um

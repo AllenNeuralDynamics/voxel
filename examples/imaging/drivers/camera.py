@@ -2,7 +2,7 @@ from pathlib import Path
 
 import zmq.asyncio
 
-from pyrig.device import Device, DeviceAddress, DeviceClient, DeviceService, DeviceType, describe
+from pyrig.device import Device, DeviceAddress, DeviceClient, DeviceService, describe
 
 
 def parse_tuple_str(str: str) -> tuple[float, float]:
@@ -16,7 +16,7 @@ def parse_tuple_str(str: str) -> tuple[float, float]:
 class Camera(Device):
     """A mock camera device for testing property and command interfaces."""
 
-    __DEVICE_TYPE__ = DeviceType.CAMERA
+    __DEVICE_TYPE__ = "camera"
 
     def __init__(self, uid: str, pixel_size_um: str):
         super().__init__(uid=uid)

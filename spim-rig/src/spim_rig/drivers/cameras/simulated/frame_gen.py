@@ -29,6 +29,7 @@ class ReferenceFrameGenerator:
         path: str | None = None,
         apply_noise: bool = True,
         mode: ResizeMode = ResizeMode.AUTO,
+        intensity_scale: float = 0.5,  # 0.08
     ):
         """Initialize frame generator.
 
@@ -39,6 +40,7 @@ class ReferenceFrameGenerator:
             path: Path to reference image (defaults to bundled image)
             apply_noise: Apply Poisson noise simulation
             mode: Resize strategy (AUTO chooses based on size ratio)
+            intensity_scale: Scale factor for intensity (0.0-1.0), simulates detector gain
         """
         self.height = height_px
         self.width = width_px
@@ -46,6 +48,7 @@ class ReferenceFrameGenerator:
         self.path = path or str(Path(__file__).parent / "default_reference.png")
         self.apply_noise = apply_noise
         self.mode = mode
+        self.intensity_scale = intensity_scale
         self._processed_base_image: np.ndarray | None = None
 
     def _load_image(self, path: str) -> np.ndarray:
@@ -105,7 +108,7 @@ class ReferenceFrameGenerator:
             if self.apply_noise:
                 rng = np.random.default_rng()
                 photons = rng.poisson(image)
-                image = (photons * 0.85 * 0.08).astype(np.float32)
+                image = (photons * 0.85 * self.intensity_scale).astype(np.float32)
 
             self._processed_base_image = self._resize_image(image)
 

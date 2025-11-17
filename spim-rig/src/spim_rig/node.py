@@ -15,6 +15,8 @@ from pyrig import Device, NodeService
 from pyrig.node import main
 from spim_rig.camera.base import SpimCamera
 from spim_rig.camera.service import CameraService
+from spim_rig.daq.base import SpimDaq
+from spim_rig.daq.service import DaqService
 
 
 class SpimNodeService(NodeService):
@@ -24,6 +26,8 @@ class SpimNodeService(NodeService):
         """Hook for custom service types."""
         if isinstance(device, SpimCamera):
             return CameraService(device, conn, self._zctx)
+        if isinstance(device, SpimDaq):
+            return DaqService(device, conn, self._zctx)
         return super()._create_service(device, conn)
 
 

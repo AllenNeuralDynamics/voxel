@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from rich import print
 
 from pyrig.config import NodeConfig
-from pyrig.device import Device, DeviceAddressTCP, DeviceService, DeviceType
+from pyrig.device import Device, DeviceAddressTCP, DeviceService
 from pyrig.utils import ZmqTopicHandler
 
 
@@ -26,7 +26,7 @@ class DeviceProvision(BaseModel):
     """Bundle of device connection and type information."""
 
     conn: DeviceAddressTCP
-    device_type: DeviceType
+    device_type: str
 
 
 class DeviceBuildError(BaseModel):

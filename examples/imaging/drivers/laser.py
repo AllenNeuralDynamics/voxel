@@ -1,13 +1,13 @@
 import random
 
-from pyrig.device import Device, DeviceClient, DeviceType, describe
+from pyrig.device import Device, DeviceClient, describe
 from pyrig.props import PropertyModel, deliminated_float, enumerated_string
 
 
 class Laser(Device):
     """A mock laser device for testing property and command interfaces."""
 
-    __DEVICE_TYPE__ = DeviceType.LASER
+    __DEVICE_TYPE__ = "laser"
     __COMMANDS__ = {"turn_on", "turn_off"}
 
     def __init__(self, uid: str, wavelength: float):

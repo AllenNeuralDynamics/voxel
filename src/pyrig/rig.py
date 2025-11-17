@@ -82,6 +82,8 @@ class Rig:
 
         await self._wait_for_connections(timeout=connection_timeout)
 
+        await self._on_provision_complete()
+
         # Log summary
         if self.build_errors:
             self.log.warning(
@@ -96,6 +98,10 @@ class Rig:
     def _create_client(self, device_id: str, prov: DeviceProvision) -> DeviceClient:
         """Create a single client. Override for custom client types."""
         return DeviceClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
+
+    async def _on_provision_complete(self) -> None:
+        """Override for custom validation after devices are provisioned."""
+        pass
 
     async def _spawn_local_nodes(self) -> dict[str, Process]:
         """Spawn local node subprocesses."""

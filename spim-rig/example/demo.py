@@ -12,10 +12,9 @@ from pathlib import Path
 
 import zmq.asyncio
 from rich import print
+from spim_rig import SpimRig, SpimRigConfig
 from spim_rig.camera.base import TriggerMode, TriggerPolarity
-from spim_rig.rig import SpimRig
 
-from pyrig import RigConfig
 from pyrig.utils import configure_logging
 
 configure_logging(level=logging.INFO, fmt="%(message)s", datefmt="[%X]")
@@ -36,7 +35,7 @@ async def main():
         sys.exit(1)
 
     # Load configuration and create rig
-    config = RigConfig.from_yaml(config_path)
+    config = SpimRigConfig.from_yaml(config_path)
     zctx = zmq.asyncio.Context()
     rig = SpimRig(zctx, config)
 
@@ -108,8 +107,8 @@ async def main():
             await rig.stop_preview()
             rig.preview.unregister_callback(frame_callback)
 
-            for _, camera in rig.cameras.items():
-                interface = await camera.get_interface()
+            for _, device in rig.devices.items():
+                interface = await device.get_interface()
                 print(interface)
 
         log.info("\n✓ Demo complete!")

@@ -2,6 +2,7 @@ _anchors:
   - &camera_ip "127.0.0.1"
   - &camera_target spim_rig.drivers.cameras.simulated.SimulatedCamera
   - &laser_target spim_rig.drivers.lasers.simulated.SimulatedLaser
+  - &daq_target spim_rig.drivers.daqs.simulated.SimulatedDaq
 
 metadata:
   name: "LightSheetMicroscope_01"
@@ -10,6 +11,9 @@ metadata:
 nodes:
   primary:
     devices:
+      daq_1:
+        target: *daq_target
+        kwargs: { device_name: "MockDev1" }
       laser_488:
         target: *laser_target
         kwargs: { wavelength: 488 }
@@ -43,6 +47,17 @@ nodes:
   #     camera_4:
   #       target: *camera_target
   #       kwargs: { pixel_size_um: "0.5, 0.5" }
+
+daq:
+  device: daq_1
+  acq_ports:
+    laser_488: ao0
+    laser_561: ao1
+    laser_656: ao2
+    camera_1: ao3
+    camera_2: ao4
+    # camera_3: ao5
+    # camera_4: ao6
 
 detection:
   camera_1:

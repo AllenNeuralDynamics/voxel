@@ -4,7 +4,7 @@ import logging
 from .config import NodeConfig, RigConfig
 
 # Device layer
-from .device import Device, DeviceClient, DeviceService, DeviceType, describe
+from .device import Device, DeviceClient, DeviceService, describe
 
 # For custom services
 from .device.conn import DeviceAddress, DeviceAddressTCP
@@ -25,7 +25,6 @@ __all__ = [
     "Device",
     "DeviceService",
     "DeviceClient",
-    "DeviceType",
     "describe",
     "PropertyModel",
     # Configuration

@@ -8,15 +8,14 @@ import zmq.asyncio
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from pyrig import RigConfig
-from spim_rig.rig import SpimRig
+from spim_rig import SpimRig, SpimRigConfig
 from spim_rig.web.routers.preview import router as preview_router
 
 # Global state
 _rig: SpimRig | None = None
 _preview_clients: dict[str, asyncio.Queue] = {}
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ui")
 
 
 def create_lifespan(config_path: str):
@@ -30,7 +29,7 @@ def create_lifespan(config_path: str):
         # Startup: Initialize rig
         log.info("Loading rig configuration from: %s", config_path)
 
-        config = RigConfig.from_yaml(config_path)
+        config = SpimRigConfig.from_yaml(config_path)
         zctx = zmq.asyncio.Context()
         _rig = SpimRig(zctx, config)
         await _rig.start()
