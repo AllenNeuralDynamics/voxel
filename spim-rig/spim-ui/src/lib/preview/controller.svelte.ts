@@ -298,7 +298,9 @@ export class Previewer {
 			onPreviewStatus: (channels, isPreviewing) => this.#handlePreviewStatus(channels, isPreviewing),
 			onFrame: (channel, metadata, bitmap) => this.#handleFrame(channel, metadata, bitmap),
 			onError: (error) => this.#handleError(error),
-			onConnectionChange: (connected) => this.#handleConnectionChange(connected)
+			onConnectionChange: (connected) => this.#handleConnectionChange(connected),
+			onCropUpdate: (crop) => this.#handleCropUpdate(crop),
+			onLevelsUpdate: (channel, levels) => this.#handleLevelsUpdate(channel, levels)
 		});
 	}
 
@@ -308,17 +310,17 @@ export class Previewer {
 
 		try {
 			await this.#initRenderResources(canvas);
-
 			await this.#client.connect();
 
-			// Initialize GPU resources for channels (already created in constructor)
-			if (this.channels.length > 0) {
-				for (const channel of this.channels) {
-					channel.setColor(channel.color);
-				}
-				this.#updateBindGroup();
+			// Initialize GPU resources for channels
+			for (const channel of this.channels) {
+				channel.setColor(channel.color);
 			}
+			this.#updateBindGroup();
+
 			this.statusMessage = 'Connected';
+			// Start the rendering loop as soon as the component is initialized
+			this.startRendering();
 		} catch (error) {
 			this.statusMessage = 'Connection failed';
 			throw error;
@@ -328,6 +330,9 @@ export class Previewer {
 	}
 
 	shutdown(): void {
+		// Stop the rendering loop when the component is destroyed
+		this.stopRendering();
+
 		if (this.isPreviewing) {
 			this.stopPreview();
 		}
@@ -346,16 +351,13 @@ export class Previewer {
 			console.warn('No visible channels to preview');
 			return;
 		}
-
+		// Only sends the command to the backend. Does not touch rendering state.
 		this.#client.startPreview();
-		this.isPreviewing = true;
-		this.#startRendering();
 	}
 
 	stopPreview(): void {
+		// Only sends the command to the backend. Does not touch rendering state.
 		this.#client.stopPreview();
-		this.isPreviewing = false;
-		this.#stopRendering();
 	}
 
 	setChannelLevels(name: string, min: number, max: number): void {
@@ -373,6 +375,26 @@ export class Previewer {
 
 	// ===================== PRIVATE: Networking Events =====================
 
+	#handleCropUpdate = (crop: PreviewCrop): void => {
+		// Check if the update is redundant to avoid unnecessary re-renders
+		if (this.crop.x !== crop.x || this.crop.y !== crop.y || this.crop.k !== crop.k) {
+			console.log('Received crop update from server:', crop);
+			this.crop = crop;
+		}
+	};
+
+	#handleLevelsUpdate = (channelName: string, levels: PreviewLevels): void => {
+		const channel = this.channels.find((c) => c.name === channelName);
+		if (!channel) return;
+
+		// Check if the update is redundant
+		if (channel.levelsMin !== levels.min || channel.levelsMax !== levels.max) {
+			console.log(`Received levels update for ${channelName}:`, levels);
+			channel.levelsMin = levels.min;
+			channel.levelsMax = levels.max;
+		}
+	};
+
 	#handlePreviewStatus = async (channels: string[], isPreviewing: boolean) => {
 		const defaultColormaps: ColormapType[] = Object.keys(COLORMAP_COLORS) as ColormapType[];
 		const assignedNames = channels ? channels.slice(0, this.MAX_CHANNELS) : [];
@@ -384,19 +406,16 @@ export class Previewer {
 			const newChannelName = assignedNames[i];
 			const channelChanged = slot.name !== newChannelName;
 
-			// No channel assigned to this slot
 			if (!newChannelName) {
 				slot.disposeGpuResources();
 				continue;
 			}
 
-			// Same channel - preserve user settings, just ensure visible
 			if (!channelChanged) {
 				slot.visible = true;
 				continue;
 			}
 
-			// New/different channel - reset and initialize with defaults
 			slot.reset();
 			slot.name = newChannelName;
 			slot.visible = true;
@@ -405,39 +424,30 @@ export class Previewer {
 			slot.setColor(colormapToHex(defaultColormaps[i % defaultColormaps.length]));
 		}
 
-		// Refresh GPU bindings if the renderer is ready
 		if (this.#rendererInitialized) {
 			this.#updateBindGroup();
 		}
 
+		// Only update the state. Do not trigger rendering here.
 		this.isPreviewing = isPreviewing;
-		if (isPreviewing) {
-			this.#startRendering();
-		} else {
-			this.#stopRendering();
-		}
 	};
 
 	#handleFrame = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
 		const channel = this.channels.find((c) => c.name === channelName);
 		if (!channel || !this.#canvas || !this.#rendererInitialized) return;
 
-		// Update canvas size if needed
 		if (this.#canvas.width !== info.preview_width || this.#canvas.height !== info.preview_height) {
 			this.#canvas.width = info.preview_width;
 			this.#canvas.height = info.preview_height;
 			this.#canvas.style.aspectRatio = `${info.preview_width} / ${info.preview_height}`;
 		}
 
-		// Update channel's latest frame info (reactive)
 		channel.latestFrameInfo = info;
 
-		// Cache histogram if present (only full frames have histogram data)
 		if (info.histogram) {
 			channel.latestHistogram = info.histogram;
 		}
 
-		// Collect frame in FramesCollector (no processing, just store)
 		this.#framesCollector.collectFrame(channel.idx, info, bitmap);
 	};
 
@@ -454,6 +464,20 @@ export class Previewer {
 	};
 
 	// ===================== PRIVATE: Renderer System =====================
+
+	startRendering(): void {
+		if (this.#isRendering || !this.#rendererInitialized) return;
+		this.#isRendering = true;
+		this.#frameLoop();
+	}
+
+	stopRendering(): void {
+		this.#isRendering = false;
+		if (this.#animationFrameId !== null) {
+			cancelAnimationFrame(this.#animationFrameId);
+			this.#animationFrameId = null;
+		}
+	}
 
 	async #initRenderResources(canvas: HTMLCanvasElement): Promise<void> {
 		this.#canvas = canvas;
@@ -482,7 +506,6 @@ export class Previewer {
 			usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
 		});
 
-		// Generate shader code dynamically based on MAX_CHANNELS
 		const shaderCode = generateShaderCode(this.MAX_CHANNELS);
 		const shaderModule = this.#gpuDevice.createShaderModule({ code: shaderCode });
 		this.#pipeline = this.#gpuDevice.createRenderPipeline({
@@ -498,7 +521,7 @@ export class Previewer {
 	}
 
 	#cleanupRenderResources(): void {
-		this.#stopRendering();
+		this.stopRendering();
 
 		for (const channel of this.channels) {
 			channel.disposeGpuResources();
@@ -511,45 +534,17 @@ export class Previewer {
 		this.#rendererInitialized = false;
 	}
 
-	#startRendering(): void {
-		if (this.#isRendering || !this.#rendererInitialized) return;
-		this.#isRendering = true;
-		this.#frameLoop();
-	}
-
-	#stopRendering(): void {
-		this.#isRendering = false;
-		if (this.#animationFrameId !== null) {
-			cancelAnimationFrame(this.#animationFrameId);
-			this.#animationFrameId = null;
-		}
-	}
-
 	#frameLoop = (): void => {
 		if (!this.#isRendering) return;
 
-		// Get indices of visible channels
 		const visibleIndices = this.channels.filter((c) => c.visible).map((c) => c.idx);
-
-		// // When pan/zoom active, use original frames; otherwise use crop-matching frames
-		// const requestCrop: PreviewCrop = this.isPanZoomActive ? { x: 0, y: 0, k: 0 } : this.crop;
-
-		// // Try to get latest frames for requested crop
-		// let frameSet = this.#framesCollector.getLatestFrames(requestCrop, visibleIndices);
-
-		// // If not available, fall back to original (unless we're already requesting original)
-		// if (!frameSet && !this.isPanZoomActive) {
-		// 	frameSet = this.#framesCollector.getLatestFrames({ x: 0, y: 0, k: 0 }, visibleIndices);
-		// }
-
 		const frameSet = this.#framesCollector.getLatestFrames(this.crop, visibleIndices);
-		// Render if we have frames available
+
 		if (frameSet) {
-			// Update GPU textures and build channel states map indexed by actual channel index
 			const channelStates = new SvelteMap<number, ChannelUniformState>();
 			for (const channel of this.channels.filter((c) => c.visible)) {
 				const frameData = frameSet.frames[channel.idx];
-				if (!frameData) continue; // Skip if no frame available for this channel
+				if (!frameData) continue;
 
 				const recreated = channel.updateTexture(frameData.bitmap);
 				if (recreated) this.#updateBindGroup();
@@ -566,9 +561,6 @@ export class Previewer {
 				});
 			}
 
-			// Calculate delta: difference between user's desired view and actual frame crop
-			// this.crop = what the user wants to see (their pan/zoom position)
-			// frameSet.crop = what crop the frames actually have
 			const delta: PreviewCrop = {
 				x: this.crop.x - frameSet.crop.x,
 				y: this.crop.y - frameSet.crop.y,
@@ -579,7 +571,6 @@ export class Previewer {
 			this.#executeRenderPass();
 		}
 
-		// Schedule next frame (only once, at the end)
 		this.#animationFrameId = requestAnimationFrame(this.#frameLoop);
 	};
 
@@ -602,7 +593,6 @@ export class Previewer {
 		const dummyView = this.#dummyTexture.createView();
 
 		let bindingIndex = 2;
-		// Bind channels by their actual index, not by filtered visible order
 		for (let i = 0; i < this.MAX_CHANNELS; i++) {
 			const channel = this.channels[i];
 			if (channel && channel.visible) {
@@ -697,12 +687,10 @@ export class Previewer {
 	}
 
 	#getMaxCropK(): number {
-		// Get frame info from any available frame in the collector
 		const visibleIndices = this.channels.filter((c) => c.visible).map((c) => c.idx);
 		const frameSet = this.#framesCollector.getLatestFrames({ x: 0, y: 0, k: 0 }, visibleIndices);
 
 		if (frameSet) {
-			// Find any frame with info
 			for (const frameData of frameSet.frames) {
 				if (frameData) {
 					const info = frameData.info;

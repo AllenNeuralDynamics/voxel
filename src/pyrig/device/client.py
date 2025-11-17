@@ -48,6 +48,7 @@ class DeviceClient:
         self._sub_socket.connect(conn.pub_addr)
         self._sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
 
+        self._lock = asyncio.Lock()
         self._listen_task = asyncio.create_task(self._listen_loop())
         self._callbacks: dict[str, list[Callable]] = {}
 
@@ -101,9 +102,10 @@ class DeviceClient:
         """Sends a command to a specific device."""
         payload = req.model_dump_json().encode()
 
-        await self._req_socket.send_multipart([_REQ_CMD_, payload])
-        response_json = await self._req_socket.recv_json()
-        return CommandResponse.model_validate(response_json)
+        async with self._lock:
+            await self._req_socket.send_multipart([_REQ_CMD_, payload])
+            response_json = await self._req_socket.recv_json()
+            return CommandResponse.model_validate(response_json)
 
     async def send_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
         """Send a command to the device and return raw response (for manual error handling)."""

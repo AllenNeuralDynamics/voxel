@@ -30,7 +30,7 @@
 
 	// Shared button styling for ghost/inline action buttons
 	const ghostButtonClass =
-		'min-w-14 justify-self-center rounded-sm px-1.5 py-[0.25] text-[0.5rem] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-0';
+		'min-w-14 justify-self-center rounded-sm px-1.5 py-[0.25] text-[0.6rem] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-0';
 
 	// SVG dimensions
 	let width = $state(256); // Default, will be updated by bind:clientWidth
@@ -59,7 +59,7 @@
 		// Debug: log histogram stats
 		const totalPixels = histogram.reduce((sum, count) => sum + count, 0);
 		const nonZeroBins = histogram.filter((count) => count > 0).length;
-		console.log('[Histogram Debug]', {
+		console.debug('[Histogram Debug]', {
 			totalPixels,
 			nonZeroBins,
 			maxCount,
@@ -234,7 +234,6 @@
 		if (minBin < startBin) return 0;
 		if (minBin > endBin) return width;
 		const pos = ((minBin - startBin) / (endBin - startBin)) * width;
-		console.log('[Handle Debug] Min:', { minBin, startBin, endBin, pos, levelsMin });
 		return pos;
 	});
 
@@ -245,7 +244,6 @@
 		const pos = ((maxBin - startBin) / (endBin - startBin)) * width;
 		// Clamp to ensure it's always visible (2px from edge)
 		const clampedPos = Math.min(pos, width - 2);
-		// console.log('[Handle Debug] Max:', { maxBin, startBin, endBin, pos, clampedPos, levelsMax, width });
 		return clampedPos;
 	});
 </script>

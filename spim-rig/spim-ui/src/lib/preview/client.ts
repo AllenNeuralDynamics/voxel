@@ -65,7 +65,23 @@ interface PreviewErrorMessage {
 	error: string;
 }
 
-type PreviewMessage = PreviewFrameMessage | PreviewStatusMessage | PreviewErrorMessage;
+interface PreviewCropMessage {
+	type: 'crop';
+	crop: PreviewCrop;
+}
+
+interface PreviewLevelsMessage {
+	type: 'levels';
+	channel: string;
+	levels: PreviewLevels;
+}
+
+type PreviewMessage =
+	| PreviewFrameMessage
+	| PreviewStatusMessage
+	| PreviewErrorMessage
+	| PreviewCropMessage
+	| PreviewLevelsMessage;
 
 /**
  * Control messages sent from client to server.
@@ -81,6 +97,8 @@ export interface PreviewClientCallbacks {
 	onFrame: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	onError?: (error: Error) => void;
 	onConnectionChange?: (connected: boolean) => void;
+	onCropUpdate?: (crop: PreviewCrop) => void;
+	onLevelsUpdate?: (channel: string, levels: PreviewLevels) => void;
 }
 
 /**
@@ -168,6 +186,14 @@ export class PreviewClient {
 
 				case 'error':
 					this.callbacks.onError?.(new Error(message.error));
+					break;
+
+				case 'crop':
+					this.callbacks.onCropUpdate?.(message.crop);
+					break;
+
+				case 'levels':
+					this.callbacks.onLevelsUpdate?.(message.channel, message.levels);
 					break;
 
 				default:

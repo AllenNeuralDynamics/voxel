@@ -1,19 +1,15 @@
 """FastAPI application for SPIM Rig web control."""
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 import zmq.asyncio
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from spim_rig import SpimRig, SpimRigConfig
-from spim_rig.web.routers.preview import router as preview_router
-
-# Global state
-_rig: SpimRig | None = None
-_preview_clients: dict[str, asyncio.Queue] = {}
+from spim_rig.web.preview import PreviewService
+from spim_rig.web.preview import router as preview_router
 
 log = logging.getLogger("ui")
 
@@ -24,26 +20,29 @@ def create_lifespan(config_path: str):
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """Application lifespan: initialize and cleanup rig."""
-        global _rig
-
-        # Startup: Initialize rig
+        # Startup: Initialize rig and services
         log.info("Loading rig configuration from: %s", config_path)
 
         config = SpimRigConfig.from_yaml(config_path)
         zctx = zmq.asyncio.Context()
-        _rig = SpimRig(zctx, config)
-        await _rig.start()
+        rig = SpimRig(zctx, config)
+        await rig.start()
 
-        log.info("Rig initialized successfully")
-        log.info("Available cameras: %s", list(_rig.cameras.keys()))
+        # Store rig and services on the application state to avoid globals
+        app.state.rig = rig
+        app.state.preview_service = PreviewService(rig=rig)
+
+        log.info("Rig and services initialized successfully")
+        log.info("Available cameras: %s", list(rig.cameras.keys()))
 
         yield
 
         # Shutdown: Stop preview and cleanup
         log.info("Shutting down rig...")
-        if _rig:
+        if hasattr(app.state, "rig") and app.state.rig:
             try:
-                await _rig.stop_preview()
+                if app.state.rig.preview.is_active:
+                    await app.state.rig.stop_preview()
             except Exception as e:
                 log.error("Error stopping preview: %s", e)
 
@@ -53,14 +52,7 @@ def create_lifespan(config_path: str):
 
 
 def create_app(config_path: str) -> FastAPI:
-    """Create and configure the FastAPI application.
-
-    Args:
-        config_path: Path to the SPIM rig configuration YAML file
-
-    Returns:
-        Configured FastAPI application
-    """
+    """Create and configure the FastAPI application."""
     app = FastAPI(
         title="SPIM Rig Control API",
         description="Web API for controlling SPIM microscope rigs",
@@ -68,10 +60,9 @@ def create_app(config_path: str) -> FastAPI:
         lifespan=create_lifespan(config_path),
     )
 
-    # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Allow all origins in development
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -79,27 +70,15 @@ def create_app(config_path: str) -> FastAPI:
 
     app.include_router(preview_router)
 
-    # Basic health check endpoint
     @app.get("/")
     async def root():
         """Root endpoint - basic health check."""
+        # Note: This still relies on app.state.rig being available
+        # A dependency-injected approach would be better in the long run
         return {
             "status": "ok",
             "service": "SPIM Rig Control API",
-            "cameras": list(_rig.cameras.keys()) if _rig else [],
+            "cameras": list(app.state.rig.cameras.keys()) if hasattr(app.state, "rig") else [],
         }
 
     return app
-
-
-# Dependency injection functions
-def get_rig() -> SpimRig:
-    """Get the initialized SpimRig instance."""
-    if _rig is None:
-        raise HTTPException(status_code=503, detail="Rig not initialized")
-    return _rig
-
-
-def get_preview_clients() -> dict[str, asyncio.Queue]:
-    """Get the preview clients dictionary."""
-    return _preview_clients
