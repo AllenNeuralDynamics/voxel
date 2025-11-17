@@ -3,6 +3,7 @@ _anchors:
   - &camera_target spim_rig.drivers.cameras.simulated.SimulatedCamera
   - &laser_target spim_rig.drivers.lasers.simulated.SimulatedLaser
   - &daq_target spim_rig.drivers.daqs.simulated.SimulatedDaq
+  - &fw_target spim_rig.drivers.filter_wheels.simulated.SimulatedFilterWheel
 
 metadata:
   name: "LightSheetMicroscope_01"
@@ -23,6 +24,19 @@ nodes:
       laser_656:
         target: *laser_target
         kwargs: { wavelength: 656 }
+      fw_detection_shared:
+        target: *fw_target
+        kwargs:
+          filters: { 0: "Multiband", 1: "Green", 2: "Cyan" }
+      fw_emission_cam1:
+        target: *fw_target
+        kwargs:
+          filters: { 0: "GFP", 1: "RFP", 2: "Cy5" }
+      fw_emission_cam2:
+        target: *fw_target
+        kwargs:
+          filters: { 0: "GFP", 1: "RFP", 2: "Cy5" }
+
   node_1:
     hostname: *camera_ip
     devices:
@@ -35,18 +49,6 @@ nodes:
       camera_2:
         target: *camera_target
         kwargs: { pixel_size_um: "0.5, 0.5" }
-  # node_3:
-  #   hostname: *camera_ip
-  #   devices:
-  #     camera_3:
-  #       target: *camera_target
-  #       kwargs: { pixel_size_um: "0.5, 0.5" }
-  # node_4:
-  #   hostname: *camera_ip
-  #   devices:
-  #     camera_4:
-  #       target: *camera_target
-  #       kwargs: { pixel_size_um: "0.5, 0.5" }
 
 daq:
   device: daq_1
@@ -56,20 +58,41 @@ daq:
     laser_656: ao2
     camera_1: ao3
     camera_2: ao4
-    # camera_3: ao5
-    # camera_4: ao6
 
 detection:
   camera_1:
-    filter_wheels: []
+    filter_wheels: [fw_detection_shared, fw_emission_cam1]
   camera_2:
-    filter_wheels: []
-  # camera_3:
-  #   filter_wheels: []
-  # camera_4:
-  #   filter_wheels: []
+    filter_wheels: [fw_detection_shared, fw_emission_cam2]
 
 illumination:
   laser_488: {}
   laser_561: {}
   laser_656: {}
+
+channels:
+  gfp:
+    detection: camera_1
+    illumination: laser_488
+    filters:
+      fw_detection_shared: "Multiband"
+      fw_emission_cam1: "GFP"
+    desc: "Green fluorescent protein channel using 488nm excitation"
+  rfp:
+    detection: camera_2
+    illumination: laser_561
+    filters:
+      fw_detection_shared: "Multiband"
+      fw_emission_cam2: "RFP"
+    desc: "Red fluorescent protein channel using 561nm excitation"
+
+profiles:
+  dual_color_dual_cam:
+    channels: ["gfp", "rfp"]
+    desc: "Simultaneous GFP (488nm, cam1) and RFP (561nm, cam2) acquisition"
+  single_gfp:
+    channels: ["gfp"]
+    desc: "Single GFP channel on camera 1 only"
+  single_rfp:
+    channels: ["rfp"]
+    desc: "Single RFP channel on camera 2 only"

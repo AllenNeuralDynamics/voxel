@@ -7,7 +7,7 @@
 	const previewer = new Previewer(wsUrl);
 
 	onMount(() => {
-		// Start preview when component mounts
+		// Start preview when component mounts ... likely not since lasers also turn on and might cause bleaching.
 		return () => {
 			// Cleanup handled by Preview component's onDestroy
 		};
@@ -31,23 +31,23 @@
 
 	<main class="flex flex-1 flex-col overflow-hidden">
 		<div class="flex flex-1 overflow-hidden">
-			<aside class="flex w-80 flex-col border-r border-zinc-800 bg-zinc-900/50">
+			<aside class="flex w-96 flex-col gap-2 border-r border-zinc-800 p-3">
 				{#if previewer.channels.length === 0}
 					<div class="flex flex-1 items-center justify-center">
 						<p class="text-sm text-zinc-500">No channels available</p>
 					</div>
 				{:else}
-					<div class="flex flex-1 flex-col overflow-y-auto">
+					<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
 						{#each previewer.channels as channel (channel.idx)}
 							{#if channel.name}
-								<div class="space-y-2 border-b border-zinc-800 px-3 pt-4 pb-6">
+								<div class="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 pt-4 pb-6">
 									<!-- Preview Section -->
 									<PreviewChannelControls {channel} {previewer} />
 
 									<div class="space-y-2 pt-2">
 										<!-- Detection Section (placeholder) -->
 										<div class="space-y-1">
-											<div class="text-[0.5rem] font-semibold text-zinc-400 uppercase">Detection</div>
+											<div class="text-[0.75rem] text-zinc-500 uppercase">Detection</div>
 											<div class="h-16 py-1">
 												<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
 											</div>
@@ -55,7 +55,7 @@
 
 										<!-- Illumination Section (placeholder) -->
 										<div class="space-y-1">
-											<div class="text-[0.5rem] font-semibold text-zinc-400 uppercase">Illumination</div>
+											<div class="text-[0.75rem] font-semibold text-zinc-500 uppercase">Illumination</div>
 											<div class="h-16 py-1">
 												<div class="text-[0.6rem] text-zinc-500">Power, focus, shutter controls...</div>
 											</div>

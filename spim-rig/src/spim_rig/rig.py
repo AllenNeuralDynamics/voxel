@@ -22,6 +22,7 @@ class SpimRig(Rig):
         self.config: SpimRigConfig = config
         self.cameras: dict[str, CameraClient] = {}
         self.lasers: dict[str, DeviceClient] = {}
+        self.fws: dict[str, DeviceClient] = {}
         self.daq: DaqClient | None = None
 
         # Preview management (independent of rig internals)
@@ -37,6 +38,10 @@ class SpimRig(Rig):
             case DeviceType.LASER:
                 client = super()._create_client(device_id, prov)
                 self.lasers[device_id] = client
+                return client
+            case DeviceType.FILTER_WHEEL:
+                client = super()._create_client(device_id, prov)
+                self.fws[device_id] = client
                 return client
             case DeviceType.DAQ:
                 client = DaqClient(uid=device_id, zctx=self.zctx, conn=prov.conn)

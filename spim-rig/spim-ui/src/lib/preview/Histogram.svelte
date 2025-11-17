@@ -57,17 +57,17 @@
 		if (maxCount === 0) return windowedHistogram.map(() => 0);
 
 		// Debug: log histogram stats
-		const totalPixels = histogram.reduce((sum, count) => sum + count, 0);
-		const nonZeroBins = histogram.filter((count) => count > 0).length;
-		console.debug('[Histogram Debug]', {
-			totalPixels,
-			nonZeroBins,
-			maxCount,
-			minValue: histogram.findIndex((count) => count > 0),
-			maxValue: 255 - [...histogram].reverse().findIndex((count) => count > 0),
-			displayWindow: { min: displayWindowMin, max: displayWindowMax },
-			visibleBins: { startBin, endBin, count: windowedHistogram.length }
-		});
+		// const totalPixels = histogram.reduce((sum, count) => sum + count, 0);
+		// const nonZeroBins = histogram.filter((count) => count > 0).length;
+		// console.log('[Histogram Debug]', {
+		// 	totalPixels,
+		// 	nonZeroBins,
+		// 	maxCount,
+		// 	minValue: histogram.findIndex((count) => count > 0),
+		// 	maxValue: 255 - [...histogram].reverse().findIndex((count) => count > 0),
+		// 	displayWindow: { min: displayWindowMin, max: displayWindowMax },
+		// 	visibleBins: { startBin, endBin, count: windowedHistogram.length }
+		// });
 
 		// Return only the windowed bins, normalized
 		return windowedHistogram.map((count) => count / maxCount);
@@ -249,7 +249,7 @@
 </script>
 
 <div class="histogram-widget flex flex-col">
-	<div class="flex items-center justify-between text-zinc-400">
+	<div class="flex items-center justify-between text-zinc-300">
 		{#if onLevelsChange}
 			<DraggableNumberInput
 				value={minIntensity}
@@ -291,7 +291,7 @@
 		{/if}
 	</div>
 
-	<div class="border border-zinc-700 bg-transparent">
+	<div class="border border-zinc-600 bg-transparent">
 		{#if hasValidData}
 			{@const histData = displayHistogram()}
 			{@const { startBin } = visibleBins()}
@@ -405,7 +405,7 @@
 			</div>
 		{/if}
 	</div>
-	<div class="flex items-center justify-between text-zinc-400">
+	<div class="flex items-center justify-between text-zinc-300">
 		<DraggableNumberInput
 			bind:value={displayWindowMin}
 			min={0}
