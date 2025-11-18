@@ -1,5 +1,6 @@
 <script lang="ts">
 	import DraggableNumberInput from '$lib/components/DraggableNumberInput.svelte';
+	import { computeAutoLevels } from './utils';
 
 	interface Props {
 		histData: number[] | undefined | null; // Allow null/undefined
@@ -55,19 +56,6 @@
 		const maxCount = Math.max(...windowedHistogram);
 
 		if (maxCount === 0) return windowedHistogram.map(() => 0);
-
-		// Debug: log histogram stats
-		// const totalPixels = histogram.reduce((sum, count) => sum + count, 0);
-		// const nonZeroBins = histogram.filter((count) => count > 0).length;
-		// console.log('[Histogram Debug]', {
-		// 	totalPixels,
-		// 	nonZeroBins,
-		// 	maxCount,
-		// 	minValue: histogram.findIndex((count) => count > 0),
-		// 	maxValue: 255 - [...histogram].reverse().findIndex((count) => count > 0),
-		// 	displayWindow: { min: displayWindowMin, max: displayWindowMax },
-		// 	visibleBins: { startBin, endBin, count: windowedHistogram.length }
-		// });
 
 		// Return only the windowed bins, normalized
 		return windowedHistogram.map((count) => count / maxCount);
@@ -149,41 +137,6 @@
 		}
 	});
 
-	function handleAutoLevels() {
-		// Use hasValidData check
-		if (!hasValidData || !histogram || !onLevelsChange) return;
-
-		// Find 1st and 99th percentile
-		const totalPixels = histogram.reduce((sum, count) => sum + count, 0);
-		const p1Threshold = totalPixels * 0.01;
-		const p99Threshold = totalPixels * 0.99;
-
-		let cumulative = 0;
-		let minBin = 0;
-		let maxBin = numBins - 1;
-
-		// Find min (1st percentile)
-		for (let i = 0; i < numBins; i++) {
-			cumulative += histogram[i];
-			if (cumulative >= p1Threshold) {
-				minBin = i;
-				break;
-			}
-		}
-
-		// Find max (99th percentile)
-		cumulative = 0;
-		for (let i = 0; i < numBins; i++) {
-			cumulative += histogram[i];
-			if (cumulative >= p99Threshold) {
-				maxBin = i;
-				break;
-			}
-		}
-
-		onLevelsChange(minBin / (numBins - 1), maxBin / (numBins - 1));
-	}
-
 	function handleFitDisplayWindow() {
 		if (!hasValidData || !histogram) return;
 
@@ -224,7 +177,6 @@
 	$effect(() => {
 		if (hasValidData && !hasAutoFit && onLevelsChange) {
 			handleFitDisplayWindow();
-			handleAutoLevels();
 		}
 	});
 
@@ -246,6 +198,15 @@
 		const clampedPos = Math.min(pos, width - 2);
 		return clampedPos;
 	});
+
+	function handleAutoLevels() {
+		// Use hasValidData check
+		if (!hasValidData || !histogram || !onLevelsChange) return;
+		const newLevels = computeAutoLevels(histogram);
+		if (newLevels) {
+			onLevelsChange(newLevels.min, newLevels.max);
+		}
+	}
 </script>
 
 <div class="histogram-widget flex flex-col">

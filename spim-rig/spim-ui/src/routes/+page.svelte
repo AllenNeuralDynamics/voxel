@@ -1,105 +1,130 @@
 <script lang="ts">
 	import { PreviewCanvas, Previewer, PreviewChannelControls, PreviewInfo } from '$lib/preview';
-	import { onMount } from 'svelte';
-	import { ProfilesManager } from '$lib/control';
+	import { onMount, onDestroy } from 'svelte';
+	import { ProfilesManager } from '$lib/profiles.svelte';
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
-	import ConnectionIndicator from '$lib/ConnectionIndicator.svelte';
+	import { RigClient, ClientStatus } from '$lib/client';
 
-	// Initialize preview controller
+	// Initialize configuration
 	const apiBaseUrl = 'http://localhost:8000';
-	const previewSocketUrl = 'ws://localhost:8000/ws/preview';
-	const controlSocketUrl = 'ws://localhost:8000/ws/control';
+	const rigSocketUrl = 'ws://localhost:8000/ws/rig';
 
-	const previewer = new Previewer(previewSocketUrl);
-	const profilesManager = new ProfilesManager({
-		baseUrl: apiBaseUrl,
-		controlSocketUrl
+	// Create single shared RigClient
+	let rigClient: RigClient;
+	let previewer: Previewer;
+	let profilesManager: ProfilesManager;
+
+	onMount(async () => {
+		// Create and connect RigClient
+		rigClient = new RigClient(rigSocketUrl);
+
+		try {
+			await rigClient.connect();
+			console.log('[App] RigClient connected');
+		} catch (error) {
+			console.error('[App] Failed to connect RigClient:', error);
+		}
+
+		// Initialize managers with shared client
+		profilesManager = new ProfilesManager({
+			baseUrl: apiBaseUrl,
+			rigClient
+		});
+
+		previewer = new Previewer(rigClient);
 	});
 
-	onMount(() => {
-		// Start preview when component mounts ... likely not since lasers also turn on and might cause bleaching.
-		return () => {
-			// Cleanup handled by Preview component's onDestroy
-		};
+	onDestroy(() => {
+		// Clean up in reverse order
+		profilesManager?.destroy();
+		previewer?.shutdown();
+		rigClient?.destroy();
+		console.log('[App] Cleanup complete');
 	});
 
 	function handleStartPreview() {
-		previewer.startPreview();
+		previewer?.startPreview();
 	}
 
 	function handleStopPreview() {
-		previewer.stopPreview();
+		previewer?.stopPreview();
 	}
 </script>
 
 <div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
-	<aside class="flex w-96 flex-col gap-2 border-r border-zinc-700 p-3">
-		{#if previewer.channels.length === 0}
-			<div class="flex flex-1 items-center justify-center">
-				<p class="text-sm text-zinc-500">No channels available</p>
-			</div>
-		{:else}
-			<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
-				{#each previewer.channels as channel (channel.idx)}
-					{#if channel.name}
-						<div class="space-y-2 rounded-xl border border-zinc-700 bg-zinc-900/70 px-3 pt-4 pb-6">
-							<!-- Preview Section -->
-							<PreviewChannelControls {channel} {previewer} />
+	{#if rigClient && profilesManager && previewer}
+		<aside class="flex w-96 flex-col gap-2 border-r border-zinc-700 p-3">
+			{#if previewer.channels.length === 0}
+				<div class="flex flex-1 items-center justify-center">
+					<p class="text-sm text-zinc-500">No channels available</p>
+				</div>
+			{:else}
+				<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
+					{#each previewer.channels as channel (channel.idx)}
+						{#if channel.name}
+							<div class="space-y-2 rounded-xl border border-zinc-700 bg-zinc-900 p-3">
+								<!-- Preview Section -->
+								<PreviewChannelControls {channel} {previewer} />
 
-							<div class="space-y-2 pt-2">
-								<!-- Detection Section (placeholder) -->
-								<div class="space-y-1">
-									<div class="text-[0.75rem] text-zinc-500 uppercase">Detection</div>
-									<div class="h-16 py-1">
-										<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
+								<div class="space-y-2 pt-3">
+									<!-- Detection Section (placeholder) -->
+									<div class="space-y-1">
+										<div class="text-[0.75rem] text-zinc-500 uppercase">Detection</div>
+										<div class="h-16 py-1">
+											<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
+										</div>
 									</div>
-								</div>
 
-								<!-- Illumination Section (placeholder) -->
-								<div class="space-y-1">
-									<div class="text-[0.75rem] font-semibold text-zinc-500 uppercase">Illumination</div>
-									<div class="h-16 py-1">
-										<div class="text-[0.6rem] text-zinc-500">Power, focus, shutter controls...</div>
+									<!-- Illumination Section (placeholder) -->
+									<div class="space-y-1">
+										<div class="text-[0.75rem] font-semibold text-zinc-500 uppercase">Illumination</div>
+										<div class="h-16 py-1">
+											<div class="text-[0.6rem] text-zinc-500">Power, focus, shutter controls...</div>
+										</div>
 									</div>
 								</div>
 							</div>
-						</div>
-					{/if}
-				{/each}
-			</div>
-		{/if}
-	</aside>
+						{/if}
+					{/each}
+				</div>
+			{/if}
+		</aside>
 
-	<main class="flex flex-1 flex-col overflow-hidden">
-		<header class="flex items-center justify-between border-t border-zinc-700 px-6 py-3">
-			<ProfileSelector manager={profilesManager} />
+		<main class="flex flex-1 flex-col overflow-hidden">
+			<header class="flex items-center justify-between border-t border-zinc-700 px-6 py-3">
+				<ProfileSelector manager={profilesManager} />
 
-			<div class="flex gap-2">
-				<button
-					onclick={handleStartPreview}
-					disabled={previewer.isPreviewing}
-					class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					Start
-				</button>
-				<button
-					onclick={handleStopPreview}
-					disabled={!previewer.isPreviewing}
-					class="rounded bg-rose-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					Stop
-				</button>
+				<div class="flex gap-2">
+					<button
+						onclick={handleStartPreview}
+						disabled={previewer.isPreviewing}
+						class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						Start
+					</button>
+					<button
+						onclick={handleStopPreview}
+						disabled={!previewer.isPreviewing}
+						class="rounded bg-rose-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						Stop
+					</button>
+				</div>
+			</header>
+			<div class="flex flex-1 overflow-hidden">
+				<div class="flex-1">
+					<PreviewCanvas {previewer} />
+				</div>
 			</div>
-		</header>
-		<div class="flex flex-1 overflow-hidden">
-			<div class="flex-1">
-				<PreviewCanvas {previewer} />
-			</div>
+
+			<footer class="flex items-center justify-between border-t border-zinc-700 px-4 py-3">
+				<ClientStatus client={rigClient} />
+				<PreviewInfo {previewer} />
+			</footer>
+		</main>
+	{:else}
+		<div class="flex h-full w-full items-center justify-center">
+			<p class="text-zinc-500">Loading...</p>
 		</div>
-
-		<footer class="flex items-center justify-between border-t border-zinc-700 px-4 py-3">
-			<ConnectionIndicator {previewer} manager={profilesManager} />
-			<PreviewInfo {previewer} />
-		</footer>
-	</main>
+	{/if}
 </div>

@@ -5,15 +5,12 @@
  * with multi-channel overlay, pan/zoom, and WebSocket streaming support.
  */
 
-// Main Svelte component
 export { default as PreviewCanvas } from './PreviewCanvas.svelte';
 
 export { default as PreviewChannelControls } from './ChannelControls.svelte';
 
 export { default as PreviewInfo } from './PreviewInfo.svelte';
 
-// controller implementations
-export { Previewer } from './controller.svelte';
+export { Previewer } from './previewer.svelte.ts';
 
-// Colormap enum for channel colorization
 export { ColormapType } from './colormap';

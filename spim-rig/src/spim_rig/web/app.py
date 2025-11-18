@@ -8,11 +8,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from spim_rig import SpimRig, SpimRigConfig
-from spim_rig.web.control import ControlService
-from spim_rig.web.control import router as control_router
-from spim_rig.web.preview import PreviewService
-from spim_rig.web.preview import router as preview_router
-from spim_rig.web.profiles import router as profiles_router
+from spim_rig.web.service import RigService
+from spim_rig.web.service import router as rig_router
 
 log = logging.getLogger("ui")
 
@@ -31,10 +28,9 @@ def create_lifespan(config_path: str):
         rig = SpimRig(zctx, config)
         await rig.start()
 
-        # Store rig and services on the application state to avoid globals
+        # Store rig_service on the application state
         app.state.rig = rig
-        app.state.preview_service = PreviewService(rig=rig)
-        app.state.control_service = ControlService(rig=rig)
+        app.state.rig_service = RigService(rig=rig)
 
         log.info("Rig and services initialized successfully")
         log.info("Available cameras: %s", list(rig.cameras.keys()))
@@ -43,12 +39,11 @@ def create_lifespan(config_path: str):
 
         # Shutdown: Stop preview and cleanup
         log.info("Shutting down rig...")
-        if hasattr(app.state, "rig") and app.state.rig:
-            try:
-                if app.state.rig.preview.is_active:
-                    await app.state.rig.stop_preview()
-            except Exception as e:
-                log.error("Error stopping preview: %s", e)
+        try:
+            if app.state.rig.preview.is_active:
+                await app.state.rig.stop_preview()
+        except Exception as e:
+            log.error("Error stopping preview: %s", e)
 
         log.info("Rig shutdown complete")
 
@@ -72,19 +67,14 @@ def create_app(config_path: str) -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(preview_router)
-    app.include_router(control_router)
-    app.include_router(profiles_router)
+    app.include_router(rig_router)  # New unified WebSocket endpoint
 
     @app.get("/")
     async def root():
         """Root endpoint - basic health check."""
-        # Note: This still relies on app.state.rig being available
-        # A dependency-injected approach would be better in the long run
         return {
             "status": "ok",
             "service": "SPIM Rig Control API",
-            "cameras": list(app.state.rig.cameras.keys()) if hasattr(app.state, "rig") else [],
         }
 
     return app

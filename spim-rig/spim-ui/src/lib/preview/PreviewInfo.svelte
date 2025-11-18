@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import DraggableNumberInput from '$lib/components/DraggableNumberInput.svelte';
-	import type { Previewer } from './controller.svelte';
+	import type { Previewer } from './previewer.svelte';
 
 	interface Props {
 		previewer: Previewer;

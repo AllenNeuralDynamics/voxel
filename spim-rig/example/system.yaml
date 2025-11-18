@@ -78,6 +78,7 @@ channels:
       fw_detection_shared: "Multiband"
       fw_emission_cam1: "GFP"
     desc: "Green fluorescent protein channel using 488nm excitation"
+    label: GFP
   rfp:
     detection: camera_2
     illumination: laser_561
@@ -85,6 +86,7 @@ channels:
       fw_detection_shared: "Multiband"
       fw_emission_cam2: "RFP"
     desc: "Red fluorescent protein channel using 561nm excitation"
+    label: RFP
 
 profiles:
   dual_color_dual_cam:

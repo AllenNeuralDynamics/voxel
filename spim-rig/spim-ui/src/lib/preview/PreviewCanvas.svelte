@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import type { Previewer } from './controller.svelte';
+	import type { Previewer } from './previewer.svelte';
 
 	let previewCanvas: HTMLCanvasElement;
 

@@ -2,12 +2,14 @@
  * Previewer: unified controller handling preview streaming + WebGPU rendering.
  */
 
-import { clampTopLeft, getWebGPUDevice } from '$lib/utils';
-import { PreviewClient, type PreviewFrameInfo, type PreviewCrop, type PreviewLevels } from './client';
+import { clampTopLeft, getWebGPUDevice, sanitizeString } from '$lib/utils';
+import type { RigClient, PreviewFrameInfo, PreviewCrop, PreviewLevels, RigStatusPayload } from '$lib/client';
 import { ColormapType, generateLUT, COLORMAP_COLORS, COMMON_CHANNELS, colormapToHex } from './colormap';
-// import shaderCode from './shader.wgsl?raw';
 import { generateShaderCode } from './shader';
 import { SvelteMap } from 'svelte/reactivity';
+import { computeAutoLevels } from './utils';
+import type { ChannelConfig } from '$lib/client/types';
+// import shaderCode from './shader.wgsl?raw';
 
 const TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
 
@@ -43,6 +45,11 @@ export class FramesCollector {
 		this.#maxChannels = maxChannels;
 		this.#originalFrames = Array(maxChannels).fill(null);
 		this.#croppedFrames = Array(maxChannels).fill(null);
+	}
+
+	clear(): void {
+		this.#originalFrames = Array(this.#maxChannels).fill(null);
+		this.#croppedFrames = Array(this.#maxChannels).fill(null);
 	}
 
 	/**
@@ -160,12 +167,17 @@ class FrameStreamTexture {
 
 export class PreviewChannel {
 	name: string | undefined = $state<string | undefined>(undefined);
+	config: ChannelConfig | null | undefined = $state<ChannelConfig | undefined | null>(null);
+	label: string | null = $derived<string | null>(
+		this.config && this.config.label ? this.config.label : this.name ? sanitizeString(this.name) : 'Unknown'
+	);
 	visible: boolean = $state<boolean>(false);
 	levelsMin: number = $state<number>(0.0);
 	levelsMax: number = $state<number>(1.0);
 	color: string = $state<string>('#ffffff'); // Hex color string
 	latestFrameInfo: PreviewFrameInfo | null = $state<PreviewFrameInfo | null>(null);
 	latestHistogram: number[] | null = $state<number[] | null>(null); // Cache last valid histogram
+	public initAutoLevelDone = false;
 
 	#frameTexture: FrameStreamTexture | null = null;
 	#lutTexture: GPUTexture | null = null;
@@ -208,9 +220,14 @@ export class PreviewChannel {
 	}
 
 	setColor(hexColor: string): void {
+		this.color = hexColor;
+
 		this.#ensureGpuResources();
 		const device = this.deviceRef();
-		if (!device || !this.#lutTexture) return;
+		if (!device || !this.#lutTexture) {
+			// GPU resources not ready, LUT will be updated later
+			return;
+		}
 
 		const data = generateLUT(hexColor, 256, false);
 		if (!data) {
@@ -218,21 +235,12 @@ export class PreviewChannel {
 			return;
 		}
 
-		this.color = hexColor;
 		device.queue.writeTexture(
 			{ texture: this.#lutTexture },
 			data as Uint8Array<ArrayBuffer>,
 			{ bytesPerRow: 256 * 4 },
 			[256, 1, 1]
 		);
-	}
-
-	reset(): void {
-		this.name = undefined;
-		this.visible = false;
-		this.levelsMin = 0.0;
-		this.levelsMax = 1.0;
-		this.color = '#ffffff';
 	}
 
 	disposeGpuResources(): void {
@@ -246,28 +254,26 @@ export class PreviewChannel {
 export class Previewer {
 	readonly MAX_CHANNELS = 4;
 
-	// Streaming + UI state
-	public isPreviewing = $state<boolean>(false);
-	public connectionState = $state<boolean>(false);
-	public statusMessage = $state<string>('');
-	public isPanZoomActive = $state<boolean>(false);
-	public crop = $state<PreviewCrop>({ x: 0, y: 0, k: 0 });
+	// Public reactive state
+	public isPreviewing = $state(false);
+	public isPanZoomActive = $state(false);
+	public crop = $state({ x: 0, y: 0, k: 0 });
 
 	public displayMode = 0;
+	channels = $state<PreviewChannel[]>([]);
 
-	channels: PreviewChannel[] = [];
-	#framesCollector!: FramesCollector;
-
+	#framesCollector: FramesCollector;
 	#canvas!: HTMLCanvasElement;
-	#client: PreviewClient;
+	#rigClient: RigClient;
 	#cleanupPanZoom?: () => void;
+	#unsubscribers: Array<() => void> = [];
 
-	// Debouncers
+	// Debounce timers for updates
 	#cropUpdateTimer: number | null = null;
 	#levelsUpdateTimers = new SvelteMap<string, number>();
-	readonly #DEBOUNCE_DELAY_MS = 100;
+	readonly #DEBOUNCE_DELAY_MS = 150;
 
-	// GPU resources
+	// WebGPU resources
 	#gpuDevice!: GPUDevice;
 	#context!: GPUCanvasContext;
 	#format!: GPUTextureFormat;
@@ -281,8 +287,10 @@ export class Previewer {
 	#isRendering = false;
 	#rendererInitialized = false;
 
-	constructor(wsUrl: string) {
+	constructor(rigClient: RigClient) {
+		this.#rigClient = rigClient;
 		this.#framesCollector = new FramesCollector(this.MAX_CHANNELS);
+
 		// Initialize channels immediately (GPU resources created lazily)
 		this.channels = Array.from(
 			{ length: this.MAX_CHANNELS },
@@ -294,35 +302,52 @@ export class Previewer {
 				)
 		);
 
-		this.#client = new PreviewClient(wsUrl, {
-			onPreviewStatus: (channels, isPreviewing) => this.#handlePreviewStatus(channels, isPreviewing),
-			onFrame: (channel, metadata, bitmap) => this.#handleFrame(channel, metadata, bitmap),
-			onError: (error) => this.#handleError(error),
-			onConnectionChange: (connected) => this.#handleConnectionChange(connected),
-			onCropUpdate: (crop) => this.#handleCropUpdate(crop),
-			onLevelsUpdate: (channel, levels) => this.#handleLevelsUpdate(channel, levels)
+		// Subscribe to RigClient topics
+		this.#subscribeToRigClient();
+	}
+
+	#subscribeToRigClient(): void {
+		const unsubStatus = this.#rigClient.on('rig/status', (status) => {
+			this.#handleRigStatus(status);
 		});
+
+		const unsubPreviewStatus = this.#rigClient.on('preview/status', (status) => {
+			this.isPreviewing = status.previewing;
+		});
+
+		const unsubFrame = this.#rigClient.subscribe('preview/frame', (topic, payload) => {
+			const data = payload as { channel: string; info: PreviewFrameInfo; bitmap: ImageBitmap };
+			this.#handleFrame(data.channel, data.info, data.bitmap);
+		});
+
+		const unsubCrop = this.#rigClient.on('preview/crop', (crop) => {
+			this.#handleCropUpdate(crop);
+		});
+
+		const unsubLevels = this.#rigClient.on('preview/levels', (levels) => {
+			this.#handleLevelsUpdate(levels.channel, { min: levels.min, max: levels.max });
+		});
+
+		this.#unsubscribers.push(unsubStatus, unsubPreviewStatus, unsubFrame, unsubCrop, unsubLevels);
 	}
 
 	async init(canvas: HTMLCanvasElement): Promise<void> {
 		this.#canvas = canvas;
-		this.statusMessage = 'Connecting...';
 
 		try {
 			await this.#initRenderResources(canvas);
-			await this.#client.connect();
 
-			// Initialize GPU resources for channels
 			for (const channel of this.channels) {
 				channel.setColor(channel.color);
 			}
 			this.#updateBindGroup();
 
-			this.statusMessage = 'Connected';
 			// Start the rendering loop as soon as the component is initialized
-			this.startRendering();
+			if (this.#isRendering || !this.#rendererInitialized) return;
+			this.#isRendering = true;
+			this.#frameLoop();
 		} catch (error) {
-			this.statusMessage = 'Connection failed';
+			console.error('Failed to initialize previewer', error);
 			throw error;
 		}
 
@@ -330,9 +355,6 @@ export class Previewer {
 	}
 
 	shutdown(): void {
-		// Stop the rendering loop when the component is destroyed
-		this.stopRendering();
-
 		if (this.isPreviewing) {
 			this.stopPreview();
 		}
@@ -342,7 +364,9 @@ export class Previewer {
 			this.#cleanupPanZoom = undefined;
 		}
 
-		this.#client.disconnect();
+		this.#unsubscribers.forEach((unsub) => unsub());
+		this.#unsubscribers = [];
+
 		this.#cleanupRenderResources();
 	}
 
@@ -351,13 +375,11 @@ export class Previewer {
 			console.warn('No visible channels to preview');
 			return;
 		}
-		// Only sends the command to the backend. Does not touch rendering state.
-		this.#client.startPreview();
+		this.#rigClient.startPreview();
 	}
 
 	stopPreview(): void {
-		// Only sends the command to the backend. Does not touch rendering state.
-		this.#client.stopPreview();
+		this.#rigClient.stopPreview();
 	}
 
 	setChannelLevels(name: string, min: number, max: number): void {
@@ -376,7 +398,6 @@ export class Previewer {
 	// ===================== PRIVATE: Networking Events =====================
 
 	#handleCropUpdate = (crop: PreviewCrop): void => {
-		// Check if the update is redundant to avoid unnecessary re-renders
 		if (this.crop.x !== crop.x || this.crop.y !== crop.y || this.crop.k !== crop.k) {
 			console.log('Received crop update from server:', crop);
 			this.crop = crop;
@@ -387,7 +408,6 @@ export class Previewer {
 		const channel = this.channels.find((c) => c.name === channelName);
 		if (!channel) return;
 
-		// Check if the update is redundant
 		if (channel.levelsMin !== levels.min || channel.levelsMax !== levels.max) {
 			console.log(`Received levels update for ${channelName}:`, levels);
 			channel.levelsMin = levels.min;
@@ -395,43 +415,40 @@ export class Previewer {
 		}
 	};
 
-	#handlePreviewStatus = async (channels: string[], isPreviewing: boolean) => {
-		const defaultColormaps: ColormapType[] = Object.keys(COLORMAP_COLORS) as ColormapType[];
-		const assignedNames = channels ? channels.slice(0, this.MAX_CHANNELS) : [];
+	#handleRigStatus = (status: RigStatusPayload): void => {
+		this.#framesCollector.clear();
 
-		if (!channels || channels.length === 0) return;
+		if (!status.active_profile_id) return;
+
+		const activeProfile = status.profiles[status.active_profile_id];
+		const activeChannelIds = activeProfile ? activeProfile.channels : [];
+		const channelNames = activeChannelIds.slice(0, this.MAX_CHANNELS);
+
+		if (channelNames.length === 0) return;
+
+		const colors: ColormapType[] = Object.keys(COLORMAP_COLORS) as ColormapType[];
 
 		for (let i = 0; i < this.MAX_CHANNELS; i++) {
 			const slot = this.channels[i];
-			const newChannelName = assignedNames[i];
-			const channelChanged = slot.name !== newChannelName;
+			slot.disposeGpuResources();
+			slot.visible = false;
+			slot.initAutoLevelDone = false;
+			slot.color = 'ffffff';
+			slot.config = null;
+			slot.name = channelNames[i];
+			if (!slot.name) continue;
 
-			if (!newChannelName) {
-				slot.disposeGpuResources();
-				continue;
-			}
+			slot.config = status.channels[slot.name];
 
-			if (!channelChanged) {
-				slot.visible = true;
-				continue;
-			}
-
-			slot.reset();
-			slot.name = newChannelName;
 			slot.visible = true;
-			slot.levelsMin = 0.0;
-			slot.levelsMax = 1.0;
-			slot.setColor(
-				COMMON_CHANNELS[newChannelName.toLowerCase()] || colormapToHex(defaultColormaps[i % defaultColormaps.length])
-			);
+			slot.setColor(COMMON_CHANNELS[slot.name.toLowerCase()] || colormapToHex(colors[i % colors.length]));
 		}
+		this.#queueCropUpdate(this.crop);
 
 		if (this.#rendererInitialized) {
 			this.#updateBindGroup();
+			this.#executeRenderPass();
 		}
-
-		// Only update the state. Do not trigger rendering here.
-		this.isPreviewing = isPreviewing;
 	};
 
 	#handleFrame = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
@@ -451,35 +468,17 @@ export class Previewer {
 		}
 
 		this.#framesCollector.collectFrame(channel.idx, info, bitmap);
-	};
 
-	#handleError = (error: Error): void => {
-		console.error('Preview error:', error);
-		this.statusMessage = error.message;
-	};
-
-	#handleConnectionChange = (connected: boolean): void => {
-		this.connectionState = connected;
-		if (!connected) {
-			this.statusMessage = 'Disconnected';
+		if (channel.latestHistogram && !channel.initAutoLevelDone) {
+			const newLevels = computeAutoLevels(channel.latestHistogram);
+			if (newLevels) {
+				this.setChannelLevels(channelName, newLevels.min, newLevels.max);
+			}
+			channel.initAutoLevelDone = true;
 		}
 	};
 
 	// ===================== PRIVATE: Renderer System =====================
-
-	startRendering(): void {
-		if (this.#isRendering || !this.#rendererInitialized) return;
-		this.#isRendering = true;
-		this.#frameLoop();
-	}
-
-	stopRendering(): void {
-		this.#isRendering = false;
-		if (this.#animationFrameId !== null) {
-			cancelAnimationFrame(this.#animationFrameId);
-			this.#animationFrameId = null;
-		}
-	}
 
 	async #initRenderResources(canvas: HTMLCanvasElement): Promise<void> {
 		this.#canvas = canvas;
@@ -523,7 +522,11 @@ export class Previewer {
 	}
 
 	#cleanupRenderResources(): void {
-		this.stopRendering();
+		this.#isRendering = false;
+		if (this.#animationFrameId !== null) {
+			cancelAnimationFrame(this.#animationFrameId);
+			this.#animationFrameId = null;
+		}
 
 		for (const channel of this.channels) {
 			channel.disposeGpuResources();
@@ -671,7 +674,7 @@ export class Previewer {
 	#queueCropUpdate(crop: PreviewCrop): void {
 		if (this.#cropUpdateTimer !== null) clearTimeout(this.#cropUpdateTimer);
 		this.#cropUpdateTimer = window.setTimeout(() => {
-			this.#client.updateCrop(crop);
+			this.#rigClient.updateCrop(crop.x, crop.y, crop.k);
 			this.#cropUpdateTimer = null;
 		}, this.#DEBOUNCE_DELAY_MS);
 	}
@@ -681,7 +684,7 @@ export class Previewer {
 		if (existing !== undefined) clearTimeout(existing);
 
 		const timer = window.setTimeout(() => {
-			this.#client.updateChannelLevels(channelName, levels);
+			this.#rigClient.updateLevels(channelName, levels.min, levels.max);
 			this.#levelsUpdateTimers.delete(channelName);
 		}, this.#DEBOUNCE_DELAY_MS);
 
