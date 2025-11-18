@@ -1,5 +1,5 @@
 <script lang="ts">
-	import DraggableNumberInput from '$lib/components/DraggableNumberInput.svelte';
+	import DraggableNumberInput from '$lib/ui/DraggableNumberInput.svelte';
 	import { computeAutoLevels } from './utils';
 
 	interface Props {

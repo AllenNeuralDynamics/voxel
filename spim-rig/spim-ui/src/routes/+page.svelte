@@ -4,6 +4,8 @@
 	import { ProfilesManager } from '$lib/profiles.svelte';
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
 	import { RigClient, ClientStatus } from '$lib/client';
+	import { Pane, PaneGroup } from 'paneforge';
+	import PaneDivider from '$lib/ui/PaneDivider.svelte';
 
 	// Initialize configuration
 	const apiBaseUrl = 'http://localhost:8000';
@@ -53,7 +55,7 @@
 
 <div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
 	{#if rigClient && profilesManager && previewer}
-		<aside class="flex w-96 flex-col gap-2 border-r border-zinc-700 p-3">
+		<aside class="flex h-full w-96 flex-col gap-4 border-r border-zinc-800 p-4">
 			{#if previewer.channels.length === 0}
 				<div class="flex flex-1 items-center justify-center">
 					<p class="text-sm text-zinc-500">No channels available</p>
@@ -62,7 +64,7 @@
 				<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
 					{#each previewer.channels as channel (channel.idx)}
 						{#if channel.name}
-							<div class="space-y-2 rounded-xl border border-zinc-700 bg-zinc-900 p-3">
+							<div class="space-y-2 rounded border border-zinc-700/80 bg-zinc-900/50 px-3 py-2">
 								<!-- Preview Section -->
 								<PreviewChannelControls {channel} {previewer} />
 
@@ -89,37 +91,40 @@
 				</div>
 			{/if}
 		</aside>
-
-		<main class="flex flex-1 flex-col overflow-hidden">
-			<header class="flex items-center justify-between border-t border-zinc-700 px-6 py-3">
-				<ProfileSelector manager={profilesManager} />
-
-				<div class="flex gap-2">
-					<button
-						onclick={handleStartPreview}
-						disabled={previewer.isPreviewing}
-						class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						Start
-					</button>
-					<button
-						onclick={handleStopPreview}
-						disabled={!previewer.isPreviewing}
-						class="rounded bg-rose-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						Stop
-					</button>
-				</div>
-			</header>
-			<div class="flex flex-1 overflow-hidden">
-				<div class="flex-1">
-					<PreviewCanvas {previewer} />
-				</div>
-			</div>
-
-			<footer class="flex items-center justify-between border-t border-zinc-700 px-4 py-3">
-				<ClientStatus client={rigClient} />
+		<main class="flex h-full flex-1 flex-col overflow-hidden border-0 border-zinc-700">
+			<PaneGroup direction="horizontal" autoSaveId="rootPanel">
+				<Pane class="flex h-full flex-1 flex-col overflow-hidden">
+					<!-- <div class="flex h-full flex-1 flex-col overflow-hidden border-0 border-zinc-700"> -->
+					<header class="flex items-center justify-between gap-4 p-4">
+						<div class="flex gap-2">
+							<button
+								onclick={handleStartPreview}
+								disabled={previewer.isPreviewing}
+								class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								Start
+							</button>
+							<button
+								onclick={handleStopPreview}
+								disabled={!previewer.isPreviewing}
+								class="rounded bg-rose-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								Stop
+							</button>
+						</div>
+						<ProfileSelector manager={profilesManager} />
+					</header>
+					<div class="flex flex-1">
+						<PreviewCanvas {previewer} />
+					</div>
+					<!-- </div> -->
+				</Pane>
+				<PaneDivider />
+				<Pane defaultSize={20} maxSize={30}></Pane>
+			</PaneGroup>
+			<footer class="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
 				<PreviewInfo {previewer} />
+				<ClientStatus client={rigClient} />
 			</footer>
 		</main>
 	{:else}

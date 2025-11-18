@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
-	import DraggableNumberInput from '$lib/components/DraggableNumberInput.svelte';
+	import DraggableNumberInput from '$lib/ui/DraggableNumberInput.svelte';
 	import type { Previewer } from './previewer.svelte';
 
 	interface Props {
@@ -70,43 +70,6 @@
 </script>
 
 <div class="flex items-center gap-4 font-mono text-[0.65rem]">
-	<!-- Frame info section -->
-	{#if frameInfo}
-		<div class="flex items-center gap-4">
-			<!-- Frame counter -->
-			<div class="flex items-center gap-1.5">
-				<span class="text-zinc-400">Frame</span>
-				<span class="text-zinc-300">#{maxFrameIdx}</span>
-			</div>
-
-			<!-- Preview dimensions -->
-			<div class="flex items-center gap-1.5">
-				<span class="text-zinc-400">Preview</span>
-				<span class="text-zinc-300">{frameInfo.preview_width} × {frameInfo.preview_height}</span>
-			</div>
-
-			<!-- Full frame dimensions -->
-			{#if frameInfo.full_width !== frameInfo.preview_width || frameInfo.full_height !== frameInfo.preview_height}
-				<div class="flex items-center gap-1.5">
-					<span class="text-zinc-400">Full</span>
-					<span class="text-zinc-300">{frameInfo.full_width} × {frameInfo.full_height}</span>
-				</div>
-			{/if}
-
-			<!-- Mismatch warning -->
-			{#if hasMismatch()}
-				<div class="text-amber-400" title="Channels have mismatched frame info">
-					<Icon icon="mdi:alert" width="12" height="12" />
-				</div>
-			{/if}
-		</div>
-	{:else}
-		<span class="text-zinc-500">No frames</span>
-	{/if}
-
-	<!-- Separator -->
-	<div class="h-3 w-px bg-zinc-700"></div>
-
 	<!-- Pan/Zoom section -->
 	<div class="flex items-center gap-4">
 		<div class="flex items-center gap-1.5">
@@ -155,4 +118,39 @@
 			<Icon icon="mdi:restore" width="12" height="12" />
 		</button>
 	</div>
+	<!-- Separator -->
+	<div class="h-3 w-px bg-zinc-700"></div>
+	<!-- Frame info section -->
+	{#if frameInfo}
+		<div class="flex items-center gap-4">
+			<!-- Full frame dimensions -->
+			{#if frameInfo.full_width !== frameInfo.preview_width || frameInfo.full_height !== frameInfo.preview_height}
+				<div class="flex items-center gap-1.5">
+					<span class="text-zinc-400">Full</span>
+					<span class="text-zinc-300">{frameInfo.full_width} × {frameInfo.full_height}</span>
+				</div>
+			{/if}
+
+			<!-- Preview dimensions -->
+			<div class="flex items-center gap-1.5">
+				<span class="text-zinc-400">Preview</span>
+				<span class="text-zinc-300">{frameInfo.preview_width} × {frameInfo.preview_height}</span>
+			</div>
+
+			<!-- Mismatch warning -->
+			{#if hasMismatch()}
+				<div class="text-amber-400" title="Channels have mismatched frame info">
+					<Icon icon="mdi:alert" width="12" height="12" />
+				</div>
+			{/if}
+
+			<!-- Frame counter -->
+			<div class="flex items-center gap-1.5">
+				<span class="text-zinc-400">Frame</span>
+				<span class="text-zinc-300">#{maxFrameIdx}</span>
+			</div>
+		</div>
+	{:else}
+		<span class="text-zinc-500">No frames</span>
+	{/if}
 </div>

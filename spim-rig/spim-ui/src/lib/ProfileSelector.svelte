@@ -43,7 +43,7 @@
 			disabled={isDisabled}
 		>
 			<SelectPrimitive.Trigger
-				class="group flex h-10 w-60 items-center justify-between rounded-lg border border-zinc-600 bg-zinc-900/70 px-3 text-sm text-zinc-200 shadow-sm transition hover:border-zinc-600 focus-visible:ring-2 focus-visible:ring-zinc-600 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+				class="group flex h-8 w-60 items-center justify-between rounded border border-zinc-700 bg-zinc-900/70 px-3 text-sm text-zinc-200 shadow-sm transition hover:border-zinc-600 focus-visible:ring-2 focus-visible:ring-zinc-600 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				<span class="truncate text-left">
 					{#if selectedProfile}
@@ -62,7 +62,7 @@
 
 			<SelectPrimitive.Content
 				align="start"
-				class="relative z-50 mt-1 w-60 rounded-lg border border-zinc-700 bg-zinc-950/95 p-1.5 text-zinc-50 shadow-xl"
+				class="relative z-50 mt-1 w-60 rounded border border-zinc-700 bg-zinc-950/95 p-1.5 text-zinc-50 shadow-xl"
 			>
 				{#if manager.profiles.length === 0 && !manager.isLoading}
 					<div class="px-3 py-2 text-sm text-zinc-500">No profiles available</div>
