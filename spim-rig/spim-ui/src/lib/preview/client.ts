@@ -269,11 +269,6 @@ export class PreviewClient {
 			colorSpaceConversion: 'none'
 		});
 
-		// Debug logging for frame arrival order
-		console.debug(
-			`[Frame] channel=${message.channel} frame_idx=${message.metadata.frame_idx} crop={x:${message.metadata.crop.x.toFixed(3)}, y:${message.metadata.crop.y.toFixed(3)}, k:${message.metadata.crop.k.toFixed(3)}}`
-		);
-
 		this.callbacks.onFrame(message.channel, message.metadata, bitmap);
 	}
 

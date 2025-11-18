@@ -8,7 +8,6 @@ import uuid
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from spim_rig import SpimRig
-from spim_rig.camera.base import TriggerMode, TriggerPolarity
 from spim_rig.camera.preview import PreviewCrop, PreviewLevels
 
 router = APIRouter()
@@ -31,7 +30,7 @@ class PreviewService:
         # Send initial status to the newly connected client
         status = {
             "type": "preview_status",
-            "channels": list(self.rig.cameras.keys()),
+            "channels": list(self.rig.active_channels.keys()),
             "is_previewing": self.rig.preview.is_active,
         }
         await queue.put(("json", status))
@@ -45,13 +44,8 @@ class PreviewService:
         """Registers the frame callback and starts the preview on the rig."""
         async with self._lock:
             if self._start_count == 0:
-                # consider switching this to a callback passed alongside start_preview args
-                self.rig.preview.register_callback(self._distribute_frames)
-                log.info("First client started preview. Registering callback and starting rig preview.")
-                await self.rig.start_preview(
-                    trigger_mode=TriggerMode.ON,
-                    trigger_polarity=TriggerPolarity.RISING_EDGE,
-                )
+                log.info("First client started preview. Starting rig preview.")
+                await self.rig.start_preview(frame_callback=self._distribute_frames)
             self._start_count += 1
             log.debug(f"Preview start count is now {self._start_count}")
         await self._broadcast_status()
@@ -63,24 +57,27 @@ class PreviewService:
                 self._start_count -= 1
             log.debug(f"Preview start count is now {self._start_count}")
             if self._start_count == 0 and self.rig.preview.is_active:
-                log.info("Last client stopped preview. Stopping rig preview and unregistering callback.")
+                log.info("Last client stopped preview. Stopping rig preview.")
                 await self.rig.stop_preview()
-                self.rig.preview.unregister_callback(self._distribute_frames)
         await self._broadcast_status()
 
     async def update_crop(self, crop: PreviewCrop):
         """Applies a new preview crop to all cameras."""
-        tasks = [cam.update_preview_crop(crop) for cam in self.rig.cameras.values()]
+        tasks = []
+        for channel in self.rig.active_channels.values():
+            if camera := self.rig.cameras.get(channel.detection):
+                tasks.append(camera.update_preview_crop(crop))
         await asyncio.gather(*tasks)
         await self._broadcast({"type": "crop", "crop": {"x": crop.x, "y": crop.y, "k": crop.k}})
 
-    async def update_levels(self, channel: str, levels: PreviewLevels):
+    async def update_levels(self, channel_id: str, levels: PreviewLevels):
         """Applies new preview levels to a specific camera."""
-        if channel in self.rig.cameras:
-            await self.rig.cameras[channel].update_preview_levels(levels)
-            await self._broadcast(
-                {"type": "levels", "channel": channel, "levels": {"min": levels.min, "max": levels.max}}
-            )
+        if channel := self.rig.active_channels.get(channel_id):
+            if camera := self.rig.cameras.get(channel.detection):
+                await camera.update_preview_levels(levels)
+                await self._broadcast(
+                    {"type": "levels", "channel": channel_id, "levels": {"min": levels.min, "max": levels.max}}
+                )
 
     async def _distribute_frames(self, channel: str, packed_frame: bytes) -> None:
         """Callback that puts frame data into each client's queue."""
@@ -105,7 +102,7 @@ class PreviewService:
         """Broadcasts the current preview status to all connected clients."""
         status = {
             "type": "preview_status",
-            "channels": list(self.rig.cameras.keys()),
+            "channels": list(self.rig.active_channels.keys()),
             "is_previewing": self.rig.preview.is_active,
         }
         await self._broadcast(status)

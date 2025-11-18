@@ -94,9 +94,12 @@ async def main():
                 if frame_count >= 50:
                     frame_event.set()
 
-            # Register callback and start preview
-            rig.preview.register_callback(frame_callback)
-            await rig.start_preview(TriggerMode.ON, TriggerPolarity.RISING_EDGE)
+            # Start preview with callback
+            await rig.start_preview(
+                frame_callback=frame_callback,
+                trigger_mode=TriggerMode.ON,
+                trigger_polarity=TriggerPolarity.RISING_EDGE,
+            )
 
             log.info("Receiving preview frames...")
 
@@ -105,7 +108,6 @@ async def main():
 
             log.info("Stopping preview...")
             await rig.stop_preview()
-            rig.preview.unregister_callback(frame_callback)
 
             for _, device in rig.devices.items():
                 interface = await device.get_interface()

@@ -75,13 +75,13 @@ def main():
             },
             "handlers": {
                 "default": {
-                    "class": "rich.logging.RichHandler",
+                    "class": "example.app.UvicornRichHandler",
                     "rich_tracebacks": True,
                     "markup": False,
                     "formatter": "default",
                 },
                 "access": {
-                    "class": "rich.logging.RichHandler",
+                    "class": "example.app.UvicornRichHandler",
                     "rich_tracebacks": True,
                     "markup": False,
                     "formatter": "access",

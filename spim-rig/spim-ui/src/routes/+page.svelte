@@ -1,10 +1,20 @@
 <script lang="ts">
 	import { PreviewCanvas, Previewer, PreviewChannelControls, PreviewInfo } from '$lib/preview';
 	import { onMount } from 'svelte';
+	import { ProfilesManager } from '$lib/control';
+	import ProfileSelector from '$lib/ProfileSelector.svelte';
+	import ConnectionIndicator from '$lib/ConnectionIndicator.svelte';
 
 	// Initialize preview controller
-	const wsUrl = 'ws://localhost:8000/ws/preview';
-	const previewer = new Previewer(wsUrl);
+	const apiBaseUrl = 'http://localhost:8000';
+	const previewSocketUrl = 'ws://localhost:8000/ws/preview';
+	const controlSocketUrl = 'ws://localhost:8000/ws/control';
+
+	const previewer = new Previewer(previewSocketUrl);
+	const profilesManager = new ProfilesManager({
+		baseUrl: apiBaseUrl,
+		controlSocketUrl
+	});
 
 	onMount(() => {
 		// Start preview when component mounts ... likely not since lasers also turn on and might cause bleaching.
@@ -20,70 +30,49 @@
 	function handleStopPreview() {
 		previewer.stopPreview();
 	}
-
-	//blue-950
 </script>
 
-<div class="flex h-screen w-full flex-col bg-zinc-950 text-zinc-100">
-	<!-- <header class="border-b border-zinc-800 bg-slate-900 px-6 py-1">
-		<h1 class="text-xs font-bold">SPIM PREVIEW</h1>
-	</header> -->
+<div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
+	<aside class="flex w-96 flex-col gap-2 border-r border-zinc-700 p-3">
+		{#if previewer.channels.length === 0}
+			<div class="flex flex-1 items-center justify-center">
+				<p class="text-sm text-zinc-500">No channels available</p>
+			</div>
+		{:else}
+			<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
+				{#each previewer.channels as channel (channel.idx)}
+					{#if channel.name}
+						<div class="space-y-2 rounded-xl border border-zinc-700 bg-zinc-900/70 px-3 pt-4 pb-6">
+							<!-- Preview Section -->
+							<PreviewChannelControls {channel} {previewer} />
 
-	<main class="flex flex-1 flex-col overflow-hidden">
-		<div class="flex flex-1 overflow-hidden">
-			<aside class="flex w-96 flex-col gap-2 border-r border-zinc-800 p-3">
-				{#if previewer.channels.length === 0}
-					<div class="flex flex-1 items-center justify-center">
-						<p class="text-sm text-zinc-500">No channels available</p>
-					</div>
-				{:else}
-					<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
-						{#each previewer.channels as channel (channel.idx)}
-							{#if channel.name}
-								<div class="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 pt-4 pb-6">
-									<!-- Preview Section -->
-									<PreviewChannelControls {channel} {previewer} />
-
-									<div class="space-y-2 pt-2">
-										<!-- Detection Section (placeholder) -->
-										<div class="space-y-1">
-											<div class="text-[0.75rem] text-zinc-500 uppercase">Detection</div>
-											<div class="h-16 py-1">
-												<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
-											</div>
-										</div>
-
-										<!-- Illumination Section (placeholder) -->
-										<div class="space-y-1">
-											<div class="text-[0.75rem] font-semibold text-zinc-500 uppercase">Illumination</div>
-											<div class="h-16 py-1">
-												<div class="text-[0.6rem] text-zinc-500">Power, focus, shutter controls...</div>
-											</div>
-										</div>
+							<div class="space-y-2 pt-2">
+								<!-- Detection Section (placeholder) -->
+								<div class="space-y-1">
+									<div class="text-[0.75rem] text-zinc-500 uppercase">Detection</div>
+									<div class="h-16 py-1">
+										<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
 									</div>
 								</div>
-							{/if}
-						{/each}
-					</div>
-				{/if}
-			</aside>
 
-			<div class="flex-1">
-				<PreviewCanvas {previewer} />
+								<!-- Illumination Section (placeholder) -->
+								<div class="space-y-1">
+									<div class="text-[0.75rem] font-semibold text-zinc-500 uppercase">Illumination</div>
+									<div class="h-16 py-1">
+										<div class="text-[0.6rem] text-zinc-500">Power, focus, shutter controls...</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					{/if}
+				{/each}
 			</div>
-		</div>
+		{/if}
+	</aside>
 
-		<footer class="flex items-center justify-between border-t border-zinc-800 px-6 py-3">
-			<div class="flex items-center gap-2 text-xs text-zinc-400">
-				<span
-					class="h-2.5 w-2.5 rounded-full transition-colors {previewer.connectionState
-						? 'bg-emerald-500 shadow-[0_0_0.5rem_--theme(--color-emerald-500/50)]'
-						: 'bg-zinc-500'}"
-				></span>
-				<span>{previewer.statusMessage}</span>
-			</div>
-
-			<PreviewInfo {previewer} />
+	<main class="flex flex-1 flex-col overflow-hidden">
+		<header class="flex items-center justify-between border-t border-zinc-700 px-6 py-3">
+			<ProfileSelector manager={profilesManager} />
 
 			<div class="flex gap-2">
 				<button
@@ -101,6 +90,16 @@
 					Stop
 				</button>
 			</div>
+		</header>
+		<div class="flex flex-1 overflow-hidden">
+			<div class="flex-1">
+				<PreviewCanvas {previewer} />
+			</div>
+		</div>
+
+		<footer class="flex items-center justify-between border-t border-zinc-700 px-4 py-3">
+			<ConnectionIndicator {previewer} manager={profilesManager} />
+			<PreviewInfo {previewer} />
 		</footer>
 	</main>
 </div>

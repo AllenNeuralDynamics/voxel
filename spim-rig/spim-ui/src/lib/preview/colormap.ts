@@ -46,6 +46,11 @@ export const COLORMAP_COLORS: Record<ColormapType, string> = {
 	[ColormapType.WHITE]: '#ffffff'
 };
 
+export const COMMON_CHANNELS: Record<string, string> = {
+	gfp: '#00ff00',
+	rfp: '#ff0000'
+};
+
 // ===================== Validation =====================
 
 /**

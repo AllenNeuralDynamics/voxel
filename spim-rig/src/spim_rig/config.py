@@ -57,11 +57,13 @@ class ChannelConfig(BaseModel):
     illumination: str
     filters: dict[str, str] = Field(default_factory=dict)
     desc: str = ""
+    label: str | None = None
 
 
 class ProfileConfig(BaseModel):
     channels: list[str]
     desc: str = ""
+    label: str | None = None
 
 
 class SpimRigConfig(RigConfig):

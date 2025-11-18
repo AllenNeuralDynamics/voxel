@@ -8,8 +8,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from spim_rig import SpimRig, SpimRigConfig
+from spim_rig.web.control import ControlService
+from spim_rig.web.control import router as control_router
 from spim_rig.web.preview import PreviewService
 from spim_rig.web.preview import router as preview_router
+from spim_rig.web.profiles import router as profiles_router
 
 log = logging.getLogger("ui")
 
@@ -31,6 +34,7 @@ def create_lifespan(config_path: str):
         # Store rig and services on the application state to avoid globals
         app.state.rig = rig
         app.state.preview_service = PreviewService(rig=rig)
+        app.state.control_service = ControlService(rig=rig)
 
         log.info("Rig and services initialized successfully")
         log.info("Available cameras: %s", list(rig.cameras.keys()))
@@ -69,6 +73,8 @@ def create_app(config_path: str) -> FastAPI:
     )
 
     app.include_router(preview_router)
+    app.include_router(control_router)
+    app.include_router(profiles_router)
 
     @app.get("/")
     async def root():

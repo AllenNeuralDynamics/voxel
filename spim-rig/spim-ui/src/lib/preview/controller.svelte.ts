@@ -4,7 +4,7 @@
 
 import { clampTopLeft, getWebGPUDevice } from '$lib/utils';
 import { PreviewClient, type PreviewFrameInfo, type PreviewCrop, type PreviewLevels } from './client';
-import { ColormapType, generateLUT, COLORMAP_COLORS, colormapToHex } from './colormap';
+import { ColormapType, generateLUT, COLORMAP_COLORS, COMMON_CHANNELS, colormapToHex } from './colormap';
 // import shaderCode from './shader.wgsl?raw';
 import { generateShaderCode } from './shader';
 import { SvelteMap } from 'svelte/reactivity';
@@ -421,7 +421,9 @@ export class Previewer {
 			slot.visible = true;
 			slot.levelsMin = 0.0;
 			slot.levelsMax = 1.0;
-			slot.setColor(colormapToHex(defaultColormaps[i % defaultColormaps.length]));
+			slot.setColor(
+				COMMON_CHANNELS[newChannelName.toLowerCase()] || colormapToHex(defaultColormaps[i % defaultColormaps.length])
+			);
 		}
 
 		if (this.#rendererInitialized) {
