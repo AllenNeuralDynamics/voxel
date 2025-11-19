@@ -10,8 +10,13 @@
 	import SliderInput from '$lib/ui/SliderInput.svelte';
 
 	// Configuration
-	const apiBaseUrl = 'http://localhost:8000';
-	const rigSocketUrl = 'ws://localhost:8000/ws/rig';
+	import { browser } from '$app/environment';
+	
+	// Configuration
+	const apiBaseUrl = browser ? window.location.origin : 'http://localhost:8000';
+	const rigSocketUrl = browser 
+		? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/rig`
+		: 'ws://localhost:8000/ws/rig';
 
 	// Component-level state
 	let rigClient = $state<RigClient | undefined>(undefined);

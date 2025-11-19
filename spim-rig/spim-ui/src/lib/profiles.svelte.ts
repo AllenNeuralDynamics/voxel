@@ -22,7 +22,7 @@ export interface ProfilesManagerOptions {
 	baseUrl?: string;
 }
 
-const DEFAULT_BASE_URL = 'http://localhost:8000';
+const DEFAULT_BASE_URL = browser ? window.location.origin : 'http://localhost:8000';
 
 export class ProfilesManager {
 	profiles = $state<Profile[]>([]);

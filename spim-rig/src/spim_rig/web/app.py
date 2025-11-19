@@ -1,11 +1,13 @@
 """FastAPI application for SPIM Rig web control."""
 
+import os
 import logging
 from contextlib import asynccontextmanager
 
 import zmq.asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from spim_rig import SpimRig, SpimRigConfig
 from spim_rig.web.service import RigService
@@ -50,7 +52,9 @@ def create_lifespan(config_path: str):
     return lifespan
 
 
-def create_app(config_path: str) -> FastAPI:
+
+
+def create_app(config_path: str, serve_static: bool = True) -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
         title="SPIM Rig Control API",
@@ -69,12 +73,17 @@ def create_app(config_path: str) -> FastAPI:
 
     app.include_router(rig_router)  # New unified WebSocket endpoint
 
-    @app.get("/")
-    async def root():
-        """Root endpoint - basic health check."""
+    @app.get("/health")
+    async def health():
+        """Basic health check."""
         return {
             "status": "ok",
             "service": "SPIM Rig Control API",
         }
+
+    if serve_static:
+        static_dir = os.path.join(os.path.dirname(__file__), "static")
+        if os.path.isdir(static_dir):
+            app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
     return app
