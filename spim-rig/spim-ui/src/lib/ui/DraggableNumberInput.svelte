@@ -157,7 +157,7 @@
 		background: transparent;
 		padding: 0.125rem 0.05rem;
 		font-family: monospace;
-		font-size: 0.6rem;
+		font-size: 0.65rem;
 		transition: all 0.15s;
 	}
 

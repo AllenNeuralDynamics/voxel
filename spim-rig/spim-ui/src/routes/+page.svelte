@@ -81,7 +81,7 @@
 				<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
 					{#each previewer.channels as channel (channel.idx)}
 						{#if channel.name}
-							<div class="space-y-2 rounded border border-zinc-700/80 bg-zinc-900/50 px-3 py-2">
+							<div class="space-y-4 rounded border border-zinc-700/80 bg-zinc-900/50 px-3 py-2">
 								<!-- Preview Section -->
 								<PreviewChannelControls {channel} {previewer} />
 
@@ -123,10 +123,10 @@
 				</div>
 			{/if}
 		</aside>
-		<main class="flex h-full flex-1 flex-col overflow-hidden border-0 border-zinc-700">
+		<main class="flex h-screen flex-1 flex-col overflow-hidden border-0 border-zinc-700">
 			<PaneGroup direction="horizontal" autoSaveId="rootPanel">
-				<Pane class="flex h-full flex-1 flex-col overflow-hidden">
-					<header class="flex items-center justify-between gap-4 p-4">
+				<Pane class="flex h-full flex-1 flex-col">
+					<header class="flex items-start justify-between gap-4 p-4">
 						<div class="flex gap-2">
 							<button
 								onclick={handleStartPreview}
@@ -145,7 +145,7 @@
 						</div>
 						<ProfileSelector manager={profilesManager} />
 					</header>
-					<div class="flex flex-1 px-4">
+					<div class="flex-1 px-4">
 						<PreviewCanvas {previewer} />
 					</div>
 				</Pane>

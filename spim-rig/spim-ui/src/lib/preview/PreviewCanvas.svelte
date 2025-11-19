@@ -19,10 +19,10 @@
 	});
 </script>
 
-<div class="relative flex h-full w-full items-start justify-center">
+<div class="flex h-full w-full flex-col items-start justify-start">
 	<canvas
 		bind:this={previewCanvas}
-		class="preview-canvas h-full w-full object-contain object-top"
+		class="preview-canvas max-h-full max-w-full object-contain object-top"
 		class:panning={previewer.isPanZoomActive}
 	></canvas>
 </div>
