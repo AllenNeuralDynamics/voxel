@@ -105,6 +105,35 @@ export interface RigErrorPayload {
 }
 
 /**
+ * PropertyModel matches pyrig.props.common.PropertyModel
+ */
+export interface PropertyModel {
+	value: unknown;
+	min_val?: number | null;
+	max_val?: number | null;
+	step?: number | null;
+	options?: (string | number)[] | null;
+}
+
+/**
+ * ErrorMsg matches pyrig.device.base.ErrorMsg
+ */
+export interface ErrorMsg {
+	msg: string;
+}
+
+/**
+ * Device property update payload.
+ * Topic: 'device/property'
+ * Matches PropsResponse from pyrig.device.base
+ */
+export interface DevicePropertyPayload {
+	device: string;
+	res: Record<string, PropertyModel>;
+	err: Record<string, ErrorMsg>;
+}
+
+/**
  * Client-to-server message types.
  */
 export type RigClientMessage =
@@ -112,7 +141,9 @@ export type RigClientMessage =
 	| { topic: 'preview/start'; payload?: Record<string, never> }
 	| { topic: 'preview/stop'; payload?: Record<string, never> }
 	| { topic: 'preview/crop'; payload: PreviewCropPayload }
-	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } };
+	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
+	| { topic: 'device/set_property'; payload: { device: string; properties: Record<string, unknown> } }
+	| { topic: 'rig/request_status'; payload?: Record<string, never> };
 
 /**
  * Message handler callback type.
@@ -129,6 +160,7 @@ export interface RigHandlers {
 	'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	'preview/crop'?: (payload: PreviewCropPayload) => void;
 	'preview/levels'?: (payload: PreviewLevelsPayload) => void;
+	'device/property'?: (payload: DevicePropertyPayload) => void;
 }
 
 /**

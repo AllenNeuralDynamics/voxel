@@ -1,9 +1,12 @@
 <script lang="ts">
 	import type { RigClient } from '$lib/client';
 
-	const { client } = $props<{ client: RigClient }>();
+	const { client } = $props<{ client: RigClient | null | undefined }>();
 
 	const connectionStatus = $derived.by(() => {
+		if (!client) {
+			return { color: 'bg-gray-500', text: 'Not initialized' };
+		}
 		if (!client.isConnected) {
 			return { color: 'bg-rose-500', text: 'Offline' };
 		}

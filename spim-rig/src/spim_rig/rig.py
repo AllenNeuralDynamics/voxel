@@ -235,7 +235,7 @@ class SpimRig(Rig):
             else:
                 self.log.warning("Preview was running but no callback found; not restarting automatically")
 
-        self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_profile.channels)})")
+        self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_channels)})")
 
     def clear_active_profile(self) -> None:
         """Clear the active profile."""

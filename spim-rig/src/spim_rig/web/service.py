@@ -82,6 +82,8 @@ class RigService:
 
         try:
             match topic:
+                case "rig/request_status":
+                    await self._broadcast_rig_status()
                 case "profile/update":
                     await self.handle_profile_change(payload)
                 case "preview/start":
@@ -92,6 +94,8 @@ class RigService:
                     await self._handle_preview_crop(payload)
                 case "preview/levels":
                     await self._handle_preview_levels(payload)
+                case "device/set_property":
+                    await self._handle_device_set_property(payload)
                 case _:
                     log.warning("Unknown message topic from client %s: %s", client_id, topic)
         except Exception as e:
@@ -166,6 +170,43 @@ class RigService:
             log.error("Error updating preview levels: %s", e)
             raise
 
+    async def _handle_device_set_property(self, payload: dict[str, Any]):
+        """Handle device property update from WebSocket."""
+        device_id = payload.get("device")
+        properties = payload.get("properties", {})
+
+        if not device_id:
+            raise ValueError("Missing 'device' in payload")
+        if not properties:
+            raise ValueError("Missing 'properties' in payload")
+
+        await self.set_device_properties(device_id, properties)
+
+    async def set_device_properties(self, device_id: str, properties: dict[str, Any]):
+        """Set device properties and broadcast to all clients.
+
+        Args:
+            device_id: The device identifier
+            properties: Dictionary of property_name -> value pairs
+
+        Returns:
+            PropsResponse with device_id, res, and err
+        """
+        client = self.rig.devices.get(device_id)
+        if not client:
+            raise ValueError(f"Device '{device_id}' not found")
+
+        # Set properties
+        result = await client.set_props(**properties)
+
+        if result.err:
+            log.warning(f"Errors setting properties on {device_id}: {result.err}")
+
+        # Broadcast to all clients (including sender)
+        await self._broadcast("device/property", {"device": device_id, **result.model_dump()})
+
+        return {"device": device_id, **result.model_dump()}
+
     async def _distribute_frames(self, channel: str, packed_frame: bytes) -> None:
         """Callback that distributes preview frames to all clients.
 
@@ -235,54 +276,51 @@ async def rig_websocket(websocket: WebSocket, service: RigService = Depends(get_
 
     await service.add_client(client_id, message_queue)
 
+    shutdown = asyncio.Event()
+
     async def sender():
         """Send messages from queue to client."""
-        while True:
-            msg_type, data = await message_queue.get()
-            if msg_type == "json":
-                await websocket.send_json(data)
-            elif msg_type == "bytes":
-                await websocket.send_bytes(data)
+        try:
+            while not shutdown.is_set():
+                try:
+                    msg_type, data = await asyncio.wait_for(message_queue.get(), timeout=0.1)
+                    if msg_type == "json":
+                        await websocket.send_json(data)
+                    elif msg_type == "bytes":
+                        await websocket.send_bytes(data)
+                except TimeoutError:
+                    continue
+        except Exception as e:
+            log.debug("Sender task ending for client %s: %s", client_id, e)
+        finally:
+            shutdown.set()
 
     async def receiver():
         """Receive messages from client."""
-        while True:
-            data = await websocket.receive_text()
-            try:
+        try:
+            while not shutdown.is_set():
+                data = await websocket.receive_text()
                 message = json.loads(data)
                 await service.handle_client_message(client_id, message)
-            except json.JSONDecodeError as e:
-                log.error("Invalid JSON from client %s: %s", client_id, e)
-            except Exception as e:
-                log.error("Error processing client message: %s", e)
-
-    sender_task: asyncio.Task | None = None
-    receiver_task: asyncio.Task | None = None
+        except WebSocketDisconnect:
+            log.debug("Client %s disconnected", client_id)
+        except json.JSONDecodeError as e:
+            log.error("Invalid JSON from client %s: %s", client_id, e)
+        except Exception as e:
+            log.debug("Receiver task ending for client %s: %s", client_id, e)
+        finally:
+            shutdown.set()
 
     try:
-        sender_task = asyncio.create_task(sender())
-        receiver_task = asyncio.create_task(receiver())
-
-        done, pending = await asyncio.wait(
-            [sender_task, receiver_task],
-            return_when=asyncio.FIRST_EXCEPTION,
-        )
-
-        for task in pending:
-            task.cancel()
-
-        for task in done:
-            task.result()
-
-    except WebSocketDisconnect:
-        log.info("Client %s disconnected", client_id)
-    except Exception as e:
-        log.error("WebSocket error for client %s: %s", client_id, e)
+        await asyncio.gather(sender(), receiver())
+    except asyncio.CancelledError:
+        log.debug("WebSocket tasks cancelled for client %s", client_id)
     finally:
-        for task in (sender_task, receiver_task):
-            if task and not task.done():
-                task.cancel()
+        shutdown.set()
         service.remove_client(client_id)
+        # Auto-stop preview if this was a client that requested it
+        if service._preview_start_count > 0:
+            await service._handle_preview_stop()
 
 
 class SetProfileRequest(BaseModel):
@@ -292,10 +330,7 @@ class SetProfileRequest(BaseModel):
 
 
 @router.post("/profiles/active", tags=["profiles"])
-async def set_active_profile(
-    request: SetProfileRequest,
-    service: RigService = Depends(get_rig_service),
-) -> dict:
+async def set_active_profile(request: SetProfileRequest, service: RigService = Depends(get_rig_service)) -> dict:
     """Set the active profile via REST API.
 
     This will configure devices (filter wheels, etc.) for the new profile.
@@ -345,3 +380,111 @@ async def list_profiles(rig: SpimRig = Depends(get_rig)) -> dict:
         },
         "active_profile_id": rig.active_profile_id,
     }
+
+
+@router.get("/devices", tags=["devices"])
+async def list_devices(rig: SpimRig = Depends(get_rig)) -> dict:
+    """Get list of all devices with their interfaces.
+
+    Returns detailed information about all provisioned devices including their
+    properties, commands, and metadata. This is useful for introspection and
+    building dynamic UIs.
+
+    Returns:
+        Dictionary mapping device_id to device info including interface details.
+    """
+    devices_info = {}
+
+    for device_id, client in rig.devices.items():
+        try:
+            interface = await client.get_interface()
+            devices_info[device_id] = {
+                "id": device_id,
+                "connected": client.is_connected,
+                "interface": interface.model_dump(),
+            }
+        except Exception as e:
+            log.warning(f"Failed to get interface for device {device_id}: {e}")
+            devices_info[device_id] = {
+                "id": device_id,
+                "connected": client.is_connected,
+                "error": str(e),
+            }
+
+    return {
+        "devices": devices_info,
+        "count": len(devices_info),
+    }
+
+
+@router.get("/devices/{device_id}/properties", tags=["devices"])
+async def get_device_properties(
+    device_id: str,
+    rig: SpimRig = Depends(get_rig),
+    props: list[str] | None = None,
+) -> dict:
+    """Get property values from a device.
+
+    Args:
+        device_id: The device identifier
+        props: Optional list of property names to fetch. If None, fetches all properties.
+
+    Returns:
+        Dictionary with device_id and PropertyModel values in res/err format
+
+    Example:
+        GET /devices/laser_488/properties
+        GET /devices/laser_488/properties?props=power&props=enabled
+    """
+    try:
+        client = rig.devices.get(device_id)
+        if not client:
+            raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found")
+
+        # Get properties
+        if props:
+            result = await client.get_props(*props)
+        else:
+            # Get all properties from interface
+            interface = await client.get_interface()
+            prop_names = list(interface.properties.keys())
+            result = await client.get_props(*prop_names)
+
+        return {
+            "device": device_id,
+            **result.model_dump(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to get properties from device {device_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/devices/{device_id}/properties", tags=["devices"])
+async def set_device_properties(
+    device_id: str,
+    properties: dict[str, Any],
+    service: RigService = Depends(get_rig_service),
+) -> dict:
+    """Set one or more properties on a device.
+
+    Updates are broadcast to all WebSocket clients in real-time.
+
+    Args:
+        device_id: The device identifier
+        properties: Dictionary of property_name -> value pairs
+
+    Returns:
+        Updated property values and any errors
+    """
+    try:
+        return await service.set_device_properties(device_id, properties)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to set properties on device {device_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

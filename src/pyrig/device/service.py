@@ -192,11 +192,11 @@ class DeviceService[D: Device]:
             for prop_name, prop_value in props.items():
                 try:
                     self.log.debug("Setting property '%s' to %s", prop_name, prop_value)
-                    # coerced_value = _coerce_property_value(self._device, prop_name, prop_value)
-                    # setattr(self._device, prop_name, coerced_value)
-                    # res[prop_name] = PropertyModel.from_value(coerced_value)
+                    # Set the property value
                     setattr(self._device, prop_name, prop_value)
-                    res[prop_name] = PropertyModel.from_value(prop_value)
+                    # Get the property back to include metadata (min/max/step/options)
+                    val = getattr(self._device, prop_name)
+                    res[prop_name] = PropertyModel.from_value(val)
                 except Exception as e:
                     err[prop_name] = ErrorMsg(msg=str(e))
             return PropsResponse(res=res, err=err)

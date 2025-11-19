@@ -204,6 +204,13 @@ export class RigClient {
 	/**
 	 * Convenience methods for common operations.
 	 */
+	/**
+	 * Request the current rig status.
+	 * This triggers the backend to broadcast the current rig/status message to all clients.
+	 */
+	requestRigStatus(): void {
+		this.send({ topic: 'rig/request_status' });
+	}
 
 	startPreview(): void {
 		this.send({ topic: 'preview/start' });

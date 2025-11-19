@@ -7,6 +7,44 @@ from typing import Any
 
 import zmq
 
+try:
+    from rich.logging import RichHandler
+except ImportError:
+    RichHandler = None  # type: ignore[assignment]
+
+
+def get_local_ip() -> str:
+    """Get local IP address."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.1)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def thread_safe_singleton(func):
+    """A decorator that makes a function a thread-safe singleton.
+    The decorated function will only be executed once, and its result
+    will be cached and returned for all subsequent calls.
+    """
+    lock = Lock()
+    instance = None
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        nonlocal instance
+        if instance is None:
+            with lock:
+                if instance is None:
+                    instance = func(*args, **kwargs)
+        return instance
+
+    return wrapper
+
 
 def configure_logging(
     level=logging.INFO,
@@ -33,10 +71,6 @@ def configure_logging(
 
     resolved_handlers: list[logging.Handler] = []
     if handlers is None:
-        try:
-            from rich.logging import RichHandler
-        except ImportError:
-            RichHandler = None  # type: ignore[assignment]
         if RichHandler is not None:
             resolved_handlers.append(RichHandler(rich_tracebacks=rich_tracebacks, markup=rich_markup))
             fmt = "%(name)s: %(message)s"
@@ -88,34 +122,72 @@ class ZmqTopicHandler(logging.Handler):
             super().close()
 
 
-def get_local_ip() -> str:
-    """Get local IP address."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(0.1)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
+if RichHandler:
+
+    class UvicornRichHandler(RichHandler):
+        """RichHandler subclass that handles uvicorn's levelprefix format."""
+
+        def format(self, record: logging.LogRecord) -> str:
+            """Format the record, handling uvicorn's levelprefix."""
+            # Remove levelprefix if present (uvicorn adds this)
+            if hasattr(record, "levelprefix"):
+                # Already has color prefix from uvicorn, just use the message
+                return record.getMessage()
+            return super().format(record)
 
 
-def thread_safe_singleton(func):
-    """A decorator that makes a function a thread-safe singleton.
-    The decorated function will only be executed once, and its result
-    will be cached and returned for all subsequent calls.
+def get_uvicorn_log_config(datefmt: str = "[%X]") -> dict[str, Any]:
+    """Get uvicorn log configuration that works with RichHandler.
+
+    When Rich is available, this configures uvicorn to use UvicornRichHandler
+    which strips ANSI color codes from uvicorn's formatters to prevent double
+    formatting (uvicorn's ANSI + Rich's formatting).
+
+    When Rich is not available, returns None to use uvicorn's default config.
+
+    Args:
+        datefmt: Date format string (e.g., "[%X]" for time only, "%Y-%m-%d %H:%M:%S" for full)
+
+    Returns:
+        Log configuration dict for uvicorn, or None for defaults.
     """
-    lock = Lock()
-    instance = None
+    if not RichHandler:
+        return None  # type: ignore[return-value]
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        nonlocal instance
-        if instance is None:
-            with lock:
-                if instance is None:
-                    instance = func(*args, **kwargs)
-        return instance
-
-    return wrapper
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(levelname)s:     %(message)s",
+                "datefmt": datefmt,
+                "use_colors": False,  # Disable ANSI codes to prevent double-formatting
+            },
+            "access": {
+                "()": "uvicorn.logging.AccessFormatter",
+                "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+                "datefmt": datefmt,
+                "use_colors": False,  # Disable ANSI codes
+            },
+        },
+        "handlers": {
+            "default": {
+                "class": "pyrig.utils.UvicornRichHandler",
+                "rich_tracebacks": True,
+                "markup": False,
+                "formatter": "default",
+            },
+            "access": {
+                "class": "pyrig.utils.UvicornRichHandler",
+                "rich_tracebacks": True,
+                "markup": False,
+                "formatter": "access",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+        },
+    }

@@ -6,7 +6,7 @@ export interface Channel {
 	label?: string | null;
 	desc?: string;
 	laser: string;
-	filter: string;
+	filters: Record<string, string>;
 	camera: string;
 }
 
@@ -90,8 +90,8 @@ export class ProfilesManager {
 						id: channelId,
 						label: channelConfig.label,
 						desc: channelConfig.desc,
-						laser: channelConfig.excitation,
-						filter: channelConfig.filter_,
+						laser: channelConfig.illumination,
+						filters: channelConfig.filters,
 						camera: channelConfig.detection
 					};
 				}

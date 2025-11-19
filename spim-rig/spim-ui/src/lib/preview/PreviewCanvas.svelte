@@ -19,7 +19,7 @@
 	});
 </script>
 
-<div class="relative flex h-full w-full items-start justify-center px-8 py-4">
+<div class="relative flex h-full w-full items-start justify-center">
 	<canvas
 		bind:this={previewCanvas}
 		class="preview-canvas h-full w-full object-contain object-top"

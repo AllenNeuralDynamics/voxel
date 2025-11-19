@@ -6,42 +6,59 @@
 	import { RigClient, ClientStatus } from '$lib/client';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/PaneDivider.svelte';
+	import { DevicesManager } from '$lib/devices.svelte';
+	import SliderInput from '$lib/ui/SliderInput.svelte';
 
-	// Initialize configuration
+	// Configuration
 	const apiBaseUrl = 'http://localhost:8000';
 	const rigSocketUrl = 'ws://localhost:8000/ws/rig';
 
-	// Create single shared RigClient
-	let rigClient: RigClient;
-	let previewer: Previewer;
-	let profilesManager: ProfilesManager;
+	// Component-level state
+	let rigClient = $state<RigClient | undefined>(undefined);
+	let previewer = $state<Previewer | undefined>(undefined);
+	let profilesManager = $state<ProfilesManager | undefined>(undefined);
+	let devicesManager = $state<DevicesManager | undefined>(undefined);
 
 	onMount(async () => {
-		// Create and connect RigClient
-		rigClient = new RigClient(rigSocketUrl);
-
 		try {
+			// 1. Create and connect RigClient
+			rigClient = new RigClient(rigSocketUrl);
 			await rigClient.connect();
-			console.log('[App] RigClient connected');
+			console.log('[Page] RigClient connected');
+
+			// 2. Initialize ProfilesManager
+			profilesManager = new ProfilesManager({
+				baseUrl: apiBaseUrl,
+				rigClient
+			});
+
+			// 3. Initialize DevicesManager and fetch all data
+			devicesManager = new DevicesManager({
+				baseUrl: apiBaseUrl,
+				rigClient
+			});
+			await devicesManager.initialize();
+			console.log('[Page] DevicesManager initialized');
+
+			// 4. Initialize Previewer
+			previewer = new Previewer(rigClient);
+
+			// 5. Request current rig status (will populate previewer channels)
+			rigClient.requestRigStatus();
+
+			console.log('[Page] All managers initialized');
 		} catch (error) {
-			console.error('[App] Failed to connect RigClient:', error);
+			console.error('[Page] Initialization failed:', error);
 		}
-
-		// Initialize managers with shared client
-		profilesManager = new ProfilesManager({
-			baseUrl: apiBaseUrl,
-			rigClient
-		});
-
-		previewer = new Previewer(rigClient);
 	});
 
 	onDestroy(() => {
 		// Clean up in reverse order
-		profilesManager?.destroy();
 		previewer?.shutdown();
+		devicesManager?.destroy();
+		profilesManager?.destroy();
 		rigClient?.destroy();
-		console.log('[App] Cleanup complete');
+		console.log('[Page] Cleanup complete');
 	});
 
 	function handleStartPreview() {
@@ -54,7 +71,7 @@
 </script>
 
 <div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
-	{#if rigClient && profilesManager && previewer}
+	{#if previewer && profilesManager && devicesManager}
 		<aside class="flex h-full w-96 flex-col gap-4 border-r border-zinc-800 p-4">
 			{#if previewer.channels.length === 0}
 				<div class="flex flex-1 items-center justify-center">
@@ -68,21 +85,36 @@
 								<!-- Preview Section -->
 								<PreviewChannelControls {channel} {previewer} />
 
-								<div class="space-y-2 pt-3">
-									<!-- Detection Section (placeholder) -->
-									<div class="space-y-1">
-										<div class="text-[0.75rem] text-zinc-500 uppercase">Detection</div>
-										<div class="h-16 py-1">
-											<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
-										</div>
-									</div>
+								<div class="space-y-2">
+									<!-- Illumination Section -->
+									{#if channel.config?.illumination && devicesManager}
+										{@const laserDeviceId = channel.config.illumination}
+										{@const laserDevice = devicesManager.getDevice(laserDeviceId)}
+										{@const powerInfo = devicesManager.getPropertyInfo(laserDeviceId, 'power_setpoint_mw')}
+										{@const powerModel = devicesManager.getPropertyModel(laserDeviceId, 'power_setpoint_mw')}
 
-									<!-- Illumination Section (placeholder) -->
-									<div class="space-y-1">
-										<div class="text-[0.75rem] font-semibold text-zinc-500 uppercase">Illumination</div>
-										<div class="h-16 py-1">
-											<div class="text-[0.6rem] text-zinc-500">Power, focus, shutter controls...</div>
-										</div>
+										{#if laserDevice?.connected && powerInfo && powerModel && typeof powerModel.value === 'number'}
+											<SliderInput
+												label={powerInfo.label}
+												bind:value={powerModel.value}
+												min={powerModel.min_val ?? 0}
+												max={powerModel.max_val ?? 100}
+												step={powerModel.step ?? 1}
+												onchange={() => {
+													if (typeof powerModel.value === 'number') {
+														devicesManager?.setProperty(laserDeviceId, 'power_setpoint_mw', powerModel.value);
+													}
+												}}
+											/>
+										{:else}
+											<div class="text-[0.6rem] text-zinc-500">Laser not available</div>
+										{/if}
+									{:else}
+										<div class="text-[0.6rem] text-zinc-500">No laser configured</div>
+									{/if}
+									<!-- Detection Section (placeholder) -->
+									<div class="h-16 py-1">
+										<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
 									</div>
 								</div>
 							</div>
@@ -94,7 +126,6 @@
 		<main class="flex h-full flex-1 flex-col overflow-hidden border-0 border-zinc-700">
 			<PaneGroup direction="horizontal" autoSaveId="rootPanel">
 				<Pane class="flex h-full flex-1 flex-col overflow-hidden">
-					<!-- <div class="flex h-full flex-1 flex-col overflow-hidden border-0 border-zinc-700"> -->
 					<header class="flex items-center justify-between gap-4 p-4">
 						<div class="flex gap-2">
 							<button
@@ -114,10 +145,9 @@
 						</div>
 						<ProfileSelector manager={profilesManager} />
 					</header>
-					<div class="flex flex-1">
+					<div class="flex flex-1 px-4">
 						<PreviewCanvas {previewer} />
 					</div>
-					<!-- </div> -->
 				</Pane>
 				<PaneDivider />
 				<Pane defaultSize={20} maxSize={30}></Pane>
