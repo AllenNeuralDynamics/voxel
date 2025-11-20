@@ -30,18 +30,7 @@ pnpm run build
 
 This will generate the static files in `spim-rig/src/spim_rig/web/static`.
 
-### 3. Generate SSL Certificates
-
-To enable WebGPU support (required for the camera preview) on remote connections, you need to serve the app over HTTPS. Generate self-signed certificates:
-
-```bash
-# From the root directory
-uv run python examples/spim/generate_cert.py
-```
-
-This will create `cert.pem` and `key.pem` in the `examples/spim` directory.
-
-### 4. Run the Application
+### 3. Run the Application
 
 Start the simulated rig and web server:
 
@@ -52,7 +41,8 @@ uv run python examples/spim/app.py
 
 ## Accessing the UI
 
-- **Local**: Open `https://localhost:8000`
-- **Remote**: Open `https://<your-ip>:8000`
+Open your browser to:
+- **Local**: `http://localhost:8000`
 
-**Note**: Since we are using self-signed certificates, your browser will show a "Not Secure" warning. You must manually proceed (Advanced -> Proceed to...) to access the UI and enable WebGPU.
+The application runs on localhost only by default. For remote access with HTTPS support, see the [Certificate Management Tool](../../scripts/cert.py) documentation.
+
