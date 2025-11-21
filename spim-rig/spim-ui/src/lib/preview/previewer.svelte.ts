@@ -167,7 +167,7 @@ class FrameStreamTexture {
 
 export class PreviewChannel {
 	name: string | undefined = $state<string | undefined>(undefined);
-	config: ChannelConfig | null | undefined = $state<ChannelConfig | undefined | null>(null);
+	config = $state<ChannelConfig | undefined>(undefined);
 	label: string | null = $derived<string | null>(
 		this.config && this.config.label ? this.config.label : this.name ? sanitizeString(this.name) : 'Unknown'
 	);
@@ -434,7 +434,7 @@ export class Previewer {
 			slot.visible = false;
 			slot.initAutoLevelDone = false;
 			slot.color = 'ffffff';
-			slot.config = null;
+			slot.config = undefined;
 			slot.name = channelNames[i];
 			if (!slot.name) continue;
 

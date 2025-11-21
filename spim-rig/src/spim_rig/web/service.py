@@ -99,6 +99,8 @@ class RigService:
                     await self._handle_preview_levels(payload)
                 case "device/set_property":
                     await self._handle_device_set_property(payload)
+                case "device/execute_command":
+                    await self._handle_device_execute_command(payload)
                 case _:
                     log.warning("Unknown message topic from client %s: %s", client_id, topic)
         except Exception as e:
@@ -185,6 +187,20 @@ class RigService:
 
         await self.set_device_properties(device_id, properties)
 
+    async def _handle_device_execute_command(self, payload: dict[str, Any]):
+        """Handle device command execution from WebSocket."""
+        device_id = payload.get("device")
+        command = payload.get("command")
+        args = payload.get("args", [])
+        kwargs = payload.get("kwargs", {})
+
+        if not device_id:
+            raise ValueError("Missing 'device' in payload")
+        if not command:
+            raise ValueError("Missing 'command' in payload")
+
+        await self.execute_device_command(device_id, command, args, kwargs)
+
     async def set_device_properties(self, device_id: str, properties: dict[str, Any]):
         """Set device properties and broadcast to all clients.
 
@@ -211,6 +227,42 @@ class RigService:
         await self._broadcast(f"device/{device_id}/properties", result.model_dump())
 
         return {"device": device_id, **result.model_dump()}
+
+    async def execute_device_command(self, device_id: str, command: str, args: list[Any], kwargs: dict[str, Any]):
+        """Execute a command on a device and broadcast result to all clients.
+
+        Args:
+            device_id: The device identifier
+            command: The command name to execute
+            args: Positional arguments for the command
+            kwargs: Keyword arguments for the command
+
+        Returns:
+            CommandResponse with device_id, command, and result/error
+        """
+        client = self.rig.devices.get(device_id)
+        if not client:
+            raise ValueError(f"Device '{device_id}' not found")
+
+        # Execute command
+        response = await client.send_command(command, *args, **kwargs)
+
+        result_payload = {
+            "device": device_id,
+            "command": command,
+            "success": response.is_ok,
+            "result": response.res if response.is_ok else None,
+            "error": response.res.msg if not response.is_ok else None,
+        }
+
+        if not response.is_ok:
+            log.warning(f"Error executing {command} on {device_id}: {response.res.msg}")
+
+        # Broadcast to all clients (including sender)
+        # Topic: device/<device_id>/command_result
+        await self._broadcast(f"device/{device_id}/command_result", result_payload)
+
+        return result_payload
 
     async def _distribute_frames(self, channel: str, packed_frame: bytes) -> None:
         """Callback that distributes preview frames to all clients.
@@ -517,4 +569,45 @@ async def set_device_properties(
         raise
     except Exception as e:
         log.error(f"Failed to set properties on device {device_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ExecuteCommandRequest(BaseModel):
+    """Request model for executing a device command."""
+
+    args: list[Any] = []
+    kwargs: dict[str, Any] = {}
+
+
+@router.post("/devices/{device_id}/commands/{command_name}", tags=["devices"])
+async def execute_device_command(
+    device_id: str,
+    command_name: str,
+    request: ExecuteCommandRequest = ExecuteCommandRequest(),
+    service: RigService = Depends(get_rig_service),
+) -> dict:
+    """Execute a command on a device.
+
+    Command results are broadcast to all WebSocket clients in real-time.
+
+    Args:
+        device_id: The device identifier
+        command_name: The name of the command to execute
+        request: Optional command arguments (args and kwargs)
+
+    Returns:
+        Command execution result with success status and result/error
+
+    Example:
+        POST /devices/laser_488/commands/enable
+        POST /devices/stage/commands/move_to {"kwargs": {"x": 100, "y": 200}}
+    """
+    try:
+        return await service.execute_device_command(device_id, command_name, request.args, request.kwargs)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to execute command {command_name} on device {device_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

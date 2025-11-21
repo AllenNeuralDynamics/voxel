@@ -15,7 +15,7 @@
 
 <div class="grid grid-rows-[auto_1fr_auto] gap-1">
 	<div class="flex items-baseline justify-between">
-		<label for={label} class="text-left text-[0.65rem] font-medium text-zinc-400">
+		<label for={label} class="text-left text-[0.65rem] font-medium text-zinc-300">
 			{label}
 		</label>
 		<span class="text-[0.65rem] text-zinc-300">{numericValue.toFixed(1)}</span>
@@ -28,9 +28,9 @@
 		{step}
 		bind:value
 		{onchange}
-		class="slider mt-1 mb-0.5 bg-zinc-700 hover:bg-zinc-500"
+		class="slider mt-1 mb-0.5 border border-zinc-500/50 bg-zinc-600/70 hover:bg-zinc-600"
 	/>
-	<div class="flex justify-between text-[0.6rem] text-zinc-400">
+	<div class="flex justify-between text-[0.6rem] text-zinc-300">
 		<span>{min}</span>
 		<span>{max}</span>
 	</div>
@@ -39,22 +39,24 @@
 <style>
 	.slider {
 		width: 100%;
-		height: 0.15rem;
+		height: 0.75rem;
 		appearance: none;
 		border-radius: 2px;
 		outline: none;
+		cursor: pointer;
 		transition: all 200ms ease-in-out;
-		--thumb-color: var(--color-zinc-600);
+		--thumb-color: var(--color-zinc-500);
 		--thumb-color-hover: var(--color-zinc-300);
 	}
 
 	/* Webkit (Chrome, Safari, Edge) */
 	.slider::-webkit-slider-thumb {
 		appearance: none;
-		width: 0.75rem;
-		height: 0.75rem;
+		width: 0.2rem;
+		height: 1rem;
 		background: var(--thumb-color);
 		border-radius: 50%;
+		border-radius: 1px;
 		cursor: pointer;
 		transition: all 200ms ease-in-out;
 	}

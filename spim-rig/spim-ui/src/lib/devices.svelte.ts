@@ -281,6 +281,26 @@ export class DevicesManager {
 	}
 
 	/**
+	 * Execute a command on a device (via WebSocket)
+	 */
+	async executeCommand(
+		deviceId: string,
+		command: string,
+		args: unknown[] = [],
+		kwargs: Record<string, unknown> = {}
+	): Promise<void> {
+		this.rigClient.send({
+			topic: 'device/execute_command',
+			payload: {
+				device: deviceId,
+				command,
+				args,
+				kwargs
+			}
+		});
+	}
+
+	/**
 	 * Fetch current properties via REST (useful for refresh).
 	 * Returns PropertyModel values in PropsResponse format (res/err).
 	 */

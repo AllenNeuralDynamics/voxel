@@ -141,8 +141,15 @@ export type RigClientMessage =
 	| { topic: 'preview/stop'; payload?: Record<string, never> }
 	| { topic: 'preview/crop'; payload: PreviewCropPayload }
 	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
-	| { topic: 'device/set_property'; payload: { device: string; properties: Record<string, unknown> } }
-	| { topic: 'rig/request_status'; payload?: Record<string, never> };
+	| { topic: 'rig/request_status'; payload?: Record<string, never> }
+	| {
+			topic: 'device/set_property';
+			payload: { device: string; properties: Record<string, unknown> };
+	  }
+	| {
+			topic: 'device/execute_command';
+			payload: { device: string; command: string; args?: unknown[]; kwargs?: Record<string, unknown> };
+	  };
 
 /**
  * Message handler callback type.
@@ -159,7 +166,7 @@ export interface RigHandlers {
 	'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	'preview/crop'?: (payload: PreviewCropPayload) => void;
 	'preview/levels'?: (payload: PreviewLevelsPayload) => void;
-	'device'?: (payload: DevicePropertyPayload) => void; // Prefix subscription
+	device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
 }
 
 /**

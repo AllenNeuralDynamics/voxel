@@ -52,8 +52,6 @@ def create_lifespan(config_path: str):
     return lifespan
 
 
-
-
 def create_app(config_path: str, serve_static: bool = True) -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(

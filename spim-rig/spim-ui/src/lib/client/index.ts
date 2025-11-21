@@ -18,7 +18,8 @@ export type {
 	PreviewFrameInfo,
 	PreviewCrop,
 	PreviewLevels,
-	DevicePropertyPayload
+	DevicePropertyPayload,
+	ChannelConfig
 } from './types';
 
 export { default as ClientStatus } from './ClientStatus.svelte';

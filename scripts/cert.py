@@ -24,11 +24,11 @@ from pathlib import Path
 # Detect Caddyfile location
 # -------------------------------------------------------
 if Path("/opt/homebrew/etc/Caddyfile").exists():
-    CADDYFILE = Path("/opt/homebrew/etc/Caddyfile")   # macOS ARM
+    CADDYFILE = Path("/opt/homebrew/etc/Caddyfile")  # macOS ARM
 elif Path("/usr/local/etc/Caddyfile").exists():
-    CADDYFILE = Path("/usr/local/etc/Caddyfile")      # macOS Intel
+    CADDYFILE = Path("/usr/local/etc/Caddyfile")  # macOS Intel
 else:
-    CADDYFILE = Path("/etc/caddy/Caddyfile")          # Linux systemd
+    CADDYFILE = Path("/etc/caddy/Caddyfile")  # Linux systemd
 
 
 def run(cmd):
@@ -52,6 +52,7 @@ def sudo_read(path: Path) -> str | None:
 # Utils
 # -------------------------------------------------------
 
+
 def get_hostname():
     return socket.gethostname().split(".")[0]
 
@@ -67,9 +68,9 @@ def get_ip():
 
 # Internal CA locations
 CADDY_DATA_PATHS = [
-    Path("/var/lib/caddy/.local/share/caddy/pki/authorities/local"),   # Linux
+    Path("/var/lib/caddy/.local/share/caddy/pki/authorities/local"),  # Linux
     Path("/opt/homebrew/var/lib/caddy/.local/share/caddy/pki/authorities/local"),  # macOS Brew
-    Path.home() / ".local/share/caddy/pki/authorities/local",          # User-run Caddy
+    Path.home() / ".local/share/caddy/pki/authorities/local",  # User-run Caddy
 ]
 
 
@@ -88,11 +89,13 @@ def find_ca_path():
 # Write new Caddyfile
 # -------------------------------------------------------
 
+
 def write_caddyfile(name: str):
     domain = f"{name}.rigs.local"
     ca_path = find_ca_path() or "/var/lib/caddy/.local/share/caddy/pki/authorities/local"
 
-    config = f"""
+    config = (
+        f"""
 {domain} {{
     tls internal
     reverse_proxy localhost:8000
@@ -102,7 +105,9 @@ def write_caddyfile(name: str):
     root * {ca_path}
     file_server browse
 }}
-""".strip() + "\n"
+""".strip()
+        + "\n"
+    )
 
     tmp = Path("/tmp/caddyfile.tmp")
     tmp.write_text(config)
@@ -123,6 +128,7 @@ def restart_caddy():
 # Parse domain
 # -------------------------------------------------------
 
+
 def current_domain():
     if not CADDYFILE.exists():
         return None
@@ -141,6 +147,7 @@ def current_domain():
 # -------------------------------------------------------
 # Status
 # -------------------------------------------------------
+
 
 def show_status():
     hostname = get_hostname()
@@ -185,6 +192,7 @@ def show_status():
 # -------------------------------------------------------
 # Main
 # -------------------------------------------------------
+
 
 def main():
     if len(sys.argv) == 1:

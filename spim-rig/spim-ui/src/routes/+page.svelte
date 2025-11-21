@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { PreviewCanvas, Previewer, PreviewChannelControls, PreviewInfo } from '$lib/preview';
+	import { PreviewCanvas, Previewer, PreviewInfo } from '$lib/preview';
 	import { onMount, onDestroy } from 'svelte';
 	import { ProfilesManager } from '$lib/profiles.svelte';
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
@@ -7,7 +7,7 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/PaneDivider.svelte';
 	import { DevicesManager } from '$lib/devices.svelte';
-	import SliderInput from '$lib/ui/SliderInput.svelte';
+	import ChannelSection from '$lib/ChannelSection.svelte';
 
 	// Configuration
 	import { browser } from '$app/environment';
@@ -77,120 +77,54 @@
 
 <div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
 	{#if previewer && profilesManager && devicesManager}
-		<aside class="flex h-full w-96 flex-col gap-4 border-r border-zinc-800 p-4">
+		<aside class="flex h-full w-96 flex-col border-r border-zinc-700 bg-zinc-900">
+			<!-- Profile Selector -->
+			<div class="border-b border-zinc-600 p-4">
+				<ProfileSelector manager={profilesManager} />
+			</div>
+
 			{#if previewer.channels.length === 0}
-				<div class="flex flex-1 items-center justify-center">
+				<div class="flex flex-1 items-center justify-center p-4">
 					<p class="text-sm text-zinc-500">No channels available</p>
 				</div>
 			{:else}
-				<div class="flex flex-1 flex-col gap-4 overflow-y-auto">
+				<div class="flex flex-1 flex-col overflow-y-auto">
 					{#each previewer.channels as channel (channel.idx)}
 						{#if channel.name}
-							<div class="space-y-4 rounded border border-zinc-700/80 bg-zinc-900/50 px-3 py-2">
-								<!-- Preview Section -->
-								<PreviewChannelControls {channel} {previewer} />
-
-								<div class="space-y-2">
-									<!-- Illumination Section -->
-									{#if channel.config?.illumination && devicesManager}
-										{@const laserDeviceId = channel.config.illumination}
-										{@const laserDevice = devicesManager.getDevice(laserDeviceId)}
-										{@const wavelength = devicesManager.getPropertyValue(laserDeviceId, 'wavelength')}
-										{@const isEnabled = devicesManager.getPropertyValue(laserDeviceId, 'is_enabled')}
-										{@const powerMw = devicesManager.getPropertyValue(laserDeviceId, 'power_mw')}
-										{@const powerSetpointModel = devicesManager.getPropertyModel(laserDeviceId, 'power_setpoint_mw')}
-										{@const powerSetpointInfo = devicesManager.getPropertyInfo(laserDeviceId, 'power_setpoint_mw')}
-
-										{#if laserDevice?.connected}
-											<div class="space-y-2 rounded border border-zinc-700/50 bg-zinc-800/30 p-2">
-												<!-- Laser Header -->
-												<div class="flex items-center justify-between">
-													<div class="flex items-center gap-2">
-														<div class="text-xs font-medium text-zinc-300">
-															{typeof wavelength === 'number' ? `${wavelength} nm` : 'Laser'}
-														</div>
-														{#if typeof isEnabled === 'boolean'}
-															<div
-																class="rounded px-1.5 py-0.5 text-[0.6rem] font-medium {isEnabled
-																	? 'bg-emerald-500/20 text-emerald-400'
-																	: 'bg-zinc-700/50 text-zinc-500'}"
-															>
-																{isEnabled ? 'ON' : 'OFF'}
-															</div>
-														{/if}
-													</div>
-													{#if typeof powerMw === 'number'}
-														<div class="text-[0.65rem] text-zinc-400">
-															{powerMw.toFixed(1)} mW
-														</div>
-													{/if}
-												</div>
-
-												<!-- Power Setpoint Slider -->
-												{#if powerSetpointInfo && powerSetpointModel && typeof powerSetpointModel.value === 'number'}
-													<SliderInput
-														label={powerSetpointInfo.label}
-														bind:value={powerSetpointModel.value}
-														min={powerSetpointModel.min_val ?? 0}
-														max={powerSetpointModel.max_val ?? 100}
-														step={powerSetpointModel.step ?? 1}
-														onchange={() => {
-															if (typeof powerSetpointModel.value === 'number') {
-																devicesManager?.setProperty(
-																	laserDeviceId,
-																	'power_setpoint_mw',
-																	powerSetpointModel.value
-																);
-															}
-														}}
-													/>
-												{/if}
-											</div>
-										{:else}
-											<div class="text-[0.6rem] text-zinc-500">Laser not available</div>
-										{/if}
-									{:else}
-										<div class="text-[0.6rem] text-zinc-500">No laser configured</div>
-									{/if}
-									<!-- Detection Section (placeholder) -->
-									<div class="h-16 py-1">
-										<div class="text-[0.6rem] text-zinc-500">Exposure, gain, binning controls...</div>
-									</div>
-								</div>
+							<div>
+								<ChannelSection {channel} {previewer} {devicesManager} />
 							</div>
+							<div class="border-t border-zinc-600"></div>
 						{/if}
 					{/each}
 				</div>
 			{/if}
 		</aside>
-		<main class="flex h-screen flex-1 flex-col overflow-hidden border-0 border-zinc-700">
+		<main class="flex h-screen flex-1 flex-col overflow-hidden">
 			<PaneGroup direction="horizontal" autoSaveId="rootPanel">
 				<Pane class="flex h-full flex-1 flex-col">
-					<header class="flex items-start justify-between gap-4 p-4">
-						<div class="flex gap-2">
-							<button
-								onclick={handleStartPreview}
-								disabled={previewer.isPreviewing}
-								class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								Start
-							</button>
-							<button
-								onclick={handleStopPreview}
-								disabled={!previewer.isPreviewing}
-								class="rounded bg-rose-600 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								Stop
-							</button>
-						</div>
-						<ProfileSelector manager={profilesManager} />
+					<header class="flex h-18 items-start justify-start gap-2 p-4">
+						<button
+							onclick={handleStartPreview}
+							disabled={previewer.isPreviewing}
+							class="rounded bg-emerald-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Start
+						</button>
+						<button
+							onclick={handleStopPreview}
+							disabled={!previewer.isPreviewing}
+							class="rounded bg-rose-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Stop
+						</button>
 					</header>
-					<div class="flex-1 px-4">
+					<div class="flex flex-1 flex-col items-start px-4">
 						<PreviewCanvas {previewer} />
 					</div>
 				</Pane>
-				<PaneDivider />
-				<Pane defaultSize={20} maxSize={30}></Pane>
+				<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
+				<Pane defaultSize={20} maxSize={30} class="bg-zinc-900"></Pane>
 			</PaneGroup>
 			<footer class="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
 				<PreviewInfo {previewer} />

@@ -7,10 +7,10 @@
 
 export { default as PreviewCanvas } from './PreviewCanvas.svelte';
 
-export { default as PreviewChannelControls } from './ChannelControls.svelte';
+export { default as PreviewControls } from './PreviewControls.svelte';
 
 export { default as PreviewInfo } from './PreviewInfo.svelte';
 
-export { Previewer } from './previewer.svelte.ts';
+export { Previewer, PreviewChannel } from './previewer.svelte.ts';
 
 export { ColormapType } from './colormap';

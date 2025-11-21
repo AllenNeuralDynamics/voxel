@@ -43,7 +43,7 @@
 			disabled={isDisabled}
 		>
 			<SelectPrimitive.Trigger
-				class="group flex h-8 w-60 items-center justify-between rounded border border-zinc-700 bg-zinc-900/70 px-3 text-sm text-zinc-200 shadow-sm transition hover:border-zinc-600 focus-visible:ring-2 focus-visible:ring-zinc-600 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+				class="group flex h-10 w-full items-center justify-between rounded border border-zinc-500/80 bg-zinc-900/70 px-3 text-sm text-zinc-200 shadow-sm transition hover:border-zinc-600 focus-visible:ring-2 focus-visible:ring-zinc-600 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				<span class="truncate text-left">
 					{#if selectedProfile}
@@ -54,15 +54,15 @@
 				</span>
 
 				{#if manager.isMutating}
-					<Icon icon="svg-spinners:3-dots-fade" class="text-zinc-400" width="14" height="14" />
+					<Icon icon="svg-spinners:3-dots-fade" class="text-zinc-400" width="16" height="16" />
 				{:else}
-					<Icon icon="mdi:chevron-up-down" class="text-zinc-400 group-hover:text-zinc-200" width="16" height="16" />
+					<Icon icon="mdi:chevron-up-down" class="text-zinc-400 group-hover:text-zinc-200" width="20" height="20" />
 				{/if}
 			</SelectPrimitive.Trigger>
 
 			<SelectPrimitive.Content
 				align="start"
-				class="relative z-50 mt-1 w-60 rounded border border-zinc-700 bg-zinc-950/95 p-1.5 text-zinc-50 shadow-xl"
+				class="relative z-50 mt-1 w-(--bits-select-anchor-width) min-w-(--bits-select-anchor-width) rounded border border-zinc-700 bg-zinc-950/95 p-1.5 text-zinc-50 shadow-xl"
 			>
 				{#if manager.profiles.length === 0 && !manager.isLoading}
 					<div class="px-3 py-2 text-sm text-zinc-500">No profiles available</div>
