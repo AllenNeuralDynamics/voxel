@@ -3,11 +3,13 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { ProfilesManager } from '$lib/profiles.svelte';
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
+	import DeviceFilterToggle, { type DeviceFilter } from '$lib/DeviceFilterToggle.svelte';
 	import { RigClient, ClientStatus } from '$lib/client';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/PaneDivider.svelte';
 	import { DevicesManager } from '$lib/devices.svelte';
 	import ChannelSection from '$lib/ChannelSection.svelte';
+	import Icon from '@iconify/svelte';
 
 	// Configuration
 	import { browser } from '$app/environment';
@@ -23,6 +25,8 @@
 	let previewer = $state<Previewer | undefined>(undefined);
 	let profilesManager = $state<ProfilesManager | undefined>(undefined);
 	let devicesManager = $state<DevicesManager | undefined>(undefined);
+	let deviceFilter = $state<DeviceFilter>('none');
+	let showHistograms = $state(true);
 
 	onMount(async () => {
 		try {
@@ -79,8 +83,24 @@
 	{#if previewer && profilesManager && devicesManager}
 		<aside class="flex h-full w-96 flex-col border-r border-zinc-700 bg-zinc-900">
 			<!-- Profile Selector -->
-			<div class="border-b border-zinc-600 p-4">
+			<div class="space-y-3 border-b border-zinc-600 p-4">
 				<ProfileSelector manager={profilesManager} />
+				<div class="flex items-center">
+					<div class="flex-1">
+						<DeviceFilterToggle bind:value={deviceFilter} onValueChange={(v) => (deviceFilter = v)} />
+					</div>
+					<div class="mx-2 h-4 w-px bg-zinc-600"></div>
+					<button
+						onclick={() => (showHistograms = !showHistograms)}
+						class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-all hover:bg-zinc-800 {showHistograms
+							? ' text-emerald-400 '
+							: ' text-rose-400'}"
+						aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
+						title={showHistograms ? 'Hide histograms' : 'Show histograms'}
+					>
+						<Icon icon="et:bargraph" width="18" height="18" />
+					</button>
+				</div>
 			</div>
 
 			{#if previewer.channels.length === 0}
@@ -92,7 +112,7 @@
 					{#each previewer.channels as channel (channel.idx)}
 						{#if channel.name}
 							<div>
-								<ChannelSection {channel} {previewer} {devicesManager} />
+								<ChannelSection {channel} {previewer} {devicesManager} {deviceFilter} {showHistograms} />
 							</div>
 							<div class="border-t border-zinc-600"></div>
 						{/if}

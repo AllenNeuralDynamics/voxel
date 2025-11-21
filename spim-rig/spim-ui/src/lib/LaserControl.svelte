@@ -39,7 +39,7 @@
 </script>
 
 {#if laserDevice?.connected}
-	<div class="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/20 shadow-sm">
+	<div class="space-y-2 rounded-lg border border-zinc-700 bg-zinc-800/80 shadow-sm">
 		<!-- Laser Header -->
 		<div class="flex items-center justify-between px-3 pt-3">
 			<div class="text-sm font-medium text-zinc-200">

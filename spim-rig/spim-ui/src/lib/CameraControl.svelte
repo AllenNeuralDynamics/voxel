@@ -33,7 +33,7 @@
 </script>
 
 {#if cameraDevice?.connected}
-	<div class="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/20 shadow-sm">
+	<div class="space-y-2 rounded-lg border border-zinc-700 bg-zinc-800/80 shadow-sm">
 		<!-- Camera Header -->
 		<div class="flex items-center justify-between px-3 pt-2">
 			<div class="text-sm font-medium text-zinc-200">Camera</div>
@@ -85,38 +85,36 @@
 			{/if}
 		</div>
 
-		<!-- Footer: Frame Rate and Stream Info -->
-		<div class="border-t border-zinc-700 px-3 py-2 font-mono text-xs text-zinc-300">
+		<!-- Footer: Frame Rate and Stream Info (single row, fixed height) -->
+		<div class="flex h-6 items-center justify-between border-t border-zinc-700 px-3 font-mono text-xs text-zinc-300">
 			<!-- Frame Rate (always shown) -->
 			{#if typeof frameRateHz === 'number'}
-				<div class="flex justify-between">
+				<div class="flex flex-1 items-center justify-between gap-1">
 					<span class="text-zinc-500">Frame Rate:</span>
 					<span>{frameRateHz.toFixed(1)} Hz</span>
 				</div>
 			{/if}
 
-			<!-- Stream Info (only when streaming) -->
+			<!-- Stream Info (only when streaming, on the right) -->
 			{#if streamInfo && typeof streamInfo === 'object'}
-				{#if 'frame_rate' in streamInfo && typeof streamInfo.frame_rate === 'number'}
-					<div class="flex justify-between">
-						<span class="text-zinc-500">Actual FPS:</span>
-						<span>{streamInfo.frame_rate.toFixed(1)} Hz</span>
-					</div>
-				{/if}
-				{#if 'data_rate_mb_s' in streamInfo && typeof streamInfo.data_rate_mb_s === 'number'}
-					<div class="flex justify-between">
-						<span class="text-zinc-500">Data Rate:</span>
-						<span>{streamInfo.data_rate_mb_s.toFixed(2)} MB/s</span>
-					</div>
-				{/if}
-				{#if 'dropped_frames' in streamInfo && typeof streamInfo.dropped_frames === 'number'}
-					<div class="flex justify-between">
-						<span class="text-zinc-500">Dropped:</span>
+				<div class="flex items-center gap-2">
+					{#if 'frame_rate' in streamInfo && typeof streamInfo.frame_rate === 'number'}
+						<div class="flex items-center gap-1">
+							<span class="text-zinc-500">FPS:</span>
+							<span>{streamInfo.frame_rate.toFixed(1)}</span>
+						</div>
+					{/if}
+					{#if 'data_rate_mb_s' in streamInfo && typeof streamInfo.data_rate_mb_s === 'number'}
+						<span class="text-zinc-600">•</span>
+						<span>{streamInfo.data_rate_mb_s.toFixed(1)} MB/s</span>
+					{/if}
+					{#if 'dropped_frames' in streamInfo && typeof streamInfo.dropped_frames === 'number'}
+						<span class="text-zinc-600">•</span>
 						<span class={streamInfo.dropped_frames > 0 ? 'text-red-400' : ''}>
-							{streamInfo.dropped_frames}
+							{streamInfo.dropped_frames} dropped
 						</span>
-					</div>
-				{/if}
+					{/if}
+				</div>
 			{/if}
 		</div>
 	</div>

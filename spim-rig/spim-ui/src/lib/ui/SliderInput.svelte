@@ -34,7 +34,7 @@
 		{step}
 		bind:value
 		onchange={handleSliderChange}
-		class="slider mt-1 mb-0.5 rounded-sm border border-zinc-600/50 bg-zinc-700/70 hover:bg-zinc-600"
+		class="slider mt-1 mb-0.5 rounded-sm border border-zinc-500/70 bg-zinc-700/50 transition-colors hover:bg-zinc-600/70"
 	/>
 	<div class="flex justify-between text-[0.6rem] text-zinc-300">
 		<span>{min}</span>
@@ -51,8 +51,8 @@
 		outline: none;
 		cursor: pointer;
 		transition: all 200ms ease-in-out;
-		--thumb-color: var(--color-zinc-500);
-		--thumb-color-hover: var(--color-zinc-300);
+		--thumb-color: var(--color-zinc-400);
+		--thumb-color-hover: var(--color-zinc-200);
 	}
 
 	/* Webkit (Chrome, Safari, Edge) */

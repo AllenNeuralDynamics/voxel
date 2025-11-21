@@ -8,14 +8,7 @@
 		id?: string;
 	}
 
-	let {
-		label,
-		value = $bindable(),
-		options,
-		onChange,
-		formatOption,
-		id
-	}: Props = $props();
+	let { label, value = $bindable(), options, onChange, formatOption, id }: Props = $props();
 
 	function handleChange(event: Event & { currentTarget: HTMLSelectElement }) {
 		const newValue = event.currentTarget.value;
@@ -44,7 +37,7 @@
 		{id}
 		bind:value
 		onchange={handleChange}
-		class="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-200 transition-colors hover:border-zinc-600 focus:border-emerald-500 focus:outline-none"
+		class="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 transition-colors hover:border-zinc-600 focus:border-emerald-500 focus:outline-none"
 	>
 		{#each options as option (option)}
 			<option value={option}>{formatDisplayValue(option)}</option>

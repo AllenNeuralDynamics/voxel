@@ -8,14 +8,17 @@
 	import CameraControl from '$lib/CameraControl.svelte';
 	import type { Previewer, PreviewChannel } from '$lib/preview';
 	import type { DevicesManager } from '$lib/devices.svelte';
+	import type { DeviceFilter } from '$lib/DeviceFilterToggle.svelte';
 
 	interface Props {
 		channel: PreviewChannel;
 		previewer: Previewer;
 		devicesManager: DevicesManager;
+		deviceFilter: DeviceFilter;
+		showHistograms: boolean;
 	}
 
-	let { channel, previewer, devicesManager }: Props = $props();
+	let { channel, previewer, devicesManager, deviceFilter, showHistograms }: Props = $props();
 
 	// Get preset colors for the color picker
 	const presetColors = Object.values(COLORMAP_COLORS);
@@ -33,6 +36,35 @@
 			previewer.setChannelLevels(channel.name, min, max);
 		}
 	}
+
+	// Determine which device controls to show based on filter
+	const showIllumination = $derived(deviceFilter === 'all' || deviceFilter === 'illumination');
+	const showDetection = $derived(deviceFilter === 'all' || deviceFilter === 'detection');
+	const showAuxiliary = $derived(deviceFilter === 'all' || deviceFilter === 'auxiliary');
+
+	// Get device status for footer when hidden
+	const laserEnabled = $derived(
+		channel.config?.illumination
+			? devicesManager.getPropertyValue(channel.config.illumination, 'is_enabled')
+			: undefined
+	);
+	const laserPower = $derived(
+		channel.config?.illumination ? devicesManager.getPropertyValue(channel.config.illumination, 'power_mw') : undefined
+	);
+
+	const cameraFrameRate = $derived(
+		channel.config?.detection ? devicesManager.getPropertyValue(channel.config.detection, 'frame_rate_hz') : undefined
+	);
+	const cameraExposure = $derived(
+		channel.config?.detection
+			? devicesManager.getPropertyValue(channel.config.detection, 'exposure_time_ms')
+			: undefined
+	);
+	const cameraStreamInfo = $derived(
+		channel.config?.detection ? devicesManager.getPropertyValue(channel.config.detection, 'stream_info') : undefined
+	);
+
+	const isStreaming = $derived(cameraStreamInfo && cameraStreamInfo !== null && cameraStreamInfo !== undefined);
 </script>
 
 <div class="space-y-4 px-4 py-4">
@@ -59,26 +91,69 @@
 	{/if}
 
 	<!-- Histogram -->
-	<!-- space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/20  -->
-	<!-- <div class="px-3 shadow-sm"> -->
-	<Histogram
-		histData={channel.latestHistogram}
-		levelsMin={channel.levelsMin}
-		levelsMax={channel.levelsMax}
-		dataTypeMax={65535}
-		color={channel.color}
-		onLevelsChange={handleLevelsChange}
-	/>
-	<!-- </div> -->
+	{#if showHistograms}
+		<Histogram
+			histData={channel.latestHistogram}
+			levelsMin={channel.levelsMin}
+			levelsMax={channel.levelsMax}
+			dataTypeMax={65535}
+			color={channel.color}
+			onLevelsChange={handleLevelsChange}
+		/>
+	{/if}
 
 	<!-- Device Controls -->
 	<!-- Illumination -->
-	{#if channel.config?.illumination}
+	{#if channel.config?.illumination && showIllumination}
 		<LaserControl deviceId={channel.config.illumination} {devicesManager} />
 	{/if}
 
 	<!-- Detection -->
-	{#if channel.config?.detection}
+	{#if channel.config?.detection && showDetection}
 		<CameraControl deviceId={channel.config.detection} {devicesManager} />
 	{/if}
+
+	<!-- Auxilliary -->
+	{#if channel.config && showAuxiliary}
+		<div class="text-[0.5rem] text-zinc-600"></div>
+	{/if}
+
+	{#snippet statusItemDivider()}
+		<div class="mx-3 h-2.5 w-px bg-zinc-500"></div>
+	{/snippet}
+	{#snippet statusBarLabel(label: string)}
+		<span class="text-zinc-400/90">{label}:</span>
+	{/snippet}
+
+	<!-- Device Status Footer (when devices are hidden) -->
+	<div class="space-y-1 font-mono text-[0.6rem] text-zinc-300">
+		{#if channel.config?.illumination && !showIllumination}
+			{@const isActive = typeof laserEnabled === 'boolean' && laserEnabled}
+			<div class="flex items-center justify-between py-1">
+				{@render statusBarLabel('Illumination')}
+				<div class="flex items-center">
+					{#if typeof laserPower === 'number'}
+						<div>{laserPower.toFixed(1)} mW</div>
+					{/if}
+					<div class="ml-3 h-1.5 w-1.5 rounded-full {isActive ? 'bg-emerald-500' : 'bg-zinc-600'}"></div>
+				</div>
+			</div>
+		{/if}
+
+		{#if channel.config?.detection && !showDetection}
+			<div class="flex items-center justify-between py-1">
+				{@render statusBarLabel('Detection')}
+				<div class="flex items-center">
+					{#if typeof cameraFrameRate === 'number'}
+						<span>{cameraFrameRate.toFixed(1)} Hz</span>
+					{/if}
+					{#if typeof cameraExposure === 'number'}
+						{@render statusItemDivider()}
+						<span>{cameraExposure.toFixed(1)} ms</span>
+					{/if}
+					<div class="ml-3 h-1.5 w-1.5 rounded-full {isStreaming ? 'bg-emerald-500' : 'bg-zinc-600'}"></div>
+				</div>
+			</div>
+		{/if}
+	</div>
 </div>
