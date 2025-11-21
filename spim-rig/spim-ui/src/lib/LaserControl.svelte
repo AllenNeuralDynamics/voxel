@@ -39,7 +39,7 @@
 </script>
 
 {#if laserDevice?.connected}
-	<div class="space-y-4 rounded-lg border border-zinc-700 bg-zinc-900/70 shadow-sm">
+	<div class="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/20 shadow-sm">
 		<!-- Laser Header -->
 		<div class="flex items-center justify-between px-3 pt-3">
 			<div class="text-sm font-medium text-zinc-200">
@@ -56,10 +56,8 @@
 					min={powerSetpointModel.min_val ?? 0}
 					max={powerSetpointModel.max_val ?? 100}
 					step={powerSetpointModel.step ?? 1}
-					onchange={() => {
-						if (typeof powerSetpointModel.value === 'number') {
-							devicesManager.setProperty(deviceId, 'power_setpoint_mw', powerSetpointModel.value);
-						}
+					onChange={(newValue) => {
+						devicesManager.setProperty(deviceId, 'power_setpoint_mw', newValue);
 					}}
 				/>
 			{/if}

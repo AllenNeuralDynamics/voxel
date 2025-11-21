@@ -25,7 +25,7 @@ class SimulatedLaser(SpimLaser):
 
     @deliminated_float(min_value=0.0, max_value=lambda self: self._max_power_mw, step=1.0)
     def power_setpoint_mw(self) -> float:
-        return self._power_setpoint_mw
+        return random.gauss(self._power_setpoint_mw, 0.1)
 
     @power_setpoint_mw.setter
     def power_setpoint_mw(self, value: float) -> None:

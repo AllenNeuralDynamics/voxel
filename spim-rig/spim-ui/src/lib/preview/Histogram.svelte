@@ -219,7 +219,7 @@
 				step={100}
 				numCharacters={5}
 				align="left"
-				onValueChange={(newValue) => {
+				onChange={(newValue) => {
 					const newMin = newValue / dataTypeMax;
 					onLevelsChange(newMin, levelsMax);
 				}}
@@ -242,7 +242,7 @@
 				step={100}
 				numCharacters={5}
 				align="right"
-				onValueChange={(newValue) => {
+				onChange={(newValue) => {
 					const newMax = newValue / dataTypeMax;
 					onLevelsChange(levelsMin, newMax);
 				}}

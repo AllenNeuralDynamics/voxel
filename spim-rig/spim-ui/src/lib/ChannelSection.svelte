@@ -5,6 +5,7 @@
 	import Histogram from '$lib/preview/Histogram.svelte';
 	import { COLORMAP_COLORS } from '$lib/preview/colormap';
 	import LaserControl from '$lib/LaserControl.svelte';
+	import CameraControl from '$lib/CameraControl.svelte';
 	import type { Previewer, PreviewChannel } from '$lib/preview';
 	import type { DevicesManager } from '$lib/devices.svelte';
 
@@ -34,11 +35,13 @@
 	}
 </script>
 
-<div class="space-y-3 rounded-lg border-0 border-zinc-700 px-4 py-6" style="border-top-color: {channel.color};">
+<div class="space-y-4 px-4 py-4">
 	<!-- Channel Header with Inline Controls -->
 	{#if channel.name}
 		<div class="-mt-2 flex items-center justify-between">
-			<span class="font-medium text-zinc-100">{channel.label ?? channel.config?.label ?? channel.name}</span>
+			<span class="font-medium text-zinc-100" style="color: {channel.color};"
+				>{channel.label ?? channel.config?.label ?? channel.name}</span
+			>
 			<div class="flex items-center gap-2">
 				<ChannelInfoTooltip name={channel.name} label={channel.label} config={channel.config} />
 				<button
@@ -56,6 +59,8 @@
 	{/if}
 
 	<!-- Histogram -->
+	<!-- space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/20  -->
+	<!-- <div class="px-3 shadow-sm"> -->
 	<Histogram
 		histData={channel.latestHistogram}
 		levelsMin={channel.levelsMin}
@@ -64,15 +69,16 @@
 		color={channel.color}
 		onLevelsChange={handleLevelsChange}
 	/>
+	<!-- </div> -->
 
 	<!-- Device Controls -->
-	<div class="space-y-2">
-		<!-- Illumination -->
-		{#if channel.config?.illumination}
-			<LaserControl deviceId={channel.config.illumination} {devicesManager} />
-		{/if}
+	<!-- Illumination -->
+	{#if channel.config?.illumination}
+		<LaserControl deviceId={channel.config.illumination} {devicesManager} />
+	{/if}
 
-		<!-- Detection (placeholder) -->
-		<!-- Future: CameraControl component -->
-	</div>
+	<!-- Detection -->
+	{#if channel.config?.detection}
+		<CameraControl deviceId={channel.config.detection} {devicesManager} />
+	{/if}
 </div>

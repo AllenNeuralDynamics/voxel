@@ -1,16 +1,22 @@
 <script lang="ts">
+	import DraggableNumberInput from './DraggableNumberInput.svelte';
+
 	interface Props {
 		label: string;
-		value: number | unknown;
+		value: number;
 		min?: number;
 		max?: number;
 		step?: number;
-		onchange?: (event: Event & { currentTarget: HTMLInputElement }) => void;
+		onChange?: (newValue: number) => void;
 	}
-	let { label, value = $bindable(), min = 0, max = 100, step = 1, onchange }: Props = $props();
+	let { label, value = $bindable(0), min = 0, max = 100, step = 1, onChange }: Props = $props();
 
-	// Ensure value is always a number for the input, with fallback
-	let numericValue = $derived(typeof value === 'number' ? value : 0);
+	function handleSliderChange(event: Event & { currentTarget: HTMLInputElement }) {
+		const newValue = parseFloat(event.currentTarget.value);
+		if (onChange) {
+			onChange(newValue);
+		}
+	}
 </script>
 
 <div class="grid grid-rows-[auto_1fr_auto] gap-1">
@@ -18,7 +24,7 @@
 		<label for={label} class="text-left text-[0.65rem] font-medium text-zinc-300">
 			{label}
 		</label>
-		<span class="text-[0.65rem] text-zinc-300">{numericValue.toFixed(1)}</span>
+		<DraggableNumberInput bind:value {min} {max} {step} decimals={1} numCharacters={5} {onChange} align="right" />
 	</div>
 	<input
 		id={label}
@@ -27,8 +33,8 @@
 		{max}
 		{step}
 		bind:value
-		{onchange}
-		class="slider mt-1 mb-0.5 border border-zinc-500/50 bg-zinc-600/70 hover:bg-zinc-600"
+		onchange={handleSliderChange}
+		class="slider mt-1 mb-0.5 rounded-sm border border-zinc-600/50 bg-zinc-700/70 hover:bg-zinc-600"
 	/>
 	<div class="flex justify-between text-[0.6rem] text-zinc-300">
 		<span>{min}</span>
@@ -41,7 +47,7 @@
 		width: 100%;
 		height: 0.75rem;
 		appearance: none;
-		border-radius: 2px;
+		/*border-radius: 2px;*/
 		outline: none;
 		cursor: pointer;
 		transition: all 200ms ease-in-out;

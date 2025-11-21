@@ -81,7 +81,7 @@
 				step={0.1}
 				decimals={1}
 				numCharacters={5}
-				onValueChange={handleZoomChange}
+				onChange={handleZoomChange}
 			/>
 			<span class="text-zinc-300">x</span>
 		</div>
@@ -95,7 +95,7 @@
 				step={0.01}
 				decimals={2}
 				numCharacters={5}
-				onValueChange={handleCropXChange}
+				onChange={handleCropXChange}
 			/>
 			<span class="text-zinc-500">,</span>
 			<DraggableNumberInput
@@ -105,7 +105,7 @@
 				step={0.01}
 				decimals={2}
 				numCharacters={5}
-				onValueChange={handleCropYChange}
+				onChange={handleCropYChange}
 			/>
 		</div>
 

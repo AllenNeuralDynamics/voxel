@@ -9,7 +9,7 @@
 		numCharacters?: number; // Number of characters wide
 		color?: string; // Text color
 		align?: 'left' | 'right';
-		onValueChange?: (newValue: number) => void; // Optional callback for value changes
+		onChange?: (newValue: number) => void; // Optional callback for value changes
 	}
 
 	let {
@@ -22,7 +22,7 @@
 		numCharacters = 4,
 		color = 'inherit',
 		align = 'left',
-		onValueChange
+		onChange: onValueChange
 	}: Props = $props();
 
 	// Compute display value with proper decimal formatting
