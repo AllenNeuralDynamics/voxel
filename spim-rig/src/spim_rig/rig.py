@@ -6,7 +6,6 @@ import zmq.asyncio
 
 from pyrig import DeviceClient, Rig
 from pyrig.node import DeviceProvision
-from spim_rig.camera.base import TriggerMode, TriggerPolarity
 from spim_rig.camera.client import CameraClient
 from spim_rig.config import ChannelConfig, DeviceType, ProfileConfig, SpimRigConfig
 from spim_rig.daq.client import DaqClient
@@ -243,14 +242,7 @@ class SpimRig(Rig):
         self.log.info("Active profile cleared")
 
     # ===================== Preview Management =====================
-
-    async def start_preview(
-        self,
-        frame_callback: Callable[[str, bytes], Awaitable[None]],
-        *,
-        trigger_mode: TriggerMode = TriggerMode.ON,
-        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
-    ) -> None:
+    async def start_preview(self, frame_callback: Callable[[str, bytes], Awaitable[None]]) -> None:
         """Start preview mode for active profile channels and begin frame streaming.
 
         Orchestrates camera preview startup and connects preview manager to camera streams.
@@ -258,8 +250,6 @@ class SpimRig(Rig):
 
         Args:
             frame_callback: Async callable that receives (channel, packed_frame) for each preview frame.
-            trigger_mode: Trigger configuration to apply to each camera.
-            trigger_polarity: Trigger polarity for camera preview.
 
         Raises:
             ValueError: If no active profile is set.
@@ -283,13 +273,7 @@ class SpimRig(Rig):
             if channel.detection not in self.cameras:
                 self.log.warning(f"Channel '{chan_name}' has no camera assigned")
                 continue
-            tasks.append(
-                self.cameras[channel.detection].start_preview(
-                    channel_name=chan_name,
-                    trigger_mode=trigger_mode,
-                    trigger_polarity=trigger_polarity,
-                )
-            )
+            tasks.append(self.cameras[channel.detection].start_preview(channel_name=chan_name))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -309,7 +293,42 @@ class SpimRig(Rig):
         self._frame_callback = frame_callback
         self.log.info(f"Preview started for {len(preview_addrs)} cameras")
 
-        # TODO: We need to turn on laser.
+        # Enable lasers for active channels if cameras started successfully
+        if preview_addrs:
+            await self._enable_channel_lasers()
+
+    async def _enable_channel_lasers(self) -> None:
+        """Enable lasers for all active channels."""
+        self.log.info(f"_enable_channel_lasers called. Active channels: {list(self.active_channels.keys())}")
+        tasks = []
+        for chan_name, channel in self.active_channels.items():
+            if channel.illumination not in self.lasers:
+                self.log.warning(f"Channel '{chan_name}' has no laser assigned")
+                continue
+            laser = self.lasers[channel.illumination]
+            tasks.append(laser.call("enable"))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for laser_id, result in zip([ch.illumination for ch in self.active_channels.values()], results):
+                if isinstance(result, BaseException):
+                    self.log.error(f"Failed to enable laser {laser_id}: {result}")
+
+    async def _disable_channel_lasers(self) -> None:
+        """Disable lasers for all active channels."""
+        tasks = []
+        for chan_name, channel in self.active_channels.items():
+            if channel.illumination not in self.lasers:
+                continue
+            laser = self.lasers[channel.illumination]
+            self.log.info(f"Disabling laser {channel.illumination} for channel {chan_name}")
+            tasks.append(laser.call("disable"))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for laser_id, result in zip([ch.illumination for ch in self.active_channels.values()], results):
+                if isinstance(result, BaseException):
+                    self.log.error(f"Failed to disable laser {laser_id}: {result}")
 
     async def stop_preview(self) -> None:
         """Stop preview mode on all streaming cameras and cleanup manager."""
@@ -319,7 +338,10 @@ class SpimRig(Rig):
 
         self.log.info("Stopping preview...")
 
-        # Stop preview manager first
+        # Disable lasers first
+        await self._disable_channel_lasers()
+
+        # Stop preview manager
         await self.preview.stop()
         self._frame_callback = None
 

@@ -17,7 +17,8 @@ export type {
 	ErrorHandler,
 	PreviewFrameInfo,
 	PreviewCrop,
-	PreviewLevels
+	PreviewLevels,
+	DevicePropertyPayload
 } from './types';
 
 export { default as ClientStatus } from './ClientStatus.svelte';

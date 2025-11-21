@@ -124,11 +124,10 @@ export interface ErrorMsg {
 
 /**
  * Device property update payload.
- * Topic: 'device/property'
+ * Topic: 'device/<device_id>/properties'
  * Matches PropsResponse from pyrig.device.base
  */
 export interface DevicePropertyPayload {
-	device: string;
 	res: Record<string, PropertyModel>;
 	err: Record<string, ErrorMsg>;
 }
@@ -160,7 +159,7 @@ export interface RigHandlers {
 	'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	'preview/crop'?: (payload: PreviewCropPayload) => void;
 	'preview/levels'?: (payload: PreviewLevelsPayload) => void;
-	'device/property'?: (payload: DevicePropertyPayload) => void;
+	'device'?: (payload: DevicePropertyPayload) => void; // Prefix subscription
 }
 
 /**

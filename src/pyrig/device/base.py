@@ -18,10 +18,18 @@ _INT_CMD_ = b"INT"
 LABEL_ATTR = "__attr_label__"
 DESC_ATTR = "__attr_desc__"
 UNITS_ATTR = "__attr_units__"
+STREAM_ATTR = "__attr_stream__"
 
 
-def describe(label: str, desc: str | None = None, units: str | None = None) -> Callable:
-    """A decorator factory to add metadata to a function."""
+def describe(label: str, desc: str | None = None, units: str | None = None, stream: bool = False) -> Callable:
+    """A decorator factory to add metadata to a function.
+
+    Args:
+        label: Human-readable label for the attribute
+        desc: Optional description
+        units: Optional units string
+        stream: If True, property changes will be published to subscribers (default: False)
+    """
 
     def attach_metadata(wrapper: Callable) -> Callable:
         setattr(wrapper, LABEL_ATTR, label)
@@ -29,6 +37,7 @@ def describe(label: str, desc: str | None = None, units: str | None = None) -> C
             setattr(wrapper, DESC_ATTR, desc)
         if units is not None:
             setattr(wrapper, UNITS_ATTR, units)
+        setattr(wrapper, STREAM_ATTR, stream)
         return wrapper
 
     def decorator(func: Callable) -> Callable:
@@ -111,6 +120,7 @@ class PropertyInfo(AttributeInfo):
     dtype: str
     access: Literal["ro", "rw"]
     units: str = ""
+    stream: bool = False
 
     @classmethod
     def from_attr(cls, attr: property) -> Self:
@@ -124,6 +134,7 @@ class PropertyInfo(AttributeInfo):
             dtype=cls._parse_type_annotation(attr.fget.__annotations__["return"]),
             access="rw" if attr.fset else "ro",
             units=str(getattr(attr.fget, UNITS_ATTR)) if hasattr(attr.fget, UNITS_ATTR) else "",
+            stream=bool(getattr(attr.fget, STREAM_ATTR, False)),
         )
 
 

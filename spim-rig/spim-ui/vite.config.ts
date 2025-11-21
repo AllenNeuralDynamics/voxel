@@ -3,5 +3,26 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit()]
+	plugins: [tailwindcss(), sveltekit()],
+	server: {
+		proxy: {
+			'/api': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			},
+			'/profiles': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			},
+			'/devices': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			},
+			'/ws': {
+				target: 'http://localhost:8000',
+				ws: true,
+				changeOrigin: true
+			}
+		}
+	}
 });

@@ -3,7 +3,6 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from enum import Enum
 from typing import Any, Self
 
 import zmq
@@ -111,22 +110,13 @@ def collect_commands(obj: Any) -> dict[str, Command]:
     return commands
 
 
-def _coerce_property_value(device: Device, prop_name: str, value: Any) -> Any:
-    prop_descriptor = getattr(type(device), prop_name, None)
-    if isinstance(prop_descriptor, property) and prop_descriptor.fget is not None:
-        return_type = prop_descriptor.fget.__annotations__.get("return")
-        if return_type is not None and isinstance(return_type, type) and issubclass(return_type, Enum):
-            if isinstance(value, str):
-                try:
-                    return return_type[value]
-                except KeyError:
-                    valid = [e.name for e in return_type]
-                    raise ValueError(f"Invalid {return_type.__name__} value '{value}'. Valid: {valid}") from None
-    return value
-
-
 class DeviceService[D: Device]:
-    def __init__(self, device: D, conn: DeviceAddress, zctx: zmq.asyncio.Context):
+    def __init__(
+        self,
+        device: D,
+        conn: DeviceAddress,
+        zctx: zmq.asyncio.Context,
+    ):
         self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
         self._device = device
         self._client_conn = conn
@@ -139,12 +129,17 @@ class DeviceService[D: Device]:
         service_commands = collect_commands(self)
         self._commands = {**device_commands, **service_commands}
 
+        properties = collect_properties(self._device)
+
         self._interface = DeviceInterface(
             uid=self._device.uid,
             type=self._device.__DEVICE_TYPE__,
             commands={name: cmd.info for name, cmd in self._commands.items()},
-            properties=collect_properties(self._device),
+            properties=properties,
         )
+
+        # Collect properties marked for streaming
+        self._stream_props = {name for name, info in properties.items() if info.stream}
 
         self._rep_socket = zctx.socket(zmq.REP)
         self._pub_socket = zctx.socket(zmq.PUB)
@@ -184,6 +179,9 @@ class DeviceService[D: Device]:
             return PropsResponse(res=res, err=err)
 
         return await self._exec(_get_props_sync)
+
+    async def _get_stream_props(self) -> PropsResponse:
+        return await self._get_props(list(self._stream_props))
 
     async def _set_props(self, props: dict[str, Any]) -> PropsResponse:
         def _set_props_sync() -> PropsResponse:
@@ -247,17 +245,30 @@ class DeviceService[D: Device]:
 
         while True:
             try:
-                current_state = await self._get_props()
+                current_state = await self._get_stream_props()
+
+                # Collect all changed properties
+                changed_props: dict[str, PropertyModel] = {}
                 for name, value in current_state.res.items():
                     last_value = last_state.res.get(name) if last_state else None
                     if last_state is None or last_value is None or value != last_value:
-                        topic = f"{self._device.uid}/state/{name}".encode("utf-8")
-                        payload = value.model_dump_json().encode("utf-8")
-                        await self._pub_socket.send_multipart([topic, payload])
+                        changed_props[name] = value
+
+                # Publish if there are changes
+                if changed_props:
+                    topic = f"{self._device.uid}/properties".encode("utf-8")
+                    # Wrap in "res" to match PropsResponse structure used elsewhere
+                    payload = PropsResponse(res=changed_props).model_dump_json().encode("utf-8")
+                    await self._pub_socket.send_multipart([topic, payload])
+
                 last_state = current_state
                 await asyncio.sleep(interval)
             except asyncio.CancelledError:
+                self.log.info("State stream loop cancelled")
                 break
+            except Exception as e:
+                self.log.error(f"Error in state stream loop: {e}", exc_info=True)
+                await asyncio.sleep(interval)
 
     async def _heartbeat_loop(self, interval: float):
         """Continuously publish heartbeat messages."""

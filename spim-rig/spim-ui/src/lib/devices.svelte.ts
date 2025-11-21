@@ -6,7 +6,7 @@
  */
 
 import { SvelteMap, SvelteURL } from 'svelte/reactivity';
-import type { RigClient } from '$lib/client';
+import type { RigClient, DevicePropertyPayload } from '$lib/client';
 
 /**
  * TypeScript interfaces matching backend Pydantic models.
@@ -133,8 +133,11 @@ export class DevicesManager {
 		this.rigClient = options.rigClient;
 
 		// Subscribe to property updates from WebSocket
-		this.unsubscribe = this.rigClient.on('device/property', (payload) => {
-			this.handlePropertyUpdate(payload);
+		// Topic: device/<device_id>/properties
+		// We subscribe to 'device' prefix to get all device updates
+		this.unsubscribe = this.rigClient.subscribe('device', (topic, payload) => {
+			// console.log('[DevicesManager] Received:', topic, payload);
+			this.handlePropertyUpdate(topic, payload as DevicePropertyPayload);
 		});
 	}
 
@@ -180,14 +183,24 @@ export class DevicesManager {
 	/**
 	 * Handle real-time property updates from WebSocket.
 	 *
-	 * Backend sends PropsResponse structure: { device, res: {propName: PropertyModel}, err: {propName: ErrorMsg} }
+	 * Backend sends PropsResponse structure: { res: {propName: PropertyModel}, err: {propName: ErrorMsg} }
+	 * Topic format: device/<device_id>/properties
 	 */
-	private handlePropertyUpdate(payload: {
-		device: string;
-		res: Record<string, PropertyModel>;
-		err: Record<string, ErrorMsg>;
-	}): void {
-		const device = this.devices.get(payload.device);
+	private handlePropertyUpdate(
+		topic: string,
+		payload: {
+			res: Record<string, PropertyModel>;
+			err: Record<string, ErrorMsg>;
+		}
+	): void {
+		// Extract device ID from topic: device/<device_id>/properties
+		const parts = topic.split('/');
+		if (parts.length < 3 || parts[0] !== 'device' || parts[2] !== 'properties') {
+			return;
+		}
+		const deviceId = parts[1];
+
+		const device = this.devices.get(deviceId);
 		if (!device?.interface) return;
 
 		// Store updated PropertyModels separately from PropertyInfo metadata
@@ -209,10 +222,10 @@ export class DevicesManager {
 
 		// Log any errors
 		for (const [propName, errorMsg] of Object.entries(payload.err)) {
-			console.error(`[DevicesManager] Error setting ${payload.device}.${propName}: ${errorMsg.msg}`);
+			console.error(`[DevicesManager] Error setting ${deviceId}.${propName}: ${errorMsg.msg}`);
 		}
 
-		console.log(`[DevicesManager] Updated ${payload.device}:`, Object.keys(payload.res));
+		// console.log(`[DevicesManager] Updated ${deviceId}:`, Object.values(payload.res));
 	}
 
 	/**

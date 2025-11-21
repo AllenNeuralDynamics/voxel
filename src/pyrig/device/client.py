@@ -86,12 +86,25 @@ class DeviceClient:
         if self._req_socket:
             self._req_socket.close()
 
-    async def subscribe(self, topic: str, callback: Callable[[bytes], None]):
-        if not topic.startswith(self.uid):
-            topic = f"{self.uid}/{topic}"
-        if topic not in self._callbacks:
-            self._callbacks[topic] = []
-        self._callbacks[topic].append(callback)
+    async def subscribe(self, topic: str, callback: Callable[[str, bytes], None]):
+        """Subscribe to device messages.
+
+        Args:
+            topic: Topic to subscribe to (e.g., "properties", "heartbeat").
+                   Use empty string "" to receive ALL topics.
+            callback: Function receiving (topic, payload_bytes)
+        """
+        if topic == "":
+            # Empty string means subscribe to all topics
+            subscribe_topic = f"{self.uid}/*"
+        elif not topic.startswith(self.uid):
+            subscribe_topic = f"{self.uid}/{topic}"
+        else:
+            subscribe_topic = topic
+
+        if subscribe_topic not in self._callbacks:
+            self._callbacks[subscribe_topic] = []
+        self._callbacks[subscribe_topic].append(callback)
 
     async def call(self, command: str, *args: Any, **kwargs: Any):
         """Call a command and unwrap the result, raising on error."""
@@ -162,15 +175,23 @@ class DeviceClient:
             try:
                 topic_bytes, payload_bytes = await self._sub_socket.recv_multipart()
                 topic = topic_bytes.decode()
+
+                # Call exact topic callbacks
                 for callback in self._callbacks.get(topic, []):
-                    callback(payload_bytes)
+                    callback(topic, payload_bytes)
+
+                # Call wildcard callbacks (subscribed with "")
+                wildcard = f"{self.uid}/*"
+                for callback in self._callbacks.get(wildcard, []):
+                    callback(topic, payload_bytes)
+
             except asyncio.CancelledError:
                 break
 
     async def _subscribe_to_heartbeat(self):
         """Subscribe to heartbeat messages."""
 
-        def handle_heartbeat(payload_bytes: bytes):
+        def handle_heartbeat(topic: str, payload_bytes: bytes):
             try:
                 # Update with local receive time (could parse payload_bytes for server time if needed later)
                 self._last_heartbeat_time = time.time()

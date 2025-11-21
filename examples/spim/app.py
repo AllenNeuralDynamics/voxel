@@ -41,10 +41,11 @@ def main():
 
     # Configure uvicorn to use RichHandler with consistent time format
     ip = "127.0.0.1"
-    
+    ip = "localhost"
+
     log.info("Serving UI at http://%s:8000", ip)
     log.info("For remote access, ensure 'rig_admin.py' is configured.")
-    
+
     uvicorn.run(
         app,
         host="127.0.0.1",

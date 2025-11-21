@@ -54,6 +54,9 @@ class RigService:
         self._preview_start_count = 0
         self._preview_lock = asyncio.Lock()
 
+        # Subscribe to device property streams in background
+        asyncio.create_task(self._subscribe_to_device_streams())
+
     @property
     def status(self) -> RigStatus:
         return RigStatus(
@@ -203,7 +206,9 @@ class RigService:
             log.warning(f"Errors setting properties on {device_id}: {result.err}")
 
         # Broadcast to all clients (including sender)
-        await self._broadcast("device/property", {"device": device_id, **result.model_dump()})
+        # Topic: device/<device_id>/properties
+        # Payload: PropsResponse (without device_id, as it's in the topic)
+        await self._broadcast(f"device/{device_id}/properties", result.model_dump())
 
         return {"device": device_id, **result.model_dump()}
 
@@ -230,6 +235,31 @@ class RigService:
             "preview/status",
             {"previewing": self.rig.preview.is_active, "timestamp": _utc_timestamp()},
         )
+
+    async def _subscribe_to_device_streams(self):
+        """Subscribe to device streams and forward them to WebSocket clients."""
+        for device_id, client in self.rig.devices.items():
+
+            def make_forwarder(dev_id: str):
+                def forwarder(topic: str, payload_bytes: bytes):
+                    try:
+                        # Parse the payload
+                        payload = json.loads(payload_bytes.decode("utf-8"))
+
+                        # Extract topic suffix after device_id/
+                        # e.g., "camera1/properties" -> "properties"
+                        topic_suffix = topic.split("/", 1)[1] if "/" in topic else topic
+
+                        # Broadcast as device/{device_id}/{topic_suffix}
+                        asyncio.create_task(self._broadcast(f"device/{dev_id}/{topic_suffix}", payload))
+                    except Exception as e:
+                        log.error(f"Error forwarding {topic} for {dev_id}: {e}")
+
+                return forwarder
+
+            # Subscribe with empty string to forward all topics
+            await client.subscribe("", make_forwarder(device_id))
+            log.debug(f"Forwarding all topics for device: {device_id}")
 
     async def _broadcast(self, topic: str, payload: dict[str, Any]):
         """Broadcast a JSON message to all connected clients."""

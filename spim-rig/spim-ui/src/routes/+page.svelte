@@ -11,10 +11,10 @@
 
 	// Configuration
 	import { browser } from '$app/environment';
-	
+
 	// Configuration
 	const apiBaseUrl = browser ? window.location.origin : 'http://localhost:8000';
-	const rigSocketUrl = browser 
+	const rigSocketUrl = browser
 		? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/rig`
 		: 'ws://localhost:8000/ws/rig';
 
@@ -95,22 +95,57 @@
 									{#if channel.config?.illumination && devicesManager}
 										{@const laserDeviceId = channel.config.illumination}
 										{@const laserDevice = devicesManager.getDevice(laserDeviceId)}
-										{@const powerInfo = devicesManager.getPropertyInfo(laserDeviceId, 'power_setpoint_mw')}
-										{@const powerModel = devicesManager.getPropertyModel(laserDeviceId, 'power_setpoint_mw')}
+										{@const wavelength = devicesManager.getPropertyValue(laserDeviceId, 'wavelength')}
+										{@const isEnabled = devicesManager.getPropertyValue(laserDeviceId, 'is_enabled')}
+										{@const powerMw = devicesManager.getPropertyValue(laserDeviceId, 'power_mw')}
+										{@const powerSetpointModel = devicesManager.getPropertyModel(laserDeviceId, 'power_setpoint_mw')}
+										{@const powerSetpointInfo = devicesManager.getPropertyInfo(laserDeviceId, 'power_setpoint_mw')}
 
-										{#if laserDevice?.connected && powerInfo && powerModel && typeof powerModel.value === 'number'}
-											<SliderInput
-												label={powerInfo.label}
-												bind:value={powerModel.value}
-												min={powerModel.min_val ?? 0}
-												max={powerModel.max_val ?? 100}
-												step={powerModel.step ?? 1}
-												onchange={() => {
-													if (typeof powerModel.value === 'number') {
-														devicesManager?.setProperty(laserDeviceId, 'power_setpoint_mw', powerModel.value);
-													}
-												}}
-											/>
+										{#if laserDevice?.connected}
+											<div class="space-y-2 rounded border border-zinc-700/50 bg-zinc-800/30 p-2">
+												<!-- Laser Header -->
+												<div class="flex items-center justify-between">
+													<div class="flex items-center gap-2">
+														<div class="text-xs font-medium text-zinc-300">
+															{typeof wavelength === 'number' ? `${wavelength} nm` : 'Laser'}
+														</div>
+														{#if typeof isEnabled === 'boolean'}
+															<div
+																class="rounded px-1.5 py-0.5 text-[0.6rem] font-medium {isEnabled
+																	? 'bg-emerald-500/20 text-emerald-400'
+																	: 'bg-zinc-700/50 text-zinc-500'}"
+															>
+																{isEnabled ? 'ON' : 'OFF'}
+															</div>
+														{/if}
+													</div>
+													{#if typeof powerMw === 'number'}
+														<div class="text-[0.65rem] text-zinc-400">
+															{powerMw.toFixed(1)} mW
+														</div>
+													{/if}
+												</div>
+
+												<!-- Power Setpoint Slider -->
+												{#if powerSetpointInfo && powerSetpointModel && typeof powerSetpointModel.value === 'number'}
+													<SliderInput
+														label={powerSetpointInfo.label}
+														bind:value={powerSetpointModel.value}
+														min={powerSetpointModel.min_val ?? 0}
+														max={powerSetpointModel.max_val ?? 100}
+														step={powerSetpointModel.step ?? 1}
+														onchange={() => {
+															if (typeof powerSetpointModel.value === 'number') {
+																devicesManager?.setProperty(
+																	laserDeviceId,
+																	'power_setpoint_mw',
+																	powerSetpointModel.value
+																);
+															}
+														}}
+													/>
+												{/if}
+											</div>
 										{:else}
 											<div class="text-[0.6rem] text-zinc-500">Laser not available</div>
 										{/if}

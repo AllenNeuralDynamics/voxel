@@ -189,9 +189,9 @@ if __name__ == "__main__":
         _ = DataProcessorServer(processor, proc_conn, zctx)
         _ = DeviceService(laser, laser_conn, zctx)
 
-        def on_message(payload):
+        def on_message(topic: str, payload: bytes):
             res = CommandResponse.model_validate_json(payload.decode())
-            print(f"Received message: {res}")
+            print(f"Received message from {topic}: {res}")
 
         proc_agent = DeviceClient(processor.uid, zctx, proc_conn)
         laser_agent = DeviceClient(laser.uid, zctx, laser_conn)
