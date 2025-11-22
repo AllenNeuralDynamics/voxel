@@ -35,7 +35,7 @@
 {#if cameraDevice?.connected}
 	<div class="space-y-2 rounded-lg border border-zinc-700 bg-zinc-800/80 shadow-sm">
 		<!-- Camera Header -->
-		<div class="flex items-center justify-between px-3 pt-2">
+		<div class="flex items-center justify-between px-3 pt-3">
 			<div class="text-sm font-medium text-zinc-200">Camera</div>
 		</div>
 
@@ -56,7 +56,7 @@
 		</div>
 
 		<!-- Pixel Format and Binning Selectors -->
-		<div class="grid grid-cols-2 gap-3 px-3">
+		<div class="grid grid-cols-2 gap-4 px-3">
 			<!-- Pixel Format Selector -->
 			{#if pixelFormatInfo && pixelFormatModel && pixelFormatModel.options && (typeof pixelFormatModel.value === 'string' || typeof pixelFormatModel.value === 'number')}
 				<SelectInput
@@ -86,7 +86,9 @@
 		</div>
 
 		<!-- Footer: Frame Rate and Stream Info (single row, fixed height) -->
-		<div class="flex h-6 items-center justify-between border-t border-zinc-700 px-3 font-mono text-xs text-zinc-300">
+		<div
+			class="mt-4 flex items-center justify-between border-t border-zinc-700 px-3 py-2 font-mono text-xs text-zinc-300"
+		>
 			<!-- Frame Rate (always shown) -->
 			{#if typeof frameRateHz === 'number'}
 				<div class="flex flex-1 items-center justify-between gap-1">
@@ -105,11 +107,11 @@
 						</div>
 					{/if}
 					{#if 'data_rate_mb_s' in streamInfo && typeof streamInfo.data_rate_mb_s === 'number'}
-						<span class="text-zinc-600">•</span>
+						<span class="text-zinc-600">|</span>
 						<span>{streamInfo.data_rate_mb_s.toFixed(1)} MB/s</span>
 					{/if}
 					{#if 'dropped_frames' in streamInfo && typeof streamInfo.dropped_frames === 'number'}
-						<span class="text-zinc-600">•</span>
+						<span class="text-zinc-600">|</span>
 						<span class={streamInfo.dropped_frames > 0 ? 'text-red-400' : ''}>
 							{streamInfo.dropped_frames} dropped
 						</span>

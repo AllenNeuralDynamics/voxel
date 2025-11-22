@@ -25,7 +25,7 @@
 	let previewer = $state<Previewer | undefined>(undefined);
 	let profilesManager = $state<ProfilesManager | undefined>(undefined);
 	let devicesManager = $state<DevicesManager | undefined>(undefined);
-	let deviceFilter = $state<DeviceFilter>('none');
+	let deviceFilter = $state<DeviceFilter>('summary');
 	let showHistograms = $state(true);
 
 	onMount(async () => {

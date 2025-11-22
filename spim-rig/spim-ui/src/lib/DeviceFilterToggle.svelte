@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { ToggleGroup } from 'bits-ui';
 
-	export type DeviceFilter = 'all' | 'detection' | 'illumination' | 'auxiliary' | 'none';
+	export type DeviceFilter = 'all' | 'detection' | 'illumination' | 'auxiliary' | 'summary';
 
 	interface Props {
 		value: DeviceFilter;
@@ -11,11 +11,11 @@
 	let { value = $bindable('all'), onValueChange }: Props = $props();
 
 	const items: { value: DeviceFilter; label: string }[] = [
-		{ value: 'none', label: 'None' },
+		{ value: 'all', label: 'All' },
+		{ value: 'summary', label: 'Summary' },
 		{ value: 'detection', label: 'Detection' },
 		{ value: 'illumination', label: 'Illumination' },
-		{ value: 'auxiliary', label: 'Auxiliary' },
-		{ value: 'all', label: 'All' }
+		{ value: 'auxiliary', label: 'Auxiliary' }
 	];
 
 	function handleValueChange(newValue: string) {
