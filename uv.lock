@@ -867,6 +867,15 @@ provides-extras = ["examples"]
 dev = [{ name = "pytest", specifier = ">=9.0.0" }]
 
 [[package]]
+name = "pyserial"
+version = "3.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/7d/ae3f0a63f41e4d2f6cb66a5b57197850f919f59e558159a4dd3a818f5082/pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb", size = 159125, upload-time = "2020-11-23T03:59:15.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0", size = 90585, upload-time = "2020-11-23T03:59:13.41Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1026,6 +1035,7 @@ dependencies = [
     { name = "numpy" },
     { name = "ome-zarr-writer" },
     { name = "opencv-python-headless" },
+    { name = "tigerasi" },
     { name = "uvicorn" },
     { name = "websockets" },
 ]
@@ -1039,6 +1049,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
+    { name = "tigerasi", specifier = ">=0.0.27" },
     { name = "uvicorn", specifier = ">=0.38.0" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
@@ -1053,6 +1064,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/de/1a/608df0b10b53b0beb96a37854ee05864d182ddd4b1156a22f1ad3860425a/starlette-0.49.3.tar.gz", hash = "sha256:1c14546f299b5901a1ea0e34410575bc33bbd741377a10484a54445588d00284", size = 2655031, upload-time = "2025-11-01T15:12:26.13Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/e0/021c772d6a662f43b63044ab481dc6ac7592447605b5b35a957785363122/starlette-0.49.3-py3-none-any.whl", hash = "sha256:b579b99715fdc2980cf88c8ec96d3bf1ce16f5a8051a7c2b84ef9b1cdecaea2f", size = 74340, upload-time = "2025-11-01T15:12:24.387Z" },
+]
+
+[[package]]
+name = "tigerasi"
+version = "0.0.27"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/55/35/79187350792e3f45893c72942734128718787d0347680d808a4707f76c9a/tigerasi-0.0.27.tar.gz", hash = "sha256:490ca560eaeb5d57f0fdcb37ffdaabc087bf94eae77f952f0c4b0ec9d9cc11d5", size = 73347, upload-time = "2025-01-11T03:37:02.837Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/22/39/f3af634792f43a3d202d5964f66bd5c94a24297fb74d4e9042c8a1820601/tigerasi-0.0.27-py3-none-any.whl", hash = "sha256:e3edb4ea05a5469b9faaf55e660866583c05ca38fde63e613ce1bbe5ea79bdca", size = 23223, upload-time = "2025-01-11T03:37:00.451Z" },
 ]
 
 [[package]]

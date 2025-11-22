@@ -36,7 +36,7 @@ Start the simulated rig and web server:
 
 ```bash
 # From the root directory
-uv run python examples/spim/app.py
+uv run python -m examples.spim.app
 ```
 
 ## Accessing the UI
@@ -45,4 +45,3 @@ Open your browser to:
 - **Local**: `http://localhost:8000`
 
 The application runs on localhost only by default. For remote access with HTTPS support, see the [Certificate Management Tool](../../scripts/cert.py) documentation.
-

@@ -10,7 +10,9 @@ class DeviceType(StrEnum):
     DAQ = "daq"
     CAMERA = "camera"
     LASER = "laser"
-    FILTER_WHEEL = "filter_wheel"
+    LINEAR_AXIS = "linear_axis"
+    ROTATION_AXIS = "rotation_axis"
+    DISCRETE_AXIS = "discrete_axis"
 
 
 class DaqConfig(BaseModel):
@@ -68,18 +70,26 @@ class ProfileConfig(BaseModel):
 
 class SpimRigConfig(RigConfig):
     daq: DaqConfig
-    # stage: StageConfig
+    stage: StageConfig
     detection: dict[str, DetectionPathConfig]
     illumination: dict[str, IlluminationPathConfig]
     channels: dict[str, ChannelConfig] = Field(default_factory=dict)
     profiles: dict[str, ProfileConfig] = Field(default_factory=dict)
+
+    @property
+    def filter_wheels(self) -> set[str]:
+        """Get all filter wheel device IDs from all detection paths."""
+        fws: set[str] = set()
+        for path in self.detection.values():
+            fws.update(path.filter_wheels)
+        return fws
 
     @model_validator(mode="after")
     def validate_device_references(self) -> Self:
         """Validate that all device references exist in nodes."""
         errors = []
         errors.extend(self._validate_daq_references())
-        # errors.extend(self._validate_stage_references())
+        errors.extend(self._validate_stage_references())
         errors.extend(self._validate_path_references())
         errors.extend(self._validate_channel_references())
         errors.extend(self._validate_profile_references())
@@ -234,19 +244,19 @@ class SpimRigConfig(RigConfig):
 
         return errors
 
-    # def _validate_stage_references(self) -> list[str]:
-    #     """Validate stage axis references."""
-    #     devices = self.device_uids
-    #     errors = []
-    #
-    #     if hasattr(self, "stage") and self.stage is not None:
-    #         for axis_name in ["x", "y", "z"]:
-    #             axis_device = getattr(self.stage, axis_name)
-    #             if axis_device not in devices:
-    #                 errors.append(f"Stage axis '{axis_name}' device '{axis_device}' not found in devices")
-    #         for axis_name in ["roll", "pitch", "yaw"]:
-    #             axis_device = getattr(self.stage, axis_name)
-    #             if axis_device is not None and axis_device not in devices:
-    #                 errors.append(f"Stage axis '{axis_name}' device '{axis_device}' not found in devices")
-    #
-    #     return errors
+    def _validate_stage_references(self) -> list[str]:
+        """Validate stage axis references."""
+        devices = self.device_uids
+        errors = []
+
+        if hasattr(self, "stage") and self.stage is not None:
+            for axis_name in ["x", "y", "z"]:
+                axis_device = getattr(self.stage, axis_name)
+                if axis_device not in devices:
+                    errors.append(f"Stage axis '{axis_name}' device '{axis_device}' not found in devices")
+            for axis_name in ["roll", "pitch", "yaw"]:
+                axis_device = getattr(self.stage, axis_name)
+                if axis_device is not None and axis_device not in devices:
+                    errors.append(f"Stage axis '{axis_name}' device '{axis_device}' not found in devices")
+
+        return errors

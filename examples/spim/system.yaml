@@ -3,7 +3,8 @@ _anchors:
   - &camera_target spim_rig.drivers.cameras.simulated.SimulatedCamera
   - &laser_target spim_rig.drivers.lasers.simulated.SimulatedLaser
   - &daq_target spim_rig.drivers.daqs.simulated.SimulatedDaq
-  - &fw_target spim_rig.drivers.filter_wheels.simulated.SimulatedFilterWheel
+  - &fw_target spim_rig.drivers.axes.simulated.SimulatedDiscreteAxis
+  - &linear_axis_target spim_rig.drivers.axes.simulated.SimulatedLinearAxis
 
 metadata:
   name: "LightSheetMicroscope_01"
@@ -27,15 +28,25 @@ nodes:
       fw_detection_shared:
         target: *fw_target
         kwargs:
-          filters: { 0: "Multiband", 1: "Green", 2: "Cyan" }
+          slots: { 0: "Multiband", 1: "Green", 2: "Cyan" }
       fw_emission_cam1:
         target: *fw_target
         kwargs:
-          filters: { 0: "GFP", 1: "RFP", 2: "Cy5" }
+          slots: { 0: "GFP", 1: "RFP", 2: "Cy5" }
       fw_emission_cam2:
         target: *fw_target
         kwargs:
-          filters: { 0: "GFP", 1: "RFP", 2: "Cy5" }
+          slots: { 0: "GFP", 1: "RFP", 2: "Cy5" }
+      x_axis:
+        target: *linear_axis_target
+        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 60.0 }
+      y_axis:
+        target: *linear_axis_target
+        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 60.0 }
+      z_axis:
+        target: *linear_axis_target
+        kwargs:
+          { lower_limit_mm: 0.0, upper_limit_mm: 40.0, has_ttl_stepper: true }
 
   node_1:
     hostname: *camera_ip
@@ -49,6 +60,11 @@ nodes:
       camera_2:
         target: *camera_target
         kwargs: { pixel_size_um: "0.5, 0.5" }
+
+stage:
+  x: x_axis
+  y: y_axis
+  z: z_axis
 
 daq:
   device: daq_1

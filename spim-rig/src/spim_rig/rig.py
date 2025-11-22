@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import zmq.asyncio
 
@@ -10,6 +11,13 @@ from spim_rig.camera.client import CameraClient
 from spim_rig.config import ChannelConfig, DeviceType, ProfileConfig, SpimRigConfig
 from spim_rig.daq.client import DaqClient
 from spim_rig.node import SpimNodeService
+
+
+@dataclass(frozen=True)
+class SpimRigStage:
+    x: DeviceClient
+    y: DeviceClient
+    z: DeviceClient
 
 
 class SpimRig(Rig):
@@ -22,8 +30,12 @@ class SpimRig(Rig):
         self.config: SpimRigConfig = config
         self.cameras: dict[str, CameraClient] = {}
         self.lasers: dict[str, DeviceClient] = {}
+        self.linear_axes: dict[str, DeviceClient] = {}
+        self.rotation_axes: dict[str, DeviceClient] = {}
+        self.discrete_axes: dict[str, DeviceClient] = {}
         self.fws: dict[str, DeviceClient] = {}
         self.daq: DaqClient | None = None
+        self.stage: SpimRigStage | None = None
 
         # Preview management (independent of rig internals)
         self.preview = RigPreviewHub(zctx, name=f"{self.__class__.__name__}.PreviewManager")
@@ -40,24 +52,39 @@ class SpimRig(Rig):
             case DeviceType.CAMERA:
                 client = CameraClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
                 self.cameras[device_id] = client
-                return client
             case DeviceType.LASER:
                 client = super()._create_client(device_id, prov)
                 self.lasers[device_id] = client
-                return client
-            case DeviceType.FILTER_WHEEL:
-                client = super()._create_client(device_id, prov)
-                self.fws[device_id] = client
-                return client
             case DeviceType.DAQ:
                 client = DaqClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
                 self.daq = client
-                return client
+            case DeviceType.LINEAR_AXIS:
+                client = super()._create_client(device_id, prov)
+                self.linear_axes[device_id] = client
+            case DeviceType.LINEAR_AXIS:
+                client = super()._create_client(device_id, prov)
+                self.rotation_axes[device_id] = client
+            case DeviceType.DISCRETE_AXIS:
+                client = super()._create_client(device_id, prov)
+                self.discrete_axes[device_id] = client
             case _:
-                return super()._create_client(device_id, prov)
+                client = super()._create_client(device_id, prov)
+        return client
 
     async def _on_provision_complete(self) -> None:
-        """Validate SPIM-specific device type assignments."""
+        """Validate SPIM-specific device type assignments and populate filter wheels."""
+        # Populate filter wheels from config
+        for fw_id in self.config.filter_wheels:
+            if fw_id in self.devices:
+                self.fws[fw_id] = self.devices[fw_id]
+
+        # Create the stage from the config
+        self.stage = SpimRigStage(
+            x=self.devices[self.config.stage.x],
+            y=self.devices[self.config.stage.y],
+            z=self.devices[self.config.stage.z],
+        )
+
         self._validate_device_types()
 
     def _validate_device_types(self) -> None:
@@ -96,8 +123,33 @@ class SpimRig(Rig):
         if self.daq is not None and self.daq.uid != self.config.daq.device:
             errors.append(f"DAQ device mismatch: expected '{self.config.daq.device}', got '{self.daq.uid}'")
 
-        # Validate aux_devices are not cameras, lasers, or DAQ
-        reserved_devices = camera_ids | laser_ids | ({self.daq.uid} if self.daq else set())
+        # Validate stage axes are LINEAR_AXIS/ROTATION_AXIS devices
+        stage_linear_axis_ids = {
+            self.config.stage.x,
+            self.config.stage.y,
+            self.config.stage.z,
+        }
+        if invalid_stage_axes := stage_linear_axis_ids - set(self.linear_axes.keys()):
+            errors.append(f"Stage axes are not LINEAR_AXIS devices: {invalid_stage_axes}")
+
+        stage_rotation_axis_ids = set()
+        if self.config.stage.roll:
+            stage_rotation_axis_ids.add(self.config.stage.roll)
+        if self.config.stage.pitch:
+            stage_rotation_axis_ids.add(self.config.stage.pitch)
+        if self.config.stage.yaw:
+            stage_rotation_axis_ids.add(self.config.stage.yaw)
+        if invalid_stage_axes := stage_rotation_axis_ids - set(self.rotation_axes.keys()):
+            errors.append(f"Stage axes are not ROTATION_AXIS devices: {invalid_stage_axes}")
+
+        # Validate filter wheels are DISCRETE_AXIS devices
+        filter_wheel_ids = set(self.config.filter_wheels)
+        if invalid_filter_wheels := filter_wheel_ids - set(self.discrete_axes.keys()):
+            errors.append(f"Filter wheels are not DISCRETE_AXIS devices: {invalid_filter_wheels}")
+
+        # Validate aux_devices are not cameras, lasers, DAQ, filter wheels, or stage axes
+        reserved_axes = filter_wheel_ids | stage_linear_axis_ids | stage_rotation_axis_ids
+        reserved_devices = camera_ids | laser_ids | ({self.daq.uid} if self.daq else set()) | reserved_axes
 
         for path_id, path in self.config.detection.items():
             for aux in path.aux_devices:

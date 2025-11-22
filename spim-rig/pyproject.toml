@@ -17,6 +17,7 @@ dependencies = [
     "uvicorn>=0.38.0",
     "websockets>=15.0.1",
     "nidaqmx>=1.3.0",
+    "tigerasi>=0.0.27",
 ]
 
 [project.scripts]

@@ -161,8 +161,18 @@ class DeviceService[D: Device]:
     def client_conn(self) -> DeviceAddress:
         return self._client_conn
 
-    async def _exec[R](self, fn: Callable[..., R]) -> R:
-        return await asyncio.get_event_loop().run_in_executor(self._executor, fn)
+    async def _exec[R](self, fn: Callable[..., R], *args, **kwargs) -> R:
+        """Execute a synchronous function in the executor with arguments.
+
+        Args:
+            fn: The synchronous function to execute.
+            *args: Positional arguments to pass to the function.
+            **kwargs: Keyword arguments to pass to the function.
+
+        Returns:
+            The return value from the function.
+        """
+        return await asyncio.get_event_loop().run_in_executor(self._executor, lambda: fn(*args, **kwargs))
 
     async def _get_props(self, props: Sequence[str] | None = None) -> PropsResponse:
         props_to_get = props or list(self._interface.properties.keys())
@@ -206,7 +216,7 @@ class DeviceService[D: Device]:
             if command.is_async:
                 out = await command(*req.args, **req.kwargs)
             else:
-                out = await self._exec(lambda: command(*req.args, **req.kwargs))
+                out = await self._exec(command, *req.args, **req.kwargs)
             return CommandResponse(res=out)
         else:
             return CommandResponse(res=ErrorMsg(msg=f"Unknown command: {req.attr}"))

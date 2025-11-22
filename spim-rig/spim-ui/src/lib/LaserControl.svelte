@@ -63,34 +63,6 @@
 			{/if}
 		</div>
 
-		<!-- Enable/Disable Controls with Status -->
-		<!-- <div class="flex items-center gap-2">
-			<div class="flex flex-1 gap-2">
-				<button
-					onclick={handleEnable}
-					disabled={typeof isEnabled === 'boolean' && isEnabled}
-					class="flex-1 rounded bg-emerald-600/90 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
-				>
-					Enable
-				</button>
-				<button
-					onclick={handleDisable}
-					disabled={typeof isEnabled === 'boolean' && !isEnabled}
-					class="flex-1 rounded bg-zinc-700/80 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
-				>
-					Disable
-				</button>
-			</div>
-			{#if typeof isEnabled === 'boolean'}
-				<div
-					class="rounded px-2 py-1.5 text-xs font-medium {isEnabled
-						? 'bg-emerald-500/20 text-emerald-400'
-						: 'bg-zinc-700/50 text-zinc-500'}"
-				>
-					{isEnabled ? 'ON' : 'OFF'}
-				</div>
-			{/if}
-		</div> -->
 		<div class="flex items-center justify-between border-t border-zinc-700 px-3 py-2 font-mono text-xs text-zinc-300">
 			{#if typeof temperatureC === 'number'}
 				<div>
