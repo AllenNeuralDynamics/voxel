@@ -19,16 +19,20 @@ from pydantic import BaseModel
 
 from spim_rig import SpimRig
 from spim_rig.camera.preview import PreviewCrop, PreviewLevels
-from spim_rig.rig import ChannelConfig, ProfileConfig
+from spim_rig.config import SpimRigConfig
 
 router = APIRouter()
 log = logging.getLogger(__name__)
 
 
 class RigStatus(BaseModel):
+    """Runtime state of the rig.
+
+    For static configuration (profiles, channels, stage, daq, etc.),
+    use the GET /config endpoint.
+    """
+
     active_profile_id: str | None
-    profiles: dict[str, ProfileConfig]
-    channels: dict[str, ChannelConfig]
     previewing: bool
     timestamp: str
 
@@ -61,8 +65,6 @@ class RigService:
     def status(self) -> RigStatus:
         return RigStatus(
             active_profile_id=self.rig.active_profile_id,
-            profiles=self.rig.config.profiles,
-            channels=self.rig.config.channels,
             previewing=self.rig.preview.is_active,
             timestamp=_utc_timestamp(),
         )
@@ -405,6 +407,11 @@ async def rig_websocket(websocket: WebSocket, service: RigService = Depends(get_
             await service._handle_preview_stop()
 
 
+@router.get("/config", tags=["config"])
+async def get_config(rig: SpimRig = Depends(get_rig)) -> SpimRigConfig:
+    return rig.config
+
+
 class SetProfileRequest(BaseModel):
     """Request model for setting active profile."""
 
@@ -438,30 +445,6 @@ async def set_active_profile(request: SetProfileRequest, service: RigService = D
     except Exception as e:
         log.error(f"Failed to set active profile: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to set active profile: {str(e)}")
-
-
-@router.get("/profiles", tags=["profiles"])
-async def list_profiles(rig: SpimRig = Depends(get_rig)) -> dict:
-    """Get list of all available profiles.
-
-    Note: This information is also available via WebSocket in the rig/status message.
-    This REST endpoint is provided for convenience and non-WebSocket clients.
-
-    Returns:
-        Dictionary with profiles and active_profile_id.
-    """
-    return {
-        "profiles": {
-            profile_id: {
-                "id": profile_id,
-                "label": profile_config.label,
-                "desc": profile_config.desc,
-                "channels": profile_config.channels,
-            }
-            for profile_id, profile_config in rig.config.profiles.items()
-        },
-        "active_profile_id": rig.active_profile_id,
-    }
 
 
 @router.get("/devices", tags=["devices"])

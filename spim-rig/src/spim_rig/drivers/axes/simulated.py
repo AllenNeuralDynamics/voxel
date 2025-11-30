@@ -1,4 +1,3 @@
-import random
 import threading
 import time
 from threading import Event, Thread
@@ -94,11 +93,25 @@ class SimulatedLinearAxis(LinearAxis):
 
         if movement_time > 0:
             self._is_moving = True
+            start_position = self._position_mm
             target_position = pos_mm
             self._stop_event.clear()
 
             def simulate_movement():
-                time.sleep(movement_time)
+                # Update position incrementally for smooth animation
+                update_rate_hz = 30  # Update position 30 times per second
+                update_interval = 1.0 / update_rate_hz
+                steps = max(1, int(movement_time / update_interval))
+
+                for i in range(steps):
+                    if self._stop_event.is_set():
+                        break
+
+                    # Linear interpolation
+                    progress = (i + 1) / steps
+                    self._position_mm = start_position + (target_position - start_position) * progress
+                    time.sleep(update_interval)
+
                 if not self._stop_event.is_set():
                     self._position_mm = target_position
                 self._is_moving = False
@@ -138,8 +151,8 @@ class SimulatedLinearAxis(LinearAxis):
 
     @property
     def position_mm(self) -> float:
-        """Get the current position in mm with simulated noise."""
-        return self._position_mm + random.gauss(0, 0.0001)
+        """Get the current position in mm."""
+        return self._position_mm
 
     @property
     def is_moving(self) -> bool:

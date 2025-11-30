@@ -39,14 +39,14 @@ nodes:
           slots: { 0: "GFP", 1: "RFP", 2: "Cy5" }
       x_axis:
         target: *linear_axis_target
-        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 60.0 }
+        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
       y_axis:
         target: *linear_axis_target
-        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 60.0 }
+        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
       z_axis:
         target: *linear_axis_target
         kwargs:
-          { lower_limit_mm: 0.0, upper_limit_mm: 40.0, has_ttl_stepper: true }
+          { lower_limit_mm: 0.0, upper_limit_mm: 50.0, has_ttl_stepper: true }
 
   node_1:
     hostname: *camera_ip

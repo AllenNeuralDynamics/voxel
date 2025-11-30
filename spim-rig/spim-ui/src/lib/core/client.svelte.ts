@@ -5,15 +5,107 @@
 
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import type {
-	RigMessage,
-	MessageHandler,
-	ConnectionHandler,
-	ErrorHandler,
-	RigClientMessage,
-	RigHandlers,
-	PreviewFrameInfo
-} from './types';
+import type { DevicePropertyPayload } from './devices.svelte.ts';
+
+export interface RigStatus {
+	active_profile_id: string | null;
+	previewing: boolean;
+	timestamp: string;
+}
+
+export interface PreviewStatus {
+	previewing: boolean;
+	timestamp: string;
+}
+
+export interface PreviewCrop {
+	x: number;
+	y: number;
+	k: number; // Zoom level: 0 = no zoom, 1 = max zoom
+}
+
+export interface PreviewLevels {
+	min: number; // Minimum level value (black level)
+	max: number; // Maximum level value (white level)
+}
+
+export type PreviewLevelsInfo = PreviewLevels & { channel: string };
+
+/**
+ * Frame metadata from backend
+ */
+export interface PreviewFrameInfo {
+	frame_idx: number;
+	preview_width: number;
+	preview_height: number;
+	full_width: number;
+	full_height: number;
+	crop: PreviewCrop;
+	levels: PreviewLevels;
+	fmt: 'jpeg' | 'png' | 'uint16'; // Frame format
+	histogram?: number[]; // 256-bin histogram (0-255), only present in full frames
+}
+
+/**
+ * Base message structure for all WebSocket messages
+ */
+interface RigMessage {
+	topic: string;
+	payload?: unknown;
+	channel?: string;
+	timestamp?: string;
+}
+
+/**
+ * Client-to-server message types
+ */
+type RigClientMessage =
+	| { topic: 'profile/update'; payload: string } // profile_id
+	| { topic: 'preview/start'; payload?: Record<string, never> }
+	| { topic: 'preview/stop'; payload?: Record<string, never> }
+	| { topic: 'preview/crop'; payload: PreviewCrop }
+	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
+	| { topic: 'rig/request_status'; payload?: Record<string, never> }
+	| {
+			topic: 'device/set_property';
+			payload: { device: string; properties: Record<string, unknown> };
+	  }
+	| {
+			topic: 'device/execute_command';
+			payload: { device: string; command: string; args?: unknown[]; kwargs?: Record<string, unknown> };
+	  };
+
+export interface RigErrorPayload {
+	error: string;
+	topic?: string;
+}
+/**
+ * Message handler callback type
+ */
+export type MessageHandler = (topic: string, payload: unknown) => void;
+
+/**
+ * Connection state callback
+ */
+export type ConnectionHandler = (connected: boolean) => void;
+
+/**
+ * Error handler callback
+ */
+export type ErrorHandler = (error: Error) => void;
+
+/**
+ * Topic-specific handler types for type safety
+ */
+export interface RigHandlers {
+	'rig/status'?: (payload: RigStatus) => void;
+	'rig/error'?: (payload: RigErrorPayload) => void;
+	'preview/status'?: (payload: PreviewStatus) => void;
+	'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
+	'preview/crop'?: (payload: PreviewCrop) => void;
+	'preview/levels'?: (payload: PreviewLevelsInfo) => void;
+	device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
+}
 
 interface RigClientOptions {
 	autoReconnect?: boolean;

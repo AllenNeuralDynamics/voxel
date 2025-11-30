@@ -1,17 +1,16 @@
 <script lang="ts">
 	import { PreviewCanvas, Previewer, PreviewInfo } from '$lib/preview';
 	import { onMount, onDestroy } from 'svelte';
-	import { ProfilesManager } from '$lib/profiles.svelte';
+	import { RigManager } from '$lib/core';
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/DeviceFilterToggle.svelte';
-	import { RigClient, ClientStatus } from '$lib/client';
+	import ClientStatus from '$lib/ClientStatus.svelte';
+	import StagePosition from '$lib/StagePosition.svelte';
+	import StageWidget from '$lib/StageWidget.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/PaneDivider.svelte';
-	import { DevicesManager } from '$lib/devices.svelte';
 	import ChannelSection from '$lib/ChannelSection.svelte';
 	import Icon from '@iconify/svelte';
-
-	// Configuration
 	import { browser } from '$app/environment';
 
 	// Configuration
@@ -21,39 +20,23 @@
 		: 'ws://localhost:8000/ws/rig';
 
 	// Component-level state
-	let rigClient = $state<RigClient | undefined>(undefined);
+	let rigManager = $state<RigManager | undefined>(undefined);
 	let previewer = $state<Previewer | undefined>(undefined);
-	let profilesManager = $state<ProfilesManager | undefined>(undefined);
-	let devicesManager = $state<DevicesManager | undefined>(undefined);
 	let deviceFilter = $state<DeviceFilter>('summary');
 	let showHistograms = $state(true);
 
 	onMount(async () => {
 		try {
-			// 1. Create and connect RigClient
-			rigClient = new RigClient(rigSocketUrl);
-			await rigClient.connect();
-			console.log('[Page] RigClient connected');
-
-			// 2. Initialize ProfilesManager
-			profilesManager = new ProfilesManager({
-				baseUrl: apiBaseUrl,
-				rigClient
+			// 1. Create and initialize RigManager (owns RigClient + DevicesManager, fetches config)
+			rigManager = new RigManager({
+				socketUrl: rigSocketUrl,
+				baseUrl: apiBaseUrl
 			});
+			await rigManager.initialize();
+			console.log('[Page] RigManager initialized (includes devices)');
 
-			// 3. Initialize DevicesManager and fetch all data
-			devicesManager = new DevicesManager({
-				baseUrl: apiBaseUrl,
-				rigClient
-			});
-			await devicesManager.initialize();
-			console.log('[Page] DevicesManager initialized');
-
-			// 4. Initialize Previewer
-			previewer = new Previewer(rigClient);
-
-			// 5. Request current rig status (will populate previewer channels)
-			rigClient.requestRigStatus();
+			// 2. Initialize Previewer
+			previewer = new Previewer(rigManager);
 
 			console.log('[Page] All managers initialized');
 		} catch (error) {
@@ -64,9 +47,7 @@
 	onDestroy(() => {
 		// Clean up in reverse order
 		previewer?.shutdown();
-		devicesManager?.destroy();
-		profilesManager?.destroy();
-		rigClient?.destroy();
+		rigManager?.destroy();
 		console.log('[Page] Cleanup complete');
 	});
 
@@ -80,11 +61,11 @@
 </script>
 
 <div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
-	{#if previewer && profilesManager && devicesManager}
+	{#if previewer && rigManager}
 		<aside class="flex h-full w-96 flex-col border-r border-zinc-700 bg-zinc-900">
 			<!-- Profile Selector -->
 			<div class="space-y-3 border-b border-zinc-600 p-4">
-				<ProfileSelector manager={profilesManager} />
+				<ProfileSelector manager={rigManager} />
 				<div class="flex items-center">
 					<div class="flex-1">
 						<DeviceFilterToggle bind:value={deviceFilter} onValueChange={(v) => (deviceFilter = v)} />
@@ -112,7 +93,7 @@
 					{#each previewer.channels as channel (channel.idx)}
 						{#if channel.name}
 							<div>
-								<ChannelSection {channel} {previewer} {devicesManager} {deviceFilter} {showHistograms} />
+								<ChannelSection {channel} {previewer} devices={rigManager.devices} {deviceFilter} {showHistograms} />
 							</div>
 							<div class="border-t border-zinc-600"></div>
 						{/if}
@@ -144,11 +125,16 @@
 					</div>
 				</Pane>
 				<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
-				<Pane defaultSize={20} maxSize={30} class="bg-zinc-900"></Pane>
+				<Pane defaultSize={50} minSize={30} maxSize={50} class=" bg-zinc-950">
+					<StageWidget manager={rigManager} {previewer} />
+				</Pane>
 			</PaneGroup>
 			<footer class="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
-				<PreviewInfo {previewer} />
-				<ClientStatus client={rigClient} />
+				<div class="flex items-center gap-4">
+					<PreviewInfo {previewer} />
+					<StagePosition manager={rigManager} />
+				</div>
+				<ClientStatus client={rigManager.client} />
 			</footer>
 		</main>
 	{:else}

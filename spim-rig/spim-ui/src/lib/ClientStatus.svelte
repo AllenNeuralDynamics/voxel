@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { RigClient } from '$lib/client';
+	import type { RigClient } from '$lib/core';
 
 	const { client } = $props<{ client: RigClient | null | undefined }>();
 

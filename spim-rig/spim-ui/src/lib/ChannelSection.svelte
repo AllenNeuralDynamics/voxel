@@ -7,18 +7,18 @@
 	import LaserControl from '$lib/LaserControl.svelte';
 	import CameraControl from '$lib/CameraControl.svelte';
 	import type { Previewer, PreviewChannel } from '$lib/preview';
-	import type { DevicesManager } from '$lib/devices.svelte';
+	import type { DevicesManager } from '$lib/core';
 	import type { DeviceFilter } from '$lib/DeviceFilterToggle.svelte';
 
 	interface Props {
 		channel: PreviewChannel;
 		previewer: Previewer;
-		devicesManager: DevicesManager;
+		devices: DevicesManager;
 		deviceFilter: DeviceFilter;
 		showHistograms: boolean;
 	}
 
-	let { channel, previewer, devicesManager, deviceFilter, showHistograms }: Props = $props();
+	let { channel, previewer, devices: devicesManager, deviceFilter, showHistograms }: Props = $props();
 
 	// Get preset colors for the color picker
 	const presetColors = Object.values(COLORMAP_COLORS);

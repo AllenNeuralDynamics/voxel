@@ -19,7 +19,7 @@ from pyrig.props import deliminated_float, enumerated_int, enumerated_string
 
 VP_151MX_M6H0 = Vec2D(y=10_640, x=14_192)
 
-_FACTOR = 0.75
+_FACTOR = 1.0
 
 DEFAULT_SENSOR_SIZE = Vec2D(y=int(VP_151MX_M6H0.y * _FACTOR), x=int(VP_151MX_M6H0.x * _FACTOR))
 

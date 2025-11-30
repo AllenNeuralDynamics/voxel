@@ -10,6 +10,10 @@ export default defineConfig({
 				target: 'http://localhost:8000',
 				changeOrigin: true
 			},
+			'/config': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			},
 			'/profiles': {
 				target: 'http://localhost:8000',
 				changeOrigin: true

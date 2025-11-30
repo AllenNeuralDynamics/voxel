@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Tooltip } from 'bits-ui';
 	import Icon from '@iconify/svelte';
-	import type { ChannelConfig } from '$lib/client';
+	import type { ChannelConfig } from '$lib/core';
 
 	interface Props {
 		name: string;

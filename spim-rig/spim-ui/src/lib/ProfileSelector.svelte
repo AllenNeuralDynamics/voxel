@@ -2,9 +2,9 @@
 	import Icon from '@iconify/svelte';
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { sanitizeString } from '$lib/utils';
-	import type { Profile, ProfilesManager } from '$lib/profiles.svelte';
+	import type { Profile, RigManager } from '$lib/core';
 
-	const { manager } = $props<{ manager: ProfilesManager }>();
+	const { manager } = $props<{ manager: RigManager }>();
 
 	const selectedProfile = $derived(
 		manager.profiles.find((profile: Profile) => profile.id === manager.activeProfileId) ?? null
@@ -16,8 +16,8 @@
 		}))
 	);
 	const selectedValue = $derived(selectedProfile ? selectedProfile.id : '');
-	const isDisabled = $derived(manager.isLoading || manager.isMutating || manager.profiles.length === 0);
-	const placeholderText = $derived(manager.isLoading ? 'Loading profiles...' : 'Select a profile');
+	const isDisabled = $derived(manager.configLoading || manager.isMutating || manager.profiles.length === 0);
+	const placeholderText = $derived(manager.configLoading ? 'Loading profiles...' : 'Select a profile');
 
 	function formatProfileName(profile: Profile | null) {
 		if (!profile) return '';
@@ -64,7 +64,7 @@
 				align="start"
 				class="relative z-50 mt-1 w-(--bits-select-anchor-width) min-w-(--bits-select-anchor-width) rounded border border-zinc-700 bg-zinc-950/95 p-1.5 text-zinc-50 shadow-xl"
 			>
-				{#if manager.profiles.length === 0 && !manager.isLoading}
+				{#if manager.profiles.length === 0 && !manager.configLoading}
 					<div class="px-3 py-2 text-sm text-zinc-500">No profiles available</div>
 				{:else}
 					<div class="max-h-56 overflow-y-auto">

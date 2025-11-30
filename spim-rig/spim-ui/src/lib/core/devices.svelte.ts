@@ -6,15 +6,11 @@
  */
 
 import { SvelteMap, SvelteURL } from 'svelte/reactivity';
-import type { RigClient, DevicePropertyPayload } from '$lib/client';
+import type { RigManager } from './rig.svelte';
+import type { RigClient } from './client.svelte';
 
 /**
- * TypeScript interfaces matching backend Pydantic models.
- * Based on pyrig.props.common.PropertyModel and pyrig.device.base.DeviceInterface
- */
-
-/**
- * Matches PropertyModel from pyrig.props.common
+ * Property model (matches pyrig.props.common.PropertyModel)
  */
 export interface PropertyModel {
 	value: unknown;
@@ -25,10 +21,59 @@ export interface PropertyModel {
 }
 
 /**
+ * Error message (matches pyrig.device.base.ErrorMsg)
+ */
+export interface ErrorMsg {
+	msg: string;
+}
+
+/**
+ * Property metadata (matches pyrig.device.base.PropertyInfo)
+ */
+export interface PropertyInfo {
+	name: string;
+	label: string;
+	desc?: string | null;
+	dtype: string;
+	access: 'ro' | 'rw';
+	units: string;
+}
+
+/**
+ * Command parameter metadata (matches pyrig.device.base.ParamInfo)
+ */
+export interface ParamInfo {
+	dtype: string;
+	required: boolean;
+	default?: unknown | null;
+	kind: 'regular' | 'var_positional' | 'var_keyword';
+}
+
+/**
+ * Command metadata (matches pyrig.device.base.CommandInfo)
+ */
+export interface CommandInfo {
+	name: string;
+	label: string;
+	desc?: string | null;
+	params: Record<string, ParamInfo>;
+}
+
+/**
+ * Device interface (matches pyrig.device.base.DeviceInterface)
+ */
+export interface DeviceInterface {
+	uid: string;
+	type: string;
+	commands: Record<string, CommandInfo>;
+	properties: Record<string, PropertyInfo>;
+}
+
+/**
  * Matches PropertyModel from pyrig.props.common
  * Made reactive with $state for Svelte 5
  */
-export class ReactivePropertyModel {
+class ReactivePropertyModel {
 	value = $state<unknown>(undefined);
 	min_val = $state<number | null>(null);
 	max_val = $state<number | null>(null);
@@ -53,56 +98,8 @@ export class ReactivePropertyModel {
 }
 
 /**
- * Matches ErrorMsg from pyrig.device.base
- */
-export interface ErrorMsg {
-	msg: string;
-}
-
-/**
- * Matches PropertyInfo from pyrig.device.base
- */
-export interface PropertyInfo {
-	name: string;
-	label: string;
-	desc?: string | null;
-	dtype: string;
-	access: 'ro' | 'rw';
-	units: string;
-}
-
-/**
- * Matches ParamInfo from pyrig.device.base
- */
-export interface ParamInfo {
-	dtype: string;
-	required: boolean;
-	default?: unknown | null;
-	kind: 'regular' | 'var_positional' | 'var_keyword';
-}
-
-/**
- * Matches CommandInfo from pyrig.device.base
- */
-export interface CommandInfo {
-	name: string;
-	label: string;
-	desc?: string | null;
-	params: Record<string, ParamInfo>;
-}
-
-/**
- * Matches DeviceInterface from pyrig.device.base
- */
-export interface DeviceInterface {
-	uid: string;
-	type: string;
-	commands: Record<string, CommandInfo>;
-	properties: Record<string, PropertyInfo>;
-}
-
-/**
- * Device info returned by /devices endpoint
+ * Device info from /devices endpoint
+ * Extended with reactive property values for UI
  */
 export interface DeviceInfo {
 	id: string;
@@ -120,6 +117,16 @@ export interface DevicesResponse {
 	count: number;
 }
 
+/**
+ * Device property update payload
+ * Topic: 'device/<device_id>/properties'
+ * Matches PropsResponse from pyrig.device.base
+ */
+export interface DevicePropertyPayload {
+	res: Record<string, PropertyModel>;
+	err: Record<string, ErrorMsg>;
+}
+
 export class DevicesManager {
 	// Reactive device state
 	devices = $state<SvelteMap<string, DeviceInfo>>(new SvelteMap());
@@ -128,14 +135,14 @@ export class DevicesManager {
 	private baseUrl: string;
 	private unsubscribe?: () => void;
 
-	constructor(options: { baseUrl: string; rigClient: RigClient }) {
-		this.baseUrl = options.baseUrl;
-		this.rigClient = options.rigClient;
+	constructor(rigManager: RigManager) {
+		this.baseUrl = rigManager.baseUrl;
+		this.rigClient = rigManager.client;
 
 		// Subscribe to property updates from WebSocket
 		// Topic: device/<device_id>/properties
 		// We subscribe to 'device' prefix to get all device updates
-		this.unsubscribe = this.rigClient.subscribe('device', (topic, payload) => {
+		this.unsubscribe = this.rigClient.subscribe('device', (topic: string, payload: unknown) => {
 			// console.log('[DevicesManager] Received:', topic, payload);
 			this.handlePropertyUpdate(topic, payload as DevicePropertyPayload);
 		});

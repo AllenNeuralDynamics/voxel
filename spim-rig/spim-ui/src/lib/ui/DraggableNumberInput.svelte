@@ -9,6 +9,7 @@
 		numCharacters?: number; // Number of characters wide
 		color?: string; // Text color
 		align?: 'left' | 'right';
+		showButtons?: boolean; // Show increment/decrement buttons
 		onChange?: (newValue: number) => void; // Optional callback for value changes
 	}
 
@@ -22,6 +23,7 @@
 		numCharacters = 4,
 		color = 'inherit',
 		align = 'left',
+		showButtons = false,
 		onChange: onValueChange
 	}: Props = $props();
 
@@ -127,6 +129,24 @@
 		}
 	}
 
+	function increment() {
+		let newValue = value + step;
+		newValue = Math.max(min, Math.min(max, newValue));
+		value = newValue;
+		if (onValueChange) {
+			onValueChange(newValue);
+		}
+	}
+
+	function decrement() {
+		let newValue = value - step;
+		newValue = Math.max(min, Math.min(max, newValue));
+		value = newValue;
+		if (onValueChange) {
+			onValueChange(newValue);
+		}
+	}
+
 	// Cleanup on destroy
 	$effect(() => {
 		return () => {
@@ -136,21 +156,70 @@
 	});
 </script>
 
-<input
-	type="text"
-	{placeholder}
-	value={displayValue()}
-	oninput={handleInput}
-	onmousedown={handleMouseDown}
-	onwheel={handleWheel}
-	style:width="{numCharacters + 1}ch"
-	style:color
-	style:text-align={align}
-	style:cursor="ew-resize"
-	class="draggable-input"
-/>
+<div class="input-wrapper" class:with-buttons={showButtons}>
+	<input
+		type="text"
+		{placeholder}
+		value={displayValue()}
+		oninput={handleInput}
+		onmousedown={handleMouseDown}
+		onwheel={handleWheel}
+		style:width="{numCharacters + 1}ch"
+		style:color
+		style:text-align={align}
+		class="draggable-input"
+	/>
+	{#if showButtons}
+		<div class="button-stack">
+			<button class="spin-button spin-up" onclick={increment} disabled={value >= max} aria-label="Increment">
+				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor">
+					<path d="M4 0L8 5H0L4 0Z" />
+				</svg>
+			</button>
+			<button class="spin-button spin-down" onclick={decrement} disabled={value <= min} aria-label="Decrement">
+				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor">
+					<path d="M4 5L0 0H8L4 5Z" />
+				</svg>
+			</button>
+		</div>
+	{/if}
+</div>
 
 <style>
+	.input-wrapper {
+		--border-width: 1px;
+		--border-color: rgb(63 63 70);
+		--border-color-hover: rgb(82 82 91);
+
+		display: inline-flex;
+		align-items: stretch;
+		transition: all 0.15s;
+	}
+
+	.input-wrapper.with-buttons {
+		border: var(--border-width) solid var(--border-color);
+		border-radius: 2px;
+		background: rgb(24 24 27);
+
+		&:hover {
+			border-color: var(--border-color-hover);
+		}
+	}
+
+	.input-wrapper.with-buttons .draggable-input {
+		border: none;
+		background: transparent;
+		cursor: ew-resize;
+		padding-inline-start: 0.2rem;
+		margin-inline-end: 0.2rem;
+	}
+
+	.input-wrapper.with-buttons .draggable-input:hover,
+	.input-wrapper.with-buttons .draggable-input:focus {
+		border: none;
+		background: transparent;
+	}
+
 	.draggable-input {
 		user-select: none;
 		border: 1px solid transparent;
@@ -158,6 +227,7 @@
 		padding: 0.125rem 0.05rem;
 		font-family: monospace;
 		font-size: 0.65rem;
+		cursor: ew-resize;
 		transition: all 0.15s;
 	}
 
@@ -177,5 +247,63 @@
 	.draggable-input::-webkit-outer-spin-button {
 		-webkit-appearance: none;
 		margin: 0;
+	}
+
+	.button-stack {
+		display: flex;
+		flex-direction: column;
+		align-self: stretch;
+		width: 1.25rem;
+		cursor: pointer;
+	}
+
+	.input-wrapper.with-buttons:hover .button-stack {
+		border-color: var(--border-color-hover);
+	}
+
+	.spin-button {
+		z-index: 999;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		padding: 0;
+		margin: 0;
+		border: none;
+		background: transparent;
+		color: rgb(113 113 122);
+		margin-right: calc(-1 * var(--border-width));
+		border: var(--border-width) solid var(--border-color);
+
+		transition: all 0.1s;
+
+		& svg {
+			pointer-events: none;
+		}
+
+		&:disabled {
+			color: rgb(63 63 70);
+			cursor: not-allowed;
+			opacity: 0.4;
+		}
+
+		&:not(disabled) {
+			&:active,
+			&:hover {
+				color: rgb(212 212 216);
+				background: rgb(39 39 42);
+			}
+		}
+	}
+
+	.spin-up {
+		margin-top: calc(-1 * var(--border-width));
+		border-top-right-radius: 2px;
+		border-bottom: none;
+	}
+	.spin-down {
+		border-bottom-right-radius: 2px;
+		margin-bottom: calc(-1 * var(--border-width));
+		border-top: none;
 	}
 </style>

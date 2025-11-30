@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DevicesManager } from '$lib/devices.svelte';
+	import type { DevicesManager } from '$lib/core';
 	import SliderInput from '$lib/ui/SliderInput.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 
