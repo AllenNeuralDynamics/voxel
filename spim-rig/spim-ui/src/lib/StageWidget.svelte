@@ -192,6 +192,22 @@
 
 		await Promise.all(haltPromises);
 	}
+
+	// Handle X-axis slider change
+	function handleXSliderChange(e: Event) {
+		if (!stageConfig?.x || !xData) return;
+		const target = e.target as HTMLInputElement;
+		const position = parseFloat(target.value);
+		manager.devices.executeCommand(stageConfig.x, 'move_abs', [position], { wait: false });
+	}
+
+	// Handle Y-axis slider change
+	function handleYSliderChange(e: Event) {
+		if (!stageConfig?.y || !yData) return;
+		const target = e.target as HTMLInputElement;
+		const position = parseFloat(target.value);
+		manager.devices.executeCommand(stageConfig.y, 'move_abs', [position], { wait: false });
+	}
 </script>
 
 {#if stageConfig && xData && yData}
@@ -275,90 +291,118 @@
 			</div>
 
 			<div class="px-4 pb-4">
-				<!-- SVG Stage visualization -->
-				<svg
-					viewBox="0 0 {stageWidth} {stageHeight}"
-					class="my-1 w-full border border-zinc-700 bg-zinc-900"
-					preserveAspectRatio="xMidYMid meet"
-				>
-					<!-- Stage bounds background -->
-					<rect
-						x="0"
-						y="0"
-						width={stageWidth}
-						height={stageHeight}
-						fill="#18181b"
-						stroke="#3f3f46"
-						stroke-width={0.1}
+				<!-- Stage visualization with sliders in grid layout -->
+				<div class="stage-grid">
+					<!-- Y-axis slider (vertical, on the left) -->
+					<input
+						type="range"
+						min={yData.lowerLimit}
+						max={yData.upperLimit}
+						step="0.1"
+						value={yData.position}
+						oninput={handleYSliderChange}
+						disabled={isMoving.y}
+						class="y-slider"
+						aria-label="Y-axis position"
 					/>
 
-					<!-- Grid cells: FOV-sized rectangles at each grid intersection (showing overlap) -->
-					{#each [...Array(numGridCellsX).keys()] as i (i)}
-						{#each [...Array(numGridCellsY).keys()] as j (`${i}-${j}`)}
-							<rect
-								x={gridOriginX + i * gridSpacingX}
-								y={gridOriginY + j * gridSpacingY}
+					<!-- SVG Stage visualization -->
+					<svg viewBox="0 0 {stageWidth} {stageHeight}" class="stage-svg" preserveAspectRatio="xMidYMid meet">
+						<!-- Stage bounds background -->
+						<rect
+							x="0"
+							y="0"
+							width={stageWidth}
+							height={stageHeight}
+							fill="#18181b"
+							stroke="#3f3f46"
+							stroke-width={0.1}
+						/>
+
+						<!-- Grid cells: FOV-sized rectangles at each grid intersection (showing overlap) -->
+						{#each [...Array(numGridCellsX).keys()] as i (i)}
+							{#each [...Array(numGridCellsY).keys()] as j (`${i}-${j}`)}
+								<rect
+									x={gridOriginX + i * gridSpacingX}
+									y={gridOriginY + j * gridSpacingY}
+									width={FOV_WIDTH}
+									height={FOV_HEIGHT}
+									fill="none"
+									stroke="#3f3f46"
+									stroke-width="0.15"
+									opacity="0.4"
+									class={isMoving.x || isMoving.y
+										? 'cursor-not-allowed outline-0'
+										: 'cursor-pointer outline-0 hover:fill-zinc-700/30 hover:stroke-zinc-400'}
+									onclick={() => moveToGridCell(i, j)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											moveToGridCell(i, j);
+										}
+									}}
+									role="button"
+									tabindex={isMoving.x || isMoving.y ? -1 : 0}
+									aria-label="Move to grid cell {i}, {j}"
+									style="pointer-events: {isMoving.x || isMoving.y ? 'none' : 'all'};"
+								/>
+							{/each}
+						{/each}
+
+						<!-- FOV rectangle with preview image -->
+						{#if thumbnail}
+							<defs>
+								<clipPath id="fov-clip">
+									<rect x={fovX} y={fovY} width={FOV_WIDTH} height={FOV_HEIGHT} />
+								</clipPath>
+							</defs>
+
+							<!-- Preview image clipped to FOV -->
+							<image
+								href={thumbnail}
+								x={fovX}
+								y={fovY}
 								width={FOV_WIDTH}
 								height={FOV_HEIGHT}
-								fill="none"
-								stroke="#3f3f46"
-								stroke-width="0.15"
-								opacity="0.4"
-								class={isMoving.x || isMoving.y
-									? 'cursor-not-allowed'
-									: 'cursor-pointer hover:fill-zinc-700/30 hover:stroke-zinc-400'}
-								onclick={() => moveToGridCell(i, j)}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										moveToGridCell(i, j);
-									}
-								}}
-								role="button"
-								tabindex={isMoving.x || isMoving.y ? -1 : 0}
-								aria-label="Move to grid cell {i}, {j}"
-								style="pointer-events: {isMoving.x || isMoving.y ? 'none' : 'all'};"
+								clip-path="url(#fov-clip)"
+								preserveAspectRatio="none"
 							/>
-						{/each}
-					{/each}
+						{/if}
 
-					<!-- FOV rectangle with preview image -->
-					{#if thumbnail}
-						<defs>
-							<clipPath id="fov-clip">
-								<rect x={fovX} y={fovY} width={FOV_WIDTH} height={FOV_HEIGHT} />
-							</clipPath>
-						</defs>
-
-						<!-- Preview image clipped to FOV -->
-						<image
-							href={thumbnail}
+						<!-- FOV border -->
+						<rect
 							x={fovX}
 							y={fovY}
 							width={FOV_WIDTH}
 							height={FOV_HEIGHT}
-							clip-path="url(#fov-clip)"
-							preserveAspectRatio="none"
+							fill={thumbnail ? 'none' : 'rgba(16, 185, 129, 0.1)'}
+							stroke="#10b981"
+							stroke-width="0.1"
 						/>
-					{/if}
 
-					<!-- FOV border -->
-					<rect
-						x={fovX}
-						y={fovY}
-						width={FOV_WIDTH}
-						height={FOV_HEIGHT}
-						fill={thumbnail ? 'none' : 'rgba(16, 185, 129, 0.1)'}
-						stroke="#10b981"
-						stroke-width="0.1"
+						<!-- Current position indicator (crosshair at top-left corner) -->
+						<g opacity="0.7">
+							<line x1={fovX - 0.5} y1={fovY} x2={fovX + 0.5} y2={fovY} stroke="#10b981" stroke-width="0.2" />
+							<line x1={fovX} y1={fovY - 0.5} x2={fovX} y2={fovY + 0.5} stroke="#10b981" stroke-width="0.2" />
+						</g>
+					</svg>
+
+					<!-- Empty space (for grid alignment) -->
+					<div class="corner-spacer"></div>
+
+					<!-- X-axis slider (horizontal, on the bottom) -->
+					<input
+						type="range"
+						min={xData.lowerLimit}
+						max={xData.upperLimit}
+						step="0.1"
+						value={xData.position}
+						oninput={handleXSliderChange}
+						disabled={isMoving.x}
+						class="x-slider"
+						aria-label="X-axis position"
 					/>
-
-					<!-- Current position indicator (crosshair at top-left corner) -->
-					<g opacity="0.7">
-						<line x1={fovX - 0.5} y1={fovY} x2={fovX + 0.5} y2={fovY} stroke="#10b981" stroke-width="0.2" />
-						<line x1={fovX} y1={fovY - 0.5} x2={fovX} y2={fovY + 0.5} stroke="#10b981" stroke-width="0.2" />
-					</g>
-				</svg>
+				</div>
 
 				<!-- Position info -->
 				<div class="mt-2 flex items-center justify-between font-mono text-xs text-zinc-400">
@@ -381,3 +425,113 @@
 		<p class="text-sm text-zinc-500">Stage not configured</p>
 	</div>
 {/if}
+
+<style>
+	.stage-grid {
+		--track-width: 2px;
+		--thumb-length: 1rem;
+		--thumb-width: 2px;
+		display: grid;
+		grid-template-columns: auto 1fr;
+		grid-template-rows: auto auto;
+		gap: calc(-0.5 * var(--thumb-length));
+	}
+
+	.corner-spacer {
+		width: var(--thumb-width);
+		height: var(--thumb-width);
+	}
+
+	.stage-svg {
+		width: 100%;
+		height: auto;
+		border: 1px solid rgb(63 63 70);
+		background: rgb(24 24 27);
+	}
+
+	input[type='range'] {
+		--track-border-radius: 1px;
+		--thumb-border-radius: 1px;
+		--track-bg: rgb(63 63 70);
+		--thumb-color: rgb(16 185 129);
+		-webkit-appearance: none;
+		appearance: none;
+		background: transparent;
+		cursor: pointer;
+
+		&::-webkit-slider-runnable-track {
+			background: var(--track-bg);
+			border-radius: var(--track-border-radius);
+		}
+		&::-moz-range-track {
+			background: var(--track-bg);
+			border-radius: var(--track-border-radius);
+		}
+
+		&::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			cursor: pointer;
+			width: var(--thumb-width);
+			height: var(--thumb-length);
+			background: var(--thumb-color);
+			border-radius: var(--thumb-border-radius);
+		}
+		&::-moz-range-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			cursor: pointer;
+			width: var(--thumb-width);
+			height: var(--thumb-length);
+			background: var(--thumb-color);
+			border-radius: var(--thumb-border-radius);
+		}
+
+		&.x-slider {
+			transform: translateY(-50%);
+			&::-webkit-slider-runnable-track {
+				height: var(--track-width);
+			}
+			&::-moz-range-track {
+				height: var(--track-width);
+			}
+			&::-webkit-slider-thumb {
+				transform: translateY(-50%);
+			}
+			&::-moz-range-thumb {
+				transform: translateY(-50%);
+			}
+		}
+		&.y-slider {
+			transform: translateX(50%);
+			writing-mode: vertical-rl;
+			direction: ltr;
+			&::-webkit-slider-runnable-track {
+				width: var(--track-width);
+			}
+			&::-moz-range-track {
+				width: var(--track-width);
+			}
+			&::-webkit-slider-thumb {
+				transform: rotate(-90deg);
+			}
+			&::-moz-range-thumb {
+				transform: rotate(-90deg);
+			}
+		}
+	}
+
+	/* Disabled state */
+	input[type='range']:disabled {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	input[type='range']:disabled::-webkit-slider-thumb {
+		cursor: not-allowed;
+	}
+
+	input[type='range']:disabled::-moz-range-thumb {
+		cursor: not-allowed;
+	}
+</style>
