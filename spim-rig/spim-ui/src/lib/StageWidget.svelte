@@ -49,6 +49,7 @@
 	// Calculate stage bounds
 	let stageWidth = $derived(xData ? xData.upperLimit - xData.lowerLimit : 100);
 	let stageHeight = $derived(yData ? yData.upperLimit - yData.lowerLimit : 100);
+	let stageDepth = $derived(zData ? zData.upperLimit - zData.lowerLimit : 100);
 
 	// FOV calculation from camera properties
 	// Hardcoded magnification for now - TODO: make configurable
@@ -120,6 +121,12 @@
 	let tileOverlap = $state(0.1); // 10% overlap by default
 	let gridOriginX = $state(0); // mm offset from stage lower limit
 	let gridOriginY = $state(0); // mm offset from stage lower limit
+
+	// Z-axis range markers (min/max positions)
+	let zRange = $derived.by(() => {
+		if (!zData) return { min: 0, max: 0 };
+		return { min: zData.lowerLimit, max: zData.upperLimit };
+	});
 
 	// Maximum grid cells that can fit
 	let maxGridCellsX = $derived.by(() => {
@@ -208,65 +215,253 @@
 		const position = parseFloat(target.value);
 		manager.devices.executeCommand(stageConfig.y, 'move_abs', [position], { wait: false });
 	}
+
+	// Handle Z-axis slider change
+	function handleZSliderChange(e: Event) {
+		if (!stageConfig?.z || !zData) return;
+		const target = e.target as HTMLInputElement;
+		const position = parseFloat(target.value);
+		manager.devices.executeCommand(stageConfig.z, 'move_abs', [position], { wait: false });
+	}
 </script>
 
-{#if stageConfig && xData && yData}
+{#if stageConfig && xData && yData && zData}
 	<div class="flex h-full w-full flex-col items-center justify-start">
-		<div class="w-full max-w-2xl">
-			<!-- Header with grid controls and halt button -->
-			<div class="flex items-center justify-between gap-3 p-4">
-				<!-- Grid controls -->
-				<div class="flex items-center gap-3 text-xs text-zinc-400">
-					<span class="text-sm font-medium text-zinc-500">Grid</span>
-					<!-- Grid origin -->
-					<div class="flex items-center gap-2">
-						<span class="text-[0.65rem] text-zinc-500">Origin</span>
-						<DraggableNumberInput
-							bind:value={gridOriginX}
-							min={0}
-							max={stageWidth}
-							step={0.5}
-							decimals={1}
-							numCharacters={4}
-							showButtons={true}
+		<div class="w-full max-w-2xl pt-4">
+			<!-- Stage visualization with sliders in grid layout -->
+			<div class="stage-grid px-4">
+				<!-- Y-axis slider (vertical, on the left) -->
+				<input
+					type="range"
+					min={yData.lowerLimit}
+					max={yData.upperLimit}
+					step="0.1"
+					value={yData.position}
+					oninput={handleYSliderChange}
+					disabled={isMoving.y}
+					class="y-slider"
+					aria-label="Y-axis position"
+				/>
+
+				<!-- SVG Stage visualization -->
+				<svg viewBox="0 0 {stageWidth} {stageHeight}" class="stage-svg" preserveAspectRatio="xMidYMid meet">
+					<!-- Stage bounds background -->
+					<rect
+						x="0"
+						y="0"
+						width={stageWidth}
+						height={stageHeight}
+						fill="none"
+						stroke="var(--color-zinc-600)"
+						stroke-width={0.1}
+					/>
+
+					<!-- Grid cells: FOV-sized rectangles at each grid intersection (showing overlap) -->
+					{#each [...Array(numGridCellsX).keys()] as i (i)}
+						{#each [...Array(numGridCellsY).keys()] as j (`${i}-${j}`)}
+							<rect
+								x={gridOriginX + i * gridSpacingX}
+								y={gridOriginY + j * gridSpacingY}
+								width={FOV_WIDTH}
+								height={FOV_HEIGHT}
+								fill="none"
+								stroke="#3f3f46"
+								stroke-width="0.15"
+								opacity="0.4"
+								class={isMoving.x || isMoving.y
+									? 'cursor-not-allowed outline-0'
+									: 'cursor-pointer outline-0 hover:fill-zinc-700/30 hover:stroke-zinc-400'}
+								onclick={() => moveToGridCell(i, j)}
+								onkeydown={(e) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										moveToGridCell(i, j);
+									}
+								}}
+								role="button"
+								tabindex={isMoving.x || isMoving.y ? -1 : 0}
+								aria-label="Move to grid cell {i}, {j}"
+								style="pointer-events: {isMoving.x || isMoving.y ? 'none' : 'all'};"
+							/>
+						{/each}
+					{/each}
+
+					<!-- FOV rectangle with preview image -->
+					{#if thumbnail}
+						<defs>
+							<clipPath id="fov-clip">
+								<rect x={fovX} y={fovY} width={FOV_WIDTH} height={FOV_HEIGHT} />
+							</clipPath>
+						</defs>
+
+						<!-- Preview image clipped to FOV -->
+						<image
+							href={thumbnail}
+							x={fovX}
+							y={fovY}
+							width={FOV_WIDTH}
+							height={FOV_HEIGHT}
+							clip-path="url(#fov-clip)"
+							preserveAspectRatio="none"
 						/>
-						<DraggableNumberInput
-							bind:value={gridOriginY}
-							min={0}
-							max={stageHeight}
-							step={0.5}
-							decimals={1}
-							numCharacters={4}
-							showButtons={true}
+					{/if}
+
+					<!-- FOV border -->
+					<rect
+						x={fovX}
+						y={fovY}
+						width={FOV_WIDTH}
+						height={FOV_HEIGHT}
+						fill={thumbnail ? 'none' : 'var(--color-emerald-600/50)'}
+						stroke="#10b981"
+						stroke-width="0.1"
+					/>
+
+					<!-- Current position indicator (crosshair at top-left corner) -->
+					<g opacity="0.7">
+						<line x1={fovX - 0.5} y1={fovY} x2={fovX + 0.5} y2={fovY} stroke="#10b981" stroke-width="0.2" />
+						<line x1={fovX} y1={fovY - 0.5} x2={fovX} y2={fovY + 0.5} stroke="#10b981" stroke-width="0.2" />
+					</g>
+				</svg>
+
+				<!-- Z-axis control column -->
+				<div class="z-control">
+					<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="xMidYMid meet">
+						<!-- Min marker line -->
+						<line
+							x1="0"
+							y1={stageDepth - (zRange.min - zData.lowerLimit)}
+							x2="30"
+							y2={stageDepth - (zRange.min - zData.lowerLimit)}
+							stroke="#3f3f46"
+							stroke-width="2"
+							opacity="1"
 						/>
+
+						<!-- Max marker line -->
+						<line
+							x1="0"
+							y1={stageDepth - (zRange.max - zData.lowerLimit)}
+							x2="30"
+							y2={stageDepth - (zRange.max - zData.lowerLimit)}
+							stroke="#3f3f46"
+							stroke-width="2"
+							opacity="1"
+						/>
+
+						<!-- Current position indicator -->
+						<line
+							x1="0"
+							y1={stageDepth - (zData.position - zData.lowerLimit)}
+							x2="30"
+							y2={stageDepth - (zData.position - zData.lowerLimit)}
+							stroke="#10b981"
+							stroke-width="0.2"
+							opacity="0.7"
+						/>
+					</svg>
+					<input
+						type="range"
+						min={zData.lowerLimit}
+						max={zData.upperLimit}
+						step="0.1"
+						value={zData.position}
+						oninput={handleZSliderChange}
+						disabled={isMoving.z}
+						class="z-slider"
+						aria-label="Z-axis position"
+					/>
+				</div>
+
+				<!-- Empty space (for grid alignment) -->
+				<div class="h-0 w-0"></div>
+
+				<!-- X-axis slider (horizontal, on the bottom) -->
+				<input
+					type="range"
+					min={xData.lowerLimit}
+					max={xData.upperLimit}
+					step="0.1"
+					value={xData.position}
+					oninput={handleXSliderChange}
+					disabled={isMoving.x}
+					class="x-slider"
+					aria-label="X-axis position"
+				/>
+
+				<!-- Empty bottom-right corner -->
+				<div class="h-0 w-0"></div>
+			</div>
+
+			<div class="flex flex-col gap-4 p-4 pb-4">
+				<!-- Position info -->
+				<div class="flex items-center justify-between font-mono text-xs text-zinc-400">
+					<!-- Halt button -->
+					<button
+						onclick={haltStage}
+						class="rounded bg-red-600 p-1 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+						disabled={!isMoving.x && !isMoving.y && !isMoving.z}
+					>
+						Halt
+					</button>
+					<div class="flex gap-4">
+						<span>X: {xData.position.toFixed(2)} mm</span>
+						<span>Y: {yData.position.toFixed(2)} mm</span>
+						<span>Z: {zData.position.toFixed(2)} mm</span>
 					</div>
+					<div class="text-zinc-500">
+						{stageWidth.toFixed(0)} × {stageHeight.toFixed(0)} × {(zData.upperLimit - zData.lowerLimit).toFixed(0)} mm
+					</div>
+				</div>
+
+				<!-- Grid controls -->
+				<div class="grid grid-cols-[auto_auto_auto] items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
+					<span class="col-span-3 text-sm font-medium text-zinc-500">Grid</span>
+
+					<span class="text-[0.65rem] text-zinc-500">Origin</span>
+					<DraggableNumberInput
+						bind:value={gridOriginX}
+						min={0}
+						max={stageWidth}
+						step={0.5}
+						decimals={1}
+						numCharacters={4}
+						showButtons={true}
+					/>
+					<DraggableNumberInput
+						bind:value={gridOriginY}
+						min={0}
+						max={stageHeight}
+						step={0.5}
+						decimals={1}
+						numCharacters={4}
+						showButtons={true}
+					/>
 
 					<!-- Grid cells -->
-					<div class="flex items-center gap-2">
-						<span class="text-[0.65rem] text-zinc-500">Cells</span>
-						<DraggableNumberInput
-							bind:value={numGridCellsX}
-							min={1}
-							max={maxGridCellsX}
-							step={1}
-							decimals={0}
-							numCharacters={3}
-							showButtons={true}
-						/>
-						<DraggableNumberInput
-							bind:value={numGridCellsY}
-							min={1}
-							max={maxGridCellsY}
-							step={1}
-							decimals={0}
-							numCharacters={3}
-							showButtons={true}
-						/>
-					</div>
+					<span class="text-[0.65rem] text-zinc-500">Cells</span>
+					<DraggableNumberInput
+						bind:value={numGridCellsX}
+						min={1}
+						max={maxGridCellsX}
+						step={1}
+						decimals={0}
+						numCharacters={3}
+						showButtons={true}
+					/>
+					<DraggableNumberInput
+						bind:value={numGridCellsY}
+						min={1}
+						max={maxGridCellsY}
+						step={1}
+						decimals={0}
+						numCharacters={3}
+						showButtons={true}
+					/>
 
 					<!-- Overlap -->
-					<div class="flex items-center gap-2">
-						<span class="text-[0.65rem] text-zinc-500">Overlap</span>
+					<span class="text-[0.65rem] text-zinc-500">Overlap</span>
+					<div class="col-span-2 flex items-center gap-2">
 						<DraggableNumberInput
 							bind:value={tileOverlap}
 							min={0}
@@ -277,144 +472,6 @@
 							showButtons={true}
 						/>
 						<span class="text-zinc-600">%</span>
-					</div>
-				</div>
-
-				<!-- Halt button -->
-				<button
-					onclick={haltStage}
-					class="rounded bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-					disabled={!isMoving.x && !isMoving.y && !isMoving.z}
-				>
-					Halt
-				</button>
-			</div>
-
-			<div class="px-4 pb-4">
-				<!-- Stage visualization with sliders in grid layout -->
-				<div class="stage-grid">
-					<!-- Y-axis slider (vertical, on the left) -->
-					<input
-						type="range"
-						min={yData.lowerLimit}
-						max={yData.upperLimit}
-						step="0.1"
-						value={yData.position}
-						oninput={handleYSliderChange}
-						disabled={isMoving.y}
-						class="y-slider"
-						aria-label="Y-axis position"
-					/>
-
-					<!-- SVG Stage visualization -->
-					<svg viewBox="0 0 {stageWidth} {stageHeight}" class="stage-svg" preserveAspectRatio="xMidYMid meet">
-						<!-- Stage bounds background -->
-						<rect
-							x="0"
-							y="0"
-							width={stageWidth}
-							height={stageHeight}
-							fill="#18181b"
-							stroke="#3f3f46"
-							stroke-width={0.1}
-						/>
-
-						<!-- Grid cells: FOV-sized rectangles at each grid intersection (showing overlap) -->
-						{#each [...Array(numGridCellsX).keys()] as i (i)}
-							{#each [...Array(numGridCellsY).keys()] as j (`${i}-${j}`)}
-								<rect
-									x={gridOriginX + i * gridSpacingX}
-									y={gridOriginY + j * gridSpacingY}
-									width={FOV_WIDTH}
-									height={FOV_HEIGHT}
-									fill="none"
-									stroke="#3f3f46"
-									stroke-width="0.15"
-									opacity="0.4"
-									class={isMoving.x || isMoving.y
-										? 'cursor-not-allowed outline-0'
-										: 'cursor-pointer outline-0 hover:fill-zinc-700/30 hover:stroke-zinc-400'}
-									onclick={() => moveToGridCell(i, j)}
-									onkeydown={(e) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.preventDefault();
-											moveToGridCell(i, j);
-										}
-									}}
-									role="button"
-									tabindex={isMoving.x || isMoving.y ? -1 : 0}
-									aria-label="Move to grid cell {i}, {j}"
-									style="pointer-events: {isMoving.x || isMoving.y ? 'none' : 'all'};"
-								/>
-							{/each}
-						{/each}
-
-						<!-- FOV rectangle with preview image -->
-						{#if thumbnail}
-							<defs>
-								<clipPath id="fov-clip">
-									<rect x={fovX} y={fovY} width={FOV_WIDTH} height={FOV_HEIGHT} />
-								</clipPath>
-							</defs>
-
-							<!-- Preview image clipped to FOV -->
-							<image
-								href={thumbnail}
-								x={fovX}
-								y={fovY}
-								width={FOV_WIDTH}
-								height={FOV_HEIGHT}
-								clip-path="url(#fov-clip)"
-								preserveAspectRatio="none"
-							/>
-						{/if}
-
-						<!-- FOV border -->
-						<rect
-							x={fovX}
-							y={fovY}
-							width={FOV_WIDTH}
-							height={FOV_HEIGHT}
-							fill={thumbnail ? 'none' : 'rgba(16, 185, 129, 0.1)'}
-							stroke="#10b981"
-							stroke-width="0.1"
-						/>
-
-						<!-- Current position indicator (crosshair at top-left corner) -->
-						<g opacity="0.7">
-							<line x1={fovX - 0.5} y1={fovY} x2={fovX + 0.5} y2={fovY} stroke="#10b981" stroke-width="0.2" />
-							<line x1={fovX} y1={fovY - 0.5} x2={fovX} y2={fovY + 0.5} stroke="#10b981" stroke-width="0.2" />
-						</g>
-					</svg>
-
-					<!-- Empty space (for grid alignment) -->
-					<div class="corner-spacer"></div>
-
-					<!-- X-axis slider (horizontal, on the bottom) -->
-					<input
-						type="range"
-						min={xData.lowerLimit}
-						max={xData.upperLimit}
-						step="0.1"
-						value={xData.position}
-						oninput={handleXSliderChange}
-						disabled={isMoving.x}
-						class="x-slider"
-						aria-label="X-axis position"
-					/>
-				</div>
-
-				<!-- Position info -->
-				<div class="mt-2 flex items-center justify-between font-mono text-xs text-zinc-400">
-					<div class="flex gap-3">
-						<span>X: {xData.position.toFixed(2)} mm</span>
-						<span>Y: {yData.position.toFixed(2)} mm</span>
-						{#if zData}
-							<span>Z: {zData.position.toFixed(2)} mm</span>
-						{/if}
-					</div>
-					<div class="text-zinc-500">
-						{stageWidth.toFixed(0)} × {stageHeight.toFixed(0)} mm
 					</div>
 				</div>
 			</div>
@@ -428,36 +485,56 @@
 
 <style>
 	.stage-grid {
-		--track-width: 2px;
-		--thumb-length: 1rem;
+		--track-width: 0.75rem;
 		--thumb-width: 2px;
+		--area-bg: rgb(24 24 27);
 		display: grid;
-		grid-template-columns: auto 1fr;
+		grid-template-columns: auto 1fr auto;
 		grid-template-rows: auto auto;
-		gap: calc(-0.5 * var(--thumb-length));
+		gap: calc(-1 * var(--track-width));
+		margin: calc(-0.5 * var(--track-width));
+		margin-block-start: 0;
+		margin-inline-end: 0;
 	}
 
-	.corner-spacer {
-		width: var(--thumb-width);
-		height: var(--thumb-width);
+	.z-control {
+		display: grid;
+		width: var(--track-width);
+		border: 1px solid var(--color-zinc-600);
+		border-inline-start: 0;
+
+		& > svg,
+		& > input {
+			grid-area: 1 / 1;
+			height: 100%;
+			width: 100%;
+		}
 	}
 
 	.stage-svg {
 		width: 100%;
 		height: auto;
-		border: 1px solid rgb(63 63 70);
-		background: rgb(24 24 27);
 	}
 
 	input[type='range'] {
-		--track-border-radius: 1px;
+		--track-border-radius: 0rem;
 		--thumb-border-radius: 1px;
-		--track-bg: rgb(63 63 70);
 		--thumb-color: rgb(16 185 129);
+		--thumb-color: var(--color-emerald-500);
+		--track-bg: var(--color-red-500);
+		--track-bg: transparent;
 		-webkit-appearance: none;
 		appearance: none;
 		background: transparent;
 		cursor: pointer;
+		margin-block-start: calc(-0.5 * var(--track-width));
+		z-index: 999;
+
+		&:hover,
+		&:focus,
+		&:active {
+			--track-bg: --alpha(var(--color-zinc-800) / 30%);
+		}
 
 		&::-webkit-slider-runnable-track {
 			background: var(--track-bg);
@@ -473,7 +550,7 @@
 			appearance: none;
 			cursor: pointer;
 			width: var(--thumb-width);
-			height: var(--thumb-length);
+			height: var(--track-width);
 			background: var(--thumb-color);
 			border-radius: var(--thumb-border-radius);
 		}
@@ -482,28 +559,29 @@
 			appearance: none;
 			cursor: pointer;
 			width: var(--thumb-width);
-			height: var(--thumb-length);
+			height: var(--track-width);
 			background: var(--thumb-color);
 			border-radius: var(--thumb-border-radius);
 		}
 
 		&.x-slider {
-			transform: translateY(-50%);
+			/*margin-block-start: calc(-1 * var(--thumb-width));*/
+			/*transform: translateY(calc(-100% + 2 * var(--track-width)));*/
 			&::-webkit-slider-runnable-track {
 				height: var(--track-width);
 			}
 			&::-moz-range-track {
 				height: var(--track-width);
 			}
-			&::-webkit-slider-thumb {
-				transform: translateY(-50%);
+			/*&::-webkit-slider-thumb {
+				transform: translateY(50%);
 			}
 			&::-moz-range-thumb {
-				transform: translateY(-50%);
-			}
+				transform: translateY(50%);
+			}*/
 		}
-		&.y-slider {
-			transform: translateX(50%);
+		&.y-slider,
+		&.z-slider {
 			writing-mode: vertical-rl;
 			direction: ltr;
 			&::-webkit-slider-runnable-track {
@@ -513,11 +591,33 @@
 				width: var(--track-width);
 			}
 			&::-webkit-slider-thumb {
-				transform: rotate(-90deg);
+				height: var(--thumb-width);
+				width: var(--track-width);
 			}
 			&::-moz-range-thumb {
-				transform: rotate(-90deg);
+				height: var(--thumb-width);
+				width: var(--track-width);
 			}
+		}
+		/*&.y-slider {
+			--x-translate: calc(0.5 * (var(--track-width) - var(--thumb-width)));
+			&::-webkit-slider-thumb {
+				transform: translateX(var(--x-translate));
+			}
+			&::-moz-range-thumb {
+				transform: translateX(var(--x-translate));
+			}
+		}*/
+		&.z-slider {
+			flex: 1;
+			/*&::-webkit-slider-runnable-track {
+				width: var(--track-width);
+				background: transparent;
+			}
+			&::-moz-range-track {
+				width: var(--track-width);
+				background: transparent;
+			}*/
 		}
 	}
 
