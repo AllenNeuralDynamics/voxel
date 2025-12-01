@@ -6,10 +6,73 @@ import type { SpimRigConfig, ProfileConfig, ChannelConfig } from './config';
 
 const DEFAULT_BASE_URL = browser ? window.location.origin : 'http://localhost:8000';
 
-export type Profile = {
-	id: string;
-	channels: Record<string, ChannelConfig>; // Expanded from string[] of channel IDs
-} & Omit<ProfileConfig, 'channels'>;
+// export type Profile = {
+// 	id: string;
+// 	channels: Record<string, ChannelConfig>; // Expanded from string[] of channel IDs
+// } & Omit<ProfileConfig, 'channels'>;
+
+/**
+ * Profile: Encapsulates profile configuration and derived state like FOV dimensions
+ */
+export class Profile {
+	readonly id: string;
+	readonly #manager: RigManager; // RigManager - can't import due to circular dependency
+
+	// State
+	#config = $state<ProfileConfig>();
+	label = $derived(this.#config?.label);
+	desc = $derived(this.#config?.desc);
+	channels = $state<Record<string, ChannelConfig>>({});
+	fovDimensions = $derived(this.#getfovDimensions());
+
+	// Magnification constant (TODO: make configurable)
+	readonly #MAGNIFICATION = 1.0;
+
+	constructor(id: string, config: ProfileConfig, channels: Record<string, ChannelConfig>, manager: RigManager) {
+		this.id = id;
+		this.#config = config;
+		this.channels = channels;
+		this.#manager = manager;
+	}
+
+	#getFrameSizePx(cameraId: string) {
+		const val = this.#manager.devices.getPropertyValue(cameraId, 'frame_size_px');
+		return Array.isArray(val) && val.length === 2 ? { x: val[0], y: val[1] } : null;
+	}
+
+	#getPixelSizeUm(cameraId: string) {
+		const val = this.#manager.devices.getPropertyValue(cameraId, 'pixel_size_um');
+
+		// Handle different formats: "0.5, 0.5" string
+		if (typeof val === 'string') {
+			const parts = val.split(',').map((s) => parseFloat(s.trim()));
+			if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+				return { x: parts[0], y: parts[1] };
+			}
+		}
+		return null;
+	}
+
+	// Calculate FOV dimensions in mm
+	#getfovDimensions() {
+		const firstChannel = Object.values(this.channels)[0];
+		const cameraId = firstChannel?.detection ?? null;
+		if (!cameraId) return null;
+
+		const frameSizePx = this.#getFrameSizePx(cameraId);
+		const pixelSizeUm = this.#getPixelSizeUm(cameraId);
+
+		if (!frameSizePx || !pixelSizeUm) {
+			return { width: 5, height: 5 }; // Fallback to 5mm
+		}
+
+		// FOV (mm) = (pixels * pixel_size_um) / (1000 * magnification)
+		const width = (frameSizePx.x * pixelSizeUm.x) / (1000 * this.#MAGNIFICATION);
+		const height = (frameSizePx.y * pixelSizeUm.y) / (1000 * this.#MAGNIFICATION);
+
+		return { width, height };
+	}
+}
 
 /**
  * Options for RigManager construction
@@ -37,6 +100,9 @@ export class RigManager {
 	config = $state<SpimRigConfig | null>(null);
 	configLoading = $state(false);
 	configError = $state<string | null>(null);
+
+	// Profiles (state)
+	profiles = $state<Profile[]>([]);
 
 	// Runtime state
 	activeProfileId = $state<string | null>(null);
@@ -86,11 +152,14 @@ export class RigManager {
 		this.rigClient.requestRigStatus();
 	}
 
-	// Derived state: build UI-friendly profiles from config
-	get profiles(): Profile[] {
-		if (!this.config) return [];
+	// Build Profile instances from config
+	private buildProfiles() {
+		if (!this.config) {
+			this.profiles = [];
+			return;
+		}
 
-		return Object.entries(this.config.profiles).map(([profileId, profileConfig]: [string, ProfileConfig]) => {
+		this.profiles = Object.entries(this.config.profiles).map(([profileId, profileConfig]: [string, ProfileConfig]) => {
 			// Build channels for this profile
 			const channels: Record<string, ChannelConfig> = {};
 			for (const channelId of profileConfig.channels) {
@@ -100,12 +169,7 @@ export class RigManager {
 				}
 			}
 
-			return {
-				id: profileId,
-				label: profileConfig.label,
-				desc: profileConfig.desc,
-				channels
-			};
+			return new Profile(profileId, profileConfig, channels, this);
 		});
 	}
 
@@ -152,6 +216,9 @@ export class RigManager {
 			}
 
 			this.config = await response.json();
+
+			// Build Profile instances from config
+			this.buildProfiles();
 		} catch (e) {
 			this.configError = e instanceof Error ? e.message : 'Unknown error';
 			console.error('Failed to fetch rig config:', e);

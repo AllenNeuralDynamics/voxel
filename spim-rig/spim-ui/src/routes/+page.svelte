@@ -5,8 +5,9 @@
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ClientStatus.svelte';
-	import StagePosition from '$lib/StagePosition.svelte';
-	import StageWidget from '$lib/StageWidget.svelte';
+	// import StagePosition from '$lib/StagePosition.svelte';
+	// import StageWidget from '$lib/StageWidget.svelte';
+	import { Stage, StageCanvas, StageControls, StagePosition } from '$lib/stage';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/PaneDivider.svelte';
 	import ChannelSection from '$lib/ChannelSection.svelte';
@@ -22,6 +23,7 @@
 	// Component-level state
 	let rigManager = $state<RigManager | undefined>(undefined);
 	let previewer = $state<Previewer | undefined>(undefined);
+	let stage = $state<Stage | undefined>(undefined);
 	let deviceFilter = $state<DeviceFilter>('summary');
 	let showHistograms = $state(true);
 
@@ -37,6 +39,9 @@
 
 			// 2. Initialize Previewer
 			previewer = new Previewer(rigManager);
+
+			// 3. Initialize Stage
+			stage = new Stage(rigManager, previewer);
 
 			console.log('[Page] All managers initialized');
 		} catch (error) {
@@ -102,69 +107,31 @@
 			{/if}
 		</aside>
 		<main class="flex h-screen flex-1 flex-col overflow-hidden">
-			<!-- <PaneGroup direction="horizontal" autoSaveId="rootPanel">
-				<Pane>
-					<PaneGroup direction="vertical" autoSaveId="centerPanel">
-						<Pane>
-							<PaneGroup direction="horizontal" autoSaveId="viewPanel">
-								<Pane class="flex h-full flex-1 flex-col">
-									<header class="flex h-18 items-start justify-start gap-2 p-4">
-										<button
-											onclick={handleStartPreview}
-											disabled={previewer.isPreviewing}
-											class="rounded bg-emerald-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-										>
-											Start
-										</button>
-										<button
-											onclick={handleStopPreview}
-											disabled={!previewer.isPreviewing}
-											class="rounded bg-rose-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-										>
-											Stop
-										</button>
-									</header>
-									<div class="flex flex-1 flex-col items-start px-4">
-										<PreviewCanvas {previewer} />
-									</div>
-								</Pane>
-								<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
-								<Pane defaultSize={50} minSize={30} maxSize={50} class=" bg-zinc-950">
-									<StageWidget manager={rigManager} {previewer} />
-								</Pane>
-							</PaneGroup></Pane
-						>
-						<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
-						<Pane></Pane>
-					</PaneGroup>
-				</Pane>
-				<Pane>
-
-				</Pane>
-			</PaneGroup> -->
 			<PaneGroup direction="vertical" autoSaveId="centerPanel">
 				<Pane>
 					<PaneGroup direction="horizontal" autoSaveId="viewPanel">
-						<Pane class="flex h-full flex-1 flex-col">
-							<div class="flex flex-1 flex-col items-start px-4">
-								<PreviewCanvas {previewer} />
-							</div>
+						<Pane defaultSize={50} minSize={30} class="grid h-full flex-1 place-content-center  px-4">
+							<PreviewCanvas {previewer} />
 						</Pane>
 						<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
-						<Pane defaultSize={50} minSize={30} maxSize={50} class=" bg-zinc-950">
-							<StageWidget manager={rigManager} {previewer} />
+						<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center  px-4">
+							{#if stage}
+								<StageCanvas {stage} />
+							{/if}
 						</Pane>
 					</PaneGroup>
 				</Pane>
 				<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
-				<Pane defaultSize={30}></Pane>
+				<Pane defaultSize={40} maxSize={50} minSize={30}></Pane>
 			</PaneGroup>
 			<footer class="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
 				<PreviewInfo {previewer} />
-				<StagePosition manager={rigManager} />
+				{#if stage}
+					<StagePosition {stage} />
+				{/if}
 			</footer>
 		</main>
-		<aside class="flex h-full w-96 flex-col border-r border-zinc-700 bg-zinc-900">
+		<aside class="flex h-full w-96 flex-col border-l border-zinc-700 bg-zinc-900">
 			<header class="flex h-18 items-start justify-start gap-2 p-4">
 				<button
 					onclick={handleStartPreview}
@@ -181,6 +148,11 @@
 					Stop
 				</button>
 			</header>
+			<div class="flex-1 overflow-y-auto">
+				{#if stage}
+					<StageControls {stage} />
+				{/if}
+			</div>
 			<footer class="mt-auto flex flex-row-reverse p-4">
 				<ClientStatus client={rigManager.client} />
 			</footer>
