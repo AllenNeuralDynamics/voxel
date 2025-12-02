@@ -71,6 +71,7 @@ export interface ChannelConfig {
 	detection: string; // camera device ID
 	illumination: string; // laser device ID
 	filters: Record<string, string>; // filter_wheel_id -> position_label
+	emission?: number | null; // Peak emission wavelength in nm
 }
 
 /**

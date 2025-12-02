@@ -3,7 +3,7 @@
  */
 
 import type { ChannelConfig, PreviewCrop, PreviewFrameInfo, PreviewLevels, RigManager, RigStatus } from '$lib/core';
-import { clampTopLeft, getWebGPUDevice, sanitizeString } from '$lib/utils';
+import { clampTopLeft, getWebGPUDevice, sanitizeString, wavelengthToColor } from '$lib/utils';
 import { SvelteMap } from 'svelte/reactivity';
 import { COLORMAP_COLORS, COMMON_CHANNELS, ColormapType, colormapToHex, generateLUT } from './colormap';
 import { generateShaderCode } from './shader';
@@ -11,6 +11,8 @@ import { computeAutoLevels } from './utils';
 // import shaderCode from './shader.wgsl?raw';
 
 const TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
+const TRANSPARENT_THUMBNAIL =
+	'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 interface ChannelUniformState {
 	levelsMin: number;
@@ -263,7 +265,7 @@ export class Previewer {
 
 	// Thumbnail generation
 	public enableThumbnails = $state(false);
-	public thumbnailSnapshot = $state<string | null>(null);
+	public thumbnailSnapshot = $state<string>(TRANSPARENT_THUMBNAIL);
 	private thumbnailUpdateCounter = 0;
 
 	#framesCollector: FramesCollector;
@@ -449,7 +451,18 @@ export class Previewer {
 			slot.config = this.#rigManager.config.channels[slot.name];
 
 			slot.visible = true;
-			slot.setColor(COMMON_CHANNELS[slot.name.toLowerCase()] || colormapToHex(colors[i % colors.length]));
+			// Try emission wavelength first (if available)
+			let color: string | undefined;
+			if (slot.config?.emission) {
+				color = wavelengthToColor(slot.config.emission);
+			}
+
+			// Fallback to name-based or cycle through colors
+			if (!color) {
+				color = COMMON_CHANNELS[slot.name.toLowerCase()] || colormapToHex(colors[i % colors.length]);
+			}
+
+			slot.setColor(color);
 		}
 		this.#queueCropUpdate(this.crop);
 

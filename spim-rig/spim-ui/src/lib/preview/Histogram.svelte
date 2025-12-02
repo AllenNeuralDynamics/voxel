@@ -35,7 +35,7 @@
 
 	// SVG dimensions
 	let width = $state(256); // Default, will be updated by bind:clientWidth
-	const height = 48;
+	const height = 32;
 
 	// Calculate which bins fall within the display window
 	const visibleBins = $derived(() => {

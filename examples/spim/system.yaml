@@ -95,6 +95,7 @@ channels:
       fw_emission_cam1: "GFP"
     desc: "Green fluorescent protein channel using 488nm excitation"
     label: GFP
+    emission: 510
   rfp:
     detection: camera_2
     illumination: laser_561
@@ -103,6 +104,7 @@ channels:
       fw_emission_cam2: "RFP"
     desc: "Red fluorescent protein channel using 561nm excitation"
     label: RFP
+    emission: 600
 
 profiles:
   dual_color_dual_cam:

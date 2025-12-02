@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { PreviewCanvas, Previewer, PanZoomControls } from '$lib/preview';
+	import { PreviewCanvas, Previewer, PanZoomControls, FrameCounter } from '$lib/preview';
 	import { onMount, onDestroy } from 'svelte';
 	import { RigManager } from '$lib/core';
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
@@ -11,6 +11,7 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/PaneDivider.svelte';
 	import ChannelSection from '$lib/ChannelSection.svelte';
+	import LaserIndicators from '$lib/LaserIndicators.svelte';
 	import Icon from '@iconify/svelte';
 	import { browser } from '$app/environment';
 
@@ -105,6 +106,9 @@
 					{/each}
 				</div>
 			{/if}
+			<footer class="mt-auto flex p-4">
+				<FrameCounter {previewer} />
+			</footer>
 		</aside>
 		<main class="flex h-screen min-w-3xl flex-1 flex-col overflow-hidden">
 			<PaneGroup direction="vertical" autoSaveId="centerPanel">
@@ -124,8 +128,14 @@
 				<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
 				<Pane defaultSize={40} maxSize={50} minSize={30}></Pane>
 			</PaneGroup>
-			<footer class="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
+			<footer class="relative flex items-center justify-between border-t border-zinc-800 px-4 py-3">
 				<PanZoomControls {previewer} />
+
+				<!-- Centered laser indicators -->
+				<div class="absolute left-1/2 -translate-x-1/2">
+					<LaserIndicators {rigManager} />
+				</div>
+
 				{#if stage}
 					<StagePosition {stage} />
 				{/if}

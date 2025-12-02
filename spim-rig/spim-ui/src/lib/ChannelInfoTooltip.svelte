@@ -50,6 +50,12 @@
 								<span class="text-right text-zinc-200">{config.detection}</span>
 							</div>
 						{/if}
+						{#if config?.emission}
+							<div class="flex justify-between gap-2">
+								<span class="text-zinc-400">Emission</span>
+								<span class="text-right text-zinc-200">{config.emission} nm</span>
+							</div>
+						{/if}
 						{#if filterEntries.length}
 							<div class="space-y-1">
 								<div class="mb-1 border-b border-zinc-800 pt-1 text-zinc-500/90">Filters</div>

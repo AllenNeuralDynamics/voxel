@@ -9,16 +9,6 @@
 
 	let { previewer }: Props = $props();
 
-	// Get frame info from visible channels
-	let visibleChannels = $derived(previewer.channels.filter((c) => c.visible && c.latestFrameInfo));
-
-	// Get representative frame info (from first visible channel)
-	let frameInfo = $derived(visibleChannels[0]?.latestFrameInfo ?? null);
-
-	// Calculate FPS from frame indices (simple approximation)
-	let frameIndices = $derived(visibleChannels.map((c) => c.latestFrameInfo?.frame_idx ?? 0));
-	let maxFrameIdx = $derived(Math.max(...frameIndices, 0));
-
 	// Check if crop is at default (no pan/zoom)
 	let isDefaultCrop = $derived(previewer.crop.x === 0 && previewer.crop.y === 0 && previewer.crop.k === 0);
 
@@ -96,16 +86,4 @@
 			/>
 		</div>
 	</div>
-	<!-- Frame info section -->
-	{#if frameInfo}
-		<div class="flex items-center gap-4">
-			<!-- Frame counter -->
-			<div class="flex items-center gap-1.5">
-				<span class="text-zinc-400">Frame</span>
-				<span class="text-zinc-300">#{maxFrameIdx}</span>
-			</div>
-		</div>
-	{:else}
-		<span class="text-zinc-500">No frames</span>
-	{/if}
 </div>

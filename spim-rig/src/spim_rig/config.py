@@ -60,6 +60,18 @@ class ChannelConfig(BaseModel):
     filters: dict[str, str] = Field(default_factory=dict)
     desc: str = ""
     label: str | None = None
+    emission: float | None = None  # Peak emission wavelength in nm
+
+    @field_validator("emission")
+    @classmethod
+    def validate_emission(cls, v: float | None) -> float | None:
+        """Validate emission wavelength."""
+        if v is not None:
+            if v <= 0:
+                raise ValueError(f"emission wavelength must be positive, got {v}")
+            if v < 200 or v > 2000:
+                raise ValueError(f"emission wavelength out of reasonable range: {v} nm")
+        return v
 
 
 class ProfileConfig(BaseModel):

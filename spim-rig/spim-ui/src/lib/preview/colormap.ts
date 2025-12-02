@@ -47,8 +47,92 @@ export const COLORMAP_COLORS: Record<ColormapType, string> = {
 };
 
 export const COMMON_CHANNELS: Record<string, string> = {
-	gfp: '#00ff00',
-	rfp: '#ff0000'
+	// Green fluorescent proteins
+	gfp: '#00ff00', // Green Fluorescent Protein (~510 nm)
+	egfp: '#00ff00', // Enhanced GFP
+
+	// Yellow fluorescent proteins
+	yfp: '#ffff00', // Yellow Fluorescent Protein (~527 nm)
+	eyfp: '#ffff00', // Enhanced YFP
+	citrine: '#ffff00', // YFP variant
+	venus: '#ffff00', // YFP variant
+
+	// Red fluorescent proteins
+	rfp: '#ff6600', // Red Fluorescent Protein (~600 nm)
+	dsred: '#ff0000', // DsRed (~583 nm)
+	mcherry: '#ff0066', // mCherry (~610 nm)
+	tdtomato: '#ff4500', // tdTomato (~581 nm)
+	mkate2: '#ff0033', // mKate2 (~633 nm)
+
+	// Cyan fluorescent proteins
+	cfp: '#00ffff', // Cyan Fluorescent Protein (~477 nm)
+	ecfp: '#00ffff', // Enhanced CFP
+	cerulean: '#00ccff', // CFP variant
+
+	// Far-red fluorescent proteins
+	mplum: '#cc00ff', // mPlum (~649 nm)
+	katushka: '#ff0066', // Katushka (~635 nm)
+
+	// DNA/nuclear stains
+	dapi: '#0066ff', // DAPI (~460 nm)
+	hoechst: '#0066ff', // Hoechst (~461 nm)
+	draq5: '#aa0066', // DRAQ5 (~697 nm)
+	pi: '#ff0000', // Propidium Iodide (~617 nm)
+
+	// Alexa Fluor dyes
+	alexa488: '#00ff99', // Alexa Fluor 488 (~519 nm)
+	alexa555: '#ffaa00', // Alexa Fluor 555 (~565 nm)
+	alexa594: '#ff6600', // Alexa Fluor 594 (~617 nm)
+	alexa647: '#ff0066', // Alexa Fluor 647 (~665 nm)
+
+	// Cy dyes
+	cy3: '#ffaa00', // Cy3 (~570 nm)
+	cy5: '#ff0066', // Cy5 (~670 nm)
+	cy7: '#990033', // Cy7 (~767 nm)
+
+	// ATTO dyes
+	atto488: '#00ff99', // ATTO 488 (~523 nm)
+	atto565: '#ff9900', // ATTO 565 (~592 nm)
+	atto647n: '#ff0066', // ATTO 647N (~664 nm)
+
+	// Classic fluorophores
+	fitc: '#00ff00', // Fluorescein (FITC) (~519 nm)
+	tritc: '#ff6600', // TRITC (~572 nm)
+	rhodamine: '#ff0066', // Rhodamine (~580 nm)
+	tamra: '#ffaa00', // TAMRA (~580 nm)
+
+	// Calcium indicators
+	gcamp: '#00ff00', // GCaMP (GFP-based, ~510 nm)
+	gcamp6: '#00ff00', // GCaMP6
+	gcamp7: '#00ff00', // GCaMP7
+	rhod2: '#ff0066', // Rhod-2 (~576 nm)
+	fluo4: '#00ff00', // Fluo-4 (~516 nm)
+	fluo8: '#00ff00', // Fluo-8 (~521 nm)
+	cal520: '#00ff99', // Cal-520 (~540 nm)
+
+	// Voltage indicators
+	asap: '#00ff99', // ASAP (~515 nm)
+	asap3: '#00ff99', // ASAP3
+	archer: '#00ff00', // Archer (~510 nm)
+
+	// pH indicators
+	phrodo: '#ff0066', // pHrodo (~585 nm)
+
+	// Lipid stains
+	dil: '#ff6600', // DiI (~565 nm)
+	dio: '#00ff00', // DiO (~501 nm)
+
+	// Mitochondrial stains
+	mitotracker: '#ff0066', // MitoTracker variants
+	tmrm: '#ff6600', // TMRM (~573 nm)
+
+	// Common abbreviations
+	blue: '#0066ff',
+	green: '#00ff00',
+	yellow: '#ffff00',
+	orange: '#ff9900',
+	red: '#ff0000',
+	farred: '#aa0066'
 };
 
 // ===================== Validation =====================

@@ -11,6 +11,8 @@ export { default as PreviewControls } from './PreviewControls.svelte';
 
 export { default as PanZoomControls } from './PanZoomControls.svelte';
 
+export { default as FrameCounter } from './FrameCounter.svelte';
+
 export { Previewer, PreviewChannel } from './previewer.svelte.ts';
 
 export { ColormapType } from './colormap';
