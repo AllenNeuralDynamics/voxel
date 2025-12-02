@@ -71,9 +71,7 @@
 	<!-- Channel Header with Inline Controls -->
 	{#if channel.name}
 		<div class="-mt-2 flex items-center justify-between">
-			<span class="font-medium text-zinc-100" style="color: {channel.color};"
-				>{channel.label ?? channel.config?.label ?? channel.name}</span
-			>
+			<span class="font-medium text-zinc-300">{channel.label ?? channel.config?.label ?? channel.name}</span>
 			<div class="flex items-center gap-2">
 				<ChannelInfoTooltip name={channel.name} label={channel.label} config={channel.config} />
 				<button

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { PreviewCanvas, Previewer, PreviewInfo } from '$lib/preview';
+	import { PreviewCanvas, Previewer, PanZoomControls } from '$lib/preview';
 	import { onMount, onDestroy } from 'svelte';
 	import { RigManager } from '$lib/core';
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
@@ -106,7 +106,7 @@
 				</div>
 			{/if}
 		</aside>
-		<main class="flex h-screen flex-1 flex-col overflow-hidden">
+		<main class="flex h-screen min-w-3xl flex-1 flex-col overflow-hidden">
 			<PaneGroup direction="vertical" autoSaveId="centerPanel">
 				<Pane>
 					<PaneGroup direction="horizontal" autoSaveId="viewPanel">
@@ -125,13 +125,13 @@
 				<Pane defaultSize={40} maxSize={50} minSize={30}></Pane>
 			</PaneGroup>
 			<footer class="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
-				<PreviewInfo {previewer} />
+				<PanZoomControls {previewer} />
 				{#if stage}
 					<StagePosition {stage} />
 				{/if}
 			</footer>
 		</main>
-		<aside class="flex h-full w-96 flex-col border-l border-zinc-700 bg-zinc-900">
+		<aside class="flex h-full w-96 min-w-96 flex-col border-l border-zinc-700 bg-zinc-900">
 			<header class="flex h-18 items-start justify-start gap-2 p-4">
 				<button
 					onclick={handleStartPreview}
@@ -148,11 +148,9 @@
 					Stop
 				</button>
 			</header>
-			<div class="flex-1 overflow-y-auto">
-				{#if stage}
-					<StageControls {stage} />
-				{/if}
-			</div>
+			{#if stage}
+				<StageControls {stage} />
+			{/if}
 			<footer class="mt-auto flex flex-row-reverse p-4">
 				<ClientStatus client={rigManager.client} />
 			</footer>

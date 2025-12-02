@@ -10,6 +10,8 @@
 		color?: string; // Text color
 		align?: 'left' | 'right';
 		showButtons?: boolean; // Show increment/decrement buttons
+		draggable?: boolean; // Enable drag to change value
+		classNames?: string; // Additional classes for input-wrapper
 		onChange?: (newValue: number) => void; // Optional callback for value changes
 	}
 
@@ -23,7 +25,9 @@
 		numCharacters = 4,
 		color = 'inherit',
 		align = 'left',
-		showButtons = false,
+		showButtons = true,
+		draggable = true,
+		classNames = '',
 		onChange: onValueChange
 	}: Props = $props();
 
@@ -42,8 +46,8 @@
 	const DRAG_THRESHOLD = 3; // pixels to move before starting drag
 
 	function handleMouseDown(e: MouseEvent) {
-		// Only start drag on left click
-		if (e.button !== 0) return;
+		// Only start drag on left click and if draggable is enabled
+		if (e.button !== 0 || !draggable) return;
 
 		isPotentialDrag = true;
 		dragStartX = e.clientX;
@@ -156,7 +160,7 @@
 	});
 </script>
 
-<div class="input-wrapper" class:with-buttons={showButtons}>
+<div class="input-wrapper {classNames}" class:with-buttons={showButtons}>
 	<input
 		type="text"
 		{placeholder}
@@ -167,7 +171,7 @@
 		style:width="{numCharacters + 1}ch"
 		style:color
 		style:text-align={align}
-		class="draggable-input"
+		class:draggable
 	/>
 	{#if showButtons}
 		<div class="button-stack">
@@ -197,6 +201,8 @@
 	}
 
 	.input-wrapper.with-buttons {
+		display: flex;
+		width: 100%;
 		border: var(--border-width) solid var(--border-color);
 		border-radius: 2px;
 		background: rgb(24 24 27);
@@ -206,45 +212,52 @@
 		}
 	}
 
-	.input-wrapper.with-buttons .draggable-input {
+	.input-wrapper.with-buttons input {
+		flex: 1;
 		border: none;
 		background: transparent;
-		cursor: ew-resize;
 		padding-inline-start: 0.2rem;
 		margin-inline-end: 0.2rem;
 	}
 
-	.input-wrapper.with-buttons .draggable-input:hover,
-	.input-wrapper.with-buttons .draggable-input:focus {
+	.input-wrapper.with-buttons input.draggable {
+		cursor: ew-resize;
+	}
+
+	.input-wrapper.with-buttons input:hover,
+	.input-wrapper.with-buttons input:focus {
 		border: none;
 		background: transparent;
 	}
 
-	.draggable-input {
+	input {
 		user-select: none;
 		border: 1px solid transparent;
 		background: transparent;
 		padding: 0.125rem 0.05rem;
 		font-family: monospace;
 		font-size: 0.65rem;
-		cursor: ew-resize;
 		transition: all 0.15s;
 	}
 
-	.draggable-input:hover {
+	input.draggable {
+		cursor: ew-resize;
+	}
+
+	input:hover {
 		border-color: rgb(82 82 91);
 		background: rgb(24 24 27);
 		color: rgb(212 212 216);
 	}
 
-	.draggable-input:focus {
+	input:focus {
 		border-color: rgb(113 113 122);
 		background: rgb(24 24 27);
 		outline: none;
 	}
 
-	.draggable-input::-webkit-inner-spin-button,
-	.draggable-input::-webkit-outer-spin-button {
+	input::-webkit-inner-spin-button,
+	input::-webkit-outer-spin-button {
 		-webkit-appearance: none;
 		margin: 0;
 	}

@@ -37,7 +37,7 @@ class DaqService(DeviceService[SpimDaq]):
         def _create():
             return self.device.get_task_inst(task_name)
 
-        task_inst = await self._exec_fn(_create)
+        task_inst = await self._exec(_create)
         self._tasks[task_name] = task_inst
         self._task_pins[task_name] = []
         self.log.info(f"Created task '{task_name}'")
@@ -53,7 +53,7 @@ class DaqService(DeviceService[SpimDaq]):
             channel = self._tasks[task_name].add_ao_channel(path, channel_name)
             return channel.name
 
-        name = await self._exec_fn(_add)
+        name = await self._exec(_add)
         self.log.debug(f"Added AO channel '{channel_name}' to task '{task_name}'")
         return name
 
@@ -68,7 +68,7 @@ class DaqService(DeviceService[SpimDaq]):
         def _configure():
             self._tasks[task_name].cfg_samp_clk_timing(rate, sample_mode, samps_per_chan)
 
-        await self._exec_fn(_configure)
+        await self._exec(_configure)
         self.log.debug(f"Configured timing for task '{task_name}': rate={rate}, mode={sample_mode}")
 
     @describe(label="Configure Trigger", desc="Configure digital edge start trigger")
@@ -80,7 +80,7 @@ class DaqService(DeviceService[SpimDaq]):
         def _configure():
             self._tasks[task_name].cfg_dig_edge_start_trig(trigger_source, retriggerable=retriggerable)
 
-        await self._exec_fn(_configure)
+        await self._exec(_configure)
         self.log.debug(f"Configured trigger for task '{task_name}': source={trigger_source}")
 
     @describe(label="Write Data", desc="Write waveform data to a task")
@@ -93,7 +93,7 @@ class DaqService(DeviceService[SpimDaq]):
             np_data = np.array(data, dtype=np.float64)
             return self._tasks[task_name].write(np_data)
 
-        samples_written = await self._exec_fn(_write)
+        samples_written = await self._exec(_write)
         self.log.debug(f"Wrote {samples_written} samples to task '{task_name}'")
         return samples_written
 
@@ -103,7 +103,7 @@ class DaqService(DeviceService[SpimDaq]):
         if task_name not in self._tasks:
             raise ValueError(f"Task '{task_name}' does not exist")
 
-        await self._exec_fn(self._tasks[task_name].start)
+        await self._exec(self._tasks[task_name].start)
         self.log.info(f"Started task '{task_name}'")
 
     @describe(label="Stop Task", desc="Stop a DAQ task")
@@ -112,7 +112,7 @@ class DaqService(DeviceService[SpimDaq]):
         if task_name not in self._tasks:
             raise ValueError(f"Task '{task_name}' does not exist")
 
-        await self._exec_fn(self._tasks[task_name].stop)
+        await self._exec(self._tasks[task_name].stop)
         self.log.info(f"Stopped task '{task_name}'")
 
     @describe(label="Close Task", desc="Close and destroy a DAQ task")
@@ -127,7 +127,7 @@ class DaqService(DeviceService[SpimDaq]):
             for pin_info in self._task_pins.get(task_name, []):
                 self.device.release_pin(pin_info)
 
-        await self._exec_fn(_close)
+        await self._exec(_close)
         del self._tasks[task_name]
         del self._task_pins[task_name]
         self.log.info(f"Closed task '{task_name}'")
@@ -154,7 +154,7 @@ class DaqService(DeviceService[SpimDaq]):
         def _assign():
             return self.device.assign_pin(pin)
 
-        pin_info = await self._exec_fn(_assign)
+        pin_info = await self._exec(_assign)
         self._task_pins[task_name].append(pin_info)
         self.log.debug(f"Assigned pin '{pin}' for task '{task_name}'")
         return pin_info
@@ -162,4 +162,4 @@ class DaqService(DeviceService[SpimDaq]):
     @describe(label="Get PFI Path", desc="Get the PFI path for a pin")
     async def get_pfi_path(self, pin: str) -> str:
         """Get the PFI path for a given pin."""
-        return await self._exec_fn(lambda: self.device.get_pfi_path(pin))
+        return await self._exec(lambda: self.device.get_pfi_path(pin))

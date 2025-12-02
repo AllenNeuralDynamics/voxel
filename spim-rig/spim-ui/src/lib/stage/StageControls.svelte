@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Stage } from './stage.svelte.ts';
-	import DraggableNumberInput from '$lib/ui/DraggableNumberInput.svelte';
+	import SpinBox from '$lib/ui/SpinBox.svelte';
 
 	interface Props {
 		stage: Stage;
@@ -19,69 +19,94 @@
 
 	// Direct access to stage grid config for two-way binding
 	let gridConfig = $derived(stage.gridConfig);
+	let zRange = $derived(stage.zRange);
 </script>
 
 {#if xAxis && yAxis && zAxis}
-	<div class="flex flex-col gap-4 p-4 pb-4">
+	<div
+		class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 p-4 text-xs text-zinc-400"
+	>
+		<!-- Z-Range controls -->
+		<!-- <span class="col-span-full text-sm font-medium text-zinc-500">Z</span> -->
+		<span class="text-[0.65rem] text-zinc-500">Z-Range</span>
+		<SpinBox
+			bind:value={zRange.min}
+			min={zAxis.lowerLimit}
+			max={zRange.max}
+			step={0.5}
+			decimals={1}
+			numCharacters={5}
+			showButtons={true}
+		/>
+		<SpinBox
+			bind:value={zRange.max}
+			min={zRange.min}
+			max={zAxis.upperLimit}
+			step={0.5}
+			decimals={1}
+			numCharacters={5}
+			showButtons={true}
+		/>
+		<span></span>
+
 		<!-- Grid controls -->
-		<div class="grid grid-cols-[auto_auto_auto] items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
-			<span class="col-span-3 text-sm font-medium text-zinc-500">Grid</span>
+		<span class="col-span-full pt-2 text-sm font-medium text-zinc-500"></span>
 
-			<span class="text-[0.65rem] text-zinc-500">Origin</span>
-			<DraggableNumberInput
-				bind:value={gridConfig.originX}
-				min={0}
-				max={stageWidth}
-				step={0.5}
-				decimals={1}
-				numCharacters={4}
-				showButtons={true}
-			/>
-			<DraggableNumberInput
-				bind:value={gridConfig.originY}
-				min={0}
-				max={stageHeight}
-				step={0.5}
-				decimals={1}
-				numCharacters={4}
-				showButtons={true}
-			/>
+		<span class="text-[0.65rem] text-zinc-500">Grid Origin</span>
+		<SpinBox
+			bind:value={gridConfig.originX}
+			min={0}
+			max={stageWidth}
+			step={0.5}
+			decimals={1}
+			numCharacters={4}
+			showButtons={true}
+		/>
+		<SpinBox
+			bind:value={gridConfig.originY}
+			min={0}
+			max={stageHeight}
+			step={0.5}
+			decimals={1}
+			numCharacters={4}
+			showButtons={true}
+		/>
+		<span></span>
 
-			<!-- Grid cells -->
-			<span class="text-[0.65rem] text-zinc-500">Cells</span>
-			<DraggableNumberInput
-				bind:value={gridConfig.numCellsX}
-				min={1}
-				max={maxGridCellsX}
-				step={1}
-				decimals={0}
-				numCharacters={3}
-				showButtons={true}
-			/>
-			<DraggableNumberInput
-				bind:value={gridConfig.numCellsY}
-				min={1}
-				max={maxGridCellsY}
-				step={1}
-				decimals={0}
-				numCharacters={3}
-				showButtons={true}
-			/>
+		<!-- Grid cells -->
+		<span class="text-[0.65rem] text-zinc-500">Grid Cells</span>
+		<SpinBox
+			bind:value={gridConfig.numCellsX}
+			min={1}
+			max={maxGridCellsX}
+			step={1}
+			decimals={0}
+			numCharacters={3}
+			showButtons={true}
+		/>
+		<SpinBox
+			bind:value={gridConfig.numCellsY}
+			min={1}
+			max={maxGridCellsY}
+			step={1}
+			decimals={0}
+			numCharacters={3}
+			showButtons={true}
+		/>
+		<span></span>
 
-			<!-- Overlap -->
-			<span class="text-[0.65rem] text-zinc-500">Overlap</span>
-			<div class="col-span-2 flex items-center gap-2">
-				<DraggableNumberInput
-					bind:value={gridConfig.overlap}
-					min={0}
-					max={0.5}
-					step={0.05}
-					decimals={2}
-					numCharacters={4}
-					showButtons={true}
-				/>
-				<span class="text-zinc-600">%</span>
-			</div>
-		</div>
+		<!-- Overlap -->
+		<span class="text-[0.65rem] text-zinc-500">Grid Overlap</span>
+		<SpinBox
+			bind:value={gridConfig.overlap}
+			min={0}
+			max={0.5}
+			step={0.05}
+			decimals={2}
+			numCharacters={4}
+			showButtons={true}
+			classNames="col-span-2"
+		/>
+		<span class="text-zinc-500">%</span>
 	</div>
 {/if}

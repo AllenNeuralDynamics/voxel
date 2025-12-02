@@ -1,5 +1,5 @@
 <script lang="ts">
-	import DraggableNumberInput from './DraggableNumberInput.svelte';
+	import SpinBox from './SpinBox.svelte';
 
 	interface Props {
 		label: string;
@@ -21,10 +21,20 @@
 
 <div class="grid grid-rows-[auto_1fr_auto] gap-1">
 	<div class="flex items-baseline justify-between">
-		<label for={label} class="text-left text-[0.65rem] font-medium text-zinc-300">
+		<label for={label} class="text-left text-[0.65rem] font-medium text-zinc-400">
 			{label}
 		</label>
-		<DraggableNumberInput bind:value {min} {max} {step} decimals={1} numCharacters={5} {onChange} align="right" />
+		<SpinBox
+			bind:value
+			{min}
+			{max}
+			{step}
+			decimals={1}
+			numCharacters={5}
+			{onChange}
+			showButtons={false}
+			align="right"
+		/>
 	</div>
 	<input
 		id={label}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import PreviewInfoTooltip from './PreviewInfoTooltip.svelte';
 	import type { Previewer } from './previewer.svelte';
 
 	let previewCanvas: HTMLCanvasElement;
@@ -10,6 +11,21 @@
 
 	let { previewer }: PreviewProps = $props();
 
+	// Get frame info from visible channels
+	let visibleChannels = $derived(previewer.channels.filter((c) => c.visible && c.latestFrameInfo));
+
+	// Get representative frame info (from first visible channel)
+	let frameInfo = $derived(visibleChannels[0]?.latestFrameInfo ?? null);
+
+	// Prepare channel frame info for tooltip
+	let channelFrameInfos = $derived(
+		visibleChannels.map((c) => ({
+			name: c.name ?? 'Unknown',
+			label: c.label,
+			frameInfo: c.latestFrameInfo!
+		}))
+	);
+
 	onMount(async () => {
 		await previewer.init(previewCanvas);
 	});
@@ -19,14 +35,19 @@
 	});
 </script>
 
-<!-- <div class="flex h-full w-full flex-col items-start justify-start"> -->
-<canvas
-	bind:this={previewCanvas}
-	class="preview-canvas max-h-full max-w-full object-contain object-top"
-	class:panning={previewer.isPanZoomActive}
-></canvas>
+<div class="relative inline-block">
+	<canvas
+		bind:this={previewCanvas}
+		class="preview-canvas max-h-full w-full object-contain object-top"
+		class:panning={previewer.isPanZoomActive}
+	>
+	</canvas>
 
-<!-- </div> -->
+	<!-- Tooltip overlay -->
+	<div class="absolute top-2 right-2">
+		<PreviewInfoTooltip {frameInfo} visibleChannels={channelFrameInfos} />
+	</div>
+</div>
 
 <style>
 	.preview-canvas {

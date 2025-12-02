@@ -1,5 +1,5 @@
 <script lang="ts">
-	import DraggableNumberInput from '$lib/ui/DraggableNumberInput.svelte';
+	import SpinBox from '$lib/ui/SpinBox.svelte';
 	import { computeAutoLevels } from './utils';
 
 	interface Props {
@@ -212,13 +212,14 @@
 <div class="histogram-widget flex flex-col">
 	<div class="flex items-center justify-between text-zinc-300">
 		{#if onLevelsChange}
-			<DraggableNumberInput
+			<SpinBox
 				value={minIntensity}
 				min={0}
 				max={maxIntensity - 1}
 				step={100}
 				numCharacters={5}
 				align="left"
+				showButtons={false}
 				onChange={(newValue) => {
 					const newMin = newValue / dataTypeMax;
 					onLevelsChange(newMin, levelsMax);
@@ -235,13 +236,14 @@
 		{/if}
 
 		{#if onLevelsChange}
-			<DraggableNumberInput
+			<SpinBox
 				value={maxIntensity}
 				min={minIntensity + 1}
 				max={dataTypeMax}
 				step={100}
 				numCharacters={5}
 				align="right"
+				showButtons={false}
 				onChange={(newValue) => {
 					const newMax = newValue / dataTypeMax;
 					onLevelsChange(levelsMin, newMax);
@@ -367,25 +369,27 @@
 		{/if}
 	</div>
 	<div class="flex items-center justify-between text-zinc-300">
-		<DraggableNumberInput
+		<SpinBox
 			bind:value={displayWindowMin}
 			min={0}
 			max={displayWindowMax - 1}
 			step={100}
 			placeholder="0"
 			numCharacters={5}
+			showButtons={false}
 			align="left"
 		/>
 		<button type="button" onclick={handleFitDisplayWindow} disabled={!hasValidData} class={ghostButtonClass}>
 			auto fit
 		</button>
-		<DraggableNumberInput
+		<SpinBox
 			bind:value={displayWindowMax}
 			min={displayWindowMin + 1}
 			max={dataTypeMax}
 			step={100}
 			placeholder={dataTypeMax.toString()}
 			numCharacters={5}
+			showButtons={false}
 			align="right"
 		/>
 	</div>

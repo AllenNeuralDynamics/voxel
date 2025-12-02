@@ -53,6 +53,11 @@ export class Profile {
 		return null;
 	}
 
+	#getBinning(cameraId: string): number {
+		const val = this.#manager.devices.getPropertyValue(cameraId, 'binning');
+		return typeof val === 'number' && val > 0 ? val : 1;
+	}
+
 	// Calculate FOV dimensions in mm
 	#getfovDimensions() {
 		const firstChannel = Object.values(this.channels)[0];
@@ -61,14 +66,17 @@ export class Profile {
 
 		const frameSizePx = this.#getFrameSizePx(cameraId);
 		const pixelSizeUm = this.#getPixelSizeUm(cameraId);
+		const binning = this.#getBinning(cameraId);
 
 		if (!frameSizePx || !pixelSizeUm) {
 			return { width: 5, height: 5 }; // Fallback to 5mm
 		}
 
-		// FOV (mm) = (pixels * pixel_size_um) / (1000 * magnification)
-		const width = (frameSizePx.x * pixelSizeUm.x) / (1000 * this.#MAGNIFICATION);
-		const height = (frameSizePx.y * pixelSizeUm.y) / (1000 * this.#MAGNIFICATION);
+		// FOV (mm) = (pixels * pixel_size_um * binning) / (1000 * magnification)
+		// Note: frame_size_px already accounts for binning (roi dimensions / binning)
+		// So we multiply by binning to get the actual physical size
+		const width = (frameSizePx.x * pixelSizeUm.x * binning) / (1000 * this.#MAGNIFICATION);
+		const height = (frameSizePx.y * pixelSizeUm.y * binning) / (1000 * this.#MAGNIFICATION);
 
 		return { width, height };
 	}

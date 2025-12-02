@@ -86,7 +86,7 @@ export class Stage {
 
 	thumbnail = $derived(this.#previewer.thumbnailSnapshot);
 	fov: FOVConfig = $derived(this.#getFOVConfig());
-	zRange: ZRange = $state({ min: this.zAxis?.lowerLimit ?? 0, max: this.zAxis?.upperLimit ?? 0 });
+	zRange: ZRange = $state({ min: 0, max: 0 });
 	gridConfig = $state<GridConfig>({
 		originX: 0,
 		originY: 0,
@@ -122,6 +122,12 @@ export class Stage {
 		this.xAxis = this.config?.x ? new Axis(manager, this.config.x) : null;
 		this.yAxis = this.config?.y ? new Axis(manager, this.config.y) : null;
 		this.zAxis = this.config?.z ? new Axis(manager, this.config.z) : null;
+
+		// Initialize zRange to the full z-axis range
+		if (this.zAxis) {
+			this.zRange.min = this.zAxis.lowerLimit;
+			this.zRange.max = this.zAxis.upperLimit;
+		}
 
 		// Enable thumbnails when Stage is created
 		this.#previewer.enableThumbnails = true;

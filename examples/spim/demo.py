@@ -95,11 +95,7 @@ async def main():
                     frame_event.set()
 
             # Start preview with callback
-            await rig.start_preview(
-                frame_callback=frame_callback,
-                trigger_mode=TriggerMode.ON,
-                trigger_polarity=TriggerPolarity.RISING_EDGE,
-            )
+            await rig.start_preview(frame_callback=frame_callback)
 
             log.info("Receiving preview frames...")
 

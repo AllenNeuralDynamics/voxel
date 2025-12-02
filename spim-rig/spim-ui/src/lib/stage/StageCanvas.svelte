@@ -54,8 +54,8 @@
 
 	let gridCellClass = $derived(
 		xAxis?.isMoving || yAxis?.isMoving
-			? 'cursor-not-allowed stroke-zinc-700/50 fill-zinc-800/40'
-			: 'cursor-pointer stroke-zinc-700 fill-zinc-800/50 hover:fill-zinc-700/30'
+			? 'cursor-not-allowed stroke-zinc-600 fill-zinc-800/40'
+			: 'cursor-pointer stroke-zinc-500 fill-zinc-800/50 hover:fill-zinc-700/30'
 	);
 
 	let isXYMoving = $derived(xAxis?.isMoving || yAxis?.isMoving);
@@ -63,9 +63,24 @@
 	let fovFillColor = $derived(isXYMoving ? 'var(--color-rose-600/50)' : 'var(--color-emerald-600/50)');
 </script>
 
+{#snippet zMarker(label: string, position: number, strokeClass: string)}
+	<g>
+		<title>{label}: {position.toFixed(1)} mm</title>
+		<line
+			x1="0"
+			y1={stageDepth - (position - (zAxis?.lowerLimit ?? 0))}
+			x2="30"
+			y2={stageDepth - (position - (zAxis?.lowerLimit ?? 0))}
+			stroke-width="0.2"
+			opacity="1"
+			class={strokeClass}
+		/>
+	</g>
+{/snippet}
+
 {#if stageConfig && xAxis && yAxis && zAxis}
-	<div class="grid auto-rows-auto">
-		<div class="stage-grid">
+	<div class="relative flex items-center" style={`aspect-ratio: ${fov.w / fov.h};`}>
+		<div class="stage-grid w-full">
 			<!-- Y-axis slider (vertical, on the left) -->
 			<input
 				type="range"
@@ -88,14 +103,12 @@
 					y="0"
 					width={stageWidth}
 					height={stageHeight}
-					fill="none"
-					stroke="var(--color-zinc-600)"
 					stroke-width={0.1}
+					fill="none"
+					class="stroke-zinc-700"
 				/>
 
 				<!-- Grid cells: FOV-sized rectangles at each grid intersection (showing overlap) -->
-				<!-- opacity="0.4" -->
-				<!-- stroke="#3f3f46" -->
 				{#each [...Array(numGridCellsX).keys()] as i (i)}
 					{#each [...Array(numGridCellsY).keys()] as j (`${i}-${j}`)}
 						<rect
@@ -148,51 +161,38 @@
 					height={fov.h}
 					fill={thumbnail ? 'none' : fovFillColor}
 					stroke={fovStrokeColor}
-					stroke-width="0.1"
+					stroke-width="0.05"
 				/>
 
 				<!-- Current position indicator (crosshair at top-left corner) -->
-				<g opacity="0.7">
-					<line x1={fov.x - 0.5} y1={fov.y} x2={fov.x + 0.5} y2={fov.y} stroke={fovStrokeColor} stroke-width="0.2" />
-					<line x1={fov.x} y1={fov.y - 0.5} x2={fov.x} y2={fov.y + 0.5} stroke={fovStrokeColor} stroke-width="0.2" />
+				<g opacity="0.5">
+					<line
+						x1={fov.x - 0.5}
+						y1={fov.y}
+						x2={fov.x + 0.5}
+						y2={fov.y}
+						stroke={fovStrokeColor}
+						stroke-width="0.2"
+						stroke-linecap="round"
+					/>
+					<line
+						x1={fov.x}
+						y1={fov.y - 0.5}
+						x2={fov.x}
+						y2={fov.y + 0.5}
+						stroke={fovStrokeColor}
+						stroke-width="0.2"
+						stroke-linecap="round"
+					/>
 				</g>
 			</svg>
 
 			<!-- Z-axis control column -->
-			<div class="z-control">
-				<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="xMidYMid meet">
-					<!-- Min marker line -->
-					<line
-						x1="0"
-						y1={stageDepth - (zRange.min - zAxis.lowerLimit)}
-						x2="30"
-						y2={stageDepth - (zRange.min - zAxis.lowerLimit)}
-						stroke="#3f3f46"
-						stroke-width="2"
-						opacity="1"
-					/>
-
-					<!-- Max marker line -->
-					<line
-						x1="0"
-						y1={stageDepth - (zRange.max - zAxis.lowerLimit)}
-						x2="30"
-						y2={stageDepth - (zRange.max - zAxis.lowerLimit)}
-						stroke="#3f3f46"
-						stroke-width="2"
-						opacity="1"
-					/>
-
-					<!-- Current position indicator -->
-					<line
-						x1="0"
-						y1={stageDepth - (zAxis.position - zAxis.lowerLimit)}
-						x2="30"
-						y2={stageDepth - (zAxis.position - zAxis.lowerLimit)}
-						stroke="#10b981"
-						stroke-width="0.2"
-						opacity="0.7"
-					/>
+			<div class="z-control border border-l-0 border-zinc-700 bg-zinc-800/40 hover:bg-zinc-800">
+				<svg viewBox="0 0 30 {stageDepth}" class="z-svg border border-zinc-700" preserveAspectRatio="none">
+					{@render zMarker('Min', zRange.min, 'stroke-amber-600')}
+					{@render zMarker('Max', zRange.max, 'stroke-sky-600')}
+					{@render zMarker('Position', zAxis.position, 'stroke-purple-600')}
 				</svg>
 				<input
 					type="range"
@@ -229,7 +229,7 @@
 			<div class="h-0 w-0"></div>
 		</div>
 		<!-- Stage size info -->
-		<div class="mt-4 text-right font-mono text-xs text-zinc-500">
+		<div class="absolute right-0 bottom-0 left-0 px-2 text-right font-mono text-[0.65rem] text-zinc-400">
 			{stageWidth.toFixed(0)} × {stageHeight.toFixed(0)} × {stageDepth.toFixed(0)} mm
 		</div>
 	</div>
@@ -252,8 +252,6 @@
 	.z-control {
 		display: grid;
 		width: var(--track-width);
-		border: 1px solid var(--color-zinc-600);
-		border-inline-start: 0;
 
 		& > svg,
 		& > input {
@@ -279,6 +277,7 @@
 		cursor: pointer;
 		margin-block-start: calc(-0.5 * var(--track-width));
 		z-index: 999;
+		transition: all 0.2s ease-in-out;
 
 		&.moving {
 			--thumb-color: var(--color-rose-600);
@@ -326,10 +325,9 @@
 				height: var(--track-width);
 			}
 		}
+
 		&.y-slider,
 		&.z-slider {
-			writing-mode: vertical-rl;
-			direction: ltr;
 			&::-webkit-slider-runnable-track {
 				width: var(--track-width);
 			}
@@ -345,7 +343,13 @@
 				width: var(--track-width);
 			}
 		}
+		&.y-slider {
+			writing-mode: vertical-rl;
+			direction: ltr;
+		}
 		&.z-slider {
+			writing-mode: vertical-rl;
+			direction: rtl;
 			flex: 1;
 		}
 	}
@@ -353,7 +357,6 @@
 	/* Disabled state */
 	input[type='range']:disabled {
 		cursor: not-allowed;
-		opacity: 0.5;
 	}
 
 	input[type='range']:disabled::-webkit-slider-thumb {

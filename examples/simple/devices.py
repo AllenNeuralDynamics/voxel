@@ -7,7 +7,7 @@ These devices demonstrate PyRig's capabilities with domain-relevant examples:
 """
 
 import random
-from pyrig.device import Device, DeviceType, describe
+from pyrig.device import Device, describe
 
 
 class TemperatureController(Device):
