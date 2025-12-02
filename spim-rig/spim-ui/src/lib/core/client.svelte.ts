@@ -134,6 +134,7 @@ export class RigClient {
 	private errorHandlers = new SvelteSet<ErrorHandler>();
 
 	statusMessage = $state('Idle');
+	isConnected = $state(false);
 
 	constructor(
 		private url: string,
@@ -160,6 +161,7 @@ export class RigClient {
 				this.ws.onopen = () => {
 					console.log('[RigClient] Connected');
 					this.statusMessage = 'Connected';
+					this.isConnected = true;
 					this.reconnectAttempts = 0;
 					this.reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
 					this.notifyConnectionChange(true);
@@ -186,6 +188,7 @@ export class RigClient {
 				this.ws.onclose = (event) => {
 					console.log('[RigClient] Connection closed:', event.code, event.reason);
 					this.statusMessage = 'Disconnected';
+					this.isConnected = false;
 					this.notifyConnectionChange(false);
 
 					if (this.shouldReconnect) {
@@ -206,6 +209,7 @@ export class RigClient {
 		this.shouldReconnect = false;
 		this.clearReconnectTimer();
 		this.cleanupSocket();
+		this.isConnected = false;
 		this.notifyConnectionChange(false);
 		this.statusMessage = 'Disconnected';
 	}
@@ -318,13 +322,6 @@ export class RigClient {
 
 	updateLevels(channel: string, min: number, max: number): void {
 		this.send({ topic: 'preview/levels', payload: { channel, min, max } });
-	}
-
-	/**
-	 * Check if currently connected.
-	 */
-	get isConnected(): boolean {
-		return this.ws?.readyState === WebSocket.OPEN;
 	}
 
 	/**

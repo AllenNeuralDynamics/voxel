@@ -16,27 +16,30 @@ nodes:
       daq_1:
         target: *daq_target
         kwargs: { device_name: "MockDev1" }
+      laser_405:
+        target: *laser_target
+        kwargs: { wavelength: 405 }
       laser_488:
         target: *laser_target
         kwargs: { wavelength: 488 }
       laser_561:
         target: *laser_target
         kwargs: { wavelength: 561 }
-      laser_656:
+      laser_640:
         target: *laser_target
-        kwargs: { wavelength: 656 }
+        kwargs: { wavelength: 640 }
       fw_detection_shared:
         target: *fw_target
         kwargs:
-          slots: { 0: "Multiband", 1: "Green", 2: "Cyan" }
+          slots: { 0: "Multiband", 1: "Cyan", 2: "FarRed" }
       fw_emission_cam1:
         target: *fw_target
         kwargs:
-          slots: { 0: "GFP", 1: "RFP", 2: "Cy5" }
+          slots: { 0: "DAPI", 1: "GFP", 2: "RFP" }
       fw_emission_cam2:
         target: *fw_target
         kwargs:
-          slots: { 0: "GFP", 1: "RFP", 2: "Cy5" }
+          slots: { 0: "GFP", 1: "Cy5" }
       x_axis:
         target: *linear_axis_target
         kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
@@ -69,11 +72,12 @@ stage:
 daq:
   device: daq_1
   acq_ports:
-    laser_488: ao0
-    laser_561: ao1
-    laser_656: ao2
-    camera_1: ao3
-    camera_2: ao4
+    laser_405: ao0
+    laser_488: ao1
+    laser_561: ao2
+    laser_640: ao3
+    camera_1: ao4
+    camera_2: ao5
 
 detection:
   camera_1:
@@ -82,37 +86,65 @@ detection:
     filter_wheels: [fw_detection_shared, fw_emission_cam2]
 
 illumination:
+  laser_405: {}
   laser_488: {}
   laser_561: {}
-  laser_656: {}
+  laser_640: {}
 
 channels:
-  gfp:
+  dapi:
     detection: camera_1
+    illumination: laser_405
+    filters:
+      fw_detection_shared: "Cyan"
+      fw_emission_cam1: "DAPI"
+    desc: "DAPI nuclear stain using 405nm excitation"
+    label: DAPI
+    emission: 461
+  gfp:
+    detection: camera_2
     illumination: laser_488
     filters:
       fw_detection_shared: "Multiband"
-      fw_emission_cam1: "GFP"
-    desc: "Green fluorescent protein channel using 488nm excitation"
+      fw_emission_cam2: "GFP"
+    desc: "Green fluorescent protein using 488nm excitation"
     label: GFP
     emission: 510
   rfp:
-    detection: camera_2
+    detection: camera_1
     illumination: laser_561
     filters:
       fw_detection_shared: "Multiband"
-      fw_emission_cam2: "RFP"
-    desc: "Red fluorescent protein channel using 561nm excitation"
+      fw_emission_cam1: "RFP"
+    desc: "Red fluorescent protein using 561nm excitation"
     label: RFP
     emission: 600
+  cy5:
+    detection: camera_2
+    illumination: laser_640
+    filters:
+      fw_detection_shared: "Multiband"
+      fw_emission_cam2: "Cy5"
+    desc: "Far-red Cy5 channel using 640nm excitation"
+    label: Cy5
+    emission: 670
 
 profiles:
-  dual_color_dual_cam:
+  gfp_rfp:
     channels: ["gfp", "rfp"]
-    desc: "Simultaneous GFP (488nm, cam1) and RFP (561nm, cam2) acquisition"
+    desc: "Simultaneous GFP and RFP imaging with multiband filter"
+  rfp_cy5:
+    channels: ["rfp", "cy5"]
+    desc: "Simultaneous RFP and Cy5 imaging with multiband filter"
+  single_dapi:
+    channels: ["dapi"]
+    desc: "Single DAPI channel for nuclear staining"
   single_gfp:
     channels: ["gfp"]
-    desc: "Single GFP channel on camera 1 only"
+    desc: "Single GFP channel imaging"
   single_rfp:
     channels: ["rfp"]
-    desc: "Single RFP channel on camera 2 only"
+    desc: "Single RFP channel imaging"
+  single_cy5:
+    channels: ["cy5"]
+    desc: "Single Cy5 far-red channel imaging"

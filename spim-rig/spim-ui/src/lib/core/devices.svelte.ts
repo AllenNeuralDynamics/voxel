@@ -5,7 +5,7 @@
  * via WebSocket updates.
  */
 
-import { SvelteMap, SvelteURL } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet, SvelteURL } from 'svelte/reactivity';
 import type { RigManager } from './rig.svelte';
 import type { RigClient } from './client.svelte';
 
@@ -164,9 +164,24 @@ export class DevicesManager {
 		const data: DevicesResponse = await response.json();
 		console.log('[DevicesManager] Loaded', data.count, 'devices');
 
-		// 2. Store devices in the map
+		// 2. Store devices in the map, preserving existing propertyValues on re-initialization
+		const fetchedDeviceIds = new SvelteSet(Object.keys(data.devices));
+
 		for (const [id, info] of Object.entries(data.devices)) {
+			const existingDevice = this.devices.get(id);
+			// Preserve propertyValues if device already exists
+			if (existingDevice?.propertyValues) {
+				info.propertyValues = existingDevice.propertyValues;
+			}
 			this.devices.set(id, info);
+		}
+
+		// Remove devices that no longer exist
+		for (const deviceId of this.devices.keys()) {
+			if (!fetchedDeviceIds.has(deviceId)) {
+				console.log(`[DevicesManager] Removing deleted device: ${deviceId}`);
+				this.devices.delete(deviceId);
+			}
 		}
 
 		// 3. Fetch property values for all connected devices

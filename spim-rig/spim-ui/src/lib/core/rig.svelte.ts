@@ -123,6 +123,7 @@ export class RigManager {
 
 	readonly baseUrl: string;
 	private pendingLocalChange = false;
+	private wasDisconnected = false;
 	private unsubscribers: Array<() => void> = [];
 
 	constructor(options: RigManagerOptions) {
@@ -246,16 +247,46 @@ export class RigManager {
 
 		// Subscribe to connection state
 		const unsubConnection = this.rigClient.onConnectionChange((connected) => {
+			const wasDisconnected = this.wasDisconnected;
 			this.connected = connected;
+			this.wasDisconnected = !connected;
+
+			// Only refetch on REconnection (not initial connection)
+			if (connected && wasDisconnected) {
+				this.handleReconnection();
+			}
 		});
 
 		// Subscribe to errors
 		const unsubError = this.rigClient.onError((error) => {
 			console.error('[RigManager] RigClient error:', error);
-			this.error = error.message;
 		});
 
 		this.unsubscribers.push(unsubStatus, unsubConnection, unsubError);
+	}
+
+	/**
+	 * Handle reconnection: refetch config and state when WebSocket reconnects.
+	 */
+	private async handleReconnection() {
+		console.log('[RigManager] Reconnected - refetching data');
+
+		try {
+			// 1. Refetch configuration (profiles might have changed)
+			await this.fetchConfig();
+
+			// 2. Reinitialize devices (device state might have changed)
+			await this.devices.initialize();
+
+			// 3. Request current rig status (active profile, previewing state)
+			this.rigClient.requestRigStatus();
+
+			// Clear any previous errors
+			this.error = null;
+		} catch (error) {
+			console.error('[RigManager] Error during reconnection:', error);
+			// Don't set error here - connection status is shown in ClientStatus
+		}
 	}
 
 	/**
@@ -289,7 +320,7 @@ export class RigManager {
 			});
 
 			if (!response.ok) {
-				throw new Error(`Failed to activate profile ${profileId}: ${response.statusText}`);
+				throw new Error(response.statusText);
 			}
 
 			const payload = await response.json();
@@ -297,12 +328,18 @@ export class RigManager {
 
 			// The WebSocket will send us the updated rig/status, no need to manually reload
 		} catch (error) {
-			if (error instanceof Error) {
-				this.error = error.message;
+			console.error('[RigManager] Failed to activate profile:', error);
+
+			// Handle network errors separately - don't show in ProfileSelector
+			if (error instanceof TypeError && error.message.includes('fetch')) {
+				// Network error - let ClientStatus handle this
+				console.error('[RigManager] Network error during profile activation');
+			} else if (error instanceof Error) {
+				// Profile-specific error - show in ProfileSelector
+				this.error = error.message || 'Failed to activate profile';
 			} else {
-				this.error = 'An unknown error occurred.';
+				this.error = 'Failed to activate profile';
 			}
-			console.error(error);
 			throw error;
 		} finally {
 			this.pendingLocalChange = false;

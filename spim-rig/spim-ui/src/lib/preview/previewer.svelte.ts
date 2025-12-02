@@ -425,6 +425,7 @@ export class Previewer {
 	};
 
 	#handleRigStatus = (status: RigStatus): void => {
+		this.isPreviewing = status.previewing;
 		this.#framesCollector.clear();
 
 		if (!status.active_profile_id || !this.#rigManager.config) return;
