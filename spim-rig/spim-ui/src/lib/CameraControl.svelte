@@ -32,6 +32,16 @@
 	// Stream info
 	let streamInfo = $derived(devicesManager.getPropertyValue(deviceId, 'stream_info'));
 
+	let streamInfoSummary = $derived(
+		!(streamInfo && typeof streamInfo === 'object')
+			? typeof frameRateHz === 'number'
+				? frameRateHz.toFixed(2)
+				: 'N/A'
+			: 'frame_rate_fps' in streamInfo && typeof streamInfo.frame_rate_fps === 'number'
+				? streamInfo.frame_rate_fps.toFixed(2)
+				: 'N/A'
+	);
+
 	// Sensor information
 	let sensorSize = $derived(devicesManager.getPropertyValue(deviceId, 'sensor_size_px'));
 	let pixelSize = $derived(devicesManager.getPropertyValue(deviceId, 'pixel_size_um'));
@@ -46,7 +56,7 @@
 {#if cameraDevice?.connected}
 	<div class="rounded-lg border border-zinc-700 bg-zinc-800/80 shadow-sm">
 		<!-- Camera Header -->
-		<div class="flex items-center justify-between px-3 py-3">
+		<div class="flex items-center justify-between px-3 py-2">
 			<div class="text-sm font-medium text-zinc-200">Camera</div>
 		</div>
 
@@ -130,12 +140,8 @@
 		{/if}
 
 		<!-- Stream Info Collapsible Section -->
-		{#if streamInfo && typeof streamInfo === 'object'}
-			{@const summary =
-				'frame_rate_fps' in streamInfo && typeof streamInfo.frame_rate_fps === 'number'
-					? `${streamInfo.frame_rate_fps.toFixed(1)} fps`
-					: ''}
-			<CardAccordion label="Stream Info" summaryValue={summary}>
+		<CardAccordion label="Stream Info" summaryValue={streamInfoSummary + ' fps'}>
+			{#if streamInfo && typeof streamInfo === 'object'}
 				{#if 'data_rate_mbs' in streamInfo && typeof streamInfo.data_rate_mbs === 'number'}
 					<div class="flex justify-between">
 						<span class="label">Data Rate</span>
@@ -156,16 +162,12 @@
 						<span class="value">{streamInfo.frame_index}</span>
 					</div>
 				{/if}
-			</CardAccordion>
-		{/if}
-
-		<!-- Frame Rate (always shown when not streaming) -->
-		{#if typeof frameRateHz === 'number' && !(streamInfo && typeof streamInfo === 'object')}
-			<div class="flex items-center justify-between border-t border-zinc-700 px-3 py-2 font-mono text-xs text-zinc-300">
-				<span class="label">Frame Rate</span>
-				<span class="value">{frameRateHz.toFixed(1)} Hz</span>
-			</div>
-		{/if}
+			{:else}
+				<div class="value flex justify-center">
+					<span class="text-zinc-600">Not Available</span>
+				</div>
+			{/if}
+		</CardAccordion>
 	</div>
 {:else}
 	<div class="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center text-xs text-zinc-500">

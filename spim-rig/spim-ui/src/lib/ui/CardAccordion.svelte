@@ -11,9 +11,13 @@
 	}
 
 	let { label, summaryValue, children, open = false, chevronIcon = 'mdi:chevron-right' }: Props = $props();
+
+	// Internal state for open/closed - not reactive to external prop changes
+	// This prevents the accordion from closing when summaryValue updates
+	let isOpen = $state(open);
 </script>
 
-<details class="card-accordion border-t border-zinc-700" {open}>
+<details class="card-accordion border-t border-zinc-700" bind:open={isOpen}>
 	<summary
 		class="flex cursor-pointer items-center justify-between px-3 py-2 font-mono text-xs transition-colors hover:bg-zinc-700/30"
 	>

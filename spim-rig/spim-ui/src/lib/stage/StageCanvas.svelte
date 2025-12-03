@@ -79,8 +79,12 @@
 {/snippet}
 
 {#if stageConfig && xAxis && yAxis && zAxis}
-	<div class="relative flex items-center" style={`aspect-ratio: ${fov.w / fov.h};`}>
+	<div class="flex items-center" style={`aspect-ratio: ${fov.w / fov.h};`}>
 		<div class="stage-grid w-full">
+			<!-- Stage size info -->
+			<div class="col-span-full px-2 text-right font-mono text-[0.65rem] text-zinc-400">
+				{stageWidth.toFixed(0)} × {stageHeight.toFixed(0)} × {stageDepth.toFixed(0)} mm
+			</div>
 			<!-- Y-axis slider (vertical, on the left) -->
 			<input
 				type="range"
@@ -228,10 +232,6 @@
 			<!-- Empty bottom-right corner -->
 			<div class="h-0 w-0"></div>
 		</div>
-		<!-- Stage size info -->
-		<div class="absolute right-0 bottom-0 left-0 px-2 text-right font-mono text-[0.65rem] text-zinc-400">
-			{stageWidth.toFixed(0)} × {stageHeight.toFixed(0)} × {stageDepth.toFixed(0)} mm
-		</div>
 	</div>
 {/if}
 
@@ -242,7 +242,7 @@
 		--area-bg: rgb(24 24 27);
 		display: grid;
 		grid-template-columns: auto 1fr auto;
-		grid-template-rows: auto auto;
+		grid-template-rows: auto auto auto;
 		gap: calc(-1 * var(--track-width));
 		margin: calc(-0.5 * var(--track-width));
 		margin-block-start: 0;
