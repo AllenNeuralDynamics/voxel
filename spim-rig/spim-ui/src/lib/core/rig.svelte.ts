@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import { RigClient } from './client.svelte';
+import { RigClient, type DaqWaveforms } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
 import type { RigStatus } from './client.svelte';
 import type { SpimRigConfig, ProfileConfig, ChannelConfig } from './config';
@@ -24,6 +24,11 @@ export class Profile {
 	desc = $derived(this.#config?.desc);
 	channels = $state<Record<string, ChannelConfig>>({});
 	fovDimensions = $derived(this.#getfovDimensions());
+	daq = $derived(this.#config?.daq);
+
+	// DAQ waveforms (voltage arrays for each device)
+	waveforms = $state<DaqWaveforms | null>(null);
+	waveformsLoading = $state(false);
 
 	// Magnification constant (TODO: make configurable)
 	readonly #MAGNIFICATION = 1.0;
@@ -151,14 +156,19 @@ export class RigManager {
 		// 2. Subscribe to rig status updates for runtime state
 		this.subscribeToRigStatus();
 
-		// 3. Fetch static configuration
+		// 3. Subscribe to DAQ waveforms updates
+		this.subscribeToWaveforms();
+
+		// 4. Fetch static configuration
 		await this.fetchConfig();
 
-		// 4. Initialize devices
+		// 5. Initialize devices
 		await this.devices.initialize();
 
-		// 5. Request initial rig status
+		// 6. Request initial rig status
 		this.rigClient.requestRigStatus();
+
+		this.rigClient.requestWaveforms();
 	}
 
 	// Build Profile instances from config
@@ -266,6 +276,16 @@ export class RigManager {
 	}
 
 	/**
+	 * Subscribe to DAQ waveforms updates.
+	 */
+	private subscribeToWaveforms() {
+		const unsub = this.rigClient.on('daq/waveforms', (waveforms) => {
+			this.handleWaveforms(waveforms);
+		});
+		this.unsubscribers.push(unsub);
+	}
+
+	/**
 	 * Handle reconnection: refetch config and state when WebSocket reconnects.
 	 */
 	private async handleReconnection() {
@@ -281,6 +301,8 @@ export class RigManager {
 			// 3. Request current rig status (active profile, previewing state)
 			this.rigClient.requestRigStatus();
 
+			this.rigClient.requestWaveforms();
+
 			// Clear any previous errors
 			this.error = null;
 		} catch (error) {
@@ -293,11 +315,30 @@ export class RigManager {
 	 * Handle runtime state updates from rig/status WebSocket topic.
 	 */
 	private handleRigStatus(status: RigStatus) {
+		const previousProfileId = this.activeProfileId;
+
 		// Update runtime state only (not profiles/channels - those come from /config)
 		if (!this.pendingLocalChange) {
 			this.activeProfileId = status.active_profile_id;
 		}
 		this.previewing = status.previewing;
+
+		// Request waveforms if profile changed or this is the initial status
+		if (this.activeProfileId && this.activeProfileId !== previousProfileId) {
+			this.requestWaveforms();
+		}
+	}
+
+	/**
+	 * Handle DAQ waveforms updates from daq/waveforms WebSocket topic.
+	 */
+	private handleWaveforms(waveforms: DaqWaveforms) {
+		// Update the active profile's waveforms
+		if (this.activeProfile) {
+			this.activeProfile.waveforms = waveforms;
+			this.activeProfile.waveformsLoading = false;
+			console.log('[RigManager] Received waveforms for active profile:', Object.keys(waveforms));
+		}
 	}
 
 	/**
@@ -311,6 +352,12 @@ export class RigManager {
 		this.error = null;
 		this.isMutating = true;
 		this.pendingLocalChange = true;
+
+		// Mark waveforms as loading for the new profile
+		const newProfile = this.profiles.find((p) => p.id === profileId);
+		if (newProfile) {
+			newProfile.waveformsLoading = true;
+		}
 
 		try {
 			const response = await fetch(`${this.baseUrl}/profiles/active`, {
@@ -326,9 +373,15 @@ export class RigManager {
 			const payload = await response.json();
 			this.activeProfileId = payload.active_profile_id ?? profileId;
 
-			// The WebSocket will send us the updated rig/status, no need to manually reload
+			// Request waveforms for the newly activated profile
+			this.requestWaveforms();
 		} catch (error) {
 			console.error('[RigManager] Failed to activate profile:', error);
+
+			// Clear loading state on error
+			if (newProfile) {
+				newProfile.waveformsLoading = false;
+			}
 
 			// Handle network errors separately - don't show in ProfileSelector
 			if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -344,6 +397,18 @@ export class RigManager {
 		} finally {
 			this.pendingLocalChange = false;
 			this.isMutating = false;
+		}
+	}
+
+	/**
+	 * Explicitly request waveforms for the active profile.
+	 * Useful for on-demand loading when opening waveform viewer.
+	 */
+	requestWaveforms() {
+		if (this.activeProfile) {
+			this.activeProfile.waveformsLoading = true;
+			this.rigClient.requestWaveforms();
+			console.log('[RigManager] Requested waveforms for active profile');
 		}
 	}
 

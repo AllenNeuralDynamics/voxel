@@ -75,12 +75,122 @@ export interface ChannelConfig {
 }
 
 /**
+ * Trigger configuration for DAQ timing (matches backend TriggerConfig from spim_rig.daq.acq_task)
+ */
+export interface TriggerConfig {
+	pin: string;
+	counter: string;
+	duty_cycle: number; // 0.0 to 1.0
+}
+
+/**
+ * Acquisition timing parameters (matches backend AcqTiming from spim_rig.daq.acq_task)
+ */
+export interface AcqTiming {
+	sample_rate: string; // Frequency with unit, e.g., "100 kHz"
+	duration: string; // Time with unit, e.g., "0.1 s"
+	rest_time: string; // Time with unit, e.g., "0 s"
+	clock?: TriggerConfig | null;
+}
+
+/**
+ * Waveform base interface
+ */
+export interface BaseWaveform {
+	voltage: { min: number; max: number };
+	window: { min: number; max: number };
+	rest_voltage?: number;
+}
+
+/**
+ * Pulse waveform (matches backend PulseWaveform from spim_rig.daq.wave)
+ */
+export interface PulseWaveform extends BaseWaveform {
+	type: 'pulse';
+}
+
+/**
+ * Square wave (matches backend SquareWave from spim_rig.daq.wave)
+ */
+export interface SquareWaveform extends BaseWaveform {
+	type: 'square';
+	duty_cycle: number;
+	cycles?: number | null;
+	frequency?: string | null; // Frequency with unit
+}
+
+/**
+ * Sine wave (matches backend SineWave from spim_rig.daq.wave)
+ */
+export interface SineWaveform extends BaseWaveform {
+	type: 'sine';
+	frequency: string; // Frequency with unit
+	phase?: number; // Radians
+}
+
+/**
+ * Triangle wave (matches backend TriangleWave from spim_rig.daq.wave)
+ */
+export interface TriangleWaveform extends BaseWaveform {
+	type: 'triangle';
+	frequency: string; // Frequency with unit
+	symmetry?: number; // 0.0 to 1.0
+}
+
+/**
+ * Sawtooth wave (matches backend SawtoothWave from spim_rig.daq.wave)
+ */
+export interface SawtoothWaveform extends BaseWaveform {
+	type: 'sawtooth';
+	frequency: string; // Frequency with unit
+	width?: number;
+}
+
+/**
+ * Multi-point waveform (matches backend MultiPointWaveform from spim_rig.daq.wave)
+ */
+export interface MultiPointWaveform extends BaseWaveform {
+	type: 'multi_point';
+	points: number[][]; // Array of [time, voltage] pairs, normalized 0.0-1.0
+}
+
+/**
+ * CSV waveform (matches backend CSVWaveform from spim_rig.daq.wave)
+ */
+export interface CSVWaveform extends BaseWaveform {
+	type: 'csv';
+	csv_file: string;
+	directory?: string | null;
+}
+
+/**
+ * Union type for all waveform types (matches backend Waveform from spim_rig.daq.wave)
+ */
+export type Waveform =
+	| PulseWaveform
+	| SquareWaveform
+	| SineWaveform
+	| TriangleWaveform
+	| SawtoothWaveform
+	| MultiPointWaveform
+	| CSVWaveform;
+
+/**
+ * Acquisition task configuration (matches backend AcqTaskConfig from spim_rig.daq.acq_task)
+ */
+export interface AcqTaskConfig {
+	timing: AcqTiming;
+	waveforms: Record<string, Waveform>; // device_id -> waveform
+}
+
+/**
  * Profile configuration - backend model (matches backend ProfileConfig from spim_rig.config)
  */
 export interface ProfileConfig {
 	label?: string | null;
 	desc: string;
 	channels: string[]; // list of channel IDs
+	daq: AcqTaskConfig; // DAQ acquisition configuration
 }
 
 /**

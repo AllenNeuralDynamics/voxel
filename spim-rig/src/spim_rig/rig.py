@@ -8,8 +8,10 @@ import zmq.asyncio
 from pyrig import DeviceClient, Rig
 from pyrig.node import DeviceProvision
 from spim_rig.camera.client import CameraClient
-from spim_rig.config import ChannelConfig, DeviceType, ProfileConfig, SpimRigConfig
+from spim_rig.config import ChannelConfig, ProfileConfig, SpimRigConfig
+from spim_rig.daq.acq_task import AcquisitionTask
 from spim_rig.daq.client import DaqClient
+from spim_rig.device import DeviceType
 from spim_rig.node import SpimNodeService
 
 
@@ -41,10 +43,14 @@ class SpimRig(Rig):
         self.preview = RigPreviewHub(zctx, name=f"{self.__class__.__name__}.PreviewManager")
 
         # Profile management
-        self._active_profile_id: str | None = list(self.config.profiles.keys())[0] or None
+        if not self.config.profiles:
+            raise ValueError("No profiles defined in configuration")
+        self._active_profile_id: str = list(self.config.profiles.keys())[0]
+
         self._is_previewing: bool = False
         self._streaming_cameras: set[str] = set()
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
+        self._acq_task: AcquisitionTask | None = None
 
     def _create_client(self, device_id: str, prov: DeviceProvision) -> DeviceClient:
         """Create a single client. Override for custom client types."""
@@ -86,6 +92,8 @@ class SpimRig(Rig):
         )
 
         self._validate_device_types()
+
+        await self.set_active_profile(self._active_profile_id)
 
     def _validate_device_types(self) -> None:
         """Validate device type assignments after provisioning."""
@@ -272,13 +280,40 @@ class SpimRig(Rig):
             # Preserve callback reference for restart
             self._frame_callback = frame_callback
 
-        # 1. Configure devices (filter wheels, etc.)
+        # 1. Close old acquisition task if exists
+        if self._acq_task:
+            await self._acq_task.close()
+            self._acq_task = None
+            self.log.debug("Closed previous acquisition task")
+
+        # 2. Configure devices (filter wheels, etc.)
         await self._configure_profile_devices(profile_id)
 
-        # 2. Update active profile state
+        # 3. Create new acquisition task for this profile
+        profile = self.config.profiles[profile_id]
+        if self.daq is None:
+            raise RuntimeError("DAQ client not initialized")
+
+        # Filter acq_ports to only include devices used by this profile
+        profile_device_ids = self.config.get_profile_device_ids(profile_id)
+        filtered_ports = {
+            device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
+        }
+
+        self._acq_task = AcquisitionTask(
+            uid=f"acq_{profile_id}",
+            client=self.daq,
+            timing=profile.daq.timing,
+            waveforms=profile.daq.waveforms,
+            ports=filtered_ports,
+        )
+        await self._acq_task.setup()
+        self.log.info(f"Created and configured acquisition task for profile '{profile_id}'")
+
+        # 4. Update active profile state
         self._active_profile_id = profile_id
 
-        # 3. Restart preview if it was running
+        # 5. Restart preview if it was running
         if restart_preview:
             if frame_callback:
                 self.log.info("Restarting preview after profile change")
@@ -287,11 +322,6 @@ class SpimRig(Rig):
                 self.log.warning("Preview was running but no callback found; not restarting automatically")
 
         self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_channels)})")
-
-    def clear_active_profile(self) -> None:
-        """Clear the active profile."""
-        self._active_profile_id = None
-        self.log.info("Active profile cleared")
 
     # ===================== Preview Management =====================
     async def start_preview(self, frame_callback: Callable[[str, bytes], Awaitable[None]]) -> None:
@@ -349,6 +379,11 @@ class SpimRig(Rig):
         if preview_addrs:
             await self._enable_channel_lasers()
 
+        # Start DAQ acquisition task after all devices are configured
+        if self._acq_task:
+            await self._acq_task.start()
+            self.log.info("Acquisition task started")
+
     async def _enable_channel_lasers(self) -> None:
         """Enable lasers for all active channels."""
         self.log.info(f"_enable_channel_lasers called. Active channels: {list(self.active_channels.keys())}")
@@ -390,7 +425,12 @@ class SpimRig(Rig):
 
         self.log.info("Stopping preview...")
 
-        # Disable lasers first
+        # Stop DAQ acquisition task first
+        if self._acq_task:
+            await self._acq_task.stop()
+            self.log.info("Acquisition task stopped")
+
+        # Disable lasers
         await self._disable_channel_lasers()
 
         # Stop preview manager

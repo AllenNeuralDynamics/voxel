@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from spim_rig.config import DeviceType
+from spim_rig.device import DeviceType
 
 from pyrig import Device, describe
 

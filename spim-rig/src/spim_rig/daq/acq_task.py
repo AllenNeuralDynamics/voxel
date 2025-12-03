@@ -2,6 +2,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Self
 
+import numpy as np
+
 # import plotly.graph_objects as go
 from pydantic import BaseModel, Field, computed_field, model_validator
 
@@ -201,6 +203,63 @@ class AcquisitionTask:
         self._is_setup = False
         self._channels.clear()
         self._log.info(f"Closed task '{self._uid}'")
+
+    def get_written_waveforms(self, target_points: int | None = None) -> dict[str, list[float]]:
+        """Get the waveform data that was/will be written to the DAQ.
+
+        Args:
+            target_points: If provided, downsample to approximately this many points
+                        using min-max downsampling to preserve peaks. Good values
+                        are 1000-2000 for visualization.
+
+        Returns:
+            Dictionary mapping device IDs to lists of voltage values.
+        """
+        if not self._is_setup:
+            raise RuntimeError(f"Task '{self._uid}' is not set up")
+
+        waveforms = {}
+        for name, channel in self._channels.items():
+            waveform_array = channel.wave.get_array(self._timing.num_samples)
+
+            # Add rest time as zeros
+            rest_samples = int(self._timing.sample_rate * self._timing.rest_time)
+            if rest_samples > 0:
+                waveform_array = np.concatenate([waveform_array, np.zeros(rest_samples)])
+
+            if target_points and len(waveform_array) > target_points:
+                # Downsample using min-max to preserve peaks
+                downsampled = self._downsample_minmax(waveform_array, target_points)
+                waveforms[name] = downsampled
+            else:
+                waveforms[name] = waveform_array.tolist()
+
+        return waveforms
+
+    @staticmethod
+    def _downsample_minmax(data: np.ndarray, target_points: int) -> list[float]:
+        """Downsample using min-max algorithm to preserve peaks and troughs.
+
+        For each bucket of samples, keeps both the minimum and maximum value,
+        ensuring that all peaks are preserved in the downsampled data.
+        """
+        if len(data) <= target_points:
+            return data.tolist()
+
+        # Each bucket contributes 2 points (min and max)
+        n_buckets = target_points // 2
+        bucket_size = len(data) // n_buckets
+
+        downsampled = []
+        for i in range(n_buckets):
+            start = i * bucket_size
+            end = start + bucket_size if i < n_buckets - 1 else len(data)
+            bucket = data[start:end]
+
+            # Add min and max from this bucket
+            downsampled.extend([float(bucket.min()), float(bucket.max())])
+
+        return downsampled[:target_points]
 
     # def plot(self, clock_cycles: int = 1) -> None:
     #     """Plot the waveforms and clock for the configured acquisition task."""

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from spim_rig import SpimRig
 from spim_rig.camera.preview import PreviewCrop, PreviewLevels
 from spim_rig.config import SpimRigConfig
+from spim_rig.daq.base import TaskStatus
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class RigStatus(BaseModel):
 
     active_profile_id: str | None
     previewing: bool
+    acq_task_active: bool
     timestamp: str
 
 
@@ -61,11 +63,21 @@ class RigService:
         # Subscribe to device property streams in background
         asyncio.create_task(self._subscribe_to_device_streams())
 
-    @property
-    def status(self) -> RigStatus:
+    async def get_status(self) -> RigStatus:
+        """Get current rig status including DAQ task status."""
+        acq_task_active = False
+        if self.rig._acq_task and self.rig.daq:
+            try:
+                task_info = await self.rig.daq.get_task_info(self.rig._acq_task.uid)
+                acq_task_active = task_info.status == TaskStatus.RUNNING
+            except Exception as e:
+                log.debug(f"Failed to get task status: {e}")
+                acq_task_active = False
+
         return RigStatus(
             active_profile_id=self.rig.active_profile_id,
             previewing=self.rig.preview.is_active,
+            acq_task_active=acq_task_active,
             timestamp=_utc_timestamp(),
         )
 
@@ -73,7 +85,8 @@ class RigService:
         """Register a new client and send initial state snapshot."""
         self.clients[client_id] = queue
         log.info("Client %s connected. Total: %d", client_id, len(self.clients))
-        await self._send_to_client(queue, "rig/status", self.status.model_dump())
+        status = await self.get_status()
+        await self._send_to_client(queue, "rig/status", status.model_dump())
 
     def remove_client(self, client_id: str):
         """Remove a client from the distribution list."""
@@ -103,6 +116,8 @@ class RigService:
                     await self._handle_device_set_property(payload)
                 case "device/execute_command":
                     await self._handle_device_execute_command(payload)
+                case "daq/request_waveforms":
+                    await self._handle_waveform_request(client_id)
                 case _:
                     log.warning("Unknown message topic from client %s: %s", client_id, topic)
         except Exception as e:
@@ -117,6 +132,7 @@ class RigService:
             raise ValueError("Missing profile_id")
         await self.rig.set_active_profile(profile_id)
         await self._broadcast_rig_status()
+        await self._broadcast_waveforms()
 
     async def _handle_preview_start(self):
         """Start preview streaming."""
@@ -281,7 +297,8 @@ class RigService:
                 pass  # Don't warn on dropped frames, too noisy
 
     async def _broadcast_rig_status(self):
-        await self._broadcast("rig/status", self.status.model_dump())
+        status = await self.get_status()
+        await self._broadcast("rig/status", status.model_dump())
 
     async def _broadcast_preview_status(self):
         """Broadcast the current previewing status."""
@@ -289,6 +306,27 @@ class RigService:
             "preview/status",
             {"previewing": self.rig.preview.is_active, "timestamp": _utc_timestamp()},
         )
+
+    async def _broadcast_waveforms(self):
+        """Broadcast DAQ waveforms to all clients."""
+        if self.rig._acq_task:
+            try:
+                waveforms = self.rig._acq_task.get_written_waveforms(target_points=2000)
+                await self._broadcast("daq/waveforms", waveforms)
+            except Exception as e:
+                log.error(f"Failed to get waveforms: {e}")
+
+    async def _handle_waveform_request(self, client_id: str):
+        """Handle explicit request for waveforms from a specific client."""
+        await self._broadcast_waveforms()
+        # if self.rig._acq_task:
+        #     try:
+        #         waveforms = self.rig._acq_task.get_written_waveforms()
+        #         queue = self.clients.get(client_id)
+        #         if queue:
+        #             await self._send_to_client(queue, "daq/waveforms", waveforms)
+        #     except Exception as e:
+        #         log.error(f"Failed to send waveforms to client {client_id}: {e}")
 
     async def _subscribe_to_device_streams(self):
         """Subscribe to device streams and forward them to WebSocket clients."""
@@ -438,12 +476,14 @@ async def set_active_profile(request: SetProfileRequest, service: RigService = D
     try:
         await service.handle_profile_change(request.profile_id)
         log.info(f"Active profile set to '{request.profile_id}' via REST")
+        status = await service.get_status()
 
-        return service.status.model_dump()
+        return status.model_dump()
     except ValueError as e:
+        log.error(f"ValueError setting active profile to '{request.profile_id}': {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        log.error(f"Failed to set active profile: {e}", exc_info=True)
+        log.error(f"Failed to set active profile to '{request.profile_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to set active profile: {str(e)}")
 
 

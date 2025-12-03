@@ -80,9 +80,9 @@
 
 {#if stageConfig && xAxis && yAxis && zAxis}
 	<div class="flex items-center" style={`aspect-ratio: ${fov.w / fov.h};`}>
-		<div class="stage-grid w-full">
+		<div class="stage-grid relative w-full">
 			<!-- Stage size info -->
-			<div class="col-span-full px-2 text-right font-mono text-[0.65rem] text-zinc-400">
+			<div class="absolute top-2 right-4 px-2 text-right font-mono text-[0.65rem] text-zinc-400">
 				{stageWidth.toFixed(0)} × {stageHeight.toFixed(0)} × {stageDepth.toFixed(0)} mm
 			</div>
 			<!-- Y-axis slider (vertical, on the left) -->
@@ -107,9 +107,9 @@
 					y="0"
 					width={stageWidth}
 					height={stageHeight}
-					stroke-width={0.1}
+					stroke-width={0.15}
 					fill="none"
-					class="stroke-zinc-700"
+					class="stroke-zinc-500"
 				/>
 
 				<!-- Grid cells: FOV-sized rectangles at each grid intersection (showing overlap) -->
@@ -192,7 +192,7 @@
 			</svg>
 
 			<!-- Z-axis control column -->
-			<div class="z-control border border-l-0 border-zinc-700 bg-zinc-800/40 hover:bg-zinc-800">
+			<div class="z-control border border-l-0 border-zinc-500 bg-zinc-800/40 hover:bg-zinc-800">
 				<svg viewBox="0 0 30 {stageDepth}" class="z-svg border border-zinc-700" preserveAspectRatio="none">
 					{@render zMarker('Min', zRange.min, 'stroke-amber-600')}
 					{@render zMarker('Max', zRange.max, 'stroke-sky-600')}

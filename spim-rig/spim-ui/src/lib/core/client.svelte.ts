@@ -10,12 +10,20 @@ import type { DevicePropertyPayload } from './devices.svelte.ts';
 export interface RigStatus {
 	active_profile_id: string | null;
 	previewing: boolean;
+	acq_task_active: boolean;
 	timestamp: string;
 }
 
 export interface PreviewStatus {
 	previewing: boolean;
 	timestamp: string;
+}
+
+/**
+ * DAQ waveforms data - maps device IDs to voltage arrays
+ */
+export interface DaqWaveforms {
+	[deviceId: string]: number[]; // Array of voltage values
 }
 
 export interface PreviewCrop {
@@ -66,6 +74,7 @@ type RigClientMessage =
 	| { topic: 'preview/crop'; payload: PreviewCrop }
 	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
 	| { topic: 'rig/request_status'; payload?: Record<string, never> }
+	| { topic: 'daq/request_waveforms'; payload?: Record<string, never> }
 	| {
 			topic: 'device/set_property';
 			payload: { device: string; properties: Record<string, unknown> };
@@ -104,6 +113,7 @@ export interface RigHandlers {
 	'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	'preview/crop'?: (payload: PreviewCrop) => void;
 	'preview/levels'?: (payload: PreviewLevelsInfo) => void;
+	'daq/waveforms'?: (payload: DaqWaveforms) => void;
 	device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
 }
 
@@ -306,6 +316,14 @@ export class RigClient {
 	 */
 	requestRigStatus(): void {
 		this.send({ topic: 'rig/request_status' });
+	}
+
+	/**
+	 * Request DAQ waveforms for the active profile.
+	 * Backend will send daq/waveforms message with voltage arrays.
+	 */
+	requestWaveforms(): void {
+		this.send({ topic: 'daq/request_waveforms' });
 	}
 
 	startPreview(): void {

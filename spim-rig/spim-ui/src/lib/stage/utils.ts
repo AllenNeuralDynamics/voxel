@@ -14,45 +14,27 @@ export function formatPosition(position: number | null): string {
 /**
  * Calculate grid cell coordinates from absolute position
  */
-export function positionToGridCell(
-	position: number,
-	origin: number,
-	spacing: number,
-	lowerLimit: number
-): number {
+export function positionToGridCell(position: number, origin: number, spacing: number, lowerLimit: number): number {
 	return Math.floor((position - lowerLimit - origin) / spacing);
 }
 
 /**
  * Calculate absolute position from grid cell coordinates
  */
-export function gridCellToPosition(
-	gridCell: number,
-	origin: number,
-	spacing: number,
-	lowerLimit: number
-): number {
+export function gridCellToPosition(gridCell: number, origin: number, spacing: number, lowerLimit: number): number {
 	return lowerLimit + origin + gridCell * spacing;
 }
 
 /**
  * Check if position is within bounds
  */
-export function isWithinBounds(
-	position: number,
-	lowerLimit: number,
-	upperLimit: number
-): boolean {
+export function isWithinBounds(position: number, lowerLimit: number, upperLimit: number): boolean {
 	return position >= lowerLimit && position <= upperLimit;
 }
 
 /**
  * Clamp position to bounds
  */
-export function clampPosition(
-	position: number,
-	lowerLimit: number,
-	upperLimit: number
-): number {
+export function clampPosition(position: number, lowerLimit: number, upperLimit: number): number {
 	return Math.max(lowerLimit, Math.min(upperLimit, position));
 }

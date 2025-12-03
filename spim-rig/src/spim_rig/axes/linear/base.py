@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
-from spim_rig.config import DeviceType
+from spim_rig.device import DeviceType
 
 from pyrig import Device, describe
 

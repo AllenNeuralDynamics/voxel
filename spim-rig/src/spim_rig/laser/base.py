@@ -2,7 +2,7 @@ from abc import abstractmethod
 
 from pyrig import Device, describe
 from pyrig.props import deliminated_float
-from spim_rig.config import DeviceType
+from spim_rig.device import DeviceType
 
 
 class SpimLaser(Device):

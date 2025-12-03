@@ -5,6 +5,26 @@ _anchors:
   - &daq_target spim_rig.drivers.daqs.simulated.SimulatedDaq
   - &fw_target spim_rig.drivers.axes.simulated.SimulatedDiscreteAxis
   - &linear_axis_target spim_rig.drivers.axes.simulated.SimulatedLinearAxis
+  - &default_timing
+    sample_rate: "100 kHz"
+    duration: "0.2 s"
+    rest_time: "0.05 s"
+  - &camera_waveform_ch1
+    type: pulse
+    voltage: { min: 0.0, max: 5.0 }
+    window: { min: 0.0, max: 0.95 }
+  - &camera_waveform_ch2
+    type: pulse
+    voltage: { min: 0.0, max: 5.0 }
+    window: { min: 0.02, max: 0.97 } # 2% delay (2ms at 100ms duration)
+  - &laser_waveform_ch1
+    type: pulse
+    voltage: { min: 0.0, max: 5.0 }
+    window: { min: 0.1, max: 0.9 }
+  - &laser_waveform_ch2
+    type: pulse
+    voltage: { min: 0.0, max: 5.0 }
+    window: { min: 0.12, max: 0.92 } # 2% delay
 
 metadata:
   name: "LightSheetMicroscope_01"
@@ -50,7 +70,6 @@ nodes:
         target: *linear_axis_target
         kwargs:
           { lower_limit_mm: 0.0, upper_limit_mm: 50.0, has_ttl_stepper: true }
-
   node_1:
     hostname: *camera_ip
     devices:
@@ -132,19 +151,53 @@ channels:
 profiles:
   gfp_rfp:
     channels: ["gfp", "rfp"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_488: *laser_waveform_ch1
+        camera_2: *camera_waveform_ch2
+        laser_561: *laser_waveform_ch2
     desc: "Simultaneous GFP and RFP imaging with multiband filter"
   rfp_cy5:
     channels: ["rfp", "cy5"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_561: *laser_waveform_ch1
+        camera_2: *camera_waveform_ch2
+        laser_640: *laser_waveform_ch2
     desc: "Simultaneous RFP and Cy5 imaging with multiband filter"
   single_dapi:
     channels: ["dapi"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_405: *laser_waveform_ch1
     desc: "Single DAPI channel for nuclear staining"
   single_gfp:
     channels: ["gfp"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_2: *camera_waveform_ch1
+        laser_488: *laser_waveform_ch1
     desc: "Single GFP channel imaging"
   single_rfp:
     channels: ["rfp"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_561: *laser_waveform_ch1
     desc: "Single RFP channel imaging"
   single_cy5:
     channels: ["cy5"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_2: *camera_waveform_ch1
+        laser_640: *laser_waveform_ch1
     desc: "Single Cy5 far-red channel imaging"

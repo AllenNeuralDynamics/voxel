@@ -1,18 +1,9 @@
-from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from pyrig import RigConfig
-
-
-class DeviceType(StrEnum):
-    DAQ = "daq"
-    CAMERA = "camera"
-    LASER = "laser"
-    LINEAR_AXIS = "linear_axis"
-    ROTATION_AXIS = "rotation_axis"
-    DISCRETE_AXIS = "discrete_axis"
+from spim_rig.daq.acq_task import AcqTaskConfig
 
 
 class DaqConfig(BaseModel):
@@ -76,6 +67,7 @@ class ChannelConfig(BaseModel):
 
 class ProfileConfig(BaseModel):
     channels: list[str]
+    daq: "AcqTaskConfig"
     desc: str = ""
     label: str | None = None
 
@@ -95,6 +87,45 @@ class SpimRigConfig(RigConfig):
         for path in self.detection.values():
             fws.update(path.filter_wheels)
         return fws
+
+    def get_profile_device_ids(self, profile_id: str) -> set[str]:
+        """Get all device IDs used by a profile.
+
+        Returns the set of all devices involved in the profile, including:
+        - Detection path devices (cameras)
+        - Illumination path devices (lasers)
+        - Filter wheels used by channels in the profile
+        - Aux devices in detection and illumination paths
+
+        Args:
+            profile_id: The profile identifier
+
+        Returns:
+            Set of device IDs used by the profile
+
+        Raises:
+            KeyError: If profile_id does not exist
+        """
+        if profile_id not in self.profiles:
+            raise KeyError(f"Profile '{profile_id}' not found")
+
+        profile = self.profiles[profile_id]
+        device_ids: set[str] = set()
+
+        for channel_id in profile.channels:
+            if channel_id not in self.channels:
+                continue  # Skip invalid channels (will be caught by validation)
+
+            channel = self.channels[channel_id]
+            device_ids.add(channel.detection)
+            device_ids.add(channel.illumination)
+            device_ids.update(channel.filters.keys())
+            if channel.detection in self.detection:
+                device_ids.update(self.detection[channel.detection].aux_devices)
+            if channel.illumination in self.illumination:
+                device_ids.update(self.illumination[channel.illumination].aux_devices)
+
+        return device_ids
 
     @model_validator(mode="after")
     def validate_device_references(self) -> Self:
@@ -253,6 +284,25 @@ class SpimRigConfig(RigConfig):
                     errors.append(
                         f"Profile '{profile_id}' has conflicting filter positions for '{fw_id}': {position_details}"
                     )
+
+            # 6. Waveform validation - check for devices in both daq.acq_ports AND used by profile
+            profile_devices = self.get_profile_device_ids(profile_id)
+            daq_acq_devices = set(self.daq.acq_ports.keys())
+            devices_needing_waveforms = profile_devices & daq_acq_devices
+
+            # Check for missing waveforms
+            missing_waveforms = devices_needing_waveforms - set(profile.daq.waveforms.keys())
+            if missing_waveforms:
+                errors.append(
+                    f"Profile '{profile_id}' missing waveforms for devices in daq.acq_ports: {sorted(missing_waveforms)}"
+                )
+
+            # Check for extra waveforms (not in acq_ports)
+            extra_waveforms = set(profile.daq.waveforms.keys()) - daq_acq_devices
+            if extra_waveforms:
+                errors.append(
+                    f"Profile '{profile_id}' defines waveforms for devices not in daq.acq_ports: {sorted(extra_waveforms)}"
+                )
 
         return errors
 

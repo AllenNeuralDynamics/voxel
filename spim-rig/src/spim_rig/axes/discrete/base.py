@@ -1,9 +1,8 @@
 from abc import abstractmethod
 from collections.abc import Mapping
 
-from spim_rig.config import DeviceType
-
 from pyrig import Device, describe
+from spim_rig.device import DeviceType
 
 
 class DiscreteAxis(Device):

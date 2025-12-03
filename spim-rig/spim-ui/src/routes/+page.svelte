@@ -5,13 +5,13 @@
 	import ProfileSelector from '$lib/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ClientStatus.svelte';
-	// import StagePosition from '$lib/StagePosition.svelte';
-	// import StageWidget from '$lib/StageWidget.svelte';
 	import { Stage, StageCanvas, StageControls, StagePosition } from '$lib/stage';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/PaneDivider.svelte';
 	import ChannelSection from '$lib/ChannelSection.svelte';
 	import LaserIndicators from '$lib/LaserIndicators.svelte';
+	import WaveformViewer from '$lib/WaveformViewer.svelte';
+	import { Tabs } from 'bits-ui';
 	import Icon from '@iconify/svelte';
 	import { browser } from '$app/environment';
 
@@ -25,8 +25,9 @@
 	let rigManager = $state<RigManager | undefined>(undefined);
 	let previewer = $state<Previewer | undefined>(undefined);
 	let stage = $state<Stage | undefined>(undefined);
-	let deviceFilter = $state<DeviceFilter>('summary');
+	let deviceFilter = $state<DeviceFilter>('all');
 	let showHistograms = $state(true);
+	let bottomPanelTab = $state('daq');
 
 	onMount(async () => {
 		try {
@@ -68,7 +69,7 @@
 
 <div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
 	{#if previewer && rigManager}
-		<aside class="flex h-full w-96 flex-col border-r border-zinc-700 bg-zinc-900">
+		<aside class="flex h-full w-96 min-w-80 flex-col border-r border-zinc-700 bg-zinc-900">
 			<!-- Profile Selector -->
 			<div class="space-y-3 border-b border-zinc-600 p-4">
 				<ProfileSelector manager={rigManager} />
@@ -110,36 +111,68 @@
 				<FrameCounter {previewer} />
 			</footer>
 		</aside>
-		<main class="flex h-screen min-w-3xl flex-1 flex-col overflow-hidden">
-			<PaneGroup direction="vertical" autoSaveId="centerPanel">
-				<Pane>
-					<PaneGroup direction="horizontal" autoSaveId="viewPanel">
-						<Pane defaultSize={50} minSize={30} class="grid h-full flex-1 place-content-center  px-4">
-							<PreviewCanvas {previewer} />
-						</Pane>
-						<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
-						<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center  px-4">
-							{#if stage}
-								<StageCanvas {stage} />
-							{/if}
-						</Pane>
-					</PaneGroup>
-				</Pane>
-				<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
-				<Pane defaultSize={40} maxSize={50} minSize={30}></Pane>
-			</PaneGroup>
-			<footer class="relative flex items-center justify-between border-t border-zinc-800 px-4 py-3">
-				<PanZoomControls {previewer} />
+		<main class="flex h-screen min-w-4xl flex-1 flex-col overflow-hidden">
+			<Tabs.Root bind:value={bottomPanelTab} class="flex h-full flex-col">
+				<PaneGroup direction="vertical" autoSaveId="centerPanel">
+					<Pane>
+						<PaneGroup direction="horizontal" autoSaveId="viewPanel">
+							<Pane defaultSize={50} minSize={30} class="grid h-full flex-1 place-content-center  px-4">
+								<PreviewCanvas {previewer} />
+							</Pane>
+							<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
+							<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center  px-4">
+								{#if stage}
+									<StageCanvas {stage} />
+								{/if}
+							</Pane>
+						</PaneGroup>
+					</Pane>
+					<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
+					<Pane defaultSize={40} maxSize={50} minSize={30} class="overflow-hidden">
+						<!-- Bottom Panel Tab Content -->
+						<Tabs.Content value="grid" class="h-full overflow-auto bg-zinc-900">
+							<div class="flex h-full items-center justify-center">
+								<p class="text-sm text-zinc-500">Grid view coming soon...</p>
+							</div>
+						</Tabs.Content>
 
-				<!-- Centered laser indicators -->
-				<div class="absolute left-1/2 -translate-x-1/2">
-					<LaserIndicators {rigManager} />
-				</div>
+						<Tabs.Content value="daq" class="h-full overflow-hidden bg-zinc-900">
+							<WaveformViewer manager={rigManager} />
+						</Tabs.Content>
+					</Pane>
+				</PaneGroup>
+				<footer class="relative flex items-center justify-between border-t border-zinc-700 px-4 py-3">
+					<!-- Tab Switcher & Preview Controls -->
+					<div class="flex items-center gap-3">
+						<Tabs.List class="flex rounded border border-zinc-700">
+							<Tabs.Trigger
+								value="grid"
+								class="px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
+							>
+								Grid
+							</Tabs.Trigger>
+							<Tabs.Trigger
+								value="daq"
+								class="border-l border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
+							>
+								DAQ
+							</Tabs.Trigger>
+						</Tabs.List>
 
-				{#if stage}
-					<StagePosition {stage} />
-				{/if}
-			</footer>
+						<PanZoomControls {previewer} />
+					</div>
+
+					<!-- Centered laser indicators -->
+					<!-- <div class="absolute left-1/2 -translate-x-1/2"> -->
+					<div class="px-4">
+						<LaserIndicators {rigManager} />
+					</div>
+
+					{#if stage}
+						<StagePosition {stage} />
+					{/if}
+				</footer>
+			</Tabs.Root>
 		</main>
 		<aside class="flex h-full w-96 min-w-96 flex-col border-l border-zinc-700 bg-zinc-900">
 			<header class="flex h-18 items-start justify-start gap-2 p-4">

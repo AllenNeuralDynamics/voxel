@@ -6,7 +6,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from pyrig import Device, describe
-from spim_rig.config import DeviceType
+from spim_rig.device import DeviceType
 
 if TYPE_CHECKING:
     from .quantity import VoltageRange
