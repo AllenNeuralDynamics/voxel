@@ -1,5 +1,5 @@
-from spim_rig.drivers.tigerhub.model import ASIMode, Reply
-from spim_rig.drivers.tigerhub.protocol.linefmt import _ax
+from spim_drivers.tigerhub.model import ASIMode, Reply
+from spim_drivers.tigerhub.protocol.linefmt import _ax
 
 
 def asi_parse(raw: bytes, requested_axes: list[str] | None = None) -> tuple[Reply, ASIMode]:  # noqa: PLR0911, PLR0912

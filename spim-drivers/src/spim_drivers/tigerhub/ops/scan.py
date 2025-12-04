@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from spim_rig.drivers.tigerhub.model import BoxInfo, Reply
-from spim_rig.drivers.tigerhub.protocol.errors import ASIDecodeError
-from spim_rig.drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
+from spim_drivers.tigerhub.model import BoxInfo, Reply
+from spim_drivers.tigerhub.protocol.errors import ASIDecodeError
+from spim_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
 
 # --- Dataclasses ---
 

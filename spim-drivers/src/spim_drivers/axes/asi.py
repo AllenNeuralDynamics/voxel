@@ -1,21 +1,21 @@
 import logging
 from types import TracebackType
 
+from spim_drivers.tigerhub.model.axis_state import AxisState
+from spim_drivers.tigerhub.model.models import ASIAxisInfo
+from spim_drivers.tigerhub.ops.params import TigerParam, TigerParams
+from spim_drivers.tigerhub.ops.step_shoot import (
+    RingBufferMode,
+    StepShootConfig,
+    TTLIn0Mode,
+    TTLOut0Mode,
+)
 from spim_rig.axes.linear.base import (
     LinearAxis,
     StepMode,
     TriggerMode,
     TTLStepper,
     TTLStepperConfig,
-)
-from spim_rig.drivers.tigerhub.model.axis_state import AxisState
-from spim_rig.drivers.tigerhub.model.models import ASIAxisInfo
-from spim_rig.drivers.tigerhub.ops.params import TigerParam, TigerParams
-from spim_rig.drivers.tigerhub.ops.step_shoot import (
-    RingBufferMode,
-    StepShootConfig,
-    TTLIn0Mode,
-    TTLOut0Mode,
 )
 
 
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     import logging
 
     from rich import print as rprint
-    from spim_rig.drivers.tigerhub.hub import TigerHub
+    from spim_drivers.tigerhub.hub import TigerHub
 
     logging.basicConfig(level=logging.DEBUG)
 

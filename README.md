@@ -6,7 +6,36 @@ Distributed device control framework for experimental rigs.
 
 Type-safe remote control of hardware devices across networked nodes with ZeroMQ.
 
+👉 Want a turnkey walkthrough? Jump to the [SPIM simulated example](examples/spim/README.md) to spin up a full rig with fake hardware and a web UI.
+
 ## Quick Start
+
+### Simulated Example
+
+Run the [`examples/spim`](examples/spim/README.md) project to see a complete microscope rig with simulated devices and a Web UI served by SpimRig (a Pyrig implementation).
+
+1. Install backend dependencies from the repo root:
+
+   ```bash
+   uv sync --all-packages --all-extras
+   ```
+
+2. Build the UI assets so the backend can serve them, then return to the repo root:
+
+   ```bash
+   cd spim-rig/spim-ui
+   pnpm install
+   pnpm run build
+   cd ../../
+   ```
+
+3. Start the simulated rig (from the repo root) and open http://localhost:8000:
+
+   ```bash
+   uv run python -m examples.spim.app
+   ```
+
+See the [detailed guide](examples/spim/README.md) for troubleshooting and HTTPS/remote access notes.
 
 ```python
 from pyrig import Rig, RigConfig

@@ -1,5 +1,5 @@
 [project]
-name = "spim-rig"
+name = "spim-drivers"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -8,19 +8,17 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "pyrig",
-    "msgpack-numpy>=0.4.8",
+    "spim-rig",
     "numpy>=2.3.4",
-    "ome-zarr-writer",
-    "opencv-python-headless>=4.11.0.86",
-    "fastapi>=0.121.1",
-    "uvicorn>=0.38.0",
-    "websockets>=15.0.1",
+    "egrabber",
+    "nidaqmx>=1.3.0",
+    "tigerasi>=0.0.27",
+    "aaopto-aotf>=0.0.11",
 ]
 
 [tool.uv.sources]
-ome-zarr-writer = { git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" }
-pyrig = { workspace = true }
+egrabber = { path = ".wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+spim-rig = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.8.24,<0.9.0"]

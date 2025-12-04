@@ -1,10 +1,12 @@
 _anchors:
   - &camera_ip "127.0.0.1"
-  - &camera_target spim_rig.drivers.cameras.simulated.SimulatedCamera
-  - &laser_target spim_rig.drivers.lasers.simulated.SimulatedLaser
-  - &daq_target spim_rig.drivers.daqs.simulated.SimulatedDaq
-  - &fw_target spim_rig.drivers.axes.simulated.SimulatedDiscreteAxis
-  - &linear_axis_target spim_rig.drivers.axes.simulated.SimulatedLinearAxis
+  - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
+  - &laser_target spim_drivers.lasers.simulated.SimulatedLaser
+  - &aotf_laser_target spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
+  - &aotf_target spim_drivers.aotf.simulated.SimulatedAotf
+  - &daq_target spim_drivers.daqs.simulated.SimulatedDaq
+  - &fw_target spim_drivers.axes.simulated.SimulatedDiscreteAxis
+  - &linear_axis_target spim_drivers.axes.simulated.SimulatedLinearAxis
   - &default_timing
     sample_rate: "100 kHz"
     duration: "0.2 s"
@@ -25,6 +27,10 @@ _anchors:
     type: pulse
     voltage: { min: 0.0, max: 5.0 }
     window: { min: 0.12, max: 0.92 } # 2% delay
+  - &aotf_blanking_waveform
+    type: pulse
+    voltage: { min: 0.0, max: 5.0 }
+    window: { min: 0.05, max: 0.95 } # Wide blanking window
 
 metadata:
   name: "LightSheetMicroscope_01"
@@ -36,30 +42,52 @@ nodes:
       daq_1:
         target: *daq_target
         kwargs: { device_name: "MockDev1" }
+      aotf_1:
+        target: *aotf_target
+        kwargs: { blanking_mode: "external" }
       laser_405:
-        target: *laser_target
-        kwargs: { wavelength: 405 }
+        target: *aotf_laser_target
+        kwargs:
+          wavelength: 405
+          aotf: aotf_1
+          aotf_channel: 1
+          aotf_frequency_mhz: 110.5
       laser_488:
-        target: *laser_target
-        kwargs: { wavelength: 488 }
+        target: *aotf_laser_target
+        kwargs:
+          wavelength: 488
+          aotf: aotf_1
+          aotf_channel: 2
+          aotf_frequency_mhz: 98.2
       laser_561:
-        target: *laser_target
-        kwargs: { wavelength: 561 }
+        target: *aotf_laser_target
+        kwargs:
+          wavelength: 561
+          aotf: aotf_1
+          aotf_channel: 3
+          aotf_frequency_mhz: 87.4
       laser_640:
+        target: *aotf_laser_target
+        kwargs:
+          wavelength: 640
+          aotf: aotf_1
+          aotf_channel: 4
+          aotf_frequency_mhz: 78.6
+      laser_730:
         target: *laser_target
-        kwargs: { wavelength: 640 }
+        kwargs: { wavelength: 730 }
       fw_detection_shared:
         target: *fw_target
         kwargs:
-          slots: { 0: "Multiband", 1: "Cyan", 2: "FarRed" }
+          slots: { 0: "Quad-DGRC", 1: "Dual-DR", 2: "Dual-GC", 3: "NIR-LP720" }
       fw_emission_cam1:
         target: *fw_target
         kwargs:
-          slots: { 0: "DAPI", 1: "GFP", 2: "RFP" }
+          slots: { 0: "BP450", 1: "BP525", 2: "BP600", 3: "BP780" }
       fw_emission_cam2:
         target: *fw_target
         kwargs:
-          slots: { 0: "GFP", 1: "Cy5" }
+          slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
       x_axis:
         target: *linear_axis_target
         kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
@@ -95,8 +123,10 @@ daq:
     laser_488: ao1
     laser_561: ao2
     laser_640: ao3
+    laser_730: ao7
     camera_1: ao4
     camera_2: ao5
+    aotf_1: ao6
 
 detection:
   camera_1:
@@ -109,14 +139,15 @@ illumination:
   laser_488: {}
   laser_561: {}
   laser_640: {}
+  laser_730: {}
 
 channels:
   dapi:
     detection: camera_1
     illumination: laser_405
     filters:
-      fw_detection_shared: "Cyan"
-      fw_emission_cam1: "DAPI"
+      fw_detection_shared: "Quad-DGRC"
+      fw_emission_cam1: "BP450"
     desc: "DAPI nuclear stain using 405nm excitation"
     label: DAPI
     emission: 461
@@ -124,8 +155,8 @@ channels:
     detection: camera_2
     illumination: laser_488
     filters:
-      fw_detection_shared: "Multiband"
-      fw_emission_cam2: "GFP"
+      fw_detection_shared: "Quad-DGRC"
+      fw_emission_cam2: "BP525"
     desc: "Green fluorescent protein using 488nm excitation"
     label: GFP
     emission: 510
@@ -133,8 +164,8 @@ channels:
     detection: camera_1
     illumination: laser_561
     filters:
-      fw_detection_shared: "Multiband"
-      fw_emission_cam1: "RFP"
+      fw_detection_shared: "Quad-DGRC"
+      fw_emission_cam1: "BP600"
     desc: "Red fluorescent protein using 561nm excitation"
     label: RFP
     emission: 600
@@ -142,23 +173,56 @@ channels:
     detection: camera_2
     illumination: laser_640
     filters:
-      fw_detection_shared: "Multiband"
-      fw_emission_cam2: "Cy5"
+      fw_detection_shared: "Quad-DGRC"
+      fw_emission_cam2: "BP700"
     desc: "Far-red Cy5 channel using 640nm excitation"
     label: Cy5
     emission: 670
+  nir:
+    detection: camera_1
+    illumination: laser_730
+    filters:
+      fw_detection_shared: "NIR-LP720"
+      fw_emission_cam1: "BP780"
+    desc: "Near-infrared channel for iRFP/miRFP using 730nm excitation"
+    label: NIR
+    emission: 760
 
 profiles:
+  # Dual-channel profiles (simultaneous imaging on both cameras)
+  dapi_gfp:
+    channels: ["dapi", "gfp"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_405: *laser_waveform_ch1
+        camera_2: *camera_waveform_ch2
+        laser_488: *laser_waveform_ch2
+        aotf_1: *aotf_blanking_waveform
+    desc: "Simultaneous DAPI (cam1) and GFP (cam2) imaging"
+  dapi_cy5:
+    channels: ["dapi", "cy5"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_405: *laser_waveform_ch1
+        camera_2: *camera_waveform_ch2
+        laser_640: *laser_waveform_ch2
+        aotf_1: *aotf_blanking_waveform
+    desc: "Simultaneous DAPI (cam1) and Cy5 (cam2) imaging"
   gfp_rfp:
     channels: ["gfp", "rfp"]
     daq:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
-        laser_488: *laser_waveform_ch1
+        laser_561: *laser_waveform_ch1
         camera_2: *camera_waveform_ch2
-        laser_561: *laser_waveform_ch2
-    desc: "Simultaneous GFP and RFP imaging with multiband filter"
+        laser_488: *laser_waveform_ch2
+        aotf_1: *aotf_blanking_waveform
+    desc: "Simultaneous GFP (cam2) and RFP (cam1) imaging"
   rfp_cy5:
     channels: ["rfp", "cy5"]
     daq:
@@ -168,7 +232,9 @@ profiles:
         laser_561: *laser_waveform_ch1
         camera_2: *camera_waveform_ch2
         laser_640: *laser_waveform_ch2
-    desc: "Simultaneous RFP and Cy5 imaging with multiband filter"
+        aotf_1: *aotf_blanking_waveform
+    desc: "Simultaneous RFP (cam1) and Cy5 (cam2) imaging"
+  # Single-channel profiles
   single_dapi:
     channels: ["dapi"]
     daq:
@@ -176,6 +242,7 @@ profiles:
       waveforms:
         camera_1: *camera_waveform_ch1
         laser_405: *laser_waveform_ch1
+        aotf_1: *aotf_blanking_waveform
     desc: "Single DAPI channel for nuclear staining"
   single_gfp:
     channels: ["gfp"]
@@ -184,6 +251,7 @@ profiles:
       waveforms:
         camera_2: *camera_waveform_ch1
         laser_488: *laser_waveform_ch1
+        aotf_1: *aotf_blanking_waveform
     desc: "Single GFP channel imaging"
   single_rfp:
     channels: ["rfp"]
@@ -192,6 +260,7 @@ profiles:
       waveforms:
         camera_1: *camera_waveform_ch1
         laser_561: *laser_waveform_ch1
+        aotf_1: *aotf_blanking_waveform
     desc: "Single RFP channel imaging"
   single_cy5:
     channels: ["cy5"]
@@ -200,4 +269,13 @@ profiles:
       waveforms:
         camera_2: *camera_waveform_ch1
         laser_640: *laser_waveform_ch1
+        aotf_1: *aotf_blanking_waveform
     desc: "Single Cy5 far-red channel imaging"
+  single_nir:
+    channels: ["nir"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_730: *laser_waveform_ch1
+    desc: "Single NIR channel for iRFP/miRFP imaging"

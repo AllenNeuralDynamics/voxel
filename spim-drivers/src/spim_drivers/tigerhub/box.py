@@ -4,21 +4,21 @@ import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from spim_rig.drivers.serial import SerialTransport
-from spim_rig.drivers.tigerhub.model import ASIMode, AxisState, BoxInfo, Reply
-from spim_rig.drivers.tigerhub.model.box_info import infer_comm_addr_from_who
-from spim_rig.drivers.tigerhub.model.card_info import CardInfo
-from spim_rig.drivers.tigerhub.model.models import ASIAxisInfo
-from spim_rig.drivers.tigerhub.ops.joystick import (
+from spim_drivers.serial import SerialTransport
+from spim_drivers.tigerhub.model import ASIMode, AxisState, BoxInfo, Reply
+from spim_drivers.tigerhub.model.box_info import infer_comm_addr_from_who
+from spim_drivers.tigerhub.model.card_info import CardInfo
+from spim_drivers.tigerhub.model.models import ASIAxisInfo
+from spim_drivers.tigerhub.ops.joystick import (
     JoystickEnableOp,
     JoystickGetMappingOp,
     JoystickInput,
     JoystickPolarityOp,
     JoystickSetMappingOp,
 )
-from spim_rig.drivers.tigerhub.ops.motion import HaltOp, HereOp, HomeOp, IsAxisBusyOp, MoveAbsOp, MoveRelOp, WhereOp
-from spim_rig.drivers.tigerhub.ops.params import GetParamOp, SetParamOp, TigerParam, TigerParams
-from spim_rig.drivers.tigerhub.ops.scan import (
+from spim_drivers.tigerhub.ops.motion import HaltOp, HereOp, HomeOp, IsAxisBusyOp, MoveAbsOp, MoveRelOp, WhereOp
+from spim_drivers.tigerhub.ops.params import GetParamOp, SetParamOp, TigerParam, TigerParams
+from spim_drivers.tigerhub.ops.scan import (
     ArrayOp,
     ArrayScanConfig,
     AutoHomeConfig,
@@ -31,7 +31,7 @@ from spim_rig.drivers.tigerhub.ops.scan import (
     ScanVConfig,
     ScanVOp,
 )
-from spim_rig.drivers.tigerhub.ops.status import (
+from spim_drivers.tigerhub.ops.status import (
     GetAxisStateOp,
     GetBuildOp,
     GetCardMods,
@@ -41,7 +41,7 @@ from spim_rig.drivers.tigerhub.ops.status import (
     IsBoxBusyOp,
     SetModeOp,
 )
-from spim_rig.drivers.tigerhub.ops.step_shoot import (
+from spim_drivers.tigerhub.ops.step_shoot import (
     GetTTLModesOp,
     LoadBufferedMoveOp,
     ProbeTTLOutOp,
@@ -52,8 +52,8 @@ from spim_rig.drivers.tigerhub.ops.step_shoot import (
     TTLConfig,
     TTLIn0Mode,
 )
-from spim_rig.drivers.tigerhub.protocol.errors import ASIDecodeError
-from spim_rig.drivers.tigerhub.protocol.parser import asi_parse
+from spim_drivers.tigerhub.protocol.errors import ASIDecodeError
+from spim_drivers.tigerhub.protocol.parser import asi_parse
 
 
 @dataclass(frozen=True)

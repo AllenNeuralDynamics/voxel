@@ -1,8 +1,8 @@
 from collections.abc import Mapping, Sequence
 
-from spim_rig.drivers.tigerhub.model import Reply
-from spim_rig.drivers.tigerhub.protocol.errors import ASIDecodeError
-from spim_rig.drivers.tigerhub.protocol.linefmt import _ax, _fmt_axes, _fmt_q_axes, _line
+from spim_drivers.tigerhub.model import Reply
+from spim_drivers.tigerhub.protocol.errors import ASIDecodeError
+from spim_drivers.tigerhub.protocol.linefmt import _ax, _fmt_axes, _fmt_q_axes, _line
 
 
 class WhereOp:

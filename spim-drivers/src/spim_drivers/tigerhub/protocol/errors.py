@@ -1,4 +1,4 @@
-from spim_rig.drivers.tigerhub.model import Reply
+from spim_drivers.tigerhub.model import Reply
 
 
 class ASIDecodeError(RuntimeError):

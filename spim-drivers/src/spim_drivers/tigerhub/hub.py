@@ -2,14 +2,14 @@ from collections.abc import Iterable
 from threading import RLock
 from typing import TYPE_CHECKING
 
-from spim_rig.drivers.tigerhub.box import TigerBox
-from spim_rig.drivers.tigerhub.model.models import ASIAxisInfo
+from spim_drivers.tigerhub.box import TigerBox
+from spim_drivers.tigerhub.model.models import ASIAxisInfo
 
 from pyrig import Device
 from pyrig.utils import Poller
 
 if TYPE_CHECKING:
-    from spim_rig.drivers.axes.asi import TigerLinearAxis
+    from spim_drivers.axes.asi import TigerLinearAxis
 
 
 class UnknownAxisError(ValueError):
@@ -72,7 +72,7 @@ class TigerHub(Device):
         if not reserved_axes:
             return
 
-        from spim_rig.drivers.tigerhub.ops.params import TigerParams
+        from spim_drivers.tigerhub.ops.params import TigerParams
 
         # Query configuration parameters
         try:
@@ -141,7 +141,7 @@ class TigerHub(Device):
 
     def make_linear_axis(self, *, uid: str, asi_label: str | None = None) -> "TigerLinearAxis":
         """Reserve and return a TigerLinearAxis bound to a Tiger UID."""
-        from spim_rig.drivers.axes.asi import TigerLinearAxis
+        from spim_drivers.axes.asi import TigerLinearAxis
 
         asi_label = asi_label or uid.upper()
         return TigerLinearAxis(hub=self, uid=uid, axis_label=asi_label)

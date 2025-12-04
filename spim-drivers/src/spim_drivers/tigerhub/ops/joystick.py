@@ -1,9 +1,9 @@
 from collections.abc import Mapping, Sequence
 from enum import Enum
 
-from spim_rig.drivers.tigerhub.model import Reply
-from spim_rig.drivers.tigerhub.protocol.errors import ASIDecodeError
-from spim_rig.drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
+from spim_drivers.tigerhub.model import Reply
+from spim_drivers.tigerhub.protocol.errors import ASIDecodeError
+from spim_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
 
 
 class JoystickInput(Enum):

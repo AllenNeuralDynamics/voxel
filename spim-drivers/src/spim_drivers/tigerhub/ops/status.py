@@ -1,10 +1,10 @@
 import re
 
-from spim_rig.drivers.tigerhub.model import ASIMode, AxisState, Reply
-from spim_rig.drivers.tigerhub.model.build_report import BuildReport
-from spim_rig.drivers.tigerhub.model.card_info import WhoReportItem
-from spim_rig.drivers.tigerhub.protocol.errors import ASIDecodeError
-from spim_rig.drivers.tigerhub.protocol.linefmt import _line
+from spim_drivers.tigerhub.model import ASIMode, AxisState, Reply
+from spim_drivers.tigerhub.model.build_report import BuildReport
+from spim_drivers.tigerhub.model.card_info import WhoReportItem
+from spim_drivers.tigerhub.protocol.errors import ASIDecodeError
+from spim_drivers.tigerhub.protocol.linefmt import _line
 
 
 class GetWhoOp:

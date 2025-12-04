@@ -22,13 +22,10 @@ dev = [
     "pytest>=9.0.0",
 ]
 
-[project.scripts]
-pyrig = "pyrig:main"
-
-
 [tool.uv.workspace]
 members = [
     "spim-rig",
+    "spim-drivers",
 ]
 [build-system]
 requires = ["uv_build>=0.8.24,<0.9.0"]

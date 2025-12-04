@@ -10,7 +10,21 @@ resolution-markers = [
 [manifest]
 members = [
     "pyrig",
+    "spim-drivers",
     "spim-rig",
+]
+
+[[package]]
+name = "aaopto-aotf"
+version = "0.0.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "parse" },
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/1e/46bd3ec5ec5a39ecb6906d146fc296258f490663063efd5e9d712da8e380/aaopto_aotf-0.0.11.tar.gz", hash = "sha256:579bd58ba2409a94e7696d96a2d34a4845905dffaf38611d362a1daca8d21ac4", size = 39650, upload-time = "2024-06-13T20:06:01.929Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/55/3546776bd907fd6bff0313e3646fa8070bd4a1de0d848c151bc914074041/aaopto_aotf-0.0.11-py3-none-any.whl", hash = "sha256:01db53479b3c91777089b420774f94a1a204709759035c790a8909a4b8cc600f", size = 7904, upload-time = "2024-06-13T20:06:00.589Z" },
 ]
 
 [[package]]
@@ -248,7 +262,7 @@ wheels = [
 [[package]]
 name = "egrabber"
 version = "24.9.0.5"
-source = { path = "spim-rig/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+source = { path = "spim-drivers/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }
 dependencies = [
     { name = "click" },
     { name = "matplotlib" },
@@ -677,6 +691,15 @@ wheels = [
 ]
 
 [[package]]
+name = "parse"
+version = "1.20.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/78/d9b09ba24bb36ef8b83b71be547e118d46214735b6dfb39e4bfde0e9b9dd/parse-1.20.2.tar.gz", hash = "sha256:b41d604d16503c79d81af5165155c0b20f6c8d6c559efa66b4b695c3e5a0a0ce", size = 29391, upload-time = "2024-06-11T04:41:57.34Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/31/ba45bf0b2aa7898d81cbbfac0e88c267befb59ad91a19e36e1bc5578ddb1/parse-1.20.2-py2.py3-none-any.whl", hash = "sha256:967095588cb802add9177d0c0b6133b5ba33b1ea9007ca800e526f42a85af558", size = 20126, upload-time = "2024-06-11T04:41:55.057Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1024,32 +1047,51 @@ wheels = [
 ]
 
 [[package]]
+name = "spim-drivers"
+version = "0.1.0"
+source = { editable = "spim-drivers" }
+dependencies = [
+    { name = "aaopto-aotf" },
+    { name = "egrabber" },
+    { name = "nidaqmx" },
+    { name = "numpy" },
+    { name = "spim-rig" },
+    { name = "tigerasi" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aaopto-aotf", specifier = ">=0.0.11" },
+    { name = "egrabber", path = "spim-drivers/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" },
+    { name = "nidaqmx", specifier = ">=1.3.0" },
+    { name = "numpy", specifier = ">=2.3.4" },
+    { name = "spim-rig", editable = "spim-rig" },
+    { name = "tigerasi", specifier = ">=0.0.27" },
+]
+
+[[package]]
 name = "spim-rig"
 version = "0.1.0"
 source = { editable = "spim-rig" }
 dependencies = [
-    { name = "egrabber" },
     { name = "fastapi" },
     { name = "msgpack-numpy" },
-    { name = "nidaqmx" },
     { name = "numpy" },
     { name = "ome-zarr-writer" },
     { name = "opencv-python-headless" },
-    { name = "tigerasi" },
+    { name = "pyrig" },
     { name = "uvicorn" },
     { name = "websockets" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "egrabber", path = "spim-rig/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.121.1" },
     { name = "msgpack-numpy", specifier = ">=0.4.8" },
-    { name = "nidaqmx", specifier = ">=1.3.0" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
-    { name = "tigerasi", specifier = ">=0.0.27" },
+    { name = "pyrig", editable = "." },
     { name = "uvicorn", specifier = ">=0.38.0" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]

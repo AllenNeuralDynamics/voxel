@@ -32,6 +32,7 @@ class SpimRig(Rig):
         self.config: SpimRigConfig = config
         self.cameras: dict[str, CameraClient] = {}
         self.lasers: dict[str, DeviceClient] = {}
+        self.aotfs: dict[str, DeviceClient] = {}
         self.linear_axes: dict[str, DeviceClient] = {}
         self.rotation_axes: dict[str, DeviceClient] = {}
         self.discrete_axes: dict[str, DeviceClient] = {}
@@ -61,13 +62,16 @@ class SpimRig(Rig):
             case DeviceType.LASER:
                 client = super()._create_client(device_id, prov)
                 self.lasers[device_id] = client
+            case DeviceType.AOTF:
+                client = super()._create_client(device_id, prov)
+                self.aotfs[device_id] = client
             case DeviceType.DAQ:
                 client = DaqClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
                 self.daq = client
             case DeviceType.LINEAR_AXIS:
                 client = super()._create_client(device_id, prov)
                 self.linear_axes[device_id] = client
-            case DeviceType.LINEAR_AXIS:
+            case DeviceType.ROTATION_AXIS:
                 client = super()._create_client(device_id, prov)
                 self.rotation_axes[device_id] = client
             case DeviceType.DISCRETE_AXIS:

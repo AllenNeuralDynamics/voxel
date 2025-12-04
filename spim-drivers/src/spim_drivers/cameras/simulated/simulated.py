@@ -3,6 +3,7 @@ from typing import ClassVar, cast, final
 
 import numpy as np
 from ome_zarr_writer.types import Vec2D
+from spim_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 from spim_rig.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
@@ -13,7 +14,6 @@ from spim_rig.camera.base import (
     TriggerPolarity,
 )
 from spim_rig.camera.roi import ROI, ROIConstraints
-from spim_rig.drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 
 from pyrig.props import deliminated_float, enumerated_int, enumerated_string
 

@@ -1,9 +1,9 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from spim_rig.drivers.tigerhub.model import Reply
-from spim_rig.drivers.tigerhub.protocol.errors import ASIDecodeError
-from spim_rig.drivers.tigerhub.protocol.linefmt import _ax
+from spim_drivers.tigerhub.model import Reply
+from spim_drivers.tigerhub.protocol.errors import ASIDecodeError
+from spim_drivers.tigerhub.protocol.linefmt import _ax
 
 
 @dataclass(frozen=True)

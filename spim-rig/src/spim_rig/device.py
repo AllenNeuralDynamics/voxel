@@ -5,6 +5,7 @@ class DeviceType(StrEnum):
     DAQ = "daq"
     CAMERA = "camera"
     LASER = "laser"
+    AOTF = "aotf"
     LINEAR_AXIS = "linear_axis"
     ROTATION_AXIS = "rotation_axis"
     DISCRETE_AXIS = "discrete_axis"
