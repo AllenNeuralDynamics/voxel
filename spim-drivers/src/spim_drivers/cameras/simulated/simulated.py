@@ -18,10 +18,20 @@ from spim_rig.camera.roi import ROI, ROIConstraints
 from pyrig.props import deliminated_float, enumerated_int, enumerated_string
 
 VP_151MX_M6H0 = Vec2D(y=10_640, x=14_192)
+# 1.00:  "10640,14192"
+# 0.75:  "7980,10,644"
+# 0.5:   "5320,7096"
+# 0.25:  "2660,3548"
+# 0.125: "1330,1774"
 
-_FACTOR = 1.0
 
-DEFAULT_SENSOR_SIZE = Vec2D(y=int(VP_151MX_M6H0.y * _FACTOR), x=int(VP_151MX_M6H0.x * _FACTOR))
+def _parse_vec2d[T: int | float](arg: Vec2D[T] | list[T] | str, rtype: type[T]) -> Vec2D[T]:
+    if isinstance(arg, str):
+        arg = [rtype(x) for x in arg.split(",")]
+    if isinstance(arg, list):
+        assert len(arg) == 2, f"Expected 2 values, got {len(arg)}"
+        return Vec2D(y=rtype(arg[0]), x=rtype(arg[1]))
+    return arg
 
 
 @final
@@ -39,12 +49,12 @@ class SimulatedCamera(SpimCamera):
     def __init__(
         self,
         uid: str,
-        pixel_size_um: Vec2D[float] = Vec2D(y=1.0, x=1.0),
-        sensor_size_px: Vec2D[int] = DEFAULT_SENSOR_SIZE,
+        pixel_size_um: Vec2D[float] | list[float] | str = Vec2D(y=1.0, x=1.0),
+        sensor_size_px: Vec2D[int] | list[int] | str = VP_151MX_M6H0,
     ):
         super().__init__(uid=uid)
-        self._pixel_size_um = pixel_size_um
-        self._sensor_size_px = sensor_size_px
+        self._pixel_size_um = _parse_vec2d(pixel_size_um, rtype=float)
+        self._sensor_size_px = _parse_vec2d(sensor_size_px, rtype=int)
         self._roi_width_px = self._sensor_size_px.x
         self._roi_height_px = self._sensor_size_px.y
         self._roi_width_offset_px = 0

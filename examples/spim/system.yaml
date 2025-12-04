@@ -1,6 +1,12 @@
 _anchors:
   - &camera_ip "127.0.0.1"
   - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
+  - &sim_pixel_size_um "0.5,0.5"
+  - &sim_camera_sensor_px "10640,14192"
+  # - &sim_camera_sensor_px "7980,10,644"
+  # - &sim_camera_sensor_px "5320,7096"
+  # - &sim_camera_sensor_px "2660,3548"
+  # - &sim_camera_sensor_px "1330,1774"
   - &laser_target spim_drivers.lasers.simulated.SimulatedLaser
   - &aotf_laser_target spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
   - &aotf_target spim_drivers.aotf.simulated.SimulatedAotf
@@ -101,15 +107,15 @@ nodes:
   node_1:
     hostname: *camera_ip
     devices:
-      camera_1:
+      camera_1: &sim_camera
         target: *camera_target
-        kwargs: { pixel_size_um: "0.5, 0.5" }
+        kwargs:
+          pixel_size_um: *sim_pixel_size_um
+          sensor_size_px: *sim_camera_sensor_px
   node_2:
     hostname: *camera_ip
     devices:
-      camera_2:
-        target: *camera_target
-        kwargs: { pixel_size_um: "0.5, 0.5" }
+      camera_2: *sim_camera
 
 stage:
   x: x_axis
