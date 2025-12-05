@@ -24,7 +24,7 @@
 	const waveforms = $derived(activeProfile?.waveforms);
 	const timing = $derived(activeProfile?.daq?.timing);
 
-	let numCycles = $state(2);
+	let numCycles = $state(1);
 
 	const timeData = $derived.by(() => {
 		if (!timing || !waveforms) return [];

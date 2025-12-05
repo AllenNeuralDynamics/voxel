@@ -40,22 +40,9 @@ export class Profile {
 		this.#manager = manager;
 	}
 
-	#getFrameSizePx(cameraId: string) {
-		const val = this.#manager.devices.getPropertyValue(cameraId, 'frame_size_px');
+	#getVec2DValue(deviceId: string, prop: string) {
+		const val = this.#manager.devices.getPropertyValue(deviceId, prop);
 		return Array.isArray(val) && val.length === 2 ? { x: val[0], y: val[1] } : null;
-	}
-
-	#getPixelSizeUm(cameraId: string) {
-		const val = this.#manager.devices.getPropertyValue(cameraId, 'pixel_size_um');
-
-		// Handle different formats: "0.5, 0.5" string
-		if (typeof val === 'string') {
-			const parts = val.split(',').map((s) => parseFloat(s.trim()));
-			if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-				return { x: parts[0], y: parts[1] };
-			}
-		}
-		return null;
 	}
 
 	#getBinning(cameraId: string): number {
@@ -69,8 +56,8 @@ export class Profile {
 		const cameraId = firstChannel?.detection ?? null;
 		if (!cameraId) return null;
 
-		const frameSizePx = this.#getFrameSizePx(cameraId);
-		const pixelSizeUm = this.#getPixelSizeUm(cameraId);
+		const frameSizePx = this.#getVec2DValue(cameraId, 'frame_size_px');
+		const pixelSizeUm = this.#getVec2DValue(cameraId, 'pixel_size_um');
 		const binning = this.#getBinning(cameraId);
 
 		if (!frameSizePx || !pixelSizeUm) {

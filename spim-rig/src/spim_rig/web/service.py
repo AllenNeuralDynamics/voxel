@@ -311,7 +311,7 @@ class RigService:
         """Broadcast DAQ waveforms to all clients."""
         if self.rig._acq_task:
             try:
-                waveforms = self.rig._acq_task.get_written_waveforms(target_points=2000)
+                waveforms = self.rig._acq_task.get_written_waveforms(target_points=1000)
                 await self._broadcast("daq/waveforms", waveforms)
             except Exception as e:
                 log.error(f"Failed to get waveforms: {e}")

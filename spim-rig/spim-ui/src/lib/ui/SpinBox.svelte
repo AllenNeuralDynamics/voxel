@@ -31,6 +31,8 @@
 		onChange: onValueChange
 	}: Props = $props();
 
+	let inputElement: HTMLInputElement | undefined;
+
 	// Compute display value with proper decimal formatting
 	let displayValue = $derived(() => {
 		if (decimals !== undefined) {
@@ -151,23 +153,36 @@
 		}
 	}
 
-	// Cleanup on destroy
+	// Cleanup drag listeners on destroy
 	$effect(() => {
 		return () => {
 			document.removeEventListener('mousemove', handleMouseMove);
 			document.removeEventListener('mouseup', handleMouseUp);
 		};
 	});
+
+	// Attach wheel event listener with proper passive option
+	$effect(() => {
+		if (!inputElement) return;
+
+		inputElement.addEventListener('wheel', handleWheel, { passive: false });
+
+		return () => {
+			if (inputElement) {
+				inputElement.removeEventListener('wheel', handleWheel);
+			}
+		};
+	});
 </script>
 
 <div class="input-wrapper {classNames}" class:with-buttons={showButtons}>
 	<input
+		bind:this={inputElement}
 		type="text"
 		{placeholder}
 		value={displayValue()}
 		oninput={handleInput}
 		onmousedown={handleMouseDown}
-		onwheel={handleWheel}
 		style:width="{numCharacters + 1}ch"
 		style:color
 		style:text-align={align}

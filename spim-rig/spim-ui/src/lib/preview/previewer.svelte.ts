@@ -838,9 +838,9 @@ export class Previewer {
 			scheduleWheelIdleReset();
 		};
 
-		canvas.addEventListener('pointerdown', pointerDown);
-		canvas.addEventListener('pointermove', pointerMove);
-		canvas.addEventListener('pointerup', pointerUp);
+		canvas.addEventListener('pointerdown', pointerDown, { passive: true });
+		canvas.addEventListener('pointermove', pointerMove, { passive: true });
+		canvas.addEventListener('pointerup', pointerUp, { passive: true });
 		canvas.addEventListener('wheel', wheel, { passive: false });
 
 		return () => {
