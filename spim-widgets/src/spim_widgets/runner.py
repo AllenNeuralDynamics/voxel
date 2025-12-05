@@ -224,7 +224,7 @@ class DeviceWidgetRunner:
             if not connected:
                 logger.warning(f"Failed to connect to device {serv.device_id}")
                 try:
-                    client.close()
+                    await client.close()
                 except Exception:
                     logger.exception("Error closing client during cleanup")
                 return None
@@ -246,7 +246,7 @@ class DeviceWidgetRunner:
 
             if client:
                 try:
-                    client.close()
+                    await client.close()
                 except Exception:
                     logger.exception("Error closing client during cleanup")
 
@@ -319,12 +319,15 @@ class DeviceWidgetRunner:
         try:
             with loop:
                 loop.run_until_complete(_setup_and_show())
-                loop.run_forever()
-        except KeyboardInterrupt:
-            logger.info("Application interrupted by user")
+                try:
+                    loop.run_forever()
+                except KeyboardInterrupt:
+                    logger.info("Application interrupted by user")
+                finally:
+                    logger.info("Application closed, cleaning up...")
+                    loop.run_until_complete(self.stop())
         finally:
-            logger.info("Application closed, cleaning up...")
-            self._terminate_services()
+            pass
 
         return 0
 
@@ -336,7 +339,7 @@ class DeviceWidgetRunner:
         for device_id, widget in self.widgets.items():
             try:
                 await widget.stop()
-                widget.client.close()
+                await widget.client.close()
                 logger.info(f"Stopped widget for {device_id}")
             except Exception:
                 logger.exception(f"Error stopping widget for {device_id}")

@@ -75,10 +75,14 @@ class DeviceClient:
             await asyncio.sleep(0.1)
         return False
 
-    def close(self):
+    async def close(self):
         """Closes the socket."""
         if self._listen_task:
             self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                pass
 
         if self._sub_socket:
             self._sub_socket.close()
