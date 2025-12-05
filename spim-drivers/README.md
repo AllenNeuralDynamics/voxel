@@ -14,45 +14,18 @@ The SPIM example (`examples/spim`) defaults to the simulated drivers so you can 
 
 **Legend:** Status column shows Implementation + Hardware test (✅ ready, ⚠️ pending).
 
-### AOTFs
-
-| Driver | Target | Status | Notes |
+| Device Type | Target | Status | Notes |
 | --- | --- | --- | --- |
-| [Simulated AOTF](src/spim_drivers/aotf/simulated.py) | `spim_drivers.aotf.simulated.SimulatedAotf` | ✅ ✅ | Used by `examples/spim` for end-to-end smoke tests. |
-| [AA Opto MPDS](src/spim_drivers/aotf/mpds.py) | `spim_drivers.aotf.mpds.MpdsAotf` | ✅ ⚠️ | Hardware hookup required for full validation; API settled. |
-
-### Lasers
-
-| Driver | Target | Status | Notes |
-| --- | --- | --- | --- |
-| [Simulated Laser (standalone DPSS)](src/spim_drivers/lasers/simulated.py) | `spim_drivers.lasers.simulated.SimulatedLaser` | ✅ ✅ | Adjustable power + telemetry without AOTF dependency. |
-| [Simulated AOTF-shuttered Laser](src/spim_drivers/lasers/simulated.py) | `spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser` | ✅ ✅ | Uses AOTF for fast blanking while laser holds power. |
-| [Simulated AOTF-modulated Laser](src/spim_drivers/lasers/simulated.py) | `spim_drivers.lasers.simulated.SimulatedAOTFModulatedLaser` | ✅ ✅ | Passive source—AOTF sets both blanking and RF drive power. |
-
-### Cameras
-
-| Driver | Target | Status | Notes |
-| --- | --- | --- | --- |
-| [Simulated camera](src/spim_drivers/cameras/simulated) | `spim_drivers.cameras.simulated.SimulatedCamera` | ✅ ✅ | Procedural frames + ROI/binning validation in the SPIM demo. |
-| [Vieworks via EGrabber](src/spim_drivers/cameras/egrabber) | `spim_drivers.cameras.egrabber.vieworks.VieworksCamera` | ✅ ⚠️ | Requires Vieworks hardware + EGrabber runtime to exercise. |
-
-### DAQ / Timing
-
-| Driver | Target | Status | Notes |
-| --- | --- | --- | --- |
-| [Simulated DAQ](src/spim_drivers/daqs/simulated.py) | `spim_drivers.daqs.simulated.SimulatedDaq` | ✅ ✅ | Drives the simulated timing stack in `examples/spim`. |
-| [NI PCIe-6738](src/spim_drivers/daqs/ni.py) | `spim_drivers.daqs.ni.NiDaq` | ✅ ⚠️ | Awaiting lab timing tests; structure mirrors deployed rigs. |
-
-### Axes & Motion
-
-| Driver | Target | Status | Notes |
-| --- | --- | --- | --- |
-| [Simulated Linear Axis](src/spim_drivers/axes/simulated.py) | `spim_drivers.axes.simulated.SimulatedLinearAxis` | ✅ ✅ | Includes optional simulated TTL stepper for stage scanning. |
-| [Simulated Discrete Axis](src/spim_drivers/axes/simulated.py) | `spim_drivers.axes.simulated.SimulatedDiscreteAxis` | ✅ ✅ | Ideal for filter wheels, turrets, and other indexed devices. |
-| [ASI Tiger linear axes](src/spim_drivers/axes/asi.py) | `spim_drivers.axes.asi.TigerLinearAxis` | ✅ ⚠️ | Integrates with Tiger hub ops; needs on-hardware sweep. |
-
-### Support Modules
-
-| Module | Target | Status | Notes |
-| --- | --- | --- | --- |
-| [Tiger hub shared protocol](src/spim_drivers/tigerhub) | n/a | ✅ ⚠️ | Dependency for ASI drivers; protocol helpers still evolving. |
+| **AOTF** | [`spim_drivers.aotf.simulated.SimulatedAotf`](src/spim_drivers/aotf/simulated.py) | ✅ ✅ | Used by `examples/spim` for end-to-end smoke tests. |
+| **AOTF** | [`spim_drivers.aotf.mpds.MpdsAotf`](src/spim_drivers/aotf/mpds.py) | ✅ ⚠️ | Hardware hookup required for full validation; API settled. |
+| **Laser** | [`spim_drivers.lasers.simulated.SimulatedLaser`](src/spim_drivers/lasers/simulated.py) | ✅ ✅ | Standalone DPSS: adjustable power + telemetry without AOTF dependency. |
+| **Laser** | [`spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser`](src/spim_drivers/lasers/simulated.py) | ✅ ✅ | Uses AOTF for fast blanking while laser holds power. |
+| **Laser** | [`spim_drivers.lasers.simulated.SimulatedAOTFModulatedLaser`](src/spim_drivers/lasers/simulated.py) | ✅ ✅ | Passive source—AOTF sets both blanking and RF drive power. |
+| **Camera** | [`spim_drivers.cameras.simulated.SimulatedCamera`](src/spim_drivers/cameras/simulated) | ✅ ✅ | Procedural frames + ROI/binning validation in the SPIM demo. |
+| **Camera** | [`spim_drivers.cameras.egrabber.vieworks.VieworksCamera`](src/spim_drivers/cameras/egrabber) | ✅ ⚠️ | Requires Vieworks hardware + EGrabber runtime to exercise. |
+| **DAQ** | [`spim_drivers.daqs.simulated.SimulatedDaq`](src/spim_drivers/daqs/simulated.py) | ✅ ✅ | Drives the simulated timing stack in `examples/spim`. |
+| **DAQ** | [`spim_drivers.daqs.ni.NiDaq`](src/spim_drivers/daqs/ni.py) | ✅ ⚠️ | NI PCIe-6738: awaiting lab timing tests; structure mirrors deployed rigs. |
+| **Linear Axis** | [`spim_drivers.axes.simulated.SimulatedLinearAxis`](src/spim_drivers/axes/simulated.py) | ✅ ✅ | Includes optional simulated TTL stepper for stage scanning. |
+| **Linear Axis** | [`spim_drivers.axes.asi.TigerLinearAxis`](src/spim_drivers/axes/asi.py) | ✅ ⚠️ | ASI Tiger: integrates with Tiger hub ops; needs on-hardware sweep. |
+| **Discrete Axis** | [`spim_drivers.axes.simulated.SimulatedDiscreteAxis`](src/spim_drivers/axes/simulated.py) | ✅ ✅ | Ideal for filter wheels, turrets, and other indexed devices. |
+| **Support** | [Tiger hub shared protocol](src/spim_drivers/tigerhub) | ✅ ⚠️ | Dependency for ASI drivers; protocol helpers still evolving. |

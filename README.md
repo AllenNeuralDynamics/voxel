@@ -1,16 +1,10 @@
 # PyRig
 
-Distributed device control framework for experimental rigs.
+Distributed device control framework for experimental rigs: Provides control of hardware devices across networked nodes with ZeroMQ.
 
 > 🚧 **Heads up:** PyRig is under active development. Expect rapid changes and occasional breaking updates while the core APIs settle.  🚧
 
-Type-safe remote control of hardware devices across networked nodes with ZeroMQ.
-
-👉 Want a turnkey walkthrough? Jump to the [SPIM simulated example](examples/spim/README.md) to spin up a full rig with fake hardware and a web UI.
-
 ## Quick Start
-
-### Simulated Example
 
 Run the [`examples/spim`](examples/spim/README.md) project to see a complete microscope rig with simulated devices and a Web UI served by SpimRig (a Pyrig implementation).
 
@@ -36,6 +30,8 @@ Run the [`examples/spim`](examples/spim/README.md) project to see a complete mic
    ```
 
 See the [detailed guide](examples/spim/README.md) for troubleshooting and HTTPS/remote access notes.
+
+### Example code
 
 ```python
 from pyrig import Rig, RigConfig
