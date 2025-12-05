@@ -210,4 +210,4 @@ uv run python -m imaging.demo
 
 ## License
 
-MIT
+[MIT](LICENSE)

@@ -271,6 +271,9 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         self._position = start_pos
         self._is_moving = False
         self._settle = float(settle_seconds)
+        self.log.debug(
+            "SimulatedDiscreteAxis %s: Initialized at position %s with %s slots", uid, start_pos, self.slot_count
+        )
 
     # --------- state ----------
     @property
@@ -289,23 +292,31 @@ class SimulatedDiscreteAxis(DiscreteAxis):
 
         self._is_moving = True
         self._position = slot
-        self.log.debug("SimulatedFilterWheel %s: Moving to slot %s (%s)", self.uid, slot, self.labels.get(slot))
 
         if wait:
             time.sleep(self._settle)
             self._is_moving = False
+            self.log.debug("SimulatedDiscreteAxis %s: Move completed (blocking), is_moving=False", self.uid)
         else:
             # non-blocking path: schedule reset
+            self.log.debug(
+                "SimulatedDiscreteAxis %s: Scheduling non-blocking move completion in %s seconds",
+                self.uid,
+                self._settle,
+            )
             threading.Timer(self._settle, self._finish_move).start()
 
     def _finish_move(self) -> None:
+        self.log.debug("SimulatedDiscreteAxis %s: Move completed (non-blocking), is_moving=False", self.uid)
         self._is_moving = False
 
     def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
+        self.log.debug("SimulatedDiscreteAxis %s: home() called - moving to slot 0", self.uid)
         self.move(0, wait=wait, timeout=timeout)
 
     def halt(self) -> None:
         """Emergency stop - halt all motion immediately."""
+        self.log.debug("SimulatedDiscreteAxis %s: halt() called - stopping motion", self.uid)
         self._is_moving = False
 
     def await_movement(self, timeout: float | None = None) -> None:

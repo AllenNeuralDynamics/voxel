@@ -3,6 +3,7 @@ name = "pyrig"
 version = "0.1.0"
 description = "Distributed device control for experimental rigs"
 readme = "README.md"
+license-files = ["LICENSE"]
 authors = [
     { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
 ]
@@ -26,6 +27,7 @@ dev = [
 members = [
     "spim-rig",
     "spim-drivers",
+    "spim-widgets",
 ]
 [build-system]
 requires = ["uv_build>=0.8.24,<0.9.0"]

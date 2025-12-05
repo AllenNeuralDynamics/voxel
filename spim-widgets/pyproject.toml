@@ -1,0 +1,24 @@
+[project]
+name = "spim-widgets"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+ "pyside6>=6.9.1",
+ "qasync>=0.28.0",
+ "spim-drivers",
+]
+
+[tool.uv.sources]
+spim-drivers = { workspace = true }
+
+[project.scripts]
+spim-widgets = "spim_widgets:main"
+
+[build-system]
+requires = ["uv_build>=0.9.15,<0.10.0"]
+build-backend = "uv_build"

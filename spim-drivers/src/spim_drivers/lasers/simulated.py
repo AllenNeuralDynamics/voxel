@@ -16,9 +16,11 @@ class SimulatedLaser(SpimLaser):
         super().__init__(uid=uid, wavelength=wavelength)
 
     def enable(self) -> None:
+        self.log.debug("Enabling laser")
         self._is_enabled = True
 
     def disable(self) -> None:
+        self.log.debug("Disabling laser")
         self._is_enabled = False
 
     @property

@@ -78,6 +78,7 @@ class DiscreteAxis(Device):
     # Motion commands ________________________________________________________________________________________________
 
     @abstractmethod
+    @describe(label="Move", desc="Move to a slot by index.", stream=True)
     def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
         """Move to a slot by index.
 
@@ -91,6 +92,7 @@ class DiscreteAxis(Device):
             TimeoutError: If wait is True and the move does not settle within timeout.
         """
 
+    @describe(label="Select", desc="Move to a slot by label.", stream=True)
     def select(self, label: str | None, *, wait: bool = False, timeout: float | None = None) -> None:
         """Move to a slot by label.
 
@@ -117,6 +119,7 @@ class DiscreteAxis(Device):
         raise KeyError(f"Label not found: {label!r}")
 
     @abstractmethod
+    @describe(label="Home", desc="Home/calibrate the device.", stream=True)
     def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
         """Home/calibrate the device.
 
@@ -126,10 +129,12 @@ class DiscreteAxis(Device):
         """
 
     @abstractmethod
+    @describe(label="Halt", desc="Emergency stop - halt all motion immediately.", stream=True)
     def halt(self) -> None:
         """Emergency stop - halt all motion immediately."""
 
     @abstractmethod
+    @describe(label="Await Movement", desc="Wait until the device stops moving.", stream=True)
     def await_movement(self, timeout: float | None = None) -> None:
         """Wait until the device stops moving.
 
