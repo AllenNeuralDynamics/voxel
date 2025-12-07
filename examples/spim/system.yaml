@@ -1,5 +1,5 @@
 # uv run python spim/rig.py
-# uv run spim-node node_<x> 10.128.133.64
+# uv run spim-node node_x 10.128.133.64
 _anchors:
   # - &exaspim2-1_ip "10.128.133.64"
   - &exaspim2-2_ip "10.128.133.46"
@@ -144,16 +144,16 @@ stage:
 daq:
   device: daq_1
   acq_ports:
-    laser_405: ao0
-    laser_488: ao1
-    laser_561: ao2
-    laser_640: ao3
-    laser_730: ao7
-    camera_1: ao4
-    camera_2: ao5
-    camera_3: ao4
-    camera_4: ao5
-    aotf_1: ao6
+    aotf_1: ao0
+    camera_1: ao1
+    camera_2: ao2
+    camera_3: ao3
+    camera_4: ao4
+    laser_405: ao11
+    laser_488: ao12
+    laser_561: ao13
+    laser_640: ao14
+    laser_730: ao15
 
 detection:
   camera_1:
