@@ -47,7 +47,8 @@ class DaqClient(DeviceClient):
 
     async def assign_pin(self, task_name: str, pin: str) -> PinInfo:
         """Assign a pin to the device and track it for the given task."""
-        result = await self.call("assign_pin", task_name, pin)
+        result = await self.call("assign_pin", task_name=task_name, pin=pin)
+        self.log.debug(f"assign_pin returned: {result}")
         return PinInfo.model_validate(result)
 
     async def get_pfi_path(self, pin: str) -> str:

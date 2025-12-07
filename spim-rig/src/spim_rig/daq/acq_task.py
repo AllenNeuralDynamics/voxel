@@ -134,7 +134,7 @@ class AcquisitionTask:
                 raise ValueError(err_msg)
 
             # Assign pin via client
-            pin_info = await self._client.assign_pin(self._uid, port)
+            pin_info = await self._client.assign_pin(task_name=self._uid, pin=port)
             self._log.debug(f"Assigned pin {name}: {pin_info}")
 
             # Add AO channel

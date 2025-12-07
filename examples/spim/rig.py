@@ -15,7 +15,7 @@ from spim_rig.web.app import create_app
 from pyrig.utils import configure_logging, get_uvicorn_log_config
 
 # Configure logging first with RichHandler
-configure_logging(level=logging.INFO, fmt="%(message)s", datefmt="[%X]")
+configure_logging(level=logging.DEBUG, fmt="%(message)s", datefmt="[%X]")
 log = logging.getLogger("spim_rig.app")
 
 

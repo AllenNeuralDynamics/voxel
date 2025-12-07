@@ -152,7 +152,7 @@ class DaqService(DeviceService[SpimDaq]):
             raise ValueError(f"Task '{task_name}' does not exist")
 
         def _assign():
-            return self.device.assign_pin(pin)
+            return self.device.assign_pin(task_name=task_name, pin=pin)
 
         pin_info = await self._exec(_assign)
         self._task_pins[task_name].append(pin_info)
