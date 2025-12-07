@@ -110,8 +110,14 @@ class SimulatedDaq(SpimDaq):
         """Get dictionary of currently assigned pins (name -> info)."""
         return self._assigned_pins.copy()
 
-    def assign_pin(self, pin: str) -> PinInfo:
+    def assign_pin(self, task_name: str, pin: str) -> PinInfo:
         if pin in self._assigned_pins:
+            # If pin is already assigned, ensure it's for the same task
+            if self._assigned_pins[pin].task_name != task_name:
+                raise ValueError(
+                    f"Pin '{pin}' is already assigned to another task "
+                    f"('{self._assigned_pins[pin].task_name}')"
+                )
             return self._assigned_pins[pin]
 
         if pin not in self._all_pins:
@@ -122,7 +128,7 @@ class SimulatedDaq(SpimDaq):
         if pin.startswith("port") or pin.startswith("ctr"):
             pfi = f"/{self._device_name}/PFI{len(self._assigned_pins)}"
 
-        info = PinInfo(pin=pin, path=f"/{self._device_name}/{pin}", pfi=pfi)
+        info = PinInfo(pin=pin, path=f"/{self._device_name}/{pin}", task_name=task_name, pfi=pfi)
         self._assigned_pins[pin] = info
         return info
 
@@ -131,6 +137,16 @@ class SimulatedDaq(SpimDaq):
             del self._assigned_pins[pin.pin]
             return True
         return False
+
+    def release_pins_for_task(self, task_name: str) -> None:
+        """Release all pins that were assigned to a specific task."""
+        pins_to_release = [
+            pin_name
+            for pin_name, info in self._assigned_pins.items()
+            if info.task_name == task_name
+        ]
+        for pin_name in pins_to_release:
+            del self._assigned_pins[pin_name]
 
     def get_pfi_path(self, pin: str) -> str:
         """Get the PFI path for a given pin."""

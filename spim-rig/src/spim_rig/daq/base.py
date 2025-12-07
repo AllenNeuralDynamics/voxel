@@ -72,6 +72,7 @@ class PinInfo(BaseModel):
 
     pin: str  # Port representation if applicable (e.g., "AO1", "P1.0", "CTR0")
     path: str  # The physical channel name (e.g., "Dev1/port1/line0", "Dev1/ao0", "Dev1/ctr0")
+    task_name: str  # The name of the task that assigned this pin
     pfi: str | None = None  # PFI representation if applicable (e.g., "PFI0")
 
     model_config = ConfigDict(frozen=True)
@@ -116,12 +117,16 @@ class SpimDaq(Device):
         """Get dictionary of currently assigned pins (name -> info)."""
 
     @abstractmethod
-    def assign_pin(self, pin: str) -> PinInfo:
+    def assign_pin(self, task_name: str, pin: str) -> PinInfo:
         """Assign a pin to the DAQ device and return its information."""
 
     @abstractmethod
     def release_pin(self, pin: PinInfo) -> bool:
         """Release a previously assigned pin."""
+
+    @abstractmethod
+    def release_pins_for_task(self, task_name: str) -> None:
+        """Release all pins that were assigned to a specific task."""
 
     @abstractmethod
     def get_pfi_path(self, pin: str) -> str:

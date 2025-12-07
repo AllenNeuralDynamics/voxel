@@ -119,15 +119,18 @@ class NiDaq(SpimDaq):
 
     def _initialize_channel_mappings(self) -> None:
         """Initialize comprehensive channel mappings."""
+        # task_name is a placeholder here, it will be updated on assignment
+        placeholder_task = "unassigned"
+
         # Handle counter channels
         for co_path in self._inst.co_physical_chans.channel_names:
             co_name = co_path.split("/")[-1].upper()
-            self.channel_map[co_name] = PinInfo(pin=co_name, path=co_path)
+            self.channel_map[co_name] = PinInfo(pin=co_name, path=co_path, task_name=placeholder_task)
 
         # Handle analog channels
         for ao_path in self._inst.ao_physical_chans.channel_names:
             ao_name = ao_path.split("/")[-1].upper()
-            self.channel_map[ao_name] = PinInfo(pin=ao_name, path=ao_path)
+            self.channel_map[ao_name] = PinInfo(pin=ao_name, path=ao_path, task_name=placeholder_task)
 
         # Handle digital channels and PFI
         def generate_dio_names(dio_path: str) -> tuple[str, str | None]:
@@ -141,7 +144,7 @@ class NiDaq(SpimDaq):
         for dio_path in self._inst.do_lines.channel_names:
             dio_name, pfi_name = generate_dio_names(dio_path)
 
-            info = PinInfo(pin=dio_name, path=dio_path, pfi=pfi_name)
+            info = PinInfo(pin=dio_name, path=dio_path, pfi=pfi_name, task_name=placeholder_task)
 
             self.channel_map[dio_name] = info
             if pfi_name:
@@ -204,7 +207,7 @@ class NiDaq(SpimDaq):
                     assigned[info.pin] = info
         return assigned
 
-    def assign_pin(self, pin: str) -> PinInfo:
+    def assign_pin(self, task_name: str, pin: str) -> PinInfo:
         """Assign a pin and return its physical name and PFI name (if applicable).
 
         Args:
@@ -224,17 +227,45 @@ class NiDaq(SpimDaq):
 
         info = self.channel_map[pin]
         if info.path in self.assigned_channels:
-            names = [n for n in (info.pin, info.pfi) if n]
-            other_str = f" (also known as {', '.join(names)})" if names else ""
-            err_msg = f"Pin {pin}{other_str} is already assigned"
-            raise ValueError(err_msg)
+            # Check if it's assigned to another task
+            if info.task_name != task_name:
+                names = [n for n in (info.pin, info.pfi) if n]
+                other_str = f" (also known as {', '.join(names)})" if names else ""
+                err_msg = (
+                    f"Pin {pin}{other_str} is already assigned to task "
+                    f"'{info.task_name}'"
+                )
+                raise ValueError(err_msg)
+        
+        # Create a new PinInfo with the correct task_name
+        new_info = info.model_copy(update={'task_name': task_name})
+        self.channel_map[pin] = new_info
+        if new_info.pfi:
+            self.channel_map[new_info.pfi] = new_info
 
-        self.assigned_channels.add(info.path)
-        return info
+        self.assigned_channels.add(new_info.path)
+        return new_info
 
     def release_pin(self, pin: PinInfo) -> bool:
         """Release a previously assigned pin."""
         if pin.path in self.assigned_channels:
             self.assigned_channels.remove(pin.path)
+            
+            # Reset task_name to placeholder
+            unassigned_info = pin.model_copy(update={'task_name': 'unassigned'})
+            self.channel_map[pin.pin] = unassigned_info
+            if pin.pfi:
+                self.channel_map[pin.pfi] = unassigned_info
             return True
         return False
+
+    def release_pins_for_task(self, task_name: str) -> None:
+        """Release all pins that were assigned to a specific task."""
+        # Find all pins assigned to this task
+        pins_to_release = [
+            info 
+            for info in self.channel_map.values() 
+            if info.task_name == task_name
+        ]
+        for pin_info in pins_to_release:
+            self.release_pin(pin_info)
