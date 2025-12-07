@@ -106,14 +106,14 @@ nodes:
         target: *fw_target
         kwargs:
           slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
-      fw_emission_cam3:
-        target: *fw_target
-        kwargs:
-          slots: { 0: "BP450", 1: "BP525", 2: "BP600", 3: "BP780" }
-      fw_emission_cam4:
-        target: *fw_target
-        kwargs:
-          slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
+      # fw_emission_cam3:
+      #   target: *fw_target
+      #   kwargs:
+      #     slots: { 0: "BP450", 1: "BP525", 2: "BP600", 3: "BP780" }
+      # fw_emission_cam4:
+      #   target: *fw_target
+      #   kwargs:
+      #     slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
 
   node_1:
     hostname: *local_ip
@@ -147,8 +147,8 @@ daq:
     aotf_1: ao0
     camera_1: ao1
     camera_2: ao2
-    camera_3: ao3
-    camera_4: ao4
+    # camera_3: ao3
+    # camera_4: ao4
     laser_405: ao11
     laser_488: ao12
     laser_561: ao13
