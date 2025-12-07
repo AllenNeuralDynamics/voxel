@@ -23,7 +23,11 @@ class CameraClient(DeviceClient):
             Preview address to connect to (e.g., "tcp://camera-host:6000")
         """
         result = await self.call("start_preview", channel_name, trigger_mode, trigger_polarity)
-        return result
+        if isinstance(result, str):
+            return result
+        if isinstance(result, dict):
+            raise RuntimeError(f"{self.uid} failed to start preview: {result.get('msg', result)}")
+        raise RuntimeError(f"{self.uid} failed to start preview: returned unexpected type {type(result)}: {result}")
 
     async def stop_preview(self) -> None:
         """Stop camera preview mode."""

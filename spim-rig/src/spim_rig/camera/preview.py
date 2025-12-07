@@ -225,12 +225,12 @@ class PreviewGenerator:
         hist_data = None
         if not adjust:
             # Debug: check what's in the data
-            self.log.debug(
-                f"Preview image stats: dtype={preview_img.dtype}, "
-                f"min={preview_img.min()}, max={preview_img.max()}, "
-                f"mean={preview_img.mean():.2f}, "
-                f"shape={preview_img.shape}"
-            )
+            # self.log.debug(
+            #     f"Preview image stats: dtype={preview_img.dtype}, "
+            #     f"min={preview_img.min()}, max={preview_img.max()}, "
+            #     f"mean={preview_img.mean():.2f}, "
+            #     f"shape={preview_img.shape}"
+            # )
 
             # Compute histogram with reasonable bin count for performance
             # Use 1024 bins for good detail without overwhelming the frontend

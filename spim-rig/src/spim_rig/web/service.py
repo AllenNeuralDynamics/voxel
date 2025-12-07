@@ -121,7 +121,7 @@ class RigService:
                 case _:
                     log.warning("Unknown message topic from client %s: %s", client_id, topic)
         except Exception as e:
-            log.error("Error handling message from client %s: %s", client_id, e)
+            log.error("Error handling message from client %s: %s", client_id, e, exc_info=True)
             await self._send_to_client(self.clients.get(client_id), "rig/error", {"error": str(e), "topic": topic})
 
     async def handle_profile_change(self, payload: dict[str, Any] | str):

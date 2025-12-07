@@ -3,8 +3,8 @@
 _anchors:
   # - &exaspim2-1_ip "10.128.133.64"
   - &exaspim2-2_ip "10.128.133.46"
-  - &exaspim2-3_ip "10.128.133.68"
-  - &exaspim2-4_ip "10.128.133.70"
+  # - &exaspim2-3_ip "10.128.133.68"
+  # - &exaspim2-4_ip "10.128.133.70"
   - &local_ip "127.0.0.1"
   - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
   - &sim_pixel_size_um "0.5,0.5"
@@ -127,14 +127,14 @@ nodes:
     hostname: *exaspim2-2_ip
     devices:
       camera_2: *sim_camera
-  node_3:
-    hostname: *exaspim2-3_ip
-    devices:
-      camera_3: *sim_camera
-  node_4:
-    hostname: *exaspim2-4_ip
-    devices:
-      camera_4: *sim_camera
+  # node_3:
+  #   hostname: *exaspim2-3_ip
+  #   devices:
+  #     camera_3: *sim_camera
+  # node_4:
+  #   hostname: *exaspim2-4_ip
+  #   devices:
+  #     camera_4: *sim_camera
 
 stage:
   x: x_axis
@@ -160,10 +160,10 @@ detection:
     filter_wheels: [fw_detection_shared, fw_emission_cam1]
   camera_2:
     filter_wheels: [fw_detection_shared, fw_emission_cam2]
-  camera_3:
-    filter_wheels: [fw_detection_shared, fw_emission_cam3]
-  camera_4:
-    filter_wheels: [fw_detection_shared, fw_emission_cam4]
+  # camera_3:
+  #   filter_wheels: [fw_detection_shared, fw_emission_cam3]
+  # camera_4:
+  #   filter_wheels: [fw_detection_shared, fw_emission_cam4]
 
 illumination:
   laser_405: {}

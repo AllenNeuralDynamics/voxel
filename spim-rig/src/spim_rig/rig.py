@@ -354,18 +354,21 @@ class SpimRig(Rig):
         self.log.info(f"Starting preview for profile '{self._active_profile_id}' on cameras: {cameras_to_stream}")
 
         # Start cameras in parallel, collect preview addresses
+        # Track camera IDs in same order as tasks to match with results
         tasks = []
+        camera_ids = []
         for chan_name, channel in self.active_channels.items():
             if channel.detection not in self.cameras:
                 self.log.warning(f"Channel '{chan_name}' has no camera assigned")
                 continue
             tasks.append(self.cameras[channel.detection].start_preview(channel_name=chan_name))
+            camera_ids.append(channel.detection)
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Collect successful preview addresses
         preview_addrs: dict[str, str] = {}
-        for cam_id, result in zip(cameras_to_stream, results):
+        for cam_id, result in zip(camera_ids, results):
             if isinstance(result, BaseException):
                 self.log.error(f"Camera {cam_id} failed to start preview: {result}")
             else:
