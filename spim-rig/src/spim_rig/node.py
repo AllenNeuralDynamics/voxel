@@ -12,7 +12,7 @@ Examples:
 """
 
 from pyrig import Device, NodeService
-from pyrig.node import main
+from pyrig.node import main as pyrig_main
 from spim_rig.aotf.base import SpimAotf
 from spim_rig.camera.base import SpimCamera
 from spim_rig.camera.service import CameraService
@@ -35,5 +35,11 @@ class SpimNodeService(NodeService):
         return super()._create_service(device, conn)
 
 
+def main():
+    """Entry point for spim-node command."""
+
+    pyrig_main(SpimNodeService)
+
+
 if __name__ == "__main__":
-    main(SpimNodeService)
+    main()
