@@ -1,4 +1,4 @@
-# uv run python spim/rig.py
+# uv run python examplse/spim/rig.py
 # uv run spim-node node_x 10.128.133.64
 _anchors:
   # - &exaspim2-1_ip "10.128.133.64"
@@ -130,11 +130,11 @@ nodes:
   node_3:
     hostname: *exaspim2-3_ip
     devices:
-      camera_2: *sim_camera
+      camera_3: *sim_camera
   node_4:
     hostname: *exaspim2-4_ip
     devices:
-      camera_2: *sim_camera
+      camera_4: *sim_camera
 
 stage:
   x: x_axis
