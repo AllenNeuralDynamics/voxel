@@ -87,7 +87,7 @@ class SimulatedDaq(SpimDaq):
         self._assigned_pins: dict[str, PinInfo] = {}
         # Simulate available pins on the device
         self._all_pins = (
-            [f"ao{i}" for i in range(8)] + [f"port0/line{i}" for i in range(8)] + [f"ctr{i}" for i in range(2)]
+            [f"ao{i}" for i in range(64)] + [f"port0/line{i}" for i in range(8)] + [f"ctr{i}" for i in range(2)]
         )
 
     @property
@@ -115,8 +115,7 @@ class SimulatedDaq(SpimDaq):
             # If pin is already assigned, ensure it's for the same task
             if self._assigned_pins[pin].task_name != task_name:
                 raise ValueError(
-                    f"Pin '{pin}' is already assigned to another task "
-                    f"('{self._assigned_pins[pin].task_name}')"
+                    f"Pin '{pin}' is already assigned to another task ('{self._assigned_pins[pin].task_name}')"
                 )
             return self._assigned_pins[pin]
 
@@ -140,11 +139,7 @@ class SimulatedDaq(SpimDaq):
 
     def release_pins_for_task(self, task_name: str) -> None:
         """Release all pins that were assigned to a specific task."""
-        pins_to_release = [
-            pin_name
-            for pin_name, info in self._assigned_pins.items()
-            if info.task_name == task_name
-        ]
+        pins_to_release = [pin_name for pin_name, info in self._assigned_pins.items() if info.task_name == task_name]
         for pin_name in pins_to_release:
             del self._assigned_pins[pin_name]
 
