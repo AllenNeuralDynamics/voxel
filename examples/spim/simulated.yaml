@@ -1,14 +1,12 @@
-# uv run python spim/rig.py
-# uv run spim-node node_<x> 10.128.133.64
 _anchors:
-  # - &exaspim2-1_ip "10.128.133.64"
-  - &exaspim2-2_ip "10.128.133.46"
-  - &exaspim2-3_ip "10.128.133.68"
-  - &exaspim2-4_ip "10.128.133.70"
-  - &local_ip "127.0.0.1"
+  - &camera_ip "127.0.0.1"
   - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
   - &sim_pixel_size_um "0.5,0.5"
   - &sim_camera_sensor_px "10640,14192"
+  # - &sim_camera_sensor_px "7980,10,644"
+  # - &sim_camera_sensor_px "5320,7096"
+  # - &sim_camera_sensor_px "2660,3548"
+  # - &sim_camera_sensor_px "1330,1774"
   - &laser_target spim_drivers.lasers.simulated.SimulatedLaser
   - &aotf_laser_target spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
   - &aotf_target spim_drivers.aotf.simulated.SimulatedAotf
@@ -53,16 +51,6 @@ nodes:
       aotf_1:
         target: *aotf_target
         kwargs: { blanking_mode: "external" }
-      x_axis:
-        target: *linear_axis_target
-        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
-      y_axis:
-        target: *linear_axis_target
-        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
-      z_axis:
-        target: *linear_axis_target
-        kwargs:
-          { lower_limit_mm: 0.0, upper_limit_mm: 50.0, has_ttl_stepper: true }
       laser_405:
         target: *aotf_laser_target
         kwargs:
@@ -106,17 +94,18 @@ nodes:
         target: *fw_target
         kwargs:
           slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
-      fw_emission_cam3:
-        target: *fw_target
+      x_axis:
+        target: *linear_axis_target
+        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
+      y_axis:
+        target: *linear_axis_target
+        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
+      z_axis:
+        target: *linear_axis_target
         kwargs:
-          slots: { 0: "BP450", 1: "BP525", 2: "BP600", 3: "BP780" }
-      fw_emission_cam4:
-        target: *fw_target
-        kwargs:
-          slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
-
+          { lower_limit_mm: 0.0, upper_limit_mm: 50.0, has_ttl_stepper: true }
   node_1:
-    hostname: *local_ip
+    hostname: *camera_ip
     devices:
       camera_1: &sim_camera
         target: *camera_target
@@ -124,15 +113,7 @@ nodes:
           pixel_size_um: *sim_pixel_size_um
           sensor_size_px: *sim_camera_sensor_px
   node_2:
-    hostname: *exaspim2-2_ip
-    devices:
-      camera_2: *sim_camera
-  node_3:
-    hostname: *exaspim2-3_ip
-    devices:
-      camera_2: *sim_camera
-  node_4:
-    hostname: *exaspim2-4_ip
+    hostname: *camera_ip
     devices:
       camera_2: *sim_camera
 
@@ -151,8 +132,6 @@ daq:
     laser_730: ao7
     camera_1: ao4
     camera_2: ao5
-    camera_3: ao4
-    camera_4: ao5
     aotf_1: ao6
 
 detection:
@@ -160,10 +139,6 @@ detection:
     filter_wheels: [fw_detection_shared, fw_emission_cam1]
   camera_2:
     filter_wheels: [fw_detection_shared, fw_emission_cam2]
-  camera_3:
-    filter_wheels: [fw_detection_shared, fw_emission_cam3]
-  camera_4:
-    filter_wheels: [fw_detection_shared, fw_emission_cam4]
 
 illumination:
   laser_405: {}

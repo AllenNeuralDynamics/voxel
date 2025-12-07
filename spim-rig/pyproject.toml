@@ -18,6 +18,9 @@ dependencies = [
     "websockets>=15.0.1",
 ]
 
+[project.scripts]
+spim-node = "spim_rig.node:main"
+
 [tool.uv.sources]
 ome-zarr-writer = { git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" }
 pyrig = { workspace = true }

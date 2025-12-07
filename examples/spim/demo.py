@@ -13,7 +13,7 @@ from pathlib import Path
 import zmq.asyncio
 from rich import print
 from spim_rig import SpimRig, SpimRigConfig
-from spim_rig.camera.base import TriggerMode, TriggerPolarity
+from spim_rig.camera.preview import PreviewFrame
 
 from pyrig.utils import configure_logging
 
@@ -76,7 +76,6 @@ async def main():
                 nonlocal frame_count
 
                 # Unpack frame to inspect metadata
-                from spim_rig.camera.preview import PreviewFrame
 
                 frame = PreviewFrame.from_packed(packed_frame)
 

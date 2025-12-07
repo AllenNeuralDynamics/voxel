@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import uvicorn
+from spim_rig.web.app import create_app
 
 from pyrig.utils import configure_logging, get_uvicorn_log_config
 
@@ -35,7 +36,6 @@ def main():
     log.info("Starting SPIM Rig web server with config: %s", config_path)
 
     # Create the app with the config path
-    from spim_rig.web.app import create_app
 
     app = create_app(str(config_path))
 
