@@ -16,10 +16,12 @@ dependencies = [
     "fastapi>=0.121.1",
     "uvicorn>=0.38.0",
     "websockets>=15.0.1",
+    "rich>=14.2.0",
 ]
 
 [project.scripts]
-spim-node = "spim_rig.node:main"
+spim-node = "spim_rig.app:node_main"
+spim = "spim_rig.app:main"
 
 [tool.uv.sources]
 ome-zarr-writer = { git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" }

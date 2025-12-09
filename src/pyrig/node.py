@@ -333,7 +333,7 @@ def run_node_service(
     log_port: int = 9001,
     start_port: int = 10000,
     service_cls: type[NodeService] = NodeService,
-    remove_console_handlers: bool = True,
+    remove_console_handlers: bool = False,
 ):
     """Run a node service (synchronous entry point).
 

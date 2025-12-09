@@ -136,7 +136,7 @@ if RichHandler:
             return super().format(record)
 
 
-def get_uvicorn_log_config(datefmt: str = "[%X]") -> dict[str, Any]:
+def get_uvicorn_log_config(datefmt: str = "[%X]", access_log_level: str = "WARNING") -> dict[str, Any]:
     """Get uvicorn log configuration that works with RichHandler.
 
     When Rich is available, this configures uvicorn to use UvicornRichHandler
@@ -147,6 +147,7 @@ def get_uvicorn_log_config(datefmt: str = "[%X]") -> dict[str, Any]:
 
     Args:
         datefmt: Date format string (e.g., "[%X]" for time only, "%Y-%m-%d %H:%M:%S" for full)
+        access_log_level: Log level for access logs (default: "WARNING" to hide 200 OK logs)
 
     Returns:
         Log configuration dict for uvicorn, or None for defaults.
@@ -188,7 +189,7 @@ def get_uvicorn_log_config(datefmt: str = "[%X]") -> dict[str, Any]:
         "loggers": {
             "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
             "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
-            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": ["access"], "level": access_log_level, "propagate": False},
         },
     }
 

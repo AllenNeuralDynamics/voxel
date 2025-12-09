@@ -6,30 +6,16 @@ Distributed device control framework for experimental rigs: Provides control of 
 
 ## Quick Start
 
-Run the [`examples/spim`](examples/spim/README.md) project to see a complete microscope rig with simulated devices and a Web UI served by SpimRig (a Pyrig implementation).
+```bash
+# Install dependencies
+uv sync --all-packages --all-extras
 
-1. Install backend dependencies from the repo root:
+# Run basic examples
+uv run python -m examples.simple.demo
+uv run python -m examples.imaging.demo
+```
 
-   ```bash
-   uv sync --all-packages --all-extras
-   ```
-
-2. Build the UI assets so the backend can serve them, then return to the repo root:
-
-   ```bash
-   cd spim-rig/spim-ui
-   pnpm install
-   pnpm run build
-   cd ../../
-   ```
-
-3. Start the simulated rig (from the repo root) and open http://localhost:8000:
-
-   ```bash
-   uv run python -m examples.spim.app
-   ```
-
-See the [detailed guide](examples/spim/README.md) for troubleshooting and HTTPS/remote access notes.
+**[SPIM-Rig:](spim-rig/README.md)** A complete microscope rig implementation using PyRig with web UI and hardware drivers.
 
 ### Example code
 

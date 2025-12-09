@@ -9,7 +9,14 @@ import zmq.asyncio
 
 from pyrig.config import RigConfig
 from pyrig.device import DeviceClient
-from pyrig.node import DeviceBuildError, DeviceProvision, NodeService, ProvisionComplete, ProvisionResponse
+from pyrig.node import (
+    DeviceBuildError,
+    DeviceBuildResult,
+    DeviceProvision,
+    NodeService,
+    ProvisionComplete,
+    ProvisionResponse,
+)
 
 # Architecture:
 # - Controller starts ROUTER socket on control_port (single port for all nodes)
@@ -74,7 +81,9 @@ class Rig:
 
         self._local_nodes = await self._spawn_local_nodes()
 
-        self.provisions, self.build_errors = await self._provision_nodes(timeout=provision_timeout)
+        result = await self._provision_nodes(timeout=provision_timeout)
+        self.provisions = result.devices
+        self.build_errors = result.errors
 
         for device_id, prov in self.provisions.items():
             client = self._create_client(device_id, prov)
@@ -121,7 +130,7 @@ class Rig:
                 target=_run_node_service,
                 args=(node_id, ctrl_port, log_port, start_port, self.NODE_SERVICE_CLASS),
                 name=f"node-{node_id}",
-                daemon=True,
+                # daemon=True, # causing issues on linux
             )
             process.start()
             processes[node_id] = process
@@ -132,9 +141,7 @@ class Rig:
 
         return processes
 
-    async def _provision_nodes(
-        self, timeout: float = 30.0
-    ) -> tuple[dict[str, DeviceProvision], dict[str, DeviceBuildError]]:
+    async def _provision_nodes(self, timeout: float = 30.0) -> DeviceBuildResult:
         """Provision all nodes (local and remote).
 
         Arguments:
@@ -195,7 +202,7 @@ class Rig:
                 f"Rig startup failed. Missing nodes: {missing}. All provisioned nodes have been shut down."
             )
 
-        return all_devices, all_errors
+        return DeviceBuildResult(devices=all_devices, errors=all_errors)
 
     async def _shutdown_nodes(self, node_ids: set[str], timeout: float = 5.0):
         """Send shutdown command to specific nodes and wait for acknowledgment.
@@ -242,9 +249,9 @@ class Rig:
                         process.join()
 
     async def _wait_for_connections(self, timeout: float = 30.0):
-        """Wait for all agents to receive heartbeats from their devices."""
+        """Wait for all clients to receive heartbeats from their devices."""
         # Use wait_for_connection() method from DeviceClient
-        tasks = {device_id: agent.wait_for_connection(timeout=timeout) for device_id, agent in self.devices.items()}
+        tasks = {device_id: client.wait_for_connection(timeout=timeout) for device_id, client in self.devices.items()}
 
         results = await asyncio.gather(*tasks.values(), return_exceptions=True)
 
@@ -286,8 +293,8 @@ class Rig:
         except Exception as e:
             self.log.error(f"Error in log receiver: {e}")
 
-    def get_agent(self, device_id: str) -> DeviceClient:
-        """Get agent for a specific device.
+    def get_device_client(self, device_id: str) -> DeviceClient:
+        """Get client for a specific device.
 
         Args:
             device_id: Device identifier
@@ -311,8 +318,9 @@ class Rig:
                 pass
 
         # Step 2: Close all DeviceClients first (disconnect from devices)
-        for device_id, agent in self.devices.items():
-            agent.close()
+        for device_id, client in self.devices.items():
+            self.log.debug(f"Closing device {device_id}")
+            await client.close()
 
         # Step 3: Shutdown all nodes (send shutdown, wait for ack, terminate processes)
         all_nodes = set(self.config.nodes.keys())

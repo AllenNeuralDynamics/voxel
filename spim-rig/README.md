@@ -1,16 +1,33 @@
 # SPIM Rig
 
-`spim-rig` is a reference implementation of a selective plane illumination microscope built on top of PyRig. It bundles the orchestration layer (`spim_rig` Python package), a FastAPI/WebSocket control service, and the companion Svelte UI (`spim-ui`) that compiles down to static assets served by the backend.
-
-## What's Inside
-
-- `src/spim_rig`: typed device clients/services, rig configuration schema, and the FastAPI surface for browsers.
-- `spim-ui`: the front-end project. `pnpm run build` drops its assets into `src/spim_rig/web/static`.
+A complete selective plane illumination microscope implementation using PyRig. Includes device drivers, typed clients/services, web UI, and CLI.
 
 ## Quick Start
 
-1. Install dependencies from the repository root: `uv sync --all-packages --all-extras`.
-2. Build the UI assets: `cd spim-rig/spim-ui && pnpm install && pnpm run build && cd ../../`.
-3. Launch the simulated rig + web app: `uv run python -m examples.spim.app` and browse to http://localhost:8000.
+```bash
+# From repository root
+uv sync --all-packages --all-extras
 
-See [examples/spim/README.md](../examples/spim/README.md) for detailed walkthroughs plus HTTPS/remote access notes.
+# Build web UI
+cd spim-rig/spim-ui
+pnpm install
+pnpm run build
+cd ../../
+
+# Run simulated rig
+uv run spim rig spim-rig/examples/simulated.yaml
+```
+
+Open http://localhost:8000
+
+## CLI Usage
+
+```bash
+# Start rig controller with web UI
+spim rig <config.yaml> [--port PORT] [--debug]
+
+# Start node service
+spim node <node_id> --rig <host[:port]> [--debug]
+```
+
+See [examples/README.md](examples/README.md) for more examples and demos.

@@ -1,19 +1,16 @@
-"""Entry point for running a SpimNodeService on a remote host.
+"""SPIM node service with custom device support.
 
-Usage:
-    uv run python -m spim_rig.node <node_id> [controller_addr]
+The SpimNodeService extends pyrig's NodeService to support SPIM-specific devices
+like SpimCamera, SpimDaq, and SpimAotf.
 
-Examples:
-    # Connect to controller on localhost
-    uv run python -m spim_rig.node node_1
-
-    # Connect to remote controller
-    uv run python -m spim_rig.node node_1 tcp://192.168.1.100:9000
+Note:
+    To run a node, use the spim CLI:
+        spim node <node_id> --rig <host[:port]>
+    Or use the alias:
+        spim-node <node_id> --rig <host[:port]>
 """
 
 from pyrig import Device, NodeService
-from pyrig.node import main as pyrig_main
-from spim_rig.aotf.base import SpimAotf
 from spim_rig.camera.base import SpimCamera
 from spim_rig.camera.service import CameraService
 from spim_rig.daq.base import SpimDaq
@@ -29,17 +26,4 @@ class SpimNodeService(NodeService):
             return CameraService(device, conn, self._zctx)
         if isinstance(device, SpimDaq):
             return DaqService(device, conn, self._zctx)
-        if isinstance(device, SpimAotf):
-            # AOTF uses the default DeviceService (no custom service needed)
-            return super()._create_service(device, conn)
         return super()._create_service(device, conn)
-
-
-def main():
-    """Entry point for spim-node command."""
-
-    pyrig_main(SpimNodeService)
-
-
-if __name__ == "__main__":
-    main()

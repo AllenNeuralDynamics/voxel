@@ -8,7 +8,11 @@ _anchors:
   - &local_ip "127.0.0.1"
   - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
   - &sim_pixel_size_um "0.5,0.5"
-  - &sim_camera_sensor_px "10640,14192"
+  # - &sim_camera_sensor_px "10640,14192"
+  # - &sim_camera_sensor_px "7980,10,644"
+  - &sim_camera_sensor_px "5320,7096"
+  # - &sim_camera_sensor_px "2660,3548"
+  # - &sim_camera_sensor_px "1330,1774"
   - &laser_target spim_drivers.lasers.simulated.SimulatedLaser
   - &aotf_laser_target spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
   - &aotf_target spim_drivers.aotf.simulated.SimulatedAotf

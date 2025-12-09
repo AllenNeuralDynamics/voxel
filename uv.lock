@@ -1150,6 +1150,7 @@ dependencies = [
     { name = "ome-zarr-writer" },
     { name = "opencv-python-headless" },
     { name = "pyrig" },
+    { name = "rich" },
     { name = "uvicorn" },
     { name = "websockets" },
 ]
@@ -1162,6 +1163,7 @@ requires-dist = [
     { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
     { name = "pyrig", editable = "." },
+    { name = "rich", specifier = ">=14.2.0" },
     { name = "uvicorn", specifier = ">=0.38.0" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
