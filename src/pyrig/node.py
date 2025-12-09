@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from typing import Any, Literal
 
 import zmq
@@ -392,7 +393,7 @@ class NodeService:
         self._device_servers.clear()
 
 
-async def _run_async(
+async def run_node_async(
     node_id: str,
     ctrl_host: str,
     ctrl_port: int,
@@ -400,6 +401,7 @@ async def _run_async(
     start_port: int,
     service_cls: type[NodeService],
     remove_console_handlers: bool = False,
+    on_ready: Callable[[], None] | None = None,
 ):
     """Async implementation of node service runner."""
     # Setup logging infrastructure
@@ -426,6 +428,7 @@ async def _run_async(
     # Create node service (no logging concerns)
     node = service_cls(zctx, node_id=node_id, ctrl_addr=f"tcp://{ctrl_host}:{ctrl_port}", start_port=start_port)
     try:
+        on_ready() if on_ready else None
         await node.run()
     except KeyboardInterrupt:
         logger.info("shutting_down")
@@ -444,6 +447,7 @@ def run_node_service(
     start_port: int = 10000,
     service_cls: type[NodeService] = NodeService,
     remove_console_handlers: bool = False,
+    on_ready: Callable[[], None] | None = None,
 ):
     """Run a node service (synchronous entry point).
 
@@ -460,7 +464,7 @@ def run_node_service(
     """
 
     asyncio.run(
-        _run_async(
+        run_node_async(
             node_id=node_id,
             ctrl_host=ctrl_host,
             ctrl_port=ctrl_port,
@@ -468,6 +472,7 @@ def run_node_service(
             start_port=start_port,
             service_cls=service_cls,
             remove_console_handlers=remove_console_handlers,
+            on_ready=on_ready,
         )
     )
 

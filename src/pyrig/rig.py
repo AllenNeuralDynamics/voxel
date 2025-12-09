@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from multiprocessing import Process
+from multiprocessing import Event, Process
 
 import zmq
 import zmq.asyncio
@@ -18,6 +18,8 @@ from pyrig.node import (
     NodeService,
     ProvisionComplete,
     ProvisionResponse,
+    run_node_async,
+    # run_node_service,
 )
 from pyrig.protocol import NodeAction, RigAction, RigMessage
 
@@ -30,22 +32,40 @@ from pyrig.protocol import NodeAction, RigAction, RigMessage
 # - Controller sends NodeConfig to each node
 # - Nodes create devices and allocate ports automatically
 # - Nodes respond with device addresses via "provision_complete" action
-# - Controller creates DeviceClients and waits for heartbeats
+# - Controller creates DeviceClients and listens to node hearbeats
 
 
-def _run_node_service(node_id: str, ctrl_port: int, log_port: int, start_port: int, service_cls: type[NodeService]):
-    """Run NodeService in a subprocess. This function is the target for subprocess.Process."""
-    from pyrig.node import run_node_service
+class LocalNodeProcess(Process):
+    def __init__(
+        self,
+        node_id: str,
+        ctrl_port: int,
+        log_port: int,
+        start_port: int,
+        service_cls: type[NodeService],
+    ):
+        super().__init__(name=f"node-{node_id}")
+        self.node_id = node_id
+        self.ctrl_port = ctrl_port
+        self.log_port = log_port
+        self.start_port = start_port
+        self.service_cls = service_cls
+        self.ready_event = Event()
 
-    run_node_service(
-        node_id=node_id,
-        ctrl_host="localhost",
-        ctrl_port=ctrl_port,
-        log_port=log_port,
-        start_port=start_port,
-        service_cls=service_cls,
-        remove_console_handlers=True,
-    )
+    def run(self):
+        asyncio.run(
+            run_node_async(
+                node_id=self.node_id,
+                ctrl_host="localhost",
+                ctrl_port=self.ctrl_port,
+                log_port=self.log_port,
+                start_port=self.start_port,
+                service_cls=self.service_cls,
+                remove_console_handlers=True,
+                on_ready=self.ready_event.set,
+            )
+        )
+        self.ready_event.clear()
 
 
 class Rig:
@@ -71,7 +91,7 @@ class Rig:
         self.provisions: dict[str, DeviceProvision] = {}
         self.devices: dict[str, DeviceClient] = {}
         self.build_errors: dict[str, DeviceBuildError] = {}
-        self._local_nodes: dict[str, Process] = {}
+        self._local_nodes: dict[str, LocalNodeProcess] = {}
         self._node_heartbeats: dict[str, float] = {}  # node_id -> last_heartbeat_time
         self._heartbeat_monitor_task: asyncio.Task | None = None
 
@@ -84,7 +104,24 @@ class Rig:
         """
         self.log.info(f"Starting {self.config.metadata.name}...")
 
-        self._local_nodes = await self._spawn_local_nodes()
+        self._clear_local_node_processes()
+        start_port = 10000
+        for node_id in self.config.local_nodes.keys():
+            process = LocalNodeProcess(
+                node_id=node_id,
+                start_port=start_port,
+                ctrl_port=self.config.metadata.control_port,
+                log_port=self.config.metadata.log_port,
+                service_cls=self.NODE_SERVICE_CLASS,
+            )
+            self._local_nodes[node_id] = process
+            process.start()
+            start_port += 1000
+
+        while not all(process.ready_event.is_set() for process in self._local_nodes.values()):
+            self.log.warning("Waiting for local nodes to report as alive...")
+            time.sleep(0.5)
+        self.log.info("All local nodes started successfully.")
 
         result = await self._provision_nodes(timeout=provision_timeout)
         self.provisions = result.devices
@@ -119,35 +156,6 @@ class Rig:
     async def _on_provision_complete(self) -> None:
         """Override for custom validation after devices are provisioned."""
         pass
-
-    async def _spawn_local_nodes(self) -> dict[str, Process]:
-        """Spawn local node subprocesses."""
-        local_nodes = self.config.local_nodes
-
-        if not local_nodes:
-            return {}
-
-        processes = {}
-        start_port = 10000
-        ctrl_port = self.config.metadata.control_port
-        log_port = self.config.metadata.log_port
-
-        for node_id in local_nodes.keys():
-            # Create subprocess running NodeService
-            process = Process(
-                target=_run_node_service,
-                args=(node_id, ctrl_port, log_port, start_port, self.NODE_SERVICE_CLASS),
-                name=f"node-{node_id}",
-                # daemon=True, # causing issues on linux
-            )
-            process.start()
-            processes[node_id] = process
-            start_port += 1000
-
-        # Give processes time to start up and connect
-        await asyncio.sleep(0.5)
-
-        return processes
 
     async def _ping_all_nodes(self, timeout: float = 5.0) -> set[str]:
         """Ping all expected nodes to verify they're reachable.
@@ -282,16 +290,18 @@ class Rig:
         except asyncio.TimeoutError:
             pass  # Timeout is expected if nodes were interrupted
 
-        # Force-terminate local subprocesses
-        for node_id in node_ids:
-            if node_id in self._local_nodes:
-                process = self._local_nodes[node_id]
+        self._clear_local_node_processes()
+
+    def _clear_local_node_processes(self):
+        for node_id in self._local_nodes:
+            process = self._local_nodes[node_id]
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=2.0)
                 if process.is_alive():
-                    process.terminate()
-                    process.join(timeout=2.0)
-                    if process.is_alive():
-                        process.kill()
-                        process.join()
+                    process.kill()
+                    process.join()
+        self._local_nodes.clear()
 
     async def _wait_for_node_heartbeats(self, timeout: float = 30.0):
         """Wait for all nodes to send their first heartbeat."""
