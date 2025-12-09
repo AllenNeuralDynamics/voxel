@@ -1,4 +1,15 @@
 import logging
+import multiprocessing
+
+# Fix multiprocessing start method for macOS/Windows compatibility
+# On macOS/Windows, the default is 'spawn' which causes subprocesses to re-import
+# all modules and can lead to issues with the rig controller spawning nodes.
+# Using 'fork' matches Linux behavior and avoids these issues.
+try:
+    multiprocessing.set_start_method("fork")
+except RuntimeError:
+    # Start method already set (e.g., by a test or parent process)
+    pass
 
 # Configuration
 from .config import NodeConfig, RigConfig
