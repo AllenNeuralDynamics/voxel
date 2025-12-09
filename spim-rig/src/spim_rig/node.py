@@ -28,5 +28,5 @@ class SpimNodeService(NodeService):
         if isinstance(device, SpimDaq):
             return DaqService(device, conn, self._zctx)
         if isinstance(device, SpimAxis):
-            return super()._create_service(device, conn, stream_interval=0.1)
+            return super()._create_service(device, conn, stream_interval=0.05)
         return super()._create_service(device, conn)
