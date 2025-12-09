@@ -193,28 +193,28 @@ if __name__ == "__main__":
             res = CommandResponse.model_validate_json(payload.decode())
             print(f"Received message from {topic}: {res}")
 
-        proc_agent = DeviceClient(processor.uid, zctx, proc_conn)
-        laser_agent = DeviceClient(laser.uid, zctx, laser_conn)
-        agents = [proc_agent, laser_agent]
+        proc_client = DeviceClient(processor.uid, zctx, proc_conn)
+        laser_client = DeviceClient(laser.uid, zctx, laser_conn)
+        device_clients = [proc_client, laser_client]
 
-        await laser_agent.subscribe("state", on_message)
-
-        await asyncio.sleep(5)
-
-        await laser_agent.set_props(power_setpoint=50.0)
+        await laser_client.subscribe("state", on_message)
 
         await asyncio.sleep(5)
 
-        await laser_agent.call("turn_on")
+        await laser_client.set_props(power_setpoint=50.0)
 
         await asyncio.sleep(5)
 
-        await laser_agent.call("set_power_and_on", 75.0)
+        await laser_client.call("turn_on")
 
         await asyncio.sleep(5)
 
-        for client in agents:
-            client.close()
+        await laser_client.call("set_power_and_on", 75.0)
+
+        await asyncio.sleep(5)
+
+        for client in device_clients:
+            await client.close()
 
         # Note: The agents will be closed automatically when the program exits.
 

@@ -1,11 +1,12 @@
 from abc import abstractmethod
 from collections.abc import Mapping
 
-from pyrig import Device, describe
+from pyrig import describe
+from spim_rig.axes.base import SpimAxis
 from spim_rig.device import DeviceType
 
 
-class DiscreteAxis(Device):
+class DiscreteAxis(SpimAxis):
     """Base class for discrete position devices.
 
     Provides interface for devices with a fixed set of positions,

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from collections.abc import Callable
 from typing import Any
 
@@ -35,7 +34,6 @@ class DeviceClient:
     def __init__(self, uid: str, zctx: zmq.asyncio.Context, conn: DeviceAddress):
         self.log = logging.getLogger(f"{uid}.{self.__class__.__name__}")
         self._uid = uid
-        self._last_heartbeat_time = 0.0
 
         self._req_socket = set_tcp_keepalive(zctx.socket(zmq.REQ))
         self._sub_socket = set_tcp_keepalive(zctx.socket(zmq.SUB))
@@ -52,28 +50,9 @@ class DeviceClient:
         self._listen_task = asyncio.create_task(self._listen_loop())
         self._callbacks: dict[str, list[Callable]] = {}
 
-        asyncio.create_task(self._subscribe_to_heartbeat())
-
     @property
     def uid(self):
         return self._uid
-
-    @property
-    def is_connected(self) -> bool:
-        """Check if device is connected (received heartbeat in last 10 seconds)."""
-        if self._last_heartbeat_time == 0:
-            return False
-        time_since_last = time.time() - self._last_heartbeat_time
-        return time_since_last < 10.0
-
-    async def wait_for_connection(self, timeout: float = 10.0) -> bool:
-        """Wait for node to connect."""
-        start = time.time()
-        while time.time() - start < timeout:
-            if self.is_connected:
-                return True
-            await asyncio.sleep(0.1)
-        return False
 
     async def close(self):
         """Closes the socket."""
@@ -191,15 +170,3 @@ class DeviceClient:
 
             except asyncio.CancelledError:
                 break
-
-    async def _subscribe_to_heartbeat(self):
-        """Subscribe to heartbeat messages."""
-
-        def handle_heartbeat(topic: str, payload_bytes: bytes):
-            try:
-                # Update with local receive time (could parse payload_bytes for server time if needed later)
-                self._last_heartbeat_time = time.time()
-            except Exception as e:
-                logger.error(f"Error handling heartbeat: {e}")
-
-        await self.subscribe("heartbeat", handle_heartbeat)

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Self
@@ -27,6 +26,8 @@ from pyrig.device.base import (
     PropsResponse,
 )
 from pyrig.device.conn import DeviceAddress, DeviceAddressTCP
+
+DEFAULT_STREAM_INTERVAL = 0.5
 
 
 def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
@@ -116,6 +117,7 @@ class DeviceService[D: Device]:
         device: D,
         conn: DeviceAddress,
         zctx: zmq.asyncio.Context,
+        stream_interval: float = DEFAULT_STREAM_INTERVAL,
     ):
         self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
         self._device = device
@@ -149,8 +151,7 @@ class DeviceService[D: Device]:
 
         self._loop_tasks: dict[str, asyncio.Task] = {
             "cmd": asyncio.create_task(self._cmd_loop()),
-            "state": asyncio.create_task(self._state_stream_loop(interval=0.5)),
-            "heartbeat": asyncio.create_task(self._heartbeat_loop(interval=2.0)),
+            "state": asyncio.create_task(self._state_stream_loop(interval=stream_interval)),
         }
 
     @property
@@ -279,21 +280,6 @@ class DeviceService[D: Device]:
             except Exception as e:
                 self.log.error(f"Error in state stream loop: {e}", exc_info=True)
                 await asyncio.sleep(interval)
-
-    async def _heartbeat_loop(self, interval: float):
-        """Continuously publish heartbeat messages."""
-        while True:
-            try:
-                topic = f"{self._device.uid}/heartbeat".encode()
-                payload = str(time.time()).encode()
-                await self._pub_socket.send_multipart([topic, payload])
-
-                await asyncio.sleep(interval)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.log.error(f"Heartbeat error: {e}")
 
     async def __aenter__(self) -> Self:
         """Async context manager entry."""

@@ -1,6 +1,7 @@
 import ipaddress
 import re
 from typing import Literal
+
 from rich import print
 
 type IpVersion = Literal[4, 6]

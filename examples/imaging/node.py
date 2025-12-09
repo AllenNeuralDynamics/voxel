@@ -21,7 +21,7 @@ from pyrig.node import main
 
 
 class ImagingNodeService(NodeService):
-    def _create_service(self, device: Device, conn):
+    def _create_service(self, device: Device, conn, stream_interval: float | None = None):
         """Hook for custom service types."""
         if isinstance(device, Camera):
             return CameraService(device, conn, self._zctx)

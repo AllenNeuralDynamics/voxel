@@ -41,11 +41,8 @@ class DeviceClientAdapter(QObject):
     async def start(self) -> None:
         """Start the adapter and subscribe to device updates."""
         try:
-            # Wait for device connection
-            connected = await self._client.wait_for_connection(timeout=10.0)
-            if not connected:
-                self.fault.emit(f"Device {self._client.uid} failed to connect")
-                return
+            # Device connection is managed by rig node heartbeats
+            # If the device client exists, it's available
 
             self.connected_changed.emit(True)
 

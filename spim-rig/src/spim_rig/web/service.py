@@ -505,14 +505,14 @@ async def list_devices(rig: SpimRig = Depends(get_rig)) -> dict:
             interface = await client.get_interface()
             devices_info[device_id] = {
                 "id": device_id,
-                "connected": client.is_connected,
+                "connected": True,  # If provisioned, device is available
                 "interface": interface.model_dump(),
             }
         except Exception as e:
             log.warning(f"Failed to get interface for device {device_id}: {e}")
             devices_info[device_id] = {
                 "id": device_id,
-                "connected": client.is_connected,
+                "connected": False,  # Failed to get interface = not connected
                 "error": str(e),
             }
 

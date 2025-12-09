@@ -1,11 +1,12 @@
 from abc import abstractmethod
 
+from spim_rig.axes.base import SpimAxis
 from spim_rig.device import DeviceType
 
-from pyrig import Device, describe
+from pyrig import describe
 
 
-class RotationAxis(Device):
+class RotationAxis(SpimAxis):
     """Base class for rotational motion axes.
 
     Provides interface for continuous rotational motion control.

@@ -218,11 +218,12 @@ class DeviceWidgetRunner:
                 conn=serv.conn,
             )
 
-            # Wait for connection
-            connected = await client.wait_for_connection(timeout=10.0)
-
-            if not connected:
-                logger.warning(f"Failed to connect to device {serv.device_id}")
+            # Device connection is managed by rig node heartbeats
+            # If we can get the interface, device is available
+            try:
+                await client.get_interface()
+            except Exception as e:
+                logger.warning(f"Failed to connect to device {serv.device_id}: {e}")
                 try:
                     await client.close()
                 except Exception:

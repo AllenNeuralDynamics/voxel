@@ -1,8 +1,8 @@
 import sys
 
 from spim_widgets import DeviceWidgetRunner, WidgetRunnerConfig
-from spim_widgets.devices.filter_wheel import FilterWheelClientWidget
-from spim_widgets.devices.laser import LaserClientWidget
+from spim_widgets.filter_wheel import FilterWheelClientWidget
+from spim_widgets.laser import LaserClientWidget
 
 from pyrig.config import DeviceConfig
 from pyrig.utils import configure_logging

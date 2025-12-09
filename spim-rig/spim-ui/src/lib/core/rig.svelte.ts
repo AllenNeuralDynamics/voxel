@@ -324,7 +324,7 @@ export class RigManager {
 		if (this.activeProfile) {
 			this.activeProfile.waveforms = waveforms;
 			this.activeProfile.waveformsLoading = false;
-			console.log('[RigManager] Received waveforms for active profile:', Object.keys(waveforms));
+			console.debug('[RigManager] Received waveforms for active profile:', Object.keys(waveforms));
 		}
 	}
 

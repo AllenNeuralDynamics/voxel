@@ -14,11 +14,10 @@ Features:
     - HTTPS for domain, hostname, hostname.local, IP
 """
 
-import sys
 import socket
 import subprocess
+import sys
 from pathlib import Path
-
 
 # -------------------------------------------------------
 # Detect Caddyfile location
@@ -62,7 +61,7 @@ def get_ip():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.connect(("8.8.8.8", 80))
         return sock.getsockname()[0]
-    except:
+    except Exception:
         return "127.0.0.1"
 
 

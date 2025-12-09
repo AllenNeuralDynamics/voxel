@@ -3,9 +3,10 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
+from spim_rig.axes.base import SpimAxis
 from spim_rig.device import DeviceType
 
-from pyrig import Device, describe
+from pyrig import describe
 
 
 class StepMode(StrEnum):
@@ -70,7 +71,7 @@ class TTLStepper(ABC):
         """Reset the step-and-shoot configuration and clear the buffer."""
 
 
-class LinearAxis(Device):
+class LinearAxis(SpimAxis):
     __DEVICE_TYPE__ = DeviceType.LINEAR_AXIS
 
     def __init__(self, uid: str) -> None:

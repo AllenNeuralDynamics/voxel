@@ -17,11 +17,12 @@ Usage:
   # On the machine that will be the client (e.g., a remote node):
   python scripts/network_check.py client --host <server_ip_address> --port 12345
 """
+
 import argparse
-import socket
-import time
 import logging
+import socket
 import sys
+import time
 
 # --- Configuration ---
 DEFAULT_PORT = 65432
@@ -30,13 +31,15 @@ HEARTBEAT_MESSAGE = b"HEARTBEAT"
 ACK_MESSAGE = b"ACK"
 # ---
 
+
 def setup_logging():
     """Sets up basic logging to stdout."""
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        format="%(asctime)s - %(levelname)s - %(message)s",
         stream=sys.stdout,
     )
+
 
 def get_local_ip():
     """Attempts to determine the local machine's primary IP address."""
@@ -62,15 +65,19 @@ def run_server(host: str, port: int):
     Logs received heartbeats and sends acknowledgements.
     """
     display_host = host
-    if host == '0.0.0.0':
+    if host == "0.0.0.0":
         detected_ip = get_local_ip()
-        if detected_ip and detected_ip != '127.0.0.1':
+        if detected_ip and detected_ip != "127.0.0.1":
             display_host = detected_ip
-            logging.info(f"Server configured to bind to all interfaces (0.0.0.0). "
-                         f"Clients should connect to this machine's IP, e.g., {display_host}:{port}")
+            logging.info(
+                f"Server configured to bind to all interfaces (0.0.0.0). "
+                f"Clients should connect to this machine's IP, e.g., {display_host}:{port}"
+            )
         else:
-            logging.info(f"Server configured to bind to all interfaces (0.0.0.0). "
-                         f"Could not determine external IP. Clients may try this machine's local IPs.")
+            logging.info(
+                "Server configured to bind to all interfaces (0.0.0.0). "
+                "Could not determine external IP. Clients may try this machine's local IPs."
+            )
 
     logging.info(f"Starting server on {host}:{port}...")
     # Use SO_REUSEADDR to allow fast restarts of the server
@@ -110,7 +117,8 @@ def run_server(host: str, port: int):
                 break
             except Exception as e:
                 logging.error(f"An unexpected error occurred: {e}")
-                time.sleep(1) # Avoid tight loop on repeated errors
+                time.sleep(1)  # Avoid tight loop on repeated errors
+
 
 def run_client(host: str, port: int):
     """
@@ -123,7 +131,7 @@ def run_client(host: str, port: int):
     while True:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                logging.info(f"Attempting to connect to server...")
+                logging.info("Attempting to connect to server...")
                 sock.connect((host, port))
                 logging.info(f"Successfully connected to {host}:{port}")
 
@@ -141,7 +149,9 @@ def run_client(host: str, port: int):
                     time.sleep(HEARTBEAT_INTERVAL_S)
 
         except ConnectionRefusedError:
-            logging.error(f"Connection refused by {host}:{port}. Is the server running? Retrying in {HEARTBEAT_INTERVAL_S}s...")
+            logging.error(
+                f"Connection refused by {host}:{port}. Is the server running? Retrying in {HEARTBEAT_INTERVAL_S}s..."
+            )
         except (ConnectionResetError, BrokenPipeError, TimeoutError):
             logging.error(f"Connection to server lost. Retrying in {HEARTBEAT_INTERVAL_S}s...")
         except KeyboardInterrupt:
@@ -165,43 +175,45 @@ Usage Examples:
 
   # On the client machine (e.g., remote node), connect to the server at 192.168.1.100:
   python %(prog)s client --host 192.168.1.100 --port 12345
-"""
+""",
     )
     parser.add_argument(
-        'mode',
-        choices=['server', 'client'],
-        help="Run the script in 'server' (listen) or 'client' (connect) mode."
+        "mode", choices=["server", "client"], help="Run the script in 'server' (listen) or 'client' (connect) mode."
     )
     parser.add_argument(
-        '--host',
+        "--host",
         type=str,
-        default='0.0.0.0',
-        help="Host address.\n" 
-             "For server mode, this is the address to bind to (default: 0.0.0.0 to listen on all interfaces).\n" 
-             "For client mode, this is the server's IP address or hostname to connect to."
+        default="0.0.0.0",
+        help="Host address.\n"
+        "For server mode, this is the address to bind to (default: 0.0.0.0 to listen on all interfaces).\n"
+        "For client mode, this is the server's IP address or hostname to connect to.",
     )
     parser.add_argument(
-        '--port',
+        "--port",
         type=int,
         default=DEFAULT_PORT,
-        help=f"The TCP port to use for the connection (default: {DEFAULT_PORT})."
+        help=f"The TCP port to use for the connection (default: {DEFAULT_PORT}).",
     )
 
     args = parser.parse_args()
 
     # A bit of validation for client mode
-    if args.mode == 'client' and args.host == '0.0.0.0':
+    if args.mode == "client" and args.host == "0.0.0.0":
         parser.error("Client mode requires a specific --host to connect to. '0.0.0.0' is not a valid target.")
 
-    if args.mode == 'client' and args.host == 'localhost':
-        print("Warning: For client mode, you should typically use the server's actual network IP address, not 'localhost'.", file=sys.stderr)
+    if args.mode == "client" and args.host == "localhost":
+        print(
+            "Warning: For client mode, you should typically use the server's actual network IP address, not 'localhost'.",
+            file=sys.stderr,
+        )
 
     setup_logging()
 
-    if args.mode == 'server':
+    if args.mode == "server":
         run_server(args.host, args.port)
-    else: # client mode
+    else:  # client mode
         run_client(args.host, args.port)
+
 
 if __name__ == "__main__":
     main()

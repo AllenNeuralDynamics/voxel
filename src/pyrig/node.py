@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import sys
+import time
 import traceback
 from typing import Any, Literal
 
@@ -13,6 +14,8 @@ from rich import print
 
 from pyrig.config import NodeConfig
 from pyrig.device import Device, DeviceAddressTCP, DeviceService
+from pyrig.device.service import DEFAULT_STREAM_INTERVAL
+from pyrig.protocol import NodeAction, NodeMessage, RigAction
 from pyrig.utils import ZmqTopicHandler
 
 
@@ -50,6 +53,22 @@ class ProvisionComplete(BaseModel):
 
     devices: dict[str, DeviceProvision]
     errors: dict[str, DeviceBuildError] = {}
+
+
+class DeviceHealth(BaseModel):
+    """Health status of a single device."""
+
+    status: Literal["healthy", "degraded", "failed"]
+    last_command_time: float = 0.0
+    error: str | None = None
+
+
+class NodeHeartbeat(BaseModel):
+    """Node heartbeat with device health information."""
+
+    node_id: str
+    timestamp: float
+    device_health: dict[str, DeviceHealth]
 
 
 def build_devices(cfg: NodeConfig) -> tuple[dict[str, Device], dict[str, DeviceBuildError]]:
@@ -203,76 +222,167 @@ class NodeService:
         self._control_socket.connect(ctrl_addr)
 
         self._device_servers: dict[str, DeviceService] = {}
+        self._heartbeat_task: asyncio.Task | None = None
         self.log = logging.getLogger(f"node.{node_id}")
 
-    def _create_service(self, device: Device, conn) -> DeviceService:
+    def _create_service(self, device: Device, conn, stream_interval: float | None = None) -> DeviceService:
         """Hook for custom service types."""
-        return DeviceService(device, conn, self._zctx)
+        stream_interval = stream_interval or DEFAULT_STREAM_INTERVAL
+        return DeviceService(device, conn=conn, zctx=self._zctx, stream_interval=stream_interval)
+
+    def _get_device_health(self, device_id: str) -> DeviceHealth:
+        """Get health status for a device."""
+        if device_id not in self._device_servers:
+            return DeviceHealth(status="failed", error="Device not found")
+
+        # For now, assume all running devices are healthy
+        # This can be enhanced to check for errors, last activity, etc.
+        return DeviceHealth(status="healthy", last_command_time=time.time())
+
+    async def _heartbeat_loop(self, interval: float = 2.0):
+        """Send periodic heartbeat to rig with device health."""
+        while True:
+            try:
+                # Collect device health
+                device_health = {device_id: self._get_device_health(device_id) for device_id in self._device_servers}
+
+                heartbeat = NodeHeartbeat(node_id=self._node_id, timestamp=time.time(), device_health=device_health)
+
+                # Send on control socket
+                msg = NodeMessage.create(NodeAction.HEARTBEAT, payload=heartbeat)
+                await self._control_socket.send_multipart(msg.to_parts())
+
+                await asyncio.sleep(interval)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.log.error(f"Error in heartbeat loop: {e}")
 
     async def run(self):
-        """Connect to controller and handle provisioning."""
-
-        # Request config - no payload needed (identity tells controller who we are)
-        await self._control_socket.send_multipart([b"", b"provision"])
+        """Wait for rig commands and handle provisioning."""
+        self.log.info(f"Node '{self._node_id}' ready, waiting for rig commands...")
 
         # Handle control messages
         try:
             while True:
                 parts = await self._control_socket.recv_multipart()
-                action = parts[1].decode()
+                msg = NodeMessage.from_parts(parts)
 
-                if action == "provision":
-                    payload = parts[2]
-                    response = ProvisionResponse.model_validate_json(payload)
-                    node_cfg = response.config
+                match msg.action:
+                    case RigAction.PING:
+                        # Health check from rig
+                        response = NodeMessage.create(NodeAction.PONG)
+                        await self._control_socket.send_multipart(response.to_parts())
 
-                    try:
-                        devices, build_errors = build_devices(node_cfg)
+                    case RigAction.PROVISION:
+                        # Rig is sending us config
+                        await self._handle_provision(msg)
 
-                        # Log any build errors
-                        for uid, error in build_errors.items():
-                            self.log.error(
-                                f"Failed to build device '{uid}': {error.message}",
-                                extra={"error_type": error.error_type, "traceback": error.traceback},
-                            )
+                    case RigAction.SHUTDOWN:
+                        # Rig wants us to close devices but stay alive
+                        await self._handle_shutdown()
 
-                        # Create services for successfully built devices
-                        device_provs: dict[str, DeviceProvision] = {}
-                        pc = self._start_port
-                        for device_id, device in devices.items():
-                            conn = DeviceAddressTCP(host=node_cfg.hostname, rpc=pc, pub=pc + 1)
-                            self._device_servers[device_id] = self._create_service(device, conn)
-                            device_provs[device_id] = DeviceProvision(conn=conn, device_type=device.__DEVICE_TYPE__)
-                            pc += 2
+                    case RigAction.TERMINATE:
+                        # Actually exit the process
+                        self.log.info("Received terminate command, exiting...")
+                        await self._cleanup()
+                        break
 
-                        # Report completion with both successes and errors
-                        complete = ProvisionComplete(devices=device_provs, errors=build_errors)
-                        await self._control_socket.send_multipart(
-                            [
-                                b"",
-                                b"provision_complete",
-                                complete.model_dump_json().encode(),
-                            ]
-                        )
+                    case _:
+                        self.log.warning(f"Unknown action received: {msg.action}")
 
-                    except Exception as e:
-                        self.log.error(f"Failed to provision {self._node_id}: {e}")
-                        raise
-
-                elif action == "shutdown":
-                    await self._cleanup()
-
-                    # Acknowledge - no payload
-                    await self._control_socket.send_multipart([b"", b"shutdown_complete"])
-                    break
         except (asyncio.CancelledError, KeyboardInterrupt):
             # Handle graceful shutdown on interrupt
+            self.log.info("Interrupted, cleaning up...")
             await self._cleanup()
         finally:
             self._control_socket.close()
 
+    async def _handle_provision(self, msg: NodeMessage):
+        """Build devices from rig-provided config."""
+        response = msg.decode_payload(ProvisionResponse)
+        node_cfg = response.config
+
+        self.log.info(f"Received provision with {len(node_cfg.devices)} devices")
+
+        try:
+            devices, build_errors = build_devices(node_cfg)
+
+            # Log any build errors
+            for uid, error in build_errors.items():
+                self.log.error(
+                    f"Failed to build device '{uid}': {error.message}",
+                    extra={"error_type": error.error_type, "traceback": error.traceback},
+                )
+
+            # Create services for successfully built devices
+            device_provs: dict[str, DeviceProvision] = {}
+            pc = self._start_port
+            for device_id, device in devices.items():
+                conn = DeviceAddressTCP(host=node_cfg.hostname, rpc=pc, pub=pc + 1)
+                self._device_servers[device_id] = self._create_service(device, conn)
+                device_provs[device_id] = DeviceProvision(conn=conn, device_type=device.__DEVICE_TYPE__)
+                pc += 2
+
+            # Report completion with both successes and errors
+            complete = ProvisionComplete(devices=device_provs, errors=build_errors)
+            response = NodeMessage.create(NodeAction.PROVISION_COMPLETE, payload=complete)
+            await self._control_socket.send_multipart(response.to_parts())
+
+            self.log.info(f"Provisioned {len(devices)} devices successfully")
+
+            # Start heartbeat loop
+            if self._heartbeat_task is None or self._heartbeat_task.done():
+                self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+                self.log.debug("Started heartbeat loop")
+
+        except Exception as e:
+            self.log.error(f"Failed to provision {self._node_id}: {e}", exc_info=True)
+            # Send error response
+            error_complete = ProvisionComplete(
+                devices={},
+                errors={
+                    "provision_error": DeviceBuildError(
+                        uid="provision_error",
+                        error_type="instantiation",
+                        message=str(e),
+                        traceback=traceback.format_exc(),
+                    )
+                },
+            )
+            response = NodeMessage.create(NodeAction.PROVISION_COMPLETE, payload=error_complete)
+            await self._control_socket.send_multipart(response.to_parts())
+
+    async def _handle_shutdown(self):
+        """Close all devices but stay alive."""
+        self.log.info("Shutting down devices...")
+
+        # Stop heartbeat loop
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self.log.debug("Stopped heartbeat loop")
+
+        for device_id, service in self._device_servers.items():
+            try:
+                service.close()
+            except Exception as e:
+                self.log.error(f"Error closing {device_id}: {e}")
+
+        self._device_servers.clear()
+
+        # Acknowledge
+        response = NodeMessage.create(NodeAction.SHUTDOWN_COMPLETE)
+        await self._control_socket.send_multipart(response.to_parts())
+
+        self.log.info("Devices closed, waiting for next provision...")
+
     async def _cleanup(self):
-        """Cleanup all devices."""
+        """Cleanup all devices (for terminate or interrupt)."""
         for device_id, server in self._device_servers.items():
             try:
                 server.close()

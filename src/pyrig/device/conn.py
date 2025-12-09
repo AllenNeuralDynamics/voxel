@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from rich import print
 
 

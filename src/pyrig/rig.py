@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from multiprocessing import Process
 
 import zmq
@@ -13,10 +14,12 @@ from pyrig.node import (
     DeviceBuildError,
     DeviceBuildResult,
     DeviceProvision,
+    NodeHeartbeat,
     NodeService,
     ProvisionComplete,
     ProvisionResponse,
 )
+from pyrig.protocol import NodeAction, RigAction, RigMessage
 
 # Architecture:
 # - Controller starts ROUTER socket on control_port (single port for all nodes)
@@ -69,6 +72,8 @@ class Rig:
         self.devices: dict[str, DeviceClient] = {}
         self.build_errors: dict[str, DeviceBuildError] = {}
         self._local_nodes: dict[str, Process] = {}
+        self._node_heartbeats: dict[str, float] = {}  # node_id -> last_heartbeat_time
+        self._heartbeat_monitor_task: asyncio.Task | None = None
 
     async def start(self, connection_timeout: float = 30.0, provision_timeout: float = 30.0):
         """Complete startup sequence.
@@ -89,7 +94,10 @@ class Rig:
             client = self._create_client(device_id, prov)
             self.devices[device_id] = client
 
-        await self._wait_for_connections(timeout=connection_timeout)
+        await self._wait_for_node_heartbeats(timeout=connection_timeout)
+
+        # Start monitoring node heartbeats in background
+        self._heartbeat_monitor_task = asyncio.create_task(self._monitor_node_heartbeats())
 
         await self._on_provision_complete()
 
@@ -137,9 +145,50 @@ class Rig:
             start_port += 1000
 
         # Give processes time to start up and connect
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(0.5)
 
         return processes
+
+    async def _ping_all_nodes(self, timeout: float = 5.0) -> set[str]:
+        """Ping all expected nodes to verify they're reachable.
+
+        Args:
+            timeout: How long to wait for all nodes to respond
+
+        Returns:
+            Set of node IDs that responded
+
+        Raises:
+            RuntimeError: If any nodes don't respond
+        """
+        expected_nodes = set(self.config.nodes.keys())
+        ponged_nodes: set[str] = set()
+
+        # Send ping to all nodes
+        for node_id in expected_nodes:
+            msg = RigMessage.create(RigAction.PING, identity=node_id.encode())
+            await self._control_socket.send_multipart(msg.to_parts())
+
+        # Wait for all pongs
+        try:
+            async with asyncio.timeout(timeout):
+                while ponged_nodes != expected_nodes:
+                    parts = await self._control_socket.recv_multipart()
+                    msg = RigMessage.from_parts(parts)
+                    node_id = msg.identity.decode()
+
+                    if msg.action == NodeAction.PONG:
+                        ponged_nodes.add(node_id)
+                        self.log.info(f"Node '{node_id}' is reachable")
+
+        except asyncio.TimeoutError:
+            missing = expected_nodes - ponged_nodes
+            self.log.error(f"Nodes not responding to ping: {missing}")
+            raise RuntimeError(
+                f"Cannot reach nodes: {missing}. Ensure remote nodes are running with: python -m pyrig.node <node_id>"
+            )
+
+        return ponged_nodes
 
     async def _provision_nodes(self, timeout: float = 30.0) -> DeviceBuildResult:
         """Provision all nodes (local and remote).
@@ -158,39 +207,36 @@ class Rig:
         expected_nodes = set(self.config.nodes.keys())
         provisioned_nodes: set[str] = set()
 
+        # Step 1: Ping all nodes to ensure they're reachable
+        self.log.info("Checking node availability...")
+        await self._ping_all_nodes(timeout=5.0)
+
+        # Step 2: Send provision command to all nodes
+        self.log.info("Sending provision commands to all nodes...")
+        for node_id, node_config in self.config.nodes.items():
+            response = ProvisionResponse(config=node_config)
+            msg = RigMessage.create(RigAction.PROVISION, identity=node_id.encode(), payload=response)
+            await self._control_socket.send_multipart(msg.to_parts())
+            self.log.info(f"Sent provision to node '{node_id}'")
+
+        # Step 3: Wait for all nodes to respond with provision_complete
         try:
             async with asyncio.timeout(timeout):
                 while provisioned_nodes != expected_nodes:
                     parts = await self._control_socket.recv_multipart()
-                    identity = parts[0]
-                    node_id = identity.decode()
-                    action = parts[2].decode()
+                    msg = RigMessage.from_parts(parts)
+                    node_id = msg.identity.decode()
 
-                    if action == "provision":
-                        # Node is requesting config
-                        if node_id not in self.config.nodes:
-                            self.log.error(f"Unknown node: {node_id}")
-                            continue
-
-                        node_config = self.config.nodes[node_id]
-                        response = ProvisionResponse(config=node_config)
-
-                        await self._control_socket.send_multipart(
-                            [
-                                identity,
-                                b"",
-                                b"provision",
-                                response.model_dump_json().encode(),
-                            ]
-                        )
-
-                    elif action == "provision_complete":
+                    if msg.action == NodeAction.PROVISION_COMPLETE:
                         # Node reporting successful provisioning
-                        payload = parts[3]
-                        complete = ProvisionComplete.model_validate_json(payload)
+                        complete = msg.decode_payload(ProvisionComplete)
                         all_devices.update(complete.devices)
                         all_errors.update(complete.errors)
                         provisioned_nodes.add(node_id)
+                        self.log.info(f"Node '{node_id}' provisioned successfully")
+                    elif msg.action == NodeAction.PONG:
+                        # Ignore stray pongs during provisioning
+                        continue
 
         except asyncio.TimeoutError:
             missing = expected_nodes - provisioned_nodes
@@ -216,9 +262,9 @@ class Rig:
 
         # Send shutdown to all nodes
         for node_id in node_ids:
-            identity = node_id.encode()
             try:
-                await self._control_socket.send_multipart([identity, b"", b"shutdown"])
+                msg = RigMessage.create(RigAction.SHUTDOWN, identity=node_id.encode())
+                await self._control_socket.send_multipart(msg.to_parts())
             except Exception as e:
                 self.log.error(f"Failed to send shutdown to {node_id}: {e}")
 
@@ -228,11 +274,10 @@ class Rig:
             async with asyncio.timeout(timeout):
                 while acknowledged != node_ids:
                     parts = await self._control_socket.recv_multipart()
-                    identity = parts[0]
-                    node_id = identity.decode()
-                    action = parts[1].decode()
+                    msg = RigMessage.from_parts(parts)
+                    node_id = msg.identity.decode()
 
-                    if action == "shutdown_complete":
+                    if msg.action == NodeAction.SHUTDOWN_COMPLETE:
                         acknowledged.add(node_id)
         except asyncio.TimeoutError:
             pass  # Timeout is expected if nodes were interrupted
@@ -248,25 +293,67 @@ class Rig:
                         process.kill()
                         process.join()
 
-    async def _wait_for_connections(self, timeout: float = 30.0):
-        """Wait for all clients to receive heartbeats from their devices."""
-        # Use wait_for_connection() method from DeviceClient
-        tasks = {device_id: client.wait_for_connection(timeout=timeout) for device_id, client in self.devices.items()}
+    async def _wait_for_node_heartbeats(self, timeout: float = 30.0):
+        """Wait for all nodes to send their first heartbeat."""
+        expected_nodes = set(self.config.nodes.keys())
+        heartbeat_received: set[str] = set()
 
-        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        self.log.info("Waiting for node heartbeats...")
 
-        # Check results
-        failed = []
-        for device_id, result in zip(tasks.keys(), results):
-            if isinstance(result, Exception):
-                self.log.error(f"{device_id}: {result}")
-                failed.append(device_id)
-            elif not result:  # wait_for_connection returned False
-                self.log.warning(f"{device_id} connection timeout")
-                failed.append(device_id)
+        try:
+            async with asyncio.timeout(timeout):
+                while heartbeat_received != expected_nodes:
+                    parts = await self._control_socket.recv_multipart()
+                    msg = RigMessage.from_parts(parts)
+                    node_id = msg.identity.decode()
 
-        if failed:
-            self.log.warning(f"{len(failed)}/{len(self.devices)} devices did not connect")
+                    if msg.action == NodeAction.HEARTBEAT:
+                        _ = msg.decode_payload(NodeHeartbeat)
+                        self._node_heartbeats[node_id] = time.time()
+
+                        if node_id not in heartbeat_received:
+                            heartbeat_received.add(node_id)
+                            self.log.info(f"Received heartbeat from node '{node_id}'")
+
+        except asyncio.TimeoutError:
+            missing = expected_nodes - heartbeat_received
+            self.log.error(f"Heartbeat timeout. Missing nodes: {missing}")
+            raise RuntimeError(f"Nodes did not send heartbeat: {missing}. This may indicate provisioning issues.")
+
+    async def _monitor_node_heartbeats(self, check_interval: float = 5.0, heartbeat_timeout: float = 10.0):
+        """Monitor node heartbeats and log warnings if nodes become unresponsive."""
+        while True:
+            try:
+                await asyncio.sleep(check_interval)
+
+                current_time = time.time()
+                for node_id, last_heartbeat in self._node_heartbeats.items():
+                    time_since_heartbeat = current_time - last_heartbeat
+
+                    if time_since_heartbeat > heartbeat_timeout:
+                        self.log.warning(
+                            f"Node '{node_id}' heartbeat timeout ({time_since_heartbeat:.1f}s since last heartbeat)"
+                        )
+
+                # Also receive and process heartbeats
+                try:
+                    while True:
+                        parts = await asyncio.wait_for(self._control_socket.recv_multipart(), timeout=0.1)
+                        msg = RigMessage.from_parts(parts)
+                        node_id = msg.identity.decode()
+
+                        if msg.action == NodeAction.HEARTBEAT:
+                            _ = msg.decode_payload(NodeHeartbeat)
+                            self._node_heartbeats[node_id] = time.time()
+
+                except asyncio.TimeoutError:
+                    # No more messages to process
+                    pass
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.log.error(f"Error in heartbeat monitor: {e}", exc_info=True)
 
     async def _receive_logs(self):
         """Background task to receive logs from nodes and forward to Python logging."""
@@ -309,7 +396,15 @@ class Rig:
 
     async def stop(self):
         """Stop all devices and cleanup."""
-        # Step 1: Stop log receiver
+        # Step 1: Stop heartbeat monitor
+        if self._heartbeat_monitor_task:
+            self._heartbeat_monitor_task.cancel()
+            try:
+                await self._heartbeat_monitor_task
+            except asyncio.CancelledError:
+                pass
+
+        # Step 2: Stop log receiver
         if self._log_watch_task:
             self._log_watch_task.cancel()
             try:
@@ -317,15 +412,15 @@ class Rig:
             except asyncio.CancelledError:
                 pass
 
-        # Step 2: Close all DeviceClients first (disconnect from devices)
+        # Step 3: Close all DeviceClients first (disconnect from devices)
         for device_id, client in self.devices.items():
             self.log.debug(f"Closing device {device_id}")
             await client.close()
 
-        # Step 3: Shutdown all nodes (send shutdown, wait for ack, terminate processes)
+        # Step 4: Shutdown all nodes (send shutdown, wait for ack, terminate processes)
         all_nodes = set(self.config.nodes.keys())
         await self._shutdown_nodes(all_nodes, timeout=2.0)
 
-        # Step 4: Close sockets
+        # Step 5: Close sockets
         self._control_socket.close()
         self._log_socket.close()
