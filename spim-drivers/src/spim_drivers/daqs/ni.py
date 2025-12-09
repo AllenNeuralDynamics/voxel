@@ -231,14 +231,11 @@ class NiDaq(SpimDaq):
             if info.task_name != task_name:
                 names = [n for n in (info.pin, info.pfi) if n]
                 other_str = f" (also known as {', '.join(names)})" if names else ""
-                err_msg = (
-                    f"Pin {pin}{other_str} is already assigned to task "
-                    f"'{info.task_name}'"
-                )
+                err_msg = f"Pin {pin}{other_str} is already assigned to task '{info.task_name}'"
                 raise ValueError(err_msg)
-        
+
         # Create a new PinInfo with the correct task_name
-        new_info = info.model_copy(update={'task_name': task_name})
+        new_info = info.model_copy(update={"task_name": task_name})
         self.channel_map[pin] = new_info
         if new_info.pfi:
             self.channel_map[new_info.pfi] = new_info
@@ -250,9 +247,9 @@ class NiDaq(SpimDaq):
         """Release a previously assigned pin."""
         if pin.path in self.assigned_channels:
             self.assigned_channels.remove(pin.path)
-            
+
             # Reset task_name to placeholder
-            unassigned_info = pin.model_copy(update={'task_name': 'unassigned'})
+            unassigned_info = pin.model_copy(update={"task_name": "unassigned"})
             self.channel_map[pin.pin] = unassigned_info
             if pin.pfi:
                 self.channel_map[pin.pfi] = unassigned_info
@@ -262,10 +259,6 @@ class NiDaq(SpimDaq):
     def release_pins_for_task(self, task_name: str) -> None:
         """Release all pins that were assigned to a specific task."""
         # Find all pins assigned to this task
-        pins_to_release = [
-            info 
-            for info in self.channel_map.values() 
-            if info.task_name == task_name
-        ]
+        pins_to_release = [info for info in self.channel_map.values() if info.task_name == task_name]
         for pin_info in pins_to_release:
             self.release_pin(pin_info)

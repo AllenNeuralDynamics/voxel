@@ -86,7 +86,7 @@ class InteractiveCirclesWidget(QWidget):
 
             # Create unique color for each circle
             hue = (i * 360 / max(1, self.num_circles)) % 360
-            color = f'hsl({hue}, 70%, 60%)'
+            color = f"hsl({hue}, 70%, 60%)"
 
             # Add circle with varying opacity
             circles.append(f"""
@@ -103,7 +103,7 @@ class InteractiveCirclesWidget(QWidget):
             <circle cx="100" cy="100" r="3" fill="#333" opacity="0.7"/>
 
             <!-- Revolving circles -->
-            {''.join(circles)}
+            {"".join(circles)}
 
             <!-- Info text -->
             <text x="100" y="25" text-anchor="middle" font-size="12" fill="#333">
@@ -115,7 +115,7 @@ class InteractiveCirclesWidget(QWidget):
         </svg>
         """
 
-        self.renderer.load(svg_data.encode('utf-8'))
+        self.renderer.load(svg_data.encode("utf-8"))
         self.update()
 
         # Emit signal if active circle changed

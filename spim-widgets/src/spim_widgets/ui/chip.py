@@ -6,18 +6,18 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
 def get_text_color(bg_color: str) -> str:
     """Determines if text should be black or white based on background color brightness."""
     # Convert hex to RGB
-    bg_color = bg_color.lstrip('#')
+    bg_color = bg_color.lstrip("#")
     r, g, b = tuple(int(bg_color[i : i + 2], 16) for i in (0, 2, 4))
     # Calculate luminance
     luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    return '#000000' if luminance > 0.55 else '#FFFFFF'
+    return "#000000" if luminance > 0.55 else "#FFFFFF"
 
 
 class Chip(QWidget):
     """A simple chip widget for displaying information."""
 
     def __init__(
-        self, text: str, color: str = '#e0e0e0', border_color: str | None = None, parent: QWidget | None = None
+        self, text: str, color: str = "#e0e0e0", border_color: str | None = None, parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
 
@@ -37,7 +37,7 @@ class Chip(QWidget):
 
     def _update_text_color(self):
         text_color = get_text_color(self._color)
-        self.label.setStyleSheet(f'color: {text_color};')
+        self.label.setStyleSheet(f"color: {text_color};")
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -74,7 +74,7 @@ class Chip(QWidget):
         self.update()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication, QMainWindow
 
     app = QApplication()
@@ -83,8 +83,8 @@ if __name__ == '__main__':
     container = QWidget()
     layout = QHBoxLayout(container)
 
-    chip1 = Chip('560 nm', color='#BEF264', border_color='#4D7C0F')
-    chip2 = Chip('488 nm', color='#67e8f9', border_color='#0E7490')
+    chip1 = Chip("560 nm", color="#BEF264", border_color="#4D7C0F")
+    chip2 = Chip("488 nm", color="#67e8f9", border_color="#0E7490")
 
     layout.addWidget(chip1)
     layout.addWidget(chip2)

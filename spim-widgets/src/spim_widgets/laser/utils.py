@@ -82,17 +82,17 @@ def rgb_to_css_string(rgb: tuple[float, float, float], alpha: float = 1.0) -> st
     b_int = int(b * 255)
 
     # Format the CSS string
-    return f'rgba({r_int}, {g_int}, {b_int}, {alpha})'
+    return f"rgba({r_int}, {g_int}, {b_int}, {alpha})"
 
 
 def rgb_to_hex(r: int, g: int, b: int) -> str:
     """Converts RGB tuple to a hex string."""
-    return f'#{r:02x}{g:02x}{b:02x}'
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     """Converts a hex color string to an RGB tuple."""
-    hex_color = hex_color.lstrip('#')
+    hex_color = hex_color.lstrip("#")
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
