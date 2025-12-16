@@ -5,7 +5,7 @@ from enum import StrEnum
 import pytest
 from pydantic import BaseModel
 
-from pyrig.device.base import Command, CommandParamsError, describe
+from pyrig.device import Command, CommandParamsError, describe
 
 
 # Test fixtures - similar to SpimCamera types

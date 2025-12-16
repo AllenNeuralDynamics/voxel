@@ -161,7 +161,7 @@ class MyDeviceAdapter(DeviceClientAdapter):
 
 ```python
 from spim_widgets.base import DeviceClientWidget
-from pyrig.device.base import PropsResponse
+from pyrig.device import PropsResponse
 
 class MyDeviceWidget(DeviceClientWidget):
     """Widget for my device."""

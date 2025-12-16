@@ -4,6 +4,11 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, field_validator, model_validator
 from rich import print
 
+_REQ_CMD_ = b"REQ"
+_GET_CMD_ = b"GET"
+_SET_CMD_ = b"SET"
+_INT_CMD_ = b"INT"
+
 
 class Proto(StrEnum):
     TCP = "tcp"

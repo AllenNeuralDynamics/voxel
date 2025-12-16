@@ -1,7 +1,7 @@
 import random
 
-from pyrig.device import Device, DeviceClient, describe
-from pyrig.props import PropertyModel, deliminated_float, enumerated_string
+from pyrig.conn import DeviceClient
+from pyrig.device import Device, PropertyModel, deliminated_float, describe, enumerated_string
 
 
 class Laser(Device):

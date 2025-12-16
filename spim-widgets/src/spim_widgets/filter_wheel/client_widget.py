@@ -3,8 +3,8 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
-from pyrig.device import DeviceClient
-from pyrig.device.base import PropsResponse
+from pyrig.conn import DeviceClient
+from pyrig.device import PropsResponse
 from spim_widgets.base import DeviceClientAdapter, DeviceClientWidget
 from spim_widgets.filter_wheel.client_adapter import DiscreteAxisClientAdapter
 from spim_widgets.filter_wheel.graphic import WheelGraphic

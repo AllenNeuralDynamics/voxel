@@ -2,35 +2,19 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Self
+from typing import Self
 
 from pydantic import BaseModel, Field
 from ruyaml import YAML
 
+from pyrig.device import BuildConfig
 from pyrig.utils import get_local_ip
 
 logger = logging.getLogger(__name__)
 yaml = YAML(typ="safe")
 
 
-class DeviceConfig(BaseModel):
-    target: str  # Fully qualified class name, e.g., "pyrig.devices.camera.Camera"
-    kwargs: dict[str, Any] = Field(default_factory=dict)  # Constructor arguments
-
-    def get_device_class(self) -> type:
-        """Dynamically import and return the device class."""
-        parts = self.target.rsplit(".", 1)
-        if len(parts) != 2:
-            raise ValueError(f"Invalid target format: {self.target}")
-
-        module_name, class_name = parts
-
-        import importlib
-
-        module = importlib.import_module(module_name)
-        device_class = getattr(module, class_name)
-
-        return device_class
+DeviceConfig = BuildConfig
 
 
 class NodeConfig(BaseModel):

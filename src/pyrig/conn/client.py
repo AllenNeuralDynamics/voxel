@@ -6,18 +6,9 @@ from typing import Any
 import zmq
 import zmq.asyncio
 
-from pyrig.device.base import (
-    _GET_CMD_,
-    _INT_CMD_,
-    _REQ_CMD_,
-    _SET_CMD_,
-    AttributeRequest,
-    CommandResponse,
-    DeviceInterface,
-    PropsResponse,
-)
-from pyrig.device.conn import DeviceAddress
-from pyrig.props import PropertyModel
+from pyrig.conn.comm import _GET_CMD_, _INT_CMD_, _REQ_CMD_, _SET_CMD_, DeviceAddress
+from pyrig.device import AttributeRequest, CommandResponse, DeviceInterface, PropsResponse
+from pyrig.device.props import PropertyModel
 
 logger = logging.getLogger(__name__)
 

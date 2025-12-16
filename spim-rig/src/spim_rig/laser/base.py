@@ -1,7 +1,7 @@
 from abc import abstractmethod
 
 from pyrig import Device, describe
-from pyrig.props import deliminated_float
+from pyrig.device.props import deliminated_float
 from spim_rig.device import DeviceType
 
 

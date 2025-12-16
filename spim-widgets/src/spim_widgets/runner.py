@@ -15,8 +15,7 @@ from PySide6.QtWidgets import QWidget as QtWidget
 
 from pyrig import Device
 from pyrig.config import DeviceConfig
-from pyrig.device import DeviceClient, DeviceService
-from pyrig.device.conn import DeviceAddress, DeviceAddressTCP
+from pyrig.conn import DeviceAddress, DeviceAddressTCP, DeviceClient, DeviceService
 from spim_widgets.base import DeviceClientWidget
 
 logger = logging.getLogger(__name__)
@@ -134,7 +133,7 @@ class DeviceWidgetRunner:
                 logger.info(f"Setting up device: {device_id}")
 
                 # Get device class from device config
-                device_cls = device_config.get_device_class()
+                device_cls = device_config.get_obj_class()
 
                 # Get widget class from configuration
                 if device_id not in cfg.widgets:

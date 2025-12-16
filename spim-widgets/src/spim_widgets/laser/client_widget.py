@@ -4,8 +4,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout
 
-from pyrig.device import DeviceClient
-from pyrig.device.base import PropsResponse
+from pyrig.conn import DeviceClient
+from pyrig.device import PropsResponse
 from spim_widgets.base import DeviceClientAdapter, DeviceClientWidget
 from spim_widgets.laser.client_adapter import LaserClientAdapter
 from spim_widgets.laser.power import PowerSetpointInput

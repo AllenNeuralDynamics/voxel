@@ -8,11 +8,8 @@ import zmq
 import zmq.asyncio
 from pydantic import ValidationError
 
-from pyrig.device.base import (
-    _GET_CMD_,
-    _INT_CMD_,
-    _REQ_CMD_,
-    _SET_CMD_,
+from pyrig.conn.comm import _GET_CMD_, _INT_CMD_, _REQ_CMD_, _SET_CMD_, DeviceAddress, DeviceAddressTCP
+from pyrig.device import (
     LABEL_ATTR,
     AttributeRequest,
     Command,
@@ -25,7 +22,6 @@ from pyrig.device.base import (
     PropertyModel,
     PropsResponse,
 )
-from pyrig.device.conn import DeviceAddress, DeviceAddressTCP
 
 DEFAULT_STREAM_INTERVAL = 0.5
 

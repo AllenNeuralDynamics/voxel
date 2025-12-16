@@ -1,4 +1,4 @@
-from pyrig.device.client import DeviceClient
+from pyrig.conn.client import DeviceClient
 from spim_rig.camera.base import TriggerMode, TriggerPolarity
 from spim_rig.camera.preview import PreviewCrop, PreviewLevels
 

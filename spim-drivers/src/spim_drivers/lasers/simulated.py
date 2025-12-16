@@ -4,7 +4,7 @@ from spim_rig.aotf.base import SpimAotf
 from spim_rig.laser.base import SpimLaser
 
 from pyrig import describe
-from pyrig.props import deliminated_float
+from pyrig.device.props import deliminated_float
 
 
 class SimulatedLaser(SpimLaser):

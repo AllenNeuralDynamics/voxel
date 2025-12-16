@@ -2,7 +2,8 @@ from pathlib import Path
 
 import zmq.asyncio
 
-from pyrig.device import Device, DeviceAddress, DeviceClient, DeviceService, describe
+from pyrig.conn import DeviceAddress, DeviceClient, DeviceService
+from pyrig.device import Device, describe
 
 
 def parse_tuple_str(str: str) -> tuple[float, float]:

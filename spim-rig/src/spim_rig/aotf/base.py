@@ -1,7 +1,7 @@
 from abc import abstractmethod
 
 from pyrig import Device, describe
-from pyrig.props import enumerated_string
+from pyrig.device.props import enumerated_string
 from spim_rig.device import DeviceType
 
 

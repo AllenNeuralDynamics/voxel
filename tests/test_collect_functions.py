@@ -6,8 +6,8 @@ when properties and methods are overridden in subclasses.
 
 from abc import abstractmethod
 
-from pyrig.device.base import Device, describe
-from pyrig.device.service import collect_commands, collect_properties
+from pyrig.conn.service import collect_commands, collect_properties
+from pyrig.device import Device, describe
 
 
 class SensorBase(Device):

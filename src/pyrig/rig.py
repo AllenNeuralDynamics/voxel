@@ -9,7 +9,7 @@ import zmq
 import zmq.asyncio
 
 from pyrig.config import RigConfig
-from pyrig.device import DeviceClient
+from pyrig.conn import DeviceClient
 from pyrig.node import (
     DeviceBuildError,
     DeviceBuildResult,
@@ -19,7 +19,6 @@ from pyrig.node import (
     ProvisionComplete,
     ProvisionResponse,
     run_node_async,
-    # run_node_service,
 )
 from pyrig.protocol import NodeAction, RigAction, RigMessage
 

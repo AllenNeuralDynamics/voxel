@@ -5,7 +5,7 @@ from typing import Any
 
 from PySide6.QtCore import Slot
 
-from pyrig.device.base import PropertyModel, PropsResponse
+from pyrig.device import PropertyModel, PropsResponse
 from spim_widgets.base import DeviceClientAdapter
 
 

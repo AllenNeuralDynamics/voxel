@@ -7,8 +7,8 @@ from typing import Any
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget
 
-from pyrig.device import DeviceClient
-from pyrig.device.base import PropsResponse
+from pyrig.conn import DeviceClient
+from pyrig.device import PropsResponse
 
 
 class DeviceClientAdapter(QObject):

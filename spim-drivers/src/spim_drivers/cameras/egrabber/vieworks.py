@@ -8,7 +8,7 @@ from spim_rig.camera.base import PixelFormat, StreamInfo, TriggerMode, TriggerPo
 from spim_rig.camera.roi import ROI, ROIConstraints
 
 from egrabber import BUFFER_INFO_BASE, GENTL_INFINITE, INFO_DATATYPE_PTR, Buffer, GenTLException, ct
-from pyrig.props import deliminated_float, enumerated_int, enumerated_string
+from pyrig.device import deliminated_float, enumerated_int, enumerated_string
 
 from .common import Binning, ExposureTime, MinMaxProp, get_dev_by_serial
 

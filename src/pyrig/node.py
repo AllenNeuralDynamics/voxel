@@ -6,7 +6,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Literal
 
 import zmq
 import zmq.asyncio
@@ -14,8 +14,9 @@ from pydantic import BaseModel
 from rich import print
 
 from pyrig.config import NodeConfig
-from pyrig.device import Device, DeviceAddressTCP, DeviceService
-from pyrig.device.service import DEFAULT_STREAM_INTERVAL
+from pyrig.conn import DeviceAddressTCP, DeviceService
+from pyrig.conn.service import DEFAULT_STREAM_INTERVAL
+from pyrig.device import BuildError, Device, build_objects
 from pyrig.protocol import NodeAction, NodeMessage, RigAction
 from pyrig.utils import ZmqTopicHandler
 
@@ -33,13 +34,7 @@ class DeviceProvision(BaseModel):
     device_type: str
 
 
-class DeviceBuildError(BaseModel):
-    """Error information for a failed device build."""
-
-    uid: str
-    error_type: Literal["import", "instantiation", "dependency", "circular"]
-    message: str
-    traceback: str | None = None
+DeviceBuildError = BuildError
 
 
 class DeviceBuildResult(BaseModel):
@@ -70,136 +65,6 @@ class NodeHeartbeat(BaseModel):
     node_id: str
     timestamp: float
     device_health: dict[str, DeviceHealth]
-
-
-def build_devices(cfg: NodeConfig) -> tuple[dict[str, Device], dict[str, DeviceBuildError]]:
-    """Build devices from configuration with error accumulation and dependency resolution.
-
-    Args:
-        cfg: Node configuration containing device specifications
-
-    Returns:
-        Tuple of (successful_devices, build_errors)
-    """
-    built: dict[str, Device] = {}
-    errors: dict[str, DeviceBuildError] = {}
-    building: set[str] = set()
-
-    def _resolve_references(value: Any) -> Any:
-        """Recursively resolve string references to built devices."""
-        if isinstance(value, str) and value in built:
-            return built[value]
-        elif isinstance(value, list):
-            return [_resolve_references(item) for item in value]
-        elif isinstance(value, dict):
-            return {k: _resolve_references(v) for k, v in value.items()}
-        return value
-
-    def _extract_dependencies(uid: str) -> set[str]:
-        """Extract device UIDs referenced in kwargs."""
-        dependencies = set()
-        device_cfg = cfg.devices[uid]
-
-        def _scan(value: Any) -> None:
-            if isinstance(value, str) and value in cfg.devices and value != uid:
-                dependencies.add(value)
-            elif isinstance(value, list):
-                for item in value:
-                    _scan(item)
-            elif isinstance(value, dict):
-                for v in value.values():
-                    _scan(v)
-
-        for v in device_cfg.kwargs.values():
-            _scan(v)
-
-        return dependencies
-
-    def _build_one(uid: str) -> Device | DeviceBuildError:
-        """Build a single device, resolving dependencies first."""
-        if uid in built:
-            return built[uid]
-
-        if uid in errors:
-            return errors[uid]
-
-        if uid in building:
-            error = DeviceBuildError(
-                uid=uid,
-                error_type="circular",
-                message=f"Circular dependency detected for device '{uid}'",
-            )
-            errors[uid] = error
-            return error
-
-        building.add(uid)
-        try:
-            device_cfg = cfg.devices[uid]
-
-            # Build dependencies first
-            deps = _extract_dependencies(uid)
-            for dep_uid in deps:
-                if dep_uid in errors:
-                    error = DeviceBuildError(
-                        uid=uid,
-                        error_type="dependency",
-                        message=f"Dependency '{dep_uid}' failed to build",
-                    )
-                    errors[uid] = error
-                    return error
-
-                dep_result = _build_one(dep_uid)
-                if isinstance(dep_result, DeviceBuildError):
-                    error = DeviceBuildError(
-                        uid=uid,
-                        error_type="dependency",
-                        message=f"Dependency '{dep_uid}' failed: {dep_result.message}",
-                    )
-                    errors[uid] = error
-                    return error
-
-            # Import the device class
-            try:
-                cls = device_cfg.get_device_class()
-            except Exception as e:
-                error = DeviceBuildError(
-                    uid=uid,
-                    error_type="import",
-                    message=f"Failed to import '{device_cfg.target}': {e}",
-                    traceback=traceback.format_exc(),
-                )
-                errors[uid] = error
-                return error
-
-            # Resolve references in kwargs
-            resolved_kwargs = _resolve_references(device_cfg.kwargs)
-            if "uid" not in resolved_kwargs:
-                resolved_kwargs["uid"] = uid
-
-            # Instantiate the device
-            try:
-                device = cls(**resolved_kwargs)
-                built[uid] = device
-                return device
-            except Exception as e:
-                error = DeviceBuildError(
-                    uid=uid,
-                    error_type="instantiation",
-                    message=f"Failed to instantiate {cls.__name__}: {e}",
-                    traceback=traceback.format_exc(),
-                )
-                errors[uid] = error
-                return error
-
-        finally:
-            building.discard(uid)
-
-    # Build all devices
-    for uid in cfg.devices:
-        if uid not in built and uid not in errors:
-            _build_one(uid)
-
-    return built, errors
 
 
 class NodeService:
@@ -308,7 +173,7 @@ class NodeService:
         self.log.info(f"Received provision with {len(node_cfg.devices)} devices")
 
         try:
-            devices, build_errors = build_devices(node_cfg)
+            devices, build_errors = build_objects(node_cfg.devices, base_cls=Device)
 
             # Log any build errors
             for uid, error in build_errors.items():

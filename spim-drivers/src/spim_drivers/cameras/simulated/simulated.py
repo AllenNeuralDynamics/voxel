@@ -15,7 +15,7 @@ from spim_rig.camera.base import (
 )
 from spim_rig.camera.roi import ROI, ROIConstraints
 
-from pyrig.props import deliminated_float, enumerated_int, enumerated_string
+from pyrig.device.props import deliminated_float, enumerated_int, enumerated_string
 
 VP_151MX_M6H0 = Vec2D(y=10_640, x=14_192)
 # 1.00:  "10640,14192"

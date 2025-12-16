@@ -1,4 +1,4 @@
-from pyrig.device.client import DeviceClient
+from pyrig.conn.client import DeviceClient
 from spim_rig.daq.base import AcqSampleMode, PinInfo
 from spim_rig.daq.service import TaskInfo
 

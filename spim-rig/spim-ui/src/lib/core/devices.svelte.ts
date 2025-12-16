@@ -10,7 +10,7 @@ import type { RigManager } from './rig.svelte';
 import type { RigClient } from './client.svelte';
 
 /**
- * Property model (matches pyrig.props.common.PropertyModel)
+ * Property model (matches pyrig.device.props.common.PropertyModel)
  */
 export interface PropertyModel {
 	value: unknown;
@@ -21,14 +21,14 @@ export interface PropertyModel {
 }
 
 /**
- * Error message (matches pyrig.device.base.ErrorMsg)
+ * Error message (matches pyrig.device.ErrorMsg)
  */
 export interface ErrorMsg {
 	msg: string;
 }
 
 /**
- * Property metadata (matches pyrig.device.base.PropertyInfo)
+ * Property metadata (matches pyrig.device.PropertyInfo)
  */
 export interface PropertyInfo {
 	name: string;
@@ -40,7 +40,7 @@ export interface PropertyInfo {
 }
 
 /**
- * Command parameter metadata (matches pyrig.device.base.ParamInfo)
+ * Command parameter metadata (matches pyrig.device.ParamInfo)
  */
 export interface ParamInfo {
 	dtype: string;
@@ -50,7 +50,7 @@ export interface ParamInfo {
 }
 
 /**
- * Command metadata (matches pyrig.device.base.CommandInfo)
+ * Command metadata (matches pyrig.device.CommandInfo)
  */
 export interface CommandInfo {
 	name: string;
@@ -60,7 +60,7 @@ export interface CommandInfo {
 }
 
 /**
- * Device interface (matches pyrig.device.base.DeviceInterface)
+ * Device interface (matches pyrig.device.DeviceInterface)
  */
 export interface DeviceInterface {
 	uid: string;
@@ -70,7 +70,7 @@ export interface DeviceInterface {
 }
 
 /**
- * Matches PropertyModel from pyrig.props.common
+ * Matches PropertyModel from pyrig.device.props.common
  * Made reactive with $state for Svelte 5
  */
 class ReactivePropertyModel {
@@ -120,7 +120,7 @@ export interface DevicesResponse {
 /**
  * Device property update payload
  * Topic: 'device/<device_id>/properties'
- * Matches PropsResponse from pyrig.device.base
+ * Matches PropsResponse from pyrig.device
  */
 export interface DevicePropertyPayload {
 	res: Record<string, PropertyModel>;

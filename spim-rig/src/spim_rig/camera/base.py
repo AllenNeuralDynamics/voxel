@@ -6,7 +6,7 @@ import numpy as np
 from ome_zarr_writer.types import Dtype, SchemaModel, Vec2D
 
 from pyrig import Device, describe
-from pyrig.props import deliminated_float, enumerated_int, enumerated_string
+from pyrig.device.props import deliminated_float, enumerated_int, enumerated_string
 from spim_rig.camera.roi import ROI, ROIAlignmentPolicy, ROIConstraints, coerce_roi
 from spim_rig.device import DeviceType
 

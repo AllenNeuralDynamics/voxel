@@ -8,12 +8,7 @@ from typing import Any, ClassVar, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field, ValidationError, create_model
 
-from pyrig.props import PropertyModel
-
-_REQ_CMD_ = b"REQ"
-_GET_CMD_ = b"GET"
-_SET_CMD_ = b"SET"
-_INT_CMD_ = b"INT"
+from .props import PropertyModel
 
 LABEL_ATTR = "__attr_label__"
 DESC_ATTR = "__attr_desc__"

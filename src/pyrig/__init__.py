@@ -4,12 +4,11 @@ import logging
 from .config import NodeConfig, RigConfig
 
 # Device layer
-from .device import Device, DeviceClient, DeviceService, describe
+from .conn import DeviceAddress, DeviceAddressTCP, DeviceClient, DeviceService
+from .device import Device, DeviceInterface, PropertyModel, describe
 
 # For custom services
-from .device.conn import DeviceAddress, DeviceAddressTCP
 from .node import NodeService
-from .props import PropertyModel
 
 # Base classes for building rigs
 from .rig import Rig
@@ -23,6 +22,7 @@ __all__ = [
     "NodeService",
     # Device layer
     "Device",
+    "DeviceInterface",
     "DeviceService",
     "DeviceClient",
     "describe",
