@@ -3,7 +3,7 @@ from typing import Self
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from pyrig import RigConfig
-from spim_rig.daq.acq_task import AcqTaskConfig
+from spim_rig.frame_task import AcqTaskConfig
 
 
 class DaqConfig(BaseModel):

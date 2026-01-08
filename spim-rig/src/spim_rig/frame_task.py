@@ -7,12 +7,12 @@ import numpy as np
 # import plotly.graph_objects as go
 from pydantic import BaseModel, Field, computed_field, model_validator
 
-from .base import AcqSampleMode, PinInfo
-from .quantity import Frequency, NormalizedRange, Time
-from .wave import Waveform
+from spim_rig.daq.base import AcqSampleMode, PinInfo
+from spim_rig.daq.quantity import Frequency, NormalizedRange, Time
+from spim_rig.daq.wave import Waveform
 
 if TYPE_CHECKING:
-    from .client import DaqClient
+    from spim_rig.daq.client import DaqClient
 
 
 class TriggerConfig(BaseModel):

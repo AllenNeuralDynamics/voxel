@@ -9,9 +9,9 @@ from pyrig import DeviceClient, Rig
 from pyrig.node import DeviceProvision
 from spim_rig.camera.client import CameraClient
 from spim_rig.config import ChannelConfig, ProfileConfig, SpimRigConfig
-from spim_rig.daq.acq_task import AcquisitionTask
 from spim_rig.daq.client import DaqClient
 from spim_rig.device import DeviceType
+from spim_rig.frame_task import AcquisitionTask
 from spim_rig.node import SpimNodeService
 
 

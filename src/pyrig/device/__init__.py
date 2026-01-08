@@ -15,6 +15,8 @@ from .base import (
     ParamInfo,
     PropertyInfo,
     PropsResponse,
+    collect_commands,
+    collect_properties,
     describe,
     get_command_help,
     runcmd,
@@ -53,4 +55,6 @@ __all__ = [
     "BuildError",
     "BuildGroupSpec",
     "build_objects",
+    "collect_properties",
+    "collect_commands",
 ]

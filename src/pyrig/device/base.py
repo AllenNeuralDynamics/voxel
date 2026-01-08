@@ -309,6 +309,87 @@ class PropsResponse(BaseModel):
     err: dict[str, ErrorMsg] = Field(default_factory=dict)
 
 
+def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
+    """Collect all properties from an object (device or service).
+
+    Searches through the Method Resolution Order (MRO) to find @describe decorators
+    on properties defined in base classes that are overridden in subclasses.
+
+    Args:
+        obj: The object to collect properties from
+
+    Returns:
+        Dictionary mapping property names to PropertyInfo
+    """
+    properties: dict[str, PropertyInfo] = {}
+
+    for attr_name in dir(obj):
+        if attr_name.startswith("_"):
+            continue
+
+        try:
+            # Search through MRO to find property with @describe decorators
+            # When a subclass overrides a property, it creates a new descriptor without base class decorators
+            prop_with_describe = None
+
+            for cls in type(obj).__mro__:
+                attr = cls.__dict__.get(attr_name)
+                if isinstance(attr, property) and attr.fget is not None:
+                    # Keep first property found (most specific)
+                    if prop_with_describe is None:
+                        prop_with_describe = attr
+
+                    # If this property has @describe, prefer it
+                    if hasattr(attr.fget, LABEL_ATTR):
+                        prop_with_describe = attr
+                        break  # Found decorated version, stop searching
+
+            if prop_with_describe is not None:
+                properties[attr_name] = PropertyInfo.from_attr(prop_with_describe)
+        except Exception:
+            pass
+
+    return properties
+
+
+def collect_commands(obj: Any) -> dict[str, Command]:
+    """Collect commands from an object (device or service).
+
+    Collects:
+    1. Methods listed in obj.__COMMANDS__ (if attribute exists)
+    2. Methods decorated with @describe
+
+    Args:
+        obj: The object to collect commands from
+
+    Returns:
+        Dictionary mapping command names to Command instances
+    """
+    commands: dict[str, Command] = {}
+
+    # Collect from __COMMANDS__ if it exists
+    if hasattr(obj, "__COMMANDS__"):
+        for attr_name in obj.__COMMANDS__:
+            if hasattr(obj, attr_name):
+                attr = getattr(obj, attr_name)
+                if callable(attr):
+                    commands[attr_name] = Command(attr)
+
+    # Collect @describe decorated methods, searching through MRO
+    for attr_name in dir(obj):
+        if not attr_name.startswith("_"):
+            # Search through MRO for methods with @describe
+            for cls in type(obj).__mro__:
+                attr = cls.__dict__.get(attr_name)
+                if callable(attr) and hasattr(attr, LABEL_ATTR):
+                    info = CommandInfo.from_func(attr)
+                    bound_method = getattr(obj, attr_name)
+                    commands[attr_name] = Command(bound_method, info=info)
+                    break
+
+    return commands
+
+
 def runcmd[R](cmd: Command[R], *args, **kwargs):
     """Execute a command with provided arguments and validation."""
     print(f"Running: {cmd.info.name}")
