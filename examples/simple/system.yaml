@@ -7,16 +7,16 @@ nodes:
     devices:
       temp_controller:
         target: simple.devices.TemperatureController
-        kwargs: { uid: "temp_ctrl_1", target_temp: 37.0 }
+        init: { uid: "temp_ctrl_1", target_temp: 37.0 }
 
       x_stage:
         target: simple.devices.MotorStage
-        kwargs: { uid: "stage_x", axis: "X", max_position: 50.0 }
+        init: { uid: "stage_x", axis: "X", max_position: 50.0 }
 
       y_stage:
         target: simple.devices.MotorStage
-        kwargs: { uid: "stage_y", axis: "Y", max_position: 50.0 }
+        init: { uid: "stage_y", axis: "Y", max_position: 50.0 }
 
       pump_1:
         target: simple.devices.Pump
-        kwargs: { uid: "pump_1", max_flow_rate: 50.0 }
+        init: { uid: "pump_1", max_flow_rate: 50.0 }

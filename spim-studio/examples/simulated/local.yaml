@@ -2,7 +2,7 @@
 _anchors:
   - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
   - &sim_pixel_size_um "0.5,0.5"
-  - &sim_camera_sensor_px "2660,3548"  # Smaller for local testing
+  - &sim_camera_sensor_px "2660,3548" # Smaller for local testing
   - &laser_target spim_drivers.lasers.simulated.SimulatedLaser
   - &aotf_laser_target spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
   - &aotf_target spim_drivers.aotf.simulated.SimulatedAotf
@@ -36,42 +36,42 @@ cluster:
 devices:
   daq_1:
     target: *daq_target
-    kwargs: { device_name: "MockDev1" }
+    init: { device_name: "MockDev1" }
   camera_1:
     target: *camera_target
-    kwargs:
+    init:
       pixel_size_um: *sim_pixel_size_um
       sensor_size_px: *sim_camera_sensor_px
   aotf_1:
     target: *aotf_target
-    kwargs: { blanking_mode: "external" }
+    init: { blanking_mode: "external" }
   laser_488:
     target: *aotf_laser_target
-    kwargs:
+    init:
       wavelength: 488
       aotf: aotf_1
       aotf_channel: 1
       aotf_frequency_mhz: 98.2
   laser_561:
     target: *aotf_laser_target
-    kwargs:
+    init:
       wavelength: 561
       aotf: aotf_1
       aotf_channel: 2
       aotf_frequency_mhz: 87.4
   fw_emission:
     target: *fw_target
-    kwargs:
+    init:
       slots: { 0: "BP525", 1: "BP600", 2: "BP700" }
   x_axis:
     target: *linear_axis_target
-    kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
+    init: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
   y_axis:
     target: *linear_axis_target
-    kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
+    init: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
   z_axis:
     target: *linear_axis_target
-    kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 50.0 }
+    init: { lower_limit_mm: 0.0, upper_limit_mm: 50.0 }
 
 stage:
   x: x_axis

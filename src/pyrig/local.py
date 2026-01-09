@@ -1,50 +1,24 @@
-"""Adapter ABC and LocalAdapter for device communication."""
-
-from abc import ABC, abstractmethod
+import logging
 from collections import defaultdict
 from typing import Any
 
-from .agent import DeviceAgent, StreamCallback
-from .base import CommandResponse, Device, DeviceInterface, PropsCallback, PropsResponse
-
-
-class Adapter[D: Device](ABC):
-    """Abstract base for device communication. Used by DeviceHandle."""
-
-    @property
-    @abstractmethod
-    def uid(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def device(self) -> D | None: ...
-
-    @abstractmethod
-    async def interface(self) -> DeviceInterface: ...
-
-    @abstractmethod
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse: ...
-
-    @abstractmethod
-    async def get_props(self, *props: str) -> PropsResponse: ...
-
-    @abstractmethod
-    async def set_props(self, **props: Any) -> PropsResponse: ...
-
-    @abstractmethod
-    async def on_props_changed(self, callback: PropsCallback) -> None: ...
-
-    @abstractmethod
-    async def subscribe(self, topic: str, callback: StreamCallback) -> None: ...
-
-    @abstractmethod
-    async def close(self) -> None: ...
+from pyrig.device import (
+    Adapter,
+    CommandResponse,
+    Device,
+    DeviceAgent,
+    DeviceInterface,
+    PropsCallback,
+    PropsResponse,
+    StreamCallback,
+)
 
 
 class LocalAdapter[D: Device](Adapter[D]):
     """Local adapter that wraps a DeviceAgent."""
 
     def __init__(self, agent: DeviceAgent[D]):
+        self.log = logging.getLogger(f"{agent.uid}.LocalAdapter")
         self._agent = agent
         self._stream_subscribers: dict[str, list[StreamCallback]] = defaultdict(list)
         self._props_callbacks: list[PropsCallback] = []
@@ -57,7 +31,7 @@ class LocalAdapter[D: Device](Adapter[D]):
                 try:
                     await callback(data)
                 except Exception:
-                    pass
+                    self.log.exception("Stream callback error for %s", full_topic)
             # Handle properties topic specially
             if topic == "properties":
                 props = PropsResponse.model_validate_json(data)
@@ -65,7 +39,7 @@ class LocalAdapter[D: Device](Adapter[D]):
                     try:
                         await callback(props)
                     except Exception:
-                        pass
+                        self.log.exception("Props callback error")
 
         self._agent.set_publisher(publish)
         self._agent.start_streaming()

@@ -148,17 +148,15 @@ class TestNestedPydanticModels:
         """Test that dict is coerced to Pydantic model."""
         cmd = Command(set_roi)
         result = cmd(roi={"x": 10, "y": 20, "w": 100, "h": 200})
-        # After validation, model_dump() converts it back to dict
-        assert "'x': 10" in result
-        assert "'y': 20" in result
+        assert "x=10" in result
+        assert "y=20" in result
 
     def test_model_from_instance(self):
         """Test that model instances work directly."""
         cmd = Command(set_roi)
         roi = ROI(x=10, y=20, w=100, h=200)
         result = cmd(roi=roi)
-        # After validation, model_dump() converts it to dict
-        assert "'x': 10" in result
+        assert "x=10" in result
 
     def test_model_invalid_dict(self):
         """Test that invalid dicts raise validation errors."""

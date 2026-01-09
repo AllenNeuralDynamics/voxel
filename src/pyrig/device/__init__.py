@@ -23,12 +23,11 @@ from .base import (
     get_command_help,
     runcmd,
 )
-from .adapter import Adapter, LocalAdapter
 from .build import BuildConfig, BuildError, BuildGroupSpec, DeviceConfig, build_objects
-from .handle import DeviceHandle
+from .handle import Adapter, DeviceHandle
 from .props.common import PropertyModel
 from .props.deliminated import deliminated_float, deliminated_int
-from .props.enumarated import enumerated_int, enumerated_string
+from .props.enumerated import enumerated_int, enumerated_string
 
 __all__ = [
     # Decorators and constants
@@ -44,7 +43,6 @@ __all__ = [
     "DeviceInterface",
     # Adapters and Publishing
     "Adapter",
-    "LocalAdapter",
     "PublishFn",
     "StreamCallback",
     # Command/property types

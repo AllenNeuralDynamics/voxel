@@ -14,19 +14,19 @@ nodes:
     devices:
       laser_488:
         target: *laser_target
-        kwargs: { wavelength: 488 }
+        init: { wavelength: 488 }
       laser_561:
         target: *laser_target
-        kwargs: { wavelength: 561 }
+        init: { wavelength: 561 }
   node_1:
     hostname: *camera_ip
     devices:
       camera_1:
         target: *camera_target
-        kwargs: { pixel_size_um: "0.5, 0.5" }
+        init: { pixel_size_um: "0.5, 0.5" }
   node_2:
     hostname: *camera_ip
     devices:
       camera_2:
         target: *camera_target
-        kwargs: { pixel_size_um: "0.5, 0.5" }
+        init: { pixel_size_um: "0.5, 0.5" }

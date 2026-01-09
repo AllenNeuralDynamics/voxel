@@ -10,7 +10,8 @@ from .cluster import (
     ZMQAdapter,
     ZMQService,
 )
-from .device import Adapter, Device, DeviceHandle, DeviceInterface, LocalAdapter, PropertyModel, describe
+from .device import Adapter, Device, DeviceHandle, DeviceInterface, PropertyModel, describe
+from .local import LocalAdapter
 from .rig import Rig, RigConfig, RigInfo
 
 # Set up library logging with NullHandler (users opt-in to see logs)

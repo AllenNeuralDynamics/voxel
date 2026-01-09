@@ -9,6 +9,7 @@ import zmq
 import zmq.asyncio
 
 from pyrig.device import (
+    Adapter,
     AttributeRequest,
     CommandResponse,
     Device,
@@ -17,7 +18,6 @@ from pyrig.device import (
     PropsResponse,
     StreamCallback,
 )
-from pyrig.device.adapter import Adapter
 
 from .protocol import _GET_CMD_, _INT_CMD_, _REQ_CMD_, _SET_CMD_, DeviceAddress
 
@@ -85,7 +85,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
 
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
         """Execute a command and return raw CommandResponse."""
-        req = AttributeRequest(node=self.uid, attr=command, args=list(args), kwargs=kwargs)
+        req = AttributeRequest(device=self.uid, attr=command, args=list(args), kwargs=kwargs)
         payload = req.model_dump_json().encode()
 
         async with self._lock:
@@ -95,7 +95,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
 
     async def get_props(self, *props: str) -> PropsResponse:
         """Get property values from the device."""
-        req = AttributeRequest(node=self.uid, attr="", args=list(props))
+        req = AttributeRequest(device=self.uid, attr="", args=list(props))
         payload = req.model_dump_json().encode()
         await self._req_socket.send_multipart([_GET_CMD_, payload])
         response_json = await self._req_socket.recv_json()
@@ -103,7 +103,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
 
     async def set_props(self, **props: Any) -> PropsResponse:
         """Set property values on the device."""
-        req = AttributeRequest(node=self.uid, attr="", kwargs=props)
+        req = AttributeRequest(device=self.uid, attr="", kwargs=props)
         payload = req.model_dump_json().encode()
         await self._req_socket.send_multipart([_SET_CMD_, payload])
         response_json = await self._req_socket.recv_json()
@@ -111,7 +111,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
 
     async def interface(self) -> DeviceInterface:
         """Get the device interface information."""
-        req = AttributeRequest(node=self.uid, attr="")
+        req = AttributeRequest(device=self.uid, attr="")
         payload = req.model_dump_json().encode()
         await self._req_socket.send_multipart([_INT_CMD_, payload])
         response_json = await self._req_socket.recv_json()

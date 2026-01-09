@@ -1,11 +1,44 @@
 """User-facing device handle."""
 
+from abc import ABC, abstractmethod
 from typing import Any
 
-from .adapter import Adapter
 from .agent import StreamCallback
 from .base import CommandResponse, Device, DeviceInterface, PropsCallback, PropsResponse
 from .props import PropertyModel
+
+
+class Adapter[D: Device](ABC):
+    """Abstract base for device communication. Used by DeviceHandle."""
+
+    @property
+    @abstractmethod
+    def uid(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def device(self) -> D | None: ...
+
+    @abstractmethod
+    async def interface(self) -> DeviceInterface: ...
+
+    @abstractmethod
+    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse: ...
+
+    @abstractmethod
+    async def get_props(self, *props: str) -> PropsResponse: ...
+
+    @abstractmethod
+    async def set_props(self, **props: Any) -> PropsResponse: ...
+
+    @abstractmethod
+    async def on_props_changed(self, callback: PropsCallback) -> None: ...
+
+    @abstractmethod
+    async def subscribe(self, topic: str, callback: StreamCallback) -> None: ...
+
+    @abstractmethod
+    async def close(self) -> None: ...
 
 
 class DeviceHandle[D: Device]:

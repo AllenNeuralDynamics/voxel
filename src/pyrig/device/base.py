@@ -268,7 +268,7 @@ class Command[R]:
             validated = self._param_model(**kwargs)
             # Return the field values directly (preserving Pydantic model instances)
             # instead of converting to dict via model_dump()
-            return (), {k: getattr(validated, k) for k in validated.model_fields.keys()}
+            return (), {k: getattr(validated, k) for k in type(validated).model_fields.keys()}
         except ValidationError as e:
             # Convert Pydantic errors to CommandParamsError
             errors = [f"{err['loc'][0]}: {err['msg']}" for err in e.errors()]
@@ -276,7 +276,7 @@ class Command[R]:
 
 
 class AttributeRequest(BaseModel):
-    node: str
+    device: str
     attr: str
     args: list[Any] = Field(default_factory=list)
     kwargs: dict[str, Any] = Field(default_factory=dict)
@@ -445,105 +445,3 @@ def list_commands(*cmds: CommandInfo | Command) -> None:
     for cmd in cmds:
         print(get_command_help(cmd))
         print("-" * 30)
-
-
-# Example usage
-if __name__ == "__main__":
-
-    @describe(label="add", desc="Adds two numbers")
-    def add(a: int, b: int) -> int:
-        """This function adds two numbers."""
-        return a + b
-
-    @describe(label="multiply", desc="Multiplies two numbers")
-    def multiply(a: float, b: float = 2.0) -> float:
-        """This function multiplies two numbers."""
-        return a * b
-
-    def process_data(data: str | int, multiplier: int | float = 1) -> str:
-        """Process data that can be string or int."""
-        if isinstance(data, str):
-            return f"Processed: {data}" * int(multiplier)
-        return f"Processed: {data * multiplier}"
-
-    @describe(label="optional param", desc="Function with optional parameter")
-    def optional_param(required: str, optional: str | None = None) -> str:
-        """Function demonstrating optional parameters."""
-        if optional:
-            return f"{required} with {optional}"
-        return f"Just {required}"
-
-    # Create command instances for standalone functions
-    add_cmd = Command(add)
-    mult_cmd = Command(multiply)
-    process_cmd = Command(process_data)
-    optional_cmd = Command(optional_param)
-
-    # List all commands using NodeAgent
-    print("=== Standalone Function Commands ===")
-    list_commands(add_cmd, mult_cmd, process_cmd, optional_cmd)
-
-    # Test basic commands
-    print("\n=== Testing Valid Commands ===")
-    runcmd(add_cmd, 2, 3)
-    print("-" * 40)
-
-    runcmd(mult_cmd, 2.5)
-    print("-" * 40)
-
-    runcmd(process_cmd, "hello", 2)
-    print("-" * 40)
-
-    runcmd(process_cmd, 42)
-    print("-" * 40)
-
-    runcmd(optional_cmd, "test")
-    print("-" * 40)
-
-    # Test validation errors
-    print("\n=== Testing Validation Errors ===")
-    try:
-        runcmd(add_cmd, "not_a_number", 3)
-    except ValueError as e:
-        print(f"Caught expected error: {e}")
-    print("-" * 40)
-
-    try:
-        runcmd(add_cmd, 2)  # Missing required parameter
-    except ValueError as e:
-        print(f"Caught expected error: {e}")
-    print("-" * 40)
-
-    # Test JSON serialization
-    print("\n=== Testing JSON Serialization ===")
-    import json
-
-    print("Command as JSON:")
-    print(json.dumps(add_cmd.to_dict(), indent=2))
-
-    # Test Command.validate_params() with Pydantic validation
-    print("\n=== Testing Command Validation (Pydantic-based) ===")
-
-    try:
-        add_cmd.validate_params(10, 20)
-        print("Valid params (positional): No errors")
-    except CommandParamsError as e:
-        print(f"Valid params (positional): {e.errors}")
-
-    try:
-        add_cmd.validate_params(a=10, b=20)
-        print("Valid params (keyword): No errors")
-    except CommandParamsError as e:
-        print(f"Valid params (keyword): {e.errors}")
-
-    try:
-        add_cmd.validate_params(a="invalid", b=20)
-        print("Invalid params: No errors (unexpected!)")
-    except CommandParamsError as e:
-        print(f"Invalid params: {e.errors}")
-
-    try:
-        add_cmd.validate_params(a=10)
-        print("Missing params: No errors (unexpected!)")
-    except CommandParamsError as e:
-        print(f"Missing params: {e.errors}")

@@ -49,69 +49,69 @@ nodes:
     devices:
       daq_1:
         target: *daq_target
-        kwargs: { device_name: "MockDev1" }
+        init: { device_name: "MockDev1" }
       aotf_1:
         target: *aotf_target
-        kwargs: { blanking_mode: "external" }
+        init: { blanking_mode: "external" }
       laser_405:
         target: *aotf_laser_target
-        kwargs:
+        init:
           wavelength: 405
           aotf: aotf_1
           aotf_channel: 1
           aotf_frequency_mhz: 110.5
       laser_488:
         target: *aotf_laser_target
-        kwargs:
+        init:
           wavelength: 488
           aotf: aotf_1
           aotf_channel: 2
           aotf_frequency_mhz: 98.2
       laser_561:
         target: *aotf_laser_target
-        kwargs:
+        init:
           wavelength: 561
           aotf: aotf_1
           aotf_channel: 3
           aotf_frequency_mhz: 87.4
       laser_640:
         target: *aotf_laser_target
-        kwargs:
+        init:
           wavelength: 640
           aotf: aotf_1
           aotf_channel: 4
           aotf_frequency_mhz: 78.6
       laser_730:
         target: *laser_target
-        kwargs: { wavelength: 730 }
+        init: { wavelength: 730 }
       fw_detection_shared:
         target: *fw_target
-        kwargs:
+        init:
           slots: { 0: "Quad-DGRC", 1: "Dual-DR", 2: "Dual-GC", 3: "NIR-LP720" }
       fw_emission_cam1:
         target: *fw_target
-        kwargs:
+        init:
           slots: { 0: "BP450", 1: "BP525", 2: "BP600", 3: "BP780" }
       fw_emission_cam2:
         target: *fw_target
-        kwargs:
+        init:
           slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
       x_axis:
         target: *linear_axis_target
-        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
+        init: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
       y_axis:
         target: *linear_axis_target
-        kwargs: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
+        init: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
       z_axis:
         target: *linear_axis_target
-        kwargs:
+        init:
           { lower_limit_mm: 0.0, upper_limit_mm: 50.0, has_ttl_stepper: true }
   node_1:
     hostname: *camera_ip
     devices:
       camera_1: &sim_camera
         target: *camera_target
-        kwargs:
+        init:
           pixel_size_um: *sim_pixel_size_um
           sensor_size_px: *sim_camera_sensor_px
   node_2:

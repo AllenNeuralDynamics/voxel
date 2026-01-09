@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from pyrig.device import DeviceHandle
 from pyrig.utils import get_local_ip
 
+from .adapter import ZMQAdapter
 from .node import (
     DeviceBuildError,
     DeviceBuildResult,
@@ -24,7 +25,6 @@ from .node import (
     run_node_async,
 )
 from .protocol import NodeAction, RigAction, RigMessage
-from .adapter import ZMQAdapter
 
 
 class LocalNodeProcess(Process):

@@ -1,6 +1,6 @@
 from .common import PropertyModel as PropertyModel
 from .deliminated import deliminated_float, deliminated_int
-from .enumarated import enumerated_int, enumerated_string
+from .enumerated import enumerated_int, enumerated_string
 
 __all__ = [
     "PropertyModel",

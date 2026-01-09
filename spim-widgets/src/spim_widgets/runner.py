@@ -10,12 +10,12 @@ from typing import Any
 import qasync
 import zmq
 import zmq.asyncio
-from pyrig.config import DeviceConfig
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow
 from PySide6.QtWidgets import QWidget as QtWidget
 
 from pyrig import Device, DeviceHandle
 from pyrig.cluster import DeviceAddress, DeviceAddressTCP, ZMQAdapter, ZMQService
+from pyrig.device import DeviceAgent, DeviceConfig
 from spim_widgets.base import RemoteHandleWidget
 
 logger = logging.getLogger(__name__)
@@ -59,8 +59,9 @@ def _run_device_service(
         # Create connection info
         conn = DeviceAddressTCP(host="0.0.0.0", rpc=rpc_port, pub=pub_port)
 
-        # Create service
-        service = service_cls(device, conn, zctx)
+        # Create agent and service
+        agent = DeviceAgent(device)
+        service = service_cls(agent, conn, zctx)
         logger.info(f"ZMQService started on rpc={rpc_port}, pub={pub_port}")
 
         # Notify parent process that we're ready
@@ -154,7 +155,7 @@ class DeviceWidgetRunner:
                     target=_run_device_service,
                     args=(
                         device_cls,
-                        device_config.kwargs,
+                        device_config.init,
                         service_class,
                         rpc_port,
                         pub_port,

@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 class BuildConfig(BaseModel):
     target: str  # Fully qualified class name, e.g., "pyrig.objs.camera.Camera"
-    kwargs: dict[str, Any] = Field(default_factory=dict)  # Constructor arguments
+    init: dict[str, Any] = Field(default_factory=dict)  # Constructor arguments
+    defaults: dict[str, Any] | None = None  # Properties to set after construction
 
     def get_obj_class(self) -> type:
         """Dynamically import and return the obj class."""
@@ -80,7 +81,7 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> tuple[
                 for v in value.values():
                     _scan(v)
 
-        for v in obj_cfg.kwargs.values():
+        for v in obj_cfg.init.values():
             _scan(v)
 
         return dependencies
@@ -148,16 +149,14 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> tuple[
                 errors[uid] = error
                 return error
 
-            # Resolve references in kwargs
-            resolved_kwargs = _resolve_references(obj_cfg.kwargs)
-            if "uid" not in resolved_kwargs:
-                resolved_kwargs["uid"] = uid
+            # Resolve references in init
+            resolved_init = _resolve_references(obj_cfg.init)
+            if "uid" not in resolved_init:
+                resolved_init["uid"] = uid
 
             # Instantiate the obj
             try:
-                obj = cls(**resolved_kwargs)
-                built[uid] = obj
-                return obj
+                obj = cls(**resolved_init)
             except Exception as e:
                 error = BuildError(
                     uid=uid,
@@ -167,6 +166,17 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> tuple[
                 )
                 errors[uid] = error
                 return error
+
+            # Apply defaults after construction
+            if obj_cfg.defaults:
+                for name, value in obj_cfg.defaults.items():
+                    try:
+                        setattr(obj, name, value)
+                    except Exception:
+                        logger.warning(f"Failed to set default {name}={value} on {uid}: {traceback.format_exc()}")
+
+            built[uid] = obj
+            return obj
 
         finally:
             building.discard(uid)

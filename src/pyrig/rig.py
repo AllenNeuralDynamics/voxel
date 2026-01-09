@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from ruyaml import YAML
 
 from pyrig.cluster import ClusterConfig, ClusterManager, NodeConfig, NodeService
-from pyrig.device import Device, DeviceConfig, DeviceHandle, LocalAdapter, build_objects
+from pyrig.device import Device, DeviceConfig, DeviceHandle, build_objects
+from pyrig.local import LocalAdapter
 from pyrig.utils import get_local_ip
 
 logger = logging.getLogger(__name__)
