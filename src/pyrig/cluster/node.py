@@ -13,11 +13,19 @@ import zmq.asyncio
 from pydantic import BaseModel, Field
 from rich import print
 
-from pyrig.cluster.protocol import DeviceAddressTCP, NodeAction, NodeMessage, RigAction
-from pyrig.cluster.service import DeviceService
-from pyrig.device import BuildError, Device, DeviceConfig, build_objects
-from pyrig.device.executor import DEFAULT_STREAM_INTERVAL
+from pyrig.device import (
+    Adapter,
+    BuildError,
+    Device,
+    DeviceAgent,
+    DeviceConfig,
+    DeviceHandle,
+    build_objects,
+)
 from pyrig.utils import ZmqTopicHandler
+
+from .protocol import DeviceAddressTCP, NodeAction, NodeMessage, RigAction
+from .service import ZMQService
 
 
 class NodeConfig(BaseModel):
@@ -91,14 +99,24 @@ class NodeService:
         self._control_socket.setsockopt(zmq.IDENTITY, node_id.encode())
         self._control_socket.connect(ctrl_addr)
 
-        self._device_servers: dict[str, DeviceService] = {}
+        self._device_servers: dict[str, ZMQService] = {}
         self._heartbeat_task: asyncio.Task | None = None
         self.log = logging.getLogger(f"node.{node_id}")
 
-    def _create_service(self, device: Device, conn, stream_interval: float | None = None) -> DeviceService:
-        """Hook for custom service types."""
-        stream_interval = stream_interval or DEFAULT_STREAM_INTERVAL
-        return DeviceService(device, conn=conn, zctx=self._zctx, stream_interval=stream_interval)
+    @classmethod
+    def create_agent(cls, device: Device) -> DeviceAgent:
+        """Create an agent for a device. Override to return custom agent types."""
+        return DeviceAgent(device, stream_interval=0.5)
+
+    @classmethod
+    def create_handle(cls, device_type: str, adapter: Adapter) -> DeviceHandle:
+        """Create a handle for a device. Override to return custom handle types."""
+        return DeviceHandle(adapter)
+
+    def _create_service(self, device: Device, conn: DeviceAddressTCP) -> ZMQService:
+        """Create a ZMQ service for a device."""
+        agent = self.create_agent(device)
+        return ZMQService(agent, conn=conn, zctx=self._zctx)
 
     def _get_device_health(self, device_id: str) -> DeviceHealth:
         """Get health status for a device."""

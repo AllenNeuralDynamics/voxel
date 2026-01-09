@@ -12,6 +12,7 @@ members = [
     "pyrig",
     "spim-drivers",
     "spim-rig",
+    "spim-studio",
     "spim-widgets",
 ]
 
@@ -1144,13 +1145,31 @@ name = "spim-rig"
 version = "0.1.0"
 source = { editable = "spim-rig" }
 dependencies = [
-    { name = "fastapi" },
     { name = "msgpack-numpy" },
     { name = "numpy" },
     { name = "ome-zarr-writer" },
     { name = "opencv-python-headless" },
     { name = "pyrig" },
     { name = "rich" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "msgpack-numpy", specifier = ">=0.4.8" },
+    { name = "numpy", specifier = ">=2.3.4" },
+    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
+    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
+    { name = "pyrig", editable = "." },
+    { name = "rich", specifier = ">=14.2.0" },
+]
+
+[[package]]
+name = "spim-studio"
+version = "0.1.0"
+source = { editable = "spim-studio" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "spim-rig" },
     { name = "uvicorn" },
     { name = "websockets" },
 ]
@@ -1158,12 +1177,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.121.1" },
-    { name = "msgpack-numpy", specifier = ">=0.4.8" },
-    { name = "numpy", specifier = ">=2.3.4" },
-    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
-    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
-    { name = "pyrig", editable = "." },
-    { name = "rich", specifier = ">=14.2.0" },
+    { name = "spim-rig", editable = "spim-rig" },
     { name = "uvicorn", specifier = ">=0.38.0" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]

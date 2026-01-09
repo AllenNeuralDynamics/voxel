@@ -1,4 +1,4 @@
-"""Device widget runner - spawns DeviceService subprocess and creates widget."""
+"""Device widget runner - spawns ZMQService subprocess and creates widget."""
 
 import asyncio
 import logging
@@ -10,13 +10,13 @@ from typing import Any
 import qasync
 import zmq
 import zmq.asyncio
+from pyrig.config import DeviceConfig
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow
 from PySide6.QtWidgets import QWidget as QtWidget
 
-from pyrig import Device
-from pyrig.config import DeviceConfig
-from pyrig.conn import DeviceAddress, DeviceAddressTCP, DeviceClient, DeviceService
-from spim_widgets.base import DeviceClientWidget
+from pyrig import Device, DeviceHandle
+from pyrig.cluster import DeviceAddress, DeviceAddressTCP, ZMQAdapter, ZMQService
+from spim_widgets.base import RemoteHandleWidget
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def _find_free_port() -> int:
 def _run_device_service(
     device_cls: type[Device],
     device_kwargs: dict[str, Any],
-    service_cls: type[DeviceService],
+    service_cls: type[ZMQService],
     rpc_port: int,
     pub_port: int,
     port_queue: Queue,
@@ -61,7 +61,7 @@ def _run_device_service(
 
         # Create service
         service = service_cls(device, conn, zctx)
-        logger.info(f"DeviceService started on rpc={rpc_port}, pub={pub_port}")
+        logger.info(f"ZMQService started on rpc={rpc_port}, pub={pub_port}")
 
         # Notify parent process that we're ready
         port_queue.put({"rpc": rpc_port, "pub": pub_port, "status": "ready"})
@@ -98,14 +98,14 @@ class WidgetRunnerConfig:
     Args:
         devices: Mapping of device_id to DeviceConfig
         widgets: Mapping of device_id to widget class
-        services: Optional mapping of device_id to service class (defaults to DeviceService)
+        services: Optional mapping of device_id to service class (defaults to ZMQService)
         window_title: Title for the application window
         window_size: (width, height) tuple for window size
     """
 
     devices: dict[str, DeviceConfig]
-    widgets: dict[str, type[DeviceClientWidget]]
-    services: dict[str, type[DeviceService]] = field(default_factory=dict)
+    widgets: dict[str, type[RemoteHandleWidget]]
+    services: dict[str, type[ZMQService]] = field(default_factory=dict)
     window_title: str = "Device Widget Runner"
     window_size: tuple[int, int] = (800, 600)
 
@@ -115,7 +115,7 @@ class DeviceWidgetRunner:
 
     This class handles:
     - Spawning device service subprocesses for each device
-    - Creating DeviceClients to communicate with services
+    - Creating RemoteHandles to communicate with services
     - Creating and managing widgets for each device
     - Cleanup of all resources on shutdown
     """
@@ -125,7 +125,7 @@ class DeviceWidgetRunner:
     def __init__(self, cfg: WidgetRunnerConfig) -> None:
         self.cfg = cfg  # Fixed typo: was WidgetRunnerConfig instead of cfg
         self.service_infos: dict[str, DeviceServiceInfo] = {}
-        self.widgets: dict[str, DeviceClientWidget] = {}
+        self.widgets: dict[str, RemoteHandleWidget] = {}
 
         try:
             # Iterate over all devices in the configuration
@@ -139,8 +139,8 @@ class DeviceWidgetRunner:
                 if device_id not in cfg.widgets:
                     raise KeyError(f"No widget class configured for device_id: {device_id}")
 
-                # Get service class (default to DeviceService if not specified)
-                service_class = cfg.services.get(device_id, DeviceService)
+                # Get service class (default to ZMQService if not specified)
+                service_class = cfg.services.get(device_id, ZMQService)
 
                 # Allocate ports for this device service
                 rpc_port = _find_free_port()
@@ -207,32 +207,33 @@ class DeviceWidgetRunner:
                 self._terminate_service_process(service_info)
 
     @classmethod
-    async def _init_client[W: DeviceClientWidget](cls, serv: DeviceServiceInfo, widget_class: type[W]) -> W | None:
-        """Initialize a single device client and widget."""
-        client: DeviceClient | None = None
+    async def _init_client[W: RemoteHandleWidget](cls, serv: DeviceServiceInfo, widget_class: type[W]) -> W | None:
+        """Initialize a single device handle and widget."""
+        handle: DeviceHandle | None = None
         try:
-            client = DeviceClient(
+            adapter = ZMQAdapter(
                 uid=serv.device_id,
                 zctx=cls.zctx,
                 conn=serv.conn,
             )
+            handle = DeviceHandle(adapter)
 
             # Device connection is managed by rig node heartbeats
             # If we can get the interface, device is available
             try:
-                await client.get_interface()
+                await handle.interface()
             except Exception as e:
                 logger.warning(f"Failed to connect to device {serv.device_id}: {e}")
                 try:
-                    await client.close()
+                    await handle.close()
                 except Exception:
-                    logger.exception("Error closing client during cleanup")
+                    logger.exception("Error closing handle during cleanup")
                 return None
 
             logger.info(f"Connected to device {serv.device_id}")
 
             # Create widget
-            widget = widget_class(client)
+            widget = widget_class(handle)
 
             # Start widget if it has a start method
             if hasattr(widget, "start"):
@@ -244,11 +245,11 @@ class DeviceWidgetRunner:
         except Exception:
             logger.exception(f"Failed to create widget for {serv.device_id}")
 
-            if client:
+            if handle:
                 try:
-                    await client.close()
+                    await handle.close()
                 except Exception:
-                    logger.exception("Error closing client during cleanup")
+                    logger.exception("Error closing handle during cleanup")
 
             return None
 
@@ -339,7 +340,7 @@ class DeviceWidgetRunner:
         for device_id, widget in self.widgets.items():
             try:
                 await widget.stop()
-                await widget.client.close()
+                await widget.handle.close()
                 logger.info(f"Stopped widget for {device_id}")
             except Exception:
                 logger.exception(f"Error stopping widget for {device_id}")

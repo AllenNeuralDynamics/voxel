@@ -10,23 +10,39 @@ Note:
         spim-node <node_id> --rig <host[:port]>
 """
 
-from pyrig import Device, NodeService
-from spim_rig.axes import SpimAxis
-from spim_rig.camera.base import SpimCamera
-from spim_rig.camera.service import CameraService
-from spim_rig.daq.base import SpimDaq
-from spim_rig.daq.service import DaqService
+from pyrig import Device, DeviceHandle, NodeService
+from pyrig.device import Adapter, DeviceAgent
+from spim_rig.axes.linear.base import LinearAxis, LinearAxisAgent
+from spim_rig.camera.base import CameraAgent, SpimCamera
+from spim_rig.camera.handle import CameraHandle
+from spim_rig.daq import DaqHandle
+from spim_rig.device import DeviceType
 
 
 class SpimNodeService(NodeService):
-    """Node service with SpimCamera, SpimDaq, and SpimAotf support."""
+    """Node service with SPIM-specific device support.
 
-    def _create_service(self, device: Device, conn, stream_interval: float | None = None):
-        """Hook for custom service types."""
+    SpimCamera devices use CameraAgent for preview streaming.
+    LinearAxis devices use LinearAxisAgent for TTL stepping support.
+    SpimAxis devices use faster property streaming for responsive stage control.
+    """
+
+    @classmethod
+    def create_agent(cls, device: Device) -> DeviceAgent:
+        """Create custom agents for SPIM device types."""
         if isinstance(device, SpimCamera):
-            return CameraService(device, conn, self._zctx)
-        if isinstance(device, SpimDaq):
-            return DaqService(device, conn, self._zctx)
-        if isinstance(device, SpimAxis):
-            return super()._create_service(device, conn, stream_interval=0.05)
-        return super()._create_service(device, conn)
+            return CameraAgent(device)
+        if isinstance(device, LinearAxis):
+            return LinearAxisAgent(device, stream_interval=0.05)
+        return super().create_agent(device)
+
+    @classmethod
+    def create_handle(cls, device_type: str, adapter: Adapter) -> DeviceHandle:
+        """Create typed handles for SPIM device types."""
+        match device_type:
+            case DeviceType.CAMERA:
+                return CameraHandle(adapter)
+            case DeviceType.DAQ:
+                return DaqHandle(adapter)
+            case _:
+                return super().create_handle(device_type, adapter)

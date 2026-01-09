@@ -15,9 +15,10 @@ Examples:
     python -m imaging.node camera_node_1 tcp://192.168.1.100:9000
 """
 
+from pyrig.cluster.node import main
+
 from imaging.drivers.camera import Camera, CameraService
 from pyrig import Device, NodeService
-from pyrig.node import main
 
 
 class ImagingNodeService(NodeService):

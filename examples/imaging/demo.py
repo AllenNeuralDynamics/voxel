@@ -35,23 +35,23 @@ async def main():
 
     # Create controller
     zctx = zmq.asyncio.Context()
-    controller = ImagingRig(zctx, config)
+    controller = ImagingRig(config, zctx)
 
     try:
         # Start rig
         await controller.start()
 
         # Example: List all devices
-        log.info("Available devices (%d):", len(controller.devices))
-        for device_id, agent in controller.devices.items():
+        log.info("Available devices (%d):", len(controller.handles))
+        for device_id, agent in controller.handles.items():
             log.info("  - %s", device_id)
-            interface = await agent.get_interface()
+            interface = await agent.interface()
             log.debug("Interface for %s:\n%s", device_id, interface)
             print(interface)
 
-        # Showcase typed LaserClient API
+        # Showcase typed LaserHandle API
         if controller.lasers:
-            log.info("=== Demonstrating Typed LaserClient API ===")
+            log.info("=== Demonstrating Typed LaserHandle API ===")
             laser_id = next(iter(controller.lasers.keys()))
             laser = controller.lasers[laser_id]
 
@@ -80,11 +80,11 @@ async def main():
             await laser.turn_off()
             log.info("Laser is on: %s", await laser.get_is_on())
 
-            log.info("✓ All typed LaserClient methods work with full autocomplete!")
+            log.info("✓ All typed LaserHandle methods work with full autocomplete!")
 
-        # Showcase typed CameraClient API with service-level commands
+        # Showcase typed CameraHandle API with service-level commands
         if controller.cameras:
-            log.info("=== Demonstrating Typed CameraClient API ===")
+            log.info("=== Demonstrating Typed CameraHandle API ===")
             camera_id = next(iter(controller.cameras.keys()))
             camera = controller.cameras[camera_id]
 
@@ -106,7 +106,7 @@ async def main():
             result = await camera.start_stream(num_frames=5)
             log.info("Stream result: %s", result)
 
-            log.info("✓ CameraClient with service-level commands working!")
+            log.info("✓ CameraHandle with service-level commands working!")
 
         # # Keep running
         # print("\n[cyan]Rig ready! Press Ctrl+C to exit.[/cyan]")

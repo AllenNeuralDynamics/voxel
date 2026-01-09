@@ -249,7 +249,7 @@ Total: 4 seconds (50% time savings)
 ### Start Multiple Cameras in Parallel
 
 ```python
-async def start_all_previews(cameras: list[CameraClient], hub_addr: str):
+async def start_all_previews(cameras: list[CameraRHandle], hub_addr: str):
     """Start preview on all cameras concurrently."""
     tasks = [
         camera.start_preview(hub_addr, f"channel_{i}")
@@ -272,7 +272,7 @@ async def start_all_previews(cameras: list[CameraClient], hub_addr: str):
 ### Handle Errors Gracefully
 
 ```python
-async def safe_start_preview(camera: CameraClient, hub_addr: str, channel: str):
+async def safe_start_preview(camera: CameraRHandle, hub_addr: str, channel: str):
     """Start preview with error handling and retry logic."""
     max_retries = 3
     for attempt in range(max_retries):
@@ -291,7 +291,7 @@ async def safe_start_preview(camera: CameraClient, hub_addr: str, channel: str):
 ### Monitor Preview Status
 
 ```python
-async def monitor_cameras(cameras: list[CameraClient]):
+async def monitor_cameras(cameras: list[CameraRHandle]):
     """Monitor camera modes and frame rates."""
     while True:
         for i, camera in enumerate(cameras):

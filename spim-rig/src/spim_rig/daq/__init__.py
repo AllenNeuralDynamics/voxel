@@ -1,15 +1,11 @@
-from .base import AcqSampleMode, AOChannelInst, DaqTaskInst, PinInfo, SpimDaq, TaskStatus
-from .client import DaqClient
-from .service import DaqService, TaskInfo
+from .base import AOTaskConfig, COTaskConfig, SampleMode, SpimDaq, TaskInfo
+from .handle import DaqHandle
 
 __all__ = [
-    "AOChannelInst",
-    "SpimDaq",
-    "PinInfo",
-    "AcqSampleMode",
-    "DaqTaskInst",
-    "TaskStatus",
-    "DaqService",
-    "DaqClient",
+    "SampleMode",
+    "AOTaskConfig",
+    "COTaskConfig",
     "TaskInfo",
+    "SpimDaq",
+    "DaqHandle",
 ]

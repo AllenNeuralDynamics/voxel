@@ -1,17 +1,17 @@
-"""Filter wheel widget using DeviceClient."""
+"""Filter wheel widget using DeviceHandle."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
-from pyrig.conn import DeviceClient
+from pyrig import DeviceHandle
 from pyrig.device import PropsResponse
-from spim_widgets.base import DeviceClientAdapter, DeviceClientWidget
+from spim_widgets.base import RemoteHandleAdapter, RemoteHandleWidget
 from spim_widgets.filter_wheel.client_adapter import DiscreteAxisClientAdapter
 from spim_widgets.filter_wheel.graphic import WheelGraphic
 
 
-class FilterWheelClientWidget(DeviceClientWidget):
-    """Filter wheel control widget using DeviceClient.
+class FilterWheelClientWidget(RemoteHandleWidget):
+    """Filter wheel control widget using DeviceHandle.
 
     Features:
     - Visual wheel graphic showing slots and assignments
@@ -23,7 +23,7 @@ class FilterWheelClientWidget(DeviceClientWidget):
 
     def __init__(
         self,
-        client: DeviceClient,
+        handle: DeviceHandle,
         hues: dict[str, int | float] | None = None,
         parent=None,
     ) -> None:
@@ -39,11 +39,11 @@ class FilterWheelClientWidget(DeviceClientWidget):
         self._labels: dict[int, str | None] = {}
         self._current_position = 0
 
-        super().__init__(client, parent)
+        super().__init__(handle, parent)
 
-    def _create_adapter(self, client: DeviceClient) -> DeviceClientAdapter:
+    def _create_adapter(self, handle: DeviceHandle) -> RemoteHandleAdapter:
         """Create discrete axis adapter."""
-        return DiscreteAxisClientAdapter(client, parent=self)
+        return DiscreteAxisClientAdapter(handle, parent=self)
 
     def _setup_ui(self) -> None:
         """Setup the filter wheel widget UI."""

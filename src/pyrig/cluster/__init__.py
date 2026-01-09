@@ -1,19 +1,19 @@
+from .adapter import ZMQAdapter
 from .manager import ClusterConfig, ClusterManager
 from .node import DeviceProvision, NodeConfig, NodeService, run_node_service
 from .protocol import DeviceAddress, DeviceAddressTCP
-from .service import DeviceService
-from .transport import RemoteTransport
+from .service import ZMQService
 
 __all__ = [
     "ClusterManager",
     "ClusterConfig",
     "DeviceAddress",
     "DeviceAddressTCP",
-    "DeviceService",
+    "ZMQService",
+    "ZMQAdapter",
     "NodeService",
     "NodeConfig",
     "DeviceProvision",
-    "RemoteTransport",
     "run_node_service",
 ]
 
@@ -114,7 +114,9 @@ if __name__ == "__main__":
                 self._internal_state = new_value
             return self._internal_state
 
-    class DataProcessorServer(DeviceService):
+    from pyrig.device import DeviceAgent
+
+    class DataProcessorAgent(DeviceAgent):
         @describe(label="Async Agent Command", desc="Async Agent Command")
         def async_agent_command(self, arg1: str, arg2: int) -> str:
             return f"Async Agent Command: {arg1} {arg2}"
@@ -190,7 +192,7 @@ if __name__ == "__main__":
             return "Emergency stop executed"
 
     async def main():
-        # Create nodes and use NodeAgent for automatic command discovery
+        # Create nodes and use DeviceAgent for automatic command discovery
         zctx = zmq.asyncio.Context()
         processor = DataProcessor("test_processor")
         laser = Laser("test_laser")
@@ -198,22 +200,25 @@ if __name__ == "__main__":
         proc_conn = DeviceAddressTCP(rpc=5555, pub=5556)
         laser_conn = DeviceAddressTCP(rpc=5559, pub=5560)
 
-        _ = DataProcessorServer(processor, proc_conn, zctx)
-        _ = DeviceService(laser, laser_conn, zctx)
+        # Create agents and services
+        proc_agent = DeviceAgent(processor)
+        laser_agent = DeviceAgent(laser)
+        _ = ZMQService(proc_agent, proc_conn, zctx)
+        _ = ZMQService(laser_agent, laser_conn, zctx)
 
         from pyrig.device import DeviceHandle, PropsResponse
 
-        async def on_properties(topic: str, props: PropsResponse):
-            print(f"Received properties from {topic}: {props}")
+        async def on_properties(props: PropsResponse):
+            print(f"Received properties: {props}")
 
-        proc_transport = RemoteTransport(processor.uid, "data_processor", zctx, proc_conn)
-        laser_transport = RemoteTransport(laser.uid, "laser", zctx, laser_conn)
+        proc_transport = ZMQAdapter(processor.uid, zctx, proc_conn)
+        laser_transport = ZMQAdapter(laser.uid, zctx, laser_conn)
 
         proc_handle = DeviceHandle(proc_transport)
         laser_handle = DeviceHandle(laser_transport)
         handles = [proc_handle, laser_handle]
 
-        await laser_handle.subscribe("properties", on_properties)
+        await laser_handle.on_props_changed(on_properties)
 
         await asyncio.sleep(5)
 

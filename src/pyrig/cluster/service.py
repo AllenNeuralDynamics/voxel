@@ -1,80 +1,63 @@
+"""ZMQ service for exposing devices over the network."""
+
 import asyncio
 import logging
-from typing import Self
 
 import zmq
 import zmq.asyncio
 from pydantic import ValidationError
 
-from pyrig.device import (
-    AttributeRequest,
-    CommandResponse,
-    Device,
-    ErrorMsg,
-    PropsResponse,
-    collect_commands,
-)
-from pyrig.device.executor import DeviceExecutor
+from pyrig.device import AttributeRequest, CommandResponse, Device, DeviceAgent, ErrorMsg, PropsResponse
 
 from .protocol import _GET_CMD_, _INT_CMD_, _REQ_CMD_, _SET_CMD_, DeviceAddress, DeviceAddressTCP
 
 
-class DeviceService[D: Device](DeviceExecutor[D]):
-    """Exposes a Device over ZMQ for remote access.
-
-    Extends DeviceExecutor to add:
-    - ZMQ REP socket for command handling
-    - ZMQ PUB socket for state streaming (via executor's subscribe_to_stream)
-    - Service-specific commands (merged with device commands)
-    """
+class ZMQService:
+    """Exposes a DeviceAgent over ZMQ."""
 
     def __init__(
         self,
-        device: D,
+        agent: DeviceAgent,
         conn: DeviceAddress,
         zctx: zmq.asyncio.Context,
-        stream_interval: float = 0.5,
     ):
-        super().__init__(device)
-        self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
-
+        self._agent = agent
         self._client_conn = conn
         self._conn: DeviceAddress = conn.as_open() if isinstance(conn, DeviceAddressTCP) else conn
+        self._zctx = zctx
+        self.log = logging.getLogger(f"{agent.uid}.ZMQService")
 
-        # Merge service commands with device commands
-        service_commands = collect_commands(self)
-        self._commands = {**self._commands, **service_commands}
-
-        # Update interface with merged commands
-        self._interface = self._interface.model_copy(
-            update={"commands": {name: cmd.info for name, cmd in self._commands.items()}}
-        )
-
-        # ZMQ sockets
+        # Create sockets
         self._rep_socket = zctx.socket(zmq.REP)
         self._pub_socket = zctx.socket(zmq.PUB)
-
         self._rep_socket.bind(self._conn.rpc_addr)
         self._pub_socket.bind(self._conn.pub_addr)
 
-        # Start command loop
-        self._cmd_task = asyncio.create_task(self._cmd_loop())
+        # Wire publish function to agent
+        async def publish(topic: str, data: bytes) -> None:
+            full_topic = f"{agent.uid}/{topic}".encode()
+            await self._pub_socket.send_multipart([full_topic, data])
 
-        # Register for property streaming (publishes changes via ZMQ)
-        self.subscribe_to_stream(self._publish_properties, interval=stream_interval)
+        self._agent.set_publisher(publish)
+
+        # Start RPC loop and property streaming
+        self._cmd_task = asyncio.create_task(self._cmd_loop())
+        self._agent.start_streaming()
+
+    @property
+    def uid(self) -> str:
+        return self._agent.uid
+
+    @property
+    def device(self) -> Device:
+        return self._agent.device
 
     @property
     def client_conn(self) -> DeviceAddress:
         return self._client_conn
 
-    async def _publish_properties(self, changed: PropsResponse) -> None:
-        """Publish changed properties to ZMQ PUB socket."""
-        topic = f"{self._device.uid}/properties".encode("utf-8")
-        payload = changed.model_dump_json().encode("utf-8")
-        await self._pub_socket.send_multipart([topic, payload])
-
     async def _handle_req(self, req: AttributeRequest) -> CommandResponse:
-        return await self.execute_command(req.attr, *req.args, **req.kwargs)
+        return await self._agent.execute_command(req.attr, *req.args, **req.kwargs)
 
     async def _cmd_loop(self) -> None:
         """Listens for, decodes, executes, and replies to commands."""
@@ -85,12 +68,12 @@ class DeviceService[D: Device](DeviceExecutor[D]):
                 try:
                     req = AttributeRequest.model_validate_json(payload_bytes)
                     if topic == _INT_CMD_:
-                        res = CommandResponse(res=self._interface)
+                        res = CommandResponse(res=self._agent.interface)
                     if topic == _GET_CMD_:
                         props = [p for p in (list(req.args) + list(req.kwargs.keys())) if isinstance(p, str)]
-                        res = await self.get_props(*props) if props else await self.get_props()
+                        res = await self._agent.get_props(*props) if props else await self._agent.get_props()
                     elif topic == _SET_CMD_:
-                        res = await self.set_props(**req.kwargs)
+                        res = await self._agent.set_props(**req.kwargs)
                     elif topic == _REQ_CMD_:
                         res = await self._handle_req(req)
                 except ValidationError as e:
@@ -103,14 +86,8 @@ class DeviceService[D: Device](DeviceExecutor[D]):
                 if res is not None:
                     await self._rep_socket.send_json(res.model_dump())
 
-    async def __aenter__(self) -> Self:
-        """Async context manager entry."""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit with cleanup."""
-
     def close(self):
+        """Close sockets and cleanup."""
         self._cleanup()
 
     def _cleanup(self):
@@ -119,7 +96,7 @@ class DeviceService[D: Device](DeviceExecutor[D]):
 
         self._rep_socket.close()
         self._pub_socket.close()
-        self.close_executor()
+        self._agent.close()
 
     def __del__(self):
         self._cleanup()

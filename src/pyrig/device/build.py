@@ -27,6 +27,9 @@ class BuildConfig(BaseModel):
         return obj_class
 
 
+DeviceConfig = BuildConfig
+
+
 class BuildError(BaseModel):
     """Error information for a failed obj build."""
 

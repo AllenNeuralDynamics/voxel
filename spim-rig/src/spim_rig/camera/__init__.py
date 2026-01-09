@@ -1,13 +1,13 @@
-from .base import SpimCamera
-from .client import CameraClient
+from .base import CameraAgent, CameraMode, SpimCamera
+from .handle import CameraHandle
 from .preview import PreviewCrop, PreviewFrame, PreviewLevels
 from .roi import ROI, ROIAlignmentPolicy, ROIConstraints, ROIError
-from .service import CameraService
 
 __all__ = [
     "SpimCamera",
-    "CameraService",
-    "CameraClient",
+    "CameraAgent",
+    "CameraMode",
+    "CameraHandle",
     "ROI",
     "ROIAlignmentPolicy",
     "ROIConstraints",

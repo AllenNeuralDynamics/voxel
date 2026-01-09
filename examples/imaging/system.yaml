@@ -3,8 +3,10 @@ _anchors:
   - &laser_target imaging.drivers.laser.Laser
   - &camera_target imaging.drivers.camera.Camera
 
-metadata:
+info:
   name: "LightSheetMicroscope_01"
+
+cluster:
   control_port: 9000
 
 nodes:

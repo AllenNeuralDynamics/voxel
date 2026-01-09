@@ -28,6 +28,7 @@ members = [
     "spim-rig",
     "spim-drivers",
     "spim-widgets",
+    "spim-studio",
 ]
 [build-system]
 requires = ["uv_build>=0.8.24,<0.9.0"]

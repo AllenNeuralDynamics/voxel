@@ -5,43 +5,44 @@ from dataclasses import dataclass
 
 import zmq.asyncio
 
-from pyrig import DeviceClient, Rig
-from pyrig.node import DeviceProvision
-from spim_rig.camera.client import CameraClient
+from pyrig import DeviceHandle, Rig
+from spim_rig.camera.handle import CameraHandle
 from spim_rig.config import ChannelConfig, ProfileConfig, SpimRigConfig
-from spim_rig.daq.client import DaqClient
+from spim_rig.daq import DaqHandle
 from spim_rig.device import DeviceType
-from spim_rig.frame_task import AcquisitionTask
+from spim_rig.frame_task import DAQFrameTask
 from spim_rig.node import SpimNodeService
 
 
 @dataclass(frozen=True)
 class SpimRigStage:
-    x: DeviceClient
-    y: DeviceClient
-    z: DeviceClient
+    x: DeviceHandle
+    y: DeviceHandle
+    z: DeviceHandle
 
 
 class SpimRig(Rig):
     """SPIM microscope rig orchestration."""
 
-    NODE_SERVICE_CLASS = SpimNodeService
+    @classmethod
+    def node_cls(cls):
+        return SpimNodeService
 
-    def __init__(self, zctx: zmq.asyncio.Context, config: SpimRigConfig):
-        super().__init__(zctx=zctx, config=config)
+    def __init__(self, config: SpimRigConfig, zctx: zmq.asyncio.Context | None = None):
+        super().__init__(config=config, zctx=zctx)
         self.config: SpimRigConfig = config
-        self.cameras: dict[str, CameraClient] = {}
-        self.lasers: dict[str, DeviceClient] = {}
-        self.aotfs: dict[str, DeviceClient] = {}
-        self.linear_axes: dict[str, DeviceClient] = {}
-        self.rotation_axes: dict[str, DeviceClient] = {}
-        self.discrete_axes: dict[str, DeviceClient] = {}
-        self.fws: dict[str, DeviceClient] = {}
-        self.daq: DaqClient | None = None
+        self.cameras: dict[str, CameraHandle] = {}
+        self.lasers: dict[str, DeviceHandle] = {}
+        self.aotfs: dict[str, DeviceHandle] = {}
+        self.linear_axes: dict[str, DeviceHandle] = {}
+        self.rotation_axes: dict[str, DeviceHandle] = {}
+        self.discrete_axes: dict[str, DeviceHandle] = {}
+        self.fws: dict[str, DeviceHandle] = {}
+        self.daq: DaqHandle | None = None
         self.stage: SpimRigStage | None = None
 
-        # Preview management (independent of rig internals)
-        self.preview = RigPreviewHub(zctx, name=f"{self.__class__.__name__}.PreviewManager")
+        # Preview management (works with both local and remote cameras)
+        self.preview = RigPreviewHub(name=f"{self.__class__.__name__}.PreviewManager")
 
         # Profile management
         if not self.config.profiles:
@@ -51,48 +52,40 @@ class SpimRig(Rig):
         self._is_previewing: bool = False
         self._streaming_cameras: set[str] = set()
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-        self._acq_task: AcquisitionTask | None = None
+        self._frame_task: DAQFrameTask | None = None
 
-    def _create_client(self, device_id: str, prov: DeviceProvision) -> DeviceClient:
-        """Create a single client. Override for custom client types."""
-        match prov.device_type:
-            case DeviceType.CAMERA:
-                client = CameraClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
-                self.cameras[device_id] = client
-            case DeviceType.LASER:
-                client = super()._create_client(device_id, prov)
-                self.lasers[device_id] = client
-            case DeviceType.AOTF:
-                client = super()._create_client(device_id, prov)
-                self.aotfs[device_id] = client
-            case DeviceType.DAQ:
-                client = DaqClient(uid=device_id, zctx=self.zctx, conn=prov.conn)
-                self.daq = client
-            case DeviceType.LINEAR_AXIS:
-                client = super()._create_client(device_id, prov)
-                self.linear_axes[device_id] = client
-            case DeviceType.ROTATION_AXIS:
-                client = super()._create_client(device_id, prov)
-                self.rotation_axes[device_id] = client
-            case DeviceType.DISCRETE_AXIS:
-                client = super()._create_client(device_id, prov)
-                self.discrete_axes[device_id] = client
-            case _:
-                client = super()._create_client(device_id, prov)
-        return client
+    async def _on_start_complete(self) -> None:
+        """Categorize devices by type and validate SPIM-specific assignments."""
+        # Categorize all handles by device type
+        for uid, handle in self.handles.items():
+            match await handle.device_type():
+                case DeviceType.CAMERA:
+                    assert isinstance(handle, CameraHandle)
+                    self.cameras[uid] = handle
+                case DeviceType.DAQ:
+                    assert isinstance(handle, DaqHandle)
+                    self.daq = handle
+                case DeviceType.LASER:
+                    self.lasers[uid] = handle
+                case DeviceType.AOTF:
+                    self.aotfs[uid] = handle
+                case DeviceType.LINEAR_AXIS:
+                    self.linear_axes[uid] = handle
+                case DeviceType.ROTATION_AXIS:
+                    self.rotation_axes[uid] = handle
+                case DeviceType.DISCRETE_AXIS:
+                    self.discrete_axes[uid] = handle
 
-    async def _on_provision_complete(self) -> None:
-        """Validate SPIM-specific device type assignments and populate filter wheels."""
         # Populate filter wheels from config
         for fw_id in self.config.filter_wheels:
-            if fw_id in self.devices:
-                self.fws[fw_id] = self.devices[fw_id]
+            if fw_id in self.handles:
+                self.fws[fw_id] = self.handles[fw_id]
 
         # Create the stage from the config
         self.stage = SpimRigStage(
-            x=self.devices[self.config.stage.x],
-            y=self.devices[self.config.stage.y],
-            z=self.devices[self.config.stage.z],
+            x=self.handles[self.config.stage.x],
+            y=self.handles[self.config.stage.y],
+            z=self.handles[self.config.stage.z],
         )
 
         self._validate_device_types()
@@ -207,7 +200,7 @@ class SpimRig(Rig):
         return list(self.config.profiles.keys())
 
     @property
-    def profile_cameras(self) -> dict[str, CameraClient]: ...
+    def profile_cameras(self) -> dict[str, CameraHandle]: ...
 
     def _get_profile_cameras(self, profile_id: str | None = None) -> set[str]:
         """Get set of camera IDs from a profile's channels.
@@ -285,9 +278,9 @@ class SpimRig(Rig):
             self._frame_callback = frame_callback
 
         # 1. Close old acquisition task if exists
-        if self._acq_task:
-            await self._acq_task.close()
-            self._acq_task = None
+        if self._frame_task:
+            await self._frame_task.close()
+            self._frame_task = None
             self.log.debug("Closed previous acquisition task")
 
         # 2. Configure devices (filter wheels, etc.)
@@ -304,14 +297,14 @@ class SpimRig(Rig):
             device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
         }
 
-        self._acq_task = AcquisitionTask(
+        self._frame_task = DAQFrameTask(
             uid=f"acq_{profile_id}",
-            client=self.daq,
+            daq=self.daq,
             timing=profile.daq.timing,
             waveforms=profile.daq.waveforms,
             ports=filtered_ports,
         )
-        await self._acq_task.setup()
+        await self._frame_task.setup()
         self.log.info(f"Created and configured acquisition task for profile '{profile_id}'")
 
         # 4. Update active profile state
@@ -353,42 +346,38 @@ class SpimRig(Rig):
         cameras_to_stream = self._get_profile_cameras()
         self.log.info(f"Starting preview for profile '{self._active_profile_id}' on cameras: {cameras_to_stream}")
 
-        # Start cameras in parallel, collect preview addresses
-        # Track camera IDs in same order as tasks to match with results
-        tasks = []
-        camera_ids = []
+        # Start cameras and collect handles with their topics
+        camera_streams: dict[str, tuple[CameraHandle, str]] = {}
+
         for chan_name, channel in self.active_channels.items():
             if channel.detection not in self.cameras:
                 self.log.warning(f"Channel '{chan_name}' has no camera assigned")
                 continue
-            tasks.append(self.cameras[channel.detection].start_preview(channel_name=chan_name))
-            camera_ids.append(channel.detection)
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+            cam_id = channel.detection
+            handle = self.cameras[cam_id]
 
-        # Collect successful preview addresses
-        preview_addrs: dict[str, str] = {}
-        for cam_id, result in zip(camera_ids, results):
-            if isinstance(result, BaseException):
-                self.log.error(f"Camera {cam_id} failed to start preview: {result}")
-            else:
-                preview_addrs[cam_id] = result  # Address returned by camera (e.g., "tcp://127.0.0.1:63495")
+            try:
+                topic = await handle.start_preview(channel_name=chan_name)
+                camera_streams[cam_id] = (handle, topic)
                 self._streaming_cameras.add(cam_id)
+            except Exception as e:
+                self.log.error(f"Camera {cam_id} failed to start preview: {e}")
 
-        # Start preview manager with collected addresses
-        await self.preview.start(preview_addrs, callback=frame_callback)
+        # Start preview manager with handles and topics
+        await self.preview.start(camera_streams, callback=frame_callback)
 
         self._is_previewing = True
         self._frame_callback = frame_callback
-        self.log.info(f"Preview started for {len(preview_addrs)} cameras")
+        self.log.info(f"Preview started for {len(camera_streams)} cameras")
 
         # Enable lasers for active channels if cameras started successfully
-        if preview_addrs:
+        if camera_streams:
             await self._enable_channel_lasers()
 
         # Start DAQ acquisition task after all devices are configured
-        if self._acq_task:
-            await self._acq_task.start()
+        if self._frame_task:
+            await self._frame_task.start()
             self.log.info("Acquisition task started")
 
     async def _enable_channel_lasers(self) -> None:
@@ -433,15 +422,16 @@ class SpimRig(Rig):
         self.log.info("Stopping preview...")
 
         # Stop DAQ acquisition task first
-        if self._acq_task:
-            await self._acq_task.stop()
+        if self._frame_task:
+            await self._frame_task.stop()
             self.log.info("Acquisition task stopped")
 
         # Disable lasers
         await self._disable_channel_lasers()
 
         # Stop preview manager
-        await self.preview.stop()
+        if self.preview is not None:
+            await self.preview.stop()
         self._frame_callback = None
 
         # Then stop all streaming cameras
@@ -457,144 +447,82 @@ class SpimRig(Rig):
 
 
 class RigPreviewHub:
-    """Manages preview frame streaming via ZMQ subscriptions.
+    """Manages preview frame streaming via handle subscriptions.
 
-    Handles ZMQ subscriptions, callback registration, and frame distribution.
-    Independent of rig implementation - only requires ZMQ context and preview addresses.
+    Uses the unified handle.subscribe() interface, which works for both
+    local devices (callback-based) and remote devices (ZMQ-based).
     """
 
-    def __init__(self, zctx: zmq.asyncio.Context, name: str = "PreviewManager"):
+    def __init__(self, name: str = "PreviewManager"):
         """Initialize the preview manager.
 
         Args:
-            zctx: ZMQ async context for creating sockets
             name: Name for logging (typically the rig class name)
         """
-        self.zctx = zctx
         self.log = logging.getLogger(name)
-
-        # ZMQ subscription socket for receiving frames from cameras
-        self._preview_sub: zmq.asyncio.Socket | None = None
-        self._init_preview_socket()
-
-        # Single frame callback provided by the preview orchestrator
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-
-        # Frame reception loop task
-        self._frame_loop_task: asyncio.Task | None = None
-
-        # Track connected addresses to prevent duplicate subscriptions
-        self._connected_addrs: set[str] = set()
-
-    def _init_preview_socket(self) -> None:
-        """Create a fresh SUB socket and subscribe to preview topics."""
-        if self._preview_sub is not None:
-            return
-
-        self._preview_sub = self.zctx.socket(zmq.SUB)
-        self._preview_sub.setsockopt(zmq.RCVHWM, 10)
-        self._preview_sub.subscribe(b"preview/")
+        self._subscribed_cameras: set[str] = set()
 
     @property
     def is_active(self) -> bool:
         """Check if preview is currently active."""
-        return self._frame_loop_task is not None and not self._frame_loop_task.done()
+        return bool(self._subscribed_cameras)
 
     async def start(
         self,
-        preview_addrs: dict[str, str],
+        camera_streams: dict[str, tuple[CameraHandle, str]],
         *,
-        callback: Callable[[str, bytes], Awaitable[None]] | None = None,
+        callback: Callable[[str, bytes], Awaitable[None]],
     ) -> None:
-        """Start frame streaming from the provided preview addresses.
+        """Start frame streaming from the provided cameras.
 
-        Connects to each preview endpoint via ZMQ SUB socket and begins frame reception loop.
+        Subscribes to each camera's preview stream using the handle interface.
 
         Args:
-            preview_addrs: Dict mapping camera_id -> preview_address (e.g., {"cam0": "tcp://127.0.0.1:5555"})
-            callback: Async function invoked for each received frame. Required when starting a new session,
-                ignored (unless None) when already active to allow adding new streams without reallocating.
+            camera_streams: Dict mapping camera_id -> (handle, topic)
+                e.g., {"camera_1": (handle, "preview/gfp")}
+            callback: Async function invoked for each received frame (channel, data).
         """
-        if not preview_addrs:
-            self.log.debug("No preview addresses provided, skipping start request")
+        if not camera_streams:
+            self.log.debug("No camera streams provided, skipping start")
             return
 
-        is_new_session = not self.is_active
-        if is_new_session:
-            if callback is None:
-                raise ValueError("Preview callback must be provided when starting a new session")
-            self._frame_callback = callback
-            self.log.info(f"Starting preview manager with {len(preview_addrs)} camera streams...")
-        else:
-            if callback and callback is not self._frame_callback:
-                self.log.warning("Ignoring new callback while preview is already active")
-            self.log.info(f"Adding {len(preview_addrs)} preview streams to active session")
+        self._frame_callback = callback
+        self.log.info(f"Starting preview manager with {len(camera_streams)} camera streams...")
 
-        # Ensure we have a fresh socket after previous stop
-        self._init_preview_socket()
+        for camera_id, (handle, topic) in camera_streams.items():
+            if camera_id in self._subscribed_cameras:
+                self.log.debug(f"Camera {camera_id} already subscribed")
+                continue
 
-        # Connect to each camera's preview endpoint
-        for camera_id, preview_addr in preview_addrs.items():
-            # Only connect if not already connected (prevents duplicate subscriptions)
-            if preview_addr not in self._connected_addrs:
-                assert self._preview_sub is not None
-                self._preview_sub.connect(preview_addr)
-                self._connected_addrs.add(preview_addr)
-                self.log.info(f"Camera {camera_id} preview connected at {preview_addr}")
-            else:
-                self.log.debug(f"Camera {camera_id} preview already connected at {preview_addr}")
-        # Start frame reception loop when launching a new session
-        if is_new_session:
-            self._frame_loop_task = asyncio.create_task(self._frame_reception_loop())
-            self.log.info("Preview manager started, frame reception loop active")
+            # Extract channel name from topic (e.g., "preview/gfp" -> "gfp")
+            channel = topic.split("/")[1]
+            await handle.subscribe(topic, self._make_callback(channel))
+            self._subscribed_cameras.add(camera_id)
+            self.log.info(f"Camera {camera_id} subscribed to {topic}")
+
+        self.log.info("Preview manager started")
+
+    def _make_callback(self, channel: str):
+        """Create callback that forwards frames with channel name."""
+
+        async def callback(data: bytes):
+            if self._frame_callback:
+                try:
+                    await self._frame_callback(channel, data)
+                except Exception as e:
+                    self.log.error(f"Error in frame callback for {channel}: {e}", exc_info=True)
+
+        return callback
 
     async def stop(self) -> None:
-        """Stop frame streaming and cleanup all connections."""
+        """Stop frame streaming and cleanup."""
         if not self.is_active:
             self.log.warning("Preview manager not active")
             return
 
         self.log.info("Stopping preview manager...")
-
-        # Cancel frame loop task
-        if self._frame_loop_task:
-            self._frame_loop_task.cancel()
-            try:
-                await self._frame_loop_task
-            except asyncio.CancelledError:
-                pass
-            self._frame_loop_task = None
-
-        # Disconnect all preview addresses to prevent duplicate subscriptions on restart
-        if self._preview_sub is not None:
-            for addr in self._connected_addrs:
-                try:
-                    self._preview_sub.disconnect(addr)
-                    self.log.debug(f"Disconnected preview socket from {addr}")
-                except Exception as e:
-                    self.log.warning(f"Failed to disconnect from {addr}: {e}")
-            self._preview_sub.close(0)
-            self._preview_sub = None
-            self._init_preview_socket()
-        self._connected_addrs.clear()
+        # Note: handles don't have unsubscribe - subscriptions are cleared when cameras stop
+        self._subscribed_cameras.clear()
         self._frame_callback = None
-
-        self.log.info("Preview manager stopped, all connections cleaned up")
-
-    async def _frame_reception_loop(self) -> None:
-        """Internal loop that receives frames from ZMQ and notifies all registered callbacks."""
-        try:
-            while True:
-                assert self._preview_sub is not None
-                topic, payload = await self._preview_sub.recv_multipart()
-                channel = topic.decode().split("/")[1]
-
-                if self._frame_callback is not None:
-                    try:
-                        await self._frame_callback(channel, payload)
-                    except Exception as e:
-                        self.log.error(f"Error in frame callback: {e}", exc_info=True)
-        except asyncio.CancelledError:
-            self.log.debug("Frame reception loop cancelled")
-        except Exception as e:
-            self.log.error(f"Error in frame reception loop: {e}", exc_info=True)
+        self.log.info("Preview manager stopped")

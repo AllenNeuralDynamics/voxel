@@ -1,7 +1,7 @@
 import random
 
-from pyrig.conn import DeviceClient
-from pyrig.device import Device, PropertyModel, deliminated_float, describe, enumerated_string
+from pyrig import DeviceHandle
+from pyrig.device import Adapter, Device, PropertyModel, deliminated_float, describe, enumerated_string
 
 
 class Laser(Device):
@@ -91,25 +91,26 @@ class Laser(Device):
         return "Emergency stop executed"
 
 
-class LaserClient(DeviceClient):
+class LaserHandle(DeviceHandle[Laser]):
+    """Typed handle for Laser devices."""
+
+    def __init__(self, adapter: Adapter[Laser]):
+        super().__init__(adapter)
+
     async def turn_on(self) -> bool:
         """Turn on the laser."""
-        self.log.info("Requesting laser turn_on")
         return await self.call("turn_on")
 
     async def turn_off(self) -> bool:
         """Turn off the laser."""
-        self.log.info("Requesting laser turn_off")
         return await self.call("turn_off")
 
     async def set_power_and_on(self, power: float) -> str:
         """Set laser power and turn on in one command."""
-        self.log.info("Requesting set_power_and_on: %.1f", power)
         return await self.call("set_power_and_on", power)
 
     async def emergency_stop(self) -> str:
         """Emergency stop the laser."""
-        self.log.warning("Requesting emergency_stop")
         return await self.call("emergency_stop")
 
     async def get_power_setpoint(self) -> float:
@@ -118,14 +119,13 @@ class LaserClient(DeviceClient):
 
     async def set_power_setpoint(self, value: float) -> None:
         """Set the laser power setpoint."""
-        self.log.info("Setting power_setpoint to %.1f", value)
         await self.set_prop("power_setpoint", value)
 
-    async def get_is_on(self) -> PropertyModel[bool]:
+    async def get_is_on(self) -> bool:
         """Check if laser is on."""
         return await self.get_prop_value("is_on")
 
-    async def get_mode(self) -> PropertyModel[str]:
+    async def get_mode(self) -> PropertyModel:
         """Get emission mode."""
         return await self.get_prop("mode")
 

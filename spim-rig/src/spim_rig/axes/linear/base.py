@@ -7,6 +7,7 @@ from spim_rig.axes.base import SpimAxis
 from spim_rig.device import DeviceType
 
 from pyrig import describe
+from pyrig.device import DeviceAgent
 
 
 class StepMode(StrEnum):
@@ -218,3 +219,64 @@ class LinearAxis(SpimAxis):
             TTLStepper instance if supported, None otherwise.
         """
         return None
+
+
+# ==================== Linear Axis Agent ====================
+
+
+class ScanMode(StrEnum):
+    IDLE = "IDLE"
+    TTL_STEPPING = "TTL_STEPPING"
+
+
+class LinearAxisAgent(DeviceAgent[LinearAxis]):
+    def __init__(self, device: LinearAxis, stream_interval: float = 0.5):
+        super().__init__(device, stream_interval=stream_interval)
+        self._scan_mode = ScanMode.IDLE
+        self._ttl_stepper = device.get_ttl_stepper()
+
+    @property
+    @describe(label="Scan Mode", stream=True)
+    def scan_mode(self) -> ScanMode:
+        return self._scan_mode
+
+    @property
+    @describe(label="TTL Stepping Available")
+    def ttl_stepping_available(self) -> bool:
+        return self._ttl_stepper is not None
+
+    @describe(label="Configure TTL Stepper")
+    async def configure_ttl_stepper(self, cfg: TTLStepperConfig) -> None:
+        if not self._ttl_stepper:
+            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+        if self._scan_mode != ScanMode.IDLE:
+            raise RuntimeError(f"Cannot configure TTL stepper while in {self._scan_mode} mode")
+
+        await self._run_sync(self._ttl_stepper.configure, cfg)
+        self._scan_mode = ScanMode.TTL_STEPPING
+
+    @describe(label="Queue Absolute Move")
+    async def queue_absolute_move(self, position_mm: float) -> None:
+        if not self._ttl_stepper:
+            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+        if self._scan_mode != ScanMode.TTL_STEPPING:
+            raise RuntimeError("TTL stepper not configured")
+
+        await self._run_sync(self._ttl_stepper.queue_absolute_move, position_mm)
+
+    @describe(label="Queue Relative Move")
+    async def queue_relative_move(self, delta_mm: float) -> None:
+        if not self._ttl_stepper:
+            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+        if self._scan_mode != ScanMode.TTL_STEPPING:
+            raise RuntimeError("TTL stepper not configured")
+
+        await self._run_sync(self._ttl_stepper.queue_relative_move, delta_mm)
+
+    @describe(label="Reset TTL Stepper")
+    async def reset_ttl_stepper(self) -> None:
+        if not self._ttl_stepper:
+            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+
+        await self._run_sync(self._ttl_stepper.reset)
+        self._scan_mode = ScanMode.IDLE

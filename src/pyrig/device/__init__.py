@@ -1,3 +1,4 @@
+from .agent import DeviceAgent, PublishFn, StreamCallback
 from .base import (
     DESC_ATTR,
     LABEL_ATTR,
@@ -14,6 +15,7 @@ from .base import (
     ErrorMsg,
     ParamInfo,
     PropertyInfo,
+    PropsCallback,
     PropsResponse,
     collect_commands,
     collect_properties,
@@ -21,40 +23,57 @@ from .base import (
     get_command_help,
     runcmd,
 )
-from .build import BuildConfig, BuildError, BuildGroupSpec, build_objects
+from .adapter import Adapter, LocalAdapter
+from .build import BuildConfig, BuildError, BuildGroupSpec, DeviceConfig, build_objects
+from .handle import DeviceHandle
 from .props.common import PropertyModel
 from .props.deliminated import deliminated_float, deliminated_int
 from .props.enumarated import enumerated_int, enumerated_string
 
 __all__ = [
+    # Decorators and constants
     "LABEL_ATTR",
     "DESC_ATTR",
     "UNITS_ATTR",
     "STREAM_ATTR",
     "describe",
+    # Core device classes
     "Device",
+    "DeviceAgent",
+    "DeviceHandle",
+    "DeviceInterface",
+    # Adapters and Publishing
+    "Adapter",
+    "LocalAdapter",
+    "PublishFn",
+    "StreamCallback",
+    # Command/property types
     "AttributeInfo",
     "PropertyInfo",
     "ParamInfo",
     "CommandInfo",
     "Command",
     "ErrorMsg",
-    "DeviceInterface",
     "CommandParamsError",
     "CommandResponse",
     "AttributeRequest",
     "PropsResponse",
+    "PropsCallback",
+    "PropertyModel",
+    # Utilities
     "runcmd",
     "get_command_help",
-    "PropertyModel",
+    "collect_properties",
+    "collect_commands",
+    # Property descriptors
     "deliminated_float",
     "deliminated_int",
     "enumerated_int",
     "enumerated_string",
+    # Build system
     "BuildConfig",
+    "DeviceConfig",
     "BuildError",
     "BuildGroupSpec",
     "build_objects",
-    "collect_properties",
-    "collect_commands",
 ]

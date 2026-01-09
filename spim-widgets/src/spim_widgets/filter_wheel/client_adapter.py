@@ -6,11 +6,11 @@ from typing import Any
 from PySide6.QtCore import Slot
 
 from pyrig.device import PropsResponse
-from spim_widgets.base import DeviceClientAdapter
+from spim_widgets.base import RemoteHandleAdapter
 
 
-class DiscreteAxisClientAdapter(DeviceClientAdapter):
-    """Adapter for discrete axis devices (e.g., filter wheels) using DeviceClient.
+class DiscreteAxisClientAdapter(RemoteHandleAdapter):
+    """Adapter for discrete axis devices (e.g., filter wheels) using DeviceHandle.
 
     Provides Qt-friendly interface for discrete axis control:
     - Position control (slot index)
@@ -24,7 +24,7 @@ class DiscreteAxisClientAdapter(DeviceClientAdapter):
 
         # Fetch all properties to initialize UI state
         try:
-            props: PropsResponse = await self._client.get_props(
+            props: PropsResponse = await self._handle.get_props(
                 "position",
                 "slot_count",
                 "labels",
@@ -37,31 +37,31 @@ class DiscreteAxisClientAdapter(DeviceClientAdapter):
 
     async def call_command(self, command: str, *args: Any, **kwargs: Any) -> Any:
         """Call a discrete axis command."""
-        return await self._client.call(command, *args, **kwargs)
+        return await self._handle.call(command, *args, **kwargs)
 
     async def get_position(self) -> int:
         """Get current slot position (0-indexed)."""
-        return await self._client.get_prop_value("position")
+        return await self._handle.get_prop_value("position")
 
     async def get_slot_count(self) -> int:
         """Get total number of slots."""
-        return await self._client.get_prop_value("slot_count")
+        return await self._handle.get_prop_value("slot_count")
 
     async def get_labels(self) -> dict[int, str | None]:
         """Get slot labels mapping."""
-        return await self._client.get_prop_value("labels")
+        return await self._handle.get_prop_value("labels")
 
     async def move(self, slot: int, wait: bool = False) -> None:
         """Move to a specific slot by index."""
-        await self._client.call("move", slot, wait=wait)
+        await self._handle.call("move", slot, wait=wait)
 
     async def select(self, label: str, wait: bool = False) -> None:
         """Move to a slot by label."""
-        await self._client.call("select", label, wait=wait)
+        await self._handle.call("select", label, wait=wait)
 
     async def home(self, wait: bool = False) -> None:
         """Move to home position (slot 0)."""
-        await self._client.call("home", wait=wait)
+        await self._handle.call("home", wait=wait)
 
     @Slot(int)
     def moveToSlot(self, slot: int) -> None:

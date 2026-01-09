@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from enum import StrEnum
 from functools import wraps
 from typing import Any, ClassVar, Literal, Self, Union, get_args, get_origin
@@ -307,6 +307,10 @@ class CommandResponse[T](BaseModel):
 class PropsResponse(BaseModel):
     res: dict[str, PropertyModel] = Field(default_factory=dict)
     err: dict[str, ErrorMsg] = Field(default_factory=dict)
+
+
+# Type alias for property change callbacks - receives parsed PropsResponse
+PropsCallback = Callable[[PropsResponse], Awaitable[None]]
 
 
 def collect_properties(obj: Any) -> dict[str, PropertyInfo]:

@@ -31,7 +31,7 @@ props = await temp.get_props()
 current_temp = props.res['current_temperature'].value
 
 # Introspection
-interface = await temp.get_interface()
+interface = await temp.interface()
 ```
 
 ## vs Imaging Example

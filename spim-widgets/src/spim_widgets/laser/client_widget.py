@@ -1,12 +1,12 @@
-"""Laser widget using DeviceClient."""
+"""Laser widget using DeviceHandle."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout
 
-from pyrig.conn import DeviceClient
+from pyrig import DeviceHandle
 from pyrig.device import PropsResponse
-from spim_widgets.base import DeviceClientAdapter, DeviceClientWidget
+from spim_widgets.base import RemoteHandleAdapter, RemoteHandleWidget
 from spim_widgets.laser.client_adapter import LaserClientAdapter
 from spim_widgets.laser.power import PowerSetpointInput
 from spim_widgets.laser.utils import (
@@ -45,8 +45,8 @@ class WavelengthChip(Chip):
         )
 
 
-class LaserClientWidget(DeviceClientWidget):
-    """Laser control widget using DeviceClient.
+class LaserClientWidget(RemoteHandleWidget):
+    """Laser control widget using DeviceHandle.
 
     Features:
     - Wavelength display
@@ -58,7 +58,7 @@ class LaserClientWidget(DeviceClientWidget):
 
     def __init__(
         self,
-        client: DeviceClient,
+        handle: DeviceHandle,
         parent=None,
         color: str = "#18181b",
         border_color: str = "#3e3e44",
@@ -71,7 +71,7 @@ class LaserClientWidget(DeviceClientWidget):
         self._is_enabled = False
         self._temperature_c = None
 
-        super().__init__(client, parent)
+        super().__init__(handle, parent)
 
         self.setFixedWidth(560)
         self.setFixedHeight(220)
@@ -79,9 +79,9 @@ class LaserClientWidget(DeviceClientWidget):
         # Set size policy to prevent expansion
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-    def _create_adapter(self, client: DeviceClient) -> DeviceClientAdapter:
+    def _create_adapter(self, handle: DeviceHandle) -> RemoteHandleAdapter:
         """Create laser-specific adapter."""
-        return LaserClientAdapter(client, parent=self)
+        return LaserClientAdapter(handle, parent=self)
 
     def _setup_ui(self) -> None:
         """Setup the laser widget UI."""
@@ -95,7 +95,7 @@ class LaserClientWidget(DeviceClientWidget):
         self._wavelength_chip = WavelengthChip(wavelength=self._wavelength)
         header_layout.addWidget(self._wavelength_chip)
 
-        self._name_label = QLabel(self.client.uid)
+        self._name_label = QLabel(self.handle.uid)
         header_layout.addWidget(self._name_label)
 
         header_layout.addStretch()

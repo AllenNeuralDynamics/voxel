@@ -17,7 +17,7 @@ This directory contains Qt widgets for controlling devices through the `DeviceCl
 │  │      │               │   │
 │  │      │ Qt Signals    │   │
 │  │      │               │   │
-│  │  DeviceClientAdapter │   │
+│  │  RemoteHandleAdapter │   │
 │  └──────────────────────┘   │
 └─────────────────────────────┘
                 │
@@ -143,9 +143,9 @@ await fw_runner.stop()
 ### Step 1: Create Adapter
 
 ```python
-from spim_widgets.base import DeviceClientAdapter
+from spim_widgets.base import RemoteHandleAdapter
 
-class MyDeviceAdapter(DeviceClientAdapter):
+class MyDeviceAdapter(RemoteHandleAdapter):
     """Adapter for my device type."""
     
     async def call_command(self, command: str, *args, **kwargs):
@@ -160,10 +160,10 @@ class MyDeviceAdapter(DeviceClientAdapter):
 ### Step 2: Create Widget
 
 ```python
-from spim_widgets.base import DeviceClientWidget
+from spim_widgets.base import RemoteHandleWidget
 from pyrig.device import PropsResponse
 
-class MyDeviceWidget(DeviceClientWidget):
+class MyDeviceWidget(RemoteHandleWidget):
     """Widget for my device."""
     
     def _create_adapter(self, client):
@@ -190,7 +190,7 @@ from spim_widgets.runner import register_widget
 from spim_rig.device import DeviceType
 
 @register_widget(DeviceType.MY_DEVICE)
-class MyDeviceWidget(DeviceClientWidget):
+class MyDeviceWidget(RemoteHandleWidget):
     ...
 ```
 
@@ -251,7 +251,7 @@ zctx = zmq.asyncio.Context()
 client = DeviceClient(
     uid=device.uid,
     zctx=zctx,
-    conn=service_info.conn,
+    conn=service_info.cluster,
 )
 
 # Wait for connection
@@ -427,7 +427,7 @@ Spawn a device service and create a widget to control it.
 - `ValueError`: No widget class and none in registry
 - `RuntimeError`: Service failed to start or connect
 
-### `DeviceClientAdapter`
+### `RemoteHandleAdapter`
 
 Base class for device adapters.
 
@@ -441,7 +441,7 @@ Base class for device adapters.
 - `connected_changed(bool)` - Connection status
 - `fault(str)` - Error messages
 
-### `DeviceClientWidget`
+### `RemoteHandleWidget`
 
 Base class for device widgets.
 
@@ -454,7 +454,7 @@ Base class for device widgets.
 
 **Properties:**
 - `client: DeviceClient` - Access DeviceClient
-- `adapter: DeviceClientAdapter` - Access adapter
+- `adapter: RemoteHandleAdapter` - Access adapter
 
 ## Contributing
 

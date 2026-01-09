@@ -59,7 +59,7 @@ class CameraService(DeviceService[Camera]):
             self._writer.write(self.device.capture())
 
 # Client (controller-side, optional)
-class CameraClient(DeviceClient):
+class CameraRHandle(DeviceClient):
     async def capture(self) -> np.ndarray:
         return await self.call("capture")
 
@@ -141,7 +141,7 @@ class ImagingRig(Rig):
     def __init__(self, zctx, config):
         super().__init__(zctx, config)
         self.lasers: dict[str, LaserClient] = {}
-        self.cameras: dict[str, CameraClient] = {}
+        self.cameras: dict[str, CameraRHandle] = {}
 
     def _create_client(self, device_id, prov):
         if prov.device_type == DeviceType.LASER:

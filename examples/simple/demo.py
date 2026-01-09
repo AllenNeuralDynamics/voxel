@@ -59,7 +59,7 @@ async def main():
         print("[bold]Device Interfaces:[/bold]")
         for device_id, agent in rig.devices.items():
             print(f"\n[yellow]Device: {device_id}[/yellow]")
-            interface = await agent.get_interface()
+            interface = await agent.interface()
             print(f"  Type: {interface.type}")
             print(f"  Commands: {len(interface.commands)}")
             print(f"  Properties: {len(interface.properties)}")

@@ -1,11 +1,11 @@
-"""Device control widgets using DeviceClient architecture."""
+"""Device control widgets using DeviceHandle architecture."""
 
-from .base import DeviceClientAdapter, DeviceClientWidget
+from .base import RemoteHandleAdapter, RemoteHandleWidget
 from .runner import DeviceWidgetRunner, WidgetRunnerConfig
 
 __all__ = [
-    "DeviceClientAdapter",
-    "DeviceClientWidget",
+    "RemoteHandleAdapter",
+    "RemoteHandleWidget",
     "DeviceWidgetRunner",
     "WidgetRunnerConfig",
 ]

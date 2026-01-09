@@ -6,11 +6,11 @@ from typing import Any
 from PySide6.QtCore import Slot
 
 from pyrig.device import PropertyModel, PropsResponse
-from spim_widgets.base import DeviceClientAdapter
+from spim_widgets.base import RemoteHandleAdapter
 
 
-class LaserClientAdapter(DeviceClientAdapter):
-    """Adapter for laser devices using DeviceClient.
+class LaserClientAdapter(RemoteHandleAdapter):
+    """Adapter for laser devices using DeviceHandle.
 
     Provides Qt-friendly interface for laser control:
     - Power setpoint control
@@ -24,7 +24,7 @@ class LaserClientAdapter(DeviceClientAdapter):
 
         # Fetch all properties to initialize UI state
         try:
-            props: PropsResponse = await self._client.get_props(
+            props: PropsResponse = await self._handle.get_props(
                 "power_setpoint_mw",
                 "is_enabled",
                 "wavelength",
@@ -37,31 +37,31 @@ class LaserClientAdapter(DeviceClientAdapter):
 
     async def call_command(self, command: str, *args: Any, **kwargs: Any) -> Any:
         """Call a laser command."""
-        return await self._client.call(command, *args, **kwargs)
+        return await self._handle.call(command, *args, **kwargs)
 
     async def get_power_setpoint(self) -> PropertyModel:
         """Get power setpoint property with metadata."""
-        return await self._client.get_prop("power_setpoint_mw")
+        return await self._handle.get_prop("power_setpoint_mw")
 
     async def set_power_setpoint(self, mw: float) -> None:
         """Set power setpoint in mW."""
-        await self._client.set_prop("power_setpoint_mw", mw)
+        await self._handle.set_prop("power_setpoint_mw", mw)
 
     async def get_is_enabled(self) -> bool:
         """Get enabled state."""
-        return await self._client.get_prop_value("is_enabled")
+        return await self._handle.get_prop_value("is_enabled")
 
     async def set_is_enabled(self, enabled: bool) -> None:
         """Set enabled state."""
-        await self._client.set_prop("is_enabled", enabled)
+        await self._handle.set_prop("is_enabled", enabled)
 
     async def enable(self) -> None:
         """Enable the laser (call enable command)."""
-        await self._client.call("enable")
+        await self._handle.call("enable")
 
     async def disable(self) -> None:
         """Disable the laser (call disable command)."""
-        await self._client.call("disable")
+        await self._handle.call("disable")
 
     @Slot(float)
     def setPower(self, mw: float) -> None:

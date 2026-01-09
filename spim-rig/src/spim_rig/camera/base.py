@@ -1,3 +1,4 @@
+import asyncio
 from abc import abstractmethod
 from enum import StrEnum
 from typing import Literal, cast
@@ -6,7 +7,9 @@ import numpy as np
 from ome_zarr_writer.types import Dtype, SchemaModel, Vec2D
 
 from pyrig import Device, describe
+from pyrig.device import DeviceAgent
 from pyrig.device.props import deliminated_float, enumerated_int, enumerated_string
+from spim_rig.camera.preview import PreviewCrop, PreviewGenerator, PreviewLevels
 from spim_rig.camera.roi import ROI, ROIAlignmentPolicy, ROIConstraints, coerce_roi
 from spim_rig.device import DeviceType
 
@@ -211,3 +214,92 @@ class SpimCamera(Device):
     @abstractmethod
     def stop(self) -> None:
         """Stop the camera."""
+
+
+# ==================== Camera Agent ====================
+
+
+class CameraMode(StrEnum):
+    IDLE = "IDLE"
+    PREVIEW = "PREVIEW"
+    ACQUISITION = "ACQUISITION"
+
+
+class CameraAgent(DeviceAgent[SpimCamera]):
+    def __init__(self, device: SpimCamera, stream_interval: float = 0.5):
+        super().__init__(device, stream_interval=stream_interval)
+        self._channel_name = device.uid
+        self._mode = CameraMode.IDLE
+        self._preview_task: asyncio.Task | None = None
+        self._frame_idx = 0
+        self._previewer = PreviewGenerator(sink=self._on_preview_frame, uid=device.uid)
+
+    @property
+    @describe(label="Camera Mode", stream=True)
+    def mode(self) -> CameraMode:
+        return self._mode
+
+    def _on_preview_frame(self, frame) -> None:
+        if self._preview_task is None or self._mode != CameraMode.PREVIEW:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.publish(f"preview/{self._channel_name}", frame.pack()))
+        except RuntimeError:
+            pass
+
+    @describe(label="Update Preview Crop")
+    async def update_preview_crop(self, crop: PreviewCrop):
+        self._previewer.crop = crop
+
+    @describe(label="Update Preview Levels")
+    async def update_preview_levels(self, levels: PreviewLevels):
+        self._previewer.levels = levels
+
+    @describe(label="Start Preview")
+    async def start_preview(
+        self,
+        channel_name: str,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> str:
+        """Returns topic name where preview frames will be published."""
+        if self._mode != CameraMode.IDLE:
+            raise RuntimeError(f"Cannot start preview: camera in {self._mode} mode")
+
+        self._channel_name = channel_name
+
+        def _prepare_and_start():
+            self.device.prepare(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
+            self.device.start(frame_count=None)
+
+        await self._run_sync(_prepare_and_start)
+
+        self._mode = CameraMode.PREVIEW
+        self._frame_idx = 0
+        self._preview_task = asyncio.create_task(self._preview_loop())
+
+        return f"preview/{self._channel_name}"
+
+    @describe(label="Stop Preview")
+    async def stop_preview(self):
+        if self._mode != CameraMode.PREVIEW:
+            return
+
+        self._mode = CameraMode.IDLE
+        if self._preview_task:
+            await self._preview_task
+            self._preview_task = None
+        await self._run_sync(self.device.stop)
+
+    async def _preview_loop(self):
+        try:
+            while self._mode == CameraMode.PREVIEW:
+                frame = await self._run_sync(self.device.grab_frame)
+                await self._previewer.new_frame(frame, idx=self._frame_idx)
+                self._frame_idx += 1
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            self.log.error(f"Preview loop error: {e}", exc_info=True)
+            self._mode = CameraMode.IDLE

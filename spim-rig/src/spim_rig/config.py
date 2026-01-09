@@ -1,9 +1,18 @@
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from pyrig import RigConfig
-from spim_rig.frame_task import AcqTaskConfig
+from spim_rig.frame_task import FrameTaskData
+
+TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column"]
+
+
+class GlobalsConfig(BaseModel):
+    """Global settings for acquisition planning."""
+
+    default_overlap: float = Field(default=0.1, ge=0.0, le=0.5, description="Default tile overlap (0.0-0.5)")
+    default_tile_order: TileOrder = Field(default="snake_row", description="Default tile ordering pattern")
 
 
 class DaqConfig(BaseModel):
@@ -67,12 +76,13 @@ class ChannelConfig(BaseModel):
 
 class ProfileConfig(BaseModel):
     channels: list[str]
-    daq: "AcqTaskConfig"
+    daq: "FrameTaskData"
     desc: str = ""
     label: str | None = None
 
 
 class SpimRigConfig(RigConfig):
+    globals: GlobalsConfig = Field(default_factory=GlobalsConfig)
     daq: DaqConfig
     stage: StageConfig
     detection: dict[str, DetectionPathConfig]

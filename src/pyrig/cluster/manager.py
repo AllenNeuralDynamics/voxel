@@ -24,7 +24,7 @@ from .node import (
     run_node_async,
 )
 from .protocol import NodeAction, RigAction, RigMessage
-from .transport import RemoteTransport
+from .adapter import ZMQAdapter
 
 
 class LocalNodeProcess(Process):
@@ -77,19 +77,19 @@ class ClusterManager:
     - DeviceHandle creation for device access
     """
 
-    NODE_SERVICE_CLASS: type[NodeService] = NodeService
-
     def __init__(
         self,
         zctx: zmq.asyncio.Context,
         name: str,
         cfg: ClusterConfig,
         nodes: dict[str, NodeConfig],
+        node_service_cls: type[NodeService] = NodeService,
     ):
         self.zctx = zctx
         self.name = name
         self.cluster = cfg
         self.nodes = nodes
+        self.node_service_cls = node_service_cls
         self.log = logging.getLogger(f"cluster.{name}")
 
         # Log socket for receiving logs from nodes
@@ -132,7 +132,7 @@ class ClusterManager:
                 start_port=start_port,
                 ctrl_port=self.cluster.control_port,
                 log_port=self.cluster.log_port,
-                service_cls=self.NODE_SERVICE_CLASS,
+                service_cls=self.node_service_cls,
             )
             self._local_node_processes[node_id] = process
             process.start()
@@ -166,14 +166,13 @@ class ClusterManager:
             self.log.info(f"Cluster ready with {len(self.handles)} devices")
 
     def _create_handle(self, device_id: str, prov: DeviceProvision) -> DeviceHandle:
-        """Create a handle for a remote device. Override for custom handle types."""
-        transport = RemoteTransport(
+        """Create a handle for a remote device."""
+        client = ZMQAdapter(
             uid=device_id,
-            device_type=prov.device_type,
             zctx=self.zctx,
             conn=prov.conn,
         )
-        return DeviceHandle(transport)
+        return self.node_service_cls.create_handle(prov.device_type, client)
 
     async def _ping_all_nodes(self, timeout: float = 5.0) -> set[str]:
         """Ping all expected nodes to verify they're reachable."""

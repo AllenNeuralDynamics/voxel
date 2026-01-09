@@ -1,33 +1,71 @@
 # SPIM Rig
 
-A complete selective plane illumination microscope implementation using PyRig. Includes device drivers, typed clients/services, web UI, and CLI.
+Core library for selective plane illumination microscopy (SPIM) using PyRig.
 
-## Quick Start
+## What is a SPIM Rig?
 
-```bash
-# From repository root
-uv sync --all-packages --all-extras
+A SPIM microscope illuminates samples with a thin sheet of light while imaging perpendicular to the illumination plane. This package provides:
 
-# Build web UI
-cd spim-rig/spim-ui
-pnpm install
-pnpm run build
-cd ../../
+- **SpimRigConfig** - YAML-based configuration schema with validation for SPIM hardware topology
+- **SpimRig** - Orchestration class that manages device lifecycle, profile switching, and coordinated preview/acquisition
+- **Device abstractions** - Base classes for cameras, lasers, DAQs, stages, AOTFs, and filter wheels
+- **Frame acquisition** - DAQ-synchronized waveform generation and hardware triggering
 
-# Run simulated rig
-uv run spim rig spim-rig/examples/simulated.yaml
+Concrete hardware drivers are in [spim-drivers](../spim-drivers/).
+
+The configuration models the physical structure of the microscope:
+
+- **Detection paths** - Camera + filter wheels + aux devices
+- **Illumination paths** - Laser + aux devices (e.g., AOTF)
+- **Channels** - Pair a detection path with an illumination path and specify filter positions
+- **Profiles** - Group channels that can be acquired simultaneously, with DAQ waveform timing
+- **Stage** - XYZ linear axes (+ optional rotation axes)
+- **DAQ** - Synchronizes acquisition via hardware triggers
+
+## Configuration
+
+```yaml
+metadata:
+  name: my-spim
+
+nodes:
+  main:
+    devices:
+      camera_1: { target: spim_drivers.cameras.Vieworks }
+      laser_488: { target: spim_drivers.lasers.AAOpto }
+      daq: { target: spim_drivers.daqs.NI }
+      # ...
+
+daq:
+  device: daq
+  acq_ports: { camera_1: ao0, laser_488: ao1 }
+
+detection:
+  camera_1: { filter_wheels: [fw1] }
+
+illumination:
+  laser_488: {}
+
+channels:
+  gfp: { detection: camera_1, illumination: laser_488, filters: { fw1: GFP } }
+
+profiles:
+  default:
+    channels: [gfp]
+    daq: { timing: { ... }, waveforms: { ... } }
 ```
 
-Open http://localhost:8000
+## Usage
 
-## CLI Usage
+For a complete application with web UI and CLI, see [spim-studio](../spim-studio/).
 
-```bash
-# Start rig controller with web UI
-spim rig <config.yaml> [--port PORT] [--debug]
+```python
+from spim_rig.config import SpimRigConfig
+from spim_rig.rig import SpimRig
 
-# Start node service
-spim node <node_id> --rig <host[:port]> [--debug]
+config = SpimRigConfig.from_yaml("system.yaml")
+rig = SpimRig(config)
+await rig.start()
+await rig.set_active_profile("default")
+await rig.start_preview(frame_callback)
 ```
-
-See [examples/README.md](examples/README.md) for more examples and demos.
