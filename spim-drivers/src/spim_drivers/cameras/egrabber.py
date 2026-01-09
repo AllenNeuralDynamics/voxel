@@ -1,25 +1,141 @@
+import logging
 import math
-from typing import cast, final
+from dataclasses import dataclass, field
+from typing import Any, cast, final
 
 import numpy as np
+from egrabber import (
+    BUFFER_INFO_BASE,
+    GENTL_INFINITE,
+    INFO_DATATYPE_PTR,
+    Buffer,
+    EGenTL,
+    EGrabber,
+    EGrabberDiscovery,
+    GenTLException,
+    RemoteModule,
+    StreamModule,
+    ct,
+)
 from ome_zarr_writer.types import Vec2D
-from spim_rig.camera import SpimCamera
-from spim_rig.camera.base import PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from spim_rig.camera.roi import ROI, ROIConstraints
+from spim_drivers.utils import thread_safe_singleton
+from spim_rig.camera.base import (
+    FrameRegion,
+    PixelFormat,
+    SpimCamera,
+    StreamInfo,
+    TriggerMode,
+    TriggerPolarity,
+)
+from spim_rig.helpers import parse_vec2d
 
-from egrabber import BUFFER_INFO_BASE, GENTL_INFINITE, INFO_DATATYPE_PTR, Buffer, GenTLException, ct
-from pyrig.device import deliminated_float, enumerated_int, enumerated_string
+from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
 
-from .common import Binning, ExposureTime, MinMaxProp, get_dev_by_serial
+
+@thread_safe_singleton
+def get_egentl_singleton() -> EGenTL:
+    return EGenTL()
+
+
+@dataclass
+class EgrabberDevice:
+    grabber: EGrabber
+    remote: RemoteModule
+    stream: StreamModule
+    logger: logging.Logger = field(default_factory=lambda: logging.getLogger("EgrabberDevice"))
+
+    def fetch_remote[T](self, feature: str, dtype: type[T]) -> T:
+        value = self.remote.get(feature=feature, dtype=dtype)
+        if value is None:
+            err = f"Failed to get remote property: {feature}"
+            raise RuntimeError(err)
+        return value
+
+    def set_remote(self, feature: str, value: Any) -> None:
+        if not self.remote:
+            self.logger.error("Unable to set %s. Remote component is not available.", feature)
+            return
+        self.remote.set(feature=feature, value=value)
+
+
+def fetch_devices() -> dict[str, "EgrabberDevice"]:
+    devices: dict[str, EgrabberDevice] = {}
+
+    gentl = get_egentl_singleton()
+    discovery = EGrabberDiscovery(gentl=gentl)
+    discovery.discover()
+    for cam in discovery.cameras:
+        grabber = EGrabber(data=cam)
+        remote = grabber.remote
+        stream = grabber.stream
+        if remote and stream and (ser := remote.get("DeviceSerialNumber", dtype=str)):
+            devices[ser] = EgrabberDevice(grabber=grabber, remote=remote, stream=stream)
+    return devices
+
+
+def get_dev_by_serial(serial_number: str) -> "EgrabberDevice":
+    devices = fetch_devices()
+    if serial_number not in devices:
+        err = f"Serial number {serial_number} not found. Available devices: {list(devices.keys())}"
+        raise RuntimeError(err)
+    return devices[serial_number]
+
+
+@dataclass
+class Binning:
+    raw: str = "X1"
+    raw_options: list[str] = field(default_factory=lambda: ["X1"])
+
+    @property
+    def value(self) -> int:
+        return self.parse_str(self.raw)
+
+    @property
+    def options(self) -> list[int]:
+        sorted_options = sorted([self.parse_str(b) for b in set(self.raw_options)])
+        return list(sorted_options)
+
+    @staticmethod
+    def parse_str(binning_str: str) -> int:
+        try:
+            return int(binning_str[1:])
+        except (ValueError, IndexError) as e:
+            err_msg = f"Invalid binning string: {binning_str}"
+            raise ValueError(err_msg) from e
+
+
+@dataclass
+class MinMaxIncProp:
+    val: float
+    min: float
+    max: float
+    inc: float = 1.0
+
+
+@dataclass
+class MinMaxProp:
+    val: float
+    min: float
+    max: float
+
+
+@dataclass
+class ExposureTime(MinMaxIncProp):
+    pass
 
 
 @final
 class VieworksCamera(SpimCamera):
     BUFFER_SIZE_MB = 4096  # 4 GB
 
-    def __init__(self, uid: str, serial: str, pixel_size_um: Vec2D[float] = Vec2D(1.0, 1.0)):
+    def __init__(
+        self,
+        uid: str,
+        serial: str,
+        pixel_size_um: Vec2D[float] | list[float] | str = Vec2D(y=1.0, x=1.0),
+    ):
         super().__init__(uid=uid)
-        self._pixel_size_um = pixel_size_um
+        self._pixel_size_um = parse_vec2d(pixel_size_um, rtype=float)
         self._dev = get_dev_by_serial(serial)
 
         # cache static properties
@@ -33,7 +149,6 @@ class VieworksCamera(SpimCamera):
         self._frame_rate_hz = MinMaxProp(min=0.0, max=12.0, val=3.0)
         self._refresh_binning_info()
         self._refresh_exposure_ms()
-        self._refresh_frame_rate_hz()
 
     @property
     def sensor_size_px(self) -> Vec2D[int]:
@@ -46,15 +161,17 @@ class VieworksCamera(SpimCamera):
     @enumerated_string(options=lambda self: self._pixel_format_options)
     def pixel_format(self) -> PixelFormat:
         fmt = self._dev.fetch_remote(feature="PixelFormat", dtype=str)
-        return cast(PixelFormat, fmt.upper())
+        return cast("PixelFormat", fmt.upper())
 
     @pixel_format.setter
     def pixel_format(self, pixel_format: str) -> None:
         if self.pixel_format != pixel_format.upper():
             self.log.info("pixel_format updated: %s -> %s", self.pixel_format, pixel_format.upper())
             self._dev.remote.set("PixelFormat", pixel_format.capitalize())
+            self._refresh_binning_info()
+            self._refresh_exposure_ms()
 
-    @enumerated_int(options=lambda self: list(self._binning_info.options))
+    @enumerated_int(options=lambda self: list(self._binning.options))
     def binning(self) -> int:
         return self._binning.value
 
@@ -69,7 +186,6 @@ class VieworksCamera(SpimCamera):
         finally:
             self._refresh_binning_info()
             self._refresh_exposure_ms()
-            self._refresh_frame_rate_hz()
 
     @deliminated_float(min_value=lambda self: self._exposure_ms.min, max_value=lambda self: self._exposure_ms.max)
     def exposure_time_ms(self) -> int:
@@ -80,8 +196,8 @@ class VieworksCamera(SpimCamera):
     @exposure_time_ms.setter
     def exposure_time_ms(self, exposure_time_ms: float) -> None:
         self._dev.set_remote(feature="ExposureTime", value=exposure_time_ms * 1000)
-        self._refresh_exposure_ms()
         self.log.info("Set exposure time to %s ms", self._exposure_ms.val)
+        self._refresh_exposure_ms()
 
     @deliminated_float(min_value=lambda self: self._frame_rate_hz.min, max_value=lambda self: self._frame_rate_hz.max)
     def frame_rate_hz(self) -> float:
@@ -92,8 +208,8 @@ class VieworksCamera(SpimCamera):
     @frame_rate_hz.setter
     def frame_rate_hz(self, value: float) -> None:
         self._dev.set_remote(feature="AcquisitionFrameRate", value=value)
-        self._refresh_frame_rate_hz()
         self.log.info("Set frame rate to %s Hz", self._frame_rate_hz.val)
+        self._refresh_exposure_ms()
 
     @property
     def stream_info(self) -> StreamInfo | None:
@@ -108,30 +224,53 @@ class VieworksCamera(SpimCamera):
             frame_rate_fps=-1,
         )
 
-    def _get_roi(self) -> ROI:
-        """Get the current ROI configuration."""
-        return ROI(
-            x=self._dev.fetch_remote("OffsetX", int),
-            y=self._dev.fetch_remote("OffsetY", int),
-            w=self._dev.fetch_remote("Width", int),
-            h=self._dev.fetch_remote("Height", int),
+    @property
+    def frame_region(self) -> FrameRegion:
+        """Get current frame region with embedded constraints."""
+        return FrameRegion(
+            x=DeliminatedInt(
+                self._dev.fetch_remote("OffsetX", int),
+                min_value=0,
+                max_value=self._dev.fetch_remote("OffsetX.Max", int),
+                step=self._dev.fetch_remote("OffsetX.Inc", int),
+            ),
+            y=DeliminatedInt(
+                self._dev.fetch_remote("OffsetY", int),
+                min_value=0,
+                max_value=self._dev.fetch_remote("OffsetY.Max", int),
+                step=self._dev.fetch_remote("OffsetY.Inc", int),
+            ),
+            width=DeliminatedInt(
+                self._dev.fetch_remote("Width", int),
+                min_value=self._dev.fetch_remote("Width.Min", int),
+                max_value=self._dev.fetch_remote("Width.Max", int),
+                step=self._dev.fetch_remote("Width.Inc", int),
+            ),
+            height=DeliminatedInt(
+                self._dev.fetch_remote("Height", int),
+                min_value=self._dev.fetch_remote("Height.Min", int),
+                max_value=self._dev.fetch_remote("Height.Max", int),
+                step=self._dev.fetch_remote("Height.Inc", int),
+            ),
         )
 
-    def _set_roi(self, roi: ROI) -> None:
-        self._dev.remote.set(feature="Width", value=roi.w)
-        self._dev.remote.set(feature="Height", value=roi.h)
-        self._dev.remote.set(feature="OffsetX", value=roi.x)
-        self._dev.remote.set(feature="OffsetY", value=roi.y)
-
-    def _get_roi_constraints(self) -> ROIConstraints:
-        return ROIConstraints(
-            grid_x=self._dev.fetch_remote("Width.Inc", int),
-            grid_y=self._dev.fetch_remote("Height.Inc", int),
-            min_x=self._dev.fetch_remote("Width.Min", int),
-            min_y=self._dev.fetch_remote("Height.Min", int),
-            max_w=self._dev.fetch_remote("Width.Max", int),
-            max_h=self._dev.fetch_remote("Height.Max", int),
-        )
+    def update_frame_region(
+        self,
+        x: int | None = None,
+        y: int | None = None,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        """Update frame region. Only provided values are changed."""
+        # Set dimensions first (may need to reduce size before changing offset)
+        if width is not None:
+            self._dev.remote.set("Width", width)
+        if height is not None:
+            self._dev.remote.set("Height", height)
+        if x is not None:
+            self._dev.remote.set("OffsetX", x)
+        if y is not None:
+            self._dev.remote.set("OffsetY", y)
 
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:
         curr_on_off = self._dev.fetch_remote("TriggerMode", str)
@@ -193,18 +332,26 @@ class VieworksCamera(SpimCamera):
             ptr = buffer.get_info(BUFFER_INFO_BASE, INFO_DATATYPE_PTR)
             assert isinstance(ptr, int), f"Expected pointer to be of type int, got {type(ptr)}"
 
-            frame_size = self.frame_size_px
+            # Get actual buffer dimensions directly from camera (not frame_size_px which divides by binning)
+            # The camera's Width/Height already reflects hardware binning
+            column_count = self._dev.fetch_remote("Width", int)
+            row_count = self._dev.fetch_remote("Height", int)
+            bytes_per_pixel = 2 if self.pixel_type.dtype == np.uint16 else 1
 
-            pixel_count = frame_size.x * frame_size.y
-
-            data = ct.cast(ptr, ct.POINTER(ct.c_ubyte * pixel_count * 2)).contents
-            frame = np.frombuffer(data, count=pixel_count, dtype=self.pixel_type.dtype)
-            return frame.reshape((frame_size.y, frame_size.x))
+            # Read frame data directly (matches old working driver)
+            buffer_size = column_count * row_count * bytes_per_pixel
+            data = ct.cast(ptr, ct.POINTER(ct.c_ubyte * buffer_size)).contents
+            frame = np.frombuffer(data, count=column_count * row_count, dtype=self.pixel_type.dtype)
+            return frame.reshape((row_count, column_count))
 
     def stop(self) -> None:
         """Stop the camera from acquiring frames."""
         try:
             self._dev.grabber.stop()
+            # Reset stream to ensure clean state for next acquisition
+            # bit_packing_mode = self._dev.stream.get("UnpackingMode")
+            # self._dev.stream.execute("StreamReset")
+            # self._dev.stream.set("UnpackingMode", bit_packing_mode)
             self.log.info("Camera stopped successfully.")
         except GenTLException as e:
             self.log.warning("EGrabber error when attempting to stop camera. Error: %s", e)
@@ -245,9 +392,7 @@ class VieworksCamera(SpimCamera):
         max_exp = self._dev.fetch_remote("ExposureTime.Max", int)
         cur_exp = self._dev.fetch_remote("ExposureTime", int)
         self._exposure_ms = ExposureTime(min=min_exp / 1000, max=max_exp / 1000, val=cur_exp / 1000)
-
-    def _refresh_frame_rate_hz(self) -> None:
-        self._exposure_ms = MinMaxProp(
+        self._frame_rate_hz = MinMaxProp(
             min=self._dev.fetch_remote("AcquisitionFrameRate.Min", float),
             max=self._dev.fetch_remote("AcquisitionFrameRate.Max", float),
             val=self._dev.fetch_remote("AcquisitionFrameRate", float),

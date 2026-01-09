@@ -168,6 +168,28 @@ wheels = [
 ]
 
 [[package]]
+name = "coherent-lasers"
+version = "0.1.0"
+source = { url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl" }
+wheels = [
+    { url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl", hash = "sha256:fffb913047ac671e06278a6e557e675a6332c82fc9847be01487fe550b86ea9d" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "black", marker = "extra == 'dev'" },
+    { name = "coverage", marker = "extra == 'dev'" },
+    { name = "flake8", marker = "extra == 'dev'" },
+    { name = "furo", marker = "extra == 'dev'" },
+    { name = "interrogate", marker = "extra == 'dev'" },
+    { name = "isort", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "sphinx", marker = "extra == 'dev'" },
+    { name = "voxel", marker = "extra == 'voxel'", git = "https://github.com/AllenNeuralDynamics/voxel.git" },
+]
+provides-extras = ["voxel", "dev"]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -658,6 +680,14 @@ wheels = [
 ]
 
 [[package]]
+name = "obis-laser"
+version = "0.0.1"
+source = { git = "https://github.com/AllenNeuralDynamics/obis-laser.git#debc2185d1f40b2fc8878d47e6a5d4db6db152af" }
+dependencies = [
+    { name = "pyserial" },
+]
+
+[[package]]
 name = "ome-zarr-writer"
 version = "0.1.0"
 source = { git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git#7b891965b8d3d58bc97f97c90c81f66ff46f4636" }
@@ -766,6 +796,14 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "pycobolt"
+version = "0.2.2"
+source = { git = "https://github.com/cobolt-lasers/pycobolt.git#1333e536ef87e2ec6a94d123559d258ae848aede" }
+dependencies = [
+    { name = "pyserial" },
 ]
 
 [[package]]
@@ -1139,22 +1177,49 @@ version = "0.1.0"
 source = { editable = "spim-drivers" }
 dependencies = [
     { name = "aaopto-aotf" },
-    { name = "egrabber" },
     { name = "nidaqmx" },
     { name = "numpy" },
+    { name = "pyserial" },
     { name = "spim-rig" },
     { name = "tigerasi" },
+]
+
+[package.optional-dependencies]
+coherent-laser = [
+    { name = "coherent-lasers" },
+]
+egrabber-camera = [
+    { name = "egrabber" },
+]
+obis-laser = [
+    { name = "obis-laser" },
+]
+pycobolt-laser = [
+    { name = "pycobolt" },
+]
+vortran-laser = [
+    { name = "vortran-laser" },
+]
+ximea-camera = [
+    { name = "ximea-python" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "aaopto-aotf", specifier = ">=0.0.11" },
-    { name = "egrabber", path = "spim-drivers/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" },
+    { name = "coherent-lasers", marker = "extra == 'coherent-laser'", url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl" },
+    { name = "egrabber", marker = "extra == 'egrabber-camera'", path = "spim-drivers/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" },
     { name = "nidaqmx", specifier = ">=1.3.0" },
     { name = "numpy", specifier = ">=2.3.4" },
+    { name = "obis-laser", marker = "extra == 'obis-laser'", git = "https://github.com/AllenNeuralDynamics/obis-laser.git" },
+    { name = "pycobolt", marker = "extra == 'pycobolt-laser'", git = "https://github.com/cobolt-lasers/pycobolt.git" },
+    { name = "pyserial", specifier = ">=3.5" },
     { name = "spim-rig", editable = "spim-rig" },
     { name = "tigerasi", specifier = ">=0.0.27" },
+    { name = "vortran-laser", marker = "extra == 'vortran-laser'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
+    { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
+provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
 
 [[package]]
 name = "spim-rig"
@@ -1304,6 +1369,14 @@ wheels = [
 ]
 
 [[package]]
+name = "vortran-laser"
+version = "0.0.1"
+source = { git = "https://github.com/AllenNeuralDynamics/vortran_laser.git#9f229b946e371964671339927f1a0028f1d459ab" }
+dependencies = [
+    { name = "pyserial" },
+]
+
+[[package]]
 name = "websockets"
 version = "15.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1321,4 +1394,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/86/eb/20b6cdf273913d0ad05a6a14aed4b9a85591c18a987a3d47f20fa13dcc47/websockets-15.0.1-cp313-cp313-win32.whl", hash = "sha256:ba9e56e8ceeeedb2e080147ba85ffcd5cd0711b89576b83784d8605a7df455fa", size = 176393, upload-time = "2025-03-05T20:02:53.814Z" },
     { url = "https://files.pythonhosted.org/packages/1b/6c/c65773d6cab416a64d191d6ee8a8b1c68a09970ea6909d16965d26bfed1e/websockets-15.0.1-cp313-cp313-win_amd64.whl", hash = "sha256:e09473f095a819042ecb2ab9465aee615bd9c2028e4ef7d933600a8401c79561", size = 176837, upload-time = "2025-03-05T20:02:55.237Z" },
     { url = "https://files.pythonhosted.org/packages/fa/a8/5b41e0da817d64113292ab1f8247140aac61cbf6cfd085d6a0fa77f4984f/websockets-15.0.1-py3-none-any.whl", hash = "sha256:f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f", size = 169743, upload-time = "2025-03-05T20:03:39.41Z" },
+]
+
+[[package]]
+name = "ximea-python"
+version = "4.29.10"
+source = { url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" }
+wheels = [
+    { url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl", hash = "sha256:90433e1d60a289203bd4721f1433ec09beb7ccca317a7a75a5a3a0c4263911b4" },
 ]

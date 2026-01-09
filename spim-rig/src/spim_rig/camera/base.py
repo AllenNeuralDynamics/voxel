@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from abc import abstractmethod
 from enum import StrEnum
@@ -5,13 +7,49 @@ from typing import Literal, cast
 
 import numpy as np
 from ome_zarr_writer.types import Dtype, SchemaModel, Vec2D
+from pydantic import BaseModel
 
 from pyrig import Device, describe
 from pyrig.device import DeviceAgent
-from pyrig.device.props import deliminated_float, enumerated_int, enumerated_string
+from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
 from spim_rig.camera.preview import PreviewCrop, PreviewGenerator, PreviewLevels
-from spim_rig.camera.roi import ROI, ROIAlignmentPolicy, ROIConstraints, coerce_roi
 from spim_rig.device import DeviceType
+
+
+class FrameRegion(BaseModel):
+    """Frame region with constraints embedded in each dimension.
+
+    Each dimension (x, y, width, height) is a DeliminatedInt that carries
+    its current value along with min/max/step constraints.
+
+    Values are in frame coordinates (post-binning), not sensor coordinates.
+    The camera's Width/Height already reflects hardware binning.
+
+    Example:
+        region = FrameRegion(
+            x=DeliminatedInt(0, min_value=0, max_value=14000, step=16),
+            y=DeliminatedInt(0, min_value=0, max_value=10000, step=16),
+            width=DeliminatedInt(1024, min_value=64, max_value=14192, step=16),
+            height=DeliminatedInt(1024, min_value=64, max_value=10640, step=16),
+        )
+    """
+
+    x: DeliminatedInt
+    y: DeliminatedInt
+    width: DeliminatedInt
+    height: DeliminatedInt
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """Get the frame size as (width, height)."""
+        return (int(self.width), int(self.height))
+
+    @property
+    def offset(self) -> tuple[int, int]:
+        """Get the frame offset as (x, y)."""
+        return (int(self.x), int(self.y))
 
 
 class TriggerMode(StrEnum):
@@ -50,12 +88,12 @@ BINNING_OPTIONS = [1, 2, 4, 8]
 class SpimCamera(Device):
     __DEVICE_TYPE__ = DeviceType.CAMERA
 
-    roi_alignment_policy: ROIAlignmentPolicy = ROIAlignmentPolicy.ALIGN
     trigger_mode: TriggerMode = TriggerMode.OFF
     trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE
 
     @property
     @abstractmethod
+    @describe(label="Sensor Size", units="px")
     def sensor_size_px(self) -> Vec2D[int]:
         """Get the size of the camera sensor in pixels."""
 
@@ -76,6 +114,7 @@ class SpimCamera(Device):
         """Set the pixel format of the camera."""
 
     @property
+    @describe(label="Pixel Type")
     def pixel_type(self) -> Dtype:
         """Get the pixel type of the camera."""
         return PIXEL_FMT_TO_DTYPE[cast(PixelFormat, str(self.pixel_format))]
@@ -110,52 +149,63 @@ class SpimCamera(Device):
     def frame_rate_hz(self, value: float) -> None:
         """Set the frame rate of the camera in Hz."""
 
-    @abstractmethod
-    def _get_roi(self) -> ROI:
-        """Get the current ROI configuration."""
-
-    @abstractmethod
-    def _set_roi(self, roi: ROI) -> None: ...
-
-    @abstractmethod
-    def _get_roi_constraints(self) -> ROIConstraints:
-        """Get the constraints of the ROI."""
-
     @property
-    @describe(label="Region of Interest")
+    @describe(label="Frame Region", stream=True)
     @abstractmethod
-    def roi(self) -> ROI:
-        """Get the current ROI configuration."""
-        return self._get_roi()
+    def frame_region(self) -> FrameRegion:
+        """Get the current frame region with embedded constraints.
 
-    @roi.setter
-    def roi(self, roi: ROI) -> None:
-        """Set the current ROI configuration.
-
-        Raises:
-            ROIPlacementError: If the ROI could not be set due to policy violations.
+        The FrameRegion contains x, y, width, height as DeliminatedInt values,
+        each carrying its own min/max/step constraints from the hardware.
+        Values are in frame coordinates (post-binning), not sensor coordinates.
         """
-        eff = coerce_roi(roi, caps=self.roi_constraints, policy=self.roi_alignment_policy)
-        self._set_roi(eff)
+
+    @abstractmethod
+    @describe(label="Update Frame Region")
+    def update_frame_region(
+        self,
+        x: int | None = None,
+        y: int | None = None,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        """Update one or more frame region dimensions.
+
+        Only specified parameters are changed; others remain unchanged.
+        Values are automatically clamped and aligned to hardware constraints.
+        Values must be in frame coordinates (post-binning).
+
+        Args:
+            x: New X offset (or None to keep current)
+            y: New Y offset (or None to keep current)
+            width: New width (or None to keep current)
+            height: New height (or None to keep current)
+        """
 
     @property
-    @describe(label="ROI Constraints")
-    def roi_constraints(self) -> ROIConstraints:
-        """Get the constraints of the ROI."""
-        return self._get_roi_constraints()
-
-    @property
+    @describe(label="Frame Size", units="px")
     def frame_size_px(self) -> Vec2D[int]:
-        """Get the image size in pixels."""
-        return Vec2D(self.roi.w // self.binning, self.roi.h // self.binning)
+        """Get the image size in pixels (post-binning frame coordinates)."""
+        return Vec2D(int(self.frame_region.width), int(self.frame_region.height))
 
     @property
+    @describe(label="Frame Size", units="MB")
     def frame_size_mb(self) -> float:
         """Get the size of the camera image in MB."""
         return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
 
     @property
+    @describe(label="Frame Area", units="mm")
+    def frame_area_mm(self) -> Vec2D[float]:
+        """Get the physical frame size in millimeters."""
+        return Vec2D(
+            self.frame_size_px.x * self.pixel_size_um.x / 1000.0,
+            self.frame_size_px.y * self.pixel_size_um.y / 1000.0,
+        )
+
+    @property
     @abstractmethod
+    @describe(label="Stream Info", stream=True)
     def stream_info(self) -> StreamInfo | None:
         """Return a dictionary of the acquisition state or None if not acquiring.
 

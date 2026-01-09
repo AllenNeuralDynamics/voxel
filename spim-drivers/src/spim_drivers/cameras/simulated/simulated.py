@@ -7,15 +7,15 @@ from spim_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 from spim_rig.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
+    FrameRegion,
     PixelFormat,
     SpimCamera,
     StreamInfo,
     TriggerMode,
     TriggerPolarity,
 )
-from spim_rig.camera.roi import ROI, ROIConstraints
 
-from pyrig.device.props import deliminated_float, enumerated_int, enumerated_string
+from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
 
 VP_151MX_M6H0 = Vec2D(y=10_640, x=14_192)
 # 1.00:  "10640,14192"
@@ -118,29 +118,61 @@ class SimulatedCamera(SpimCamera):
     def frame_rate_hz(self, value: float) -> None:
         self._frame_rate_hz = value
 
-    def _get_roi(self) -> ROI:
-        return ROI(
-            x=self._roi_width_offset_px,
-            y=self._roi_height_offset_px,
-            w=self._roi_width_px,
-            h=self._roi_height_px,
+    @property
+    def frame_region(self) -> FrameRegion:
+        """Get the current frame region with embedded constraints."""
+        return FrameRegion(
+            x=DeliminatedInt(
+                self._roi_width_offset_px,
+                min_value=0,
+                max_value=self._sensor_size_px.x - self._min_width,
+                step=self._roi_step_width_px,
+            ),
+            y=DeliminatedInt(
+                self._roi_height_offset_px,
+                min_value=0,
+                max_value=self._sensor_size_px.y - self._min_height,
+                step=self._roi_step_height_px,
+            ),
+            width=DeliminatedInt(
+                self._roi_width_px,
+                min_value=self._min_width,
+                max_value=self._sensor_size_px.x,
+                step=self._roi_step_width_px,
+            ),
+            height=DeliminatedInt(
+                self._roi_height_px,
+                min_value=self._min_height,
+                max_value=self._sensor_size_px.y,
+                step=self._roi_step_height_px,
+            ),
         )
 
-    def _set_roi(self, roi: ROI) -> None:
-        self._roi_width_offset_px = roi.x
-        self._roi_height_offset_px = roi.y
-        self._roi_width_px = roi.w
-        self._roi_height_px = roi.h
-
-    def _get_roi_constraints(self) -> ROIConstraints:
-        return ROIConstraints(
-            grid_x=self._roi_step_width_px,
-            grid_y=self._roi_step_height_px,
-            min_x=self._min_width,
-            min_y=self._min_height,
-            max_w=self._sensor_size_px.x,
-            max_h=self._sensor_size_px.y,
-        )
+    def update_frame_region(
+        self,
+        x: int | None = None,
+        y: int | None = None,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        """Update one or more frame region dimensions."""
+        if x is not None:
+            # Clamp and align to step
+            x = max(0, min(x, self._sensor_size_px.x - self._min_width))
+            x = (x // self._roi_step_width_px) * self._roi_step_width_px
+            self._roi_width_offset_px = x
+        if y is not None:
+            y = max(0, min(y, self._sensor_size_px.y - self._min_height))
+            y = (y // self._roi_step_height_px) * self._roi_step_height_px
+            self._roi_height_offset_px = y
+        if width is not None:
+            width = max(self._min_width, min(width, self._sensor_size_px.x))
+            width = (width // self._roi_step_width_px) * self._roi_step_width_px
+            self._roi_width_px = width
+        if height is not None:
+            height = max(self._min_height, min(height, self._sensor_size_px.y))
+            height = (height // self._roi_step_height_px) * self._roi_step_height_px
+            self._roi_height_px = height
 
     @property
     def stream_info(self) -> StreamInfo | None:
@@ -169,10 +201,10 @@ class SimulatedCamera(SpimCamera):
     def _prepare_for_capture(self) -> None:
         self.log.info("Preparing simulated camera. Generating reference image")
 
-        # Generate single reference frame based on current ROI and binning
-        roi = self._get_roi()
-        binned_height = roi.h // self._binning
-        binned_width = roi.w // self._binning
+        # Generate single reference frame based on current frame region and binning
+        region = self.frame_region
+        binned_height = int(region.height) // self._binning
+        binned_width = int(region.width) // self._binning
 
         generator = ReferenceFrameGenerator(
             height_px=binned_height,

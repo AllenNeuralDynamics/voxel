@@ -1,9 +1,11 @@
 from .common import PropertyModel as PropertyModel
-from .deliminated import deliminated_float, deliminated_int
+from .deliminated import DeliminatedFloat, DeliminatedInt, deliminated_float, deliminated_int
 from .enumerated import enumerated_int, enumerated_string
 
 __all__ = [
     "PropertyModel",
+    "DeliminatedInt",
+    "DeliminatedFloat",
     "deliminated_int",
     "deliminated_float",
     "enumerated_int",
