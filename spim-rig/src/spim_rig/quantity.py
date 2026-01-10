@@ -58,7 +58,7 @@ class Quantity(float):
         yield cls._validate
 
     @classmethod
-    def _validate(cls, v: float | str, *args, **kwargs) -> float:  # noqa: ARG003, ANN002, ANN003
+    def _validate(cls, v: float | str, *args, **kwargs) -> float:  # noqa: ARG003
         if isinstance(v, (int, float)):
             return float(v)
         m = re.fullmatch(r"\s*([+-]?[0-9]*\.?[0-9]+)\s*([a-zA-Z°]+)\s*", str(v))

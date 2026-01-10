@@ -1,100 +1,266 @@
 """Simulated DAQ driver for testing."""
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
 
 import numpy as np
+from spim_rig.daq import AcqSampleMode, AOTask, COTask, PinInfo, SpimDaq, TaskStatus
+from spim_rig.quantity import VoltageRange
 
-from spim_rig.daq import AOTaskConfig, COTaskConfig, SpimDaq
-from spim_rig.daq.quantity import VoltageRange
+# ==================== Mock Task Classes ====================
 
 
-@dataclass
-class MockAOTask:
+class MockAOTask(AOTask):
     """Mock AO task for testing."""
 
-    name: str
-    config: AOTaskConfig
-    channel_names: list[str] = field(default_factory=list)
-    running: bool = False
+    def __init__(self, name: str, pins: list[str], device_name: str):
+        self._name = name
+        self._channel_names = [f"{device_name}/{pin}" for pin in pins]
+        self._status = TaskStatus.IDLE
+        self._data: np.ndarray | None = None
 
-    def __post_init__(self) -> None:
-        self.channel_names = [f"MockDev/{pin}" for pin in self.config.pins]
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def status(self) -> TaskStatus:
+        return self._status
+
+    @property
+    def channel_names(self) -> list[str]:
+        return self._channel_names
+
+    def start(self) -> None:
+        self._status = TaskStatus.RUNNING
+
+    def stop(self) -> None:
+        self._status = TaskStatus.IDLE
+
+    def close(self) -> None:
+        self._status = TaskStatus.IDLE
+
+    def wait_until_done(self, timeout: float) -> None:
+        pass  # Instant completion in simulation
+
+    def write(self, data: np.ndarray) -> int:
+        self._data = data
+        return data.shape[-1] if data.ndim > 1 else len(data)
+
+    def cfg_samp_clk_timing(self, rate: float, sample_mode: AcqSampleMode, samps_per_chan: int) -> None:
+        pass  # No-op in simulation
+
+    def cfg_dig_edge_start_trig(self, trigger_source: str, *, retriggerable: bool = False) -> None:
+        pass  # No-op in simulation
 
 
-@dataclass
-class MockCOTask:
+class MockCOTask(COTask):
     """Mock CO task for testing."""
 
-    name: str
-    config: COTaskConfig
-    output_terminal: str | None = None
-    running: bool = False
+    def __init__(
+        self,
+        name: str,
+        frequency_hz: float,
+        duty_cycle: float,
+        output_terminal: str | None = None,
+    ):
+        self._name = name
+        self._frequency_hz = frequency_hz
+        self._duty_cycle = duty_cycle
+        self._output_terminal = output_terminal
+        self._status = TaskStatus.IDLE
 
-    def __post_init__(self) -> None:
-        if self.config.output_pin:
-            self.output_terminal = f"/MockDev/{self.config.output_pin}"
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def status(self) -> TaskStatus:
+        return self._status
+
+    @property
+    def channel_names(self) -> list[str]:
+        return [self._name]
+
+    @property
+    def frequency_hz(self) -> float:
+        return self._frequency_hz
+
+    @property
+    def duty_cycle(self) -> float:
+        return self._duty_cycle
+
+    @property
+    def output_terminal(self) -> str | None:
+        return self._output_terminal
+
+    def start(self) -> None:
+        self._status = TaskStatus.RUNNING
+
+    def stop(self) -> None:
+        self._status = TaskStatus.IDLE
+
+    def close(self) -> None:
+        self._status = TaskStatus.IDLE
+
+    def wait_until_done(self, timeout: float) -> None:
+        pass  # Instant completion in simulation
+
+    def cfg_dig_edge_start_trig(self, trigger_source: str, *, retriggerable: bool = False) -> None:
+        pass  # No-op in simulation
 
 
-class SimulatedDaq(SpimDaq[MockAOTask, MockCOTask]):
+# ==================== SimulatedDaq Device ====================
+
+
+class SimulatedDaq(SpimDaq):
     """A simulated DAQ device for testing purposes."""
 
     def __init__(self, uid: str = "sim_daq", device_name: str = "MockDev") -> None:
         super().__init__(uid=uid)
         self._device_name = device_name
 
+        # Simulated pins
+        self._ao_pins = [f"ao{i}" for i in range(32)]
+        self._pfi_pins = [f"pfi{i}" for i in range(16)]
+        self._counter_pins = ["ctr0", "ctr1", "ctr2", "ctr3"]
+
+        # Pin management
+        self._assigned_pins: dict[str, PinInfo] = {}
+
+        # Task management
+        self._active_tasks: dict[str, MockAOTask | MockCOTask] = {}
+
     def __repr__(self) -> str:
-        return f"SimulatedDaq(uid={self._uid}, device={self._device_name})"
+        return f"SimulatedDaq(uid={self.uid}, device={self._device_name})"
 
     # ==================== Properties ====================
 
     @property
+    def device_name(self) -> str:
+        return self._device_name
+
+    @property
     def ao_voltage_range(self) -> VoltageRange:
-        """Get the analog output voltage range."""
-        return VoltageRange(min=-5.0, max=5.0)
+        return VoltageRange(min=-10.0, max=10.0)
 
-    # ==================== Driver Implementation ====================
+    @property
+    def available_pins(self) -> list[str]:
+        assigned = set(self._assigned_pins.keys())
+        return [p for p in self._ao_pins + self._pfi_pins if p not in assigned]
 
-    def _create_ao_task(self, name: str, config: AOTaskConfig) -> MockAOTask:
-        """Create a mock AO task."""
-        task = MockAOTask(name=name, config=config)
-        self.log.info(f"Created mock AO task '{name}' with {len(config.pins)} channels")
-        return task
+    @property
+    def assigned_pins(self) -> dict[str, PinInfo]:
+        return dict(self._assigned_pins)
 
-    def _create_co_task(self, name: str, config: COTaskConfig) -> MockCOTask:
-        """Create a mock CO task."""
-        task = MockCOTask(name=name, config=config)
-        self.log.info(f"Created mock CO task '{name}' at {config.frequency_hz}Hz")
-        return task
+    def get_tasks(self) -> Mapping[str, MockAOTask | MockCOTask]:
+        return self._active_tasks
 
-    def _write(self, task: MockAOTask, data: np.ndarray) -> int:
-        """Write data to mock AO task."""
-        samples = data.shape[-1] if data.ndim > 1 else len(data)
-        self.log.debug(f"Mock write {samples} samples to '{task.name}'")
-        return samples
+    # ==================== Pin Management ====================
 
-    def _start_task(self, task: MockAOTask | MockCOTask) -> None:
-        """Start a mock task."""
-        task.running = True
-        self.log.debug(f"Started mock task '{task.name}'")
+    def assign_pin(self, task_name: str, pin: str) -> PinInfo:
+        pin_lower = pin.lower()
+        if pin_lower in self._assigned_pins:
+            existing = self._assigned_pins[pin_lower]
+            raise ValueError(f"Pin '{pin}' already assigned to task '{existing.task_name}'")
 
-    def _stop_task(self, task: MockAOTask | MockCOTask) -> None:
-        """Stop a mock task."""
-        task.running = False
-        self.log.debug(f"Stopped mock task '{task.name}'")
+        # Determine pin type and path
+        if pin_lower.startswith("ao"):
+            path = f"/{self._device_name}/{pin_lower}"
+            pfi = None
+        elif pin_lower.startswith("pfi"):
+            path = f"/{self._device_name}/{pin.upper()}"
+            pfi = path
+        else:
+            raise ValueError(f"Unknown pin type: {pin}")
 
-    def _close_task(self, task: MockAOTask | MockCOTask) -> None:
-        """Close a mock task."""
-        task.running = False
-        self.log.debug(f"Closed mock task '{task.name}'")
+        info = PinInfo(pin=pin_lower, path=path, task_name=task_name, pfi=pfi)
+        self._assigned_pins[pin_lower] = info
+        self.log.debug(f"Assigned pin '{pin}' to task '{task_name}'")
+        return info
 
-    def _get_channel_names(self, task: MockAOTask | MockCOTask) -> list[str]:
-        """Get channel names from task."""
-        if isinstance(task, MockAOTask):
-            return task.channel_names
-        return []
+    def release_pin(self, pin: PinInfo) -> bool:
+        if pin.pin in self._assigned_pins:
+            del self._assigned_pins[pin.pin]
+            self.log.debug(f"Released pin '{pin.pin}'")
+            return True
+        return False
 
-    def _get_output_terminal(self, task: MockAOTask | MockCOTask) -> str | None:
-        """Get output terminal for CO task."""
-        if isinstance(task, MockCOTask):
-            return task.output_terminal
-        return None
+    def release_pins_for_task(self, task_name: str) -> None:
+        to_remove = [p for p, info in self._assigned_pins.items() if info.task_name == task_name]
+        for pin in to_remove:
+            del self._assigned_pins[pin]
+        if to_remove:
+            self.log.debug(f"Released {len(to_remove)} pins for task '{task_name}'")
+
+    def get_pfi_path(self, pin: str) -> str:
+        pin_upper = pin.upper()
+        if pin_upper.startswith("PFI"):
+            return f"/{self._device_name}/{pin_upper}"
+        raise ValueError(f"Pin '{pin}' is not a valid PFI pin")
+
+    # ==================== Task Factory ====================
+
+    def create_ao_task(self, task_name: str, pins: list[str]) -> MockAOTask:
+        if task_name in self._active_tasks:
+            raise ValueError(f"Task '{task_name}' already exists")
+
+        assigned: list[PinInfo] = []
+        try:
+            # Assign pins atomically
+            for pin in pins:
+                info = self.assign_pin(task_name, pin)
+                assigned.append(info)
+
+            task = MockAOTask(task_name, pins, self._device_name)
+            self._active_tasks[task_name] = task
+            self.log.info(f"Created mock AO task '{task_name}' with {len(pins)} channels")
+            return task
+
+        except Exception:
+            # Rollback on failure
+            for info in assigned:
+                self.release_pin(info)
+            raise
+
+    def create_co_task(
+        self,
+        task_name: str,
+        counter: str,
+        frequency_hz: float,
+        duty_cycle: float = 0.5,
+        pulses: int | None = None,
+        output_pin: str | None = None,
+    ) -> MockCOTask:
+        if task_name in self._active_tasks:
+            raise ValueError(f"Task '{task_name}' already exists")
+
+        assigned: list[PinInfo] = []
+        try:
+            # Assign output pin if specified
+            output_terminal = None
+            if output_pin:
+                info = self.assign_pin(task_name, output_pin)
+                assigned.append(info)
+                output_terminal = info.path
+
+            task = MockCOTask(task_name, frequency_hz, duty_cycle, output_terminal)
+            self._active_tasks[task_name] = task
+            self.log.info(f"Created mock CO task '{task_name}' at {frequency_hz}Hz")
+            return task
+
+        except Exception:
+            # Rollback on failure
+            for info in assigned:
+                self.release_pin(info)
+            raise
+
+    def close_task(self, task_name: str) -> None:
+        task = self._active_tasks.pop(task_name, None)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' does not exist")
+
+        try:
+            task.close()
+        finally:
+            self.release_pins_for_task(task_name)
+        self.log.info(f"Closed mock task '{task_name}'")

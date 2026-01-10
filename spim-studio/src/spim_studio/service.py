@@ -428,7 +428,10 @@ async def rig_websocket(websocket: WebSocket, service: RigService = Depends(get_
         service.remove_client(client_id)
         # Auto-stop preview if this was a client that requested it
         if service._preview_start_count > 0:
-            await service._handle_preview_stop()
+            try:
+                await service._handle_preview_stop()
+            except Exception as e:
+                log.warning(f"Error stopping preview during disconnect: {e}")
 
 
 @router.get("/config", tags=["config"])

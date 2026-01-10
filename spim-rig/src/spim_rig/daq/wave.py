@@ -5,8 +5,7 @@ from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
-
-from .quantity import Angle, Frequency, NormalizedRange, Voltage, VoltageRange
+from spim_rig.quantity import Angle, Frequency, NormalizedRange, Voltage, VoltageRange
 
 
 class BaseWaveform(BaseModel, ABC):

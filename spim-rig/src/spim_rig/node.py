@@ -15,7 +15,7 @@ from pyrig.device import Adapter, DeviceAgent
 from spim_rig.axes.linear.base import LinearAxis, LinearAxisAgent
 from spim_rig.camera.base import CameraAgent, SpimCamera
 from spim_rig.camera.handle import CameraHandle
-from spim_rig.daq import DaqHandle
+from spim_rig.daq import DaqAgent, DaqHandle, SpimDaq
 from spim_rig.device import DeviceType
 
 
@@ -24,7 +24,7 @@ class SpimNodeService(NodeService):
 
     SpimCamera devices use CameraAgent for preview streaming.
     LinearAxis devices use LinearAxisAgent for TTL stepping support.
-    SpimAxis devices use faster property streaming for responsive stage control.
+    SpimDaq devices use DaqAgent for task management.
     """
 
     @classmethod
@@ -34,6 +34,8 @@ class SpimNodeService(NodeService):
             return CameraAgent(device)
         if isinstance(device, LinearAxis):
             return LinearAxisAgent(device, stream_interval=0.05)
+        if isinstance(device, SpimDaq):
+            return DaqAgent(device)
         return super().create_agent(device)
 
     @classmethod

@@ -7,8 +7,8 @@ from typing import Any, Self
 import numpy as np
 from pydantic import BaseModel, Field, computed_field, model_validator
 
-from spim_rig.daq import AOTaskConfig, COTaskConfig, DaqHandle, SampleMode, TaskInfo
-from spim_rig.daq.quantity import Frequency, NormalizedRange, Time
+from spim_rig.daq import AcqSampleMode, DaqHandle
+from spim_rig.quantity import Frequency, NormalizedRange, Time
 from spim_rig.daq.wave import Waveform
 
 
@@ -101,8 +101,9 @@ class DAQFrameTask:
         self._ports = ports
         self._channels: dict[str, WaveGenChannel] = {}
 
-        self._ao_task: TaskInfo | None = None
-        self._clock_task: TaskInfo | None = None
+        self._ao_task_name: str | None = None
+        self._ao_channel_names: list[str] = []
+        self._clock_task_name: str | None = None
         self._is_setup = False
 
     @property
@@ -135,21 +136,26 @@ class DAQFrameTask:
         for name, port in self._ports.items():
             self._channels[name] = WaveGenChannel(name=name, pin=port, wave=self._waveforms[name])
 
-        # Build AO task config
+        # Create AO task
         pins = list(self._ports.values())
-        trigger_pin = self._timing.clock.pin if self._timing.clock else None
-        sample_mode = SampleMode.FINITE if self._timing.clock else SampleMode.CONTINUOUS
+        task_info = await self._daq.create_ao_task(self._uid, pins)
+        self._ao_task_name = task_info.name
+        self._ao_channel_names = task_info.channel_names
 
-        ao_config = AOTaskConfig(
-            pins=pins,
-            sample_rate=float(self._timing.sample_rate),
-            num_samples=self._timing.num_samples,
+        # Configure timing
+        sample_mode = AcqSampleMode.FINITE if self._timing.clock else AcqSampleMode.CONTINUOUS
+        await self._daq.configure_ao_timing(
+            self._uid,
+            rate=float(self._timing.sample_rate),
             sample_mode=sample_mode,
-            trigger_pin=trigger_pin,
-            retriggerable=trigger_pin is not None,
+            samps_per_chan=self._timing.num_samples,
         )
 
-        self._ao_task = await self._daq.new_ao_task(self._uid, ao_config)
+        # Configure trigger if clock is set
+        if self._timing.clock:
+            trigger_pfi = await self._daq.get_pfi_path(self._timing.clock.pin)
+            await self._daq.configure_ao_trigger(self._uid, trigger_pfi, retriggerable=True)
+
         self._log.info(f"Created AO task '{self._uid}' with pins: {pins}")
 
         # Create clock task if configured
@@ -164,24 +170,25 @@ class DAQFrameTask:
             return
 
         clock_task_name = f"{self._uid}_clock"
-        co_config = COTaskConfig(
+        await self._daq.create_co_task(
+            clock_task_name,
             counter=self._timing.clock.counter,
             frequency_hz=self._timing.frequency,
             duty_cycle=self._timing.clock.duty_cycle,
             output_pin=self._timing.clock.pin,
         )
-
-        self._clock_task = await self._daq.new_co_task(clock_task_name, co_config)
+        self._clock_task_name = clock_task_name
         self._log.info(f"Created clock task '{clock_task_name}' at {self._timing.frequency}Hz")
 
     async def _write(self) -> None:
         """Generate and write waveform data."""
-        if self._ao_task is None:
+        if self._ao_task_name is None:
             raise RuntimeError("AO task not created")
 
         self._log.info("Writing waveforms to task...")
 
-        channel_names = self._ao_task.channel_names
+        # Get channel names from the task via handle
+        channel_names = self._ao_channel_names
         data_arrays: list[np.ndarray] = []
 
         for channel_name in channel_names:
@@ -199,7 +206,7 @@ class DAQFrameTask:
         data = np.vstack(data_arrays) if len(data_arrays) > 1 else data_arrays[0]
         self._log.info(f"Writing {len(data_arrays)} channels x {self._timing.num_samples} samples")
 
-        written_samples = await self._daq.write(self._ao_task.name, data.tolist())
+        written_samples = await self._daq.write_ao_task(self._ao_task_name, data.tolist())
         if written_samples != self._timing.num_samples:
             self._log.warning(f"Only wrote {written_samples}/{self._timing.num_samples} samples")
 
@@ -207,38 +214,38 @@ class DAQFrameTask:
         """Write waveforms and start the task."""
         if not self._is_setup:
             raise RuntimeError(f"Task '{self._uid}' is not set up")
-        if self._ao_task is None:
+        if self._ao_task_name is None:
             raise RuntimeError("AO task not created")
 
         await self._write()
-        await self._daq.start_task(self._ao_task.name)
+        await self._daq.start_task(self._ao_task_name)
         self._log.info(f"Started task '{self._uid}'")
 
-        if self._clock_task:
-            await self._daq.start_task(self._clock_task.name)
-            self._log.info(f"Started clock task '{self._clock_task.name}'")
+        if self._clock_task_name:
+            await self._daq.start_task(self._clock_task_name)
+            self._log.info(f"Started clock task '{self._clock_task_name}'")
 
     async def stop(self) -> None:
         """Stop the task."""
-        if self._clock_task:
-            await self._daq.stop_task(self._clock_task.name)
-            self._log.info(f"Stopped clock task '{self._clock_task.name}'")
+        if self._clock_task_name:
+            await self._daq.stop_task(self._clock_task_name)
+            self._log.info(f"Stopped clock task '{self._clock_task_name}'")
 
-        if self._ao_task:
-            await self._daq.stop_task(self._ao_task.name)
+        if self._ao_task_name:
+            await self._daq.stop_task(self._ao_task_name)
             self._log.info(f"Stopped task '{self._uid}'")
 
     async def close(self) -> None:
         """Close the task and release resources."""
-        if self._clock_task:
-            await self._daq.close_task(self._clock_task.name)
-            self._log.info(f"Closed clock task '{self._clock_task.name}'")
-            self._clock_task = None
+        if self._clock_task_name:
+            await self._daq.close_task(self._clock_task_name)
+            self._log.info(f"Closed clock task '{self._clock_task_name}'")
+            self._clock_task_name = None
 
-        if self._ao_task:
-            await self._daq.close_task(self._ao_task.name)
+        if self._ao_task_name:
+            await self._daq.close_task(self._ao_task_name)
             self._log.info(f"Closed task '{self._uid}'")
-            self._ao_task = None
+            self._ao_task_name = None
 
         self._is_setup = False
         self._channels.clear()
