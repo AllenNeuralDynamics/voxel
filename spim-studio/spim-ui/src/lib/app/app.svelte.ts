@@ -331,9 +331,7 @@ export class App {
 	// ========== Status Handling ==========
 
 	private async handleStatusUpdate(status: AppStatus): Promise<void> {
-		const hadSession = this.hasSession;
 		const previousProfileId = this.activeProfileId;
-		const previousPhase = this.status?.phase ?? 'idle';
 
 		// Update app status
 		this.status = status;
@@ -341,8 +339,8 @@ export class App {
 		// Handle phase transitions
 		switch (status.phase) {
 			case 'idle': {
-				// Clear session-specific state if we had a session
-				if (hadSession) {
+				// Clear session-specific state if we have feature controllers
+				if (this.previewer || this.config) {
 					console.log('[App] Session closed, cleaning up');
 					this.destroyFeatureControllers();
 					this.config = null;
@@ -352,8 +350,8 @@ export class App {
 			}
 
 			case 'ready': {
-				// Initialize session if transitioning from non-ready state
-				if (previousPhase !== 'ready' && !hadSession) {
+				// Initialize session if we don't have feature controllers yet
+				if (!this.previewer) {
 					console.log('[App] Session became ready, initializing...');
 					await this.initializeSession();
 				}

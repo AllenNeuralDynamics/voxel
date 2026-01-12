@@ -320,20 +320,25 @@ class Session:
         offset_x = self._config.grid_config.x_offset_um
         offset_y = self._config.grid_config.y_offset_um
 
-        # Calculate number of tiles to cover entire stage (last row/col may be clipped)
-        num_cols = max(1, math.ceil((stage_width_um - offset_x - fov_w) / step_w) + 1) if step_w > 0 else 1
-        num_rows = max(1, math.ceil((stage_height_um - offset_y - fov_h) / step_h) + 1) if step_h > 0 else 1
+        # Calculate tile indices to cover entire stage (tiles extend before and after offset)
+        # Include tiles that overlap with stage: x + fov > 0 AND x < stage_width
+        # col_min: smallest col where x + fov > 0 → col > (-offset - fov) / step
+        # col_max: largest col where x < stage_width → col < (stage_width - offset) / step
+        col_min = math.floor((-offset_x - fov_w) / step_w) + 1 if step_w > 0 else 0
+        col_max = math.ceil((stage_width_um - offset_x) / step_w) if step_w > 0 else 1
+        row_min = math.floor((-offset_y - fov_h) / step_h) + 1 if step_h > 0 else 0
+        row_max = math.ceil((stage_height_um - offset_y) / step_h) if step_h > 0 else 1
 
         # Generate tiles
         tiles: list[Tile] = []
-        for row in range(num_rows):
-            for col in range(num_cols):
-                tile_id = f"tile_r{row}_c{col}"
+        for row in range(row_min, row_max):
+            for col in range(col_min, col_max):
                 x_um = offset_x + col * step_w
                 y_um = offset_y + row * step_h
 
-                # Include tile if it starts within stage bounds
-                if x_um < stage_width_um and y_um < stage_height_um:
+                # Include tile if it overlaps with stage bounds
+                if x_um + fov_w > 0 and x_um < stage_width_um and y_um + fov_h > 0 and y_um < stage_height_um:
+                    tile_id = f"tile_r{row}_c{col}"
                     tiles.append(
                         Tile(
                             tile_id=tile_id,
@@ -346,6 +351,8 @@ class Session:
                         )
                     )
 
+        num_cols = col_max - col_min
+        num_rows = row_max - row_min
         self._log.debug(
             f"Generated {len(tiles)} tiles ({num_cols}x{num_rows}) with FOV {fov_w:.0f}x{fov_h:.0f} um, step {step_w:.0f}x{step_h:.0f} um"
         )

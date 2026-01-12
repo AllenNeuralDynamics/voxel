@@ -185,9 +185,9 @@
 			class="stage-canvas"
 			style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
 		>
-			<div class="xy-column">
-				<div class="x-row">
-					<div class="corner-spacer"></div>
+			<div class="flex flex-col">
+				<div class="flex">
+					<div style="width: {TRACK_WIDTH}px"></div>
 					<input
 						type="range"
 						class="x-slider"
@@ -219,38 +219,6 @@
 						class="xy-svg"
 						style="width: {canvasWidth}px; height: {canvasHeight}px;"
 					>
-						<!-- Background -->
-						<rect x="0" y="0" width={stageWidth} height={stageHeight} class="fill-zinc-900" />
-
-						<!-- Grid Layer: Tiles as stroke-only rectangles -->
-						{#if layerVisibility.grid}
-							<g class="grid-layer">
-								{#each tiles as tile (tile.tile_id)}
-									{@const x = toMm(tile.x_um)}
-									{@const y = toMm(tile.y_um)}
-									{@const w = toMm(tile.w_um)}
-									{@const h = toMm(tile.h_um)}
-									<rect
-										{x}
-										{y}
-										width={w}
-										height={h}
-										fill="none"
-										stroke="#3f3f46"
-										stroke-width={0.05}
-										class="tile outline-none"
-										class:cursor-pointer={!isXYMoving}
-										class:cursor-not-allowed={isXYMoving}
-										role="button"
-										tabindex={isXYMoving ? -1 : 0}
-										ondblclick={() => handleTileClick(tile)}
-									>
-										<title>Tile [{tile.row}, {tile.col}]</title>
-									</rect>
-								{/each}
-							</g>
-						{/if}
-
 						<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
 						{#if layerVisibility.stacks}
 							<g class="stacks-layer">
@@ -311,42 +279,68 @@
 									height={fov.height}
 									fill="none"
 									stroke={fovStrokeColor}
-									stroke-width={0.05}
+									stroke-width={0.095}
 								>
 									<title>FOV: ({stage.x.position.toFixed(1)}, {stage.y.position.toFixed(1)}) mm</title>
 								</rect>
+							</g>
+						{/if}
+
+						<!-- Grid Layer: Tiles (topmost for easy clicking) -->
+						{#if layerVisibility.grid}
+							<g class="grid-layer">
+								{#each tiles as tile (tile.tile_id)}
+									{@const x = toMm(tile.x_um)}
+									{@const y = toMm(tile.y_um)}
+									{@const w = toMm(tile.w_um)}
+									{@const h = toMm(tile.h_um)}
+									<rect
+										{x}
+										{y}
+										width={w}
+										height={h}
+										fill="transparent"
+										stroke="#3f3f46"
+										stroke-width={0.05}
+										class="tile outline-none"
+										class:cursor-pointer={!isXYMoving}
+										class:cursor-not-allowed={isXYMoving}
+										role="button"
+										tabindex={isXYMoving ? -1 : 0}
+										ondblclick={() => handleTileClick(tile)}
+									>
+										<title>Tile [{tile.row}, {tile.col}]</title>
+									</rect>
+								{/each}
 							</g>
 						{/if}
 					</svg>
 				</div>
 			</div>
 
-			<div class="z-column">
-				<div class="corner-spacer-right"></div>
-				<div class="z-area" style="height: {canvasHeight}px;">
-					<input
-						type="range"
-						class="z-slider"
-						min={stage.z.lowerLimit}
-						max={stage.z.upperLimit}
-						step={0.1}
-						value={stage.z.position}
-						disabled={isZMoving}
-						oninput={handleZSliderChange}
-					/>
-					<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="none">
-						<line
-							x1="0"
-							y1={stageDepth - fovZ}
-							x2="30"
-							y2={stageDepth - fovZ}
-							stroke={isZMoving ? '#e11d48' : '#10b981'}
-							stroke-width={0.2}
-						>
-							<title>Z: {stage.z.position.toFixed(1)} mm</title>
-						</line>
-					</svg>
-				</div>
+			<div class="z-area" style="height: {canvasHeight + TRACK_WIDTH}px;">
+				<input
+					type="range"
+					class="z-slider"
+					min={stage.z.lowerLimit}
+					max={stage.z.upperLimit}
+					step={0.1}
+					value={stage.z.position}
+					disabled={isZMoving}
+					oninput={handleZSliderChange}
+				/>
+				<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="none">
+					<line
+						x1="0"
+						y1={stageDepth - fovZ}
+						x2="30"
+						y2={stageDepth - fovZ}
+						stroke={isZMoving ? '#e11d48' : '#10b981'}
+						stroke-width={0.2}
+					>
+						<title>Z: {stage.z.position.toFixed(1)} mm</title>
+					</line>
+				</svg>
 			</div>
 		</div>
 	</div>
@@ -370,9 +364,8 @@
 		--thumb-width: 2px;
 		--thumb-color: var(--color-emerald-500, #10b981);
 		--thumb-color-moving: var(--color-rose-600, #e11d48);
-		--stage-bg-color: var(--color-zinc-800, rgb(24, 24, 27));
-		--stage-border-color: var(--color-zinc-600);
-		--stage-border: var(--stage-border-width) solid var(--stage-border-color);
+		--stage-border: var(--stage-border-width) solid var(--color-zinc-600);
+		--slider-bg: var(--color-zinc-800, rgb(24, 24, 27));
 
 		display: flex;
 		gap: var(--stage-gap);
@@ -417,23 +410,17 @@
 		}
 	}
 
-	.xy-column {
-		display: flex;
-		flex-direction: column;
-		border: var(--stage-border);
+	.xy-svg {
+		flex-shrink: 0;
+		border-right: var(--stage-border);
+		border-bottom: var(--stage-border);
 	}
 
-	.x-row {
-		display: flex;
-		flex-shrink: 0;
-
-		.corner-spacer {
-			width: var(--track-width);
-			flex-shrink: 0;
-			background-color: var(--color-zinc-700);
-			border-right: var(--stage-border);
-			border-bottom: bar(--stage-border);
-		}
+	.x-slider,
+	.y-slider,
+	.z-slider {
+		background-color: var(--slider-bg);
+		border: var(--stage-border);
 	}
 
 	.x-slider {
@@ -466,57 +453,36 @@
 		}
 	}
 
-	.xy-svg {
-		flex-shrink: 0;
-		border: var(--stage-border);
-		border-right: 0;
-	}
-
-	.z-column {
-		display: flex;
-		flex-direction: column;
+	.z-area {
 		width: var(--z-area-width);
-		border: var(--stage-border);
+		position: relative;
+		flex: 1;
 
-		.corner-spacer-right {
-			height: var(--track-width);
-			width: var(--z-area-width);
-			flex-shrink: 0;
-			background-color: var(--color-zinc-700);
-			border-right: var(--stage-border);
-			border-bottom: var(--stage-border);
+		.z-slider {
+			position: absolute;
+			inset: 0;
+			writing-mode: vertical-rl;
+			direction: rtl;
+			width: 100%;
+			height: 100%;
+			z-index: 1;
+
+			&::-webkit-slider-thumb {
+				width: var(--z-area-width);
+				height: var(--thumb-width);
+			}
+
+			&::-moz-range-thumb {
+				width: var(--z-area-width);
+				height: var(--thumb-width);
+			}
 		}
 
-		.z-area {
-			position: relative;
-			flex: 1;
-
-			.z-slider {
-				position: absolute;
-				inset: 0;
-				writing-mode: vertical-rl;
-				direction: rtl;
-				width: 100%;
-				height: 100%;
-				z-index: 1;
-
-				&::-webkit-slider-thumb {
-					width: var(--z-area-width);
-					height: var(--thumb-width);
-				}
-
-				&::-moz-range-thumb {
-					width: var(--z-area-width);
-					height: var(--thumb-width);
-				}
-			}
-
-			.z-svg {
-				position: absolute;
-				inset: 0;
-				pointer-events: none;
-				z-index: 2;
-			}
+		.z-svg {
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			z-index: 2;
 		}
 	}
 

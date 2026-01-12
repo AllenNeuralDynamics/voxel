@@ -4,6 +4,7 @@
 	import SessionList from './SessionList.svelte';
 	import NewSessionForm from './NewSessionForm.svelte';
 	import LogViewer from './LogViewer.svelte';
+	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 
 	const { app }: { app: App } = $props();
 
@@ -60,50 +61,54 @@
 	}
 </script>
 
-<div class="flex h-full w-full bg-zinc-950">
+<div class="flex h-screen w-full bg-zinc-950">
 	<!-- Main content panel -->
-	<div class="flex flex-1 items-center justify-center p-8" class:max-w-xl={isLaunching}>
-		<div class="w-full max-w-2xl space-y-6">
-			<!-- Header -->
-			<div class="text-center">
-				{#if isLaunching}
-					<div class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-zinc-700 border-t-blue-500"></div>
-					<h1 class="mt-4 text-xl font-semibold text-zinc-100">Starting Session</h1>
-					<p class="mt-1 text-sm text-zinc-400">Initializing rig and devices...</p>
-				{:else}
-					<h1 class="text-2xl font-semibold text-zinc-100">SPIM Studio</h1>
-					<p class="mt-1 text-sm text-zinc-400">Select or create a session to get started</p>
-				{/if}
+	<div class="flex w-2/5 flex-col overflow-y-auto p-8">
+		<!-- Header -->
+		<div class="mb-6">
+			{#if isLaunching}
+				<div class="flex items-center gap-4">
+					<div class="h-8 w-8 animate-spin rounded-full border-4 border-zinc-700 border-t-blue-500"></div>
+					<div>
+						<h1 class="text-xl font-semibold text-zinc-100">Starting Session</h1>
+						<p class="text-sm text-zinc-400">Initializing rig and devices...</p>
+					</div>
+				</div>
+			{:else}
+				<h1 class="text-2xl font-semibold text-zinc-100">SPIM Studio</h1>
+				<p class="mt-1 text-sm text-zinc-400">Select or create a session to get started</p>
+			{/if}
+		</div>
+
+		<!-- Error display -->
+		{#if error}
+			<div class="mb-6 rounded border border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
+				{error}
+			</div>
+		{/if}
+
+		{#if !isLaunching}
+			<!-- New session form -->
+			<div class="mb-6 space-y-2">
+				<h2 class="text-sm font-medium text-zinc-300">New Session</h2>
+				<NewSessionForm {roots} {rigs} onLaunch={handleLaunchSession} />
 			</div>
 
-			<!-- Error display -->
-			{#if error}
-				<div class="rounded border border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
-					{error}
-				</div>
-			{/if}
+			<!-- Recent sessions from all roots -->
+			<div class="space-y-2">
+				<h2 class="text-sm font-medium text-zinc-300">Recent Sessions</h2>
+				<SessionList {sessions} loading={loadingSessions} onResume={handleResumeSession} />
+			</div>
+		{/if}
 
-			{#if !isLaunching}
-				<!-- Recent sessions from all roots -->
-				<div class="space-y-2">
-					<h2 class="text-sm font-medium text-zinc-300">Recent Sessions</h2>
-					<SessionList {sessions} loading={loadingSessions} onResume={handleResumeSession} />
-				</div>
-
-				<!-- New session form (includes root selector) -->
-				<div class="space-y-2">
-					<h2 class="text-sm font-medium text-zinc-300">New Session</h2>
-					<NewSessionForm {roots} {rigs} onLaunch={handleLaunchSession} />
-				</div>
-			{/if}
+		<!-- Connection status (pushed to bottom) -->
+		<div class="mt-auto pt-4">
+			<ClientStatus client={app.client} />
 		</div>
 	</div>
 
-	<!-- Log viewer sidebar (shown when launching) -->
-	{#if isLaunching}
-		<div class="flex w-125 flex-col border-l border-zinc-800 p-4">
-			<h2 class="mb-2 text-sm font-medium text-zinc-300">Startup Log</h2>
-			<LogViewer {logs} />
-		</div>
-	{/if}
+	<!-- Log viewer panel (always visible) -->
+	<div class="flex w-3/5 flex-col border-l border-zinc-700 bg-zinc-900 p-4">
+		<LogViewer {logs} onClear={() => app.clearLogs()} />
+	</div>
 </div>
