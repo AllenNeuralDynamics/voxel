@@ -374,7 +374,7 @@ export class App {
 		// Create feature controllers
 		if (this.config) {
 			console.log('[App] Creating Previewer and Stage controllers');
-			this.previewer = new Previewer(this.client, this.config);
+			this.previewer = new Previewer(this.client, { channels: this.config.channels, profiles: this.config.profiles });
 
 			// Create Stage if all axis device IDs are configured
 			const stage = this.config.stage;

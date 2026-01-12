@@ -446,7 +446,16 @@ class SpimRig(Rig):
 
         self.log.info("Stopping preview...")
 
-        # Stop DAQ acquisition task first
+        # Stop cameras first (while DAQ is still triggering)
+        # This allows cameras to exit their preview loops cleanly without
+        # blocking on grab_frame waiting for triggers that will never come.
+        tasks = [
+            self.cameras[cam_id].stop_preview() for cam_id in list(self._streaming_cameras) if cam_id in self.cameras
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self._streaming_cameras.clear()
+
+        # Stop DAQ acquisition task (no longer needed since cameras stopped)
         if self._sync_task:
             await self._sync_task.stop()
             self.log.info("Acquisition task stopped")
@@ -459,13 +468,6 @@ class SpimRig(Rig):
             await self.preview.stop()
         self._frame_callback = None
 
-        # Then stop all streaming cameras
-        tasks = [
-            self.cameras[cam_id].stop_preview() for cam_id in list(self._streaming_cameras) if cam_id in self.cameras
-        ]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        self._streaming_cameras.clear()
         self._mode = RigMode.IDLE
 
         self.log.info("Preview stopped")

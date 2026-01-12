@@ -9,8 +9,14 @@ import type {
 	PreviewLevels,
 	AppStatus,
 	Client,
-	SpimRigConfig
+	ProfileConfig
 } from '$lib/core';
+
+/** Minimal config subset needed by Previewer */
+export interface PreviewerConfig {
+	channels: Record<string, ChannelConfig>;
+	profiles: Record<string, ProfileConfig>;
+}
 import { clampTopLeft, getWebGPUDevice, sanitizeString, wavelengthToColor } from '$lib/utils';
 import { SvelteMap } from 'svelte/reactivity';
 import { COLORMAP_COLORS, COMMON_CHANNELS, ColormapType, colormapToHex, generateLUT } from './colormap';
@@ -301,11 +307,11 @@ export class Previewer {
 	#rendererInitialized = false;
 
 	#client: Client;
-	config: SpimRigConfig;
+	#config: PreviewerConfig;
 
-	constructor(client: Client, config: SpimRigConfig) {
+	constructor(client: Client, config: PreviewerConfig) {
 		this.#client = client;
-		this.config = config;
+		this.#config = config;
 		this.#framesCollector = new FramesCollector(this.MAX_CHANNELS);
 
 		// Initialize channels immediately (GPU resources created lazily)
@@ -438,30 +444,31 @@ export class Previewer {
 		const session = status.session;
 		this.isPreviewing = session?.mode === 'previewing';
 
-		if (!session?.active_profile_id || !this.config) return;
+		if (!session?.active_profile_id || !this.#config) return;
 
 		const active_profile_id = session.active_profile_id;
 
 		// Get active profile and channels from RigManager's config
-		const activeProfile = this.config.profiles[active_profile_id];
+		const activeProfile = this.#config.profiles[active_profile_id];
 		const activeChannelIds = activeProfile ? activeProfile.channels : [];
 		const newChannelNames = activeChannelIds.slice(0, this.MAX_CHANNELS);
 
 		if (newChannelNames.length === 0) return;
 
 		// Check if channel names changed - only reconfigure if they did
-		const currentChannelNames = this.channels.map((c) => c.name);
-		const channelsChanged =
-			newChannelNames.length !== currentChannelNames.filter((n) => n).length ||
-			newChannelNames.some((name, i) => name !== currentChannelNames[i]);
+		// Compare all slots: new names vs current names (treating undefined as empty)
+		const channelsChanged = this.channels.some((channel, i) => {
+			const currentName = channel.name ?? '';
+			const newName = newChannelNames[i] ?? '';
+			return currentName !== newName;
+		});
 
 		if (!channelsChanged) return;
 
-		// Channels changed - update configuration
-		// Note: We don't clear frames or dispose GPU resources here.
-		// - FrameStreamTexture handles size changes automatically
-		// - Old frames will be overwritten when new ones arrive
-		// - setColor() updates the LUT texture in place
+		// Channels changed - clear old frames to avoid showing stale data
+		// (frames are indexed by slot, not channel name, so old frames would
+		// be incorrectly associated with the new channel)
+		this.#framesCollector.clear();
 
 		const colors: ColormapType[] = Object.keys(COLORMAP_COLORS) as ColormapType[];
 
@@ -473,7 +480,7 @@ export class Previewer {
 			slot.name = newChannelNames[i];
 			if (!slot.name) continue;
 
-			slot.config = this.config.channels[slot.name];
+			slot.config = this.#config.channels[slot.name];
 			slot.visible = true;
 
 			// Determine color from emission wavelength or fallback
