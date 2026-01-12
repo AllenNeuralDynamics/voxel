@@ -81,7 +81,6 @@ class Rig:
 
     def __init__(self, config: RigConfig, zctx: zmq.asyncio.Context | None = None):
         self.config = config
-        self.zctx = zctx
         self.log = logging.getLogger(f"rig.{config.info.name}")
 
         # Handles for all devices (local and remote)
@@ -92,11 +91,17 @@ class Rig:
 
         # Cluster manager for distributed mode (optional)
         self._cluster: ClusterManager | None = None
+        self._owns_zctx = False
 
+        # Auto-create ZMQ context if needed for distributed nodes
         if config.nodes:
             if zctx is None:
-                raise ValueError("ZMQ context required when config has distributed nodes")
+                zctx = zmq.asyncio.Context()
+                self._owns_zctx = True
+                self.log.debug("Auto-created ZMQ context for distributed nodes")
             self._cluster = self._create_cluster_manager(zctx, config)
+
+        self.zctx = zctx
 
     def _create_cluster_manager(self, zctx: zmq.asyncio.Context, config: RigConfig) -> ClusterManager:
         """Create cluster manager."""
@@ -195,3 +200,8 @@ class Rig:
         # Stop cluster if running
         if self._cluster:
             await self._cluster.stop()
+
+        # Cleanup auto-created ZMQ context
+        if self._owns_zctx and self.zctx is not None:
+            self.zctx.term()
+            self.log.debug("Terminated auto-created ZMQ context")

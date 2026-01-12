@@ -84,25 +84,42 @@ class SystemConfig(BaseModel):
         # Create directories
         SPIM_DIR.mkdir(parents=True, exist_ok=True)
         RIGS_DIR.mkdir(exist_ok=True)
-        testing_dir = SPIM_DIR / "testing"
-        testing_dir.mkdir(exist_ok=True)
 
-        # Copy simulated rig config from package
-        simulated_src = Path(__file__).parent / "simulated.rig.yaml"
-        simulated_dst = RIGS_DIR / "simulated.rig.yaml"
-        if simulated_src.exists() and not simulated_dst.exists():
-            shutil.copy(simulated_src, simulated_dst)
-            log.info(f"Created default rig config: {simulated_dst}")
+        # Create session root directories
+        experiments_dir = SPIM_DIR / "experiments"
+        playground_dir = SPIM_DIR / "playground"
+        experiments_dir.mkdir(exist_ok=True)
+        playground_dir.mkdir(exist_ok=True)
 
-        # Create system.yaml with testing root
+        # Copy example rig configs from package
+        examples_dir = Path(__file__).parent / "examples"
+        rig_files = [
+            "simulated.local.rig.yaml",
+            "simulated.distributed.rig.yaml",
+            "simulated.hybrid.rig.yaml",
+        ]
+        for rig_file in rig_files:
+            src = examples_dir / rig_file
+            dst = RIGS_DIR / rig_file
+            if src.exists() and not dst.exists():
+                shutil.copy(src, dst)
+                log.info(f"Created rig config: {dst}")
+
+        # Create system.yaml with default session roots
         system_yaml = {
             "session_roots": [
                 {
-                    "name": "testing",
-                    "label": "Testing",
-                    "description": "Test sessions",
-                    "path": str(testing_dir),
-                }
+                    "name": "experiments",
+                    "label": "Experiments",
+                    "description": "Production experiment sessions",
+                    "path": str(experiments_dir),
+                },
+                {
+                    "name": "playground",
+                    "label": "Playground",
+                    "description": "Test and development sessions",
+                    "path": str(playground_dir),
+                },
             ]
         }
         with open(SYSTEM_CONFIG_FILE, "w") as f:

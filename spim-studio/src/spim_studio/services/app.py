@@ -114,7 +114,7 @@ class AppService:
 
         Args:
             data: The message to broadcast.
-            with_status: If True, also broadcast full app status after this message.
+            with_status: If True, also schedule a full app status broadcast.
         """
         msg_type = "bytes" if isinstance(data, bytes) else "json"
         for queue in self.clients.values():
@@ -124,7 +124,7 @@ class AppService:
                 pass
 
         if with_status:
-            self._broadcast_status()
+            self._schedule_status_broadcast()
 
     async def _send_to_client(self, client_id: str, data: dict[str, Any]) -> None:
         """Send a message to a specific client."""
@@ -141,7 +141,7 @@ class AppService:
         log.info("Client %s connected. Total: %d", client_id, len(self.clients))
 
         # Send initial app status
-        status = self._get_app_status()
+        status = await self._get_app_status()
         await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
 
     def remove_client(self, client_id: str) -> None:
@@ -151,11 +151,11 @@ class AppService:
 
     # ==================== Status ====================
 
-    def _get_app_status(self) -> AppStatus:
+    async def _get_app_status(self) -> AppStatus:
         """Get current app status."""
         session_status = None
         if self.session_service:
-            session_status = self.session_service.get_status()
+            session_status = await self.session_service.get_status()
 
         return AppStatus(
             phase=self._phase,
@@ -165,10 +165,14 @@ class AppService:
             timestamp=_utc_timestamp(),
         )
 
-    def _broadcast_status(self) -> None:
+    async def _broadcast_status(self) -> None:
         """Broadcast app status to all clients."""
-        status = self._get_app_status()
+        status = await self._get_app_status()
         self._broadcast({"topic": "status", "payload": status.model_dump(mode="json")})
+
+    def _schedule_status_broadcast(self) -> None:
+        """Schedule an async status broadcast. Use this from sync contexts."""
+        asyncio.create_task(self._broadcast_status())
 
     # ==================== Session Lifecycle ====================
 
@@ -209,7 +213,7 @@ class AppService:
 
         # Set phase to launching and broadcast
         self._phase = "launching"
-        self._broadcast_status()
+        await self._broadcast_status()
 
         # Launch the session
         try:
@@ -220,13 +224,13 @@ class AppService:
 
             log.info(f"Session launched: {session_dir}")
             self._phase = "ready"
-            self._broadcast_status()
+            await self._broadcast_status()
 
         except Exception as e:
             log.error(f"Failed to launch session: {e}", exc_info=True)
             self.session_service = None
             self._phase = "idle"
-            self._broadcast_status()
+            await self._broadcast_status()
             raise
 
     async def close_session(self) -> None:
@@ -249,7 +253,7 @@ class AppService:
         finally:
             self.session_service = None
             self._phase = "idle"
-            self._broadcast_status()
+            await self._broadcast_status()
 
     # ==================== Message Handling ====================
 
@@ -265,7 +269,7 @@ class AppService:
         try:
             # App-level topics
             if topic == "request_status":
-                status = self._get_app_status()
+                status = await self._get_app_status()
                 await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
                 return
 
@@ -380,7 +384,7 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
 @router.get("/status")
 async def get_status(service: AppService = Depends(get_app_service)) -> AppStatus:
     """Get current app status including session if active."""
-    return service._get_app_status()
+    return await service._get_app_status()
 
 
 @router.get("/roots/{root_name}/sessions")
@@ -405,7 +409,7 @@ async def launch_session(request: LaunchRequest, service: AppService = Depends(g
             session_name=request.session_name,
             rig_config=request.rig_config,
         )
-        return service._get_app_status()
+        return await service._get_app_status()
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
@@ -420,7 +424,7 @@ async def close_session(service: AppService = Depends(get_app_service)) -> AppSt
     """Close the current session."""
     try:
         await service.close_session()
-        return service._get_app_status()
+        return await service._get_app_status()
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:

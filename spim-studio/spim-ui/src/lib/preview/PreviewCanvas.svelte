@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import FrameCounter from './FrameCounter.svelte';
 	import PreviewInfoTooltip from './PreviewInfoTooltip.svelte';
 	import type { Previewer } from './previewer.svelte';
 
@@ -46,6 +47,9 @@
 	<!-- Tooltip overlay -->
 	<div class="absolute top-2 right-2">
 		<PreviewInfoTooltip {frameInfo} visibleChannels={channelFrameInfos} />
+	</div>
+	<div class="absolute top-2 left-2">
+		<FrameCounter {previewer} />
 	</div>
 </div>
 

@@ -40,10 +40,12 @@ export interface SessionStatus {
 	mode: RigMode;
 	session_dir: string;
 	grid_locked: boolean;
-	stack_count: number;
-	pending_count: number;
-	completed_count: number;
 	timestamp: string;
+
+	// Server-authoritative tile/stack data
+	grid_config: GridConfig;
+	tiles: Tile[];
+	stacks: Stack[];
 }
 
 /**
@@ -148,6 +150,16 @@ export interface AcquisitionProgress {
 	total?: number;
 	completed?: number;
 	error?: string;
+}
+
+/**
+ * Layer visibility for StageCanvas
+ * Controls which layers are rendered in the stage view
+ */
+export interface LayerVisibility {
+	grid: boolean;
+	stacks: boolean;
+	fov: boolean;
 }
 
 // ============================================================================

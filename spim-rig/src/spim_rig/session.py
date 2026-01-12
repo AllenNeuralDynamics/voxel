@@ -9,7 +9,7 @@ from ruyaml import YAML
 
 from spim_rig.config import SpimRigConfig, TileOrder
 from spim_rig.rig import RigMode, SpimRig
-from spim_rig.tile import Stack, StackResult, StackStatus
+from spim_rig.tile import Stack, StackResult, StackStatus, Tile
 
 # Round-trip YAML preserves anchors, aliases, and comments
 yaml = YAML()
@@ -248,11 +248,11 @@ class Session:
 
             # Get camera's frame_area_mm via handle
             camera = self._rig.cameras[channel.detection]
-            frame_area_mm = await camera.get_prop_value("frame_area_mm")
+            frame_area_mm = await camera.get_frame_area_mm()
 
             # FOV = frame_area * 1000 / magnification (mm -> um)
-            fov_width_um = frame_area_mm["x"] * 1000 / magnification
-            fov_height_um = frame_area_mm["y"] * 1000 / magnification
+            fov_width_um = frame_area_mm.x * 1000 / magnification
+            fov_height_um = frame_area_mm.y * 1000 / magnification
             fovs.append((fov_width_um, fov_height_um))
 
         if not fovs:
@@ -266,6 +266,67 @@ class Session:
         overlap = self._config.grid_config.overlap
         self._tile_size_um = (fov_w * (1 - overlap), fov_h * (1 - overlap))
         return self._tile_size_um
+
+    async def get_tiles(self) -> list[Tile]:
+        """Generate the tile grid based on grid config and stage dimensions.
+
+        Computes all tile positions that fit within the stage travel range,
+        starting from the grid offset. Tiles are positioned at intervals of
+        tile_size (FOV adjusted for overlap).
+
+        Returns:
+            List of Tile objects covering the stage area from the grid offset.
+            Returns empty list if tile size cannot be computed (no active profile).
+        """
+        # Get tile size (requires active profile with cameras)
+        try:
+            tile_w, tile_h = await self.get_tile_size()
+        except (ValueError, KeyError):
+            # No active profile or cameras - return empty grid
+            return []
+
+        # Get stage dimensions from axis limits (in mm, convert to um)
+        stage = self._rig.stage
+        x_lower = await stage.x.get_prop_value("lower_limit_mm")
+        x_upper = await stage.x.get_prop_value("upper_limit_mm")
+        y_lower = await stage.y.get_prop_value("lower_limit_mm")
+        y_upper = await stage.y.get_prop_value("upper_limit_mm")
+
+        stage_width_um = (x_upper - x_lower) * 1000
+        stage_height_um = (y_upper - y_lower) * 1000
+
+        # Grid offset (in um, relative to stage lower limit)
+        offset_x = self._config.grid_config.x_offset_um
+        offset_y = self._config.grid_config.y_offset_um
+
+        # Calculate number of tiles that fit from offset to edge
+        num_cols = max(1, int((stage_width_um - offset_x) / tile_w)) if tile_w > 0 else 1
+        num_rows = max(1, int((stage_height_um - offset_y) / tile_h)) if tile_h > 0 else 1
+
+        # Generate tiles
+        tiles: list[Tile] = []
+        for row in range(num_rows):
+            for col in range(num_cols):
+                tile_id = f"tile_r{row}_c{col}"
+                x_um = offset_x + col * tile_w
+                y_um = offset_y + row * tile_h
+
+                # Only include tiles that fit within stage bounds
+                if x_um + tile_w <= stage_width_um and y_um + tile_h <= stage_height_um:
+                    tiles.append(
+                        Tile(
+                            tile_id=tile_id,
+                            row=row,
+                            col=col,
+                            x_um=x_um,
+                            y_um=y_um,
+                            w_um=tile_w,
+                            h_um=tile_h,
+                        )
+                    )
+
+        self._log.debug(f"Generated {len(tiles)} tiles ({num_cols}x{num_rows}) with size {tile_w:.0f}x{tile_h:.0f} um")
+        return tiles
 
     # ==================== Stack Management ====================
 

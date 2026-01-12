@@ -198,7 +198,7 @@ class SpimCamera(Device):
     @describe(label="Frame Size", units="px")
     def frame_size_px(self) -> Vec2D[int]:
         """Get the image size in pixels (post-binning frame coordinates)."""
-        return Vec2D(int(self.frame_region.width), int(self.frame_region.height))
+        return Vec2D(x=int(self.frame_region.width), y=int(self.frame_region.height))
 
     @property
     @describe(label="Frame Size", units="MB")
@@ -211,8 +211,8 @@ class SpimCamera(Device):
     def frame_area_mm(self) -> Vec2D[float]:
         """Get the physical frame size in millimeters."""
         return Vec2D(
-            self.frame_size_px.x * self.pixel_size_um.x / 1000.0,
-            self.frame_size_px.y * self.pixel_size_um.y / 1000.0,
+            x=self.frame_size_px.x * self.pixel_size_um.x / 1000.0,
+            y=self.frame_size_px.y * self.pixel_size_um.y / 1000.0,
         )
 
     @property

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from spim_rig import RigMode, Session
 from spim_rig.session import GridConfig
-from spim_rig.tile import Stack, StackStatus
+from spim_rig.tile import Stack, StackStatus, Tile
 
 from .rig import BroadcastCallback, RigService
 from .rig import router as rig_router
@@ -34,7 +34,7 @@ def _utc_timestamp() -> str:
 
 
 class SessionStatus(BaseModel):
-    """Combined rig and session status."""
+    """Combined rig and session status with full tile/stack data."""
 
     # Rig status
     active_profile_id: str | None
@@ -43,9 +43,11 @@ class SessionStatus(BaseModel):
     # Session status
     session_dir: str
     grid_locked: bool
-    stack_count: int
-    pending_count: int
-    completed_count: int
+
+    # Full data (replaces separate broadcasts)
+    grid_config: GridConfig
+    tiles: list[Tile]
+    stacks: list[Stack]
 
     timestamp: str
 
@@ -72,20 +74,18 @@ class SessionService:
 
     # ==================== Status ====================
 
-    def get_status(self) -> SessionStatus:
-        """Get current session status."""
-        stacks = self.session.stacks
-        pending = sum(1 for s in stacks if s.status == StackStatus.PLANNED)
-        completed = sum(1 for s in stacks if s.status == StackStatus.COMPLETED)
+    async def get_status(self) -> SessionStatus:
+        """Get current session status with full tile/stack data."""
+        tiles = await self.session.get_tiles()
 
         return SessionStatus(
             active_profile_id=self.session.rig.active_profile_id,
             mode=self.session.rig.mode,
             session_dir=str(self.session.session_dir),
             grid_locked=self.session.grid_locked,
-            stack_count=len(stacks),
-            pending_count=pending,
-            completed_count=completed,
+            grid_config=self.session.grid_config,
+            tiles=tiles,
+            stacks=self.session.stacks,
             timestamp=_utc_timestamp(),
         )
 
@@ -133,7 +133,8 @@ class SessionService:
             raise ValueError("Missing x_offset_um or y_offset_um")
 
         self.session.set_grid_offset(x_offset, y_offset)
-        self._broadcast({"topic": "grid/updated", "payload": self.session.grid_config.model_dump()}, with_status=True)
+        # Status broadcast includes grid_config, tiles, and stacks
+        self._broadcast({}, with_status=True)
 
     async def _handle_grid_overlap(self, payload: dict[str, Any]) -> None:
         """Handle grid overlap update."""
@@ -143,7 +144,8 @@ class SessionService:
             raise ValueError("Missing overlap")
 
         self.session.set_overlap(overlap)
-        self._broadcast({"topic": "grid/updated", "payload": self.session.grid_config.model_dump()}, with_status=True)
+        # Status broadcast includes grid_config, tiles, and stacks
+        self._broadcast({}, with_status=True)
 
     # ==================== Stack Management ====================
 
@@ -159,7 +161,8 @@ class SessionService:
             raise ValueError("Missing required fields: row, col, z_start_um, z_end_um, z_step_um")
 
         await self.session.add_stack(int(row), int(col), float(z_start), float(z_end), float(z_step))
-        self._broadcast_stacks(with_status=True)
+        # Status broadcast includes stacks
+        self._broadcast({}, with_status=True)
 
     async def _handle_stack_edit(self, payload: dict[str, Any]) -> None:
         """Handle stack edit request."""
@@ -173,7 +176,8 @@ class SessionService:
             z_end_um=payload.get("z_end_um"),
             z_step_um=payload.get("z_step_um"),
         )
-        self._broadcast_stacks()
+        # Status broadcast includes stacks
+        self._broadcast({}, with_status=True)
 
     async def _handle_stack_remove(self, payload: dict[str, Any]) -> None:
         """Handle stack remove request."""
@@ -182,12 +186,8 @@ class SessionService:
             raise ValueError("Missing tile_id")
 
         self.session.remove_stack(tile_id)
-        self._broadcast_stacks(with_status=True)
-
-    def _broadcast_stacks(self, with_status: bool = False) -> None:
-        """Broadcast stack list to all clients."""
-        stacks = [s.model_dump() for s in self.session.stacks]
-        self._broadcast({"topic": "stacks/updated", "payload": {"stacks": stacks}}, with_status=with_status)
+        # Status broadcast includes stacks
+        self._broadcast({}, with_status=True)
 
     # ==================== Acquisition ====================
 
@@ -231,8 +231,7 @@ class SessionService:
                 {"topic": "acq/progress", "payload": {"status": "failed", "tile_id": tile_id, "error": str(e)}},
                 with_status=True,
             )
-        finally:
-            self._broadcast_stacks()
+        # Status broadcast (with_status=True) already includes stacks
 
     async def _run_full_acquisition(self) -> None:
         """Run acquisition for all pending stacks."""
@@ -271,8 +270,7 @@ class SessionService:
                     },
                     with_status=True,
                 )
-
-            self._broadcast_stacks()
+            # Status broadcast (with_status=True) already includes stacks
 
         self._broadcast(
             {"topic": "acq/progress", "payload": {"status": "completed", "total": total, "completed": completed}},
@@ -321,7 +319,8 @@ async def update_grid(request: GridUpdateRequest, service: SessionService = Depe
         if request.overlap is not None:
             service.session.set_overlap(request.overlap)
 
-        service._broadcast({"topic": "grid/updated", "payload": service.session.grid_config.model_dump()})
+        # Status broadcast includes grid_config, tiles, and stacks
+        service._broadcast({}, with_status=True)
         return service.session.grid_config
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))  # Conflict - grid locked
@@ -359,7 +358,8 @@ async def add_stack(request: AddStackRequest, service: SessionService = Depends(
             z_end_um=request.z_end_um,
             z_step_um=request.z_step_um,
         )
-        service._broadcast_stacks()
+        # Status broadcast includes stacks
+        service._broadcast({}, with_status=True)
         return stack
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -389,7 +389,8 @@ async def edit_stack(
             z_end_um=request.z_end_um,
             z_step_um=request.z_step_um,
         )
-        service._broadcast_stacks()
+        # Status broadcast includes stacks
+        service._broadcast({}, with_status=True)
         return stack
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -402,7 +403,8 @@ async def remove_stack(tile_id: str, service: SessionService = Depends(get_sessi
     """Remove a stack."""
     try:
         service.session.remove_stack(tile_id)
-        service._broadcast_stacks()
+        # Status broadcast includes stacks
+        service._broadcast({}, with_status=True)
         return {"removed": tile_id}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

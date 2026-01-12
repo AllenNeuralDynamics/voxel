@@ -12,11 +12,19 @@
  */
 
 import { browser } from '$app/environment';
-import { Client, type ClientOptions, type DaqWaveforms } from '$lib/core/client.svelte';
-import { DevicesManager } from '$lib/core/devices.svelte';
-import type { AppStatus, SessionDirectory, LogMessage, GridConfig, Stack } from '$lib/core/types';
-import type { SpimRigConfig, ProfileConfig, ChannelConfig } from '$lib/core/config';
-import { Previewer } from '$lib/preview';
+import { Client, type ClientOptions, type DaqWaveforms } from '../core/client.svelte.ts';
+import { DevicesManager } from '../core/devices.svelte.ts';
+import type {
+	AppStatus,
+	SessionDirectory,
+	LogMessage,
+	GridConfig,
+	Tile,
+	Stack,
+	LayerVisibility
+} from '../core/types.ts';
+import type { SpimRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
+import { Previewer } from '../preview/index.ts';
 import { Axis, Stage } from './axis.svelte.ts';
 import { SvelteDate } from 'svelte/reactivity';
 
@@ -58,9 +66,6 @@ export class Profile {
 	waveforms = $state<DaqWaveforms | null>(null);
 	waveformsLoading = $state(false);
 
-	// Magnification constant (TODO: make configurable)
-	readonly #MAGNIFICATION = 1.0;
-
 	constructor(id: string, config: ProfileConfig, channels: Record<string, ChannelConfig>, app: App) {
 		this.id = id;
 		this.#config = config;
@@ -70,12 +75,14 @@ export class Profile {
 
 	#getVec2DValue(deviceId: string, prop: string) {
 		const val = this.#app.devices.getPropertyValue(deviceId, prop);
-		return Array.isArray(val) && val.length === 2 ? { x: val[0], y: val[1] } : null;
+		// Vec2D serializes as [y, x] due to NamedTuple field order
+		return Array.isArray(val) && val.length === 2 ? { x: val[1], y: val[0] } : null;
 	}
 
-	#getBinning(cameraId: string): number {
-		const val = this.#app.devices.getPropertyValue(cameraId, 'binning');
-		return typeof val === 'number' && val > 0 ? val : 1;
+	#getMagnification(cameraId: string): number {
+		// Get magnification from detection path config
+		const detectionConfig = this.#app.config?.detection?.[cameraId];
+		return detectionConfig?.magnification ?? 1.0;
 	}
 
 	#getfovDimensions() {
@@ -85,14 +92,16 @@ export class Profile {
 
 		const frameSizePx = this.#getVec2DValue(cameraId, 'frame_size_px');
 		const pixelSizeUm = this.#getVec2DValue(cameraId, 'pixel_size_um');
-		const binning = this.#getBinning(cameraId);
+		const magnification = this.#getMagnification(cameraId);
 
 		if (!frameSizePx || !pixelSizeUm) {
 			return { width: 5, height: 5 }; // Fallback to 5mm
 		}
 
-		const width = (frameSizePx.x * pixelSizeUm.x * binning) / (1000 * this.#MAGNIFICATION);
-		const height = (frameSizePx.y * pixelSizeUm.y * binning) / (1000 * this.#MAGNIFICATION);
+		// FOV = frame_area / magnification
+		// frame_area = frame_size_px * pixel_size_um
+		const width = (frameSizePx.x * pixelSizeUm.x) / (1000 * magnification);
+		const height = (frameSizePx.y * pixelSizeUm.y) / (1000 * magnification);
 
 		return { width, height };
 	}
@@ -128,9 +137,15 @@ export class App {
 	error = $state<string | null>(null);
 	isMutating = $state(false);
 
-	// Grid and Stack state (synced with backend)
-	gridConfig = $state<GridConfig>({ x_offset_um: 0, y_offset_um: 0, overlap: 0.1 });
-	stacks = $state<Stack[]>([]);
+	// Grid, tiles, and stacks (derived from session status - server authoritative)
+	gridConfig = $derived<GridConfig>(
+		this.status?.session?.grid_config ?? { x_offset_um: 0, y_offset_um: 0, overlap: 0.1 }
+	);
+	tiles = $derived<Tile[]>(this.status?.session?.tiles ?? []);
+	stacks = $derived<Stack[]>(this.status?.session?.stacks ?? []);
+
+	// Layer visibility state (controlled by StageControls)
+	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, fov: true });
 
 	private wasDisconnected = false;
 	private unsubscribers: Array<() => void> = [];
@@ -297,18 +312,6 @@ export class App {
 			});
 		});
 
-		// Grid updates
-		const unsubGrid = this.#client.on('grid/updated', (payload: GridConfig) => {
-			console.log('[App] Grid updated:', payload);
-			this.gridConfig = payload;
-		});
-
-		// Stacks updates
-		const unsubStacks = this.#client.on('stacks/updated', (payload: { stacks: Stack[] }) => {
-			console.log('[App] Stacks updated:', payload.stacks.length, 'stacks');
-			this.stacks = payload.stacks;
-		});
-
 		// Connection state
 		const unsubConnection = this.#client.onConnectionChange((connected) => {
 			const wasDisconnected = this.wasDisconnected;
@@ -322,16 +325,7 @@ export class App {
 			}
 		});
 
-		this.unsubscribers.push(
-			unsubStatus,
-			unsubProfile,
-			unsubWaveforms,
-			unsubLogs,
-			unsubError,
-			unsubGrid,
-			unsubStacks,
-			unsubConnection
-		);
+		this.unsubscribers.push(unsubStatus, unsubProfile, unsubWaveforms, unsubLogs, unsubError, unsubConnection);
 	}
 
 	// ========== Status Handling ==========

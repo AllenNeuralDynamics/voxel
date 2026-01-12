@@ -6,9 +6,7 @@
 
 	const { app } = $props<{ app: App }>();
 
-	const selectedProfile = $derived(
-		app.profiles.find((profile: Profile) => profile.id === app.activeProfileId) ?? null
-	);
+	const selectedProfile = $derived(app.profiles.find((profile: Profile) => profile.id === app.activeProfileId) ?? null);
 	const selectItems = $derived(
 		app.profiles.map((profile: Profile) => ({
 			value: profile.id,

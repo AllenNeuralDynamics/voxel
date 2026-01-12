@@ -22,6 +22,14 @@ export default defineConfig({
 				target: 'http://localhost:8000',
 				changeOrigin: true
 			},
+			'/roots': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			},
+			'/session': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			},
 			'/ws': {
 				target: 'http://localhost:8000',
 				ws: true,

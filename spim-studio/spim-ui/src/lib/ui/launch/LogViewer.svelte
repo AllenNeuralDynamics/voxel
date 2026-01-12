@@ -39,16 +39,16 @@
 
 <div
 	bind:this={container}
-	class="h-64 overflow-y-auto rounded border border-zinc-700 bg-zinc-900 font-mono text-xs"
+	class="min-h-0 flex-1 overflow-y-auto rounded border border-zinc-700 bg-zinc-900 font-mono text-xs"
 >
 	{#if logs.length === 0}
 		<div class="flex h-full items-center justify-center text-zinc-500">Waiting for logs...</div>
 	{:else}
-		<div class="p-2 space-y-0.5">
-			{#each logs as log}
+		<div class="space-y-0.5 p-2">
+			{#each logs as log, i (i)}
 				<div class="flex gap-2 {getLevelColor(log.level)}">
 					<span class="shrink-0 text-zinc-600">{formatTime(log.timestamp)}</span>
-					<span class="shrink-0 w-14 text-right text-zinc-500">[{log.logger}]</span>
+					<span class="w-14 shrink-0 text-right text-zinc-500">[{log.logger}]</span>
 					<span class="break-all">{log.message}</span>
 				</div>
 			{/each}

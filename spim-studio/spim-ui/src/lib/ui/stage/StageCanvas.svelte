@@ -1,115 +1,532 @@
-<!-- TODO: This component needs to be updated for the new Stage/App architecture -->
-<div class="flex h-64 items-center justify-center rounded border border-zinc-700">
-	<p class="text-sm text-zinc-500">Stage canvas - update pending...</p>
-</div>
-
-<!--
-ORIGINAL COMPONENT - Commented out for reference during refactor
-
 <script lang="ts">
-	import type { Stage } from './stage.svelte.ts';
+	import type { App } from '$lib/app';
+	import type { Tile, Stack, StackStatus } from '$lib/core/types';
+	import { onMount } from 'svelte';
 
 	interface Props {
-		stage: Stage;
+		app: App;
 	}
 
-	let { stage }: Props = $props();
+	let { app }: Props = $props();
 
-	// Derived data from stage
-	let stageConfig = $derived(stage.config);
-	let xAxis = $derived(stage.xAxis);
-	let yAxis = $derived(stage.yAxis);
-	let zAxis = $derived(stage.zAxis);
-	let stageWidth = $derived(stage.stageWidth);
-	let stageHeight = $derived(stage.stageHeight);
-	let stageDepth = $derived(stage.stageDepth);
-	let fov = $derived(stage.fov);
-	let thumbnail = $derived(stage.thumbnail);
-	let zRange = $derived(stage.zRange);
-	let numGridCellsX = $derived(stage.gridConfig.numCellsX);
-	let numGridCellsY = $derived(stage.gridConfig.numCellsY);
-	let gridOriginX = $derived(stage.gridConfig.originX);
-	let gridOriginY = $derived(stage.gridConfig.originY);
-	let gridSpacingX = $derived(stage.gridSpacingX);
-	let gridSpacingY = $derived(stage.gridSpacingY);
+	// Get stage and preview state from app
+	let stage = $derived(app.stage);
+	let previewer = $derived(app.previewer);
+	let fov = $derived(app.fov);
 
-	// Handle grid cell click
-	function handleGridCellClick(i: number, j: number) {
-		stage.moveToGridCell(i, j);
+	// Server-authoritative data (derived from SessionStatus)
+	let tiles = $derived(app.tiles);
+	let stacks = $derived(app.stacks);
+	let layerVisibility = $derived(app.layerVisibility);
+
+	// Stage dimensions
+	let stageWidth = $derived(stage?.width ?? 100);
+	let stageHeight = $derived(stage?.height ?? 100);
+	let stageDepth = $derived(stage?.depth ?? 100);
+
+	// Current position relative to stage origin
+	let fovX = $derived(stage ? stage.x.position - stage.x.lowerLimit : 0);
+	let fovY = $derived(stage ? stage.y.position - stage.y.lowerLimit : 0);
+	let fovZ = $derived(stage ? stage.z.position - stage.z.lowerLimit : 0);
+
+	// Thumbnail from previewer
+	let thumbnail = $derived(previewer?.thumbnailSnapshot ?? '');
+
+	// Moving state
+	let isXYMoving = $derived(stage?.x.isMoving || stage?.y.isMoving);
+	let isZMoving = $derived(stage?.z.isMoving ?? false);
+
+	// Stage aspect ratio
+	let stageAspectRatio = $derived(stageWidth / stageHeight);
+
+	// FOV styling
+	let fovStrokeColor = $derived(isXYMoving ? '#e11d48' : '#10b981');
+
+	// ResizeObserver for responsive sizing
+	let containerRef = $state<HTMLDivElement | null>(null);
+	let canvasWidth = $state(400);
+	let canvasHeight = $state(250);
+
+	// Layout constants (in pixels)
+	const TRACK_WIDTH = 12;
+	const Z_AREA_WIDTH = TRACK_WIDTH * 2;
+	const STAGE_GAP = 16;
+	const STAGE_BORDER = 0.5;
+
+	function updateCanvasSize(containerWidth: number, containerHeight: number) {
+		// Available space for the SVG (excluding sliders and gap)
+		const availableWidth = containerWidth - TRACK_WIDTH - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 4;
+		const availableHeight = containerHeight - TRACK_WIDTH - STAGE_BORDER * 2;
+
+		if (availableWidth <= 0 || availableHeight <= 0) return;
+
+		const containerAspect = availableWidth / availableHeight;
+
+		if (containerAspect > stageAspectRatio) {
+			// Height-constrained: use full height, calculate width
+			canvasHeight = availableHeight;
+			canvasWidth = availableHeight * stageAspectRatio;
+		} else {
+			// Width-constrained: use full width, calculate height
+			canvasWidth = availableWidth;
+			canvasHeight = availableWidth / stageAspectRatio;
+		}
+	}
+
+	onMount(() => {
+		if (!containerRef) return;
+
+		const resizeObserver = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				const { width, height } = entry.contentRect;
+				updateCanvasSize(width, height);
+			}
+		});
+
+		resizeObserver.observe(containerRef);
+
+		return () => resizeObserver.disconnect();
+	});
+
+	// Update canvas size when aspect ratio changes
+	$effect(() => {
+		if (containerRef) {
+			const { width, height } = containerRef.getBoundingClientRect();
+			updateCanvasSize(width, height);
+		}
+	});
+
+	// Convert tile/stack coordinates from μm to mm for SVG rendering
+	function toMm(um: number): number {
+		return um / 1000;
+	}
+
+	// Get stack fill color based on status
+	function getStackFillColor(status: StackStatus): string {
+		switch (status) {
+			case 'planned':
+				return 'rgba(59, 130, 246, 0.3)'; // blue-500/30
+			case 'committed':
+				return 'rgba(168, 85, 247, 0.4)'; // purple-500/40
+			case 'acquiring':
+				return 'rgba(234, 179, 8, 0.5)'; // yellow-500/50
+			case 'completed':
+				return 'rgba(34, 197, 94, 0.4)'; // green-500/40
+			case 'failed':
+				return 'rgba(239, 68, 68, 0.4)'; // red-500/40
+			case 'skipped':
+				return 'rgba(107, 114, 128, 0.3)'; // gray-500/30
+			default:
+				return 'rgba(107, 114, 128, 0.2)';
+		}
+	}
+
+	// Get stack stroke color based on status
+	function getStackStrokeColor(status: StackStatus): string {
+		switch (status) {
+			case 'planned':
+				return '#3b82f6'; // blue-500
+			case 'committed':
+				return '#a855f7'; // purple-500
+			case 'acquiring':
+				return '#eab308'; // yellow-500
+			case 'completed':
+				return '#22c55e'; // green-500
+			case 'failed':
+				return '#ef4444'; // red-500
+			case 'skipped':
+				return '#6b7280'; // gray-500
+			default:
+				return '#6b7280';
+		}
+	}
+
+	// Handle tile double-click to move stage
+	function handleTileClick(tile: Tile) {
+		if (isXYMoving || !stage) return;
+		// Convert tile center position from μm to mm and move
+		const targetX = stage.x.lowerLimit + toMm(tile.x_um) + toMm(tile.w_um) / 2 - fov.width / 2;
+		const targetY = stage.y.lowerLimit + toMm(tile.y_um) + toMm(tile.h_um) / 2 - fov.height / 2;
+		stage.moveXY(targetX, targetY);
+	}
+
+	// Handle stack double-click
+	function handleStackClick(stack: Stack) {
+		if (isXYMoving || !stage) return;
+		// Move to stack position
+		const targetX = stage.x.lowerLimit + toMm(stack.x_um);
+		const targetY = stage.y.lowerLimit + toMm(stack.y_um);
+		stage.moveXY(targetX, targetY);
 	}
 
 	// Handle slider changes
 	function handleXSliderChange(e: Event) {
-		if (!xAxis) return;
+		if (!stage) return;
 		const target = e.target as HTMLInputElement;
-		const position = parseFloat(target.value);
-		xAxis.move(position);
+		stage.x.move(parseFloat(target.value));
 	}
 
 	function handleYSliderChange(e: Event) {
-		if (!yAxis) return;
+		if (!stage) return;
 		const target = e.target as HTMLInputElement;
-		const position = parseFloat(target.value);
-		yAxis.move(position);
+		stage.y.move(parseFloat(target.value));
 	}
 
 	function handleZSliderChange(e: Event) {
-		if (!zAxis) return;
+		if (!stage) return;
 		const target = e.target as HTMLInputElement;
-		const position = parseFloat(target.value);
-		zAxis.move(position);
+		stage.z.move(parseFloat(target.value));
 	}
-
-	let gridCellClass = $derived(
-		xAxis?.isMoving || yAxis?.isMoving
-			? 'cursor-not-allowed stroke-zinc-600 fill-zinc-800/40'
-			: 'cursor-pointer stroke-zinc-500 fill-zinc-800/50 hover:fill-zinc-700/30'
-	);
-
-	let isXYMoving = $derived(xAxis?.isMoving || yAxis?.isMoving);
-	let fovStrokeColor = $derived(isXYMoving ? '#e11d48' : '#10b981');
-	let fovFillColor = $derived(isXYMoving ? 'var(- -color-rose-600/50)' : 'var(- -color-emerald-600/50)');
 </script>
 
-{#snippet zMarker(label: string, position: number, strokeClass: string)}
-	<g>
-		<title>{label}: {position.toFixed(1)} mm</title>
-		<line
-			x1="0"
-			y1={stageDepth - (position - (zAxis?.lowerLimit ?? 0))}
-			x2="30"
-			y2={stageDepth - (position - (zAxis?.lowerLimit ?? 0))}
-			stroke-width="0.2"
-			opacity="1"
-			class={strokeClass}
-		/>
-	</g>
-{/snippet}
+{#if stage}
+	<div class="stage-container" bind:this={containerRef}>
+		<div
+			class="stage-canvas"
+			style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
+		>
+			<div class="xy-column">
+				<div class="x-row">
+					<div class="corner-spacer"></div>
+					<input
+						type="range"
+						class="x-slider"
+						style="width: {canvasWidth}px;"
+						min={stage.x.lowerLimit}
+						max={stage.x.upperLimit}
+						step={0.1}
+						value={stage.x.position}
+						disabled={isXYMoving}
+						oninput={handleXSliderChange}
+					/>
+				</div>
 
-{#if stageConfig && xAxis && yAxis && zAxis}
-	<div class="flex items-center" style={`aspect-ratio: ${fov.w / fov.h};`}>
-		<div class="stage-grid relative w-full">
-			<div class="absolute top-2 right-4 px-2 text-right font-mono text-[0.65rem] text-zinc-400">
-				{stageWidth.toFixed(0)} x {stageHeight.toFixed(0)} x {stageDepth.toFixed(0)} mm
+				<div class="flex min-h-0 items-center">
+					<input
+						type="range"
+						class="y-slider"
+						style="height: {canvasHeight}px;"
+						min={stage.y.lowerLimit}
+						max={stage.y.upperLimit}
+						step={0.1}
+						value={stage.y.position}
+						disabled={isXYMoving}
+						oninput={handleYSliderChange}
+					/>
+
+					<svg
+						viewBox="0 0 {stageWidth} {stageHeight}"
+						class="xy-svg"
+						style="width: {canvasWidth}px; height: {canvasHeight}px;"
+					>
+						<!-- Background -->
+						<rect x="0" y="0" width={stageWidth} height={stageHeight} class="fill-zinc-900" />
+
+						<!-- Grid Layer: Tiles as stroke-only rectangles -->
+						{#if layerVisibility.grid}
+							<g class="grid-layer">
+								{#each tiles as tile (tile.tile_id)}
+									{@const x = toMm(tile.x_um)}
+									{@const y = toMm(tile.y_um)}
+									{@const w = toMm(tile.w_um)}
+									{@const h = toMm(tile.h_um)}
+									<rect
+										{x}
+										{y}
+										width={w}
+										height={h}
+										fill="none"
+										stroke="#3f3f46"
+										stroke-width={0.05}
+										class="tile outline-none"
+										class:cursor-pointer={!isXYMoving}
+										class:cursor-not-allowed={isXYMoving}
+										role="button"
+										tabindex={isXYMoving ? -1 : 0}
+										ondblclick={() => handleTileClick(tile)}
+									>
+										<title>Tile [{tile.row}, {tile.col}]</title>
+									</rect>
+								{/each}
+							</g>
+						{/if}
+
+						<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
+						{#if layerVisibility.stacks}
+							<g class="stacks-layer">
+								{#each stacks as stack (stack.tile_id)}
+									{@const x = toMm(stack.x_um)}
+									{@const y = toMm(stack.y_um)}
+									{@const w = toMm(stack.w_um)}
+									{@const h = toMm(stack.h_um)}
+									<rect
+										{x}
+										{y}
+										width={w}
+										height={h}
+										fill={getStackFillColor(stack.status)}
+										stroke={getStackStrokeColor(stack.status)}
+										stroke-width={0.08}
+										class="stack outline-none"
+										class:cursor-pointer={!isXYMoving}
+										class:cursor-not-allowed={isXYMoving}
+										role="button"
+										tabindex={isXYMoving ? -1 : 0}
+										ondblclick={() => handleStackClick(stack)}
+									>
+										<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
+									</rect>
+								{/each}
+							</g>
+						{/if}
+
+						<!-- FOV Layer: Current position with thumbnail -->
+						{#if layerVisibility.fov}
+							<g class="fov-layer pointer-events-none">
+								<!-- Clip path for thumbnail -->
+								<defs>
+									<clipPath id="fov-clip">
+										<rect x={fovX} y={fovY} width={fov.width} height={fov.height} />
+									</clipPath>
+								</defs>
+
+								<!-- Thumbnail image -->
+								{#if thumbnail}
+									<image
+										href={thumbnail}
+										x={fovX}
+										y={fovY}
+										width={fov.width}
+										height={fov.height}
+										clip-path="url(#fov-clip)"
+										preserveAspectRatio="xMidYMid slice"
+									/>
+								{/if}
+
+								<!-- FOV border -->
+								<rect
+									x={fovX}
+									y={fovY}
+									width={fov.width}
+									height={fov.height}
+									fill="none"
+									stroke={fovStrokeColor}
+									stroke-width={0.05}
+								>
+									<title>FOV: ({stage.x.position.toFixed(1)}, {stage.y.position.toFixed(1)}) mm</title>
+								</rect>
+							</g>
+						{/if}
+					</svg>
+				</div>
 			</div>
-			... (rest of template)
+
+			<div class="z-column">
+				<div class="corner-spacer-right"></div>
+				<div class="z-area" style="height: {canvasHeight}px;">
+					<input
+						type="range"
+						class="z-slider"
+						min={stage.z.lowerLimit}
+						max={stage.z.upperLimit}
+						step={0.1}
+						value={stage.z.position}
+						disabled={isZMoving}
+						oninput={handleZSliderChange}
+					/>
+					<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="none">
+						<line
+							x1="0"
+							y1={stageDepth - fovZ}
+							x2="30"
+							y2={stageDepth - fovZ}
+							stroke={isZMoving ? '#e11d48' : '#10b981'}
+							stroke-width={0.2}
+						>
+							<title>Z: {stage.z.position.toFixed(1)} mm</title>
+						</line>
+					</svg>
+				</div>
+			</div>
 		</div>
+	</div>
+{:else}
+	<div class="flex h-64 items-center justify-center rounded border border-zinc-700">
+		<p class="text-sm text-zinc-500">Stage not available</p>
 	</div>
 {/if}
 
 <style>
-	.stage-grid {
-		- -track-width: 0.75rem;
-		- -thumb-width: 2px;
-		- -area-bg: rgb(24 24 27);
-		display: grid;
-		grid-template-columns: auto 1fr auto;
-		grid-template-rows: auto auto auto;
-		gap: calc(-1 * var(- -track-width));
-		margin: calc(-0.5 * var(- -track-width));
-		margin-block-start: 0;
-		margin-inline-end: 0;
+	.stage-container {
+		display: flex;
+		flex: 1;
+		justify-content: center;
+		align-items: center;
+		min-height: 0;
+		overflow: hidden;
 	}
-	... (rest of styles)
+
+	.stage-canvas {
+		--thumb-width: 2px;
+		--thumb-color: var(--color-emerald-500, #10b981);
+		--thumb-color-moving: var(--color-rose-600, #e11d48);
+		--stage-bg-color: var(--color-zinc-800, rgb(24, 24, 27));
+		--stage-border-color: var(--color-zinc-600);
+		--stage-border: var(--stage-border-width) solid var(--stage-border-color);
+
+		display: flex;
+		gap: var(--stage-gap);
+
+		input[type='range'] {
+			-webkit-appearance: none;
+			appearance: none;
+			cursor: pointer;
+			margin: 0;
+			padding: 0;
+
+			&::-webkit-slider-runnable-track {
+				background: transparent;
+				border-radius: 0;
+			}
+
+			&::-moz-range-track {
+				background: transparent;
+				border-radius: 0;
+			}
+
+			&::-webkit-slider-thumb {
+				-webkit-appearance: none;
+				appearance: none;
+				background: var(--thumb-color);
+				border-radius: 1px;
+				cursor: pointer;
+			}
+
+			&::-moz-range-thumb {
+				appearance: none;
+				background: var(--thumb-color);
+				border: none;
+				border-radius: 1px;
+				cursor: pointer;
+			}
+
+			&:disabled {
+				cursor: not-allowed;
+				--thumb-color: var(--thumb-color-moving);
+			}
+		}
+	}
+
+	.xy-column {
+		display: flex;
+		flex-direction: column;
+		border: var(--stage-border);
+	}
+
+	.x-row {
+		display: flex;
+		flex-shrink: 0;
+
+		.corner-spacer {
+			width: var(--track-width);
+			flex-shrink: 0;
+			background-color: var(--color-zinc-700);
+			border-right: var(--stage-border);
+			border-bottom: bar(--stage-border);
+		}
+	}
+
+	.x-slider {
+		height: var(--track-width);
+
+		&::-webkit-slider-thumb {
+			width: var(--thumb-width);
+			height: var(--track-width);
+		}
+
+		&::-moz-range-thumb {
+			width: var(--thumb-width);
+			height: var(--track-width);
+		}
+	}
+
+	.y-slider {
+		writing-mode: vertical-rl;
+		direction: ltr;
+		width: var(--track-width);
+
+		&::-webkit-slider-thumb {
+			width: var(--track-width);
+			height: var(--thumb-width);
+		}
+
+		&::-moz-range-thumb {
+			width: var(--track-width);
+			height: var(--thumb-width);
+		}
+	}
+
+	.xy-svg {
+		flex-shrink: 0;
+		border: var(--stage-border);
+		border-right: 0;
+	}
+
+	.z-column {
+		display: flex;
+		flex-direction: column;
+		width: var(--z-area-width);
+		border: var(--stage-border);
+
+		.corner-spacer-right {
+			height: var(--track-width);
+			width: var(--z-area-width);
+			flex-shrink: 0;
+			background-color: var(--color-zinc-700);
+			border-right: var(--stage-border);
+			border-bottom: var(--stage-border);
+		}
+
+		.z-area {
+			position: relative;
+			flex: 1;
+
+			.z-slider {
+				position: absolute;
+				inset: 0;
+				writing-mode: vertical-rl;
+				direction: rtl;
+				width: 100%;
+				height: 100%;
+				z-index: 1;
+
+				&::-webkit-slider-thumb {
+					width: var(--z-area-width);
+					height: var(--thumb-width);
+				}
+
+				&::-moz-range-thumb {
+					width: var(--z-area-width);
+					height: var(--thumb-width);
+				}
+			}
+
+			.z-svg {
+				position: absolute;
+				inset: 0;
+				pointer-events: none;
+				z-index: 2;
+			}
+		}
+	}
+
+	/* Tile hover effect */
+	.tile:hover {
+		fill: rgba(63, 63, 70, 0.3);
+	}
+
+	/* Stack hover effect */
+	.stack:hover {
+		filter: brightness(1.2);
+	}
 </style>
--->

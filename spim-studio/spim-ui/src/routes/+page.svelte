@@ -1,14 +1,12 @@
 <script lang="ts">
-	import { PreviewCanvas, PanZoomControls, FrameCounter } from '$lib/preview';
+	import { PreviewCanvas, PanZoomControls } from '$lib/preview';
 	import { onMount, onDestroy } from 'svelte';
 	import { App } from '$lib/app';
 	import { LaunchPage } from '$lib/ui/launch';
 	import ProfileSelector from '$lib/ui/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/ui/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
-	import { StagePosition } from '$lib/ui/stage';
-	// TODO: StageCanvas and StageControls need to be updated for new Stage/App architecture
-	// import { StageCanvas, StageControls } from '$lib/ui/stage';
+	import { StagePosition, StageCanvas, StageControls } from '$lib/ui/stage';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
 	import ChannelSection from '$lib/ui/ChannelSection.svelte';
@@ -133,7 +131,14 @@
 					</div>
 				{/if}
 				<footer class="mt-auto flex p-4">
-					<FrameCounter {previewer} />
+					<button
+						onclick={() => app?.closeSession()}
+						class="mr-auto flex cursor-pointer items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+						aria-label="Close Session"
+						title="Close Session"
+					>
+						<Icon icon="mdi:exit-to-app" width="20" height="20" />
+					</button>
 				</footer>
 			</aside>
 			<main class="flex h-screen min-w-4xl flex-1 flex-col overflow-hidden">
@@ -146,10 +151,7 @@
 								</Pane>
 								<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
 								<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
-									<!-- TODO: Update StageCanvas for new Stage/App architecture -->
-									<div class="flex h-full items-center justify-center">
-										<p class="text-sm text-zinc-500">Stage canvas coming soon...</p>
-									</div>
+									<StageCanvas {app} />
 								</Pane>
 							</PaneGroup>
 						</Pane>
@@ -215,17 +217,8 @@
 					>
 						Stop
 					</button>
-					<button
-						onclick={() => app?.closeSession()}
-						class="ml-auto rounded bg-zinc-700 px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-600"
-					>
-						Close Session
-					</button>
 				</header>
-				<!-- TODO: Update StageControls for new Stage/App architecture -->
-				<div class="flex flex-1 items-center justify-center">
-					<p class="text-sm text-zinc-500">Stage controls coming soon...</p>
-				</div>
+				<StageControls {app} />
 				<footer class="mt-auto flex flex-row-reverse p-4">
 					<ClientStatus client={app.client} />
 				</footer>

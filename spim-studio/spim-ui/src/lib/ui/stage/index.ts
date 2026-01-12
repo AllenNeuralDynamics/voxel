@@ -7,8 +7,7 @@
 
 export { default as StageWidget } from './StageWidget.svelte';
 
-// TODO: These components need to be updated for new Stage/App architecture
-// export { default as StageCanvas } from './StageCanvas.svelte';
-// export { default as StageControls } from './StageControls.svelte';
+export { default as StageCanvas } from './StageCanvas.svelte';
+export { default as StageControls } from './StageControls.svelte';
 
 export { default as StagePosition } from './StagePosition.svelte';

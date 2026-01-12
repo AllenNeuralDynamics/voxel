@@ -87,7 +87,7 @@ class HamamatsuCamera(SpimCamera):
         super().__init__(uid=uid)
 
         self._serial = str(serial)
-        self._pixel_size_um = Vec2D(*pixel_size_um) if isinstance(pixel_size_um, tuple) else pixel_size_um
+        self._pixel_size_um = Vec2D(x=pixel_size_um[0], y=pixel_size_um[1]) if isinstance(pixel_size_um, tuple) else pixel_size_um
         self._latest_frame: np.ndarray | None = None
         self._buffer_size_frames = 0
         self._dropped_frames = 0
@@ -143,7 +143,7 @@ class HamamatsuCamera(SpimCamera):
     @describe(label="Sensor Size", units="px", desc="The size of the camera sensor in pixels.")
     def sensor_size_px(self) -> Vec2D[int]:
         """Get the size of the camera sensor in pixels."""
-        return Vec2D(self._sensor_width, self._sensor_height)
+        return Vec2D(x=self._sensor_width, y=self._sensor_height)
 
     @property
     @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")

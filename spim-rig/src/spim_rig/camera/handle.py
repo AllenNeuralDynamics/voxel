@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from ome_zarr_writer.types import Vec2D
 from pyrig.device import DeviceHandle
 from spim_rig.camera.base import CameraBatchResult, SpimCamera, TriggerMode, TriggerPolarity
 from spim_rig.camera.preview import PreviewCrop, PreviewLevels
@@ -59,3 +60,16 @@ class CameraHandle(DeviceHandle[SpimCamera]):
         """Capture a batch of frames in triggered mode."""
         result = await self.call("capture_batch", num_frames, str(output_dir), trigger_mode, trigger_polarity)
         return CameraBatchResult.model_validate(result)
+
+    async def get_frame_area_mm(self) -> Vec2D[float]:
+        """Get the physical frame area in millimeters.
+
+        Handles deserialization of Vec2D which serializes as [y, x] list over ZMQ.
+        """
+        value = await self.get_prop_value("frame_area_mm")
+        if isinstance(value, (list, tuple)):
+            # Vec2D serializes as [y, x] due to NamedTuple field order
+            return Vec2D(x=value[1], y=value[0])
+        if hasattr(value, "x"):
+            return value
+        return Vec2D(x=value["x"], y=value["y"])

@@ -29,27 +29,27 @@
 			<span class="ml-2 text-sm text-zinc-400">Loading sessions...</span>
 		</div>
 	{:else if sessions.length === 0}
-		<div class="py-8 text-center text-sm text-zinc-500">No sessions found in this root</div>
+		<div class="py-8 text-center text-sm text-zinc-500">No recent sessions</div>
 	{:else}
 		<ul class="divide-y divide-zinc-700">
-			{#each sessions as session}
+			{#each sessions as session (session.path)}
 				<li class="group">
 					<button
 						class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-zinc-800"
 						onclick={() => onResume(session)}
 					>
 						<div class="min-w-0 flex-1">
-							<div class="truncate font-medium text-zinc-100">{session.name}</div>
+							<div class="truncate font-medium text-zinc-100">
+								<span class="text-amber-500">{session.root_name}</span>
+								<span class="text-zinc-500"> / </span>
+								<span>{session.name}</span>
+							</div>
 							<div class="mt-0.5 text-xs text-zinc-500">
 								<span class="rounded bg-zinc-800 px-1.5 py-0.5">{session.rig_name}</span>
 								<span class="ml-2">{formatDate(session.modified)}</span>
 							</div>
 						</div>
-						<div
-							class="ml-4 text-xs text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100"
-						>
-							Resume
-						</div>
+						<div class="ml-4 text-xs text-zinc-500 transition-colors group-hover:text-emerald-500">Resume</div>
 					</button>
 				</li>
 			{/each}
