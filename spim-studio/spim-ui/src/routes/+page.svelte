@@ -2,7 +2,7 @@
 	import { PreviewCanvas, PanZoomControls } from '$lib/preview';
 	import { onMount, onDestroy } from 'svelte';
 	import { App } from '$lib/app';
-	import { LaunchPage } from '$lib/ui/launch';
+	import { LaunchPage, LogViewer } from '$lib/ui/launch';
 	import ProfileSelector from '$lib/ui/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/ui/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
@@ -160,6 +160,12 @@
 							<Tabs.Content value="waveforms" class="h-full overflow-hidden bg-zinc-900">
 								<WaveformViewer {app} />
 							</Tabs.Content>
+
+							<Tabs.Content value="logs" class="h-full overflow-hidden bg-zinc-900 p-2">
+								{#if app}
+									<LogViewer logs={app.logs} onClear={() => { if (app) app.logs = []; }} />
+								{/if}
+							</Tabs.Content>
 						</Pane>
 					</PaneGroup>
 					<footer class="relative flex items-center justify-between border-t border-zinc-700 px-4 py-3">
@@ -177,6 +183,12 @@
 									class="border-l border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
 								>
 									Waveforms
+								</Tabs.Trigger>
+								<Tabs.Trigger
+									value="logs"
+									class="border-l border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
+								>
+									Logs
 								</Tabs.Trigger>
 							</Tabs.List>
 

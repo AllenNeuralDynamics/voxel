@@ -60,8 +60,8 @@
 	}
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col">
-	<div class="mb-2 flex items-center justify-between">
+<div class="flex h-full flex-col overflow-hidden">
+	<div class="mb-2 flex shrink-0 items-center justify-between">
 		<h2 class="text-sm font-medium text-zinc-300">Log</h2>
 		{#if onClear}
 			<button
@@ -76,7 +76,7 @@
 	</div>
 	<div
 		bind:this={container}
-		class="min-h-0 flex-1 overflow-y-auto rounded border border-zinc-700 bg-zinc-800 font-mono text-xs"
+		class="log-container min-h-0 flex-1 overflow-y-auto rounded border border-zinc-700 bg-zinc-800 font-mono text-xs"
 	>
 		{#if logs.length === 0}
 			<div class="flex h-full items-center justify-center text-zinc-500">Waiting for logs...</div>
@@ -87,8 +87,8 @@
 						<!-- Time: fixed 8 chars "HH:MM:SS" -->
 						<span class="w-[8ch] shrink-0 text-zinc-600">{formatTime(log.timestamp)}</span>
 						<!-- Logger: fixed width, middle-truncated -->
-						<span class="w-[18ch] shrink-0 text-zinc-500" title={log.logger}
-							>{truncateMiddle(log.logger, 18)}</span
+						<span class="w-[36ch] shrink-0 text-zinc-500" title={log.logger}
+							>{truncateMiddle(log.logger, 36)}</span
 						>
 						<!-- Message: fills remaining space -->
 						<span class="min-w-0 flex-1 text-zinc-300">{log.message}</span>
@@ -102,3 +102,27 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.log-container {
+		scrollbar-width: thin;
+		scrollbar-color: #3f3f46 transparent;
+	}
+
+	.log-container::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.log-container::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.log-container::-webkit-scrollbar-thumb {
+		background-color: #3f3f46;
+		border-radius: 3px;
+	}
+
+	.log-container::-webkit-scrollbar-thumb:hover {
+		background-color: #52525b;
+	}
+</style>
