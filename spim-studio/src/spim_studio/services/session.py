@@ -155,12 +155,11 @@ class SessionService:
         col = payload.get("col")
         z_start = payload.get("z_start_um")
         z_end = payload.get("z_end_um")
-        z_step = payload.get("z_step_um")
 
-        if row is None or col is None or z_start is None or z_end is None or z_step is None:
-            raise ValueError("Missing required fields: row, col, z_start_um, z_end_um, z_step_um")
+        if row is None or col is None or z_start is None or z_end is None:
+            raise ValueError("Missing required fields: row, col, z_start_um, z_end_um")
 
-        await self.session.add_stack(int(row), int(col), float(z_start), float(z_end), float(z_step))
+        await self.session.add_stack(int(row), int(col), float(z_start), float(z_end))
         # Status broadcast includes stacks
         self._broadcast({}, with_status=True)
 
@@ -174,7 +173,6 @@ class SessionService:
             tile_id,
             z_start_um=payload.get("z_start_um"),
             z_end_um=payload.get("z_end_um"),
-            z_step_um=payload.get("z_step_um"),
         )
         # Status broadcast includes stacks
         self._broadcast({}, with_status=True)
@@ -344,7 +342,6 @@ class AddStackRequest(BaseModel):
     col: int
     z_start_um: float
     z_end_um: float
-    z_step_um: float
 
 
 @session_router.post("/session/stacks")
@@ -356,7 +353,6 @@ async def add_stack(request: AddStackRequest, service: SessionService = Depends(
             col=request.col,
             z_start_um=request.z_start_um,
             z_end_um=request.z_end_um,
-            z_step_um=request.z_step_um,
         )
         # Status broadcast includes stacks
         service._broadcast({}, with_status=True)
@@ -372,7 +368,6 @@ class EditStackRequest(BaseModel):
 
     z_start_um: float | None = None
     z_end_um: float | None = None
-    z_step_um: float | None = None
 
 
 @session_router.patch("/session/stacks/{tile_id}")
@@ -387,7 +382,6 @@ async def edit_stack(
             tile_id,
             z_start_um=request.z_start_um,
             z_end_um=request.z_end_um,
-            z_step_um=request.z_step_um,
         )
         # Status broadcast includes stacks
         service._broadcast({}, with_status=True)

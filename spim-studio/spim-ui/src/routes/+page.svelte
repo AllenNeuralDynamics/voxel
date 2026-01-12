@@ -21,7 +21,7 @@
 	// Control view state
 	let deviceFilter = $state<DeviceFilter>('all');
 	let showHistograms = $state(true);
-	let bottomPanelTab = $state('daq');
+	let bottomPanelTab = $state('stacks');
 
 	// Derived state from App
 	const viewName = $derived.by(() => {
@@ -158,13 +158,13 @@
 						<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
 						<Pane defaultSize={40} maxSize={50} minSize={30} class="overflow-hidden">
 							<!-- Bottom Panel Tab Content -->
-							<Tabs.Content value="grid" class="h-full overflow-auto bg-zinc-900">
+							<Tabs.Content value="stacks" class="h-full overflow-auto bg-zinc-900">
 								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-zinc-500">Grid view coming soon...</p>
+									<p class="text-sm text-zinc-500">Stacks table coming soon...</p>
 								</div>
 							</Tabs.Content>
 
-							<Tabs.Content value="daq" class="h-full overflow-hidden bg-zinc-900">
+							<Tabs.Content value="waveforms" class="h-full overflow-hidden bg-zinc-900">
 								<WaveformViewer {app} />
 							</Tabs.Content>
 						</Pane>
@@ -174,16 +174,16 @@
 						<div class="flex items-center gap-3">
 							<Tabs.List class="flex rounded border border-zinc-700">
 								<Tabs.Trigger
-									value="grid"
+									value="stacks"
 									class="px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
 								>
-									Grid
+									Stacks
 								</Tabs.Trigger>
 								<Tabs.Trigger
-									value="daq"
+									value="waveforms"
 									class="border-l border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
 								>
-									DAQ
+									Waveforms
 								</Tabs.Trigger>
 							</Tabs.List>
 

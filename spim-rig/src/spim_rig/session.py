@@ -1,10 +1,11 @@
 """Session management for SPIM acquisition."""
 
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
 from spim_rig.config import SpimRigConfig, TileOrder
@@ -22,6 +23,7 @@ class GridConfig(BaseModel):
     x_offset_um: float = 0.0
     y_offset_um: float = 0.0
     overlap: float = Field(default=0.1, ge=0.0, lt=1.0)
+    z_step_um: float = -1.0  # sentinel: -1 means use rig default
 
 
 class SessionConfig(BaseModel):
@@ -38,13 +40,22 @@ class SessionConfig(BaseModel):
 
     rig: SpimRigConfig
     grid_config: GridConfig = Field(default_factory=GridConfig)
-    tile_order: TileOrder = "snake_row"
+    tile_order: TileOrder = "unset"
     stacks: list[Stack] = Field(default_factory=list)
 
     model_config = {"extra": "forbid"}
 
     # Private attr for round-trip YAML preservation
     _raw_data: dict[str, Any] | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def apply_rig_defaults(self) -> "SessionConfig":
+        """Copy defaults from rig globals if not set."""
+        if self.grid_config.z_step_um < 0:
+            self.grid_config.z_step_um = self.rig.globals.default_z_step_um
+        if self.tile_order == "unset":
+            self.tile_order = self.rig.globals.default_tile_order
+        return self
 
     @classmethod
     def from_yaml(cls, path: Path) -> "SessionConfig":
@@ -234,8 +245,12 @@ class Session:
         self._tile_size_um = None  # Invalidate cache
         self._save()
 
-    async def get_tile_size(self) -> tuple[float, float]:
-        """Get tile size from active profile's detection paths and cameras."""
+    async def get_fov_size(self) -> tuple[float, float]:
+        """Get FOV size from active profile's detection paths and cameras.
+
+        Returns the actual field of view dimensions in micrometers.
+        This is the physical size each tile covers, regardless of overlap.
+        """
         if self._tile_size_um is not None:
             return self._tile_size_um
 
@@ -262,25 +277,31 @@ class Session:
         if not all(f == fovs[0] for f in fovs):
             raise ValueError("All detection paths in profile must have matching FOV")
 
-        fov_w, fov_h = fovs[0]
-        overlap = self._config.grid_config.overlap
-        self._tile_size_um = (fov_w * (1 - overlap), fov_h * (1 - overlap))
+        self._tile_size_um = fovs[0]
         return self._tile_size_um
+
+    async def get_step_size(self) -> tuple[float, float]:
+        """Get step size between tile positions (FOV adjusted for overlap)."""
+        fov_w, fov_h = await self.get_fov_size()
+        overlap = self._config.grid_config.overlap
+        return (fov_w * (1 - overlap), fov_h * (1 - overlap))
 
     async def get_tiles(self) -> list[Tile]:
         """Generate the tile grid based on grid config and stage dimensions.
 
         Computes all tile positions that fit within the stage travel range,
         starting from the grid offset. Tiles are positioned at intervals of
-        tile_size (FOV adjusted for overlap).
+        step_size (FOV adjusted for overlap), but have dimensions equal to
+        the full FOV (so adjacent tiles overlap).
 
         Returns:
             List of Tile objects covering the stage area from the grid offset.
-            Returns empty list if tile size cannot be computed (no active profile).
+            Returns empty list if FOV cannot be computed (no active profile).
         """
-        # Get tile size (requires active profile with cameras)
+        # Get FOV and step size (requires active profile with cameras)
         try:
-            tile_w, tile_h = await self.get_tile_size()
+            fov_w, fov_h = await self.get_fov_size()
+            step_w, step_h = await self.get_step_size()
         except (ValueError, KeyError):
             # No active profile or cameras - return empty grid
             return []
@@ -299,20 +320,20 @@ class Session:
         offset_x = self._config.grid_config.x_offset_um
         offset_y = self._config.grid_config.y_offset_um
 
-        # Calculate number of tiles that fit from offset to edge
-        num_cols = max(1, int((stage_width_um - offset_x) / tile_w)) if tile_w > 0 else 1
-        num_rows = max(1, int((stage_height_um - offset_y) / tile_h)) if tile_h > 0 else 1
+        # Calculate number of tiles to cover entire stage (last row/col may be clipped)
+        num_cols = max(1, math.ceil((stage_width_um - offset_x - fov_w) / step_w) + 1) if step_w > 0 else 1
+        num_rows = max(1, math.ceil((stage_height_um - offset_y - fov_h) / step_h) + 1) if step_h > 0 else 1
 
         # Generate tiles
         tiles: list[Tile] = []
         for row in range(num_rows):
             for col in range(num_cols):
                 tile_id = f"tile_r{row}_c{col}"
-                x_um = offset_x + col * tile_w
-                y_um = offset_y + row * tile_h
+                x_um = offset_x + col * step_w
+                y_um = offset_y + row * step_h
 
-                # Only include tiles that fit within stage bounds
-                if x_um + tile_w <= stage_width_um and y_um + tile_h <= stage_height_um:
+                # Include tile if it starts within stage bounds
+                if x_um < stage_width_um and y_um < stage_height_um:
                     tiles.append(
                         Tile(
                             tile_id=tile_id,
@@ -320,33 +341,29 @@ class Session:
                             col=col,
                             x_um=x_um,
                             y_um=y_um,
-                            w_um=tile_w,
-                            h_um=tile_h,
+                            w_um=fov_w,
+                            h_um=fov_h,
                         )
                     )
 
-        self._log.debug(f"Generated {len(tiles)} tiles ({num_cols}x{num_rows}) with size {tile_w:.0f}x{tile_h:.0f} um")
+        self._log.debug(
+            f"Generated {len(tiles)} tiles ({num_cols}x{num_rows}) with FOV {fov_w:.0f}x{fov_h:.0f} um, step {step_w:.0f}x{step_h:.0f} um"
+        )
         return tiles
 
     # ==================== Stack Management ====================
 
-    async def add_stack(
-        self,
-        row: int,
-        col: int,
-        z_start_um: float,
-        z_end_um: float,
-        z_step_um: float,
-    ) -> Stack:
+    async def add_stack(self, row: int, col: int, z_start_um: float, z_end_um: float) -> Stack:
         """Add a stack at grid position. Captures current profile and computes absolute position."""
         if self._rig.active_profile_id is None:
             raise RuntimeError("No active profile - select a profile before adding stacks")
 
-        tile_w, tile_h = await self.get_tile_size()
+        fov_w, fov_h = await self.get_fov_size()
+        step_w, step_h = await self.get_step_size()
 
-        # Compute absolute position from grid
-        x_um = self._config.grid_config.x_offset_um + col * tile_w
-        y_um = self._config.grid_config.y_offset_um + row * tile_h
+        # Compute absolute position from grid using step size
+        x_um = self._config.grid_config.x_offset_um + col * step_w
+        y_um = self._config.grid_config.y_offset_um + row * step_h
 
         tile_id = f"tile_r{row}_c{col}"
 
@@ -360,11 +377,11 @@ class Session:
             col=col,
             x_um=x_um,
             y_um=y_um,
-            w_um=tile_w,
-            h_um=tile_h,
+            w_um=fov_w,
+            h_um=fov_h,
             z_start_um=z_start_um,
             z_end_um=z_end_um,
-            z_step_um=z_step_um,
+            z_step_um=self._config.grid_config.z_step_um,
             profile_id=self._rig.active_profile_id,
             status=StackStatus.PLANNED,
         )
@@ -375,14 +392,7 @@ class Session:
         self._log.info(f"Added stack {tile_id} at ({x_um:.1f}, {y_um:.1f}) um with profile '{stack.profile_id}'")
         return stack
 
-    def edit_stack(
-        self,
-        tile_id: str,
-        *,
-        z_start_um: float | None = None,
-        z_end_um: float | None = None,
-        z_step_um: float | None = None,
-    ) -> Stack:
+    def edit_stack(self, tile_id: str, *, z_start_um: float | None = None, z_end_um: float | None = None) -> Stack:
         """Edit a stack's z parameters. Only PLANNED stacks can be edited."""
         for stack in self._config.stacks:
             if stack.tile_id == tile_id:
@@ -393,8 +403,6 @@ class Session:
                     stack.z_start_um = z_start_um
                 if z_end_um is not None:
                     stack.z_end_um = z_end_um
-                if z_step_um is not None:
-                    stack.z_step_um = z_step_um
 
                 self._save()
                 self._log.info(f"Edited stack {tile_id}")
@@ -424,7 +432,7 @@ class Session:
         """Sort stacks according to tile_order."""
         order = self._config.tile_order
 
-        if order == "row_wise":
+        if order == "row_wise" or order == "unset":
             self._config.stacks.sort(key=lambda s: (s.row, s.col))
         elif order == "column_wise":
             self._config.stacks.sort(key=lambda s: (s.col, s.row))

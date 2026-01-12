@@ -1,8 +1,8 @@
 # Simulated rig - all devices run in the main process (no ZMQ)
 _anchors:
   - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
-  - &sim_pixel_size_um "0.5,0.5"
-  - &sim_camera_sensor_px "2660,3548" # Smaller for local testing
+  - &sim_pixel_size_um "3.76,3.76"
+  - &sim_camera_sensor_px "10640,14192"
   - &laser_target spim_drivers.lasers.simulated.SimulatedLaser
   - &aotf_laser_target spim_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
   - &aotf_target spim_drivers.aotf.simulated.SimulatedAotf
@@ -65,10 +65,10 @@ devices:
       slots: { 0: "BP525", 1: "BP600", 2: "BP700" }
   x_axis:
     target: *linear_axis_target
-    init: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
+    init: { lower_limit_mm: 0.0, upper_limit_mm: 36.7 }
   y_axis:
     target: *linear_axis_target
-    init: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
+    init: { lower_limit_mm: 0.0, upper_limit_mm: 23.0 }
   z_axis:
     target: *linear_axis_target
     init: { lower_limit_mm: 0.0, upper_limit_mm: 50.0 }
@@ -93,7 +93,7 @@ daq:
 detection:
   camera_1:
     filter_wheels: [fw_emission]
-    magnification: 10.0
+    magnification: 8.0
 
 illumination:
   laser_488: {}

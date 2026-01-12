@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from pyrig import RigConfig
 from spim_rig.sync import SyncTaskData
 
-TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column"]
+TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column", "unset"]
 
 
 class GlobalsConfig(BaseModel):
@@ -13,6 +13,7 @@ class GlobalsConfig(BaseModel):
 
     default_overlap: float = Field(default=0.1, ge=0.0, le=0.5, description="Default tile overlap (0.0-0.5)")
     default_tile_order: TileOrder = Field(default="snake_row", description="Default tile ordering pattern")
+    default_z_step_um: float = Field(default=1.0, gt=0.0, description="Default z-step in micrometers")
 
 
 class DaqConfig(BaseModel):

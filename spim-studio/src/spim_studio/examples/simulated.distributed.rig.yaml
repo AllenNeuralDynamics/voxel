@@ -1,9 +1,9 @@
 _anchors:
   - &camera_ip "127.0.0.1"
   - &camera_target spim_drivers.cameras.simulated.SimulatedCamera
-  - &sim_pixel_size_um "0.5,0.5"
+  - &sim_pixel_size_um "3.76,3.76"
   - &sim_camera_sensor_px "10640,14192"
-  # - &sim_camera_sensor_px "7980,10,644"
+  # - &sim_camera_sensor_px "7980,10644"
   # - &sim_camera_sensor_px "5320,7096"
   # - &sim_camera_sensor_px "2660,3548"
   # - &sim_camera_sensor_px "1330,1774"
@@ -98,10 +98,10 @@ nodes:
           slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
       x_axis:
         target: *linear_axis_target
-        init: { lower_limit_mm: 0.0, upper_limit_mm: 40.0 }
+        init: { lower_limit_mm: 0.0, upper_limit_mm: 36.7 }
       y_axis:
         target: *linear_axis_target
-        init: { lower_limit_mm: 0.0, upper_limit_mm: 25.0 }
+        init: { lower_limit_mm: 0.0, upper_limit_mm: 23.0 }
       z_axis:
         target: *linear_axis_target
         init:
@@ -143,10 +143,10 @@ daq:
 detection:
   camera_1:
     filter_wheels: [fw_detection_shared, fw_emission_cam1]
-    magnification: 10.0
+    magnification: 8.0
   camera_2:
     filter_wheels: [fw_detection_shared, fw_emission_cam2]
-    magnification: 10.0
+    magnification: 8.0
 
 illumination:
   laser_405: {}

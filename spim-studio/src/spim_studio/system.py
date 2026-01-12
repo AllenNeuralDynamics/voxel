@@ -109,16 +109,16 @@ class SystemConfig(BaseModel):
         system_yaml = {
             "session_roots": [
                 {
-                    "name": "experiments",
-                    "label": "Experiments",
-                    "description": "Production experiment sessions",
-                    "path": str(experiments_dir),
-                },
-                {
                     "name": "playground",
                     "label": "Playground",
                     "description": "Test and development sessions",
                     "path": str(playground_dir),
+                },
+                {
+                    "name": "experiments",
+                    "label": "Experiments",
+                    "description": "Production experiment sessions",
+                    "path": str(experiments_dir),
                 },
             ]
         }
