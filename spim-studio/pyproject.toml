@@ -15,8 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-spim = "spim_studio.app:main"
-spim-node = "spim_studio.app:node_main"
+spim = "spim_studio.cli:main"
+spim-node = "spim_rig.node:node_main"
 
 [tool.uv.sources]
 spim-rig = { workspace = true }

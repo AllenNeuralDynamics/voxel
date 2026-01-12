@@ -1,10 +1,9 @@
 /**
- * Core rig management module.
- * Exports managers and types for rig communication and device control.
+ * Core infrastructure module.
+ * Exports networking, device management, and type definitions.
  */
 
-export { RigClient } from './client.svelte.ts';
-export { RigManager } from './rig.svelte.ts';
+export { Client, type ClientOptions, type TopicHandlers } from './client.svelte.ts';
 export { DevicesManager } from './devices.svelte.ts';
 export type { DeviceInfo } from './devices.svelte.ts';
 
@@ -22,8 +21,6 @@ export type {
 	SpimRigConfig
 } from './config.ts';
 
-export type { Profile, RigManagerOptions } from './rig.svelte.ts';
-
 export type {
 	DevicePropertyPayload,
 	PropertyModel,
@@ -35,4 +32,16 @@ export type {
 	DevicesResponse
 } from './devices.svelte.ts';
 
-export type { PreviewCrop, PreviewFrameInfo, PreviewLevels, RigStatus } from './client.svelte.ts';
+export type { PreviewCrop, PreviewFrameInfo, PreviewLevels } from './client.svelte.ts';
+
+export type {
+	AppStatus,
+	AppPhase,
+	SessionStatus,
+	SessionRoot,
+	SessionDirectory,
+	RigMode,
+	LogMessage,
+	ErrorPayload,
+	ProfileChangedPayload
+} from './types.ts';

@@ -5,7 +5,7 @@ Example implementation for imaging/microscopy systems with cameras and lasers.
 ## Components
 
 - `ImagingRig` - Rig with typed `lasers` and `cameras` collections
-- `ImagingNodeService` - Creates `CameraService` for camera devices
+- `ImagingRigNode` - Creates `CameraService` for camera devices
 - Device drivers in `drivers/`
 
 ## Usage

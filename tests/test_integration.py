@@ -6,7 +6,7 @@ from enum import StrEnum
 import pytest
 
 from pyrig import Device, LocalAdapter, Rig, RigConfig
-from pyrig.device import DeviceAgent, describe
+from pyrig.device import DeviceController, describe
 
 # ============== Test Devices ==============
 
@@ -311,59 +311,59 @@ class TestLocalRig:
             await rig.stop()
 
 
-class TestDeviceAgent:
-    """Test DeviceAgent directly."""
+class TestDeviceController:
+    """Test DeviceController directly."""
 
     @pytest.mark.asyncio
-    async def test_agent_execute_command(self):
-        """Test executing commands through agent."""
+    async def test_ctrl_execute_command(self):
+        """Test executing commands through controller."""
         laser = MockLaser("test_laser", max_power=100.0)
-        agent = DeviceAgent(laser)
+        ctrl = DeviceController(laser)
 
         try:
             # Set power first
-            await agent.set_props(power=50.0)
+            await ctrl.set_props(power=50.0)
 
             # Execute enable command
-            response = await agent.execute_command("enable")
+            response = await ctrl.execute_command("enable")
             assert response.is_ok
             result = response.unwrap()
             assert "enabled" in result.lower()
         finally:
-            agent.close()
+            ctrl.close()
 
     @pytest.mark.asyncio
-    async def test_agent_get_set_props(self):
-        """Test getting and setting properties through agent."""
+    async def test_ctrl_get_set_props(self):
+        """Test getting and setting properties through controller."""
         camera = MockCamera("test_camera")
-        agent = DeviceAgent(camera)
+        ctrl = DeviceController(camera)
 
         try:
             # Get props
-            props = await agent.get_props("exposure_ms", "frame_count")
+            props = await ctrl.get_props("exposure_ms", "frame_count")
             assert props.res["exposure_ms"].value == 10.0
             assert props.res["frame_count"].value == 0
 
             # Set props
-            result = await agent.set_props(exposure_ms=25.0)
+            result = await ctrl.set_props(exposure_ms=25.0)
             assert result.res["exposure_ms"].value == 25.0
         finally:
-            agent.close()
+            ctrl.close()
 
     @pytest.mark.asyncio
-    async def test_agent_interface(self):
-        """Test agent interface generation."""
+    async def test_ctrl_interface(self):
+        """Test controller interface generation."""
         laser = MockLaser("test_laser")
-        agent = DeviceAgent(laser)
+        ctrl = DeviceController(laser)
 
         try:
-            interface = agent.interface
+            interface = ctrl.interface
             assert interface.uid == "test_laser"
             assert interface.type == "laser"
             assert "enable" in interface.commands
             assert "power" in interface.properties
         finally:
-            agent.close()
+            ctrl.close()
 
 
 class TestLocalAdapter:
@@ -373,8 +373,8 @@ class TestLocalAdapter:
     async def test_local_adapter_command(self):
         """Test command execution through LocalAdapter."""
         laser = MockLaser("test_laser", max_power=100.0)
-        agent = DeviceAgent(laser)
-        adapter = LocalAdapter(agent)
+        ctrl = DeviceController(laser)
+        adapter = LocalAdapter(ctrl)
 
         try:
             # Set power via props
@@ -390,8 +390,8 @@ class TestLocalAdapter:
     async def test_local_adapter_interface(self):
         """Test interface retrieval through LocalAdapter."""
         camera = MockCamera("test_camera")
-        agent = DeviceAgent(camera)
-        adapter = LocalAdapter(agent)
+        ctrl = DeviceController(camera)
+        adapter = LocalAdapter(ctrl)
 
         try:
             interface = await adapter.interface()
@@ -405,8 +405,8 @@ class TestLocalAdapter:
         """Test subscription to property changes."""
         # Use StreamingLaser which has stream=True on power property
         laser = StreamingLaser("test_laser")
-        agent = DeviceAgent(laser, stream_interval=0.1)
-        adapter = LocalAdapter(agent)
+        ctrl = DeviceController(laser, stream_interval=0.1)
+        adapter = LocalAdapter(ctrl)
 
         received_updates = []
 

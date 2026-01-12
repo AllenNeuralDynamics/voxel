@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SpinBox from '$lib/ui/SpinBox.svelte';
+	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import { computeAutoLevels } from './utils';
 
 	interface Props {
@@ -22,8 +22,19 @@
 
 	// Display window (what range of intensities to show in the histogram)
 	let displayWindowMin = $state(0);
-	let displayWindowMax = $state(dataTypeMax);
+	let displayWindowMax = $state(0);
 	let hasAutoFit = $state(false);
+	let prevDataTypeMax = 0;
+
+	// Initialize and reset display window when dataTypeMax changes (e.g., switching between uint8/uint16)
+	$effect.pre(() => {
+		if (dataTypeMax !== prevDataTypeMax) {
+			displayWindowMax = dataTypeMax;
+			displayWindowMin = 0;
+			hasAutoFit = false;
+			prevDataTypeMax = dataTypeMax;
+		}
+	});
 
 	// --- NEW: Check for valid data ---
 	// Support variable-length histograms (256 for uint8, 65536 for uint16, etc.)

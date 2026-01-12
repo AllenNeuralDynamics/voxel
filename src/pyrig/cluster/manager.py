@@ -12,19 +12,19 @@ from pydantic import BaseModel, Field
 from pyrig.device import DeviceHandle
 from pyrig.utils import get_local_ip
 
-from .adapter import ZMQAdapter
 from .node import (
     DeviceBuildError,
     DeviceBuildResult,
     DeviceProvision,
     NodeConfig,
     NodeHeartbeat,
-    NodeService,
     ProvisionComplete,
     ProvisionResponse,
+    RigNode,
     run_node_async,
 )
 from .protocol import NodeAction, RigAction, RigMessage
+from .transport import ZMQAdapter
 
 
 class LocalNodeProcess(Process):
@@ -36,7 +36,7 @@ class LocalNodeProcess(Process):
         ctrl_port: int,
         log_port: int,
         start_port: int,
-        service_cls: type[NodeService],
+        service_cls: type[RigNode],
     ):
         super().__init__(name=f"node-{node_id}")
         self.node_id = node_id
@@ -83,7 +83,7 @@ class ClusterManager:
         name: str,
         cfg: ClusterConfig,
         nodes: dict[str, NodeConfig],
-        node_service_cls: type[NodeService] = NodeService,
+        node_service_cls: type[RigNode] = RigNode,
     ):
         self.zctx = zctx
         self.name = name

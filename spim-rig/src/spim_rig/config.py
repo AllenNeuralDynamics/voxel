@@ -3,7 +3,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from pyrig import RigConfig
-from spim_rig.frame_task import FrameTaskData
+from spim_rig.sync import SyncTaskData
 
 TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column"]
 
@@ -44,6 +44,7 @@ class OpticalPathConfig(BaseModel):
 
 class DetectionPathConfig(OpticalPathConfig):
     filter_wheels: list[str]
+    magnification: float = Field(..., gt=0, description="Optical magnification of the detection path")
 
 
 class IlluminationPathConfig(OpticalPathConfig): ...
@@ -76,13 +77,13 @@ class ChannelConfig(BaseModel):
 
 class ProfileConfig(BaseModel):
     channels: list[str]
-    daq: "FrameTaskData"
+    daq: "SyncTaskData"
     desc: str = ""
     label: str | None = None
 
 
 class SpimRigConfig(RigConfig):
-    globals: GlobalsConfig = Field(default_factory=GlobalsConfig)
+    globals: GlobalsConfig
     daq: DaqConfig
     stage: StageConfig
     detection: dict[str, DetectionPathConfig]

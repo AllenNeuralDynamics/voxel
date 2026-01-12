@@ -1,10 +1,10 @@
-from .base import CameraAgent, CameraMode, FrameRegion, SpimCamera
+from .base import CameraController, CameraMode, FrameRegion, SpimCamera
 from .handle import CameraHandle
 from .preview import PreviewCrop, PreviewFrame, PreviewLevels
 
 __all__ = [
     "SpimCamera",
-    "CameraAgent",
+    "CameraController",
     "CameraMode",
     "CameraHandle",
     "FrameRegion",

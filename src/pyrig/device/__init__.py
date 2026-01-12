@@ -1,4 +1,4 @@
-from .agent import DeviceAgent, PublishFn, StreamCallback
+from .controller import DeviceController, PublishFn, StreamCallback
 from .base import (
     DESC_ATTR,
     LABEL_ATTR,
@@ -38,7 +38,7 @@ __all__ = [
     "describe",
     # Core device classes
     "Device",
-    "DeviceAgent",
+    "DeviceController",
     "DeviceHandle",
     "DeviceInterface",
     # Adapters and Publishing

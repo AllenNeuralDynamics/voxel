@@ -2,23 +2,41 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
+from pathlib import Path
 
 import zmq.asyncio
 
 from pyrig import DeviceHandle, Rig
+from spim_rig.axes import LinearAxisHandle, StepMode, TTLStepperConfig
 from spim_rig.camera.handle import CameraHandle
 from spim_rig.config import ChannelConfig, ProfileConfig, SpimRigConfig
 from spim_rig.daq import DaqHandle
 from spim_rig.device import DeviceType
-from spim_rig.frame_task import DAQFrameTask
-from spim_rig.node import SpimNodeService
+from spim_rig.node import SpimRigNode
+from spim_rig.sync import SyncTask
+from spim_rig.tile import Stack, StackResult, StackStatus
+
+
+class RigMode(StrEnum):
+    """Operating mode of the rig."""
+
+    IDLE = "idle"
+    PREVIEWING = "previewing"
+    ACQUIRING = "acquiring"
 
 
 @dataclass(frozen=True)
 class SpimRigStage:
-    x: DeviceHandle
-    y: DeviceHandle
-    z: DeviceHandle
+    x: LinearAxisHandle
+    y: LinearAxisHandle
+    z: LinearAxisHandle
+
+    @property
+    def scanning_axis(self) -> LinearAxisHandle:
+        """The axis used for z-stack scanning. Default: z."""
+        return self.z
 
 
 class SpimRig(Rig):
@@ -26,7 +44,7 @@ class SpimRig(Rig):
 
     @classmethod
     def node_cls(cls):
-        return SpimNodeService
+        return SpimRigNode
 
     def __init__(self, config: SpimRigConfig, zctx: zmq.asyncio.Context | None = None):
         super().__init__(config=config, zctx=zctx)
@@ -39,7 +57,7 @@ class SpimRig(Rig):
         self.discrete_axes: dict[str, DeviceHandle] = {}
         self.fws: dict[str, DeviceHandle] = {}
         self.daq: DaqHandle | None = None
-        self.stage: SpimRigStage | None = None
+        self.stage: SpimRigStage
 
         # Preview management (works with both local and remote cameras)
         self.preview = RigPreviewHub(name=f"{self.__class__.__name__}.PreviewManager")
@@ -49,10 +67,10 @@ class SpimRig(Rig):
             raise ValueError("No profiles defined in configuration")
         self._active_profile_id: str = list(self.config.profiles.keys())[0]
 
-        self._is_previewing: bool = False
+        self._mode: RigMode = RigMode.IDLE
         self._streaming_cameras: set[str] = set()
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-        self._frame_task: DAQFrameTask | None = None
+        self._sync_task: SyncTask | None = None
 
     async def _on_start_complete(self) -> None:
         """Categorize devices by type and validate SPIM-specific assignments."""
@@ -81,12 +99,14 @@ class SpimRig(Rig):
             if fw_id in self.handles:
                 self.fws[fw_id] = self.handles[fw_id]
 
-        # Create the stage from the config
-        self.stage = SpimRigStage(
-            x=self.handles[self.config.stage.x],
-            y=self.handles[self.config.stage.y],
-            z=self.handles[self.config.stage.z],
-        )
+        # Create the stage from the config (handles are LinearAxisHandle from SpimRigNode)
+        x_handle = self.handles[self.config.stage.x]
+        y_handle = self.handles[self.config.stage.y]
+        z_handle = self.handles[self.config.stage.z]
+        assert isinstance(x_handle, LinearAxisHandle)
+        assert isinstance(y_handle, LinearAxisHandle)
+        assert isinstance(z_handle, LinearAxisHandle)
+        self.stage = SpimRigStage(x=x_handle, y=y_handle, z=z_handle)
 
         self._validate_device_types()
 
@@ -168,6 +188,11 @@ class SpimRig(Rig):
 
         if errors:
             raise ValueError("SPIM device validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
+
+    @property
+    def mode(self) -> RigMode:
+        """Get the current operating mode of the rig."""
+        return self._mode
 
     # ===================== Profile Management =====================
 
@@ -268,7 +293,7 @@ class SpimRig(Rig):
         if profile_id not in self.config.profiles:
             raise ValueError(f"Profile '{profile_id}' not found in config")
 
-        restart_preview = self._is_previewing
+        restart_preview = self._mode == RigMode.PREVIEWING
         frame_callback = self._frame_callback
 
         if restart_preview:
@@ -278,9 +303,9 @@ class SpimRig(Rig):
             self._frame_callback = frame_callback
 
         # 1. Close old acquisition task if exists
-        if self._frame_task:
-            await self._frame_task.close()
-            self._frame_task = None
+        if self._sync_task:
+            await self._sync_task.close()
+            self._sync_task = None
             self.log.debug("Closed previous acquisition task")
 
         # 2. Configure devices (filter wheels, etc.)
@@ -297,14 +322,14 @@ class SpimRig(Rig):
             device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
         }
 
-        self._frame_task = DAQFrameTask(
+        self._sync_task = SyncTask(
             uid=f"acq_{profile_id}",
             daq=self.daq,
             timing=profile.daq.timing,
             waveforms=profile.daq.waveforms,
             ports=filtered_ports,
         )
-        await self._frame_task.setup()
+        await self._sync_task.setup()
         self.log.info(f"Created and configured acquisition task for profile '{profile_id}'")
 
         # 4. Update active profile state
@@ -336,7 +361,7 @@ class SpimRig(Rig):
         if not self.active_profile:
             raise ValueError("No active profile set - use set_active_profile() first")
 
-        if self._is_previewing:
+        if self._mode == RigMode.PREVIEWING:
             self.log.warning("Preview already running")
             return
 
@@ -367,7 +392,7 @@ class SpimRig(Rig):
         # Start preview manager with handles and topics
         await self.preview.start(camera_streams, callback=frame_callback)
 
-        self._is_previewing = True
+        self._mode = RigMode.PREVIEWING
         self._frame_callback = frame_callback
         self.log.info(f"Preview started for {len(camera_streams)} cameras")
 
@@ -376,8 +401,8 @@ class SpimRig(Rig):
             await self._enable_channel_lasers()
 
         # Start DAQ acquisition task after all devices are configured
-        if self._frame_task:
-            await self._frame_task.start()
+        if self._sync_task:
+            await self._sync_task.start()
             self.log.info("Acquisition task started")
 
     async def _enable_channel_lasers(self) -> None:
@@ -415,15 +440,15 @@ class SpimRig(Rig):
 
     async def stop_preview(self) -> None:
         """Stop preview mode on all streaming cameras and cleanup manager."""
-        if not self._is_previewing:
+        if self._mode != RigMode.PREVIEWING:
             self.log.warning("Preview not running")
             return
 
         self.log.info("Stopping preview...")
 
         # Stop DAQ acquisition task first
-        if self._frame_task:
-            await self._frame_task.stop()
+        if self._sync_task:
+            await self._sync_task.stop()
             self.log.info("Acquisition task stopped")
 
         # Disable lasers
@@ -441,9 +466,139 @@ class SpimRig(Rig):
         await asyncio.gather(*tasks, return_exceptions=True)
 
         self._streaming_cameras.clear()
-        self._is_previewing = False
+        self._mode = RigMode.IDLE
 
         self.log.info("Preview stopped")
+
+    # ===================== Stack Acquisition =====================
+    #
+    @property
+    def scanning_axis(self) -> LinearAxisHandle:
+        return self.stage.scanning_axis
+
+    async def acquire_stack(self, stack: Stack, output_dir: Path, profile_id: str | None = None) -> StackResult:
+        """Acquire a z-stack at one tile position."""
+        if self._mode == RigMode.ACQUIRING:
+            raise RuntimeError("Cannot acquire stack while another acquisition is in progress")
+        if self._mode == RigMode.PREVIEWING:
+            await self.stop_preview()
+
+        self._mode = RigMode.ACQUIRING
+        started_at = datetime.now()
+        stack.status = StackStatus.ACQUIRING
+
+        # Set profile if specified
+        if profile_id and profile_id != self._active_profile_id:
+            await self.set_active_profile(profile_id)
+
+        if not self.active_profile:
+            raise ValueError("No active profile set")
+
+        if self.stage is None:
+            raise RuntimeError("Stage not initialized")
+
+        if self.daq is None:
+            raise RuntimeError("DAQ not initialized")
+
+        try:
+            # 1. Move stage to tile XY position and z_start
+            await asyncio.gather(
+                self.stage.x.move_abs(stack.x_um / 1000, wait=True),  # um -> mm
+                self.stage.y.move_abs(stack.y_um / 1000, wait=True),
+                self.stage.z.move_abs(stack.z_start_um / 1000, wait=True),
+            )
+
+            # 2. Configure TTL stepper on scanning axis for relative stepping
+            await self.scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
+
+            # 3. Queue relative moves for each frame
+            step_mm = stack.z_step_um / 1000
+            for _ in range(stack.num_frames):
+                await self.scanning_axis.queue_relative_move(step_mm)
+
+            # 4. Create frame task with for_stack=True
+            profile = self.active_profile
+            profile_device_ids = self.config.get_profile_device_ids(self._active_profile_id)
+            filtered_ports = {
+                device_id: port
+                for device_id, port in self.config.daq.acq_ports.items()
+                if device_id in profile_device_ids
+            }
+
+            sync_task = SyncTask(
+                uid=f"stack_{stack.tile_id}",
+                daq=self.daq,
+                timing=profile.daq.timing,
+                waveforms=profile.daq.waveforms,
+                ports=filtered_ports,
+                for_stack=True,
+                stack_only=profile.daq.stack_only,
+            )
+            await sync_task.setup()
+
+            # 5. Start cameras via capture_batch (in parallel)
+            camera_tasks = {}
+            for chan_name, channel in self.active_channels.items():
+                cam_id = channel.detection
+                if cam_id not in self.cameras:
+                    continue
+                camera_output = output_dir / cam_id
+                camera_tasks[cam_id] = self.cameras[cam_id].capture_batch(
+                    num_frames=stack.num_frames,
+                    output_dir=camera_output,
+                )
+
+            # 6. Enable lasers
+            await self._enable_channel_lasers()
+
+            # 7. Start frame task and wait for cameras
+            await sync_task.start()
+            camera_results = await asyncio.gather(*camera_tasks.values())
+
+            # 8. Stop and cleanup
+            await sync_task.stop()
+            await sync_task.close()
+            await self._disable_channel_lasers()
+            await self.scanning_axis.reset_ttl_stepper()
+
+            # Build results dict
+            cameras_dict = {cam_id: result for cam_id, result in zip(camera_tasks.keys(), camera_results)}
+
+            stack.status = StackStatus.COMPLETED
+            completed_at = datetime.now()
+            self._mode = RigMode.IDLE
+
+            return StackResult(
+                tile_id=stack.tile_id,
+                status=StackStatus.COMPLETED,
+                output_dir=output_dir,
+                cameras=cameras_dict,
+                num_frames=stack.num_frames,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration_s=(completed_at - started_at).total_seconds(),
+            )
+
+        except Exception as e:
+            stack.status = StackStatus.FAILED
+            completed_at = datetime.now()
+            self._mode = RigMode.IDLE
+            # Attempt cleanup on failure
+            try:
+                await self.scanning_axis.reset_ttl_stepper()
+            except Exception:
+                pass
+            return StackResult(
+                tile_id=stack.tile_id,
+                status=StackStatus.FAILED,
+                output_dir=output_dir,
+                cameras={},
+                num_frames=0,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration_s=(completed_at - started_at).total_seconds(),
+                error_message=str(e),
+            )
 
 
 class RigPreviewHub:

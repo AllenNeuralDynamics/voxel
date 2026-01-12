@@ -43,9 +43,9 @@ async def main():
 
         # Example: List all devices
         log.info("Available devices (%d):", len(controller.handles))
-        for device_id, agent in controller.handles.items():
+        for device_id, handle in controller.handles.items():
             log.info("  - %s", device_id)
-            interface = await agent.interface()
+            interface = await handle.interface()
             log.debug("Interface for %s:\n%s", device_id, interface)
             print(interface)
 

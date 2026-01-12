@@ -7,7 +7,7 @@
 #     QWidget,
 # )
 # from voxel.devices.descriptions import generate_ui_label
-# from voxel.devices.laser.agent import LaserAgent
+# from voxel.devices.laser.controller import LaserAgent
 
 # from spim_widgets.laser.adapter import QtLaserAdapter
 # from spim_widgets.laser.power import PowerSetpointInput
@@ -41,12 +41,12 @@
 
 # class LaserWidget(QWidget):
 #     def __init__(
-#         self, agent: LaserAgent, color: str = "#18181b", border_color: str = "#3e3e44", border_radius: int = 16
+#         self, controller: LaserAgent, color: str = "#18181b", border_color: str = "#3e3e44", border_radius: int = 16
 #     ) -> None:
 #         super().__init__()
-#         self.agent = agent
-#         self.adapter = QtLaserAdapter(agent)
-#         self._input = PowerSetpointInput(binding=self.adapter.power, wavelength=agent.laser.wavelength)
+#         self.controller = controller
+#         self.adapter = QtLaserAdapter(controller)
+#         self._input = PowerSetpointInput(binding=self.adapter.power, wavelength=controller.laser.wavelength)
 
 #         self._color = color
 #         self._border_color = border_color
@@ -61,9 +61,9 @@
 
 #         # Start -- Header Layout
 #         header_layout = QHBoxLayout()
-#         wavelength_chip = WavelengthChip(wavelength=self.agent.laser.wavelength)
+#         wavelength_chip = WavelengthChip(wavelength=self.controller.laser.wavelength)
 #         header_layout.addWidget(wavelength_chip)
-#         label = QLabel(f"{generate_ui_label(self.agent.uid)}")
+#         label = QLabel(f"{generate_ui_label(self.controller.uid)}")
 #         header_layout.addWidget(label)
 #         header_layout.addStretch()
 #         enable_chip = Chip(text="ON", color="#419044", border_color="#245D27")

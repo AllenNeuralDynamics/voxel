@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QWidget as QtWidget
 
 from pyrig import Device, DeviceHandle
 from pyrig.cluster import DeviceAddress, DeviceAddressTCP, ZMQAdapter, ZMQService
-from pyrig.device import DeviceAgent, DeviceConfig
+from pyrig.device import DeviceConfig, DeviceController
 from spim_widgets.base import RemoteHandleWidget
 
 logger = logging.getLogger(__name__)
@@ -59,9 +59,9 @@ def _run_device_service(
         # Create connection info
         conn = DeviceAddressTCP(host="0.0.0.0", rpc=rpc_port, pub=pub_port)
 
-        # Create agent and service
-        agent = DeviceAgent(device)
-        service = service_cls(agent, conn, zctx)
+        # Create controller and service
+        ctrl = DeviceController(device)
+        service = service_cls(ctrl, conn, zctx)
         logger.info(f"ZMQService started on rpc={rpc_port}, pub={pub_port}")
 
         # Notify parent process that we're ready

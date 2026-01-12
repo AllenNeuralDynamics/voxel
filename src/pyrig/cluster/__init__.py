@@ -1,8 +1,6 @@
-from .adapter import ZMQAdapter
 from .manager import ClusterConfig, ClusterManager
-from .node import DeviceProvision, NodeConfig, NodeService, run_node_service
-from .protocol import DeviceAddress, DeviceAddressTCP
-from .service import ZMQService
+from .node import DeviceProvision, NodeConfig, RigNode, run_node_service
+from .transport import DeviceAddress, DeviceAddressTCP, ZMQAdapter, ZMQService
 
 __all__ = [
     "ClusterManager",
@@ -11,7 +9,7 @@ __all__ = [
     "DeviceAddressTCP",
     "ZMQService",
     "ZMQAdapter",
-    "NodeService",
+    "RigNode",
     "NodeConfig",
     "DeviceProvision",
     "run_node_service",
@@ -26,7 +24,7 @@ if __name__ == "__main__":
     import zmq.asyncio
     from rich import print
 
-    from pyrig.device import Device, describe
+    from pyrig.device import Device, DeviceController, describe
 
     class DataProcessor(Device):
         """Test class for more complex method scenarios."""
@@ -114,12 +112,10 @@ if __name__ == "__main__":
                 self._internal_state = new_value
             return self._internal_state
 
-    from pyrig.device import DeviceAgent
-
-    class DataProcessorAgent(DeviceAgent):
-        @describe(label="Async Agent Command", desc="Async Agent Command")
-        def async_agent_command(self, arg1: str, arg2: int) -> str:
-            return f"Async Agent Command: {arg1} {arg2}"
+    class DataProcessorController(DeviceController):
+        @describe(label="Async Controller Command", desc="Async Controller Command")
+        def async_ctrl_command(self, arg1: str, arg2: int) -> str:
+            return f"Async Controller Command: {arg1} {arg2}"
 
     class Laser(Device):
         """A mock laser device for testing property and command interfaces."""
@@ -192,7 +188,7 @@ if __name__ == "__main__":
             return "Emergency stop executed"
 
     async def main():
-        # Create nodes and use DeviceAgent for automatic command discovery
+        # Create nodes and use DeviceController for automatic command discovery
         zctx = zmq.asyncio.Context()
         processor = DataProcessor("test_processor")
         laser = Laser("test_laser")
@@ -200,11 +196,11 @@ if __name__ == "__main__":
         proc_conn = DeviceAddressTCP(rpc=5555, pub=5556)
         laser_conn = DeviceAddressTCP(rpc=5559, pub=5560)
 
-        # Create agents and services
-        proc_agent = DeviceAgent(processor)
-        laser_agent = DeviceAgent(laser)
-        _ = ZMQService(proc_agent, proc_conn, zctx)
-        _ = ZMQService(laser_agent, laser_conn, zctx)
+        # Create controllers and services
+        proc_ctrl = DeviceController(processor)
+        laser_ctrl = DeviceController(laser)
+        _ = ZMQService(proc_ctrl, proc_conn, zctx)
+        _ = ZMQService(laser_ctrl, laser_conn, zctx)
 
         from pyrig.device import DeviceHandle, PropsResponse
 

@@ -5,8 +5,6 @@ from collections.abc import Callable, Sequence
 from functools import wraps
 from typing import Any
 
-import zmq
-
 try:
     from rich.logging import RichHandler
 except ImportError:
@@ -83,43 +81,6 @@ def configure_logging(
 
     logging.basicConfig(**basic_kwargs)
     return resolved_handlers
-
-
-class ZmqTopicHandler(logging.Handler):
-    """Publish log records via ZMQ using `<logger>.<LEVEL>` topics."""
-
-    def __init__(self, address: str):
-        super().__init__()
-        self._ctx = zmq.Context()
-        self._socket = self._ctx.socket(zmq.PUB)
-        self._socket.connect(address)
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if self._socket is None:
-            return
-        logger_name = record.name or "root"
-        topic = f"{logger_name}.{record.levelname}"
-        try:
-            message = self.format(record)
-            self._socket.send_multipart(
-                [
-                    topic.encode("utf-8", errors="replace"),
-                    message.encode("utf-8", errors="replace"),
-                ]
-            )
-        except Exception:
-            self.handleError(record)
-
-    def close(self) -> None:
-        try:
-            if self._socket is not None:
-                self._socket.close(0)
-            if self._ctx is not None:
-                self._ctx.term()
-        finally:
-            self._socket = None
-            self._ctx = None
-            super().close()
 
 
 if RichHandler:

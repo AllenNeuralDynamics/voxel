@@ -8,7 +8,7 @@ Minimal example using PyRig base classes without customization.
 - `MotorStage` - Motion control
 - `Pump` - Fluid handling
 
-All accessed through generic `rig.agents` dictionary.
+All accessed through generic `rig.controllers` dictionary.
 
 ## Usage
 
@@ -20,8 +20,8 @@ uv run python -m simple.demo
 ## Device Access
 
 ```python
-# Generic access through agents dict
-temp = rig.agents["temp_controller"]
+# Generic access through handles dict
+temp = rig.handles["temp_controller"]
 
 # Call commands
 result = await temp.call("start_regulation")
@@ -36,5 +36,5 @@ interface = await temp.interface()
 
 ## vs Imaging Example
 
-**Simple:** Generic `DeviceClient`, access via `rig.agents["id"]`, call with strings
+**Simple:** Generic `DeviceClient`, access via `rig.controllers["id"]`, call with strings
 **Imaging:** Typed clients (`LaserClient`), organized collections (`rig.lasers["id"]`), methods with autocomplete

@@ -17,15 +17,14 @@ from pyrig.device import (
     Adapter,
     BuildError,
     Device,
-    DeviceAgent,
     DeviceConfig,
+    DeviceController,
     DeviceHandle,
     build_objects,
 )
-from pyrig.utils import ZmqTopicHandler
 
-from .protocol import DeviceAddressTCP, NodeAction, NodeMessage, RigAction
-from .service import ZMQService
+from .protocol import NodeAction, NodeMessage, RigAction
+from .transport import DeviceAddressTCP, ZMQService
 
 
 class NodeConfig(BaseModel):
@@ -79,11 +78,11 @@ class NodeHeartbeat(BaseModel):
     device_health: dict[str, DeviceHealth]
 
 
-class NodeService:
+class RigNode:
     """Service that manages devices on a node and communicates with the controller."""
 
     def __init__(self, zctx: zmq.asyncio.Context, node_id: str, ctrl_addr: str, start_port: int = 10000):
-        """Initialize NodeService.
+        """Initialize RigNode.
 
         Args:
             zctx: ZMQ context
@@ -104,9 +103,9 @@ class NodeService:
         self.log = logging.getLogger(f"node.{node_id}")
 
     @classmethod
-    def create_agent(cls, device: Device) -> DeviceAgent:
-        """Create an agent for a device. Override to return custom agent types."""
-        return DeviceAgent(device, stream_interval=0.5)
+    def create_controller(cls, device: Device) -> DeviceController:
+        """Create a controller for a device. Override to return custom controller types."""
+        return DeviceController(device, stream_interval=0.5)
 
     @classmethod
     def create_handle(cls, device_type: str, adapter: Adapter) -> DeviceHandle:
@@ -115,8 +114,8 @@ class NodeService:
 
     def _create_service(self, device: Device, conn: DeviceAddressTCP) -> ZMQService:
         """Create a ZMQ service for a device."""
-        agent = self.create_agent(device)
-        return ZMQService(agent, conn=conn, zctx=self._zctx)
+        controller = self.create_controller(device)
+        return ZMQService(controller, conn=conn, zctx=self._zctx)
 
     def _get_device_health(self, device_id: str) -> DeviceHealth:
         """Get health status for a device."""
@@ -280,13 +279,50 @@ class NodeService:
         self._device_servers.clear()
 
 
+class ZmqTopicHandler(logging.Handler):
+    """Publish log records via ZMQ using `<logger>.<LEVEL>` topics."""
+
+    def __init__(self, address: str):
+        super().__init__()
+        self._ctx = zmq.Context()
+        self._socket = self._ctx.socket(zmq.PUB)
+        self._socket.connect(address)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self._socket is None:
+            return
+        logger_name = record.name or "root"
+        topic = f"{logger_name}.{record.levelname}"
+        try:
+            message = self.format(record)
+            self._socket.send_multipart(
+                [
+                    topic.encode("utf-8", errors="replace"),
+                    message.encode("utf-8", errors="replace"),
+                ]
+            )
+        except Exception:
+            self.handleError(record)
+
+    def close(self) -> None:
+        try:
+            if self._socket is not None:
+                self._socket.close(0)
+            if self._ctx is not None:
+                self._ctx.term()
+        finally:
+            self._socket = None
+            self._ctx = None
+            super().close()
+
+
 async def run_node_async(
     node_id: str,
     ctrl_host: str,
     ctrl_port: int,
     log_port: int,
     start_port: int,
-    service_cls: type[NodeService],
+    service_cls: type[RigNode],
     remove_console_handlers: bool = False,
     on_ready: Callable[[], None] | None = None,
 ):
@@ -332,7 +368,7 @@ def run_node_service(
     ctrl_port: int = 9000,
     log_port: int = 9001,
     start_port: int = 10000,
-    service_cls: type[NodeService] = NodeService,
+    service_cls: type[RigNode] = RigNode,
     remove_console_handlers: bool = False,
     on_ready: Callable[[], None] | None = None,
 ):
@@ -347,7 +383,7 @@ def run_node_service(
         ctrl_port: Controller control port (default: 9000)
         log_port: Port for log aggregation (default: 9001)
         start_port: Starting port for device allocation (default: 10000)
-        service_cls: NodeService class to instantiate (default: NodeService)
+        service_cls: RigNode class to instantiate (default: RigNode)
     """
 
     asyncio.run(
@@ -364,10 +400,10 @@ def run_node_service(
     )
 
 
-def main(service_cls: type[NodeService] = NodeService):
+def main(service_cls: type[RigNode] = RigNode):
     """Entry point for node services.
 
-    This can be used by any NodeService subclass as its CLI entry point.
+    This can be used by any RigNode subclass as its CLI entry point.
 
     Usage:
         python -m pyrig.node <node_id> [controller_host] [control_port] [log_port] [start_port]
@@ -377,7 +413,7 @@ def main(service_cls: type[NodeService] = NodeService):
         python -m pyrig.node camera_1 localhost 9000 9001
 
     Args:
-        service_cls: NodeService class to instantiate (default: NodeService)
+        service_cls: RigNode class to instantiate (default: RigNode)
     """
     if len(sys.argv) < 2:
         print("Usage: python -m pyrig.node <node_id> [controller_host] [control_port] [log_port] [start_port]")

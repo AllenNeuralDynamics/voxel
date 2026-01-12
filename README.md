@@ -27,7 +27,7 @@ rig = Rig(zctx, config)
 await rig.start()
 
 # Generic access
-temp = rig.agents["temp_controller"]
+temp = rig.controllers["temp_controller"]
 await temp.call("start_regulation")
 
 # Or with typed clients (ImagingRig example)
@@ -130,13 +130,13 @@ Users opt-in by configuring Python logging. No logs appear by default (library b
 
 ## Customization
 
-**Base Rig:** Generic device access via `rig.agents["id"]`
+**Base Rig:** Generic device access via `rig.controllers["id"]`
 
 **Custom Rig:** Typed collections with autocomplete
 
 ```python
 class ImagingRig(Rig):
-    NODE_SERVICE_CLASS = ImagingNodeService  # Custom services
+    NODE_SERVICE_CLASS = ImagingRigNode  # Custom services
 
     def __init__(self, zctx, config):
         super().__init__(zctx, config)

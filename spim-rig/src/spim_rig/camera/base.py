@@ -1,6 +1,8 @@
 import asyncio
 from abc import abstractmethod
+from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal, cast
 
 import numpy as np
@@ -8,7 +10,7 @@ from ome_zarr_writer.types import Dtype, SchemaModel, Vec2D
 from pydantic import BaseModel
 
 from pyrig import Device, describe
-from pyrig.device import DeviceAgent
+from pyrig.device import DeviceController
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
 from spim_rig.camera.preview import PreviewCrop, PreviewGenerator, PreviewLevels
 from spim_rig.device import DeviceType
@@ -81,6 +83,18 @@ PIXEL_FMT_TO_DTYPE: dict[PixelFormat, Dtype] = {
 }
 
 BINNING_OPTIONS = [1, 2, 4, 8]
+
+
+class CameraBatchResult(BaseModel):
+    """Result of a batch capture operation."""
+
+    camera_id: str
+    num_frames: int
+    output_path: Path
+    started_at: datetime
+    completed_at: datetime
+    duration_s: float
+    dropped_frames: int = 0
 
 
 class SpimCamera(Device):
@@ -264,7 +278,7 @@ class SpimCamera(Device):
         """Stop the camera."""
 
 
-# ==================== Camera Agent ====================
+# ==================== Camera Controller ====================
 
 
 class CameraMode(StrEnum):
@@ -273,7 +287,7 @@ class CameraMode(StrEnum):
     ACQUISITION = "ACQUISITION"
 
 
-class CameraAgent(DeviceAgent[SpimCamera]):
+class CameraController(DeviceController[SpimCamera]):
     def __init__(self, device: SpimCamera, stream_interval: float = 0.5):
         super().__init__(device, stream_interval=stream_interval)
         self._channel_name = device.uid
@@ -339,6 +353,69 @@ class CameraAgent(DeviceAgent[SpimCamera]):
             await self._preview_task
             self._preview_task = None
         await self._run_sync(self.device.stop)
+
+    @describe(label="Capture Batch")
+    async def capture_batch(
+        self,
+        num_frames: int,
+        output_dir: str,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> CameraBatchResult:
+        """Capture a batch of frames in triggered mode and write to output_dir."""
+        if self._mode != CameraMode.IDLE:
+            raise RuntimeError(f"Cannot capture batch: camera in {self._mode} mode")
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        log_file = output_path / "frames.txt"
+
+        started_at = datetime.now()
+        self._mode = CameraMode.ACQUISITION
+
+        try:
+
+            def _prepare_and_start():
+                self.device.prepare(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
+                self.device.start(frame_count=num_frames)
+
+            await self._run_sync(_prepare_and_start)
+
+            frames_captured = 0
+            dropped = 0
+
+            with log_file.open("w") as f:
+                f.write(f"camera_id: {self.device.uid}\n")
+                f.write(f"started_at: {started_at.isoformat()}\n")
+                f.write("---\n")
+
+                for i in range(num_frames):
+                    frame = await self._run_sync(self.device.grab_frame)
+                    frame_time = datetime.now()
+                    f.write(f"frame {i}: shape={frame.shape}, mean={frame.mean():.2f}, ts={frame_time.isoformat()}\n")
+                    frames_captured += 1
+
+                    stream_info = self.device.stream_info
+                    if stream_info:
+                        dropped = stream_info.dropped_frames
+
+            await self._run_sync(self.device.stop)
+
+        finally:
+            self._mode = CameraMode.IDLE
+
+        completed_at = datetime.now()
+        duration = (completed_at - started_at).total_seconds()
+
+        return CameraBatchResult(
+            camera_id=self.device.uid,
+            num_frames=frames_captured,
+            output_path=output_path,
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_s=duration,
+            dropped_frames=dropped,
+        )
 
     async def _preview_loop(self):
         try:

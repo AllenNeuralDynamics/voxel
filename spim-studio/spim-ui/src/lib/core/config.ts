@@ -1,4 +1,17 @@
 /**
+ * Tile ordering pattern (matches backend TileOrder from spim_rig.config)
+ */
+export type TileOrder = 'row_wise' | 'column_wise' | 'snake_row' | 'snake_column';
+
+/**
+ * Global settings for acquisition planning (matches backend GlobalsConfig from spim_rig.config)
+ */
+export interface GlobalsConfig {
+	default_overlap: number;
+	default_tile_order: TileOrder;
+}
+
+/**
  * Device configuration (matches backend DeviceConfig from pyrig.config)
  */
 export interface DeviceConfig {
@@ -55,6 +68,7 @@ export interface OpticalPathConfig {
  */
 export interface DetectionPathConfig extends OpticalPathConfig {
 	filter_wheels: string[];
+	magnification: number;
 }
 
 /**
@@ -84,7 +98,7 @@ export interface TriggerConfig {
 }
 
 /**
- * Acquisition timing parameters (matches backend FrameTiming from spim_rig.daq.acq_task)
+ * Acquisition timing parameters (matches backend FrameTiming from spim_rig.sync_task)
  */
 export interface FrameTiming {
 	sample_rate: string; // Frequency with unit, e.g., "100 kHz"
@@ -176,11 +190,12 @@ export type Waveform =
 	| CSVWaveform;
 
 /**
- * Acquisition task configuration (matches backend FrameTaskData from spim_rig.daq.acq_task)
+ * Sync task configuration (matches backend SyncTaskData from spim_rig.sync_task)
  */
-export interface FrameTaskData {
+export interface SyncTaskData {
 	timing: FrameTiming;
 	waveforms: Record<string, Waveform>; // device_id -> waveform
+	stack_only?: string[]; // Waveforms excluded from frame streaming (included only during stack acquisition)
 }
 
 /**
@@ -190,7 +205,7 @@ export interface ProfileConfig {
 	label?: string | null;
 	desc: string;
 	channels: string[]; // list of channel IDs
-	daq: FrameTaskData; // DAQ acquisition configuration
+	daq: SyncTaskData; // DAQ sync task configuration
 }
 
 /**
@@ -198,6 +213,7 @@ export interface ProfileConfig {
  */
 export interface SpimRigConfig {
 	metadata: RigMetadata;
+	globals: GlobalsConfig;
 	nodes: Record<string, NodeConfig>;
 	daq: DaqConfig;
 	stage: StageConfig;

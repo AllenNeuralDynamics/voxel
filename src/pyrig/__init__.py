@@ -6,7 +6,7 @@ from .cluster import (
     DeviceAddress,
     DeviceAddressTCP,
     NodeConfig,
-    NodeService,
+    RigNode,
     ZMQAdapter,
     ZMQService,
 )
@@ -30,7 +30,7 @@ __all__ = [
     # Network services
     "ZMQService",
     "ZMQAdapter",
-    "NodeService",
+    "RigNode",
     # Configuration
     "RigConfig",
     "RigInfo",

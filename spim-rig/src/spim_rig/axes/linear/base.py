@@ -7,7 +7,7 @@ from spim_rig.axes.base import SpimAxis
 from spim_rig.device import DeviceType
 
 from pyrig import describe
-from pyrig.device import DeviceAgent
+from pyrig.device import DeviceController
 
 
 class StepMode(StrEnum):
@@ -221,7 +221,7 @@ class LinearAxis(SpimAxis):
         return None
 
 
-# ==================== Linear Axis Agent ====================
+# ==================== Linear Axis Controller ====================
 
 
 class ScanMode(StrEnum):
@@ -229,7 +229,7 @@ class ScanMode(StrEnum):
     TTL_STEPPING = "TTL_STEPPING"
 
 
-class LinearAxisAgent(DeviceAgent[LinearAxis]):
+class LinearAxisController(DeviceController[LinearAxis]):
     def __init__(self, device: LinearAxis, stream_interval: float = 0.5):
         super().__init__(device, stream_interval=stream_interval)
         self._scan_mode = ScanMode.IDLE

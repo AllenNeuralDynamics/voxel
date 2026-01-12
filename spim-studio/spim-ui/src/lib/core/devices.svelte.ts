@@ -6,8 +6,7 @@
  */
 
 import { SvelteMap, SvelteSet, SvelteURL } from 'svelte/reactivity';
-import type { RigManager } from './rig.svelte';
-import type { RigClient } from './client.svelte';
+import type { Client } from './client.svelte';
 
 /**
  * Property model (matches pyrig.device.props.common.PropertyModel)
@@ -131,21 +130,23 @@ export class DevicesManager {
 	// Reactive device state
 	devices = $state<SvelteMap<string, DeviceInfo>>(new SvelteMap());
 
-	private rigClient: RigClient;
-	private baseUrl: string;
+	readonly #client: Client;
 	private unsubscribe?: () => void;
 
-	constructor(rigManager: RigManager) {
-		this.baseUrl = rigManager.baseUrl;
-		this.rigClient = rigManager.client;
+	constructor(client: Client) {
+		this.#client = client;
 
 		// Subscribe to property updates from WebSocket
 		// Topic: device/<device_id>/properties
 		// We subscribe to 'device' prefix to get all device updates
-		this.unsubscribe = this.rigClient.subscribe('device', (topic: string, payload: unknown) => {
+		this.unsubscribe = this.#client.subscribe('device', (topic: string, payload: unknown) => {
 			// console.log('[DevicesManager] Received:', topic, payload);
 			this.handlePropertyUpdate(topic, payload as DevicePropertyPayload);
 		});
+	}
+
+	get baseUrl(): string {
+		return this.#client.baseUrl;
 	}
 
 	/**
@@ -286,7 +287,7 @@ export class DevicesManager {
 	 * Set properties on a device (via WebSocket)
 	 */
 	async setProperties(deviceId: string, properties: Record<string, unknown>): Promise<void> {
-		this.rigClient.send({
+		this.#client.send({
 			topic: 'device/set_property',
 			payload: {
 				device: deviceId,
@@ -311,7 +312,7 @@ export class DevicesManager {
 		args: unknown[] = [],
 		kwargs: Record<string, unknown> = {}
 	): Promise<void> {
-		this.rigClient.send({
+		this.#client.send({
 			topic: 'device/execute_command',
 			payload: {
 				device: deviceId,

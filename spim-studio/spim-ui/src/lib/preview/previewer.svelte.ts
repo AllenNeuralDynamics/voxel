@@ -2,7 +2,15 @@
  * Previewer: unified controller handling preview streaming + WebGPU rendering.
  */
 
-import type { ChannelConfig, PreviewCrop, PreviewFrameInfo, PreviewLevels, RigManager, RigStatus } from '$lib/core';
+import type {
+	ChannelConfig,
+	PreviewCrop,
+	PreviewFrameInfo,
+	PreviewLevels,
+	AppStatus,
+	Client,
+	SpimRigConfig
+} from '$lib/core';
 import { clampTopLeft, getWebGPUDevice, sanitizeString, wavelengthToColor } from '$lib/utils';
 import { SvelteMap } from 'svelte/reactivity';
 import { COLORMAP_COLORS, COMMON_CHANNELS, ColormapType, colormapToHex, generateLUT } from './colormap';
@@ -292,10 +300,12 @@ export class Previewer {
 	#isRendering = false;
 	#rendererInitialized = false;
 
-	#rigManager: RigManager;
+	#client: Client;
+	config: SpimRigConfig;
 
-	constructor(rigManager: RigManager) {
-		this.#rigManager = rigManager;
+	constructor(client: Client, config: SpimRigConfig) {
+		this.#client = client;
+		this.config = config;
 		this.#framesCollector = new FramesCollector(this.MAX_CHANNELS);
 
 		// Initialize channels immediately (GPU resources created lazily)
@@ -312,28 +322,28 @@ export class Previewer {
 		// Subscribe to RigClient topics
 		this.#subscribeToRigClient();
 
-		this.#rigManager.client.requestRigStatus();
+		this.#client.requestStatus();
 	}
 
 	#subscribeToRigClient(): void {
-		const unsubStatus = this.#rigManager.client.on('rig/status', (status) => {
-			this.#handleRigStatus(status);
+		const unsubStatus = this.#client.on('status', (status) => {
+			this.#handleAppStatus(status);
 		});
 
-		const unsubPreviewStatus = this.#rigManager.client.on('preview/status', (status) => {
+		const unsubPreviewStatus = this.#client.on('preview/status', (status) => {
 			this.isPreviewing = status.previewing;
 		});
 
-		const unsubFrame = this.#rigManager.client.subscribe('preview/frame', (topic, payload) => {
+		const unsubFrame = this.#client.subscribe('preview/frame', (topic, payload) => {
 			const data = payload as { channel: string; info: PreviewFrameInfo; bitmap: ImageBitmap };
 			this.#handleFrame(data.channel, data.info, data.bitmap);
 		});
 
-		const unsubCrop = this.#rigManager.client.on('preview/crop', (crop) => {
+		const unsubCrop = this.#client.on('preview/crop', (crop) => {
 			this.#handleCropUpdate(crop);
 		});
 
-		const unsubLevels = this.#rigManager.client.on('preview/levels', (levels) => {
+		const unsubLevels = this.#client.on('preview/levels', (levels) => {
 			this.#handleLevelsUpdate(levels.channel, { min: levels.min, max: levels.max });
 		});
 
@@ -384,11 +394,11 @@ export class Previewer {
 			console.warn('No visible channels to preview');
 			return;
 		}
-		this.#rigManager.client.startPreview();
+		this.#client.startPreview();
 	}
 
 	stopPreview(): void {
-		this.#rigManager.client.stopPreview();
+		this.#client.stopPreview();
 	}
 
 	setChannelLevels(name: string, min: number, max: number): void {
@@ -424,14 +434,17 @@ export class Previewer {
 		}
 	};
 
-	#handleRigStatus = (status: RigStatus): void => {
-		this.isPreviewing = status.previewing;
+	#handleAppStatus = (status: AppStatus): void => {
+		const session = status.session;
+		this.isPreviewing = session?.mode === 'previewing';
 		this.#framesCollector.clear();
 
-		if (!status.active_profile_id || !this.#rigManager.config) return;
+		if (!session?.active_profile_id || !this.config) return;
+
+		const active_profile_id = session.active_profile_id;
 
 		// Get active profile and channels from RigManager's config
-		const activeProfile = this.#rigManager.config.profiles[status.active_profile_id];
+		const activeProfile = this.config.profiles[active_profile_id];
 		const activeChannelIds = activeProfile ? activeProfile.channels : [];
 		const channelNames = activeChannelIds.slice(0, this.MAX_CHANNELS);
 
@@ -449,7 +462,7 @@ export class Previewer {
 			slot.name = channelNames[i];
 			if (!slot.name) continue;
 
-			slot.config = this.#rigManager.config.channels[slot.name];
+			slot.config = this.config.channels[slot.name];
 
 			slot.visible = true;
 			// Try emission wavelength first (if available)
@@ -728,7 +741,7 @@ export class Previewer {
 	#queueCropUpdate(crop: PreviewCrop): void {
 		if (this.#cropUpdateTimer !== null) clearTimeout(this.#cropUpdateTimer);
 		this.#cropUpdateTimer = window.setTimeout(() => {
-			this.#rigManager.client.updateCrop(crop.x, crop.y, crop.k);
+			this.#client.updateCrop(crop.x, crop.y, crop.k);
 			this.#cropUpdateTimer = null;
 		}, this.#DEBOUNCE_DELAY_MS);
 	}
@@ -738,7 +751,7 @@ export class Previewer {
 		if (existing !== undefined) clearTimeout(existing);
 
 		const timer = window.setTimeout(() => {
-			this.#rigManager.client.updateLevels(channelName, levels.min, levels.max);
+			this.#client.updateLevels(channelName, levels.min, levels.max);
 			this.#levelsUpdateTimers.delete(channelName);
 		}, this.#DEBOUNCE_DELAY_MS);
 

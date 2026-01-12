@@ -1,7 +1,9 @@
 """Camera device handle with typed methods."""
 
+from pathlib import Path
+
 from pyrig.device import DeviceHandle
-from spim_rig.camera.base import SpimCamera, TriggerMode, TriggerPolarity
+from spim_rig.camera.base import CameraBatchResult, SpimCamera, TriggerMode, TriggerPolarity
 from spim_rig.camera.preview import PreviewCrop, PreviewLevels
 
 
@@ -46,3 +48,14 @@ class CameraHandle(DeviceHandle[SpimCamera]):
     async def update_preview_levels(self, levels: PreviewLevels) -> None:
         """Update preview levels range."""
         await self.call("update_preview_levels", levels)
+
+    async def capture_batch(
+        self,
+        num_frames: int,
+        output_dir: Path,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> CameraBatchResult:
+        """Capture a batch of frames in triggered mode."""
+        result = await self.call("capture_batch", num_frames, str(output_dir), trigger_mode, trigger_polarity)
+        return CameraBatchResult.model_validate(result)

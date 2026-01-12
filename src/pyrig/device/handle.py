@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .agent import StreamCallback
+from .controller import StreamCallback
 from .base import CommandResponse, Device, DeviceInterface, PropsCallback, PropsResponse
 from .props import PropertyModel
 

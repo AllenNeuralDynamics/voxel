@@ -1,7 +1,7 @@
 """DAQ interface module for SPIM systems."""
 
-from .agent import DaqAgent
-from .base import AOTask, AcqSampleMode, COTask, DaqTask, PinInfo, SpimDaq, TaskInfo, TaskStatus
+from .controller import DaqController
+from .base import AcqSampleMode, AOTask, COTask, DaqTask, PinInfo, SpimDaq, TaskInfo, TaskStatus
 from .handle import DaqHandle
 
 __all__ = [
@@ -13,6 +13,6 @@ __all__ = [
     "TaskInfo",
     "AcqSampleMode",
     "TaskStatus",
-    "DaqAgent",
+    "DaqController",
     "DaqHandle",
 ]

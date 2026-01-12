@@ -8,7 +8,7 @@ import zmq.asyncio
 from pydantic import BaseModel, Field
 from ruyaml import YAML
 
-from pyrig.cluster import ClusterConfig, ClusterManager, NodeConfig, NodeService
+from pyrig.cluster import ClusterConfig, ClusterManager, NodeConfig, RigNode
 from pyrig.device import Device, DeviceConfig, DeviceHandle, build_objects
 from pyrig.local import LocalAdapter
 from pyrig.utils import get_local_ip
@@ -71,13 +71,13 @@ class Rig:
     - Hybrid: Both `devices` and `nodes`
 
     Subclasses can customize:
-    - node_cls(): Return NodeService subclass for agents and handles
+    - node_cls(): Return RigNode subclass for controllers and handles
     """
 
     @classmethod
-    def node_cls(cls) -> type[NodeService]:
-        """Return the NodeService class for agent and handle creation."""
-        return NodeService
+    def node_cls(cls) -> type[RigNode]:
+        """Return the RigNode class for controller and handle creation."""
+        return RigNode
 
     def __init__(self, config: RigConfig, zctx: zmq.asyncio.Context | None = None):
         self.config = config
@@ -128,7 +128,7 @@ class Rig:
 
             for uid, dev in devices.items():
                 self._local_devices[uid] = dev
-                adapter = LocalAdapter(self.node_cls().create_agent(dev))
+                adapter = LocalAdapter(self.node_cls().create_controller(dev))
                 self.handles[uid] = self.node_cls().create_handle(dev.__DEVICE_TYPE__, adapter)
                 self.log.debug(f"Created local handle for {uid}")
 

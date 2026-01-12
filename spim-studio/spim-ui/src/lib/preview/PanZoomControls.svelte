@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
-	import DraggableNumberInput from '$lib/ui/SpinBox.svelte';
+	import DraggableNumberInput from '$lib/ui/primitives/SpinBox.svelte';
 	import type { Previewer } from './previewer.svelte';
 
 	interface Props {
@@ -13,12 +13,13 @@
 	let isDefaultCrop = $derived(previewer.crop.x === 0 && previewer.crop.y === 0 && previewer.crop.k === 0);
 
 	// Local state for crop values (for draggable inputs)
-	let cropX = $state(previewer.crop.x);
-	let cropY = $state(previewer.crop.y);
-	let magnification = $state(1 / (1 - previewer.crop.k));
+	// Initialized via $effect.pre to sync with previewer on first render
+	let cropX = $state(0);
+	let cropY = $state(0);
+	let magnification = $state(1);
 
-	// Sync local state with previewer
-	$effect(() => {
+	// Sync local state with previewer (runs before DOM update)
+	$effect.pre(() => {
 		cropX = previewer.crop.x;
 		cropY = previewer.crop.y;
 		magnification = 1 / (1 - previewer.crop.k);

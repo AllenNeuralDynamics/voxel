@@ -1,6 +1,5 @@
-"""Web interface for SPIM Rig control."""
+"""SPIM Studio - Web interface for SPIM microscope control."""
 
-from spim_studio.server import create_rig_app
-from spim_studio.service import RigService
+from spim_studio.app import create_app
 
-__all__ = ["create_rig_app", "RigService"]
+__all__ = ["create_app"]

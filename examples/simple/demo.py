@@ -1,8 +1,8 @@
 """Simple demo using base Rig class without any customization.
 
 This example shows how to use PyRig with the base classes directly,
-without creating custom Rig or NodeService subclasses. All devices
-are accessed through the generic `agents` dictionary.
+without creating custom Rig or RigNode subclasses. All devices
+are accessed through the generic `handles` dictionary.
 
 Usage:
     cd examples
@@ -42,9 +42,9 @@ async def main():
 
     # Create base Rig (no customization)
     zctx = zmq.asyncio.Context()
-    rig = Rig(zctx, config)
+    rig = Rig(config, zctx)
 
-    print(f"\n[bold cyan]=== Starting {config.metadata.name} ===[/bold cyan]")
+    print(f"\n[bold cyan]=== Starting {config.info.name} ===[/bold cyan]")
     print("[cyan]Using base Rig class (no custom clients)[/cyan]\n")
 
     try:
@@ -53,13 +53,13 @@ async def main():
 
         # List all connected devices
         print("\n[bold green]✓ Rig started successfully![/bold green]")
-        print(f"[cyan]Connected devices: {len(rig.devices)}[/cyan]\n")
+        print(f"[cyan]Connected devices: {len(rig.handles)}[/cyan]\n")
 
         # Show device interfaces
         print("[bold]Device Interfaces:[/bold]")
-        for device_id, agent in rig.devices.items():
+        for device_id, handle in rig.handles.items():
             print(f"\n[yellow]Device: {device_id}[/yellow]")
-            interface = await agent.interface()
+            interface = await handle.interface()
             print(f"  Type: {interface.type}")
             print(f"  Commands: {len(interface.commands)}")
             print(f"  Properties: {len(interface.properties)}")
@@ -74,8 +74,8 @@ async def main():
         print("\n[bold cyan]=== Demonstrating Generic Device Access ===[/bold cyan]\n")
 
         # Work with temperature controller
-        if "temp_controller" in rig.devices:
-            temp = rig.devices["temp_controller"]
+        if "temp_controller" in rig.handles:
+            temp = rig.handles["temp_controller"]
 
             print("[yellow]Working with Temperature Controller[/yellow]\n")
 
@@ -95,8 +95,8 @@ async def main():
             print(f"Heater power: {props.res['heater_power'].value}%")
 
         # Work with motor stage
-        if "x_stage" in rig.devices:
-            stage = rig.devices["x_stage"]
+        if "x_stage" in rig.handles:
+            stage = rig.handles["x_stage"]
 
             print("\n[yellow]Working with Motor Stage (X-axis)[/yellow]\n")
 
@@ -119,8 +119,8 @@ async def main():
             print(f"New position: {props.res['position'].value} mm")
 
         # Work with pump
-        if "pump_1" in rig.devices:
-            pump = rig.devices["pump_1"]
+        if "pump_1" in rig.handles:
+            pump = rig.handles["pump_1"]
 
             print("\n[yellow]Working with Pump[/yellow]\n")
 

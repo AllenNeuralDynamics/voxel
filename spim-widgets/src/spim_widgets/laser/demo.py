@@ -7,7 +7,7 @@
 
 #     from PySide6 import QtAsyncio
 #     from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QVBoxLayout, QWidget
-#     from voxel.devices.laser.agent import LaserAgent
+#     from voxel.devices.laser.controller import LaserAgent
 #     from voxel.devices.laser.mock import SimulatedLaser
 #     from voxel.utils.log import VoxelLogging
 
@@ -26,8 +26,8 @@
 #             h_layout.addStretch()
 
 #             v_layout = QVBoxLayout()
-#             for name, agent in agents.items():
-#                 wgt = LaserWidget(agent=agent)
+#             for name, controller in agents.items():
+#                 wgt = LaserWidget(controller=controller)
 #                 self._wgts[name] = wgt
 #                 v_layout.addWidget(wgt)
 #             v_layout.addStretch()

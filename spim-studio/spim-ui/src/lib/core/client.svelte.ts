@@ -1,18 +1,12 @@
 /**
- * Unified WebSocket client for rig communication.
+ * WebSocket client for backend communication.
  * Uses slash-notation topics for routing and multiplexing.
  */
 
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-
-export interface RigStatus {
-	active_profile_id: string | null;
-	previewing: boolean;
-	acq_task_active: boolean;
-	timestamp: string;
-}
+import type { AppStatus, ErrorPayload, LogMessage, ProfileChangedPayload, Stack } from './types.ts';
 
 export interface PreviewStatus {
 	previewing: boolean;
@@ -67,13 +61,13 @@ interface RigMessage {
 /**
  * Client-to-server message types
  */
-type RigClientMessage =
-	| { topic: 'profile/update'; payload: string } // profile_id
+type ClientMessage =
+	| { topic: 'request_status'; payload?: Record<string, never> }
+	| { topic: 'profile/update'; payload: { profile_id: string } }
 	| { topic: 'preview/start'; payload?: Record<string, never> }
 	| { topic: 'preview/stop'; payload?: Record<string, never> }
 	| { topic: 'preview/crop'; payload: PreviewCrop }
 	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
-	| { topic: 'rig/request_status'; payload?: Record<string, never> }
 	| { topic: 'daq/request_waveforms'; payload?: Record<string, never> }
 	| {
 			topic: 'device/set_property';
@@ -82,12 +76,19 @@ type RigClientMessage =
 	| {
 			topic: 'device/execute_command';
 			payload: { device: string; command: string; args?: unknown[]; kwargs?: Record<string, unknown> };
-	  };
-
-export interface RigErrorPayload {
-	error: string;
-	topic?: string;
-}
+	  }
+	// Grid/Stack messages
+	| { topic: 'grid/set_offset'; payload: { x_offset_um: number; y_offset_um: number } }
+	| { topic: 'grid/set_overlap'; payload: { overlap: number } }
+	| {
+			topic: 'stack/add';
+			payload: { row: number; col: number; z_start_um: number; z_end_um: number; z_step_um: number };
+	  }
+	| {
+			topic: 'stack/edit';
+			payload: { tile_id: string; z_start_um?: number; z_end_um?: number; z_step_um?: number };
+	  }
+	| { topic: 'stack/remove'; payload: { tile_id: string } };
 /**
  * Message handler callback type
  */
@@ -106,32 +107,37 @@ export type ErrorHandler = (error: Error) => void;
 /**
  * Topic-specific handler types for type safety
  */
-export interface RigHandlers {
-	'rig/status'?: (payload: RigStatus) => void;
-	'rig/error'?: (payload: RigErrorPayload) => void;
+export interface TopicHandlers {
+	status?: (payload: AppStatus) => void;
+	error?: (payload: ErrorPayload) => void;
+	'profile/changed'?: (payload: ProfileChangedPayload) => void;
+	'log/message'?: (payload: LogMessage) => void;
 	'preview/status'?: (payload: PreviewStatus) => void;
 	'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	'preview/crop'?: (payload: PreviewCrop) => void;
 	'preview/levels'?: (payload: PreviewLevelsInfo) => void;
 	'daq/waveforms'?: (payload: DaqWaveforms) => void;
 	device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
+	// Grid/Stack handlers
+	'grid/updated'?: (payload: { x_offset_um: number; y_offset_um: number; overlap: number }) => void;
+	'stacks/updated'?: (payload: { stacks: Stack[] }) => void;
 }
 
-interface RigClientOptions {
+export interface ClientOptions {
 	autoReconnect?: boolean;
 	initialReconnectDelayMs?: number;
 	maxReconnectDelayMs?: number;
 	maxReconnectAttempts?: number;
 }
 
-const DEFAULT_OPTIONS: Required<RigClientOptions> = {
+const DEFAULT_OPTIONS: Required<ClientOptions> = {
 	autoReconnect: true,
 	initialReconnectDelayMs: 1000,
 	maxReconnectDelayMs: 15000,
 	maxReconnectAttempts: 10
 };
 
-export class RigClient {
+export class Client {
 	private ws: WebSocket | null = null;
 	private handlers = new SvelteMap<string, SvelteSet<MessageHandler>>();
 	private reconnectAttempts = 0;
@@ -143,18 +149,27 @@ export class RigClient {
 	private connectionHandlers = new SvelteSet<ConnectionHandler>();
 	private errorHandlers = new SvelteSet<ErrorHandler>();
 
+	/** Base URL for REST API (derived from WebSocket URL) */
+	readonly baseUrl: string;
+
 	statusMessage = $state('Idle');
 	isConnected = $state(false);
 
 	constructor(
 		private url: string,
-		options: RigClientOptions = {}
+		options: ClientOptions = {}
 	) {
 		const resolved = { ...DEFAULT_OPTIONS, ...options };
 		this.shouldReconnect = resolved.autoReconnect;
 		this.reconnectDelay = resolved.initialReconnectDelayMs;
 		this.maxReconnectDelay = resolved.maxReconnectDelayMs;
 		this.maxReconnectAttempts = resolved.maxReconnectAttempts;
+
+		// Derive baseUrl from WebSocket URL: ws://host:port/ws -> http://host:port
+		this.baseUrl = url
+			.replace(/^ws:/, 'http:')
+			.replace(/^wss:/, 'https:')
+			.replace(/\/ws\/?$/, '');
 	}
 
 	/**
@@ -169,7 +184,7 @@ export class RigClient {
 				this.ws.binaryType = 'arraybuffer';
 
 				this.ws.onopen = () => {
-					console.log('[RigClient] Connected');
+					console.log('[Client] Connected');
 					this.statusMessage = 'Connected';
 					this.isConnected = true;
 					this.reconnectAttempts = 0;
@@ -182,13 +197,13 @@ export class RigClient {
 					try {
 						await this.handleMessage(event.data);
 					} catch (error) {
-						console.error('[RigClient] Error processing message:', error);
+						console.error('[Client] Error processing message:', error);
 						this.notifyError(error as Error);
 					}
 				};
 
 				this.ws.onerror = (event) => {
-					console.error('[RigClient] WebSocket error:', event);
+					console.error('[Client] WebSocket error:', event);
 					const error = new Error('WebSocket connection error');
 					this.statusMessage = 'Connection error';
 					this.notifyError(error);
@@ -196,7 +211,7 @@ export class RigClient {
 				};
 
 				this.ws.onclose = (event) => {
-					console.log('[RigClient] Connection closed:', event.code, event.reason);
+					console.log('[Client] Connection closed:', event.code, event.reason);
 					this.statusMessage = 'Disconnected';
 					this.isConnected = false;
 					this.notifyConnectionChange(false);
@@ -269,7 +284,7 @@ export class RigClient {
 	/**
 	 * Type-safe subscription methods for specific topics.
 	 */
-	on<K extends keyof RigHandlers>(topic: K, handler: RigHandlers[K]): () => void {
+	on<K extends keyof TopicHandlers>(topic: K, handler: TopicHandlers[K]): () => void {
 		// Special case for preview/frame which has different signature
 		if (topic === 'preview/frame') {
 			return this.subscribe(topic, handler as MessageHandler);
@@ -299,11 +314,11 @@ export class RigClient {
 	/**
 	 * Send a message to the server.
 	 */
-	send(message: RigClientMessage): void {
+	send(message: ClientMessage): void {
 		if (this.ws?.readyState === WebSocket.OPEN) {
 			this.ws.send(JSON.stringify(message));
 		} else {
-			console.warn('[RigClient] Cannot send message: not connected');
+			console.warn('[Client] Cannot send message: not connected');
 		}
 	}
 
@@ -311,11 +326,11 @@ export class RigClient {
 	 * Convenience methods for common operations.
 	 */
 	/**
-	 * Request the current rig status.
-	 * This triggers the backend to broadcast the current rig/status message to all clients.
+	 * Request the current app status.
+	 * This triggers the backend to broadcast the current status message to all clients.
 	 */
-	requestRigStatus(): void {
-		this.send({ topic: 'rig/request_status' });
+	requestStatus(): void {
+		this.send({ topic: 'request_status' });
 	}
 
 	/**
@@ -359,7 +374,7 @@ export class RigClient {
 		const newlineIndex = bytes.indexOf(10); // '\n' = 10
 
 		if (newlineIndex === -1) {
-			console.error('[RigClient] Invalid hybrid message: no newline separator');
+			console.error('[Client] Invalid hybrid message: no newline separator');
 			return;
 		}
 
@@ -376,7 +391,7 @@ export class RigClient {
 		};
 
 		if (!frame.info || !frame.data) {
-			console.error('[RigClient] Invalid frame structure:', frame);
+			console.error('[Client] Invalid frame structure:', frame);
 			return;
 		}
 
@@ -402,10 +417,10 @@ export class RigClient {
 				mimeType = 'image/png';
 				break;
 			case 'uint16':
-				console.warn('[RigClient] uint16 format not yet supported');
+				console.warn('[Client] uint16 format not yet supported');
 				return null;
 			default:
-				console.warn('[RigClient] Unknown frame format:', fmt);
+				console.warn('[Client] Unknown frame format:', fmt);
 				return null;
 		}
 
@@ -481,7 +496,7 @@ export class RigClient {
 		}
 
 		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-			console.error('[RigClient] Max reconnection attempts reached');
+			console.error('[Client] Max reconnection attempts reached');
 			this.statusMessage = 'Reconnection failed';
 			this.notifyError(new Error('Failed to reconnect after multiple attempts'));
 			return;
@@ -489,13 +504,13 @@ export class RigClient {
 
 		this.reconnectAttempts++;
 		this.statusMessage = `Reconnecting... (attempt ${this.reconnectAttempts})`;
-		console.log(`[RigClient] Reconnecting... attempt ${this.reconnectAttempts} in ${this.reconnectDelay}ms`);
+		console.log(`[Client] Reconnecting... attempt ${this.reconnectAttempts} in ${this.reconnectDelay}ms`);
 
 		this.reconnectTimer = window.setTimeout(() => {
 			this.reconnectTimer = null;
 			this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, this.maxReconnectDelay);
 			this.connect().catch((error) => {
-				console.error('[RigClient] Reconnection failed:', error);
+				console.error('[Client] Reconnection failed:', error);
 			});
 		}, this.reconnectDelay);
 	}

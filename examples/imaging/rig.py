@@ -2,7 +2,7 @@ import zmq.asyncio
 
 from imaging.drivers.camera import CameraHandle
 from imaging.drivers.laser import LaserHandle
-from imaging.node import ImagingNodeService
+from imaging.node import ImagingRigNode
 from pyrig import DeviceHandle, Rig, RigConfig
 from pyrig.cluster import ClusterManager, DeviceProvision, ZMQAdapter
 
@@ -10,7 +10,7 @@ from pyrig.cluster import ClusterManager, DeviceProvision, ZMQAdapter
 class ImagingClusterManager(ClusterManager):
     """Cluster manager that creates typed handles for imaging devices."""
 
-    NODE_SERVICE_CLASS = ImagingNodeService
+    NODE_SERVICE_CLASS = ImagingRigNode
 
     def _create_handle(self, device_id: str, prov: DeviceProvision) -> DeviceHandle:
         """Create typed handles for laser and camera devices."""

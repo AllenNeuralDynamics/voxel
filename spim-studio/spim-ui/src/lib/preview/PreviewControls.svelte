@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ColorPicker from '$lib/ui/ColorPicker.svelte';
+	import ColorPicker from '$lib/ui/primitives/ColorPicker.svelte';
 	import { Tooltip } from 'bits-ui';
 	import Histogram from './Histogram.svelte';
 	import Icon from '@iconify/svelte';

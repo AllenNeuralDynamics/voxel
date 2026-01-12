@@ -4,7 +4,7 @@
 # from typing import Protocol, Self
 
 # from PySide6.QtCore import QObject, Signal, Slot
-# from voxel.devices.laser.agent import LaserAgent
+# from voxel.devices.laser.controller import LaserAgent
 # from voxel.utils.descriptors.deliminated import DeliminatedFloat
 
 # from spim_widgets.ui.input.binding import FieldBinder
@@ -14,9 +14,9 @@
 #     state_changed = Signal(object)  # LaserState
 #     fault = Signal(str)
 
-#     def __init__(self, agent: LaserAgent, parent: QObject | None = None) -> None:
+#     def __init__(self, controller: LaserAgent, parent: QObject | None = None) -> None:
 #         super().__init__(parent)
-#         self._agent = agent
+#         self._controller = controller
 #         self._pump_task: asyncio.Task | None = None
 
 #         # Power setpoint: read DeliminatedFloat, write float (mW)
@@ -39,7 +39,7 @@
 
 #     # ----- lifecycle -----
 #     async def start(self) -> None:
-#         await self._agent.start()
+#         await self._controller.start()
 #         self._pump_task = asyncio.create_task(self._pump_states(), name="laser-pump")
 
 #     async def stop(self) -> None:
@@ -48,7 +48,7 @@
 #             with contextlib.suppress(asyncio.CancelledError):
 #                 await self._pump_task
 #             self._pump_task = None
-#         await self._agent.stop()
+#         await self._controller.stop()
 
 #     async def __aenter__(self) -> Self:
 #         await self.start()
@@ -59,7 +59,7 @@
 
 #     async def _pump_states(self) -> None:
 #         try:
-#             async for st in self._agent.states():
+#             async for st in self._controller.states():
 #                 self.state_changed.emit(st)
 #         except Exception as e:  # noqa: BLE001
 #             self.fault.emit(f"{e!r}")
@@ -67,11 +67,11 @@
 #     # ----- command slots (thin) -----
 #     @Slot(float)
 #     def setPower(self, mw: float) -> None:
-#         self._agent.set_power(power_mw=mw)
+#         self._controller.set_power(power_mw=mw)
 
 #     @Slot(bool)
 #     def setEnable(self, on: bool) -> None:
-#         self._agent.set_enable(on=on)
+#         self._controller.set_enable(on=on)
 
 
 # class AsyncAdapter(Protocol):
