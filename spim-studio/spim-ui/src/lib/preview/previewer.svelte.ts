@@ -437,7 +437,6 @@ export class Previewer {
 	#handleAppStatus = (status: AppStatus): void => {
 		const session = status.session;
 		this.isPreviewing = session?.mode === 'previewing';
-		this.#framesCollector.clear();
 
 		if (!session?.active_profile_id || !this.config) return;
 
@@ -446,38 +445,49 @@ export class Previewer {
 		// Get active profile and channels from RigManager's config
 		const activeProfile = this.config.profiles[active_profile_id];
 		const activeChannelIds = activeProfile ? activeProfile.channels : [];
-		const channelNames = activeChannelIds.slice(0, this.MAX_CHANNELS);
+		const newChannelNames = activeChannelIds.slice(0, this.MAX_CHANNELS);
 
-		if (channelNames.length === 0) return;
+		if (newChannelNames.length === 0) return;
+
+		// Check if channel names changed - only reconfigure if they did
+		const currentChannelNames = this.channels.map((c) => c.name);
+		const channelsChanged =
+			newChannelNames.length !== currentChannelNames.filter((n) => n).length ||
+			newChannelNames.some((name, i) => name !== currentChannelNames[i]);
+
+		if (!channelsChanged) return;
+
+		// Channels changed - update configuration
+		// Note: We don't clear frames or dispose GPU resources here.
+		// - FrameStreamTexture handles size changes automatically
+		// - Old frames will be overwritten when new ones arrive
+		// - setColor() updates the LUT texture in place
 
 		const colors: ColormapType[] = Object.keys(COLORMAP_COLORS) as ColormapType[];
 
 		for (let i = 0; i < this.MAX_CHANNELS; i++) {
 			const slot = this.channels[i];
-			slot.disposeGpuResources();
 			slot.visible = false;
 			slot.initAutoLevelDone = false;
-			slot.color = 'ffffff';
 			slot.config = undefined;
-			slot.name = channelNames[i];
+			slot.name = newChannelNames[i];
 			if (!slot.name) continue;
 
 			slot.config = this.config.channels[slot.name];
-
 			slot.visible = true;
-			// Try emission wavelength first (if available)
+
+			// Determine color from emission wavelength or fallback
 			let color: string | undefined;
 			if (slot.config?.emission) {
 				color = wavelengthToColor(slot.config.emission);
 			}
-
-			// Fallback to name-based or cycle through colors
 			if (!color) {
 				color = COMMON_CHANNELS[slot.name.toLowerCase()] || colormapToHex(colors[i % colors.length]);
 			}
 
 			slot.setColor(color);
 		}
+
 		this.#queueCropUpdate(this.crop);
 
 		if (this.#rendererInitialized) {

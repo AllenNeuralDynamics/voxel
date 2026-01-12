@@ -77,6 +77,7 @@ class AppService:
         self.clients: dict[str, asyncio.Queue[tuple[str, Any]]] = {}
         self._log_handler: _WebSocketLogHandler | None = None
         self._phase: AppPhase = "idle"
+        self._status_lock = asyncio.Lock()  # Serialize status fetching (ZMQ calls)
 
         self._setup_log_capture()
 
@@ -140,9 +141,10 @@ class AppService:
         self.clients[client_id] = queue
         log.info("Client %s connected. Total: %d", client_id, len(self.clients))
 
-        # Send initial app status
-        status = await self._get_app_status()
-        await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
+        # Send initial app status (use lock to prevent ZMQ conflicts)
+        async with self._status_lock:
+            status = await self._get_app_status()
+            await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
 
     def remove_client(self, client_id: str) -> None:
         """Remove a client from the distribution list."""
@@ -167,8 +169,13 @@ class AppService:
 
     async def _broadcast_status(self) -> None:
         """Broadcast app status to all clients."""
-        status = await self._get_app_status()
-        self._broadcast({"topic": "status", "payload": status.model_dump(mode="json")})
+        # Use lock to serialize status fetching (prevents ZMQ REQ/REP conflicts)
+        async with self._status_lock:
+            try:
+                status = await self._get_app_status()
+                self._broadcast({"topic": "status", "payload": status.model_dump(mode="json")})
+            except Exception as e:
+                log.warning("Failed to broadcast status: %s", e)
 
     def _schedule_status_broadcast(self) -> None:
         """Schedule an async status broadcast. Use this from sync contexts."""

@@ -365,7 +365,7 @@
 		--thumb-color: var(--color-emerald-500, #10b981);
 		--thumb-color-moving: var(--color-rose-600, #e11d48);
 		--stage-border: var(--stage-border-width) solid var(--color-zinc-600);
-		--slider-bg: var(--color-zinc-800, rgb(24, 24, 27));
+		--slider-bg: var(--color-zinc-900, rgb(24, 24, 27));
 
 		display: flex;
 		gap: var(--stage-gap);

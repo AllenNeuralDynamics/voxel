@@ -131,14 +131,7 @@
 					</div>
 				{/if}
 				<footer class="mt-auto flex p-4">
-					<button
-						onclick={() => app?.closeSession()}
-						class="mr-auto flex cursor-pointer items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-						aria-label="Close Session"
-						title="Close Session"
-					>
-						<Icon icon="mdi:exit-to-app" width="20" height="20" />
-					</button>
+					<ClientStatus client={app.client} />
 				</footer>
 			</aside>
 			<main class="flex h-screen min-w-4xl flex-1 flex-col overflow-hidden">
@@ -219,8 +212,15 @@
 					</button>
 				</header>
 				<StageControls {app} />
-				<footer class="mt-auto flex flex-row-reverse p-4">
-					<ClientStatus client={app.client} />
+				<footer class="mt-auto flex flex-row-reverse justify-between p-4">
+					<button
+						onclick={() => app?.closeSession()}
+						class="flex cursor-pointer items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+						aria-label="Close Session"
+						title="Close Session"
+					>
+						<Icon icon="mdi:exit-to-app" width="20" height="20" />
+					</button>
 				</footer>
 			</aside>
 		</div>

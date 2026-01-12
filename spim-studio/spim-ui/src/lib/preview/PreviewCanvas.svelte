@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import FrameCounter from './FrameCounter.svelte';
 	import PreviewInfoTooltip from './PreviewInfoTooltip.svelte';
 	import type { Previewer } from './previewer.svelte';
@@ -31,9 +31,9 @@
 		await previewer.init(previewCanvas);
 	});
 
-	onDestroy(() => {
-		previewer.shutdown();
-	});
+	// Note: Do NOT call previewer.shutdown() here.
+	// The App class owns the previewer lifecycle.
+	// PreviewCanvas is just a view that uses it.
 </script>
 
 <div class="relative inline-block">
