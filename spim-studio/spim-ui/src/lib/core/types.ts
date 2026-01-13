@@ -170,7 +170,6 @@ export function getStackStatusColor(status: StackStatus | null): StatusColor {
  * Tile - 2D position in the grid
  */
 export interface Tile {
-	tile_id: string;
 	row: number;
 	col: number;
 	x_um: number;

@@ -147,6 +147,10 @@ export class App {
 	// Layer visibility state (controlled by StageControls)
 	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, fov: true });
 
+	// Selected tile position [row, col] - never null, defaults to [0, 0]
+	#selectedTilePos = $state<[number, number]>([0, 0]);
+	selectedTile = $derived<Tile>(this.#getSelectedTile());
+
 	private wasDisconnected = false;
 	private unsubscribers: Array<() => void> = [];
 
@@ -224,6 +228,28 @@ export class App {
 	/** Halt all stage axes */
 	async haltStage(): Promise<void> {
 		await this.stage?.halt();
+	}
+
+	/** Get selected tile from tiles array, or create a default tile */
+	#getSelectedTile(): Tile {
+		const [row, col] = this.#selectedTilePos;
+		const tile = this.tiles.find((t) => t.row === row && t.col === col);
+		if (tile) return tile;
+
+		// Return default tile if not found in tiles array
+		return {
+			row,
+			col,
+			x_um: 0,
+			y_um: 0,
+			w_um: this.fov.width * 1000,
+			h_um: this.fov.height * 1000
+		};
+	}
+
+	/** Select a tile by row/col */
+	selectTile(row: number, col: number): void {
+		this.#selectedTilePos = [row, col];
 	}
 
 	// ========== Grid/Stack Actions (send to backend) ==========

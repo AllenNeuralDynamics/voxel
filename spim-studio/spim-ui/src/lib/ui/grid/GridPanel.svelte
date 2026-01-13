@@ -10,8 +10,9 @@
 
 	let { app }: Props = $props();
 
-	// Get stage and config from app
+	// Get stage, fov, and config from app
 	let stage = $derived(app.stage);
+	let fov = $derived(app.fov);
 	let gridConfig = $derived(app.gridConfig);
 	let gridLocked = $derived(app.gridLocked);
 
@@ -19,19 +20,21 @@
 	let gridOffsetXMm = $derived(gridConfig.x_offset_um / 1000);
 	let gridOffsetYMm = $derived(gridConfig.y_offset_um / 1000);
 
-	// Dummy data for tile/stack (will be wired to app later)
-	const dummyTile: Tile = {
-		tile_id: 'tile_r2_c3',
-		row: 2,
-		col: 3,
-		x_um: 12500,
-		y_um: 8200,
-		w_um: 6670,
-		h_um: 5001
-	};
+	// Max offset = tile spacing = FOV × (1 - overlap)
+	let maxOffsetX = $derived(fov.width * (1 - gridConfig.overlap));
+	let maxOffsetY = $derived(fov.height * (1 - gridConfig.overlap));
 
+	// Selected tile from app (never null, defaults to [0,0])
+	let selectedTile = $derived(app.selectedTile);
+
+	// Dummy stack data (will be wired to app later)
 	const dummyStack: Stack | null = {
-		...dummyTile,
+		row: 0,
+		col: 0,
+		x_um: 0,
+		y_um: 0,
+		w_um: 6670,
+		h_um: 5001,
 		z_start_um: 0,
 		z_end_um: 300,
 		z_step_um: 2.0,
@@ -41,8 +44,7 @@
 		num_frames: 150
 	};
 
-	// Component state for tile/stack (dummy for now)
-	let selectedTile = $state<Tile>(dummyTile);
+	// Stack for selected tile (dummy for now)
 	let stack = $state<Stack | null>(dummyStack);
 
 	// Form state
@@ -86,7 +88,7 @@
 	function handleSubmit() {
 		if (hasStack) {
 			console.log('Editing stack:', { z_start_um: zStartInput, z_end_um: zEndInput });
-			// TODO: Call app.editStack(selectedTile.tile_id, zStartInput, zEndInput)
+			// TODO: Call app.editStack(selectedTile.row, selectedTile.col, zStartInput, zEndInput)
 		} else {
 			console.log('Adding stack:', {
 				row: selectedTile.row,
@@ -101,8 +103,8 @@
 
 	function handleDelete() {
 		if (confirm('Delete this stack?')) {
-			console.log('Deleting stack:', selectedTile.tile_id);
-			// TODO: Call app.removeStack(selectedTile.tile_id)
+			console.log('Deleting stack:', selectedTile.row, selectedTile.col);
+			// TODO: Call app.removeStack(selectedTile.row, selectedTile.col)
 		}
 	}
 
@@ -289,8 +291,8 @@
 				class:opacity-50={gridLocked}
 				class:pointer-events-none={gridLocked}
 			>
-				{@render spinboxRow('Offset X', gridOffsetXMm, updateGridOffsetX, 0, stage.width, 0.1, 1, 'mm')}
-				{@render spinboxRow('Offset Y', gridOffsetYMm, updateGridOffsetY, 0, stage.height, 0.1, 1, 'mm')}
+				{@render spinboxRow('Offset X', gridOffsetXMm, updateGridOffsetX, -maxOffsetX, maxOffsetX, 0.1, 1, 'mm')}
+				{@render spinboxRow('Offset Y', gridOffsetYMm, updateGridOffsetY, -maxOffsetY, maxOffsetY, 0.1, 1, 'mm')}
 				{@render spinboxRow('Overlap', gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
 				{@render staticRow('Z Step', String(gridConfig.z_step_um), 'µm')}
 			</div>

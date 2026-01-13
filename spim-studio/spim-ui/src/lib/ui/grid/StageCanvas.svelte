@@ -103,21 +103,51 @@
 	}
 
 
+	// Selected tile from app
+	let selectedTile = $derived(app.selectedTile);
+
+	// Check if a tile is selected
+	function isSelected(tile: Tile): boolean {
+		return tile.row === selectedTile.row && tile.col === selectedTile.col;
+	}
+
+	// Handle tile single-click to select
+	function handleTileSelect(tile: Tile) {
+		app.selectTile(tile.row, tile.col);
+	}
+
+	// Clamp position to keep FOV within stage limits
+	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
+		if (!stage) return [targetX, targetY];
+		const minX = stage.x.lowerLimit;
+		const maxX = stage.x.upperLimit - fov.width;
+		const minY = stage.y.lowerLimit;
+		const maxY = stage.y.upperLimit - fov.height;
+		return [Math.max(minX, Math.min(maxX, targetX)), Math.max(minY, Math.min(maxY, targetY))];
+	}
+
 	// Handle tile double-click to move stage
-	function handleTileClick(tile: Tile) {
+	function handleTileMove(tile: Tile) {
 		if (isXYMoving || !stage) return;
-		// Convert tile center position from μm to mm and move
-		const targetX = stage.x.lowerLimit + toMm(tile.x_um) + toMm(tile.w_um) / 2 - fov.width / 2;
-		const targetY = stage.y.lowerLimit + toMm(tile.y_um) + toMm(tile.h_um) / 2 - fov.height / 2;
+		// Convert tile center position from μm to mm, then clamp to stage limits
+		const rawX = stage.x.lowerLimit + toMm(tile.x_um) + toMm(tile.w_um) / 2 - fov.width / 2;
+		const rawY = stage.y.lowerLimit + toMm(tile.y_um) + toMm(tile.h_um) / 2 - fov.height / 2;
+		const [targetX, targetY] = clampToStageLimits(rawX, rawY);
 		stage.moveXY(targetX, targetY);
 	}
 
-	// Handle stack double-click
-	function handleStackClick(stack: Stack) {
+	// Handle stack click to select its tile
+	function handleStackSelect(stack: Stack) {
+		app.selectTile(stack.row, stack.col);
+	}
+
+	// Handle stack double-click to move stage
+	function handleStackMove(stack: Stack) {
 		if (isXYMoving || !stage) return;
-		// Move to stack position
-		const targetX = stage.x.lowerLimit + toMm(stack.x_um);
-		const targetY = stage.y.lowerLimit + toMm(stack.y_um);
+		// Move to stack center, clamped to stage limits
+		const rawX = stage.x.lowerLimit + toMm(stack.x_um) + toMm(stack.w_um) / 2 - fov.width / 2;
+		const rawY = stage.y.lowerLimit + toMm(stack.y_um) + toMm(stack.h_um) / 2 - fov.height / 2;
+		const [targetX, targetY] = clampToStageLimits(rawX, rawY);
 		stage.moveXY(targetX, targetY);
 	}
 
@@ -231,7 +261,7 @@
 						<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
 						{#if layerVisibility.stacks}
 							<g class="stacks-layer">
-								{#each stacks as stack (stack.tile_id)}
+								{#each stacks as stack (`${stack.row}_${stack.col}`)}
 									{@const x = toMm(stack.x_um)}
 									{@const y = toMm(stack.y_um)}
 									{@const w = toMm(stack.w_um)}
@@ -249,7 +279,8 @@
 										class:cursor-not-allowed={isXYMoving}
 										role="button"
 										tabindex={isXYMoving ? -1 : 0}
-										ondblclick={() => handleStackClick(stack)}
+										onclick={() => handleStackSelect(stack)}
+										ondblclick={() => handleStackMove(stack)}
 									>
 										<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
 									</rect>
@@ -288,7 +319,7 @@
 									height={fov.height}
 									fill="none"
 									stroke={fovStrokeColor}
-									stroke-width={0.095}
+									stroke-width={0.1}
 								>
 									<title>FOV: ({stage.x.position.toFixed(1)}, {stage.y.position.toFixed(1)}) mm</title>
 								</rect>
@@ -298,25 +329,27 @@
 						<!-- Grid Layer: Tiles (topmost for easy clicking) -->
 						{#if layerVisibility.grid}
 							<g class="grid-layer">
-								{#each tiles as tile (tile.tile_id)}
+								{#each tiles as tile (`${tile.row}_${tile.col}`)}
 									{@const x = toMm(tile.x_um)}
 									{@const y = toMm(tile.y_um)}
 									{@const w = toMm(tile.w_um)}
 									{@const h = toMm(tile.h_um)}
+									{@const selected = isSelected(tile)}
 									<rect
 										{x}
 										{y}
 										width={w}
 										height={h}
-										fill="transparent"
-										stroke="#3f3f46"
-										stroke-width={0.05}
+										fill={selected ? 'rgba(251, 191, 36, 0.1)' : 'transparent'}
+										stroke={selected ? '#fbbf24' : '#3f3f46'}
+										stroke-width={selected ? 0.1 : 0.05}
 										class="tile outline-none"
 										class:cursor-pointer={!isXYMoving}
 										class:cursor-not-allowed={isXYMoving}
 										role="button"
 										tabindex={isXYMoving ? -1 : 0}
-										ondblclick={() => handleTileClick(tile)}
+										onclick={() => handleTileSelect(tile)}
+										ondblclick={() => handleTileMove(tile)}
 									>
 										<title>Tile [{tile.row}, {tile.col}]</title>
 									</rect>
