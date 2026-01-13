@@ -20,6 +20,9 @@
 	let hasStage = $derived(app.xAxis && app.yAxis && app.zAxis);
 	let stageAspectRatio = $derived(app.stageWidth / app.stageHeight);
 
+	// Local UI state
+	let showThumbnail = $state(true);
+
 	// ResizeObserver for responsive sizing
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let canvasWidth = $state(400);
@@ -235,6 +238,16 @@
 					>
 						<Icon icon="mdi:crosshairs" width="14" height="14" />
 					</button>
+					<button
+						onclick={() => (showThumbnail = !showThumbnail)}
+						disabled={!app.layerVisibility.fov}
+						class="rounded p-1 transition-colors {showThumbnail && app.layerVisibility.fov
+							? 'text-cyan-400 hover:bg-zinc-700'
+							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'} disabled:cursor-not-allowed disabled:opacity-50"
+						title="Toggle thumbnail"
+					>
+						<Icon icon="mdi:image" width="14" height="14" />
+					</button>
 				</div>
 			</div>
 
@@ -340,7 +353,7 @@
 									</defs>
 
 									<!-- Thumbnail image -->
-									{#if thumbnail}
+									{#if showThumbnail && thumbnail}
 										<image
 											href={thumbnail}
 											x={fovX}
