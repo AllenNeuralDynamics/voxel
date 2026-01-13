@@ -110,6 +110,9 @@ class SpimRig(Rig):
 
         self._validate_device_types()
 
+        # Subscribe to all camera preview streams (subscriptions are stable for rig lifetime)
+        await self.preview.subscribe_cameras(self.cameras)
+
         await self.set_active_profile(self._active_profile_id)
 
     def _validate_device_types(self) -> None:
@@ -335,7 +338,10 @@ class SpimRig(Rig):
         # 4. Update active profile state
         self._active_profile_id = profile_id
 
-        # 5. Restart preview if it was running
+        # 5. Update camera→channel mapping for preview
+        self.preview.set_channel_mapping(self._build_camera_channel_mapping())
+
+        # 6. Restart preview if it was running
         if restart_preview:
             if frame_callback:
                 self.log.info("Restarting preview after profile change")
@@ -346,11 +352,17 @@ class SpimRig(Rig):
         self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_channels)})")
 
     # ===================== Preview Management =====================
+
+    def _build_camera_channel_mapping(self) -> dict[str, str]:
+        """Build camera_id → channel_name mapping from active profile."""
+        mapping: dict[str, str] = {}
+        for chan_name, channel in self.active_channels.items():
+            if channel.detection in self.cameras:
+                mapping[channel.detection] = chan_name
+        return mapping
+
     async def start_preview(self, frame_callback: Callable[[str, bytes], Awaitable[None]]) -> None:
         """Start preview mode for active profile channels and begin frame streaming.
-
-        Orchestrates camera preview startup and connects preview manager to camera streams.
-        Only streams cameras used by the active profile's channels.
 
         Args:
             frame_callback: Async callable that receives (channel, packed_frame) for each preview frame.
@@ -371,33 +383,28 @@ class SpimRig(Rig):
         cameras_to_stream = self._get_profile_cameras()
         self.log.info(f"Starting preview for profile '{self._active_profile_id}' on cameras: {cameras_to_stream}")
 
-        # Start cameras and collect handles with their topics
-        camera_streams: dict[str, tuple[CameraHandle, str]] = {}
-
-        for chan_name, channel in self.active_channels.items():
-            if channel.detection not in self.cameras:
-                self.log.warning(f"Channel '{chan_name}' has no camera assigned")
+        # Start cameras for the active profile's channels
+        for cam_id in cameras_to_stream:
+            if cam_id not in self.cameras:
+                self.log.warning(f"Camera '{cam_id}' not found")
                 continue
 
-            cam_id = channel.detection
             handle = self.cameras[cam_id]
-
             try:
-                topic = await handle.start_preview(channel_name=chan_name)
-                camera_streams[cam_id] = (handle, topic)
+                await handle.start_preview()
                 self._streaming_cameras.add(cam_id)
             except Exception as e:
                 self.log.error(f"Camera {cam_id} failed to start preview: {e}")
 
-        # Start preview manager with handles and topics
-        await self.preview.start(camera_streams, callback=frame_callback)
+        # Start preview manager (subscriptions already exist, just enable forwarding)
+        self.preview.start(frame_callback)
 
         self._mode = RigMode.PREVIEWING
         self._frame_callback = frame_callback
-        self.log.info(f"Preview started for {len(camera_streams)} cameras")
+        self.log.info(f"Preview started for {len(self._streaming_cameras)} cameras")
 
         # Enable lasers for active channels if cameras started successfully
-        if camera_streams:
+        if self._streaming_cameras:
             await self._enable_channel_lasers()
 
         # Start DAQ acquisition task after all devices are configured
@@ -463,9 +470,8 @@ class SpimRig(Rig):
         # Disable lasers
         await self._disable_channel_lasers()
 
-        # Stop preview manager
-        if self.preview is not None:
-            await self.preview.stop()
+        # Stop preview manager (just stops forwarding, subscriptions remain)
+        self.preview.stop()
         self._frame_callback = None
 
         self._mode = RigMode.IDLE
@@ -602,84 +608,88 @@ class SpimRig(Rig):
                 error_message=str(e),
             )
 
+    async def stop(self) -> None:
+        """Stop the rig and cleanup preview subscriptions."""
+        await self.preview.shutdown()
+        await super().stop()
+
 
 class RigPreviewHub:
     """Manages preview frame streaming via handle subscriptions.
 
-    Uses the unified handle.subscribe() interface, which works for both
-    local devices (callback-based) and remote devices (ZMQ-based).
+    Subscribes to all cameras once at rig start. Maintains a camera→channel
+    mapping that's updated when the active profile changes. This avoids
+    subscription churn on profile switches and preview start/stop cycles.
     """
 
     def __init__(self, name: str = "PreviewManager"):
-        """Initialize the preview manager.
-
-        Args:
-            name: Name for logging (typically the rig class name)
-        """
+        """Initialize the preview manager."""
         self.log = logging.getLogger(name)
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-        self._subscribed_cameras: set[str] = set()
+        # Camera ID → channel name mapping (from active profile)
+        self._camera_to_channel: dict[str, str] = {}
+        # Track subscriptions for cleanup: camera_id -> (handle, callback)
+        self._subscriptions: dict[str, tuple[CameraHandle, Callable[[bytes], Awaitable[None]]]] = {}
 
     @property
     def is_active(self) -> bool:
         """Check if preview is currently active."""
-        return bool(self._subscribed_cameras)
+        return self._frame_callback is not None
 
-    async def start(
-        self,
-        camera_streams: dict[str, tuple[CameraHandle, str]],
-        *,
-        callback: Callable[[str, bytes], Awaitable[None]],
-    ) -> None:
-        """Start frame streaming from the provided cameras.
-
-        Subscribes to each camera's preview stream using the handle interface.
-
-        Args:
-            camera_streams: Dict mapping camera_id -> (handle, topic)
-                e.g., {"camera_1": (handle, "preview/gfp")}
-            callback: Async function invoked for each received frame (channel, data).
-        """
-        if not camera_streams:
-            self.log.debug("No camera streams provided, skipping start")
-            return
-
-        self._frame_callback = callback
-        self.log.info(f"Starting preview manager with {len(camera_streams)} camera streams...")
-
-        for camera_id, (handle, topic) in camera_streams.items():
-            if camera_id in self._subscribed_cameras:
+    async def subscribe_cameras(self, cameras: dict[str, CameraHandle]) -> None:
+        """Subscribe to all cameras. Call once at rig start."""
+        for camera_id, handle in cameras.items():
+            if camera_id in self._subscriptions:
                 self.log.debug(f"Camera {camera_id} already subscribed")
                 continue
+            callback = self._make_callback(camera_id)
+            await handle.subscribe("preview", callback)
+            self._subscriptions[camera_id] = (handle, callback)
+            self.log.info(f"Subscribed to camera {camera_id} preview stream")
 
-            # Extract channel name from topic (e.g., "preview/gfp" -> "gfp")
-            channel = topic.split("/")[1]
-            await handle.subscribe(topic, self._make_callback(channel))
-            self._subscribed_cameras.add(camera_id)
-            self.log.info(f"Camera {camera_id} subscribed to {topic}")
-
-        self.log.info("Preview manager started")
-
-    def _make_callback(self, channel: str):
-        """Create callback that forwards frames with channel name."""
+    def _make_callback(self, camera_id: str):
+        """Create callback that looks up channel dynamically from mapping."""
 
         async def callback(data: bytes):
             if self._frame_callback:
-                try:
-                    await self._frame_callback(channel, data)
-                except Exception as e:
-                    self.log.error(f"Error in frame callback for {channel}: {e}", exc_info=True)
+                channel = self._camera_to_channel.get(camera_id)
+                if channel:
+                    try:
+                        await self._frame_callback(channel, data)
+                    except Exception as e:
+                        self.log.error(f"Error in frame callback for {channel}: {e}", exc_info=True)
 
         return callback
 
-    async def stop(self) -> None:
-        """Stop frame streaming and cleanup."""
-        if not self.is_active:
-            self.log.warning("Preview manager not active")
-            return
+    def set_channel_mapping(self, mapping: dict[str, str]) -> None:
+        """Update camera→channel mapping. Call on profile switch.
 
-        self.log.info("Stopping preview manager...")
-        # Note: handles don't have unsubscribe - subscriptions are cleared when cameras stop
-        self._subscribed_cameras.clear()
+        Args:
+            mapping: Dict mapping camera_id -> channel_name
+        """
+        self._camera_to_channel = mapping
+        self.log.debug(f"Updated channel mapping: {mapping}")
+
+    def start(self, callback: Callable[[str, bytes], Awaitable[None]]) -> None:
+        """Start forwarding frames to callback."""
+        self._frame_callback = callback
+        self.log.info("Preview manager started")
+
+    def stop(self) -> None:
+        """Stop forwarding frames."""
         self._frame_callback = None
         self.log.info("Preview manager stopped")
+
+    async def shutdown(self) -> None:
+        """Unsubscribe all callbacks. Call on rig stop."""
+        self.log.info("Shutting down preview manager...")
+        for camera_id, (handle, callback) in self._subscriptions.items():
+            try:
+                await handle.unsubscribe("preview", callback)
+                self.log.debug(f"Unsubscribed {camera_id}")
+            except Exception as e:
+                self.log.error(f"Error unsubscribing {camera_id}: {e}")
+        self._subscriptions.clear()
+        self._camera_to_channel.clear()
+        self._frame_callback = None
+        self.log.info("Preview manager shutdown complete")

@@ -141,7 +141,7 @@
 					<PaneGroup direction="vertical" autoSaveId="centerPanel">
 						<Pane>
 							<PaneGroup direction="horizontal" autoSaveId="viewPanel">
-								<Pane defaultSize={50} minSize={30} class="grid h-full flex-1 place-content-center px-4">
+								<Pane defaultSize={50} minSize={30} class="h-full flex-1 px-4">
 									<PreviewCanvas {previewer} />
 								</Pane>
 								<PaneDivider class="text-zinc-700 hover:text-zinc-600" />

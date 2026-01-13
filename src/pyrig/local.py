@@ -77,6 +77,15 @@ class LocalAdapter[D: Device](Adapter[D]):
         full_topic = f"{self._controller.uid}/{topic}"
         self._stream_subscribers[full_topic].append(callback)
 
+    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None:
+        """Unsubscribe from raw byte streams."""
+        full_topic = f"{self._controller.uid}/{topic}"
+        if full_topic in self._stream_subscribers:
+            try:
+                self._stream_subscribers[full_topic].remove(callback)
+            except ValueError:
+                pass  # Callback not in list
+
     async def close(self) -> None:
         """Release resources."""
         self._controller.close()

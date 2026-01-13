@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Tile, type Stack, type StackStatus } from '$lib/core/types';
+	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
 	import { onMount } from 'svelte';
 	import Icon from '@iconify/svelte';
 
@@ -41,7 +41,7 @@
 	let stageAspectRatio = $derived(stageWidth / stageHeight);
 
 	// FOV styling
-	let fovStrokeColor = $derived(isXYMoving ? '#e11d48' : '#10b981');
+	let fovStrokeColor = $derived(isXYMoving ? 'var(--color-rose-400)' : 'var(--color-emerald-400)');
 
 	// ResizeObserver for responsive sizing
 	let containerRef = $state<HTMLDivElement | null>(null);
@@ -101,7 +101,6 @@
 	function toMm(um: number): number {
 		return um / 1000;
 	}
-
 
 	// Selected tile from app
 	let selectedTile = $derived(app.selectedTile);
@@ -182,215 +181,225 @@
 	function toggleFov() {
 		app.layerVisibility = { ...app.layerVisibility, fov: !app.layerVisibility.fov };
 	}
+
+	// Keyboard handler for interactive elements
+	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			selectFn();
+		}
+	}
 </script>
 
-{#if stage}
-	<div
-		class="stage-container relative flex flex-1 items-center justify-center overflow-hidden"
-		bind:this={containerRef}
-	>
-		<!-- Layer visibility floating widget -->
-		<div class="absolute top-5 right-2 z-10 flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
-			<button
-				onclick={toggleGrid}
-				class="rounded p-1 transition-colors {layerVisibility.grid
-					? 'text-blue-400 hover:bg-zinc-700'
-					: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
-				title="Toggle grid"
-			>
-				<Icon icon="mdi:grid" width="14" height="14" />
-			</button>
-			<button
-				onclick={toggleStacks}
-				class="rounded p-1 transition-colors {layerVisibility.stacks
-					? 'text-purple-400 hover:bg-zinc-700'
-					: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
-				title="Toggle stacks"
-			>
-				<Icon icon="mdi:layers" width="14" height="14" />
-			</button>
-			<button
-				onclick={toggleFov}
-				class="rounded p-1 transition-colors {layerVisibility.fov
-					? 'text-emerald-400 hover:bg-zinc-700'
-					: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
-				title="Toggle FOV"
-			>
-				<Icon icon="mdi:crosshairs" width="14" height="14" />
-			</button>
-		</div>
-
-		<div
-			class="stage-canvas"
-			style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
-		>
-			<div class="flex flex-col">
-				<div class="flex">
-					<div style="width: {TRACK_WIDTH}px"></div>
-					<input
-						type="range"
-						class="x-slider"
-						style="width: {canvasWidth}px;"
-						min={stage.x.lowerLimit}
-						max={stage.x.upperLimit}
-						step={0.1}
-						value={stage.x.position}
-						disabled={isXYMoving}
-						oninput={handleXSliderChange}
-					/>
-				</div>
-
-				<div class="flex min-h-0 items-center">
-					<input
-						type="range"
-						class="y-slider"
-						style="height: {canvasHeight}px;"
-						min={stage.y.lowerLimit}
-						max={stage.y.upperLimit}
-						step={0.1}
-						value={stage.y.position}
-						disabled={isXYMoving}
-						oninput={handleYSliderChange}
-					/>
-
-					<svg
-						viewBox="0 0 {stageWidth} {stageHeight}"
-						class="xy-svg"
-						style="width: {canvasWidth}px; height: {canvasHeight}px;"
+<div class="relative grid h-full w-full px-4 pt-18 pb-8">
+	{#if stage}
+		<div class="stage-container flex flex-1 items-center justify-center overflow-hidden" bind:this={containerRef}>
+			<!-- Layer visibility floating widget -->
+			<div class="absolute top-0 right-4 z-10 flex h-18 items-center">
+				<div class="flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
+					<button
+						onclick={toggleGrid}
+						class="rounded p-1 transition-colors {layerVisibility.grid
+							? 'text-blue-400 hover:bg-zinc-700'
+							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+						title="Toggle grid"
 					>
-						<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
-						{#if layerVisibility.stacks}
-							<g class="stacks-layer">
-								{#each stacks as stack (`${stack.row}_${stack.col}`)}
-									{@const x = toMm(stack.x_um)}
-									{@const y = toMm(stack.y_um)}
-									{@const w = toMm(stack.w_um)}
-									{@const h = toMm(stack.h_um)}
+						<Icon icon="mdi:grid" width="14" height="14" />
+					</button>
+					<button
+						onclick={toggleStacks}
+						class="rounded p-1 transition-colors {layerVisibility.stacks
+							? 'text-purple-400 hover:bg-zinc-700'
+							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+						title="Toggle stacks"
+					>
+						<Icon icon="mdi:layers" width="14" height="14" />
+					</button>
+					<button
+						onclick={toggleFov}
+						class="rounded p-1 transition-colors {layerVisibility.fov
+							? 'text-emerald-400 hover:bg-zinc-700'
+							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+						title="Toggle FOV"
+					>
+						<Icon icon="mdi:crosshairs" width="14" height="14" />
+					</button>
+				</div>
+			</div>
+
+			<div
+				class="stage-canvas"
+				style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
+			>
+				<div class="flex flex-col">
+					<div class="flex">
+						<div style="width: {TRACK_WIDTH}px"></div>
+						<input
+							type="range"
+							class="x-slider"
+							style="width: {canvasWidth}px;"
+							min={stage.x.lowerLimit}
+							max={stage.x.upperLimit}
+							step={0.1}
+							value={stage.x.position}
+							disabled={isXYMoving}
+							oninput={handleXSliderChange}
+						/>
+					</div>
+
+					<div class="flex min-h-0 items-center">
+						<input
+							type="range"
+							class="y-slider"
+							style="height: {canvasHeight}px;"
+							min={stage.y.lowerLimit}
+							max={stage.y.upperLimit}
+							step={0.1}
+							value={stage.y.position}
+							disabled={isXYMoving}
+							oninput={handleYSliderChange}
+						/>
+
+						<svg
+							viewBox="0 0 {stageWidth} {stageHeight}"
+							class="xy-svg"
+							style="width: {canvasWidth}px; height: {canvasHeight}px;"
+						>
+							<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
+							{#if layerVisibility.stacks}
+								<g class="stacks-layer">
+									{#each stacks as stack (`${stack.row}_${stack.col}`)}
+										{@const x = toMm(stack.x_um)}
+										{@const y = toMm(stack.y_um)}
+										{@const w = toMm(stack.w_um)}
+										{@const h = toMm(stack.h_um)}
+										<rect
+											{x}
+											{y}
+											width={w}
+											height={h}
+											stroke-width={0.075}
+											class="stack outline-none {getStackStatusColor(stack.status)}"
+											class:cursor-pointer={!isXYMoving}
+											class:cursor-not-allowed={isXYMoving}
+											role="button"
+											tabindex={isXYMoving ? -1 : 0}
+											onclick={() => handleStackSelect(stack)}
+											ondblclick={() => handleStackMove(stack)}
+											onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
+										>
+											<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
+										</rect>
+									{/each}
+								</g>
+							{/if}
+
+							<!-- FOV Layer: Current position with thumbnail -->
+							{#if layerVisibility.fov}
+								<g class="fov-layer pointer-events-none">
+									<!-- Clip path for thumbnail -->
+									<defs>
+										<clipPath id="fov-clip">
+											<rect x={fovX} y={fovY} width={fov.width} height={fov.height} />
+										</clipPath>
+									</defs>
+
+									<!-- Thumbnail image -->
+									{#if thumbnail}
+										<image
+											href={thumbnail}
+											x={fovX}
+											y={fovY}
+											width={fov.width}
+											height={fov.height}
+											clip-path="url(#fov-clip)"
+											preserveAspectRatio="xMidYMid slice"
+										/>
+									{/if}
+
+									<!-- FOV border -->
 									<rect
-										{x}
-										{y}
-										width={w}
-										height={h}
-										fill={getStackStatusColor(stack.status).rgba}
-										stroke={getStackStatusColor(stack.status).hex}
-										stroke-width={0.08}
-										class="stack outline-none"
-										class:cursor-pointer={!isXYMoving}
-										class:cursor-not-allowed={isXYMoving}
-										role="button"
-										tabindex={isXYMoving ? -1 : 0}
-										onclick={() => handleStackSelect(stack)}
-										ondblclick={() => handleStackMove(stack)}
-									>
-										<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
-									</rect>
-								{/each}
-							</g>
-						{/if}
-
-						<!-- FOV Layer: Current position with thumbnail -->
-						{#if layerVisibility.fov}
-							<g class="fov-layer pointer-events-none">
-								<!-- Clip path for thumbnail -->
-								<defs>
-									<clipPath id="fov-clip">
-										<rect x={fovX} y={fovY} width={fov.width} height={fov.height} />
-									</clipPath>
-								</defs>
-
-								<!-- Thumbnail image -->
-								{#if thumbnail}
-									<image
-										href={thumbnail}
 										x={fovX}
 										y={fovY}
 										width={fov.width}
 										height={fov.height}
-										clip-path="url(#fov-clip)"
-										preserveAspectRatio="xMidYMid slice"
-									/>
-								{/if}
-
-								<!-- FOV border -->
-								<rect
-									x={fovX}
-									y={fovY}
-									width={fov.width}
-									height={fov.height}
-									fill="none"
-									stroke={fovStrokeColor}
-									stroke-width={0.1}
-								>
-									<title>FOV: ({stage.x.position.toFixed(1)}, {stage.y.position.toFixed(1)}) mm</title>
-								</rect>
-							</g>
-						{/if}
-
-						<!-- Grid Layer: Tiles (topmost for easy clicking) -->
-						{#if layerVisibility.grid}
-							<g class="grid-layer">
-								{#each tiles as tile (`${tile.row}_${tile.col}`)}
-									{@const x = toMm(tile.x_um)}
-									{@const y = toMm(tile.y_um)}
-									{@const w = toMm(tile.w_um)}
-									{@const h = toMm(tile.h_um)}
-									{@const selected = isSelected(tile)}
-									<rect
-										{x}
-										{y}
-										width={w}
-										height={h}
-										fill={selected ? 'rgba(251, 191, 36, 0.1)' : 'transparent'}
-										stroke={selected ? '#fbbf24' : '#3f3f46'}
-										stroke-width={selected ? 0.1 : 0.05}
-										class="tile outline-none"
-										class:cursor-pointer={!isXYMoving}
-										class:cursor-not-allowed={isXYMoving}
-										role="button"
-										tabindex={isXYMoving ? -1 : 0}
-										onclick={() => handleTileSelect(tile)}
-										ondblclick={() => handleTileMove(tile)}
+										fill="none"
+										stroke={fovStrokeColor}
+										stroke-width={0.1}
 									>
-										<title>Tile [{tile.row}, {tile.col}]</title>
+										<title>FOV: ({stage.x.position.toFixed(1)}, {stage.y.position.toFixed(1)}) mm</title>
 									</rect>
-								{/each}
-							</g>
-						{/if}
+								</g>
+							{/if}
+
+							<!-- Grid Layer: Tiles (topmost for easy clicking) -->
+							<!-- stroke={selected ? '#fbbf24' : '#3f3f46'} -->
+							{#if layerVisibility.grid}
+								<g class="grid-layer">
+									{#each tiles as tile (`${tile.row}_${tile.col}`)}
+										{@const x = toMm(tile.x_um)}
+										{@const y = toMm(tile.y_um)}
+										{@const w = toMm(tile.w_um)}
+										{@const h = toMm(tile.h_um)}
+										{@const selected = isSelected(tile)}
+										<rect
+											{x}
+											{y}
+											width={w}
+											height={h}
+											fill={selected ? 'color-mix(in srgb, var(--color-amber-400) 10%, transparent)' : 'transparent'}
+											stroke={selected ? 'var(--color-amber-400)' : 'var(--color-zinc-700)'}
+											stroke-width={selected ? 0.075 : 0.05}
+											class="tile outline-none"
+											class:cursor-pointer={!isXYMoving}
+											class:cursor-not-allowed={isXYMoving}
+											role="button"
+											tabindex={isXYMoving ? -1 : 0}
+											onclick={() => handleTileSelect(tile)}
+											ondblclick={() => handleTileMove(tile)}
+											onkeydown={(e) => handleKeydown(e, () => handleTileSelect(tile))}
+										>
+											<title>Tile [{tile.row}, {tile.col}]</title>
+										</rect>
+									{/each}
+								</g>
+							{/if}
+						</svg>
+					</div>
+				</div>
+
+				<div class="z-area" style="height: {canvasHeight + TRACK_WIDTH}px;">
+					<input
+						type="range"
+						class="z-slider"
+						min={stage.z.lowerLimit}
+						max={stage.z.upperLimit}
+						step={0.1}
+						value={stage.z.position}
+						disabled={isZMoving}
+						oninput={handleZSliderChange}
+					/>
+					<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="none">
+						<line
+							x1="0"
+							y1={stageDepth - fovZ}
+							x2="30"
+							y2={stageDepth - fovZ}
+							stroke={isZMoving ? '#e11d48' : '#10b981'}
+							stroke-width={0.2}
+						>
+							<title>Z: {stage.z.position.toFixed(1)} mm</title>
+						</line>
 					</svg>
 				</div>
 			</div>
-
-			<div class="z-area" style="height: {canvasHeight + TRACK_WIDTH}px;">
-				<input
-					type="range"
-					class="z-slider"
-					min={stage.z.lowerLimit}
-					max={stage.z.upperLimit}
-					step={0.1}
-					value={stage.z.position}
-					disabled={isZMoving}
-					oninput={handleZSliderChange}
-				/>
-				<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="none">
-					<line
-						x1="0"
-						y1={stageDepth - fovZ}
-						x2="30"
-						y2={stageDepth - fovZ}
-						stroke={isZMoving ? '#e11d48' : '#10b981'}
-						stroke-width={0.2}
-					>
-						<title>Z: {stage.z.position.toFixed(1)} mm</title>
-					</line>
-				</svg>
-			</div>
 		</div>
-	</div>
-{:else}
-	<div class="flex h-64 items-center justify-center rounded border border-zinc-700">
-		<p class="text-sm text-zinc-500">Stage not available</p>
-	</div>
-{/if}
+	{:else}
+		<div class="flex h-64 items-center justify-center rounded border border-zinc-700">
+			<p class="text-sm text-zinc-500">Stage not available</p>
+		</div>
+	{/if}
+</div>
 
 <style>
 	.stage-canvas {
@@ -524,8 +533,12 @@
 		fill: rgba(63, 63, 70, 0.3);
 	}
 
-	/* Stack hover effect */
-	.stack:hover {
-		filter: brightness(1.2);
+	/* Stack styling - uses currentColor from Tailwind text-* classes */
+	.stack {
+		fill: color-mix(in srgb, currentColor 10%, transparent);
+		stroke: currentColor;
+		&:hover {
+			filter: brightness(1.2);
+		}
 	}
 </style>

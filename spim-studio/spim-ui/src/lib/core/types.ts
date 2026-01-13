@@ -117,54 +117,22 @@ export interface GridConfig {
 export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'skipped';
 
 /**
- * Color info for stack status
+ * Stack status to Tailwind color class mapping
+ * Uses Tailwind's color classes - derive CSS vars/hex from these in components
  */
-export interface StatusColor {
-	tw: string; // Tailwind color class (e.g., 'text-blue-400')
-	hex: string; // Hex color for SVG strokes
-	rgba: string; // RGBA color for SVG fills
-}
-
-/**
- * Status color map - maps stack status to color info
- */
-export const STACK_STATUS_COLORS: Record<StackStatus | 'none', StatusColor> = {
-	none: {
-		tw: 'text-zinc-200',
-		hex: '#e4e4e7',
-		rgba: 'rgba(228, 228, 231, 0.3)'
-	},
-	planned: {
-		tw: 'text-blue-400',
-		hex: '#60a5fa',
-		rgba: 'rgba(96, 165, 250, 0.3)'
-	},
-	acquiring: {
-		tw: 'text-cyan-400',
-		hex: '#22d3ee',
-		rgba: 'rgba(34, 211, 238, 0.4)'
-	},
-	completed: {
-		tw: 'text-emerald-400',
-		hex: '#34d399',
-		rgba: 'rgba(52, 211, 153, 0.4)'
-	},
-	failed: {
-		tw: 'text-rose-400',
-		hex: '#fb7185',
-		rgba: 'rgba(251, 113, 133, 0.4)'
-	},
-	skipped: {
-		tw: 'text-amber-600',
-		hex: '#d97706',
-		rgba: 'rgba(217, 119, 6, 0.3)'
-	}
+export const STACK_STATUS_COLORS: Record<StackStatus | 'none', string> = {
+	none: 'text-zinc-200',
+	planned: 'text-blue-400',
+	acquiring: 'text-cyan-400',
+	completed: 'text-emerald-400',
+	failed: 'text-rose-400',
+	skipped: 'text-amber-600'
 };
 
 /**
- * Get status color info for a stack status
+ * Get Tailwind color class for a stack status
  */
-export function getStackStatusColor(status: StackStatus | null): StatusColor {
+export function getStackStatusColor(status: StackStatus | null): string {
 	return STACK_STATUS_COLORS[status ?? 'none'];
 }
 

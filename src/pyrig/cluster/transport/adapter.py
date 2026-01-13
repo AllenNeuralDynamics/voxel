@@ -83,6 +83,24 @@ class ZMQAdapter[D: Device](Adapter[D]):
 
         self._stream_callbacks[subscribe_topic].append(callback)
 
+    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None:
+        """Unsubscribe from raw byte streams.
+
+        Args:
+            topic: Topic to unsubscribe from
+            callback: The callback to remove
+        """
+        if not topic.startswith(self.uid):
+            subscribe_topic = f"{self.uid}/{topic}"
+        else:
+            subscribe_topic = topic
+
+        if subscribe_topic in self._stream_callbacks:
+            try:
+                self._stream_callbacks[subscribe_topic].remove(callback)
+            except ValueError:
+                pass  # Callback not in list
+
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
         """Execute a command and return raw CommandResponse."""
         req = AttributeRequest(device=self.uid, attr=command, args=list(args), kwargs=kwargs)

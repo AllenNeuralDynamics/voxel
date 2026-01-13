@@ -2,7 +2,7 @@
 	import Icon from '@iconify/svelte';
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
+	import { getStackStatusColor, type Stack } from '$lib/core/types';
 
 	interface Props {
 		app: App;
@@ -217,7 +217,7 @@
 		<div class="flex flex-col gap-2 px-4 py-4">
 			<!-- Header: tile label + stack action buttons -->
 			<div class="flex items-center justify-between">
-				<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null).tw}">
+				<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
 					R{selectedTile.row}, C{selectedTile.col}
 				</span>
 				<div class="flex items-center gap-0.5">
@@ -302,7 +302,7 @@
 				{@render staticRow('Profile', stack?.profile_id ?? '—')}
 				<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
 					<span class="w-14">Status</span>
-					<span class="font-mono {getStackStatusColor(stack?.status ?? null).tw}">{stack?.status}</span>
+					<span class="font-mono {getStackStatusColor(stack?.status ?? null)}">{stack?.status}</span>
 				</div>
 			</div>
 		</div>

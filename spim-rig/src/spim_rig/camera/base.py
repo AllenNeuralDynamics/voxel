@@ -290,7 +290,6 @@ class CameraMode(StrEnum):
 class CameraController(DeviceController[SpimCamera]):
     def __init__(self, device: SpimCamera, stream_interval: float = 0.5):
         super().__init__(device, stream_interval=stream_interval)
-        self._channel_name = device.uid
         self._mode = CameraMode.IDLE
         self._preview_task: asyncio.Task | None = None
         self._frame_idx = 0
@@ -306,7 +305,7 @@ class CameraController(DeviceController[SpimCamera]):
             return
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self.publish(f"preview/{self._channel_name}", frame.pack()))
+            loop.create_task(self.publish("preview", frame.pack()))
         except RuntimeError:
             pass
 
@@ -321,15 +320,12 @@ class CameraController(DeviceController[SpimCamera]):
     @describe(label="Start Preview")
     async def start_preview(
         self,
-        channel_name: str,
         trigger_mode: TriggerMode = TriggerMode.ON,
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
     ) -> str:
-        """Returns topic name where preview frames will be published."""
+        """Start preview mode. Returns topic name where frames will be published."""
         if self._mode != CameraMode.IDLE:
             raise RuntimeError(f"Cannot start preview: camera in {self._mode} mode")
-
-        self._channel_name = channel_name
 
         def _prepare_and_start():
             self.device.prepare(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
@@ -341,7 +337,7 @@ class CameraController(DeviceController[SpimCamera]):
         self._frame_idx = 0
         self._preview_task = asyncio.create_task(self._preview_loop())
 
-        return f"preview/{self._channel_name}"
+        return "preview"
 
     @describe(label="Stop Preview")
     async def stop_preview(self):

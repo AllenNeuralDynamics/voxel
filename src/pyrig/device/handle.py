@@ -38,6 +38,9 @@ class Adapter[D: Device](ABC):
     async def subscribe(self, topic: str, callback: StreamCallback) -> None: ...
 
     @abstractmethod
+    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None: ...
+
+    @abstractmethod
     async def close(self) -> None: ...
 
 
@@ -107,6 +110,9 @@ class DeviceHandle[D: Device]:
 
     async def subscribe(self, topic: str, callback: StreamCallback) -> None:
         await self._adapter.subscribe(topic, callback)
+
+    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None:
+        await self._adapter.unsubscribe(topic, callback)
 
     async def close(self) -> None:
         await self._adapter.close()

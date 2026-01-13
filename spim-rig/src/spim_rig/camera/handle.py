@@ -17,21 +17,19 @@ class CameraHandle(DeviceHandle[SpimCamera]):
 
     async def start_preview(
         self,
-        channel_name: str,
         trigger_mode: TriggerMode = TriggerMode.ON,
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
     ) -> str:
         """Start camera preview mode.
 
         Args:
-            channel_name: Channel identifier for this camera
             trigger_mode: Trigger mode (default: TriggerMode.ON)
             trigger_polarity: Trigger polarity (default: TriggerPolarity.RISING_EDGE)
 
         Returns:
-            Preview address to connect to (e.g., "tcp://camera-host:6000")
+            Topic name where preview frames will be published.
         """
-        result = await self.call("start_preview", channel_name, trigger_mode, trigger_polarity)
+        result = await self.call("start_preview", trigger_mode, trigger_polarity)
         if isinstance(result, str):
             return result
         if isinstance(result, dict):
