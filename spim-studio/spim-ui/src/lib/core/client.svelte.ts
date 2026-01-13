@@ -82,13 +82,13 @@ type ClientMessage =
 	| { topic: 'grid/set_overlap'; payload: { overlap: number } }
 	| {
 			topic: 'stack/add';
-			payload: { row: number; col: number; z_start_um: number; z_end_um: number; z_step_um: number };
+			payload: { row: number; col: number; z_start_um: number; z_end_um: number };
 	  }
 	| {
 			topic: 'stack/edit';
-			payload: { tile_id: string; z_start_um?: number; z_end_um?: number; z_step_um?: number };
+			payload: { row: number; col: number; z_start_um: number; z_end_um: number };
 	  }
-	| { topic: 'stack/remove'; payload: { tile_id: string } };
+	| { topic: 'stack/remove'; payload: { row: number; col: number } };
 /**
  * Message handler callback type
  */

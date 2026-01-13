@@ -107,6 +107,8 @@ export interface GridConfig {
 	y_offset_um: number;
 	overlap: number; // 0.0 to 1.0
 	z_step_um: number;
+	default_z_start_um: number;
+	default_z_end_um: number;
 }
 
 /**
@@ -128,9 +130,9 @@ export interface StatusColor {
  */
 export const STACK_STATUS_COLORS: Record<StackStatus | 'none', StatusColor> = {
 	none: {
-		tw: 'text-amber-400',
-		hex: '#fbbf24',
-		rgba: 'rgba(251, 191, 36, 0.3)'
+		tw: 'text-zinc-200',
+		hex: '#e4e4e7',
+		rgba: 'rgba(228, 228, 231, 0.3)'
 	},
 	planned: {
 		tw: 'text-blue-400',

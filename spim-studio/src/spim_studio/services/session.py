@@ -165,24 +165,32 @@ class SessionService:
 
     async def _handle_stack_edit(self, payload: dict[str, Any]) -> None:
         """Handle stack edit request."""
-        tile_id = payload.get("tile_id")
-        if not tile_id:
-            raise ValueError("Missing tile_id")
+        row = payload.get("row")
+        col = payload.get("col")
+        z_start = payload.get("z_start_um")
+        z_end = payload.get("z_end_um")
 
+        if row is None or col is None:
+            raise ValueError("Missing row or col")
+
+        tile_id = f"tile_r{row}_c{col}"
         self.session.edit_stack(
             tile_id,
-            z_start_um=payload.get("z_start_um"),
-            z_end_um=payload.get("z_end_um"),
+            z_start_um=z_start,
+            z_end_um=z_end,
         )
         # Status broadcast includes stacks
         self._broadcast({}, with_status=True)
 
     async def _handle_stack_remove(self, payload: dict[str, Any]) -> None:
         """Handle stack remove request."""
-        tile_id = payload.get("tile_id")
-        if not tile_id:
-            raise ValueError("Missing tile_id")
+        row = payload.get("row")
+        col = payload.get("col")
 
+        if row is None or col is None:
+            raise ValueError("Missing row or col")
+
+        tile_id = f"tile_r{row}_c{col}"
         self.session.remove_stack(tile_id)
         # Status broadcast includes stacks
         self._broadcast({}, with_status=True)

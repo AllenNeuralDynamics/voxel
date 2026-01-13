@@ -139,7 +139,14 @@ export class App {
 
 	// Grid, tiles, and stacks (derived from session status - server authoritative)
 	gridConfig = $derived<GridConfig>(
-		this.status?.session?.grid_config ?? { x_offset_um: 0, y_offset_um: 0, overlap: 0.1, z_step_um: 2.0 }
+		this.status?.session?.grid_config ?? {
+			x_offset_um: 0,
+			y_offset_um: 0,
+			overlap: 0.1,
+			z_step_um: 2.0,
+			default_z_start_um: 0,
+			default_z_end_um: 100
+		}
 	);
 	tiles = $derived<Tile[]>(this.status?.session?.tiles ?? []);
 	stacks = $derived<Stack[]>(this.status?.session?.stacks ?? []);
@@ -265,24 +272,24 @@ export class App {
 	}
 
 	/** Add a stack at grid position (sends to backend) */
-	addStack(row: number, col: number, zStartUm: number, zEndUm: number, zStepUm: number): void {
+	addStack(row: number, col: number, zStartUm: number, zEndUm: number): void {
 		this.#client.send({
 			topic: 'stack/add',
-			payload: { row, col, z_start_um: zStartUm, z_end_um: zEndUm, z_step_um: zStepUm }
+			payload: { row, col, z_start_um: zStartUm, z_end_um: zEndUm }
 		});
 	}
 
 	/** Edit a stack's z parameters (sends to backend) */
-	editStack(tileId: string, zStartUm?: number, zEndUm?: number, zStepUm?: number): void {
+	editStack(row: number, col: number, zStartUm: number, zEndUm: number): void {
 		this.#client.send({
 			topic: 'stack/edit',
-			payload: { tile_id: tileId, z_start_um: zStartUm, z_end_um: zEndUm, z_step_um: zStepUm }
+			payload: { row, col, z_start_um: zStartUm, z_end_um: zEndUm }
 		});
 	}
 
 	/** Remove a stack (sends to backend) */
-	removeStack(tileId: string): void {
-		this.#client.send({ topic: 'stack/remove', payload: { tile_id: tileId } });
+	removeStack(row: number, col: number): void {
+		this.#client.send({ topic: 'stack/remove', payload: { row, col } });
 	}
 
 	// ========== Initialization ==========
@@ -548,8 +555,6 @@ export class App {
 			throw new Error('Cannot launch session: not connected');
 		}
 
-		// Clear logs for new session
-		this.logs = [];
 		this.error = null;
 
 		try {

@@ -24,6 +24,8 @@ class GridConfig(BaseModel):
     y_offset_um: float = 0.0
     overlap: float = Field(default=0.1, ge=0.0, lt=1.0)
     z_step_um: float = -1.0  # sentinel: -1 means use rig default
+    default_z_start_um: float = 0.0
+    default_z_end_um: float = 100.0
 
 
 class SessionConfig(BaseModel):
@@ -97,24 +99,47 @@ class SessionConfig(BaseModel):
         return config
 
     def to_yaml(self, path: Path) -> None:
-        """Save to .spim.yaml file, preserving YAML anchors if present."""
+        """Save to .spim.yaml file, preserving YAML anchors if present.
+
+        Uses atomic write with backup to prevent data loss on serialization failure:
+        1. Write to temp file first
+        2. If successful, backup existing file (if any)
+        3. Atomically replace target with temp file
+
+        Cross-platform: uses Path.replace() which is atomic on POSIX, Linux, and Windows.
+        """
         if self._raw_data is not None:
             # Update session fields in raw data to preserve anchors in rig section
             self._raw_data["grid_config"] = self.grid_config.model_dump()
             self._raw_data["tile_order"] = self.tile_order
-            self._raw_data["stacks"] = [s.model_dump() for s in self.stacks]
-            with open(path, "w") as f:
-                yaml.dump(self._raw_data, f)
+            # Use mode='json' to serialize enums as strings for YAML compatibility
+            self._raw_data["stacks"] = [s.model_dump(mode="json") for s in self.stacks]
+            data = self._raw_data
         else:
             # Fresh config without raw_data, just dump normally
             data = {
                 "rig": self.rig.model_dump(),
                 "grid_config": self.grid_config.model_dump(),
                 "tile_order": self.tile_order,
-                "stacks": [s.model_dump() for s in self.stacks],
+                # Use mode='json' to serialize enums as strings for YAML compatibility
+                "stacks": [s.model_dump(mode="json") for s in self.stacks],
             }
-            with open(path, "w") as f:
-                yaml.dump(data, f)
+
+        # Atomic write: temp file -> backup existing -> replace target
+        temp_path = path.with_suffix(".yaml.tmp")
+        backup_path = path.with_suffix(".yaml.bak")
+
+        # Write to temp file first (if this fails, original is untouched)
+        with open(temp_path, "w") as f:
+            yaml.dump(data, f)
+
+        # Backup existing file if present
+        if path.exists():
+            # replace() is atomic and works cross-platform
+            path.replace(backup_path)
+
+        # Atomically move temp to target
+        temp_path.replace(path)
 
 
 class Session:

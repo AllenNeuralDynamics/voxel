@@ -2,7 +2,7 @@
 	import Icon from '@iconify/svelte';
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Tile, type Stack, type StackStatus } from '$lib/core/types';
+	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
 
 	interface Props {
 		app: App;
@@ -27,30 +27,41 @@
 	// Selected tile from app (never null, defaults to [0,0])
 	let selectedTile = $derived(app.selectedTile);
 
-	// Dummy stack data (will be wired to app later)
-	const dummyStack: Stack | null = {
-		row: 0,
-		col: 0,
-		x_um: 0,
-		y_um: 0,
-		w_um: 6670,
-		h_um: 5001,
-		z_start_um: 0,
-		z_end_um: 300,
-		z_step_um: 2.0,
-		profile_id: 'dapi_gfp',
-		status: 'planned' as StackStatus,
-		output_path: null,
-		num_frames: 150
-	};
-
-	// Stack for selected tile (dummy for now)
-	let stack = $state<Stack | null>(dummyStack);
+	// Stack for selected tile (lookup by row/col from app.stacks)
+	let stacks = $derived(app.stacks);
+	let stack = $derived<Stack | null>(
+		stacks.find((s) => s.row === selectedTile.row && s.col === selectedTile.col) ?? null
+	);
 
 	// Form state
 	let isEditing = $state(false);
-	let zStartInput = $state(stack?.z_start_um ?? 0);
-	let zEndInput = $state(stack?.z_end_um ?? 100);
+	let zStartInput = $state(0);
+	let zEndInput = $state(100);
+
+	// Track last used Z values for smart pre-population
+	let lastZStart = $state<number | null>(null);
+	let lastZEnd = $state<number | null>(null);
+
+	// Get smart default Z values: stack → last used → grid config defaults
+	function getDefaultZ(): { start: number; end: number } {
+		if (stack) {
+			return { start: stack.z_start_um, end: stack.z_end_um };
+		}
+		if (lastZStart !== null && lastZEnd !== null) {
+			return { start: lastZStart, end: lastZEnd };
+		}
+		return { start: gridConfig.default_z_start_um, end: gridConfig.default_z_end_um };
+	}
+
+	// Reset form when selected tile changes
+	$effect(() => {
+		// Track selectedTile to trigger on tile change
+		const _tile = selectedTile;
+		isEditing = false;
+		const defaults = getDefaultZ();
+		zStartInput = defaults.start;
+		zEndInput = defaults.end;
+	});
 
 	// Derived state
 	let isDirty = $derived(stack ? zStartInput !== stack.z_start_um || zEndInput !== stack.z_end_um : true);
@@ -81,37 +92,34 @@
 	// Stack handlers
 	function handleEdit() {
 		isEditing = true;
-		zStartInput = stack?.z_start_um ?? 0;
-		zEndInput = stack?.z_end_um ?? 100;
+		const defaults = getDefaultZ();
+		zStartInput = defaults.start;
+		zEndInput = defaults.end;
 	}
 
 	function handleSubmit() {
 		if (hasStack) {
-			console.log('Editing stack:', { z_start_um: zStartInput, z_end_um: zEndInput });
-			// TODO: Call app.editStack(selectedTile.row, selectedTile.col, zStartInput, zEndInput)
+			app.editStack(selectedTile.row, selectedTile.col, zStartInput, zEndInput);
 		} else {
-			console.log('Adding stack:', {
-				row: selectedTile.row,
-				col: selectedTile.col,
-				z_start_um: zStartInput,
-				z_end_um: zEndInput
-			});
-			// TODO: Call app.addStack(selectedTile.row, selectedTile.col, zStartInput, zEndInput)
+			app.addStack(selectedTile.row, selectedTile.col, zStartInput, zEndInput);
 		}
+		// Track last used values for smart pre-population
+		lastZStart = zStartInput;
+		lastZEnd = zEndInput;
 		isEditing = false;
 	}
 
 	function handleDelete() {
 		if (confirm('Delete this stack?')) {
-			console.log('Deleting stack:', selectedTile.row, selectedTile.col);
-			// TODO: Call app.removeStack(selectedTile.row, selectedTile.col)
+			app.removeStack(selectedTile.row, selectedTile.col);
 		}
 	}
 
 	function handleCancel() {
 		isEditing = false;
-		zStartInput = stack?.z_start_um ?? 0;
-		zEndInput = stack?.z_end_um ?? 100;
+		const defaults = getDefaultZ();
+		zStartInput = defaults.start;
+		zEndInput = defaults.end;
 	}
 
 	// Z input handlers
@@ -130,7 +138,6 @@
 	function useCurrentZForEnd() {
 		zEndInput = Math.round(stage!.z.position * 1000);
 	}
-
 </script>
 
 {#snippet spinboxRow(
@@ -184,7 +191,17 @@
 				>
 					Use Current Z
 				</button>
-				<SpinBox value={inputValue} {onChange} {min} {max} step={10} decimals={0} numCharacters={6} showButtons={false} align="right" />
+				<SpinBox
+					value={inputValue}
+					{onChange}
+					{min}
+					{max}
+					step={10}
+					decimals={0}
+					numCharacters={6}
+					showButtons={false}
+					align="right"
+				/>
 				<span class="w-6 text-right text-zinc-600">µm</span>
 			{:else}
 				<span class="font-mono text-zinc-400">{displayValue ?? '—'}</span>
@@ -230,11 +247,11 @@
 						>
 							<Icon icon="mdi:close" width="14" height="14" />
 						</button>
-					{:else if hasStack}
+					{:else}
 						<button
 							onclick={handleEdit}
 							class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
-							title="Edit stack"
+							title={hasStack ? 'Edit stack' : 'Add stack'}
 						>
 							<Icon icon="mdi:pencil-outline" width="14" height="14" />
 						</button>
@@ -253,8 +270,24 @@
 				{@render staticRow('H', formatMm(selectedTile.h_um, 1), 'mm')}
 
 				<!-- Z range -->
-				{@render editableZRow('Z Start', zStartInput, stack?.z_start_um ?? null, updateZStart, useCurrentZForStart, stage.z.lowerLimit * 1000, stage.z.upperLimit * 1000)}
-				{@render editableZRow('Z End', zEndInput, stack?.z_end_um ?? null, updateZEnd, useCurrentZForEnd, stage.z.lowerLimit * 1000, stage.z.upperLimit * 1000)}
+				{@render editableZRow(
+					'Z Start',
+					zStartInput,
+					stack?.z_start_um ?? null,
+					updateZStart,
+					useCurrentZForStart,
+					stage.z.lowerLimit * 1000,
+					stage.z.upperLimit * 1000
+				)}
+				{@render editableZRow(
+					'Z End',
+					zEndInput,
+					stack?.z_end_um ?? null,
+					updateZEnd,
+					useCurrentZForEnd,
+					stage.z.lowerLimit * 1000,
+					stage.z.upperLimit * 1000
+				)}
 
 				<!-- Derived -->
 				{@render staticRow('Step', String(gridConfig.z_step_um), 'µm')}
@@ -265,14 +298,12 @@
 					>
 				</div>
 
-				<!-- Metadata (if stack exists) -->
-				{#if hasStack}
-					{@render staticRow('Profile', stack?.profile_id ?? '—')}
-					<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
-						<span class="w-14">Status</span>
-						<span class="font-mono {getStackStatusColor(stack?.status ?? null).tw}">{stack?.status}</span>
-					</div>
-				{/if}
+				<!-- Metadata  -->
+				{@render staticRow('Profile', stack?.profile_id ?? '—')}
+				<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
+					<span class="w-14">Status</span>
+					<span class="font-mono {getStackStatusColor(stack?.status ?? null).tw}">{stack?.status}</span>
+				</div>
 			</div>
 		</div>
 
