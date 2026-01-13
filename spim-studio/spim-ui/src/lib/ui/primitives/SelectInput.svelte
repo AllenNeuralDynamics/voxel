@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		label: string;
+		label?: string;
 		value: string | number;
 		options: (string | number)[];
 		onChange?: (newValue: string | number) => void;
@@ -30,9 +30,11 @@
 </script>
 
 <div class="grid gap-1">
-	<label for={id} class="text-left text-[0.65rem] font-medium text-zinc-400">
-		{label}
-	</label>
+	{#if label}
+		<label for={id} class="text-left text-[0.65rem] font-medium text-zinc-400">
+			{label}
+		</label>
+	{/if}
 	<select
 		{id}
 		bind:value

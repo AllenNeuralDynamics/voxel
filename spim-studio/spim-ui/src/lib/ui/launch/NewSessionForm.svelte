@@ -62,7 +62,7 @@
 				<select
 					id="root-select"
 					bind:value={selectedRoot}
-					class="w-full appearance-none rounded border border-zinc-700 bg-zinc-800 py-2 pl-3 pr-8 text-sm text-zinc-100 transition-colors focus:border-blue-500 focus:outline-none"
+					class="w-full appearance-none rounded border border-zinc-700 bg-zinc-800 py-2 pr-8 pl-3 text-sm text-zinc-100 transition-colors focus:border-blue-500 focus:outline-none"
 				>
 					{#each roots as root (root.name)}
 						<option value={root.name}>{root.label ?? root.name}</option>
@@ -72,7 +72,7 @@
 					icon="mdi:chevron-down"
 					width="16"
 					height="16"
-					class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500"
+					class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-zinc-500"
 				/>
 			</div>
 		</div>
@@ -86,7 +86,7 @@
 				<select
 					id="rig-select"
 					bind:value={selectedRig}
-					class="w-full appearance-none rounded border border-zinc-700 bg-zinc-800 py-2 pl-3 pr-8 text-sm text-zinc-100 transition-colors focus:border-blue-500 focus:outline-none"
+					class="w-full appearance-none rounded border border-zinc-700 bg-zinc-800 py-2 pr-8 pl-3 text-sm text-zinc-100 transition-colors focus:border-blue-500 focus:outline-none"
 				>
 					{#each rigs as rig (rig)}
 						<option value={rig}>{rig}</option>
@@ -96,7 +96,7 @@
 					icon="mdi:chevron-down"
 					width="16"
 					height="16"
-					class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500"
+					class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-zinc-500"
 				/>
 			</div>
 		</div>

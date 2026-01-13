@@ -1,8 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
+	import SelectInput from '$lib/ui/primitives/SelectInput.svelte';
 	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Stack } from '$lib/core/types';
+	import { getStackStatusColor, type Stack, type TileOrder } from '$lib/core/types';
 
 	interface Props {
 		app: App;
@@ -15,6 +16,16 @@
 	let fov = $derived(app.fov);
 	let gridConfig = $derived(app.gridConfig);
 	let gridLocked = $derived(app.gridLocked);
+	let tileOrder = $derived(app.tileOrder);
+
+	// Tile order labels - options derived from keys
+	const TILE_ORDER_LABELS: Record<TileOrder, string> = {
+		row_wise: 'Row-wise',
+		column_wise: 'Column-wise',
+		snake_row: 'Snake (Row)',
+		snake_column: 'Snake (Column)'
+	};
+	const TILE_ORDER_OPTIONS = Object.keys(TILE_ORDER_LABELS) as TileOrder[];
 
 	// Grid offset in mm for display (stored in μm)
 	let gridOffsetXMm = $derived(gridConfig.x_offset_um / 1000);
@@ -56,7 +67,7 @@
 	// Reset form when selected tile changes
 	$effect(() => {
 		// Track selectedTile to trigger on tile change
-		const _tile = selectedTile;
+		void selectedTile;
 		isEditing = false;
 		const defaults = getDefaultZ();
 		zStartInput = defaults.start;
@@ -87,6 +98,10 @@
 	function updateGridOverlap(value: number) {
 		if (gridLocked) return;
 		app.setGridOverlap(value);
+	}
+
+	function updateTileOrder(value: string | number) {
+		app.setTileOrder(value as TileOrder);
 	}
 
 	// Stack handlers
@@ -316,7 +331,7 @@
 				</div>
 			</div>
 
-			<!-- Grid parameters -->
+			<!-- Grid parameters (lockable) -->
 			<div
 				class="flex flex-col gap-2 text-[0.65rem]"
 				class:opacity-70={gridLocked}
@@ -326,6 +341,20 @@
 				{@render spinboxRow('Offset Y', gridOffsetYMm, updateGridOffsetY, -maxOffsetY, maxOffsetY, 0.1, 1, 'mm')}
 				{@render spinboxRow('Overlap', gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
 				{@render staticRow('Z Step', String(gridConfig.z_step_um), 'µm')}
+			</div>
+
+			<!-- Separator -->
+			<div class="-mx-4 border-t border-zinc-700/50"></div>
+
+			<!-- Tile order (not locked - can change anytime) -->
+			<div class="flex h-6 items-center justify-between gap-2 text-[0.65rem]">
+				<span class="w-14 text-zinc-400">Order</span>
+				<SelectInput
+					value={tileOrder}
+					options={TILE_ORDER_OPTIONS}
+					onChange={updateTileOrder}
+					formatOption={(opt) => TILE_ORDER_LABELS[opt as TileOrder]}
+				/>
 			</div>
 		</div>
 	</div>

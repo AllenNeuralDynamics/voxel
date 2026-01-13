@@ -21,7 +21,8 @@ import type {
 	GridConfig,
 	Tile,
 	Stack,
-	LayerVisibility
+	LayerVisibility,
+	TileOrder
 } from '../core/types.ts';
 import type { SpimRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
 import { Previewer } from '../preview/index.ts';
@@ -150,9 +151,10 @@ export class App {
 	);
 	tiles = $derived<Tile[]>(this.status?.session?.tiles ?? []);
 	stacks = $derived<Stack[]>(this.status?.session?.stacks ?? []);
+	tileOrder = $derived<TileOrder>(this.status?.session?.tile_order ?? 'snake_row');
 
 	// Layer visibility state (controlled by StageControls)
-	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, fov: true });
+	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true });
 
 	// Selected tile position [row, col] - never null, defaults to [0, 0]
 	#selectedTilePos = $state<[number, number]>([0, 0]);
@@ -269,6 +271,11 @@ export class App {
 	/** Update grid overlap (sends to backend) */
 	setGridOverlap(overlap: number): void {
 		this.#client.send({ topic: 'grid/set_overlap', payload: { overlap } });
+	}
+
+	/** Update tile acquisition order (sends to backend) */
+	setTileOrder(order: TileOrder): void {
+		this.#client.send({ topic: 'grid/set_tile_order', payload: { tile_order: order } });
 	}
 
 	/** Add a stack at grid position (sends to backend) */

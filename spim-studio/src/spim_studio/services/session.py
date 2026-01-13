@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from spim_rig import RigMode, Session
+from spim_rig.config import TileOrder
 from spim_rig.session import GridConfig
 from spim_rig.tile import Stack, StackStatus, Tile
 
@@ -46,6 +47,7 @@ class SessionStatus(BaseModel):
 
     # Full data (replaces separate broadcasts)
     grid_config: GridConfig
+    tile_order: TileOrder
     tiles: list[Tile]
     stacks: list[Stack]
 
@@ -84,6 +86,7 @@ class SessionService:
             session_dir=str(self.session.session_dir),
             grid_locked=self.session.grid_locked,
             grid_config=self.session.grid_config,
+            tile_order=self.session.tile_order,
             tiles=tiles,
             stacks=self.session.stacks,
             timestamp=_utc_timestamp(),
@@ -109,6 +112,8 @@ class SessionService:
                 await self._handle_grid_offset(payload)
             case "grid/set_overlap":
                 await self._handle_grid_overlap(payload)
+            case "grid/set_tile_order":
+                await self._handle_tile_order(payload)
             case "stack/add":
                 await self._handle_stack_add(payload)
             case "stack/edit":
@@ -145,6 +150,17 @@ class SessionService:
 
         self.session.set_overlap(overlap)
         # Status broadcast includes grid_config, tiles, and stacks
+        self._broadcast({}, with_status=True)
+
+    async def _handle_tile_order(self, payload: dict[str, Any]) -> None:
+        """Handle tile order update."""
+        tile_order = payload.get("tile_order")
+
+        if tile_order is None:
+            raise ValueError("Missing tile_order")
+
+        self.session.set_tile_order(tile_order)
+        # Status broadcast includes tile_order and stacks (re-sorted)
         self._broadcast({}, with_status=True)
 
     # ==================== Stack Management ====================
@@ -332,6 +348,22 @@ async def update_grid(request: GridUpdateRequest, service: SessionService = Depe
         raise HTTPException(status_code=409, detail=str(e))  # Conflict - grid locked
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class TileOrderRequest(BaseModel):
+    """Request model for setting tile order."""
+
+    tile_order: TileOrder
+
+
+@session_router.put("/session/tile-order")
+async def set_tile_order(
+    request: TileOrderRequest, service: SessionService = Depends(get_session_service)
+) -> dict[str, TileOrder]:
+    """Set tile acquisition order."""
+    service.session.set_tile_order(request.tile_order)
+    service._broadcast({}, with_status=True)
+    return {"tile_order": service.session.tile_order}
 
 
 @session_router.get("/session/stacks")

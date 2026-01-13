@@ -6,7 +6,7 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type { AppStatus, ErrorPayload, LogMessage, ProfileChangedPayload, Stack } from './types.ts';
+import type { AppStatus, ErrorPayload, LogMessage, ProfileChangedPayload, Stack, TileOrder } from './types.ts';
 
 export interface PreviewStatus {
 	previewing: boolean;
@@ -80,6 +80,7 @@ type ClientMessage =
 	// Grid/Stack messages
 	| { topic: 'grid/set_offset'; payload: { x_offset_um: number; y_offset_um: number } }
 	| { topic: 'grid/set_overlap'; payload: { overlap: number } }
+	| { topic: 'grid/set_tile_order'; payload: { tile_order: TileOrder } }
 	| {
 			topic: 'stack/add';
 			payload: { row: number; col: number; z_start_um: number; z_end_um: number };

@@ -32,9 +32,7 @@
 	}
 
 	function formatSessionName(name: string): string {
-		return name
-			.replace(/[-_]/g, ' ')
-			.replace(/\b\w/g, (char) => char.toUpperCase());
+		return name.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 	}
 </script>
 
@@ -80,7 +78,9 @@
 				</div>
 
 				<!-- Resume indicator -->
-				<div class="flex shrink-0 items-center gap-1.5 rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300 transition-colors group-hover:bg-emerald-600 group-hover:text-white">
+				<div
+					class="flex shrink-0 items-center gap-1.5 rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300 transition-colors group-hover:bg-emerald-600 group-hover:text-white"
+				>
 					<span>Resume</span>
 					<Icon icon="mdi:arrow-right" width="14" height="14" />
 				</div>

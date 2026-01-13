@@ -35,6 +35,11 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
  * Session status - included in AppStatus when a session is active
  * Topic: 'status' (within AppStatus.session)
  */
+/**
+ * Tile ordering pattern (matches backend TileOrder)
+ */
+export type TileOrder = 'row_wise' | 'column_wise' | 'snake_row' | 'snake_column';
+
 export interface SessionStatus {
 	active_profile_id: string | null;
 	mode: RigMode;
@@ -44,6 +49,7 @@ export interface SessionStatus {
 
 	// Server-authoritative tile/stack data
 	grid_config: GridConfig;
+	tile_order: TileOrder;
 	tiles: Tile[];
 	stacks: Stack[];
 }
@@ -181,6 +187,7 @@ export interface AcquisitionProgress {
 export interface LayerVisibility {
 	grid: boolean;
 	stacks: boolean;
+	path: boolean;
 	fov: boolean;
 }
 

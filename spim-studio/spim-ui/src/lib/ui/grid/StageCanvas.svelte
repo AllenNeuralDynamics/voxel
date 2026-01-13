@@ -175,6 +175,10 @@
 		app.layerVisibility = { ...app.layerVisibility, stacks: !app.layerVisibility.stacks };
 	}
 
+	function togglePath() {
+		app.layerVisibility = { ...app.layerVisibility, path: !app.layerVisibility.path };
+	}
+
 	function toggleFov() {
 		app.layerVisibility = { ...app.layerVisibility, fov: !app.layerVisibility.fov };
 	}
@@ -235,6 +239,15 @@
 						title="Toggle stacks"
 					>
 						<Icon icon="mdi:layers" width="14" height="14" />
+					</button>
+					<button
+						onclick={togglePath}
+						class="rounded p-1 transition-colors {layerVisibility.path
+							? 'text-fuchsia-400 hover:bg-zinc-700'
+							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+						title="Toggle acquisition path"
+					>
+						<Icon icon="mdi:vector-polyline" width="14" height="14" />
 					</button>
 					<button
 						onclick={toggleFov}
@@ -311,6 +324,30 @@
 										>
 											<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
 										</rect>
+									{/each}
+								</g>
+							{/if}
+
+							<!-- Path Layer: Acquisition order path -->
+							{#if layerVisibility.path && stacks.length > 1}
+								{@const pathPoints = stacks.map((s) => ({
+									x: toMm(s.x_um + s.w_um / 2),
+									y: toMm(s.y_um + s.h_um / 2)
+								}))}
+								<g class="path-layer">
+									<!-- Path line -->
+									<polyline points={pathPoints.map((p) => `${p.x},${p.y}`).join(' ')} class="acquisition-path" />
+									<!-- Arrows at segment midpoints -->
+									{#each pathPoints.slice(0, -1) as p1, i (i)}
+										{@const p2 = pathPoints[i + 1]}
+										{@const midX = (p1.x + p2.x) / 2}
+										{@const midY = (p1.y + p2.y) / 2}
+										{@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
+										<path
+											d="M -0.15 -0.2 L 0.15 0 L -0.15 0.2"
+											class="path-arrow-head"
+											transform="translate({midX}, {midY}) rotate({angle})"
+										/>
 									{/each}
 								</g>
 							{/if}
@@ -543,6 +580,26 @@
 		&.moving {
 			stroke: var(--color-rose-400);
 		}
+	}
+
+	.path-layer {
+		pointer-events: none;
+	}
+
+	.acquisition-path {
+		fill: none;
+		stroke: var(--color-fuchsia-500);
+		stroke-width: 0.04;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.path-arrow-head {
+		fill: none;
+		stroke: var(--color-fuchsia-500);
+		stroke-width: 0.06;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 
 	.stack {
