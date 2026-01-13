@@ -112,7 +112,59 @@ export interface GridConfig {
 /**
  * Stack status enum - matches backend StackStatus
  */
-export type StackStatus = 'planned' | 'committed' | 'acquiring' | 'completed' | 'failed' | 'skipped';
+export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'skipped';
+
+/**
+ * Color info for stack status
+ */
+export interface StatusColor {
+	tw: string; // Tailwind color class (e.g., 'text-blue-400')
+	hex: string; // Hex color for SVG strokes
+	rgba: string; // RGBA color for SVG fills
+}
+
+/**
+ * Status color map - maps stack status to color info
+ */
+export const STACK_STATUS_COLORS: Record<StackStatus | 'none', StatusColor> = {
+	none: {
+		tw: 'text-amber-400',
+		hex: '#fbbf24',
+		rgba: 'rgba(251, 191, 36, 0.3)'
+	},
+	planned: {
+		tw: 'text-blue-400',
+		hex: '#60a5fa',
+		rgba: 'rgba(96, 165, 250, 0.3)'
+	},
+	acquiring: {
+		tw: 'text-cyan-400',
+		hex: '#22d3ee',
+		rgba: 'rgba(34, 211, 238, 0.4)'
+	},
+	completed: {
+		tw: 'text-emerald-400',
+		hex: '#34d399',
+		rgba: 'rgba(52, 211, 153, 0.4)'
+	},
+	failed: {
+		tw: 'text-rose-400',
+		hex: '#fb7185',
+		rgba: 'rgba(251, 113, 133, 0.4)'
+	},
+	skipped: {
+		tw: 'text-amber-600',
+		hex: '#d97706',
+		rgba: 'rgba(217, 119, 6, 0.3)'
+	}
+};
+
+/**
+ * Get status color info for a stack status
+ */
+export function getStackStatusColor(status: StackStatus | null): StatusColor {
+	return STACK_STATUS_COLORS[status ?? 'none'];
+}
 
 /**
  * Tile - 2D position in the grid

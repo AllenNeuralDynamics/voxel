@@ -87,9 +87,7 @@
 						<!-- Time: fixed 8 chars "HH:MM:SS" -->
 						<span class="w-[8ch] shrink-0 text-zinc-600">{formatTime(log.timestamp)}</span>
 						<!-- Logger: fixed width, middle-truncated -->
-						<span class="w-[36ch] shrink-0 text-zinc-500" title={log.logger}
-							>{truncateMiddle(log.logger, 36)}</span
-						>
+						<span class="w-[28ch] shrink-0 text-zinc-500" title={log.logger}>{truncateMiddle(log.logger, 36)}</span>
 						<!-- Message: fills remaining space -->
 						<span class="min-w-0 flex-1 text-zinc-300">{log.message}</span>
 						<!-- Level: icon at end -->

@@ -2,7 +2,7 @@
 	import Icon from '@iconify/svelte';
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import type { App } from '$lib/app';
-	import type { Tile, Stack, StackStatus } from '$lib/core/types';
+	import { getStackStatusColor, type Tile, type Stack, type StackStatus } from '$lib/core/types';
 
 	interface Props {
 		app: App;
@@ -14,7 +14,6 @@
 	let stage = $derived(app.stage);
 	let gridConfig = $derived(app.gridConfig);
 	let gridLocked = $derived(app.gridLocked);
-	let layerVisibility = $derived(app.layerVisibility);
 
 	// Grid offset in mm for display (stored in μm)
 	let gridOffsetXMm = $derived(gridConfig.x_offset_um / 1000);
@@ -77,19 +76,6 @@
 		app.setGridOverlap(value);
 	}
 
-	// Toggle layer visibility
-	function toggleGrid() {
-		app.layerVisibility = { ...layerVisibility, grid: !layerVisibility.grid };
-	}
-
-	function toggleStacks() {
-		app.layerVisibility = { ...layerVisibility, stacks: !layerVisibility.stacks };
-	}
-
-	function toggleFov() {
-		app.layerVisibility = { ...layerVisibility, fov: !layerVisibility.fov };
-	}
-
 	// Stack handlers
 	function handleEdit() {
 		isEditing = true;
@@ -126,151 +112,101 @@
 		zEndInput = stack?.z_end_um ?? 100;
 	}
 
-	// Status styling
-	function getStatusColor(status: StackStatus): string {
-		switch (status) {
-			case 'planned':
-				return 'text-blue-400';
-			case 'committed':
-				return 'text-amber-400';
-			case 'acquiring':
-				return 'text-cyan-400';
-			case 'completed':
-				return 'text-emerald-400';
-			case 'failed':
-				return 'text-rose-400';
-			case 'skipped':
-				return 'text-zinc-500';
-			default:
-				return 'text-zinc-400';
-		}
+	// Z input handlers
+	function updateZStart(value: number) {
+		zStartInput = value;
 	}
+
+	function updateZEnd(value: number) {
+		zEndInput = value;
+	}
+
+	function useCurrentZForStart() {
+		zStartInput = Math.round(stage!.z.position * 1000);
+	}
+
+	function useCurrentZForEnd() {
+		zEndInput = Math.round(stage!.z.position * 1000);
+	}
+
 </script>
+
+{#snippet spinboxRow(
+	label: string,
+	value: number,
+	onChange: (v: number) => void,
+	min: number,
+	max: number,
+	step: number,
+	decimals: number,
+	unit: string
+)}
+	<div class="flex h-6 items-center justify-between gap-2">
+		<span class="w-14 text-zinc-500">{label}</span>
+		<div class="flex items-center gap-1">
+			<SpinBox {value} {onChange} {min} {max} {step} {decimals} numCharacters={4} showButtons={true} align="right" />
+			<span class="w-6 text-right text-zinc-600">{unit}</span>
+		</div>
+	</div>
+{/snippet}
+
+{#snippet staticRow(label: string, value: string, unit: string = '')}
+	<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
+		<span class="w-14">{label}</span>
+		<div class="flex items-center gap-1">
+			<span class="font-mono text-zinc-400">{value}</span>
+			{#if unit}
+				<span class="w-6 text-right text-zinc-600">{unit}</span>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
+{#snippet editableZRow(
+	label: string,
+	inputValue: number,
+	displayValue: number | null,
+	onChange: (v: number) => void,
+	onUseCurrent: () => void,
+	min: number,
+	max: number
+)}
+	<div class="flex h-6 items-center justify-between gap-2">
+		<span class="w-14 text-zinc-500">{label}</span>
+		<div class="flex flex-1 items-center justify-end gap-1">
+			{#if isEditing}
+				<button
+					onclick={onUseCurrent}
+					class="mr-2 rounded px-1 py-0.5 text-[0.6rem] text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
+					title="Use current Z position"
+				>
+					Use Current Z
+				</button>
+				<SpinBox value={inputValue} {onChange} {min} {max} step={10} decimals={0} numCharacters={6} showButtons={false} align="right" />
+				<span class="w-6 text-right text-zinc-600">µm</span>
+			{:else}
+				<span class="font-mono text-zinc-400">{displayValue ?? '—'}</span>
+				<span class="w-6 text-right text-zinc-600">µm</span>
+			{/if}
+		</div>
+	</div>
+{/snippet}
 
 {#if stage}
 	<div class="flex flex-col border-t border-zinc-800 bg-zinc-800/30">
-		<!-- Grid Settings Section -->
-		<div class="flex flex-col gap-3 px-4 py-4">
-			<div class="flex items-center justify-between">
-				<span class="text-xs font-medium text-zinc-300">Grid</span>
-				{#if gridLocked}
-					<span class="text-[0.65rem] text-amber-500">Locked</span>
-				{/if}
-			</div>
-
-			<!-- Layer visibility toggles -->
-			<div class="flex items-center justify-between text-[0.65rem] text-zinc-400">
-				<span class="text-zinc-500">Layers</span>
-				<label class="flex cursor-pointer items-center gap-1.5">
-					<input
-						type="checkbox"
-						checked={layerVisibility.grid}
-						onchange={toggleGrid}
-						class="h-3 w-3 rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-0 focus:ring-offset-0"
-					/>
-					<span>Grid</span>
-				</label>
-				<label class="flex cursor-pointer items-center gap-1.5">
-					<input
-						type="checkbox"
-						checked={layerVisibility.stacks}
-						onchange={toggleStacks}
-						class="h-3 w-3 rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-0 focus:ring-offset-0"
-					/>
-					<span>Stacks</span>
-				</label>
-				<label class="flex cursor-pointer items-center gap-1.5">
-					<input
-						type="checkbox"
-						checked={layerVisibility.fov}
-						onchange={toggleFov}
-						class="h-3 w-3 rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-0 focus:ring-offset-0"
-					/>
-					<span>FOV</span>
-				</label>
-			</div>
-
-			<!-- Grid parameters -->
-			<div
-				class="grid grid-cols-2 gap-x-6 gap-y-2 text-[0.65rem]"
-				class:opacity-50={gridLocked}
-				class:pointer-events-none={gridLocked}
-			>
-				<div class="flex items-center justify-between gap-2">
-					<span class="text-zinc-500">Offset X</span>
-					<div class="flex items-center gap-1">
-						<SpinBox
-							value={gridOffsetXMm}
-							onChange={updateGridOffsetX}
-							min={0}
-							max={stage.width}
-							step={0.1}
-							decimals={1}
-							numCharacters={4}
-							showButtons={true}
-						/>
-						<span class="text-zinc-600">mm</span>
-					</div>
-				</div>
-				<div class="flex items-center justify-between gap-2">
-					<span class="text-zinc-500">Offset Y</span>
-					<div class="flex items-center gap-1">
-						<SpinBox
-							value={gridOffsetYMm}
-							onChange={updateGridOffsetY}
-							min={0}
-							max={stage.height}
-							step={0.1}
-							decimals={1}
-							numCharacters={4}
-							showButtons={true}
-						/>
-						<span class="text-zinc-600">mm</span>
-					</div>
-				</div>
-				<div class="flex items-center justify-between gap-2">
-					<span class="text-zinc-500">Overlap</span>
-					<SpinBox
-						value={gridConfig.overlap}
-						onChange={updateGridOverlap}
-						min={0}
-						max={0.5}
-						step={0.05}
-						decimals={2}
-						numCharacters={4}
-						showButtons={true}
-					/>
-				</div>
-				<div class="flex items-center justify-between gap-2 text-zinc-500">
-					<span>Z Step</span>
-					<span class="font-mono text-zinc-400">{gridConfig.z_step_um} µm</span>
-				</div>
-			</div>
-		</div>
-
 		<!-- Tile Section -->
-		<div class="flex flex-col gap-1.5 border-t border-zinc-700/50 px-4 py-4">
-			<div class="flex items-center justify-between">
+		<div class="flex flex-col gap-2 px-4 py-4">
+			<div class="flex items-center justify-between gap-4">
 				<span class="text-xs font-medium text-zinc-300">Tile</span>
-				<span class="font-mono text-sm font-semibold text-zinc-200">R{selectedTile.row}, C{selectedTile.col}</span>
+				<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null).tw}">
+					R{selectedTile.row}, C{selectedTile.col}
+				</span>
 			</div>
-			<div class="grid grid-cols-2 gap-x-6 gap-y-1 text-[0.65rem]">
-				<div class="flex justify-between text-zinc-500">
-					<span>X</span>
-					<span class="font-mono text-zinc-400">{formatMm(selectedTile.x_um)} mm</span>
-				</div>
-				<div class="flex justify-between text-zinc-500">
-					<span>Y</span>
-					<span class="font-mono text-zinc-400">{formatMm(selectedTile.y_um)} mm</span>
-				</div>
-				<div class="flex justify-between text-zinc-500">
-					<span>W</span>
-					<span class="font-mono text-zinc-400">{formatMm(selectedTile.w_um, 1)} mm</span>
-				</div>
-				<div class="flex justify-between text-zinc-500">
-					<span>H</span>
-					<span class="font-mono text-zinc-400">{formatMm(selectedTile.h_um, 1)} mm</span>
-				</div>
+			<div class="flex flex-col gap-2 text-[0.65rem]">
+				{@render staticRow('X', formatMm(selectedTile.x_um), 'mm')}
+				{@render staticRow('Y', formatMm(selectedTile.y_um), 'mm')}
+				{@render staticRow('W', formatMm(selectedTile.w_um, 1), 'mm')}
+				{@render staticRow('H', formatMm(selectedTile.h_um, 1), 'mm')}
 			</div>
 		</div>
 
@@ -320,71 +256,11 @@
 
 			<!-- Stack content - unified layout with fixed row heights -->
 			<div class="flex flex-col gap-2 text-[0.65rem]">
-				<!-- Z Start -->
-				<div class="flex h-6 items-center justify-between gap-2">
-					<span class="w-14 text-zinc-500">Z Start</span>
-					<div class="flex flex-1 items-center justify-end gap-1">
-						{#if isEditing}
-							<button
-								onclick={() => (zStartInput = Math.round(stage.z.position * 1000))}
-								class="py-0.375 mr-2 rounded border-0 border-zinc-700 px-1 text-[0.6rem] text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
-								title="Use current Z position"
-							>
-								Use Current Z
-							</button>
-							<SpinBox
-								bind:value={zStartInput}
-								min={stage.z.lowerLimit * 1000}
-								max={stage.z.upperLimit * 1000}
-								step={10}
-								decimals={0}
-								numCharacters={6}
-								showButtons={false}
-								align="right"
-							/>
-							<span class="text-zinc-600">µm</span>
-						{:else}
-							<span class="font-mono text-zinc-400">{stack?.z_start_um ?? '—'} µm</span>
-						{/if}
-					</div>
-				</div>
+				{@render editableZRow('Z Start', zStartInput, stack?.z_start_um ?? null, updateZStart, useCurrentZForStart, stage.z.lowerLimit * 1000, stage.z.upperLimit * 1000)}
+				{@render editableZRow('Z End', zEndInput, stack?.z_end_um ?? null, updateZEnd, useCurrentZForEnd, stage.z.lowerLimit * 1000, stage.z.upperLimit * 1000)}
+				{@render staticRow('Step', String(gridConfig.z_step_um), 'µm')}
 
-				<!-- Z End -->
-				<div class="flex h-6 items-center justify-between gap-2">
-					<span class="w-14 text-zinc-500">Z End</span>
-					<div class="flex flex-1 items-center justify-end gap-1">
-						{#if isEditing}
-							<button
-								onclick={() => (zEndInput = Math.round(stage.z.position * 1000))}
-								class="py-0.375 mr-2 rounded border-0 border-zinc-700 px-1 text-[0.6rem] text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
-								title="Use current Z position"
-							>
-								Use Current Z
-							</button>
-							<SpinBox
-								bind:value={zEndInput}
-								min={stage.z.lowerLimit * 1000}
-								max={stage.z.upperLimit * 1000}
-								step={10}
-								decimals={0}
-								numCharacters={6}
-								showButtons={false}
-								align="right"
-							/>
-							<span class="text-zinc-600">µm</span>
-						{:else}
-							<span class="font-mono text-zinc-400">{stack?.z_end_um ?? '—'} µm</span>
-						{/if}
-					</div>
-				</div>
-
-				<!-- Step -->
-				<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
-					<span class="w-14">Step</span>
-					<span class="font-mono text-zinc-400">{gridConfig.z_step_um} µm</span>
-				</div>
-
-				<!-- Slices -->
+				<!-- Slices (custom styling for edit mode) -->
 				<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
 					<span class="w-14">Slices</span>
 					<span class="font-mono {isEditing ? 'text-zinc-300' : 'text-zinc-400'}"
@@ -393,18 +269,36 @@
 				</div>
 
 				{#if hasStack}
-					<!-- Profile -->
-					<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
-						<span class="w-14">Profile</span>
-						<span class="font-mono text-zinc-400">{stack?.profile_id}</span>
-					</div>
+					{@render staticRow('Profile', stack?.profile_id ?? '—')}
 
-					<!-- Status -->
+					<!-- Status (custom color) -->
 					<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
 						<span class="w-14">Status</span>
-						<span class="font-mono {getStatusColor(stack?.status ?? 'planned')}">{stack?.status}</span>
+						<span class="font-mono {getStackStatusColor(stack?.status ?? null).tw}">{stack?.status}</span>
 					</div>
 				{/if}
+			</div>
+		</div>
+
+		<!-- Grid Settings Section -->
+		<div class="flex flex-col gap-3 border-t border-zinc-700/50 px-4 py-4">
+			<div class="flex items-center justify-between">
+				<span class="text-xs font-medium text-zinc-300">Grid</span>
+				<div class="rounded p-1 {gridLocked ? 'text-amber-500' : 'text-zinc-500'}">
+					<Icon icon={gridLocked ? 'mdi:lock' : 'mdi:lock-open-outline'} width="14" height="14" />
+				</div>
+			</div>
+
+			<!-- Grid parameters -->
+			<div
+				class="flex flex-col gap-2 text-[0.65rem]"
+				class:opacity-50={gridLocked}
+				class:pointer-events-none={gridLocked}
+			>
+				{@render spinboxRow('Offset X', gridOffsetXMm, updateGridOffsetX, 0, stage.width, 0.1, 1, 'mm')}
+				{@render spinboxRow('Offset Y', gridOffsetYMm, updateGridOffsetY, 0, stage.height, 0.1, 1, 'mm')}
+				{@render spinboxRow('Overlap', gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
+				{@render staticRow('Z Step', String(gridConfig.z_step_um), 'µm')}
 			</div>
 		</div>
 	</div>

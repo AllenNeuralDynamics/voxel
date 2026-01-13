@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { App } from '$lib/app';
-	import type { Tile, Stack, StackStatus } from '$lib/core/types';
+	import { getStackStatusColor, type Tile, type Stack, type StackStatus } from '$lib/core/types';
 	import { onMount } from 'svelte';
+	import Icon from '@iconify/svelte';
 
 	interface Props {
 		app: App;
@@ -101,45 +102,6 @@
 		return um / 1000;
 	}
 
-	// Get stack fill color based on status
-	function getStackFillColor(status: StackStatus): string {
-		switch (status) {
-			case 'planned':
-				return 'rgba(59, 130, 246, 0.3)'; // blue-500/30
-			case 'committed':
-				return 'rgba(168, 85, 247, 0.4)'; // purple-500/40
-			case 'acquiring':
-				return 'rgba(234, 179, 8, 0.5)'; // yellow-500/50
-			case 'completed':
-				return 'rgba(34, 197, 94, 0.4)'; // green-500/40
-			case 'failed':
-				return 'rgba(239, 68, 68, 0.4)'; // red-500/40
-			case 'skipped':
-				return 'rgba(107, 114, 128, 0.3)'; // gray-500/30
-			default:
-				return 'rgba(107, 114, 128, 0.2)';
-		}
-	}
-
-	// Get stack stroke color based on status
-	function getStackStrokeColor(status: StackStatus): string {
-		switch (status) {
-			case 'planned':
-				return '#3b82f6'; // blue-500
-			case 'committed':
-				return '#a855f7'; // purple-500
-			case 'acquiring':
-				return '#eab308'; // yellow-500
-			case 'completed':
-				return '#22c55e'; // green-500
-			case 'failed':
-				return '#ef4444'; // red-500
-			case 'skipped':
-				return '#6b7280'; // gray-500
-			default:
-				return '#6b7280';
-		}
-	}
 
 	// Handle tile double-click to move stage
 	function handleTileClick(tile: Tile) {
@@ -177,10 +139,57 @@
 		const target = e.target as HTMLInputElement;
 		stage.z.move(parseFloat(target.value));
 	}
+
+	// Layer visibility toggles
+	function toggleGrid() {
+		app.layerVisibility = { ...app.layerVisibility, grid: !app.layerVisibility.grid };
+	}
+
+	function toggleStacks() {
+		app.layerVisibility = { ...app.layerVisibility, stacks: !app.layerVisibility.stacks };
+	}
+
+	function toggleFov() {
+		app.layerVisibility = { ...app.layerVisibility, fov: !app.layerVisibility.fov };
+	}
 </script>
 
 {#if stage}
-	<div class="stage-container" bind:this={containerRef}>
+	<div
+		class="stage-container relative flex flex-1 items-center justify-center overflow-hidden"
+		bind:this={containerRef}
+	>
+		<!-- Layer visibility floating widget -->
+		<div class="absolute top-5 right-2 z-10 flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
+			<button
+				onclick={toggleGrid}
+				class="rounded p-1 transition-colors {layerVisibility.grid
+					? 'text-blue-400 hover:bg-zinc-700'
+					: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+				title="Toggle grid"
+			>
+				<Icon icon="mdi:grid" width="14" height="14" />
+			</button>
+			<button
+				onclick={toggleStacks}
+				class="rounded p-1 transition-colors {layerVisibility.stacks
+					? 'text-purple-400 hover:bg-zinc-700'
+					: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+				title="Toggle stacks"
+			>
+				<Icon icon="mdi:layers" width="14" height="14" />
+			</button>
+			<button
+				onclick={toggleFov}
+				class="rounded p-1 transition-colors {layerVisibility.fov
+					? 'text-emerald-400 hover:bg-zinc-700'
+					: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+				title="Toggle FOV"
+			>
+				<Icon icon="mdi:crosshairs" width="14" height="14" />
+			</button>
+		</div>
+
 		<div
 			class="stage-canvas"
 			style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
@@ -232,8 +241,8 @@
 										{y}
 										width={w}
 										height={h}
-										fill={getStackFillColor(stack.status)}
-										stroke={getStackStrokeColor(stack.status)}
+										fill={getStackStatusColor(stack.status).rgba}
+										stroke={getStackStatusColor(stack.status).hex}
 										stroke-width={0.08}
 										class="stack outline-none"
 										class:cursor-pointer={!isXYMoving}
@@ -351,15 +360,6 @@
 {/if}
 
 <style>
-	.stage-container {
-		display: flex;
-		flex: 1;
-		justify-content: center;
-		align-items: center;
-		min-height: 0;
-		overflow: hidden;
-	}
-
 	.stage-canvas {
 		--thumb-width: 2px;
 		--thumb-color: var(--color-emerald-500, #10b981);
