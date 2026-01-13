@@ -40,9 +40,6 @@
 	// Stage aspect ratio
 	let stageAspectRatio = $derived(stageWidth / stageHeight);
 
-	// FOV styling
-	let fovStrokeColor = $derived(isXYMoving ? 'var(--color-rose-400)' : 'var(--color-emerald-400)');
-
 	// ResizeObserver for responsive sizing
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let canvasWidth = $state(400);
@@ -191,6 +188,30 @@
 	}
 </script>
 
+{#snippet tileRect(tile: Tile, selected: boolean)}
+	{@const x = toMm(tile.x_um)}
+	{@const y = toMm(tile.y_um)}
+	{@const w = toMm(tile.w_um)}
+	{@const h = toMm(tile.h_um)}
+	<rect
+		{x}
+		{y}
+		width={w}
+		height={h}
+		class="tile outline-none"
+		class:selected
+		class:cursor-pointer={!isXYMoving}
+		class:cursor-not-allowed={isXYMoving}
+		role="button"
+		tabindex={isXYMoving ? -1 : 0}
+		onclick={() => handleTileSelect(tile)}
+		ondblclick={() => handleTileMove(tile)}
+		onkeydown={(e) => handleKeydown(e, () => handleTileSelect(tile))}
+	>
+		<title>Tile [{tile.row}, {tile.col}]</title>
+	</rect>
+{/snippet}
+
 <div class="relative grid h-full w-full px-4 pt-18 pb-8">
 	{#if stage}
 		<div class="stage-container flex flex-1 items-center justify-center overflow-hidden" bind:this={containerRef}>
@@ -317,15 +338,14 @@
 										/>
 									{/if}
 
-									<!-- FOV border -->
+									<!-- FOV border (outset) -->
 									<rect
-										x={fovX}
-										y={fovY}
-										width={fov.width}
-										height={fov.height}
-										fill="none"
-										stroke={fovStrokeColor}
-										stroke-width={0.1}
+										x={fovX - 0.025}
+										y={fovY - 0.025}
+										width={fov.width + 0.05}
+										height={fov.height + 0.05}
+										class="fov-rect"
+										class:moving={isXYMoving}
 									>
 										<title>FOV: ({stage.x.position.toFixed(1)}, {stage.y.position.toFixed(1)}) mm</title>
 									</rect>
@@ -333,35 +353,17 @@
 							{/if}
 
 							<!-- Grid Layer: Tiles (topmost for easy clicking) -->
-							<!-- stroke={selected ? '#fbbf24' : '#3f3f46'} -->
 							{#if layerVisibility.grid}
+								{@const selectedTileData = tiles.find((t) => isSelected(t))}
 								<g class="grid-layer">
 									{#each tiles as tile (`${tile.row}_${tile.col}`)}
-										{@const x = toMm(tile.x_um)}
-										{@const y = toMm(tile.y_um)}
-										{@const w = toMm(tile.w_um)}
-										{@const h = toMm(tile.h_um)}
-										{@const selected = isSelected(tile)}
-										<rect
-											{x}
-											{y}
-											width={w}
-											height={h}
-											fill={selected ? 'color-mix(in srgb, var(--color-amber-400) 10%, transparent)' : 'transparent'}
-											stroke={selected ? 'var(--color-amber-400)' : 'var(--color-zinc-700)'}
-											stroke-width={selected ? 0.075 : 0.05}
-											class="tile outline-none"
-											class:cursor-pointer={!isXYMoving}
-											class:cursor-not-allowed={isXYMoving}
-											role="button"
-											tabindex={isXYMoving ? -1 : 0}
-											onclick={() => handleTileSelect(tile)}
-											ondblclick={() => handleTileMove(tile)}
-											onkeydown={(e) => handleKeydown(e, () => handleTileSelect(tile))}
-										>
-											<title>Tile [{tile.row}, {tile.col}]</title>
-										</rect>
+										{#if !isSelected(tile)}
+											{@render tileRect(tile, false)}
+										{/if}
 									{/each}
+									{#if selectedTileData}
+										{@render tileRect(selectedTileData, true)}
+									{/if}
 								</g>
 							{/if}
 						</svg>
@@ -380,14 +382,7 @@
 						oninput={handleZSliderChange}
 					/>
 					<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="none">
-						<line
-							x1="0"
-							y1={stageDepth - fovZ}
-							x2="30"
-							y2={stageDepth - fovZ}
-							stroke={isZMoving ? '#e11d48' : '#10b981'}
-							stroke-width={0.2}
-						>
+						<line x1="0" y1={stageDepth - fovZ} x2="30" y2={stageDepth - fovZ} class="z-line" class:moving={isZMoving}>
 							<title>Z: {stage.z.position.toFixed(1)} mm</title>
 						</line>
 					</svg>
@@ -404,75 +399,62 @@
 <style>
 	.stage-canvas {
 		--thumb-width: 2px;
-		--thumb-color: var(--color-emerald-500, #10b981);
-		--thumb-color-moving: var(--color-rose-600, #e11d48);
 		--stage-border: var(--stage-border-width) solid var(--color-zinc-600);
-		--slider-bg: var(--color-zinc-900, rgb(24, 24, 27));
-
 		display: flex;
 		gap: var(--stage-gap);
+	}
 
-		input[type='range'] {
+	.stage-canvas input[type='range'] {
+		-webkit-appearance: none;
+		appearance: none;
+		cursor: pointer;
+		margin: 0;
+		padding: 0;
+		background-color: var(--color-zinc-900);
+		border: var(--stage-border);
+
+		&::-webkit-slider-runnable-track {
+			background: transparent;
+			border-radius: 0;
+		}
+		&::-moz-range-track {
+			background: transparent;
+			border-radius: 0;
+		}
+
+		&::-webkit-slider-thumb {
 			-webkit-appearance: none;
 			appearance: none;
+			background: var(--color-emerald-500);
+			border-radius: 1px;
 			cursor: pointer;
-			margin: 0;
-			padding: 0;
+		}
 
-			&::-webkit-slider-runnable-track {
-				background: transparent;
-				border-radius: 0;
-			}
+		&::-moz-range-thumb {
+			appearance: none;
+			background: var(--color-emerald-500);
+			border: none;
+			border-radius: 1px;
+			cursor: pointer;
+		}
 
-			&::-moz-range-track {
-				background: transparent;
-				border-radius: 0;
-			}
-
+		&:disabled {
+			cursor: not-allowed;
 			&::-webkit-slider-thumb {
-				-webkit-appearance: none;
-				appearance: none;
-				background: var(--thumb-color);
-				border-radius: 1px;
-				cursor: pointer;
+				background: var(--color-rose-500);
 			}
-
 			&::-moz-range-thumb {
-				appearance: none;
-				background: var(--thumb-color);
-				border: none;
-				border-radius: 1px;
-				cursor: pointer;
-			}
-
-			&:disabled {
-				cursor: not-allowed;
-				--thumb-color: var(--thumb-color-moving);
+				background: var(--color-rose-500);
 			}
 		}
-	}
-
-	.xy-svg {
-		flex-shrink: 0;
-		border-right: var(--stage-border);
-		border-bottom: var(--stage-border);
-	}
-
-	.x-slider,
-	.y-slider,
-	.z-slider {
-		background-color: var(--slider-bg);
-		border: var(--stage-border);
 	}
 
 	.x-slider {
 		height: var(--track-width);
-
 		&::-webkit-slider-thumb {
 			width: var(--thumb-width);
 			height: var(--track-width);
 		}
-
 		&::-moz-range-thumb {
 			width: var(--thumb-width);
 			height: var(--track-width);
@@ -483,12 +465,10 @@
 		writing-mode: vertical-rl;
 		direction: ltr;
 		width: var(--track-width);
-
 		&::-webkit-slider-thumb {
 			width: var(--track-width);
 			height: var(--thumb-width);
 		}
-
 		&::-moz-range-thumb {
 			width: var(--track-width);
 			height: var(--thumb-width);
@@ -499,46 +479,79 @@
 		width: var(--z-area-width);
 		position: relative;
 		flex: 1;
+	}
 
-		.z-slider {
-			position: absolute;
-			inset: 0;
-			writing-mode: vertical-rl;
-			direction: rtl;
-			width: 100%;
-			height: 100%;
-			z-index: 1;
-
-			&::-webkit-slider-thumb {
-				width: var(--z-area-width);
-				height: var(--thumb-width);
-			}
-
-			&::-moz-range-thumb {
-				width: var(--z-area-width);
-				height: var(--thumb-width);
-			}
+	.z-slider {
+		position: absolute;
+		inset: 0;
+		writing-mode: vertical-rl;
+		direction: rtl;
+		width: 100%;
+		height: 100%;
+		z-index: 1;
+		&::-webkit-slider-thumb {
+			width: var(--z-area-width);
+			height: var(--thumb-width);
 		}
-
-		.z-svg {
-			position: absolute;
-			inset: 0;
-			pointer-events: none;
-			z-index: 2;
+		&::-moz-range-thumb {
+			width: var(--z-area-width);
+			height: var(--thumb-width);
 		}
 	}
 
-	/* Tile hover effect */
-	.tile:hover {
-		fill: rgba(63, 63, 70, 0.3);
+	.xy-svg {
+		flex-shrink: 0;
+		border-right: var(--stage-border);
+		border-bottom: var(--stage-border);
 	}
 
-	/* Stack styling - uses currentColor from Tailwind text-* classes */
-	.stack {
-		fill: color-mix(in srgb, currentColor 10%, transparent);
-		stroke: currentColor;
+	.z-svg {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: 2;
+	}
+
+	.z-line {
+		stroke: var(--color-emerald-500);
+		stroke-width: 0.2;
+		&.moving {
+			stroke: var(--color-rose-500);
+		}
+	}
+
+	.tile {
+		fill: transparent;
+		stroke: var(--color-zinc-700);
+		stroke-width: 0.05;
+		transition:
+			fill 150ms ease,
+			stroke 150ms ease;
 		&:hover {
-			filter: brightness(1.2);
+			fill: color-mix(in srgb, var(--color-zinc-500) 15%, transparent);
+		}
+		&.selected {
+			stroke: var(--color-amber-500);
+			stroke-width: 0.05;
+		}
+	}
+
+	.fov-rect {
+		fill: none;
+		stroke: var(--color-emerald-400);
+		stroke-width: 0.1;
+		&.moving {
+			stroke: var(--color-rose-400);
+		}
+	}
+
+	.stack {
+		fill: currentColor;
+		fill-opacity: 0.15;
+		stroke: currentColor;
+		transition: fill-opacity 150ms ease;
+		&:hover {
+			fill-opacity: 0.35;
 		}
 	}
 </style>
