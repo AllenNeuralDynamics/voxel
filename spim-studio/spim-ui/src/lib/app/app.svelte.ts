@@ -139,7 +139,7 @@ export class App {
 
 	// Grid, tiles, and stacks (derived from session status - server authoritative)
 	gridConfig = $derived<GridConfig>(
-		this.status?.session?.grid_config ?? { x_offset_um: 0, y_offset_um: 0, overlap: 0.1 }
+		this.status?.session?.grid_config ?? { x_offset_um: 0, y_offset_um: 0, overlap: 0.1, z_step_um: 2.0 }
 	);
 	tiles = $derived<Tile[]>(this.status?.session?.tiles ?? []);
 	stacks = $derived<Stack[]>(this.status?.session?.stacks ?? []);

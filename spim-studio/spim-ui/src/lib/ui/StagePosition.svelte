@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Stage } from '$lib/app';
-	import { formatPosition } from './utils';
 
 	interface Props {
 		stage: Stage;
@@ -8,6 +7,11 @@
 
 	let { stage }: Props = $props();
 
+	export function formatPosition(position: number | null): string {
+		if (position === null) return '---';
+		const formatted = Math.abs(position).toFixed(2);
+		return position >= 0 ? `+${formatted}` : `-${formatted}`;
+	}
 	// Check if any axis is moving
 	let isAnyAxisMoving = $derived(stage.isMoving);
 </script>

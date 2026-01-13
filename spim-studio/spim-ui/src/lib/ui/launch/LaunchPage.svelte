@@ -3,7 +3,7 @@
 	import type { SessionDirectory } from '$lib/core';
 	import SessionList from './SessionList.svelte';
 	import NewSessionForm from './NewSessionForm.svelte';
-	import LogViewer from './LogViewer.svelte';
+	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 
 	const { app }: { app: App } = $props();

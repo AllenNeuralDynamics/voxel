@@ -2,11 +2,13 @@
 	import { PreviewCanvas, PanZoomControls } from '$lib/preview';
 	import { onMount, onDestroy } from 'svelte';
 	import { App } from '$lib/app';
-	import { LaunchPage, LogViewer } from '$lib/ui/launch';
+	import { LaunchPage } from '$lib/ui/launch';
+	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import ProfileSelector from '$lib/ui/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/ui/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
-	import { StagePosition, StageCanvas, StageControls } from '$lib/ui/stage';
+	import { StageCanvas, GridPanel } from '$lib/ui/grid';
+	import StagePosition from '$lib/ui/StagePosition.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
 	import ChannelSection from '$lib/ui/ChannelSection.svelte';
@@ -163,7 +165,12 @@
 
 							<Tabs.Content value="logs" class="h-full overflow-hidden bg-zinc-900 p-2">
 								{#if app}
-									<LogViewer logs={app.logs} onClear={() => { if (app) app.logs = []; }} />
+									<LogViewer
+										logs={app.logs}
+										onClear={() => {
+											if (app) app.logs = [];
+										}}
+									/>
 								{/if}
 							</Tabs.Content>
 						</Pane>
@@ -223,7 +230,7 @@
 						Stop
 					</button>
 				</header>
-				<StageControls {app} />
+				<GridPanel {app} />
 				<footer class="mt-auto flex flex-row-reverse justify-between p-4">
 					<button
 						onclick={() => app?.closeSession()}

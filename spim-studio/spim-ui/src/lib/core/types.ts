@@ -106,6 +106,7 @@ export interface GridConfig {
 	x_offset_um: number;
 	y_offset_um: number;
 	overlap: number; // 0.0 to 1.0
+	z_step_um: number;
 }
 
 /**
