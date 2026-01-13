@@ -36,16 +36,14 @@
 	// PreviewCanvas is just a view that uses it.
 </script>
 
-<div class="relative grid h-full flex-1 place-content-center bg-zinc-950 px-4 pt-18 pb-8">
-	<div class="inline-block">
-		<canvas
-			bind:this={previewCanvas}
-			class="preview-canvas max-h-full w-full border border-emerald-400 object-contain object-top"
-			class:panning={previewer.isPanZoomActive}
-			class:is-idle={!previewer.isPreviewing}
-		>
-		</canvas>
-	</div>
+<div class="relative flex h-full items-start justify-center bg-zinc-950 px-4 pt-18 pb-12">
+	<canvas
+		bind:this={previewCanvas}
+		class="preview-canvas max-h-full max-w-full border border-emerald-400"
+		class:panning={previewer.isPanZoomActive}
+		class:is-idle={!previewer.isPreviewing}
+	>
+	</canvas>
 	<!-- Tooltip overlay -->
 	<div class="absolute top-0 right-4 flex h-18 items-center">
 		<PreviewInfoTooltip {frameInfo} visibleChannels={channelFrameInfos} />

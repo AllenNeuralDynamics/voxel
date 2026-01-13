@@ -134,7 +134,13 @@
 						{#each app.previewer.channels as channel (channel.idx)}
 							{#if channel.name}
 								<div>
-									<ChannelSection {channel} previewer={app.previewer} devices={app.devices} {deviceFilter} {showHistograms} />
+									<ChannelSection
+										{channel}
+										previewer={app.previewer}
+										devices={app.devices}
+										{deviceFilter}
+										{showHistograms}
+									/>
 								</div>
 								<div class="border-t border-zinc-600"></div>
 							{/if}
@@ -160,7 +166,7 @@
 							</PaneGroup>
 						</Pane>
 						<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
-						<Pane defaultSize={40} maxSize={50} minSize={30} class="overflow-hidden">
+						<Pane defaultSize={40} maxSize={70} minSize={30} class="overflow-hidden">
 							<!-- Bottom Panel Tab Content -->
 							<Tabs.Content value="stacks" class="h-full overflow-auto bg-zinc-900">
 								<div class="flex h-full items-center justify-center">
