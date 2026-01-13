@@ -377,12 +377,14 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
     finally:
         shutdown.set()
         service.remove_client(client_id)
-        # Auto-stop preview if this was a client that requested it
-        if service.session_service and service.session_service.rig_service.preview_start_count > 0:
-            try:
-                await service.session_service.rig_service.force_stop_preview()
-            except Exception as e:
-                log.warning(f"Error stopping preview during disconnect: {e}")
+        # Auto-stop preview only if this was the last client
+        if len(service.clients) == 0:
+            if service.session_service and service.session_service.rig_service.is_previewing:
+                try:
+                    log.info("Last client disconnected, stopping preview")
+                    await service.session_service.rig_service.stop_preview()
+                except Exception as e:
+                    log.warning(f"Error stopping preview during disconnect: {e}")
 
 
 # ==================== REST Endpoints ====================

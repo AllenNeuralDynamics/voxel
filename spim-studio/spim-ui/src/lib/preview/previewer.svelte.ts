@@ -336,9 +336,8 @@ export class Previewer {
 			this.#handleAppStatus(status);
 		});
 
-		const unsubPreviewStatus = this.#client.on('preview/status', (status) => {
-			this.isPreviewing = status.previewing;
-		});
+		// Note: isPreviewing is derived from status.session.mode in #handleAppStatus
+		// No separate preview/status subscription needed
 
 		const unsubFrame = this.#client.subscribe('preview/frame', (topic, payload) => {
 			const data = payload as { channel: string; info: PreviewFrameInfo; bitmap: ImageBitmap };
@@ -353,7 +352,7 @@ export class Previewer {
 			this.#handleLevelsUpdate(levels.channel, { min: levels.min, max: levels.max });
 		});
 
-		this.#unsubscribers.push(unsubStatus, unsubPreviewStatus, unsubFrame, unsubCrop, unsubLevels);
+		this.#unsubscribers.push(unsubStatus, unsubFrame, unsubCrop, unsubLevels);
 	}
 
 	async init(canvas: HTMLCanvasElement): Promise<void> {

@@ -45,7 +45,6 @@ class RigService:
     def __init__(self, rig: SpimRig, broadcast: BroadcastCallback):
         self.rig = rig
         self._broadcast = broadcast
-        self._preview_start_count = 0
         self._preview_lock = asyncio.Lock()
 
         # Subscribe to device property streams in background
@@ -95,34 +94,28 @@ class RigService:
     async def _handle_preview_start(self):
         """Start preview streaming."""
         async with self._preview_lock:
-            if self._preview_start_count == 0:
-                log.info("First client requested preview. Starting rig preview.")
+            if not self.is_previewing:
+                log.info("Starting rig preview")
                 await self.rig.start_preview(frame_callback=self._distribute_frames)
-            self._preview_start_count += 1
-            log.debug("Preview start count: %d", self._preview_start_count)
 
         await self._broadcast_preview_status()
 
     async def _handle_preview_stop(self):
         """Stop preview streaming."""
         async with self._preview_lock:
-            if self._preview_start_count > 0:
-                self._preview_start_count -= 1
-            log.debug("Preview start count: %d", self._preview_start_count)
-
-            if self._preview_start_count == 0 and self.rig.preview.is_active:
-                log.info("Last client stopped preview. Stopping rig preview.")
+            if self.is_previewing:
+                log.info("Stopping rig preview")
                 await self.rig.stop_preview()
 
         await self._broadcast_preview_status()
 
-    async def force_stop_preview(self):
-        """Force stop preview (used during client disconnect)."""
+    async def stop_preview(self):
+        """Stop preview (used during last client disconnect)."""
         async with self._preview_lock:
-            if self._preview_start_count > 0:
-                self._preview_start_count -= 1
-            if self._preview_start_count == 0 and self.rig.preview.is_active:
+            if self.is_previewing:
+                log.info("Last client disconnected. Stopping rig preview.")
                 await self.rig.stop_preview()
+        await self._broadcast_preview_status()
 
     async def _handle_preview_crop(self, payload: dict[str, Any]):
         """Handle preview crop update."""
@@ -273,11 +266,6 @@ class RigService:
     def is_previewing(self) -> bool:
         """Check if preview is active."""
         return self.rig.preview.is_active
-
-    @property
-    def preview_start_count(self) -> int:
-        """Get the number of clients that have started preview."""
-        return self._preview_start_count
 
 
 # ==================== REST Endpoints ====================
