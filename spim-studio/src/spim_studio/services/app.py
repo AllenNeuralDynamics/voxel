@@ -114,15 +114,17 @@ class AppService:
         """Broadcast to all clients. Dict = JSON message, bytes = binary.
 
         Args:
-            data: The message to broadcast.
+            data: The message to broadcast. Empty dict is skipped.
             with_status: If True, also schedule a full app status broadcast.
         """
-        msg_type = "bytes" if isinstance(data, bytes) else "json"
-        for queue in self.clients.values():
-            try:
-                queue.put_nowait((msg_type, data))
-            except asyncio.QueueFull:
-                pass
+        # Only broadcast if there's actual data (skip empty dicts)
+        if data:
+            msg_type = "bytes" if isinstance(data, bytes) else "json"
+            for queue in self.clients.values():
+                try:
+                    queue.put_nowait((msg_type, data))
+                except asyncio.QueueFull:
+                    pass
 
         if with_status:
             self._schedule_status_broadcast()

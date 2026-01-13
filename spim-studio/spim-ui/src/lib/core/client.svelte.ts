@@ -434,6 +434,11 @@ export class Client {
 	 * Supports exact match, prefix match, and wildcard '*'.
 	 */
 	private dispatch(topic: string, payload: unknown): void {
+		if (!topic) {
+			console.warn('[Client] Received message without topic:', payload);
+			return;
+		}
+
 		// Exact match
 		this.handlers.get(topic)?.forEach((h) => h(topic, payload));
 
