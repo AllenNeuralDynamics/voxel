@@ -39,7 +39,7 @@
 		{id}
 		bind:value
 		onchange={handleChange}
-		class="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 transition-colors hover:border-zinc-600 focus:border-emerald-500 focus:outline-none"
+		class="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 transition-colors hover:border-zinc-600 focus:border-emerald-500 focus:outline-none"
 	>
 		{#each options as option (option)}
 			<option value={option}>{formatDisplayValue(option)}</option>

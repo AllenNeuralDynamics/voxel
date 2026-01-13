@@ -140,7 +140,17 @@
 	}
 </script>
 
-{#snippet spinboxRow(
+{#snippet staticItem(label: string, value: string, unit: string = '')}
+	<div class="flex items-center justify-between">
+		<span class="text-zinc-400">{label}</span>
+		<span class="flex items-center gap-1">
+			<span class="border border-transparent py-0.5 font-mono text-zinc-300">{value}</span>
+			{#if unit}<span class="text-zinc-400">{unit}</span>{/if}
+		</span>
+	</div>
+{/snippet}
+
+{#snippet spinBoxItem(
 	label: string,
 	value: number,
 	onChange: (v: number) => void,
@@ -148,30 +158,18 @@
 	max: number,
 	step: number,
 	decimals: number,
-	unit: string
+	unit: string = ''
 )}
-	<div class="flex h-6 items-center justify-between gap-2">
-		<span class="w-14 text-zinc-400">{label}</span>
-		<div class="flex items-center gap-1">
-			<SpinBox {value} {onChange} {min} {max} {step} {decimals} numCharacters={4} showButtons={true} align="right" />
-			<span class="w-6 text-right text-zinc-400">{unit}</span>
-		</div>
+	<div class="flex items-center justify-between">
+		<span class="text-zinc-400">{label}</span>
+		<span class="flex items-center gap-1">
+			<SpinBox {value} {onChange} {min} {max} {step} {decimals} numCharacters={4} showButtons={false} align="right" />
+			{#if unit}<span class="text-zinc-400">{unit}</span>{/if}
+		</span>
 	</div>
 {/snippet}
 
-{#snippet staticRow(label: string, value: string, unit: string = '')}
-	<div class="flex h-6 items-center justify-between gap-2 text-zinc-400">
-		<span class="w-14">{label}</span>
-		<div class="flex items-center gap-1">
-			<span class="font-mono text-zinc-300">{value}</span>
-			{#if unit}
-				<span class="w-6 text-right text-zinc-400">{unit}</span>
-			{/if}
-		</div>
-	</div>
-{/snippet}
-
-{#snippet editableZRow(
+{#snippet editableZItem(
 	label: string,
 	inputValue: number,
 	displayValue: number | null,
@@ -180,17 +178,15 @@
 	min: number,
 	max: number
 )}
-	<div class="flex h-6 items-center justify-between gap-2">
-		<span class="w-14 text-zinc-400">{label}</span>
-		<div class="flex flex-1 items-center justify-end gap-1">
+	<div class="flex items-center justify-between">
+		<span class="text-zinc-400">{label}</span>
+		<span class="flex items-center gap-1">
 			{#if isEditing}
 				<button
 					onclick={onUseCurrent}
-					class="mr-2 rounded px-1 py-0.5 text-[0.6rem] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
-					title="Use current Z position"
+					class="rounded px-1 text-[0.55rem] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+					title="Use current Z">Current</button
 				>
-					Use Current Z
-				</button>
 				<SpinBox
 					value={inputValue}
 					{onChange}
@@ -198,27 +194,29 @@
 					{max}
 					step={10}
 					decimals={0}
-					numCharacters={6}
+					numCharacters={5}
 					showButtons={false}
 					align="right"
 				/>
-				<span class="w-6 text-right text-zinc-400">µm</span>
 			{:else}
-				<span class="font-mono text-zinc-300">{displayValue ?? '—'}</span>
-				<span class="w-6 text-right text-zinc-400">µm</span>
+				<span class="border border-transparent py-0.5 font-mono text-zinc-300">{displayValue ?? '—'}</span>
 			{/if}
-		</div>
+			<span class="text-zinc-400">µm</span>
+		</span>
 	</div>
 {/snippet}
 
 {#if app.zAxis}
-	<div class="flex flex-col border-t border-zinc-800 bg-zinc-800/30">
+	<div class="flex flex-col border-y border-zinc-700 bg-zinc-800/30">
 		<!-- Tile & Stack Section -->
-		<div class="flex flex-col gap-2 px-4 py-4">
-			<!-- Header: tile label + stack action buttons -->
+		<div class="flex flex-col gap-2 p-4 pt-3">
+			<!-- Header: tile label + status + action buttons -->
 			<div class="flex items-center justify-between">
-				<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
-					R{app.selectedTile.row}, C{app.selectedTile.col}
+				<span class="flex items-center gap-2">
+					<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
+						R{app.selectedTile.row}, C{app.selectedTile.col}
+					</span>
+					{#if stack}<span class="text-[0.6rem] {getStackStatusColor(stack.status)}">{stack.status}</span>{/if}
 				</span>
 				<div class="flex items-center gap-0.5">
 					{#if isEditing}
@@ -260,18 +258,16 @@
 			</div>
 
 			<!-- Content rows -->
-			<div class="flex flex-col gap-2 text-[0.65rem]">
-				<!-- Tile position -->
-				{@render staticRow('X', formatMm(app.selectedTile.x_um), 'mm')}
-				{@render staticRow('Y', formatMm(app.selectedTile.y_um), 'mm')}
-
-				<!-- Tile size -->
-				{@render staticRow('W', formatMm(app.selectedTile.w_um, 1), 'mm')}
-				{@render staticRow('H', formatMm(app.selectedTile.h_um, 1), 'mm')}
+			<div class="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.65rem]">
+				<!-- Tile position & size -->
+				{@render staticItem('X', formatMm(app.selectedTile.x_um), 'mm')}
+				{@render staticItem('Y', formatMm(app.selectedTile.y_um), 'mm')}
+				{@render staticItem('W', formatMm(app.selectedTile.w_um, 1), 'mm')}
+				{@render staticItem('H', formatMm(app.selectedTile.h_um, 1), 'mm')}
 
 				<!-- Z range -->
-				{@render editableZRow(
-					'Z Start',
+				{@render editableZItem(
+					'Z0',
 					zStartInput,
 					stack?.z_start_um ?? null,
 					updateZStart,
@@ -279,8 +275,8 @@
 					app.zAxis.lowerLimit * 1000,
 					app.zAxis.upperLimit * 1000
 				)}
-				{@render editableZRow(
-					'Z End',
+				{@render editableZItem(
+					'Z1',
 					zEndInput,
 					stack?.z_end_um ?? null,
 					updateZEnd,
@@ -290,57 +286,46 @@
 				)}
 
 				<!-- Derived -->
-				{@render staticRow('Step', String(app.gridConfig.z_step_um), 'µm')}
-				<div class="flex h-6 items-center justify-between gap-2 text-zinc-400">
-					<span class="w-14">Slices</span>
-					<span class="font-mono {isEditing ? 'text-zinc-200' : 'text-zinc-300'}"
-						>{isEditing ? numSlices : (stack?.num_frames ?? '—')}</span
-					>
-				</div>
+				{@render staticItem('Slices', isEditing ? String(numSlices) : (stack?.num_frames?.toString() ?? '—'))}
 
-				<!-- Metadata  -->
-				{@render staticRow('Profile', stack?.profile_id ?? '—')}
-				<div class="flex h-6 items-center justify-between gap-2 text-zinc-400">
-					<span class="w-14">Status</span>
-					<span class="font-mono {getStackStatusColor(stack?.status ?? null)}">{stack?.status}</span>
-				</div>
+				<!-- Metadata -->
+				{@render staticItem('Profile', stack?.profile_id ?? '—')}
 			</div>
 		</div>
 
 		<!-- Grid Settings Section -->
-		<div class="flex flex-col gap-3 border-y border-zinc-700/50 px-4 py-4">
+		<div class="flex flex-col gap-3 border-y border-zinc-700/80 p-4 pt-3">
 			<div class="flex items-center justify-between">
 				<span class="text-xs font-medium text-zinc-300">Grid</span>
-				<div class="rounded p-1 {app.gridLocked ? 'text-amber-500' : 'text-zinc-500'}">
+				<div class="rounded {app.gridLocked ? 'text-amber-500' : 'text-zinc-500'}">
 					<Icon icon={app.gridLocked ? 'mdi:lock' : 'mdi:lock-open-outline'} width="14" height="14" />
 				</div>
 			</div>
 
 			<!-- Grid parameters (lockable) -->
 			<div
-				class="flex flex-col gap-2 text-[0.65rem]"
+				class="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.65rem]"
 				class:opacity-70={app.gridLocked}
 				class:pointer-events-none={app.gridLocked}
 			>
-				{@render spinboxRow('Offset X', gridOffsetXMm, updateGridOffsetX, -maxOffsetX, maxOffsetX, 0.1, 1, 'mm')}
-				{@render spinboxRow('Offset Y', gridOffsetYMm, updateGridOffsetY, -maxOffsetY, maxOffsetY, 0.1, 1, 'mm')}
-				{@render spinboxRow('Overlap', app.gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
-				{@render staticRow('Z Step', String(app.gridConfig.z_step_um), 'µm')}
+				{@render spinBoxItem('X', gridOffsetXMm, updateGridOffsetX, -maxOffsetX, maxOffsetX, 0.1, 1, 'mm')}
+				{@render spinBoxItem('Y', gridOffsetYMm, updateGridOffsetY, -maxOffsetY, maxOffsetY, 0.1, 1, 'mm')}
+				{@render spinBoxItem('Overlap', app.gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
+				{@render staticItem('Z Step', String(app.gridConfig.z_step_um), 'µm')}
 			</div>
 
 			<!-- Separator -->
-			<div class="-mx-4 border-t border-zinc-700/50"></div>
-
-			<!-- Tile order (not locked - can change anytime) -->
-			<div class="flex h-6 items-center justify-between gap-2 text-[0.65rem]">
-				<span class="w-14 text-zinc-400">Order</span>
-				<SelectInput
-					value={app.tileOrder}
-					options={TILE_ORDER_OPTIONS}
-					onChange={updateTileOrder}
-					formatOption={(opt) => TILE_ORDER_LABELS[opt as TileOrder]}
-				/>
-			</div>
+			<!-- <div class="-mx-4 border-t border-zinc-700/50"></div> -->
+		</div>
+		<!-- Tile order (not locked - can change anytime) -->
+		<div class="grid grid-cols-2 gap-x-8 p-4 text-[0.65rem]">
+			<span class="text-zinc-400">Order</span>
+			<SelectInput
+				value={app.tileOrder}
+				options={TILE_ORDER_OPTIONS}
+				onChange={updateTileOrder}
+				formatOption={(opt) => TILE_ORDER_LABELS[opt as TileOrder]}
+			/>
 		</div>
 	</div>
 {/if}
