@@ -26,7 +26,7 @@ import type {
 } from '../core/types.ts';
 import type { SpimRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
 import { Previewer } from '../preview/index.ts';
-import { Axis, Stage } from './axis.svelte.ts';
+import { Axis } from './axis.svelte.ts';
 import { SvelteDate } from 'svelte/reactivity';
 
 /**
@@ -118,7 +118,18 @@ export class App {
 
 	// Feature controllers (owned by App)
 	previewer = $state<Previewer | null>(null);
-	stage = $state<Stage | null>(null);
+
+	// Stage axes (owned by App, flattened for better reactivity)
+	xAxis = $state<Axis | null>(null);
+	yAxis = $state<Axis | null>(null);
+	zAxis = $state<Axis | null>(null);
+
+	// Stage derived properties (flattened to avoid nested $state issues)
+	stageWidth = $derived(this.xAxis?.range ?? 100);
+	stageHeight = $derived(this.yAxis?.range ?? 100);
+	stageDepth = $derived(this.zAxis?.range ?? 100);
+	stageIsMoving = $derived(this.xAxis?.isMoving || this.yAxis?.isMoving || this.zAxis?.isMoving);
+	stageConnected = $derived((this.xAxis?.isConnected && this.yAxis?.isConnected && this.zAxis?.isConnected) ?? false);
 
 	// App state
 	logs = $state<LogMessage[]>([]);
@@ -161,6 +172,7 @@ export class App {
 	selectedTile = $derived<Tile>(this.#getSelectedTile());
 
 	private wasDisconnected = false;
+	private sessionInitializing = false;
 	private unsubscribers: Array<() => void> = [];
 
 	constructor(options: AppOptions = {}) {
@@ -175,22 +187,18 @@ export class App {
 		return this.#client;
 	}
 
-	get activeProfile(): Profile | null {
+	// ========== Derived Properties (must use $derived for reactivity) ==========
+
+	activeProfile = $derived.by(() => {
 		if (!this.activeProfileId) return null;
 		return this.profiles.find((p) => p.id === this.activeProfileId) ?? null;
-	}
-
-	// ========== Grid & FOV ==========
+	});
 
 	/** FOV dimensions in mm from active profile */
-	get fov(): { width: number; height: number } {
-		return this.activeProfile?.fovDimensions ?? { width: 5, height: 5 };
-	}
+	fov = $derived<{ width: number; height: number }>(this.activeProfile?.fovDimensions ?? { width: 5, height: 5 });
 
 	/** Grid locked when PLANNED stacks exist */
-	get gridLocked(): boolean {
-		return this.status?.session?.grid_locked ?? false;
-	}
+	gridLocked = $derived(this.status?.session?.grid_locked ?? false);
 
 	/** Tile spacing in mm (FOV adjusted for overlap) */
 	get tileSpacingX(): number {
@@ -214,7 +222,7 @@ export class App {
 	positionToGridCell(positionMm: number, axis: 'x' | 'y'): number {
 		const offset = axis === 'x' ? this.gridOffsetX : this.gridOffsetY;
 		const spacing = axis === 'x' ? this.tileSpacingX : this.tileSpacingY;
-		const lowerLimit = axis === 'x' ? (this.stage?.x.lowerLimit ?? 0) : (this.stage?.y.lowerLimit ?? 0);
+		const lowerLimit = axis === 'x' ? (this.xAxis?.lowerLimit ?? 0) : (this.yAxis?.lowerLimit ?? 0);
 		return Math.floor((positionMm - lowerLimit - offset) / spacing);
 	}
 
@@ -222,21 +230,32 @@ export class App {
 	gridCellToPosition(gridCell: number, axis: 'x' | 'y'): number {
 		const offset = axis === 'x' ? this.gridOffsetX : this.gridOffsetY;
 		const spacing = axis === 'x' ? this.tileSpacingX : this.tileSpacingY;
-		const lowerLimit = axis === 'x' ? (this.stage?.x.lowerLimit ?? 0) : (this.stage?.y.lowerLimit ?? 0);
+		const lowerLimit = axis === 'x' ? (this.xAxis?.lowerLimit ?? 0) : (this.yAxis?.lowerLimit ?? 0);
 		return lowerLimit + offset + gridCell * spacing;
 	}
 
 	/** Move stage to grid cell position */
 	moveToGridCell(row: number, col: number): void {
-		if (!this.stage || this.stage.isMoving) return;
+		if (this.stageIsMoving || !this.xAxis || !this.yAxis) return;
 		const targetX = this.gridCellToPosition(col, 'x');
 		const targetY = this.gridCellToPosition(row, 'y');
-		this.stage.moveXY(targetX, targetY);
+		this.moveXY(targetX, targetY);
+	}
+
+	/** Move X and Y axes */
+	moveXY(x: number, y: number): void {
+		this.xAxis?.move(x);
+		this.yAxis?.move(y);
+	}
+
+	/** Move Z axis */
+	moveZ(z: number): void {
+		this.zAxis?.move(z);
 	}
 
 	/** Halt all stage axes */
 	async haltStage(): Promise<void> {
-		await this.stage?.halt();
+		await Promise.all([this.xAxis?.halt(), this.yAxis?.halt(), this.zAxis?.halt()]);
 	}
 
 	/** Get selected tile from tiles array, or create a default tile */
@@ -327,7 +346,7 @@ export class App {
 
 		// Profile changes
 		const unsubProfile = this.#client.on('profile/changed', (payload) => {
-			console.log('[App] Profile changed:', payload.profile_id);
+			console.debug('[App] Profile changed:', payload.profile_id);
 			this.requestWaveforms();
 		});
 
@@ -381,19 +400,28 @@ export class App {
 			case 'idle': {
 				// Clear session-specific state if we have feature controllers
 				if (this.previewer || this.config) {
-					console.log('[App] Session closed, cleaning up');
-					this.destroyFeatureControllers();
+					console.debug('[App] Session closed, cleaning up');
+					this.previewer?.shutdown();
+					this.previewer = null;
 					this.config = null;
 					this.profiles = [];
 				}
+				this.sessionInitializing = false;
 				break;
 			}
 
 			case 'ready': {
 				// Initialize session if we don't have feature controllers yet
-				if (!this.previewer) {
-					console.log('[App] Session became ready, initializing...');
-					await this.initializeSession();
+				// Use sessionInitializing flag to prevent race condition when multiple
+				// status messages arrive before async initializeSession() completes
+				if (!this.previewer && !this.sessionInitializing) {
+					this.sessionInitializing = true;
+					console.debug('[App] Session became ready, initializing...');
+					try {
+						await this.initializeSession();
+					} finally {
+						this.sessionInitializing = false;
+					}
 				}
 
 				// Request waveforms if profile changed
@@ -413,33 +441,19 @@ export class App {
 
 		// Create feature controllers
 		if (this.config) {
-			console.log('[App] Creating Previewer and Stage controllers');
+			console.debug('[App] Creating Previewer and Axis controllers');
 			this.previewer = new Previewer(this.client, { channels: this.config.channels, profiles: this.config.profiles });
 
-			// Create Stage if all axis device IDs are configured
+			// Create axes if device IDs are configured
 			const stage = this.config.stage;
-			if (stage?.x && stage?.y && stage?.z) {
-				const xAxis = new Axis(this, stage.x);
-				const yAxis = new Axis(this, stage.y);
-				const zAxis = new Axis(this, stage.z);
-				this.stage = new Stage(xAxis, yAxis, zAxis);
-				// Enable thumbnails when stage is available
-				this.previewer.enableThumbnails = true;
-			}
-		}
-	}
-
-	private destroyFeatureControllers(): void {
-		console.log('[App] Destroying Previewer and Stage controllers');
-		this.stage = null;
-		if (this.previewer) {
-			this.previewer.shutdown();
-			this.previewer = null;
+			if (stage?.x) this.xAxis = new Axis(this, stage.x);
+			if (stage?.y) this.yAxis = new Axis(this, stage.y);
+			if (stage?.z) this.zAxis = new Axis(this, stage.z);
 		}
 	}
 
 	private handleReconnection(): void {
-		console.log('[App] Reconnected - refetching data');
+		console.debug('[App] Reconnected - refetching data');
 		this.connectionError = null;
 		this.#client.requestStatus();
 	}
@@ -581,7 +595,7 @@ export class App {
 			}
 
 			// Backend will broadcast status update with phase='launching', then phase='ready'
-			console.log('[App] Session launch request sent');
+			console.debug('[App] Session launch request sent');
 		} catch (error) {
 			console.error('[App] Failed to launch session:', error);
 			this.error = error instanceof Error ? error.message : 'Failed to launch session';
@@ -608,7 +622,7 @@ export class App {
 				throw new Error(errorData.detail || response.statusText);
 			}
 
-			console.log('[App] Session close request sent');
+			console.debug('[App] Session close request sent');
 		} catch (error) {
 			console.error('[App] Failed to close session:', error);
 			this.error = error instanceof Error ? error.message : 'Failed to close session';
@@ -648,7 +662,10 @@ export class App {
 	}
 
 	destroy(): void {
-		this.destroyFeatureControllers();
+		if (this.previewer) {
+			this.previewer.shutdown();
+			this.previewer = null;
+		}
 		this.unsubscribers.forEach((unsub) => unsub());
 		this.unsubscribers = [];
 		this.devices.destroy();

@@ -10,35 +10,15 @@
 
 	let { app }: Props = $props();
 
-	// Get stage and preview state from app
-	let stage = $derived(app.stage);
-	let previewer = $derived(app.previewer);
-	let fov = $derived(app.fov);
-
-	// Server-authoritative data (derived from SessionStatus)
-	let tiles = $derived(app.tiles);
-	let stacks = $derived(app.stacks);
-	let layerVisibility = $derived(app.layerVisibility);
-
-	// Stage dimensions
-	let stageWidth = $derived(stage?.width ?? 100);
-	let stageHeight = $derived(stage?.height ?? 100);
-	let stageDepth = $derived(stage?.depth ?? 100);
-
-	// Current position relative to stage origin
-	let fovX = $derived(stage ? stage.x.position - stage.x.lowerLimit : 0);
-	let fovY = $derived(stage ? stage.y.position - stage.y.lowerLimit : 0);
-	let fovZ = $derived(stage ? stage.z.position - stage.z.lowerLimit : 0);
-
-	// Thumbnail from previewer
-	let thumbnail = $derived(previewer?.thumbnailSnapshot ?? '');
-
-	// Moving state
-	let isXYMoving = $derived(stage?.x.isMoving || stage?.y.isMoving);
-	let isZMoving = $derived(stage?.z.isMoving ?? false);
-
-	// Stage aspect ratio
-	let stageAspectRatio = $derived(stageWidth / stageHeight);
+	// Computed derived state (not simple aliases)
+	let fovX = $derived(app.xAxis ? app.xAxis.position - app.xAxis.lowerLimit : 0);
+	let fovY = $derived(app.yAxis ? app.yAxis.position - app.yAxis.lowerLimit : 0);
+	let fovZ = $derived(app.zAxis ? app.zAxis.position - app.zAxis.lowerLimit : 0);
+	let thumbnail = $derived(app.previewer?.thumbnailSnapshot ?? '');
+	let isXYMoving = $derived(app.xAxis?.isMoving || app.yAxis?.isMoving);
+	let isZMoving = $derived(app.zAxis?.isMoving ?? false);
+	let hasStage = $derived(app.xAxis && app.yAxis && app.zAxis);
+	let stageAspectRatio = $derived(app.stageWidth / app.stageHeight);
 
 	// ResizeObserver for responsive sizing
 	let containerRef = $state<HTMLDivElement | null>(null);
@@ -99,12 +79,9 @@
 		return um / 1000;
 	}
 
-	// Selected tile from app
-	let selectedTile = $derived(app.selectedTile);
-
 	// Check if a tile is selected
 	function isSelected(tile: Tile): boolean {
-		return tile.row === selectedTile.row && tile.col === selectedTile.col;
+		return tile.row === app.selectedTile.row && tile.col === app.selectedTile.col;
 	}
 
 	// Handle tile single-click to select
@@ -114,22 +91,22 @@
 
 	// Clamp position to keep FOV within stage limits
 	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
-		if (!stage) return [targetX, targetY];
-		const minX = stage.x.lowerLimit;
-		const maxX = stage.x.upperLimit - fov.width;
-		const minY = stage.y.lowerLimit;
-		const maxY = stage.y.upperLimit - fov.height;
+		if (!app.xAxis || !app.yAxis) return [targetX, targetY];
+		const minX = app.xAxis.lowerLimit;
+		const maxX = app.xAxis.upperLimit - app.fov.width;
+		const minY = app.yAxis.lowerLimit;
+		const maxY = app.yAxis.upperLimit - app.fov.height;
 		return [Math.max(minX, Math.min(maxX, targetX)), Math.max(minY, Math.min(maxY, targetY))];
 	}
 
 	// Handle tile double-click to move stage
 	function handleTileMove(tile: Tile) {
-		if (isXYMoving || !stage) return;
+		if (isXYMoving || !app.xAxis || !app.yAxis) return;
 		// Convert tile center position from μm to mm, then clamp to stage limits
-		const rawX = stage.x.lowerLimit + toMm(tile.x_um) + toMm(tile.w_um) / 2 - fov.width / 2;
-		const rawY = stage.y.lowerLimit + toMm(tile.y_um) + toMm(tile.h_um) / 2 - fov.height / 2;
+		const rawX = app.xAxis.lowerLimit + toMm(tile.x_um) + toMm(tile.w_um) / 2 - app.fov.width / 2;
+		const rawY = app.yAxis.lowerLimit + toMm(tile.y_um) + toMm(tile.h_um) / 2 - app.fov.height / 2;
 		const [targetX, targetY] = clampToStageLimits(rawX, rawY);
-		stage.moveXY(targetX, targetY);
+		app.moveXY(targetX, targetY);
 	}
 
 	// Handle stack click to select its tile
@@ -139,31 +116,31 @@
 
 	// Handle stack double-click to move stage
 	function handleStackMove(stack: Stack) {
-		if (isXYMoving || !stage) return;
+		if (isXYMoving || !app.xAxis || !app.yAxis) return;
 		// Move to stack center, clamped to stage limits
-		const rawX = stage.x.lowerLimit + toMm(stack.x_um) + toMm(stack.w_um) / 2 - fov.width / 2;
-		const rawY = stage.y.lowerLimit + toMm(stack.y_um) + toMm(stack.h_um) / 2 - fov.height / 2;
+		const rawX = app.xAxis.lowerLimit + toMm(stack.x_um) + toMm(stack.w_um) / 2 - app.fov.width / 2;
+		const rawY = app.yAxis.lowerLimit + toMm(stack.y_um) + toMm(stack.h_um) / 2 - app.fov.height / 2;
 		const [targetX, targetY] = clampToStageLimits(rawX, rawY);
-		stage.moveXY(targetX, targetY);
+		app.moveXY(targetX, targetY);
 	}
 
 	// Handle slider changes
 	function handleXSliderChange(e: Event) {
-		if (!stage) return;
+		if (!app.xAxis) return;
 		const target = e.target as HTMLInputElement;
-		stage.x.move(parseFloat(target.value));
+		app.xAxis.move(parseFloat(target.value));
 	}
 
 	function handleYSliderChange(e: Event) {
-		if (!stage) return;
+		if (!app.yAxis) return;
 		const target = e.target as HTMLInputElement;
-		stage.y.move(parseFloat(target.value));
+		app.yAxis.move(parseFloat(target.value));
 	}
 
 	function handleZSliderChange(e: Event) {
-		if (!stage) return;
+		if (!app.zAxis) return;
 		const target = e.target as HTMLInputElement;
-		stage.z.move(parseFloat(target.value));
+		app.zAxis.move(parseFloat(target.value));
 	}
 
 	// Layer visibility toggles
@@ -217,14 +194,14 @@
 {/snippet}
 
 <div class="relative grid h-full w-full px-4 pt-18 pb-8">
-	{#if stage}
+	{#if hasStage}
 		<div class="stage-container flex flex-1 items-center justify-center overflow-hidden" bind:this={containerRef}>
 			<!-- Layer visibility floating widget -->
 			<div class="absolute top-0 right-4 z-10 flex h-18 items-center">
 				<div class="flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
 					<button
 						onclick={toggleGrid}
-						class="rounded p-1 transition-colors {layerVisibility.grid
+						class="rounded p-1 transition-colors {app.layerVisibility.grid
 							? 'text-blue-400 hover:bg-zinc-700'
 							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
 						title="Toggle grid"
@@ -233,7 +210,7 @@
 					</button>
 					<button
 						onclick={toggleStacks}
-						class="rounded p-1 transition-colors {layerVisibility.stacks
+						class="rounded p-1 transition-colors {app.layerVisibility.stacks
 							? 'text-purple-400 hover:bg-zinc-700'
 							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
 						title="Toggle stacks"
@@ -242,7 +219,7 @@
 					</button>
 					<button
 						onclick={togglePath}
-						class="rounded p-1 transition-colors {layerVisibility.path
+						class="rounded p-1 transition-colors {app.layerVisibility.path
 							? 'text-fuchsia-400 hover:bg-zinc-700'
 							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
 						title="Toggle acquisition path"
@@ -251,7 +228,7 @@
 					</button>
 					<button
 						onclick={toggleFov}
-						class="rounded p-1 transition-colors {layerVisibility.fov
+						class="rounded p-1 transition-colors {app.layerVisibility.fov
 							? 'text-emerald-400 hover:bg-zinc-700'
 							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
 						title="Toggle FOV"
@@ -272,10 +249,10 @@
 							type="range"
 							class="x-slider"
 							style="width: {canvasWidth}px;"
-							min={stage.x.lowerLimit}
-							max={stage.x.upperLimit}
+							min={app.xAxis?.lowerLimit}
+							max={app.xAxis?.upperLimit}
 							step={0.1}
-							value={stage.x.position}
+							value={app.xAxis?.position}
 							disabled={isXYMoving}
 							oninput={handleXSliderChange}
 						/>
@@ -286,23 +263,23 @@
 							type="range"
 							class="y-slider"
 							style="height: {canvasHeight}px;"
-							min={stage.y.lowerLimit}
-							max={stage.y.upperLimit}
+							min={app.yAxis?.lowerLimit}
+							max={app.yAxis?.upperLimit}
 							step={0.1}
-							value={stage.y.position}
+							value={app.yAxis?.position}
 							disabled={isXYMoving}
 							oninput={handleYSliderChange}
 						/>
 
 						<svg
-							viewBox="0 0 {stageWidth} {stageHeight}"
+							viewBox="0 0 {app.stageWidth} {app.stageHeight}"
 							class="xy-svg"
 							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 						>
 							<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
-							{#if layerVisibility.stacks}
+							{#if app.layerVisibility.stacks}
 								<g class="stacks-layer">
-									{#each stacks as stack (`${stack.row}_${stack.col}`)}
+									{#each app.stacks as stack (`${stack.row}_${stack.col}`)}
 										{@const x = toMm(stack.x_um)}
 										{@const y = toMm(stack.y_um)}
 										{@const w = toMm(stack.w_um)}
@@ -329,8 +306,8 @@
 							{/if}
 
 							<!-- Path Layer: Acquisition order path -->
-							{#if layerVisibility.path && stacks.length > 1}
-								{@const pathPoints = stacks.map((s) => ({
+							{#if app.layerVisibility.path && app.stacks.length > 1}
+								{@const pathPoints = app.stacks.map((s) => ({
 									x: toMm(s.x_um + s.w_um / 2),
 									y: toMm(s.y_um + s.h_um / 2)
 								}))}
@@ -353,12 +330,12 @@
 							{/if}
 
 							<!-- FOV Layer: Current position with thumbnail -->
-							{#if layerVisibility.fov}
+							{#if app.layerVisibility.fov}
 								<g class="fov-layer pointer-events-none">
 									<!-- Clip path for thumbnail -->
 									<defs>
 										<clipPath id="fov-clip">
-											<rect x={fovX} y={fovY} width={fov.width} height={fov.height} />
+											<rect x={fovX} y={fovY} width={app.fov.width} height={app.fov.height} />
 										</clipPath>
 									</defs>
 
@@ -368,8 +345,8 @@
 											href={thumbnail}
 											x={fovX}
 											y={fovY}
-											width={fov.width}
-											height={fov.height}
+											width={app.fov.width}
+											height={app.fov.height}
 											clip-path="url(#fov-clip)"
 											preserveAspectRatio="xMidYMid slice"
 										/>
@@ -379,21 +356,21 @@
 									<rect
 										x={fovX - 0.025}
 										y={fovY - 0.025}
-										width={fov.width + 0.05}
-										height={fov.height + 0.05}
+										width={app.fov.width + 0.05}
+										height={app.fov.height + 0.05}
 										class="fov-rect"
 										class:moving={isXYMoving}
 									>
-										<title>FOV: ({stage.x.position.toFixed(1)}, {stage.y.position.toFixed(1)}) mm</title>
+										<title>FOV: ({app.xAxis?.position.toFixed(1)}, {app.yAxis?.position.toFixed(1)}) mm</title>
 									</rect>
 								</g>
 							{/if}
 
 							<!-- Grid Layer: Tiles (topmost for easy clicking) -->
-							{#if layerVisibility.grid}
-								{@const selectedTileData = tiles.find((t) => isSelected(t))}
+							{#if app.layerVisibility.grid}
+								{@const selectedTileData = app.tiles.find((t) => isSelected(t))}
 								<g class="grid-layer">
-									{#each tiles as tile (`${tile.row}_${tile.col}`)}
+									{#each app.tiles as tile (`${tile.row}_${tile.col}`)}
 										{#if !isSelected(tile)}
 											{@render tileRect(tile, false)}
 										{/if}
@@ -411,16 +388,23 @@
 					<input
 						type="range"
 						class="z-slider"
-						min={stage.z.lowerLimit}
-						max={stage.z.upperLimit}
+						min={app.zAxis?.lowerLimit}
+						max={app.zAxis?.upperLimit}
 						step={0.1}
-						value={stage.z.position}
+						value={app.zAxis?.position}
 						disabled={isZMoving}
 						oninput={handleZSliderChange}
 					/>
-					<svg viewBox="0 0 30 {stageDepth}" class="z-svg" preserveAspectRatio="none">
-						<line x1="0" y1={stageDepth - fovZ} x2="30" y2={stageDepth - fovZ} class="z-line" class:moving={isZMoving}>
-							<title>Z: {stage.z.position.toFixed(1)} mm</title>
+					<svg viewBox="0 0 30 {app.stageDepth}" class="z-svg" preserveAspectRatio="none">
+						<line
+							x1="0"
+							y1={app.stageDepth - fovZ}
+							x2="30"
+							y2={app.stageDepth - fovZ}
+							class="z-line"
+							class:moving={isZMoving}
+						>
+							<title>Z: {app.zAxis?.position.toFixed(1)} mm</title>
 						</line>
 					</svg>
 				</div>

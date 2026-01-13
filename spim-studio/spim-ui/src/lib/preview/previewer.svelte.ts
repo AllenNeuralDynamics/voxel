@@ -278,7 +278,6 @@ export class Previewer {
 	channels = $state<PreviewChannel[]>([]);
 
 	// Thumbnail generation
-	public enableThumbnails = $state(false);
 	public thumbnailSnapshot = $state<string>(TRANSPARENT_THUMBNAIL);
 	private thumbnailUpdateCounter = 0;
 
@@ -504,7 +503,9 @@ export class Previewer {
 
 	#handleFrame = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
 		const channel = this.channels.find((c) => c.name === channelName);
-		if (!channel || !this.#canvas || !this.#rendererInitialized) return;
+		if (!channel || !this.#canvas || !this.#rendererInitialized) {
+			return;
+		}
 
 		if (this.#canvas.width !== info.preview_width || this.#canvas.height !== info.preview_height) {
 			this.#canvas.width = info.preview_width;
@@ -587,6 +588,16 @@ export class Previewer {
 		if (this.#globalSettingsBuffer) this.#globalSettingsBuffer.destroy();
 		if (this.#dummyTexture) this.#dummyTexture.destroy();
 
+		// Unconfigure canvas context before destroying device
+		if (this.#context) {
+			this.#context.unconfigure();
+		}
+
+		// Destroy GPU device to release adapter resources
+		if (this.#gpuDevice) {
+			this.#gpuDevice.destroy();
+		}
+
 		this.#rendererInitialized = false;
 	}
 
@@ -626,13 +637,10 @@ export class Previewer {
 			this.#updateGlobalSettingsBuffer(channelStates, delta);
 			this.#executeRenderPass();
 
-			// Update thumbnail if enabled
-			if (this.enableThumbnails) {
-				this.thumbnailUpdateCounter++;
-				if (this.thumbnailUpdateCounter % 6 === 0) {
-					// ~10fps at 60fps
-					this.#updateThumbnail();
-				}
+			// Update thumbnail (~10fps at 60fps render loop)
+			this.thumbnailUpdateCounter++;
+			if (this.thumbnailUpdateCounter % 6 === 0) {
+				this.#updateThumbnail();
 			}
 		}
 

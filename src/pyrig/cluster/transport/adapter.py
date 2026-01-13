@@ -115,27 +115,30 @@ class ZMQAdapter[D: Device](Adapter[D]):
         """Get property values from the device."""
         req = AttributeRequest(device=self.uid, attr="", args=list(props))
         payload = req.model_dump_json().encode()
-        await self._req_socket.send_multipart([_GET_CMD_, payload])
-        response_json = await self._req_socket.recv_json()
-        return PropsResponse.model_validate(response_json)
+        async with self._lock:
+            await self._req_socket.send_multipart([_GET_CMD_, payload])
+            response_json = await self._req_socket.recv_json()
+            return PropsResponse.model_validate(response_json)
 
     async def set_props(self, **props: Any) -> PropsResponse:
         """Set property values on the device."""
         req = AttributeRequest(device=self.uid, attr="", kwargs=props)
         payload = req.model_dump_json().encode()
-        await self._req_socket.send_multipart([_SET_CMD_, payload])
-        response_json = await self._req_socket.recv_json()
-        return PropsResponse.model_validate(response_json)
+        async with self._lock:
+            await self._req_socket.send_multipart([_SET_CMD_, payload])
+            response_json = await self._req_socket.recv_json()
+            return PropsResponse.model_validate(response_json)
 
     async def interface(self) -> DeviceInterface:
         """Get the device interface information."""
         req = AttributeRequest(device=self.uid, attr="")
         payload = req.model_dump_json().encode()
-        await self._req_socket.send_multipart([_INT_CMD_, payload])
-        response_json = await self._req_socket.recv_json()
-        cmd_response: CommandResponse[dict] = CommandResponse.model_validate(response_json)
-        interface_dict = cmd_response.unwrap()
-        return DeviceInterface.model_validate(interface_dict)
+        async with self._lock:
+            await self._req_socket.send_multipart([_INT_CMD_, payload])
+            response_json = await self._req_socket.recv_json()
+            cmd_response: CommandResponse[dict] = CommandResponse.model_validate(response_json)
+            interface_dict = cmd_response.unwrap()
+            return DeviceInterface.model_validate(interface_dict)
 
     async def close(self) -> None:
         """Close sockets and cleanup."""

@@ -11,13 +11,6 @@
 
 	let { app }: Props = $props();
 
-	// Get stage, fov, and config from app
-	let stage = $derived(app.stage);
-	let fov = $derived(app.fov);
-	let gridConfig = $derived(app.gridConfig);
-	let gridLocked = $derived(app.gridLocked);
-	let tileOrder = $derived(app.tileOrder);
-
 	// Tile order labels - options derived from keys
 	const TILE_ORDER_LABELS: Record<TileOrder, string> = {
 		row_wise: 'Row-wise',
@@ -27,21 +20,13 @@
 	};
 	const TILE_ORDER_OPTIONS = Object.keys(TILE_ORDER_LABELS) as TileOrder[];
 
-	// Grid offset in mm for display (stored in μm)
-	let gridOffsetXMm = $derived(gridConfig.x_offset_um / 1000);
-	let gridOffsetYMm = $derived(gridConfig.y_offset_um / 1000);
-
-	// Max offset = tile spacing = FOV × (1 - overlap)
-	let maxOffsetX = $derived(fov.width * (1 - gridConfig.overlap));
-	let maxOffsetY = $derived(fov.height * (1 - gridConfig.overlap));
-
-	// Selected tile from app (never null, defaults to [0,0])
-	let selectedTile = $derived(app.selectedTile);
-
-	// Stack for selected tile (lookup by row/col from app.stacks)
-	let stacks = $derived(app.stacks);
+	// Computed derived state (not simple aliases)
+	let gridOffsetXMm = $derived(app.gridConfig.x_offset_um / 1000);
+	let gridOffsetYMm = $derived(app.gridConfig.y_offset_um / 1000);
+	let maxOffsetX = $derived(app.fov.width * (1 - app.gridConfig.overlap));
+	let maxOffsetY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
 	let stack = $derived<Stack | null>(
-		stacks.find((s) => s.row === selectedTile.row && s.col === selectedTile.col) ?? null
+		app.stacks.find((s) => s.row === app.selectedTile.row && s.col === app.selectedTile.col) ?? null
 	);
 
 	// Form state
@@ -61,13 +46,13 @@
 		if (lastZStart !== null && lastZEnd !== null) {
 			return { start: lastZStart, end: lastZEnd };
 		}
-		return { start: gridConfig.default_z_start_um, end: gridConfig.default_z_end_um };
+		return { start: app.gridConfig.default_z_start_um, end: app.gridConfig.default_z_end_um };
 	}
 
 	// Reset form when selected tile changes
 	$effect(() => {
 		// Track selectedTile to trigger on tile change
-		void selectedTile;
+		void app.selectedTile;
 		isEditing = false;
 		const defaults = getDefaultZ();
 		zStartInput = defaults.start;
@@ -76,7 +61,7 @@
 
 	// Derived state
 	let isDirty = $derived(stack ? zStartInput !== stack.z_start_um || zEndInput !== stack.z_end_um : true);
-	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / gridConfig.z_step_um));
+	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / app.gridConfig.z_step_um));
 	let hasStack = $derived(stack !== null);
 
 	// Format position for display
@@ -86,17 +71,17 @@
 
 	// Grid control handlers
 	function updateGridOffsetX(value: number) {
-		if (gridLocked) return;
-		app.setGridOffset(value * 1000, gridConfig.y_offset_um);
+		if (app.gridLocked) return;
+		app.setGridOffset(value * 1000, app.gridConfig.y_offset_um);
 	}
 
 	function updateGridOffsetY(value: number) {
-		if (gridLocked) return;
-		app.setGridOffset(gridConfig.x_offset_um, value * 1000);
+		if (app.gridLocked) return;
+		app.setGridOffset(app.gridConfig.x_offset_um, value * 1000);
 	}
 
 	function updateGridOverlap(value: number) {
-		if (gridLocked) return;
+		if (app.gridLocked) return;
 		app.setGridOverlap(value);
 	}
 
@@ -114,9 +99,9 @@
 
 	function handleSubmit() {
 		if (hasStack) {
-			app.editStack(selectedTile.row, selectedTile.col, zStartInput, zEndInput);
+			app.editStack(app.selectedTile.row, app.selectedTile.col, zStartInput, zEndInput);
 		} else {
-			app.addStack(selectedTile.row, selectedTile.col, zStartInput, zEndInput);
+			app.addStack(app.selectedTile.row, app.selectedTile.col, zStartInput, zEndInput);
 		}
 		// Track last used values for smart pre-population
 		lastZStart = zStartInput;
@@ -126,7 +111,7 @@
 
 	function handleDelete() {
 		if (confirm('Delete this stack?')) {
-			app.removeStack(selectedTile.row, selectedTile.col);
+			app.removeStack(app.selectedTile.row, app.selectedTile.col);
 		}
 	}
 
@@ -147,11 +132,11 @@
 	}
 
 	function useCurrentZForStart() {
-		zStartInput = Math.round(stage!.z.position * 1000);
+		zStartInput = Math.round(app.zAxis!.position * 1000);
 	}
 
 	function useCurrentZForEnd() {
-		zEndInput = Math.round(stage!.z.position * 1000);
+		zEndInput = Math.round(app.zAxis!.position * 1000);
 	}
 </script>
 
@@ -226,14 +211,14 @@
 	</div>
 {/snippet}
 
-{#if stage}
+{#if app.zAxis}
 	<div class="flex flex-col border-t border-zinc-800 bg-zinc-800/30">
 		<!-- Tile & Stack Section -->
 		<div class="flex flex-col gap-2 px-4 py-4">
 			<!-- Header: tile label + stack action buttons -->
 			<div class="flex items-center justify-between">
 				<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
-					R{selectedTile.row}, C{selectedTile.col}
+					R{app.selectedTile.row}, C{app.selectedTile.col}
 				</span>
 				<div class="flex items-center gap-0.5">
 					{#if isEditing}
@@ -277,12 +262,12 @@
 			<!-- Content rows -->
 			<div class="flex flex-col gap-2 text-[0.65rem]">
 				<!-- Tile position -->
-				{@render staticRow('X', formatMm(selectedTile.x_um), 'mm')}
-				{@render staticRow('Y', formatMm(selectedTile.y_um), 'mm')}
+				{@render staticRow('X', formatMm(app.selectedTile.x_um), 'mm')}
+				{@render staticRow('Y', formatMm(app.selectedTile.y_um), 'mm')}
 
 				<!-- Tile size -->
-				{@render staticRow('W', formatMm(selectedTile.w_um, 1), 'mm')}
-				{@render staticRow('H', formatMm(selectedTile.h_um, 1), 'mm')}
+				{@render staticRow('W', formatMm(app.selectedTile.w_um, 1), 'mm')}
+				{@render staticRow('H', formatMm(app.selectedTile.h_um, 1), 'mm')}
 
 				<!-- Z range -->
 				{@render editableZRow(
@@ -291,8 +276,8 @@
 					stack?.z_start_um ?? null,
 					updateZStart,
 					useCurrentZForStart,
-					stage.z.lowerLimit * 1000,
-					stage.z.upperLimit * 1000
+					app.zAxis.lowerLimit * 1000,
+					app.zAxis.upperLimit * 1000
 				)}
 				{@render editableZRow(
 					'Z End',
@@ -300,12 +285,12 @@
 					stack?.z_end_um ?? null,
 					updateZEnd,
 					useCurrentZForEnd,
-					stage.z.lowerLimit * 1000,
-					stage.z.upperLimit * 1000
+					app.zAxis.lowerLimit * 1000,
+					app.zAxis.upperLimit * 1000
 				)}
 
 				<!-- Derived -->
-				{@render staticRow('Step', String(gridConfig.z_step_um), 'µm')}
+				{@render staticRow('Step', String(app.gridConfig.z_step_um), 'µm')}
 				<div class="flex h-6 items-center justify-between gap-2 text-zinc-400">
 					<span class="w-14">Slices</span>
 					<span class="font-mono {isEditing ? 'text-zinc-200' : 'text-zinc-300'}"
@@ -326,21 +311,21 @@
 		<div class="flex flex-col gap-3 border-y border-zinc-700/50 px-4 py-4">
 			<div class="flex items-center justify-between">
 				<span class="text-xs font-medium text-zinc-300">Grid</span>
-				<div class="rounded p-1 {gridLocked ? 'text-amber-500' : 'text-zinc-500'}">
-					<Icon icon={gridLocked ? 'mdi:lock' : 'mdi:lock-open-outline'} width="14" height="14" />
+				<div class="rounded p-1 {app.gridLocked ? 'text-amber-500' : 'text-zinc-500'}">
+					<Icon icon={app.gridLocked ? 'mdi:lock' : 'mdi:lock-open-outline'} width="14" height="14" />
 				</div>
 			</div>
 
 			<!-- Grid parameters (lockable) -->
 			<div
 				class="flex flex-col gap-2 text-[0.65rem]"
-				class:opacity-70={gridLocked}
-				class:pointer-events-none={gridLocked}
+				class:opacity-70={app.gridLocked}
+				class:pointer-events-none={app.gridLocked}
 			>
 				{@render spinboxRow('Offset X', gridOffsetXMm, updateGridOffsetX, -maxOffsetX, maxOffsetX, 0.1, 1, 'mm')}
 				{@render spinboxRow('Offset Y', gridOffsetYMm, updateGridOffsetY, -maxOffsetY, maxOffsetY, 0.1, 1, 'mm')}
-				{@render spinboxRow('Overlap', gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
-				{@render staticRow('Z Step', String(gridConfig.z_step_um), 'µm')}
+				{@render spinboxRow('Overlap', app.gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
+				{@render staticRow('Z Step', String(app.gridConfig.z_step_um), 'µm')}
 			</div>
 
 			<!-- Separator -->
@@ -350,7 +335,7 @@
 			<div class="flex h-6 items-center justify-between gap-2 text-[0.65rem]">
 				<span class="w-14 text-zinc-400">Order</span>
 				<SelectInput
-					value={tileOrder}
+					value={app.tileOrder}
 					options={TILE_ORDER_OPTIONS}
 					onChange={updateTileOrder}
 					formatOption={(opt) => TILE_ORDER_LABELS[opt as TileOrder]}

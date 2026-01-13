@@ -39,10 +39,19 @@
 				return 'control';
 		}
 	});
-	const previewer = $derived(app?.previewer);
-	const stage = $derived(app?.stage);
+
+	// Cleanup function - must be synchronous for beforeunload
+	function cleanup() {
+		if (app) {
+			app.destroy();
+			app = undefined;
+		}
+	}
 
 	onMount(async () => {
+		// Register beforeunload early to catch refreshes during initialization
+		window.addEventListener('beforeunload', cleanup);
+
 		try {
 			app = new App();
 			await app.initialize();
@@ -53,16 +62,16 @@
 	});
 
 	onDestroy(() => {
-		app?.destroy();
-		console.log('[Page] Cleanup complete');
+		window.removeEventListener('beforeunload', cleanup);
+		cleanup();
 	});
 
 	function handleStartPreview() {
-		previewer?.startPreview();
+		app?.previewer?.startPreview();
 	}
 
 	function handleStopPreview() {
-		previewer?.stopPreview();
+		app?.previewer?.stopPreview();
 	}
 </script>
 
@@ -91,7 +100,7 @@
 	{:else if viewName === 'launch' || viewName === 'loading'}
 		<!-- Launch page (includes loading state) -->
 		<LaunchPage {app} />
-	{:else if viewName === 'control' && previewer}
+	{:else if viewName === 'control' && app.previewer}
 		<!-- Control view -->
 		<div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
 			<aside class="flex h-full w-96 min-w-80 flex-col border-r border-zinc-700 bg-zinc-900">
@@ -116,16 +125,16 @@
 					</div>
 				</div>
 
-				{#if previewer.channels.length === 0}
+				{#if app.previewer.channels.length === 0}
 					<div class="flex flex-1 items-center justify-center p-4">
 						<p class="text-sm text-zinc-500">No channels available</p>
 					</div>
 				{:else}
 					<div class="flex flex-1 flex-col overflow-y-auto">
-						{#each previewer.channels as channel (channel.idx)}
+						{#each app.previewer.channels as channel (channel.idx)}
 							{#if channel.name}
 								<div>
-									<ChannelSection {channel} {previewer} devices={app.devices} {deviceFilter} {showHistograms} />
+									<ChannelSection {channel} previewer={app.previewer} devices={app.devices} {deviceFilter} {showHistograms} />
 								</div>
 								<div class="border-t border-zinc-600"></div>
 							{/if}
@@ -142,7 +151,7 @@
 						<Pane>
 							<PaneGroup direction="horizontal" autoSaveId="viewPanel">
 								<Pane defaultSize={50} minSize={30} class="h-full flex-1 px-4">
-									<PreviewCanvas {previewer} />
+									<PreviewCanvas previewer={app.previewer} />
 								</Pane>
 								<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
 								<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
@@ -199,7 +208,7 @@
 								</Tabs.Trigger>
 							</Tabs.List>
 
-							<PanZoomControls {previewer} />
+							<PanZoomControls previewer={app.previewer} />
 						</div>
 
 						<!-- Laser indicators -->
@@ -207,8 +216,8 @@
 							<LaserIndicators {app} />
 						</div>
 
-						{#if stage}
-							<StagePosition {stage} />
+						{#if app.stageConnected}
+							<StagePosition {app} />
 						{/if}
 					</footer>
 				</Tabs.Root>
@@ -217,14 +226,14 @@
 				<header class="flex h-18 items-start justify-start gap-2 p-4">
 					<button
 						onclick={handleStartPreview}
-						disabled={previewer.isPreviewing}
+						disabled={app.previewer.isPreviewing}
 						class="rounded bg-emerald-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Start
 					</button>
 					<button
 						onclick={handleStopPreview}
-						disabled={!previewer.isPreviewing}
+						disabled={!app.previewer.isPreviewing}
 						class="rounded bg-rose-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Stop

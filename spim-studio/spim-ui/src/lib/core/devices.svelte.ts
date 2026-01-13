@@ -154,8 +154,6 @@ export class DevicesManager {
 	 * Call this after construction.
 	 */
 	async initialize(): Promise<void> {
-		console.log('[DevicesManager] Fetching devices...');
-
 		// 1. Fetch all devices and their interfaces
 		const response = await fetch(`${this.baseUrl}/devices`);
 		if (!response.ok) {
@@ -163,7 +161,7 @@ export class DevicesManager {
 		}
 
 		const data: DevicesResponse = await response.json();
-		console.log('[DevicesManager] Loaded', data.count, 'devices');
+		console.debug('[DevicesManager] Loaded', data.count, 'devices');
 
 		// 2. Store devices in the map, preserving existing propertyValues on re-initialization
 		const fetchedDeviceIds = new SvelteSet(Object.keys(data.devices));
@@ -180,7 +178,7 @@ export class DevicesManager {
 		// Remove devices that no longer exist
 		for (const deviceId of this.devices.keys()) {
 			if (!fetchedDeviceIds.has(deviceId)) {
-				console.log(`[DevicesManager] Removing deleted device: ${deviceId}`);
+				console.debug(`[DevicesManager] Removing deleted device: ${deviceId}`);
 				this.devices.delete(deviceId);
 			}
 		}
@@ -192,7 +190,6 @@ export class DevicesManager {
 				// Get all property names from the interface
 				const propertyNames = Object.keys(deviceInfo.interface.properties);
 				if (propertyNames.length > 0) {
-					console.log(`[DevicesManager] Fetching ${propertyNames.length} properties for ${deviceId}`);
 					fetchPromises.push(this.fetchProperties(deviceId, propertyNames));
 				}
 			}
@@ -200,7 +197,6 @@ export class DevicesManager {
 
 		// Fetch all properties in parallel
 		await Promise.all(fetchPromises);
-		console.log('[DevicesManager] All properties fetched');
 	}
 
 	/**

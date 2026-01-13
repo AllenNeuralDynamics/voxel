@@ -1,8 +1,7 @@
 /**
- * Axis & Stage: Physical stage control classes.
+ * Axis: Single stage axis state and control.
  *
- * Axis - Single axis state and control
- * Stage - Combined axis control and stage dimensions
+ * Wraps a device ID and provides derived state from DevicesManager.
  */
 
 import type { App } from './app.svelte.ts';
@@ -59,56 +58,5 @@ export class Axis {
 
 	async halt(): Promise<void> {
 		await this.#app.devices.executeCommand(this.#deviceId, 'halt');
-	}
-}
-
-interface Vec3D {
-	x: number;
-	y: number;
-	z: number;
-}
-
-/**
- * Stage: Combined control for X/Y/Z axes with stage dimensions.
- */
-export class Stage {
-	readonly x: Axis;
-	readonly y: Axis;
-	readonly z: Axis;
-
-	constructor(x: Axis, y: Axis, z: Axis) {
-		this.x = x;
-		this.y = y;
-		this.z = z;
-	}
-
-	// Stage dimensions in mm (derived from axis limits)
-	width = $derived.by(() => this.x.upperLimit - this.x.lowerLimit);
-	height = $derived.by(() => this.y.upperLimit - this.y.lowerLimit);
-	depth = $derived.by(() => this.z.upperLimit - this.z.lowerLimit);
-
-	position: Vec3D = $derived.by(() => ({ x: this.x.position, y: this.y.position, z: this.z.position }));
-
-	// Combined state
-	isMoving = $derived.by(() => this.x.isMoving || this.y.isMoving || this.z.isMoving);
-	isConnected = $derived.by(() => this.x.isConnected && this.y.isConnected && this.z.isConnected);
-
-	moveZ(position: number): void {
-		this.z.move(position);
-	}
-
-	moveXY(x: number, y: number): void {
-		this.x.move(x);
-		this.y.move(y);
-	}
-
-	moveXYZ(x: number, y: number, z: number): void {
-		this.x.move(x);
-		this.y.move(y);
-		this.z.move(z);
-	}
-
-	async halt(): Promise<void> {
-		await Promise.all([this.x.halt(), this.y.halt(), this.z.halt()]);
 	}
 }
