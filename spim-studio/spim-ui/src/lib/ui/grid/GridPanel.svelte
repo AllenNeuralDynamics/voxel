@@ -194,27 +194,13 @@
 
 {#if stage}
 	<div class="flex flex-col border-t border-zinc-800 bg-zinc-800/30">
-		<!-- Tile Section -->
+		<!-- Tile & Stack Section -->
 		<div class="flex flex-col gap-2 px-4 py-4">
-			<div class="flex items-center justify-between gap-4">
-				<span class="text-xs font-medium text-zinc-300">Tile</span>
+			<!-- Header: tile label + stack action buttons -->
+			<div class="flex items-center justify-between">
 				<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null).tw}">
 					R{selectedTile.row}, C{selectedTile.col}
 				</span>
-			</div>
-			<div class="flex flex-col gap-2 text-[0.65rem]">
-				{@render staticRow('X', formatMm(selectedTile.x_um), 'mm')}
-				{@render staticRow('Y', formatMm(selectedTile.y_um), 'mm')}
-				{@render staticRow('W', formatMm(selectedTile.w_um, 1), 'mm')}
-				{@render staticRow('H', formatMm(selectedTile.h_um, 1), 'mm')}
-			</div>
-		</div>
-
-		<!-- Stack Section -->
-		<div class="flex flex-col gap-2 border-t border-zinc-700/50 px-4 py-4">
-			<!-- Header row with label and action buttons -->
-			<div class="flex items-center justify-between">
-				<span class="text-xs font-medium text-zinc-300">Stack</span>
 				<div class="flex items-center gap-0.5">
 					{#if isEditing}
 						{#if hasStack}
@@ -254,13 +240,22 @@
 				</div>
 			</div>
 
-			<!-- Stack content - unified layout with fixed row heights -->
+			<!-- Content rows -->
 			<div class="flex flex-col gap-2 text-[0.65rem]">
+				<!-- Tile position -->
+				{@render staticRow('X', formatMm(selectedTile.x_um), 'mm')}
+				{@render staticRow('Y', formatMm(selectedTile.y_um), 'mm')}
+
+				<!-- Tile size -->
+				{@render staticRow('W', formatMm(selectedTile.w_um, 1), 'mm')}
+				{@render staticRow('H', formatMm(selectedTile.h_um, 1), 'mm')}
+
+				<!-- Z range -->
 				{@render editableZRow('Z Start', zStartInput, stack?.z_start_um ?? null, updateZStart, useCurrentZForStart, stage.z.lowerLimit * 1000, stage.z.upperLimit * 1000)}
 				{@render editableZRow('Z End', zEndInput, stack?.z_end_um ?? null, updateZEnd, useCurrentZForEnd, stage.z.lowerLimit * 1000, stage.z.upperLimit * 1000)}
-				{@render staticRow('Step', String(gridConfig.z_step_um), 'µm')}
 
-				<!-- Slices (custom styling for edit mode) -->
+				<!-- Derived -->
+				{@render staticRow('Step', String(gridConfig.z_step_um), 'µm')}
 				<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
 					<span class="w-14">Slices</span>
 					<span class="font-mono {isEditing ? 'text-zinc-300' : 'text-zinc-400'}"
@@ -268,10 +263,9 @@
 					>
 				</div>
 
+				<!-- Metadata (if stack exists) -->
 				{#if hasStack}
 					{@render staticRow('Profile', stack?.profile_id ?? '—')}
-
-					<!-- Status (custom color) -->
 					<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
 						<span class="w-14">Status</span>
 						<span class="font-mono {getStackStatusColor(stack?.status ?? null).tw}">{stack?.status}</span>
@@ -281,7 +275,7 @@
 		</div>
 
 		<!-- Grid Settings Section -->
-		<div class="flex flex-col gap-3 border-t border-zinc-700/50 px-4 py-4">
+		<div class="flex flex-col gap-3 border-y border-zinc-700/50 px-4 py-4">
 			<div class="flex items-center justify-between">
 				<span class="text-xs font-medium text-zinc-300">Grid</span>
 				<div class="rounded p-1 {gridLocked ? 'text-amber-500' : 'text-zinc-500'}">
