@@ -151,21 +151,21 @@
 	unit: string
 )}
 	<div class="flex h-6 items-center justify-between gap-2">
-		<span class="w-14 text-zinc-500">{label}</span>
+		<span class="w-14 text-zinc-400">{label}</span>
 		<div class="flex items-center gap-1">
 			<SpinBox {value} {onChange} {min} {max} {step} {decimals} numCharacters={4} showButtons={true} align="right" />
-			<span class="w-6 text-right text-zinc-600">{unit}</span>
+			<span class="w-6 text-right text-zinc-400">{unit}</span>
 		</div>
 	</div>
 {/snippet}
 
 {#snippet staticRow(label: string, value: string, unit: string = '')}
-	<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
+	<div class="flex h-6 items-center justify-between gap-2 text-zinc-400">
 		<span class="w-14">{label}</span>
 		<div class="flex items-center gap-1">
-			<span class="font-mono text-zinc-400">{value}</span>
+			<span class="font-mono text-zinc-300">{value}</span>
 			{#if unit}
-				<span class="w-6 text-right text-zinc-600">{unit}</span>
+				<span class="w-6 text-right text-zinc-400">{unit}</span>
 			{/if}
 		</div>
 	</div>
@@ -181,12 +181,12 @@
 	max: number
 )}
 	<div class="flex h-6 items-center justify-between gap-2">
-		<span class="w-14 text-zinc-500">{label}</span>
+		<span class="w-14 text-zinc-400">{label}</span>
 		<div class="flex flex-1 items-center justify-end gap-1">
 			{#if isEditing}
 				<button
 					onclick={onUseCurrent}
-					class="mr-2 rounded px-1 py-0.5 text-[0.6rem] text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
+					class="mr-2 rounded px-1 py-0.5 text-[0.6rem] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
 					title="Use current Z position"
 				>
 					Use Current Z
@@ -202,10 +202,10 @@
 					showButtons={false}
 					align="right"
 				/>
-				<span class="w-6 text-right text-zinc-600">µm</span>
+				<span class="w-6 text-right text-zinc-400">µm</span>
 			{:else}
-				<span class="font-mono text-zinc-400">{displayValue ?? '—'}</span>
-				<span class="w-6 text-right text-zinc-600">µm</span>
+				<span class="font-mono text-zinc-300">{displayValue ?? '—'}</span>
+				<span class="w-6 text-right text-zinc-400">µm</span>
 			{/if}
 		</div>
 	</div>
@@ -291,16 +291,16 @@
 
 				<!-- Derived -->
 				{@render staticRow('Step', String(gridConfig.z_step_um), 'µm')}
-				<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
+				<div class="flex h-6 items-center justify-between gap-2 text-zinc-400">
 					<span class="w-14">Slices</span>
-					<span class="font-mono {isEditing ? 'text-zinc-300' : 'text-zinc-400'}"
+					<span class="font-mono {isEditing ? 'text-zinc-200' : 'text-zinc-300'}"
 						>{isEditing ? numSlices : (stack?.num_frames ?? '—')}</span
 					>
 				</div>
 
 				<!-- Metadata  -->
 				{@render staticRow('Profile', stack?.profile_id ?? '—')}
-				<div class="flex h-6 items-center justify-between gap-2 text-zinc-500">
+				<div class="flex h-6 items-center justify-between gap-2 text-zinc-400">
 					<span class="w-14">Status</span>
 					<span class="font-mono {getStackStatusColor(stack?.status ?? null)}">{stack?.status}</span>
 				</div>
@@ -319,7 +319,7 @@
 			<!-- Grid parameters -->
 			<div
 				class="flex flex-col gap-2 text-[0.65rem]"
-				class:opacity-50={gridLocked}
+				class:opacity-70={gridLocked}
 				class:pointer-events-none={gridLocked}
 			>
 				{@render spinboxRow('Offset X', gridOffsetXMm, updateGridOffsetX, -maxOffsetX, maxOffsetX, 0.1, 1, 'mm')}
