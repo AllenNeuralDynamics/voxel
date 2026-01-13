@@ -3,7 +3,7 @@
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import SelectInput from '$lib/ui/primitives/SelectInput.svelte';
 	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Stack, type TileOrder } from '$lib/core/types';
+	import { getStackStatusColor, type TileOrder } from '$lib/core/types';
 
 	interface Props {
 		app: App;
@@ -25,9 +25,7 @@
 	let gridOffsetYMm = $derived(app.gridConfig.y_offset_um / 1000);
 	let maxOffsetX = $derived(app.fov.width * (1 - app.gridConfig.overlap));
 	let maxOffsetY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
-	let stack = $derived<Stack | null>(
-		app.stacks.find((s) => s.row === app.selectedTile.row && s.col === app.selectedTile.col) ?? null
-	);
+	let stack = $derived(app.selectedStack);
 
 	// Form state
 	let isEditing = $state(false);
@@ -212,7 +210,7 @@
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<!-- Header: tile label + status + action buttons -->
 			<div class="flex items-center justify-between">
-				<span class="flex items-center gap-2">
+				<span class="flex items-center gap-3">
 					<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
 						R{app.selectedTile.row}, C{app.selectedTile.col}
 					</span>

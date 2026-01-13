@@ -170,6 +170,9 @@ export class App {
 	// Selected tile position [row, col] - never null, defaults to [0, 0]
 	#selectedTilePos = $state<[number, number]>([0, 0]);
 	selectedTile = $derived<Tile>(this.#getSelectedTile());
+	selectedStack = $derived<Stack | null>(
+		this.stacks.find((s) => s.row === this.selectedTile.row && s.col === this.selectedTile.col) ?? null
+	);
 
 	private wasDisconnected = false;
 	private sessionInitializing = false;

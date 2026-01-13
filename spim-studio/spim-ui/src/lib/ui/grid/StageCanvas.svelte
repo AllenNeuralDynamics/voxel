@@ -408,12 +408,24 @@
 						disabled={isZMoving}
 						oninput={handleZSliderChange}
 					/>
-					<svg viewBox="0 0 30 {app.stageDepth}" class="z-svg" preserveAspectRatio="none">
+					<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
+						<!-- Stack Z markers -->
+						{#if app.selectedStack && app.zAxis}
+							{@const z0Offset = app.selectedStack.z_start_um / 1000 - app.zAxis.lowerLimit}
+							{@const z1Offset = app.selectedStack.z_end_um / 1000 - app.zAxis.lowerLimit}
+							{@const y0 = (1 - z0Offset / app.stageDepth) * canvasHeight - 1}
+							{@const y1 = (1 - z1Offset / app.stageDepth) * canvasHeight - 1}
+							<g class={getStackStatusColor(app.selectedStack.status)}>
+								<line x1="0" y1={y0} x2="30" y2={y0} class="z-marker" />
+								<line x1="0" y1={y1} x2="30" y2={y1} class="z-marker" />
+							</g>
+						{/if}
+						<!-- Current Z position -->
 						<line
 							x1="0"
-							y1={app.stageDepth - fovZ}
+							y1={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
 							x2="30"
-							y2={app.stageDepth - fovZ}
+							y2={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
 							class="z-line"
 							class:moving={isZMoving}
 						>
@@ -513,6 +525,8 @@
 		width: var(--z-area-width);
 		position: relative;
 		flex: 1;
+		background-color: var(--color-zinc-900);
+		border: var(--stage-border);
 	}
 
 	.z-slider {
@@ -523,6 +537,8 @@
 		width: 100%;
 		height: 100%;
 		z-index: 1;
+		background: transparent;
+		border: none;
 		&::-webkit-slider-thumb {
 			width: var(--z-area-width);
 			height: var(--thumb-width);
@@ -552,6 +568,11 @@
 		&.moving {
 			stroke: var(--color-rose-500);
 		}
+	}
+
+	.z-marker {
+		stroke: currentColor;
+		stroke-width: 2;
 	}
 
 	.tile {
