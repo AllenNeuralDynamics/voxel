@@ -39,7 +39,7 @@ ximea-camera = [
 # Note: Hamamatsu DCAM SDK is bundled in spim_drivers/cameras/dcam/sdk/
 
 [tool.uv.sources]
-egrabber = { path = ".wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+egrabber = { url = "https://github.com/waltermwaniki/spim-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" }
 spim-rig = { workspace = true }
 
 [build-system]
