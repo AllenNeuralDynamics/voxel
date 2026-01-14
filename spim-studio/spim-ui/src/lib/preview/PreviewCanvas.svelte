@@ -45,10 +45,10 @@
 	>
 	</canvas>
 	<!-- Tooltip overlay -->
-	<div class="absolute top-0 right-4 flex h-18 items-center">
+	<div class="absolute top-0 right-0 flex h-18 items-center">
 		<PreviewInfoTooltip {frameInfo} visibleChannels={channelFrameInfos} />
 	</div>
-	<div class="absolute top-0 left-4 flex h-18 items-center">
+	<div class="absolute top-0 left-0 flex h-18 items-center">
 		<FrameCounter {previewer} />
 	</div>
 </div>

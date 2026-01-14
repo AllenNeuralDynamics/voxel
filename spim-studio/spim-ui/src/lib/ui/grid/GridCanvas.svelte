@@ -217,7 +217,7 @@
 	{#if hasStage}
 		<div class="stage-container flex flex-1 justify-center overflow-hidden" bind:this={containerRef}>
 			<!-- Layer visibility floating widget -->
-			<div class="absolute top-0 right-4 z-10 flex h-18 items-center">
+			<div class="absolute top-0 right-0 z-10 flex h-18 items-center">
 				<div class="flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
 					<button
 						onclick={toggleGrid}
@@ -305,7 +305,6 @@
 							class="xy-svg"
 							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 						>
-
 							<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
 							{#if app.layerVisibility.stacks}
 								<g class="stacks-layer">

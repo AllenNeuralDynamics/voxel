@@ -174,7 +174,7 @@
 							<Checkbox checked={allChecked} indeterminate={someChecked} onchange={handleSelectAll} size="sm" />
 						</div>
 					</th>
-					<th class="w-26 border-b border-zinc-700 p-1.5 text-left">
+					<th class="w-26 border-b border-zinc-700 p-1.5 text-left capitalize">
 						<Select bind:value={filterMode} options={filterOptions} size="sm" />
 					</th>
 					<th class="w-32 border-b border-zinc-700 p-2 text-left font-medium tracking-wider"> Position </th>
