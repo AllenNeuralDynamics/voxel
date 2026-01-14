@@ -131,14 +131,6 @@
 		checkedItems.clear();
 	}
 
-	// Clear all stacks with confirmation
-	function handleClearAll() {
-		if (app.stacks.length === 0) return;
-		if (confirm(`Delete all ${app.stacks.length} stacks?`)) {
-			app.clearAllStacks();
-		}
-	}
-
 	// Handle Z range change - applies to all checked items with stacks
 	function handleZChange(tile: Tile, zStart: number, zEnd: number) {
 		handleRowClick(tile);
@@ -175,8 +167,8 @@
 	<!-- Table -->
 	<div class="flex-1 overflow-auto">
 		<table class="w-full border-collapse">
-			<thead class="sticky top-0 z-10 bg-zinc-900">
-				<tr>
+			<thead class="sticky top-0 z-10 bg-zinc-800 text-zinc-300 uppercase">
+				<tr class="text-[0.65rem] font-medium">
 					<th class="w-8 border-b border-zinc-700 px-5 py-1.5">
 						<div class="flex items-center justify-center">
 							<Checkbox checked={allChecked} indeterminate={someChecked} onchange={handleSelectAll} size="sm" />
@@ -185,42 +177,26 @@
 					<th class="w-26 border-b border-zinc-700 p-1.5 text-left">
 						<Select bind:value={filterMode} options={filterOptions} size="sm" />
 					</th>
-					<th
-						class="w-32 border-b border-zinc-700 p-2 text-left text-[0.65rem] font-medium tracking-wider text-zinc-300 uppercase"
-					>
-						Position
-					</th>
-					<th
-						class="w-24 border-b border-zinc-700 p-2 text-left text-[0.65rem] font-medium tracking-wider text-zinc-300 uppercase"
-					>
-						<div class="flex items-center gap-1.5">
-							<span>Stacks</span>
-							<button
-								class="rounded p-0.5 text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
-								onclick={handleClearAll}
-								disabled={app.stacks.length === 0}
-								title="Clear all stacks"
-							>
-								<Icon icon="mdi:delete-outline" width="14" height="14" />
-							</button>
-						</div>
-					</th>
+					<th class="w-32 border-b border-zinc-700 p-2 text-left font-medium tracking-wider"> Position </th>
+					<th class="min-w-16 border-b border-zinc-700 p-1.5"></th>
 					<th class="w-56 border-b border-zinc-700 p-1.5 text-left">
 						<div class="flex items-center gap-1">
-							<SpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={12} showButtons={false} />
+							<SpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={13} showButtons={false} />
 							<span class="text-zinc-500">→</span>
 							<SpinBox
 								bind:value={defaultZEnd}
 								min={0}
 								step={10}
-								numCharacters={12}
+								numCharacters={13}
 								showButtons={false}
 								align="right"
 							/>
-							<span class="ml-3 text-[0.65rem] text-zinc-400">µm</span>
+							<span class="ml-1 text-[0.65rem] text-zinc-400 lowercase">µm</span>
 						</div>
 					</th>
-					<th class="min-w-40 border-b border-zinc-700 p-1.5 pr-5 text-left"></th>
+					<th class="w-16 border-b border-zinc-700 p-2 text-right font-medium tracking-wider"> Slices </th>
+					<th class="w-20 border-b border-zinc-700 p-2 text-right font-medium tracking-wider"> Profile </th>
+					<th class="w-20 border-b border-zinc-700 p-2 pr-4 text-right font-medium tracking-wider"> Stacks </th>
 				</tr>
 			</thead>
 			<tbody>
@@ -228,7 +204,7 @@
 					{@const stack = getStack(tile)}
 					{@const focused = isFocused(tile)}
 					<tr
-						class="cursor-pointer border-b border-zinc-800 border-l-2 border-l-transparent transition-[background-color] hover:bg-zinc-800"
+						class="cursor-pointer border-b border-l-2 border-zinc-800 border-l-transparent transition-[background-color] hover:bg-zinc-800/50"
 						class:!border-l-amber-500={focused}
 						onclick={() => handleRowClick(tile)}
 					>
@@ -247,19 +223,7 @@
 						<td class="p-1.5 font-mono text-[0.65rem] text-zinc-400">
 							{(tile.x_um / 1000).toFixed(2)}, {(tile.y_um / 1000).toFixed(2)} mm
 						</td>
-						<td class="p-1.5">
-							{#if stack}
-								<span class={statusColors[stack.status]}>{stack.status}</span>
-							{:else}
-								<button
-									class="inline-flex items-center gap-1 rounded border border-zinc-700 bg-transparent px-1.5 py-0.5 text-[0.65rem] text-zinc-400 transition-colors hover:border-emerald-500 hover:text-emerald-500"
-									onclick={() => handleAddStack(tile)}
-								>
-									<Icon icon="mdi:plus" width="12" height="12" />
-									Add
-								</button>
-							{/if}
-						</td>
+						<td class="p-1.5"></td>
 						<td class="p-1.5" onclick={() => handleRowClick(tile)}>
 							{#if stack}
 								<div class="flex items-center gap-1">
@@ -281,13 +245,39 @@
 										onChange={(v) => handleZChange(tile, stack.z_start_um, v)}
 										align="right"
 									/>
-									<span class="ml-3 text-[0.65rem] text-zinc-400">µm</span>
+									<span class="ml-1 text-[0.65rem] text-zinc-400">µm</span>
 								</div>
 							{:else}
 								<span class="text-zinc-700">—</span>
 							{/if}
 						</td>
-						<td class="p-1.5 pr-5"></td>
+						<td class="p-1.5 text-right font-mono text-zinc-400">
+							{#if stack}
+								{stack.num_frames}
+							{:else}
+								<span class="text-zinc-700">—</span>
+							{/if}
+						</td>
+						<td class="p-1.5 text-right text-zinc-400">
+							{#if stack}
+								<span class="font-mono text-[0.65rem]">{stack.profile_id}</span>
+							{:else}
+								<span class="text-zinc-700">—</span>
+							{/if}
+						</td>
+						<td class="p-1.5 pr-4 text-right">
+							{#if stack}
+								<span class={statusColors[stack.status]}>{stack.status}</span>
+							{:else}
+								<button
+									class="inline-flex items-center gap-1 rounded border border-zinc-700 bg-transparent px-1.5 py-0.5 text-[0.65rem] text-zinc-400 transition-colors hover:border-emerald-500 hover:text-emerald-500"
+									onclick={() => handleAddStack(tile)}
+								>
+									Add
+									<Icon icon="mdi:plus" width="12" height="12" />
+								</button>
+							{/if}
+						</td>
 					</tr>
 				{/each}
 			</tbody>
