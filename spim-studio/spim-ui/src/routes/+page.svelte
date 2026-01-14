@@ -7,7 +7,7 @@
 	import ProfileSelector from '$lib/ui/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/ui/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
-	import { GridCanvas, GridPanel } from '$lib/ui/grid';
+	import { GridCanvas, GridPanel, GridTable } from '$lib/ui/grid';
 	import StagePosition from '$lib/ui/StagePosition.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
@@ -23,7 +23,7 @@
 	// Control view state
 	let deviceFilter = $state<DeviceFilter>('all');
 	let showHistograms = $state(true);
-	let bottomPanelTab = $state('stacks');
+	let bottomPanelTab = $state('grid');
 
 	// Derived state from App
 	const viewName = $derived.by(() => {
@@ -168,10 +168,8 @@
 						<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
 						<Pane defaultSize={40} maxSize={70} minSize={30} class="overflow-hidden">
 							<!-- Bottom Panel Tab Content -->
-							<Tabs.Content value="stacks" class="h-full overflow-auto bg-zinc-900">
-								<div class="flex h-full items-center justify-center">
-									<p class="text-sm text-zinc-500">Stacks table coming soon...</p>
-								</div>
+							<Tabs.Content value="grid" class="h-full overflow-hidden bg-zinc-900">
+								<GridTable {app} />
 							</Tabs.Content>
 
 							<Tabs.Content value="waveforms" class="h-full overflow-hidden bg-zinc-900">
@@ -195,10 +193,10 @@
 						<div class="flex items-center gap-3">
 							<Tabs.List class="flex rounded border border-zinc-700">
 								<Tabs.Trigger
-									value="stacks"
+									value="grid"
 									class="px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
 								>
-									Stacks
+									Grid
 								</Tabs.Trigger>
 								<Tabs.Trigger
 									value="waveforms"

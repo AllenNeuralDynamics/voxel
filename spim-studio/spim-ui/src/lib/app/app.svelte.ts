@@ -316,9 +316,28 @@ export class App {
 		});
 	}
 
+	/** Edit multiple stacks' z parameters (sends to backend) */
+	editStacks(positions: Array<{ row: number; col: number }>, zStartUm: number, zEndUm: number): void {
+		for (const { row, col } of positions) {
+			this.editStack(row, col, zStartUm, zEndUm);
+		}
+	}
+
 	/** Remove a stack (sends to backend) */
 	removeStack(row: number, col: number): void {
 		this.#client.send({ topic: 'stack/remove', payload: { row, col } });
+	}
+
+	/** Remove multiple stacks (sends to backend) */
+	removeStacks(positions: Array<{ row: number; col: number }>): void {
+		for (const { row, col } of positions) {
+			this.removeStack(row, col);
+		}
+	}
+
+	/** Clear all stacks (sends to backend) */
+	clearAllStacks(): void {
+		this.removeStacks(this.stacks.map((s) => ({ row: s.row, col: s.col })));
 	}
 
 	// ========== Initialization ==========
