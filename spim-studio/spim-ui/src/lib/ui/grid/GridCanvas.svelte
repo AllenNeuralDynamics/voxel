@@ -213,7 +213,7 @@
 	</rect>
 {/snippet}
 
-<div class="relative grid h-full w-full px-4 pt-18 pb-12">
+<div class="relative grid h-full w-full px-4 pt-18 pb-8">
 	{#if hasStage}
 		<div class="stage-container flex flex-1 justify-center overflow-hidden" bind:this={containerRef}>
 			<!-- Layer visibility floating widget -->

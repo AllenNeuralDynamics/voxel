@@ -5,6 +5,7 @@
 	import type { Previewer } from './previewer.svelte';
 
 	let previewCanvas: HTMLCanvasElement;
+	let previewCanvasContainer: HTMLDivElement;
 
 	interface PreviewProps {
 		previewer: Previewer;
@@ -28,6 +29,9 @@
 	);
 
 	onMount(async () => {
+		// reasonable default
+		previewCanvas.height = previewCanvasContainer.clientWidth;
+		previewCanvas.width = (previewCanvasContainer.clientWidth * 4) / 3;
 		await previewer.init(previewCanvas);
 	});
 
@@ -36,7 +40,10 @@
 	// PreviewCanvas is just a view that uses it.
 </script>
 
-<div class="relative flex h-full items-start justify-center bg-zinc-950 px-4 pt-18 pb-12">
+<div
+	class="relative flex h-full items-start justify-center bg-zinc-950 px-4 pt-18 pb-8"
+	bind:this={previewCanvasContainer}
+>
 	<canvas
 		bind:this={previewCanvas}
 		class="preview-canvas max-h-full max-w-full border border-emerald-400"

@@ -167,7 +167,7 @@
 	<!-- Table -->
 	<div class="flex-1 overflow-auto">
 		<table class="w-full border-collapse">
-			<thead class="sticky top-0 z-10 bg-zinc-800 text-zinc-300 uppercase">
+			<thead class="sticky top-0 z-1000 bg-zinc-800 text-zinc-300 uppercase">
 				<tr class="text-[0.65rem] font-medium">
 					<th class="w-8 border-b border-zinc-700 px-5 py-1.5">
 						<div class="flex items-center justify-center">
