@@ -246,28 +246,57 @@ class Session:
 
     @property
     def grid_locked(self) -> bool:
-        """Grid is locked if any PLANNED stacks exist."""
-        return any(s.status == StackStatus.PLANNED for s in self._config.stacks)
+        """Grid is locked if any non-PLANNED stacks exist (acquisition has started)."""
+        return any(s.status != StackStatus.PLANNED for s in self._config.stacks)
 
     # ==================== Grid Management ====================
 
-    def set_grid_offset(self, x_offset_um: float, y_offset_um: float) -> None:
-        """Set grid offset. Raises if grid is locked."""
+    async def _recalculate_planned_stack_positions(self) -> None:
+        """Recalculate (x_um, y_um) for all PLANNED stacks based on current grid config.
+
+        Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
+        The (row, col) identity remains stable - only physical positions change.
+        """
+        if not any(s.status == StackStatus.PLANNED for s in self._config.stacks):
+            return
+
+        fov_w, fov_h = await self.get_fov_size()
+        step_w, step_h = await self.get_step_size()
+        offset_x = self._config.grid_config.x_offset_um
+        offset_y = self._config.grid_config.y_offset_um
+
+        for stack in self._config.stacks:
+            if stack.status == StackStatus.PLANNED:
+                stack.x_um = offset_x + stack.col * step_w
+                stack.y_um = offset_y + stack.row * step_h
+                stack.w_um = fov_w
+                stack.h_um = fov_h
+
+    async def set_grid_offset(self, x_offset_um: float, y_offset_um: float) -> None:
+        """Set grid offset. Recalculates PLANNED stack positions.
+
+        Raises RuntimeError if grid is locked (non-PLANNED stacks exist).
+        """
         if self.grid_locked:
-            raise RuntimeError("Cannot modify grid offset while PLANNED stacks exist")
+            raise RuntimeError("Cannot modify grid: acquisition has started")
         self._config.grid_config.x_offset_um = x_offset_um
         self._config.grid_config.y_offset_um = y_offset_um
         self._tile_size_um = None  # Invalidate cache
+        await self._recalculate_planned_stack_positions()
         self._save()
 
-    def set_overlap(self, overlap: float) -> None:
-        """Set overlap. Raises if grid is locked."""
+    async def set_overlap(self, overlap: float) -> None:
+        """Set overlap. Recalculates PLANNED stack positions.
+
+        Raises RuntimeError if grid is locked (non-PLANNED stacks exist).
+        """
         if self.grid_locked:
-            raise RuntimeError("Cannot modify overlap while PLANNED stacks exist")
+            raise RuntimeError("Cannot modify grid: acquisition has started")
         if not 0.0 <= overlap < 1.0:
             raise ValueError(f"Overlap must be in [0.0, 1.0), got {overlap}")
         self._config.grid_config.overlap = overlap
         self._tile_size_um = None  # Invalidate cache
+        await self._recalculate_planned_stack_positions()
         self._save()
 
     async def get_fov_size(self) -> tuple[float, float]:

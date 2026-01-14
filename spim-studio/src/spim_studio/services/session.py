@@ -137,7 +137,7 @@ class SessionService:
         if x_offset is None or y_offset is None:
             raise ValueError("Missing x_offset_um or y_offset_um")
 
-        self.session.set_grid_offset(x_offset, y_offset)
+        await self.session.set_grid_offset(x_offset, y_offset)
         # Status broadcast includes grid_config, tiles, and stacks
         self._broadcast({}, with_status=True)
 
@@ -148,7 +148,7 @@ class SessionService:
         if overlap is None:
             raise ValueError("Missing overlap")
 
-        self.session.set_overlap(overlap)
+        await self.session.set_overlap(overlap)
         # Status broadcast includes grid_config, tiles, and stacks
         self._broadcast({}, with_status=True)
 
@@ -315,7 +315,7 @@ def get_session_service(request: Request) -> SessionService:
 @session_router.get("/session/status")
 async def get_session_status(service: SessionService = Depends(get_session_service)) -> SessionStatus:
     """Get current session status."""
-    return service.get_status()
+    return await service.get_status()
 
 
 @session_router.get("/session/grid")
@@ -337,9 +337,9 @@ async def update_grid(request: GridUpdateRequest, service: SessionService = Depe
     """Update grid configuration."""
     try:
         if request.x_offset_um is not None and request.y_offset_um is not None:
-            service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
+            await service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
         if request.overlap is not None:
-            service.session.set_overlap(request.overlap)
+            await service.session.set_overlap(request.overlap)
 
         # Status broadcast includes grid_config, tiles, and stacks
         service._broadcast({}, with_status=True)
