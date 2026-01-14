@@ -37,8 +37,8 @@
 	let canvasHeight = $state(250);
 
 	// Layout constants (in pixels)
-	const TRACK_WIDTH = 12;
-	const Z_AREA_WIDTH = TRACK_WIDTH * 2;
+	const TRACK_WIDTH = 16;
+	const Z_AREA_WIDTH = TRACK_WIDTH;
 	const STAGE_GAP = 16;
 	const STAGE_BORDER = 0.5;
 
@@ -305,8 +305,6 @@
 							class="xy-svg"
 							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 						>
-							<!-- Stage bounds background -->
-							<rect x="0" y="0" width={app.stageWidth} height={app.stageHeight} class="stage-bounds" />
 
 							<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
 							{#if app.layerVisibility.stacks}
@@ -526,6 +524,7 @@
 
 	.x-slider {
 		height: var(--track-width);
+		border-bottom: none;
 		&::-webkit-slider-thumb {
 			width: var(--thumb-width);
 			height: var(--track-width);
@@ -540,6 +539,7 @@
 		writing-mode: vertical-rl;
 		direction: ltr;
 		width: var(--track-width);
+		border-right: none;
 		&::-webkit-slider-thumb {
 			width: var(--track-width);
 			height: var(--thumb-width);
@@ -581,14 +581,6 @@
 	.xy-svg {
 		flex-shrink: 0;
 		border: var(--stage-border);
-	}
-
-	.stage-bounds {
-		fill: none;
-		stroke: var(--color-zinc-700);
-		stroke-width: 0.05;
-		stroke-dasharray: 0.15 0.1;
-		opacity: 1;
 	}
 
 	.z-svg {

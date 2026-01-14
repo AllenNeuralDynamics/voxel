@@ -23,12 +23,11 @@
 	// Computed derived state (not simple aliases)
 	let gridOffsetXMm = $derived(app.gridConfig.x_offset_um / 1000);
 	let gridOffsetYMm = $derived(app.gridConfig.y_offset_um / 1000);
-	// Offset constrained to [-step/2, +step/2] for intuitive +/- adjustment
-	// step = fov * (1 - overlap), one full period of grid alignment
+	// Offset constrained to [-step, +step] for generous, intuitive adjustment range
 	let stepX = $derived(app.fov.width * (1 - app.gridConfig.overlap));
 	let stepY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
-	let maxOffsetX = $derived(stepX / 2);
-	let maxOffsetY = $derived(stepY / 2);
+	let maxOffsetX = $derived(stepX);
+	let maxOffsetY = $derived(stepY);
 	let stack = $derived(app.selectedStack);
 
 	// Form state
