@@ -315,9 +315,9 @@ class Session:
         """Generate the tile grid based on grid config and stage dimensions.
 
         Computes all tile positions that fit within the stage travel range,
-        starting from the grid offset. Tiles are positioned at intervals of
-        step_size (FOV adjusted for overlap), but have dimensions equal to
-        the full FOV (so adjacent tiles overlap).
+        starting from the grid offset. Tile positions are CENTER-ANCHORED:
+        (x_um, y_um) represents the center of each tile. Tiles are positioned
+        at intervals of step_size (FOV adjusted for overlap).
 
         Returns:
             List of Tile objects covering the stage area from the grid offset.
@@ -342,27 +342,29 @@ class Session:
         stage_height_um = (y_upper - y_lower) * 1000
 
         # Grid offset (in um, relative to stage lower limit)
+        # This represents where tile (0,0)'s center is positioned
         offset_x = self._config.grid_config.x_offset_um
         offset_y = self._config.grid_config.y_offset_um
 
-        # Calculate tile indices to cover entire stage (tiles extend before and after offset)
-        # Include tiles that overlap with stage: x + fov > 0 AND x < stage_width
-        # col_min: smallest col where x + fov > 0 → col > (-offset - fov) / step
-        # col_max: largest col where x < stage_width → col < (stage_width - offset) / step
-        col_min = math.floor((-offset_x - fov_w) / step_w) + 1 if step_w > 0 else 0
-        col_max = math.ceil((stage_width_um - offset_x) / step_w) if step_w > 0 else 1
-        row_min = math.floor((-offset_y - fov_h) / step_h) + 1 if step_h > 0 else 0
-        row_max = math.ceil((stage_height_um - offset_y) / step_h) if step_h > 0 else 1
+        # Calculate tile indices for reachable tiles (center within stage bounds)
+        # With center-anchored positions: center = offset + col * step
+        # For center >= 0: col >= -offset / step
+        # For center <= stage_width: col <= (stage_width - offset) / step
+        col_min = math.ceil(-offset_x / step_w) if step_w > 0 else 0
+        col_max = math.floor((stage_width_um - offset_x) / step_w) + 1 if step_w > 0 else 1
+        row_min = math.ceil(-offset_y / step_h) if step_h > 0 else 0
+        row_max = math.floor((stage_height_um - offset_y) / step_h) + 1 if step_h > 0 else 1
 
-        # Generate tiles
+        # Generate tiles with CENTER-ANCHORED positions
         tiles: list[Tile] = []
         for row in range(row_min, row_max):
             for col in range(col_min, col_max):
+                # Center position = offset + grid_step
                 x_um = offset_x + col * step_w
                 y_um = offset_y + row * step_h
 
-                # Include tile if it overlaps with stage bounds
-                if x_um + fov_w > 0 and x_um < stage_width_um and y_um + fov_h > 0 and y_um < stage_height_um:
+                # Include tile if center is within stage bounds (reachable by stage)
+                if 0 <= x_um <= stage_width_um and 0 <= y_um <= stage_height_um:
                     tile_id = f"tile_r{row}_c{col}"
                     tiles.append(
                         Tile(
@@ -386,14 +388,17 @@ class Session:
     # ==================== Stack Management ====================
 
     async def add_stack(self, row: int, col: int, z_start_um: float, z_end_um: float) -> Stack:
-        """Add a stack at grid position. Captures current profile and computes absolute position."""
+        """Add a stack at grid position. Captures current profile and computes absolute position.
+
+        Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
+        """
         if self._rig.active_profile_id is None:
             raise RuntimeError("No active profile - select a profile before adding stacks")
 
         fov_w, fov_h = await self.get_fov_size()
         step_w, step_h = await self.get_step_size()
 
-        # Compute absolute position from grid using step size
+        # Compute CENTER position from grid (offset + grid_step)
         x_um = self._config.grid_config.x_offset_um + col * step_w
         y_um = self._config.grid_config.y_offset_um + row * step_h
 

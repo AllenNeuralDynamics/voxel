@@ -19,19 +19,26 @@ class StackStatus(StrEnum):
 
 
 class Tile(BaseModel):
-    """2D tile position, auto-generated from grid planning."""
+    """2D tile position, auto-generated from grid planning.
+
+    Positions (x_um, y_um) represent the CENTER of the tile.
+    Tile bounds extend from (x - w/2, y - h/2) to (x + w/2, y + h/2).
+    """
 
     tile_id: str
     row: int
     col: int
-    x_um: float
-    y_um: float
-    w_um: float
-    h_um: float
+    x_um: float  # Center X position in micrometers
+    y_um: float  # Center Y position in micrometers
+    w_um: float  # Width in micrometers (full FOV width)
+    h_um: float  # Height in micrometers (full FOV height)
 
 
 class Stack(Tile):
-    """3D acquisition unit = Tile + z-range."""
+    """3D acquisition unit = Tile + z-range.
+
+    Inherits center-anchored positioning from Tile.
+    """
 
     z_start_um: float
     z_end_um: float

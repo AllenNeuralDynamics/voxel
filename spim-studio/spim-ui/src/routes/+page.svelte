@@ -7,7 +7,7 @@
 	import ProfileSelector from '$lib/ui/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/ui/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
-	import { StageCanvas, GridPanel } from '$lib/ui/grid';
+	import { GridCanvas, GridPanel } from '$lib/ui/grid';
 	import StagePosition from '$lib/ui/StagePosition.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
@@ -161,7 +161,7 @@
 								</Pane>
 								<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
 								<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
-									<StageCanvas {app} />
+									<GridCanvas {app} />
 								</Pane>
 							</PaneGroup>
 						</Pane>

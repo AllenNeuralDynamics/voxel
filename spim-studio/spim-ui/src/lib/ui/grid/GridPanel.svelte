@@ -23,8 +23,12 @@
 	// Computed derived state (not simple aliases)
 	let gridOffsetXMm = $derived(app.gridConfig.x_offset_um / 1000);
 	let gridOffsetYMm = $derived(app.gridConfig.y_offset_um / 1000);
-	let maxOffsetX = $derived(app.fov.width * (1 - app.gridConfig.overlap));
-	let maxOffsetY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
+	// Offset constrained to [-step/2, +step/2] for intuitive +/- adjustment
+	// step = fov * (1 - overlap), one full period of grid alignment
+	let stepX = $derived(app.fov.width * (1 - app.gridConfig.overlap));
+	let stepY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
+	let maxOffsetX = $derived(stepX / 2);
+	let maxOffsetY = $derived(stepY / 2);
 	let stack = $derived(app.selectedStack);
 
 	// Form state
@@ -161,8 +165,8 @@
 	<div class="flex items-center justify-between">
 		<span class="text-zinc-400">{label}</span>
 		<span class="flex items-center gap-1">
-			<SpinBox {value} {onChange} {min} {max} {step} {decimals} numCharacters={4} showButtons={false} align="right" />
-			{#if unit}<span class="text-zinc-400">{unit}</span>{/if}
+			<SpinBox {value} {onChange} {min} {max} {step} {decimals} numCharacters={5} showButtons={true} align="right" />
+			{#if unit}<span class="w-3 text-zinc-400">{unit}</span>{/if}
 		</span>
 	</div>
 {/snippet}
@@ -311,9 +315,6 @@
 				{@render spinBoxItem('Overlap', app.gridConfig.overlap, updateGridOverlap, 0, 0.5, 0.05, 2, '%')}
 				{@render staticItem('Z Step', String(app.gridConfig.z_step_um), 'µm')}
 			</div>
-
-			<!-- Separator -->
-			<!-- <div class="-mx-4 border-t border-zinc-700/50"></div> -->
 		</div>
 		<!-- Tile order (not locked - can change anytime) -->
 		<div class="grid grid-cols-2 gap-x-8 p-4 text-[0.65rem]">
