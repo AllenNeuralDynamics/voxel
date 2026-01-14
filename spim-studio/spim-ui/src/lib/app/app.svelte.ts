@@ -300,44 +300,39 @@ export class App {
 		this.#client.send({ topic: 'grid/set_tile_order', payload: { tile_order: order } });
 	}
 
-	/** Add a stack at grid position (sends to backend) */
-	addStack(row: number, col: number, zStartUm: number, zEndUm: number): void {
+	/** Add stacks at grid positions (bulk, sends to backend) */
+	addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
-			topic: 'stack/add',
-			payload: { row, col, z_start_um: zStartUm, z_end_um: zEndUm }
+			topic: 'stacks/add',
+			payload: {
+				stacks: stacks.map((s) => ({
+					row: s.row,
+					col: s.col,
+					z_start_um: s.zStartUm,
+					z_end_um: s.zEndUm
+				}))
+			}
 		});
 	}
 
-	/** Edit a stack's z parameters (sends to backend) */
-	editStack(row: number, col: number, zStartUm: number, zEndUm: number): void {
+	/** Edit stacks' z parameters (bulk, sends to backend) */
+	editStacks(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
-			topic: 'stack/edit',
-			payload: { row, col, z_start_um: zStartUm, z_end_um: zEndUm }
+			topic: 'stacks/edit',
+			payload: {
+				edits: edits.map((e) => ({
+					row: e.row,
+					col: e.col,
+					z_start_um: e.zStartUm,
+					z_end_um: e.zEndUm
+				}))
+			}
 		});
 	}
 
-	/** Edit multiple stacks' z parameters (sends to backend) */
-	editStacks(positions: Array<{ row: number; col: number }>, zStartUm: number, zEndUm: number): void {
-		for (const { row, col } of positions) {
-			this.editStack(row, col, zStartUm, zEndUm);
-		}
-	}
-
-	/** Remove a stack (sends to backend) */
-	removeStack(row: number, col: number): void {
-		this.#client.send({ topic: 'stack/remove', payload: { row, col } });
-	}
-
-	/** Remove multiple stacks (sends to backend) */
+	/** Remove stacks (bulk, sends to backend) */
 	removeStacks(positions: Array<{ row: number; col: number }>): void {
-		for (const { row, col } of positions) {
-			this.removeStack(row, col);
-		}
-	}
-
-	/** Clear all stacks (sends to backend) */
-	clearAllStacks(): void {
-		this.removeStacks(this.stacks.map((s) => ({ row: s.row, col: s.col })));
+		this.#client.send({ topic: 'stacks/remove', payload: { positions } });
 	}
 
 	// ========== Initialization ==========

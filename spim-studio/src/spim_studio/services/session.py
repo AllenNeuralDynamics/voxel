@@ -114,12 +114,12 @@ class SessionService:
                 await self._handle_grid_overlap(payload)
             case "grid/set_tile_order":
                 await self._handle_tile_order(payload)
-            case "stack/add":
-                await self._handle_stack_add(payload)
-            case "stack/edit":
-                await self._handle_stack_edit(payload)
-            case "stack/remove":
-                await self._handle_stack_remove(payload)
+            case "stacks/add":
+                await self._handle_stacks_add(payload)
+            case "stacks/edit":
+                await self._handle_stacks_edit(payload)
+            case "stacks/remove":
+                await self._handle_stacks_remove(payload)
             case "acq/start":
                 await self._handle_acq_start(payload)
             case "acq/stop":
@@ -165,50 +165,40 @@ class SessionService:
 
     # ==================== Stack Management ====================
 
-    async def _handle_stack_add(self, payload: dict[str, Any]) -> None:
-        """Handle stack add request."""
-        row = payload.get("row")
-        col = payload.get("col")
-        z_start = payload.get("z_start_um")
-        z_end = payload.get("z_end_um")
+    async def _handle_stacks_add(self, payload: dict[str, Any]) -> None:
+        """Handle bulk stack add request.
 
-        if row is None or col is None or z_start is None or z_end is None:
-            raise ValueError("Missing required fields: row, col, z_start_um, z_end_um")
+        Payload: { "stacks": [{ row, col, z_start_um, z_end_um }, ...] }
+        """
+        stacks = payload.get("stacks")
+        if not stacks or not isinstance(stacks, list):
+            raise ValueError("Missing or invalid 'stacks' array")
 
-        await self.session.add_stack(int(row), int(col), float(z_start), float(z_end))
-        # Status broadcast includes stacks
+        await self.session.add_stacks(stacks)
         self._broadcast({}, with_status=True)
 
-    async def _handle_stack_edit(self, payload: dict[str, Any]) -> None:
-        """Handle stack edit request."""
-        row = payload.get("row")
-        col = payload.get("col")
-        z_start = payload.get("z_start_um")
-        z_end = payload.get("z_end_um")
+    async def _handle_stacks_edit(self, payload: dict[str, Any]) -> None:
+        """Handle bulk stack edit request.
 
-        if row is None or col is None:
-            raise ValueError("Missing row or col")
+        Payload: { "edits": [{ row, col, z_start_um?, z_end_um? }, ...] }
+        """
+        edits = payload.get("edits")
+        if not edits or not isinstance(edits, list):
+            raise ValueError("Missing or invalid 'edits' array")
 
-        tile_id = f"tile_r{row}_c{col}"
-        self.session.edit_stack(
-            tile_id,
-            z_start_um=z_start,
-            z_end_um=z_end,
-        )
-        # Status broadcast includes stacks
+        self.session.edit_stacks(edits)
         self._broadcast({}, with_status=True)
 
-    async def _handle_stack_remove(self, payload: dict[str, Any]) -> None:
-        """Handle stack remove request."""
-        row = payload.get("row")
-        col = payload.get("col")
+    async def _handle_stacks_remove(self, payload: dict[str, Any]) -> None:
+        """Handle bulk stack remove request.
 
-        if row is None or col is None:
-            raise ValueError("Missing row or col")
+        Payload: { "positions": [{ row, col }, ...] }
+        """
+        positions = payload.get("positions")
+        if not positions or not isinstance(positions, list):
+            raise ValueError("Missing or invalid 'positions' array")
 
-        tile_id = f"tile_r{row}_c{col}"
-        self.session.remove_stack(tile_id)
-        # Status broadcast includes stacks
+        self.session.remove_stacks(positions)
         self._broadcast({}, with_status=True)
 
     # ==================== Acquisition ====================
@@ -375,8 +365,8 @@ async def list_stacks(service: SessionService = Depends(get_session_service)) ->
     }
 
 
-class AddStackRequest(BaseModel):
-    """Request model for adding a stack."""
+class StackInput(BaseModel):
+    """Input model for a single stack."""
 
     row: int
     col: int
@@ -384,62 +374,73 @@ class AddStackRequest(BaseModel):
     z_end_um: float
 
 
+class AddStacksRequest(BaseModel):
+    """Request model for adding stacks (bulk)."""
+
+    stacks: list[StackInput]
+
+
 @session_router.post("/session/stacks")
-async def add_stack(request: AddStackRequest, service: SessionService = Depends(get_session_service)) -> Stack:
-    """Add a stack at the specified grid position."""
+async def add_stacks(request: AddStacksRequest, service: SessionService = Depends(get_session_service)) -> dict:
+    """Add stacks at the specified grid positions (bulk)."""
     try:
-        stack = await service.session.add_stack(
-            row=request.row,
-            col=request.col,
-            z_start_um=request.z_start_um,
-            z_end_um=request.z_end_um,
-        )
-        # Status broadcast includes stacks
+        stacks = await service.session.add_stacks([s.model_dump() for s in request.stacks])
         service._broadcast({}, with_status=True)
-        return stack
+        return {"added": len(stacks), "stacks": [s.model_dump() for s in stacks]}
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-class EditStackRequest(BaseModel):
-    """Request model for editing a stack."""
+class StackEditInput(BaseModel):
+    """Input model for editing a single stack."""
 
+    row: int
+    col: int
     z_start_um: float | None = None
     z_end_um: float | None = None
 
 
-@session_router.patch("/session/stacks/{tile_id}")
-async def edit_stack(
-    tile_id: str,
-    request: EditStackRequest,
-    service: SessionService = Depends(get_session_service),
-) -> Stack:
-    """Edit a stack's z parameters."""
+class EditStacksRequest(BaseModel):
+    """Request model for editing stacks (bulk)."""
+
+    edits: list[StackEditInput]
+
+
+@session_router.patch("/session/stacks")
+async def edit_stacks(request: EditStacksRequest, service: SessionService = Depends(get_session_service)) -> dict:
+    """Edit stacks' z parameters (bulk)."""
     try:
-        stack = service.session.edit_stack(
-            tile_id,
-            z_start_um=request.z_start_um,
-            z_end_um=request.z_end_um,
-        )
-        # Status broadcast includes stacks
+        stacks = service.session.edit_stacks([e.model_dump(exclude_none=True) for e in request.edits])
         service._broadcast({}, with_status=True)
-        return stack
+        return {"edited": len(stacks), "stacks": [s.model_dump() for s in stacks]}
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@session_router.delete("/session/stacks/{tile_id}")
-async def remove_stack(tile_id: str, service: SessionService = Depends(get_session_service)) -> dict:
-    """Remove a stack."""
+class StackPosition(BaseModel):
+    """Position identifier for a stack."""
+
+    row: int
+    col: int
+
+
+class RemoveStacksRequest(BaseModel):
+    """Request model for removing stacks (bulk)."""
+
+    positions: list[StackPosition]
+
+
+@session_router.delete("/session/stacks")
+async def remove_stacks(request: RemoveStacksRequest, service: SessionService = Depends(get_session_service)) -> dict:
+    """Remove stacks (bulk)."""
     try:
-        service.session.remove_stack(tile_id)
-        # Status broadcast includes stacks
+        service.session.remove_stacks([p.model_dump() for p in request.positions])
         service._broadcast({}, with_status=True)
-        return {"removed": tile_id}
+        return {"removed": len(request.positions)}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

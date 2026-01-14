@@ -103,7 +103,7 @@
 
 	// Add stack to tile
 	function handleAddStack(tile: Tile) {
-		app.addStack(tile.row, tile.col, defaultZStart, defaultZEnd);
+		app.addStacks([{ row: tile.row, col: tile.col, zStartUm: defaultZStart, zEndUm: defaultZEnd }]);
 		handleRowClick(tile);
 	}
 
@@ -146,10 +146,10 @@
 
 		// If this tile is checked and there are other checked tiles with stacks, bulk edit
 		if (checkedItems.has(key) && checkedWithStacks.length > 1) {
-			app.editStacks(checkedWithStacks, zStart, zEnd);
+			app.editStacks(checkedWithStacks.map((p) => ({ ...p, zStartUm: zStart, zEndUm: zEnd })));
 		} else {
 			// Single edit
-			app.editStack(tile.row, tile.col, zStart, zEnd);
+			app.editStacks([{ row: tile.row, col: tile.col, zStartUm: zStart, zEndUm: zEnd }]);
 		}
 	}
 

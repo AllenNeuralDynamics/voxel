@@ -99,10 +99,11 @@
 	}
 
 	function handleSubmit() {
+		const { row, col } = app.selectedTile;
 		if (hasStack) {
-			app.editStack(app.selectedTile.row, app.selectedTile.col, zStartInput, zEndInput);
+			app.editStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		} else {
-			app.addStack(app.selectedTile.row, app.selectedTile.col, zStartInput, zEndInput);
+			app.addStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		}
 		// Track last used values for smart pre-population
 		lastZStart = zStartInput;
@@ -112,7 +113,7 @@
 
 	function handleDelete() {
 		if (confirm('Delete this stack?')) {
-			app.removeStack(app.selectedTile.row, app.selectedTile.col);
+			app.removeStacks([{ row: app.selectedTile.row, col: app.selectedTile.col }]);
 		}
 	}
 

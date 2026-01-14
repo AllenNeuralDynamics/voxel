@@ -416,77 +416,125 @@ class Session:
 
     # ==================== Stack Management ====================
 
-    async def add_stack(self, row: int, col: int, z_start_um: float, z_end_um: float) -> Stack:
-        """Add a stack at grid position. Captures current profile and computes absolute position.
+    async def add_stacks(
+        self, stacks: list[dict[str, int | float]]
+    ) -> list[Stack]:
+        """Add multiple stacks at grid positions. Single save at end.
+
+        Args:
+            stacks: List of {row, col, z_start_um, z_end_um}
 
         Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
         """
+        if not stacks:
+            return []
+
         if self._rig.active_profile_id is None:
             raise RuntimeError("No active profile - select a profile before adding stacks")
 
         fov_w, fov_h = await self.get_fov_size()
         step_w, step_h = await self.get_step_size()
 
-        # Compute CENTER position from grid (offset + grid_step)
-        x_um = self._config.grid_config.x_offset_um + col * step_w
-        y_um = self._config.grid_config.y_offset_um + row * step_h
+        added: list[Stack] = []
+        for s in stacks:
+            row = int(s["row"])
+            col = int(s["col"])
+            z_start_um = float(s["z_start_um"])
+            z_end_um = float(s["z_end_um"])
 
-        tile_id = f"tile_r{row}_c{col}"
+            # Compute CENTER position from grid (offset + grid_step)
+            x_um = self._config.grid_config.x_offset_um + col * step_w
+            y_um = self._config.grid_config.y_offset_um + row * step_h
 
-        # Check for duplicate
-        if any(s.tile_id == tile_id for s in self._config.stacks):
-            raise ValueError(f"Stack {tile_id} already exists")
+            tile_id = f"tile_r{row}_c{col}"
 
-        stack = Stack(
-            tile_id=tile_id,
-            row=row,
-            col=col,
-            x_um=x_um,
-            y_um=y_um,
-            w_um=fov_w,
-            h_um=fov_h,
-            z_start_um=z_start_um,
-            z_end_um=z_end_um,
-            z_step_um=self._config.grid_config.z_step_um,
-            profile_id=self._rig.active_profile_id,
-            status=StackStatus.PLANNED,
-        )
+            # Check for duplicate
+            if any(st.tile_id == tile_id for st in self._config.stacks):
+                raise ValueError(f"Stack {tile_id} already exists")
 
-        self._config.stacks.append(stack)
+            stack = Stack(
+                tile_id=tile_id,
+                row=row,
+                col=col,
+                x_um=x_um,
+                y_um=y_um,
+                w_um=fov_w,
+                h_um=fov_h,
+                z_start_um=z_start_um,
+                z_end_um=z_end_um,
+                z_step_um=self._config.grid_config.z_step_um,
+                profile_id=self._rig.active_profile_id,
+                status=StackStatus.PLANNED,
+            )
+
+            self._config.stacks.append(stack)
+            added.append(stack)
+            self._log.info(f"Added stack {tile_id} at ({x_um:.1f}, {y_um:.1f}) um")
+
         self._sort_stacks()
         self._save()
-        self._log.info(f"Added stack {tile_id} at ({x_um:.1f}, {y_um:.1f}) um with profile '{stack.profile_id}'")
-        return stack
+        return added
 
-    def edit_stack(self, tile_id: str, *, z_start_um: float | None = None, z_end_um: float | None = None) -> Stack:
-        """Edit a stack's z parameters. Only PLANNED stacks can be edited."""
-        for stack in self._config.stacks:
-            if stack.tile_id == tile_id:
-                if stack.status != StackStatus.PLANNED:
-                    raise RuntimeError(f"Cannot edit stack {tile_id} with status {stack.status}")
+    def edit_stacks(self, edits: list[dict[str, int | float]]) -> list[Stack]:
+        """Edit multiple stacks' z parameters. Single save at end.
 
-                if z_start_um is not None:
-                    stack.z_start_um = z_start_um
-                if z_end_um is not None:
-                    stack.z_end_um = z_end_um
+        Args:
+            edits: List of {row, col, z_start_um?, z_end_um?}
 
-                self._save()
-                self._log.info(f"Edited stack {tile_id}")
-                return stack
+        Only PLANNED stacks can be edited.
+        """
+        if not edits:
+            return []
 
-        raise ValueError(f"Stack {tile_id} not found")
+        edited: list[Stack] = []
+        for e in edits:
+            row = int(e["row"])
+            col = int(e["col"])
+            tile_id = f"tile_r{row}_c{col}"
 
-    def remove_stack(self, tile_id: str) -> None:
-        """Remove a stack by ID."""
-        for i, stack in enumerate(self._config.stacks):
-            if stack.tile_id == tile_id:
-                if stack.status == StackStatus.COMPLETED:
-                    self._log.warning(f"Removing completed stack {tile_id}")
-                self._config.stacks.pop(i)
-                self._save()
-                self._log.info(f"Removed stack {tile_id}")
-                return
-        raise ValueError(f"Stack {tile_id} not found")
+            stack = next((s for s in self._config.stacks if s.tile_id == tile_id), None)
+            if stack is None:
+                raise ValueError(f"Stack {tile_id} not found")
+
+            if stack.status != StackStatus.PLANNED:
+                raise RuntimeError(f"Cannot edit stack {tile_id} with status {stack.status}")
+
+            if "z_start_um" in e:
+                stack.z_start_um = float(e["z_start_um"])
+            if "z_end_um" in e:
+                stack.z_end_um = float(e["z_end_um"])
+
+            edited.append(stack)
+            self._log.info(f"Edited stack {tile_id}")
+
+        self._save()
+        return edited
+
+    def remove_stacks(self, positions: list[dict[str, int]]) -> None:
+        """Remove multiple stacks by position. Single save at end.
+
+        Args:
+            positions: List of {row, col}
+        """
+        if not positions:
+            return
+
+        for p in positions:
+            row = int(p["row"])
+            col = int(p["col"])
+            tile_id = f"tile_r{row}_c{col}"
+
+            for i, stack in enumerate(self._config.stacks):
+                if stack.tile_id == tile_id:
+                    if stack.status == StackStatus.COMPLETED:
+                        self._log.warning(f"Removing completed stack {tile_id}")
+                    self._config.stacks.pop(i)
+                    self._log.info(f"Removed stack {tile_id}")
+                    break
+            else:
+                raise ValueError(f"Stack {tile_id} not found")
+
+        self._save()
 
     def set_tile_order(self, order: TileOrder) -> None:
         """Set tile order. Re-sorts stack list."""
