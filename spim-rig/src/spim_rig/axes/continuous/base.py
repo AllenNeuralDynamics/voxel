@@ -1,13 +1,15 @@
+"""Continuous axis abstraction for linear and rotational motion."""
+
 from abc import ABC, abstractmethod
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
-from spim_rig.axes.base import SpimAxis
-from spim_rig.device import DeviceType
 
 from pyrig import describe
 from pyrig.device import DeviceController
+from spim_rig.axes.base import SpimAxis
+from spim_rig.device import DeviceType
 
 
 class StepMode(StrEnum):
@@ -52,19 +54,19 @@ class TTLStepper(ABC):
         """
 
     @abstractmethod
-    def queue_absolute_move(self, position_mm: float) -> None:
+    def queue_absolute_move(self, position: float) -> None:
         """Queue an absolute move to the ring buffer.
 
         Args:
-            position_mm: Target absolute position in mm.
+            position: Target absolute position in axis units.
         """
 
     @abstractmethod
-    def queue_relative_move(self, delta_mm: float) -> None:
+    def queue_relative_move(self, delta: float) -> None:
         """Queue a relative move to the ring buffer.
 
         Args:
-            delta_mm: Relative distance to move in mm.
+            delta: Relative distance to move in axis units.
         """
 
     @abstractmethod
@@ -72,32 +74,57 @@ class TTLStepper(ABC):
         """Reset the step-and-shoot configuration and clear the buffer."""
 
 
-class LinearAxis(SpimAxis):
-    __DEVICE_TYPE__ = DeviceType.LINEAR_AXIS
+class ContinuousAxis(SpimAxis):
+    """Base class for continuous motion axes (linear or rotational).
+
+    This abstraction unifies linear and rotational axes by using generic
+    property names with a `units` property to indicate the unit type
+    (e.g., "mm" for linear, "deg" for rotational).
+
+    Implementations must provide:
+        - units: The unit string (e.g., "mm", "deg")
+        - position: Current position in `units`
+        - is_moving: Whether the axis is currently in motion
+        - Motion commands: move_abs, move_rel, go_home, halt, await_movement
+        - Calibration: set_zero_here, set_logical_position
+        - Limits: upper_limit, lower_limit
+        - Kinematics: speed, acceleration (optional: backlash, home)
+    """
+
+    __DEVICE_TYPE__ = DeviceType.CONTINUOUS_AXIS
 
     def __init__(self, uid: str) -> None:
         super().__init__(uid=uid)
 
+    # Unit specification _____________________________________________________________________________________________
+
+    @property
+    @abstractmethod
+    @describe(label="Units", desc="Unit string for position values (e.g., 'mm', 'deg').")
+    def units(self) -> str:
+        """Unit string for position values (e.g., 'mm', 'deg')."""
+        ...
+
     # Motion commands ________________________________________________________________________________________________
 
-    @describe(label="Move Absolute", desc="Move to an absolute position in mm.")
+    @describe(label="Move Absolute", desc="Move to an absolute position.")
     @abstractmethod
-    def move_abs(self, pos_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        """Move to an absolute position in mm.
+    def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        """Move to an absolute position.
 
         Args:
-            pos_mm: Target absolute position in mm.
+            position: Target absolute position in axis units.
             wait: If True, block until movement is complete.
             timeout_s: Maximum time to wait in seconds (only used if wait=True).
         """
 
-    @describe(label="Move Relative", desc="Move a relative distance in mm.")
+    @describe(label="Move Relative", desc="Move a relative distance.")
     @abstractmethod
-    def move_rel(self, delta_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        """Move a relative distance in mm.
+    def move_rel(self, delta: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        """Move a relative distance.
 
         Args:
-            delta_mm: Distance to move in mm (positive or negative).
+            delta: Distance to move in axis units (positive or negative).
             wait: If True, block until movement is complete.
             timeout_s: Maximum time to wait in seconds (only used if wait=True).
         """
@@ -114,7 +141,9 @@ class LinearAxis(SpimAxis):
 
     @describe(label="Halt", desc="Emergency stop - halt all motion immediately.")
     @abstractmethod
-    def halt(self) -> None: ...
+    def halt(self) -> None:
+        """Emergency stop - halt all motion immediately."""
+        ...
 
     @describe(label="Await Movement", desc="Wait until the axis stops moving.")
     @abstractmethod
@@ -129,84 +158,102 @@ class LinearAxis(SpimAxis):
 
     @property
     @abstractmethod
-    @describe(label="Position", units="mm", desc="The current position.", stream=True)
-    def position_mm(self) -> float: ...
+    @describe(label="Position", desc="The current position.", stream=True)
+    def position(self) -> float:
+        """The current position in axis units."""
+        ...
 
     @property
     @abstractmethod
     @describe(label="Is Moving", desc="Whether the axis is currently moving.", stream=True)
-    def is_moving(self) -> bool: ...
+    def is_moving(self) -> bool:
+        """Whether the axis is currently moving."""
+        ...
 
     # Configuration and calibration __________________________________________________________________________________
 
     @describe(label="Set Zero Here", desc="Set the current position as zero.")
     @abstractmethod
-    def set_zero_here(self) -> None: ...
+    def set_zero_here(self) -> None:
+        """Set the current position as zero."""
+        ...
 
     @describe(label="Set Logical Position", desc="Set the logical position without moving.")
     @abstractmethod
-    def set_logical_position(self, pos_mm: float) -> None:
+    def set_logical_position(self, position: float) -> None:
         """Set the logical position without moving (for calibration).
 
         Args:
-            pos_mm: The position value to assign to the current physical location.
+            position: The position value to assign to the current physical location.
         """
 
     @property
     @abstractmethod
-    @describe(label="Upper Limit", units="mm", desc="The upper position limit.", stream=True)
-    def upper_limit_mm(self) -> float: ...
+    @describe(label="Upper Limit", desc="The upper position limit.", stream=True)
+    def upper_limit(self) -> float:
+        """The upper position limit in axis units."""
+        ...
 
-    @upper_limit_mm.setter
+    @upper_limit.setter
     @abstractmethod
-    def upper_limit_mm(self, mm: float) -> None: ...
+    def upper_limit(self, value: float) -> None: ...
 
     @property
     @abstractmethod
-    @describe(label="Lower Limit", units="mm", desc="The lower position limit.", stream=True)
-    def lower_limit_mm(self) -> float: ...
+    @describe(label="Lower Limit", desc="The lower position limit.", stream=True)
+    def lower_limit(self) -> float:
+        """The lower position limit in axis units."""
+        ...
 
-    @lower_limit_mm.setter
+    @lower_limit.setter
     @abstractmethod
-    def lower_limit_mm(self, mm: float) -> None: ...
+    def lower_limit(self, value: float) -> None: ...
 
     # Kinematic parameters ___________________________________________________________________________________________
 
     @property
     @abstractmethod
-    @describe(label="Speed", units="mm/s", desc="The current speed.", stream=True)
-    def speed_mm_s(self) -> float | None: ...
+    @describe(label="Speed", desc="The current speed.", stream=True)
+    def speed(self) -> float | None:
+        """The current speed in axis units per second."""
+        ...
 
-    @speed_mm_s.setter
+    @speed.setter
     @abstractmethod
-    def speed_mm_s(self, mm_per_s: float) -> None: ...
-
-    @property
-    @abstractmethod
-    @describe(label="Acceleration", units="mm/s²", desc="The current acceleration.", stream=True)
-    def acceleration_mm_s2(self) -> float | None: ...
-
-    @acceleration_mm_s2.setter
-    @abstractmethod
-    def acceleration_mm_s2(self, mm_per_s2: float) -> None: ...
+    def speed(self, value: float) -> None: ...
 
     @property
     @abstractmethod
-    @describe(label="Backlash", units="mm", desc="The backlash compensation value.")
-    def backlash_mm(self) -> float | None: ...
+    @describe(label="Acceleration", desc="The current acceleration.", stream=True)
+    def acceleration(self) -> float | None:
+        """The current acceleration in axis units per second squared."""
+        ...
 
-    @backlash_mm.setter
+    @acceleration.setter
     @abstractmethod
-    def backlash_mm(self, mm: float) -> None: ...
+    def acceleration(self, value: float) -> None: ...
 
     @property
     @abstractmethod
-    @describe(label="Home Position", units="mm", desc="The home position.")
-    def home(self) -> float | None: ...
+    @describe(label="Backlash", desc="The backlash compensation value.")
+    def backlash(self) -> float | None:
+        """The backlash compensation value in axis units."""
+        ...
+
+    @backlash.setter
+    @abstractmethod
+    def backlash(self, value: float) -> None: ...
+
+    @property
+    @abstractmethod
+    @describe(label="Home Position", desc="The home position.")
+    def home(self) -> float | None:
+        """The home position in axis units."""
+        ...
 
     @home.setter
     @abstractmethod
-    def home(self, pos_mm: float) -> None: ...
+    def home(self, position: float) -> None: ...
 
     # Capabilities ___________________________________________________________________________________________________
 
@@ -221,7 +268,7 @@ class LinearAxis(SpimAxis):
         return None
 
 
-# ==================== Linear Axis Controller ====================
+# ==================== Continuous Axis Controller ====================
 
 
 class ScanMode(StrEnum):
@@ -229,8 +276,10 @@ class ScanMode(StrEnum):
     TTL_STEPPING = "TTL_STEPPING"
 
 
-class LinearAxisController(DeviceController[LinearAxis]):
-    def __init__(self, device: LinearAxis, stream_interval: float = 0.5):
+class ContinuousAxisController(DeviceController[ContinuousAxis]):
+    """Controller for ContinuousAxis with TTL stepping support."""
+
+    def __init__(self, device: ContinuousAxis, stream_interval: float = 0.5):
         super().__init__(device, stream_interval=stream_interval)
         self._scan_mode = ScanMode.IDLE
         self._ttl_stepper = device.get_ttl_stepper()
@@ -256,22 +305,22 @@ class LinearAxisController(DeviceController[LinearAxis]):
         self._scan_mode = ScanMode.TTL_STEPPING
 
     @describe(label="Queue Absolute Move")
-    async def queue_absolute_move(self, position_mm: float) -> None:
+    async def queue_absolute_move(self, position: float) -> None:
         if not self._ttl_stepper:
             raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
         if self._scan_mode != ScanMode.TTL_STEPPING:
             raise RuntimeError("TTL stepper not configured")
 
-        await self._run_sync(self._ttl_stepper.queue_absolute_move, position_mm)
+        await self._run_sync(self._ttl_stepper.queue_absolute_move, position)
 
     @describe(label="Queue Relative Move")
-    async def queue_relative_move(self, delta_mm: float) -> None:
+    async def queue_relative_move(self, delta: float) -> None:
         if not self._ttl_stepper:
             raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
         if self._scan_mode != ScanMode.TTL_STEPPING:
             raise RuntimeError("TTL stepper not configured")
 
-        await self._run_sync(self._ttl_stepper.queue_relative_move, delta_mm)
+        await self._run_sync(self._ttl_stepper.queue_relative_move, delta)
 
     @describe(label="Reset TTL Stepper")
     async def reset_ttl_stepper(self) -> None:

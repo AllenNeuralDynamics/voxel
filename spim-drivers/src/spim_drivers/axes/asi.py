@@ -10,8 +10,8 @@ from spim_drivers.tigerhub.ops.step_shoot import (
     TTLIn0Mode,
     TTLOut0Mode,
 )
-from spim_rig.axes.linear.base import (
-    LinearAxis,
+from spim_rig.axes.continuous.base import (
+    ContinuousAxis,
     StepMode,
     TriggerMode,
     TTLStepper,
@@ -48,14 +48,14 @@ class TigerTTLStepper(TTLStepper):
         )
         self._box.configure_step_shoot(asi_cfg)
 
-    def queue_absolute_move(self, position_mm: float) -> None:
+    def queue_absolute_move(self, position: float) -> None:
         """Queue an absolute move to the ring buffer for this axis."""
-        pos_steps = position_mm * self._axis.POS_MULT
+        pos_steps = position * self._axis.POS_MULT
         self._box.queue_step_shoot_abs({self._axis.asi_label: pos_steps})
 
-    def queue_relative_move(self, delta_mm: float) -> None:
+    def queue_relative_move(self, delta: float) -> None:
         """Queue a relative move to the ring buffer for this axis."""
-        delta_steps = delta_mm * self._axis.POS_MULT
+        delta_steps = delta * self._axis.POS_MULT
         self._box.queue_step_shoot_rel({self._axis.asi_label: delta_steps})
 
     def reset(self) -> None:
@@ -63,7 +63,7 @@ class TigerTTLStepper(TTLStepper):
         self._box.reset_step_shoot()
 
 
-class TigerLinearAxis(LinearAxis):
+class TigerLinearAxis(ContinuousAxis):
     POS_MULT = 10000
 
     def __init__(self, *, hub: "TigerHub", axis_label: str, uid: str) -> None:
@@ -102,14 +102,20 @@ class TigerLinearAxis(LinearAxis):
         # Fallback to direct query if not in cache yet
         return self.hub.box.get_param(param, [self._axis_label]).get(self._axis_label)
 
-    # ---- motion ----
-    def move_abs(self, pos_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        self.hub.box.move_abs({self._axis_label: float(pos_mm * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
-        self.log.debug("Moving axis %s to absolute position %.3f mm", self._axis_label, pos_mm)
+    # Unit specification _____________________________________________________________________________________________
 
-    def move_rel(self, delta_mm: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        self.hub.box.move_rel({self._axis_label: float(delta_mm * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
-        self.log.debug("Moving axis %s by relative distance %.3f mm", self._axis_label, delta_mm)
+    @property
+    def units(self) -> str:
+        return "mm"
+
+    # ---- motion ----
+    def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        self.hub.box.move_abs({self._axis_label: float(position * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
+        self.log.debug("Moving axis %s to absolute position %.3f mm", self._axis_label, position)
+
+    def move_rel(self, delta: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        self.hub.box.move_rel({self._axis_label: float(delta * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
+        self.log.debug("Moving axis %s by relative distance %.3f mm", self._axis_label, delta)
 
     def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.box.home_axes([self._axis_label], wait=wait, timeout_s=timeout_s)
@@ -123,7 +129,7 @@ class TigerLinearAxis(LinearAxis):
         return self.hub.box.wait_until_idle(axes=self._axis_label, timeout_s=timeout_s)
 
     @property
-    def position_mm(self) -> float:
+    def position(self) -> float:
         cached_steps = self.hub.get_axis_state_cached(self._axis_label).get("position_steps", 0.0)
         return cached_steps / self.POS_MULT
 
@@ -135,63 +141,63 @@ class TigerLinearAxis(LinearAxis):
     def set_zero_here(self) -> None:
         self.hub.box.zero_axes([self._axis_label])
 
-    def set_logical_position(self, pos_mm: float) -> None:
-        self.hub.box.set_logical_position({self._axis_label: float(pos_mm * self.POS_MULT)})
-        self.log.debug("Logical position set to %s mm", pos_mm)
+    def set_logical_position(self, position: float) -> None:
+        self.hub.box.set_logical_position({self._axis_label: float(position * self.POS_MULT)})
+        self.log.debug("Logical position set to %s mm", position)
 
     @property
-    def upper_limit_mm(self) -> float:
-        return self._get_cached_param("upper_limit_mm", TigerParams.LIMIT_HIGH) or 0.0
+    def upper_limit(self) -> float:
+        return self._get_cached_param("upper_limit", TigerParams.LIMIT_HIGH) or 0.0
 
-    @upper_limit_mm.setter
-    def upper_limit_mm(self, mm: float) -> None:
-        self.log.debug("Setting upper limit to %s mm", mm)
-        self.hub.box.set_param(TigerParams.LIMIT_HIGH, {self._axis_label: float(mm)})
-
-    @property
-    def lower_limit_mm(self) -> float:
-        return self._get_cached_param("lower_limit_mm", TigerParams.LIMIT_LOW) or 0.0
-
-    @lower_limit_mm.setter
-    def lower_limit_mm(self, mm: float) -> None:
-        self.log.debug("Setting lower limit to %s mm", mm)
-        self.hub.box.set_param(TigerParams.LIMIT_LOW, {self._axis_label: float(mm)})
+    @upper_limit.setter
+    def upper_limit(self, value: float) -> None:
+        self.log.debug("Setting upper limit to %s mm", value)
+        self.hub.box.set_param(TigerParams.LIMIT_HIGH, {self._axis_label: float(value)})
 
     @property
-    def speed_mm_s(self) -> float | None:
-        return self._get_cached_param("speed_mm_s", TigerParams.SPEED)
+    def lower_limit(self) -> float:
+        return self._get_cached_param("lower_limit", TigerParams.LIMIT_LOW) or 0.0
 
-    @speed_mm_s.setter
-    def speed_mm_s(self, mm_per_s: float) -> None:
-        self.hub.box.set_param(TigerParams.SPEED, {self._axis_label: float(mm_per_s)})
-        self.log.debug("Speed set to %s mm/s", mm_per_s)
-
-    @property
-    def acceleration_mm_s2(self) -> float | None:
-        return self._get_cached_param("acceleration_mm_s2", TigerParams.ACCEL)
-
-    @acceleration_mm_s2.setter
-    def acceleration_mm_s2(self, mm_per_s2: float) -> None:
-        self.hub.box.set_param(TigerParams.ACCEL, {self._axis_label: float(mm_per_s2)})
-        self.log.debug("Acceleration set to %s mm/s²", mm_per_s2)
+    @lower_limit.setter
+    def lower_limit(self, value: float) -> None:
+        self.log.debug("Setting lower limit to %s mm", value)
+        self.hub.box.set_param(TigerParams.LIMIT_LOW, {self._axis_label: float(value)})
 
     @property
-    def backlash_mm(self) -> float | None:
-        return self._get_cached_param("backlash_mm", TigerParams.BACKLASH)
+    def speed(self) -> float | None:
+        return self._get_cached_param("speed", TigerParams.SPEED)
 
-    @backlash_mm.setter
-    def backlash_mm(self, mm: float) -> None:
-        self.hub.box.set_param(TigerParams.BACKLASH, {self._axis_label: float(mm)})
-        self.log.debug("Backlash set to %s mm", mm)
+    @speed.setter
+    def speed(self, value: float) -> None:
+        self.hub.box.set_param(TigerParams.SPEED, {self._axis_label: float(value)})
+        self.log.debug("Speed set to %s mm/s", value)
+
+    @property
+    def acceleration(self) -> float | None:
+        return self._get_cached_param("acceleration", TigerParams.ACCEL)
+
+    @acceleration.setter
+    def acceleration(self, value: float) -> None:
+        self.hub.box.set_param(TigerParams.ACCEL, {self._axis_label: float(value)})
+        self.log.debug("Acceleration set to %s mm/s²", value)
+
+    @property
+    def backlash(self) -> float | None:
+        return self._get_cached_param("backlash", TigerParams.BACKLASH)
+
+    @backlash.setter
+    def backlash(self, value: float) -> None:
+        self.hub.box.set_param(TigerParams.BACKLASH, {self._axis_label: float(value)})
+        self.log.debug("Backlash set to %s mm", value)
 
     @property
     def home(self) -> float | None:
         return self._get_cached_param("home", TigerParams.HOME_POS)
 
     @home.setter
-    def home(self, pos_mm: float) -> None:
-        self.hub.box.set_param(TigerParams.HOME_POS, {self._axis_label: float(pos_mm)})
-        self.log.debug("Home position set to %s mm", pos_mm)
+    def home(self, position: float) -> None:
+        self.hub.box.set_param(TigerParams.HOME_POS, {self._axis_label: float(position)})
+        self.log.debug("Home position set to %s mm", position)
 
     def close(self) -> None:
         # Cleanly give back the axis to the hub
@@ -223,14 +229,14 @@ if __name__ == "__main__":
 
     PORT = "COM3"
 
-    def log_axis_info(ax: LinearAxis) -> None:
+    def log_axis_info(ax: ContinuousAxis) -> None:
         logger.info("%s axis state:", ax.uid)
-        logger.info("\tposition: %s mm", ax.position_mm)
-        logger.info("\tvelocity: %s mm/s", ax.speed_mm_s)
-        logger.info("\tacceleration: %s mm/s²", ax.acceleration_mm_s2)
-        logger.info("\tbacklash: %s mm", ax.backlash_mm)
-        logger.info("\tlimits: %s %smm", ax.lower_limit_mm, ax.upper_limit_mm)
-        logger.info("\tHome position: %s mm", ax.home)
+        logger.info("\tposition: %s %s", ax.position, ax.units)
+        logger.info("\tvelocity: %s %s/s", ax.speed, ax.units)
+        logger.info("\tacceleration: %s %s/s²", ax.acceleration, ax.units)
+        logger.info("\tbacklash: %s %s", ax.backlash, ax.units)
+        logger.info("\tlimits: %s %s %s", ax.lower_limit, ax.upper_limit, ax.units)
+        logger.info("\tHome position: %s %s", ax.home, ax.units)
 
     hub = TigerHub(PORT)
     rprint("Connected axes: %s", hub.box.info().axes)
@@ -243,8 +249,8 @@ if __name__ == "__main__":
     log_axis_info(x_axis)
     log_axis_info(y_axis)
 
-    # og_x = x_axis.position_mm
-    # og_y = y_axis.position_mm
+    # og_x = x_axis.position
+    # og_y = y_axis.position
 
     # logger.info('Original: x=%s, y=%s', og_x, og_y)
 
@@ -254,7 +260,7 @@ if __name__ == "__main__":
     # rel = 5 * 5
     # logger.info('Moved axes relatively by %s mm', rel)
     # logger.info('Expected new position: x=%s, y=%s', og_x - rel, og_y - rel)
-    # logger.info('Actual new position: x=%s, y=%s', x_axis.position_mm, y_axis.position_mm)
+    # logger.info('Actual new position: x=%s, y=%s', x_axis.position, y_axis.position)
 
     # log_axis_info(x_axis)
     # log_axis_info(y_axis)

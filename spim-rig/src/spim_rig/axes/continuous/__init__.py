@@ -1,5 +1,6 @@
-from .base import SpimAxis
-from .continuous.base import (
+"""Continuous axis module."""
+
+from spim_rig.axes.continuous.base import (
     ContinuousAxis,
     ContinuousAxisController,
     ScanMode,
@@ -8,11 +9,9 @@ from .continuous.base import (
     TTLStepper,
     TTLStepperConfig,
 )
-from .continuous.handle import ContinuousAxisHandle
-from .discrete.base import DiscreteAxis
+from spim_rig.axes.continuous.handle import ContinuousAxisHandle
 
 __all__ = [
-    # New continuous axis
     "ContinuousAxis",
     "ContinuousAxisController",
     "ContinuousAxisHandle",
@@ -21,6 +20,4 @@ __all__ = [
     "TriggerMode",
     "TTLStepper",
     "TTLStepperConfig",
-    "DiscreteAxis",
-    "SpimAxis",
 ]

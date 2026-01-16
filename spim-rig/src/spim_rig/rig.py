@@ -9,7 +9,7 @@ from pathlib import Path
 import zmq.asyncio
 
 from pyrig import DeviceHandle, Rig
-from spim_rig.axes import LinearAxisHandle, StepMode, TTLStepperConfig
+from spim_rig.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from spim_rig.camera.handle import CameraHandle
 from spim_rig.config import ChannelConfig, ProfileConfig, SpimRigConfig
 from spim_rig.daq import DaqHandle
@@ -29,12 +29,12 @@ class RigMode(StrEnum):
 
 @dataclass(frozen=True)
 class SpimRigStage:
-    x: LinearAxisHandle
-    y: LinearAxisHandle
-    z: LinearAxisHandle
+    x: ContinuousAxisHandle
+    y: ContinuousAxisHandle
+    z: ContinuousAxisHandle
 
     @property
-    def scanning_axis(self) -> LinearAxisHandle:
+    def scanning_axis(self) -> ContinuousAxisHandle:
         """The axis used for z-stack scanning. Default: z."""
         return self.z
 
@@ -52,8 +52,7 @@ class SpimRig(Rig):
         self.cameras: dict[str, CameraHandle] = {}
         self.lasers: dict[str, DeviceHandle] = {}
         self.aotfs: dict[str, DeviceHandle] = {}
-        self.linear_axes: dict[str, DeviceHandle] = {}
-        self.rotation_axes: dict[str, DeviceHandle] = {}
+        self.continuous_axes: dict[str, ContinuousAxisHandle] = {}
         self.discrete_axes: dict[str, DeviceHandle] = {}
         self.fws: dict[str, DeviceHandle] = {}
         self.daq: DaqHandle | None = None
@@ -87,10 +86,9 @@ class SpimRig(Rig):
                     self.lasers[uid] = handle
                 case DeviceType.AOTF:
                     self.aotfs[uid] = handle
-                case DeviceType.LINEAR_AXIS:
-                    self.linear_axes[uid] = handle
-                case DeviceType.ROTATION_AXIS:
-                    self.rotation_axes[uid] = handle
+                case DeviceType.CONTINUOUS_AXIS:
+                    assert isinstance(handle, ContinuousAxisHandle)
+                    self.continuous_axes[uid] = handle
                 case DeviceType.DISCRETE_AXIS:
                     self.discrete_axes[uid] = handle
 
@@ -99,14 +97,12 @@ class SpimRig(Rig):
             if fw_id in self.handles:
                 self.fws[fw_id] = self.handles[fw_id]
 
-        # Create the stage from the config (handles are LinearAxisHandle from SpimRigNode)
-        x_handle = self.handles[self.config.stage.x]
-        y_handle = self.handles[self.config.stage.y]
-        z_handle = self.handles[self.config.stage.z]
-        assert isinstance(x_handle, LinearAxisHandle)
-        assert isinstance(y_handle, LinearAxisHandle)
-        assert isinstance(z_handle, LinearAxisHandle)
-        self.stage = SpimRigStage(x=x_handle, y=y_handle, z=z_handle)
+        # Create the stage from the config (handles come from continuous_axes)
+        self.stage = SpimRigStage(
+            x=self.continuous_axes[self.config.stage.x],
+            y=self.continuous_axes[self.config.stage.y],
+            z=self.continuous_axes[self.config.stage.z],
+        )
 
         self._validate_device_types()
 
@@ -151,24 +147,14 @@ class SpimRig(Rig):
         if self.daq is not None and self.daq.uid != self.config.daq.device:
             errors.append(f"DAQ device mismatch: expected '{self.config.daq.device}', got '{self.daq.uid}'")
 
-        # Validate stage axes are LINEAR_AXIS/ROTATION_AXIS devices
-        stage_linear_axis_ids = {
+        # Validate stage axes are CONTINUOUS_AXIS devices
+        stage_axis_ids = {
             self.config.stage.x,
             self.config.stage.y,
             self.config.stage.z,
         }
-        if invalid_stage_axes := stage_linear_axis_ids - set(self.linear_axes.keys()):
-            errors.append(f"Stage axes are not LINEAR_AXIS devices: {invalid_stage_axes}")
-
-        stage_rotation_axis_ids = set()
-        if self.config.stage.roll:
-            stage_rotation_axis_ids.add(self.config.stage.roll)
-        if self.config.stage.pitch:
-            stage_rotation_axis_ids.add(self.config.stage.pitch)
-        if self.config.stage.yaw:
-            stage_rotation_axis_ids.add(self.config.stage.yaw)
-        if invalid_stage_axes := stage_rotation_axis_ids - set(self.rotation_axes.keys()):
-            errors.append(f"Stage axes are not ROTATION_AXIS devices: {invalid_stage_axes}")
+        if invalid_stage_axes := stage_axis_ids - set(self.continuous_axes.keys()):
+            errors.append(f"Stage axes are not CONTINUOUS_AXIS devices: {invalid_stage_axes}")
 
         # Validate filter wheels are DISCRETE_AXIS devices
         filter_wheel_ids = set(self.config.filter_wheels)
@@ -176,7 +162,7 @@ class SpimRig(Rig):
             errors.append(f"Filter wheels are not DISCRETE_AXIS devices: {invalid_filter_wheels}")
 
         # Validate aux_devices are not cameras, lasers, DAQ, filter wheels, or stage axes
-        reserved_axes = filter_wheel_ids | stage_linear_axis_ids | stage_rotation_axis_ids
+        reserved_axes = filter_wheel_ids | stage_axis_ids
         reserved_devices = camera_ids | laser_ids | ({self.daq.uid} if self.daq else set()) | reserved_axes
 
         for path_id, path in self.config.detection.items():
@@ -481,7 +467,7 @@ class SpimRig(Rig):
     # ===================== Stack Acquisition =====================
     #
     @property
-    def scanning_axis(self) -> LinearAxisHandle:
+    def scanning_axis(self) -> ContinuousAxisHandle:
         return self.stage.scanning_axis
 
     async def acquire_stack(self, stack: Stack, output_dir: Path, profile_id: str | None = None) -> StackResult:

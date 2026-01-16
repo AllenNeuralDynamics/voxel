@@ -25,7 +25,7 @@ The SPIM example (`examples/spim`) defaults to the simulated drivers so you can 
 | **Camera** | [`spim_drivers.cameras.egrabber.vieworks.VieworksCamera`](src/spim_drivers/cameras/egrabber) | ✅ ⚠️ | Requires Vieworks hardware + EGrabber runtime to exercise. |
 | **DAQ** | [`spim_drivers.daqs.simulated.SimulatedDaq`](src/spim_drivers/daqs/simulated.py) | ✅ ✅ | Drives the simulated timing stack in `examples/spim`. |
 | **DAQ** | [`spim_drivers.daqs.ni.NiDaq`](src/spim_drivers/daqs/ni.py) | ✅ ⚠️ | NI PCIe-6738: awaiting lab timing tests; structure mirrors deployed rigs. |
-| **Linear Axis** | [`spim_drivers.axes.simulated.SimulatedLinearAxis`](src/spim_drivers/axes/simulated.py) | ✅ ✅ | Includes optional simulated TTL stepper for stage scanning. |
-| **Linear Axis** | [`spim_drivers.axes.asi.TigerLinearAxis`](src/spim_drivers/axes/asi.py) | ✅ ⚠️ | ASI Tiger: integrates with Tiger hub ops; needs on-hardware sweep. |
+| **Continuous Axis** | [`spim_drivers.axes.simulated.SimulatedContinuousAxis`](src/spim_drivers/axes/simulated.py) | ✅ ✅ | Includes optional simulated TTL stepper for stage scanning. |
+| **Continuous Axis** | [`spim_drivers.axes.asi.TigerLinearAxis`](src/spim_drivers/axes/asi.py) | ✅ ⚠️ | ASI Tiger: integrates with Tiger hub ops; needs on-hardware sweep. |
 | **Discrete Axis** | [`spim_drivers.axes.simulated.SimulatedDiscreteAxis`](src/spim_drivers/axes/simulated.py) | ✅ ✅ | Ideal for filter wheels, turrets, and other indexed devices. |
 | **Support** | [Tiger hub shared protocol](src/spim_drivers/tigerhub) | ✅ ⚠️ | Dependency for ASI drivers; protocol helpers still evolving. |

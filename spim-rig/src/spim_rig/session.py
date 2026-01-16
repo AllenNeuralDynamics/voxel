@@ -362,10 +362,10 @@ class Session:
 
         # Get stage dimensions from axis limits (in mm, convert to um)
         stage = self._rig.stage
-        x_lower = await stage.x.get_prop_value("lower_limit_mm")
-        x_upper = await stage.x.get_prop_value("upper_limit_mm")
-        y_lower = await stage.y.get_prop_value("lower_limit_mm")
-        y_upper = await stage.y.get_prop_value("upper_limit_mm")
+        x_lower = await stage.x.get_lower_limit()
+        x_upper = await stage.x.get_upper_limit()
+        y_lower = await stage.y.get_lower_limit()
+        y_upper = await stage.y.get_upper_limit()
 
         stage_width_um = (x_upper - x_lower) * 1000
         stage_height_um = (y_upper - y_lower) * 1000

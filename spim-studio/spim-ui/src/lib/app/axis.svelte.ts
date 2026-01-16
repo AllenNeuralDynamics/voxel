@@ -29,17 +29,17 @@ export class Axis {
 
 	// Derived state properties
 	position = $derived.by(() => {
-		const val = this.#app.devices.getPropertyValue(this.#deviceId, 'position_mm');
+		const val = this.#app.devices.getPropertyValue(this.#deviceId, 'position');
 		return typeof val === 'number' ? val : 0;
 	});
 
 	lowerLimit = $derived.by(() => {
-		const val = this.#app.devices.getPropertyValue(this.#deviceId, 'lower_limit_mm');
+		const val = this.#app.devices.getPropertyValue(this.#deviceId, 'lower_limit');
 		return typeof val === 'number' ? val : 0;
 	});
 
 	upperLimit = $derived.by(() => {
-		const val = this.#app.devices.getPropertyValue(this.#deviceId, 'upper_limit_mm');
+		const val = this.#app.devices.getPropertyValue(this.#deviceId, 'upper_limit');
 		return typeof val === 'number' ? val : 100;
 	});
 

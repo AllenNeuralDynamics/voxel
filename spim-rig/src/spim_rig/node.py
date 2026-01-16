@@ -15,8 +15,8 @@ from pyrig import Device, DeviceHandle, RigNode
 from pyrig.cluster import run_node_service
 from pyrig.device import Adapter, DeviceController
 from pyrig.utils import configure_logging
-from spim_rig.axes.linear.base import LinearAxis, LinearAxisController
-from spim_rig.axes.linear.handle import LinearAxisHandle
+from spim_rig.axes.continuous.base import ContinuousAxis, ContinuousAxisController
+from spim_rig.axes.continuous.handle import ContinuousAxisHandle
 from spim_rig.camera.base import CameraController, SpimCamera
 from spim_rig.camera.handle import CameraHandle
 from spim_rig.daq import DaqController, DaqHandle, SpimDaq
@@ -27,7 +27,7 @@ class SpimRigNode(RigNode):
     """Node service with SPIM-specific device support.
 
     SpimCamera devices use CameraController for preview streaming.
-    LinearAxis devices use LinearAxisController for TTL stepping support.
+    ContinuousAxis devices use ContinuousAxisController for TTL stepping support.
     SpimDaq devices use DaqController for task management.
     """
 
@@ -36,8 +36,8 @@ class SpimRigNode(RigNode):
         """Create custom controllers for SPIM device types."""
         if isinstance(device, SpimCamera):
             return CameraController(device)
-        if isinstance(device, LinearAxis):
-            return LinearAxisController(device, stream_interval=0.05)
+        if isinstance(device, ContinuousAxis):
+            return ContinuousAxisController(device, stream_interval=0.05)
         if isinstance(device, SpimDaq):
             return DaqController(device)
         return super().create_controller(device)
@@ -50,8 +50,8 @@ class SpimRigNode(RigNode):
                 return CameraHandle(adapter)
             case DeviceType.DAQ:
                 return DaqHandle(adapter)
-            case DeviceType.LINEAR_AXIS:
-                return LinearAxisHandle(adapter)
+            case DeviceType.CONTINUOUS_AXIS:
+                return ContinuousAxisHandle(adapter)
             case _:
                 return super().create_handle(device_type, adapter)
 

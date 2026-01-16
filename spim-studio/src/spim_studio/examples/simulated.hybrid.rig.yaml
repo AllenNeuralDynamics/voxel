@@ -10,7 +10,7 @@ _anchors:
   - &aotf_target spim_drivers.aotf.simulated.SimulatedAotf
   - &daq_target spim_drivers.daqs.simulated.SimulatedDaq
   - &fw_target spim_drivers.axes.simulated.SimulatedDiscreteAxis
-  - &linear_axis_target spim_drivers.axes.simulated.SimulatedLinearAxis
+  - &linear_axis_target spim_drivers.axes.simulated.SimulatedContinuousAxis
   - &default_timing
     sample_rate: "100 kHz"
     duration: "0.2 s"
@@ -78,13 +78,13 @@ devices:
       slots: { 0: "BP525", 1: "BP600" }
   x_axis:
     target: *linear_axis_target
-    init: { lower_limit_mm: 0.0, upper_limit_mm: 36.7 }
+    init: { lower_limit: 0.0, upper_limit: 36.7 }
   y_axis:
     target: *linear_axis_target
-    init: { lower_limit_mm: 0.0, upper_limit_mm: 23.0 }
+    init: { lower_limit: 0.0, upper_limit: 23.0 }
   z_axis:
     target: *linear_axis_target
-    init: { lower_limit_mm: 0.0, upper_limit_mm: 50.0 }
+    init: { lower_limit: 0.0, upper_limit: 50.0 }
 
 # Remote devices - cameras on separate nodes (require ZMQ)
 nodes:

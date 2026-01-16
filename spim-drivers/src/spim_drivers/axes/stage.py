@@ -6,23 +6,23 @@ from dataclasses import dataclass
 from spim_drivers.axes.asi import TigerLinearAxis
 from spim_drivers.tigerhub.hub import TigerHub
 from spim_drivers.tigerhub.ops.scan import ScanPattern, ScanRConfig, ScanVConfig
-from spim_rig.axes import LinearAxis, TTLStepper
+from spim_rig.axes.continuous.base import ContinuousAxis, TTLStepper
 
 
-class XYZStage[A: LinearAxis]:
+class XYZStage[A: ContinuousAxis]:
     def __init__(self, x: A, y: A, z: A) -> None:
         self.x = x
         self.y = y
         self.z = z
 
-    def move_abs(self, x_mm: float, y_mm: float, z_mm: float, *, wait: bool = False) -> None:
-        self.x.move_abs(x_mm, wait=False)
-        self.y.move_abs(y_mm, wait=False)
-        self.z.move_abs(z_mm, wait=wait)
+    def move_abs(self, x: float, y: float, z: float, *, wait: bool = False) -> None:
+        self.x.move_abs(x, wait=False)
+        self.y.move_abs(y, wait=False)
+        self.z.move_abs(z, wait=wait)
 
     @property
-    def position_mm(self) -> tuple[float, float, float]:
-        return self.x.position_mm, self.y.position_mm, self.z.position_mm
+    def position(self) -> tuple[float, float, float]:
+        return self.x.position, self.y.position, self.z.position
 
     def get_ttl_stepper(self) -> TTLStepper:
         if (stepper := self.z.get_ttl_stepper()) is not None:
@@ -61,7 +61,7 @@ class ScanSession(ABC):
     def stop(self): ...
 
 
-class ScannableStage[A: LinearAxis](ABC, XYZStage[A]):
+class ScannableStage[A: ContinuousAxis](ABC, XYZStage[A]):
     @abstractmethod
     def new_scan_session(self, pattern: ScanPattern = ScanPattern.RASTER) -> ScanSession: ...
 
@@ -227,13 +227,13 @@ if __name__ == "__main__":
 
     stage = TigerXYZStage(x_axis, y_axis, z_axis)
 
-    z_pos = z_axis.position_mm
+    z_pos = z_axis.position
     z_min = z_pos - 0.5
     z_max = z_pos + 0.5
 
     widget = XYZStageWidget(
-        x=stage.x.position_mm,
-        y=stage.y.position_mm,
+        x=stage.x.position,
+        y=stage.y.position,
         z=z_pos,
         x_limits=(-50.0, -5.0),
         y_limits=(-0.0, 50.0),
@@ -242,16 +242,16 @@ if __name__ == "__main__":
         grid_height=40,
     )
 
-    console.print(f"X limits: {x_axis.lower_limit_mm} - {x_axis.upper_limit_mm}")
-    console.print(f"Y limits: {y_axis.lower_limit_mm} - {y_axis.upper_limit_mm}")
-    console.print(f"Z limits: {z_axis.lower_limit_mm} - {z_axis.upper_limit_mm}")
+    console.print(f"X limits: {x_axis.lower_limit} - {x_axis.upper_limit}")
+    console.print(f"Y limits: {y_axis.lower_limit} - {y_axis.upper_limit}")
+    console.print(f"Z limits: {z_axis.lower_limit} - {z_axis.upper_limit}")
 
     with Live(renderable=widget, console=console, refresh_per_second=2, screen=True) as live:
         live.console.print("[bold green]Starting XY stage simulation...[/]", justify="center")
         time.sleep(1)
         while True:
             try:
-                pos = stage.position_mm
+                pos = stage.position
                 widget.x = pos[0]
                 widget.y = pos[1]
                 widget.z = pos[2]

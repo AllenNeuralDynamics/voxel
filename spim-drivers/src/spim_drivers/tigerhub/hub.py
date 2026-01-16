@@ -87,15 +87,15 @@ class TigerHub(Device):
                 for axis in reserved_axes:
                     self._state_cache.setdefault(axis, {})
                     if axis in speeds:
-                        self._state_cache[axis]["speed_mm_s"] = speeds[axis]
+                        self._state_cache[axis]["speed"] = speeds[axis]
                     if axis in accels:
-                        self._state_cache[axis]["acceleration_mm_s2"] = accels[axis]
+                        self._state_cache[axis]["acceleration"] = accels[axis]
                     if axis in backlashes:
-                        self._state_cache[axis]["backlash_mm"] = backlashes[axis]
+                        self._state_cache[axis]["backlash"] = backlashes[axis]
                     if axis in upper_limits:
-                        self._state_cache[axis]["upper_limit_mm"] = upper_limits[axis]
+                        self._state_cache[axis]["upper_limit"] = upper_limits[axis]
                     if axis in lower_limits:
-                        self._state_cache[axis]["lower_limit_mm"] = lower_limits[axis]
+                        self._state_cache[axis]["lower_limit"] = lower_limits[axis]
                     if axis in homes:
                         self._state_cache[axis]["home"] = homes[axis]
         except Exception as e:
