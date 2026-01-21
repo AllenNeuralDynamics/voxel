@@ -286,14 +286,14 @@ wheels = [
 [[package]]
 name = "egrabber"
 version = "24.9.0.5"
-source = { path = "spim-drivers/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+source = { url = "https://github.com/waltermwaniki/spim-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" }
 dependencies = [
     { name = "click" },
     { name = "matplotlib" },
     { name = "six" },
 ]
 wheels = [
-    { filename = "egrabber-24.9.0.5-py2.py3-none-any.whl", hash = "sha256:29c35f87efd87590eaac2737ef3e0c20b8bd36e565eb42207fb1f559f89df9ac" },
+    { url = "https://github.com/waltermwaniki/spim-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl", hash = "sha256:29c35f87efd87590eaac2737ef3e0c20b8bd36e565eb42207fb1f559f89df9ac" },
 ]
 
 [package.metadata]
@@ -1208,7 +1208,7 @@ ximea-camera = [
 requires-dist = [
     { name = "aaopto-aotf", specifier = ">=0.0.11" },
     { name = "coherent-lasers", marker = "extra == 'coherent-laser'", url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl" },
-    { name = "egrabber", marker = "extra == 'egrabber-camera'", path = "spim-drivers/.wheels/egrabber-24.09.0.5-py2.py3-none-any.whl" },
+    { name = "egrabber", marker = "extra == 'egrabber-camera'", url = "https://github.com/waltermwaniki/spim-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" },
     { name = "nidaqmx", specifier = ">=1.3.0" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "obis-laser", marker = "extra == 'obis-laser'", git = "https://github.com/AllenNeuralDynamics/obis-laser.git" },
