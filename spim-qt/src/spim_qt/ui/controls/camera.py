@@ -12,12 +12,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from spim_qt.ui.primitives.containers import CardDark
 from spim_qt.ui.primitives.display import Label
 from spim_qt.ui.primitives.input import LockableSlider, Select
-from spim_qt.ui.theme import Colors, Spacing
+from spim_qt.ui.theme import BorderRadius, Colors, Spacing
 
 if TYPE_CHECKING:
-    from spim_qt.devices import DevicesManager
+    from spim_qt.handle import DeviceHandleQt
 
 log = logging.getLogger(__name__)
 
@@ -30,30 +31,47 @@ class CameraControl(QWidget):
     - Row 2: Exposure slider
     - Row 3: Format + Binning selectors (inline)
 
+    Wrapped in a CardDark container.
+
     Args:
-        compact: If True, uses minimal styling for embedding in other widgets.
+        adapter: DeviceHandleQt wrapping a camera device.
+        parent: Parent widget.
+
+    Example (integrated with spim-qt):
+        adapter = devices_manager.get_adapter("camera_1")
+        widget = CameraControl(adapter)
+
+    Example (standalone):
+        from spim_drivers.cameras.simulated import SimulatedCamera
+        from pyrig import create_local_handle
+        from spim_qt.handle import DeviceHandleQt
+
+        device = SimulatedCamera(uid="cam")
+        handle = create_local_handle(device)
+        adapter = DeviceHandleQt(handle)
+        await adapter.start()
+        widget = CameraControl(adapter)
     """
 
     def __init__(
         self,
-        device_id: str,
-        devices: DevicesManager,
-        compact: bool = False,
+        adapter: DeviceHandleQt,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._device_id = device_id
-        self._devices = devices
-        self._compact = compact
+        self._adapter = adapter
 
-        self._setup_ui()
-        self._connect_signals()
+        # Outer layout
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
 
-    def _setup_ui(self) -> None:
-        """Set up the UI components."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, Spacing.XS, 0, Spacing.XS)
-        layout.setSpacing(Spacing.XS)
+        # Content container
+        content = CardDark(border_radius=BorderRadius.LG)
+        existing_layout = content.layout()
+        assert isinstance(existing_layout, QVBoxLayout)
+        content_layout = existing_layout
+        content_layout.setSpacing(Spacing.XS)
 
         # Row 1: Camera label + frame info
         row1 = QHBoxLayout()
@@ -61,13 +79,12 @@ class CameraControl(QWidget):
         row1.setSpacing(Spacing.SM)
 
         row1.addWidget(Label("Camera", variant="default", color=Colors.TEXT))
-
         row1.addStretch()
 
         self._frame_info_label = Label("--", variant="value", color=Colors.TEXT_MUTED)
         row1.addWidget(self._frame_info_label)
 
-        layout.addLayout(row1)
+        content_layout.addLayout(row1)
 
         # Row 2: Exposure slider
         self._exposure_slider = LockableSlider(
@@ -75,7 +92,7 @@ class CameraControl(QWidget):
             max_value=100.0,
             color=Colors.ACCENT,
         )
-        layout.addWidget(self._exposure_slider)
+        content_layout.addWidget(self._exposure_slider)
 
         # Row 3: Format + Binning inline
         row3 = QHBoxLayout()
@@ -99,35 +116,29 @@ class CameraControl(QWidget):
 
         row3.addStretch()
 
-        layout.addLayout(row3)
+        content_layout.addLayout(row3)
 
-    def _connect_signals(self) -> None:
-        """Connect to device adapter signals."""
-        adapter = self._devices.get_adapter(self._device_id)
-        if adapter:
-            adapter.properties_changed.connect(self._on_properties_changed)
+        outer_layout.addWidget(content)
 
-        # Connect UI signals
+        # Connect signals
+        self._adapter.properties_changed.connect(self._on_properties_changed)
         self._exposure_slider.inputReleased.connect(self._on_exposure_changed)
         self._format_select.value_changed.connect(self._on_format_changed)
         self._binning_select.value_changed.connect(self._on_binning_changed)
 
     def _on_properties_changed(self, props: dict[str, Any]) -> None:
         """Update UI from device properties."""
-        # Exposure time
         if "exposure_time_ms" in props:
             exposure = float(props["exposure_time_ms"])
             self._exposure_slider.setTarget(exposure)
             self._exposure_slider.setActual(exposure)
 
-        # Pixel format
         if "pixel_format" in props:
             fmt = props["pixel_format"]
             self._format_select.blockSignals(True)
             self._format_select.set_value(fmt)
             self._format_select.blockSignals(False)
 
-        # Binning
         if "binning" in props:
             binning = props["binning"]
             self._binning_select.blockSignals(True)
@@ -155,24 +166,18 @@ class CameraControl(QWidget):
 
     def _on_exposure_changed(self, value: float) -> None:
         """Handle exposure time change."""
-        adapter = self._devices.get_adapter(self._device_id)
-        if adapter:
-            asyncio.create_task(adapter.set("exposure_time_ms", value))
-            log.debug("Camera %s: set exposure_time_ms = %.2f", self._device_id, value)
+        asyncio.create_task(self._adapter.set("exposure_time_ms", value))
+        log.debug("Camera %s: set exposure_time_ms = %.2f", self._adapter.uid, value)
 
     def _on_format_changed(self, value: Any) -> None:
         """Handle pixel format change."""
-        adapter = self._devices.get_adapter(self._device_id)
-        if adapter:
-            asyncio.create_task(adapter.set("pixel_format", value))
-            log.debug("Camera %s: set pixel_format = %s", self._device_id, value)
+        asyncio.create_task(self._adapter.set("pixel_format", value))
+        log.debug("Camera %s: set pixel_format = %s", self._adapter.uid, value)
 
     def _on_binning_changed(self, value: Any) -> None:
         """Handle binning change."""
-        adapter = self._devices.get_adapter(self._device_id)
-        if adapter:
-            asyncio.create_task(adapter.set("binning", value))
-            log.debug("Camera %s: set binning = %s", self._device_id, value)
+        asyncio.create_task(self._adapter.set("binning", value))
+        log.debug("Camera %s: set binning = %s", self._adapter.uid, value)
 
     def update_exposure_range(self, min_val: float, max_val: float) -> None:
         """Update the exposure slider range."""

@@ -21,9 +21,13 @@ class Chip(QWidget):
     Automatically calculates text color (black/white) based on background
     brightness for optimal contrast.
 
+    The `label` attribute is public to allow external customization
+    (e.g., alignment, font).
+
     Usage:
         chip = Chip("560 nm", color="#BEF264")
         chip = Chip("488 nm", color="#67e8f9", border_color="#0E7490")
+        chip.label.setAlignment(Qt.AlignmentFlag.AlignRight)
     """
 
     def __init__(
@@ -38,20 +42,20 @@ class Chip(QWidget):
         self.setMinimumWidth(60)
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
 
-        self._label = QLabel(text)
+        self.label = QLabel(text)
         self._color = color
         self._border_color = border_color
 
         self._update_text_color()
 
         layout = QHBoxLayout()
-        layout.addWidget(self._label)
+        layout.addWidget(self.label)
         layout.setContentsMargins(Spacing.MD, Spacing.SM, Spacing.MD, Spacing.SM)
         self.setLayout(layout)
 
     def _update_text_color(self) -> None:
         text_color = _get_text_color(self._color)
-        self._label.setStyleSheet(f"color: {text_color};")
+        self.label.setStyleSheet(f"color: {text_color};")
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)
@@ -67,17 +71,17 @@ class Chip(QWidget):
 
         painter.setBrush(brush)
         painter.setPen(pen)
-        radius = BorderRadius.LG
+        radius = BorderRadius.XL
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), radius, radius)
 
         if event is not None:
             super().paintEvent(event)
 
     def setText(self, text: str) -> None:
-        self._label.setText(text)
+        self.label.setText(text)
 
     def text(self) -> str:
-        return self._label.text()
+        return self.label.text()
 
     def getColor(self) -> str:
         return self._color

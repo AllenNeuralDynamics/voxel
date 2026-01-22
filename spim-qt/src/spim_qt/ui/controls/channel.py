@@ -24,10 +24,7 @@ log = logging.getLogger(__name__)
 
 
 class ChannelSection(QWidget):
-    """Section for controlling devices in a single acquisition channel.
-
-    Flat design - no card borders, minimal padding. Uses divider lines between sections.
-    """
+    """Section for controlling devices in a single acquisition channel."""
 
     def __init__(
         self,
@@ -41,16 +38,12 @@ class ChannelSection(QWidget):
         self._config = channel_config
         self._devices = devices
 
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        """Set up the UI components."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, Spacing.MD)
         layout.setSpacing(Spacing.SM)
 
-        # Section header with divider
-        label_text = (self._config.label or self._channel_id).upper()
+        # Section header
+        label_text = (channel_config.label or channel_id).upper()
         self._label = Label(label_text, variant="section", color=Colors.TEXT)
         self._label.setStyleSheet(
             self._label.styleSheet() + f"padding-bottom: {Spacing.XS}px; border-bottom: 1px solid {Colors.BORDER};"
@@ -58,26 +51,20 @@ class ChannelSection(QWidget):
         layout.addWidget(self._label)
 
         # Illumination control (laser)
-        if self._config.illumination:
-            self._laser_control = LaserControl(
-                device_id=self._config.illumination,
-                devices=self._devices,
-                compact=True,
-            )
-            layout.addWidget(self._laser_control)
-        else:
-            self._laser_control = None
+        self._laser_control: LaserControl | None = None
+        if channel_config.illumination:
+            adapter = devices.get_adapter(channel_config.illumination)
+            if adapter:
+                self._laser_control = LaserControl(adapter)
+                layout.addWidget(self._laser_control)
 
         # Detection control (camera)
-        if self._config.detection:
-            self._camera_control = CameraControl(
-                device_id=self._config.detection,
-                devices=self._devices,
-                compact=True,
-            )
-            layout.addWidget(self._camera_control)
-        else:
-            self._camera_control = None
+        self._camera_control: CameraControl | None = None
+        if channel_config.detection:
+            adapter = devices.get_adapter(channel_config.detection)
+            if adapter:
+                self._camera_control = CameraControl(adapter)
+                layout.addWidget(self._camera_control)
 
     @property
     def channel_id(self) -> str:

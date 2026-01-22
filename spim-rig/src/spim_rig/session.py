@@ -416,9 +416,7 @@ class Session:
 
     # ==================== Stack Management ====================
 
-    async def add_stacks(
-        self, stacks: list[dict[str, int | float]]
-    ) -> list[Stack]:
+    async def add_stacks(self, stacks: list[dict[str, int | float]]) -> list[Stack]:
         """Add multiple stacks at grid positions. Single save at end.
 
         Args:

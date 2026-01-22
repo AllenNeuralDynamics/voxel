@@ -7,6 +7,7 @@ from pyrig.device import (
     CommandResponse,
     Device,
     DeviceController,
+    DeviceHandle,
     DeviceInterface,
     PropsCallback,
     PropsResponse,
@@ -89,3 +90,31 @@ class LocalAdapter[D: Device](Adapter[D]):
     async def close(self) -> None:
         """Release resources."""
         self._controller.close()
+
+
+def create_local_handle(device: Device) -> DeviceHandle:
+    """Create a DeviceHandle for local (non-networked) device access.
+
+    This is useful for standalone testing or applications that don't
+    need distributed device control.
+
+    Args:
+        device: The device instance to wrap.
+
+    Returns:
+        A DeviceHandle that provides the standard async interface.
+
+    Example:
+        from pyrig import create_local_handle
+        from my_drivers import MyCamera
+
+        camera = MyCamera(uid="cam1")
+        handle = create_local_handle(camera)
+
+        # Now use the handle
+        await handle.call("start_capture")
+        value = await handle.get_prop_value("exposure")
+    """
+    controller = DeviceController(device)
+    adapter = LocalAdapter(controller)
+    return DeviceHandle(adapter)

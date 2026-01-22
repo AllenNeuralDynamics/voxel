@@ -1,10 +1,17 @@
+"""Hardware control demo using spim_qt primitives.
+
+This demonstrates how to use SpinBox/DoubleSpinBox with mock hardware,
+using Qt's signal-based architecture rather than getter/setter bindings.
+"""
+
 import random
 from collections.abc import Callable
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QGroupBox, QLabel, QPushButton, QVBoxLayout, QWidget
 from rich import print
-from spim_widgets.ui.input.label import LiveValueLabel
-from spim_widgets.ui.input.number import VNumberInput
+
+from spim_qt.ui.primitives.input import DoubleSpinBox, SpinBox
 
 
 class MockHardware:
@@ -21,8 +28,6 @@ class MockHardware:
 
     def set_position(self, position: int) -> None:
         print(f"[green]Setting hardware position to: {position}[/green]")
-        # Simulate hardware delay without blocking UI thread
-        # In real hardware, this would be a non-blocking operation
         self._position = position
 
     def get_voltage(self) -> float:
@@ -51,153 +56,161 @@ class MockHardware:
 
 
 class VoltageWidget(QGroupBox):
-    """Widget for controlling hardware voltage using VNumberInput[float]."""
+    """Widget for controlling hardware voltage using DoubleSpinBox."""
 
     def __init__(self, getter: Callable[[], float], setter: Callable[[float], None], parent=None):
         super().__init__("Voltage Control", parent)
-        self.setup_ui(getter, setter)
+        self._getter = getter
+        self._setter = setter
+        self._setup_ui()
 
-    def setup_ui(self, getter: Callable[[], float], setter: Callable[[float], None]):
-        """Create voltage control UI with VNumberInput[float]."""
+    def _setup_ui(self):
+        """Create voltage control UI with DoubleSpinBox."""
         layout = QVBoxLayout(self)
 
-        # Use VNumberInput[float] for voltage control
-        self.voltage_spinbox: VNumberInput[float] = VNumberInput[float](
-            getter=getter,
-            onchange=setter,
-            debounce_delay=300,  # Debounce voltage changes
-            watch_interval=None,  # No continuous monitoring for voltage
-            parent=self,
+        # Use DoubleSpinBox for voltage control
+        self.voltage_spinbox = DoubleSpinBox(
+            value=self._getter(),
+            min=0.0,
+            max=10.0,
+            decimals=2,
+            step=0.1,
         )
-
-        # Configure for voltage (0-10V range, 0.1V steps, 2 decimal places)
-        self.voltage_spinbox.setRange(0.0, 10.0)
-        self.voltage_spinbox.setSingleStep(0.1)
-        self.voltage_spinbox.setDecimals(2)
         self.voltage_spinbox.setSuffix("V")
 
         # Display label that shows current voltage
-        self.voltage_label = QLabel(f"Current Voltage: {self.voltage_spinbox.value:.2f}V")
+        self.voltage_label = QLabel(f"Current Voltage: {self.voltage_spinbox.value():.2f}V")
 
-        # Connect the VNumberInput to update our display label
-        self.voltage_spinbox._binding.value_changed.connect(self.update_display)
+        # Connect the spinbox to the setter and update display
+        self.voltage_spinbox.valueChanged.connect(self._on_value_changed)
 
         layout.addWidget(QLabel("Set Voltage:"))
-        layout.addWidget(self.voltage_spinbox.widget)  # Use .widget property for layout
+        layout.addWidget(self.voltage_spinbox)
         layout.addWidget(self.voltage_label)
 
-    def update_display(self, value: float):
-        """Update voltage display when hardware value changes."""
+    def _on_value_changed(self, value: float):
+        """Handle value change from spinbox."""
+        self._setter(value)
         self.voltage_label.setText(f"Current Voltage: {value:.2f}V")
 
     def refresh(self):
         """Refresh voltage from hardware."""
         try:
-            self.voltage_spinbox.refresh()
-            # The spinbox will automatically update its display and emit signals
+            value = self._getter()
+            self.voltage_spinbox.blockSignals(True)
+            self.voltage_spinbox.setValue(value)
+            self.voltage_spinbox.blockSignals(False)
+            self.voltage_label.setText(f"Current Voltage: {value:.2f}V")
         except Exception as e:
             print(f"[red]Error refreshing voltage: {e}[/red]")
 
 
 class PositionWidget(QGroupBox):
-    """Widget for controlling hardware position using ValueBoundSpinBox."""
+    """Widget for controlling hardware position using SpinBox."""
 
     def __init__(self, getter: Callable[[], int], setter: Callable[[int], None], parent=None):
         super().__init__("Position Control", parent)
-        self.setup_ui(getter, setter)
+        self._getter = getter
+        self._setter = setter
+        self._setup_ui()
 
-    def setup_ui(self, getter: Callable[[], int], setter: Callable[[int], None]):
-        """Create position control UI with VNumberInput[int]."""
+    def _setup_ui(self):
+        """Create position control UI with SpinBox."""
         layout = QVBoxLayout(self)
 
-        # Use VNumberInput[int] for position control
-        self.pos_spinbox: VNumberInput[int] = VNumberInput[int](
-            getter=getter,
-            onchange=setter,
-            debounce_delay=300,  # Debounce position changes
-            watch_interval=None,  # No continuous monitoring for position
-            parent=self,
+        # Use SpinBox for position control
+        self.pos_spinbox = SpinBox(
+            value=self._getter(),
+            min=0,
+            max=1000,
         )
 
         # Display label that shows current position
-        self.pos_label = QLabel(f"Current Position: {self.pos_spinbox.value}")
+        self.pos_label = QLabel(f"Current Position: {self.pos_spinbox.value()}")
 
-        # Connect the VNumberInput to update our display label
-        self.pos_spinbox._binding.value_changed.connect(self.update_display)
+        # Connect the spinbox to the setter and update display
+        self.pos_spinbox.valueChanged.connect(self._on_value_changed)
 
         layout.addWidget(QLabel("Set Position:"))
-        layout.addWidget(self.pos_spinbox.widget)  # Use .widget property for layout
+        layout.addWidget(self.pos_spinbox)
         layout.addWidget(self.pos_label)
 
-    def update_display(self, value):
-        """Update position display when hardware value changes."""
+    def _on_value_changed(self, value: int):
+        """Handle value change from spinbox."""
+        self._setter(value)
         self.pos_label.setText(f"Current Position: {value}")
 
     def refresh(self):
         """Refresh position from hardware."""
         try:
-            self.pos_spinbox.refresh()
-            # The spinbox will automatically update its display and emit signals
+            value = self._getter()
+            self.pos_spinbox.blockSignals(True)
+            self.pos_spinbox.setValue(value)
+            self.pos_spinbox.blockSignals(False)
+            self.pos_label.setText(f"Current Position: {value}")
         except Exception as e:
             print(f"[red]Error refreshing position: {e}[/red]")
 
 
 class TemperatureWidget(QGroupBox):
-    """Widget for monitoring and controlling temperature using ValueBoundSpinBox."""
+    """Widget for monitoring and controlling temperature using DoubleSpinBox."""
 
     def __init__(self, hardware, parent=None):
         super().__init__("Temperature Control", parent)
         self.hardware = hardware
-        self.setup_ui()
+        self._setup_ui()
 
-    def setup_ui(self):
-        """Create temperature control UI with VNumberInput[float]."""
+    def _setup_ui(self):
+        """Create temperature control UI with DoubleSpinBox."""
         layout = QVBoxLayout(self)
 
-        # Use VNumberInput[float] for target temperature control
-        self.target_spinbox: VNumberInput[float] = VNumberInput[float](
-            getter=lambda: self.hardware.target_temperature,
-            onchange=lambda x: setattr(self.hardware, "target_temperature", x),
-            debounce_delay=300,  # Debounce temperature changes
-            watch_interval=1000,  # Continuous monitoring needed for target temp
-            parent=self,
+        # Use DoubleSpinBox for target temperature control
+        self.target_spinbox = DoubleSpinBox(
+            value=self.hardware.target_temperature,
+            min=0.0,
+            max=100.0,
+            decimals=1,
         )
-        self.target_spinbox.setRange(0.0, 100.0)  # Use forwarded method
-        self.target_spinbox.setDecimals(1)  # 1 decimal place for temperature
-        self.target_spinbox.setSuffix("°C")  # Use forwarded method
+        self.target_spinbox.setSuffix("°C")
 
         # Display label for target temperature
-        self.target_label = QLabel(f"Target: {self.target_spinbox.value}°C")
+        self.target_label = QLabel(f"Target: {self.target_spinbox.value():.1f}°C")
 
-        # Actual temperature display using LiveValueLabel (polling)
-        self.actual_temp_widget = LiveValueLabel(
-            getter=lambda: self.hardware.temperature,
-            prefix="Actual: ",
-            suffix="°C",
-            format_func=lambda x: f"{x:.1f}",
-            poll_interval=1000,
-        )
+        # Actual temperature display (using polling with QTimer)
+        self.actual_temp_label = QLabel(f"Actual: {self.hardware.temperature:.1f}°C")
 
-        # Connect the VNumberInput to update our display label
-        self.target_spinbox._binding.value_changed.connect(self.update_target_display)
+        # Connect the spinbox to update target
+        self.target_spinbox.valueChanged.connect(self._on_target_changed)
+
+        # Setup polling timer for actual temperature
+        self._poll_timer = QTimer(self)
+        self._poll_timer.timeout.connect(self._update_actual_temperature)
+        self._poll_timer.start(1000)  # Poll every second
 
         layout.addWidget(QLabel("Set Target Temperature:"))
-        layout.addWidget(self.target_spinbox.widget)  # Use .widget property for layout
+        layout.addWidget(self.target_spinbox)
         layout.addWidget(self.target_label)
-        layout.addWidget(self.actual_temp_widget.widget)  # Use .widget property for layout
+        layout.addWidget(self.actual_temp_label)
 
-    def update_target_display(self, value):
-        """Update target temperature display."""
-        self.target_label.setText(f"Target: {value}°C")
+    def _on_target_changed(self, value: float):
+        """Handle target temperature change."""
+        self.hardware.target_temperature = value
+        self.target_label.setText(f"Target: {value:.1f}°C")
+
+    def _update_actual_temperature(self):
+        """Update actual temperature display from hardware."""
+        actual = self.hardware.temperature
+        self.actual_temp_label.setText(f"Actual: {actual:.1f}°C")
 
     def refresh(self):
         """Refresh target temperature from hardware."""
         try:
-            self.target_spinbox.refresh()
-            # The spinbox will automatically update its display and emit signals
-
-            # Also refresh the actual temperature display
-            self.actual_temp_widget.refresh()
+            value = self.hardware.target_temperature
+            self.target_spinbox.blockSignals(True)
+            self.target_spinbox.setValue(value)
+            self.target_spinbox.blockSignals(False)
+            self.target_label.setText(f"Target: {value:.1f}°C")
+            self._update_actual_temperature()
         except Exception as e:
             print(f"[red]Error refreshing target temperature: {e}[/red]")
 
@@ -208,9 +221,9 @@ class MockHardwareWidget(QWidget):
     def __init__(self, hardware: MockHardware, parent=None):
         super().__init__(parent)
         self.hardware = hardware
-        self.setup_ui()
+        self._setup_ui()
 
-    def setup_ui(self):
+    def _setup_ui(self):
         """Create the composite UI with child widgets."""
         layout = QVBoxLayout(self)
 
@@ -240,25 +253,11 @@ if __name__ == "__main__":
     import sys
 
     from PySide6.QtWidgets import QApplication
-    from rich import print
 
-    # Demonstrate preset usage (uncomment to try different configurations)
-    print("[cyan]Available binding presets:[/cyan]")
-    print("[cyan]- BindingPresets.FAST_HARDWARE: Quick response, minimal delays[/cyan]")
-    print("[cyan]- BindingPresets.SLOW_HARDWARE: Conservative timing for slow devices[/cyan]")
-    print("[cyan]- BindingPresets.MONITORED: Includes continuous polling[/cyan]")
-    print("[cyan]- BindingPresets.PRECISION: Extended delays for high-precision instruments[/cyan]")
-    print("[cyan]- BindingPresets.RESPONSIVE: Balanced for UI responsiveness[/cyan]")
+    print("[cyan]Hardware control demo using spim_qt primitives[/cyan]")
+    print("[cyan]- SpinBox: Integer values (position)[/cyan]")
+    print("[cyan]- DoubleSpinBox: Float values (voltage, temperature)[/cyan]")
     print()
-
-    print("[cyan]Generic VNumberInput examples:[/cyan]")
-    print("[cyan]- VNumberInput[int]: Creates QSpinBox for integer values[/cyan]")
-    print("[cyan]- VNumberInput[float]: Creates QDoubleSpinBox for float values[/cyan]")
-    print()
-
-    # Example of using presets with typed spinboxes:
-    # int_spinbox = VNumberInput[int](int_getter, int_setter, **BindingPresets.FAST_HARDWARE)
-    # float_spinbox = VNumberInput[float](float_getter, float_setter, **BindingPresets.PRECISION)
 
     app = QApplication(sys.argv)
 
@@ -267,12 +266,11 @@ if __name__ == "__main__":
 
     # Create the composite hardware widget
     widget = MockHardwareWidget(hardware)
-    widget.setWindowTitle("Generic Hardware Control Widget - Int & Float SpinBoxes")
+    widget.setWindowTitle("Hardware Control - spim_qt Primitives Demo")
     widget.resize(400, 500)
     widget.show()
 
     print("[yellow]Try changing position (int), voltage (float), and temperature (float) values![/yellow]")
-    print("[yellow]Notice how position uses QSpinBox and voltage/temperature use QDoubleSpinBox![/yellow]")
     print("[yellow]Watch the console for hardware interactions.[/yellow]")
 
     sys.exit(app.exec())

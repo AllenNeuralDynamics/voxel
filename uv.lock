@@ -14,7 +14,6 @@ members = [
     "spim-qt",
     "spim-rig",
     "spim-studio",
-    "spim-widgets",
 ]
 
 [[package]]
@@ -1254,7 +1253,6 @@ dependencies = [
     { name = "pyside6" },
     { name = "qasync" },
     { name = "qtawesome" },
-    { name = "spim-drivers" },
     { name = "spim-rig" },
     { name = "spim-studio" },
 ]
@@ -1264,7 +1262,6 @@ requires-dist = [
     { name = "pyside6", specifier = ">=6.8.0" },
     { name = "qasync", specifier = ">=0.27.1" },
     { name = "qtawesome", specifier = ">=1.4.0" },
-    { name = "spim-drivers", editable = "spim-drivers" },
     { name = "spim-rig", editable = "spim-rig" },
     { name = "spim-studio", editable = "spim-studio" },
 ]
@@ -1309,23 +1306,6 @@ requires-dist = [
     { name = "spim-rig", editable = "spim-rig" },
     { name = "uvicorn", specifier = ">=0.38.0" },
     { name = "websockets", specifier = ">=15.0.1" },
-]
-
-[[package]]
-name = "spim-widgets"
-version = "0.1.0"
-source = { editable = "spim-widgets" }
-dependencies = [
-    { name = "pyside6" },
-    { name = "qasync" },
-    { name = "spim-drivers" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pyside6", specifier = ">=6.9.1" },
-    { name = "qasync", specifier = ">=0.28.0" },
-    { name = "spim-drivers", editable = "spim-drivers" },
 ]
 
 [[package]]

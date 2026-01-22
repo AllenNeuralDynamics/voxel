@@ -87,7 +87,9 @@ class HamamatsuCamera(SpimCamera):
         super().__init__(uid=uid)
 
         self._serial = str(serial)
-        self._pixel_size_um = Vec2D(x=pixel_size_um[0], y=pixel_size_um[1]) if isinstance(pixel_size_um, tuple) else pixel_size_um
+        self._pixel_size_um = (
+            Vec2D(x=pixel_size_um[0], y=pixel_size_um[1]) if isinstance(pixel_size_um, tuple) else pixel_size_um
+        )
         self._latest_frame: np.ndarray | None = None
         self._buffer_size_frames = 0
         self._dropped_frames = 0

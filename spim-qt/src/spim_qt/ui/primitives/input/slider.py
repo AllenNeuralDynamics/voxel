@@ -1,6 +1,6 @@
 """Lockable slider with 3-layer visualization: actual, target, input."""
 
-from PySide6.QtCore import Qt, QRect, QRectF, Signal, Slot
+from PySide6.QtCore import Qt, QRectF, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QPainter, QPen
 from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QWidget
 

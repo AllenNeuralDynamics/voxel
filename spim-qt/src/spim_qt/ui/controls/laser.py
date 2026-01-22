@@ -12,159 +12,155 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from spim_qt.ui.primitives.display import Label
+from spim_qt.ui.primitives.containers import CardDark
+from spim_qt.ui.primitives.display import Chip, Label
 from spim_qt.ui.primitives.input import LockableSlider, Toggle
-from spim_qt.ui.theme import Colors, Spacing
+from spim_qt.ui.theme import (
+    BorderRadius,
+    Colors,
+    Spacing,
+    darken_color,
+    lighten_color,
+    wavelength_to_hex,
+)
 
 if TYPE_CHECKING:
-    from spim_qt.devices import DevicesManager
+    from spim_qt.handle import DeviceHandleQt
 
 log = logging.getLogger(__name__)
 
 
-def wavelength_to_color(wavelength_nm: int | float) -> str:
-    """Convert wavelength (nm) to approximate RGB hex color.
+class WavelengthChip(Chip):
+    """Chip displaying laser wavelength with color derived from the wavelength."""
 
-    Based on Dan Bruton's algorithm for visible spectrum colors.
-    """
-    wl = float(wavelength_nm)
+    def __init__(self, wavelength: int, parent: QWidget | None = None) -> None:
+        base_color = wavelength_to_hex(wavelength)
+        bg_color = lighten_color(base_color, factor=0.3)
+        border_color = darken_color(base_color, factor=0.3)
 
-    if 380 <= wl < 440:
-        r = -(wl - 440) / (440 - 380)
-        g = 0.0
-        b = 1.0
-    elif 440 <= wl < 490:
-        r = 0.0
-        g = (wl - 440) / (490 - 440)
-        b = 1.0
-    elif 490 <= wl < 510:
-        r = 0.0
-        g = 1.0
-        b = -(wl - 510) / (510 - 490)
-    elif 510 <= wl < 580:
-        r = (wl - 510) / (580 - 510)
-        g = 1.0
-        b = 0.0
-    elif 580 <= wl < 645:
-        r = 1.0
-        g = -(wl - 645) / (645 - 580)
-        b = 0.0
-    elif 645 <= wl <= 780:
-        r = 1.0
-        g = 0.0
-        b = 0.0
-    else:
-        # Outside visible range - gray
-        r = g = b = 0.5
+        super().__init__(
+            text=f"{wavelength} nm",
+            color=bg_color,
+            border_color=border_color,
+            parent=parent,
+        )
+        self._wavelength = wavelength
 
-    # Intensity adjustment at edges
-    if 380 <= wl < 420:
-        factor = 0.3 + 0.7 * (wl - 380) / (420 - 380)
-    elif 645 < wl <= 780:
-        factor = 0.3 + 0.7 * (780 - wl) / (780 - 645)
-    else:
-        factor = 1.0
-
-    r = int(r * factor * 255)
-    g = int(g * factor * 255)
-    b = int(b * factor * 255)
-
-    return f"#{r:02x}{g:02x}{b:02x}"
+    @property
+    def wavelength(self) -> int:
+        return self._wavelength
 
 
 class LaserControl(QWidget):
     """Laser device control widget.
 
     Displays:
-    - Row 1: Wavelength label + enable toggle + power readout
-    - Row 2: Power setpoint slider
+    - Header: Wavelength chip + power readout + enable toggle
+    - Power setpoint slider
+
+    Wrapped in a CardDark container.
 
     Args:
-        compact: If True, uses minimal styling for embedding in other widgets.
+        adapter: DeviceHandleQt wrapping a laser device.
+        parent: Parent widget.
+
+    Example (integrated with spim-qt):
+        adapter = devices_manager.get_adapter("laser_488")
+        widget = LaserControl(adapter)
+
+    Example (standalone):
+        from spim_drivers.lasers.simulated import SimulatedLaser
+        from pyrig import create_local_handle
+        from spim_qt.handle import DeviceHandleQt
+
+        device = SimulatedLaser(uid="laser", wavelength=488, max_power_mw=100)
+        handle = create_local_handle(device)
+        adapter = DeviceHandleQt(handle)
+        await adapter.start()
+        widget = LaserControl(adapter)
     """
 
-    def __init__(
-        self,
-        device_id: str,
-        devices: DevicesManager,
-        compact: bool = False,
-        parent: QWidget | None = None,
-    ) -> None:
+    def __init__(self, adapter: DeviceHandleQt, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._device_id = device_id
-        self._devices = devices
-        self._compact = compact
+        self._adapter = adapter
         self._wavelength: int | None = None
         self._color = Colors.ACCENT
 
-        self._setup_ui()
-        self._connect_signals()
+        # Outer layout
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
 
-    def _setup_ui(self) -> None:
-        """Set up the UI components."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, Spacing.XS, 0, Spacing.XS)
-        layout.setSpacing(Spacing.XS)
+        # Content container
+        content = CardDark(border_radius=BorderRadius.LG)
+        existing_layout = content.layout()
+        assert isinstance(existing_layout, QVBoxLayout)
+        content_layout = existing_layout
+        content_layout.setSpacing(Spacing.SM)
 
-        # Row 1: wavelength + toggle + power readout
-        row1 = QHBoxLayout()
-        row1.setContentsMargins(0, 0, 0, 0)
-        row1.setSpacing(Spacing.SM)
+        # Header row: wavelength chip + stretch + power label + toggle
+        self._header_layout = QHBoxLayout()
+        self._header_layout.setContentsMargins(0, 0, 0, 0)
+        self._header_layout.setSpacing(Spacing.SM)
 
-        self._wavelength_label = Label("Laser", variant="default", color=Colors.TEXT)
-        row1.addWidget(self._wavelength_label)
+        # Wavelength chip (placeholder until we get device info)
+        self._wavelength_chip: WavelengthChip | None = None
+        self._chip_placeholder = Label("Laser", variant="default", color=Colors.TEXT)
+        self._header_layout.addWidget(self._chip_placeholder)
 
-        row1.addStretch()
+        self._header_layout.addStretch()
 
+        # Power readout
         self._power_label = Label("-- mW", variant="value", color=Colors.TEXT_MUTED)
-        row1.addWidget(self._power_label)
+        self._header_layout.addWidget(self._power_label)
 
+        # Enable toggle
         self._enable_toggle = Toggle()
         self._enable_toggle.setToolTip("Enable/disable laser emission")
-        row1.addWidget(self._enable_toggle)
+        self._header_layout.addWidget(self._enable_toggle)
 
-        layout.addLayout(row1)
+        content_layout.addLayout(self._header_layout)
 
-        # Row 2: Power slider
+        # Power slider
         self._power_slider = LockableSlider(
             min_value=0.0,
             max_value=100.0,
             color=self._color,
         )
-        layout.addWidget(self._power_slider)
+        content_layout.addWidget(self._power_slider)
 
-    def _connect_signals(self) -> None:
-        """Connect to device adapter signals."""
-        adapter = self._devices.get_adapter(self._device_id)
-        if adapter:
-            adapter.properties_changed.connect(self._on_properties_changed)
+        outer_layout.addWidget(content)
 
-        # Connect UI signals
+        # Connect signals
+        self._adapter.properties_changed.connect(self._on_properties_changed)
         self._enable_toggle.toggled.connect(self._on_toggle_changed)
         self._power_slider.inputReleased.connect(self._on_power_changed)
 
     def _on_properties_changed(self, props: dict[str, Any]) -> None:
         """Update UI from device properties."""
-        # Wavelength (usually static)
         if "wavelength" in props:
-            self._wavelength = int(props["wavelength"])
-            self._wavelength_label.setText(f"{self._wavelength} nm Laser")
-            self._color = wavelength_to_color(self._wavelength)
-            self._power_slider.setColor(self._color)
+            wavelength = int(props["wavelength"])
+            if self._wavelength != wavelength:
+                self._wavelength = wavelength
+                self._color = wavelength_to_hex(wavelength)
+                self._power_slider.setColor(self._color)
 
-        # Enable state
+                # Replace placeholder with wavelength chip
+                if self._wavelength_chip is None:
+                    self._chip_placeholder.hide()
+                    self._wavelength_chip = WavelengthChip(wavelength)
+                    self._header_layout.insertWidget(0, self._wavelength_chip)
+
         if "is_enabled" in props:
             is_enabled = bool(props["is_enabled"])
             self._enable_toggle.blockSignals(True)
             self._enable_toggle.setChecked(is_enabled)
             self._enable_toggle.blockSignals(False)
 
-        # Power setpoint (target value for slider)
         if "power_setpoint_mw" in props:
             setpoint = float(props["power_setpoint_mw"])
             self._power_slider.setTarget(setpoint)
 
-        # Actual power (progress bar + label)
         if "power_mw" in props:
             power = float(props["power_mw"])
             self._power_slider.setActual(power)
@@ -172,18 +168,14 @@ class LaserControl(QWidget):
 
     def _on_toggle_changed(self, checked: bool) -> None:
         """Handle enable toggle change."""
-        adapter = self._devices.get_adapter(self._device_id)
-        if adapter:
-            command = "enable" if checked else "disable"
-            asyncio.create_task(adapter.call(command))
-            log.debug("Laser %s: %s", self._device_id, command)
+        command = "enable" if checked else "disable"
+        asyncio.create_task(self._adapter.call(command))
+        log.debug("Laser %s: %s", self._adapter.uid, command)
 
     def _on_power_changed(self, value: float) -> None:
         """Handle power setpoint change from slider."""
-        adapter = self._devices.get_adapter(self._device_id)
-        if adapter:
-            asyncio.create_task(adapter.set("power_setpoint_mw", value))
-            log.debug("Laser %s: set power_setpoint_mw = %.1f", self._device_id, value)
+        asyncio.create_task(self._adapter.set("power_setpoint_mw", value))
+        log.debug("Laser %s: set power_setpoint_mw = %.1f", self._adapter.uid, value)
 
     def update_power_range(self, min_val: float, max_val: float) -> None:
         """Update the power slider range (call after fetching device interface)."""

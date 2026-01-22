@@ -1,7 +1,7 @@
 """Entry point for running an ImagingRigNode on a remote host.
 
-This allows you to run imaging-specific node services (with CameraService support)
-on remote machines that connect to a central ImagingRig controller.
+This allows you to run imaging-specific node services on remote machines
+that connect to a central ImagingRig controller.
 
 Usage:
     cd examples
@@ -15,17 +15,14 @@ Examples:
     python -m imaging.node camera_node_1 tcp://192.168.1.100:9000
 """
 
-from imaging.drivers.camera import Camera, CameraService
-from pyrig import Device, RigNode
+from pyrig import RigNode
 from pyrig.cluster.node import main
 
 
 class ImagingRigNode(RigNode):
-    def _create_service(self, device: Device, conn, stream_interval: float | None = None):
-        """Hook for custom service types."""
-        if isinstance(device, Camera):
-            return CameraService(device, conn, self._zctx)
-        return super()._create_service(device, conn)
+    """Custom RigNode for imaging applications."""
+
+    pass
 
 
 if __name__ == "__main__":

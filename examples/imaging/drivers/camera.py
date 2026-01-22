@@ -1,10 +1,7 @@
 from pathlib import Path
 
-import zmq.asyncio
-
 from pyrig import DeviceHandle
-from pyrig.cluster import DeviceAddress, DeviceService
-from pyrig.device import Adapter, Device, describe
+from pyrig.device import Adapter, Device, DeviceController, describe
 
 
 def parse_tuple_str(str: str) -> tuple[float, float]:
@@ -67,11 +64,11 @@ class Writer:
             f.write(text)
 
 
-class CameraService(DeviceService[Camera]):
+class CameraService(DeviceController):
     """Camera service with extended streaming commands."""
 
-    def __init__(self, device: Camera, conn: DeviceAddress, zctx: zmq.asyncio.Context):
-        super().__init__(device, conn, zctx)
+    def __init__(self, device: Camera):
+        super().__init__(device)
         tmp_folder = Path(__file__).parent.parent / "tmp"
         tmp_folder.mkdir(exist_ok=True)
         self._writer = Writer(str(tmp_folder / f"{device.uid}.txt"))

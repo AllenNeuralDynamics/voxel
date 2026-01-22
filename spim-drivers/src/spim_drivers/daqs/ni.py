@@ -115,8 +115,10 @@ class NiCOTask(COTask):
 
     @property
     def output_terminal(self) -> str | None:
-        if self._task.co_channels:
-            return self._task.co_channels[0].co_pulse_term
+        co_channels = self._task.co_channels
+        if co_channels:
+            channel = co_channels[0]
+            return channel.co_pulse_term if channel else None  # pyright: ignore[reportAttributeAccessIssue]
         return None
 
     def start(self) -> None:

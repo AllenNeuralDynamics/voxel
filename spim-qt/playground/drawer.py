@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
-from spim_widgets.ui.input.label import VLabel
+
+from spim_qt.ui.primitives.display import Label
 
 
 class SlidingDrawer(QWidget):
@@ -29,7 +30,7 @@ class SlidingDrawer(QWidget):
         drawer_layout.setContentsMargins(12, 12, 12, 12)
 
         # Create simple header (no close button)
-        self.title_label = VLabel("Event Log")
+        self.title_label = Label("Event Log", variant="title")
         self.title_label.setStyleSheet("""
             QLabel {
                 color: palette(windowText);

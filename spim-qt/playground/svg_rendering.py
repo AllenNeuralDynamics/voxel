@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from spim_widgets.playground.interactive_circles_widget import InteractiveCirclesWidget
+
+from .interactive_circles_widget import InteractiveCirclesWidget
 
 
 class SVGFromStringWidget(QWidget):

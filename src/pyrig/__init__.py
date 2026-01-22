@@ -11,7 +11,7 @@ from .cluster import (
     ZMQService,
 )
 from .device import Adapter, Device, DeviceHandle, DeviceInterface, PropertyModel, describe
-from .local import LocalAdapter
+from .local import LocalAdapter, create_local_handle
 from .rig import Rig, RigConfig, RigInfo
 
 # Set up library logging with NullHandler (users opt-in to see logs)
@@ -41,4 +41,5 @@ __all__ = [
     # Utilities
     "describe",
     "PropertyModel",
+    "create_local_handle",
 ]

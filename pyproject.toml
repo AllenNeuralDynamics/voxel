@@ -28,7 +28,6 @@ dev = [
 members = [
     "spim-rig",
     "spim-drivers",
-    "spim-widgets",
     "spim-studio",
     "spim-qt",
 ]
@@ -44,9 +43,8 @@ asyncio_default_fixture_loop_scope = "function"
 line-length = 120
 
 [tool.pyright]
-# include = ["src"]
-# reportMissingTypeStubs = "none"
-# reportExplicitAny = "none"
-# reportAny = "none"
-# reportImplicitOverride = "none"
 typeCheckingMode = "standard"
+ignore = [
+    "**/sdk/**",
+    "**/vendor/**",
+]

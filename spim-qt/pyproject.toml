@@ -9,7 +9,6 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "spim-rig",
-    "spim-drivers",
     "spim-studio",
     "PySide6>=6.8.0",
     "qasync>=0.27.1",
@@ -21,7 +20,6 @@ spim-qt = "spim_qt.cli:main"
 
 [tool.uv.sources]
 spim-rig = { workspace = true }
-spim-drivers = { workspace = true }
 spim-studio = { workspace = true }
 
 [build-system]
