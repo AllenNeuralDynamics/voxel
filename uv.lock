@@ -9,9 +9,9 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "exaspim",
     "pyrig",
     "spim-drivers",
+    "spim-qt",
     "spim-rig",
     "spim-studio",
     "spim-widgets",
@@ -302,27 +302,6 @@ requires-dist = [
     { name = "click", specifier = ">=7.1" },
     { name = "matplotlib" },
     { name = "six", specifier = ">=1.12" },
-]
-
-[[package]]
-name = "exaspim"
-version = "0.1.0"
-source = { editable = "exaspim" }
-dependencies = [
-    { name = "pyside6" },
-    { name = "qasync" },
-    { name = "qtawesome" },
-    { name = "spim-drivers" },
-    { name = "spim-rig" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pyside6", specifier = ">=6.8.0" },
-    { name = "qasync", specifier = ">=0.27.1" },
-    { name = "qtawesome", specifier = ">=1.4.0" },
-    { name = "spim-drivers", editable = "spim-drivers" },
-    { name = "spim-rig", editable = "spim-rig" },
 ]
 
 [[package]]
@@ -1266,6 +1245,29 @@ requires-dist = [
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
 provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
+
+[[package]]
+name = "spim-qt"
+version = "0.1.0"
+source = { editable = "spim-qt" }
+dependencies = [
+    { name = "pyside6" },
+    { name = "qasync" },
+    { name = "qtawesome" },
+    { name = "spim-drivers" },
+    { name = "spim-rig" },
+    { name = "spim-studio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyside6", specifier = ">=6.8.0" },
+    { name = "qasync", specifier = ">=0.27.1" },
+    { name = "qtawesome", specifier = ">=1.4.0" },
+    { name = "spim-drivers", editable = "spim-drivers" },
+    { name = "spim-rig", editable = "spim-rig" },
+    { name = "spim-studio", editable = "spim-studio" },
+]
 
 [[package]]
 name = "spim-rig"
