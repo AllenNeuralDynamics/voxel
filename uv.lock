@@ -10,16 +10,10 @@ resolution-markers = [
 [manifest]
 members = [
     "pyrig",
-    "spim-drivers",
-    "spim-qt",
-    "spim-rig",
-    "spim-studio",
-]
-
-[manifest.dependency-groups]
-dev = [
-    { name = "pytest", specifier = ">=9.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    "voxel",
+    "voxel-drivers",
+    "voxel-qt",
+    "voxel-studio",
 ]
 
 [[package]]
@@ -1195,119 +1189,6 @@ wheels = [
 ]
 
 [[package]]
-name = "spim-drivers"
-version = "0.1.0"
-source = { editable = "spim-drivers" }
-dependencies = [
-    { name = "aaopto-aotf" },
-    { name = "nidaqmx" },
-    { name = "numpy" },
-    { name = "pyserial" },
-    { name = "spim-rig" },
-    { name = "tigerasi" },
-]
-
-[package.optional-dependencies]
-coherent-laser = [
-    { name = "coherent-lasers" },
-]
-egrabber-camera = [
-    { name = "egrabber" },
-]
-obis-laser = [
-    { name = "obis-laser" },
-]
-pycobolt-laser = [
-    { name = "pycobolt" },
-]
-vortran-laser = [
-    { name = "vortran-laser" },
-]
-ximea-camera = [
-    { name = "ximea-python" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aaopto-aotf", specifier = ">=0.0.11" },
-    { name = "coherent-lasers", marker = "extra == 'coherent-laser'", url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl" },
-    { name = "egrabber", marker = "extra == 'egrabber-camera'", url = "https://github.com/waltermwaniki/spim-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" },
-    { name = "nidaqmx", specifier = ">=1.3.0" },
-    { name = "numpy", specifier = ">=2.3.4" },
-    { name = "obis-laser", marker = "extra == 'obis-laser'", git = "https://github.com/AllenNeuralDynamics/obis-laser.git" },
-    { name = "pycobolt", marker = "extra == 'pycobolt-laser'", git = "https://github.com/cobolt-lasers/pycobolt.git" },
-    { name = "pyserial", specifier = ">=3.5" },
-    { name = "spim-rig", editable = "spim-rig" },
-    { name = "tigerasi", specifier = ">=0.0.27" },
-    { name = "vortran-laser", marker = "extra == 'vortran-laser'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
-    { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
-]
-provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
-
-[[package]]
-name = "spim-qt"
-version = "0.1.0"
-source = { editable = "spim-qt" }
-dependencies = [
-    { name = "pyside6" },
-    { name = "qasync" },
-    { name = "qtawesome" },
-    { name = "spim-rig" },
-    { name = "spim-studio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pyside6", specifier = ">=6.8.0" },
-    { name = "qasync", specifier = ">=0.27.1" },
-    { name = "qtawesome", specifier = ">=1.4.0" },
-    { name = "spim-rig", editable = "spim-rig" },
-    { name = "spim-studio", editable = "spim-studio" },
-]
-
-[[package]]
-name = "spim-rig"
-version = "0.1.0"
-source = { editable = "spim-rig" }
-dependencies = [
-    { name = "msgpack-numpy" },
-    { name = "numpy" },
-    { name = "ome-zarr-writer" },
-    { name = "opencv-python-headless" },
-    { name = "pyrig" },
-    { name = "rich" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "msgpack-numpy", specifier = ">=0.4.8" },
-    { name = "numpy", specifier = ">=2.3.4" },
-    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
-    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
-    { name = "pyrig", editable = "pyrig" },
-    { name = "rich", specifier = ">=14.2.0" },
-]
-
-[[package]]
-name = "spim-studio"
-version = "0.1.0"
-source = { editable = "spim-studio" }
-dependencies = [
-    { name = "fastapi" },
-    { name = "spim-rig" },
-    { name = "uvicorn" },
-    { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.121.1" },
-    { name = "spim-rig", editable = "spim-rig" },
-    { name = "uvicorn", specifier = ">=0.38.0" },
-    { name = "websockets", specifier = ">=15.0.1" },
-]
-
-[[package]]
 name = "starlette"
 version = "0.49.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1401,6 +1282,131 @@ version = "0.0.1"
 source = { git = "https://github.com/AllenNeuralDynamics/vortran_laser.git#9f229b946e371964671339927f1a0028f1d459ab" }
 dependencies = [
     { name = "pyserial" },
+]
+
+[[package]]
+name = "voxel"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "msgpack-numpy" },
+    { name = "numpy" },
+    { name = "ome-zarr-writer" },
+    { name = "opencv-python-headless" },
+    { name = "pyrig" },
+    { name = "rich" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "msgpack-numpy", specifier = ">=0.4.8" },
+    { name = "numpy", specifier = ">=2.3.4" },
+    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
+    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
+    { name = "pyrig", editable = "pyrig" },
+    { name = "rich", specifier = ">=14.2.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+]
+
+[[package]]
+name = "voxel-drivers"
+version = "0.1.0"
+source = { editable = "voxel-drivers" }
+dependencies = [
+    { name = "aaopto-aotf" },
+    { name = "nidaqmx" },
+    { name = "numpy" },
+    { name = "pyserial" },
+    { name = "tigerasi" },
+    { name = "voxel" },
+]
+
+[package.optional-dependencies]
+coherent-laser = [
+    { name = "coherent-lasers" },
+]
+egrabber-camera = [
+    { name = "egrabber" },
+]
+obis-laser = [
+    { name = "obis-laser" },
+]
+pycobolt-laser = [
+    { name = "pycobolt" },
+]
+vortran-laser = [
+    { name = "vortran-laser" },
+]
+ximea-camera = [
+    { name = "ximea-python" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aaopto-aotf", specifier = ">=0.0.11" },
+    { name = "coherent-lasers", marker = "extra == 'coherent-laser'", url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl" },
+    { name = "egrabber", marker = "extra == 'egrabber-camera'", url = "https://github.com/waltermwaniki/spim-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" },
+    { name = "nidaqmx", specifier = ">=1.3.0" },
+    { name = "numpy", specifier = ">=2.3.4" },
+    { name = "obis-laser", marker = "extra == 'obis-laser'", git = "https://github.com/AllenNeuralDynamics/obis-laser.git" },
+    { name = "pycobolt", marker = "extra == 'pycobolt-laser'", git = "https://github.com/cobolt-lasers/pycobolt.git" },
+    { name = "pyserial", specifier = ">=3.5" },
+    { name = "tigerasi", specifier = ">=0.0.27" },
+    { name = "vortran-laser", marker = "extra == 'vortran-laser'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
+    { name = "voxel", editable = "." },
+    { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
+]
+provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
+
+[[package]]
+name = "voxel-qt"
+version = "0.1.0"
+source = { editable = "voxel-qt" }
+dependencies = [
+    { name = "pyside6" },
+    { name = "qasync" },
+    { name = "qtawesome" },
+    { name = "voxel" },
+    { name = "voxel-studio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyside6", specifier = ">=6.8.0" },
+    { name = "qasync", specifier = ">=0.27.1" },
+    { name = "qtawesome", specifier = ">=1.4.0" },
+    { name = "voxel", editable = "." },
+    { name = "voxel-studio", editable = "voxel-studio" },
+]
+
+[[package]]
+name = "voxel-studio"
+version = "0.1.0"
+source = { editable = "voxel-studio" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+    { name = "voxel" },
+    { name = "websockets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.121.1" },
+    { name = "uvicorn", specifier = ">=0.38.0" },
+    { name = "voxel", editable = "." },
+    { name = "websockets", specifier = ">=15.0.1" },
 ]
 
 [[package]]

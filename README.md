@@ -1,195 +1,79 @@
-# PyRig
+<h1>
+    <div>
+        <img src="voxel-logo.png" alt="Voxel Logo" width="50" height="50">
+    </div>
+    Voxel
+</h1>
 
-Distributed device control framework for experimental rigs: Provides control of hardware devices across networked nodes with ZeroMQ.
+Core library for light sheet microscopy using PyRig.
 
-> 🚧 **Heads up:** PyRig is under active development. Expect rapid changes and occasional breaking updates while the core APIs settle.  🚧
+> [!Warning]
+> 🚧 Under Construction: APIs, configuration schemas, device drivers, and documentation are actively evolving. 🚧
 
-## Quick Start
+## What is Voxel?
 
-```bash
-# Install dependencies
-uv sync --all-packages --all-extras
+A light sheet microscope illuminates samples with a thin sheet of light while imaging perpendicular to the illumination plane. This package provides:
 
-# Run basic examples
-uv run python -m examples.simple.demo
-uv run python -m examples.imaging.demo
-```
+- **VoxelRigConfig** - YAML-based configuration schema with validation for microscope hardware topology
+- **VoxelRig** - Orchestration class that manages device lifecycle, profile switching, and coordinated preview/acquisition
+- **Device abstractions** - Base classes for cameras, lasers, DAQs, stages, AOTFs, and filter wheels
+- **Frame acquisition** - DAQ-synchronized waveform generation and hardware triggering
 
-**[SPIM-Rig:](spim-rig/README.md)** A complete microscope rig implementation using PyRig with web UI and hardware drivers.
+Concrete hardware drivers are in [voxel-drivers](voxel-drivers/).
 
-### Example code
+The configuration models the physical structure of the microscope:
 
-```python
-from pyrig import Rig, RigConfig
+- **Detection paths** - Camera + filter wheels + aux devices
+- **Illumination paths** - Laser + aux devices (e.g., AOTF)
+- **Channels** - Pair a detection path with an illumination path and specify filter positions
+- **Profiles** - Group channels that can be acquired simultaneously, with DAQ waveform timing
+- **Stage** - XYZ linear axes (+ optional rotation axes)
+- **DAQ** - Synchronizes acquisition via hardware triggers
 
-config = RigConfig.from_yaml("system.yaml")
-rig = Rig(zctx, config)
-await rig.start()
-
-# Generic access
-temp = rig.controllers["temp_controller"]
-await temp.call("start_regulation")
-
-# Or with typed clients (ImagingRig example)
-laser = rig.lasers["laser_488"]
-await laser.turn_on()  # IDE autocomplete!
-```
-
-## Architecture
-
-Three layers:
-
-**Device** - Hardware abstraction (talks to SDK/driver)
-**Service** - Network wrapper (ZeroMQ server)
-**Client** - Remote proxy (ZeroMQ client)
-
-```python
-from pyrig import Device, DeviceService, DeviceClient, describe
-
-# Device (server-side)
-class Camera(Device):
-    def capture(self) -> np.ndarray:
-        return self._sdk.acquire()
-
-# Service (server-side, optional)
-class CameraService(DeviceService[Camera]):
-    @describe(label="Start Stream", desc="Stream frames to file")
-    def start_stream(self, n_frames: int):
-        for i in range(n_frames):
-            self._writer.write(self.device.capture())
-
-# Client (controller-side, optional)
-class CameraRHandle(DeviceClient):
-    async def capture(self) -> np.ndarray:
-        return await self.call("capture")
-
-    async def start_stream(self, n_frames: int):
-        return await self.call("start_stream", n_frames)
-```
-
-Devices can run on separate machines. Configuration in YAML:
+## Configuration
 
 ```yaml
 metadata:
-  name: MyRig
-  control_port: 9000
+  name: my-voxel-rig
 
 nodes:
-  primary:
+  main:
     devices:
-      camera_1:
-        target: myrig.devices.Camera
-        kwargs: { serial: "12345" }
+      camera_1: { target: voxel_drivers.cameras.Vieworks }
+      laser_488: { target: voxel_drivers.lasers.AAOpto }
+      daq: { target: voxel_drivers.daqs.NI }
+      # ...
 
-  remote_node:
-    hostname: 192.168.1.50
-    devices:
-      stage_x:
-        target: myrig.devices.MotorStage
-        kwargs: { axis: "X" }
+daq:
+  device: daq
+  acq_ports: { camera_1: ao0, laser_488: ao1 }
+
+detection:
+  camera_1: { filter_wheels: [fw1] }
+
+illumination:
+  laser_488: {}
+
+channels:
+  gfp: { detection: camera_1, illumination: laser_488, filters: { fw1: GFP } }
+
+profiles:
+  default:
+    channels: [gfp]
+    daq: { timing: { ... }, waveforms: { ... } }
 ```
 
-## Communication
+## Usage
 
-**Commands/Properties:** REQ/REP sockets
-**State streaming:** PUB/SUB sockets
-**Connection monitoring:** Heartbeats
-**Logging:** PUB/SUB aggregation
-
-Each device service exposes:
-
-- `REQ` - Execute command
-- `GET` - Read properties
-- `SET` - Write properties
-- `INT` - Introspection
-
-## Logging
-
-PyRig uses Python's stdlib logging with ZeroMQ log aggregation.
-
-**Enable logging:**
+For a complete application with web UI and CLI, see [voxel-studio](voxel-studio/).
 
 ```python
-import logging
-logging.basicConfig(level=logging.INFO)  # See all pyrig and node logs
+from voxel.config import VoxelRigConfig
+from voxel.rig import VoxelRig
 
-from pyrig import Rig, RigConfig
-rig = Rig(zctx, config)
+config = VoxelRigConfig.from_yaml("system.yaml")
+rig = VoxelRig(config)
 await rig.start()
+await rig.set_active_profile("default")
+await rig.start_preview(frame_callback)
 ```
-
-The Rig automatically receives logs from all nodes and forwards them to Python's logging system under the `node.<node_id>` logger. You'll see logs like:
-
-```txt
-2025-11-05 20:58:00 - pyrig.rig - INFO - Starting MyRig...
-2025-11-05 20:58:00 - pyrig.nodes - INFO - [node.primary.INFO] Node primary started
-2025-11-05 20:58:02 - pyrig.rig - INFO - MyRig ready with 4 devices
-```
-
-Users opt-in by configuring Python logging. No logs appear by default (library best practice).
-
-## Customization
-
-**Base Rig:** Generic device access via `rig.controllers["id"]`
-
-**Custom Rig:** Typed collections with autocomplete
-
-```python
-class ImagingRig(Rig):
-    NODE_SERVICE_CLASS = ImagingRigNode  # Custom services
-
-    def __init__(self, zctx, config):
-        super().__init__(zctx, config)
-        self.lasers: dict[str, LaserClient] = {}
-        self.cameras: dict[str, CameraRHandle] = {}
-
-    def _create_client(self, device_id, prov):
-        if prov.device_type == DeviceType.LASER:
-            client = LaserClient(...)
-            self.lasers[device_id] = client
-            return client
-        # ...
-```
-
-## Property Helpers
-
-Many hardware knobs expose constrained values (bounded ranges, enumerated modes). PyRig ships specialized property descriptors under `pyrig.device.props` so those constraints stay declarative and travel with the data:
-
-- `@deliminated_float` / `@deliminated_int`: clamp values to `min/max/step` and report those bounds to clients.
-- `@enumerated_string` / `@enumerated_int`: restrict values to a predefined list and expose the options in RPC responses.
-
-Descriptors return `PropertyModel` objects, so `DeviceService` and `DeviceClient` automatically serialize both the value and its metadata. UI layers can render sliders or dropdowns without guessing constraints.
-
-```python
-from pyrig.device.props import deliminated_float, enumerated_string
-
-class Laser(Device):
-    @deliminated_float(min_value=0.0, max_value=100.0, step=0.5)
-    def power_setpoint(self) -> float:
-        return self._power
-
-    @power_setpoint.setter
-    def power_setpoint(self, value: float) -> None:
-        self._power = value
-
-    @enumerated_string(options=["cw", "pulsed", "burst"])
-    def mode(self) -> str:
-        return self._mode
-```
-
-On the client side, call `await client.get_prop("power_setpoint")` to receive the full `PropertyModel` (value + bounds), or `await client.get_prop_value("mode")` for just the primitive.
-
-## Examples
-
-**Simple:** Base classes, generic access
-**Imaging:** Custom rig with typed clients (cameras, lasers)
-
-```bash
-cd examples
-uv run python -m simple.demo
-uv run python -m imaging.demo
-```
-
-## License
-
-[MIT](LICENSE)

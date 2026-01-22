@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from pyrig.device import Command, CommandParamsError, describe
 
 
-# Test fixtures - similar to SpimCamera types
+# Test fixtures - similar to Camera types
 class TriggerMode(StrEnum):
     OFF = "off"
     ON = "on"

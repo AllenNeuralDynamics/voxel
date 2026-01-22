@@ -1,13 +1,35 @@
+[project]
+name = "voxel"
+version = "0.1.0"
+description = "Voxel microscope configuration, orchestration, and acquisition"
+readme = "README.md"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pyrig",
+    "msgpack-numpy>=0.4.8",
+    "numpy>=2.3.4",
+    "ome-zarr-writer",
+    "opencv-python-headless>=4.11.0.86",
+    "rich>=14.2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
 [tool.uv.workspace]
 members = [
     "pyrig",
-    "spim-rig",
-    "spim-drivers",
-    "spim-studio",
-    "spim-qt",
+    "voxel-drivers",
+    "voxel-studio",
+    "voxel-qt",
 ]
 
 [tool.uv.sources]
+ome-zarr-writer = { git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" }
 pyrig = { workspace = true }
 
 [dependency-groups]
