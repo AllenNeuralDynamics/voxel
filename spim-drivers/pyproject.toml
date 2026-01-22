@@ -1,7 +1,7 @@
 [project]
 name = "spim-drivers"
 version = "0.1.0"
-description = "Add your description here"
+description = "Hardware drivers for SPIM microscopy: cameras, lasers, stages, DAQs"
 readme = "README.md"
 authors = [
     { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
@@ -43,5 +43,5 @@ egrabber = { url = "https://github.com/waltermwaniki/spim-wheels/releases/downlo
 spim-rig = { workspace = true }
 
 [build-system]
-requires = ["uv_build>=0.8.24,<0.9.0"]
+requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"

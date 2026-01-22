@@ -16,6 +16,12 @@ members = [
     "spim-studio",
 ]
 
+[manifest.dependency-groups]
+dev = [
+    { name = "pytest", specifier = ">=9.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+]
+
 [[package]]
 name = "aaopto-aotf"
 version = "0.0.11"
@@ -900,16 +906,11 @@ wheels = [
 [[package]]
 name = "pyrig"
 version = "0.1.0"
-source = { editable = "." }
+source = { editable = "pyrig" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyzmq" },
     { name = "ruyaml" },
-]
-
-[package.optional-dependencies]
-examples = [
-    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -922,10 +923,8 @@ dev = [
 requires-dist = [
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "pyzmq", specifier = ">=27.1.0" },
-    { name = "rich", marker = "extra == 'examples'", specifier = ">=14.2.0" },
     { name = "ruyaml", specifier = ">=0.91.0" },
 ]
-provides-extras = ["examples"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1285,7 +1284,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
-    { name = "pyrig", editable = "." },
+    { name = "pyrig", editable = "pyrig" },
     { name = "rich", specifier = ">=14.2.0" },
 ]
 
