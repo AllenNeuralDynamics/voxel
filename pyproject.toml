@@ -23,9 +23,9 @@ build-backend = "uv_build"
 [tool.uv.workspace]
 members = [
     "pyrig",
-    "voxel-drivers",
-    "voxel-studio",
-    "voxel-qt",
+    "drivers",
+    "studio",
+    "qt",
 ]
 
 [tool.uv.sources]
