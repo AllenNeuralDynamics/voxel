@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DevicesManager } from '$lib/core';
+	import { type DevicesManager, parseVec2D } from '$lib/core';
 	import SliderInput from '$lib/ui/primitives/SliderInput.svelte';
 	import SelectInput from '$lib/ui/primitives/SelectInput.svelte';
 	import CardAccordion from '$lib/ui/primitives/CardAccordion.svelte';
@@ -42,10 +42,10 @@
 				: 'N/A'
 	);
 
-	// Sensor information
-	let sensorSize = $derived(devicesManager.getPropertyValue(deviceId, 'sensor_size_px'));
-	let pixelSize = $derived(devicesManager.getPropertyValue(deviceId, 'pixel_size_um'));
-	let frameSize = $derived(devicesManager.getPropertyValue(deviceId, 'frame_size_px'));
+	// Sensor information (parsed as Vec2D)
+	let sensorSize = $derived(parseVec2D(devicesManager.getPropertyValue(deviceId, 'sensor_size_px')));
+	let pixelSize = $derived(parseVec2D(devicesManager.getPropertyValue(deviceId, 'pixel_size_um')));
+	let frameSize = $derived(parseVec2D(devicesManager.getPropertyValue(deviceId, 'frame_size_px')));
 	let frameSizeMb = $derived(devicesManager.getPropertyValue(deviceId, 'frame_size_mb'));
 
 	// ROI
@@ -109,22 +109,22 @@
 		</div>
 
 		<!-- Sensor & ROI Collapsible Section (using CardAccordion component) -->
-		{#if frameSize && Array.isArray(frameSize) && frameSize.length === 2}
-			{@const summary = `${frameSize[0]} × ${frameSize[1]} px${typeof frameSizeMb === 'number' ? ` | ${frameSizeMb.toFixed(2)} MB` : ''}`}
+		{#if frameSize}
+			{@const summary = `${frameSize.y} × ${frameSize.x} px${typeof frameSizeMb === 'number' ? ` | ${frameSizeMb.toFixed(2)} MB` : ''}`}
 			<CardAccordion label="Frame Size" summaryValue={summary}>
 				<!-- Sensor Size -->
-				{#if sensorSize && Array.isArray(sensorSize) && sensorSize.length === 2}
+				{#if sensorSize}
 					<div class="flex justify-between">
 						<span class="label">Sensor Size</span>
-						<span class="value">{sensorSize[0]} × {sensorSize[1]} px</span>
+						<span class="value">{sensorSize.y} × {sensorSize.x} px</span>
 					</div>
 				{/if}
 
 				<!-- Pixel Size -->
-				{#if pixelSize && typeof pixelSize === 'string'}
+				{#if pixelSize}
 					<div class="flex justify-between">
 						<span class="label">Pixel Size</span>
-						<span class="value">{pixelSize} µm</span>
+						<span class="value">{pixelSize.y} × {pixelSize.x} µm</span>
 					</div>
 				{/if}
 

@@ -3,11 +3,11 @@ from .deliminated import DeliminatedFloat, DeliminatedInt, deliminated_float, de
 from .enumerated import enumerated_int, enumerated_string
 
 __all__ = [
-    "PropertyModel",
-    "DeliminatedInt",
     "DeliminatedFloat",
-    "deliminated_int",
+    "DeliminatedInt",
+    "PropertyModel",
     "deliminated_float",
+    "deliminated_int",
     "enumerated_int",
     "enumerated_string",
 ]
@@ -15,7 +15,7 @@ __all__ = [
 if __name__ == "__main__":
     import logging
 
-    from pyrig.utils import configure_logging
+    from vxlib import configure_logging
 
     logger = logging.getLogger(__name__)
 

@@ -11,9 +11,9 @@ from voxel_qt.ui.main_window import MainWindow
 from voxel_qt.ui.theme import BorderRadius, Colors, FontSize, Spacing
 
 __all__ = [
-    "MainWindow",
-    "Colors",
-    "Spacing",
-    "FontSize",
     "BorderRadius",
+    "Colors",
+    "FontSize",
+    "MainWindow",
+    "Spacing",
 ]

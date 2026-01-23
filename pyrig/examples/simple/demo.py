@@ -148,7 +148,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    try:
+    from contextlib import suppress
+
+    with suppress(KeyboardInterrupt):
         asyncio.run(main())
-    except KeyboardInterrupt:
-        pass

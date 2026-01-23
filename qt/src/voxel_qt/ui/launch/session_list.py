@@ -1,9 +1,6 @@
 """Session list widget for displaying recent sessions."""
 
-from __future__ import annotations
-
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -13,11 +10,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from voxel_studio.system import SessionDirectory
+
 from voxel_qt.ui.primitives.display import Chip, Label
 from voxel_qt.ui.theme import Colors
-
-if TYPE_CHECKING:
-    from voxel_studio.system import SessionDirectory
 
 
 class SessionListItem(QWidget):
@@ -70,12 +66,11 @@ class SessionListItem(QWidget):
                 return f"{minutes}m ago" if minutes > 0 else "just now"
             hours = delta.seconds // 3600
             return f"{hours}h ago"
-        elif delta.days == 1:
+        if delta.days == 1:
             return "yesterday"
-        elif delta.days < 7:
+        if delta.days < 7:
             return f"{delta.days}d ago"
-        else:
-            return dt.strftime("%b %d, %Y")
+        return dt.strftime("%b %d, %Y")
 
 
 class SessionList(QWidget):

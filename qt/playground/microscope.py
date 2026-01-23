@@ -219,8 +219,8 @@ class MicroscopeControlInterface(QMainWindow):
         # Exposure
         self._exposure_spinbox = DoubleSpinBox(
             value=self.state.exposure_time,
-            min=0.001,
-            max=10.0,
+            min_val=0.001,
+            max_val=10.0,
             decimals=3,
         )
         self._exposure_spinbox.setSuffix(" s")
@@ -230,8 +230,8 @@ class MicroscopeControlInterface(QMainWindow):
         # Gain
         self._gain_spinbox = DoubleSpinBox(
             value=float(self.state.gain),
-            min=1.0,
-            max=1000.0,
+            min_val=1.0,
+            max_val=1000.0,
             decimals=0,
         )
         self._gain_spinbox.valueChanged.connect(lambda v: self._make_callback("gain")(int(v)))
@@ -260,7 +260,7 @@ class MicroscopeControlInterface(QMainWindow):
         self._laser_405_toggle.toggled.connect(self._make_callback("laser_405_enabled"))
         laser_405_layout.addWidget(self._laser_405_toggle)
         laser_405_layout.addWidget(Label("Power (mW):"))
-        self._laser_405_power = DoubleSpinBox(value=self.state.laser_405_power, min=0.0, max=50.0, decimals=1)
+        self._laser_405_power = DoubleSpinBox(value=self.state.laser_405_power, min_val=0.0, max_val=50.0, decimals=1)
         self._laser_405_power.valueChanged.connect(self._make_callback("laser_405_power"))
         laser_405_layout.addWidget(self._laser_405_power)
         laser_405_layout.addStretch()
@@ -274,7 +274,7 @@ class MicroscopeControlInterface(QMainWindow):
         self._laser_488_toggle.toggled.connect(self._make_callback("laser_488_enabled"))
         laser_488_layout.addWidget(self._laser_488_toggle)
         laser_488_layout.addWidget(Label("Power (mW):"))
-        self._laser_488_power = DoubleSpinBox(value=self.state.laser_488_power, min=0.0, max=100.0, decimals=1)
+        self._laser_488_power = DoubleSpinBox(value=self.state.laser_488_power, min_val=0.0, max_val=100.0, decimals=1)
         self._laser_488_power.valueChanged.connect(self._make_callback("laser_488_power"))
         laser_488_layout.addWidget(self._laser_488_power)
         laser_488_layout.addStretch()
@@ -288,7 +288,7 @@ class MicroscopeControlInterface(QMainWindow):
         self._laser_561_toggle.toggled.connect(self._make_callback("laser_561_enabled"))
         laser_561_layout.addWidget(self._laser_561_toggle)
         laser_561_layout.addWidget(Label("Power (mW):"))
-        self._laser_561_power = DoubleSpinBox(value=self.state.laser_561_power, min=0.0, max=75.0, decimals=1)
+        self._laser_561_power = DoubleSpinBox(value=self.state.laser_561_power, min_val=0.0, max_val=75.0, decimals=1)
         self._laser_561_power.valueChanged.connect(self._make_callback("laser_561_power"))
         laser_561_layout.addWidget(self._laser_561_power)
         laser_561_layout.addStretch()
@@ -303,25 +303,25 @@ class MicroscopeControlInterface(QMainWindow):
 
         # X position
         grid.addWidget(Label("X (μm):"), 0, 0)
-        self._stage_x = DoubleSpinBox(value=self.state.stage_x, min=0.0, max=25000.0, decimals=1)
+        self._stage_x = DoubleSpinBox(value=self.state.stage_x, min_val=0.0, max_val=25000.0, decimals=1)
         self._stage_x.valueChanged.connect(self._make_callback("stage_x"))
         grid.addWidget(self._stage_x, 0, 1)
 
         # Y position
         grid.addWidget(Label("Y (μm):"), 0, 2)
-        self._stage_y = DoubleSpinBox(value=self.state.stage_y, min=0.0, max=25000.0, decimals=1)
+        self._stage_y = DoubleSpinBox(value=self.state.stage_y, min_val=0.0, max_val=25000.0, decimals=1)
         self._stage_y.valueChanged.connect(self._make_callback("stage_y"))
         grid.addWidget(self._stage_y, 0, 3)
 
         # Z position
         grid.addWidget(Label("Z (μm):"), 1, 0)
-        self._stage_z = DoubleSpinBox(value=self.state.stage_z, min=0.0, max=1000.0, decimals=1)
+        self._stage_z = DoubleSpinBox(value=self.state.stage_z, min_val=0.0, max_val=1000.0, decimals=1)
         self._stage_z.valueChanged.connect(self._make_callback("stage_z"))
         grid.addWidget(self._stage_z, 1, 1)
 
         # Step size
         grid.addWidget(Label("Step Size (μm):"), 1, 2)
-        self._stage_step = DoubleSpinBox(value=self.state.stage_step_size, min=0.1, max=1000.0, decimals=1)
+        self._stage_step = DoubleSpinBox(value=self.state.stage_step_size, min_val=0.1, max_val=1000.0, decimals=1)
         self._stage_step.valueChanged.connect(self._make_callback("stage_step_size"))
         grid.addWidget(self._stage_step, 1, 3)
 

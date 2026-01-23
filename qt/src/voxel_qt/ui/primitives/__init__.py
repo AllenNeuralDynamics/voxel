@@ -39,23 +39,23 @@ from voxel_qt.ui.primitives.layout import (
 __all__ = [
     # Buttons
     "Button",
-    "IconButton",
     # Containers
     "Card",
     # Display
     "Chip",
-    "Label",
-    "Separator",
     # Input
     "DoubleSpinBox",
-    "LockableSlider",
-    "SpinBox",
-    "Toggle",
     # Layout
     "Field",
     "FormBuilder",
     "Grid",
     "HStack",
+    "IconButton",
     "InfoRow",
+    "Label",
+    "LockableSlider",
+    "Separator",
+    "SpinBox",
+    "Toggle",
     "VStack",
 ]

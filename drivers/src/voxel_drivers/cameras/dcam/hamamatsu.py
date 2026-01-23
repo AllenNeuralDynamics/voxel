@@ -3,12 +3,12 @@
 import time
 
 import numpy as np
-from ome_zarr_writer.types import Vec2D
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
-from voxel.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from voxel_drivers.utils import thread_safe_singleton
+from vxlib.vec import IVec2D, Vec2D
 
 from pyrig import describe
+from voxel.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxlib import thread_safe_singleton
 
 from .sdk.dcam import DCAM_IDSTR, DCAMERR, DCAMPROP_ATTR, Dcam, Dcamapi
 from .sdk.dcamapi4 import DCAMCAP_TRANSFERINFO
@@ -76,21 +76,19 @@ class HamamatsuCamera(Camera):
         self,
         uid: str,
         serial: str,
-        pixel_size_um: Vec2D[float] | tuple[float, float] = (6.5, 6.5),
+        pixel_size_um: Vec2D | tuple[float, float] | list[float] | str = (6.5, 6.5),
     ) -> None:
         """Initialize the Hamamatsu camera.
 
         Args:
             uid: Unique identifier for this device.
             serial: Camera serial number.
-            pixel_size_um: Physical pixel size in microns (x, y). Default is 6.5µm for ORCA.
+            pixel_size_um: Physical pixel size in microns (y, x). Default is 6.5µm for ORCA.
         """
         super().__init__(uid=uid)
 
         self._serial = str(serial)
-        self._pixel_size_um = (
-            Vec2D(x=pixel_size_um[0], y=pixel_size_um[1]) if isinstance(pixel_size_um, tuple) else pixel_size_um
-        )
+        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
         self._latest_frame: np.ndarray | None = None
         self._buffer_size_frames = 0
         self._dropped_frames = 0
@@ -130,7 +128,7 @@ class HamamatsuCamera(Camera):
         self._readout_direction_options = self._query_readout_direction_options()
 
         self.log.info(
-            f"Initialized Hamamatsu camera: serial={serial}, sensor={self._sensor_width}x{self._sensor_height}"
+            f"Initialized Hamamatsu camera: serial={serial}, sensor={self._sensor_width}x{self._sensor_height}",
         )
 
     @property
@@ -144,13 +142,13 @@ class HamamatsuCamera(Camera):
 
     @property
     @describe(label="Sensor Size", units="px", desc="The size of the camera sensor in pixels.")
-    def sensor_size_px(self) -> Vec2D[int]:
+    def sensor_size_px(self) -> IVec2D:
         """Get the size of the camera sensor in pixels."""
-        return Vec2D(x=self._sensor_width, y=self._sensor_height)
+        return IVec2D(y=self._sensor_height, x=self._sensor_width)
 
     @property
     @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D[float]:
+    def pixel_size_um(self) -> Vec2D:
         """Get the size of the camera pixel in microns."""
         return self._pixel_size_um
 
@@ -218,6 +216,7 @@ class HamamatsuCamera(Camera):
     @frame_rate_hz.setter
     def frame_rate_hz(self, value: float) -> None:
         """Set the frame rate of the camera in Hz."""
+        del value  # unused - frame rate controlled via line interval
         self.log.warning("Frame rate is controlled via line interval on Hamamatsu cameras")
 
     def _get_frame_time_ms(self) -> float:
@@ -392,6 +391,7 @@ class HamamatsuCamera(Camera):
     @describe(label="Start", desc="Start acquiring frames from the camera.")
     def start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames."""
+        del frame_count  # unused - continuous acquisition
         self.log.info("Starting camera acquisition")
         self._dropped_frames = 0
         self._pre_frame_time = time.time()

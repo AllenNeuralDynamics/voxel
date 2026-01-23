@@ -1,15 +1,12 @@
 from collections.abc import Iterable
 from threading import RLock
-from typing import TYPE_CHECKING
 
-from pyrig.utils import Poller
 from voxel_drivers.tigerhub.box import TigerBox
 from voxel_drivers.tigerhub.model.models import ASIAxisInfo
+from voxel_drivers.tigerhub.ops.params import TigerParams
 
 from pyrig import Device
-
-if TYPE_CHECKING:
-    from voxel_drivers.axes.asi import TigerLinearAxis
+from vxlib import Poller
 
 
 class UnknownAxisError(ValueError):
@@ -72,8 +69,6 @@ class TigerHub(Device):
         if not reserved_axes:
             return
 
-        from voxel_drivers.tigerhub.ops.params import TigerParams
-
         # Query configuration parameters
         try:
             speeds = self.box.get_param(TigerParams.SPEED, reserved_axes)
@@ -98,8 +93,8 @@ class TigerHub(Device):
                         self._state_cache[axis]["lower_limit"] = lower_limits[axis]
                     if axis in homes:
                         self._state_cache[axis]["home"] = homes[axis]
-        except Exception as e:
-            self.log.error(f"Error polling slow state: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Error polling slow state")
 
     def get_axis_state_cached(self, axis_label: str) -> dict:
         """Get the cached state for a given axis."""
@@ -138,10 +133,3 @@ class TigerHub(Device):
         self.log.info("Releasing axis %s", uid)
         with self._lock:
             self._reserved.discard(uid.upper())
-
-    def make_linear_axis(self, *, uid: str, asi_label: str | None = None) -> "TigerLinearAxis":
-        """Reserve and return a TigerLinearAxis bound to a Tiger UID."""
-        from voxel_drivers.axes.asi import TigerLinearAxis
-
-        asi_label = asi_label or uid.upper()
-        return TigerLinearAxis(hub=self, uid=uid, axis_label=asi_label)

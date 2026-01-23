@@ -1,16 +1,15 @@
 """Laser device control widget."""
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any, cast
 
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )
+
+from voxel_qt.handle import DeviceHandleQt
 from voxel_qt.ui.primitives.containers import CardDark
 from voxel_qt.ui.primitives.display import Chip, Label
 from voxel_qt.ui.primitives.input import LockableSlider, Toggle
@@ -22,9 +21,7 @@ from voxel_qt.ui.theme import (
     lighten_color,
     wavelength_to_hex,
 )
-
-if TYPE_CHECKING:
-    from voxel_qt.handle import DeviceHandleQt
+from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -92,9 +89,7 @@ class LaserControl(QWidget):
 
         # Content container
         content = CardDark(border_radius=BorderRadius.LG)
-        existing_layout = content.layout()
-        assert isinstance(existing_layout, QVBoxLayout)
-        content_layout = existing_layout
+        content_layout = cast("QVBoxLayout", content.layout())
         content_layout.setSpacing(Spacing.SM)
 
         # Header row: wavelength chip + stretch + power label + toggle
@@ -168,12 +163,12 @@ class LaserControl(QWidget):
     def _on_toggle_changed(self, checked: bool) -> None:
         """Handle enable toggle change."""
         command = "enable" if checked else "disable"
-        asyncio.create_task(self._adapter.call(command))
+        fire_and_forget(self._adapter.call(command), log=log)
         log.debug("Laser %s: %s", self._adapter.uid, command)
 
     def _on_power_changed(self, value: float) -> None:
         """Handle power setpoint change from slider."""
-        asyncio.create_task(self._adapter.set("power_setpoint_mw", value))
+        fire_and_forget(self._adapter.set("power_setpoint_mw", value), log=log)
         log.debug("Laser %s: set power_setpoint_mw = %.1f", self._adapter.uid, value)
 
     def update_power_range(self, min_val: float, max_val: float) -> None:

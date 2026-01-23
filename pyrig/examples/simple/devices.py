@@ -7,6 +7,7 @@ These devices demonstrate PyRig's capabilities with domain-relevant examples:
 """
 
 import random
+from typing import ClassVar
 
 from pyrig.device import Device, describe
 
@@ -15,7 +16,7 @@ class TemperatureController(Device):
     """Temperature controller for environmental control."""
 
     __DEVICE_TYPE__ = "temp-controller"
-    __COMMANDS__ = {"start_regulation", "stop_regulation", "reset"}
+    __COMMANDS__: ClassVar[set[str]] = {"start_regulation", "stop_regulation", "reset"}
 
     def __init__(self, uid: str, target_temp: float = 25.0):
         super().__init__(uid=uid)
@@ -91,7 +92,7 @@ class MotorStage(Device):
     """Single-axis motorized stage for positioning."""
 
     __DEVICE_TYPE__ = "motor-stage"
-    __COMMANDS__ = {"move_absolute", "move_relative", "home", "stop"}
+    __COMMANDS__: ClassVar[set[str]] = {"move_absolute", "move_relative", "home", "stop"}
 
     def __init__(self, uid: str, axis: str = "X", max_position: float = 100.0):
         super().__init__(uid=uid)
@@ -178,7 +179,7 @@ class Pump(Device):
     """Peristaltic pump for fluid handling."""
 
     __DEVICE_TYPE__ = "pump"
-    __COMMANDS__ = {"start", "stop", "dispense_volume"}
+    __COMMANDS__: ClassVar[set[str]] = {"start", "stop", "dispense_volume"}
 
     def __init__(self, uid: str, max_flow_rate: float = 100.0):
         super().__init__(uid=uid)

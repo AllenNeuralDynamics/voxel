@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from contextlib import suppress
 from typing import Any
 
 from pyrig.device import (
@@ -82,10 +83,8 @@ class LocalAdapter[D: Device](Adapter[D]):
         """Unsubscribe from raw byte streams."""
         full_topic = f"{self._controller.uid}/{topic}"
         if full_topic in self._stream_subscribers:
-            try:
+            with suppress(ValueError):
                 self._stream_subscribers[full_topic].remove(callback)
-            except ValueError:
-                pass  # Callback not in list
 
     async def close(self) -> None:
         """Release resources."""

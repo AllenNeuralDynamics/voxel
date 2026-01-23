@@ -1,10 +1,10 @@
 import random
 
 from pyrig.device.props import deliminated_float
-from voxel.aotf.base import AOTF
-from voxel.laser.base import Laser
 
 from pyrig import describe
+from voxel.aotf.base import AOTF
+from voxel.laser.base import Laser
 
 
 class SimulatedLaser(Laser):
@@ -90,7 +90,7 @@ class SimulatedAOTFShutteredLaser(Laser):
 
         self.log.info(
             f"Initialized SimulatedAOTFShutteredLaser: wavelength={wavelength}nm, "
-            f"aotf={aotf.uid} channel={aotf_channel}"
+            f"aotf={aotf.uid} channel={aotf_channel}",
         )
 
     def get_aotf(self) -> "AOTF":
@@ -185,7 +185,7 @@ class SimulatedAOTFModulatedLaser(Laser):
         self.log.info(
             f"Initialized SimulatedAOTFModulatedLaser: wavelength={wavelength}nm, "
             f"aotf={aotf.uid} channel={aotf_channel}, "
-            f"frequency={aotf_frequency_mhz}MHz"
+            f"frequency={aotf_frequency_mhz}MHz",
         )
 
     def get_aotf(self) -> "AOTF":

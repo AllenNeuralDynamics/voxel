@@ -1,5 +1,6 @@
 import logging
 import math
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, cast, final
 
@@ -17,8 +18,9 @@ from egrabber import (
     StreamModule,
     ct,
 )
-from ome_zarr_writer.types import Vec2D
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from vxlib.vec import IVec2D, Vec2D
+
 from voxel.camera.base import (
     Camera,
     FrameRegion,
@@ -27,8 +29,9 @@ from voxel.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from voxel.helpers import parse_vec2d
-from voxel_drivers.utils import thread_safe_singleton
+from vxlib import thread_safe_singleton
+
+DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 
 
 @thread_safe_singleton
@@ -131,14 +134,14 @@ class VieworksCamera(Camera):
         self,
         uid: str,
         serial: str,
-        pixel_size_um: Vec2D[float] | list[float] | str = Vec2D(y=1.0, x=1.0),
+        pixel_size_um: Vec2D | list[float] | str = DEFAULT_PIXEL_SIZE_UM,
     ):
         super().__init__(uid=uid)
-        self._pixel_size_um = parse_vec2d(pixel_size_um, rtype=float)
+        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
         self._dev = get_dev_by_serial(serial)
 
         # cache static properties
-        self._sensor_size_px: Vec2D[int] = self._query_sensor_size_px()
+        self._sensor_size_px: IVec2D = self._query_sensor_size_px()
         self._trigger_source_opts = self._query_trigger_sources()
         self._pixel_format_options: list[PixelFormat] = self._query_pixel_format_options()
 
@@ -150,11 +153,11 @@ class VieworksCamera(Camera):
         self._refresh_exposure_ms()
 
     @property
-    def sensor_size_px(self) -> Vec2D[int]:
+    def sensor_size_px(self) -> IVec2D:
         return self._sensor_size_px
 
     @property
-    def pixel_size_um(self) -> Vec2D[float]:
+    def pixel_size_um(self) -> Vec2D:
         return self._pixel_size_um
 
     @enumerated_string(options=lambda self: self._pixel_format_options)
@@ -281,7 +284,7 @@ class VieworksCamera(Camera):
         curr_source = self._dev.fetch_remote("TriggerSource", str)
         if "Line0" in self._trigger_source_opts and curr_source != "Line0":
             self._dev.remote.set("TriggerSource", "Line0")
-        # self._dev.remote.set('TriggerSelector', 'ExposureStart')
+        # consider:: self._dev.remote.set('TriggerSelector', 'ExposureStart')
 
     def _configure_trigger_polarity(self, polarity: TriggerPolarity) -> None:
         match polarity:
@@ -329,7 +332,8 @@ class VieworksCamera(Camera):
 
         with Buffer(self._dev.grabber, timeout=timeout_ms) as buffer:
             ptr = buffer.get_info(BUFFER_INFO_BASE, INFO_DATATYPE_PTR)
-            assert isinstance(ptr, int), f"Expected pointer to be of type int, got {type(ptr)}"
+            if not isinstance(ptr, int):
+                raise TypeError(f"Expected pointer to be of type int, got {type(ptr)}")
 
             # Get actual buffer dimensions directly from camera (not frame_size_px which divides by binning)
             # The camera's Width/Height already reflects hardware binning
@@ -397,10 +401,10 @@ class VieworksCamera(Camera):
             val=self._dev.fetch_remote("AcquisitionFrameRate", float),
         )
 
-    def _query_sensor_size_px(self) -> Vec2D[int]:
+    def _query_sensor_size_px(self) -> IVec2D:
         x = self._dev.fetch_remote(feature="SensorWidth", dtype=int)
         y = self._dev.fetch_remote(feature="SensorHeight", dtype=int)
-        return Vec2D(x=x, y=y)
+        return IVec2D(y=y, x=x)
 
     def _query_trigger_sources(self) -> set[str]:
         """Query the available trigger sources."""
@@ -410,11 +414,9 @@ class VieworksCamera(Camera):
         opts = set()
 
         for trigger_source in trigger_source_options:
-            try:
+            with suppress(Exception):
                 self._dev.remote.set("TriggerSource", trigger_source)
                 opts.add(trigger_source)
-            except Exception:  # noqa: BLE001, S110
-                pass
         # reset to initial value
         self._dev.remote.set("TriggerSource", init_trigger_source)
         return opts
@@ -435,7 +437,7 @@ class VieworksCamera(Camera):
                 try:
                     self._dev.remote.set("PixelFormat", option)
                     options.append(option.upper())
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     self.log.debug("Unexpected error processing pixel format: %s. Error: %s", option, e)
         finally:
             if initial:

@@ -5,6 +5,7 @@ when properties and methods are overridden in subclasses.
 """
 
 from abc import abstractmethod
+from typing import ClassVar
 
 from pyrig.device import Device, collect_commands, collect_properties, describe
 
@@ -17,7 +18,6 @@ class SensorBase(Device):
     @describe(label="Sensor Size", units="pixels", desc="Size of the sensor")
     def sensor_size(self) -> int:
         """Get sensor size."""
-        pass
 
     @property
     @describe(label="Sensor Temperature", units="°C", desc="Temperature of the sensor")
@@ -28,7 +28,6 @@ class SensorBase(Device):
     @describe(label="Reset Sensor", desc="Reset the sensor to defaults")
     def reset(self) -> None:
         """Reset sensor."""
-        pass
 
 
 class ConcreteSensor(SensorBase):
@@ -207,7 +206,7 @@ class TestCollectCommandsEdgeCases:
         """Test that __COMMANDS__ attribute is respected."""
 
         class DeviceWithCommands(Device):
-            __COMMANDS__ = {"special_command"}
+            __COMMANDS__: ClassVar[set[str]] = {"special_command"}
 
             def special_command(self):
                 return "special"

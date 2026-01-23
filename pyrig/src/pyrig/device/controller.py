@@ -1,7 +1,5 @@
 """Device controller - wraps a device and provides command execution, property access, and streaming."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
@@ -78,7 +76,7 @@ class DeviceController[D: Device]:
         """Set the publish function for this controller."""
         self._publish_fn = fn
 
-    async def _run_sync[R](self, fn: Callable[..., R], *args, **kwargs) -> R:
+    async def _run_sync[R](self, fn: Callable[..., R], *args: Any, **kwargs: Any) -> R:
         """Run a sync function in the thread pool."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._thread_pool, lambda: fn(*args, **kwargs))
@@ -95,7 +93,7 @@ class DeviceController[D: Device]:
                 result = await self._run_sync(cmd, *args, **kwargs)
             return CommandResponse(res=result)
         except Exception as e:
-            self.log.error(f"Command '{command}' failed: {e}", exc_info=True)
+            self.log.exception(f"Command '{command}' failed")
             return CommandResponse(res=ErrorMsg(msg=str(e)))
 
     async def get_props(self, *props: str) -> PropsResponse:
@@ -163,8 +161,8 @@ class DeviceController[D: Device]:
                 await asyncio.sleep(self._stream_interval)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                self.log.error(f"Stream loop error: {e}", exc_info=True)
+            except Exception:
+                self.log.exception("Stream loop error")
                 await asyncio.sleep(self._stream_interval)
 
     def close(self) -> None:

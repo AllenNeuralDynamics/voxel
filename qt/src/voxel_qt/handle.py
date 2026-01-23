@@ -3,10 +3,10 @@
 import logging
 from typing import Any
 
+from pyrig.device import PropsResponse
 from PySide6.QtCore import QObject, Signal
 
 from pyrig import DeviceHandle
-from pyrig.device import PropsResponse
 
 
 class DeviceHandleQt(QObject):
@@ -99,10 +99,9 @@ class DeviceHandleQt(QObject):
             Exception: If command fails
         """
         try:
-            result = await self._handle.call(command, *args, **kwargs)
-            return result
+            return await self._handle.call(command, *args, **kwargs)
         except Exception as e:
-            self.log.error(f"Command {command} failed: {e}")
+            self.log.exception(f"Command {command} failed")
             self.fault.emit(f"Command {command} failed: {e}")
             raise
 

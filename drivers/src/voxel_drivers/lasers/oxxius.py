@@ -7,9 +7,9 @@ from typing import Literal
 
 from pyrig.device.props import deliminated_float, enumerated_string
 from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
-from voxel.laser.base import Laser
 
 from pyrig import Device, describe
+from voxel.laser.base import Laser
 
 # ==================== Protocol Constants ====================
 

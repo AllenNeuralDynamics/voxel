@@ -1,19 +1,21 @@
 import asyncio
 from abc import abstractmethod
+from contextlib import suppress
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal, cast
 
 import numpy as np
-from ome_zarr_writer.types import Dtype, SchemaModel, Vec2D
 from pydantic import BaseModel
 from pyrig.device import DeviceController
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from vxlib.vec import IVec2D, Vec2D
 
 from pyrig import Device, describe
-from voxel.camera.preview import PreviewCrop, PreviewGenerator, PreviewLevels
+from voxel.camera.preview import PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
 from voxel.device import DeviceType
+from vxlib import Dtype, SchemaModel, fire_and_forget
 
 
 class FrameRegion(BaseModel):
@@ -106,13 +108,13 @@ class Camera(Device):
     @property
     @abstractmethod
     @describe(label="Sensor Size", units="px")
-    def sensor_size_px(self) -> Vec2D[int]:
+    def sensor_size_px(self) -> IVec2D:
         """Get the size of the camera sensor in pixels."""
 
     @property
     @abstractmethod
     @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D[float]:
+    def pixel_size_um(self) -> Vec2D:
         """Get the size of the camera pixel in microns."""
 
     @enumerated_string(options=list(PIXEL_FMT_TO_DTYPE.keys()))
@@ -129,7 +131,7 @@ class Camera(Device):
     @describe(label="Pixel Type")
     def pixel_type(self) -> Dtype:
         """Get the pixel type of the camera."""
-        return PIXEL_FMT_TO_DTYPE[cast(PixelFormat, str(self.pixel_format))]
+        return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
 
     @enumerated_int(options=BINNING_OPTIONS)
     @abstractmethod
@@ -196,9 +198,9 @@ class Camera(Device):
 
     @property
     @describe(label="Frame Size", units="px")
-    def frame_size_px(self) -> Vec2D[int]:
+    def frame_size_px(self) -> IVec2D:
         """Get the image size in pixels (post-binning frame coordinates)."""
-        return Vec2D(x=int(self.frame_region.width), y=int(self.frame_region.height))
+        return IVec2D(y=int(self.frame_region.height), x=int(self.frame_region.width))
 
     @property
     @describe(label="Frame Size", units="MB")
@@ -208,7 +210,7 @@ class Camera(Device):
 
     @property
     @describe(label="Frame Area", units="mm")
-    def frame_area_mm(self) -> Vec2D[float]:
+    def frame_area_mm(self) -> Vec2D:
         """Get the physical frame size in millimeters."""
         return Vec2D(
             x=self.frame_size_px.x * self.pixel_size_um.x / 1000.0,
@@ -300,14 +302,11 @@ class CameraController(DeviceController[Camera]):
     def mode(self) -> CameraMode:
         return self._mode
 
-    def _on_preview_frame(self, frame) -> None:
+    def _on_preview_frame(self, frame: PreviewFrame) -> None:
         if self._preview_task is None or self._mode != CameraMode.PREVIEW:
             return
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self.publish("preview", frame.pack()))
-        except RuntimeError:
-            pass
+        with suppress(RuntimeError):
+            fire_and_forget(self.publish("preview", frame.pack()), log=self.log)
 
     @describe(label="Update Preview Crop")
     async def update_preview_crop(self, crop: PreviewCrop):
@@ -421,6 +420,6 @@ class CameraController(DeviceController[Camera]):
                 self._frame_idx += 1
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            self.log.error(f"Preview loop error: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Preview loop error")
             self._mode = CameraMode.IDLE

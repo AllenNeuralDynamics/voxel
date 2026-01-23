@@ -34,5 +34,5 @@ class PropertyModel[T: str | int | float](BaseModel):
         return self
 
 
-def get_descriptor_logger(*, fget: Callable):
+def get_descriptor_logger(*, fget: Callable) -> logging.Logger:
     return logging.getLogger(fget.__qualname__.split(".")[0] + "." + fget.__name__)

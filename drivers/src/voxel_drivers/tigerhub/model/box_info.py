@@ -134,7 +134,6 @@ def infer_comm_addr_from_who(cards: Iterable[CardInfo]) -> int | None:
     Strategy 2: pick the card with no axes (likely the backplane).
     Strategy 3: pick the smallest address (stable fallback).
     """
-
     # Strategy 1: pick the card with 'COMM' in its board name.
     for c in cards:
         if c.board and "COMM" in c.board.upper():

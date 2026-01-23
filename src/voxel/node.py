@@ -13,7 +13,6 @@ import sys
 
 from pyrig.cluster import run_node_service
 from pyrig.device import Adapter, DeviceController
-from pyrig.utils import configure_logging
 
 from pyrig import Device, DeviceHandle, RigNode
 from voxel.axes.continuous.base import ContinuousAxis, ContinuousAxisController
@@ -22,6 +21,7 @@ from voxel.camera.base import Camera, CameraController
 from voxel.camera.handle import CameraHandle
 from voxel.daq import DaqController, DaqHandle, VoxelDaq
 from voxel.device import DeviceType
+from vxlib import configure_logging
 
 
 class VoxelNode(RigNode):
@@ -85,7 +85,7 @@ def node_main() -> None:
         try:
             ctrl_port = int(port_str)
         except ValueError:
-            log.error("Invalid port in --rig argument: %s", port_str)
+            log.exception("Invalid port in --rig argument: %s", port_str)
             sys.exit(1)
     else:
         ctrl_host = args.rig

@@ -4,23 +4,21 @@ This service handles rig operations: profiles, preview, devices, DAQ.
 It receives a broadcast callback from SessionService for client communication.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Protocol
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from voxel.camera.preview import PreviewCrop, PreviewLevels
-from voxel.config import VoxelRigConfig
+from pyrig.device import PropsResponse
 
 from voxel import VoxelRig
-
-if TYPE_CHECKING:
-    from pyrig.device import PropsResponse
+from voxel.camera.preview import PreviewCrop, PreviewLevels
+from voxel.config import VoxelRigConfig
+from vxlib import fire_and_forget
 
 router = APIRouter(tags=["rig"])
 log = logging.getLogger(__name__)
@@ -34,7 +32,7 @@ class BroadcastCallback(Protocol):
 
 def _utc_timestamp() -> str:
     """Return an ISO 8601 timestamp in UTC."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class RigService:
@@ -49,7 +47,7 @@ class RigService:
         self._preview_lock = asyncio.Lock()
 
         # Subscribe to device property streams in background
-        asyncio.create_task(self._subscribe_to_device_streams())
+        fire_and_forget(self._subscribe_to_device_streams(), log=log)
 
     async def handle_message(self, topic: str, payload: dict[str, Any]) -> bool:
         """Handle rig-related messages. Returns True if handled."""
@@ -75,7 +73,7 @@ class RigService:
                     return False
             return True
         except Exception as e:
-            log.error("Error handling rig message %s: %s", topic, e, exc_info=True)
+            log.exception("Error handling rig message %s", topic)
             self._broadcast({"topic": "error", "payload": {"error": str(e), "topic": topic}})
             return True
 
@@ -138,15 +136,16 @@ class RigService:
 
         levels = PreviewLevels(min=payload.get("min", 0), max=payload.get("max", 255))
 
-        if channel := self.rig.active_channels.get(channel_id):
-            if camera := self.rig.cameras.get(channel.detection):
-                await camera.update_preview_levels(levels)
-                self._broadcast(
-                    {
-                        "topic": "preview/levels",
-                        "payload": {"channel": channel_id, "min": levels.min, "max": levels.max},
-                    }
-                )
+        if (channel := self.rig.active_channels.get(channel_id)) and (
+            camera := self.rig.cameras.get(channel.detection)
+        ):
+            await camera.update_preview_levels(levels)
+            self._broadcast(
+                {
+                    "topic": "preview/levels",
+                    "payload": {"channel": channel_id, "min": levels.min, "max": levels.max},
+                },
+            )
 
     async def _distribute_frames(self, channel: str, packed_frame: bytes) -> None:
         """Callback that distributes preview frames to all clients.
@@ -210,7 +209,11 @@ class RigService:
         return {"device": device_id, **result.model_dump()}
 
     async def execute_device_command(
-        self, device_id: str, command: str, args: list[Any], kwargs: dict[str, Any]
+        self,
+        device_id: str,
+        command: str,
+        args: list[Any],
+        kwargs: dict[str, Any],
     ) -> dict[str, Any]:
         """Execute a command on a device and broadcast result to all clients."""
         client = self.rig.handles.get(device_id)
@@ -236,16 +239,15 @@ class RigService:
 
     async def _subscribe_to_device_streams(self):
         """Subscribe to device streams and forward them to WebSocket clients."""
-
         for device_id, handle in self.rig.handles.items():
 
-            def make_forwarder(dev_id: str):
-                async def forwarder(props: PropsResponse):
+            def make_forwarder(dev_id: str) -> Callable[[PropsResponse], Awaitable[None]]:
+                async def forwarder(props: PropsResponse) -> None:
                     try:
                         payload = props.model_dump()
                         self._broadcast({"topic": f"device/{dev_id}/properties", "payload": payload})
-                    except Exception as e:
-                        log.error(f"Error forwarding properties for {dev_id}: {e}")
+                    except Exception:
+                        log.exception(f"Error forwarding properties for {dev_id}")
 
                 return forwarder
 
@@ -256,12 +258,12 @@ class RigService:
 
     async def _broadcast_waveforms(self):
         """Broadcast DAQ waveforms to all clients."""
-        if self.rig._sync_task:
+        if self.rig.sync_task:
             try:
-                waveforms = self.rig._sync_task.get_written_waveforms(target_points=1000)
+                waveforms = self.rig.sync_task.get_written_waveforms(target_points=1000)
                 self._broadcast({"topic": "daq/waveforms", "payload": waveforms})
-            except Exception as e:
-                log.error(f"Failed to get waveforms: {e}")
+            except Exception:
+                log.exception("Failed to get waveforms")
 
     @property
     def is_previewing(self) -> bool:
@@ -289,7 +291,7 @@ def get_rig_service(request: Request) -> RigService:
 
 
 @router.get("/config")
-async def get_config(rig: VoxelRig = Depends(get_rig)) -> VoxelRigConfig:
+async def get_config(rig: Annotated[VoxelRig, Depends(get_rig)]) -> VoxelRigConfig:
     """Get the full rig configuration."""
     return rig.config
 
@@ -301,7 +303,10 @@ class SetProfileRequest(BaseModel):
 
 
 @router.post("/profiles/active")
-async def set_active_profile(request: SetProfileRequest, service: RigService = Depends(get_rig_service)) -> dict:
+async def set_active_profile(
+    request: SetProfileRequest,
+    service: Annotated[RigService, Depends(get_rig_service)],
+) -> dict:
     """Set the active profile via REST API.
 
     This will configure devices (filter wheels, etc.) for the new profile.
@@ -316,15 +321,15 @@ async def set_active_profile(request: SetProfileRequest, service: RigService = D
             "timestamp": _utc_timestamp(),
         }
     except ValueError as e:
-        log.error(f"ValueError setting active profile to '{request.profile_id}': {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        log.exception(f"ValueError setting active profile to '{request.profile_id}'")
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        log.error(f"Failed to set active profile to '{request.profile_id}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to set active profile: {str(e)}")
+        log.exception(f"Failed to set active profile to '{request.profile_id}'")
+        raise HTTPException(status_code=500, detail=f"Failed to set active profile: {e!s}") from e
 
 
 @router.get("/devices")
-async def list_devices(rig: VoxelRig = Depends(get_rig)) -> dict:
+async def list_devices(rig: Annotated[VoxelRig, Depends(get_rig)]) -> dict:
     """Get list of all devices with their interfaces."""
     devices_info = {}
 
@@ -353,14 +358,15 @@ async def list_devices(rig: VoxelRig = Depends(get_rig)) -> dict:
 @router.get("/devices/{device_id}/properties")
 async def get_device_properties(
     device_id: str,
-    rig: VoxelRig = Depends(get_rig),
+    rig: Annotated[VoxelRig, Depends(get_rig)],
     props: list[str] | None = None,
 ) -> dict:
     """Get property values from a device."""
+    client = rig.handles.get(device_id)
+    if not client:
+        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found")
+
     try:
-        client = rig.handles.get(device_id)
-        if not client:
-            raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found")
 
         if props:
             result = await client.get_props(*props)
@@ -374,29 +380,27 @@ async def get_device_properties(
             **result.model_dump(),
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
-        log.error(f"Failed to get properties from device {device_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        log.exception(f"Failed to get properties from device {device_id}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.patch("/devices/{device_id}/properties")
 async def set_device_properties_endpoint(
     device_id: str,
     properties: dict[str, Any],
-    service: RigService = Depends(get_rig_service),
+    service: Annotated[RigService, Depends(get_rig_service)],
 ) -> dict:
     """Set one or more properties on a device."""
     try:
         return await service.set_device_properties(device_id, properties)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"Failed to set properties on device {device_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        log.exception(f"Failed to set properties on device {device_id}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 class ExecuteCommandRequest(BaseModel):
@@ -410,16 +414,18 @@ class ExecuteCommandRequest(BaseModel):
 async def execute_device_command_endpoint(
     device_id: str,
     command_name: str,
-    request: ExecuteCommandRequest = ExecuteCommandRequest(),
-    service: RigService = Depends(get_rig_service),
+    service: Annotated[RigService, Depends(get_rig_service)],
+    request: ExecuteCommandRequest | None = None,
 ) -> dict:
     """Execute a command on a device."""
+    if request is None:
+        request = ExecuteCommandRequest()
     try:
         return await service.execute_device_command(device_id, command_name, request.args, request.kwargs)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"Failed to execute command {command_name} on device {device_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        log.exception(f"Failed to execute command {command_name} on device {device_id}")
+        raise HTTPException(status_code=500, detail=str(e)) from e

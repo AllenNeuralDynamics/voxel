@@ -1,0 +1,20 @@
+[project]
+name = "vxlib"
+version = "0.1.0"
+description = "Shared types and utilities"
+readme = "README.md"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+rich = ["rich>=14.0.0"]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"

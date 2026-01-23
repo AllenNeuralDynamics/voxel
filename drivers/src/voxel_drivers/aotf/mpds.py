@@ -6,6 +6,7 @@ pyrig device framework.
 
 from aaopto_aotf.aotf import MAX_POWER_DBM, MPDS
 from aaopto_aotf.device_codes import BlankingMode, InputMode
+
 from voxel.aotf.base import AOTF
 
 
@@ -51,7 +52,7 @@ class MpdsAotf(AOTF):
 
         self.log.info(
             f"Initialized MPDS AOTF on {com_port} with {self._mpds.num_channels} channels, "
-            f"blanking={blanking_mode}, input_mode={default_input_mode}"
+            f"blanking={blanking_mode}, input_mode={default_input_mode}",
         )
 
     @property

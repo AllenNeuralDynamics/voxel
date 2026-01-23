@@ -13,18 +13,20 @@ Not run as part of pytest because subprocess management can hang.
 
 import asyncio
 import sys
+import traceback
+from typing import ClassVar
 
 import zmq.asyncio
+from pyrig.device import describe
 
 from pyrig import Device, Rig, RigConfig
-from pyrig.device import describe
 
 
 class MockLaser(Device):
     """A mock laser device for testing."""
 
     __DEVICE_TYPE__ = "laser"
-    __COMMANDS__ = {"enable", "disable"}
+    __COMMANDS__: ClassVar[set[str]] = {"enable", "disable"}
 
     def __init__(self, uid: str, max_power: float = 100.0):
         super().__init__(uid=uid)
@@ -82,7 +84,7 @@ async def test_distributed_rig():
                     },
                 },
             },
-        }
+        },
     )
 
     zctx = zmq.asyncio.Context()
@@ -132,8 +134,6 @@ async def test_distributed_rig():
 
     except Exception as e:
         print(f"\n✗ ERROR: {e}")
-        import traceback
-
         traceback.print_exc()
         return False
 

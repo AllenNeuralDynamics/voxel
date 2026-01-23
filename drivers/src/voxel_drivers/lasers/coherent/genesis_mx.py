@@ -3,6 +3,7 @@
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX as GenesisMXDriver
 from pyrig.device.props import deliminated_float
+
 from voxel.laser.base import Laser
 
 
@@ -26,11 +27,16 @@ class GenesisMX(Laser):
 
         try:
             self._inst = GenesisMXDriver(serial=serial)
-            if self._inst.head.serial != serial:
-                raise ValueError(f"Serial number mismatch: expected {serial}, got {self._inst.head.serial}")
-            self._inst.mode = OperationModes.PHOTO
         except Exception as e:
             raise RuntimeError(f"Failed to initialize Genesis MX laser {serial}: {e}") from e
+
+        if self._inst.head.serial != serial:
+            raise ValueError(f"Serial number mismatch: expected {serial}, got {self._inst.head.serial}")
+
+        try:
+            self._inst.mode = OperationModes.PHOTO
+        except Exception as e:
+            raise RuntimeError(f"Failed to set Genesis MX laser mode: {e}") from e
 
         super().__init__(uid=uid, wavelength=wavelength)
 

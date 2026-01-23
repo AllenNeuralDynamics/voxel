@@ -9,8 +9,6 @@ from voxel.device import DeviceType
 class ChannelCollisionError(Exception):
     """Raised when a device tries to register an already-claimed AOTF channel."""
 
-    pass
-
 
 class AOTF(Device):
     """Base class for AOTF (Acousto-Optic Tunable Filter) devices.
@@ -51,7 +49,7 @@ class AOTF(Device):
             if existing_owner != device_id:
                 raise ChannelCollisionError(
                     f"AOTF {self.uid} channel {channel} is already registered to "
-                    f"'{existing_owner}', cannot register '{device_id}'"
+                    f"'{existing_owner}', cannot register '{device_id}'",
                 )
             # Same device re-registering is a no-op
             return

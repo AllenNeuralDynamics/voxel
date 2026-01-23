@@ -15,8 +15,9 @@ import argparse
 import logging
 
 import uvicorn
-from pyrig.utils import configure_logging, get_local_ip, get_uvicorn_log_config
+
 from voxel_studio.app import create_app
+from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -61,7 +62,7 @@ def main() -> None:
 
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="0.0.0.0",  # noqa: S104 :: allow bind all
         port=args.port,
         log_config=get_uvicorn_log_config(),
     )

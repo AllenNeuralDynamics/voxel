@@ -1,23 +1,20 @@
 """Camera device control widget."""
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any, cast
 
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )
+
+from voxel_qt.handle import DeviceHandleQt
 from voxel_qt.ui.primitives.containers import CardDark
 from voxel_qt.ui.primitives.display import Label
 from voxel_qt.ui.primitives.input import LockableSlider, Select
 from voxel_qt.ui.theme import BorderRadius, Colors, Spacing
-
-if TYPE_CHECKING:
-    from voxel_qt.handle import DeviceHandleQt
+from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -67,9 +64,7 @@ class CameraControl(QWidget):
 
         # Content container
         content = CardDark(border_radius=BorderRadius.LG)
-        existing_layout = content.layout()
-        assert isinstance(existing_layout, QVBoxLayout)
-        content_layout = existing_layout
+        content_layout = cast("QVBoxLayout", content.layout())
         content_layout.setSpacing(Spacing.XS)
 
         # Row 1: Camera label + frame info
@@ -165,17 +160,17 @@ class CameraControl(QWidget):
 
     def _on_exposure_changed(self, value: float) -> None:
         """Handle exposure time change."""
-        asyncio.create_task(self._adapter.set("exposure_time_ms", value))
+        fire_and_forget(self._adapter.set("exposure_time_ms", value), log=log)
         log.debug("Camera %s: set exposure_time_ms = %.2f", self._adapter.uid, value)
 
     def _on_format_changed(self, value: Any) -> None:
         """Handle pixel format change."""
-        asyncio.create_task(self._adapter.set("pixel_format", value))
+        fire_and_forget(self._adapter.set("pixel_format", value), log=log)
         log.debug("Camera %s: set pixel_format = %s", self._adapter.uid, value)
 
     def _on_binning_changed(self, value: Any) -> None:
         """Handle binning change."""
-        asyncio.create_task(self._adapter.set("binning", value))
+        fire_and_forget(self._adapter.set("binning", value), log=log)
         log.debug("Camera %s: set binning = %s", self._adapter.uid, value)
 
     def update_exposure_range(self, min_val: float, max_val: float) -> None:

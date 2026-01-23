@@ -5,6 +5,7 @@ from typing import Any
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QComboBox, QWidget
+
 from voxel_qt.ui.theme import Colors, FontSize, Size
 
 

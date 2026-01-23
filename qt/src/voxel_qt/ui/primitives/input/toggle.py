@@ -12,6 +12,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QBrush, QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QCheckBox, QSizePolicy, QVBoxLayout, QWidget
+
 from voxel_qt.ui.theme import BorderRadius
 
 

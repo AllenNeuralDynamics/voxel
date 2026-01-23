@@ -1,22 +1,18 @@
 """Channel section widget combining device controls for a single channel."""
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from voxel.config import ChannelConfig
+from voxel_qt.devices import DevicesManager
 from voxel_qt.ui.controls.camera import CameraControl
 from voxel_qt.ui.controls.laser import LaserControl
 from voxel_qt.ui.primitives.display import Label
 from voxel_qt.ui.theme import Colors, Spacing
-
-if TYPE_CHECKING:
-    from voxel.config import ChannelConfig
-    from voxel_qt.devices import DevicesManager
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +40,7 @@ class ChannelSection(QWidget):
         label_text = (channel_config.label or channel_id).upper()
         self._label = Label(label_text, variant="section", color=Colors.TEXT)
         self._label.setStyleSheet(
-            self._label.styleSheet() + f"padding-bottom: {Spacing.XS}px; border-bottom: 1px solid {Colors.BORDER};"
+            self._label.styleSheet() + f"padding-bottom: {Spacing.XS}px; border-bottom: 1px solid {Colors.BORDER};",
         )
         layout.addWidget(self._label)
 

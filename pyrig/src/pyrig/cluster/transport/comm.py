@@ -34,10 +34,10 @@ class DeviceAddress(BaseModel, ABC):
     @abstractmethod
     def pub_addr(self) -> str: ...
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"rpc_addr={self.rpc_addr} pub_addr={self.pub_addr}"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(rpc_addr={self.rpc_addr}, pub_addr={self.pub_addr})"
 
 
@@ -48,6 +48,7 @@ class DeviceAddressTCP(DeviceAddress):
     pub: int = Field(..., ge=1, le=65535)
 
     @field_validator("host", mode="before")
+    @classmethod
     def validate_host(cls, value: str) -> str:
         host = value.strip()
         if host.count(":") >= 2 and not host.startswith("[") and not host.endswith("]"):
@@ -74,7 +75,7 @@ class DeviceAddressTCP(DeviceAddress):
         return DeviceAddressTCP(host="127.0.0.1", rpc=self.rpc, pub=self.pub)
 
     def as_open(self) -> "DeviceAddressTCP":
-        return DeviceAddressTCP(host="0.0.0.0", rpc=self.rpc, pub=self.pub)
+        return DeviceAddressTCP(host="0.0.0.0", rpc=self.rpc, pub=self.pub)  # noqa: S104 :: allow bind all
 
 
 class DeviceAddressIPC(DeviceAddress):

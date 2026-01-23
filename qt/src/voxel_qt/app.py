@@ -9,10 +9,7 @@ This module provides the central application state for Voxel Qt, managing:
 Uses Qt signals for state change notifications, enabling reactive UI updates.
 """
 
-from __future__ import annotations
-
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QObject, Signal
@@ -27,9 +24,10 @@ from voxel_studio.system import (
 )
 
 from voxel import Session
+from voxel_qt.devices import DevicesManager
 
 if TYPE_CHECKING:
-    from voxel_qt.devices import DevicesManager
+    from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -148,8 +146,8 @@ class VoxelQtApp(QObject):
             return []
         try:
             return self._system_config.list_sessions(root_name)
-        except Exception as e:
-            log.error("Failed to list sessions for root '%s': %s", root_name, e)
+        except Exception:
+            log.exception("Failed to list sessions for root '%s'", root_name)
             return []
 
     def list_all_sessions(self) -> list[SessionDirectory]:
@@ -222,8 +220,6 @@ class VoxelQtApp(QObject):
             log.info("Session launched: %s", session_dir)
 
             # Initialize device manager
-            from voxel_qt.devices import DevicesManager
-
             self._devices = DevicesManager(self._session, parent=self)
             await self._devices.start()
             log.info("DevicesManager started")

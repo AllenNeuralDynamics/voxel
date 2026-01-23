@@ -2,7 +2,7 @@
 
 from pyrig.device import DeviceHandle
 
-from .base import AcqSampleMode, PinInfo, VoxelDaq, TaskInfo
+from .base import AcqSampleMode, PinInfo, TaskInfo, VoxelDaq
 
 
 class DaqHandle(DeviceHandle[VoxelDaq]):
@@ -101,9 +101,9 @@ class DaqHandle(DeviceHandle[VoxelDaq]):
         """Configure digital edge start trigger for CO task."""
         await self.call("configure_co_trigger", task_name, trigger_source, retriggerable)
 
-    async def wait_for_task(self, task_name: str, timeout: float) -> None:
+    async def wait_for_task(self, task_name: str, timeout_s: float) -> None:
         """Wait for a task to complete."""
-        await self.call("wait_for_task", task_name, timeout)
+        await self.call("wait_for_task", task_name, timeout_s)
 
     # ==================== Lifecycle ====================
 
@@ -165,14 +165,14 @@ class DaqHandle(DeviceHandle[VoxelDaq]):
             pulse_data = [voltage_v] * num_samples
             await self.write_ao_task(task_name, pulse_data)
             await self.start_task(task_name)
-            await self.wait_for_task(task_name, timeout=duration_s + 1.0)
+            await self.wait_for_task(task_name, timeout_s=duration_s + 1.0)
             await self.stop_task(task_name)
 
             # Return to rest (0V)
             rest_data = [0.0] * num_samples
             await self.write_ao_task(task_name, rest_data)
             await self.start_task(task_name)
-            await self.wait_for_task(task_name, timeout=duration_s + 1.0)
+            await self.wait_for_task(task_name, timeout_s=duration_s + 1.0)
 
         finally:
             # Always clean up the task

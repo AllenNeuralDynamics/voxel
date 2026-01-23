@@ -10,7 +10,8 @@ from nidaqmx.errors import DaqError
 from nidaqmx.system import System as NiSystem
 from nidaqmx.system.device import Device as NiDevice
 from nidaqmx.task import Task as NiTask
-from voxel.daq import AcqSampleMode, AOTask, COTask, PinInfo, VoxelDaq, TaskStatus
+
+from voxel.daq import AcqSampleMode, AOTask, COTask, PinInfo, TaskStatus, VoxelDaq
 from voxel.quantity import VoltageRange
 
 

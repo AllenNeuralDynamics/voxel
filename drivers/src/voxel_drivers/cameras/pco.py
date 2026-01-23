@@ -4,11 +4,11 @@ from enum import StrEnum
 
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
-from ome_zarr_writer.types import Vec2D
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
-from voxel.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxlib.vec import IVec2D, Vec2D
 
 from pyrig import describe
+from voxel.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
 
 # Buffer size in MB for frame storage
 BUFFER_SIZE_MB = 2400
@@ -50,21 +50,19 @@ class PCOCamera(Camera):
         self,
         uid: str,
         interface: str = "Camera Link Silicon Software",
-        pixel_size_um: Vec2D[float] | tuple[float, float] = (6.5, 6.5),
+        pixel_size_um: Vec2D | tuple[float, float] | list[float] | str = (6.5, 6.5),
     ) -> None:
         """Initialize the PCO camera.
 
         Args:
             uid: Unique identifier for this device.
             interface: Camera interface name (e.g., "Camera Link Silicon Software").
-            pixel_size_um: Physical pixel size in microns (x, y). Default is 6.5µm for PCO Edge.
+            pixel_size_um: Physical pixel size in microns (y, x). Default is 6.5µm for PCO Edge.
         """
         super().__init__(uid=uid)
 
         self._interface = interface
-        self._pixel_size_um = (
-            Vec2D(x=pixel_size_um[0], y=pixel_size_um[1]) if isinstance(pixel_size_um, tuple) else pixel_size_um
-        )
+        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
         self._latest_frame: np.ndarray | None = None
         self._buffer_size_frames = 0
 
@@ -80,20 +78,20 @@ class PCOCamera(Camera):
         self._trigger_modes = self._query_trigger_modes()
 
         self.log.info(
-            f"Initialized PCO camera: interface={interface}, sensor={self._sensor_width}x{self._sensor_height}"
+            f"Initialized PCO camera: interface={interface}, sensor={self._sensor_width}x{self._sensor_height}",
         )
 
     # ==================== Sensor Properties ====================
 
     @property
     @describe(label="Sensor Size", units="px", desc="The size of the camera sensor in pixels.")
-    def sensor_size_px(self) -> Vec2D[int]:
+    def sensor_size_px(self) -> IVec2D:
         """Get the size of the camera sensor in pixels."""
-        return Vec2D(x=self._sensor_width, y=self._sensor_height)
+        return IVec2D(y=self._sensor_height, x=self._sensor_width)
 
     @property
     @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D[float]:
+    def pixel_size_um(self) -> Vec2D:
         """Get the size of the camera pixel in microns."""
         return self._pixel_size_um
 
@@ -151,7 +149,7 @@ class PCOCamera(Camera):
     @frame_rate_hz.setter
     def frame_rate_hz(self, value: float) -> None:
         """Set the frame rate of the camera in Hz."""
-        # PCO frame rate is controlled via line timing
+        del value  # unused - frame rate controlled via line timing
         self.log.warning("Frame rate is controlled via line timing on PCO cameras")
 
     def _get_frame_time_ms(self) -> float:
@@ -299,6 +297,7 @@ class PCOCamera(Camera):
         Note: PCO cameras start recording when record() is called in _prepare_for_capture().
         This method is a no-op since acquisition is already running.
         """
+        del frame_count  # unused - continuous acquisition
         self.log.info("Camera acquisition already started via record()")
 
     @describe(label="Grab Frame", desc="Grab a single frame from the camera buffer.")

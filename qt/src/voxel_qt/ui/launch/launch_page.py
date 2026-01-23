@@ -6,11 +6,7 @@ The launch page is shown when no session is active. It allows users to:
 - View application logs
 """
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
@@ -20,14 +16,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from voxel_studio.system import SessionDirectory
+
+from voxel_qt.app import VoxelQtApp
 from voxel_qt.ui.launch.new_session_form import NewSessionForm
 from voxel_qt.ui.launch.session_list import SessionList
 from voxel_qt.ui.primitives.display import Label
 from voxel_qt.ui.theme import Colors
-
-if TYPE_CHECKING:
-    from voxel_qt.app import VoxelQtApp
-    from voxel_studio.system import SessionDirectory
+from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -213,13 +209,13 @@ class LaunchPage(QWidget):
     def _on_new_session_requested(self, root_name: str, session_name: str, rig_config: str) -> None:
         """Handle new session request."""
         log.info("Creating new session: %s/%s with rig %s", root_name, session_name, rig_config)
-        asyncio.create_task(self._launch_session(root_name, session_name, rig_config))
+        fire_and_forget(self._launch_session(root_name, session_name, rig_config), log=log)
 
     @Slot(object)
     def _on_session_selected(self, session: SessionDirectory) -> None:
         """Handle session selection (resume)."""
         log.info("Resuming session: %s/%s", session.root_name, session.name)
-        asyncio.create_task(self._launch_session(session.root_name, session.name))
+        fire_and_forget(self._launch_session(session.root_name, session.name), log=log)
 
     async def _launch_session(
         self,
@@ -230,8 +226,8 @@ class LaunchPage(QWidget):
         """Launch a session asynchronously."""
         try:
             await self._app.launch_session(root_name, session_name, rig_config)
-        except Exception as e:
-            log.error("Failed to launch session: %s", e)
+        except Exception:
+            log.exception("Failed to launch session")
 
     def showEvent(self, event) -> None:
         """Refresh data when shown."""

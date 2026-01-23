@@ -3,10 +3,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from voxel.axes.continuous.base import ContinuousAxis, TTLStepper
 from voxel_drivers.axes.asi import TigerLinearAxis
 from voxel_drivers.tigerhub.hub import TigerHub
 from voxel_drivers.tigerhub.ops.scan import ScanPattern, ScanRConfig, ScanVConfig
+
+from voxel.axes.continuous.base import ContinuousAxis, TTLStepper
 
 
 class XYZStage[A: ContinuousAxis]:
@@ -83,7 +84,7 @@ class TigerScanSession(ScanSession):
                 pulse_interval_um=fast_cfg.pulse_interval_um,
                 stop_mm=fast_cfg.stop_mm,
                 retrace_speed_percent=fast_cfg.retrace_speed_percent,
-            )
+            ),
         )
 
     def configure_slow_axis(self, slow_cfg: SlowAxisConfig):
@@ -94,7 +95,7 @@ class TigerScanSession(ScanSession):
                 line_count=slow_cfg.line_count,
                 overshoot_time_ms=slow_cfg.overshoot_time_ms,
                 overshoot_factor=slow_cfg.overshoot_factor,
-            )
+            ),
         )
 
     def start(self):

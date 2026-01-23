@@ -2,11 +2,12 @@
 
 import asyncio
 from enum import StrEnum
+from typing import ClassVar
 
 import pytest
+from pyrig.device import DeviceController, describe
 
 from pyrig import Device, LocalAdapter, Rig, RigConfig
-from pyrig.device import DeviceController, describe
 
 # ============== Test Devices ==============
 
@@ -21,7 +22,7 @@ class MockLaser(Device[LaserState]):
     """A mock laser device for testing."""
 
     __DEVICE_TYPE__ = "laser"
-    __COMMANDS__ = {"enable", "disable"}
+    __COMMANDS__: ClassVar[set[str]] = {"enable", "disable"}
 
     def __init__(self, uid: str, max_power: float = 100.0):
         super().__init__(uid=uid)
@@ -94,7 +95,7 @@ class MockCamera(Device):
     """A mock camera device for testing."""
 
     __DEVICE_TYPE__ = "camera"
-    __COMMANDS__ = {"capture"}
+    __COMMANDS__: ClassVar[set[str]] = {"capture"}
 
     def __init__(self, uid: str, resolution: tuple[int, int] = (1920, 1080)):
         super().__init__(uid=uid)
@@ -133,7 +134,7 @@ class MockCamera(Device):
         }
 
     @describe(label="Capture Sequence", desc="Capture multiple frames")
-    def capture_sequence(self, count: int, interval_ms: float = 0.0) -> list[dict]:
+    def capture_sequence(self, count: int, _interval_ms: float = 0.0) -> list[dict]:
         """Capture a sequence of frames."""
         frames = []
         for _ in range(count):
@@ -156,14 +157,14 @@ class TestLocalRig:
                 "devices": {
                     "laser_1": {
                         "target": "tests.test_integration.MockLaser",
-                        "kwargs": {"max_power": 50.0},
+                        "init": {"max_power": 50.0},
                     },
                     "camera_1": {
                         "target": "tests.test_integration.MockCamera",
-                        "kwargs": {"resolution": [640, 480]},
+                        "init": {"resolution": [640, 480]},
                     },
                 },
-            }
+            },
         )
 
     @pytest.mark.asyncio

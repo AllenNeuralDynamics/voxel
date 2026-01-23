@@ -1,3 +1,4 @@
+import importlib
 import logging
 import traceback
 from typing import Any, Literal
@@ -19,13 +20,8 @@ class BuildConfig(BaseModel):
             raise ValueError(f"Invalid target format: {self.target}")
 
         module_name, class_name = parts
-
-        import importlib
-
         module = importlib.import_module(module_name)
-        obj_class = getattr(module, class_name)
-
-        return obj_class
+        return getattr(module, class_name)
 
 
 DeviceConfig = BuildConfig
@@ -43,7 +39,7 @@ class BuildError(BaseModel):
 type BuildGroupSpec = dict[str, BuildConfig]
 
 
-def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> tuple[dict[str, T], dict[str, BuildError]]:
+def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> tuple[dict[str, T], dict[str, BuildError]]:  # noqa: C901 - factory with dependency resolution
     """Build objects from configuration with error accumulation and dependency resolution.
 
     Args:
@@ -60,9 +56,9 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> tuple[
         """Recursively resolve string references to built objects."""
         if isinstance(value, str) and value in built:
             return built[value]
-        elif isinstance(value, list):
+        if isinstance(value, list):
             return [_resolve_references(item) for item in value]
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             return {k: _resolve_references(v) for k, v in value.items()}
         return value
 

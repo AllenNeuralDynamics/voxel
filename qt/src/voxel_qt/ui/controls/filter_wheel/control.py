@@ -1,7 +1,5 @@
 """Filter wheel device control widget."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import Mapping
@@ -15,7 +13,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from voxel_qt.ui.controls.filter_wheel.graphic import WheelGraphic
+from vxlib import fire_and_forget
 
 if TYPE_CHECKING:
     from voxel_qt.handle import DeviceHandleQt
@@ -51,7 +51,7 @@ class FilterWheelControl(QWidget):
 
     def __init__(
         self,
-        adapter: DeviceHandleQt,
+        adapter: "DeviceHandleQt",
         hue_mapping: Mapping[str, float | int] | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -68,7 +68,7 @@ class FilterWheelControl(QWidget):
         self._connect_signals()
 
         # Trigger async initialization
-        asyncio.create_task(self._initialize())
+        fire_and_forget(self._initialize(), log=log)
 
     def _setup_ui(self) -> None:
         """Set up the initial UI (placeholder until device info is fetched)."""
@@ -196,7 +196,7 @@ class FilterWheelControl(QWidget):
     def _on_slot_selected(self, slot: int) -> None:
         """Handle user selecting a slot in the graphic."""
         log.debug("User selected slot %s", slot)
-        asyncio.create_task(self._move_to_slot(slot))
+        fire_and_forget(self._move_to_slot(slot), log=log)
 
     async def _move_to_slot(self, slot: int) -> None:
         """Send move command to the device."""
@@ -218,9 +218,10 @@ if __name__ == "__main__":
 
     from PySide6.QtWidgets import QApplication, QMainWindow
     from qasync import QEventLoop, asyncSlot
-    from voxel_qt.handle import DeviceHandleQt
+    from voxel_drivers.axes.simulated import SimulatedDiscreteAxis
 
     from pyrig import create_local_handle
+    from voxel_qt.handle import DeviceHandleQt
 
     class FilterWheelDemo(QMainWindow):
         def __init__(self) -> None:
@@ -230,17 +231,12 @@ if __name__ == "__main__":
 
         @asyncSlot()
         async def setup(self) -> None:
-            # Import here to avoid circular imports in demo
-            from voxel_drivers.axes.simulated import SimulatedDiscreteAxis
-
-            # Create simulated device
             device = SimulatedDiscreteAxis(
                 uid="demo-fw",
                 slots={0: "GFP", 1: "RFP", 2: "DAPI", 3: "Cy5"},
                 slot_count=6,
             )
 
-            # Create local handle and Qt adapter
             handle = create_local_handle(device)
             self._adapter = DeviceHandleQt(handle)
             await self._adapter.start()
@@ -264,8 +260,6 @@ if __name__ == "__main__":
     demo = FilterWheelDemo()
     demo.show()
 
-    # Trigger async setup
-    asyncio.ensure_future(demo.setup())
-
     with loop:
+        loop.run_until_complete(demo.setup())
         loop.run_forever()

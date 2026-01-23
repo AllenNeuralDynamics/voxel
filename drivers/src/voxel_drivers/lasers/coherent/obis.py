@@ -7,9 +7,9 @@ from obis_laser import ObisLS as ObisLSDriver
 from obis_laser import ObisLX as ObisLXDriver
 from pyrig.device.props import deliminated_float, enumerated_string
 from serial import Serial
-from voxel.laser.base import Laser
 
 from pyrig import describe
+from voxel.laser.base import Laser
 
 
 class ModulationMode(StrEnum):

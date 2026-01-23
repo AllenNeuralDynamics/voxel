@@ -18,28 +18,28 @@ from .rig import Rig, RigConfig, RigInfo
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __all__ = [
-    # Rig orchestration
-    "Rig",
+    "Adapter",
+    "ClusterConfig",
     "ClusterManager",
     # Device abstractions
     "Device",
+    "DeviceAddress",
+    "DeviceAddressTCP",
     "DeviceHandle",
     "DeviceInterface",
-    "Adapter",
     "LocalAdapter",
-    # Network services
-    "ZMQService",
-    "ZMQAdapter",
-    "RigNode",
+    "NodeConfig",
+    "PropertyModel",
+    # Rig orchestration
+    "Rig",
     # Configuration
     "RigConfig",
     "RigInfo",
-    "ClusterConfig",
-    "NodeConfig",
-    "DeviceAddress",
-    "DeviceAddressTCP",
+    "RigNode",
+    "ZMQAdapter",
+    # Network services
+    "ZMQService",
+    "create_local_handle",
     # Utilities
     "describe",
-    "PropertyModel",
-    "create_local_handle",
 ]

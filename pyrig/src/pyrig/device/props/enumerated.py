@@ -38,7 +38,7 @@ class EnumeratedProperty[S, T](property, ABC):
         if self._fset is None:
             raise AttributeError("can't set attribute")
 
-        instance = cast(S, obj)
+        instance = cast("S", obj)
         options = self._unwrap_dynamic_attribute(self._options, instance)
         if options and value not in options:
             msg = f"Value '{value}' is not in allowed options: {options}"
@@ -58,6 +58,7 @@ class EnumeratedProperty[S, T](property, ABC):
 
 
 class EnumeratedString(str):
+    __slots__ = ()
     _options_map: ClassVar[dict[int, Sequence[str]]] = {}
 
     def __new__(cls, value: str, options: list[str]) -> Self:

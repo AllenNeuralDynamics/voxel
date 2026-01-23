@@ -14,15 +14,17 @@
 import { browser } from '$app/environment';
 import { Client, type ClientOptions, type DaqWaveforms } from '../core/client.svelte.ts';
 import { DevicesManager } from '../core/devices.svelte.ts';
-import type {
-	AppStatus,
-	SessionDirectory,
-	LogMessage,
-	GridConfig,
-	Tile,
-	Stack,
-	LayerVisibility,
-	TileOrder
+import {
+	parseVec2D,
+	type AppStatus,
+	type SessionDirectory,
+	type LogMessage,
+	type GridConfig,
+	type Tile,
+	type Stack,
+	type LayerVisibility,
+	type TileOrder,
+	type Vec2D
 } from '../core/types.ts';
 import type { VoxelRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
 import { Previewer } from '../preview/index.ts';
@@ -74,10 +76,9 @@ export class Profile {
 		this.#app = app;
 	}
 
-	#getVec2DValue(deviceId: string, prop: string) {
+	#getVec2DValue(deviceId: string, prop: string): Vec2D | null {
 		const val = this.#app.devices.getPropertyValue(deviceId, prop);
-		// Vec2D serializes as [y, x] due to NamedTuple field order
-		return Array.isArray(val) && val.length === 2 ? { x: val[1], y: val[0] } : null;
+		return parseVec2D(val);
 	}
 
 	#getMagnification(cameraId: string): number {

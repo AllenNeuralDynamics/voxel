@@ -174,8 +174,7 @@ class GetTTLModesOp:
 
 
 class ProbeTTLOutOp:
-    """
-    Query instantaneous OUT level using the explicit 'O?' form.
+    """Query instantaneous OUT level using the explicit 'O?' form.
     Returns True for high (1), False for low (0).
     """
 
@@ -200,8 +199,7 @@ class ProbeTTLOutOp:
 
 
 class ProbeTTLOutOp2:
-    """
-    Legacy/bare 'TTL' probe. Some firmware returns 0/1; others just ACK.
+    """Legacy/bare 'TTL' probe. Some firmware returns 0/1; others just ACK.
     Kept as a fallback if ReadOut doesn't work on a given box.
     """
 

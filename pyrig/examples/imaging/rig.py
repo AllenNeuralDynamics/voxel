@@ -1,10 +1,10 @@
 import zmq.asyncio
+from pyrig.cluster import ClusterManager, DeviceProvision, ZMQAdapter
 
 from imaging.drivers.camera import CameraHandle
 from imaging.drivers.laser import LaserHandle
 from imaging.node import ImagingRigNode
 from pyrig import DeviceHandle, Rig, RigConfig
-from pyrig.cluster import ClusterManager, DeviceProvision, ZMQAdapter
 
 
 class ImagingClusterManager(ClusterManager):

@@ -5,9 +5,9 @@ from enum import StrEnum
 from pyrig.device.props import deliminated_float, enumerated_string
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusDriver
-from voxel.laser.base import Laser
 
 from pyrig import describe
+from voxel.laser.base import Laser
 
 
 class ModulationMode(StrEnum):

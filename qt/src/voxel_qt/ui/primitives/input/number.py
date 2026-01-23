@@ -1,6 +1,7 @@
 """Number input primitives."""
 
 from PySide6.QtWidgets import QDoubleSpinBox, QSpinBox, QWidget
+
 from voxel_qt.ui.primitives.utils import icon_data_uri
 from voxel_qt.ui.theme import BorderRadius, Colors, FontSize, Size, Spacing
 
@@ -69,18 +70,18 @@ class SpinBox(QSpinBox):
     def __init__(
         self,
         value: int = 0,
-        min: int | None = None,
-        max: int | None = None,
+        min_val: int | None = None,
+        max_val: int | None = None,
         step: int | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
-        if min is not None and max is not None:
-            self.setRange(min, max)
-        elif min is not None:
-            self.setMinimum(min)
-        elif max is not None:
-            self.setMaximum(max)
+        if min_val is not None and max_val is not None:
+            self.setRange(min_val, max_val)
+        elif min_val is not None:
+            self.setMinimum(min_val)
+        elif max_val is not None:
+            self.setMaximum(max_val)
         if step is not None:
             self.setSingleStep(step)
         if value:
@@ -100,8 +101,8 @@ class DoubleSpinBox(QDoubleSpinBox):
     def __init__(
         self,
         value: float = 0.0,
-        min: float | None = None,
-        max: float | None = None,
+        min_val: float | None = None,
+        max_val: float | None = None,
         decimals: int | None = None,
         step: float | None = None,
         parent: QWidget | None = None,
@@ -109,12 +110,12 @@ class DoubleSpinBox(QDoubleSpinBox):
         super().__init__(parent=parent)
         if decimals is not None:
             self.setDecimals(decimals)
-        if min is not None and max is not None:
-            self.setRange(min, max)
-        elif min is not None:
-            self.setMinimum(min)
-        elif max is not None:
-            self.setMaximum(max)
+        if min_val is not None and max_val is not None:
+            self.setRange(min_val, max_val)
+        elif min_val is not None:
+            self.setMinimum(min_val)
+        elif max_val is not None:
+            self.setMaximum(max_val)
         if step is not None:
             self.setSingleStep(step)
         if value:

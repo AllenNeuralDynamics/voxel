@@ -6,6 +6,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable
+from contextlib import suppress
 from typing import Literal
 
 import zmq
@@ -108,7 +109,7 @@ class RigNode:
         return DeviceController(device, stream_interval=0.5)
 
     @classmethod
-    def create_handle(cls, device_type: str, adapter: Adapter) -> DeviceHandle:
+    def create_handle(cls, _device_type: str, adapter: Adapter) -> DeviceHandle:
         """Create a handle for a device. Override to return custom handle types."""
         return DeviceHandle(adapter)
 
@@ -143,8 +144,8 @@ class RigNode:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                self.log.error(f"Error in heartbeat loop: {e}")
+            except Exception:
+                self.log.exception("Error in heartbeat loop")
 
     async def run(self):
         """Wait for rig commands and handle provisioning."""
@@ -225,7 +226,7 @@ class RigNode:
                 self.log.debug("Started heartbeat loop")
 
         except Exception as e:
-            self.log.error(f"Failed to provision {self._node_id}: {e}", exc_info=True)
+            self.log.exception(f"Failed to provision {self._node_id}")
             # Send error response
             error_complete = ProvisionComplete(
                 devices={},
@@ -235,7 +236,7 @@ class RigNode:
                         error_type="instantiation",
                         message=str(e),
                         traceback=traceback.format_exc(),
-                    )
+                    ),
                 },
             )
             response = NodeMessage.create(NodeAction.PROVISION_COMPLETE, payload=error_complete)
@@ -248,17 +249,15 @@ class RigNode:
         # Stop heartbeat loop
         if self._heartbeat_task and not self._heartbeat_task.done():
             self._heartbeat_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._heartbeat_task
-            except asyncio.CancelledError:
-                pass
             self.log.debug("Stopped heartbeat loop")
 
         for device_id, service in self._device_servers.items():
             try:
                 service.close()
-            except Exception as e:
-                self.log.error(f"Error closing {device_id}: {e}")
+            except Exception:
+                self.log.exception(f"Error closing {device_id}")
 
         self._device_servers.clear()
 
@@ -273,8 +272,8 @@ class RigNode:
         for device_id, server in self._device_servers.items():
             try:
                 server.close()
-            except Exception as e:
-                self.log.error(f"Error closing {device_id}: {e}")
+            except Exception:
+                self.log.exception(f"Error closing {device_id}")
 
         self._device_servers.clear()
 
@@ -299,7 +298,7 @@ class ZmqTopicHandler(logging.Handler):
                 [
                     topic.encode("utf-8", errors="replace"),
                     message.encode("utf-8", errors="replace"),
-                ]
+                ],
             )
         except Exception:
             self.handleError(record)
@@ -385,7 +384,6 @@ def run_node_service(
         start_port: Starting port for device allocation (default: 10000)
         service_cls: RigNode class to instantiate (default: RigNode)
     """
-
     asyncio.run(
         run_node_async(
             node_id=node_id,
@@ -396,7 +394,7 @@ def run_node_service(
             service_cls=service_cls,
             remove_console_handlers=remove_console_handlers,
             on_ready=on_ready,
-        )
+        ),
     )
 
 

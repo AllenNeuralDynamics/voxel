@@ -339,7 +339,7 @@ class SVGRenderingDemo(QMainWindow):
         self.setGeometry(100, 100, 800, 600)
         self.setup_ui()
 
-    def setup_ui(self) -> None:  # noqa: PLR0915
+    def setup_ui(self) -> None:
         """Setup the demo interface."""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)

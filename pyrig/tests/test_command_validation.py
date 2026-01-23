@@ -4,7 +4,6 @@ from enum import StrEnum
 
 import pytest
 from pydantic import BaseModel
-
 from pyrig.device import Command, CommandParamsError, describe
 
 

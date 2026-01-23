@@ -4,6 +4,7 @@ from typing import Literal
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QPushButton, QWidget
+
 from voxel_qt.ui.theme import BorderRadius, Colors, FontSize, Size, Spacing
 
 ButtonVariant = Literal["primary", "secondary", "success", "danger", "ghost"]

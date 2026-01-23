@@ -10,8 +10,7 @@ from voxel_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
 
 @dataclass(frozen=True)
 class ScanRConfig:
-    """
-    Fast-axis (horizontal line) setup.
+    """Fast-axis (horizontal line) setup.
 
     Exactly one of stop_mm or num_pixels must be provided.
 
@@ -40,8 +39,7 @@ class ScanRConfig:
             raise ValueError("retrace_speed_percent must be in [0, 100].")
 
     def to_kv(self, info: BoxInfo, fast_axis_uid: str) -> tuple[dict[str, object], float]:
-        """
-        Returns (kv, actual_interval_um).
+        """Returns (kv, actual_interval_um).
         Uses BoxInfo.axes[fast_axis_uid].enc_cnts_per_mm to compute Z (ticks/pulse).
         """
         self.validate()
@@ -71,8 +69,7 @@ class ScanRConfig:
 
 @dataclass(frozen=True)
 class ScanVConfig:
-    """
-    Slow-axis (vertical stepping) setup.
+    """Slow-axis (vertical stepping) setup.
 
     Encodings:
       X = start position [mm]
@@ -119,17 +116,20 @@ class ScanPattern(Enum):
 
 
 class ScanBindAxesOp:
-    """
-    SCAN axis binding/config:
-      X? (unused here)
-      Y = fast_axis_id
-      Z = slow_axis_id
-      F = pattern (0=raster, 1=serpentine)
+    """SCAN axis binding/config:
+    X? (unused here)
+    Y = fast_axis_id
+    Z = slow_axis_id
+    F = pattern (0=raster, 1=serpentine).
     """
 
     @staticmethod
     def encode(
-        card_hex: int, *, fast_axis_id: int | None, slow_axis_id: int | None, pattern: ScanPattern | None
+        card_hex: int,
+        *,
+        fast_axis_id: int | None,
+        slow_axis_id: int | None,
+        pattern: ScanPattern | None,
     ) -> bytes:
         kv = {}
         if fast_axis_id is not None:
@@ -172,7 +172,7 @@ class ScanVOp:
 class ScanRunOp:
     @staticmethod
     def encode(card_hex: int, action: str) -> bytes:
-        # action: 'S' (start) or 'P' (stop)
+        # action:: 'S' (start) or 'P' (stop)
         return _line("SCAN", action, card_hex)
 
     @staticmethod

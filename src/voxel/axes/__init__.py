@@ -18,11 +18,11 @@ __all__ = [
     "ContinuousAxis",
     "ContinuousAxisController",
     "ContinuousAxisHandle",
-    "ScanMode",
-    "StepMode",
-    "TriggerMode",
-    "TTLStepper",
-    "TTLStepperConfig",
     # Discrete axis
     "DiscreteAxis",
+    "ScanMode",
+    "StepMode",
+    "TTLStepper",
+    "TTLStepperConfig",
+    "TriggerMode",
 ]

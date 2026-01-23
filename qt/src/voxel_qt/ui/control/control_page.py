@@ -8,9 +8,6 @@ Layout:
 - Status bar: Connection status, laser indicators, stage position, Exit
 """
 
-from __future__ import annotations
-
-import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -24,11 +21,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from voxel_qt.ui.controls import ChannelSection
 from voxel_qt.ui.primitives.buttons import Button
 from voxel_qt.ui.primitives.display import Label, Separator
 from voxel_qt.ui.primitives.input import Select
 from voxel_qt.ui.theme import Colors, Spacing
+from vxlib import fire_and_forget
 
 if TYPE_CHECKING:
     from voxel_qt.app import VoxelQtApp
@@ -56,7 +55,7 @@ class LeftSidebar(QWidget):
 
     profile_changed = Signal(str)
 
-    def __init__(self, app: VoxelQtApp, parent: QWidget | None = None) -> None:
+    def __init__(self, app: "VoxelQtApp", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._app = app
         self._channel_sections: dict[str, ChannelSection] = {}
@@ -170,7 +169,7 @@ class LeftSidebar(QWidget):
 class StatusBar(QWidget):
     """Status bar with connection status, laser indicators, stage position, and exit button."""
 
-    def __init__(self, app: VoxelQtApp, parent: QWidget | None = None) -> None:
+    def __init__(self, app: "VoxelQtApp", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._app = app
 
@@ -212,7 +211,7 @@ class StatusBar(QWidget):
 
     def _on_exit_clicked(self) -> None:
         """Exit the active session."""
-        asyncio.create_task(self._app.close_session())
+        fire_and_forget(self._app.close_session(), log=log)
 
     def set_connected(self, connected: bool) -> None:
         """Update connection status display."""
@@ -238,7 +237,7 @@ class StatusBar(QWidget):
 class MainPanel(QWidget):
     """Center panel with header, preview, grid canvas, and bottom tabs."""
 
-    def __init__(self, app: VoxelQtApp, parent: QWidget | None = None) -> None:
+    def __init__(self, app: "VoxelQtApp", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._app = app
 
@@ -281,12 +280,24 @@ class MainPanel(QWidget):
 
         splitter.addWidget(top_splitter)
 
-        # Bottom: tabs
+        # Bottom:: tabs
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(f"""
-            QTabWidget::pane {{ border: none; border-top: 1px solid {Colors.BORDER}; background-color: {Colors.BG_DARK}; }}
-            QTabBar::tab {{ background-color: transparent; color: {Colors.TEXT_MUTED}; border: none; padding: 6px 12px; }}
-            QTabBar::tab:selected {{ color: {Colors.TEXT}; border-bottom: 2px solid {Colors.ACCENT}; }}
+            QTabWidget::pane {{
+                border: none;
+                border-top: 1px solid {Colors.BORDER};
+                background-color: {Colors.BG_DARK};
+            }}
+            QTabBar::tab {{
+                background-color: transparent;
+                color: {Colors.TEXT_MUTED};
+                border: none;
+                padding: 6px 12px;
+            }}
+            QTabBar::tab:selected {{
+                color: {Colors.TEXT};
+                border-bottom: 2px solid {Colors.ACCENT};
+            }}
             QTabBar::tab:hover:!selected {{ color: {Colors.TEXT}; }}
         """)
 
@@ -323,7 +334,7 @@ class ControlPage(QWidget):
     - Status bar: Connection status, laser indicators, stage position, Exit button
     """
 
-    def __init__(self, app: VoxelQtApp, parent: QWidget | None = None) -> None:
+    def __init__(self, app: "VoxelQtApp", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._app = app
 
@@ -379,7 +390,7 @@ class ControlPage(QWidget):
         rig = self._app.rig
         if rig:
             log.info("Switching to profile: %s", profile_id)
-            asyncio.create_task(self._switch_profile(profile_id))
+            fire_and_forget(self._switch_profile(profile_id), log=log)
 
     async def _switch_profile(self, profile_id: str) -> None:
         """Switch to a new profile (async)."""

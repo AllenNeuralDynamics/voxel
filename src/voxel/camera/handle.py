@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from ome_zarr_writer.types import Vec2D
 from pyrig.device import DeviceHandle
+from vxlib.vec import Vec2D
 
 from voxel.camera.base import Camera, CameraBatchResult, TriggerMode, TriggerPolarity
 from voxel.camera.preview import PreviewCrop, PreviewLevels
@@ -60,15 +60,17 @@ class CameraHandle(DeviceHandle[Camera]):
         result = await self.call("capture_batch", num_frames, str(output_dir), trigger_mode, trigger_polarity)
         return CameraBatchResult.model_validate(result)
 
-    async def get_frame_area_mm(self) -> Vec2D[float]:
+    async def get_frame_area_mm(self) -> Vec2D:
         """Get the physical frame area in millimeters.
 
-        Handles deserialization of Vec2D which serializes as [y, x] list over ZMQ.
+        Handles deserialization of Vec2D which serializes as "y,x" string over ZMQ.
         """
         value = await self.get_prop_value("frame_area_mm")
-        if isinstance(value, (list, tuple)):
-            # Vec2D serializes as [y, x] due to NamedTuple field order
-            return Vec2D(x=value[1], y=value[0])
-        if hasattr(value, "x"):
+        if isinstance(value, Vec2D):
             return value
-        return Vec2D(x=value["x"], y=value["y"])
+        if isinstance(value, str):
+            # Vec2D serializes as "y,x" string
+            return Vec2D.from_str(value)
+        if isinstance(value, (list, tuple)):
+            return Vec2D(y=value[0], x=value[1])
+        return Vec2D(y=value["y"], x=value["x"])

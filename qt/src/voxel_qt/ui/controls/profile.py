@@ -1,10 +1,6 @@
 """Profile selector widget for switching acquisition profiles."""
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -12,12 +8,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from voxel import VoxelRig
 from voxel_qt.ui.primitives.display import Label
 from voxel_qt.ui.primitives.input import Select
 from voxel_qt.ui.theme import Colors, Spacing
-
-if TYPE_CHECKING:
-    from voxel import VoxelRig
+from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +112,7 @@ class ProfileSelector(QFrame):
             return  # No change
 
         log.info("Switching profile to: %s", profile_id)
-        asyncio.create_task(self._switch_profile(profile_id))
+        fire_and_forget(self._switch_profile(profile_id), log=log)
 
     async def _switch_profile(self, profile_id: str) -> None:
         """Switch to a new profile (async)."""

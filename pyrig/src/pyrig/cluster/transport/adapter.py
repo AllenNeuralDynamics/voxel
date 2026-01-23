@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections import defaultdict
+from contextlib import suppress
 from typing import Any
 
 import zmq
@@ -22,7 +23,7 @@ from pyrig.device import (
 from .comm import _GET_CMD_, _INT_CMD_, _REQ_CMD_, _SET_CMD_, DeviceAddress
 
 
-def set_tcp_keepalive(socket: zmq.asyncio.Socket):
+def set_tcp_keepalive(socket: zmq.asyncio.Socket) -> zmq.asyncio.Socket:
     socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
     socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 1)  # Start after 1s
     socket.setsockopt(zmq.TCP_KEEPALIVE_INTVL, 1)  # Probe every 1s
@@ -76,11 +77,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
             topic: Topic to subscribe to (e.g., "frames")
             callback: Async function receiving raw bytes
         """
-        if not topic.startswith(self.uid):
-            subscribe_topic = f"{self.uid}/{topic}"
-        else:
-            subscribe_topic = topic
-
+        subscribe_topic = f"{self.uid}/{topic}" if not topic.startswith(self.uid) else topic
         self._stream_callbacks[subscribe_topic].append(callback)
 
     async def unsubscribe(self, topic: str, callback: StreamCallback) -> None:
@@ -90,16 +87,10 @@ class ZMQAdapter[D: Device](Adapter[D]):
             topic: Topic to unsubscribe from
             callback: The callback to remove
         """
-        if not topic.startswith(self.uid):
-            subscribe_topic = f"{self.uid}/{topic}"
-        else:
-            subscribe_topic = topic
-
+        subscribe_topic = f"{self.uid}/{topic}" if not topic.startswith(self.uid) else topic
         if subscribe_topic in self._stream_callbacks:
-            try:
+            with suppress(ValueError):
                 self._stream_callbacks[subscribe_topic].remove(callback)
-            except ValueError:
-                pass  # Callback not in list
 
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
         """Execute a command and return raw CommandResponse."""
@@ -144,10 +135,8 @@ class ZMQAdapter[D: Device](Adapter[D]):
         """Close sockets and cleanup."""
         if self._listen_task:
             self._listen_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._listen_task
-            except asyncio.CancelledError:
-                pass
 
         if self._sub_socket:
             self._sub_socket.close()
@@ -169,8 +158,8 @@ class ZMQAdapter[D: Device](Adapter[D]):
                     for callback in stream_callbacks:
                         try:
                             await callback(payload_bytes)
-                        except Exception as e:
-                            self.log.error(f"Stream callback error: {e}")
+                        except Exception:
+                            self.log.exception("Stream callback error")
                     continue
 
                 # Check for property updates
@@ -180,12 +169,12 @@ class ZMQAdapter[D: Device](Adapter[D]):
                         for callback in self._props_callbacks:
                             try:
                                 await callback(props)
-                            except Exception as e:
-                                self.log.error(f"Props callback error: {e}")
-                    except Exception as e:
-                        self.log.error(f"Failed to parse props response: {e}")
+                            except Exception:
+                                self.log.exception("Props callback error")
+                    except Exception:
+                        self.log.exception("Failed to parse props response")
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                self.log.error(f"Error in listen loop: {e}", exc_info=True)
+            except Exception:
+                self.log.exception("Error in listen loop")

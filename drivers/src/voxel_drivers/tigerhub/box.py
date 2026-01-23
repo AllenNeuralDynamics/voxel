@@ -158,7 +158,7 @@ class TigerBox:
                     date=item.date,
                     flags=item.flags,
                     mods=mods,
-                )
+                ),
             )
 
         # COMM addr inference from WHO
@@ -301,7 +301,7 @@ class TigerBox:
 
     # ---- TTL Modes _______
     def set_ttl_config(self, card_addr: int, cfg: TTLConfig) -> None:
-        """Set TTL modes on a card. Ex: ttl_set(31, X=12, Y=2, F=1, R=0, T=0)"""
+        """Set TTL modes on a card. Ex: ttl_set(31, X=12, Y=2, F=1, R=0, T=0)."""
         r = self._transact(SetTTLModesOp.encode(addr=card_addr, cfg=cfg))
         SetTTLModesOp.decode(r)
 
@@ -325,8 +325,7 @@ class TigerBox:
 
     # -- Step and Shoot ---
     def _build_axis_mask_for_card(self, card: int, axes: list[str]) -> int:
-        """
-        Translate a list of axis UIDs into the Tiger controller's bitmask
+        """Translate a list of axis UIDs into the Tiger controller's bitmask
         representation for a specific card.
 
         The Tiger controller represents per-axis selection as a bitmask, where
@@ -372,10 +371,9 @@ class TigerBox:
         return mask & 0xFFFF
 
     def configure_step_shoot(self, cfg: StepShootConfig) -> None:
-        """
-        Configure step-and-shoot on a card using:
+        """Configure step-and-shoot on a card using:
           - RM: enable ring buffer for selected axis/axes
-          - TTL: set input (ABS/REL) and output pulse behavior
+          - TTL: set input (ABS/REL) and output pulse behavior.
 
         ABS vs REL behavior:
           • IN0 = MOVE_TO_NEXT_ABS_POSITION (1): queued LD values are ABSOLUTE positions (like MOVEABS).
@@ -444,8 +442,7 @@ class TigerBox:
         self._queue_step_shoot(deltas)
 
     def _queue_step_shoot(self, mapping: Mapping[str, float]) -> None:
-        """
-        Queue one buffered move (LD) on the configured card.
+        """Queue one buffered move (LD) on the configured card.
 
         Semantics depend on the configured TTL IN0 mode:
         - If IN0 = MOVE_TO_NEXT_ABS_POSITION (1), each axis value is an ABSOLUTE target
@@ -471,7 +468,7 @@ class TigerBox:
             LoadBufferedMoveOp.encode(
                 addr=self._step_shoot_session.card,
                 mapping={k.upper(): float(v) for k, v in mapping.items()},
-            )
+            ),
         )
         LoadBufferedMoveOp.decode(r)
 
@@ -498,7 +495,7 @@ class TigerBox:
                     fast_axis_id=fa.axis_id,
                     slow_axis_id=sa.axis_id,
                     pattern=pattern,
-                )
+                ),
             )
             ScanBindAxesOp.decode(r)
         except Exception as e:
@@ -578,7 +575,7 @@ class TigerBox:
                 fast_axis_id=None,
                 slow_axis_id=None,
                 pattern=arr_scan_cfg.pattern,
-            )
+            ),
         )
         if auto_home_cfg is not None:
             self._transact(AutoHomeOp.encode(addr=card, cfg=auto_home_cfg))
@@ -637,7 +634,8 @@ class TigerBox:
 
     def enable_joystick_inputs(self, axes: Sequence[str] | None = None) -> dict[str, JoystickInput]:
         """Enable joystick control for the given axes (or all if None).
-        If a cached mapping exists, reapplies it for the affected axes."""
+        If a cached mapping exists, reapplies it for the affected axes.
+        """
         if axes is None:
             axes = list(self.info().axes.keys())
         by_card = self._build_axis_uids_by_card(axes)
@@ -656,7 +654,8 @@ class TigerBox:
 
     def disable_joystick_inputs(self, axes: Sequence[str] | None = None) -> dict[str, JoystickInput]:
         """Disable joystick control for the given axes (or all if None).
-        Caches current mapping so a later enable can restore user bindings."""
+        Caches current mapping so a later enable can restore user bindings.
+        """
         self._cached_joystick_mapping = self.get_joystick_mapping(refresh=True)
         by_card = self._build_axis_uids_by_card(axes or list(self.info().axes.keys()))
         for card, axlist in by_card.items():
@@ -683,8 +682,7 @@ class TigerBox:
             pass
 
     def _enable_tiger_mode(self, probe_axis: str = "X") -> bool:
-        """
-        Try unaddressed VB first (most firmwares), then addressed if we can
+        """Try unaddressed VB first (most firmwares), then addressed if we can
         infer a COMM addr from WHO.
         """
         # Unaddressed first
@@ -711,7 +709,6 @@ if __name__ == "__main__":
     print("Info:", info)
     print("Axes:", info.axes)
     print("Joystick Mapping:", drv.get_joystick_mapping())
-    # print('Cards:', info.cards)
     print("BUSY:", drv.is_busy())
 
     flat_axes = sorted(drv.info().axes.keys())

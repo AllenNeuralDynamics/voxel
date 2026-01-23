@@ -3,7 +3,8 @@
 from collections.abc import Mapping
 
 import numpy as np
-from voxel.daq import AcqSampleMode, AOTask, COTask, PinInfo, VoxelDaq, TaskStatus
+
+from voxel.daq import AcqSampleMode, AOTask, COTask, PinInfo, TaskStatus, VoxelDaq
 from voxel.quantity import VoltageRange
 
 # ==================== Mock Task Classes ====================
@@ -231,6 +232,7 @@ class SimulatedDaq(VoxelDaq):
         pulses: int | None = None,
         output_pin: str | None = None,
     ) -> MockCOTask:
+        del counter, pulses  # unused in simulation
         if task_name in self._active_tasks:
             raise ValueError(f"Task '{task_name}' already exists")
 

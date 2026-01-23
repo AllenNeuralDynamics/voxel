@@ -3,6 +3,7 @@
 from typing import Literal
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLayout, QVBoxLayout, QWidget
+
 from voxel_qt.ui.theme import BorderRadius, Colors, FontSize, Spacing
 
 

@@ -11,7 +11,7 @@ from ruyaml import YAML
 from pyrig.cluster import ClusterConfig, ClusterManager, NodeConfig, RigNode
 from pyrig.device import Device, DeviceConfig, DeviceHandle, build_objects
 from pyrig.local import LocalAdapter
-from pyrig.utils import get_local_ip
+from vxlib import get_local_ip
 
 logger = logging.getLogger(__name__)
 yaml = YAML(typ="safe")
@@ -38,7 +38,7 @@ class RigConfig(BaseModel):
     @classmethod
     def from_yaml(cls, path: str | Path) -> Self:
         """Load configuration from YAML file."""
-        with open(path, "r") as f:
+        with Path(path).open() as f:
             data = yaml.load(f)
         # remove the key _anchors
         data.pop("_anchors", None)
@@ -48,7 +48,7 @@ class RigConfig(BaseModel):
     @property
     def device_uids(self) -> set[str]:
         """All device UIDs across local devices and nodes."""
-        node_devices = {device_id for node in self.nodes.values() for device_id in node.devices.keys()}
+        node_devices = {device_id for node in self.nodes.values() for device_id in node.devices}
         return node_devices | set(self.devices.keys())
 
     @property
@@ -153,12 +153,11 @@ class Rig:
         remote_count = len(self.handles) - local_count
         self.log.info(
             f"{self.config.info.name} ready with {len(self.handles)} devices "
-            f"({local_count} local, {remote_count} remote)"
+            f"({local_count} local, {remote_count} remote)",
         )
 
     async def _on_start_complete(self) -> None:
         """Override for custom validation after startup completes."""
-        pass
 
     def get_handle(self, device_id: str) -> DeviceHandle:
         """Get handle for a specific device.

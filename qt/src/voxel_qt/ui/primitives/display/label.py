@@ -3,6 +3,7 @@
 from typing import ClassVar, Literal
 
 from PySide6.QtWidgets import QLabel, QWidget
+
 from voxel_qt.ui.theme import BorderRadius, Colors, Spacing
 
 LabelVariant = Literal["default", "title", "section", "value", "muted", "overlay"]
@@ -32,7 +33,6 @@ class Label(QLabel):
 
     # Base styles per variant (without color - color applied separately)
     STYLES: ClassVar[dict[LabelVariant, tuple[str, str]]] = {
-        # (base_style, default_color)
         "default": ("font-size: 11px;", Colors.TEXT_MUTED),
         "title": ("font-size: 14px; font-weight: bold;", Colors.TEXT),
         "section": ("font-size: 11px; font-weight: bold;", Colors.TEXT_MUTED),

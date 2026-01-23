@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.12.0",
     "pyzmq>=27.1.0",
     "ruyaml>=0.91.0",
+    "vxlib",
 ]
 
 [dependency-groups]

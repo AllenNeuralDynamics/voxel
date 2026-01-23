@@ -19,14 +19,6 @@ class CardInfo:
     flags: str | None = None
     mods: set[str] = field(default_factory=set)
 
-    # def __repr__(self) -> str:
-    #     axes = ','.join(self.axes) if self.axes else '-'
-    #     mods = ','.join(sorted(self.mods)) if self.mods else '-'
-    #     return (
-    #         f'<Card {self.addr}: axes=[{axes}] fw={self.fw or "-"} board={self.board or "-"} '
-    #         f'flags={self.flags or "-"} mods={mods}>'
-    #     )
-
 
 @dataclass(frozen=True)
 class WhoReportItem:

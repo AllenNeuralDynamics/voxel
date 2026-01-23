@@ -71,12 +71,12 @@ def run_server(host: str, port: int):
             display_host = detected_ip
             logging.info(
                 f"Server configured to bind to all interfaces (0.0.0.0). "
-                f"Clients should connect to this machine's IP, e.g., {display_host}:{port}"
+                f"Clients should connect to this machine's IP, e.g., {display_host}:{port}",
             )
         else:
             logging.info(
                 "Server configured to bind to all interfaces (0.0.0.0). "
-                "Could not determine external IP. Clients may try this machine's local IPs."
+                "Could not determine external IP. Clients may try this machine's local IPs.",
             )
 
     logging.info(f"Starting server on {host}:{port}...")
@@ -86,7 +86,7 @@ def run_server(host: str, port: int):
         try:
             sock.bind((host, port))
         except OSError as e:
-            logging.error(f"Failed to bind to {host}:{port}. Is another process using it? Error: {e}")
+            logging.exception(f"Failed to bind to {host}:{port}. Is another process using it? Error: {e}")
             sys.exit(1)
 
         sock.listen()
@@ -116,7 +116,7 @@ def run_server(host: str, port: int):
                 logging.info("Server shutting down.")
                 break
             except Exception as e:
-                logging.error(f"An unexpected error occurred: {e}")
+                logging.exception(f"An unexpected error occurred: {e}")
                 time.sleep(1)  # Avoid tight loop on repeated errors
 
 
@@ -149,16 +149,16 @@ def run_client(host: str, port: int):
                     time.sleep(HEARTBEAT_INTERVAL_S)
 
         except ConnectionRefusedError:
-            logging.error(
-                f"Connection refused by {host}:{port}. Is the server running? Retrying in {HEARTBEAT_INTERVAL_S}s..."
+            logging.exception(
+                f"Connection refused by {host}:{port}. Is the server running? Retrying in {HEARTBEAT_INTERVAL_S}s...",
             )
         except (ConnectionResetError, BrokenPipeError, TimeoutError):
-            logging.error(f"Connection to server lost. Retrying in {HEARTBEAT_INTERVAL_S}s...")
+            logging.exception(f"Connection to server lost. Retrying in {HEARTBEAT_INTERVAL_S}s...")
         except KeyboardInterrupt:
             logging.info("Client shutting down.")
             break
         except Exception as e:
-            logging.error(f"An unexpected error occurred: {e}. Retrying in {HEARTBEAT_INTERVAL_S}s...")
+            logging.exception(f"An unexpected error occurred: {e}. Retrying in {HEARTBEAT_INTERVAL_S}s...")
 
         time.sleep(HEARTBEAT_INTERVAL_S)
 
@@ -178,7 +178,9 @@ Usage Examples:
 """,
     )
     parser.add_argument(
-        "mode", choices=["server", "client"], help="Run the script in 'server' (listen) or 'client' (connect) mode."
+        "mode",
+        choices=["server", "client"],
+        help="Run the script in 'server' (listen) or 'client' (connect) mode.",
     )
     parser.add_argument(
         "--host",
@@ -203,7 +205,8 @@ Usage Examples:
 
     if args.mode == "client" and args.host == "localhost":
         print(
-            "Warning: For client mode, you should typically use the server's actual network IP address, not 'localhost'.",
+            "Warning: For client mode, you should typically use the server's actual network IP address, "
+            "not 'localhost'.",
             file=sys.stderr,
         )
 

@@ -1,14 +1,73 @@
+"""Shared utilities for voxel packages."""
+
+import asyncio
 import logging
 import socket
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Coroutine, Sequence
 from functools import wraps
-from typing import Any
+from typing import Any, cast
 
 try:
     from rich.logging import RichHandler
 except ImportError:
     RichHandler = None  # type: ignore[assignment]
+
+_log = logging.getLogger(__name__)
+
+
+def thread_safe_singleton[T](func: Callable[..., T]) -> Callable[..., T]:
+    """A decorator that makes a function a thread-safe singleton.
+
+    The decorated function will only be executed once, and its result
+    will be cached and returned for all subsequent calls.
+    """
+    lock = threading.Lock()
+    instance: T | None = None
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> T:
+        nonlocal instance
+        if instance is None:
+            with lock:
+                if instance is None:
+                    instance = func(*args, **kwargs)
+        return cast("T", instance)
+
+    return wrapper
+
+
+def fire_and_forget(
+    coro: Coroutine[Any, Any, Any],
+    *,
+    name: str | None = None,
+    log: logging.Logger | None = None,
+) -> asyncio.Task:
+    """Create a fire-and-forget task with automatic exception logging.
+
+    Use this instead of bare `asyncio.create_task()` for background tasks
+    where you don't need to await the result. Exceptions are logged
+    automatically instead of being silently ignored.
+
+    Args:
+        coro: The coroutine to run.
+        name: Optional name for the task (for debugging).
+        log: Optional logger to use. Defaults to vxlib.utils logger.
+
+    Returns:
+        The created task (stored reference prevents garbage collection).
+    """
+    logger = log or _log
+
+    def handle_exception(task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        if exc := task.exception():
+            logger.error("Background task %s failed", task.get_name(), exc_info=exc)
+
+    task = asyncio.create_task(coro, name=name)
+    task.add_done_callback(handle_exception)
+    return task
 
 
 def get_local_ip() -> str:
@@ -24,28 +83,8 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
-def thread_safe_singleton(func):
-    """A decorator that makes a function a thread-safe singleton.
-    The decorated function will only be executed once, and its result
-    will be cached and returned for all subsequent calls.
-    """
-    lock = threading.Lock()
-    instance = None
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        nonlocal instance
-        if instance is None:
-            with lock:
-                if instance is None:
-                    instance = func(*args, **kwargs)
-        return instance
-
-    return wrapper
-
-
 def configure_logging(
-    level=logging.INFO,
+    level: int = logging.INFO,
     fmt: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     datefmt: str = "[%X]",
     handlers: Sequence[logging.Handler] | None = None,
@@ -66,7 +105,6 @@ def configure_logging(
     Returns:
         List of handlers installed (empty if none were set explicitly).
     """
-
     resolved_handlers: list[logging.Handler] = []
     if handlers is None:
         if RichHandler is not None:
@@ -135,13 +173,13 @@ def get_uvicorn_log_config(datefmt: str = "[%X]", access_log_level: str = "WARNI
         },
         "handlers": {
             "default": {
-                "class": "pyrig.utils.UvicornRichHandler",
+                "class": "vxlib.utils.UvicornRichHandler",
                 "rich_tracebacks": True,
                 "markup": False,
                 "formatter": "default",
             },
             "access": {
-                "class": "pyrig.utils.UvicornRichHandler",
+                "class": "vxlib.utils.UvicornRichHandler",
                 "rich_tracebacks": True,
                 "markup": False,
                 "formatter": "access",
@@ -172,7 +210,7 @@ class Poller:
         while not self._stop_event.is_set():
             try:
                 self._callback()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 self._log.exception("Runtime error in poller callback: %s", e)
 
             # Wait for the specified interval, but check the stop event periodically

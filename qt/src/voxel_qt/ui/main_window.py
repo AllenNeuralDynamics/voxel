@@ -6,11 +6,7 @@ Manages the top-level window and switches between views based on app phase:
 - ready: ControlPage (main operational interface)
 """
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
@@ -21,11 +17,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from voxel_qt.app import VoxelQtApp
+from voxel_qt.ui.control import ControlPage
+from voxel_qt.ui.launch import LaunchPage
 from voxel_qt.ui.primitives.display import Label
 from voxel_qt.ui.theme import Colors
-
-if TYPE_CHECKING:
-    from voxel_qt.app import VoxelQtApp
+from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -102,15 +100,11 @@ class MainWindow(QMainWindow):
         self._loading_view = LoadingView()
         self._stack.addWidget(self._loading_view)
 
-        # Launch page (lazy import to avoid circular imports)
-        from voxel_qt.ui.launch import LaunchPage
-
+        # Launch page
         self._launch_page = LaunchPage(self._app)
         self._stack.addWidget(self._launch_page)
 
-        # Control page (lazy import)
-        from voxel_qt.ui.control import ControlPage
-
+        # Control page
         self._control_page = ControlPage(self._app)
         self._stack.addWidget(self._control_page)
 
@@ -157,7 +151,7 @@ class MainWindow(QMainWindow):
 
             # Close session and quit
             log.info("User confirmed quit - closing session")
-            asyncio.create_task(self._close_and_quit())
+            fire_and_forget(self._close_and_quit(), log=log)
             event.ignore()  # We'll quit after cleanup
         else:
             # No session - just quit
@@ -168,8 +162,8 @@ class MainWindow(QMainWindow):
         """Close the session and quit the application."""
         try:
             await self._app.close_session()
-        except Exception as e:
-            log.error("Error closing session: %s", e)
+        except Exception:
+            log.exception("Error closing session")
         finally:
             self._quit_app()
 

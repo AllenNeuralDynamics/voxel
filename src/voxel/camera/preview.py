@@ -12,8 +12,9 @@ import cv2
 import msgpack
 import msgpack_numpy as mpack_numpy
 import numpy as np
-from ome_zarr_writer.types import SchemaModel
 from pydantic import Field
+
+from vxlib import SchemaModel
 
 
 class PreviewFmt(StrEnum):
@@ -196,7 +197,6 @@ class PreviewGenerator:
         resizes the cropped image to the target preview dimensions. It also applies black/white
         point and gamma adjustments to produce an 8-bit preview.
         """
-
         gen_start = time.perf_counter()
 
         full_width = raw_frame.shape[1]
@@ -224,14 +224,6 @@ class PreviewGenerator:
         # This shows the actual data distribution for proper level adjustment
         hist_data = None
         if not adjust:
-            # Debug: check what's in the data
-            # self.log.debug(
-            #     f"Preview image stats: dtype={preview_img.dtype}, "
-            #     f"min={preview_img.min()}, max={preview_img.max()}, "
-            #     f"mean={preview_img.mean():.2f}, "
-            #     f"shape={preview_img.shape}"
-            # )
-
             # Compute histogram with reasonable bin count for performance
             # Use 1024 bins for good detail without overwhelming the frontend
             max_val = np.iinfo(raw_frame.dtype).max
@@ -242,8 +234,6 @@ class PreviewGenerator:
         # 4) Convert to float32 for levels scaling.
         preview_float = preview_img.astype(np.float32)
 
-        # levels = self.levels if adjust else PreviewLevels(min=0.0, max=1.0)
-        # Always use the current levels setting, regardless of adjust flag
         levels = self.levels
 
         if levels.needs_adjustment:
@@ -289,7 +279,7 @@ class PreviewGenerator:
         if frame_idx < 5 or frame_idx % 100 == 0:
             self.log.debug(
                 f"Frame {frame_idx} preview generation: resize={resize_time * 1000:.1f}ms, "
-                f"encode={encode_time * 1000:.1f}ms, total={gen_time * 1000:.1f}ms"
+                f"encode={encode_time * 1000:.1f}ms, total={gen_time * 1000:.1f}ms",
             )
 
         return preview_frame

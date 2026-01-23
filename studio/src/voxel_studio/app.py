@@ -4,8 +4,9 @@ Always starts in lobby mode. Sessions are launched via the API.
 """
 
 import logging
-import os
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,11 +18,11 @@ from .system import SystemConfig
 log = logging.getLogger(__name__)
 
 
-def _create_lifespan(system_config: SystemConfig):
+def _create_lifespan(system_config: SystemConfig) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     """Create a lifespan context manager for the app."""
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Application lifespan: initialize and cleanup."""
         log.info("Starting Voxel Studio in lobby mode")
 
@@ -41,11 +42,11 @@ def _create_lifespan(system_config: SystemConfig):
             log.info("Closing active session...")
             try:
                 await app_service.close_session()
-            except Exception as e:
-                log.error("Error closing session: %s", e)
+            except Exception:
+                log.exception("Error closing session")
 
         # Cleanup log handler
-        app_service._teardown_log_capture()
+        app_service.teardown_log_capture()
         log.info("Voxel Studio stopped")
 
     return lifespan
@@ -83,7 +84,7 @@ def create_app(system_config: SystemConfig | None = None, serve_static: bool = T
     app.include_router(app_router)
 
     @app.get("/health")
-    async def health():
+    async def health() -> dict[str, str]:
         """Basic health check."""
         return {
             "status": "ok",
@@ -91,8 +92,8 @@ def create_app(system_config: SystemConfig | None = None, serve_static: bool = T
         }
 
     if serve_static:
-        static_dir = os.path.join(os.path.dirname(__file__), "static")
-        if os.path.isdir(static_dir):
+        static_dir = Path(__file__).parent / "static"
+        if static_dir.is_dir():
             app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
     return app

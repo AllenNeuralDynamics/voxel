@@ -1,9 +1,5 @@
 """New session form for creating sessions."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -11,13 +7,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from voxel_studio.system import SessionRoot
+
 from voxel_qt.ui.primitives.buttons import Button
 from voxel_qt.ui.primitives.display import Label
 from voxel_qt.ui.primitives.input import Select
 from voxel_qt.ui.theme import BorderRadius, Colors, FontSize
-
-if TYPE_CHECKING:
-    from voxel_studio.system import SessionRoot
 
 
 class NewSessionForm(QWidget):

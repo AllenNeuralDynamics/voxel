@@ -2,35 +2,28 @@ import time
 from typing import ClassVar, cast, final
 
 import numpy as np
-from ome_zarr_writer.types import Vec2D
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from voxel_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
+from vxlib.vec import IVec2D, Vec2D
+
 from voxel.camera.base import (
     BINNING_OPTIONS,
-    Camera,
     PIXEL_FMT_TO_DTYPE,
+    Camera,
     FrameRegion,
     PixelFormat,
     StreamInfo,
     TriggerMode,
     TriggerPolarity,
 )
-from voxel_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 
-VP_151MX_M6H0 = Vec2D(y=10_640, x=14_192)
+DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
+VP_151MX_M6H0 = IVec2D(y=10_640, x=14_192)
 # 1.00:  "10640,14192"
 # 0.75:  "7980,10,644"
 # 0.5:   "5320,7096"
 # 0.25:  "2660,3548"
 # 0.125: "1330,1774"
-
-
-def _parse_vec2d[T: int | float](arg: Vec2D[T] | list[T] | str, rtype: type[T]) -> Vec2D[T]:
-    if isinstance(arg, str):
-        arg = [rtype(x) for x in arg.split(",")]
-    if isinstance(arg, list):
-        assert len(arg) == 2, f"Expected 2 values, got {len(arg)}"
-        return Vec2D(y=rtype(arg[0]), x=rtype(arg[1]))
-    return arg
 
 
 @final
@@ -48,12 +41,12 @@ class SimulatedCamera(Camera):
     def __init__(
         self,
         uid: str,
-        pixel_size_um: Vec2D[float] | list[float] | str = Vec2D(y=1.0, x=1.0),
-        sensor_size_px: Vec2D[int] | list[int] | str = VP_151MX_M6H0,
+        pixel_size_um: Vec2D | list[float] | str = DEFAULT_PIXEL_SIZE_UM,
+        sensor_size_px: IVec2D | list[int] | str = VP_151MX_M6H0,
     ):
         super().__init__(uid=uid)
-        self._pixel_size_um = _parse_vec2d(pixel_size_um, rtype=float)
-        self._sensor_size_px = _parse_vec2d(sensor_size_px, rtype=int)
+        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
+        self._sensor_size_px = sensor_size_px if isinstance(sensor_size_px, IVec2D) else IVec2D.parse(sensor_size_px)
         self._roi_width_px = self._sensor_size_px.x
         self._roi_height_px = self._sensor_size_px.y
         self._roi_width_offset_px = 0
@@ -72,11 +65,11 @@ class SimulatedCamera(Camera):
         self._actual_frame_rate_fps: float = 0
 
     @property
-    def sensor_size_px(self) -> Vec2D[int]:
+    def sensor_size_px(self) -> IVec2D:
         return self._sensor_size_px
 
     @property
-    def pixel_size_um(self) -> Vec2D[float]:
+    def pixel_size_um(self) -> Vec2D:
         return self._pixel_size_um
 
     @enumerated_string(options=list(PIXEL_FMT_TO_DTYPE.keys()))
@@ -85,7 +78,7 @@ class SimulatedCamera(Camera):
 
     @pixel_format.setter
     def pixel_format(self, pixel_format: str) -> None:
-        self._pixel_format = cast(PixelFormat, pixel_format)
+        self._pixel_format = cast("PixelFormat", pixel_format)
 
     @enumerated_int(options=BINNING_OPTIONS)
     def binning(self) -> int:
@@ -157,21 +150,17 @@ class SimulatedCamera(Camera):
         """Update one or more frame region dimensions."""
         if x is not None:
             # Clamp and align to step
-            x = max(0, min(x, self._sensor_size_px.x - self._min_width))
-            x = (x // self._roi_step_width_px) * self._roi_step_width_px
-            self._roi_width_offset_px = x
+            clamped_x = max(0, min(x, self._sensor_size_px.x - self._min_width))
+            self._roi_width_offset_px = (clamped_x // self._roi_step_width_px) * self._roi_step_width_px
         if y is not None:
-            y = max(0, min(y, self._sensor_size_px.y - self._min_height))
-            y = (y // self._roi_step_height_px) * self._roi_step_height_px
-            self._roi_height_offset_px = y
+            clamped_y = max(0, min(y, self._sensor_size_px.y - self._min_height))
+            self._roi_height_offset_px = (clamped_y // self._roi_step_height_px) * self._roi_step_height_px
         if width is not None:
-            width = max(self._min_width, min(width, self._sensor_size_px.x))
-            width = (width // self._roi_step_width_px) * self._roi_step_width_px
-            self._roi_width_px = width
+            clamped_w = max(self._min_width, min(width, self._sensor_size_px.x))
+            self._roi_width_px = (clamped_w // self._roi_step_width_px) * self._roi_step_width_px
         if height is not None:
-            height = max(self._min_height, min(height, self._sensor_size_px.y))
-            height = (height // self._roi_step_height_px) * self._roi_step_height_px
-            self._roi_height_px = height
+            clamped_h = max(self._min_height, min(height, self._sensor_size_px.y))
+            self._roi_height_px = (clamped_h // self._roi_step_height_px) * self._roi_step_height_px
 
     @property
     def stream_info(self) -> StreamInfo | None:
@@ -236,7 +225,6 @@ class SimulatedCamera(Camera):
         Raises:
             RuntimeError: If camera is not started or reference frame not generated.
         """
-
         if self._frame_count < 0:
             raise RuntimeError("Camera not started. Call start() first.")
 

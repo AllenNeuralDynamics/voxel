@@ -7,20 +7,18 @@ This service owns the Session and RigService, handling:
 It receives a broadcast callback from AppService for client communication.
 """
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
+from voxel import RigMode, Session
 from voxel.config import TileOrder
 from voxel.session import GridConfig
 from voxel.tile import Stack, StackStatus, Tile
-
-from voxel import RigMode, Session
+from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
 from .rig import router as rig_router
@@ -32,7 +30,7 @@ log = logging.getLogger(__name__)
 
 def _utc_timestamp() -> str:
     """Return an ISO 8601 timestamp in UTC."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class SessionStatus(BaseModel):
@@ -67,7 +65,7 @@ class SessionService:
         broadcast: BroadcastCallback,
     ):
         self.session = session
-        self._broadcast = broadcast
+        self.broadcast = broadcast
 
         # Compose RigService with broadcast callback
         self.rig_service = RigService(
@@ -122,9 +120,9 @@ class SessionService:
             case "stacks/remove":
                 await self._handle_stacks_remove(payload)
             case "acq/start":
-                await self._handle_acq_start(payload)
+                await self.handle_acq_start(payload)
             case "acq/stop":
-                await self._handle_acq_stop()
+                await self.handle_acq_stop()
             case _:
                 log.warning("Unknown topic from client %s: %s", client_id, topic)
 
@@ -140,7 +138,7 @@ class SessionService:
 
         await self.session.set_grid_offset(x_offset, y_offset)
         # Status broadcast includes grid_config, tiles, and stacks
-        self._broadcast({}, with_status=True)
+        self.broadcast({}, with_status=True)
 
     async def _handle_grid_overlap(self, payload: dict[str, Any]) -> None:
         """Handle grid overlap update."""
@@ -151,7 +149,7 @@ class SessionService:
 
         await self.session.set_overlap(overlap)
         # Status broadcast includes grid_config, tiles, and stacks
-        self._broadcast({}, with_status=True)
+        self.broadcast({}, with_status=True)
 
     async def _handle_tile_order(self, payload: dict[str, Any]) -> None:
         """Handle tile order update."""
@@ -162,7 +160,7 @@ class SessionService:
 
         self.session.set_tile_order(tile_order)
         # Status broadcast includes tile_order and stacks (re-sorted)
-        self._broadcast({}, with_status=True)
+        self.broadcast({}, with_status=True)
 
     # ==================== Stack Management ====================
 
@@ -176,7 +174,7 @@ class SessionService:
             raise ValueError("Missing or invalid 'stacks' array")
 
         await self.session.add_stacks(stacks)
-        self._broadcast({}, with_status=True)
+        self.broadcast({}, with_status=True)
 
     async def _handle_stacks_edit(self, payload: dict[str, Any]) -> None:
         """Handle bulk stack edit request.
@@ -188,7 +186,7 @@ class SessionService:
             raise ValueError("Missing or invalid 'edits' array")
 
         self.session.edit_stacks(edits)
-        self._broadcast({}, with_status=True)
+        self.broadcast({}, with_status=True)
 
     async def _handle_stacks_remove(self, payload: dict[str, Any]) -> None:
         """Handle bulk stack remove request.
@@ -200,22 +198,22 @@ class SessionService:
             raise ValueError("Missing or invalid 'positions' array")
 
         self.session.remove_stacks(positions)
-        self._broadcast({}, with_status=True)
+        self.broadcast({}, with_status=True)
 
     # ==================== Acquisition ====================
 
-    async def _handle_acq_start(self, payload: dict[str, Any]) -> None:
+    async def handle_acq_start(self, payload: dict[str, Any]) -> None:
         """Handle acquisition start request."""
         tile_id = payload.get("tile_id")  # Optional - if None, acquire all
 
         if tile_id:
             # Acquire single stack
-            asyncio.create_task(self._run_single_acquisition(tile_id))
+            fire_and_forget(self._run_single_acquisition(tile_id), log=log)
         else:
             # Acquire all pending stacks
-            asyncio.create_task(self._run_full_acquisition())
+            fire_and_forget(self._run_full_acquisition(), log=log)
 
-    async def _handle_acq_stop(self) -> None:
+    async def handle_acq_stop(self) -> None:
         """Handle acquisition stop request."""
         # TODO: Implement acquisition cancellation
         log.warning("Acquisition stop not yet implemented")
@@ -223,11 +221,12 @@ class SessionService:
     async def _run_single_acquisition(self, tile_id: str) -> None:
         """Run acquisition for a single stack."""
         try:
-            self._broadcast(
-                {"topic": "acq/progress", "payload": {"status": "started", "tile_id": tile_id}}, with_status=True
+            self.broadcast(
+                {"topic": "acq/progress", "payload": {"status": "started", "tile_id": tile_id}},
+                with_status=True,
             )
             result = await self.session.acquire_stack(tile_id)
-            self._broadcast(
+            self.broadcast(
                 {
                     "topic": "acq/progress",
                     "payload": {
@@ -239,8 +238,8 @@ class SessionService:
                 with_status=True,
             )
         except Exception as e:
-            log.error(f"Acquisition failed for {tile_id}: {e}", exc_info=True)
-            self._broadcast(
+            log.exception(f"Acquisition failed for {tile_id}")
+            self.broadcast(
                 {"topic": "acq/progress", "payload": {"status": "failed", "tile_id": tile_id, "error": str(e)}},
                 with_status=True,
             )
@@ -251,7 +250,7 @@ class SessionService:
         pending = [s for s in self.session.stacks if s.status == StackStatus.PLANNED]
         total = len(pending)
 
-        self._broadcast(
+        self.broadcast(
             {"topic": "acq/progress", "payload": {"status": "started", "total": total, "completed": 0}},
             with_status=True,
         )
@@ -262,7 +261,7 @@ class SessionService:
                 result = await self.session.acquire_stack(stack.tile_id)
                 if result.status == StackStatus.COMPLETED:
                     completed += 1
-                self._broadcast(
+                self.broadcast(
                     {
                         "topic": "acq/progress",
                         "payload": {
@@ -275,8 +274,8 @@ class SessionService:
                     with_status=True,
                 )
             except Exception as e:
-                log.error(f"Acquisition failed for {stack.tile_id}: {e}", exc_info=True)
-                self._broadcast(
+                log.exception(f"Acquisition failed for {stack.tile_id}")
+                self.broadcast(
                     {
                         "topic": "acq/progress",
                         "payload": {"status": "failed", "tile_id": stack.tile_id, "error": str(e)},
@@ -285,7 +284,7 @@ class SessionService:
                 )
             # Status broadcast (with_status=True) already includes stacks
 
-        self._broadcast(
+        self.broadcast(
             {"topic": "acq/progress", "payload": {"status": "completed", "total": total, "completed": completed}},
             with_status=True,
         )
@@ -304,13 +303,13 @@ def get_session_service(request: Request) -> SessionService:
 
 
 @session_router.get("/session/status")
-async def get_session_status(service: SessionService = Depends(get_session_service)) -> SessionStatus:
+async def get_session_status(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionStatus:
     """Get current session status."""
     return await service.get_status()
 
 
 @session_router.get("/session/grid")
-async def get_grid(service: SessionService = Depends(get_session_service)) -> GridConfig:
+async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig:
     """Get current grid configuration."""
     return service.session.grid_config
 
@@ -324,7 +323,10 @@ class GridUpdateRequest(BaseModel):
 
 
 @session_router.patch("/session/grid")
-async def update_grid(request: GridUpdateRequest, service: SessionService = Depends(get_session_service)) -> GridConfig:
+async def update_grid(
+    request: GridUpdateRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> GridConfig:
     """Update grid configuration."""
     try:
         if request.x_offset_um is not None and request.y_offset_um is not None:
@@ -333,12 +335,12 @@ async def update_grid(request: GridUpdateRequest, service: SessionService = Depe
             await service.session.set_overlap(request.overlap)
 
         # Status broadcast includes grid_config, tiles, and stacks
-        service._broadcast({}, with_status=True)
+        service.broadcast({}, with_status=True)
         return service.session.grid_config
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))  # Conflict - grid locked
+        raise HTTPException(status_code=409, detail=str(e)) from e  # Conflict - grid locked
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 class TileOrderRequest(BaseModel):
@@ -349,16 +351,17 @@ class TileOrderRequest(BaseModel):
 
 @session_router.put("/session/tile-order")
 async def set_tile_order(
-    request: TileOrderRequest, service: SessionService = Depends(get_session_service)
+    request: TileOrderRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict[str, TileOrder]:
     """Set tile acquisition order."""
     service.session.set_tile_order(request.tile_order)
-    service._broadcast({}, with_status=True)
+    service.broadcast({}, with_status=True)
     return {"tile_order": service.session.tile_order}
 
 
 @session_router.get("/session/stacks")
-async def list_stacks(service: SessionService = Depends(get_session_service)) -> dict:
+async def list_stacks(service: Annotated[SessionService, Depends(get_session_service)]) -> dict:
     """Get all stacks."""
     return {
         "stacks": [s.model_dump() for s in service.session.stacks],
@@ -382,16 +385,19 @@ class AddStacksRequest(BaseModel):
 
 
 @session_router.post("/session/stacks")
-async def add_stacks(request: AddStacksRequest, service: SessionService = Depends(get_session_service)) -> dict:
+async def add_stacks(
+    request: AddStacksRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
     """Add stacks at the specified grid positions (bulk)."""
     try:
         stacks = await service.session.add_stacks([s.model_dump() for s in request.stacks])
-        service._broadcast({}, with_status=True)
+        service.broadcast({}, with_status=True)
         return {"added": len(stacks), "stacks": [s.model_dump() for s in stacks]}
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 class StackEditInput(BaseModel):
@@ -410,16 +416,19 @@ class EditStacksRequest(BaseModel):
 
 
 @session_router.patch("/session/stacks")
-async def edit_stacks(request: EditStacksRequest, service: SessionService = Depends(get_session_service)) -> dict:
+async def edit_stacks(
+    request: EditStacksRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
     """Edit stacks' z parameters (bulk)."""
     try:
         stacks = service.session.edit_stacks([e.model_dump(exclude_none=True) for e in request.edits])
-        service._broadcast({}, with_status=True)
+        service.broadcast({}, with_status=True)
         return {"edited": len(stacks), "stacks": [s.model_dump() for s in stacks]}
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 class StackPosition(BaseModel):
@@ -436,14 +445,17 @@ class RemoveStacksRequest(BaseModel):
 
 
 @session_router.delete("/session/stacks")
-async def remove_stacks(request: RemoveStacksRequest, service: SessionService = Depends(get_session_service)) -> dict:
+async def remove_stacks(
+    request: RemoveStacksRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
     """Remove stacks (bulk)."""
     try:
         service.session.remove_stacks([p.model_dump() for p in request.positions])
-        service._broadcast({}, with_status=True)
+        service.broadcast({}, with_status=True)
         return {"removed": len(request.positions)}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 class AcquireRequest(BaseModel):
@@ -454,18 +466,19 @@ class AcquireRequest(BaseModel):
 
 @session_router.post("/session/acquire")
 async def start_acquisition(
-    request: AcquireRequest = AcquireRequest(), service: SessionService = Depends(get_session_service)
+    request: AcquireRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Start acquisition."""
     if service.session.rig.mode == RigMode.ACQUIRING:
         raise HTTPException(status_code=409, detail="Acquisition already in progress")
 
-    await service._handle_acq_start({"tile_id": request.tile_id})
+    await service.handle_acq_start({"tile_id": request.tile_id})
     return {"status": "started", "tile_id": request.tile_id}
 
 
 @session_router.post("/session/acquire/stop")
-async def stop_acquisition(service: SessionService = Depends(get_session_service)) -> dict:
+async def stop_acquisition(service: Annotated[SessionService, Depends(get_session_service)]) -> dict:
     """Stop acquisition."""
-    await service._handle_acq_stop()
+    await service.handle_acq_stop()
     return {"status": "stopping"}

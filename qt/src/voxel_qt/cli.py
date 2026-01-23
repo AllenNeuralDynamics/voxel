@@ -9,6 +9,9 @@ from pathlib import Path
 import qasync
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
+
+from voxel_qt.app import VoxelQtApp
+from voxel_qt.ui.main_window import MainWindow
 from voxel_qt.ui.theme import Colors
 
 
@@ -43,7 +46,7 @@ def create_qapp() -> QApplication:
     return qapp
 
 
-def run_app(config_path: Path | None = None) -> int:
+def run_app(_config_path: Path | None = None) -> int:
     """Run the Voxel Qt application with qasync event loop.
 
     Args:
@@ -65,9 +68,6 @@ def run_app(config_path: Path | None = None) -> int:
     async def _setup_and_run() -> None:
         """Setup and show the main window."""
         nonlocal window
-
-        from voxel_qt.app import VoxelQtApp
-        from voxel_qt.ui.main_window import MainWindow
 
         # Create application state manager
         app = VoxelQtApp()

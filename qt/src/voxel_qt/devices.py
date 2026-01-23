@@ -4,18 +4,14 @@ This module provides centralized management of device handles and their Qt adapt
 enabling reactive UI updates when device properties change.
 """
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from PySide6.QtCore import QObject, Signal
+
+from pyrig import DeviceHandle
+from voxel import Session
 from voxel_qt.handle import DeviceHandleQt
-
-if TYPE_CHECKING:
-    from pyrig import DeviceHandle
-    from voxel import Session
-
 
 log = logging.getLogger(__name__)
 

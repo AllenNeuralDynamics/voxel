@@ -1,7 +1,7 @@
-import asyncio
 import inspect
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from enum import StrEnum
 from functools import wraps
 from typing import Any, ClassVar, Literal, Self, Union, get_args, get_origin
@@ -15,6 +15,7 @@ DESC_ATTR = "__attr_desc__"
 UNITS_ATTR = "__attr_units__"
 STREAM_ATTR = "__attr_stream__"
 
+logger = logging.getLogger("pyrig")
 
 def describe(label: str, desc: str | None = None, units: str | None = None, stream: bool = False) -> Callable:
     """A decorator factory to add metadata to a function.
@@ -36,27 +37,25 @@ def describe(label: str, desc: str | None = None, units: str | None = None, stre
         return wrapper
 
     def decorator(func: Callable) -> Callable:
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
 
             @wraps(func)
-            async def async_wrapper(*args, **kwargs):
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 return await func(*args, **kwargs)
 
             return attach_metadata(async_wrapper)
 
-        else:
+        @wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
 
-            @wraps(func)
-            def sync_wrapper(*args, **kwargs):
-                return func(*args, **kwargs)
-
-            return attach_metadata(sync_wrapper)
+        return attach_metadata(sync_wrapper)
 
     return decorator
 
 
 class Device[T: StrEnum]:
-    __COMMANDS__: set[str] = set()
+    __COMMANDS__: ClassVar[set[str]] = set()
     __DEVICE_TYPE__: ClassVar[str] = "generic"
 
     def __init__(self, uid: str):
@@ -70,7 +69,7 @@ class AttributeInfo(BaseModel):
     desc: str | None = None
 
     @staticmethod
-    def _parse_type_annotation(annotation) -> str:
+    def _parse_type_annotation(annotation: Any) -> str:
         """Parse type annotation into string representation."""
         if annotation is inspect.Parameter.empty:
             return "any"
@@ -200,9 +199,9 @@ class Command[R]:
         self._func = func
         self._info = info or CommandInfo.from_func(self._func)
         self._param_model = self._create_param_model(func)
-        self._is_async = asyncio.iscoroutinefunction(func)
+        self._is_async = inspect.iscoroutinefunction(func)
 
-    def __call__(self, *args, **kwargs) -> R:
+    def __call__(self, *args: Any, **kwargs: Any) -> R:
         args, kwargs = self.validate_params(*args, **kwargs)
         return self._func(*args, **kwargs)
 
@@ -228,27 +227,18 @@ class Command[R]:
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
 
-            if param.annotation == inspect.Parameter.empty:
-                # No annotation, use Any
-                annotation = Any
-            else:
-                annotation = param.annotation
-
-            # Determine default value
-            if param.default == inspect.Parameter.empty:
-                default = ...  # Required field in Pydantic
-            else:
-                default = param.default
-
+            annotation = Any if param.annotation == inspect.Parameter.empty else param.annotation
+            default = ... if param.default == inspect.Parameter.empty else param.default
             fields[param_name] = (annotation, default)
 
         return create_model(f"{func.__name__}_params", **fields)
 
-    def validate_params(self, *args, **kwargs) -> tuple[Sequence, Mapping]:
+    def validate_params(self, *args: Any, **kwargs: Any) -> tuple[tuple[Any, ...], dict[str, Any]]:
         """Validate provided parameters using Pydantic model.
 
         Returns:
             tuple containing arguments and keyword arguments.
+
         Raises:
             CommandParamsError: If validation fails.
         """
@@ -261,18 +251,18 @@ class Command[R]:
                 kwargs = dict(bound_args.arguments)
                 args = ()
             except TypeError as e:
-                raise CommandParamsError(self, [f"Parameter binding error: {e}"])
+                raise CommandParamsError(self, [f"Parameter binding error: {e}"]) from e
 
         # Use Pydantic for validation - it handles all type coercion automatically!
         try:
             validated = self._param_model(**kwargs)
             # Return the field values directly (preserving Pydantic model instances)
             # instead of converting to dict via model_dump()
-            return (), {k: getattr(validated, k) for k in type(validated).model_fields.keys()}
+            return (), {k: getattr(validated, k) for k in type(validated).model_fields}
         except ValidationError as e:
             # Convert Pydantic errors to CommandParamsError
             errors = [f"{err['loc'][0]}: {err['msg']}" for err in e.errors()]
-            raise CommandParamsError(self, errors)
+            raise CommandParamsError(self, errors) from e
 
 
 class AttributeRequest(BaseModel):
@@ -331,7 +321,7 @@ def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
         if attr_name.startswith("_"):
             continue
 
-        try:
+        with suppress(Exception):
             # Search through MRO to find property with @describe decorators
             # When a subclass overrides a property, it creates a new descriptor without base class decorators
             prop_with_describe = None
@@ -350,8 +340,6 @@ def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
 
             if prop_with_describe is not None:
                 properties[attr_name] = PropertyInfo.from_attr(prop_with_describe)
-        except Exception:
-            pass
 
     return properties
 
@@ -394,21 +382,21 @@ def collect_commands(obj: Any) -> dict[str, Command]:
     return commands
 
 
-def runcmd[R](cmd: Command[R], *args, **kwargs):
+def runcmd[R](cmd: Command[R], *args: Any, **kwargs: Any) -> R | None:
     """Execute a command with provided arguments and validation."""
-    print(f"Running: {cmd.info.name}")
-    print(f"Description: {cmd.info.desc}")
+    logger.info(f"Running: {cmd.info.name}")
+    logger.info(f"Description: {cmd.info.desc}")
 
     try:
         result = cmd(*args, **kwargs)
-        print(f"Result: {result}")
+        logger.info(f"Result: {result}")
         return result
     except CommandParamsError as e:
         err_msg = "Parameter validation failed:\n" + "\n".join(f"  - {err}" for err in e.errors)
-        print(f"Error: [red]{err_msg}[/red]")
-        return
+        logger.info(f"Error: [red]{err_msg}[/red]")
+        return None
     except Exception as e:
-        print(f"Execution Error: {e}")
+        logger.info(f"Execution Error: {e}")
         raise
 
 
@@ -440,8 +428,8 @@ def get_command_help(cmd: CommandInfo | Command) -> str:
 
 def list_commands(*cmds: CommandInfo | Command) -> None:
     """List all provided commands with their interfaces."""
-    print("Available Commands:")
-    print("=" * 50)
+    logger.info("Available Commands:")
+    logger.info("=" * 50)
     for cmd in cmds:
-        print(get_command_help(cmd))
-        print("-" * 30)
+        logger.info(get_command_help(cmd))
+        logger.info("-" * 30)

@@ -1,11 +1,16 @@
 """Ximea camera driver using xiapi SDK."""
 
 import re
+from contextlib import suppress
 from typing import Any
 
 import numpy as np
-from ome_zarr_writer.types import Vec2D
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from vxlib.vec import IVec2D, Vec2D
+from ximea_python import xiapi
+from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
+
+from pyrig import describe
 from voxel.camera.base import (
     Camera,
     FrameRegion,
@@ -14,10 +19,6 @@ from voxel.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from ximea_python import xiapi
-from ximea_python.xidefs import XI_DOWNSAMPLING_VALUE
-
-from pyrig import describe
 
 
 def _to_int(value: Any) -> int:
@@ -60,21 +61,19 @@ class XimeaCamera(Camera):
         self,
         uid: str,
         serial: str,
-        pixel_size_um: Vec2D[float] | tuple[float, float] = (1.0, 1.0),
+        pixel_size_um: Vec2D | tuple[float, float] | list[float] | str = (1.0, 1.0),
     ) -> None:
         """Initialize the Ximea camera.
 
         Args:
             uid: Unique identifier for this device.
             serial: Camera serial number.
-            pixel_size_um: Physical pixel size in microns (x, y).
+            pixel_size_um: Physical pixel size in microns (y, x).
         """
         super().__init__(uid=uid)
 
         self._serial = str(serial)
-        self._pixel_size_um = (
-            Vec2D(x=pixel_size_um[0], y=pixel_size_um[1]) if isinstance(pixel_size_um, tuple) else pixel_size_um
-        )
+        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
         self._latest_frame: np.ndarray | None = None
         self._buffer_size_frames = 0
 
@@ -100,13 +99,13 @@ class XimeaCamera(Camera):
 
     @property
     @describe(label="Sensor Size", units="px", desc="The size of the camera sensor in pixels.")
-    def sensor_size_px(self) -> Vec2D[int]:
+    def sensor_size_px(self) -> IVec2D:
         """Get the size of the camera sensor in pixels."""
-        return Vec2D(x=self._sensor_width, y=self._sensor_height)
+        return IVec2D(y=self._sensor_height, x=self._sensor_width)
 
     @property
     @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D[float]:
+    def pixel_size_um(self) -> Vec2D:
         """Get the size of the camera pixel in microns."""
         return self._pixel_size_um
 
@@ -179,7 +178,7 @@ class XimeaCamera(Camera):
     @frame_rate_hz.setter
     def frame_rate_hz(self, value: float) -> None:
         """Set the frame rate of the camera in Hz."""
-        # Ximea frame rate is typically controlled via exposure/line timing
+        del value  # unused - frame rate controlled via exposure time
         self.log.warning("Frame rate is controlled via exposure time on Ximea cameras")
 
     # ==================== Frame Region ====================
@@ -298,6 +297,7 @@ class XimeaCamera(Camera):
     @describe(label="Start", desc="Start acquiring frames from the camera.")
     def start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames."""
+        del frame_count  # unused - continuous acquisition
         self.log.info("Starting camera acquisition")
         self._camera.start_acquisition()
 
@@ -348,18 +348,14 @@ class XimeaCamera(Camera):
 
     def _query_pixel_formats(self) -> list[PixelFormat]:
         """Query available pixel formats from the camera."""
-        from ximea_python.xidefs import XI_BIT_DEPTH
-
         available: list[PixelFormat] = []
         init_depth = self._camera.get_sensor_bit_depth()
 
         for depth in XI_BIT_DEPTH:
-            try:
+            with suppress(Exception):
                 self._camera.set_sensor_bit_depth(depth)
                 if depth in _XIMEA_TO_PIXEL_FMT:
                     available.append(_XIMEA_TO_PIXEL_FMT[depth])
-            except Exception:
-                pass
 
         self._camera.set_sensor_bit_depth(init_depth)
         return available
@@ -382,10 +378,8 @@ class XimeaCamera(Camera):
                 self.log.debug(f"Binning {binning_str} not available on this camera")
 
         # Restore initial value
-        try:
+        with suppress(Exception):
             self._camera.set_downsampling(init_binning)
-        except Exception:
-            pass
 
         # Default to [1] if no options found
         if not available:

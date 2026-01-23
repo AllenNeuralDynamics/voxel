@@ -1,10 +1,9 @@
 """Layout primitives for composable UI construction."""
 
-from __future__ import annotations
-
 from typing import Self
 
 from PySide6.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+
 from voxel_qt.ui.primitives.display.label import Label
 from voxel_qt.ui.theme import Colors
 

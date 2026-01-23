@@ -1,14 +1,16 @@
 import random
+from typing import ClassVar
+
+from pyrig.device import Adapter, Device, PropertyModel, deliminated_float, describe, enumerated_string
 
 from pyrig import DeviceHandle
-from pyrig.device import Adapter, Device, PropertyModel, deliminated_float, describe, enumerated_string
 
 
 class Laser(Device):
     """A mock laser device for testing property and command interfaces."""
 
     __DEVICE_TYPE__ = "laser"
-    __COMMANDS__ = {"turn_on", "turn_off"}
+    __COMMANDS__: ClassVar[set[str]] = {"turn_on", "turn_off"}
 
     def __init__(self, uid: str, wavelength: float):
         super().__init__(uid=uid)

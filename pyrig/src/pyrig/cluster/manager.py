@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+from contextlib import suppress
 from multiprocessing import Event, Process
 
 import zmq
@@ -10,7 +11,7 @@ import zmq.asyncio
 from pydantic import BaseModel, Field
 
 from pyrig.device import DeviceHandle
-from pyrig.utils import get_local_ip
+from vxlib import get_local_ip
 
 from .node import (
     DeviceBuildError,
@@ -57,7 +58,7 @@ class LocalNodeProcess(Process):
                 service_cls=self.service_cls,
                 remove_console_handlers=True,
                 on_ready=self.ready_event.set,
-            )
+            ),
         )
         self.ready_event.clear()
 
@@ -140,10 +141,10 @@ class ClusterManager:
 
         while not all(process.ready_event.is_set() for process in self._local_node_processes.values()):
             self.log.warning("Waiting for local nodes to report as alive...")
-            time.sleep(0.5)
+            time.sleep(0.5)  # noqa: ASYNC251 - allow sleep in async
         self.log.info("All local nodes started successfully.")
 
-        result = await self._provision_nodes(timeout=provision_timeout)
+        result = await self._provision_nodes(timeout_s=provision_timeout)
         self.provisions = result.devices
         self.build_errors = result.errors
 
@@ -151,14 +152,14 @@ class ClusterManager:
             handle = self._create_handle(device_id, prov)
             self.handles[device_id] = handle
 
-        await self._wait_for_node_heartbeats(timeout=connection_timeout)
+        await self._wait_for_node_heartbeats(timeout_s=connection_timeout)
 
         self._heartbeat_monitor_task = asyncio.create_task(self._monitor_node_heartbeats())
 
         # Log summary
         if self.build_errors:
             self.log.warning(
-                f"Cluster ready with {len(self.handles)} devices, {len(self.build_errors)} failed to build"
+                f"Cluster ready with {len(self.handles)} devices, {len(self.build_errors)} failed to build",
             )
             for uid, error in self.build_errors.items():
                 self.log.error(f"  {uid}: {error.message}")
@@ -174,7 +175,7 @@ class ClusterManager:
         )
         return self.node_service_cls.create_handle(prov.device_type, client)
 
-    async def _ping_all_nodes(self, timeout: float = 5.0) -> set[str]:
+    async def _ping_all_nodes(self, timeout_s: float = 5.0) -> set[str]:
         """Ping all expected nodes to verify they're reachable."""
         expected_nodes = set(self.nodes.keys())
         ponged_nodes: set[str] = set()
@@ -184,7 +185,7 @@ class ClusterManager:
             await self._control_socket.send_multipart(msg.to_parts())
 
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(timeout_s):
                 while ponged_nodes != expected_nodes:
                     parts = await self._control_socket.recv_multipart()
                     msg = RigMessage.from_parts(parts)
@@ -194,16 +195,16 @@ class ClusterManager:
                         ponged_nodes.add(node_id)
                         self.log.info(f"Node '{node_id}' is reachable")
 
-        except asyncio.TimeoutError:
+        except TimeoutError as e:
             missing = expected_nodes - ponged_nodes
-            self.log.error(f"Nodes not responding to ping: {missing}")
+            self.log.exception(f"Nodes not responding to ping: {missing}")
             raise RuntimeError(
-                f"Cannot reach nodes: {missing}. Ensure remote nodes are running with: python -m pyrig.node <node_id>"
-            )
+                f"Cannot reach nodes: {missing}. Ensure remote nodes are running with: python -m pyrig.node <node_id>",
+            ) from e
 
         return ponged_nodes
 
-    async def _provision_nodes(self, timeout: float = 30.0) -> DeviceBuildResult:
+    async def _provision_nodes(self, timeout_s: float = 30.0) -> DeviceBuildResult:
         """Provision all nodes (local and remote)."""
         all_devices: dict[str, DeviceProvision] = {}
         all_errors: dict[str, DeviceBuildError] = {}
@@ -211,7 +212,7 @@ class ClusterManager:
         provisioned_nodes: set[str] = set()
 
         self.log.info("Checking node availability...")
-        await self._ping_all_nodes(timeout=5.0)
+        await self._ping_all_nodes(timeout_s=5.0)
 
         self.log.info("Sending provision commands to all nodes...")
         for node_id, node_config in self.nodes.items():
@@ -221,7 +222,7 @@ class ClusterManager:
             self.log.info(f"Sent provision to node '{node_id}'")
 
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(timeout_s):
                 while provisioned_nodes != expected_nodes:
                     parts = await self._control_socket.recv_multipart()
                     msg = RigMessage.from_parts(parts)
@@ -236,19 +237,19 @@ class ClusterManager:
                     elif msg.action == NodeAction.PONG:
                         continue
 
-        except asyncio.TimeoutError:
+        except TimeoutError as e:
             missing = expected_nodes - provisioned_nodes
-            self.log.error(f"Provisioning timeout. Missing nodes: {missing}")
+            self.log.exception(f"Provisioning timeout. Missing nodes: {missing}")
 
             await self._shutdown_nodes(provisioned_nodes)
 
             raise RuntimeError(
-                f"Rig startup failed. Missing nodes: {missing}. All provisioned nodes have been shut down."
-            )
+                f"Rig startup failed. Missing nodes: {missing}. All provisioned nodes have been shut down.",
+            ) from e
 
         return DeviceBuildResult(devices=all_devices, errors=all_errors)
 
-    async def _shutdown_nodes(self, node_ids: set[str], timeout: float = 5.0):
+    async def _shutdown_nodes(self, node_ids: set[str], timeout_s: float = 5.0):
         """Send shutdown command to specific nodes and wait for acknowledgment."""
         if not node_ids:
             return
@@ -257,12 +258,12 @@ class ClusterManager:
             try:
                 msg = RigMessage.create(RigAction.SHUTDOWN, identity=node_id.encode())
                 await self._control_socket.send_multipart(msg.to_parts())
-            except Exception as e:
-                self.log.error(f"Failed to send shutdown to {node_id}: {e}")
+            except Exception:
+                self.log.exception(f"Failed to send shutdown to {node_id}")
 
         acknowledged = set()
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(timeout_s):
                 while acknowledged != node_ids:
                     parts = await self._control_socket.recv_multipart()
                     msg = RigMessage.from_parts(parts)
@@ -270,7 +271,7 @@ class ClusterManager:
 
                     if msg.action == NodeAction.SHUTDOWN_COMPLETE:
                         acknowledged.add(node_id)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
         self._clear_local_node_processes()
@@ -286,7 +287,7 @@ class ClusterManager:
                     process.join()
         self._local_node_processes.clear()
 
-    async def _wait_for_node_heartbeats(self, timeout: float = 30.0):
+    async def _wait_for_node_heartbeats(self, timeout_s: float = 30.0):
         """Wait for all nodes to send their first heartbeat."""
         expected_nodes = set(self.nodes.keys())
         heartbeat_received: set[str] = set()
@@ -294,7 +295,7 @@ class ClusterManager:
         self.log.info("Waiting for node heartbeats...")
 
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(timeout_s):
                 while heartbeat_received != expected_nodes:
                     parts = await self._control_socket.recv_multipart()
                     msg = RigMessage.from_parts(parts)
@@ -308,10 +309,11 @@ class ClusterManager:
                             heartbeat_received.add(node_id)
                             self.log.info(f"Received heartbeat from node '{node_id}'")
 
-        except asyncio.TimeoutError:
+        except TimeoutError as e:
             missing = expected_nodes - heartbeat_received
-            self.log.error(f"Heartbeat timeout. Missing nodes: {missing}")
-            raise RuntimeError(f"Nodes did not send heartbeat: {missing}. This may indicate provisioning issues.")
+            self.log.exception(f"Heartbeat timeout. Missing nodes: {missing}")
+            msg = f"Nodes did not send heartbeat: {missing}. This may indicate provisioning issues."
+            raise RuntimeError(msg) from e
 
     async def _monitor_node_heartbeats(self, check_interval: float = 5.0, heartbeat_timeout: float = 10.0):
         """Monitor node heartbeats and log warnings if nodes become unresponsive."""
@@ -325,7 +327,7 @@ class ClusterManager:
 
                     if time_since_heartbeat > heartbeat_timeout:
                         self.log.warning(
-                            f"Node '{node_id}' heartbeat timeout ({time_since_heartbeat:.1f}s since last heartbeat)"
+                            f"Node '{node_id}' heartbeat timeout ({time_since_heartbeat:.1f}s since last heartbeat)",
                         )
 
                 try:
@@ -338,13 +340,13 @@ class ClusterManager:
                             _ = msg.decode_payload(NodeHeartbeat)
                             self._node_heartbeats[node_id] = time.time()
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                self.log.error(f"Error in heartbeat monitor: {e}", exc_info=True)
+            except Exception:
+                self.log.exception("Error in heartbeat monitor")
 
     async def _receive_logs(self):
         """Background task to receive logs from nodes and forward to Python logging."""
@@ -365,31 +367,27 @@ class ClusterManager:
                     target_logger.log(level, message)
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            self.log.error(f"Error in log receiver: {e}")
+        except Exception:
+            self.log.exception("Error in log receiver")
 
     async def stop(self):
         """Stop all nodes and cleanup."""
         if self._heartbeat_monitor_task:
             self._heartbeat_monitor_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._heartbeat_monitor_task
-            except asyncio.CancelledError:
-                pass
 
         if self._log_watch_task:
             self._log_watch_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._log_watch_task
-            except asyncio.CancelledError:
-                pass
 
         for device_id, client in self.handles.items():
             self.log.debug(f"Closing device {device_id}")
             await client.close()
 
         all_nodes = set(self.nodes.keys())
-        await self._shutdown_nodes(all_nodes, timeout=2.0)
+        await self._shutdown_nodes(all_nodes, timeout_s=2.0)
 
         self._control_socket.close()
         self._log_socket.close()

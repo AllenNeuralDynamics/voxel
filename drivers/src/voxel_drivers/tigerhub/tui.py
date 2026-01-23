@@ -1,5 +1,4 @@
-"""
-TigerBox Safe TUI (read-only)
+"""TigerBox Safe TUI (read-only).
 
 Axis view blends:
   • Overview (card/slot/id/enc, pos, busy, joystick)
@@ -83,8 +82,7 @@ def cards_table(info: BoxInfo) -> Table:
 
 
 def _axis_state_bits(axis_state_obj: Any) -> dict[str, Any]:
-    """
-    Extract useful status bits from AxisState safely.
+    """Extract useful status bits from AxisState safely.
     We keep names short and only add rows that exist.
     """
     # try a bunch of common names, fallback to None if missing
@@ -128,9 +126,8 @@ def axis_detail_panel(
     hspd: Mapping[str, float],
     axis_state_obj: Any,
 ) -> Panel:
-    """
-    Single, compact panel that merges AxisState status bits into the axis card.
-    (We avoid duplicating pos/limits/backlash which already appear via params/where.)
+    """Single, compact panel that merges AxisState status bits into the axis card.
+    (We avoid duplicating pos/limits/backlash which already appear via params/where.).
     """
     ax = info.axes[uid]
 
@@ -271,7 +268,7 @@ def print_help(console: Console) -> None:
 # ---------------- main loop ---------------- #
 
 
-def main() -> None:  # noqa: C901, PLR0912, PLR0915
+def main() -> None:  # noqa: C901, PLR0915 - TUI main loop
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", default="COM3", help="Serial port (default: COM3)")
     args = ap.parse_args()
@@ -291,7 +288,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 port=args.port,
                 version=info.version,
                 mode=str(drv.current_mode()) if drv.current_mode() is not None else None,
-            )
+            ),
         )
 
         if axes:
@@ -329,7 +326,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         f"Detected axes: [bold]{', '.join(axes) if axes else '—'}[/bold]",
                         border_style="cyan",
                         expand=False,
-                    )
+                    ),
                 )
                 if axes and idx == -1:
                     idx = 0
@@ -363,7 +360,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         title="[bold yellow]Cards & Modules[/bold yellow]",
                         border_style="yellow",
                         padding=(0, 1),
-                    )
+                    ),
                 )
                 continue
 

@@ -2,7 +2,7 @@ from voxel_drivers.tigerhub.model import ASIMode, Reply
 from voxel_drivers.tigerhub.protocol.linefmt import _ax
 
 
-def asi_parse(raw: bytes, requested_axes: list[str] | None = None) -> tuple[Reply, ASIMode]:  # noqa: PLR0911, PLR0912
+def asi_parse(raw: bytes, requested_axes: list[str] | None = None) -> tuple[Reply, ASIMode]:
     s = (raw or b"").decode(errors="ignore").strip()
 
     if s.startswith(":N"):

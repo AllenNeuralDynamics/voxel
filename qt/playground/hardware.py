@@ -70,8 +70,8 @@ class VoltageWidget(QGroupBox):
         # Use DoubleSpinBox for voltage control
         self.voltage_spinbox = DoubleSpinBox(
             value=self._getter(),
-            min=0.0,
-            max=10.0,
+            min_val=0.0,
+            max_val=10.0,
             decimals=2,
             step=0.1,
         )
@@ -120,8 +120,8 @@ class PositionWidget(QGroupBox):
         # Use SpinBox for position control
         self.pos_spinbox = SpinBox(
             value=self._getter(),
-            min=0,
-            max=1000,
+            min_val=0,
+            max_val=1000,
         )
 
         # Display label that shows current position
@@ -166,8 +166,8 @@ class TemperatureWidget(QGroupBox):
         # Use DoubleSpinBox for target temperature control
         self.target_spinbox = DoubleSpinBox(
             value=self.hardware.target_temperature,
-            min=0.0,
-            max=100.0,
+            min_val=0.0,
+            max_val=100.0,
             decimals=1,
         )
         self.target_spinbox.setSuffix("°C")

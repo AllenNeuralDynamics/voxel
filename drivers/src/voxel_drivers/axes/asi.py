@@ -1,14 +1,11 @@
 import logging
 from types import TracebackType
+from typing import TYPE_CHECKING, Self
 
-from voxel.axes.continuous.base import (
-    ContinuousAxis,
-    StepMode,
-    TriggerMode,
-    TTLStepper,
-    TTLStepperConfig,
-)
 from voxel_drivers.tigerhub.model.axis_state import AxisState
+
+if TYPE_CHECKING:
+    from voxel_drivers.tigerhub.hub import TigerHub
 from voxel_drivers.tigerhub.model.models import ASIAxisInfo
 from voxel_drivers.tigerhub.ops.params import TigerParam, TigerParams
 from voxel_drivers.tigerhub.ops.step_shoot import (
@@ -16,6 +13,14 @@ from voxel_drivers.tigerhub.ops.step_shoot import (
     StepShootConfig,
     TTLIn0Mode,
     TTLOut0Mode,
+)
+
+from voxel.axes.continuous.base import (
+    ContinuousAxis,
+    StepMode,
+    TriggerMode,
+    TTLStepper,
+    TTLStepperConfig,
 )
 
 
@@ -204,7 +209,7 @@ class TigerLinearAxis(ContinuousAxis):
         self.hub.release_axis(self._axis_label)
 
     # Optional context-manager UX
-    def __enter__(self) -> "TigerLinearAxis":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_tp: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
@@ -241,30 +246,12 @@ if __name__ == "__main__":
     hub = TigerHub(PORT)
     rprint("Connected axes: %s", hub.box.info().axes)
 
-    x_axis = hub.make_linear_axis(uid="x_axis", asi_label="X")
+    x_axis = TigerLinearAxis(hub=hub, uid="x_axis", axis_label="X")
     logger.info("X axis initialized", extra=x_axis.info.to_dict())
-    y_axis = hub.make_linear_axis(uid="y_axis", asi_label="V")
+    y_axis = TigerLinearAxis(hub=hub, uid="y_axis", axis_label="V")
     logger.info("Y axis initialized", extra=y_axis.info.to_dict())
 
     log_axis_info(x_axis)
     log_axis_info(y_axis)
-
-    # og_x = x_axis.position
-    # og_y = y_axis.position
-
-    # logger.info('Original: x=%s, y=%s', og_x, og_y)
-
-    # for _ in range(5):
-    #     for ax in (x_axis, y_axis):
-    #         ax.move_rel(-5, wait=True)
-    # rel = 5 * 5
-    # logger.info('Moved axes relatively by %s mm', rel)
-    # logger.info('Expected new position: x=%s, y=%s', og_x - rel, og_y - rel)
-    # logger.info('Actual new position: x=%s, y=%s', x_axis.position, y_axis.position)
-
-    # log_axis_info(x_axis)
-    # log_axis_info(y_axis)
-
-    # rprint(x_axis.tiger_axis_state)
 
     hub.close()

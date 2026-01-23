@@ -43,5 +43,9 @@ export type {
 	RigMode,
 	LogMessage,
 	ErrorPayload,
-	ProfileChangedPayload
+	ProfileChangedPayload,
+	Vec2D,
+	Vec3D
 } from './types.ts';
+
+export { parseVec2D, parseVec3D } from './types.ts';

@@ -87,7 +87,12 @@ class SimulatedContinuousAxis(ContinuousAxis):
         """Move to an absolute position."""
         if position < self._lower_limit or position > self._upper_limit:
             self.log.warning(
-                f"Position {position} {self._units} is outside limits [{self._lower_limit}, {self._upper_limit}] {self._units}"
+                "Position %s %s is outside limits [%s, %s] %s",
+                position,
+                self._units,
+                self._lower_limit,
+                self._upper_limit,
+                self._units,
             )
 
         # Stop any ongoing movement
@@ -279,7 +284,10 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         self._is_moving = False
         self._settle = float(settle_seconds)
         self.log.debug(
-            "SimulatedDiscreteAxis %s: Initialized at position %s with %s slots", uid, start_pos, self.slot_count
+            "SimulatedDiscreteAxis %s: Initialized at position %s with %s slots",
+            uid,
+            start_pos,
+            self.slot_count,
         )
 
     # --------- state ----------
@@ -293,6 +301,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
 
     # --------- commands ----------
     def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
+        del timeout  # unused in simulation
         if not (0 <= slot < self.slot_count):
             msg = f"Invalid slot {slot}; valid range is 0..{self.slot_count - 1}"
             raise ValueError(msg)

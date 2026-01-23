@@ -54,11 +54,11 @@ class Quantity(float):
         return super().__new__(cls, parsed)
 
     @classmethod
-    def __get_validators__(cls) -> Generator[Callable[..., float], Any, None]:
+    def __get_validators__(cls) -> Generator[Callable[..., float], Any]:
         yield cls._validate
 
     @classmethod
-    def _validate(cls, v: float | str, *args, **kwargs) -> float:  # noqa: ARG003
+    def _validate(cls, v: float | str, *_args: Any, **_kwargs: Any) -> float:
         if isinstance(v, (int, float)):
             return float(v)
         m = re.fullmatch(r"\s*([+-]?[0-9]*\.?[0-9]+)\s*([a-zA-Z°]+)\s*", str(v))

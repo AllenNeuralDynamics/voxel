@@ -1,4 +1,3 @@
-from .controller import DeviceController, PublishFn, StreamCallback
 from .base import (
     DESC_ATTR,
     LABEL_ATTR,
@@ -24,54 +23,55 @@ from .base import (
     runcmd,
 )
 from .build import BuildConfig, BuildError, BuildGroupSpec, DeviceConfig, build_objects
+from .controller import DeviceController, PublishFn, StreamCallback
 from .handle import Adapter, DeviceHandle
 from .props.common import PropertyModel
 from .props.deliminated import deliminated_float, deliminated_int
 from .props.enumerated import enumerated_int, enumerated_string
 
 __all__ = [
+    "DESC_ATTR",
     # Decorators and constants
     "LABEL_ATTR",
-    "DESC_ATTR",
-    "UNITS_ATTR",
     "STREAM_ATTR",
-    "describe",
+    "UNITS_ATTR",
+    # Adapters and Publishing
+    "Adapter",
+    # Command/property types
+    "AttributeInfo",
+    "AttributeRequest",
+    # Build system
+    "BuildConfig",
+    "BuildError",
+    "BuildGroupSpec",
+    "Command",
+    "CommandInfo",
+    "CommandParamsError",
+    "CommandResponse",
     # Core device classes
     "Device",
+    "DeviceConfig",
     "DeviceController",
     "DeviceHandle",
     "DeviceInterface",
-    # Adapters and Publishing
-    "Adapter",
+    "ErrorMsg",
+    "ParamInfo",
+    "PropertyInfo",
+    "PropertyModel",
+    "PropsCallback",
+    "PropsResponse",
     "PublishFn",
     "StreamCallback",
-    # Command/property types
-    "AttributeInfo",
-    "PropertyInfo",
-    "ParamInfo",
-    "CommandInfo",
-    "Command",
-    "ErrorMsg",
-    "CommandParamsError",
-    "CommandResponse",
-    "AttributeRequest",
-    "PropsResponse",
-    "PropsCallback",
-    "PropertyModel",
-    # Utilities
-    "runcmd",
-    "get_command_help",
-    "collect_properties",
+    "build_objects",
     "collect_commands",
+    "collect_properties",
     # Property descriptors
     "deliminated_float",
     "deliminated_int",
+    "describe",
     "enumerated_int",
     "enumerated_string",
-    # Build system
-    "BuildConfig",
-    "DeviceConfig",
-    "BuildError",
-    "BuildGroupSpec",
-    "build_objects",
+    "get_command_help",
+    # Utilities
+    "runcmd",
 ]

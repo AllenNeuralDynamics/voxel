@@ -24,7 +24,7 @@ def print_help():
     console.print(table)
 
 
-def main():  # noqa: PLR0912
+def main():
     device = VoiceCoilDevice(port=PORT)
     console.print(Panel("[bold green]VoiceCoil Device Interactive REPL[/bold green]", expand=False))
     print_help()
@@ -53,7 +53,7 @@ def main():  # noqa: PLR0912
             elif cmd.lower().startswith("send "):
                 raw = cmd[5:].strip()
                 if raw:
-                    resp = device._send_bytes(raw.encode("ascii") + b"\r")  # noqa: SLF001
+                    resp = device._send_bytes(raw.encode("ascii") + b"\r")
                     console.print(f"[blue]RESPONSE:[/blue] {resp}")
                 else:
                     console.print("[red]Usage: send <raw_command>[/red]")

@@ -17,7 +17,7 @@ __all__ = [
     "ContinuousAxisHandle",
     "ScanMode",
     "StepMode",
-    "TriggerMode",
     "TTLStepper",
     "TTLStepperConfig",
+    "TriggerMode",
 ]

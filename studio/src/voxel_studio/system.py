@@ -5,12 +5,11 @@ Manages the ~/.voxel/ directory structure:
 - rigs/: Rig config templates
 """
 
-from __future__ import annotations
-
 import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, Field
 from ruyaml import YAML
@@ -55,13 +54,13 @@ class SystemConfig(BaseModel):
     session_roots: list[SessionRoot] = Field(default_factory=list)
 
     @classmethod
-    def load(cls) -> SystemConfig:
+    def load(cls) -> Self:
         """Load from ~/.voxel/system.yaml, create defaults if missing."""
         if not SYSTEM_CONFIG_FILE.exists():
             log.info("First run detected, creating ~/.voxel/ directory structure")
             cls._create_defaults()
 
-        with open(SYSTEM_CONFIG_FILE) as f:
+        with SYSTEM_CONFIG_FILE.open() as f:
             data = yaml.load(f) or {}
 
         roots = []
@@ -73,7 +72,7 @@ class SystemConfig(BaseModel):
                     path=path,
                     label=root_data.get("label"),
                     description=root_data.get("description"),
-                )
+                ),
             )
 
         return cls(session_roots=roots)
@@ -120,9 +119,9 @@ class SystemConfig(BaseModel):
                     "description": "Production experiment sessions",
                     "path": str(experiments_dir),
                 },
-            ]
+            ],
         }
-        with open(SYSTEM_CONFIG_FILE, "w") as f:
+        with SYSTEM_CONFIG_FILE.open("w") as f:
             yaml.dump(system_yaml, f)
         log.info(f"Created system config: {SYSTEM_CONFIG_FILE}")
 
@@ -156,7 +155,7 @@ class SystemConfig(BaseModel):
                 continue
 
             try:
-                with open(session_file) as f:
+                with session_file.open() as f:
                     data = yaml.load(f) or {}
 
                 rig_info = data.get("rig", {}).get("info", {})
@@ -170,7 +169,7 @@ class SystemConfig(BaseModel):
                         root_name=root_name,
                         rig_name=rig_name,
                         modified=modified,
-                    )
+                    ),
                 )
             except Exception as e:
                 log.warning(f"Failed to read session {child}: {e}")

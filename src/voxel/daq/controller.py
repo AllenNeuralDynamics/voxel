@@ -1,11 +1,11 @@
 """DAQ controller - wraps VoxelDaq and provides async task management."""
 
 import numpy as np
-
-from pyrig import describe
 from pyrig.device import DeviceController
 
-from .base import AcqSampleMode, AOTask, COTask, PinInfo, VoxelDaq, TaskInfo
+from pyrig import describe
+
+from .base import AcqSampleMode, AOTask, COTask, PinInfo, TaskInfo, VoxelDaq
 
 
 class DaqController(DeviceController[VoxelDaq]):
@@ -147,11 +147,11 @@ class DaqController(DeviceController[VoxelDaq]):
         await self._run_sync(task.cfg_dig_edge_start_trig, trigger_source, retriggerable=retriggerable)
 
     @describe(label="Wait for Task", desc="Wait for a task to complete")
-    async def wait_for_task(self, task_name: str, timeout: float) -> None:
+    async def wait_for_task(self, task_name: str, timeout_s: float) -> None:
         task = self.device.get_tasks().get(task_name)
         if task is None:
             raise ValueError(f"Task '{task_name}' not found")
-        await self._run_sync(task.wait_until_done, timeout)
+        await self._run_sync(task.wait_until_done, timeout_s)
 
     # ==================== Lifecycle ====================
 

@@ -78,7 +78,7 @@ class ChannelConfig(BaseModel):
 
 class ProfileConfig(BaseModel):
     channels: list[str]
-    daq: "SyncTaskData"
+    daq: SyncTaskData
     desc: str = ""
     label: str | None = None
 
@@ -211,21 +211,22 @@ class VoxelRigConfig(RigConfig):
             # Validate detection path reference
             if channel.detection not in self.detection:
                 errors.append(
-                    f"Channel '{channel_id}' references detection path '{channel.detection}' which does not exist"
+                    f"Channel '{channel_id}' references detection path '{channel.detection}' which does not exist",
                 )
 
             # Validate illumination path reference
             if channel.illumination not in self.illumination:
                 errors.append(
-                    f"Channel '{channel_id}' references illumination path '{channel.illumination}' which does not exist"
+                    f"Channel '{channel_id}' references illumination path "
+                    f"'{channel.illumination}' which does not exist",
                 )
 
             # Validate filter wheel references
-            for fw_id, filter_label in channel.filters.items():
+            for fw_id in channel.filters:
                 # Check that filter wheel device exists
                 if fw_id not in devices:
                     errors.append(
-                        f"Channel '{channel_id}' references filter wheel '{fw_id}' which does not exist in devices"
+                        f"Channel '{channel_id}' references filter wheel '{fw_id}' which does not exist in devices",
                     )
                     continue
 
@@ -235,12 +236,12 @@ class VoxelRigConfig(RigConfig):
                     if fw_id not in detection_path.filter_wheels:
                         errors.append(
                             f"Channel '{channel_id}' references filter wheel '{fw_id}' "
-                            f"which is not in detection path '{channel.detection}'"
+                            f"which is not in detection path '{channel.detection}'",
                         )
 
         return errors
 
-    def _validate_profile_references(self) -> list[str]:
+    def _validate_profile_references(self) -> list[str]:  # noqa: C901 - validates many cross-references
         """Validate profile configuration references and compatibility."""
         errors = []
 
@@ -268,8 +269,9 @@ class VoxelRigConfig(RigConfig):
                 channel = self.channels[ch_id]
                 if channel.detection in detection_paths:
                     errors.append(
-                        f"Profile '{profile_id}' has channels '{detection_paths[channel.detection]}' and '{ch_id}' "
-                        f"both using detection path '{channel.detection}' - channels in a profile must use different cameras"
+                        f"Profile '{profile_id}' has channels '{detection_paths[channel.detection]}' and "
+                        f"'{ch_id}' both using detection path '{channel.detection}' - "
+                        f"channels in a profile must use different cameras",
                     )
                 else:
                     detection_paths[channel.detection] = ch_id
@@ -291,10 +293,10 @@ class VoxelRigConfig(RigConfig):
             for fw_id, positions in filter_positions.items():
                 if len(positions) > 1:  # Multiple different positions for same wheel
                     position_details = ", ".join(
-                        [f"'{label}' by channel(s) {channels}" for label, channels in positions.items()]
+                        [f"'{label}' by channel(s) {channels}" for label, channels in positions.items()],
                     )
                     errors.append(
-                        f"Profile '{profile_id}' has conflicting filter positions for '{fw_id}': {position_details}"
+                        f"Profile '{profile_id}' has conflicting filter positions for '{fw_id}': {position_details}",
                     )
 
             # 6. Waveform validation - check for devices in both daq.acq_ports AND used by profile
@@ -306,14 +308,16 @@ class VoxelRigConfig(RigConfig):
             missing_waveforms = devices_needing_waveforms - set(profile.daq.waveforms.keys())
             if missing_waveforms:
                 errors.append(
-                    f"Profile '{profile_id}' missing waveforms for devices in daq.acq_ports: {sorted(missing_waveforms)}"
+                    f"Profile '{profile_id}' missing waveforms for devices in daq.acq_ports: "
+                    f"{sorted(missing_waveforms)}",
                 )
 
             # Check for extra waveforms (not in acq_ports)
             extra_waveforms = set(profile.daq.waveforms.keys()) - daq_acq_devices
             if extra_waveforms:
                 errors.append(
-                    f"Profile '{profile_id}' defines waveforms for devices not in daq.acq_ports: {sorted(extra_waveforms)}"
+                    f"Profile '{profile_id}' defines waveforms for devices not in daq.acq_ports: "
+                    f"{sorted(extra_waveforms)}",
                 )
 
         return errors

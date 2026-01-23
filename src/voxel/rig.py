@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -41,7 +42,7 @@ class VoxelStage:
 
 class VoxelRig(Rig):
     @classmethod
-    def node_cls(cls):
+    def node_cls(cls) -> type["VoxelNode"]:
         return VoxelNode
 
     def __init__(self, config: VoxelRigConfig, zctx: zmq.asyncio.Context | None = None):
@@ -62,12 +63,12 @@ class VoxelRig(Rig):
         # Profile management
         if not self.config.profiles:
             raise ValueError("No profiles defined in configuration")
-        self._active_profile_id: str = list(self.config.profiles.keys())[0]
+        self._active_profile_id: str = next(iter(self.config.profiles.keys()))
 
         self._mode: RigMode = RigMode.IDLE
         self._streaming_cameras: set[str] = set()
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-        self._sync_task: SyncTask | None = None
+        self.sync_task: SyncTask | None = None
 
     async def _on_start_complete(self) -> None:
         """Categorize devices by type and validate Voxel-specific assignments."""
@@ -75,17 +76,20 @@ class VoxelRig(Rig):
         for uid, handle in self.handles.items():
             match await handle.device_type():
                 case DeviceType.CAMERA:
-                    assert isinstance(handle, CameraHandle)
+                    if not isinstance(handle, CameraHandle):
+                        raise TypeError(f"Expected CameraHandle for {uid}, got {type(handle)}")
                     self.cameras[uid] = handle
                 case DeviceType.DAQ:
-                    assert isinstance(handle, DaqHandle)
+                    if not isinstance(handle, DaqHandle):
+                        raise TypeError(f"Expected DaqHandle for {uid}, got {type(handle)}")
                     self.daq = handle
                 case DeviceType.LASER:
                     self.lasers[uid] = handle
                 case DeviceType.AOTF:
                     self.aotfs[uid] = handle
                 case DeviceType.CONTINUOUS_AXIS:
-                    assert isinstance(handle, ContinuousAxisHandle)
+                    if not isinstance(handle, ContinuousAxisHandle):
+                        raise TypeError(f"Expected ContinuousAxisHandle for {uid}, got {type(handle)}")
                     self.continuous_axes[uid] = handle
                 case DeviceType.DISCRETE_AXIS:
                     self.discrete_axes[uid] = handle
@@ -109,7 +113,7 @@ class VoxelRig(Rig):
 
         await self.set_active_profile(self._active_profile_id)
 
-    def _validate_device_types(self) -> None:
+    def _validate_device_types(self) -> None:  # noqa: C901 - validates many device types
         """Validate device type assignments after provisioning."""
         errors = []
 
@@ -290,9 +294,9 @@ class VoxelRig(Rig):
             self._frame_callback = frame_callback
 
         # 1. Close old acquisition task if exists
-        if self._sync_task:
-            await self._sync_task.close()
-            self._sync_task = None
+        if self.sync_task:
+            await self.sync_task.close()
+            self.sync_task = None
             self.log.debug("Closed previous acquisition task")
 
         # 2. Configure devices (filter wheels, etc.)
@@ -309,14 +313,14 @@ class VoxelRig(Rig):
             device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
         }
 
-        self._sync_task = SyncTask(
+        self.sync_task = SyncTask(
             uid=f"acq_{profile_id}",
             daq=self.daq,
             timing=profile.daq.timing,
             waveforms=profile.daq.waveforms,
             ports=filtered_ports,
         )
-        await self._sync_task.setup()
+        await self.sync_task.setup()
         self.log.info(f"Created and configured acquisition task for profile '{profile_id}'")
 
         # 4. Update active profile state
@@ -377,8 +381,8 @@ class VoxelRig(Rig):
             try:
                 await handle.start_preview()
                 self._streaming_cameras.add(cam_id)
-            except Exception as e:
-                self.log.error(f"Camera {cam_id} failed to start preview: {e}")
+            except Exception:
+                self.log.exception(f"Camera {cam_id} failed to start preview")
 
         # Start preview manager (subscriptions already exist, just enable forwarding)
         self.preview.start(frame_callback)
@@ -392,8 +396,8 @@ class VoxelRig(Rig):
             await self._enable_channel_lasers()
 
         # Start DAQ acquisition task after all devices are configured
-        if self._sync_task:
-            await self._sync_task.start()
+        if self.sync_task:
+            await self.sync_task.start()
             self.log.info("Acquisition task started")
 
     async def _enable_channel_lasers(self) -> None:
@@ -409,23 +413,25 @@ class VoxelRig(Rig):
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            for laser_id, result in zip([ch.illumination for ch in self.active_channels.values()], results):
+            laser_ids = [ch.illumination for ch in self.active_channels.values()]
+            for laser_id, result in zip(laser_ids, results, strict=True):
                 if isinstance(result, BaseException):
                     self.log.error(f"Failed to enable laser {laser_id}: {result}")
 
     async def _disable_channel_lasers(self) -> None:
         """Disable lasers for all active channels."""
         tasks = []
-        for chan_name, channel in self.active_channels.items():
+        for channel in self.active_channels.values():
             if channel.illumination not in self.lasers:
                 continue
             laser = self.lasers[channel.illumination]
-            self.log.info(f"Disabling laser {channel.illumination} for channel {chan_name}")
+            self.log.info(f"Disabling laser {channel.illumination}")
             tasks.append(laser.call("disable"))
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            for laser_id, result in zip([ch.illumination for ch in self.active_channels.values()], results):
+            laser_ids = [ch.illumination for ch in self.active_channels.values()]
+            for laser_id, result in zip(laser_ids, results, strict=True):
                 if isinstance(result, BaseException):
                     self.log.error(f"Failed to disable laser {laser_id}: {result}")
 
@@ -447,8 +453,8 @@ class VoxelRig(Rig):
         self._streaming_cameras.clear()
 
         # Stop DAQ acquisition task (no longer needed since cameras stopped)
-        if self._sync_task:
-            await self._sync_task.stop()
+        if self.sync_task:
+            await self.sync_task.stop()
             self.log.info("Acquisition task stopped")
 
         # Disable lasers
@@ -530,7 +536,7 @@ class VoxelRig(Rig):
 
             # 5. Start cameras via capture_batch (in parallel)
             camera_tasks = {}
-            for chan_name, channel in self.active_channels.items():
+            for channel in self.active_channels.values():
                 cam_id = channel.detection
                 if cam_id not in self.cameras:
                     continue
@@ -554,7 +560,7 @@ class VoxelRig(Rig):
             await self.scanning_axis.reset_ttl_stepper()
 
             # Build results dict
-            cameras_dict = {cam_id: result for cam_id, result in zip(camera_tasks.keys(), camera_results)}
+            cameras_dict = dict(zip(camera_tasks.keys(), camera_results, strict=True))
 
             stack.status = StackStatus.COMPLETED
             completed_at = datetime.now()
@@ -576,10 +582,8 @@ class VoxelRig(Rig):
             completed_at = datetime.now()
             self._mode = RigMode.IDLE
             # Attempt cleanup on failure
-            try:
+            with suppress(Exception):
                 await self.scanning_axis.reset_ttl_stepper()
-            except Exception:
-                pass
             return StackResult(
                 tile_id=stack.tile_id,
                 status=StackStatus.FAILED,
@@ -631,17 +635,17 @@ class RigPreviewHub:
             self._subscriptions[camera_id] = (handle, callback)
             self.log.info(f"Subscribed to camera {camera_id} preview stream")
 
-    def _make_callback(self, camera_id: str):
+    def _make_callback(self, camera_id: str) -> Callable[[bytes], Awaitable[None]]:
         """Create callback that looks up channel dynamically from mapping."""
 
-        async def callback(data: bytes):
+        async def callback(data: bytes) -> None:
             if self._frame_callback:
                 channel = self._camera_to_channel.get(camera_id)
                 if channel:
                     try:
                         await self._frame_callback(channel, data)
-                    except Exception as e:
-                        self.log.error(f"Error in frame callback for {channel}: {e}", exc_info=True)
+                    except Exception:
+                        self.log.exception(f"Error in frame callback for {channel}")
 
         return callback
 
@@ -671,8 +675,8 @@ class RigPreviewHub:
             try:
                 await handle.unsubscribe("preview", callback)
                 self.log.debug(f"Unsubscribed {camera_id}")
-            except Exception as e:
-                self.log.error(f"Error unsubscribing {camera_id}: {e}")
+            except Exception:
+                self.log.exception(f"Error unsubscribing {camera_id}")
         self._subscriptions.clear()
         self._camera_to_channel.clear()
         self._frame_callback = None

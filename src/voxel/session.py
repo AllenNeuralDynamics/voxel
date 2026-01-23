@@ -62,7 +62,7 @@ class SessionConfig(BaseModel):
     @classmethod
     def from_yaml(cls, path: Path) -> "SessionConfig":
         """Load from .voxel.yaml file, preserving anchors for round-tripping."""
-        with open(path) as f:
+        with path.open() as f:
             raw_data = yaml.load(f)
 
         config = cls(
@@ -80,7 +80,7 @@ class SessionConfig(BaseModel):
 
         Preserves YAML anchors from the original config file.
         """
-        with open(rig_config_path) as f:
+        with rig_config_path.open() as f:
             rig_data = yaml.load(f)
 
         # Remove _anchors key if present (it's just for defining reusable anchors)
@@ -130,7 +130,7 @@ class SessionConfig(BaseModel):
         backup_path = path.with_suffix(".yaml.bak")
 
         # Write to temp file first (if this fails, original is untouched)
-        with open(temp_path, "w") as f:
+        with temp_path.open("w") as f:
             yaml.dump(data, f)
 
         # Backup existing file if present
@@ -404,13 +404,20 @@ class Session:
                             y_um=y_um,
                             w_um=fov_w,
                             h_um=fov_h,
-                        )
+                        ),
                     )
 
         num_cols = col_max - col_min
         num_rows = row_max - row_min
         self._log.debug(
-            f"Generated {len(tiles)} tiles ({num_cols}x{num_rows}) with FOV {fov_w:.0f}x{fov_h:.0f} um, step {step_w:.0f}x{step_h:.0f} um"
+            "Generated %d tiles (%dx%d) with FOV %.0fx%.0f um, step %.0fx%.0f um",
+            len(tiles),
+            num_cols,
+            num_rows,
+            fov_w,
+            fov_h,
+            step_w,
+            step_h,
         )
         return tiles
 
@@ -544,7 +551,7 @@ class Session:
         """Sort stacks according to tile_order."""
         order = self._config.tile_order
 
-        if order == "row_wise" or order == "unset":
+        if order in {"row_wise", "unset"}:
             self._config.stacks.sort(key=lambda s: (s.row, s.col))
         elif order == "column_wise":
             self._config.stacks.sort(key=lambda s: (s.col, s.row))

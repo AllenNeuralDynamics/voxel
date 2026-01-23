@@ -15,14 +15,13 @@ Examples:
     python -m imaging.node camera_node_1 tcp://192.168.1.100:9000
 """
 
-from pyrig import RigNode
 from pyrig.cluster.node import main
+
+from pyrig import RigNode
 
 
 class ImagingRigNode(RigNode):
     """Custom RigNode for imaging applications."""
-
-    pass
 
 
 if __name__ == "__main__":

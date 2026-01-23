@@ -4,9 +4,9 @@ from enum import StrEnum
 
 from pycobolt import CoboltLaser
 from pyrig.device.props import deliminated_float, enumerated_string
-from voxel.laser.base import Laser
 
 from pyrig import describe
+from voxel.laser.base import Laser
 
 
 class Cmd(StrEnum):

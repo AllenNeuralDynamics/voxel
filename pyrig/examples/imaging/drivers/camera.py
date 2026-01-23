@@ -1,15 +1,16 @@
 from pathlib import Path
 
-from pyrig import DeviceHandle
 from pyrig.device import Adapter, Device, DeviceController, describe
 
+from pyrig import DeviceHandle
 
-def parse_tuple_str(str: str) -> tuple[float, float]:
+
+def parse_tuple_str(s: str) -> tuple[float, float]:
     try:
-        x, y = map(float, str.split(","))
+        x, y = map(float, s.split(","))
         return x, y
-    except ValueError:
-        raise ValueError("Invalid tuple string format")
+    except ValueError as e:
+        raise ValueError("Invalid tuple string format") from e
 
 
 class Camera(Device):

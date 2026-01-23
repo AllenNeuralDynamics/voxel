@@ -9,6 +9,7 @@ members = [
     "voxel-drivers",
     "voxel-qt",
     "voxel-studio",
+    "vxlib",
 ]
 
 [[package]]
@@ -910,6 +911,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyzmq" },
     { name = "ruyaml" },
+    { name = "vxlib" },
 ]
 
 [package.dev-dependencies]
@@ -923,6 +925,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "pyzmq", specifier = ">=27.1.0" },
     { name = "ruyaml", specifier = ">=0.91.0" },
+    { name = "vxlib", editable = "vxlib" },
 ]
 
 [package.metadata.requires-dev]
@@ -1291,6 +1294,7 @@ dependencies = [
     { name = "opencv-python-headless" },
     { name = "pyrig" },
     { name = "rich" },
+    { name = "vxlib" },
 ]
 
 [package.dev-dependencies]
@@ -1307,6 +1311,7 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
     { name = "pyrig", editable = "pyrig" },
     { name = "rich", specifier = ">=14.2.0" },
+    { name = "vxlib", editable = "vxlib" },
 ]
 
 [package.metadata.requires-dev]
@@ -1326,6 +1331,7 @@ dependencies = [
     { name = "pyserial" },
     { name = "tigerasi" },
     { name = "voxel" },
+    { name = "vxlib" },
 ]
 
 [package.optional-dependencies]
@@ -1361,6 +1367,7 @@ requires-dist = [
     { name = "tigerasi", specifier = ">=0.0.27" },
     { name = "vortran-laser", marker = "extra == 'vortran-laser'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
     { name = "voxel", editable = "." },
+    { name = "vxlib", editable = "vxlib" },
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
 provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
@@ -1404,6 +1411,28 @@ requires-dist = [
     { name = "voxel", editable = "." },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
+
+[[package]]
+name = "vxlib"
+version = "0.1.0"
+source = { editable = "vxlib" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+rich = [
+    { name = "rich" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "rich", marker = "extra == 'rich'", specifier = ">=14.0.0" },
+]
+provides-extras = ["rich"]
 
 [[package]]
 name = "websockets"

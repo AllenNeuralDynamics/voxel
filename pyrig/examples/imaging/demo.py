@@ -9,7 +9,7 @@ from rich import print
 
 from imaging.rig import ImagingRig
 from pyrig import RigConfig
-from pyrig.utils import configure_logging
+from vxlib import configure_logging
 
 configure_logging(level=logging.INFO, fmt="%(message)s", datefmt="[%X]")
 

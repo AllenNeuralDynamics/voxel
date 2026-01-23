@@ -7,23 +7,26 @@ This service manages:
 - App-level status (roots, rigs, session)
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from contextlib import suppress
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from voxel_studio.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
 
 from voxel import Session
+from voxel_studio.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
+from vxlib import fire_and_forget
 
 from .session import SessionService, SessionStatus, session_router
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 router = APIRouter(tags=["app"])
 router.include_router(session_router)  # Include session routes (requires active session)
@@ -32,7 +35,7 @@ log = logging.getLogger(__name__)
 
 def _utc_timestamp() -> str:
     """Return an ISO 8601 timestamp in UTC."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 AppPhase = Literal["idle", "launching", "ready"]
@@ -101,7 +104,7 @@ class AppService:
         root_logger.addHandler(self._log_handler)
         log.debug("Log capture enabled for WebSocket streaming")
 
-    def _teardown_log_capture(self) -> None:
+    def teardown_log_capture(self) -> None:
         """Remove log capture handler."""
         if self._log_handler:
             root_logger = logging.getLogger()
@@ -121,10 +124,8 @@ class AppService:
         if data:
             msg_type = "bytes" if isinstance(data, bytes) else "json"
             for queue in self.clients.values():
-                try:
+                with suppress(asyncio.QueueFull):
                     queue.put_nowait((msg_type, data))
-                except asyncio.QueueFull:
-                    pass
 
         if with_status:
             self._schedule_status_broadcast()
@@ -145,7 +146,7 @@ class AppService:
 
         # Send initial app status (use lock to prevent ZMQ conflicts)
         async with self._status_lock:
-            status = await self._get_app_status()
+            status = await self.get_app_status()
             await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
 
     def remove_client(self, client_id: str) -> None:
@@ -155,7 +156,7 @@ class AppService:
 
     # ==================== Status ====================
 
-    async def _get_app_status(self) -> AppStatus:
+    async def get_app_status(self) -> AppStatus:
         """Get current app status."""
         session_status = None
         if self.session_service:
@@ -174,14 +175,14 @@ class AppService:
         # Use lock to serialize status fetching (prevents ZMQ REQ/REP conflicts)
         async with self._status_lock:
             try:
-                status = await self._get_app_status()
+                status = await self.get_app_status()
                 self._broadcast({"topic": "status", "payload": status.model_dump(mode="json")})
             except Exception as e:
                 log.warning("Failed to broadcast status: %s", e)
 
     def _schedule_status_broadcast(self) -> None:
         """Schedule an async status broadcast. Use this from sync contexts."""
-        asyncio.create_task(self._broadcast_status())
+        fire_and_forget(self._broadcast_status(), log=log)
 
     # ==================== Session Lifecycle ====================
 
@@ -235,8 +236,8 @@ class AppService:
             self._phase = "ready"
             await self._broadcast_status()
 
-        except Exception as e:
-            log.error(f"Failed to launch session: {e}", exc_info=True)
+        except Exception:
+            log.exception("Failed to launch session")
             self.session_service = None
             self._phase = "idle"
             await self._broadcast_status()
@@ -257,8 +258,8 @@ class AppService:
 
             log.info(f"Session closed: {self.session_service.session.session_dir}")
 
-        except Exception as e:
-            log.error(f"Error during session close: {e}", exc_info=True)
+        except Exception:
+            log.exception("Error during session close")
         finally:
             self.session_service = None
             self._phase = "idle"
@@ -278,7 +279,7 @@ class AppService:
         try:
             # App-level topics
             if topic == "request_status":
-                status = await self._get_app_status()
+                status = await self.get_app_status()
                 await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
                 return
 
@@ -294,7 +295,7 @@ class AppService:
             await self.session_service.handle_message(client_id, topic, payload)
 
         except Exception as e:
-            log.error("Error handling message from client %s: %s", client_id, e, exc_info=True)
+            log.exception("Error handling message from client %s", client_id)
             await self._send_to_client(
                 client_id,
                 {"topic": "error", "payload": {"error": str(e), "topic": topic}},
@@ -329,7 +330,7 @@ def get_app_service(request: Request) -> AppService:
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends(get_app_service_websocket)):
+async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends(get_app_service_websocket)):  # noqa: C901 - WebSocket message routing
     """Unified WebSocket endpoint for all app, session, and rig communication."""
     await websocket.accept()
     client_id = str(uuid.uuid4())
@@ -365,8 +366,8 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
                 await service.handle_client_message(client_id, message)
         except WebSocketDisconnect:
             log.debug("Client %s disconnected", client_id)
-        except json.JSONDecodeError as e:
-            log.error("Invalid JSON from client %s: %s", client_id, e)
+        except json.JSONDecodeError:
+            log.exception("Invalid JSON from client %s", client_id)
         except Exception as e:
             log.debug("Receiver task ending for client %s: %s", client_id, e)
         finally:
@@ -380,8 +381,7 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
         shutdown.set()
         service.remove_client(client_id)
         # Auto-stop preview only if this was the last client
-        if len(service.clients) == 0:
-            if service.session_service and service.session_service.rig_service.is_previewing:
+        if len(service.clients) == 0 and service.session_service and service.session_service.rig_service.is_previewing:
                 try:
                     log.info("Last client disconnected, stopping preview")
                     await service.session_service.rig_service.stop_preview()
@@ -393,13 +393,13 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
 
 
 @router.get("/status")
-async def get_status(service: AppService = Depends(get_app_service)) -> AppStatus:
+async def get_status(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatus:
     """Get current app status including session if active."""
-    return await service._get_app_status()
+    return await service.get_app_status()
 
 
 @router.get("/roots/{root_name}/sessions")
-async def list_sessions(root_name: str, service: AppService = Depends(get_app_service)) -> dict:
+async def list_sessions(root_name: str, service: Annotated[AppService, Depends(get_app_service)]) -> dict:
     """List sessions in a root."""
     try:
         sessions = service.system_config.list_sessions(root_name)
@@ -408,11 +408,11 @@ async def list_sessions(root_name: str, service: AppService = Depends(get_app_se
             "count": len(sessions),
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/session/launch")
-async def launch_session(request: LaunchRequest, service: AppService = Depends(get_app_service)) -> AppStatus:
+async def launch_session(request: LaunchRequest, service: Annotated[AppService, Depends(get_app_service)]) -> AppStatus:
     """Launch a new session or resume an existing one."""
     try:
         await service.launch_session(
@@ -420,24 +420,24 @@ async def launch_session(request: LaunchRequest, service: AppService = Depends(g
             session_name=request.session_name,
             rig_config=request.rig_config,
         )
-        return await service._get_app_status()
+        return await service.get_app_status()
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        log.error(f"Failed to launch session: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        log.exception("Failed to launch session")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/session")
-async def close_session(service: AppService = Depends(get_app_service)) -> AppStatus:
+async def close_session(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatus:
     """Close the current session."""
     try:
         await service.close_session()
-        return await service._get_app_status()
+        return await service.get_app_status()
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except Exception as e:
-        log.error(f"Failed to close session: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        log.exception("Failed to close session")
+        raise HTTPException(status_code=500, detail=str(e)) from e
