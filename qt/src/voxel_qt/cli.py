@@ -7,28 +7,25 @@ import sys
 from pathlib import Path
 
 import qasync
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
 
-from voxel_qt.app import VoxelQtApp
+from voxel_qt.app import VoxelApp
+from voxel_qt.ui.assets import VOXEL_LOGO, load_fonts
+from voxel_qt.ui.kit import Colors, app_stylesheet
 from voxel_qt.ui.main_window import MainWindow
-from voxel_qt.ui.theme import Colors
-
-
-def configure_logging(level: int = logging.INFO) -> None:
-    """Configure logging with a simple format."""
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%H:%M:%S",
-    )
+from vxlib import configure_logging
 
 
 def create_qapp() -> QApplication:
     """Create and configure the Qt application."""
     qapp = QApplication([])
     qapp.setStyle("Fusion")
-    qapp.setApplicationName("Voxel Qt")
+    qapp.setApplicationName("VoxelStudio")
+    qapp.setWindowIcon(QIcon(str(VOXEL_LOGO)))
+
+    # Load custom fonts (must be done after QApplication is created)
+    load_fonts()
 
     # Apply dark palette using design tokens
     palette = QPalette()
@@ -41,7 +38,12 @@ def create_qapp() -> QApplication:
     palette.setColor(QPalette.ColorRole.ButtonText, QColor(Colors.TEXT))
     palette.setColor(QPalette.ColorRole.Highlight, QColor(Colors.ACCENT))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor(Colors.TEXT_BRIGHT))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(Colors.BG_MEDIUM))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(Colors.TEXT_BRIGHT))
     qapp.setPalette(palette)
+
+    # Apply global styles
+    qapp.setStyleSheet(app_stylesheet())
 
     return qapp
 
@@ -70,7 +72,7 @@ def run_app(_config_path: Path | None = None) -> int:
         nonlocal window
 
         # Create application state manager
-        app = VoxelQtApp()
+        app = VoxelApp()
 
         # Create and show main window
         window = MainWindow(app)

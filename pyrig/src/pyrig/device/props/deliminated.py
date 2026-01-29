@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, Protocol, Self, overload
 
+from pydantic_core import core_schema
+
 from .common import PropertyModel, get_descriptor_logger
 
 type DynamicNumber = float | Callable[[Any], float]
@@ -51,6 +53,25 @@ class DeliminatedFloat(float):
     def to_property_model(self) -> PropertyModel[float]:
         return PropertyModel(value=float(self), min_val=self.min_value, max_val=self.max_value, step=self.step)
 
+    @classmethod
+    def __get_pydantic_core_schema__(cls, _source_type: Any, _handler: Any) -> core_schema.CoreSchema:
+        """Pydantic serializer: serialize as dict with value and constraints."""
+        return core_schema.no_info_plain_validator_function(
+            cls._validate,
+            serialization=core_schema.plain_serializer_function_ser_schema(cls._serialize, info_arg=False),
+        )
+
+    @classmethod
+    def _validate(cls, v: Any) -> "DeliminatedFloat":
+        if isinstance(v, cls):
+            return v
+        if isinstance(v, dict):
+            return cls(v["value"], v.get("min_val"), v.get("max_val"), v.get("step"))
+        return cls(float(v))
+
+    def _serialize(self) -> dict[str, Any]:
+        return {"value": float(self), "min_val": self.min_value, "max_val": self.max_value, "step": self.step}
+
 
 class DeliminatedInt(int):
     min_value: int | None
@@ -88,6 +109,25 @@ class DeliminatedInt(int):
 
     def to_prop_model(self) -> PropertyModel[int]:
         return PropertyModel(value=int(self), min_val=self.min_value, max_val=self.max_value, step=self.step)
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, _source_type: Any, _handler: Any) -> core_schema.CoreSchema:
+        """Pydantic serializer: serialize as dict with value and constraints."""
+        return core_schema.no_info_plain_validator_function(
+            cls._validate,
+            serialization=core_schema.plain_serializer_function_ser_schema(cls._serialize, info_arg=False),
+        )
+
+    @classmethod
+    def _validate(cls, v: Any) -> "DeliminatedInt":
+        if isinstance(v, cls):
+            return v
+        if isinstance(v, dict):
+            return cls(v["value"], v.get("min_val"), v.get("max_val"), v.get("step"))
+        return cls(int(v))
+
+    def _serialize(self) -> dict[str, Any]:
+        return {"value": int(self), "min_val": self.min_value, "max_val": self.max_value, "step": self.step}
 
 
 class DeliminatedProperty[N: float | int](property, ABC):

@@ -12,12 +12,13 @@ import zmq.asyncio
 from pyrig import DeviceHandle, Rig
 from voxel.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from voxel.camera.handle import CameraHandle
+from voxel.camera.preview import PreviewCrop, PreviewLevels
 from voxel.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from voxel.daq import DaqHandle
 from voxel.device import DeviceType
 from voxel.node import VoxelNode
 from voxel.sync import SyncTask
-from voxel.tile import Stack, StackResult, StackStatus
+from voxel.tile import Box, BoxResult, BoxStatus
 
 
 class RigMode(StrEnum):
@@ -435,6 +436,29 @@ class VoxelRig(Rig):
                 if isinstance(result, BaseException):
                     self.log.error(f"Failed to disable laser {laser_id}: {result}")
 
+    async def update_preview_crop(self, crop: PreviewCrop) -> None:
+        """Update preview crop for streaming cameras.
+
+        Args:
+            crop: The crop settings (x, y normalized top-left, k zoom factor).
+        """
+        if self._streaming_cameras:
+            tasks = [self.cameras[cam_id].update_preview_crop(crop) for cam_id in self._streaming_cameras]
+            await asyncio.gather(*tasks)
+
+    async def update_preview_levels(self, levels: dict[str, PreviewLevels]) -> None:
+        """Update preview levels for specified channels.
+
+        Args:
+            levels: Mapping of channel_id -> PreviewLevels
+        """
+        tasks = []
+        for channel_id, channel_levels in levels.items():
+            if (channel := self.active_channels.get(channel_id)) and (camera := self.cameras.get(channel.detection)):
+                tasks.append(camera.update_preview_levels(channel_levels))
+        if tasks:
+            await asyncio.gather(*tasks)
+
     async def stop_preview(self) -> None:
         """Stop preview mode on all streaming cameras and cleanup manager."""
         if self._mode != RigMode.PREVIEWING:
@@ -468,13 +492,13 @@ class VoxelRig(Rig):
 
         self.log.info("Preview stopped")
 
-    # ===================== Stack Acquisition =====================
+    # ===================== Box Acquisition =====================
     #
     @property
     def scanning_axis(self) -> ContinuousAxisHandle:
         return self.stage.scanning_axis
 
-    async def acquire_stack(self, stack: Stack, output_dir: Path, profile_id: str | None = None) -> StackResult:
+    async def acquire_stack(self, stack: Box, output_dir: Path, profile_id: str | None = None) -> BoxResult:
         """Acquire a z-stack at one tile position."""
         if self._mode == RigMode.ACQUIRING:
             raise RuntimeError("Cannot acquire stack while another acquisition is in progress")
@@ -483,7 +507,7 @@ class VoxelRig(Rig):
 
         self._mode = RigMode.ACQUIRING
         started_at = datetime.now()
-        stack.status = StackStatus.ACQUIRING
+        stack.status = BoxStatus.ACQUIRING
 
         # Set profile if specified
         if profile_id and profile_id != self._active_profile_id:
@@ -562,13 +586,13 @@ class VoxelRig(Rig):
             # Build results dict
             cameras_dict = dict(zip(camera_tasks.keys(), camera_results, strict=True))
 
-            stack.status = StackStatus.COMPLETED
+            stack.status = BoxStatus.COMPLETED
             completed_at = datetime.now()
             self._mode = RigMode.IDLE
 
-            return StackResult(
+            return BoxResult(
                 tile_id=stack.tile_id,
-                status=StackStatus.COMPLETED,
+                status=BoxStatus.COMPLETED,
                 output_dir=output_dir,
                 cameras=cameras_dict,
                 num_frames=stack.num_frames,
@@ -578,15 +602,15 @@ class VoxelRig(Rig):
             )
 
         except Exception as e:
-            stack.status = StackStatus.FAILED
+            stack.status = BoxStatus.FAILED
             completed_at = datetime.now()
             self._mode = RigMode.IDLE
             # Attempt cleanup on failure
             with suppress(Exception):
                 await self.scanning_axis.reset_ttl_stepper()
-            return StackResult(
+            return BoxResult(
                 tile_id=stack.tile_id,
-                status=StackStatus.FAILED,
+                status=BoxStatus.FAILED,
                 output_dir=output_dir,
                 cameras={},
                 num_frames=0,

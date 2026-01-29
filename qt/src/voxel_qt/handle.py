@@ -4,9 +4,10 @@ import logging
 from typing import Any
 
 from pyrig.device import PropsResponse
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 
 from pyrig import DeviceHandle
+from vxlib import fire_and_forget
 
 
 class DeviceHandleQt(QObject):
@@ -62,6 +63,26 @@ class DeviceHandleQt(QObject):
         except Exception as e:
             self.log.exception("Error starting adapter")
             self.fault.emit(f"Start error: {e!r}")
+
+    def request_initial_properties(self) -> None:
+        """Request initial property values. Call after connecting to properties_changed signal."""
+        if not self._started:
+            return
+        # Use QTimer to ensure this runs after the current event loop iteration
+        QTimer.singleShot(0, lambda: fire_and_forget(self._emit_initial_properties(), log=self.log))
+
+    async def _emit_initial_properties(self) -> None:
+        """Fetch all properties and emit them to initialize widgets."""
+        try:
+            iface = await self._handle.interface()
+            prop_names = list(iface.properties.keys())
+            self.log.debug("Fetching initial properties: %s", prop_names)
+            if prop_names:
+                props = await self._handle.get_props(*prop_names)
+                self.log.debug("Got initial properties: %s", list(props.res.keys()))
+                await self._on_properties(props)
+        except Exception as e:
+            self.log.warning("Failed to fetch initial properties: %s", e, exc_info=True)
 
     async def stop(self) -> None:
         """Stop the adapter and cleanup."""

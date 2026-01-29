@@ -10,7 +10,7 @@ from ruyaml import YAML
 
 from voxel.config import TileOrder, VoxelRigConfig
 from voxel.rig import RigMode, VoxelRig
-from voxel.tile import Stack, StackResult, StackStatus, Tile
+from voxel.tile import Box, BoxResult, BoxStatus, Tile
 
 # Round-trip YAML preserves anchors, aliases, and comments
 yaml = YAML()
@@ -43,7 +43,7 @@ class SessionConfig(BaseModel):
     rig: VoxelRigConfig
     grid_config: GridConfig = Field(default_factory=GridConfig)
     tile_order: TileOrder = "unset"
-    stacks: list[Stack] = Field(default_factory=list)
+    stacks: list[Box] = Field(default_factory=list)
 
     model_config = {"extra": "forbid"}
 
@@ -69,7 +69,7 @@ class SessionConfig(BaseModel):
             rig=VoxelRigConfig.model_validate(raw_data.get("rig", {})),
             grid_config=GridConfig.model_validate(raw_data.get("grid_config", {})),
             tile_order=raw_data.get("tile_order", "snake_row"),
-            stacks=[Stack.model_validate(s) for s in raw_data.get("stacks", [])],
+            stacks=[Box.model_validate(s) for s in raw_data.get("stacks", [])],
         )
         config._raw_data = raw_data
         return config
@@ -230,7 +230,7 @@ class Session:
         return self._session_dir
 
     @property
-    def stacks(self) -> list[Stack]:
+    def stacks(self) -> list[Box]:
         """Get the list of stacks."""
         return self._config.stacks
 
@@ -247,17 +247,17 @@ class Session:
     @property
     def grid_locked(self) -> bool:
         """Grid is locked if any non-PLANNED stacks exist (acquisition has started)."""
-        return any(s.status != StackStatus.PLANNED for s in self._config.stacks)
+        return any(s.status != BoxStatus.PLANNED for s in self._config.stacks)
 
     # ==================== Grid Management ====================
 
     async def _recalculate_planned_stack_positions(self) -> None:
         """Recalculate (x_um, y_um) for all PLANNED stacks based on current grid config.
 
-        Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
+        Box positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
         The (row, col) identity remains stable - only physical positions change.
         """
-        if not any(s.status == StackStatus.PLANNED for s in self._config.stacks):
+        if not any(s.status == BoxStatus.PLANNED for s in self._config.stacks):
             return
 
         fov_w, fov_h = await self.get_fov_size()
@@ -266,7 +266,7 @@ class Session:
         offset_y = self._config.grid_config.y_offset_um
 
         for stack in self._config.stacks:
-            if stack.status == StackStatus.PLANNED:
+            if stack.status == BoxStatus.PLANNED:
                 stack.x_um = offset_x + stack.col * step_w
                 stack.y_um = offset_y + stack.row * step_h
                 stack.w_um = fov_w
@@ -421,15 +421,15 @@ class Session:
         )
         return tiles
 
-    # ==================== Stack Management ====================
+    # ==================== Box Management ====================
 
-    async def add_stacks(self, stacks: list[dict[str, int | float]]) -> list[Stack]:
+    async def add_stacks(self, stacks: list[dict[str, int | float]]) -> list[Box]:
         """Add multiple stacks at grid positions. Single save at end.
 
         Args:
             stacks: List of {row, col, z_start_um, z_end_um}
 
-        Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
+        Box positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
         """
         if not stacks:
             return []
@@ -440,7 +440,7 @@ class Session:
         fov_w, fov_h = await self.get_fov_size()
         step_w, step_h = await self.get_step_size()
 
-        added: list[Stack] = []
+        added: list[Box] = []
         for s in stacks:
             row = int(s["row"])
             col = int(s["col"])
@@ -455,9 +455,9 @@ class Session:
 
             # Check for duplicate
             if any(st.tile_id == tile_id for st in self._config.stacks):
-                raise ValueError(f"Stack {tile_id} already exists")
+                raise ValueError(f"Box {tile_id} already exists")
 
-            stack = Stack(
+            stack = Box(
                 tile_id=tile_id,
                 row=row,
                 col=col,
@@ -469,7 +469,7 @@ class Session:
                 z_end_um=z_end_um,
                 z_step_um=self._config.grid_config.z_step_um,
                 profile_id=self._rig.active_profile_id,
-                status=StackStatus.PLANNED,
+                status=BoxStatus.PLANNED,
             )
 
             self._config.stacks.append(stack)
@@ -480,7 +480,7 @@ class Session:
         self._save()
         return added
 
-    def edit_stacks(self, edits: list[dict[str, int | float]]) -> list[Stack]:
+    def edit_stacks(self, edits: list[dict[str, int | float]]) -> list[Box]:
         """Edit multiple stacks' z parameters. Single save at end.
 
         Args:
@@ -491,7 +491,7 @@ class Session:
         if not edits:
             return []
 
-        edited: list[Stack] = []
+        edited: list[Box] = []
         for e in edits:
             row = int(e["row"])
             col = int(e["col"])
@@ -499,9 +499,9 @@ class Session:
 
             stack = next((s for s in self._config.stacks if s.tile_id == tile_id), None)
             if stack is None:
-                raise ValueError(f"Stack {tile_id} not found")
+                raise ValueError(f"Box {tile_id} not found")
 
-            if stack.status != StackStatus.PLANNED:
+            if stack.status != BoxStatus.PLANNED:
                 raise RuntimeError(f"Cannot edit stack {tile_id} with status {stack.status}")
 
             if "z_start_um" in e:
@@ -531,13 +531,13 @@ class Session:
 
             for i, stack in enumerate(self._config.stacks):
                 if stack.tile_id == tile_id:
-                    if stack.status == StackStatus.COMPLETED:
+                    if stack.status == BoxStatus.COMPLETED:
                         self._log.warning(f"Removing completed stack {tile_id}")
                     self._config.stacks.pop(i)
                     self._log.info(f"Removed stack {tile_id}")
                     break
             else:
-                raise ValueError(f"Stack {tile_id} not found")
+                raise ValueError(f"Box {tile_id} not found")
 
         self._save()
 
@@ -564,14 +564,14 @@ class Session:
 
     # ==================== Acquisition ====================
 
-    async def acquire_stack(self, tile_id: str) -> StackResult:
+    async def acquire_stack(self, tile_id: str) -> BoxResult:
         """Acquire a single stack by ID. Uses the profile captured when stack was planned."""
         stack = next((s for s in self._config.stacks if s.tile_id == tile_id), None)
         if stack is None:
-            raise ValueError(f"Stack {tile_id} not found")
+            raise ValueError(f"Box {tile_id} not found")
 
-        if stack.status != StackStatus.PLANNED:
-            raise RuntimeError(f"Stack {tile_id} has status {stack.status}, expected PLANNED")
+        if stack.status != BoxStatus.PLANNED:
+            raise RuntimeError(f"Box {tile_id} has status {stack.status}, expected PLANNED")
 
         if self._rig.mode == RigMode.ACQUIRING:
             raise RuntimeError("Another stack is currently being acquired")
@@ -591,18 +591,18 @@ class Session:
         stack.output_path = str(output_dir.relative_to(self._session_dir))
         self._save()
 
-        if result.status == StackStatus.COMPLETED:
+        if result.status == BoxStatus.COMPLETED:
             self._log.info(f"Completed stack {tile_id}")
         else:
             self._log.error(f"Failed stack {tile_id}: {result.error_message}")
 
         return result
 
-    async def acquire_all(self) -> list[StackResult]:
+    async def acquire_all(self) -> list[BoxResult]:
         """Acquire all PLANNED stacks in order. Saves state after each."""
-        results: list[StackResult] = []
+        results: list[BoxResult] = []
 
-        pending_stacks = [s for s in self._config.stacks if s.status == StackStatus.PLANNED]
+        pending_stacks = [s for s in self._config.stacks if s.status == BoxStatus.PLANNED]
         self._log.info(f"Starting acquisition of {len(pending_stacks)} stacks")
 
         for stack in pending_stacks:

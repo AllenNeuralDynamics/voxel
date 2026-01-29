@@ -27,8 +27,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from voxel_qt.ui.primitives.display import Label
-from voxel_qt.ui.primitives.input import DoubleSpinBox, Select, Toggle
+from voxel_qt.ui.kit import DoubleSpinBox, Select, Text, Toggle
 
 
 class MicroscopeState:
@@ -142,7 +141,7 @@ class MicroscopeControlInterface(QMainWindow):
         layout = QVBoxLayout(widget)
 
         # Title
-        title = Label("Microscope Controls", variant="title")
+        title = Text.title("Microscope Controls")
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
@@ -197,7 +196,7 @@ class MicroscopeControlInterface(QMainWindow):
 
         # Acquisition Mode
         self._mode_select = Select(
-            options=["Single Image", "Time Series", "Z-Stack", "Tile Scan"],
+            options=["Single Image", "Time Series", "Z-Box", "Tile Scan"],
             value=self.state.acquisition_mode,
         )
         self._mode_select.value_changed.connect(self._make_callback("acquisition_mode"))
@@ -254,12 +253,12 @@ class MicroscopeControlInterface(QMainWindow):
 
         # 405nm Laser
         laser_405_layout = QHBoxLayout()
-        laser_405_layout.addWidget(Label("405nm Enable:"))
+        laser_405_layout.addWidget(Text("405nm Enable:"))
         self._laser_405_toggle = Toggle()
         self._laser_405_toggle.setChecked(self.state.laser_405_enabled)
         self._laser_405_toggle.toggled.connect(self._make_callback("laser_405_enabled"))
         laser_405_layout.addWidget(self._laser_405_toggle)
-        laser_405_layout.addWidget(Label("Power (mW):"))
+        laser_405_layout.addWidget(Text("Power (mW):"))
         self._laser_405_power = DoubleSpinBox(value=self.state.laser_405_power, min_val=0.0, max_val=50.0, decimals=1)
         self._laser_405_power.valueChanged.connect(self._make_callback("laser_405_power"))
         laser_405_layout.addWidget(self._laser_405_power)
@@ -268,12 +267,12 @@ class MicroscopeControlInterface(QMainWindow):
 
         # 488nm Laser
         laser_488_layout = QHBoxLayout()
-        laser_488_layout.addWidget(Label("488nm Enable:"))
+        laser_488_layout.addWidget(Text("488nm Enable:"))
         self._laser_488_toggle = Toggle()
         self._laser_488_toggle.setChecked(self.state.laser_488_enabled)
         self._laser_488_toggle.toggled.connect(self._make_callback("laser_488_enabled"))
         laser_488_layout.addWidget(self._laser_488_toggle)
-        laser_488_layout.addWidget(Label("Power (mW):"))
+        laser_488_layout.addWidget(Text("Power (mW):"))
         self._laser_488_power = DoubleSpinBox(value=self.state.laser_488_power, min_val=0.0, max_val=100.0, decimals=1)
         self._laser_488_power.valueChanged.connect(self._make_callback("laser_488_power"))
         laser_488_layout.addWidget(self._laser_488_power)
@@ -282,12 +281,12 @@ class MicroscopeControlInterface(QMainWindow):
 
         # 561nm Laser
         laser_561_layout = QHBoxLayout()
-        laser_561_layout.addWidget(Label("561nm Enable:"))
+        laser_561_layout.addWidget(Text("561nm Enable:"))
         self._laser_561_toggle = Toggle()
         self._laser_561_toggle.setChecked(self.state.laser_561_enabled)
         self._laser_561_toggle.toggled.connect(self._make_callback("laser_561_enabled"))
         laser_561_layout.addWidget(self._laser_561_toggle)
-        laser_561_layout.addWidget(Label("Power (mW):"))
+        laser_561_layout.addWidget(Text("Power (mW):"))
         self._laser_561_power = DoubleSpinBox(value=self.state.laser_561_power, min_val=0.0, max_val=75.0, decimals=1)
         self._laser_561_power.valueChanged.connect(self._make_callback("laser_561_power"))
         laser_561_layout.addWidget(self._laser_561_power)
@@ -302,25 +301,25 @@ class MicroscopeControlInterface(QMainWindow):
         grid = QGridLayout(group)
 
         # X position
-        grid.addWidget(Label("X (μm):"), 0, 0)
+        grid.addWidget(Text("X (μm):"), 0, 0)
         self._stage_x = DoubleSpinBox(value=self.state.stage_x, min_val=0.0, max_val=25000.0, decimals=1)
         self._stage_x.valueChanged.connect(self._make_callback("stage_x"))
         grid.addWidget(self._stage_x, 0, 1)
 
         # Y position
-        grid.addWidget(Label("Y (μm):"), 0, 2)
+        grid.addWidget(Text("Y (μm):"), 0, 2)
         self._stage_y = DoubleSpinBox(value=self.state.stage_y, min_val=0.0, max_val=25000.0, decimals=1)
         self._stage_y.valueChanged.connect(self._make_callback("stage_y"))
         grid.addWidget(self._stage_y, 0, 3)
 
         # Z position
-        grid.addWidget(Label("Z (μm):"), 1, 0)
+        grid.addWidget(Text("Z (μm):"), 1, 0)
         self._stage_z = DoubleSpinBox(value=self.state.stage_z, min_val=0.0, max_val=1000.0, decimals=1)
         self._stage_z.valueChanged.connect(self._make_callback("stage_z"))
         grid.addWidget(self._stage_z, 1, 1)
 
         # Step size
-        grid.addWidget(Label("Step Size (μm):"), 1, 2)
+        grid.addWidget(Text("Step Size (μm):"), 1, 2)
         self._stage_step = DoubleSpinBox(value=self.state.stage_step_size, min_val=0.1, max_val=1000.0, decimals=1)
         self._stage_step.valueChanged.connect(self._make_callback("stage_step_size"))
         grid.addWidget(self._stage_step, 1, 3)
@@ -366,9 +365,9 @@ class MicroscopeControlInterface(QMainWindow):
         status_group = QGroupBox("System Status")
         status_layout = QVBoxLayout(status_group)
 
-        self.temp_label = Label(f"Temperature: {self.state.temperature:.1f} °C")
-        self.humidity_label = Label(f"Humidity: {self.state.humidity:.1f} %")
-        self.ready_label = Label("System Ready: ✓ Ready" if self.state.system_ready else "System Ready: ✗ Not Ready")
+        self.temp_label = Text(f"Temperature: {self.state.temperature:.1f} °C")
+        self.humidity_label = Text(f"Humidity: {self.state.humidity:.1f} %")
+        self.ready_label = Text("System Ready: ✓ Ready" if self.state.system_ready else "System Ready: ✗ Not Ready")
 
         status_layout.addWidget(self.temp_label)
         status_layout.addWidget(self.humidity_label)

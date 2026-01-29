@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from voxel import RigMode, Session
 from voxel.config import TileOrder
 from voxel.session import GridConfig
-from voxel.tile import Stack, StackStatus, Tile
+from voxel.tile import Box, BoxStatus, Tile
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
@@ -48,7 +48,7 @@ class SessionStatus(BaseModel):
     grid_config: GridConfig
     tile_order: TileOrder
     tiles: list[Tile]
-    stacks: list[Stack]
+    stacks: list[Box]
 
     timestamp: str
 
@@ -162,7 +162,7 @@ class SessionService:
         # Status broadcast includes tile_order and stacks (re-sorted)
         self.broadcast({}, with_status=True)
 
-    # ==================== Stack Management ====================
+    # ==================== Box Management ====================
 
     async def _handle_stacks_add(self, payload: dict[str, Any]) -> None:
         """Handle bulk stack add request.
@@ -230,7 +230,7 @@ class SessionService:
                 {
                     "topic": "acq/progress",
                     "payload": {
-                        "status": "completed" if result.status == StackStatus.COMPLETED else "failed",
+                        "status": "completed" if result.status == BoxStatus.COMPLETED else "failed",
                         "tile_id": tile_id,
                         "error": result.error_message,
                     },
@@ -247,7 +247,7 @@ class SessionService:
 
     async def _run_full_acquisition(self) -> None:
         """Run acquisition for all pending stacks."""
-        pending = [s for s in self.session.stacks if s.status == StackStatus.PLANNED]
+        pending = [s for s in self.session.stacks if s.status == BoxStatus.PLANNED]
         total = len(pending)
 
         self.broadcast(
@@ -259,7 +259,7 @@ class SessionService:
         for stack in pending:
             try:
                 result = await self.session.acquire_stack(stack.tile_id)
-                if result.status == StackStatus.COMPLETED:
+                if result.status == BoxStatus.COMPLETED:
                     completed += 1
                 self.broadcast(
                     {
@@ -369,7 +369,7 @@ async def list_stacks(service: Annotated[SessionService, Depends(get_session_ser
     }
 
 
-class StackInput(BaseModel):
+class BoxInput(BaseModel):
     """Input model for a single stack."""
 
     row: int
@@ -378,15 +378,15 @@ class StackInput(BaseModel):
     z_end_um: float
 
 
-class AddStacksRequest(BaseModel):
+class AddBoxsRequest(BaseModel):
     """Request model for adding stacks (bulk)."""
 
-    stacks: list[StackInput]
+    stacks: list[BoxInput]
 
 
 @session_router.post("/session/stacks")
 async def add_stacks(
-    request: AddStacksRequest,
+    request: AddBoxsRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Add stacks at the specified grid positions (bulk)."""
@@ -400,7 +400,7 @@ async def add_stacks(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-class StackEditInput(BaseModel):
+class BoxEditInput(BaseModel):
     """Input model for editing a single stack."""
 
     row: int
@@ -409,15 +409,15 @@ class StackEditInput(BaseModel):
     z_end_um: float | None = None
 
 
-class EditStacksRequest(BaseModel):
+class EditBoxsRequest(BaseModel):
     """Request model for editing stacks (bulk)."""
 
-    edits: list[StackEditInput]
+    edits: list[BoxEditInput]
 
 
 @session_router.patch("/session/stacks")
 async def edit_stacks(
-    request: EditStacksRequest,
+    request: EditBoxsRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Edit stacks' z parameters (bulk)."""
@@ -431,22 +431,22 @@ async def edit_stacks(
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
-class StackPosition(BaseModel):
+class BoxPosition(BaseModel):
     """Position identifier for a stack."""
 
     row: int
     col: int
 
 
-class RemoveStacksRequest(BaseModel):
+class RemoveBoxsRequest(BaseModel):
     """Request model for removing stacks (bulk)."""
 
-    positions: list[StackPosition]
+    positions: list[BoxPosition]
 
 
 @session_router.delete("/session/stacks")
 async def remove_stacks(
-    request: RemoveStacksRequest,
+    request: RemoveBoxsRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Remove stacks (bulk)."""

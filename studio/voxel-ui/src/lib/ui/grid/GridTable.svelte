@@ -2,7 +2,7 @@
 	import Icon from '@iconify/svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { App } from '$lib/app';
-	import type { Tile, Stack, StackStatus } from '$lib/core/types';
+	import type { Tile, Box, BoxStatus } from '$lib/core/types';
 	import { Select, Checkbox, SpinBox } from '$lib/ui/primitives';
 
 	interface Props {
@@ -17,8 +17,8 @@
 
 	const filterOptions = [
 		{ value: 'all' as const, label: 'All' },
-		{ value: 'with_stack' as const, label: 'Stacks' },
-		{ value: 'without_stack' as const, label: 'No Stacks' }
+		{ value: 'with_stack' as const, label: 'Boxs' },
+		{ value: 'without_stack' as const, label: 'No Boxs' }
 	];
 
 	// Default Z values for new stacks (in µm)
@@ -34,7 +34,7 @@
 	}
 
 	// Get stack for a tile
-	function getStack(tile: Tile): Stack | null {
+	function getBox(tile: Tile): Box | null {
 		return app.stacks.find((s) => s.row === tile.row && s.col === tile.col) ?? null;
 	}
 
@@ -42,9 +42,9 @@
 	const filteredTiles = $derived.by(() => {
 		switch (filterMode) {
 			case 'with_stack':
-				return app.tiles.filter((t) => getStack(t) !== null);
+				return app.tiles.filter((t) => getBox(t) !== null);
 			case 'without_stack':
-				return app.tiles.filter((t) => getStack(t) === null);
+				return app.tiles.filter((t) => getBox(t) === null);
 			default:
 				return app.tiles;
 		}
@@ -102,8 +102,8 @@
 	}
 
 	// Add stack to tile
-	function handleAddStack(tile: Tile) {
-		app.addStacks([{ row: tile.row, col: tile.col, zStartUm: defaultZStart, zEndUm: defaultZEnd }]);
+	function handleAddBox(tile: Tile) {
+		app.addBoxs([{ row: tile.row, col: tile.col, zStartUm: defaultZStart, zEndUm: defaultZEnd }]);
 		handleRowClick(tile);
 	}
 
@@ -126,7 +126,7 @@
 			});
 
 		if (positions.length > 0) {
-			app.removeStacks(positions);
+			app.removeBoxs(positions);
 		}
 		checkedItems.clear();
 	}
@@ -137,7 +137,7 @@
 		const key = tileKey(tile.row, tile.col);
 
 		// Get all checked tiles that have stacks
-		const checkedWithStacks = Array.from(checkedItems)
+		const checkedWithBoxs = Array.from(checkedItems)
 			.map((k) => {
 				const [row, col] = k.split(',').map(Number);
 				return { row, col };
@@ -145,16 +145,16 @@
 			.filter(({ row, col }) => app.stacks.some((s) => s.row === row && s.col === col));
 
 		// If this tile is checked and there are other checked tiles with stacks, bulk edit
-		if (checkedItems.has(key) && checkedWithStacks.length > 1) {
-			app.editStacks(checkedWithStacks.map((p) => ({ ...p, zStartUm: zStart, zEndUm: zEnd })));
+		if (checkedItems.has(key) && checkedWithBoxs.length > 1) {
+			app.editBoxs(checkedWithBoxs.map((p) => ({ ...p, zStartUm: zStart, zEndUm: zEnd })));
 		} else {
 			// Single edit
-			app.editStacks([{ row: tile.row, col: tile.col, zStartUm: zStart, zEndUm: zEnd }]);
+			app.editBoxs([{ row: tile.row, col: tile.col, zStartUm: zStart, zEndUm: zEnd }]);
 		}
 	}
 
 	// Status color classes
-	const statusColors: Record<StackStatus, string> = {
+	const statusColors: Record<BoxStatus, string> = {
 		planned: 'text-blue-400',
 		acquiring: 'text-cyan-400',
 		completed: 'text-emerald-400',
@@ -196,12 +196,12 @@
 					</th>
 					<th class="w-16 border-b border-zinc-700 p-2 text-right font-medium tracking-wider"> Slices </th>
 					<th class="w-20 border-b border-zinc-700 p-2 text-right font-medium tracking-wider"> Profile </th>
-					<th class="w-20 border-b border-zinc-700 p-2 pr-4 text-right font-medium tracking-wider"> Stacks </th>
+					<th class="w-20 border-b border-zinc-700 p-2 pr-4 text-right font-medium tracking-wider"> Boxs </th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each filteredTiles as tile (tileKey(tile.row, tile.col))}
-					{@const stack = getStack(tile)}
+					{@const stack = getBox(tile)}
 					{@const focused = isFocused(tile)}
 					<tr
 						class="cursor-pointer border-b border-l-2 border-zinc-800 border-l-transparent transition-[background-color] hover:bg-zinc-800/50"
@@ -271,7 +271,7 @@
 							{:else}
 								<button
 									class="inline-flex items-center gap-1 rounded border border-zinc-700 bg-transparent px-1.5 py-0.5 text-[0.65rem] text-zinc-400 transition-colors hover:border-emerald-500 hover:text-emerald-500"
-									onclick={() => handleAddStack(tile)}
+									onclick={() => handleAddBox(tile)}
 								>
 									Add
 									<Icon icon="mdi:plus" width="12" height="12" />

@@ -53,6 +53,53 @@ class PreviewLevels(SchemaModel):
     def needs_adjustment(self) -> bool:
         return self.min != 0.0 or self.max != 1.0
 
+    @classmethod
+    def from_histogram(cls, histogram: list[int], percentile: float = 1.0) -> Self:
+        """Calculate auto-levels from a histogram using percentile clipping.
+
+        Args:
+            histogram: Histogram bin counts (any number of bins)
+            percentile: Percentile to clip at low/high ends (default 1.0 means 1st and 99th percentile)
+
+        Returns:
+            PreviewLevels with min/max normalized to 0-1 range
+        """
+        total = sum(histogram)
+        if total == 0:
+            return cls()
+
+        low_threshold = total * (percentile / 100.0)
+        high_threshold = total * ((100.0 - percentile) / 100.0)
+
+        # Find low percentile bin
+        cumsum = 0
+        low_bin = 0
+        for i, count in enumerate(histogram):
+            cumsum += count
+            if cumsum >= low_threshold:
+                low_bin = i
+                break
+
+        # Find high percentile bin
+        cumsum = 0
+        high_bin = len(histogram) - 1
+        for i, count in enumerate(histogram):
+            cumsum += count
+            if cumsum >= high_threshold:
+                high_bin = i
+                break
+
+        # Normalize to 0-1 range
+        num_bins = len(histogram)
+        min_val = low_bin / (num_bins - 1)
+        max_val = high_bin / (num_bins - 1)
+
+        # Ensure min < max
+        if max_val <= min_val:
+            max_val = min_val + 0.01
+
+        return cls(min=min_val, max=max_val)
+
 
 class PreviewFrameInfo(SchemaModel):
     """Contains the preview configuration settings for a frame including the config used to generate it."""
@@ -231,25 +278,18 @@ class PreviewGenerator:
             histogram, _ = np.histogram(preview_img, bins=num_bins, range=(0, max_val))
             hist_data = histogram.tolist()
 
-        # 4) Convert to float32 for levels scaling.
-        preview_float = preview_img.astype(np.float32)
+        # 4) Convert to float32 and normalize to 0-1 range based on dtype.
+        max_val = np.iinfo(raw_frame.dtype).max  # 255 for uint8, 65535 for uint16
+        preview_float = preview_img.astype(np.float32) / max_val
 
+        # 5) Apply levels adjustment if needed (values are now in 0-1 range).
         levels = self.levels
-
         if levels.needs_adjustment:
-            # 5) Determine the max possible value from the raw frame's dtype (e.g. 65535 for uint16).
-            # 6) Compute the actual black/white values from percentages.
-            # 7) Clamp to [black_val..white_val].
-            max_val = np.iinfo(raw_frame.dtype).max
-            black_val = levels.min * max_val
-            white_val = levels.max * max_val
-            preview_float = np.clip(preview_float, black_val, white_val)
+            preview_float = np.clip(preview_float, levels.min, levels.max)
+            denom = (levels.max - levels.min) + 1e-8
+            preview_float = (preview_float - levels.min) / denom
 
-            # 8) Normalize to [0..1].
-            denom = (white_val - black_val) + 1e-8
-            preview_float = (preview_float - black_val) / denom
-
-        # 10) Scale to [0..255] and convert to uint8.
+        # 6) Scale to [0..255] and convert to uint8.
         preview_float *= 255.0
         preview_uint8 = preview_float.astype(np.uint8)
 

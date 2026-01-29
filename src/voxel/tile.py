@@ -1,4 +1,4 @@
-"""Tile and Stack models for acquisition planning."""
+"""Tile and Box models for acquisition planning."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -9,7 +9,7 @@ from pydantic import BaseModel, computed_field
 from voxel.camera.base import CameraBatchResult
 
 
-class StackStatus(StrEnum):
+class BoxStatus(StrEnum):
     PLANNED = "planned"
     COMMITTED = "committed"
     ACQUIRING = "acquiring"
@@ -34,7 +34,7 @@ class Tile(BaseModel):
     h_um: float  # Height in micrometers (full FOV height)
 
 
-class Stack(Tile):
+class Box(Tile):
     """3D acquisition unit = Tile + z-range.
 
     Inherits center-anchored positioning from Tile.
@@ -44,7 +44,7 @@ class Stack(Tile):
     z_end_um: float
     z_step_um: float
     profile_id: str
-    status: StackStatus = StackStatus.PLANNED
+    status: BoxStatus = BoxStatus.PLANNED
     output_path: str | None = None
 
     @computed_field
@@ -53,11 +53,11 @@ class Stack(Tile):
         return int((self.z_end_um - self.z_start_um) / self.z_step_um) + 1
 
 
-class StackResult(BaseModel):
+class BoxResult(BaseModel):
     """Result of acquiring a z-stack."""
 
     tile_id: str
-    status: StackStatus
+    status: BoxStatus
     output_dir: Path
     cameras: dict[str, CameraBatchResult]
     num_frames: int

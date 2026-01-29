@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
+	import { getBoxStatusColor, type Tile, type Box } from '$lib/core/types';
 	import { onMount } from 'svelte';
 	import Icon from '@iconify/svelte';
 
@@ -128,14 +128,14 @@
 	}
 
 	// Handle stack click to select its tile
-	function handleStackSelect(stack: Stack) {
+	function handleBoxSelect(stack: Box) {
 		app.selectTile(stack.row, stack.col);
 	}
 
 	// Handle stack double-click to move stage (center-anchored: stack position IS the center)
-	function handleStackMove(stack: Stack) {
+	function handleBoxMove(stack: Box) {
 		if (isXYMoving || !app.xAxis || !app.yAxis) return;
-		// Stack position is center, move stage so FOV center aligns with stack center
+		// Box position is center, move stage so FOV center aligns with stack center
 		const targetX = app.xAxis.lowerLimit + toMm(stack.x_um);
 		const targetY = app.yAxis.lowerLimit + toMm(stack.y_um);
 		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
@@ -166,7 +166,7 @@
 		app.layerVisibility = { ...app.layerVisibility, grid: !app.layerVisibility.grid };
 	}
 
-	function toggleStacks() {
+	function toggleBoxs() {
 		app.layerVisibility = { ...app.layerVisibility, stacks: !app.layerVisibility.stacks };
 	}
 
@@ -229,7 +229,7 @@
 						<Icon icon="mdi:grid" width="14" height="14" />
 					</button>
 					<button
-						onclick={toggleStacks}
+						onclick={toggleBoxs}
 						class="rounded p-1 transition-colors {app.layerVisibility.stacks
 							? 'text-purple-400 hover:bg-zinc-700'
 							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
@@ -305,7 +305,7 @@
 							class="xy-svg"
 							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 						>
-							<!-- Stacks Layer: Stacks as filled rectangles with status coloring -->
+							<!-- Boxs Layer: Boxs as filled rectangles with status coloring -->
 							{#if app.layerVisibility.stacks}
 								<g class="stacks-layer">
 									{#each app.stacks as stack (`${stack.row}_${stack.col}`)}
@@ -321,16 +321,16 @@
 											width={w}
 											height={h}
 											stroke-width={0.075}
-											class="stack outline-none {getStackStatusColor(stack.status)}"
+											class="stack outline-none {getBoxStatusColor(stack.status)}"
 											class:cursor-pointer={!isXYMoving}
 											class:cursor-not-allowed={isXYMoving}
 											role="button"
 											tabindex={isXYMoving ? -1 : 0}
-											onclick={() => handleStackSelect(stack)}
-											ondblclick={() => handleStackMove(stack)}
-											onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
+											onclick={() => handleBoxSelect(stack)}
+											ondblclick={() => handleBoxMove(stack)}
+											onkeydown={(e) => handleKeydown(e, () => handleBoxSelect(stack))}
 										>
-											<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
+											<title>Box [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
 										</rect>
 									{/each}
 								</g>
@@ -435,13 +435,13 @@
 						oninput={handleZSliderChange}
 					/>
 					<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
-						<!-- Stack Z markers -->
-						{#if app.selectedStack && app.zAxis}
-							{@const z0Offset = app.selectedStack.z_start_um / 1000 - app.zAxis.lowerLimit}
-							{@const z1Offset = app.selectedStack.z_end_um / 1000 - app.zAxis.lowerLimit}
+						<!-- Box Z markers -->
+						{#if app.selectedBox && app.zAxis}
+							{@const z0Offset = app.selectedBox.z_start_um / 1000 - app.zAxis.lowerLimit}
+							{@const z1Offset = app.selectedBox.z_end_um / 1000 - app.zAxis.lowerLimit}
 							{@const y0 = (1 - z0Offset / app.stageDepth) * canvasHeight - 1}
 							{@const y1 = (1 - z1Offset / app.stageDepth) * canvasHeight - 1}
-							<g class={getStackStatusColor(app.selectedStack.status)}>
+							<g class={getBoxStatusColor(app.selectedBox.status)}>
 								<line x1="0" y1={y0} x2="30" y2={y0} class="z-marker" />
 								<line x1="0" {y1} x2="30" y2={y1} class="z-marker" />
 							</g>

@@ -119,13 +119,7 @@ class RigService:
     async def _handle_preview_crop(self, payload: dict[str, Any]):
         """Handle preview crop update."""
         crop = PreviewCrop(x=payload.get("x", 0), y=payload.get("y", 0), k=payload.get("k", 0))
-
-        tasks = []
-        for channel in self.rig.active_channels.values():
-            if camera := self.rig.cameras.get(channel.detection):
-                tasks.append(camera.update_preview_crop(crop))
-        await asyncio.gather(*tasks)
-
+        await self.rig.update_preview_crop(crop)
         self._broadcast({"topic": "preview/crop", "payload": {"x": crop.x, "y": crop.y, "k": crop.k}})
 
     async def _handle_preview_levels(self, payload: dict[str, Any]):
@@ -135,17 +129,13 @@ class RigService:
             raise ValueError("Missing 'channel' in levels payload")
 
         levels = PreviewLevels(min=payload.get("min", 0), max=payload.get("max", 255))
-
-        if (channel := self.rig.active_channels.get(channel_id)) and (
-            camera := self.rig.cameras.get(channel.detection)
-        ):
-            await camera.update_preview_levels(levels)
-            self._broadcast(
-                {
-                    "topic": "preview/levels",
-                    "payload": {"channel": channel_id, "min": levels.min, "max": levels.max},
-                },
-            )
+        await self.rig.update_preview_levels({channel_id: levels})
+        self._broadcast(
+            {
+                "topic": "preview/levels",
+                "payload": {"channel": channel_id, "min": levels.min, "max": levels.max},
+            },
+        )
 
     async def _distribute_frames(self, channel: str, packed_frame: bytes) -> None:
         """Callback that distributes preview frames to all clients.
@@ -367,7 +357,6 @@ async def get_device_properties(
         raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found")
 
     try:
-
         if props:
             result = await client.get_props(*props)
         else:

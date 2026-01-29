@@ -145,6 +145,7 @@ class Camera(Device):
 
     @deliminated_float()
     @abstractmethod
+    @describe(label="Exposure Time", units="ms", stream=True)
     def exposure_time_ms(self) -> float:
         """Get the exposure time of the camera in ms."""
 

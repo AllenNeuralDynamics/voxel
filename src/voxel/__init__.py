@@ -3,7 +3,7 @@ from .config import VoxelRigConfig
 from .node import VoxelNode
 from .rig import RigMode, VoxelRig
 from .session import GridConfig, Session, SessionConfig
-from .tile import Stack, StackResult, StackStatus, Tile
+from .tile import Box, BoxResult, BoxStatus, Tile
 
 __all__ = [
     "CameraBatchResult",
@@ -11,9 +11,9 @@ __all__ = [
     "RigMode",
     "Session",
     "SessionConfig",
-    "Stack",
-    "StackResult",
-    "StackStatus",
+    "Box",
+    "BoxResult",
+    "BoxStatus",
     "Tile",
     "VoxelNode",
     "VoxelRig",

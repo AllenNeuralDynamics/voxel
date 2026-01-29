@@ -21,7 +21,7 @@ import {
 	type LogMessage,
 	type GridConfig,
 	type Tile,
-	type Stack,
+	type Box,
 	type LayerVisibility,
 	type TileOrder,
 	type Vec2D
@@ -162,7 +162,7 @@ export class App {
 		}
 	);
 	tiles = $derived<Tile[]>(this.status?.session?.tiles ?? []);
-	stacks = $derived<Stack[]>(this.status?.session?.stacks ?? []);
+	stacks = $derived<Box[]>(this.status?.session?.stacks ?? []);
 	tileOrder = $derived<TileOrder>(this.status?.session?.tile_order ?? 'snake_row');
 
 	// Layer visibility state (controlled by StageControls)
@@ -171,7 +171,7 @@ export class App {
 	// Selected tile position [row, col] - never null, defaults to [0, 0]
 	#selectedTilePos = $state<[number, number]>([0, 0]);
 	selectedTile = $derived<Tile>(this.#getSelectedTile());
-	selectedStack = $derived<Stack | null>(
+	selectedBox = $derived<Box | null>(
 		this.stacks.find((s) => s.row === this.selectedTile.row && s.col === this.selectedTile.col) ?? null
 	);
 
@@ -284,7 +284,7 @@ export class App {
 		this.#selectedTilePos = [row, col];
 	}
 
-	// ========== Grid/Stack Actions (send to backend) ==========
+	// ========== Grid/Box Actions (send to backend) ==========
 
 	/** Update grid offset (sends to backend) */
 	setGridOffset(xOffsetUm: number, yOffsetUm: number): void {
@@ -302,7 +302,7 @@ export class App {
 	}
 
 	/** Add stacks at grid positions (bulk, sends to backend) */
-	addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
+	addBoxs(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
 			topic: 'stacks/add',
 			payload: {
@@ -317,7 +317,7 @@ export class App {
 	}
 
 	/** Edit stacks' z parameters (bulk, sends to backend) */
-	editStacks(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
+	editBoxs(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
 			topic: 'stacks/edit',
 			payload: {
@@ -332,7 +332,7 @@ export class App {
 	}
 
 	/** Remove stacks (bulk, sends to backend) */
-	removeStacks(positions: Array<{ row: number; col: number }>): void {
+	removeBoxs(positions: Array<{ row: number; col: number }>): void {
 		this.#client.send({ topic: 'stacks/remove', payload: { positions } });
 	}
 
