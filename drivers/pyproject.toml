@@ -38,9 +38,14 @@ ximea-camera = [
 ]
 # pco-camera = ["pco"]
 # Note: Hamamatsu DCAM SDK is bundled in voxel_drivers/cameras/dcam/sdk/
+# Optomechanics drivers
+opto-icc = ["optoICC"]
+opto-kummenberg = ["optoKummenberg"]
 
 [tool.uv.sources]
-egrabber = { url = "https://github.com/waltermwaniki/spim-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+egrabber = { url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" }
+optoICC = { url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/optoICC-2.0.4922-py3-none-any.whl" }
+optoKummenberg = { url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/optoKummenberg-1.0.4894-py3-none-any.whl" }
 voxel = { workspace = true }
 vxlib = { workspace = true }
 
