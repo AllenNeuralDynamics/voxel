@@ -1,5 +1,5 @@
 [project]
-name = "voxel-qt"
+name = "vxl-qt"
 version = "0.1.0"
 description = "Voxel Qt - PySide6-based microscope control built on voxel"
 readme = "README.md"
@@ -8,17 +8,17 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "voxel",
+    "vxl",
     "PySide6>=6.8.0",
     "qasync>=0.27.1",
     "qtawesome>=1.4.0",
 ]
 
 [project.scripts]
-voxel-qt = "voxel_qt.cli:main"
+vxl-qt = "vxl_qt.cli:main"
 
 [tool.uv.sources]
-voxel = { workspace = true }
+vxl = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

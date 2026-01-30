@@ -1,0 +1,26 @@
+[project]
+name = "vxl-web"
+version = "0.1.0"
+description = "Web interface for Voxel Rig control"
+readme = "README.md"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "vxl",
+    "fastapi>=0.121.1",
+    "uvicorn>=0.38.0",
+    "websockets>=15.0.1",
+]
+
+[project.scripts]
+vxl = "vxl_web.cli:main"
+vxl-node = "vxl.node:node_main"
+
+[tool.uv.sources]
+vxl = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"

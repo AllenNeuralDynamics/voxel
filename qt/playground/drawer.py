@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation
 from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
-from voxel_qt.ui.kit import Text
+from vxl_qt.ui.kit import Text
 
 
 class SlidingDrawer(QWidget):

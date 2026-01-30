@@ -1,4 +1,4 @@
-"""Hardware control demo using voxel_qt primitives.
+"""Hardware control demo using vxl_qt primitives.
 
 This demonstrates how to use SpinBox/DoubleSpinBox with mock hardware,
 using Qt's signal-based architecture rather than getter/setter bindings.
@@ -10,7 +10,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QGroupBox, QLabel, QPushButton, QVBoxLayout, QWidget
 from rich import print
-from voxel_qt.ui.kit import DoubleSpinBox, SpinBox
+from vxl_qt.ui.kit import DoubleSpinBox, SpinBox
 
 
 class MockHardware:
@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
     from PySide6.QtWidgets import QApplication
 
-    print("[cyan]Hardware control demo using voxel_qt primitives[/cyan]")
+    print("[cyan]Hardware control demo using vxl_qt primitives[/cyan]")
     print("[cyan]- SpinBox: Integer values (position)[/cyan]")
     print("[cyan]- DoubleSpinBox: Float values (voltage, temperature)[/cyan]")
     print()
@@ -265,7 +265,7 @@ if __name__ == "__main__":
 
     # Create the composite hardware widget
     widget = MockHardwareWidget(hardware)
-    widget.setWindowTitle("Hardware Control - voxel_qt Primitives Demo")
+    widget.setWindowTitle("Hardware Control - vxl_qt Primitives Demo")
     widget.resize(400, 500)
     widget.show()
 

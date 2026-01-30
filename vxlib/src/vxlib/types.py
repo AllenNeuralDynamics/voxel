@@ -1,6 +1,6 @@
-"""Core type definitions for the pyrig ecosystem.
+"""Core type definitions for the rigup ecosystem.
 
-These types are used throughout pyrig and related packages for consistent
+These types are used throughout rigup and related packages for consistent
 data representation across device drivers, camera handling, and schemas.
 """
 

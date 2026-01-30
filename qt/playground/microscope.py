@@ -1,7 +1,7 @@
 """Microscope Control Interface Example.
 
 This example demonstrates a realistic microscope control interface built using
-the voxel_qt primitives. It showcases how to create a proper UI application
+the vxl_qt primitives. It showcases how to create a proper UI application
 with state management, status indicators, and organized control panels.
 """
 
@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from voxel_qt.ui.kit import DoubleSpinBox, Select, Text, Toggle
+from vxl_qt.ui.kit import DoubleSpinBox, Select, Text, Toggle
 
 
 class MicroscopeState:
@@ -92,7 +92,7 @@ class MicroscopeControlInterface(QMainWindow):
 
     def _setup_ui(self):
         """Set up the user interface."""
-        self.setWindowTitle("ExaSPIM Microscope Control - voxel_qt Demo")
+        self.setWindowTitle("ExaSPIM Microscope Control - vxl_qt Demo")
         self.setGeometry(100, 100, 1200, 800)
 
         # Create central widget with main layout
