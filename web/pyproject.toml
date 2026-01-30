@@ -16,7 +16,9 @@ dependencies = [
 
 [project.scripts]
 vxl = "vxl_web.cli:main"
+voxel = "vxl_web.cli:main"
 vxl-node = "vxl.node:node_main"
+voxel-node = "vxl.node:node_main"
 
 [tool.uv.sources]
 vxl = { workspace = true }
