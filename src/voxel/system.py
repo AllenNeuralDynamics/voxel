@@ -91,7 +91,7 @@ class SystemConfig(BaseModel):
         playground_dir.mkdir(exist_ok=True)
 
         # Copy example rig configs from package
-        examples_dir = Path(__file__).parent / "examples"
+        examples_dir = Path(__file__).parent / "_configs"
         rig_files = [
             "simulated.local.rig.yaml",
             "simulated.distributed.rig.yaml",
