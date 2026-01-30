@@ -3,7 +3,6 @@ from typing import ClassVar, cast, final
 
 import numpy as np
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
-from vxl_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 from vxlib.vec import IVec2D, Vec2D
 
 from vxl.camera.base import (
@@ -16,6 +15,7 @@ from vxl.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
+from vxl.camera.simulated.frame_gen import ReferenceFrameGenerator
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 VP_151MX_M6H0 = IVec2D(y=10_640, x=14_192)

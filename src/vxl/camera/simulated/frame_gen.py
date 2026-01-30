@@ -3,7 +3,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image
 
 
 class ResizeMode(Enum):
@@ -52,12 +51,10 @@ class ReferenceFrameGenerator:
         self._processed_base_image: np.ndarray | None = None
 
     def _load_image(self, path: str) -> np.ndarray:
-        """Load image from disk. Handles various formats via Pillow."""
-        img = Image.open(path)
-        arr = np.array(img)
-        # Ensure 2D grayscale
-        if arr.ndim == 3:
-            arr = arr[:, :, 0]  # Take first channel if RGB
+        """Load image from disk as grayscale, preserving bit depth."""
+        arr = cv2.imread(path, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
+        if arr is None:
+            raise FileNotFoundError(f"Failed to load image: {path}")
         return arr.astype(np.float32)
 
     def _should_tile(self, ref_shape: tuple[int, int]) -> bool:
