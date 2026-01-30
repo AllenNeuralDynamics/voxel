@@ -2,13 +2,13 @@
 
 Examples:
     # Start in lobby mode (default)
-    voxel
+    vxl
 
     # Start with debug logging
-    voxel --debug
+    vxl --debug
 
     # Start on a different port
-    voxel --port 9000
+    vxl --port 9000
 """
 
 import argparse
@@ -23,7 +23,7 @@ from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
-        prog="voxel",
+        prog="vxl",
         description="Voxel Studio - Microscope Control System",
     )
 
@@ -49,7 +49,7 @@ def main() -> None:
 
     log_level = logging.DEBUG if args.debug else logging.INFO
     configure_logging(level=log_level, fmt="%(message)s", datefmt="[%X]")
-    log = logging.getLogger("voxel")
+    log = logging.getLogger("vxl")
 
     log.info("Starting Voxel Studio...")
 
