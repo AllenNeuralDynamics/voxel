@@ -6,7 +6,7 @@ from pyrig.device import DeviceHandle
 from vxlib.vec import Vec2D
 
 from voxel.camera.base import Camera, CameraBatchResult, TriggerMode, TriggerPolarity
-from voxel.camera.preview import PreviewCrop, PreviewLevels
+from voxel.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
 
 
 class CameraHandle(DeviceHandle[Camera]):
@@ -48,6 +48,15 @@ class CameraHandle(DeviceHandle[Camera]):
     async def update_preview_levels(self, levels: PreviewLevels) -> None:
         """Update preview levels range."""
         await self.call("update_preview_levels", levels)
+
+    async def update_preview_colormap(self, colormap: str | None) -> None:
+        """Update the colormap applied to preview frames."""
+        await self.call("update_preview_colormap", colormap)
+
+    async def get_preview_config(self) -> PreviewConfig:
+        """Get the current preview display configuration."""
+        result = await self.call("get_preview_config")
+        return PreviewConfig.model_validate(result)
 
     async def capture_batch(
         self,

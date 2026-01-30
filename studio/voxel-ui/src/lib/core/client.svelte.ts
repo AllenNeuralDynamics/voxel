@@ -46,6 +46,7 @@ export interface PreviewFrameInfo {
 	levels: PreviewLevels;
 	fmt: 'jpeg' | 'png' | 'uint16'; // Frame format
 	histogram?: number[]; // 256-bin histogram (0-255), only present in full frames
+	colormap?: string; // Colormap name applied by backend (e.g. "green", "magenta")
 }
 
 /**
@@ -68,6 +69,7 @@ type ClientMessage =
 	| { topic: 'preview/stop'; payload?: Record<string, never> }
 	| { topic: 'preview/crop'; payload: PreviewCrop }
 	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
+	| { topic: 'preview/colormap'; payload: { channel: string; colormap: string } }
 	| { topic: 'daq/request_waveforms'; payload?: Record<string, never> }
 	| {
 			topic: 'device/set_property';
@@ -117,6 +119,7 @@ export interface TopicHandlers {
 	'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
 	'preview/crop'?: (payload: PreviewCrop) => void;
 	'preview/levels'?: (payload: PreviewLevelsInfo) => void;
+	'preview/colormap'?: (payload: { channel: string; colormap: string }) => void;
 	'daq/waveforms'?: (payload: DaqWaveforms) => void;
 	device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
 	// Grid/Box handlers
@@ -356,6 +359,10 @@ export class Client {
 
 	updateLevels(channel: string, min: number, max: number): void {
 		this.send({ topic: 'preview/levels', payload: { channel, min, max } });
+	}
+
+	updateColormap(channel: string, colormap: string): void {
+		this.send({ topic: 'preview/colormap', payload: { channel, colormap } });
 	}
 
 	/**

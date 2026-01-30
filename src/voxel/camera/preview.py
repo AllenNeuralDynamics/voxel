@@ -13,6 +13,7 @@ import msgpack
 import msgpack_numpy as mpack_numpy
 import numpy as np
 from pydantic import Field
+from vxlib.color import resolve_colormap
 
 from vxlib import SchemaModel
 
@@ -101,6 +102,14 @@ class PreviewLevels(SchemaModel):
         return cls(min=min_val, max=max_val)
 
 
+class PreviewConfig(SchemaModel):
+    """Current preview display configuration for a camera."""
+
+    crop: PreviewCrop = Field(default_factory=PreviewCrop)
+    levels: PreviewLevels = Field(default_factory=PreviewLevels)
+    colormap: str | None = None
+
+
 class PreviewFrameInfo(SchemaModel):
     """Contains the preview configuration settings for a frame including the config used to generate it."""
 
@@ -115,6 +124,10 @@ class PreviewFrameInfo(SchemaModel):
     histogram: list[int] | None = Field(
         default=None,
         description="256-bin histogram of preview intensity (0-255). Only present in full (non-cropped) frames.",
+    )
+    colormap: str | None = Field(
+        default=None,
+        description="Colormap applied to this frame, or None for grayscale.",
     )
 
 
@@ -185,10 +198,22 @@ class PreviewGenerator:
         self.levels = levels or PreviewLevels()
         self._idx: int = 0
         self._current_frame: np.ndarray | None = None
+        self._colormap: str | None = None
+        self._lut: np.ndarray | None = None  # (256, 3) uint8, cached
         self.log = logging.getLogger(f"{self._uid}.PreviewGenerator")
 
         # Dedicated executor for preview processing (1 worker per camera)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewGenerator")
+
+    @property
+    def colormap(self) -> str | None:
+        """Colormap name applied to preview frames, or None for grayscale."""
+        return self._colormap
+
+    @colormap.setter
+    def colormap(self, value: str | None) -> None:
+        self._colormap = value
+        self._lut = resolve_colormap(value) if value else None
 
     async def new_frame(self, frame: np.ndarray, idx: int) -> None:
         """Set a new frame for previewing (async version - offloads processing to executor).
@@ -293,6 +318,12 @@ class PreviewGenerator:
         preview_float *= 255.0
         preview_uint8 = preview_float.astype(np.uint8)
 
+        # 7) Apply colormap LUT if set (grayscale → RGB).
+        if self._lut is not None:
+            preview_out = cv2.cvtColor(self._lut[preview_uint8], cv2.COLOR_RGB2BGR)
+        else:
+            preview_out = preview_uint8
+
         # Use actual crop values based on whether adjustment was applied
         actual_crop = self.crop if adjust else PreviewCrop(x=0.0, y=0.0, k=0.0)
 
@@ -306,11 +337,12 @@ class PreviewGenerator:
             fmt=self._fmt,
             crop=actual_crop,
             histogram=hist_data,
+            colormap=self._colormap,
         )
 
-        # 11) Return the final 8-bit preview.
+        # 8) Encode and return the final preview.
         encode_start = time.perf_counter()
-        preview_frame = PreviewFrame.from_array(frame_array=preview_uint8, info=metadata)
+        preview_frame = PreviewFrame.from_array(frame_array=preview_out, info=metadata)
         encode_time = time.perf_counter() - encode_start
 
         gen_time = time.perf_counter() - gen_start

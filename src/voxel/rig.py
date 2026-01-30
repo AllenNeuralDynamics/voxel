@@ -8,11 +8,12 @@ from enum import StrEnum
 from pathlib import Path
 
 import zmq.asyncio
+from vxlib.color import Color
 
 from pyrig import DeviceHandle, Rig
 from voxel.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from voxel.camera.handle import CameraHandle
-from voxel.camera.preview import PreviewCrop, PreviewLevels
+from voxel.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
 from voxel.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from voxel.daq import DaqHandle
 from voxel.device import DeviceType
@@ -69,6 +70,7 @@ class VoxelRig(Rig):
         self._mode: RigMode = RigMode.IDLE
         self._streaming_cameras: set[str] = set()
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
+        self._preview_crop: PreviewCrop = PreviewCrop()
         self.sync_task: SyncTask | None = None
 
     async def _on_start_complete(self) -> None:
@@ -330,7 +332,17 @@ class VoxelRig(Rig):
         # 5. Update camera→channel mapping for preview
         self.preview.set_channel_mapping(self._build_camera_channel_mapping())
 
-        # 6. Restart preview if it was running
+        # 6. Apply default colormaps to cameras based on emission wavelengths
+        default_colormaps: dict[str, str] = {}
+        for chan_id, channel in self.active_channels.items():
+            if channel.emission:
+                default_colormaps[chan_id] = str(Color.from_wavelength(channel.emission))
+            else:
+                default_colormaps[chan_id] = "green"
+        if default_colormaps:
+            await self.update_preview_colormaps(default_colormaps)
+
+        # 7. Restart preview if it was running
         if restart_preview:
             if frame_callback:
                 self.log.info("Restarting preview after profile change")
@@ -339,6 +351,19 @@ class VoxelRig(Rig):
                 self.log.warning("Preview was running but no callback found; not restarting automatically")
 
         self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_channels)})")
+
+    async def get_channel_preview_configs(self) -> dict[str, PreviewConfig]:
+        """Query cameras for current preview configs of active channels.
+
+        Returns:
+            Mapping of channel_id -> PreviewConfig.
+        """
+        configs: dict[str, PreviewConfig] = {}
+        for chan_id, channel in self.active_channels.items():
+            camera = self.cameras.get(channel.detection)
+            if camera:
+                configs[chan_id] = await camera.get_preview_config()
+        return configs
 
     # ===================== Preview Management =====================
 
@@ -350,11 +375,15 @@ class VoxelRig(Rig):
                 mapping[channel.detection] = chan_name
         return mapping
 
-    async def start_preview(self, frame_callback: Callable[[str, bytes], Awaitable[None]]) -> None:
+    async def start_preview(
+        self, frame_callback: Callable[[str, bytes], Awaitable[None]], crop: PreviewCrop | None = None
+    ) -> None:
         """Start preview mode for active profile channels and begin frame streaming.
 
         Args:
             frame_callback: Async callable that receives (channel, packed_frame) for each preview frame.
+            crop: Optional crop to apply. If provided, updates the cached crop and forwards to cameras.
+                  If None, the previously cached crop is re-applied (persists across restarts).
 
         Raises:
             ValueError: If no active profile is set.
@@ -384,6 +413,12 @@ class VoxelRig(Rig):
                 self._streaming_cameras.add(cam_id)
             except Exception:
                 self.log.exception(f"Camera {cam_id} failed to start preview")
+
+        # Apply crop to new cameras
+        if crop is not None:
+            await self.update_preview_crop(crop)
+        elif self._preview_crop.needs_adjustment:
+            await self.update_preview_crop(self._preview_crop)
 
         # Start preview manager (subscriptions already exist, just enable forwarding)
         self.preview.start(frame_callback)
@@ -439,9 +474,12 @@ class VoxelRig(Rig):
     async def update_preview_crop(self, crop: PreviewCrop) -> None:
         """Update preview crop for streaming cameras.
 
+        The crop is cached so it persists across preview restarts and profile switches.
+
         Args:
             crop: The crop settings (x, y normalized top-left, k zoom factor).
         """
+        self._preview_crop = crop
         if self._streaming_cameras:
             tasks = [self.cameras[cam_id].update_preview_crop(crop) for cam_id in self._streaming_cameras]
             await asyncio.gather(*tasks)
@@ -456,6 +494,19 @@ class VoxelRig(Rig):
         for channel_id, channel_levels in levels.items():
             if (channel := self.active_channels.get(channel_id)) and (camera := self.cameras.get(channel.detection)):
                 tasks.append(camera.update_preview_levels(channel_levels))
+        if tasks:
+            await asyncio.gather(*tasks)
+
+    async def update_preview_colormaps(self, colormaps: dict[str, str]) -> None:
+        """Update preview colormaps for specified channels.
+
+        Args:
+            colormaps: Mapping of channel_id -> colormap name (hex, fluorophore, or scientific).
+        """
+        tasks = []
+        for channel_id, colormap in colormaps.items():
+            if (channel := self.active_channels.get(channel_id)) and (camera := self.cameras.get(channel.detection)):
+                tasks.append(camera.update_preview_colormap(colormap))
         if tasks:
             await asyncio.gather(*tasks)
 

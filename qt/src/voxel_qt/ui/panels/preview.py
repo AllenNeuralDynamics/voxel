@@ -9,12 +9,12 @@ from voxel.camera.preview import PreviewCrop
 from voxel_qt.store import (
     PreviewStore,
     blur_image,
-    colorize,
     composite_rgb,
     compute_local_crop,
     crop_image,
     resize_image,
 )
+from voxel_qt.store.preview import ChannelData
 from voxel_qt.ui.assets import VOXEL_LOGO
 from voxel_qt.ui.kit import Colors
 
@@ -181,26 +181,48 @@ class PreviewPanel(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.reset_crop()
 
+    def _select_frame(self, ch: ChannelData) -> tuple[np.ndarray, PreviewCrop]:
+        """Pick the right frame slot for a channel.
+
+        - Not zoomed: full frame
+        - Zoomed + interacting: full frame (local crop applied by caller)
+        - Zoomed + not interacting: detail if its crop matches the target, else full frame
+        """
+        target_crop = self._store.crop
+        is_zoomed = target_crop.k > 0
+
+        if is_zoomed and not self._store.is_interacting and ch.detail is not None:
+            _, detail_crop = ch.detail
+            if detail_crop == target_crop:
+                return ch.detail
+
+        return ch.frame, PreviewCrop()
+
     def _update_display(self) -> None:
-        """Composite and display frames from store."""
+        """Composite and display frames from store.
+
+        Each channel independently selects its best frame slot (full or detail),
+        then applies its own local crop before compositing.
+        """
         channels = self._store.channels
         if not channels:
             return
 
-        # Colorize each channel
-        colorized = [colorize(ch.data, ch.emission) for ch in channels.values()]
+        target_crop = self._store.crop
+        is_zoomed = target_crop.k > 0
 
-        # Composite
-        rgb = composite_rgb(colorized)
+        # Select best frame per channel and apply per-channel local crop
+        cropped_frames = []
+        for ch in channels.values():
+            data, frame_crop = self._select_frame(ch)
+            local_crop = compute_local_crop(frame_crop, target_crop)
+            cropped_frames.append(crop_image(data, local_crop))
+
+        rgb = composite_rgb(cropped_frames)
         if rgb is None:
             return
 
-        # Apply local crop
-        local_crop = compute_local_crop(self._store.frame_crop, self._store.crop)
-        rgb = crop_image(rgb, local_crop)
-
-        # Apply blur during interaction
-        if self._store.is_interacting and self._store.crop.k > 0:
+        if self._store.is_interacting and is_zoomed:
             rgb = blur_image(rgb, radius=1.0)
 
         pixmap = self._numpy_to_pixmap(rgb)
@@ -299,15 +321,9 @@ class PreviewThumbnail(QWidget):
         if not channels:
             return
 
-        # Collect full frames, skip channels without full_data
-        full_frames = [(ch.full_data, ch.emission) for ch in channels.values() if ch.full_data is not None]
-        if not full_frames:
-            return
+        frames = [resize_image(ch.frame, self._target_width) for ch in channels.values()]
 
-        # Resize, colorize, and composite
-        colorized = [colorize(resize_image(data, self._target_width), emission) for data, emission in full_frames]
-
-        rgb = composite_rgb(colorized)
+        rgb = composite_rgb(frames)
         if rgb is None:
             return
 

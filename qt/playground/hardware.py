@@ -10,7 +10,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QGroupBox, QLabel, QPushButton, QVBoxLayout, QWidget
 from rich import print
-from voxel_qt.ui.primitives.input import DoubleSpinBox, SpinBox
+from voxel_qt.ui.kit import DoubleSpinBox, SpinBox
 
 
 class MockHardware:

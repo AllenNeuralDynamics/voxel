@@ -9,12 +9,13 @@ Structure:
     ├── input/           # SpinBox, Toggle, LockableSlider, Select, etc.
     ├── layout.py        # vbox, hbox, Separator, Splitter
     ├── stack.py         # Box, Flow, Stretch
+    ├── table.py         # Table, TableModel, TableColumn, TableToolbar
     ├── text.py          # Text, Chip, FontSize, FontWeight
     └── theme.py         # Color, Colors, Spacing, BorderRadius, Size, APP_STYLESHEET
 """
 
 from .accordion import Accordion
-from .button import Button
+from .button import Button, ToolButton
 from .form import Field, FormBuilder, GridFormBuilder
 from .input import (
     DoubleSpinBox,
@@ -38,6 +39,14 @@ from .stack import (
     Flow,
     Stretch,
 )
+from .table import (
+    ColumnType,
+    Table,
+    TableColumn,
+    TableDelegate,
+    TableModel,
+    TableToolbar,
+)
 from .text import Chip, FontSize, FontWeight, Text
 from .theme import APP_STYLESHEET, BorderRadius, Color, Colors, ControlSize, Size, Spacing, app_stylesheet
 
@@ -50,6 +59,7 @@ __all__ = [
     "Chip",
     "Color",
     "Colors",
+    "ColumnType",
     "ControlSize",
     "DoubleSpinBox",
     "Field",
@@ -69,9 +79,15 @@ __all__ = [
     "SpinBox",
     "Splitter",
     "Stretch",
+    "Table",
+    "TableColumn",
+    "TableDelegate",
+    "TableModel",
+    "TableToolbar",
     "Text",
     "TextInput",
     "Toggle",
+    "ToolButton",
     "app_stylesheet",
     "hbox",
     "vbox",

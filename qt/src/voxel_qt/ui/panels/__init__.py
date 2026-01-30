@@ -5,10 +5,9 @@ from PySide6.QtWidgets import QWidget
 
 from voxel_qt.ui.kit import Colors, Text, vbox
 from voxel_qt.ui.panels.controls import ControlPanel
-from voxel_qt.ui.panels.grid import GridPanel, GridTablePanel
+from voxel_qt.ui.panels.grid import GridCanvas, GridPanel
 from voxel_qt.ui.panels.logs import LogPanel
 from voxel_qt.ui.panels.preview import PreviewPanel, PreviewThumbnail
-from voxel_qt.ui.panels.status_bar import StatusBar
 from voxel_qt.ui.panels.waveforms import WaveformsPanel
 
 
@@ -28,12 +27,11 @@ class PlaceholderPanel(QWidget):
 
 __all__ = [
     "ControlPanel",
+    "GridCanvas",
     "GridPanel",
-    "GridTablePanel",
     "LogPanel",
     "PlaceholderPanel",
     "PreviewPanel",
     "PreviewThumbnail",
-    "StatusBar",
     "WaveformsPanel",
 ]

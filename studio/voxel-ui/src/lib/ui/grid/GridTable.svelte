@@ -11,7 +11,6 @@
 
 	let { app }: Props = $props();
 
-	// Filter state
 	type FilterMode = 'all' | 'with_stack' | 'without_stack';
 	let filterMode = $state<FilterMode>('all');
 
@@ -21,24 +20,19 @@
 		{ value: 'without_stack' as const, label: 'No Boxs' }
 	];
 
-	// Default Z values for new stacks (in µm)
 	let defaultZStart = $state(0);
 	let defaultZEnd = $state(500);
 
-	// Checked items for bulk operations (separate from focused tile)
 	let checkedItems = new SvelteSet<string>();
 
-	// Helper to create tile key
 	function tileKey(row: number, col: number): string {
 		return `${row},${col}`;
 	}
 
-	// Get stack for a tile
 	function getBox(tile: Tile): Box | null {
 		return app.stacks.find((s) => s.row === tile.row && s.col === tile.col) ?? null;
 	}
 
-	// Filtered tiles
 	const filteredTiles = $derived.by(() => {
 		switch (filterMode) {
 			case 'with_stack':
@@ -50,42 +44,34 @@
 		}
 	});
 
-	// Count of checked items (only count those that are visible after filter)
 	const checkedCount = $derived.by(() => {
 		const visibleKeys = new Set(filteredTiles.map((t) => tileKey(t.row, t.col)));
 		return Array.from(checkedItems).filter((key) => visibleKeys.has(key)).length;
 	});
 
-	// Select all checkbox state
 	const allChecked = $derived(filteredTiles.length > 0 && checkedCount === filteredTiles.length);
 	const someChecked = $derived(checkedCount > 0 && checkedCount < filteredTiles.length);
 
-	// Handle select all toggle
 	function handleSelectAll(checked: boolean) {
 		if (checked) {
-			// Select all filtered tiles
 			for (const tile of filteredTiles) {
 				checkedItems.add(tileKey(tile.row, tile.col));
 			}
 		} else {
-			// Deselect all filtered tiles
 			for (const tile of filteredTiles) {
 				checkedItems.delete(tileKey(tile.row, tile.col));
 			}
 		}
 	}
 
-	// Check if a tile row is the focused tile
 	function isFocused(tile: Tile): boolean {
 		return app.selectedTile.row === tile.row && app.selectedTile.col === tile.col;
 	}
 
-	// Handle row click (sets focused tile, syncs with GridCanvas)
 	function handleRowClick(tile: Tile) {
 		app.selectTile(tile.row, tile.col);
 	}
 
-	// Handle checkbox toggle
 	function handleCheckboxChange(tile: Tile, checked: boolean) {
 		const key = tileKey(tile.row, tile.col);
 		if (checked) {
@@ -96,34 +82,27 @@
 		handleRowClick(tile);
 	}
 
-	// Check if tile is checked
 	function isChecked(tile: Tile): boolean {
 		return checkedItems.has(tileKey(tile.row, tile.col));
 	}
 
-	// Add stack to tile
 	function handleAddBox(tile: Tile) {
 		app.addBoxs([{ row: tile.row, col: tile.col, zStartUm: defaultZStart, zEndUm: defaultZEnd }]);
 		handleRowClick(tile);
 	}
 
-	// Handle double-click on tile to move stage
 	function handleTileDoubleClick(tile: Tile) {
 		handleRowClick(tile);
 		app.moveToGridCell(tile.row, tile.col);
 	}
 
-	// Delete selected stacks
 	function handleDeleteSelected() {
 		const positions = Array.from(checkedItems)
 			.map((key) => {
 				const [row, col] = key.split(',').map(Number);
 				return { row, col };
 			})
-			.filter(({ row, col }) => {
-				// Only delete if has stack
-				return app.stacks.some((s) => s.row === row && s.col === col);
-			});
+			.filter(({ row, col }) => app.stacks.some((s) => s.row === row && s.col === col));
 
 		if (positions.length > 0) {
 			app.removeBoxs(positions);
@@ -131,12 +110,10 @@
 		checkedItems.clear();
 	}
 
-	// Handle Z range change - applies to all checked items with stacks
 	function handleZChange(tile: Tile, zStart: number, zEnd: number) {
 		handleRowClick(tile);
 		const key = tileKey(tile.row, tile.col);
 
-		// Get all checked tiles that have stacks
 		const checkedWithBoxs = Array.from(checkedItems)
 			.map((k) => {
 				const [row, col] = k.split(',').map(Number);
@@ -144,16 +121,13 @@
 			})
 			.filter(({ row, col }) => app.stacks.some((s) => s.row === row && s.col === col));
 
-		// If this tile is checked and there are other checked tiles with stacks, bulk edit
 		if (checkedItems.has(key) && checkedWithBoxs.length > 1) {
 			app.editBoxs(checkedWithBoxs.map((p) => ({ ...p, zStartUm: zStart, zEndUm: zEnd })));
 		} else {
-			// Single edit
 			app.editBoxs([{ row: tile.row, col: tile.col, zStartUm: zStart, zEndUm: zEnd }]);
 		}
 	}
 
-	// Status color classes
 	const statusColors: Record<BoxStatus, string> = {
 		planned: 'text-blue-400',
 		acquiring: 'text-cyan-400',

@@ -4,15 +4,15 @@
 		min?: number;
 		max?: number;
 		step?: number;
-		decimals?: number; // Number of decimal places to display
+		decimals?: number;
 		placeholder?: string;
-		numCharacters?: number; // Number of characters wide
-		color?: string; // Text color
+		numCharacters?: number;
+		color?: string;
 		align?: 'left' | 'right';
-		showButtons?: boolean; // Show increment/decrement buttons
-		draggable?: boolean; // Enable drag to change value
-		classNames?: string; // Additional classes for input-wrapper
-		onChange?: (newValue: number) => void; // Optional callback for value changes
+		showButtons?: boolean;
+		draggable?: boolean;
+		classNames?: string;
+		onChange?: (newValue: number) => void;
 	}
 
 	let {
@@ -33,7 +33,6 @@
 
 	let inputElement: HTMLInputElement | undefined;
 
-	// Compute display value with proper decimal formatting
 	let displayValue = $derived(() => {
 		if (decimals !== undefined) {
 			return value.toFixed(decimals);
@@ -45,17 +44,15 @@
 	let isPotentialDrag = $state(false);
 	let dragStartX = $state(0);
 	let dragStartValue = $state(0);
-	const DRAG_THRESHOLD = 3; // pixels to move before starting drag
+	const DRAG_THRESHOLD = 3;
 
 	function handleMouseDown(e: MouseEvent) {
-		// Only start drag on left click and if draggable is enabled
 		if (e.button !== 0 || !draggable) return;
 
 		isPotentialDrag = true;
 		dragStartX = e.clientX;
 		dragStartValue = value;
 
-		// Add global listeners
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 	}
@@ -63,10 +60,8 @@
 	function handleMouseMove(e: MouseEvent) {
 		if (!isPotentialDrag && !isDragging) return;
 
-		// Calculate delta in pixels
 		const deltaX = e.clientX - dragStartX;
 
-		// Check if we've moved past the threshold to start dragging
 		if (!isDragging && Math.abs(deltaX) > DRAG_THRESHOLD) {
 			isDragging = true;
 			e.preventDefault();
@@ -74,20 +69,12 @@
 
 		if (!isDragging) return;
 
-		// Convert to value change (1 pixel = 1 step by default, adjust sensitivity if needed)
-		const sensitivity = 1; // pixels per step
+		const sensitivity = 1;
 		const deltaValue = Math.round(deltaX / sensitivity) * step;
-
-		// Calculate new value
 		let newValue = dragStartValue + deltaValue;
-
-		// Clamp to min/max
 		newValue = Math.max(min, Math.min(max, newValue));
-
-		// Update value
 		value = newValue;
 
-		// Call callback if provided
 		if (onValueChange) {
 			onValueChange(newValue);
 		}
@@ -106,12 +93,9 @@
 
 		if (isNaN(newValue)) return;
 
-		// Clamp to min/max
 		newValue = Math.max(min, Math.min(max, newValue));
-
 		value = newValue;
 
-		// Call callback if provided
 		if (onValueChange) {
 			onValueChange(newValue);
 		}
@@ -120,16 +104,11 @@
 	function handleWheel(e: WheelEvent) {
 		e.preventDefault();
 
-		// Scroll up (negative deltaY) increases value, scroll down decreases
 		const direction = e.deltaY < 0 ? 1 : -1;
 		let newValue = value + direction * step;
-
-		// Clamp to min/max
 		newValue = Math.max(min, Math.min(max, newValue));
-
 		value = newValue;
 
-		// Call callback if provided
 		if (onValueChange) {
 			onValueChange(newValue);
 		}
@@ -153,7 +132,6 @@
 		}
 	}
 
-	// Cleanup drag listeners on destroy
 	$effect(() => {
 		return () => {
 			document.removeEventListener('mousemove', handleMouseMove);
@@ -161,7 +139,6 @@
 		};
 	});
 
-	// Attach wheel event listener with proper passive option
 	$effect(() => {
 		if (!inputElement) return;
 

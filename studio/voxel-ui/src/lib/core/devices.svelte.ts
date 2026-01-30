@@ -1,16 +1,6 @@
-/**
- * Device management with real-time property synchronization.
- *
- * Manages device state and keeps it synchronized across all clients
- * via WebSocket updates.
- */
-
 import { SvelteMap, SvelteSet, SvelteURL } from 'svelte/reactivity';
 import type { Client } from './client.svelte';
 
-/**
- * Property model (matches pyrig.device.props.common.PropertyModel)
- */
 export interface PropertyModel {
 	value: unknown;
 	min_val?: number | null;
@@ -19,16 +9,10 @@ export interface PropertyModel {
 	options?: (string | number)[] | null;
 }
 
-/**
- * Error message (matches pyrig.device.ErrorMsg)
- */
 export interface ErrorMsg {
 	msg: string;
 }
 
-/**
- * Property metadata (matches pyrig.device.PropertyInfo)
- */
 export interface PropertyInfo {
 	name: string;
 	label: string;
@@ -38,9 +22,6 @@ export interface PropertyInfo {
 	units: string;
 }
 
-/**
- * Command parameter metadata (matches pyrig.device.ParamInfo)
- */
 export interface ParamInfo {
 	dtype: string;
 	required: boolean;
@@ -48,9 +29,6 @@ export interface ParamInfo {
 	kind: 'regular' | 'var_positional' | 'var_keyword';
 }
 
-/**
- * Command metadata (matches pyrig.device.CommandInfo)
- */
 export interface CommandInfo {
 	name: string;
 	label: string;
@@ -58,9 +36,6 @@ export interface CommandInfo {
 	params: Record<string, ParamInfo>;
 }
 
-/**
- * Device interface (matches pyrig.device.DeviceInterface)
- */
 export interface DeviceInterface {
 	uid: string;
 	type: string;
@@ -68,10 +43,6 @@ export interface DeviceInterface {
 	properties: Record<string, PropertyInfo>;
 }
 
-/**
- * Matches PropertyModel from pyrig.device.props.common
- * Made reactive with $state for Svelte 5
- */
 class ReactivePropertyModel {
 	value = $state<unknown>(undefined);
 	min_val = $state<number | null>(null);
@@ -96,10 +67,6 @@ class ReactivePropertyModel {
 	}
 }
 
-/**
- * Device info from /devices endpoint
- * Extended with reactive property values for UI
- */
 export interface DeviceInfo {
 	id: string;
 	connected: boolean;
@@ -108,26 +75,17 @@ export interface DeviceInfo {
 	propertyValues?: Record<string, ReactivePropertyModel>;
 }
 
-/**
- * Response from /devices endpoint
- */
 export interface DevicesResponse {
 	devices: Record<string, DeviceInfo>;
 	count: number;
 }
 
-/**
- * Device property update payload
- * Topic: 'device/<device_id>/properties'
- * Matches PropsResponse from pyrig.device
- */
 export interface DevicePropertyPayload {
 	res: Record<string, PropertyModel>;
 	err: Record<string, ErrorMsg>;
 }
 
 export class DevicesManager {
-	// Reactive device state
 	devices = $state<SvelteMap<string, DeviceInfo>>(new SvelteMap());
 
 	readonly #client: Client;
@@ -136,11 +94,7 @@ export class DevicesManager {
 	constructor(client: Client) {
 		this.#client = client;
 
-		// Subscribe to property updates from WebSocket
-		// Topic: device/<device_id>/properties
-		// We subscribe to 'device' prefix to get all device updates
 		this.unsubscribe = this.#client.subscribe('device', (topic: string, payload: unknown) => {
-			// console.log('[DevicesManager] Received:', topic, payload);
 			this.handlePropertyUpdate(topic, payload as DevicePropertyPayload);
 		});
 	}
@@ -149,12 +103,7 @@ export class DevicesManager {
 		return this.#client.baseUrl;
 	}
 
-	/**
-	 * Initialize the manager by fetching all devices and their properties.
-	 * Call this after construction.
-	 */
 	async initialize(): Promise<void> {
-		// 1. Fetch all devices and their interfaces
 		const response = await fetch(`${this.baseUrl}/devices`);
 		if (!response.ok) {
 			throw new Error(`Failed to fetch devices: ${response.statusText}`);
@@ -163,19 +112,16 @@ export class DevicesManager {
 		const data: DevicesResponse = await response.json();
 		console.debug('[DevicesManager] Loaded', data.count, 'devices');
 
-		// 2. Store devices in the map, preserving existing propertyValues on re-initialization
 		const fetchedDeviceIds = new SvelteSet(Object.keys(data.devices));
 
 		for (const [id, info] of Object.entries(data.devices)) {
 			const existingDevice = this.devices.get(id);
-			// Preserve propertyValues if device already exists
 			if (existingDevice?.propertyValues) {
 				info.propertyValues = existingDevice.propertyValues;
 			}
 			this.devices.set(id, info);
 		}
 
-		// Remove devices that no longer exist
 		for (const deviceId of this.devices.keys()) {
 			if (!fetchedDeviceIds.has(deviceId)) {
 				console.debug(`[DevicesManager] Removing deleted device: ${deviceId}`);
@@ -183,11 +129,9 @@ export class DevicesManager {
 			}
 		}
 
-		// 3. Fetch property values for all connected devices
 		const fetchPromises: Promise<void>[] = [];
 		for (const [deviceId, deviceInfo] of this.devices.entries()) {
 			if (deviceInfo.connected && deviceInfo.interface) {
-				// Get all property names from the interface
 				const propertyNames = Object.keys(deviceInfo.interface.properties);
 				if (propertyNames.length > 0) {
 					fetchPromises.push(this.fetchProperties(deviceId, propertyNames));
@@ -195,16 +139,9 @@ export class DevicesManager {
 			}
 		}
 
-		// Fetch all properties in parallel
 		await Promise.all(fetchPromises);
 	}
 
-	/**
-	 * Handle real-time property updates from WebSocket.
-	 *
-	 * Backend sends PropsResponse structure: { res: {propName: PropertyModel}, err: {propName: ErrorMsg} }
-	 * Topic format: device/<device_id>/properties
-	 */
 	private handlePropertyUpdate(
 		topic: string,
 		payload: {
@@ -212,7 +149,6 @@ export class DevicesManager {
 			err: Record<string, ErrorMsg>;
 		}
 	): void {
-		// Extract device ID from topic: device/<device_id>/properties
 		const parts = topic.split('/');
 		if (parts.length < 3 || parts[0] !== 'device' || parts[2] !== 'properties') {
 			return;
@@ -222,15 +158,12 @@ export class DevicesManager {
 		const device = this.devices.get(deviceId);
 		if (!device?.interface) return;
 
-		// Store updated PropertyModels separately from PropertyInfo metadata
 		if (!device.propertyValues) {
 			device.propertyValues = {};
 		}
 
-		// Update successful property changes from res
 		for (const [propName, propModel] of Object.entries(payload.res)) {
 			if (device.interface.properties[propName]) {
-				// Update existing reactive model or create new one
 				if (device.propertyValues[propName]) {
 					device.propertyValues[propName].update(propModel);
 				} else {
@@ -239,49 +172,30 @@ export class DevicesManager {
 			}
 		}
 
-		// Log any errors
 		for (const [propName, errorMsg] of Object.entries(payload.err)) {
 			console.error(`[DevicesManager] Error setting ${deviceId}.${propName}: ${errorMsg.msg}`);
 		}
-
-		// console.log(`[DevicesManager] Updated ${deviceId}:`, Object.values(payload.res));
 	}
 
-	/**
-	 * Get a specific device by ID
-	 */
 	getDevice(deviceId: string): DeviceInfo | undefined {
 		return this.devices.get(deviceId);
 	}
 
-	/**
-	 * Get property value from a device.
-	 * Returns the runtime value from PropertyModel if available.
-	 */
 	getPropertyValue(deviceId: string, propName: string): unknown | undefined {
 		const device = this.devices.get(deviceId);
 		return device?.propertyValues?.[propName]?.value;
 	}
 
-	/**
-	 * Get full property model (value, limits, step, options)
-	 */
 	getPropertyModel(deviceId: string, propName: string): ReactivePropertyModel | undefined {
 		const device = this.devices.get(deviceId);
 		return device?.propertyValues?.[propName];
 	}
 
-	/**
-	 * Get property metadata (name, label, desc, dtype, access, units)
-	 */
 	getPropertyInfo(deviceId: string, propName: string): PropertyInfo | undefined {
 		const device = this.devices.get(deviceId);
 		return device?.interface?.properties[propName];
 	}
 
-	/**
-	 * Set properties on a device (via WebSocket)
-	 */
 	async setProperties(deviceId: string, properties: Record<string, unknown>): Promise<void> {
 		this.#client.send({
 			topic: 'device/set_property',
@@ -292,16 +206,10 @@ export class DevicesManager {
 		});
 	}
 
-	/**
-	 * Set a single property (convenience method)
-	 */
 	async setProperty(deviceId: string, propName: string, value: unknown): Promise<void> {
 		await this.setProperties(deviceId, { [propName]: value });
 	}
 
-	/**
-	 * Execute a command on a device (via WebSocket)
-	 */
 	async executeCommand(
 		deviceId: string,
 		command: string,
@@ -319,10 +227,6 @@ export class DevicesManager {
 		});
 	}
 
-	/**
-	 * Fetch current properties via REST (useful for refresh).
-	 * Returns PropertyModel values in PropsResponse format (res/err).
-	 */
 	async fetchProperties(deviceId: string, props?: string[]): Promise<void> {
 		const url = new SvelteURL(`${this.baseUrl}/devices/${deviceId}/properties`);
 		if (props) {
@@ -338,12 +242,10 @@ export class DevicesManager {
 			await response.json();
 		const device = this.devices.get(deviceId);
 		if (device) {
-			// Merge PropertyModel values from res into our cache
 			if (!device.propertyValues) {
 				device.propertyValues = {};
 			}
 
-			// Create or update reactive property models
 			for (const [propName, propModel] of Object.entries(data.res)) {
 				if (device.propertyValues[propName]) {
 					device.propertyValues[propName].update(propModel);
@@ -352,16 +254,12 @@ export class DevicesManager {
 				}
 			}
 
-			// Log any errors
 			for (const [propName, errorMsg] of Object.entries(data.err)) {
 				console.error(`[DevicesManager] Error fetching ${deviceId}.${propName}: ${errorMsg.msg}`);
 			}
 		}
 	}
 
-	/**
-	 * Cleanup subscriptions
-	 */
 	destroy(): void {
 		this.unsubscribe?.();
 	}

@@ -1,31 +1,24 @@
 <script lang="ts">
 	import ChannelInfoTooltip from './ChannelInfoTooltip.svelte';
-	import ColorPicker from '$lib/ui/primitives/ColorPicker.svelte';
+	import ColormapPicker from './ColormapPicker.svelte';
 	import Icon from '@iconify/svelte';
-	import Histogram from '$lib/preview/Histogram.svelte';
-	import { COLORMAP_COLORS } from '$lib/preview/colormap';
+	import { Histogram } from '$lib/ui/preview';
 	import LaserControl from '$lib/ui/devices/LaserControl.svelte';
 	import CameraControl from '$lib/ui/devices/CameraControl.svelte';
-	import type { Previewer, PreviewChannel } from '$lib/preview';
-	import type { DevicesManager } from '$lib/core';
+	import type { PreviewState, PreviewChannel } from '$lib/app/preview.svelte';
+	import type { DevicesManager, ColormapCatalog } from '$lib/core';
 	import type { DeviceFilter } from './DeviceFilterToggle.svelte';
 
 	interface Props {
 		channel: PreviewChannel;
-		previewer: Previewer;
+		previewer: PreviewState;
 		devices: DevicesManager;
 		deviceFilter: DeviceFilter;
 		showHistograms: boolean;
+		catalog: ColormapCatalog;
 	}
 
-	let { channel, previewer, devices: devicesManager, deviceFilter, showHistograms }: Props = $props();
-
-	// Get preset colors for the color picker
-	const presetColors = Object.values(COLORMAP_COLORS);
-
-	function handleColorChange(newColor: string) {
-		channel.setColor(newColor);
-	}
+	let { channel, previewer, devices: devicesManager, deviceFilter, showHistograms, catalog }: Props = $props();
 
 	function handleVisibilityToggle() {
 		channel.visible = !channel.visible;
@@ -65,13 +58,33 @@
 	);
 
 	const isStreaming = $derived(cameraStreamInfo && cameraStreamInfo !== null && cameraStreamInfo !== undefined);
+
+	// Resolve colormap name to gradient color stops for the histogram
+	const colormapColors = $derived.by(() => {
+		const name = channel.colormap;
+		if (!name) return undefined;
+		// Check if it's a direct hex color
+		if (name.startsWith('#')) return [name];
+		for (const group of catalog) {
+			const stops = group.colormaps[name];
+			if (stops) return stops;
+		}
+		return undefined;
+	});
 </script>
 
 <div class="space-y-4 px-4 py-4">
 	<!-- Channel Header with Inline Controls -->
 	{#if channel.name}
 		<div class="-mt-2 flex items-center justify-between">
-			<span class="font-medium text-zinc-300">{channel.label ?? channel.config?.label ?? channel.name}</span>
+			<ColormapPicker
+				label={channel.label ?? channel.config?.label ?? channel.name ?? ''}
+				colormap={channel.colormap}
+				{catalog}
+				onColormapChange={(cmap) => {
+					if (channel.name) previewer.setChannelColormap(channel.name, cmap);
+				}}
+			/>
 			<div class="flex items-center gap-2">
 				<ChannelInfoTooltip name={channel.name} label={channel.label} config={channel.config} />
 				<button
@@ -83,7 +96,6 @@
 				>
 					<Icon icon={channel.visible ? 'mdi:eye' : 'mdi:eye-off'} width="14" height="14" />
 				</button>
-				<ColorPicker color={channel.color} {presetColors} onColorChange={handleColorChange} align="end" />
 			</div>
 		</div>
 	{/if}
@@ -95,7 +107,7 @@
 			levelsMin={channel.levelsMin}
 			levelsMax={channel.levelsMax}
 			dataTypeMax={65535}
-			color={channel.color}
+			colors={colormapColors}
 			onLevelsChange={handleLevelsChange}
 		/>
 	{/if}

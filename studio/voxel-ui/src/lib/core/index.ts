@@ -44,8 +44,12 @@ export type {
 	LogMessage,
 	ErrorPayload,
 	ProfileChangedPayload,
+	PreviewConfig,
 	Vec2D,
 	Vec3D
 } from './types.ts';
 
 export { parseVec2D, parseVec3D } from './types.ts';
+
+export type { ColormapDef, ColormapGroup, ColormapCatalog } from './colormaps.ts';
+export { fetchColormapCatalog } from './colormaps.ts';

@@ -52,6 +52,9 @@ export interface SessionStatus {
 	tile_order: TileOrder;
 	tiles: Tile[];
 	stacks: Box[];
+
+	// Preview display config per channel (channel_id -> PreviewConfig)
+	preview: Record<string, PreviewConfig>;
 }
 
 /**
@@ -196,8 +199,14 @@ export interface LayerVisibility {
 // Types for preview/rendering system
 // ============================================================================
 
-// Preview types are defined in client.svelte.ts for now
-// They may be moved here in the future for better organization
+/**
+ * Preview display configuration per channel (matches backend PreviewConfig)
+ */
+export interface PreviewConfig {
+	crop: { x: number; y: number; k: number };
+	levels: { min: number; max: number };
+	colormap: string | null;
+}
 
 // ============================================================================
 // VECTOR TYPES

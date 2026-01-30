@@ -315,7 +315,7 @@ class ToolButton(QToolButton):
         icon: str | tuple[str, str],
         *,
         checkable: bool = False,
-        size: ControlSize = ControlSize.SM,
+        size: ControlSize = ControlSize.MD,
         color: str = Colors.TEXT_MUTED,
         color_hover: str = Colors.TEXT,
         parent: QWidget | None = None,

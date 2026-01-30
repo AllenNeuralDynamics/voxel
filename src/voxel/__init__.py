@@ -6,14 +6,14 @@ from .session import GridConfig, Session, SessionConfig
 from .tile import Box, BoxResult, BoxStatus, Tile
 
 __all__ = [
+    "Box",
+    "BoxResult",
+    "BoxStatus",
     "CameraBatchResult",
     "GridConfig",
     "RigMode",
     "Session",
     "SessionConfig",
-    "Box",
-    "BoxResult",
-    "BoxStatus",
     "Tile",
     "VoxelNode",
     "VoxelRig",

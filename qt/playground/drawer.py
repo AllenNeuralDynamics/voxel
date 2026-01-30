@@ -1,9 +1,8 @@
 from datetime import UTC, datetime
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
-from voxel_qt.ui.primitives.display import Label
+from voxel_qt.ui.kit import Text
 
 
 class SlidingDrawer(QWidget):
@@ -29,16 +28,7 @@ class SlidingDrawer(QWidget):
         drawer_layout.setContentsMargins(12, 12, 12, 12)
 
         # Create simple header (no close button)
-        self.title_label = Label("Event Log", variant="title")
-        self.title_label.setStyleSheet("""
-            QLabel {
-                color: palette(windowText);
-            }
-        """)
-        title_font = QFont()
-        title_font.setPointSize(12)
-        title_font.setBold(True)
-        self.title_label.setFont(title_font)
+        self.title_label = Text.section("Event Log")
 
         drawer_layout.addWidget(self.title_label)
 

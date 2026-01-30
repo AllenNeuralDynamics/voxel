@@ -20,8 +20,11 @@ from voxel_qt.ui.kit import (
     Select,
     SelectOption,
     Separator,
+    Size,
     Spacing,
+    Stretch,
     Text,
+    ToolButton,
     vbox,
 )
 from vxlib import display_name, fire_and_forget
@@ -132,11 +135,31 @@ class ControlPanel(QWidget):
 
         scroll.setWidget(self._channels_box)
 
+        # Footer with connection status and exit button (same height as status bar)
+        self._status_dot = Text.muted("●", color=Colors.TEXT_DISABLED)
+        self._status_label = Text.muted("Connecting...")
+
+        self._exit_btn = ToolButton("mdi.exit-to-app", color=Colors.TEXT_MUTED)
+        self._exit_btn.setToolTip("Exit session")
+        self._exit_btn.clicked.connect(self._on_exit_clicked)
+
+        footer = Box.hstack(
+            self._status_dot,
+            self._status_label,
+            Stretch(),
+            self._exit_btn,
+            spacing=Spacing.SM,
+            padding=(Spacing.MD, 0, Spacing.MD, 0),
+        )
+        footer.setFixedHeight(Size.XL)
+
         # Main layout
         layout = vbox(self)
         layout.addWidget(header)
         layout.addWidget(Separator())
         layout.addWidget(scroll, stretch=1)
+        layout.addWidget(Separator())
+        layout.addWidget(footer)
 
         # Connect to app signals
         self._app.devices_ready.connect(self._on_devices_ready)
@@ -224,7 +247,7 @@ class ControlPanel(QWidget):
             await rig.set_active_profile(profile_id)
             self.profile_changed.emit(profile_id)
             self.rebuild_channel_sections()
-            self._app.preview.reset()
+            self._app.preview.clear_frames()
             self._auto_leveled_channels.clear()
             log.info("Profile switched to: %s", profile_id)
         except Exception:
@@ -259,10 +282,11 @@ class ControlPanel(QWidget):
     async def _start_preview(self) -> None:
         """Start preview streaming."""
         self._auto_leveled_channels.clear()
-        self._app.preview.reset()
+        self._app.preview.clear_frames()
         rig = self._app.rig
         if rig:
-            await rig.start_preview(self._on_frame)
+            crop = self._app.preview.crop
+            await rig.start_preview(self._on_frame, crop=crop)
 
     async def _stop_preview(self) -> None:
         """Stop preview streaming."""
@@ -270,31 +294,19 @@ class ControlPanel(QWidget):
         if rig:
             await rig.stop_preview()
 
-    def _get_channel_emission(self, channel: str) -> float:
-        """Get emission wavelength for a channel."""
-        rig = self._app.rig
-        if not rig:
-            return 520.0  # Default green
-        channel_config = rig.active_channels.get(channel)
-        if channel_config and channel_config.emission:
-            return channel_config.emission
-        return 520.0
-
     async def _on_frame(self, channel: str, data: bytes) -> None:
         """Frame callback - decode and send to preview store."""
         frame = PreviewFrame.from_packed(data)
-        grayscale = self._decode_frame(frame.data)
-        if grayscale is None:
+        image_data = self._decode_frame(frame.data)
+        if image_data is None:
             return
 
-        emission = self._get_channel_emission(channel)
         info = frame.info
-
         self._app.preview.set_frame(
             channel=channel,
-            data=grayscale,
-            emission=emission,
+            data=image_data,
             crop=info.crop,
+            colormap=info.colormap,
             histogram=info.histogram,
         )
 
@@ -304,27 +316,16 @@ class ControlPanel(QWidget):
             self._on_auto_levels_requested(channel)
 
     def _decode_frame(self, data: bytes) -> np.ndarray | None:
-        """Decode compressed frame data to grayscale numpy array."""
+        """Decode compressed frame data to RGB numpy array."""
         qimage = QImage()
         if not qimage.loadFromData(data):
             return None
-
-        # Convert to grayscale
-        if qimage.format() == QImage.Format.Format_Grayscale8:
-            width = qimage.width()
-            height = qimage.height()
-            ptr = qimage.bits()
-            return np.array(ptr, dtype=np.uint8).reshape((height, width)).copy()
-
         if qimage.format() != QImage.Format.Format_RGB888:
             qimage = qimage.convertToFormat(QImage.Format.Format_RGB888)
-
         width = qimage.width()
         height = qimage.height()
         ptr = qimage.bits()
-        rgb = np.array(ptr, dtype=np.uint8).reshape((height, width, 3))
-
-        return (0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]).astype(np.uint8)
+        return np.array(ptr, dtype=np.uint8).reshape((height, width, 3)).copy()
 
     def _on_auto_levels_requested(self, channel_id: str) -> None:
         """Handle auto-levels request from channel section."""
@@ -339,3 +340,18 @@ class ControlPanel(QWidget):
         rig = self._app.rig
         if rig:
             fire_and_forget(rig.update_preview_levels({channel_id: levels}), log=log)
+
+    def _on_exit_clicked(self) -> None:
+        """Exit the active session."""
+        fire_and_forget(self._app.close_session(), log=log)
+
+    def set_connected(self, connected: bool) -> None:
+        """Update connection status display."""
+        if connected:
+            self._status_dot.fmt = self._status_dot.fmt.with_(color=Colors.SUCCESS)
+            self._status_label.setText("Connected")
+            self._status_label.fmt = self._status_label.fmt.with_(color=Colors.SUCCESS)
+        else:
+            self._status_dot.fmt = self._status_dot.fmt.with_(color=Colors.TEXT_DISABLED)
+            self._status_label.setText("Disconnected")
+            self._status_label.fmt = self._status_label.fmt.with_(color=Colors.TEXT_MUTED)

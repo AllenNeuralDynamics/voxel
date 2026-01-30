@@ -11,7 +11,6 @@
 
 	let { app }: Props = $props();
 
-	// Tile order labels - options derived from keys
 	const TILE_ORDER_LABELS: Record<TileOrder, string> = {
 		row_wise: 'Row-wise',
 		column_wise: 'Column-wise',
@@ -20,26 +19,21 @@
 	};
 	const TILE_ORDER_OPTIONS = Object.keys(TILE_ORDER_LABELS) as TileOrder[];
 
-	// Computed derived state (not simple aliases)
 	let gridOffsetXMm = $derived(app.gridConfig.x_offset_um / 1000);
 	let gridOffsetYMm = $derived(app.gridConfig.y_offset_um / 1000);
-	// Offset constrained to [-step, +step] for generous, intuitive adjustment range
 	let stepX = $derived(app.fov.width * (1 - app.gridConfig.overlap));
 	let stepY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
 	let maxOffsetX = $derived(stepX);
 	let maxOffsetY = $derived(stepY);
 	let stack = $derived(app.selectedBox);
 
-	// Form state
 	let isEditing = $state(false);
 	let zStartInput = $state(0);
 	let zEndInput = $state(100);
 
-	// Track last used Z values for smart pre-population
 	let lastZStart = $state<number | null>(null);
 	let lastZEnd = $state<number | null>(null);
 
-	// Get smart default Z values: stack → last used → grid config defaults
 	function getDefaultZ(): { start: number; end: number } {
 		if (stack) {
 			return { start: stack.z_start_um, end: stack.z_end_um };
@@ -50,9 +44,7 @@
 		return { start: app.gridConfig.default_z_start_um, end: app.gridConfig.default_z_end_um };
 	}
 
-	// Reset form when selected tile changes
 	$effect(() => {
-		// Track selectedTile to trigger on tile change
 		void app.selectedTile;
 		isEditing = false;
 		const defaults = getDefaultZ();
@@ -60,17 +52,14 @@
 		zEndInput = defaults.end;
 	});
 
-	// Derived state
 	let isDirty = $derived(stack ? zStartInput !== stack.z_start_um || zEndInput !== stack.z_end_um : true);
 	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / app.gridConfig.z_step_um));
 	let hasBox = $derived(stack !== null);
 
-	// Format position for display
 	function formatMm(um: number, decimals: number = 2): string {
 		return (um / 1000).toFixed(decimals);
 	}
 
-	// Grid control handlers
 	function updateGridOffsetX(value: number) {
 		if (app.gridLocked) return;
 		app.setGridOffset(value * 1000, app.gridConfig.y_offset_um);
@@ -90,7 +79,6 @@
 		app.setTileOrder(value as TileOrder);
 	}
 
-	// Box handlers
 	function handleEdit() {
 		isEditing = true;
 		const defaults = getDefaultZ();
@@ -105,7 +93,6 @@
 		} else {
 			app.addBoxs([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		}
-		// Track last used values for smart pre-population
 		lastZStart = zStartInput;
 		lastZEnd = zEndInput;
 		isEditing = false;
@@ -124,7 +111,6 @@
 		zEndInput = defaults.end;
 	}
 
-	// Z input handlers
 	function updateZStart(value: number) {
 		zStartInput = value;
 	}
@@ -210,9 +196,7 @@
 
 {#if app.zAxis}
 	<div class="flex flex-col border-y border-zinc-700 bg-zinc-800/30">
-		<!-- Tile & Box Section -->
 		<div class="flex flex-col gap-2 p-4 pt-3">
-			<!-- Header: tile label + status + action buttons -->
 			<div class="flex items-center justify-between">
 				<span class="flex items-center gap-3">
 					<span class="font-mono text-xs font-semibold {getBoxStatusColor(stack?.status ?? null)}">
@@ -259,15 +243,12 @@
 				</div>
 			</div>
 
-			<!-- Content rows -->
 			<div class="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.65rem]">
-				<!-- Tile position & size -->
 				{@render staticItem('X', formatMm(app.selectedTile.x_um), 'mm')}
 				{@render staticItem('Y', formatMm(app.selectedTile.y_um), 'mm')}
 				{@render staticItem('W', formatMm(app.selectedTile.w_um, 1), 'mm')}
 				{@render staticItem('H', formatMm(app.selectedTile.h_um, 1), 'mm')}
 
-				<!-- Z range -->
 				{@render editableZItem(
 					'Z0',
 					zStartInput,
@@ -287,15 +268,11 @@
 					app.zAxis.upperLimit * 1000
 				)}
 
-				<!-- Derived -->
 				{@render staticItem('Slices', isEditing ? String(numSlices) : (stack?.num_frames?.toString() ?? '—'))}
-
-				<!-- Metadata -->
 				{@render staticItem('Profile', stack?.profile_id ?? '—')}
 			</div>
 		</div>
 
-		<!-- Grid Settings Section -->
 		<div class="flex flex-col gap-3 border-y border-zinc-700/80 p-4 pt-3">
 			<div class="flex items-center justify-between">
 				<span class="text-xs font-medium text-zinc-300">Grid</span>
@@ -304,7 +281,6 @@
 				</div>
 			</div>
 
-			<!-- Grid parameters (lockable) -->
 			<div
 				class="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.65rem]"
 				class:opacity-70={app.gridLocked}
@@ -316,7 +292,6 @@
 				{@render staticItem('Z Step', String(app.gridConfig.z_step_um), 'µm')}
 			</div>
 		</div>
-		<!-- Tile order (not locked - can change anytime) -->
 		<div class="grid grid-cols-2 gap-x-8 p-4 text-[0.65rem]">
 			<span class="text-zinc-400">Order</span>
 			<SelectInput

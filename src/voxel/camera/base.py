@@ -13,7 +13,7 @@ from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int
 from vxlib.vec import IVec2D, Vec2D
 
 from pyrig import Device, describe
-from voxel.camera.preview import PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
+from voxel.camera.preview import PreviewConfig, PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
 from voxel.device import DeviceType
 from vxlib import Dtype, SchemaModel, fire_and_forget
 
@@ -119,6 +119,7 @@ class Camera(Device):
 
     @enumerated_string(options=list(PIXEL_FMT_TO_DTYPE.keys()))
     @abstractmethod
+    @describe(label="Pixel Format", stream=True)
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera."""
 
@@ -128,13 +129,14 @@ class Camera(Device):
         """Set the pixel format of the camera."""
 
     @property
-    @describe(label="Pixel Type")
+    @describe(label="Pixel Type", stream=True)
     def pixel_type(self) -> Dtype:
         """Get the pixel type of the camera."""
         return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
 
     @enumerated_int(options=BINNING_OPTIONS)
     @abstractmethod
+    @describe(label="Binning", stream=True)
     def binning(self) -> int:
         """Get the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
 
@@ -198,19 +200,19 @@ class Camera(Device):
         """
 
     @property
-    @describe(label="Frame Size", units="px")
+    @describe(label="Frame Size", units="px", stream=True)
     def frame_size_px(self) -> IVec2D:
         """Get the image size in pixels (post-binning frame coordinates)."""
         return IVec2D(y=int(self.frame_region.height), x=int(self.frame_region.width))
 
     @property
-    @describe(label="Frame Size", units="MB")
+    @describe(label="Frame Size", units="MB", stream=True)
     def frame_size_mb(self) -> float:
         """Get the size of the camera image in MB."""
         return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
 
     @property
-    @describe(label="Frame Area", units="mm")
+    @describe(label="Frame Area", units="mm", stream=True)
     def frame_area_mm(self) -> Vec2D:
         """Get the physical frame size in millimeters."""
         return Vec2D(
@@ -316,6 +318,18 @@ class CameraController(DeviceController[Camera]):
     @describe(label="Update Preview Levels")
     async def update_preview_levels(self, levels: PreviewLevels):
         self._previewer.levels = levels
+
+    @describe(label="Update Preview Colormap")
+    async def update_preview_colormap(self, colormap: str | None) -> None:
+        self._previewer.colormap = colormap
+
+    @describe(label="Get Preview Config")
+    async def get_preview_config(self) -> PreviewConfig:
+        return PreviewConfig(
+            crop=self._previewer.crop,
+            levels=self._previewer.levels,
+            colormap=self._previewer.colormap,
+        )
 
     @describe(label="Start Preview")
     async def start_preview(

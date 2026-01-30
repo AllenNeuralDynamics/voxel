@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from voxel import RigMode, Session
+from voxel.camera.preview import PreviewConfig
 from voxel.config import TileOrder
 from voxel.session import GridConfig
 from voxel.tile import Box, BoxStatus, Tile
@@ -39,6 +40,7 @@ class SessionStatus(BaseModel):
     # Rig status
     active_profile_id: str | None
     mode: RigMode
+    preview: dict[str, PreviewConfig] = Field(default_factory=dict)
 
     # Session status
     session_dir: str
@@ -78,6 +80,7 @@ class SessionService:
     async def get_status(self) -> SessionStatus:
         """Get current session status with full tile/stack data."""
         tiles = await self.session.get_tiles()
+        preview = await self.session.rig.get_channel_preview_configs()
 
         return SessionStatus(
             active_profile_id=self.session.rig.active_profile_id,
@@ -88,6 +91,7 @@ class SessionService:
             tile_order=self.session.tile_order,
             tiles=tiles,
             stacks=self.session.stacks,
+            preview=preview,
             timestamp=_utc_timestamp(),
         )
 

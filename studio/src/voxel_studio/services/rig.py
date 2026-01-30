@@ -18,7 +18,7 @@ from pyrig.device import PropsResponse
 from voxel import VoxelRig
 from voxel.camera.preview import PreviewCrop, PreviewLevels
 from voxel.config import VoxelRigConfig
-from vxlib import fire_and_forget
+from vxlib import fire_and_forget, get_colormap_catalog
 
 router = APIRouter(tags=["rig"])
 log = logging.getLogger(__name__)
@@ -63,6 +63,8 @@ class RigService:
                     await self._handle_preview_crop(payload)
                 case "preview/levels":
                     await self._handle_preview_levels(payload)
+                case "preview/colormap":
+                    await self._handle_preview_colormap(payload)
                 case "device/set_property":
                     await self._handle_device_set_property(payload)
                 case "device/execute_command":
@@ -134,6 +136,24 @@ class RigService:
             {
                 "topic": "preview/levels",
                 "payload": {"channel": channel_id, "min": levels.min, "max": levels.max},
+            },
+        )
+
+    async def _handle_preview_colormap(self, payload: dict[str, Any]):
+        """Handle preview colormap update for a specific channel."""
+        channel_id = payload.get("channel")
+        if not channel_id:
+            raise ValueError("Missing 'channel' in colormap payload")
+
+        colormap = payload.get("colormap")
+        if not colormap:
+            raise ValueError("Missing 'colormap' in colormap payload")
+
+        await self.rig.update_preview_colormaps({channel_id: colormap})
+        self._broadcast(
+            {
+                "topic": "preview/colormap",
+                "payload": {"channel": channel_id, "colormap": colormap},
             },
         )
 
@@ -284,6 +304,12 @@ def get_rig_service(request: Request) -> RigService:
 async def get_config(rig: Annotated[VoxelRig, Depends(get_rig)]) -> VoxelRigConfig:
     """Get the full rig configuration."""
     return rig.config
+
+
+@router.get("/colormaps")
+async def get_colormaps() -> list:
+    """Return the colormap catalog for the UI."""
+    return [group.model_dump() for group in get_colormap_catalog()]
 
 
 class SetProfileRequest(BaseModel):

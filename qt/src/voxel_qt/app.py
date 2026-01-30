@@ -16,7 +16,7 @@ from PySide6.QtCore import QObject, Signal
 from voxel_studio.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
 
 from voxel import Session
-from voxel_qt.store import DevicesStore, PreviewStore
+from voxel_qt.store import DevicesStore, GridStore, PreviewStore
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -71,6 +71,7 @@ class VoxelApp(QObject):
         # Child stores
         self.devices = DevicesStore(parent=self)
         self.preview = PreviewStore(parent=self)
+        self.grid = GridStore(parent=self)
 
         self._load_system_config()
 
@@ -219,6 +220,9 @@ class VoxelApp(QObject):
             log.info("DevicesStore started")
             self.devices_ready.emit()
 
+            await self.grid.bind_session(self._session)
+            log.info("GridStore bound to session")
+
             self._set_phase("ready")
             self.session_changed.emit(self._session)
 
@@ -241,6 +245,7 @@ class VoxelApp(QObject):
         try:
             await self.devices.stop()
             self.preview.reset()
+            self.grid.unbind_session()
 
             if self._session.rig.preview.is_active:
                 await self._session.rig.stop_preview()

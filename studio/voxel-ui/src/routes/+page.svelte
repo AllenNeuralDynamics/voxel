@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { PreviewCanvas, PanZoomControls } from '$lib/preview';
+	import { PreviewCanvas } from '$lib/ui/preview';
 	import { onMount, onDestroy } from 'svelte';
 	import { App } from '$lib/app';
 	import { LaunchPage } from '$lib/ui/launch';
@@ -67,11 +67,11 @@
 	});
 
 	function handleStartPreview() {
-		app?.previewer?.startPreview();
+		app?.previewState?.startPreview();
 	}
 
 	function handleStopPreview() {
-		app?.previewer?.stopPreview();
+		app?.previewState?.stopPreview();
 	}
 </script>
 
@@ -100,7 +100,7 @@
 	{:else if viewName === 'launch' || viewName === 'loading'}
 		<!-- Launch page (includes loading state) -->
 		<LaunchPage {app} />
-	{:else if viewName === 'control' && app.previewer}
+	{:else if viewName === 'control' && app.previewState}
 		<!-- Control view -->
 		<div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
 			<aside class="flex h-full w-96 min-w-80 flex-col border-r border-zinc-700 bg-zinc-900">
@@ -125,21 +125,22 @@
 					</div>
 				</div>
 
-				{#if app.previewer.channels.length === 0}
+				{#if app.previewState.channels.length === 0}
 					<div class="flex flex-1 items-center justify-center p-4">
 						<p class="text-sm text-zinc-500">No channels available</p>
 					</div>
 				{:else}
 					<div class="flex flex-1 flex-col overflow-y-auto">
-						{#each app.previewer.channels as channel (channel.idx)}
+						{#each app.previewState.channels as channel (channel.idx)}
 							{#if channel.name}
 								<div>
 									<ChannelSection
 										{channel}
-										previewer={app.previewer}
+										previewer={app.previewState}
 										devices={app.devices}
 										{deviceFilter}
 										{showHistograms}
+										catalog={app.colormapCatalog}
 									/>
 								</div>
 								<div class="border-t border-zinc-600"></div>
@@ -157,7 +158,7 @@
 						<Pane>
 							<PaneGroup direction="horizontal" autoSaveId="viewPanel">
 								<Pane defaultSize={50} minSize={30} class="h-full flex-1 px-4">
-									<PreviewCanvas previewer={app.previewer} />
+									<PreviewCanvas previewer={app.previewState} />
 								</Pane>
 								<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
 								<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
@@ -211,8 +212,6 @@
 									Logs
 								</Tabs.Trigger>
 							</Tabs.List>
-
-							<PanZoomControls previewer={app.previewer} />
 						</div>
 
 						<!-- Laser indicators -->
@@ -230,14 +229,14 @@
 				<header class="flex h-18 items-start justify-start gap-2 p-4">
 					<button
 						onclick={handleStartPreview}
-						disabled={app.previewer.isPreviewing}
+						disabled={app.previewState.isPreviewing}
 						class="rounded bg-emerald-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Start
 					</button>
 					<button
 						onclick={handleStopPreview}
-						disabled={!app.previewer.isPreviewing}
+						disabled={!app.previewState.isPreviewing}
 						class="rounded bg-rose-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Stop

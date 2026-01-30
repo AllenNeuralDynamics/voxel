@@ -12,20 +12,18 @@ Usage:
     # Color utilities
     c = Color("#3a6ea5")
     c.lighten(0.2)  # Lighter shade
-    c.alpha(0.5)    # With transparency
 """
 
 from __future__ import annotations
 
 import base64
-import colorsys
 from enum import Enum, StrEnum
 from functools import lru_cache
-from typing import Self
 
 import qtawesome as qta
 from PySide6.QtCore import QBuffer, QIODevice
 from PySide6.QtGui import QColor
+from vxlib.color import Color
 
 from voxel_qt.ui.assets import DEFAULT_FAMILY
 
@@ -49,200 +47,6 @@ def icon_data_uri(icon_name: str, color: str, size: int = 12) -> str:
     pixmap.save(buffer, "PNG")
     b64 = base64.b64encode(buffer.data().data()).decode()
     return f"url(data:image/png;base64,{b64})"
-
-
-class Color(str):
-    """A color that behaves as a hex string but provides color space methods.
-
-    Initialization formats:
-        Color("#3a6ea5")      # 6-digit hex with #
-        Color("3a6ea5")       # 6-digit hex without #
-        Color("#f00")         # 3-digit hex with #
-        Color("f00")          # 3-digit hex without #
-        Color.from_rgb(58, 110, 165)
-        Color.from_hsl(0.58, 0.48, 0.44)
-
-    Usage:
-        c = Color("#3a6ea5")
-        str(c)              # "#3a6ea5"
-        f"{c}"              # "#3a6ea5" (works in stylesheets)
-        c.rgb               # (58, 110, 165)
-        c.rgb_float         # (0.227, 0.431, 0.647)
-        c.hsl               # (0.583, 0.480, 0.437)
-        c.lighten(0.2)      # Color("#6a9bc5")
-        c.darken(0.2)       # Color("#2e5884")
-        c.alpha(0.5)        # Color with 50% opacity
-        c.rgba              # "rgba(58, 110, 165, 1.0)"
-    """
-
-    __slots__ = ("_alpha",)
-
-    def __new__(cls, value: str, alpha: float = 1.0) -> Self:  # noqa: ARG004
-        # Normalize to 6-digit hex with #
-        hex_str = cls._normalize_hex(value)
-        return super().__new__(cls, hex_str)
-
-    def __init__(self, _value: str, alpha: float = 1.0) -> None:
-        self._alpha = max(0.0, min(1.0, alpha))  # Clamp 0-1
-
-    @staticmethod
-    def _normalize_hex(value: str) -> str:
-        """Convert various hex formats to #rrggbb."""
-        h = value.lstrip("#").lower()
-        if len(h) == 3:
-            h = h[0] * 2 + h[1] * 2 + h[2] * 2
-        if len(h) != 6:
-            raise ValueError(f"Invalid hex color: {value}")
-        return f"#{h}"
-
-    # -------------------------------------------------------------------------
-    # Properties
-    # -------------------------------------------------------------------------
-
-    @property
-    def rgb(self) -> tuple[int, int, int]:
-        """RGB tuple with values 0-255."""
-        h = self.lstrip("#")
-        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
-
-    @property
-    def rgb_float(self) -> tuple[float, float, float]:
-        """RGB tuple with values 0.0-1.0."""
-        r, g, b = self.rgb
-        return (r / 255, g / 255, b / 255)
-
-    @property
-    def hsl(self) -> tuple[float, float, float]:
-        """HSL tuple (hue, saturation, lightness) with values 0.0-1.0."""
-        r, g, b = self.rgb_float
-        hue, lightness, saturation = colorsys.rgb_to_hls(r, g, b)
-        return (hue, saturation, lightness)
-
-    @property
-    def opacity(self) -> float:
-        """Alpha/opacity value 0.0-1.0."""
-        return self._alpha
-
-    @property
-    def rgba(self) -> str:
-        """CSS rgba() string."""
-        r, g, b = self.rgb
-        return f"rgba({r}, {g}, {b}, {self._alpha})"
-
-    # -------------------------------------------------------------------------
-    # Modifiers (return new Color instances)
-    # -------------------------------------------------------------------------
-
-    def alpha(self, value: float) -> Color:
-        """Return new Color with specified opacity."""
-        return Color(self, alpha=value)
-
-    def lighten(self, factor: float = 0.2) -> Color:
-        """Return a lighter shade."""
-        r, g, b = self.rgb
-        new_r = int(r + (255 - r) * factor)
-        new_g = int(g + (255 - g) * factor)
-        new_b = int(b + (255 - b) * factor)
-        return Color(f"#{new_r:02x}{new_g:02x}{new_b:02x}", alpha=self._alpha)
-
-    def darken(self, factor: float = 0.2) -> Color:
-        """Return a darker shade."""
-        r, g, b = self.rgb
-        new_r = int(r * (1 - factor))
-        new_g = int(g * (1 - factor))
-        new_b = int(b * (1 - factor))
-        return Color(f"#{new_r:02x}{new_g:02x}{new_b:02x}", alpha=self._alpha)
-
-    @property
-    def luminance(self) -> float:
-        """Relative luminance (0.0-1.0) per WCAG formula."""
-        r, g, b = self.rgb_float
-
-        def linearize(c: float) -> float:
-            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-
-        return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
-
-    def contrasting(self, light: str = "#ffffff", dark: str = "#000000") -> Color:
-        """Return light or dark color based on contrast with this color."""
-        return Color(dark if self.luminance > 0.179 else light)
-
-    # -------------------------------------------------------------------------
-    # Factory methods
-    # -------------------------------------------------------------------------
-
-    @classmethod
-    def from_rgb(cls, r: int, g: int, b: int, alpha: float = 1.0) -> Color:
-        """Create from RGB values (0-255)."""
-        return cls(f"#{r:02x}{g:02x}{b:02x}", alpha=alpha)
-
-    @classmethod
-    def from_hsl(cls, hue: float, saturation: float, lightness: float, alpha: float = 1.0) -> Color:
-        """Create from HSL values (0.0-1.0)."""
-        r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)  # colorsys uses HLS order
-        return cls.from_rgb(int(r * 255), int(g * 255), int(b * 255), alpha=alpha)
-
-    @classmethod
-    def from_wavelength(cls, wavelength_nm: float) -> Color:
-        """Create from light wavelength in nanometers (380-780nm visible range).
-
-        Uses gamma correction for better violet rendering on sRGB displays.
-        Returns black if wavelength is outside visible range.
-        """
-        w = wavelength_nm
-
-        if w < 380 or w > 780:
-            return cls("#000000")
-
-        # Calculate raw RGB based on wavelength
-        if 380 <= w < 440:
-            # Violet to Blue (reduced red to avoid magenta)
-            r = 0.6 * (1.0 - (w - 380) / (440 - 380))
-            g = 0.0
-            b = 1.0
-        elif 440 <= w < 490:
-            # Blue to Cyan
-            r = 0.0
-            g = (w - 440) / (490 - 440)
-            b = 1.0
-        elif 490 <= w < 510:
-            # Cyan to Green
-            r = 0.0
-            g = 1.0
-            b = -(w - 510) / (510 - 490)
-        elif 510 <= w < 580:
-            # Green to Yellow
-            r = (w - 510) / (580 - 510)
-            g = 1.0
-            b = 0.0
-        elif 580 <= w < 645:
-            # Yellow to Red
-            r = 1.0
-            g = -(w - 645) / (645 - 580)
-            b = 0.0
-        else:  # 645 <= w <= 780
-            # Red
-            r = 1.0
-            g = 0.0
-            b = 0.0
-
-        # Intensity falloff at spectral extremes
-        if w < 420:
-            intensity = 0.3 + 0.7 * (w - 380) / (420 - 380)
-        elif w > 645:
-            intensity = 0.3 + 0.7 * (780 - w) / (780 - 645)
-        else:
-            intensity = 1.0
-
-        r, g, b = r * intensity, g * intensity, b * intensity
-
-        # Gamma correction for sRGB displays
-        gamma = 0.8
-        r = r**gamma if r > 0 else 0.0
-        g = g**gamma if g > 0 else 0.0
-        b = b**gamma if b > 0 else 0.0
-
-        return cls.from_rgb(int(r * 255), int(g * 255), int(b * 255))
 
 
 class Colors:
@@ -422,12 +226,12 @@ QToolTip {{
 /* Scrollbars - vertical */
 QScrollBar:vertical {{
     background: {Colors.BG_DARK};
-    width: 8px;
+    width: 6px;
     border: none;
 }}
 QScrollBar::handle:vertical {{
     background: {Colors.BORDER};
-    border-radius: {BorderRadius.MD}px;
+    border-radius: {BorderRadius.SM}px;
     min-height: 20px;
 }}
 QScrollBar::handle:vertical:hover {{
@@ -446,12 +250,12 @@ QScrollBar::sub-page:vertical {{
 /* Scrollbars - horizontal */
 QScrollBar:horizontal {{
     background: {Colors.BG_DARK};
-    height: 8px;
+    height: 6px;
     border: none;
 }}
 QScrollBar::handle:horizontal {{
     background: {Colors.BORDER};
-    border-radius: {BorderRadius.MD}px;
+    border-radius: {BorderRadius.SM}px;
     min-width: 20px;
 }}
 QScrollBar::handle:horizontal:hover {{

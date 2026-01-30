@@ -1,16 +1,3 @@
-/**
- * App - Main application controller.
- *
- * Unified manager that handles:
- * - WebSocket connection (Client)
- * - Application view state (connecting, launch, loading, control, error)
- * - Session lifecycle (launch/close)
- * - Rig configuration and profiles
- * - Device state (DevicesManager)
- * - Preview and Stage controllers (owned by App)
- * - Log collection
- */
-
 import { browser } from '$app/environment';
 import { Client, type ClientOptions, type DaqWaveforms } from '../core/client.svelte.ts';
 import { DevicesManager } from '../core/devices.svelte.ts';
@@ -27,22 +14,17 @@ import {
 	type Vec2D
 } from '../core/types.ts';
 import type { VoxelRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
-import { Previewer } from '../preview/index.ts';
+import { fetchColormapCatalog, type ColormapCatalog } from '../core/colormaps.ts';
+import { PreviewState } from './preview.svelte.ts';
 import { Axis } from './axis.svelte.ts';
 import { SvelteDate } from 'svelte/reactivity';
 
-/**
- * Get the default WebSocket URL based on the current page origin.
- */
 function getDefaultSocketUrl(): string {
 	if (!browser) return 'ws://localhost:8000/ws';
 	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 	return `${protocol}//${window.location.host}/ws`;
 }
 
-/**
- * App options for construction
- */
 export interface AppOptions {
 	socketUrl?: string;
 	clientOptions?: ClientOptions;
@@ -50,14 +32,10 @@ export interface AppOptions {
 
 const MAX_LOGS = 500;
 
-/**
- * Profile: Encapsulates profile configuration and derived state like FOV dimensions
- */
 export class Profile {
 	readonly id: string;
 	readonly #app: App;
 
-	// State
 	#config = $state<ProfileConfig>();
 	label = $derived(this.#config?.label);
 	desc = $derived(this.#config?.desc);
@@ -65,7 +43,6 @@ export class Profile {
 	fovDimensions = $derived(this.#getfovDimensions());
 	daq = $derived(this.#config?.daq);
 
-	// DAQ waveforms (voltage arrays for each device)
 	waveforms = $state<DaqWaveforms | null>(null);
 	waveformsLoading = $state(false);
 
@@ -82,7 +59,6 @@ export class Profile {
 	}
 
 	#getMagnification(cameraId: string): number {
-		// Get magnification from detection path config
 		const detectionConfig = this.#app.config?.detection?.[cameraId];
 		return detectionConfig?.magnification ?? 1.0;
 	}
@@ -97,11 +73,9 @@ export class Profile {
 		const magnification = this.#getMagnification(cameraId);
 
 		if (!frameSizePx || !pixelSizeUm) {
-			return { width: 5, height: 5 }; // Fallback to 5mm
+			return { width: 5, height: 5 };
 		}
 
-		// FOV = frame_area / magnification
-		// frame_area = frame_size_px * pixel_size_um
 		const width = (frameSizePx.x * pixelSizeUm.x) / (1000 * magnification);
 		const height = (frameSizePx.y * pixelSizeUm.y) / (1000 * magnification);
 
@@ -109,48 +83,38 @@ export class Profile {
 	}
 }
 
-/**
- * Main application controller.
- */
 export class App {
-	// Core services
 	readonly #client: Client;
 	readonly devices: DevicesManager;
 
-	// Feature controllers (owned by App)
-	previewer = $state<Previewer | null>(null);
+	previewState = $state<PreviewState | null>(null);
 
-	// Stage axes (owned by App, flattened for better reactivity)
 	xAxis = $state<Axis | null>(null);
 	yAxis = $state<Axis | null>(null);
 	zAxis = $state<Axis | null>(null);
 
-	// Stage derived properties (flattened to avoid nested $state issues)
 	stageWidth = $derived(this.xAxis?.range ?? 100);
 	stageHeight = $derived(this.yAxis?.range ?? 100);
 	stageDepth = $derived(this.zAxis?.range ?? 100);
 	stageIsMoving = $derived(this.xAxis?.isMoving || this.yAxis?.isMoving || this.zAxis?.isMoving);
 	stageConnected = $derived((this.xAxis?.isConnected && this.yAxis?.isConnected && this.zAxis?.isConnected) ?? false);
 
-	// App state
 	logs = $state<LogMessage[]>([]);
 	status = $state<AppStatus | null>(null);
 	activeProfileId = $derived<string | null>(this.status?.session?.active_profile_id ?? null);
 	hasSession = $derived<boolean>(this.status?.session !== null && this.status?.session !== undefined);
 	connectionError = $state<string | null>(null);
 
-	// Rig configuration (only available when session is active)
 	config = $state<VoxelRigConfig | null>(null);
 	configLoading = $state(false);
 	configError = $state<string | null>(null);
 
+	colormapCatalog = $state<ColormapCatalog>([]);
 	profiles = $state<Profile[]>([]);
 
-	// UI state
 	error = $state<string | null>(null);
 	isMutating = $state(false);
 
-	// Grid, tiles, and stacks (derived from session status - server authoritative)
 	gridConfig = $derived<GridConfig>(
 		this.status?.session?.grid_config ?? {
 			x_offset_um: 0,
@@ -165,10 +129,8 @@ export class App {
 	stacks = $derived<Box[]>(this.status?.session?.stacks ?? []);
 	tileOrder = $derived<TileOrder>(this.status?.session?.tile_order ?? 'snake_row');
 
-	// Layer visibility state (controlled by StageControls)
 	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true });
 
-	// Selected tile position [row, col] - never null, defaults to [0, 0]
 	#selectedTilePos = $state<[number, number]>([0, 0]);
 	selectedTile = $derived<Tile>(this.#getSelectedTile());
 	selectedBox = $derived<Box | null>(
@@ -185,26 +147,19 @@ export class App {
 		this.devices = new DevicesManager(this.#client);
 	}
 
-	// ========== Resources ==========
-
 	get client(): Client {
 		return this.#client;
 	}
-
-	// ========== Derived Properties (must use $derived for reactivity) ==========
 
 	activeProfile = $derived.by(() => {
 		if (!this.activeProfileId) return null;
 		return this.profiles.find((p) => p.id === this.activeProfileId) ?? null;
 	});
 
-	/** FOV dimensions in mm from active profile */
 	fov = $derived<{ width: number; height: number }>(this.activeProfile?.fovDimensions ?? { width: 5, height: 5 });
 
-	/** Grid locked when PLANNED stacks exist */
 	gridLocked = $derived(this.status?.session?.grid_locked ?? false);
 
-	/** Tile spacing in mm (FOV adjusted for overlap) */
 	get tileSpacingX(): number {
 		return this.fov.width * (1 - this.gridConfig.overlap);
 	}
@@ -213,7 +168,6 @@ export class App {
 		return this.fov.height * (1 - this.gridConfig.overlap);
 	}
 
-	/** Grid offset in mm (converted from μm) */
 	get gridOffsetX(): number {
 		return this.gridConfig.x_offset_um / 1000;
 	}
@@ -222,7 +176,6 @@ export class App {
 		return this.gridConfig.y_offset_um / 1000;
 	}
 
-	/** Calculate grid cell from absolute position (in mm) */
 	positionToGridCell(positionMm: number, axis: 'x' | 'y'): number {
 		const offset = axis === 'x' ? this.gridOffsetX : this.gridOffsetY;
 		const spacing = axis === 'x' ? this.tileSpacingX : this.tileSpacingY;
@@ -230,7 +183,6 @@ export class App {
 		return Math.floor((positionMm - lowerLimit - offset) / spacing);
 	}
 
-	/** Calculate absolute position (in mm) from grid cell */
 	gridCellToPosition(gridCell: number, axis: 'x' | 'y'): number {
 		const offset = axis === 'x' ? this.gridOffsetX : this.gridOffsetY;
 		const spacing = axis === 'x' ? this.tileSpacingX : this.tileSpacingY;
@@ -238,7 +190,6 @@ export class App {
 		return lowerLimit + offset + gridCell * spacing;
 	}
 
-	/** Move stage to grid cell position */
 	moveToGridCell(row: number, col: number): void {
 		if (this.stageIsMoving || !this.xAxis || !this.yAxis) return;
 		const targetX = this.gridCellToPosition(col, 'x');
@@ -246,29 +197,24 @@ export class App {
 		this.moveXY(targetX, targetY);
 	}
 
-	/** Move X and Y axes */
 	moveXY(x: number, y: number): void {
 		this.xAxis?.move(x);
 		this.yAxis?.move(y);
 	}
 
-	/** Move Z axis */
 	moveZ(z: number): void {
 		this.zAxis?.move(z);
 	}
 
-	/** Halt all stage axes */
 	async haltStage(): Promise<void> {
 		await Promise.all([this.xAxis?.halt(), this.yAxis?.halt(), this.zAxis?.halt()]);
 	}
 
-	/** Get selected tile from tiles array, or create a default tile */
 	#getSelectedTile(): Tile {
 		const [row, col] = this.#selectedTilePos;
 		const tile = this.tiles.find((t) => t.row === row && t.col === col);
 		if (tile) return tile;
 
-		// Return default tile if not found in tiles array
 		return {
 			row,
 			col,
@@ -279,29 +225,22 @@ export class App {
 		};
 	}
 
-	/** Select a tile by row/col */
 	selectTile(row: number, col: number): void {
 		this.#selectedTilePos = [row, col];
 	}
 
-	// ========== Grid/Box Actions (send to backend) ==========
-
-	/** Update grid offset (sends to backend) */
 	setGridOffset(xOffsetUm: number, yOffsetUm: number): void {
 		this.#client.send({ topic: 'grid/set_offset', payload: { x_offset_um: xOffsetUm, y_offset_um: yOffsetUm } });
 	}
 
-	/** Update grid overlap (sends to backend) */
 	setGridOverlap(overlap: number): void {
 		this.#client.send({ topic: 'grid/set_overlap', payload: { overlap } });
 	}
 
-	/** Update tile acquisition order (sends to backend) */
 	setTileOrder(order: TileOrder): void {
 		this.#client.send({ topic: 'grid/set_tile_order', payload: { tile_order: order } });
 	}
 
-	/** Add stacks at grid positions (bulk, sends to backend) */
 	addBoxs(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
 			topic: 'stacks/add',
@@ -316,7 +255,6 @@ export class App {
 		});
 	}
 
-	/** Edit stacks' z parameters (bulk, sends to backend) */
 	editBoxs(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
 			topic: 'stacks/edit',
@@ -331,24 +269,16 @@ export class App {
 		});
 	}
 
-	/** Remove stacks (bulk, sends to backend) */
 	removeBoxs(positions: Array<{ row: number; col: number }>): void {
 		this.#client.send({ topic: 'stacks/remove', payload: { positions } });
 	}
 
-	// ========== Initialization ==========
-
 	async initialize(): Promise<void> {
 		this.connectionError = null;
-
-		// Set up subscriptions
 		this.subscribeToTopics();
 
 		try {
-			// Connect to WebSocket
 			await this.#client.connect();
-
-			// Request initial app status
 			this.#client.requestStatus();
 		} catch (error) {
 			this.connectionError = error instanceof Error ? error.message : 'Failed to connect';
@@ -357,28 +287,23 @@ export class App {
 	}
 
 	private subscribeToTopics(): void {
-		// Status updates
 		const unsubStatus = this.#client.on('status', (status) => {
 			this.handleStatusUpdate(status);
 		});
 
-		// Profile changes
 		const unsubProfile = this.#client.on('profile/changed', (payload) => {
 			console.debug('[App] Profile changed:', payload.profile_id);
 			this.requestWaveforms();
 		});
 
-		// DAQ waveforms
 		const unsubWaveforms = this.#client.on('daq/waveforms', (waveforms) => {
 			this.handleWaveforms(waveforms);
 		});
 
-		// Log messages
 		const unsubLogs = this.#client.on('log/message', (log) => {
 			this.handleLog(log);
 		});
 
-		// Errors
 		const unsubError = this.#client.on('error', (payload) => {
 			console.error('[App] Error from backend:', payload.error);
 			this.handleLog({
@@ -389,13 +314,11 @@ export class App {
 			});
 		});
 
-		// Connection state
 		const unsubConnection = this.#client.onConnectionChange((connected) => {
 			const wasDisconnected = this.wasDisconnected;
 			this.wasDisconnected = !connected;
 
 			if (!connected && this.status !== null) {
-				// Lost connection after we had status
 				this.connectionError = 'Connection lost. Attempting to reconnect...';
 			} else if (connected && wasDisconnected) {
 				this.handleReconnection();
@@ -405,23 +328,17 @@ export class App {
 		this.unsubscribers.push(unsubStatus, unsubProfile, unsubWaveforms, unsubLogs, unsubError, unsubConnection);
 	}
 
-	// ========== Status Handling ==========
-
 	private async handleStatusUpdate(status: AppStatus): Promise<void> {
 		const previousProfileId = this.activeProfileId;
-
-		// Update app status
 		this.status = status;
 
-		// Handle phase transitions
 		switch (status.phase) {
 			case 'idle': {
-				// Clear session-specific state if we have feature controllers
-				if (this.previewer || this.config) {
-					console.debug('[App] Session closed, cleaning up');
-					this.previewer?.shutdown();
-					this.previewer = null;
+				if (this.previewState || this.config) {
+					this.previewState?.shutdown();
+					this.previewState = null;
 					this.config = null;
+					this.colormapCatalog = [];
 					this.profiles = [];
 				}
 				this.sessionInitializing = false;
@@ -429,12 +346,8 @@ export class App {
 			}
 
 			case 'ready': {
-				// Initialize session if we don't have feature controllers yet
-				// Use sessionInitializing flag to prevent race condition when multiple
-				// status messages arrive before async initializeSession() completes
-				if (!this.previewer && !this.sessionInitializing) {
+				if (!this.previewState && !this.sessionInitializing) {
 					this.sessionInitializing = true;
-					console.debug('[App] Session became ready, initializing...');
 					try {
 						await this.initializeSession();
 					} finally {
@@ -442,7 +355,6 @@ export class App {
 					}
 				}
 
-				// Request waveforms if profile changed
 				const currentProfileId = status.session?.active_profile_id ?? null;
 				if (currentProfileId && currentProfileId !== previousProfileId) {
 					this.requestWaveforms();
@@ -457,12 +369,18 @@ export class App {
 		await this.devices.initialize();
 		this.#client.requestWaveforms();
 
-		// Create feature controllers
-		if (this.config) {
-			console.debug('[App] Creating Previewer and Axis controllers');
-			this.previewer = new Previewer(this.client, { channels: this.config.channels, profiles: this.config.profiles });
+		fetchColormapCatalog(this.#client.baseUrl)
+			.then((catalog) => {
+				this.colormapCatalog = catalog;
+			})
+			.catch((e) => console.warn('[App] Failed to fetch colormap catalog:', e));
 
-			// Create axes if device IDs are configured
+		if (this.config) {
+			this.previewState = new PreviewState(this.client, {
+				channels: this.config.channels,
+				profiles: this.config.profiles
+			});
+
 			const stage = this.config.stage;
 			if (stage?.x) this.xAxis = new Axis(this, stage.x);
 			if (stage?.y) this.yAxis = new Axis(this, stage.y);
@@ -487,8 +405,6 @@ export class App {
 	private handleLog(log: LogMessage): void {
 		this.logs = [...this.logs, log].slice(-MAX_LOGS);
 	}
-
-	// ========== Config ==========
 
 	async fetchConfig(): Promise<void> {
 		if (!this.hasSession) {
@@ -532,8 +448,6 @@ export class App {
 			return new Profile(profileId, profileConfig, channels, this);
 		});
 	}
-
-	// ========== Profile Actions ==========
 
 	async activateProfile(profileId: string): Promise<void> {
 		if (!browser || !profileId) return;
@@ -582,8 +496,6 @@ export class App {
 		}
 	}
 
-	// ========== Session Lifecycle ==========
-
 	async launchSession(rootName: string, sessionName: string, rigConfig?: string): Promise<void> {
 		if (!browser) return;
 		if (this.hasSession) {
@@ -612,7 +524,6 @@ export class App {
 				throw new Error(errorData.detail || response.statusText);
 			}
 
-			// Backend will broadcast status update with phase='launching', then phase='ready'
 			console.debug('[App] Session launch request sent');
 		} catch (error) {
 			console.error('[App] Failed to launch session:', error);
@@ -662,11 +573,9 @@ export class App {
 		}
 	}
 
-	// ========== Utilities ==========
-
 	async retryConnection(): Promise<void> {
 		this.connectionError = null;
-		this.status = null; // Reset to connecting state
+		this.status = null;
 		try {
 			await this.#client.connect();
 			this.#client.requestStatus();
@@ -680,9 +589,9 @@ export class App {
 	}
 
 	destroy(): void {
-		if (this.previewer) {
-			this.previewer.shutdown();
-			this.previewer = null;
+		if (this.previewState) {
+			this.previewState.shutdown();
+			this.previewState = null;
 		}
 		this.unsubscribers.forEach((unsub) => unsub());
 		this.unsubscribers = [];

@@ -3,6 +3,7 @@
 	import { getBoxStatusColor, type Tile, type Box } from '$lib/core/types';
 	import { onMount } from 'svelte';
 	import Icon from '@iconify/svelte';
+	import { compositeFullFrames } from '$lib/app/preview.svelte.ts';
 
 	interface Props {
 		app: App;
@@ -10,39 +11,63 @@
 
 	let { app }: Props = $props();
 
-	// Computed derived state
 	let fovX = $derived(app.xAxis ? app.xAxis.position - app.xAxis.lowerLimit : 0);
 	let fovY = $derived(app.yAxis ? app.yAxis.position - app.yAxis.lowerLimit : 0);
 	let fovZ = $derived(app.zAxis ? app.zAxis.position - app.zAxis.lowerLimit : 0);
-	let thumbnail = $derived(app.previewer?.thumbnailSnapshot ?? '');
 	let isXYMoving = $derived(app.xAxis?.isMoving || app.yAxis?.isMoving);
 	let isZMoving = $derived(app.zAxis?.isMoving ?? false);
 	let hasStage = $derived(app.xAxis && app.yAxis && app.zAxis);
 
-	// Margins for center-anchored FOV (half FOV on each side)
 	let marginX = $derived(app.fov.width / 2);
 	let marginY = $derived(app.fov.height / 2);
 
-	// Total viewBox dimensions (stage + margins)
 	let viewBoxWidth = $derived(app.stageWidth + app.fov.width);
 	let viewBoxHeight = $derived(app.stageHeight + app.fov.height);
 	let stageAspectRatio = $derived(viewBoxWidth / viewBoxHeight);
 
-	// Local UI state
 	let showThumbnail = $state(true);
 
-	// ResizeObserver for responsive sizing
+	const FOV_RESOLUTION = 256;
+	let thumbnail = $state('');
+	let fovNeedsRedraw = false;
+	let fovAnimFrameId: number | null = null;
+
+	const offscreen = document.createElement('canvas');
+	offscreen.width = FOV_RESOLUTION;
+	const offscreenCtx = offscreen.getContext('2d')!;
+
+	$effect(() => {
+		const aspect = app.fov.width / app.fov.height;
+		if (aspect > 0 && Number.isFinite(aspect)) {
+			offscreen.height = Math.round(FOV_RESOLUTION / aspect);
+		}
+	});
+
+	$effect(() => {
+		if (app.previewState) {
+			void app.previewState.redrawGeneration;
+			fovNeedsRedraw = true;
+		}
+	});
+
+	function fovFrameLoop() {
+		if (fovNeedsRedraw && app.previewState) {
+			fovNeedsRedraw = false;
+			compositeFullFrames(offscreenCtx, offscreen, app.previewState.channels);
+			thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
+		}
+		fovAnimFrameId = requestAnimationFrame(fovFrameLoop);
+	}
+
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let canvasWidth = $state(400);
 	let canvasHeight = $state(250);
 
-	// Layout constants (in pixels)
 	const TRACK_WIDTH = 16;
 	const Z_AREA_WIDTH = TRACK_WIDTH;
 	const STAGE_GAP = 16;
 	const STAGE_BORDER = 0.5;
 
-	// Computed pixel dimensions for sliders (stage area only, not margins)
 	let scale = $derived(canvasWidth / viewBoxWidth);
 	let marginPixelsX = $derived(marginX * scale);
 	let marginPixelsY = $derived(marginY * scale);
@@ -50,7 +75,6 @@
 	let stagePixelsY = $derived(app.stageHeight * scale);
 
 	function updateCanvasSize(containerWidth: number, containerHeight: number) {
-		// Available space for the SVG (excluding sliders and gap)
 		const availableWidth = containerWidth - TRACK_WIDTH - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 4;
 		const availableHeight = containerHeight - TRACK_WIDTH - STAGE_BORDER * 2;
 
@@ -59,11 +83,9 @@
 		const containerAspect = availableWidth / availableHeight;
 
 		if (containerAspect > stageAspectRatio) {
-			// Height-constrained: use full height, calculate width
 			canvasHeight = availableHeight;
 			canvasWidth = availableHeight * stageAspectRatio;
 		} else {
-			// Width-constrained: use full width, calculate height
 			canvasWidth = availableWidth;
 			canvasHeight = availableWidth / stageAspectRatio;
 		}
@@ -81,10 +103,14 @@
 
 		resizeObserver.observe(containerRef);
 
-		return () => resizeObserver.disconnect();
+		fovFrameLoop();
+
+		return () => {
+			resizeObserver.disconnect();
+			if (fovAnimFrameId !== null) cancelAnimationFrame(fovAnimFrameId);
+		};
 	});
 
-	// Update canvas size when aspect ratio changes
 	$effect(() => {
 		if (containerRef) {
 			const { width, height } = containerRef.getBoundingClientRect();
@@ -92,22 +118,18 @@
 		}
 	});
 
-	// Convert μm to mm
 	function toMm(um: number): number {
 		return um / 1000;
 	}
 
-	// Check if a tile is selected
 	function isSelected(tile: Tile): boolean {
 		return tile.row === app.selectedTile.row && tile.col === app.selectedTile.col;
 	}
 
-	// Handle tile single-click to select
 	function handleTileSelect(tile: Tile) {
 		app.selectTile(tile.row, tile.col);
 	}
 
-	// Clamp position to keep FOV within stage limits
 	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
 		if (!app.xAxis || !app.yAxis) return [targetX, targetY];
 		const minX = app.xAxis.lowerLimit;
@@ -117,32 +139,26 @@
 		return [Math.max(minX, Math.min(maxX, targetX)), Math.max(minY, Math.min(maxY, targetY))];
 	}
 
-	// Handle tile double-click to move stage (center-anchored: tile position IS the center)
 	function handleTileMove(tile: Tile) {
 		if (isXYMoving || !app.xAxis || !app.yAxis) return;
-		// Tile position is center, move stage so FOV center aligns with tile center
 		const targetX = app.xAxis.lowerLimit + toMm(tile.x_um);
 		const targetY = app.yAxis.lowerLimit + toMm(tile.y_um);
 		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
 		app.moveXY(clampedX, clampedY);
 	}
 
-	// Handle stack click to select its tile
 	function handleBoxSelect(stack: Box) {
 		app.selectTile(stack.row, stack.col);
 	}
 
-	// Handle stack double-click to move stage (center-anchored: stack position IS the center)
 	function handleBoxMove(stack: Box) {
 		if (isXYMoving || !app.xAxis || !app.yAxis) return;
-		// Box position is center, move stage so FOV center aligns with stack center
 		const targetX = app.xAxis.lowerLimit + toMm(stack.x_um);
 		const targetY = app.yAxis.lowerLimit + toMm(stack.y_um);
 		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
 		app.moveXY(clampedX, clampedY);
 	}
 
-	// Handle slider changes
 	function handleXSliderChange(e: Event) {
 		if (!app.xAxis) return;
 		const target = e.target as HTMLInputElement;
@@ -161,7 +177,6 @@
 		app.zAxis.move(parseFloat(target.value));
 	}
 
-	// Layer visibility toggles
 	function toggleGrid() {
 		app.layerVisibility = { ...app.layerVisibility, grid: !app.layerVisibility.grid };
 	}
@@ -178,7 +193,6 @@
 		app.layerVisibility = { ...app.layerVisibility, fov: !app.layerVisibility.fov };
 	}
 
-	// Keyboard handler for interactive elements
 	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
@@ -216,7 +230,6 @@
 <div class="relative grid h-full w-full px-4 pt-18 pb-8">
 	{#if hasStage}
 		<div class="stage-container flex flex-1 justify-center overflow-hidden" bind:this={containerRef}>
-			<!-- Layer visibility floating widget -->
 			<div class="absolute top-0 right-0 z-10 flex h-18 items-center">
 				<div class="flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
 					<button
@@ -273,7 +286,6 @@
 				style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
 			>
 				<div class="flex flex-col">
-					<!-- X slider: margin-left = trackWidth + border + marginPixels to align with stage area -->
 					<input
 						type="range"
 						class="x-slider"
@@ -287,7 +299,6 @@
 					/>
 
 					<div class="flex min-h-0 items-start">
-						<!-- Y slider: margin-top = border + marginPixels to align with stage area -->
 						<input
 							type="range"
 							class="y-slider"
@@ -305,7 +316,6 @@
 							class="xy-svg"
 							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 						>
-							<!-- Boxs Layer: Boxs as filled rectangles with status coloring -->
 							{#if app.layerVisibility.stacks}
 								<g class="stacks-layer">
 									{#each app.stacks as stack (`${stack.row}_${stack.col}`)}
@@ -336,16 +346,13 @@
 								</g>
 							{/if}
 
-							<!-- Path Layer: Acquisition order path (centers are now the actual positions) -->
 							{#if app.layerVisibility.path && app.stacks.length > 1}
 								{@const pathPoints = app.stacks.map((s) => ({
 									x: toMm(s.x_um),
 									y: toMm(s.y_um)
 								}))}
 								<g class="path-layer">
-									<!-- Path line -->
 									<polyline points={pathPoints.map((p) => `${p.x},${p.y}`).join(' ')} class="acquisition-path" />
-									<!-- Arrows at segment midpoints -->
 									{#each pathPoints.slice(0, -1) as p1, i (i)}
 										{@const p2 = pathPoints[i + 1]}
 										{@const midX = (p1.x + p2.x) / 2}
@@ -360,19 +367,16 @@
 								</g>
 							{/if}
 
-							<!-- FOV Layer: Current position with thumbnail (center-anchored) -->
 							{#if app.layerVisibility.fov}
 								{@const fovLeft = fovX - app.fov.width / 2}
 								{@const fovTop = fovY - app.fov.height / 2}
 								<g class="fov-layer pointer-events-none">
-									<!-- Clip path for thumbnail -->
 									<defs>
 										<clipPath id="fov-clip">
 											<rect x={fovLeft} y={fovTop} width={app.fov.width} height={app.fov.height} />
 										</clipPath>
 									</defs>
 
-									<!-- Thumbnail image -->
 									{#if showThumbnail && thumbnail}
 										<image
 											href={thumbnail}
@@ -385,7 +389,6 @@
 										/>
 									{/if}
 
-									<!-- FOV border (outset) -->
 									<rect
 										x={fovLeft - 0.025}
 										y={fovTop - 0.025}
@@ -397,7 +400,6 @@
 										<title>FOV: ({app.xAxis?.position.toFixed(1)}, {app.yAxis?.position.toFixed(1)}) mm</title>
 									</rect>
 
-									<!-- Center crosshair to indicate position point -->
 									<g class="fov-crosshair" class:moving={isXYMoving}>
 										<line x1={fovX - 0.3} y1={fovY} x2={fovX + 0.3} y2={fovY} />
 										<line x1={fovX} y1={fovY - 0.3} x2={fovX} y2={fovY + 0.3} />
@@ -405,7 +407,6 @@
 								</g>
 							{/if}
 
-							<!-- Grid Layer: Tiles (topmost for easy clicking) -->
 							{#if app.layerVisibility.grid}
 								{@const selectedTileData = app.tiles.find((t) => isSelected(t))}
 								<g class="grid-layer">
@@ -435,7 +436,6 @@
 						oninput={handleZSliderChange}
 					/>
 					<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
-						<!-- Box Z markers -->
 						{#if app.selectedBox && app.zAxis}
 							{@const z0Offset = app.selectedBox.z_start_um / 1000 - app.zAxis.lowerLimit}
 							{@const z1Offset = app.selectedBox.z_end_um / 1000 - app.zAxis.lowerLimit}
@@ -446,7 +446,6 @@
 								<line x1="0" {y1} x2="30" y2={y1} class="z-marker" />
 							</g>
 						{/if}
-						<!-- Current Z position -->
 						<line
 							x1="0"
 							y1={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
