@@ -10,8 +10,8 @@ import zmq
 import zmq.asyncio
 from pydantic import BaseModel, Field
 
+from pyrig._utils import get_local_ip
 from pyrig.device import DeviceHandle
-from vxlib import get_local_ip
 
 from .node import (
     DeviceBuildError,

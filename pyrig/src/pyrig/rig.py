@@ -8,10 +8,10 @@ import zmq.asyncio
 from pydantic import BaseModel, Field
 from ruyaml import YAML
 
+from pyrig._utils import get_local_ip
 from pyrig.cluster import ClusterConfig, ClusterManager, NodeConfig, RigNode
 from pyrig.device import Device, DeviceConfig, DeviceHandle, build_objects
 from pyrig.local import LocalAdapter
-from vxlib import get_local_ip
 
 logger = logging.getLogger(__name__)
 yaml = YAML(typ="safe")

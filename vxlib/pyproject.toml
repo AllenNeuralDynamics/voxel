@@ -1,12 +1,19 @@
 [project]
 name = "vxlib"
 version = "0.1.0"
-description = "Shared types and utilities"
+description = "Shared types and utilities for the Voxel microscopy platform"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
 ]
 requires-python = ">=3.13"
+keywords = ["voxel", "microscopy", "utilities", "types"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     "numpy>=2.0",
     "pydantic>=2.0",
@@ -14,6 +21,10 @@ dependencies = [
 
 [project.optional-dependencies]
 rich = ["rich>=14.0.0"]
+
+[project.urls]
+Repository = "https://github.com/AllenNeuralDynamics/voxel"
+Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

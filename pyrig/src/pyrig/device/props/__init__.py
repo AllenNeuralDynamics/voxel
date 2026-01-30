@@ -15,7 +15,7 @@ __all__ = [
 if __name__ == "__main__":
     import logging
 
-    from vxlib import configure_logging
+    logging.basicConfig(level=logging.DEBUG)
 
     logger = logging.getLogger(__name__)
 
@@ -57,8 +57,6 @@ if __name__ == "__main__":
         @preset.setter
         def preset(self, value: int) -> None:
             self._preset = value
-
-    configure_logging(logging.DEBUG)
 
     channel = MixerChannel()
     logger.info(channel.volume)  # 0.5 (min=0.0, max=1.0, step=0.1)

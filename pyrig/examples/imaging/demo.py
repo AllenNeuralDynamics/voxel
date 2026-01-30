@@ -9,9 +9,8 @@ from rich import print
 
 from imaging.rig import ImagingRig
 from pyrig import RigConfig
-from vxlib import configure_logging
 
-configure_logging(level=logging.INFO, fmt="%(message)s", datefmt="[%X]")
+logging.basicConfig(level=logging.INFO, format="%(message)s", datefmt="[%X]")
 
 log = logging.getLogger("imaging.demo")
 
