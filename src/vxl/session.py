@@ -189,6 +189,7 @@ class Session:
 
         if session_file.exists():
             # Resume existing session
+            session_file.touch()  # Update mtime so it sorts as recently accessed
             config = SessionConfig.from_yaml(session_file)
 
             rig = VoxelRig(config=config.rig)

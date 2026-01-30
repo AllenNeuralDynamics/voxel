@@ -202,7 +202,6 @@ class VoxelApp(QObject):
         session_file = session_dir / "session.voxel.yaml"
         if session_file.exists():
             log.info("Resuming existing session: %s", session_dir)
-            session_file.touch()
             config_path = None
         else:
             if config_path is None:
