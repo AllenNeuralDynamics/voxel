@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from voxel_drivers.tigerhub.model import BoxInfo, Reply
-from voxel_drivers.tigerhub.protocol.errors import ASIDecodeError
-from voxel_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
+from vxl_drivers.tigerhub.model import BoxInfo, Reply
+from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
+from vxl_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
 
 # --- Dataclasses ---
 

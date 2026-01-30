@@ -31,10 +31,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from voxel_drivers.tigerhub.box import TigerBox
-from voxel_drivers.tigerhub.model.box_info import BoxInfo
-from voxel_drivers.tigerhub.ops.joystick import JoystickInput
-from voxel_drivers.tigerhub.ops.params import TigerParams
+from vxl_drivers.tigerhub.box import TigerBox
+from vxl_drivers.tigerhub.model.box_info import BoxInfo
+from vxl_drivers.tigerhub.ops.joystick import JoystickInput
+from vxl_drivers.tigerhub.ops.params import TigerParams
 
 # ---------------- UI bits ---------------- #
 

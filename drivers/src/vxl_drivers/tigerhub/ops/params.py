@@ -1,9 +1,9 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from voxel_drivers.tigerhub.model import Reply
-from voxel_drivers.tigerhub.protocol.errors import ASIDecodeError
-from voxel_drivers.tigerhub.protocol.linefmt import _ax
+from vxl_drivers.tigerhub.model import Reply
+from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
+from vxl_drivers.tigerhub.protocol.linefmt import _ax
 
 
 @dataclass(frozen=True)

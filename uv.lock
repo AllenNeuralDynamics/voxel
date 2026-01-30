@@ -5,7 +5,7 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "pyrig",
-    "voxel-drivers",
+    "vxl-drivers",
     "vxl",
     "vxl-qt",
     "vxl-web",
@@ -1352,7 +1352,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "voxel-drivers"
+name = "vxl-drivers"
 version = "0.1.0"
 source = { editable = "drivers" }
 dependencies = [

@@ -2,13 +2,13 @@ import logging
 from types import TracebackType
 from typing import TYPE_CHECKING, Self
 
-from voxel_drivers.tigerhub.model.axis_state import AxisState
+from vxl_drivers.tigerhub.model.axis_state import AxisState
 
 if TYPE_CHECKING:
-    from voxel_drivers.tigerhub.hub import TigerHub
-from voxel_drivers.tigerhub.model.models import ASIAxisInfo
-from voxel_drivers.tigerhub.ops.params import TigerParam, TigerParams
-from voxel_drivers.tigerhub.ops.step_shoot import (
+    from vxl_drivers.tigerhub.hub import TigerHub
+from vxl_drivers.tigerhub.model.models import ASIAxisInfo
+from vxl_drivers.tigerhub.ops.params import TigerParam, TigerParams
+from vxl_drivers.tigerhub.ops.step_shoot import (
     RingBufferMode,
     StepShootConfig,
     TTLIn0Mode,
@@ -226,7 +226,7 @@ if __name__ == "__main__":
     import logging
 
     from rich import print as rprint
-    from voxel_drivers.tigerhub.hub import TigerHub
+    from vxl_drivers.tigerhub.hub import TigerHub
 
     logging.basicConfig(level=logging.DEBUG)
 

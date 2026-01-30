@@ -3,7 +3,7 @@ from typing import ClassVar, cast, final
 
 import numpy as np
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
-from voxel_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
+from vxl_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 from vxlib.vec import IVec2D, Vec2D
 
 from vxl.camera.base import (

@@ -1,4 +1,4 @@
-from voxel_drivers.tigerhub.model import Reply
+from vxl_drivers.tigerhub.model import Reply
 
 
 class ASIDecodeError(RuntimeError):

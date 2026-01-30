@@ -1,5 +1,5 @@
-from voxel_drivers.tigerhub.model import ASIMode, Reply
-from voxel_drivers.tigerhub.protocol.linefmt import _ax
+from vxl_drivers.tigerhub.model import ASIMode, Reply
+from vxl_drivers.tigerhub.protocol.linefmt import _ax
 
 
 def asi_parse(raw: bytes, requested_axes: list[str] | None = None) -> tuple[Reply, ASIMode]:

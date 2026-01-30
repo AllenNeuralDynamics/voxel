@@ -1,14 +1,14 @@
 # Simulated rig - all devices run in the main process (no ZMQ)
 _anchors:
-  - &camera_target voxel_drivers.cameras.simulated.SimulatedCamera
+  - &camera_target vxl_drivers.cameras.simulated.SimulatedCamera
   - &sim_pixel_size_um "3.76,3.76"
   - &sim_camera_sensor_px "10640,14192"
-  - &laser_target voxel_drivers.lasers.simulated.SimulatedLaser
-  - &aotf_laser_target voxel_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
-  - &aotf_target voxel_drivers.aotf.simulated.SimulatedAotf
-  - &daq_target voxel_drivers.daqs.simulated.SimulatedDaq
-  - &fw_target voxel_drivers.axes.simulated.SimulatedDiscreteAxis
-  - &linear_axis_target voxel_drivers.axes.simulated.SimulatedContinuousAxis
+  - &laser_target vxl_drivers.lasers.simulated.SimulatedLaser
+  - &aotf_laser_target vxl_drivers.lasers.simulated.SimulatedAOTFShutteredLaser
+  - &aotf_target vxl_drivers.aotf.simulated.SimulatedAotf
+  - &daq_target vxl_drivers.daqs.simulated.SimulatedDaq
+  - &fw_target vxl_drivers.axes.simulated.SimulatedDiscreteAxis
+  - &linear_axis_target vxl_drivers.axes.simulated.SimulatedContinuousAxis
   - &default_timing
     sample_rate: "100 kHz"
     duration: "0.2 s"

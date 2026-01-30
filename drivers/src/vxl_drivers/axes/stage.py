@@ -3,9 +3,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from voxel_drivers.axes.asi import TigerLinearAxis
-from voxel_drivers.tigerhub.hub import TigerHub
-from voxel_drivers.tigerhub.ops.scan import ScanPattern, ScanRConfig, ScanVConfig
+from vxl_drivers.axes.asi import TigerLinearAxis
+from vxl_drivers.tigerhub.hub import TigerHub
+from vxl_drivers.tigerhub.ops.scan import ScanPattern, ScanRConfig, ScanVConfig
 
 from vxl.axes.continuous.base import ContinuousAxis, TTLStepper
 

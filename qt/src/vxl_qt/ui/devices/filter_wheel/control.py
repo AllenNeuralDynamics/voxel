@@ -40,7 +40,7 @@ class FilterWheelControl(QWidget):
         widget = FilterWheelControl(adapter)
 
     Example (standalone):
-        from voxel_drivers.axes.simulated import SimulatedDiscreteAxis
+        from vxl_drivers.axes.simulated import SimulatedDiscreteAxis
         from vxl_qt.handle import create_local_handle, DeviceHandleQt
 
         device = SimulatedDiscreteAxis(uid="fw", slots={0: "GFP", 1: "RFP"}, slot_count=6)
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 
     from PySide6.QtWidgets import QApplication, QMainWindow
     from qasync import QEventLoop, asyncSlot
-    from voxel_drivers.axes.simulated import SimulatedDiscreteAxis
+    from vxl_drivers.axes.simulated import SimulatedDiscreteAxis
 
     from pyrig import create_local_handle
     from vxl_qt.handle import DeviceHandleQt

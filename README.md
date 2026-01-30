@@ -19,7 +19,7 @@ A light sheet microscope illuminates samples with a thin sheet of light while im
 - **Device abstractions** - Base classes for cameras, lasers, DAQs, stages, AOTFs, and filter wheels
 - **Frame acquisition** - DAQ-synchronized waveform generation and hardware triggering
 
-Concrete hardware drivers are in [voxel-drivers](voxel-drivers/).
+Concrete hardware drivers are in [vxl-drivers](vxl-drivers/).
 
 The configuration models the physical structure of the microscope:
 
@@ -39,9 +39,9 @@ metadata:
 nodes:
   main:
     devices:
-      camera_1: { target: voxel_drivers.cameras.Vieworks }
-      laser_488: { target: voxel_drivers.lasers.AAOpto }
-      daq: { target: voxel_drivers.daqs.NI }
+      camera_1: { target: vxl_drivers.cameras.Vieworks }
+      laser_488: { target: vxl_drivers.lasers.AAOpto }
+      daq: { target: vxl_drivers.daqs.NI }
       # ...
 
 daq:

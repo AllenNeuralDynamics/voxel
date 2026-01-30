@@ -1,5 +1,5 @@
 [project]
-name = "voxel-drivers"
+name = "vxl-drivers"
 version = "0.1.0"
 description = "Hardware drivers for Voxel microscopy: cameras, lasers, stages, DAQs"
 readme = "README.md"
@@ -37,7 +37,7 @@ ximea-camera = [
     "ximea-python @ https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl",
 ]
 # pco-camera = ["pco"]
-# Note: Hamamatsu DCAM SDK is bundled in voxel_drivers/cameras/dcam/sdk/
+# Note: Hamamatsu DCAM SDK is bundled in vxl_drivers/cameras/dcam/sdk/
 # Optomechanics drivers
 opto-icc = ["optoICC"]
 opto-kummenberg = ["optoKummenberg"]

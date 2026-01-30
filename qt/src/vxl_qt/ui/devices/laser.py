@@ -39,7 +39,7 @@ class LaserControl(QWidget):
         widget = LaserControl(adapter)
 
     Example (standalone):
-        from voxel_drivers.lasers.simulated import SimulatedLaser
+        from vxl_drivers.lasers.simulated import SimulatedLaser
         from pyrig import create_local_handle
         from vxl_qt.handle import DeviceHandleQt
 

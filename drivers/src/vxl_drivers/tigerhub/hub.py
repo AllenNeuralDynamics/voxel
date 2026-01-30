@@ -1,9 +1,9 @@
 from collections.abc import Iterable
 from threading import RLock
 
-from voxel_drivers.tigerhub.box import TigerBox
-from voxel_drivers.tigerhub.model.models import ASIAxisInfo
-from voxel_drivers.tigerhub.ops.params import TigerParams
+from vxl_drivers.tigerhub.box import TigerBox
+from vxl_drivers.tigerhub.model.models import ASIAxisInfo
+from vxl_drivers.tigerhub.ops.params import TigerParams
 
 from pyrig import Device
 from vxlib import Poller
