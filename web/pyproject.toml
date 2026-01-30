@@ -8,18 +8,18 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "voxel",
+    "vxl",
     "fastapi>=0.121.1",
     "uvicorn>=0.38.0",
     "websockets>=15.0.1",
 ]
 
 [project.scripts]
-voxel = "vxl_web.cli:main"
-voxel-node = "voxel.node:node_main"
+vxl = "vxl_web.cli:main"
+vxl-node = "vxl.node:node_main"
 
 [tool.uv.sources]
-voxel = { workspace = true }
+vxl = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

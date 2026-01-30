@@ -6,9 +6,9 @@ from typing import Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget
 
-from voxel.config import TileOrder
-from voxel.tile import Box as TileBox
-from voxel.tile import Tile
+from vxl.config import TileOrder
+from vxl.tile import Box as TileBox
+from vxl.tile import Tile
 from vxl_qt.store import STACK_STATUS_COLORS, GridStore, PreviewStore, get_stack_status_color
 from vxl_qt.ui.kit import (
     Box,

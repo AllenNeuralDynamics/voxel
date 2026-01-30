@@ -21,5 +21,5 @@ Open http://localhost:8000
 
 ```bash
 # Start remote node
-voxel-node <node_id> --rig <host[:port]> [--debug]
+vxl-node <node_id> --rig <host[:port]> [--debug]
 ```

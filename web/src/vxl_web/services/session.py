@@ -14,11 +14,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from voxel import RigMode, Session
-from voxel.camera.preview import PreviewConfig
-from voxel.config import TileOrder
-from voxel.session import GridConfig
-from voxel.tile import Box, BoxStatus, Tile
+from vxl import RigMode, Session
+from vxl.camera.preview import PreviewConfig
+from vxl.config import TileOrder
+from vxl.session import GridConfig
+from vxl.tile import Box, BoxStatus, Tile
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService

@@ -11,7 +11,7 @@ from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
 
 from pyrig import describe
-from voxel.camera.base import (
+from vxl.camera.base import (
     Camera,
     FrameRegion,
     PixelFormat,

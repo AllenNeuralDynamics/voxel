@@ -15,9 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from pyrig.device import PropsResponse
 
-from voxel import VoxelRig
-from voxel.camera.preview import PreviewCrop, PreviewLevels
-from voxel.config import VoxelRigConfig
+from vxl import VoxelRig
+from vxl.camera.preview import PreviewCrop, PreviewLevels
+from vxl.config import VoxelRigConfig
 from vxlib import fire_and_forget, get_colormap_catalog
 
 router = APIRouter(tags=["rig"])

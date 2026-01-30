@@ -6,7 +6,7 @@ from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int
 from voxel_drivers.cameras.simulated.frame_gen import ReferenceFrameGenerator
 from vxlib.vec import IVec2D, Vec2D
 
-from voxel.camera.base import (
+from vxl.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
     Camera,

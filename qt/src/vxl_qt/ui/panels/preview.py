@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QMouseEvent, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
-from voxel.camera.preview import PreviewCrop
+from vxl.camera.preview import PreviewCrop
 from vxl_qt.store import (
     PreviewStore,
     blur_image,

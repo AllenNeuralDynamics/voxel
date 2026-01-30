@@ -5,8 +5,8 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "pyrig",
-    "voxel",
     "voxel-drivers",
+    "vxl",
     "vxl-qt",
     "vxl-web",
     "vxlib",
@@ -1352,45 +1352,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "voxel"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "msgpack-numpy" },
-    { name = "numpy" },
-    { name = "ome-zarr-writer" },
-    { name = "opencv-python-headless" },
-    { name = "pyrig" },
-    { name = "rich" },
-    { name = "ruyaml" },
-    { name = "vxlib" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "msgpack-numpy", specifier = ">=0.4.8" },
-    { name = "numpy", specifier = ">=2.3.4" },
-    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
-    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
-    { name = "pyrig", editable = "pyrig" },
-    { name = "rich", specifier = ">=14.2.0" },
-    { name = "ruyaml", specifier = ">=0.91.0" },
-    { name = "vxlib", editable = "vxlib" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24.0" },
-]
-
-[[package]]
 name = "voxel-drivers"
 version = "0.1.0"
 source = { editable = "drivers" }
@@ -1400,7 +1361,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pyserial" },
     { name = "tigerasi" },
-    { name = "voxel" },
+    { name = "vxl" },
     { name = "vxlib" },
 ]
 
@@ -1444,11 +1405,50 @@ requires-dist = [
     { name = "pyserial", specifier = ">=3.5" },
     { name = "tigerasi", specifier = ">=0.0.27" },
     { name = "vortran-laser", marker = "extra == 'vortran-laser'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
-    { name = "voxel", editable = "." },
+    { name = "vxl", editable = "." },
     { name = "vxlib", editable = "vxlib" },
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
 provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera", "opto-icc", "opto-kummenberg"]
+
+[[package]]
+name = "vxl"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "msgpack-numpy" },
+    { name = "numpy" },
+    { name = "ome-zarr-writer" },
+    { name = "opencv-python-headless" },
+    { name = "pyrig" },
+    { name = "rich" },
+    { name = "ruyaml" },
+    { name = "vxlib" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "msgpack-numpy", specifier = ">=0.4.8" },
+    { name = "numpy", specifier = ">=2.3.4" },
+    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
+    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
+    { name = "pyrig", editable = "pyrig" },
+    { name = "rich", specifier = ">=14.2.0" },
+    { name = "ruyaml", specifier = ">=0.91.0" },
+    { name = "vxlib", editable = "vxlib" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+]
 
 [[package]]
 name = "vxl-qt"
@@ -1458,7 +1458,7 @@ dependencies = [
     { name = "pyside6" },
     { name = "qasync" },
     { name = "qtawesome" },
-    { name = "voxel" },
+    { name = "vxl" },
 ]
 
 [package.metadata]
@@ -1466,7 +1466,7 @@ requires-dist = [
     { name = "pyside6", specifier = ">=6.8.0" },
     { name = "qasync", specifier = ">=0.27.1" },
     { name = "qtawesome", specifier = ">=1.4.0" },
-    { name = "voxel", editable = "." },
+    { name = "vxl", editable = "." },
 ]
 
 [[package]]
@@ -1476,7 +1476,7 @@ source = { editable = "web" }
 dependencies = [
     { name = "fastapi" },
     { name = "uvicorn" },
-    { name = "voxel" },
+    { name = "vxl" },
     { name = "websockets" },
 ]
 
@@ -1484,7 +1484,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.121.1" },
     { name = "uvicorn", specifier = ">=0.38.0" },
-    { name = "voxel", editable = "." },
+    { name = "vxl", editable = "." },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
 

@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from pyrig.device import DeviceController
 
 from pyrig import describe
-from voxel.axes.base import Axis
-from voxel.device import DeviceType
+from vxl.axes.base import Axis
+from vxl.device import DeviceType
 
 
 class StepMode(StrEnum):

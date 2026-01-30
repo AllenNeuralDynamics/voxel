@@ -9,7 +9,7 @@ from pyrig.device.props import deliminated_float, enumerated_string
 from serial import Serial
 
 from pyrig import describe
-from voxel.laser.base import Laser
+from vxl.laser.base import Laser
 
 
 class ModulationMode(StrEnum):

@@ -7,7 +7,7 @@ from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusDriver
 
 from pyrig import describe
-from voxel.laser.base import Laser
+from vxl.laser.base import Laser
 
 
 class ModulationMode(StrEnum):

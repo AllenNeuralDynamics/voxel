@@ -7,9 +7,9 @@ from typing import Any, Self
 import numpy as np
 from pydantic import BaseModel, Field, computed_field, model_validator
 
-from voxel.daq import AcqSampleMode, DaqHandle
-from voxel.daq.wave import Waveform
-from voxel.quantity import Frequency, NormalizedRange, Time
+from vxl.daq import AcqSampleMode, DaqHandle
+from vxl.daq.wave import Waveform
+from vxl.quantity import Frequency, NormalizedRange, Time
 
 
 class TriggerConfig(BaseModel):

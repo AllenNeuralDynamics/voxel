@@ -11,15 +11,15 @@ import zmq.asyncio
 from vxlib.color import Color
 
 from pyrig import DeviceHandle, Rig
-from voxel.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from voxel.camera.handle import CameraHandle
-from voxel.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
-from voxel.config import ChannelConfig, ProfileConfig, VoxelRigConfig
-from voxel.daq import DaqHandle
-from voxel.device import DeviceType
-from voxel.node import VoxelNode
-from voxel.sync import SyncTask
-from voxel.tile import Box, BoxResult, BoxStatus
+from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
+from vxl.camera.handle import CameraHandle
+from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
+from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
+from vxl.daq import DaqHandle
+from vxl.device import DeviceType
+from vxl.node import VoxelNode
+from vxl.sync import SyncTask
+from vxl.tile import Box, BoxResult, BoxStatus
 
 
 class RigMode(StrEnum):

@@ -13,8 +13,8 @@ from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int
 from vxlib.vec import IVec2D, Vec2D
 
 from pyrig import Device, describe
-from voxel.camera.preview import PreviewConfig, PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
-from voxel.device import DeviceType
+from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
+from vxl.device import DeviceType
 from vxlib import Dtype, SchemaModel, fire_and_forget
 
 

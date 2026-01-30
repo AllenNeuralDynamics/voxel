@@ -8,9 +8,9 @@ from typing import Any
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
-from voxel.config import TileOrder, VoxelRigConfig
-from voxel.rig import RigMode, VoxelRig
-from voxel.tile import Box, BoxResult, BoxStatus, Tile
+from vxl.config import TileOrder, VoxelRigConfig
+from vxl.rig import RigMode, VoxelRig
+from vxl.tile import Box, BoxResult, BoxStatus, Tile
 
 # Round-trip YAML preserves anchors, aliases, and comments
 yaml = YAML()

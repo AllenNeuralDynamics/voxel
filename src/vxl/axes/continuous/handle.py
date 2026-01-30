@@ -2,7 +2,7 @@
 
 from pyrig.device import DeviceHandle
 
-from voxel.axes.continuous.base import ContinuousAxis, TTLStepperConfig
+from vxl.axes.continuous.base import ContinuousAxis, TTLStepperConfig
 
 
 class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):

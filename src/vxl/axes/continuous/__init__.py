@@ -1,6 +1,6 @@
 """Continuous axis module."""
 
-from voxel.axes.continuous.base import (
+from vxl.axes.continuous.base import (
     ContinuousAxis,
     ContinuousAxisController,
     ScanMode,
@@ -9,7 +9,7 @@ from voxel.axes.continuous.base import (
     TTLStepper,
     TTLStepperConfig,
 )
-from voxel.axes.continuous.handle import ContinuousAxisHandle
+from vxl.axes.continuous.handle import ContinuousAxisHandle
 
 __all__ = [
     "ContinuousAxis",

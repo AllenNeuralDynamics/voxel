@@ -3,14 +3,14 @@ import time
 from threading import Event, Thread
 from typing import Any
 
-from voxel.axes.continuous.base import (
+from vxl.axes.continuous.base import (
     ContinuousAxis,
     StepMode,
     TriggerMode,
     TTLStepper,
     TTLStepperConfig,
 )
-from voxel.axes.discrete import DiscreteAxis
+from vxl.axes.discrete import DiscreteAxis
 
 
 class SimulatedTTLStepper(TTLStepper):

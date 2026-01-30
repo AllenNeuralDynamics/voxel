@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
 )
 
-from voxel.system import SessionDirectory
+from vxl.system import SessionDirectory
 from vxl_qt.app import VoxelApp
 from vxl_qt.ui.control_page import ControlPage
 from vxl_qt.ui.kit import Colors

@@ -1,5 +1,5 @@
 # uv run python examples/voxel/rig.py
-# uv run voxel-node node_x 10.128.133.64
+# uv run vxl-node node_x 10.128.133.64
 _anchors:
   # - &exaspim2-1_ip "10.128.133.64"
   - &exaspim2-2_ip "10.128.133.46"

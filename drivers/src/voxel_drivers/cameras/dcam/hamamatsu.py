@@ -7,7 +7,7 @@ from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int
 from vxlib.vec import IVec2D, Vec2D
 
 from pyrig import describe
-from voxel.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
 from vxlib import thread_safe_singleton
 
 from .sdk.dcam import DCAM_IDSTR, DCAMERR, DCAMPROP_ATTR, Dcam, Dcamapi

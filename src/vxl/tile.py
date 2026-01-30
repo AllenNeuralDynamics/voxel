@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, computed_field
 
-from voxel.camera.base import CameraBatchResult
+from vxl.camera.base import CameraBatchResult
 
 
 class BoxStatus(StrEnum):

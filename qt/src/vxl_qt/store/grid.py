@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
 
-from voxel.config import TileOrder
-from voxel.session import GridConfig
-from voxel.tile import Box, BoxStatus, Tile
+from vxl.config import TileOrder
+from vxl.session import GridConfig
+from vxl.tile import Box, BoxStatus, Tile
 
 if TYPE_CHECKING:
-    from voxel import Session
+    from vxl import Session
 
 log = logging.getLogger(__name__)
 

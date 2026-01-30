@@ -6,7 +6,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
-from voxel.quantity import Angle, Frequency, NormalizedRange, Voltage, VoltageRange
+from vxl.quantity import Angle, Frequency, NormalizedRange, Voltage, VoltageRange
 
 
 class BaseWaveform(BaseModel, ABC):

@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 from PySide6.QtCore import QObject, Signal
 
-from voxel.camera.preview import PreviewCrop, PreviewLevels
+from vxl.camera.preview import PreviewCrop, PreviewLevels
 
 
 def composite_rgb(frames: list[np.ndarray]) -> np.ndarray | None:

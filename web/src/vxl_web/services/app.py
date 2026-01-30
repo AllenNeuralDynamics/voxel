@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from voxel import Session
-from voxel.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
+from vxl import Session
+from vxl.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxlib import fire_and_forget
 
 from .session import SessionService, SessionStatus, session_router

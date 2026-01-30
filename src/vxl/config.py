@@ -3,7 +3,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from pyrig import RigConfig
-from voxel.sync import SyncTaskData
+from vxl.sync import SyncTaskData
 
 TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column", "unset"]
 

@@ -7,7 +7,7 @@ from voxel_drivers.axes.asi import TigerLinearAxis
 from voxel_drivers.tigerhub.hub import TigerHub
 from voxel_drivers.tigerhub.ops.scan import ScanPattern, ScanRConfig, ScanVConfig
 
-from voxel.axes.continuous.base import ContinuousAxis, TTLStepper
+from vxl.axes.continuous.base import ContinuousAxis, TTLStepper
 
 
 class XYZStage[A: ContinuousAxis]:

@@ -1,5 +1,5 @@
 [project]
-name = "voxel"
+name = "vxl"
 version = "0.1.0"
 description = "Voxel microscope configuration, orchestration, and acquisition"
 readme = "README.md"

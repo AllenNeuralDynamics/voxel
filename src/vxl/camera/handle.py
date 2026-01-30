@@ -5,8 +5,8 @@ from pathlib import Path
 from pyrig.device import DeviceHandle
 from vxlib.vec import Vec2D
 
-from voxel.camera.base import Camera, CameraBatchResult, TriggerMode, TriggerPolarity
-from voxel.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
+from vxl.camera.base import Camera, CameraBatchResult, TriggerMode, TriggerPolarity
+from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
 
 
 class CameraHandle(DeviceHandle[Camera]):

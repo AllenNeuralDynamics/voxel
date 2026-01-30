@@ -3,7 +3,7 @@ from abc import abstractmethod
 from pyrig.device.props import deliminated_float
 
 from pyrig import Device, describe
-from voxel.device import DeviceType
+from vxl.device import DeviceType
 
 
 class Laser(Device):

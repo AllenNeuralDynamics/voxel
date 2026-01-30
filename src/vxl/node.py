@@ -4,7 +4,7 @@ The VoxelRigNode extends pyrig's RigNode to support Voxel-specific devices
 like Camera, VoxelDaq, and AOTF.
 
 Usage:
-    voxel-node <node_id> --rig <host[:port]>
+    vxl-node <node_id> --rig <host[:port]>
 """
 
 import argparse
@@ -15,12 +15,12 @@ from pyrig.cluster import run_node_service
 from pyrig.device import Adapter, DeviceController
 
 from pyrig import Device, DeviceHandle, RigNode
-from voxel.axes.continuous.base import ContinuousAxis, ContinuousAxisController
-from voxel.axes.continuous.handle import ContinuousAxisHandle
-from voxel.camera.base import Camera, CameraController
-from voxel.camera.handle import CameraHandle
-from voxel.daq import DaqController, DaqHandle, VoxelDaq
-from voxel.device import DeviceType
+from vxl.axes.continuous.base import ContinuousAxis, ContinuousAxisController
+from vxl.axes.continuous.handle import ContinuousAxisHandle
+from vxl.camera.base import Camera, CameraController
+from vxl.camera.handle import CameraHandle
+from vxl.daq import DaqController, DaqHandle, VoxelDaq
+from vxl.device import DeviceType
 from vxlib import configure_logging
 
 
@@ -60,7 +60,7 @@ class VoxelNode(RigNode):
 def _create_node_parser() -> argparse.ArgumentParser:
     """Create the argument parser for node CLI."""
     parser = argparse.ArgumentParser(
-        prog="voxel-node",
+        prog="vxl-node",
         description="Voxel Node Service - Manage devices on a node",
     )
     parser.add_argument("node_id", type=str, help="Node identifier (e.g., camera_1)")
@@ -72,12 +72,12 @@ def _create_node_parser() -> argparse.ArgumentParser:
 
 
 def node_main() -> None:
-    """Entry point for voxel-node CLI."""
+    """Entry point for vxl-node CLI."""
     args = _create_node_parser().parse_args()
 
     log_level = logging.DEBUG if args.debug else logging.INFO
     configure_logging(level=log_level, fmt="%(message)s", datefmt="[%X]")
-    log = logging.getLogger("voxel.node")
+    log = logging.getLogger("vxl.node")
 
     # Parse host:port
     if ":" in args.rig:

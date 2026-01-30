@@ -6,8 +6,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QFrame, QScrollArea, QWidget
 
-from voxel.camera.preview import PreviewCrop, PreviewFrame, PreviewLevels
-from voxel.config import ChannelConfig
+from vxl.camera.preview import PreviewCrop, PreviewFrame, PreviewLevels
+from vxl.config import ChannelConfig
 from vxl_qt.store import DevicesStore
 from vxl_qt.ui.devices.camera import CameraControl
 from vxl_qt.ui.devices.laser import LaserControl

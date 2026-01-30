@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import QBoxLayout, QLabel, QScrollArea, QWidget
 
-from voxel.system import SessionDirectory, SessionRoot
+from vxl.system import SessionDirectory, SessionRoot
 from vxl_qt.ui.assets import VOXEL_LOGO
 from vxl_qt.ui.kit import (
     Box,

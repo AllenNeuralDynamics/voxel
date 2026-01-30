@@ -8,7 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "voxel",
+    "vxl",
     "vxlib",
     "numpy>=2.3.4",
     "pyserial>=3.5",
@@ -46,7 +46,7 @@ opto-kummenberg = ["optoKummenberg"]
 egrabber = { url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" }
 optoICC = { url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/optoICC-2.0.4922-py3-none-any.whl" }
 optoKummenberg = { url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/optoKummenberg-1.0.4894-py3-none-any.whl" }
-voxel = { workspace = true }
+vxl = { workspace = true }
 vxlib = { workspace = true }
 
 [build-system]

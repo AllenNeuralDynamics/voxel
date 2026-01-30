@@ -4,7 +4,7 @@ from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX as GenesisMXDriver
 from pyrig.device.props import deliminated_float
 
-from voxel.laser.base import Laser
+from vxl.laser.base import Laser
 
 
 class GenesisMX(Laser):

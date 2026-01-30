@@ -9,10 +9,10 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from pyrig import Device, describe
-from voxel.device import DeviceType
+from vxl.device import DeviceType
 
 if TYPE_CHECKING:
-    from voxel.quantity import VoltageRange
+    from vxl.quantity import VoltageRange
 
 
 class PinInfo(BaseModel):

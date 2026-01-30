@@ -14,14 +14,14 @@ from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QObject, Signal
 
-from voxel import Session
-from voxel.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
+from vxl import Session
+from vxl.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxl_qt.store import DevicesStore, GridStore, PreviewStore
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from voxel import VoxelRig
+    from vxl import VoxelRig
 
 log = logging.getLogger(__name__)
 

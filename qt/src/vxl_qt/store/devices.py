@@ -13,7 +13,7 @@ from pyrig import DeviceHandle
 from vxl_qt.handle import DeviceHandleQt
 
 if TYPE_CHECKING:
-    from voxel import Session
+    from vxl import Session
 
 log = logging.getLogger(__name__)
 

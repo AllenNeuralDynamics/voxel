@@ -3,8 +3,8 @@ import random
 from pyrig.device.props import deliminated_float
 
 from pyrig import describe
-from voxel.aotf.base import AOTF
-from voxel.laser.base import Laser
+from vxl.aotf.base import AOTF
+from vxl.laser.base import Laser
 
 
 class SimulatedLaser(Laser):

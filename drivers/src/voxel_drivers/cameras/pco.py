@@ -8,7 +8,7 @@ from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int
 from vxlib.vec import IVec2D, Vec2D
 
 from pyrig import describe
-from voxel.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
 
 # Buffer size in MB for frame storage
 BUFFER_SIZE_MB = 2400

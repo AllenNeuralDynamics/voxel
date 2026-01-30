@@ -21,7 +21,7 @@ from egrabber import (
 from pyrig.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
-from voxel.camera.base import (
+from vxl.camera.base import (
     Camera,
     FrameRegion,
     PixelFormat,

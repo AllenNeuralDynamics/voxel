@@ -7,7 +7,7 @@ pyrig device framework.
 from aaopto_aotf.aotf import MAX_POWER_DBM, MPDS
 from aaopto_aotf.device_codes import BlankingMode, InputMode
 
-from voxel.aotf.base import AOTF
+from vxl.aotf.base import AOTF
 
 
 class MpdsAotf(AOTF):

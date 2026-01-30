@@ -15,7 +15,7 @@ from voxel_drivers.tigerhub.ops.step_shoot import (
     TTLOut0Mode,
 )
 
-from voxel.axes.continuous.base import (
+from vxl.axes.continuous.base import (
     ContinuousAxis,
     StepMode,
     TriggerMode,

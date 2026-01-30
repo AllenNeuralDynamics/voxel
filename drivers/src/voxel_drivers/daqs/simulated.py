@@ -4,8 +4,8 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from voxel.daq import AcqSampleMode, AOTask, COTask, PinInfo, TaskStatus, VoxelDaq
-from voxel.quantity import VoltageRange
+from vxl.daq import AcqSampleMode, AOTask, COTask, PinInfo, TaskStatus, VoxelDaq
+from vxl.quantity import VoltageRange
 
 # ==================== Mock Task Classes ====================
 
