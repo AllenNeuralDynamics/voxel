@@ -13,9 +13,9 @@ import logging
 from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QObject, Signal
-from voxel_studio.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
 
 from voxel import Session
+from voxel.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
 from voxel_qt.store import DevicesStore, GridStore, PreviewStore
 
 if TYPE_CHECKING:

@@ -14,8 +14,8 @@ from typing import cast
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import QBoxLayout, QLabel, QScrollArea, QWidget
-from voxel_studio.system import SessionDirectory, SessionRoot
 
+from voxel.system import SessionDirectory, SessionRoot
 from voxel_qt.ui.assets import VOXEL_LOGO
 from voxel_qt.ui.kit import (
     Box,

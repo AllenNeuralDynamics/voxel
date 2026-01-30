@@ -18,8 +18,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QStackedWidget,
 )
-from voxel_studio.system import SessionDirectory
 
+from voxel.system import SessionDirectory
 from voxel_qt.app import VoxelApp
 from voxel_qt.ui.control_page import ControlPage
 from voxel_qt.ui.kit import Colors

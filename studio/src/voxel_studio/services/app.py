@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSo
 from pydantic import BaseModel
 
 from voxel import Session
-from voxel_studio.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
+from voxel.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxlib import fire_and_forget
 
 from .session import SessionService, SessionStatus, session_router

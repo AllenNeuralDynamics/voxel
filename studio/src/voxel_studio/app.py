@@ -12,8 +12,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from voxel.system import SystemConfig
+
 from .services import AppService, app_router
-from .system import SystemConfig
 
 log = logging.getLogger(__name__)
 

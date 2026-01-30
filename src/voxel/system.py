@@ -1,4 +1,4 @@
-"""System configuration for Voxel Studio.
+"""System configuration for Voxel.
 
 Manages the ~/.voxel/ directory structure:
 - system.yaml: Global settings with session roots

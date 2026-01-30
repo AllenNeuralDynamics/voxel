@@ -9,7 +9,6 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "voxel",
-    "voxel-studio",
     "PySide6>=6.8.0",
     "qasync>=0.27.1",
     "qtawesome>=1.4.0",
@@ -20,7 +19,6 @@ voxel-qt = "voxel_qt.cli:main"
 
 [tool.uv.sources]
 voxel = { workspace = true }
-voxel-studio = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
