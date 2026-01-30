@@ -5,8 +5,8 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "pyrig",
-    "vxl-drivers",
     "vxl",
+    "vxl-drivers",
     "vxl-qt",
     "vxl-web",
     "vxlib",
@@ -1352,6 +1352,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "vxl"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "msgpack-numpy" },
+    { name = "numpy" },
+    { name = "ome-zarr-writer" },
+    { name = "opencv-python-headless" },
+    { name = "pyrig" },
+    { name = "rich" },
+    { name = "ruyaml" },
+    { name = "vxlib" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "msgpack-numpy", specifier = ">=0.4.8" },
+    { name = "numpy", specifier = ">=2.3.4" },
+    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
+    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
+    { name = "pyrig", editable = "pyrig" },
+    { name = "rich", specifier = ">=14.2.0" },
+    { name = "ruyaml", specifier = ">=0.91.0" },
+    { name = "vxlib", editable = "vxlib" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+]
+
+[[package]]
 name = "vxl-drivers"
 version = "0.1.0"
 source = { editable = "drivers" }
@@ -1410,45 +1449,6 @@ requires-dist = [
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
 provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera", "opto-icc", "opto-kummenberg"]
-
-[[package]]
-name = "vxl"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "msgpack-numpy" },
-    { name = "numpy" },
-    { name = "ome-zarr-writer" },
-    { name = "opencv-python-headless" },
-    { name = "pyrig" },
-    { name = "rich" },
-    { name = "ruyaml" },
-    { name = "vxlib" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "msgpack-numpy", specifier = ">=0.4.8" },
-    { name = "numpy", specifier = ">=2.3.4" },
-    { name = "ome-zarr-writer", git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" },
-    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
-    { name = "pyrig", editable = "pyrig" },
-    { name = "rich", specifier = ">=14.2.0" },
-    { name = "ruyaml", specifier = ">=0.91.0" },
-    { name = "vxlib", editable = "vxlib" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24.0" },
-]
 
 [[package]]
 name = "vxl-qt"

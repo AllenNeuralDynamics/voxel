@@ -1,12 +1,22 @@
 [project]
 name = "vxl"
 version = "0.1.0"
-description = "Voxel microscope configuration, orchestration, and acquisition"
+description = "Light sheet microscopy configuration, orchestration, and acquisition"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
 ]
 requires-python = ">=3.13"
+keywords = ["voxel", "microscopy", "light-sheet", "neuroscience", "pyrig"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: System :: Hardware",
+]
+
 dependencies = [
     "pyrig",
     "vxlib",
@@ -17,6 +27,10 @@ dependencies = [
     "rich>=14.2.0",
     "ruyaml>=0.91.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/AllenNeuralDynamics/voxel"
+Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
@@ -52,105 +66,3 @@ ignore = [
     "**/sdk/**",
     "**/vendor/**",
 ]
-
-[tool.ruff]
-line-length = 120
-show-fixes = true
-
-target-version = 'py313'
-exclude = [
-    '**/sdk',
-]
-
-[tool.ruff.format]
-docstring-code-format = true
-docstring-code-line-length = 'dynamic'
-indent-style = 'space'
-quote-style = 'double'
-
-[tool.ruff.lint]
-select = ['ALL']
-ignore = [
-    'D',
-    # 'D100',    # Missing docstring in public module
-    # 'D101',    # Missing docstring in public class
-    # 'D102',    # Missing docstring in public method
-    # 'D103',    # Missing docstring in public function
-    # 'D104',    # Missing docstring in public package
-    # 'D105',    # Missing docstring in magic method
-    # 'D107',    # Missing docstring in __init__ method
-    # 'D205',    # One blank line required between summary line and description
-    'TRY003',  # Specifying long messages outside the exception class (Also EM101, EM102)
-    'EM101',   # Exception must not use a string literal, assign to variable first
-    'EM102',   # Exception must not use a string literal, assign to variable first
-    'COM812',  # (Redundant when using formatter) missing-trailing-comma
-    'G004',    # f-strings in logging (should use % formatting)
-    'ANN401',  # typing.Any is allowed - needed for dynamic APIs
-    'BLE001',  # Blind exception catch - appropriate for hardware/cleanup/resilience
-    'PLR2004', # Magic values are fine when obvious in context
-    'FBT001',  # Boolean-typed positional argument in function definition
-    'FBT002',  # Boolean-typed default value in function definition
-    'FBT003',  # Boolean positional value in function call
-    'PLR0913', # Too many arguments in function definition
-    'PLR0911', # Too many return statements - early returns/guard clauses are preferred
-    'PLR0912', # Too many branches - C901 (cyclomatic complexity) is a better metric
-    'TD',      # Missing issue link for this TODO, Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>:
-    'FIX002',  # Line contains TODO, consider resolving the issue
-    'TRY300',  # Early returns in try blocks are more readable than else blocks
-    'INP001',  # False positives with src/ layout - packages have __init__.py
-    'PERF401', # Manual list append in loop is more readable than list comprehension
-    'TRY004',  # RuntimeError is appropriate for API/runtime errors, not just TypeError
-    'DTZ005',  # datetime.now() without tz - local microscope system doesn't need timezone awareness
-    'DTZ006',  # datetime.fromtimestamp() without tz
-    'ERA001',  # Commented-out code - useful for hardware driver debugging/reference
-]
-
-fixable = ['ALL']
-unfixable = ['B']
-extend-safe-fixes = ['D415', 'D205']
-
-mccabe = { max-complexity = 14 }
-pylint = { max-statements = 75 }
-pydocstyle = { convention = 'google' }
-
-flake8-builtins.ignorelist = ['print']
-flake8-quotes = { inline-quotes = 'double', multiline-quotes = 'double' }
-flake8-bugbear.extend-immutable-calls = [
-    "fastapi.Depends",
-    "fastapi.Query",
-    "fastapi.Path",
-    "fastapi.Body",
-    "Depends",
-    "Query",
-    "Path",
-    "Body",
-    "Vec2D",
-    "AcquireRequest",
-    "ExecuteCommandRequest",
-]
-
-[tool.ruff.lint.per-file-ignores]
-"!**/src/**.py" = [
-    "D", # 'Docstring' rules only in src
-    'ANN',
-    "S101", # Assert detected
-    "T201", # 'print' found
-    'ERA001',  # Commented out code
-    'RET503',  # Missing explicit `return` at the end of function able to return non-`None` value
-    'UP031',   # Use format specifiers instead of percent format
-    'INP001',  # implicit-namespace-package
-    'PLR',     #
-    'C901',    # complex-structure
-    'PLR2004', # Magic value used in comparison, consider using a constant
-    'S603',    # subprocess-without-shell-equals-true
-    'S311',    # Standard pseudo-random generators are not suitable for cryptographic purposes
-    'SLF001',  # Private member accessed
-    'LOG015',  # Root logger call
-]
-"qt/**" = ["ANN", "N802", "N815"]  # Qt uses camelCase method names
-"**/scripts/**" = ["EXE001", "PLW1510", "S108", "S110", "PLR0912", "S104", "TRY401"]  # Utility scripts
-"**/tests/manual/**" = ["EXE001"]  # Manual test scripts
-
-[tool.ruff.lint.flake8-annotations]
-suppress-none-returning = true
-allow-star-arg-any = true
