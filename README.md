@@ -65,7 +65,7 @@ profiles:
 
 ## Usage
 
-For a complete application with web UI and CLI, see [voxel-studio](voxel-studio/).
+For a complete application with web UI and CLI, see [vxl-web](vxl-web/).
 
 ```python
 from voxel.config import VoxelRigConfig

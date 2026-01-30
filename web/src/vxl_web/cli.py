@@ -16,7 +16,7 @@ import logging
 
 import uvicorn
 
-from voxel_studio.app import create_app
+from vxl_web.app import create_app
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
 

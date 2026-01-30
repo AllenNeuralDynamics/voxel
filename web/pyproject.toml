@@ -1,5 +1,5 @@
 [project]
-name = "voxel-studio"
+name = "vxl-web"
 version = "0.1.0"
 description = "Web interface for Voxel Rig control"
 readme = "README.md"
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-voxel = "voxel_studio.cli:main"
+voxel = "vxl_web.cli:main"
 voxel-node = "voxel.node:node_main"
 
 [tool.uv.sources]
