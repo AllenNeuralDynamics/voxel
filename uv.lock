@@ -7,7 +7,7 @@ members = [
     "pyrig",
     "voxel",
     "voxel-drivers",
-    "voxel-qt",
+    "vxl-qt",
     "voxel-studio",
     "vxlib",
 ]
@@ -1451,7 +1451,7 @@ requires-dist = [
 provides-extras = ["coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera", "opto-icc", "opto-kummenberg"]
 
 [[package]]
-name = "voxel-qt"
+name = "vxl-qt"
 version = "0.1.0"
 source = { editable = "qt" }
 dependencies = [
