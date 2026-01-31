@@ -1,15 +1,17 @@
 """Vector types for 2D and 3D coordinates.
 
-Provides both float and integer variants:
+Provides float, integer, and positive-validated variants:
 - Vec2D, Vec3D: Float vectors for physical coordinates (micrometers, etc.)
 - IVec2D, IVec3D: Integer vectors for pixel coordinates, shapes, etc.
+- UVec2D, UVec3D: Positive float vectors (all components > 0)
+- UIVec2D, UIVec3D: Positive integer vectors (all components > 0)
 
 All vectors use y,x (and z,y,x) ordering to match NumPy array indexing.
 """
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, final
+from typing import Any, Self, final
 
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
@@ -17,7 +19,6 @@ from pydantic_core import CoreSchema, core_schema
 # === 2D Vectors ===
 
 
-@final
 @dataclass(frozen=True, slots=True)
 class Vec2D:
     """Float 2D vector with y,x components.
@@ -36,30 +37,30 @@ class Vec2D:
         yield self.y
         yield self.x
 
-    def __add__(self, other: "Vec2D") -> "Vec2D":
-        return Vec2D(self.y + other.y, self.x + other.x)
+    def __add__(self, other: Self) -> Self:
+        return type(self)(self.y + other.y, self.x + other.x)
 
-    def __sub__(self, other: "Vec2D") -> "Vec2D":
-        return Vec2D(self.y - other.y, self.x - other.x)
+    def __sub__(self, other: Self) -> Self:
+        return type(self)(self.y - other.y, self.x - other.x)
 
-    def __mul__(self, scalar: float) -> "Vec2D":
-        return Vec2D(self.y * scalar, self.x * scalar)
+    def __mul__(self, scalar: float) -> Self:
+        return type(self)(self.y * scalar, self.x * scalar)
 
-    def __truediv__(self, scalar: float) -> "Vec2D":
-        return Vec2D(self.y / scalar, self.x / scalar)
+    def __truediv__(self, scalar: float) -> Self:
+        return type(self)(self.y / scalar, self.x / scalar)
 
-    def __floordiv__(self, scalar: float) -> "Vec2D":
-        return Vec2D(self.y // scalar, self.x // scalar)
+    def __floordiv__(self, scalar: float) -> Self:
+        return type(self)(self.y // scalar, self.x // scalar)
 
-    def __neg__(self) -> "Vec2D":
-        return Vec2D(-self.y, -self.x)
+    def __neg__(self) -> Self:
+        return type(self)(-self.y, -self.x)
 
     def to_str(self) -> str:
         """Serialize to 'y,x' string."""
         return f"{self.y},{self.x}"
 
     @classmethod
-    def from_str(cls, s: str) -> "Vec2D":
+    def from_str(cls, s: str) -> Self:
         """Parse from 'y,x' string."""
         parts = s.split(",")
         if len(parts) != 2:
@@ -67,7 +68,7 @@ class Vec2D:
         return cls(float(parts[0]), float(parts[1]))
 
     @classmethod
-    def parse(cls, v: "list[float] | tuple[float, float] | dict[str, float] | str") -> "Vec2D":
+    def parse(cls, v: "list[float] | tuple[float, float] | dict[str, float] | str") -> Self:
         """Parse from various formats: [y, x], (y, x), {'y': ..., 'x': ...}, or 'y,x' string."""
         if isinstance(v, str):
             return cls.from_str(v)
@@ -75,7 +76,7 @@ class Vec2D:
             return cls(y=float(v["y"]), x=float(v["x"]))
         if isinstance(v, (list, tuple)) and len(v) == 2:
             return cls(y=float(v[0]), x=float(v[1]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as Vec2D")
+        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
 
     def to_dict(self) -> dict[str, float]:
         """Convert to dictionary."""
@@ -96,7 +97,6 @@ class Vec2D:
         )
 
 
-@final
 @dataclass(frozen=True, slots=True)
 class IVec2D:
     """Integer 2D vector with y,x components.
@@ -115,27 +115,27 @@ class IVec2D:
         yield self.y
         yield self.x
 
-    def __add__(self, other: "IVec2D") -> "IVec2D":
-        return IVec2D(self.y + other.y, self.x + other.x)
+    def __add__(self, other: Self) -> Self:
+        return type(self)(self.y + other.y, self.x + other.x)
 
-    def __sub__(self, other: "IVec2D") -> "IVec2D":
-        return IVec2D(self.y - other.y, self.x - other.x)
+    def __sub__(self, other: Self) -> Self:
+        return type(self)(self.y - other.y, self.x - other.x)
 
-    def __mul__(self, scalar: int) -> "IVec2D":
-        return IVec2D(self.y * scalar, self.x * scalar)
+    def __mul__(self, scalar: int) -> Self:
+        return type(self)(self.y * scalar, self.x * scalar)
 
-    def __floordiv__(self, scalar: int) -> "IVec2D":
-        return IVec2D(self.y // scalar, self.x // scalar)
+    def __floordiv__(self, scalar: int) -> Self:
+        return type(self)(self.y // scalar, self.x // scalar)
 
-    def __neg__(self) -> "IVec2D":
-        return IVec2D(-self.y, -self.x)
+    def __neg__(self) -> Self:
+        return type(self)(-self.y, -self.x)
 
     def to_str(self) -> str:
         """Serialize to 'y,x' string."""
         return f"{self.y},{self.x}"
 
     @classmethod
-    def from_str(cls, s: str) -> "IVec2D":
+    def from_str(cls, s: str) -> Self:
         """Parse from 'y,x' string."""
         parts = s.split(",")
         if len(parts) != 2:
@@ -143,7 +143,7 @@ class IVec2D:
         return cls(int(parts[0]), int(parts[1]))
 
     @classmethod
-    def parse(cls, v: "list[int] | tuple[int, int] | dict[str, int] | str") -> "IVec2D":
+    def parse(cls, v: "list[int] | tuple[int, int] | dict[str, int] | str") -> Self:
         """Parse from various formats: [y, x], (y, x), {'y': ..., 'x': ...}, or 'y,x' string."""
         if isinstance(v, str):
             return cls.from_str(v)
@@ -151,7 +151,7 @@ class IVec2D:
             return cls(y=int(v["y"]), x=int(v["x"]))
         if isinstance(v, (list, tuple)) and len(v) == 2:
             return cls(y=int(v[0]), x=int(v[1]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as IVec2D")
+        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
 
     def to_dict(self) -> dict[str, int]:
         """Convert to dictionary."""
@@ -175,7 +175,6 @@ class IVec2D:
 # === 3D Vectors ===
 
 
-@final
 @dataclass(frozen=True, slots=True)
 class Vec3D:
     """Float 3D vector with z,y,x components.
@@ -196,33 +195,33 @@ class Vec3D:
         yield self.y
         yield self.x
 
-    def __add__(self, other: "Vec3D") -> "Vec3D":
-        return Vec3D(self.z + other.z, self.y + other.y, self.x + other.x)
+    def __add__(self, other: Self) -> Self:
+        return type(self)(self.z + other.z, self.y + other.y, self.x + other.x)
 
-    def __sub__(self, other: "Vec3D") -> "Vec3D":
-        return Vec3D(self.z - other.z, self.y - other.y, self.x - other.x)
+    def __sub__(self, other: Self) -> Self:
+        return type(self)(self.z - other.z, self.y - other.y, self.x - other.x)
 
-    def __mul__(self, scalar: float) -> "Vec3D":
-        return Vec3D(self.z * scalar, self.y * scalar, self.x * scalar)
+    def __mul__(self, scalar: float) -> Self:
+        return type(self)(self.z * scalar, self.y * scalar, self.x * scalar)
 
-    def __truediv__(self, scalar: float) -> "Vec3D":
-        return Vec3D(self.z / scalar, self.y / scalar, self.x / scalar)
+    def __truediv__(self, scalar: float) -> Self:
+        return type(self)(self.z / scalar, self.y / scalar, self.x / scalar)
 
-    def __floordiv__(self, scalar: float) -> "Vec3D":
-        return Vec3D(self.z // scalar, self.y // scalar, self.x // scalar)
+    def __floordiv__(self, scalar: float) -> Self:
+        return type(self)(self.z // scalar, self.y // scalar, self.x // scalar)
 
-    def __neg__(self) -> "Vec3D":
-        return Vec3D(-self.z, -self.y, -self.x)
+    def __neg__(self) -> Self:
+        return type(self)(-self.z, -self.y, -self.x)
 
     def __repr__(self) -> str:
-        return f"Vec3D(z={self.z}, y={self.y}, x={self.x})"
+        return f"{type(self).__name__}(z={self.z}, y={self.y}, x={self.x})"
 
     def to_str(self) -> str:
         """Serialize to 'z,y,x' string."""
         return f"{self.z},{self.y},{self.x}"
 
     @classmethod
-    def from_str(cls, s: str) -> "Vec3D":
+    def from_str(cls, s: str) -> Self:
         """Parse from 'z,y,x' string."""
         parts = s.split(",")
         if len(parts) != 3:
@@ -230,7 +229,7 @@ class Vec3D:
         return cls(float(parts[0]), float(parts[1]), float(parts[2]))
 
     @classmethod
-    def parse(cls, v: "list[float] | tuple[float, float, float] | dict[str, float] | str") -> "Vec3D":
+    def parse(cls, v: "list[float] | tuple[float, float, float] | dict[str, float] | str") -> Self:
         """Parse from various formats: [z, y, x], (z, y, x), {'z': ..., 'y': ..., 'x': ...}, or 'z,y,x' string."""
         if isinstance(v, str):
             return cls.from_str(v)
@@ -238,7 +237,7 @@ class Vec3D:
             return cls(z=float(v["z"]), y=float(v["y"]), x=float(v["x"]))
         if isinstance(v, (list, tuple)) and len(v) == 3:
             return cls(z=float(v[0]), y=float(v[1]), x=float(v[2]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as Vec3D")
+        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
 
     def to_dict(self) -> dict[str, float]:
         """Convert to dictionary."""
@@ -264,7 +263,6 @@ class Vec3D:
         )
 
 
-@final
 @dataclass(frozen=True, slots=True)
 class IVec3D:
     """Integer 3D vector with z,y,x components.
@@ -285,30 +283,30 @@ class IVec3D:
         yield self.y
         yield self.x
 
-    def __add__(self, other: "IVec3D") -> "IVec3D":
-        return IVec3D(self.z + other.z, self.y + other.y, self.x + other.x)
+    def __add__(self, other: Self) -> Self:
+        return type(self)(self.z + other.z, self.y + other.y, self.x + other.x)
 
-    def __sub__(self, other: "IVec3D") -> "IVec3D":
-        return IVec3D(self.z - other.z, self.y - other.y, self.x - other.x)
+    def __sub__(self, other: Self) -> Self:
+        return type(self)(self.z - other.z, self.y - other.y, self.x - other.x)
 
-    def __mul__(self, scalar: int) -> "IVec3D":
-        return IVec3D(self.z * scalar, self.y * scalar, self.x * scalar)
+    def __mul__(self, scalar: int) -> Self:
+        return type(self)(self.z * scalar, self.y * scalar, self.x * scalar)
 
-    def __floordiv__(self, scalar: int) -> "IVec3D":
-        return IVec3D(self.z // scalar, self.y // scalar, self.x // scalar)
+    def __floordiv__(self, scalar: int) -> Self:
+        return type(self)(self.z // scalar, self.y // scalar, self.x // scalar)
 
-    def __neg__(self) -> "IVec3D":
-        return IVec3D(-self.z, -self.y, -self.x)
+    def __neg__(self) -> Self:
+        return type(self)(-self.z, -self.y, -self.x)
 
     def __repr__(self) -> str:
-        return f"IVec3D(z={self.z}, y={self.y}, x={self.x})"
+        return f"{type(self).__name__}(z={self.z}, y={self.y}, x={self.x})"
 
     def to_str(self) -> str:
         """Serialize to 'z,y,x' string."""
         return f"{self.z},{self.y},{self.x}"
 
     @classmethod
-    def from_str(cls, s: str) -> "IVec3D":
+    def from_str(cls, s: str) -> Self:
         """Parse from 'z,y,x' string."""
         parts = s.split(",")
         if len(parts) != 3:
@@ -316,7 +314,7 @@ class IVec3D:
         return cls(int(parts[0]), int(parts[1]), int(parts[2]))
 
     @classmethod
-    def parse(cls, v: "list[int] | tuple[int, int, int] | dict[str, int] | str") -> "IVec3D":
+    def parse(cls, v: "list[int] | tuple[int, int, int] | dict[str, int] | str") -> Self:
         """Parse from various formats: [z, y, x], (z, y, x), {'z': ..., 'y': ..., 'x': ...}, or 'z,y,x' string."""
         if isinstance(v, str):
             return cls.from_str(v)
@@ -324,7 +322,7 @@ class IVec3D:
             return cls(z=int(v["z"]), y=int(v["y"]), x=int(v["x"]))
         if isinstance(v, (list, tuple)) and len(v) == 3:
             return cls(z=int(v[0]), y=int(v[1]), x=int(v[2]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as IVec3D")
+        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
 
     def to_dict(self) -> dict[str, int]:
         """Convert to dictionary."""
@@ -348,3 +346,52 @@ class IVec3D:
             ],
             serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_str()),
         )
+
+
+# === Positive-validated variants ===
+
+
+def _check_positive_2d(name: str, y: float, x: float) -> None:
+    if y <= 0 or x <= 0:
+        raise ValueError(f"{name}: all components must be positive, got y={y}, x={x}")
+
+
+def _check_positive_3d(name: str, z: float, y: float, x: float) -> None:
+    if z <= 0 or y <= 0 or x <= 0:
+        raise ValueError(f"{name}: all components must be positive, got z={z}, y={y}, x={x}")
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class UVec2D(Vec2D):
+    """Positive float 2D vector. All components must be > 0."""
+
+    def __post_init__(self):
+        _check_positive_2d(type(self).__name__, self.y, self.x)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class UIVec2D(IVec2D):
+    """Positive integer 2D vector. All components must be > 0."""
+
+    def __post_init__(self):
+        _check_positive_2d(type(self).__name__, self.y, self.x)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class UVec3D(Vec3D):
+    """Positive float 3D vector. All components must be > 0."""
+
+    def __post_init__(self):
+        _check_positive_3d(type(self).__name__, self.z, self.y, self.x)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class UIVec3D(IVec3D):
+    """Positive integer 3D vector. All components must be > 0."""
+
+    def __post_init__(self):
+        _check_positive_3d(type(self).__name__, self.z, self.y, self.x)

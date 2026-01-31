@@ -26,6 +26,10 @@ export default defineConfig({
 				target: 'http://localhost:8000',
 				changeOrigin: true
 			},
+			'/colormaps': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			},
 			'/session': {
 				target: 'http://localhost:8000',
 				changeOrigin: true

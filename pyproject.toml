@@ -43,10 +43,11 @@ members = [
     "web",
     "qt",
     "vxlib",
+    "omezarr",
 ]
 
 [tool.uv.sources]
-ome-zarr-writer = { git = "https://github.com/AllenNeuralDynamics/ome-zarr-writer.git" }
+ome-zarr-writer = { workspace = true }
 rigup = { workspace = true }
 vxlib = { workspace = true }
 

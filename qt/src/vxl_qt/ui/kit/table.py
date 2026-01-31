@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from .button import ToolButton
 from .input import DoubleSpinBox, Select, SpinBox
 from .layout import vbox
-from .stack import Box, Stretch
+from .flex import Flex, Stretch
 from .text import FontSize, Text
 from .theme import Colors, ControlSize, Spacing
 
@@ -124,7 +124,7 @@ class TableModel[T, A](QAbstractTableModel):
     - _on_edit(row, aux, column, value): Handle edit commits
 
     Usage:
-        class GridTableModel(TableModel[Tile, Box | None]):
+        class GridTableModel(TableModel[Tile, Stack | None]):
             def __init__(self, store: GridStore, columns: list[TableColumn]):
                 super().__init__(columns)
                 self._store = store
@@ -133,7 +133,7 @@ class TableModel[T, A](QAbstractTableModel):
             def _get_rows(self) -> list[Tile]:
                 return self._store.tiles
 
-            def _get_aux_data(self, tile: Tile) -> Box | None:
+            def _get_aux_data(self, tile: Tile) -> Stack | None:
                 return self._store.get_stack_at(tile.row, tile.col)
     """
 
@@ -655,7 +655,7 @@ class TableToolbar(QWidget):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
-        self._layout_box = Box.hstack(spacing=Spacing.SM)
+        self._layout_box = Flex.hstack(spacing=Spacing.SM)
         self._layout_box.add(Stretch())  # Push actions to the right
 
         # Selection count label (hidden by default)

@@ -156,11 +156,11 @@ class TestLocalRig:
                 "info": {"name": "test-rig"},
                 "devices": {
                     "laser_1": {
-                        "target": "tests.test_integration.MockLaser",
+                        "target": f"{__name__}.MockLaser",
                         "init": {"max_power": 50.0},
                     },
                     "camera_1": {
-                        "target": "tests.test_integration.MockCamera",
+                        "target": f"{__name__}.MockCamera",
                         "init": {"resolution": [640, 480]},
                     },
                 },

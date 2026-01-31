@@ -196,7 +196,7 @@ class MicroscopeControlInterface(QMainWindow):
 
         # Acquisition Mode
         self._mode_select = Select(
-            options=["Single Image", "Time Series", "Z-Box", "Tile Scan"],
+            options=["Single Image", "Time Series", "Z-Stack", "Tile Scan"],
             value=self.state.acquisition_mode,
         )
         self._mode_select.value_changed.connect(self._make_callback("acquisition_mode"))

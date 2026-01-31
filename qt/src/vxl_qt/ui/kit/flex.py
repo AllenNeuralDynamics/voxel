@@ -1,8 +1,8 @@
-"""Alternative Box API with classmethod presets and hover support.
+"""Alternative Flex API with classmethod presets and hover support.
 
-This module explores a Text-like API for Box components:
-- Classmethods for common variants: Box.card(...), Box.row(...)
-- Full customization via **fmt overrides: Box.vstack(..., background=..., padding=...)
+This module explores a Text-like API for Flex components:
+- Classmethods for common variants: Flex.card(...), Flex.row(...)
+- Full customization via **fmt overrides: Flex.vstack(..., background=..., padding=...)
 - Built-in hover state support
 """
 
@@ -28,45 +28,45 @@ class Flow(Enum):
     HORIZONTAL = "horizontal"
 
 
-class Box(QWidget):
+class Flex(QWidget):
     """Unified container with layout and optional visual styling.
 
     Usage:
         # Plain stacks
-        Box.vstack(widget1, widget2)
-        Box.hstack(btn1, btn2)
+        Flex.vstack(widget1, widget2)
+        Flex.hstack(btn1, btn2)
 
         # Card preset
-        Box.card(header, content)
-        Box.card(content, border_radius=BorderRadius.SM)
+        Flex.card(header, content)
+        Flex.card(content, border_radius=BorderRadius.SM)
 
         # With styling overrides
-        Box.vstack(content, background=Colors.BG_DARK, border_radius=BorderRadius.LG)
-        Box.hstack(label, padding=(Spacing.LG, 0, 0, 0))
+        Flex.vstack(content, background=Colors.BG_DARK, border_radius=BorderRadius.LG)
+        Flex.hstack(label, padding=(Spacing.LG, 0, 0, 0))
     """
 
     class FmtOverrides(TypedDict, total=False):
-        """Valid overrides for Box.Fmt."""
+        """Valid overrides for Flex.Fmt."""
 
         background: str | None
         border_color: str | None
         border_radius: int
         border_width: int
         padding: tuple[int, int, int, int]
-        hover: "Box.FmtOverrides | None"
+        hover: "Flex.FmtOverrides | None"
 
     @dataclass(frozen=True)
     class Fmt:
-        """Visual format for Box components."""
+        """Visual format for Flex components."""
 
         background: str | None = None
         border_color: str | None = None
         border_radius: int = 0
         border_width: int = 1
         padding: tuple[int, int, int, int] = (0, 0, 0, 0)
-        hover: "Box.FmtOverrides | None" = None
+        hover: "Flex.FmtOverrides | None" = None
 
-        def with_(self, **overrides: Unpack["Box.FmtOverrides"]) -> "Box.Fmt":
+        def with_(self, **overrides: Unpack["Flex.FmtOverrides"]) -> "Flex.Fmt":
             """Return a new format with overrides applied."""
             return replace(self, **overrides)
 
@@ -80,11 +80,11 @@ class Box(QWidget):
         *children: BoxChild,
         flow: Flow = Flow.VERTICAL,
         spacing: int = Spacing.SM,
-        fmt: "Box.Fmt | None" = None,
+        fmt: "Flex.Fmt | None" = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._fmt = fmt or Box.Fmt()
+        self._fmt = fmt or Flex.Fmt()
         self._flow = flow
         self._hovered = False
 
@@ -108,7 +108,7 @@ class Box(QWidget):
             self.add(*children)
 
     @property
-    def fmt(self) -> "Box.Fmt":
+    def fmt(self) -> "Flex.Fmt":
         """Return current format."""
         return self._fmt
 
@@ -163,7 +163,7 @@ class Box(QWidget):
         if event:
             super().leaveEvent(event)
 
-    def _active_fmt(self) -> "Box.Fmt":
+    def _active_fmt(self) -> "Flex.Fmt":
         """Get the currently active format (base or hover)."""
         if self._hovered and self._fmt.hover:
             overrides = {**self._fmt.hover, "hover": None}
@@ -213,7 +213,7 @@ class Box(QWidget):
         spacing: int = Spacing.SM,
         parent: QWidget | None = None,
         **fmt: Unpack[FmtOverrides],
-    ) -> "Box":
+    ) -> "Flex":
         """Create a vertical stack (plain)."""
         return cls(*children, flow=Flow.VERTICAL, spacing=spacing, fmt=cls.Fmt(**fmt) if fmt else None, parent=parent)
 
@@ -224,7 +224,7 @@ class Box(QWidget):
         spacing: int = Spacing.SM,
         parent: QWidget | None = None,
         **fmt: Unpack[FmtOverrides],
-    ) -> "Box":
+    ) -> "Flex":
         """Create a horizontal stack (plain)."""
         return cls(*children, flow=Flow.HORIZONTAL, spacing=spacing, fmt=cls.Fmt(**fmt) if fmt else None, parent=parent)
 
@@ -236,7 +236,7 @@ class Box(QWidget):
         spacing: int = Spacing.SM,
         parent: QWidget | None = None,
         **overrides: Unpack[FmtOverrides],
-    ) -> "Box":
+    ) -> "Flex":
         """Create a card-styled stack."""
         base = cls.Fmt(
             background=Colors.BG_MEDIUM,

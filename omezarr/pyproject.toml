@@ -1,0 +1,51 @@
+[project]
+name = "ome-zarr-writer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "vxlib",
+    "pydantic>=2.11.9",
+    "numba>=0.62.1",
+]
+
+[dependency-groups]
+ts = [
+    "tensorstore>=0.1.76",
+    "pydantic-tensorstore",
+]
+zarrs = [
+    "zarr>=3.1.2",
+    "zarrs>=0.2.0",
+]
+ng = [
+    "neuroglancer",
+]
+fastapi = [
+    "fastapi>=0.120.3",
+    "uvicorn>=0.38.0",
+]
+aqz = [
+    "acquire-zarr>=0.6.0",
+]
+s3 = [
+    "boto3>=1.40.65",
+]
+dev = [
+    "pytest>=8.4.2",
+]
+
+[tool.uv.sources]
+vxlib = { workspace = true }
+pydantic-tensorstore = { git = "https://github.com/tlambert03/pydantic-tensorstore" }
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pyright]
+typeCheckingMode = "standard"
+
+[tool.ruff]
+line-length = 120

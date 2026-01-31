@@ -9,6 +9,9 @@ Examples:
 
     # Start on a different port
     vxl --port 9000
+
+    # Start server and open a native webview window
+    vxl --view
 """
 
 import argparse
@@ -38,7 +41,6 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable debug logging",
     )
-
     return parser
 
 
@@ -55,8 +57,9 @@ def main() -> None:
 
     app = create_app()
 
+    url = f"http://localhost:{args.port}"
     local_ip = get_local_ip()
-    log.info("Web UI: http://localhost:%d", args.port)
+    log.info("Web UI: %s", url)
     if local_ip != "127.0.0.1":
         log.info("      or http://%s:%d", local_ip, args.port)
 

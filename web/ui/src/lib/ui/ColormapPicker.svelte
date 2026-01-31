@@ -18,6 +18,22 @@
 
 	let customHexInput = $state('');
 	let popoverOpen = $state(false);
+	let openGroup = $state<string | null>(null);
+	let search = $state('');
+
+	const searchResults = $derived.by(() => {
+		const q = search.trim().toLowerCase();
+		if (!q) return null;
+		const results: { name: string; stops: string[] }[] = [];
+		for (const group of catalog) {
+			for (const [name, stops] of Object.entries(group.colormaps)) {
+				if (name.toLowerCase().includes(q)) {
+					results.push({ name, stops });
+				}
+			}
+		}
+		return results;
+	});
 
 	function stopsToGradient(stops: string[]): string {
 		return `linear-gradient(to right, ${stops.join(', ')})`;
@@ -65,19 +81,24 @@
 	</Popover.Trigger>
 
 	<Popover.Content
-		class="z-50 w-64 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl outline-none"
+		class="z-50 w-72 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl outline-none"
 		sideOffset={4}
 		align="start"
 	>
+		<div class="px-3 py-2">
+			<input
+				type="text"
+				bind:value={search}
+				placeholder="Search colormaps..."
+				class="h-6 w-full rounded border border-zinc-600 bg-zinc-800 px-1.5 text-[0.65rem] text-zinc-200 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none"
+			/>
+		</div>
+
 		<div class="max-h-80 overflow-y-auto">
-			{#each catalog as group (group.uid)}
-				<details class="group-section">
-					<summary class="group-header">
-						<span class="chevron">&#9654;</span>
-						{group.label}
-					</summary>
-					<div class="grid grid-cols-4 gap-1.5 px-3 pb-2">
-						{#each Object.entries(group.colormaps) as [name, stops] (name)}
+			{#if searchResults}
+				{#if searchResults.length > 0}
+					<div class="grid grid-cols-6 gap-1 px-3 pb-2">
+						{#each searchResults as { name, stops } (name)}
 							<button
 								type="button"
 								onclick={() => handleSwatchClick(name)}
@@ -88,8 +109,41 @@
 							></button>
 						{/each}
 					</div>
-				</details>
-			{/each}
+				{:else}
+					<div class="px-3 pb-2 text-[0.65rem] text-zinc-500">No matches</div>
+				{/if}
+			{:else}
+				{#each catalog as group (group.uid)}
+					<details
+						class="group-section"
+						open={openGroup === group.uid}
+						ontoggle={(e: ToggleEvent) => {
+							if (e.newState === 'open') {
+								openGroup = group.uid;
+							} else if (openGroup === group.uid) {
+								openGroup = null;
+							}
+						}}
+					>
+						<summary class="group-header">
+							<span class="chevron">&#9654;</span>
+							{group.label}
+						</summary>
+						<div class="grid grid-cols-6 gap-1 px-3 pb-2">
+							{#each Object.entries(group.colormaps) as [name, stops] (name)}
+								<button
+									type="button"
+									onclick={() => handleSwatchClick(name)}
+									class="swatch {colormap === name ? 'selected' : ''}"
+									style="background: {stopsToGradient(stops)}"
+									title={name}
+									aria-label="Select colormap {name}"
+								></button>
+							{/each}
+						</div>
+					</details>
+				{/each}
+			{/if}
 		</div>
 
 		<!-- Custom hex input -->
@@ -153,7 +207,7 @@
 	}
 
 	.swatch {
-		height: 1.25rem;
+		height: 1rem;
 		border-radius: 0.125rem;
 		border: 1px solid rgb(82 82 91 / 0.5);
 		transition: all 0.15s;

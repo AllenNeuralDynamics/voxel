@@ -12,7 +12,7 @@ from PySide6.QtCore import QObject, Signal
 
 from vxl.config import TileOrder
 from vxl.session import GridConfig
-from vxl.tile import Box, BoxStatus, Tile
+from vxl.tile import Stack, StackStatus, Tile
 
 if TYPE_CHECKING:
     from vxl import Session
@@ -31,18 +31,18 @@ class LayerVisibility:
 
 
 # Status colors for stacks (matching studio)
-STACK_STATUS_COLORS: dict[BoxStatus | None, str] = {
-    BoxStatus.PLANNED: "#3a6ea5",  # blue (ACCENT)
-    BoxStatus.ACQUIRING: "#22d3ee",  # cyan-400
-    BoxStatus.COMPLETED: "#4ec9b0",  # teal (SUCCESS)
-    BoxStatus.FAILED: "#f44336",  # red (ERROR)
-    BoxStatus.SKIPPED: "#ffb74d",  # orange (WARNING)
-    BoxStatus.COMMITTED: "#3a6ea5",  # blue (same as planned)
+STACK_STATUS_COLORS: dict[StackStatus | None, str] = {
+    StackStatus.PLANNED: "#3a6ea5",  # blue (ACCENT)
+    StackStatus.ACQUIRING: "#22d3ee",  # cyan-400
+    StackStatus.COMPLETED: "#4ec9b0",  # teal (SUCCESS)
+    StackStatus.FAILED: "#f44336",  # red (ERROR)
+    StackStatus.SKIPPED: "#ffb74d",  # orange (WARNING)
+    StackStatus.COMMITTED: "#3a6ea5",  # blue (same as planned)
     None: "#71717a",  # zinc-500 (no stack)
 }
 
 
-def get_stack_status_color(status: BoxStatus | None) -> str:
+def get_stack_status_color(status: StackStatus | None) -> str:
     """Get the color for a stack status."""
     return STACK_STATUS_COLORS.get(status, STACK_STATUS_COLORS[None])
 
@@ -125,7 +125,7 @@ class GridStore(QObject):
         return self._tiles
 
     @property
-    def stacks(self) -> list[Box]:
+    def stacks(self) -> list[Stack]:
         """List of stacks from session."""
         if self._session is None:
             return []
@@ -192,14 +192,14 @@ class GridStore(QObject):
                 return tile
         return None
 
-    def get_selected_stack(self) -> Box | None:
+    def get_selected_stack(self) -> Stack | None:
         """Get the stack at the selected tile, or None if no stack."""
         for stack in self.stacks:
             if stack.row == self._selected_row and stack.col == self._selected_col:
                 return stack
         return None
 
-    def get_stack_at(self, row: int, col: int) -> Box | None:
+    def get_stack_at(self, row: int, col: int) -> Stack | None:
         """Get the stack at a specific tile position."""
         for stack in self.stacks:
             if stack.row == row and stack.col == col:
@@ -260,14 +260,14 @@ class GridStore(QObject):
 
     # ==================== Stack Management ====================
 
-    async def add_stacks(self, stacks: list[dict]) -> list[Box]:
+    async def add_stacks(self, stacks: list[dict]) -> list[Stack]:
         """Add stacks at grid positions.
 
         Args:
             stacks: List of {row, col, z_start_um, z_end_um}
 
         Returns:
-            List of added Box objects
+            List of added Stack objects
         """
         if self._session is None:
             return []
@@ -278,14 +278,14 @@ class GridStore(QObject):
             self.grid_locked_changed.emit(self.grid_locked)
         return added
 
-    def edit_stacks(self, edits: list[dict]) -> list[Box]:
+    def edit_stacks(self, edits: list[dict]) -> list[Stack]:
         """Edit stacks' z parameters.
 
         Args:
             edits: List of {row, col, z_start_um?, z_end_um?}
 
         Returns:
-            List of edited Box objects
+            List of edited Stack objects
         """
         if self._session is None:
             return []

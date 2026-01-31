@@ -12,11 +12,11 @@ from vxl_qt.store import DevicesStore
 from vxl_qt.ui.devices.camera import CameraControl
 from vxl_qt.ui.devices.laser import LaserControl
 from vxl_qt.ui.kit import (
-    Box,
     Button,
     Color,
     Colors,
     ControlSize,
+    Flex,
     Select,
     SelectOption,
     Separator,
@@ -59,7 +59,7 @@ class ChannelSection(QWidget):
         auto_btn = Button.icon_btn("mdi.auto-fix", size=ControlSize.SM)
         auto_btn.setToolTip("Auto-adjust levels")
         auto_btn.clicked.connect(self._on_auto_clicked)
-        header = Box.hstack(
+        header = Flex.hstack(
             Text.section(label_text, color=label_color),
             auto_btn,
             padding=(Spacing.LG, 0, Spacing.XS, 0),
@@ -113,7 +113,7 @@ class ControlPanel(QWidget):
         self._preview_btn.clicked.connect(self._on_preview_clicked)
 
         # Header
-        header = Box.hstack(
+        header = Flex.hstack(
             (self._profile_select, 1),
             self._preview_btn,
             spacing=Spacing.MD,
@@ -126,7 +126,7 @@ class ControlPanel(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        self._channels_box = Box.vstack(
+        self._channels_box = Flex.vstack(
             spacing=Spacing.LG,
             background=Colors.BG_DARK,
             padding=(Spacing.MD, Spacing.LG, Spacing.MD, Spacing.SM),
@@ -143,7 +143,7 @@ class ControlPanel(QWidget):
         self._exit_btn.setToolTip("Exit session")
         self._exit_btn.clicked.connect(self._on_exit_clicked)
 
-        footer = Box.hstack(
+        footer = Flex.hstack(
             self._status_dot,
             self._status_label,
             Stretch(),

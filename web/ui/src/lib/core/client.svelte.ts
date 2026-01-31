@@ -6,7 +6,7 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type { AppStatus, ErrorPayload, LogMessage, ProfileChangedPayload, Box, TileOrder } from './types.ts';
+import type { AppStatus, ErrorPayload, LogMessage, ProfileChangedPayload, Stack, TileOrder } from './types.ts';
 
 export interface PreviewStatus {
 	previewing: boolean;
@@ -79,7 +79,7 @@ type ClientMessage =
 			topic: 'device/execute_command';
 			payload: { device: string; command: string; args?: unknown[]; kwargs?: Record<string, unknown> };
 	  }
-	// Grid/Box messages
+	// Grid/Stack messages
 	| { topic: 'grid/set_offset'; payload: { x_offset_um: number; y_offset_um: number } }
 	| { topic: 'grid/set_overlap'; payload: { overlap: number } }
 	| { topic: 'grid/set_tile_order'; payload: { tile_order: TileOrder } }
@@ -122,9 +122,9 @@ export interface TopicHandlers {
 	'preview/colormap'?: (payload: { channel: string; colormap: string }) => void;
 	'daq/waveforms'?: (payload: DaqWaveforms) => void;
 	device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
-	// Grid/Box handlers
+	// Grid/Stack handlers
 	'grid/updated'?: (payload: { x_offset_um: number; y_offset_um: number; overlap: number }) => void;
-	'stacks/updated'?: (payload: { stacks: Box[] }) => void;
+	'stacks/updated'?: (payload: { stacks: Stack[] }) => void;
 }
 
 export interface ClientOptions {

@@ -8,10 +8,10 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from vxl_qt.handle import DeviceHandleQt
 from vxl_qt.ui.kit import (
     Accordion,
-    Box,
     Colors,
     ControlSize,
     Field,
+    Flex,
     GridFormBuilder,
     Select,
     SliderSpinBox,
@@ -88,7 +88,7 @@ class CameraControl(QWidget):
         outer_layout.setSpacing(0)
 
         # Header row
-        header = Box.hstack(Text.heading("Camera"), Stretch(), self._frame_info_label)
+        header = Flex.hstack(Text.heading("Camera"), Stretch(), self._frame_info_label)
 
         # Form: Exposure, Format, Binning, Offset, Size
         form = (
@@ -102,19 +102,19 @@ class CameraControl(QWidget):
 
         # Sensor Info accordion
         sensor_layout = self._sensor_info_accordion.content_layout
-        sensor_layout.addWidget(Box.hstack(Text("Frame Size"), Stretch(), self._frame_size_value))
-        sensor_layout.addWidget(Box.hstack(Stretch(), self._frame_size_mb_value))
-        sensor_layout.addWidget(Box.hstack(Text("Pixel Size"), Stretch(), self._pixel_size_value))
-        sensor_layout.addWidget(Box.hstack(Text("Sensor Size"), Stretch(), self._sensor_size_value))
+        sensor_layout.addWidget(Flex.hstack(Text("Frame Size"), Stretch(), self._frame_size_value))
+        sensor_layout.addWidget(Flex.hstack(Stretch(), self._frame_size_mb_value))
+        sensor_layout.addWidget(Flex.hstack(Text("Pixel Size"), Stretch(), self._pixel_size_value))
+        sensor_layout.addWidget(Flex.hstack(Text("Sensor Size"), Stretch(), self._sensor_size_value))
 
         # Stream Info accordion
         stream_layout = self._stream_info_accordion.content_layout
-        stream_layout.addWidget(Box.hstack(Text("Data Rate"), Stretch(), self._data_rate_value))
-        stream_layout.addWidget(Box.hstack(Text("Dropped Frames"), Stretch(), self._dropped_value))
-        stream_layout.addWidget(Box.hstack(Text("Frame Index"), Stretch(), self._frame_idx_value))
+        stream_layout.addWidget(Flex.hstack(Text("Data Rate"), Stretch(), self._data_rate_value))
+        stream_layout.addWidget(Flex.hstack(Text("Dropped Frames"), Stretch(), self._dropped_value))
+        stream_layout.addWidget(Flex.hstack(Text("Frame Index"), Stretch(), self._frame_idx_value))
 
         # Card container with all content
-        content = Box.card(
+        content = Flex.card(
             header,
             form,
             self._sensor_info_accordion,

@@ -69,6 +69,13 @@ flake8-bugbear.extend-immutable-calls = [
     "Path",
     "Body",
     "Vec2D",
+    "IVec2D",
+    "Vec3D",
+    "IVec3D",
+    "UVec2D",
+    "UIVec2D",
+    "UVec3D",
+    "UIVec3D",
     "AcquireRequest",
     "ExecuteCommandRequest",
 ]

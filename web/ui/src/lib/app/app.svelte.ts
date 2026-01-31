@@ -8,7 +8,7 @@ import {
 	type LogMessage,
 	type GridConfig,
 	type Tile,
-	type Box,
+	type Stack,
 	type LayerVisibility,
 	type TileOrder,
 	type Vec2D
@@ -126,14 +126,14 @@ export class App {
 		}
 	);
 	tiles = $derived<Tile[]>(this.status?.session?.tiles ?? []);
-	stacks = $derived<Box[]>(this.status?.session?.stacks ?? []);
+	stacks = $derived<Stack[]>(this.status?.session?.stacks ?? []);
 	tileOrder = $derived<TileOrder>(this.status?.session?.tile_order ?? 'snake_row');
 
 	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true });
 
 	#selectedTilePos = $state<[number, number]>([0, 0]);
 	selectedTile = $derived<Tile>(this.#getSelectedTile());
-	selectedBox = $derived<Box | null>(
+	selectedStack = $derived<Stack | null>(
 		this.stacks.find((s) => s.row === this.selectedTile.row && s.col === this.selectedTile.col) ?? null
 	);
 
@@ -241,7 +241,7 @@ export class App {
 		this.#client.send({ topic: 'grid/set_tile_order', payload: { tile_order: order } });
 	}
 
-	addBoxs(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
+	addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
 			topic: 'stacks/add',
 			payload: {
@@ -255,7 +255,7 @@ export class App {
 		});
 	}
 
-	editBoxs(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
+	editStacks(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
 		this.#client.send({
 			topic: 'stacks/edit',
 			payload: {
@@ -269,7 +269,7 @@ export class App {
 		});
 	}
 
-	removeBoxs(positions: Array<{ row: number; col: number }>): void {
+	removeStacks(positions: Array<{ row: number; col: number }>): void {
 		this.#client.send({ topic: 'stacks/remove', payload: { positions } });
 	}
 

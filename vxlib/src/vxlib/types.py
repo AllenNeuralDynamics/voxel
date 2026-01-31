@@ -4,6 +4,7 @@ These types are used throughout rigup and related packages for consistent
 data representation across device drivers, camera handling, and schemas.
 """
 
+from collections.abc import Iterable
 from enum import StrEnum
 from typing import Any
 
@@ -67,6 +68,6 @@ class Dtype(StrEnum):
         """Get the maximum representable value for this dtype."""
         return np.iinfo(self.value).max
 
-    def calc_nbytes(self, shape: tuple[int, ...]) -> int:
+    def calc_nbytes(self, shape: Iterable[int]) -> int:
         """Calculate total bytes for an array of the given shape."""
-        return int(self.itemsize * np.prod(shape))
+        return int(self.itemsize * np.prod(tuple(shape)))

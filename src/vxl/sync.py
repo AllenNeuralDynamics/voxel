@@ -50,7 +50,7 @@ class SyncTaskData(BaseModel):
     stack_only: list[str] = Field(default_factory=list)
 
     def get_waveforms(self, for_stack: bool = False) -> dict[str, Waveform]:
-        """Get waveforms filtered by mode. Box mode gets all, frame mode excludes stack_only."""
+        """Get waveforms filtered by mode. Stack mode gets all, frame mode excludes stack_only."""
         if for_stack:
             return self.waveforms
         return {k: v for k, v in self.waveforms.items() if k not in self.stack_only}

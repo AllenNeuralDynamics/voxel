@@ -7,9 +7,9 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from vxl_qt.handle import DeviceHandleQt
 from vxl_qt.ui.kit import (
-    Box,
     Color,
     Colors,
+    Flex,
     LockableSlider,
     Spacing,
     Stretch,
@@ -68,7 +68,7 @@ class LaserControl(QWidget):
         self._enable_toggle.setToolTip("Enable/disable laser emission")
 
         # Header row: label + stretch + power label + toggle
-        header = Box.hstack(self._label, Stretch(), self._power_label, self._enable_toggle)
+        header = Flex.hstack(self._label, Stretch(), self._power_label, self._enable_toggle)
 
         # Power slider
         self._power_slider = LockableSlider(
@@ -78,7 +78,7 @@ class LaserControl(QWidget):
         )
 
         # Card container with all content
-        content = Box.card(header, self._power_slider, spacing=Spacing.SM)
+        content = Flex.card(header, self._power_slider, spacing=Spacing.SM)
         outer_layout.addWidget(content)
 
         # Connect signals

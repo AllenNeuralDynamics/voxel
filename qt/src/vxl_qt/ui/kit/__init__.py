@@ -8,7 +8,7 @@ Structure:
     ├── icons.py         # icon_data_uri
     ├── input/           # SpinBox, Toggle, LockableSlider, Select, etc.
     ├── layout.py        # vbox, hbox, Separator, Splitter
-    ├── stack.py         # Box, Flow, Stretch
+    ├── flex.py          # Flex, Flow, Stretch
     ├── table.py         # Table, TableModel, TableColumn, TableToolbar
     ├── text.py          # Text, Chip, FontSize, FontWeight
     └── theme.py         # Color, Colors, Spacing, BorderRadius, Size, APP_STYLESHEET
@@ -16,6 +16,11 @@ Structure:
 
 from .accordion import Accordion
 from .button import Button, ToolButton
+from .flex import (
+    Flex,
+    Flow,
+    Stretch,
+)
 from .form import Field, FormBuilder, GridFormBuilder
 from .input import (
     DoubleSpinBox,
@@ -34,11 +39,6 @@ from .layout import (
     vbox,
 )
 from .loader import LinearLoader
-from .stack import (
-    Box,
-    Flow,
-    Stretch,
-)
 from .table import (
     ColumnType,
     Table,
@@ -54,7 +54,6 @@ __all__ = [
     "APP_STYLESHEET",
     "Accordion",
     "BorderRadius",
-    "Box",
     "Button",
     "Chip",
     "Color",
@@ -63,6 +62,7 @@ __all__ = [
     "ControlSize",
     "DoubleSpinBox",
     "Field",
+    "Flex",
     "Flow",
     "FontSize",
     "FontWeight",

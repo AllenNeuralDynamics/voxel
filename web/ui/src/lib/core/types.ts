@@ -51,7 +51,7 @@ export interface SessionStatus {
 	grid_config: GridConfig;
 	tile_order: TileOrder;
 	tiles: Tile[];
-	stacks: Box[];
+	stacks: Stack[];
 
 	// Preview display config per channel (channel_id -> PreviewConfig)
 	preview: Record<string, PreviewConfig>;
@@ -121,15 +121,15 @@ export interface GridConfig {
 }
 
 /**
- * Box status enum - matches backend BoxStatus
+ * Stack status enum - matches backend StackStatus
  */
-export type BoxStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'skipped';
+export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'skipped';
 
 /**
- * Box status to Tailwind color class mapping
+ * Stack status to Tailwind color class mapping
  * Uses Tailwind's color classes - derive CSS vars/hex from these in components
  */
-export const STACK_STATUS_COLORS: Record<BoxStatus | 'none', string> = {
+export const STACK_STATUS_COLORS: Record<StackStatus | 'none', string> = {
 	none: 'text-zinc-200',
 	planned: 'text-blue-400',
 	acquiring: 'text-cyan-400',
@@ -141,7 +141,7 @@ export const STACK_STATUS_COLORS: Record<BoxStatus | 'none', string> = {
 /**
  * Get Tailwind color class for a stack status
  */
-export function getBoxStatusColor(status: BoxStatus | null): string {
+export function getStackStatusColor(status: StackStatus | null): string {
 	return STACK_STATUS_COLORS[status ?? 'none'];
 }
 
@@ -158,15 +158,15 @@ export interface Tile {
 }
 
 /**
- * Box - 3D acquisition unit (Tile + z-range)
- * Matches backend Box model
+ * Stack - 3D acquisition unit (Tile + z-range)
+ * Matches backend Stack model
  */
-export interface Box extends Tile {
+export interface Stack extends Tile {
 	z_start_um: number;
 	z_end_um: number;
 	z_step_um: number;
 	profile_id: string;
-	status: BoxStatus;
+	status: StackStatus;
 	output_path: string | null;
 	num_frames: number;
 }

@@ -19,7 +19,7 @@ from vxl.daq import DaqHandle
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
 from vxl.sync import SyncTask
-from vxl.tile import Box, BoxResult, BoxStatus
+from vxl.tile import Stack, StackResult, StackStatus
 
 
 class RigMode(StrEnum):
@@ -543,13 +543,13 @@ class VoxelRig(Rig):
 
         self.log.info("Preview stopped")
 
-    # ===================== Box Acquisition =====================
+    # ===================== Stack Acquisition =====================
     #
     @property
     def scanning_axis(self) -> ContinuousAxisHandle:
         return self.stage.scanning_axis
 
-    async def acquire_stack(self, stack: Box, output_dir: Path, profile_id: str | None = None) -> BoxResult:
+    async def acquire_stack(self, stack: Stack, output_dir: Path, profile_id: str | None = None) -> StackResult:
         """Acquire a z-stack at one tile position."""
         if self._mode == RigMode.ACQUIRING:
             raise RuntimeError("Cannot acquire stack while another acquisition is in progress")
@@ -558,7 +558,7 @@ class VoxelRig(Rig):
 
         self._mode = RigMode.ACQUIRING
         started_at = datetime.now()
-        stack.status = BoxStatus.ACQUIRING
+        stack.status = StackStatus.ACQUIRING
 
         # Set profile if specified
         if profile_id and profile_id != self._active_profile_id:
@@ -637,13 +637,13 @@ class VoxelRig(Rig):
             # Build results dict
             cameras_dict = dict(zip(camera_tasks.keys(), camera_results, strict=True))
 
-            stack.status = BoxStatus.COMPLETED
+            stack.status = StackStatus.COMPLETED
             completed_at = datetime.now()
             self._mode = RigMode.IDLE
 
-            return BoxResult(
+            return StackResult(
                 tile_id=stack.tile_id,
-                status=BoxStatus.COMPLETED,
+                status=StackStatus.COMPLETED,
                 output_dir=output_dir,
                 cameras=cameras_dict,
                 num_frames=stack.num_frames,
@@ -653,15 +653,15 @@ class VoxelRig(Rig):
             )
 
         except Exception as e:
-            stack.status = BoxStatus.FAILED
+            stack.status = StackStatus.FAILED
             completed_at = datetime.now()
             self._mode = RigMode.IDLE
             # Attempt cleanup on failure
             with suppress(Exception):
                 await self.scanning_axis.reset_ttl_stepper()
-            return BoxResult(
+            return StackResult(
                 tile_id=stack.tile_id,
-                status=BoxStatus.FAILED,
+                status=StackStatus.FAILED,
                 output_dir=output_dir,
                 cameras={},
                 num_frames=0,

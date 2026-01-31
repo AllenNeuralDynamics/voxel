@@ -7,16 +7,15 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget
 
 from vxl.config import TileOrder
-from vxl.tile import Box as TileBox
-from vxl.tile import Tile
+from vxl.tile import Stack, Tile
 from vxl_qt.store import STACK_STATUS_COLORS, GridStore, PreviewStore, get_stack_status_color
 from vxl_qt.ui.kit import (
-    Box,
     Colors,
     ColumnType,
     ControlSize,
     DoubleSpinBox,
     Field,
+    Flex,
     GridFormBuilder,
     Select,
     Separator,
@@ -119,7 +118,7 @@ GRID_TABLE_COLUMNS: list[TableColumn] = [
 ]
 
 
-class GridTableModel(TableModel[Tile, TileBox | None]):
+class GridTableModel(TableModel[Tile, Stack | None]):
     """Model for the grid table, backed by GridStore."""
 
     def __init__(self, store: GridStore, columns: list[TableColumn]) -> None:
@@ -140,11 +139,11 @@ class GridTableModel(TableModel[Tile, TileBox | None]):
             return [t for t in tiles if not self._store.get_stack_at(t.row, t.col)]
         return tiles
 
-    def _get_aux_data(self, row_data: Tile) -> TileBox | None:
+    def _get_aux_data(self, row_data: Tile) -> Stack | None:
         """Get stack for a tile."""
         return self._store.get_stack_at(row_data.row, row_data.col)
 
-    def _on_edit(self, row_data: Tile, aux_data: TileBox | None, column: TableColumn, value: Any) -> None:
+    def _on_edit(self, row_data: Tile, aux_data: Stack | None, column: TableColumn, value: Any) -> None:
         """Handle inline editing."""
         if aux_data and column.setter:
             edit_dict = column.setter(row_data, aux_data, value)
@@ -253,7 +252,7 @@ class PropertyEditor(QWidget):
         self._store = store
         self._updating = False
 
-    def load_from_tile(self, _tile: Tile, _stack: TileBox | None) -> None:
+    def load_from_tile(self, _tile: Tile, _stack: Stack | None) -> None:
         """Load values from a single tile/stack for display."""
         raise NotImplementedError
 
@@ -311,7 +310,7 @@ class ZRangeEditor(PropertyEditor):
             slices = int(z_range / z_step) + 1
             self._slices_label.setText(str(slices))
 
-    def load_from_tile(self, _tile: Tile, _stack: TileBox | None) -> None:
+    def load_from_tile(self, _tile: Tile, _stack: Stack | None) -> None:
         """Load Z range from tile's stack."""
         self._updating = True
         if _stack:
@@ -370,7 +369,7 @@ class ProfileEditor(PropertyEditor):
         self._placeholder = Text.muted("Profile editing coming soon")
         layout.addWidget(self._placeholder)
 
-    def load_from_tile(self, _tile: Tile, _stack: TileBox | None) -> None:
+    def load_from_tile(self, _tile: Tile, _stack: Stack | None) -> None:
         """Load profile from tile's stack."""
         # TODO: Implement when profiles are available
 
@@ -432,7 +431,7 @@ class SelectionEditor(QWidget):
         self._delete_btn.setToolTip("Remove stack(s)")
         self._delete_btn.clicked.connect(self._on_delete_clicked)
 
-        header = Box.hstack(
+        header = Flex.hstack(
             self._header_label,
             self._status_label,
             Stretch(),
@@ -464,7 +463,7 @@ class SelectionEditor(QWidget):
         self._property_select = Select(options=property_options, value="z_range", size=ControlSize.SM)
         self._property_select.value_changed.connect(self._on_property_changed)
 
-        prop_field = Box.hstack(
+        prop_field = Flex.hstack(
             Text.muted("Edit:", size=11),
             self._property_select,
             Stretch(),
@@ -500,7 +499,7 @@ class SelectionEditor(QWidget):
         self._apply_btn.setToolTip("Apply to all selected")
         self._apply_btn.clicked.connect(self._on_apply_clicked)
 
-        self._apply_row = Box.hstack(Stretch(), self._apply_btn, spacing=Spacing.SM)
+        self._apply_row = Flex.hstack(Stretch(), self._apply_btn, spacing=Spacing.SM)
         self._apply_row.hide()
         layout.addWidget(self._apply_row)
 
@@ -682,7 +681,7 @@ class GridSettingsSection(QWidget):
         self._lock_icon.setCheckable(True)
         self._lock_icon.setEnabled(False)  # Read-only indicator
 
-        header = Box.hstack(
+        header = Flex.hstack(
             Text.section("Grid", color=Colors.TEXT),
             Stretch(),
             self._lock_icon,
@@ -788,7 +787,7 @@ class GridCanvas(QWidget):
 
     TODO: Implement using QSvgRenderer + QPainter pattern (like WheelGraphic):
     - Grid layer: Tile rectangles (clickable for selection)
-    - Stacks layer: Box rectangles with status-based coloring
+    - Stacks layer: Stack rectangles with status-based coloring
     - Path layer: Acquisition order polyline with arrows
     - FOV layer: Current position with thumbnail and crosshair
     - X/Y sliders for stage movement
@@ -851,13 +850,13 @@ class GridPanel(QWidget):
         self._filter_select = Select(options=GRID_FILTER_OPTIONS, value="all", size=ControlSize.SM)
         self._filter_select.value_changed.connect(self._on_filter_changed)
 
-        top_row = Box.hstack(
+        top_row = Flex.hstack(
             self._filter_select,
             Stretch(),
             spacing=Spacing.SM,
         )
 
-        right_panel = Box.vstack(
+        right_panel = Flex.vstack(
             top_row,
             Separator(),
             self._selection_editor,
@@ -871,7 +870,7 @@ class GridPanel(QWidget):
         right_panel.setFixedWidth(320)
 
         # Main layout: table | separator | right panel
-        main = Box.hstack(
+        main = Flex.hstack(
             (self._grid_table, 1),  # stretch=1
             Separator(orientation="vertical"),
             right_panel,

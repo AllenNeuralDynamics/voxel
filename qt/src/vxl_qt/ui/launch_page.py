@@ -18,10 +18,10 @@ from PySide6.QtWidgets import QBoxLayout, QLabel, QScrollArea, QWidget
 from vxl.system import SessionDirectory, SessionRoot
 from vxl_qt.ui.assets import VOXEL_LOGO
 from vxl_qt.ui.kit import (
-    Box,
     Button,
     Colors,
     ControlSize,
+    Flex,
     Flow,
     LinearLoader,
     Select,
@@ -37,7 +37,7 @@ from vxl_qt.ui.panels import LogPanel
 from vxlib import display_name, format_relative_time
 
 
-class LaunchHeader(Box):
+class LaunchHeader(Flex):
     """Header with logo and title/subtitle."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -48,7 +48,7 @@ class LaunchHeader(Box):
 
         super().__init__(
             logo,
-            Box.vstack(
+            Flex.vstack(
                 Text.title("Voxel Qt", color=Colors.TEXT_BRIGHT),
                 Text.muted("Select or create a session to get started"),
                 spacing=Spacing.XS,
@@ -79,19 +79,19 @@ class NewSessionForm(QWidget):
         self._path_preview = Text.muted("")
 
         # Row 1: Root selector + Rig selector side by side
-        root_field = Box.vstack(Text.muted("Session Root"), self._root_select, spacing=Spacing.SM)
-        rig_field = Box.vstack(Text.muted("Rig Configuration"), self._rig_select, spacing=Spacing.SM)
-        row1 = Box.hstack(root_field, rig_field, spacing=Spacing.XL)
+        root_field = Flex.vstack(Text.muted("Session Root"), self._root_select, spacing=Spacing.SM)
+        rig_field = Flex.vstack(Text.muted("Rig Configuration"), self._rig_select, spacing=Spacing.SM)
+        row1 = Flex.hstack(root_field, rig_field, spacing=Spacing.XL)
 
         # Row 2: Session name + Create button side by side
-        row2 = Box.hstack(
-            Box.vstack(Text.muted("Session Name"), self._name_input, spacing=Spacing.SM),
-            Box.vstack(Stretch(), self._create_btn),
+        row2 = Flex.hstack(
+            Flex.vstack(Text.muted("Session Name"), self._name_input, spacing=Spacing.SM),
+            Flex.vstack(Stretch(), self._create_btn),
             spacing=Spacing.XL,
         )
 
         # Form container with card styling
-        form = Box.card(
+        form = Flex.card(
             row1,
             row2,
             self._path_preview,
@@ -161,7 +161,7 @@ class NewSessionForm(QWidget):
         self._name_input.clear()
 
 
-class LaunchingIndicator(Box):
+class LaunchingIndicator(Flex):
     """Centered loading indicator with animated progress bar."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -175,7 +175,7 @@ class LaunchingIndicator(Box):
         )
 
 
-class SessionCard(Box):
+class SessionCard(Flex):
     """Clickable card displaying a session with resume/folder actions."""
 
     clicked = Signal(object)  # SessionDirectory
@@ -191,7 +191,7 @@ class SessionCard(Box):
         resume_btn.clicked.connect(lambda: self.clicked.emit(session))
 
         # Row format with hover effect
-        fmt = Box.Fmt(
+        fmt = Flex.Fmt(
             background="transparent",
             border_color=Colors.BORDER,
             border_width=0,
@@ -233,7 +233,7 @@ class SessionsList(QScrollArea):
         self.setFrameShape(QScrollArea.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        self._container = Box.card(spacing=0, padding=(1, 1, 1, 1))
+        self._container = Flex.card(spacing=0, padding=(1, 1, 1, 1))
         self.setWidget(self._container)
         self._cards: list[SessionCard] = []
 
@@ -302,14 +302,14 @@ class LaunchPage(QWidget):
         self._launching_indicator.hide()
 
         self._new_session_form = NewSessionForm()
-        self._form_section = Box.vstack(
+        self._form_section = Flex.vstack(
             Text.section("New Session", color=Colors.TEXT),
             self._new_session_form,
             spacing=Spacing.MD,
         )
 
         self._sessions_list = SessionsList()
-        self._sessions_section = Box.vstack(
+        self._sessions_section = Flex.vstack(
             Text.section("Recent Sessions", color=Colors.TEXT),
             self._sessions_list,
             spacing=Spacing.MD,

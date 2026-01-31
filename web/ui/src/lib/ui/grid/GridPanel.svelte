@@ -3,7 +3,7 @@
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import SelectInput from '$lib/ui/primitives/SelectInput.svelte';
 	import type { App } from '$lib/app';
-	import { getBoxStatusColor, type TileOrder } from '$lib/core/types';
+	import { getStackStatusColor, type TileOrder } from '$lib/core/types';
 
 	interface Props {
 		app: App;
@@ -25,7 +25,7 @@
 	let stepY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
 	let maxOffsetX = $derived(stepX);
 	let maxOffsetY = $derived(stepY);
-	let stack = $derived(app.selectedBox);
+	let stack = $derived(app.selectedStack);
 
 	let isEditing = $state(false);
 	let zStartInput = $state(0);
@@ -54,7 +54,7 @@
 
 	let isDirty = $derived(stack ? zStartInput !== stack.z_start_um || zEndInput !== stack.z_end_um : true);
 	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / app.gridConfig.z_step_um));
-	let hasBox = $derived(stack !== null);
+	let hasStack = $derived(stack !== null);
 
 	function formatMm(um: number, decimals: number = 2): string {
 		return (um / 1000).toFixed(decimals);
@@ -88,10 +88,10 @@
 
 	function handleSubmit() {
 		const { row, col } = app.selectedTile;
-		if (hasBox) {
-			app.editBoxs([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
+		if (hasStack) {
+			app.editStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		} else {
-			app.addBoxs([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
+			app.addStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		}
 		lastZStart = zStartInput;
 		lastZEnd = zEndInput;
@@ -100,7 +100,7 @@
 
 	function handleDelete() {
 		if (confirm('Delete this stack?')) {
-			app.removeBoxs([{ row: app.selectedTile.row, col: app.selectedTile.col }]);
+			app.removeStacks([{ row: app.selectedTile.row, col: app.selectedTile.col }]);
 		}
 	}
 
@@ -199,14 +199,14 @@
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
 				<span class="flex items-center gap-3">
-					<span class="font-mono text-xs font-semibold {getBoxStatusColor(stack?.status ?? null)}">
+					<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
 						R{app.selectedTile.row}, C{app.selectedTile.col}
 					</span>
-					{#if stack}<span class="text-[0.6rem] {getBoxStatusColor(stack.status)}">{stack.status}</span>{/if}
+					{#if stack}<span class="text-[0.6rem] {getStackStatusColor(stack.status)}">{stack.status}</span>{/if}
 				</span>
 				<div class="flex items-center gap-0.5">
 					{#if isEditing}
-						{#if hasBox}
+						{#if hasStack}
 							<button
 								onclick={handleDelete}
 								class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-rose-400"
@@ -219,7 +219,7 @@
 							<button
 								onclick={handleSubmit}
 								class="rounded p-1 text-emerald-500 transition-colors hover:bg-zinc-700 hover:text-emerald-400"
-								title={hasBox ? 'Save changes' : 'Add stack'}
+								title={hasStack ? 'Save changes' : 'Add stack'}
 							>
 								<Icon icon="mdi:check" width="14" height="14" />
 							</button>
@@ -235,7 +235,7 @@
 						<button
 							onclick={handleEdit}
 							class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
-							title={hasBox ? 'Edit stack' : 'Add stack'}
+							title={hasStack ? 'Edit stack' : 'Add stack'}
 						>
 							<Icon icon="mdi:pencil-outline" width="14" height="14" />
 						</button>

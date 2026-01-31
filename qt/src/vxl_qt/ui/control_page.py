@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QStackedWidget, QWidget
 
-from vxl_qt.ui.kit import Box, Color, Colors, FontSize, Separator, Size, Spacing, Splitter, Stretch, Text, vbox
+from vxl_qt.ui.kit import Color, Colors, Flex, FontSize, Separator, Size, Spacing, Splitter, Stretch, Text, vbox
 from vxl_qt.ui.panels import (
     ControlPanel,
     GridCanvas,
@@ -104,10 +104,10 @@ class TabbedPanel(QWidget):
         self._stack = QStackedWidget()
 
         # Bottom bar: tabs on left, status bar slot on right
-        self._tab_bar = Box.hstack(spacing=0)
-        self._status_container = Box.hstack(spacing=Spacing.MD)
+        self._tab_bar = Flex.hstack(spacing=0)
+        self._status_container = Flex.hstack(spacing=Spacing.MD)
 
-        bottom_bar = Box.hstack(
+        bottom_bar = Flex.hstack(
             self._tab_bar,
             Stretch(),
             self._status_container,
@@ -162,11 +162,11 @@ class MainFooter(QWidget):
         self._stage_label = Text.value("X: 0.000  Y: 0.000  Z: 0.000", color=Colors.TEXT_MUTED)
 
         # Laser indicators (right)
-        self._laser_box = Box.hstack(spacing=Spacing.XS)
+        self._laser_box = Flex.hstack(spacing=Spacing.XS)
         self._laser_indicators: dict[str, Text] = {}
 
         # Layout: stage position on left, laser indicators on right
-        content = Box.hstack(
+        content = Flex.hstack(
             self._stage_label,
             self._laser_box,
             spacing=Spacing.LG,
