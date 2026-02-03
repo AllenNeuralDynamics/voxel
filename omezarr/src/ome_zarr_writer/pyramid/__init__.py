@@ -1,4 +1,5 @@
 import numpy as np
+
 from ome_zarr_writer.types import ScaleLevel
 
 from ._numpy import pyramids_2d as pyramids_2d_numpy

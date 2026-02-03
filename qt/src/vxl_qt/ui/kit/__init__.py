@@ -1,4 +1,4 @@
-"""Reusable UI kit for the Voxel Qt application.
+"""Reusable UI kit for the Voxel application.
 
 Structure:
     kit/

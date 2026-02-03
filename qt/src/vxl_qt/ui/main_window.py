@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
 
     def _configure_window(self) -> None:
         """Configure window properties."""
-        self.setWindowTitle("Voxel Qt")
+        self.setWindowTitle("Voxel")
         self.setMinimumSize(1280, 800)
         self.showMaximized()
         # self.showFullScreen()
@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
             # Ask for confirmation
             reply = QMessageBox.question(
                 self,
-                "Quit Voxel Qt",
+                "Quit Voxel",
                 "An active session is running.\n\nAre you sure you want to quit?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,

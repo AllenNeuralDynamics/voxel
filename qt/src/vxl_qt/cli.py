@@ -1,4 +1,4 @@
-"""Voxel Qt application entry point with qasync event loop integration."""
+"""Voxel application entry point with qasync event loop integration."""
 
 import argparse
 import asyncio
@@ -21,7 +21,7 @@ def create_qapp() -> QApplication:
     """Create and configure the Qt application."""
     qapp = QApplication([])
     qapp.setStyle("Fusion")
-    qapp.setApplicationName("VoxelStudio")
+    qapp.setApplicationName("Voxel")
     qapp.setWindowIcon(QIcon(str(VOXEL_LOGO)))
 
     # Load custom fonts (must be done after QApplication is created)
@@ -49,7 +49,7 @@ def create_qapp() -> QApplication:
 
 
 def run_app(_config_path: Path | None = None) -> int:
-    """Run the Voxel Qt application with qasync event loop.
+    """Run the Voxel application with qasync event loop.
 
     Args:
         config_path: Optional path to rig configuration YAML
@@ -78,7 +78,7 @@ def run_app(_config_path: Path | None = None) -> int:
         window = MainWindow(app)
         window.show()
 
-        log.info("Voxel Qt application started")
+        log.info("Voxel application started")
 
     try:
         with loop:
@@ -96,7 +96,7 @@ def run_app(_config_path: Path | None = None) -> int:
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Voxel Qt - Microscope control application",
+        description="Voxel - Microscope control application",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

@@ -1,4 +1,4 @@
-"""Device control widgets for Voxel Qt."""
+"""Device control widgets for Voxel."""
 
 from .camera import CameraControl
 from .filter_wheel import FilterWheelControl, WheelGraphic

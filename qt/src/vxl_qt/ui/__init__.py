@@ -1,1 +1,1 @@
-"""Voxel Qt UI components."""
+"""Voxel UI components."""

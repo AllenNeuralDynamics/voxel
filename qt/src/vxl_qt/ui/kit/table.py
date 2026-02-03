@@ -1,4 +1,4 @@
-"""Reusable table components for the Voxel Qt application.
+"""Reusable table components for the Voxel application.
 
 Provides a flexible table system with:
 - Column definitions with type-specific rendering and editing
@@ -27,9 +27,9 @@ from PySide6.QtWidgets import (
 )
 
 from .button import ToolButton
+from .flex import Flex, Stretch
 from .input import DoubleSpinBox, Select, SpinBox
 from .layout import vbox
-from .flex import Flex, Stretch
 from .text import FontSize, Text
 from .theme import Colors, ControlSize, Spacing
 
@@ -486,7 +486,7 @@ class TableDelegate(QStyledItemDelegate):
 
 
 class Table(QWidget):
-    """Styled table component for the Voxel Qt kit.
+    """Styled table component for the Voxel kit.
 
     Features:
     - Custom column definitions with type-specific delegates

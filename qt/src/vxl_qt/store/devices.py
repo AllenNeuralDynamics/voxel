@@ -1,4 +1,4 @@
-"""Device state store for Voxel Qt application.
+"""Device state store for Voxel application.
 
 This module provides centralized management of device handles and their Qt adapters,
 enabling reactive UI updates when device properties change.

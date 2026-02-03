@@ -4,8 +4,8 @@ from pathlib import Path
 
 from ome_zarr_writer.buffer import MultiScaleBuffer
 from ome_zarr_writer.config import WriterConfig
-from ome_zarr_writer.s3_utils import S3Config
 from ome_zarr_writer.metadata import Zarr3GroupMeta
+from ome_zarr_writer.s3_utils import S3Config
 
 
 class Backend(ABC):

@@ -25,6 +25,8 @@ Backend imports (import only what you need):
     >>> from ome_zarr_writer.backends.log import LogBackend             # no extra dependencies
 """
 
+from vxlib.vec import UIVec2D, UIVec3D, UVec3D
+
 from .backends.base import Backend, MultiBackend
 
 # Buffer types (for advanced usage)
@@ -44,7 +46,6 @@ from .types import (
     Dtype,
     ScaleLevel,
 )
-from vxlib.vec import UIVec2D, UIVec3D, UVec3D
 from .writer import OMEZarrWriter, StreamMetrics, StreamStatus
 
 __version__ = "0.1.0"

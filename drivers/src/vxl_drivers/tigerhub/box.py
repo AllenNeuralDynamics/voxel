@@ -355,7 +355,7 @@ class TigerBox:
             ValueError: if any requested axis does not belong to that card.
         """
         per_card = [(ax.label, ax.card_index) for ax in self.info().axes.values() if ax.card_hex == card]
-        per_card.sort(key=lambda t: (t[1] if t[1] is not None else 10_000))
+        per_card.sort(key=lambda t: t[1] if t[1] is not None else 10_000)
         order = [uid for uid, _ in per_card]
         if not order:
             err = f"Card {card} has no axes."

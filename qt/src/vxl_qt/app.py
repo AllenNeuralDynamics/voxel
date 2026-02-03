@@ -1,6 +1,6 @@
-"""Voxel Qt application coordinator.
+"""Voxel application coordinator.
 
-This module provides the central application object for Voxel Qt, managing:
+This module provides the central application object for Voxel, managing:
 - System configuration (from ~/.voxel/system.yaml)
 - Session lifecycle (launch/close)
 - Rig state access

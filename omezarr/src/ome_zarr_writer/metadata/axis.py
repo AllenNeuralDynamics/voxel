@@ -1,6 +1,7 @@
 from enum import StrEnum
 from typing import Annotated, Literal
-from pydantic import Field, AfterValidator
+
+from pydantic import AfterValidator, Field
 from vxlib import SchemaModel
 
 

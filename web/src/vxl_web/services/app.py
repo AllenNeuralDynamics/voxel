@@ -1,4 +1,4 @@
-"""App-level service for Voxel Studio.
+"""App-level service for Voxel.
 
 This service manages:
 - WebSocket client communication

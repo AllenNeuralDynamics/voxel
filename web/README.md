@@ -1,4 +1,4 @@
-# Voxel Studio
+# Voxel
 
 Web interface and CLI for controlling Voxel microscopes.
 

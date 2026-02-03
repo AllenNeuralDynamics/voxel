@@ -2,15 +2,14 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from ome_zarr_writer.buffer import MultiScaleBuffer
-from ome_zarr_writer.types import ScaleLevel, Compression
+import numpy as np
+import pydantic_tensorstore as pts
+import tensorstore as ts
 
 from ome_zarr_writer.backends.base import Backend
-import numpy as np
-import tensorstore as ts
-import pydantic_tensorstore as pts
-
+from ome_zarr_writer.buffer import MultiScaleBuffer
 from ome_zarr_writer.s3_utils import S3Config
+from ome_zarr_writer.types import Compression, ScaleLevel
 
 _BLOSC_LZ4 = [
     pts.Zarr3CodecBlosc(

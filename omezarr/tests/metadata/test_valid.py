@@ -7,9 +7,9 @@ For maximum type safety in production code, construct models explicitly.
 # pyright: reportArgumentType=false, reportOptionalSubscript=false
 # ruff: noqa: PGH003
 
-from ome_zarr_writer.metadata import OmeMeta5, Multiscale, Dataset
+from ome_zarr_writer.metadata import Dataset, Multiscale, OmeMeta5
+from ome_zarr_writer.metadata.axis import ChannelAxis, TimeAxis
 from ome_zarr_writer.metadata.transforms import DownscaleType, ScaleTransform, TranslationTransform
-from ome_zarr_writer.metadata.axis import TimeAxis, ChannelAxis
 
 
 def test_minimal_2d():

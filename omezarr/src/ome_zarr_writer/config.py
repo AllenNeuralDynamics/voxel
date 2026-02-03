@@ -2,12 +2,11 @@ import math
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from vxlib.vec import UIVec3D, UVec3D
 
 from .metadata import Dataset, Multiscale, OmeMeta, OmeMeta5, Zarr3GroupMeta
 from .metadata.axis import SpaceAxis, SpaceUnit
 from .metadata.transforms import DownscaleType, ScaleTransform
-from vxlib.vec import UIVec3D, UVec3D
-
 from .types import Compression, Dtype, ScaleLevel
 
 

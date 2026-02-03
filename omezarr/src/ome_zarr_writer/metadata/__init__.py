@@ -1,9 +1,10 @@
-from pydantic import Field, model_validator
+from typing import Literal
 
+from pydantic import Field, model_validator
 from vxlib import SchemaModel
+
 from .axis import MultiscaleAxes
 from .transforms import CoordinateTransformations, DownscaleType
-from typing import Literal
 
 
 class Dataset(SchemaModel):
@@ -126,9 +127,10 @@ __all__ = [
 
 
 if __name__ == "__main__":
+    from rich import print
+
     from .axis import AxisName, ChannelAxis, SpaceAxis, SpaceUnit, TimeAxis, TimeUnit
     from .transforms import ScaleTransform, TranslationTransform
-    from rich import print
 
     # Create a simple test OME-Zarr metadata structure
     # TCZYX with 2 resolution levels

@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from rich import print
 
-
 from .base import ZarrServer, get_host_ip
 
 

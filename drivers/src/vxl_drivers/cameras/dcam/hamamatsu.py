@@ -478,7 +478,7 @@ class HamamatsuCamera(Camera):
         except Exception:
             self.log.debug("Failed to query binning options")
 
-        return available if available else [1]
+        return available or [1]
 
     def _query_pixel_format_options(self) -> list[PixelFormat]:
         """Query available pixel format options from the camera."""
@@ -500,7 +500,7 @@ class HamamatsuCamera(Camera):
         except Exception:
             self.log.debug("Failed to query pixel format options")
 
-        return available if available else ["MONO16"]
+        return available or ["MONO16"]
 
     def _query_sensor_mode_options(self) -> dict[str, int]:
         """Query available sensor mode options from the camera."""
@@ -518,7 +518,7 @@ class HamamatsuCamera(Camera):
         except Exception:
             self.log.debug("Failed to query sensor mode options")
 
-        return options if options else {"area": 1}
+        return options or {"area": 1}
 
     def _query_readout_direction_options(self) -> dict[str, int]:
         """Query available readout direction options from the camera."""
@@ -536,4 +536,4 @@ class HamamatsuCamera(Camera):
         except Exception:
             self.log.debug("Failed to query readout direction options")
 
-        return options if options else {"forward": 1}
+        return options or {"forward": 1}

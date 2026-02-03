@@ -1,4 +1,4 @@
-"""State stores for Voxel Qt application.
+"""State stores for Voxel application.
 
 Stores provide centralized state management with Qt signals for reactive updates.
 

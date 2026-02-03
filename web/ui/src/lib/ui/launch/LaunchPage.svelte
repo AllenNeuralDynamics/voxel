@@ -65,23 +65,22 @@
 	<!-- Main content panel -->
 	<div class="flex w-2/5 flex-col overflow-y-auto p-8">
 		<!-- Header -->
-		<div class="mb-6">
+		<div class="mb-6 flex flex-col gap-4">
+			<div class="flex items-center gap-3">
+				<img src="/voxel-logo.png" alt="Voxel" class="h-10 w-10" />
+				<div>
+					<h1 class="text-2xl font-semibold text-zinc-100">Voxel</h1>
+					<p class="text-sm text-zinc-400">Light sheet microscope control</p>
+				</div>
+			</div>
+
 			{#if isLaunching}
-				<div class="flex items-center gap-4">
-					<div class="h-8 w-8 animate-spin rounded-full border-4 border-zinc-700 border-t-blue-500"></div>
-					<div>
-						<h1 class="text-xl font-semibold text-zinc-100">Starting Session</h1>
-						<p class="text-sm text-zinc-400">Initializing rig and devices...</p>
-					</div>
+				<div class="flex items-center gap-2">
+					<div class="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-blue-500"></div>
+					<p class="text-sm text-zinc-400">Starting session...</p>
 				</div>
 			{:else}
-				<div class="flex items-center gap-3">
-					<img src="/voxel-logo.png" alt="Voxel" class="h-10 w-10" />
-					<div>
-						<h1 class="text-2xl font-semibold text-zinc-100">Voxel Studio</h1>
-						<p class="text-sm text-zinc-400">Select or create a session to get started</p>
-					</div>
-				</div>
+				<p class="text-sm text-zinc-300">Select or create a session to get started</p>
 			{/if}
 		</div>
 

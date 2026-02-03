@@ -1,15 +1,16 @@
-import numpy as np
-from pydantic import BaseModel, Field, computed_field
+import time
 from collections.abc import Callable
 
+import numpy as np
+from pydantic import BaseModel, Field, computed_field
+from rich import print
 from vxlib.vec import UIVec3D
 
-from ome_zarr_writer.types import Dtype, ScaleLevel
-from .config import WriterConfig
 from ome_zarr_writer.backends.base import Backend
+from ome_zarr_writer.types import Dtype, ScaleLevel
+
 from .buffer import BufferStage, BufferStatus, MultiScaleBuffer, create_ring_buffer
-import time
-from rich import print
+from .config import WriterConfig
 
 
 class StreamStatus(BaseModel):
@@ -441,6 +442,7 @@ class OMEZarrWriter:
 # Example usage:
 if __name__ == "__main__":
     from rich import print
+
     from ome_zarr_writer.backends.log import LogBackend
 
     # Create configuration

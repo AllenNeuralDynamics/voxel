@@ -1,7 +1,7 @@
 [project]
 name = "vxl-web"
 version = "0.1.0"
-description = "Web interface for Voxel Rig control"
+description = "Voxel - Web interface for microscope control"
 readme = "README.md"
 authors = [
     { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }

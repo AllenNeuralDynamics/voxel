@@ -1,4 +1,4 @@
-"""Web interface for Voxel Studio.
+"""Web interface for Voxel.
 
 Always starts in lobby mode. Sessions are launched via the API.
 """
@@ -25,7 +25,7 @@ def _create_lifespan(system_config: SystemConfig) -> Callable[[FastAPI], Abstrac
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Application lifespan: initialize and cleanup."""
-        log.info("Starting Voxel Studio in lobby mode")
+        log.info("Starting Voxel in lobby mode")
 
         # Create app service (starts with no session)
         app_service = AppService(system_config)
@@ -48,7 +48,7 @@ def _create_lifespan(system_config: SystemConfig) -> Callable[[FastAPI], Abstrac
 
         # Cleanup log handler
         app_service.teardown_log_capture()
-        log.info("Voxel Studio stopped")
+        log.info("Voxel stopped")
 
     return lifespan
 
@@ -67,7 +67,7 @@ def create_app(system_config: SystemConfig | None = None, serve_static: bool = T
         system_config = SystemConfig.load()
 
     app = FastAPI(
-        title="Voxel Studio API",
+        title="Voxel API",
         description="Web API for Voxel microscope control",
         version="0.1.0",
         lifespan=_create_lifespan(system_config),
@@ -89,7 +89,7 @@ def create_app(system_config: SystemConfig | None = None, serve_static: bool = T
         """Basic health check."""
         return {
             "status": "ok",
-            "service": "Voxel Studio API",
+            "service": "Voxel API",
         }
 
     if serve_static:

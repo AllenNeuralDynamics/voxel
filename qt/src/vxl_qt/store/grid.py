@@ -1,4 +1,4 @@
-"""Grid state store for Voxel Qt application.
+"""Grid state store for Voxel application.
 
 This module provides centralized management of grid/tile/stack state,
 enabling reactive UI updates when grid configuration or selection changes.

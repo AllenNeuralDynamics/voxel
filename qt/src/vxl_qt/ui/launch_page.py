@@ -38,7 +38,7 @@ from vxlib import display_name, format_relative_time
 
 
 class LaunchHeader(Flex):
-    """Header with logo and title/subtitle."""
+    """Header with logo, title, and swappable status line."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         logo = QLabel()
@@ -46,18 +46,36 @@ class LaunchHeader(Flex):
         pixmap = pixmap.scaledToWidth(40, Qt.TransformationMode.SmoothTransformation)
         logo.setPixmap(pixmap)
 
+        # Status line: swaps between idle and launching
+        self._idle_text = Text.muted("Select or create a session to get started")
+        self._launching_indicator = Flex.vstack(
+            Text.muted("Starting session..."),
+            LinearLoader(),
+            spacing=Spacing.SM,
+        )
+        self._launching_indicator.hide()
+
         super().__init__(
-            logo,
-            Flex.vstack(
-                Text.title("Voxel Qt", color=Colors.TEXT_BRIGHT),
-                Text.muted("Select or create a session to get started"),
-                spacing=Spacing.XS,
+            Flex.hstack(
+                logo,
+                Flex.vstack(
+                    Text.title("Voxel", color=Colors.TEXT_BRIGHT),
+                    Text.muted("Light sheet microscope control"),
+                    spacing=Spacing.XS,
+                ),
+                Stretch(),
+                spacing=Spacing.LG,
             ),
-            Stretch(),
-            flow=Flow.HORIZONTAL,
-            spacing=Spacing.LG,
+            self._idle_text,
+            self._launching_indicator,
+            spacing=Spacing.MD,
             parent=parent,
         )
+
+    def set_launching(self, launching: bool) -> None:
+        """Toggle between idle and launching status line."""
+        self._idle_text.setVisible(not launching)
+        self._launching_indicator.setVisible(launching)
 
 
 class NewSessionForm(QWidget):
@@ -159,20 +177,6 @@ class NewSessionForm(QWidget):
 
     def clear(self) -> None:
         self._name_input.clear()
-
-
-class LaunchingIndicator(Flex):
-    """Centered loading indicator with animated progress bar."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(
-            # Text.title("Starting Session...", color=Colors.TEXT_BRIGHT),
-            # Text.muted("Initializing rig and devices..."),
-            LinearLoader(),
-            Stretch(),
-            spacing=Spacing.MD,
-            parent=parent,
-        )
 
 
 class SessionCard(Flex):
@@ -298,8 +302,6 @@ class LaunchPage(QWidget):
         self._right_panel = QWidget()
 
         self._header = LaunchHeader()
-        self._launching_indicator = LaunchingIndicator()
-        self._launching_indicator.hide()
 
         self._new_session_form = NewSessionForm()
         self._form_section = Flex.vstack(
@@ -328,9 +330,9 @@ class LaunchPage(QWidget):
             self._left_panel, spacing=Spacing.XXL, margins=(Spacing.XL, Spacing.XL, Spacing.XL, Spacing.XL)
         )
         left_layout.addWidget(self._header)
-        left_layout.addWidget(self._launching_indicator, stretch=1)
         left_layout.addWidget(self._form_section)
         left_layout.addWidget(self._sessions_section, stretch=1)
+        left_layout.addStretch()
 
         self._left_panel.setStyleSheet(f"background-color: {Colors.BG_MEDIUM};")
         self._splitter.addWidget(self._left_panel)
@@ -366,6 +368,6 @@ class LaunchPage(QWidget):
 
     def set_launching(self, launching: bool) -> None:
         """Toggle between idle and launching states."""
-        self._launching_indicator.setVisible(launching)
+        self._header.set_launching(launching)
         self._form_section.setVisible(not launching)
         self._sessions_section.setVisible(not launching)

@@ -1,4 +1,4 @@
-"""Asset paths for the Voxel Qt application."""
+"""Asset paths for the Voxel application."""
 
 from pathlib import Path
 

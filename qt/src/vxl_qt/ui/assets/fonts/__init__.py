@@ -1,4 +1,4 @@
-"""Font loading utilities for the Voxel Qt application.
+"""Font loading utilities for the Voxel application.
 
 Usage:
     from vxl_qt.ui.assets.fonts import load_fonts, IBM_PLEX, GEIST

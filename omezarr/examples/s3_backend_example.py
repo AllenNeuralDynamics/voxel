@@ -5,10 +5,10 @@ This example demonstrates how to use the TensorStoreS3Backend to write
 OME-Zarr data directly to S3-compatible storage.
 """
 
-from ome_zarr_writer import WriterConfig, S3Config, S3AuthType
-from ome_zarr_writer.backends.ts import TensorStoreBackend
 from vxlib.vec import UIVec3D
 
+from ome_zarr_writer import S3AuthType, S3Config, WriterConfig
+from ome_zarr_writer.backends.ts import TensorStoreBackend
 from ome_zarr_writer.types import ScaleLevel
 
 

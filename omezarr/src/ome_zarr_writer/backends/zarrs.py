@@ -7,10 +7,9 @@ import zarr
 import zarrs  # noqa: F401
 from zarr.storage import LocalStore
 
-from ome_zarr_writer.buffer import MultiScaleBuffer
-from ome_zarr_writer.types import ScaleLevel, Compression
-
 from ome_zarr_writer.backends.base import Backend
+from ome_zarr_writer.buffer import MultiScaleBuffer
+from ome_zarr_writer.types import Compression, ScaleLevel
 
 # Enable Zarrs pipeline globally
 zarr.config.set(

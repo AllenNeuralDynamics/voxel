@@ -9,7 +9,7 @@ from pathlib import Path
 
 from rich import print
 
-from ome_zarr_writer.ng_view import NGLUT, NGLayerConfig, ng_quick_view, S3Config
+from ome_zarr_writer.ng_view import NGLUT, NGLayerConfig, S3Config, ng_quick_view
 
 
 def create_multi_tile_s3_urls(

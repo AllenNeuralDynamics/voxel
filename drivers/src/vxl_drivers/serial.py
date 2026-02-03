@@ -15,7 +15,7 @@ class SerialTransport:
     def readline(self) -> bytes | None:
         with self._lock:
             line = self.ser.readline()
-        return line if line else None
+        return line or None
 
     # Might have to switch to this if bugs are present
     def readline2(self) -> bytes | None:

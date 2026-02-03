@@ -1,4 +1,4 @@
-"""Voxel Studio - Web interface for Voxel microscope control."""
+"""Voxel - Web interface for microscope control."""
 
 from vxl_web.app import create_app
 

@@ -1,7 +1,6 @@
+import socket
 from abc import ABC, abstractmethod
 from pathlib import Path
-import socket
-
 
 _HOST_IP: str = "localhost"
 _HOST_NAME: str = socket.gethostname()

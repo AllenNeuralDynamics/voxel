@@ -1,7 +1,9 @@
 """Numba JIT-compiled CPU implementation of multi-scale pyramid generation."""
 
 import math
+
 import numpy as np
+
 from ome_zarr_writer.types import ScaleLevel
 
 try:

@@ -10,9 +10,9 @@ from pathlib import Path
 
 import neuroglancer as ng
 
-from ome_zarr_writer.zarr_server import HTTPDZarrServer
-from ome_zarr_writer.zarr_server.base import ZarrServer, get_host_name, get_host_ip
 from ome_zarr_writer.s3_utils import S3Config
+from ome_zarr_writer.zarr_server import HTTPDZarrServer
+from ome_zarr_writer.zarr_server.base import ZarrServer, get_host_ip, get_host_name
 
 
 def replace_hostname_with_ip(viewer):

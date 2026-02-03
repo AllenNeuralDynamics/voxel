@@ -8,6 +8,7 @@ Type checkers may warn about dict inputs, but this is expected behavior.
 
 import pytest
 from pydantic import ValidationError
+
 from ome_zarr_writer.metadata import Multiscale
 
 

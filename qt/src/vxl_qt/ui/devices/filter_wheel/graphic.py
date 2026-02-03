@@ -69,7 +69,7 @@ class WheelGraphic(QWidget):
         self.assignments = {i: assignments.get(i) for i in self.slots}
 
         self.default_hue = 240  # Blue-grey for unmapped labels (fallback color)
-        self.hue_mapping = hue_mapping if hue_mapping else {}
+        self.hue_mapping = hue_mapping or {}
 
         self.orbit_radius = 60
         self.desired_spacing = 12.0  # Desired spacing between members in SVG units

@@ -6,8 +6,9 @@ using the S3Config configuration.
 """
 
 from enum import StrEnum
-from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Self
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class S3AuthType(StrEnum):
@@ -194,7 +195,7 @@ def write_file_to_s3(s3_config: "S3Config", content: str | bytes, key: str | Non
         >>> # Writes to: s3://my-bucket/data/test.txt
     """
     try:
-        from botocore.exceptions import NoCredentialsError, ClientError
+        from botocore.exceptions import ClientError, NoCredentialsError
     except ImportError as e:
         print(f"Warning: boto3 not available for S3 operations: {e}")
         return False
@@ -252,7 +253,7 @@ def read_file_from_s3(s3_config: "S3Config", key: str | None = None) -> bytes | 
         >>> # Reads from: s3://my-bucket/data/test.txt
     """
     try:
-        from botocore.exceptions import NoCredentialsError, ClientError
+        from botocore.exceptions import ClientError, NoCredentialsError
     except ImportError as e:
         print(f"Warning: boto3 not available for S3 operations: {e}")
         return None
@@ -341,7 +342,7 @@ def list_s3_objects(s3_config: "S3Config", prefix: str | None = None, max_keys: 
         >>> # Returns: ["experiments/2024/data.zarr", "experiments/2024/test.txt", ...]
     """
     try:
-        from botocore.exceptions import NoCredentialsError, ClientError
+        from botocore.exceptions import ClientError, NoCredentialsError
     except ImportError as e:
         print(f"Warning: boto3 not available for S3 operations: {e}")
         return []

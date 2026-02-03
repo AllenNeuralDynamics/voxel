@@ -1,4 +1,4 @@
-"""Design tokens for the Voxel Qt application.
+"""Design tokens for the Voxel application.
 
 This module provides a consistent design system used throughout the UI.
 All colors follow a dark theme inspired by VS Code's dark+ theme.

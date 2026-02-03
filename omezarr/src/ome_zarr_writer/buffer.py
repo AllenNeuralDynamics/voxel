@@ -8,10 +8,9 @@ from multiprocessing.sharedctypes import Synchronized
 import numpy as np
 from pydantic import BaseModel, Field, computed_field
 from rich import print
-
-from ome_zarr_writer.pyramid import pyramids_3d
 from vxlib.vec import UIVec3D
 
+from ome_zarr_writer.pyramid import pyramids_3d
 from ome_zarr_writer.types import Dtype, ScaleLevel
 
 

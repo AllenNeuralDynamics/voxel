@@ -1,4 +1,4 @@
-"""CLI for Voxel Studio.
+"""CLI for Voxel.
 
 Examples:
     # Start in lobby mode (default)
@@ -27,7 +27,7 @@ def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
         prog="vxl",
-        description="Voxel Studio - Microscope Control System",
+        description="Voxel - Microscope Control System",
     )
 
     parser.add_argument(
@@ -53,7 +53,7 @@ def main() -> None:
     configure_logging(level=log_level, fmt="%(message)s", datefmt="[%X]")
     log = logging.getLogger("vxl")
 
-    log.info("Starting Voxel Studio...")
+    log.info("Starting Voxel...")
 
     app = create_app()
 

@@ -1,9 +1,8 @@
 from enum import StrEnum
-from typing import Annotated, Literal, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator
 from pydantic.functional_serializers import PlainSerializer
-
 from vxlib import SchemaModel
 
 

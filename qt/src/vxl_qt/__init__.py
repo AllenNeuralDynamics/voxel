@@ -1,5 +1,5 @@
-"""Voxel Qt - PySide6-based microscope control built on voxel.
+"""Voxel - PySide6-based microscope control.
 
 This package provides a native Qt desktop application for Voxel microscope control,
-offering the same features as the vxl-web web interface but as a desktop app.
+offering the same features as the web interface but as a desktop app.
 """
