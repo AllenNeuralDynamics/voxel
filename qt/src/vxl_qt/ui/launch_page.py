@@ -163,8 +163,7 @@ class NewSessionForm(QWidget):
             self._path_preview.setText("")
             return
 
-        sanitized = session_name.lower().replace(" ", "-")
-        full_path = root.path / sanitized
+        full_path = root.session_path(session_name)
         self._path_preview.setText(f"{full_path}")
 
     def _on_create_clicked(self) -> None:

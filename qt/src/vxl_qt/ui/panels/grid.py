@@ -1,14 +1,25 @@
 """Grid panel for acquisition grid display and control."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+import math
+from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QWidget
 
-from vxl.config import TileOrder
 from vxl.tile import Stack, Tile
-from vxl_qt.store import STACK_STATUS_COLORS, GridStore, PreviewStore, get_stack_status_color
+from vxl_qt.store import (
+    STACK_STATUS_COLORS,
+    GridStore,
+    PreviewStore,
+    StageStore,
+    composite_rgb,
+    get_stack_status_color,
+    resize_image,
+)
 from vxl_qt.ui.kit import (
     Colors,
     ColumnType,
@@ -29,8 +40,12 @@ from vxl_qt.ui.kit import (
     ToolButton,
     vbox,
 )
-from vxl_qt.ui.panels.preview import PreviewThumbnail
 from vxlib import fire_and_forget
+
+if TYPE_CHECKING:
+    from PySide6.QtGui import QPaintEvent, QResizeEvent
+
+    from vxl.config import TileOrder
 
 log = logging.getLogger(__name__)
 
@@ -782,42 +797,749 @@ class GridSettingsSection(QWidget):
         self._store.set_tile_order(order)
 
 
-class GridCanvas(QWidget):
-    """2D stage visualization with grid, tiles, stacks, and FOV.
+# =============================================================================
+# Stage Canvas Sub-widgets
+# =============================================================================
 
-    TODO: Implement using QSvgRenderer + QPainter pattern (like WheelGraphic):
-    - Grid layer: Tile rectangles (clickable for selection)
-    - Stacks layer: Stack rectangles with status-based coloring
-    - Path layer: Acquisition order polyline with arrows
-    - FOV layer: Current position with thumbnail and crosshair
-    - X/Y sliders for stage movement
-    - Z slider (vertical) for depth control
-    - Layer visibility toggle buttons
+# Colors used for stage visualization
+_EMERALD = "#10b981"
+_ROSE = "#f43f5e"
+_FUCHSIA = "#d946ef"
+_AMBER = "#f59e0b"
+_ZINC_600 = "#52525b"
+_ZINC_700 = "#3f3f46"
+_ZINC_900 = "#18181b"
+
+# Layer toggle button colors (matching web)
+_LAYER_COLORS: dict[str, str] = {
+    "grid": "#60a5fa",  # blue-400
+    "stacks": "#c084fc",  # purple-400
+    "path": "#e879f9",  # fuchsia-400
+    "fov": "#34d399",  # emerald-400
+    "thumbnail": "#22d3ee",  # cyan-400
+}
+
+_TRACK_WIDTH = 16
+_STAGE_GAP = 16
+
+
+class _StageSlider(QWidget):
+    """Thin custom slider for stage axis control."""
+
+    valueChanged = Signal(float)
+
+    def __init__(
+        self,
+        orientation: Qt.Orientation = Qt.Orientation.Horizontal,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._orientation = orientation
+        self._min = 0.0
+        self._max = 100.0
+        self._value = 0.0
+        self._moving = False
+        self._dragging = False
+        self._inverted = False
+
+        if orientation == Qt.Orientation.Horizontal:
+            self.setFixedHeight(_TRACK_WIDTH)
+            self.setMinimumWidth(20)
+        else:
+            self.setFixedWidth(_TRACK_WIDTH)
+            self.setMinimumHeight(20)
+
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def setRange(self, min_val: float, max_val: float) -> None:
+        self._min = min_val
+        self._max = max_val
+        self.update()
+
+    def setValue(self, value: float) -> None:
+        self._value = value
+        self.update()
+
+    def setMoving(self, moving: bool) -> None:
+        self._moving = moving
+        self.update()
+
+    def setInverted(self, inverted: bool) -> None:
+        self._inverted = inverted
+
+    def _value_to_ratio(self) -> float:
+        r = self._max - self._min
+        if r <= 0:
+            return 0.0
+        ratio = (self._value - self._min) / r
+        if self._inverted:
+            ratio = 1.0 - ratio
+        return max(0.0, min(1.0, ratio))
+
+    def _ratio_to_value(self, ratio: float) -> float:
+        if self._inverted:
+            ratio = 1.0 - ratio
+        return self._min + ratio * (self._max - self._min)
+
+    def paintEvent(self, _event: QPaintEvent | None) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+
+        # Background
+        painter.setPen(QPen(QColor(_ZINC_600), 0.5))
+        painter.setBrush(QColor(_ZINC_900))
+        painter.drawRect(QRectF(0, 0, w, h))
+
+        # Thumb line
+        color = QColor(_ROSE) if self._moving else QColor(_EMERALD)
+        ratio = self._value_to_ratio()
+
+        pen = QPen(color, 2)
+        painter.setPen(pen)
+        if self._orientation == Qt.Orientation.Horizontal:
+            x = ratio * w
+            painter.drawLine(QPointF(x, 0), QPointF(x, h))
+        else:
+            y = (1.0 - ratio) * h  # vertical: top = max
+            painter.drawLine(QPointF(0, y), QPointF(w, y))
+
+        painter.end()
+
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
+        if event and not self._moving and event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._handle_mouse(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
+        if event and self._dragging:
+            self._handle_mouse(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
+        if event and self._dragging and event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+
+    def _handle_mouse(self, event: QMouseEvent) -> None:
+        if self._orientation == Qt.Orientation.Horizontal:
+            ratio = max(0.0, min(1.0, event.position().x() / max(1, self.width())))
+        else:
+            ratio = max(0.0, min(1.0, 1.0 - event.position().y() / max(1, self.height())))
+        value = self._ratio_to_value(ratio)
+        self._value = value
+        self.update()
+        self.valueChanged.emit(value)
+
+
+class _StageCanvas(QWidget):
+    """Core QPainter widget for 2D stage visualization.
+
+    Draws tile grid, stacks, acquisition path, FOV indicator, and thumbnail.
+    All coordinates are in mm (tile µm / 1000).
+    """
+
+    tile_clicked = Signal(int, int)  # row, col
+    tile_double_clicked = Signal(int, int)  # row, col
+
+    def __init__(
+        self,
+        grid_store: GridStore,
+        stage_store: StageStore,
+        preview_store: PreviewStore,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._grid = grid_store
+        self._stage = stage_store
+        self._preview = preview_store
+
+        self._show_thumbnail = True
+        self._hovered_tile: tuple[int, int] | None = None
+        self._thumbnail_image: QImage | None = None
+
+        # Cache transform
+        self._transform = QTransform()
+        self._inv_transform = QTransform()
+
+        self.setMouseTracking(True)
+        self.setMinimumSize(100, 100)
+
+        # Connect signals
+        self._grid.tiles_changed.connect(self.update)
+        self._grid.stacks_changed.connect(self.update)
+        self._grid.grid_config_changed.connect(self.update)
+        self._grid.selection_changed.connect(self._on_selection_changed)
+        self._grid.layer_visibility_changed.connect(self.update)
+
+        self._stage.position_changed.connect(self.update)
+        self._stage.moving_changed.connect(self._on_moving_changed)
+        self._stage.limits_changed.connect(self.update)
+
+        self._preview.composite_updated.connect(self._on_composite_updated)
+
+    def set_show_thumbnail(self, show: bool) -> None:
+        self._show_thumbnail = show
+        self.update()
+
+    def _on_selection_changed(self, _row: int, _col: int) -> None:
+        self.update()
+
+    def _on_moving_changed(self) -> None:
+        if self._stage.is_xy_moving:
+            self.setCursor(Qt.CursorShape.ForbiddenCursor)
+        else:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update()
+
+    def _on_composite_updated(self) -> None:
+        channels = self._preview.channels
+        if not channels:
+            self._thumbnail_image = None
+            self.update()
+            return
+
+        frames = [ch.frame for ch in channels.values()]
+        composite = composite_rgb(frames)
+        if composite is None:
+            self._thumbnail_image = None
+        else:
+            resized = resize_image(composite, 256)
+            h, w = resized.shape[:2]
+            # .copy() to detach from numpy buffer
+            data = resized.copy().data
+            self._thumbnail_image = QImage(data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
+        self.update()
+
+    def _to_mm(self, um: float) -> float:
+        return um / 1000.0
+
+    def _compute_transform(self) -> None:
+        """Compute world-to-widget transform maintaining aspect ratio."""
+        fov_w, fov_h = self._grid.fov_size
+        fov_w_mm = self._to_mm(fov_w)
+        fov_h_mm = self._to_mm(fov_h)
+
+        margin_x = fov_w_mm / 2.0
+        margin_y = fov_h_mm / 2.0
+
+        stage_w = self._stage.stage_width
+        stage_h = self._stage.stage_height
+
+        if stage_w <= 0 or stage_h <= 0:
+            stage_w = fov_w_mm * 2
+            stage_h = fov_h_mm * 2
+
+        vb_w = stage_w + fov_w_mm
+        vb_h = stage_h + fov_h_mm
+
+        if vb_w <= 0 or vb_h <= 0:
+            return
+
+        w = self.width()
+        h = self.height()
+
+        scale_x = w / vb_w
+        scale_y = h / vb_h
+        scale = min(scale_x, scale_y)
+
+        # Center the content
+        used_w = vb_w * scale
+        used_h = vb_h * scale
+        offset_x = (w - used_w) / 2.0
+        offset_y = (h - used_h) / 2.0
+
+        self._transform = QTransform()
+        self._transform.translate(offset_x, offset_y)
+        self._transform.scale(scale, scale)
+        self._transform.translate(margin_x, margin_y)
+
+        inv, invertible = self._transform.inverted()
+        self._inv_transform = inv if invertible else QTransform()
+
+    def paintEvent(self, _event: QPaintEvent | None) -> None:
+        self._compute_transform()
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Dark background
+        painter.fillRect(self.rect(), QColor(str(Colors.BG_DARK)))
+
+        painter.setTransform(self._transform)
+
+        vis = self._grid.layer_visibility
+        tiles = self._grid.tiles
+        stacks = self._grid.stacks
+
+        # 1. Stacks layer
+        if vis.stacks and stacks:
+            self._paint_stacks(painter, stacks)
+
+        # 2. Path layer
+        if vis.path and len(stacks) > 1:
+            self._paint_path(painter, stacks)
+
+        # 3. FOV layer
+        if vis.fov:
+            self._paint_fov(painter)
+
+        # 4. Grid layer (tiles on top for click targeting)
+        if vis.grid and tiles:
+            self._paint_grid(painter, tiles)
+
+        painter.end()
+
+    def _paint_stacks(self, painter: QPainter, stacks: list[Stack]) -> None:
+        for stack in stacks:
+            cx = self._to_mm(stack.x_um)
+            cy = self._to_mm(stack.y_um)
+            w = self._to_mm(stack.w_um)
+            h = self._to_mm(stack.h_um)
+            x = cx - w / 2
+            y = cy - h / 2
+            rect = QRectF(x, y, w, h)
+
+            color_hex = get_stack_status_color(stack.status)
+            color = QColor(color_hex)
+
+            # Check hover
+            is_hovered = self._hovered_tile == (stack.row, stack.col)
+
+            # Fill with alpha
+            fill_color = QColor(color)
+            fill_color.setAlphaF(0.35 if is_hovered else 0.15)
+            painter.setBrush(fill_color)
+
+            # Stroke
+            pen = QPen(color)
+            pen.setCosmetic(True)
+            pen.setWidthF(1.5)
+            painter.setPen(pen)
+
+            painter.drawRect(rect)
+
+    def _paint_path(self, painter: QPainter, stacks: list[Stack]) -> None:
+        points = [QPointF(self._to_mm(s.x_um), self._to_mm(s.y_um)) for s in stacks]
+
+        # Polyline
+        pen = QPen(QColor(_FUCHSIA))
+        pen.setCosmetic(True)
+        pen.setWidthF(1.5)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPolyline(QPolygonF(points))
+
+        # Arrowheads at midpoints
+        for i in range(len(points) - 1):
+            p1 = points[i]
+            p2 = points[i + 1]
+            mid = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
+            angle = math.atan2(p2.y() - p1.y(), p2.x() - p1.x())
+
+            # Arrow size in world coords - scale to be visible
+            arrow_size = 0.15
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+
+            # Arrow points (relative to mid, rotated by angle)
+            # M -0.15 -0.2  L 0.15 0  L -0.15 0.2
+            ax1 = mid.x() + (-arrow_size * cos_a - (-0.2) * sin_a)
+            ay1 = mid.y() + (-arrow_size * sin_a + (-0.2) * cos_a)
+            ax2 = mid.x() + (arrow_size * cos_a)
+            ay2 = mid.y() + (arrow_size * sin_a)
+            ax3 = mid.x() + (-arrow_size * cos_a - 0.2 * sin_a)
+            ay3 = mid.y() + (-arrow_size * sin_a + 0.2 * cos_a)
+
+            path = QPainterPath()
+            path.moveTo(ax1, ay1)
+            path.lineTo(ax2, ay2)
+            path.lineTo(ax3, ay3)
+
+            pen = QPen(QColor(_FUCHSIA))
+            pen.setCosmetic(True)
+            pen.setWidthF(1.5)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+
+    def _paint_fov(self, painter: QPainter) -> None:
+        fov_w_mm = self._to_mm(self._grid.fov_size[0])
+        fov_h_mm = self._to_mm(self._grid.fov_size[1])
+
+        # FOV position relative to stage lower limits
+        fov_x = self._stage.x.position - self._stage.x.lower_limit
+        fov_y = self._stage.y.position - self._stage.y.lower_limit
+
+        left = fov_x - fov_w_mm / 2
+        top = fov_y - fov_h_mm / 2
+        fov_rect = QRectF(left, top, fov_w_mm, fov_h_mm)
+
+        is_moving = self._stage.is_xy_moving
+        color = QColor(_ROSE) if is_moving else QColor(_EMERALD)
+
+        # Thumbnail
+        if self._show_thumbnail and self._thumbnail_image is not None:
+            painter.save()
+            painter.setClipRect(fov_rect)
+            painter.drawImage(fov_rect, self._thumbnail_image)
+            painter.restore()
+
+        # FOV outline
+        pen = QPen(color)
+        pen.setCosmetic(True)
+        pen.setWidthF(2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(fov_rect)
+
+        # Crosshair
+        crosshair_len = 0.3
+        pen_ch = QPen(color)
+        pen_ch.setCosmetic(True)
+        pen_ch.setWidthF(1)
+        color_ch = QColor(color)
+        color_ch.setAlphaF(0.7)
+        pen_ch.setColor(color_ch)
+        painter.setPen(pen_ch)
+        painter.drawLine(QPointF(fov_x - crosshair_len, fov_y), QPointF(fov_x + crosshair_len, fov_y))
+        painter.drawLine(QPointF(fov_x, fov_y - crosshair_len), QPointF(fov_x, fov_y + crosshair_len))
+
+    def _paint_grid(self, painter: QPainter, tiles: list[Tile]) -> None:
+        sel_row = self._grid.selected_row
+        sel_col = self._grid.selected_col
+        selected_tile: Tile | None = None
+
+        for tile in tiles:
+            if tile.row == sel_row and tile.col == sel_col:
+                selected_tile = tile
+                continue  # draw selected last
+            self._paint_tile(painter, tile, selected=False)
+
+        # Draw selected tile on top
+        if selected_tile is not None:
+            self._paint_tile(painter, selected_tile, selected=True)
+
+    def _paint_tile(self, painter: QPainter, tile: Tile, *, selected: bool) -> None:
+        cx = self._to_mm(tile.x_um)
+        cy = self._to_mm(tile.y_um)
+        w = self._to_mm(tile.w_um)
+        h = self._to_mm(tile.h_um)
+        x = cx - w / 2
+        y = cy - h / 2
+        rect = QRectF(x, y, w, h)
+
+        is_hovered = self._hovered_tile == (tile.row, tile.col)
+
+        if is_hovered:
+            fill = QColor(_ZINC_700)
+            fill.setAlphaF(0.3)
+            painter.setBrush(fill)
+        else:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        if selected:
+            pen = QPen(QColor(_AMBER))
+            pen.setCosmetic(True)
+            pen.setWidthF(2)
+        else:
+            pen = QPen(QColor(_ZINC_700))
+            pen.setCosmetic(True)
+            pen.setWidthF(1)
+        painter.setPen(pen)
+        painter.drawRect(rect)
+
+    def _hit_test(self, pos: QPointF) -> tuple[int, int] | None:
+        """Hit test against tiles, return (row, col) or None."""
+        world = self._inv_transform.map(pos)
+        wx, wy = world.x(), world.y()
+
+        for tile in self._grid.tiles:
+            cx = self._to_mm(tile.x_um)
+            cy = self._to_mm(tile.y_um)
+            w = self._to_mm(tile.w_um)
+            h = self._to_mm(tile.h_um)
+            if cx - w / 2 <= wx <= cx + w / 2 and cy - h / 2 <= wy <= cy + h / 2:
+                return (tile.row, tile.col)
+        return None
+
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
+        if event and event.button() == Qt.MouseButton.LeftButton:
+            hit = self._hit_test(event.position())
+            if hit:
+                self._grid.select_tile(hit[0], hit[1])
+                self.tile_clicked.emit(hit[0], hit[1])
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent | None) -> None:
+        if event and event.button() == Qt.MouseButton.LeftButton:
+            hit = self._hit_test(event.position())
+            if hit:
+                self.tile_double_clicked.emit(hit[0], hit[1])
+
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
+        if event:
+            hit = self._hit_test(event.position())
+            if hit != self._hovered_tile:
+                self._hovered_tile = hit
+                self.update()
+
+
+class _ZVisualization(QWidget):
+    """Transparent overlay drawn on top of Z slider showing z-position and stack range."""
+
+    def __init__(self, stage_store: StageStore, grid_store: GridStore, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._stage = stage_store
+        self._grid = grid_store
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        self._stage.position_changed.connect(self.update)
+        self._stage.moving_changed.connect(self.update)
+        self._grid.selection_changed.connect(self._on_selection)
+        self._grid.stacks_changed.connect(self.update)
+
+    def _on_selection(self, _r: int, _c: int) -> None:
+        self.update()
+
+    def _z_to_y(self, z_value: float) -> float:
+        depth = self._stage.stage_depth
+        if depth <= 0:
+            return 0.0
+        offset = z_value - self._stage.z.lower_limit
+        return (1.0 - offset / depth) * self.height()
+
+    def paintEvent(self, _event: QPaintEvent | None) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w = self.width()
+
+        # Selected stack z markers
+        selected_stack = self._grid.get_selected_stack()
+        if selected_stack and self._stage.stage_depth > 0:
+            color = QColor(get_stack_status_color(selected_stack.status))
+            pen = QPen(color)
+            pen.setCosmetic(True)
+            pen.setWidthF(2)
+            painter.setPen(pen)
+
+            z0_mm = selected_stack.z_start_um / 1000.0
+            z1_mm = selected_stack.z_end_um / 1000.0
+            y0 = self._z_to_y(z0_mm)
+            y1 = self._z_to_y(z1_mm)
+            painter.drawLine(QPointF(0, y0), QPointF(w, y0))
+            painter.drawLine(QPointF(0, y1), QPointF(w, y1))
+
+        # Z position line
+        is_moving = self._stage.is_z_moving
+        color = QColor(_ROSE) if is_moving else QColor(_EMERALD)
+        pen = QPen(color)
+        pen.setCosmetic(True)
+        pen.setWidthF(2)
+        painter.setPen(pen)
+
+        y = self._z_to_y(self._stage.z.position)
+        painter.drawLine(QPointF(0, y), QPointF(w, y))
+
+        painter.end()
+
+
+class _LayerToggleBar(QWidget):
+    """Floating toolbar with layer toggle buttons."""
+
+    def __init__(self, grid_store: GridStore, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._grid = grid_store
+        self._show_thumbnail = True
+
+        self.setStyleSheet("background-color: rgba(24, 24, 27, 204); border-radius: 4px;")
+
+        layout = vbox(self, spacing=0, margins=(2, 2, 2, 2))
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(1)
+
+        self._btns: dict[str, ToolButton] = {}
+        icons = {
+            "grid": "mdi.grid",
+            "stacks": "mdi.layers",
+            "path": "mdi.vector-polyline",
+            "fov": "mdi.crosshairs",
+            "thumbnail": "mdi.image",
+        }
+
+        for key, icon_name in icons.items():
+            color = _LAYER_COLORS[key]
+            btn = ToolButton(
+                icon_name,
+                checkable=True,
+                size=ControlSize.SM,
+                color=color,
+                color_hover=color,
+            )
+            btn.setChecked(True)
+            btn.setToolTip(f"Toggle {key}")
+            btn.toggled.connect(lambda checked, k=key: self._on_toggled(k, checked))
+            row.addWidget(btn)
+            self._btns[key] = btn
+
+        layout.addLayout(row)
+
+        # Sync initial state
+        self._grid.layer_visibility_changed.connect(self._sync_state)
+
+    @property
+    def show_thumbnail(self) -> bool:
+        return self._show_thumbnail
+
+    def _on_toggled(self, key: str, checked: bool) -> None:
+        if key == "thumbnail":
+            self._show_thumbnail = checked
+            parent = self.parent()
+            if isinstance(parent, GridCanvas):
+                parent.set_show_thumbnail(checked)
+        else:
+            self._grid.set_layer_visibility(key, checked)
+
+    def _sync_state(self) -> None:
+        vis = self._grid.layer_visibility
+        for key in ("grid", "stacks", "path", "fov"):
+            btn = self._btns[key]
+            btn.blockSignals(True)
+            btn.setChecked(getattr(vis, key))
+            btn.blockSignals(False)
+
+
+class GridCanvas(QWidget):
+    """2D stage visualization with grid, tiles, stacks, FOV, sliders, and layer toggles.
+
+    Composite widget assembling _StageCanvas, _StageSliders, _ZVisualization,
+    and _LayerToggleBar into a complete stage visualization panel.
     """
 
     def __init__(
         self,
         preview_store: PreviewStore,
         grid_store: GridStore,
+        stage_store: StageStore,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._preview_store = preview_store
-        self._grid_store = grid_store
+        self._preview = preview_store
+        self._grid = grid_store
+        self._stage = stage_store
 
         self.setStyleSheet(f"background-color: {Colors.BG_DARK};")
 
-        layout = vbox(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Sub-widgets
+        self._canvas = _StageCanvas(grid_store, stage_store, preview_store, self)
 
-        # Placeholder for now
-        label = Text.muted("Grid Canvas (Coming Soon)", color=Colors.TEXT_DISABLED)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        self._x_slider = _StageSlider(Qt.Orientation.Horizontal, self)
+        self._y_slider = _StageSlider(Qt.Orientation.Vertical, self)
+        self._z_slider = _StageSlider(Qt.Orientation.Vertical, self)
+        self._z_slider.setInverted(True)
 
-        # Preview thumbnail for FOV reference
-        self._thumbnail = PreviewThumbnail(self._preview_store, target_width=200)
-        layout.addWidget(self._thumbnail, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self._z_viz = _ZVisualization(stage_store, grid_store, self)
+        self._toggle_bar = _LayerToggleBar(grid_store, self)
+
+        # Layout: grid with sliders on edges
+        layout = QGridLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
+
+        #  row 0: [empty] [x_slider] [empty]
+        #  row 1: [y_slider] [canvas] [z_area]
+        layout.addWidget(self._x_slider, 0, 1)
+        layout.addWidget(self._y_slider, 1, 0)
+        layout.addWidget(self._canvas, 1, 1)
+
+        # Z area: stack z_slider and z_viz overlaid
+        z_container = QWidget(self)
+        z_container.setFixedWidth(_TRACK_WIDTH + 4)
+        z_layout = QGridLayout(z_container)
+        z_layout.setContentsMargins(2, 0, 0, 0)
+        z_layout.setSpacing(0)
+        z_layout.addWidget(self._z_slider, 0, 0)
+        z_layout.addWidget(self._z_viz, 0, 0)  # overlaid on z_slider
+        layout.addWidget(z_container, 1, 2)
+
+        layout.setColumnStretch(1, 1)
+        layout.setRowStretch(1, 1)
+
+        # Connect slider -> stage move
+        self._x_slider.valueChanged.connect(self._on_x_slider)
+        self._y_slider.valueChanged.connect(self._on_y_slider)
+        self._z_slider.valueChanged.connect(self._on_z_slider)
+
+        # Connect stage -> slider updates
+        self._stage.position_changed.connect(self._sync_sliders)
+        self._stage.moving_changed.connect(self._sync_slider_moving)
+        self._stage.limits_changed.connect(self._sync_slider_ranges)
+
+        # Canvas double-click -> move stage
+        self._canvas.tile_double_clicked.connect(self._on_tile_double_clicked)
+
+    def set_show_thumbnail(self, show: bool) -> None:
+        """Set thumbnail visibility on the stage canvas."""
+        self._canvas.set_show_thumbnail(show)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        # Position toggle bar in top-right corner
+        bar_w = self._toggle_bar.sizeHint().width()
+        self._toggle_bar.move(self.width() - bar_w - 8, 4)
+        self._toggle_bar.raise_()
+
+    def _sync_sliders(self) -> None:
+        self._x_slider.blockSignals(True)
+        self._y_slider.blockSignals(True)
+        self._z_slider.blockSignals(True)
+
+        self._x_slider.setValue(self._stage.x.position)
+        self._y_slider.setValue(self._stage.y.position)
+        self._z_slider.setValue(self._stage.z.position)
+
+        self._x_slider.blockSignals(False)
+        self._y_slider.blockSignals(False)
+        self._z_slider.blockSignals(False)
+
+    def _sync_slider_moving(self) -> None:
+        self._x_slider.setMoving(self._stage.is_xy_moving)
+        self._y_slider.setMoving(self._stage.is_xy_moving)
+        self._z_slider.setMoving(self._stage.is_z_moving)
+
+    def _sync_slider_ranges(self) -> None:
+        self._x_slider.setRange(self._stage.x.lower_limit, self._stage.x.upper_limit)
+        self._y_slider.setRange(self._stage.y.lower_limit, self._stage.y.upper_limit)
+        self._z_slider.setRange(self._stage.z.lower_limit, self._stage.z.upper_limit)
+
+    def _on_x_slider(self, value: float) -> None:
+        if self._stage.x_adapter and not self._stage.is_xy_moving:
+            fire_and_forget(self._stage.x_adapter.call("move_abs", value), log=log)
+
+    def _on_y_slider(self, value: float) -> None:
+        if self._stage.y_adapter and not self._stage.is_xy_moving:
+            fire_and_forget(self._stage.y_adapter.call("move_abs", value), log=log)
+
+    def _on_z_slider(self, value: float) -> None:
+        if self._stage.z_adapter and not self._stage.is_z_moving:
+            fire_and_forget(self._stage.z_adapter.call("move_abs", value), log=log)
+
+    def _on_tile_double_clicked(self, row: int, col: int) -> None:
+        """Move stage to tile center on double-click."""
+        if self._stage.is_xy_moving:
+            return
+        for tile in self._grid.tiles:
+            if tile.row == row and tile.col == col:
+                target_x = self._stage.x.lower_limit + tile.x_um / 1000.0
+                target_y = self._stage.y.lower_limit + tile.y_um / 1000.0
+                # Clamp to limits
+                target_x = max(self._stage.x.lower_limit, min(self._stage.x.upper_limit, target_x))
+                target_y = max(self._stage.y.lower_limit, min(self._stage.y.upper_limit, target_y))
+                if self._stage.x_adapter:
+                    fire_and_forget(self._stage.x_adapter.call("move_abs", target_x), log=log)
+                if self._stage.y_adapter:
+                    fire_and_forget(self._stage.y_adapter.call("move_abs", target_y), log=log)
+                break
 
 
 class GridPanel(QWidget):

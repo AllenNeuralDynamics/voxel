@@ -16,7 +16,7 @@ from PySide6.QtCore import QObject, Signal
 
 from vxl import Session
 from vxl.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
-from vxl_qt.store import DevicesStore, GridStore, PreviewStore
+from vxl_qt.store import DevicesStore, GridStore, PreviewStore, StageStore
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -72,6 +72,7 @@ class VoxelApp(QObject):
         self.devices = DevicesStore(parent=self)
         self.preview = PreviewStore(parent=self)
         self.grid = GridStore(parent=self)
+        self.stage = StageStore(parent=self)
 
         self._load_system_config()
 
@@ -191,7 +192,7 @@ class VoxelApp(QObject):
         if root is None:
             raise ValueError(f"Session root '{root_name}' not found")
 
-        session_dir = root.path / session_name
+        session_dir = root.session_path(session_name)
 
         config_path: Path | None = None
         if rig_config:
@@ -217,6 +218,16 @@ class VoxelApp(QObject):
 
             await self.devices.start(self._session)
             log.info("DevicesStore started")
+
+            # Bind stage store to axis adapters
+            stage_cfg = self._session.rig.config.stage
+            x_adapter = self.devices.get_adapter(stage_cfg.x)
+            y_adapter = self.devices.get_adapter(stage_cfg.y)
+            z_adapter = self.devices.get_adapter(stage_cfg.z)
+            if x_adapter and y_adapter and z_adapter:
+                self.stage.bind(x_adapter, y_adapter, z_adapter)
+                log.info("StageStore bound")
+
             self.devices_ready.emit()
 
             await self.grid.bind_session(self._session)
@@ -245,6 +256,7 @@ class VoxelApp(QObject):
             await self.devices.stop()
             self.preview.reset()
             self.grid.unbind_session()
+            self.stage.unbind()
 
             if self._session.rig.preview.is_active:
                 await self._session.rig.stop_preview()

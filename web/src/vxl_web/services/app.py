@@ -201,7 +201,7 @@ class AppService:
         if root is None:
             raise ValueError(f"Session root '{root_name}' not found")
 
-        session_dir = root.path / session_name
+        session_dir = root.session_path(session_name)
 
         # Resolve rig config path
         config_path: Path | None = None

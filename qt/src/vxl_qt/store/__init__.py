@@ -6,6 +6,7 @@ Stores:
     DevicesStore: Device adapters and property cache
     PreviewStore: Preview frames, crop state
     GridStore: Grid/tile/stack state for acquisition planning
+    StageStore: Stage axis position, limits, moving state
 
 Compositing functions:
     composite_rgb: Additively blend RGB frames
@@ -30,14 +31,17 @@ from vxl_qt.store.preview import (
     crop_image,
     resize_image,
 )
+from vxl_qt.store.stage import AxisState, StageStore
 
 __all__ = [
     "STACK_STATUS_COLORS",
+    "AxisState",
     "ChannelData",
     "DevicesStore",
     "GridStore",
     "LayerVisibility",
     "PreviewStore",
+    "StageStore",
     "blur_image",
     "composite_rgb",
     "compute_local_crop",

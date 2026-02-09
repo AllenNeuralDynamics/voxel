@@ -268,7 +268,7 @@ class ControlPage(QWidget):
         # Top: preview and grid panel side by side
         top_splitter = Splitter(Qt.Orientation.Horizontal)
         top_splitter.addWidget(self._preview_widget)
-        top_splitter.addWidget(GridCanvas(self._app.preview, self._app.grid))
+        top_splitter.addWidget(GridCanvas(self._app.preview, self._app.grid, self._app.stage))
         top_splitter.setSizes([500, 500])
         center_splitter.addWidget(top_splitter)
 
@@ -295,6 +295,14 @@ class ControlPage(QWidget):
 
         # Update connection status in left sidebar
         self._left_sidebar.set_connected(True)
+
+        # Wire stage position to footer
+        self._app.stage.position_changed.connect(self._update_footer_position)
+
+    def _update_footer_position(self) -> None:
+        """Update footer with current stage position."""
+        stage = self._app.stage
+        self._main_footer.set_stage_position(stage.x.position, stage.y.position, stage.z.position)
 
     def _on_profile_changed(self, profile_id: str) -> None:
         """Handle profile selection change from header."""

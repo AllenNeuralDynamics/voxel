@@ -6,6 +6,7 @@ Manages the ~/.voxel/ directory structure:
 """
 
 import logging
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,14 @@ yaml = YAML()
 yaml.preserve_quotes = True  # type: ignore[assignment]
 
 
+def slugify(name: str) -> str:
+    """Convert a display name to a filesystem-friendly slug."""
+    s = name.strip().lower()
+    s = re.sub(r"[^\w\s-]", "", s)
+    s = re.sub(r"[\s_]+", "-", s)
+    return s.strip("-")
+
+
 class SessionRoot(BaseModel):
     """A directory where sessions can be created."""
 
@@ -36,6 +45,10 @@ class SessionRoot(BaseModel):
     def get_label(self) -> str:
         """Get display label, falling back to name."""
         return self.label or self.name
+
+    def session_path(self, session_name: str) -> Path:
+        """Convert a display name to a full session directory path."""
+        return self.path / slugify(session_name)
 
 
 class SessionDirectory(BaseModel):

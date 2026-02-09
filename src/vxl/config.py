@@ -84,7 +84,7 @@ class ProfileConfig(BaseModel):
 
 
 class VoxelRigConfig(RigConfig):
-    globals: GlobalsConfig
+    globals: GlobalsConfig = Field(default_factory=GlobalsConfig)
     daq: DaqConfig
     stage: StageConfig
     detection: dict[str, DetectionPathConfig]
