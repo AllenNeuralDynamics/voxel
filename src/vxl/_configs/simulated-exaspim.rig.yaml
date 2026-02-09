@@ -1,0 +1,117 @@
+info:
+  name: "Simulated ExASPIM Microscope"
+
+cluster:
+  control_port: 9000
+
+nodes:
+  primary:
+    devices:
+      daq_1:
+        target: vxl.daq.simulated.SimulatedDaq
+        init: { device_name: "MockDev1" }
+      camera:
+        target: vxl.camera.simulated.SimulatedCamera
+        init:
+          pixel_size_um: "0.5,0.5"
+          sensor_size_px: "10640,14192"
+      fw_emission:
+        target: vxl.axes.simulated.SimulatedDiscreteAxis
+        init:
+          slots: { 0: "BP525", 2: "BP600" }
+      aotf_1:
+        target: vxl.aotf.simulated.SimulatedAotf
+        init: { blanking_mode: "external" }
+      x_axis:
+        target: &linear_axis_target vxl.axes.simulated.SimulatedContinuousAxis
+        init: { lower_limit: 0.0, upper_limit: 40.0 }
+      y_axis:
+        target: *linear_axis_target
+        init: { lower_limit: 0.0, upper_limit: 25.0 }
+      z_axis:
+        target: *linear_axis_target
+        init: { lower_limit: 0.0, upper_limit: 50.0, has_ttl_stepper: true }
+      laser_488:
+        target: &laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
+        init:
+          wavelength: 488
+          aotf: aotf_1
+          aotf_channel: 2
+          aotf_frequency_mhz: 98.2
+      laser_561:
+        target: *laser_target
+        init:
+          wavelength: 561
+          aotf: aotf_1
+          aotf_channel: 3
+          aotf_frequency_mhz: 87.4
+
+stage:
+  x: x_axis
+  y: y_axis
+  z: z_axis
+
+daq:
+  device: daq_1
+  acq_ports:
+    aotf_1: ao0
+    camera: ao1
+    laser_488: ao12
+    laser_561: ao13
+
+detection:
+  camera:
+    filter_wheels: [fw_emission]
+    magnification: 8.0
+
+illumination:
+  laser_488: {}
+  laser_561: {}
+
+channels:
+  "488":
+    detection: camera
+    illumination: laser_488
+    filters:
+      fw_emission: "BP525"
+    desc: "488nm excitation, BP525 emission"
+    emission: 510
+  "561":
+    detection: camera
+    illumination: laser_561
+    filters:
+      fw_emission: "BP600"
+    desc: "561nm excitation, BP600 emission"
+    emission: 600
+
+profiles:
+  gfp:
+    channels: ["488"]
+    daq:
+      timing: &default_timing
+        sample_rate: "100 kHz"
+        duration: "0.2 s"
+        rest_time: "0.05 s"
+      waveforms:
+        camera: &camera_waveform
+          type: pulse
+          voltage: { min: 0.0, max: 5.0 }
+          window: { min: 0.0, max: 0.95 }
+        laser_488: &laser_waveform
+          type: pulse
+          voltage: { min: 0.0, max: 5.0 }
+          window: { min: 0.1, max: 0.9 }
+        aotf_1: &aotf_blanking_waveform
+          type: pulse
+          voltage: { min: 0.0, max: 5.0 }
+          window: { min: 0.05, max: 0.95 } # Wide blanking window
+    desc: "GFP imaging with 488nm excitation and BP525 emission filter"
+  rfp:
+    channels: ["561"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera: *camera_waveform
+        laser_561: *laser_waveform
+        aotf_1: *aotf_blanking_waveform
+    desc: "RFP imaging with 561nm excitation and BP600 emission filter"
