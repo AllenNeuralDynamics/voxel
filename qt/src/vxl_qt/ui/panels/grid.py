@@ -1342,96 +1342,27 @@ class _ZVisualization(QWidget):
         painter.end()
 
 
-class _LayerToggleBar(QWidget):
-    """Floating toolbar with layer toggle buttons."""
+class _StageArea(QWidget):
+    """Stage visualization area with manual geometry.
 
-    def __init__(self, grid_store: GridStore, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._grid = grid_store
-        self._show_thumbnail = True
-
-        self.setStyleSheet("background-color: rgba(24, 24, 27, 204); border-radius: 4px;")
-
-        layout = vbox(self, spacing=0, margins=(2, 2, 2, 2))
-
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(1)
-
-        self._btns: dict[str, ToolButton] = {}
-        icons = {
-            "grid": "mdi.grid",
-            "stacks": "mdi.layers",
-            "path": "mdi.vector-polyline",
-            "fov": "mdi.crosshairs",
-            "thumbnail": "mdi.image",
-        }
-
-        for key, icon_name in icons.items():
-            color = _LAYER_COLORS[key]
-            btn = ToolButton(
-                icon_name,
-                checkable=True,
-                size=ControlSize.SM,
-                color=color,
-                color_hover=color,
-            )
-            btn.setChecked(True)
-            btn.setToolTip(f"Toggle {key}")
-            btn.toggled.connect(lambda checked, k=key: self._on_toggled(k, checked))
-            row.addWidget(btn)
-            self._btns[key] = btn
-
-        layout.addLayout(row)
-
-        # Sync initial state
-        self._grid.layer_visibility_changed.connect(self._sync_state)
-
-    @property
-    def show_thumbnail(self) -> bool:
-        return self._show_thumbnail
-
-    def _on_toggled(self, key: str, checked: bool) -> None:
-        if key == "thumbnail":
-            self._show_thumbnail = checked
-            parent = self.parent()
-            if isinstance(parent, GridCanvas):
-                parent.set_show_thumbnail(checked)
-        else:
-            self._grid.set_layer_visibility(key, checked)
-
-    def _sync_state(self) -> None:
-        vis = self._grid.layer_visibility
-        for key in ("grid", "stacks", "path", "fov"):
-            btn = self._btns[key]
-            btn.blockSignals(True)
-            btn.setChecked(getattr(vis, key))
-            btn.blockSignals(False)
-
-
-class GridCanvas(QWidget):
-    """2D stage visualization with grid, tiles, stacks, FOV, sliders, and layer toggles.
-
-    Uses manual geometry (no layout manager) so that X/Y sliders are sized and
-    positioned to exactly hug the stage area within the canvas, matching the
-    web UI's approach.
+    Positions _StageCanvas, X/Y/Z sliders, and _ZVisualization so that
+    the sliders hug the stage area within the canvas.
     """
 
     _PADDING = 4
 
+    tile_double_clicked = Signal(int, int)
+
     def __init__(
         self,
-        preview_store: PreviewStore,
         grid_store: GridStore,
         stage_store: StageStore,
+        preview_store: PreviewStore,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._preview = preview_store
         self._grid = grid_store
         self._stage = stage_store
-
-        self.setStyleSheet(f"background-color: {Colors.BG_DARK};")
 
         # Sub-widgets (no layout manager — positioned in _update_layout)
         self._canvas = _StageCanvas(grid_store, stage_store, preview_store, self)
@@ -1439,8 +1370,8 @@ class GridCanvas(QWidget):
         self._y_slider = _StageSlider(Qt.Orientation.Vertical, self)
         self._z_slider = _StageSlider(Qt.Orientation.Vertical, self)
         self._z_slider.setInverted(True)
-        self._z_viz = _ZVisualization(stage_store, grid_store, self)
-        self._toggle_bar = _LayerToggleBar(grid_store, self)
+        # Z visualization is a child of z_slider so it overlays naturally
+        self._z_viz = _ZVisualization(stage_store, grid_store, self._z_slider)
 
         # Connect slider -> stage move
         self._x_slider.valueChanged.connect(self._on_x_slider)
@@ -1455,11 +1386,10 @@ class GridCanvas(QWidget):
         # Re-layout when viewBox dimensions change (FOV size or stage limits)
         self._grid.tiles_changed.connect(self._update_layout)
 
-        # Canvas double-click -> move stage
-        self._canvas.tile_double_clicked.connect(self._on_tile_double_clicked)
+        # Forward canvas double-click
+        self._canvas.tile_double_clicked.connect(self.tile_double_clicked.emit)
 
     def set_show_thumbnail(self, show: bool) -> None:
-        """Set thumbnail visibility on the stage canvas."""
         self._canvas.set_show_thumbnail(show)
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
@@ -1469,8 +1399,7 @@ class GridCanvas(QWidget):
     def _update_layout(self) -> None:
         """Compute viewBox geometry and position all children.
 
-        Mirrors the web UI's updateCanvasSize / inline style approach:
-        the canvas is sized to the viewBox aspect ratio, then sliders are
+        The canvas is sized to the viewBox aspect ratio, then sliders are
         sized and offset to align with the stage area (excluding FOV margins).
         """
         pad = self._PADDING
@@ -1532,17 +1461,13 @@ class GridCanvas(QWidget):
         y_sl_y = canvas_y + margin_px_y
         self._y_slider.setGeometry(int(y_sl_x), int(y_sl_y), _TRACK_WIDTH, int(stage_px_y))
 
-        # Z area: to the right of canvas, spanning canvas height + x-slider height
+        # Z slider: to the right of canvas, spanning canvas height + x-slider height
         z_x = int(canvas_x + canvas_w) + _STAGE_GAP
         z_y = pad
         z_h = _TRACK_WIDTH + int(canvas_h)
         self._z_slider.setGeometry(z_x, z_y, _TRACK_WIDTH, z_h)
-        self._z_viz.setGeometry(z_x, z_y, _TRACK_WIDTH, z_h)
-
-        # Toggle bar: top-right corner
-        bar_w = self._toggle_bar.sizeHint().width()
-        self._toggle_bar.move(self.width() - bar_w - 8, pad)
-        self._toggle_bar.raise_()
+        # z_viz fills its parent (z_slider)
+        self._z_viz.setGeometry(0, 0, _TRACK_WIDTH, z_h)
 
     def _sync_sliders(self) -> None:
         self._x_slider.blockSignals(True)
@@ -1580,6 +1505,95 @@ class GridCanvas(QWidget):
         if self._stage.z_adapter and not self._stage.is_z_moving:
             fire_and_forget(self._stage.z_adapter.call("move_abs", value), log=log)
 
+
+class GridCanvas(QWidget):
+    """2D stage visualization with top toolbar and stage area.
+
+    Layout (VBoxLayout):
+    - Top bar: stretch + layer toggle buttons (right-aligned)
+    - Stage area: _StageArea with manual geometry for canvas/sliders
+    """
+
+    # Emitted on thumbnail toggle so external code can react
+    thumbnail_toggled = Signal(bool)
+
+    def __init__(
+        self,
+        preview_store: PreviewStore,
+        grid_store: GridStore,
+        stage_store: StageStore,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._grid = grid_store
+        self._stage = stage_store
+
+        self.setStyleSheet(f"background-color: {Colors.BG_DARK};")
+
+        # Stage area (canvas + sliders + z)
+        self._stage_area = _StageArea(grid_store, stage_store, preview_store, self)
+
+        # Layer toggle buttons
+        self._toggle_btns: dict[str, ToolButton] = {}
+        self._show_thumbnail = True
+
+        toggle_row = QHBoxLayout()
+        toggle_row.setContentsMargins(0, 0, 0, 0)
+        toggle_row.setSpacing(1)
+        toggle_row.addStretch()
+
+        icons = {
+            "grid": "mdi.grid",
+            "stacks": "mdi.layers",
+            "path": "mdi.vector-polyline",
+            "fov": "mdi.crosshairs",
+            "thumbnail": "mdi.image",
+        }
+        for key, icon_name in icons.items():
+            color = _LAYER_COLORS[key]
+            btn = ToolButton(
+                icon_name,
+                checkable=True,
+                size=ControlSize.SM,
+                color=color,
+                color_hover=color,
+            )
+            btn.setChecked(True)
+            btn.setToolTip(f"Toggle {key}")
+            btn.toggled.connect(lambda checked, k=key: self._on_layer_toggled(k, checked))
+            toggle_row.addWidget(btn)
+            self._toggle_btns[key] = btn
+
+        # Main layout
+        layout = vbox(self, spacing=0, margins=(Spacing.SM, Spacing.SM, Spacing.SM, 0))
+        layout.addLayout(toggle_row)
+        layout.addWidget(self._stage_area, stretch=1)
+
+        # Sync layer visibility from store
+        self._grid.layer_visibility_changed.connect(self._sync_toggle_state)
+
+        # Forward tile double-click for stage movement
+        self._stage_area.tile_double_clicked.connect(self._on_tile_double_clicked)
+
+    def set_show_thumbnail(self, show: bool) -> None:
+        """Set thumbnail visibility on the stage canvas."""
+        self._stage_area.set_show_thumbnail(show)
+
+    def _on_layer_toggled(self, key: str, checked: bool) -> None:
+        if key == "thumbnail":
+            self._show_thumbnail = checked
+            self._stage_area.set_show_thumbnail(checked)
+        else:
+            self._grid.set_layer_visibility(key, checked)
+
+    def _sync_toggle_state(self) -> None:
+        vis = self._grid.layer_visibility
+        for key in ("grid", "stacks", "path", "fov"):
+            btn = self._toggle_btns[key]
+            btn.blockSignals(True)
+            btn.setChecked(getattr(vis, key))
+            btn.blockSignals(False)
+
     def _on_tile_double_clicked(self, row: int, col: int) -> None:
         """Move stage to tile center on double-click."""
         if self._stage.is_xy_moving:
@@ -1588,7 +1602,6 @@ class GridCanvas(QWidget):
             if tile.row == row and tile.col == col:
                 target_x = self._stage.x.lower_limit + tile.x_um / 1000.0
                 target_y = self._stage.y.lower_limit + tile.y_um / 1000.0
-                # Clamp to limits
                 target_x = max(self._stage.x.lower_limit, min(self._stage.x.upper_limit, target_x))
                 target_y = max(self._stage.y.lower_limit, min(self._stage.y.upper_limit, target_y))
                 if self._stage.x_adapter:
