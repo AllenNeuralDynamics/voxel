@@ -156,13 +156,14 @@ class Button(QPushButton):
         s = self._size
 
         fg_hover = f.fg_hover or f.fg
-        border = f"1px solid {f.border}" if f.border else "none"
-        border_hover = f"1px solid {f.border}" if f.border else "none"
+        border = f"1px solid {f.border}" if f.border else f"1px solid {f.bg}"
+        border_hover = f"1px solid {f.border}" if f.border else f"1px solid {f.bg_hover}"
 
         # Set icon with correct color if using qtawesome
         if self._icon_name:
             self.setIcon(qta.icon(self._icon_name, color=f.fg, color_active=fg_hover))
 
+        self.setFixedHeight(s.h)
         self.setStyleSheet(f"""
             QPushButton {{
                 background-color: {f.bg};
@@ -171,8 +172,6 @@ class Button(QPushButton):
                 padding: 0px {Spacing.LG}px;
                 border: {border};
                 border-radius: {s.radius}px;
-                min-height: {s.h}px;
-                max-height: {s.h}px;
             }}
             QPushButton:hover {{
                 background-color: {f.bg_hover};
@@ -318,6 +317,7 @@ class ToolButton(QToolButton):
         size: ControlSize = ControlSize.MD,
         color: str = Colors.TEXT_MUTED,
         color_hover: str = Colors.TEXT,
+        color_unchecked: str = Colors.TEXT_DISABLED,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -330,11 +330,11 @@ class ToolButton(QToolButton):
         self._size = size
         self._color = color
         self._color_hover = color_hover
+        self._color_unchecked = color_unchecked
 
         if checkable:
             self.setCheckable(True)
-            if self._checked_icon_name:
-                self.toggled.connect(self._on_toggled)
+            self.toggled.connect(self._on_toggled)
 
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._apply_style()
@@ -346,7 +346,8 @@ class ToolButton(QToolButton):
     def _update_icon(self, checked: bool = False) -> None:
         """Update the icon based on checked state."""
         icon_name = self._checked_icon_name if checked and self._checked_icon_name else self._icon_name
-        self.setIcon(qta.icon(icon_name, color=self._color, color_active=self._color_hover))
+        color = self._color if (checked or not self.isCheckable()) else self._color_unchecked
+        self.setIcon(qta.icon(icon_name, color=color, color_active=self._color_hover))
 
     def _apply_style(self) -> None:
         """Apply icon and stylesheet."""

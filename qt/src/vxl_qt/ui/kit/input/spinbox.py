@@ -14,7 +14,6 @@ def _spinbox_style(size: ControlSize = ControlSize.MD) -> str:
             border: 1px solid {Colors.BORDER};
             border-radius: {size.radius}px;
             font-size: {size.font}px;
-            height: {size.h}px;
             padding: 0 {size.px}px;
         }}
         QSpinBox:hover, QDoubleSpinBox:hover {{
@@ -46,9 +45,11 @@ class SpinBox(QSpinBox):
         max_val: int | None = None,
         step: int | None = None,
         size: ControlSize = ControlSize.MD,
+        keyboard_tracking: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
+        self.setKeyboardTracking(keyboard_tracking)
         if min_val is not None and max_val is not None:
             self.setRange(min_val, max_val)
         elif min_val is not None:
@@ -59,6 +60,7 @@ class SpinBox(QSpinBox):
             self.setSingleStep(step)
         if value:
             self.setValue(value)
+        self.setFixedHeight(size.h)
         self.setStyleSheet(_spinbox_style(size))
 
 
@@ -79,9 +81,11 @@ class DoubleSpinBox(QDoubleSpinBox):
         decimals: int | None = None,
         step: float | None = None,
         size: ControlSize = ControlSize.MD,
+        keyboard_tracking: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
+        self.setKeyboardTracking(keyboard_tracking)
         if decimals is not None:
             self.setDecimals(decimals)
         if min_val is not None and max_val is not None:
@@ -94,4 +98,5 @@ class DoubleSpinBox(QDoubleSpinBox):
             self.setSingleStep(step)
         if value:
             self.setValue(value)
+        self.setFixedHeight(size.h)
         self.setStyleSheet(_spinbox_style(size))

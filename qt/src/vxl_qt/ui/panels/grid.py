@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform
-from PySide6.QtWidgets import QHBoxLayout, QWidget
+from PySide6.QtWidgets import QWidget
 
 from vxl.tile import Stack, Tile
 from vxl_qt.store import (
@@ -21,6 +21,7 @@ from vxl_qt.store import (
     resize_image,
 )
 from vxl_qt.ui.kit import (
+    Button,
     Colors,
     ColumnType,
     ControlSize,
@@ -820,7 +821,7 @@ _LAYER_COLORS: dict[str, str] = {
 }
 
 _TRACK_WIDTH = 16
-_STAGE_GAP = 16
+_STAGE_GAP = Spacing.MD
 
 
 class _StageSlider(QWidget):
@@ -1349,8 +1350,6 @@ class _StageArea(QWidget):
     the sliders hug the stage area within the canvas.
     """
 
-    _PADDING = 4
-
     tile_double_clicked = Signal(int, int)
 
     def __init__(
@@ -1402,9 +1401,8 @@ class _StageArea(QWidget):
         The canvas is sized to the viewBox aspect ratio, then sliders are
         sized and offset to align with the stage area (excluding FOV margins).
         """
-        pad = self._PADDING
-        total_w = self.width() - pad * 2
-        total_h = self.height() - pad * 2
+        total_w = self.width()
+        total_h = self.height()
 
         # ViewBox dimensions (mm)
         fov_w_mm = self._grid.fov_size[0] / 1000.0
@@ -1446,25 +1444,31 @@ class _StageArea(QWidget):
         stage_px_x = stage_w * scale
         stage_px_y = stage_h * scale
 
+        # Center content within the widget
+        content_w = _TRACK_WIDTH + canvas_w + _STAGE_GAP + _TRACK_WIDTH
+        content_h = _TRACK_WIDTH + canvas_h
+        x_start = max(0.0, (self.width() - content_w) / 2)
+        y_start = max(0.0, (self.height() - content_h) / 2)
+
         # Canvas position (right of Y slider, below X slider)
-        canvas_x = pad + _TRACK_WIDTH
-        canvas_y = pad + _TRACK_WIDTH
+        canvas_x = x_start + _TRACK_WIDTH
+        canvas_y = y_start + _TRACK_WIDTH
         self._canvas.setGeometry(int(canvas_x), int(canvas_y), int(canvas_w), int(canvas_h))
 
         # X slider: spans the stage area width, aligned horizontally with stage
         x_sl_x = canvas_x + margin_px_x
-        x_sl_y = pad
+        x_sl_y = y_start
         self._x_slider.setGeometry(int(x_sl_x), int(x_sl_y), int(stage_px_x), _TRACK_WIDTH)
 
         # Y slider: spans the stage area height, aligned vertically with stage
-        y_sl_x = pad
+        y_sl_x = x_start
         y_sl_y = canvas_y + margin_px_y
         self._y_slider.setGeometry(int(y_sl_x), int(y_sl_y), _TRACK_WIDTH, int(stage_px_y))
 
-        # Z slider: to the right of canvas, spanning canvas height + x-slider height
+        # Z slider: to the right of canvas, matching Y slider height
         z_x = int(canvas_x + canvas_w) + _STAGE_GAP
-        z_y = pad
-        z_h = _TRACK_WIDTH + int(canvas_h)
+        z_y = int(y_sl_y)
+        z_h = int(stage_px_y)
         self._z_slider.setGeometry(z_x, z_y, _TRACK_WIDTH, z_h)
         # z_viz fills its parent (z_slider)
         self._z_viz.setGeometry(0, 0, _TRACK_WIDTH, z_h)
@@ -1533,14 +1537,9 @@ class GridCanvas(QWidget):
         # Stage area (canvas + sliders + z)
         self._stage_area = _StageArea(grid_store, stage_store, preview_store, self)
 
-        # Layer toggle buttons
+        # --- Toolbar: [toggle buttons] ... [X spin] [Y spin] [Z spin] [halt] ---
         self._toggle_btns: dict[str, ToolButton] = {}
         self._show_thumbnail = True
-
-        toggle_row = QHBoxLayout()
-        toggle_row.setContentsMargins(0, 0, 0, 0)
-        toggle_row.setSpacing(1)
-        toggle_row.addStretch()
 
         icons = {
             "grid": "mdi.grid",
@@ -1549,6 +1548,7 @@ class GridCanvas(QWidget):
             "fov": "mdi.crosshairs",
             "thumbnail": "mdi.image",
         }
+        toggle_children: list[ToolButton] = []
         for key, icon_name in icons.items():
             color = _LAYER_COLORS[key]
             btn = ToolButton(
@@ -1561,16 +1561,66 @@ class GridCanvas(QWidget):
             btn.setChecked(True)
             btn.setToolTip(f"Toggle {key}")
             btn.toggled.connect(lambda checked, k=key: self._on_layer_toggled(k, checked))
-            toggle_row.addWidget(btn)
+            toggle_children.append(btn)
             self._toggle_btns[key] = btn
 
+        # Stage position spinboxes
+        self._x_spin = DoubleSpinBox(decimals=3, step=0.1, size=ControlSize.SM)
+        self._y_spin = DoubleSpinBox(decimals=3, step=0.1, size=ControlSize.SM)
+        self._z_spin = DoubleSpinBox(decimals=3, step=0.1, size=ControlSize.SM)
+        self._x_spin.setSuffix(" mm")
+        self._y_spin.setSuffix(" mm")
+        self._z_spin.setSuffix(" mm")
+        for spin in (self._x_spin, self._y_spin, self._z_spin):
+            spin.setFixedWidth(80)
+
+        # Halt button
+        self._halt_btn = Button.danger("Halt", icon="mdi.stop-circle-outline", size=ControlSize.SM)
+        self._halt_btn.setToolTip("Halt all axes")
+        self._halt_btn.clicked.connect(self._on_halt_clicked)
+
+        layer_group = Flex.hstack(*toggle_children, spacing=1)
+        position_group = Flex.hstack(
+            Text.muted("X"),
+            self._x_spin,
+            Text.muted("Y"),
+            self._y_spin,
+            Text.muted("Z"),
+            self._z_spin,
+            self._halt_btn,
+            spacing=Spacing.SM,
+        )
+
+        toolbar = Flex.hstack(
+            layer_group,
+            Stretch(),
+            position_group,
+            spacing=Spacing.XL,
+            padding=(Spacing.LG, Spacing.LG, Spacing.LG, Spacing.LG),
+        )
+        toolbar.setFixedHeight(Spacing.LG * 2 + ControlSize.LG.h)
+
+        # Padded container for stage area
+        stage_container = QWidget()
+        container_layout = vbox(stage_container, spacing=0, margins=(Spacing.LG, Spacing.LG, Spacing.LG, Spacing.LG))
+        container_layout.addWidget(self._stage_area)
+
         # Main layout
-        layout = vbox(self, spacing=0, margins=(Spacing.SM, Spacing.SM, Spacing.SM, 0))
-        layout.addLayout(toggle_row)
-        layout.addWidget(self._stage_area, stretch=1)
+        layout = vbox(self, spacing=0, margins=(0, 0, 0, 0))
+        layout.addWidget(toolbar)
+        layout.addWidget(stage_container, stretch=1)
 
         # Sync layer visibility from store
         self._grid.layer_visibility_changed.connect(self._sync_toggle_state)
+
+        # Sync stage position to spinboxes
+        self._stage.position_changed.connect(self._sync_position_spins)
+        self._stage.limits_changed.connect(self._sync_position_limits)
+
+        # Spinbox commit → stage move
+        self._x_spin.editingFinished.connect(self._on_x_spin_committed)
+        self._y_spin.editingFinished.connect(self._on_y_spin_committed)
+        self._z_spin.editingFinished.connect(self._on_z_spin_committed)
 
         # Forward tile double-click for stage movement
         self._stage_area.tile_double_clicked.connect(self._on_tile_double_clicked)
@@ -1593,6 +1643,37 @@ class GridCanvas(QWidget):
             btn.blockSignals(True)
             btn.setChecked(getattr(vis, key))
             btn.blockSignals(False)
+
+    def _sync_position_spins(self) -> None:
+        """Update spinboxes from stage position (skip if user is editing)."""
+        for spin, axis in ((self._x_spin, self._stage.x), (self._y_spin, self._stage.y), (self._z_spin, self._stage.z)):
+            if not spin.hasFocus():
+                spin.blockSignals(True)
+                spin.setValue(axis.position)
+                spin.blockSignals(False)
+
+    def _sync_position_limits(self) -> None:
+        """Update spinbox ranges from stage limits."""
+        for spin, axis in ((self._x_spin, self._stage.x), (self._y_spin, self._stage.y), (self._z_spin, self._stage.z)):
+            spin.setRange(axis.lower_limit, axis.upper_limit)
+
+    def _on_x_spin_committed(self) -> None:
+        if self._stage.x_adapter and not self._stage.is_xy_moving:
+            fire_and_forget(self._stage.x_adapter.call("move_abs", self._x_spin.value()), log=log)
+
+    def _on_y_spin_committed(self) -> None:
+        if self._stage.y_adapter and not self._stage.is_xy_moving:
+            fire_and_forget(self._stage.y_adapter.call("move_abs", self._y_spin.value()), log=log)
+
+    def _on_z_spin_committed(self) -> None:
+        if self._stage.z_adapter and not self._stage.is_z_moving:
+            fire_and_forget(self._stage.z_adapter.call("move_abs", self._z_spin.value()), log=log)
+
+    def _on_halt_clicked(self) -> None:
+        """Halt all stage axes."""
+        for adapter in (self._stage.x_adapter, self._stage.y_adapter, self._stage.z_adapter):
+            if adapter:
+                fire_and_forget(adapter.call("halt"), log=log)
 
     def _on_tile_double_clicked(self, row: int, col: int) -> None:
         """Move stage to tile center on double-click."""
