@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QWidget
 
 from vxl.tile import Stack, Tile
 from vxl_qt.store import (
@@ -901,7 +901,7 @@ class _StageSlider(QWidget):
             x = ratio * w
             painter.drawLine(QPointF(x, 0), QPointF(x, h))
         else:
-            y = (1.0 - ratio) * h  # vertical: top = max
+            y = ratio * h  # vertical: top = min, bottom = max
             painter.drawLine(QPointF(0, y), QPointF(w, y))
 
         painter.end()
@@ -923,7 +923,7 @@ class _StageSlider(QWidget):
         if self._orientation == Qt.Orientation.Horizontal:
             ratio = max(0.0, min(1.0, event.position().x() / max(1, self.width())))
         else:
-            ratio = max(0.0, min(1.0, 1.0 - event.position().y() / max(1, self.height())))
+            ratio = max(0.0, min(1.0, event.position().y() / max(1, self.height())))
         value = self._ratio_to_value(ratio)
         self._value = value
         self.update()
@@ -1412,9 +1412,12 @@ class _LayerToggleBar(QWidget):
 class GridCanvas(QWidget):
     """2D stage visualization with grid, tiles, stacks, FOV, sliders, and layer toggles.
 
-    Composite widget assembling _StageCanvas, _StageSliders, _ZVisualization,
-    and _LayerToggleBar into a complete stage visualization panel.
+    Uses manual geometry (no layout manager) so that X/Y sliders are sized and
+    positioned to exactly hug the stage area within the canvas, matching the
+    web UI's approach.
     """
+
+    _PADDING = 4
 
     def __init__(
         self,
@@ -1430,40 +1433,14 @@ class GridCanvas(QWidget):
 
         self.setStyleSheet(f"background-color: {Colors.BG_DARK};")
 
-        # Sub-widgets
+        # Sub-widgets (no layout manager — positioned in _update_layout)
         self._canvas = _StageCanvas(grid_store, stage_store, preview_store, self)
-
         self._x_slider = _StageSlider(Qt.Orientation.Horizontal, self)
         self._y_slider = _StageSlider(Qt.Orientation.Vertical, self)
         self._z_slider = _StageSlider(Qt.Orientation.Vertical, self)
         self._z_slider.setInverted(True)
-
         self._z_viz = _ZVisualization(stage_store, grid_store, self)
         self._toggle_bar = _LayerToggleBar(grid_store, self)
-
-        # Layout: grid with sliders on edges
-        layout = QGridLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(0)
-
-        #  row 0: [empty] [x_slider] [empty]
-        #  row 1: [y_slider] [canvas] [z_area]
-        layout.addWidget(self._x_slider, 0, 1)
-        layout.addWidget(self._y_slider, 1, 0)
-        layout.addWidget(self._canvas, 1, 1)
-
-        # Z area: stack z_slider and z_viz overlaid
-        z_container = QWidget(self)
-        z_container.setFixedWidth(_TRACK_WIDTH + 4)
-        z_layout = QGridLayout(z_container)
-        z_layout.setContentsMargins(2, 0, 0, 0)
-        z_layout.setSpacing(0)
-        z_layout.addWidget(self._z_slider, 0, 0)
-        z_layout.addWidget(self._z_viz, 0, 0)  # overlaid on z_slider
-        layout.addWidget(z_container, 1, 2)
-
-        layout.setColumnStretch(1, 1)
-        layout.setRowStretch(1, 1)
 
         # Connect slider -> stage move
         self._x_slider.valueChanged.connect(self._on_x_slider)
@@ -1473,7 +1450,10 @@ class GridCanvas(QWidget):
         # Connect stage -> slider updates
         self._stage.position_changed.connect(self._sync_sliders)
         self._stage.moving_changed.connect(self._sync_slider_moving)
-        self._stage.limits_changed.connect(self._sync_slider_ranges)
+        self._stage.limits_changed.connect(self._on_limits_changed)
+
+        # Re-layout when viewBox dimensions change (FOV size or stage limits)
+        self._grid.tiles_changed.connect(self._update_layout)
 
         # Canvas double-click -> move stage
         self._canvas.tile_double_clicked.connect(self._on_tile_double_clicked)
@@ -1484,9 +1464,84 @@ class GridCanvas(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        # Position toggle bar in top-right corner
+        self._update_layout()
+
+    def _update_layout(self) -> None:
+        """Compute viewBox geometry and position all children.
+
+        Mirrors the web UI's updateCanvasSize / inline style approach:
+        the canvas is sized to the viewBox aspect ratio, then sliders are
+        sized and offset to align with the stage area (excluding FOV margins).
+        """
+        pad = self._PADDING
+        total_w = self.width() - pad * 2
+        total_h = self.height() - pad * 2
+
+        # ViewBox dimensions (mm)
+        fov_w_mm = self._grid.fov_size[0] / 1000.0
+        fov_h_mm = self._grid.fov_size[1] / 1000.0
+        margin_x = fov_w_mm / 2.0
+        margin_y = fov_h_mm / 2.0
+
+        stage_w = self._stage.stage_width
+        stage_h = self._stage.stage_height
+        if stage_w <= 0 or stage_h <= 0:
+            stage_w = fov_w_mm * 2
+            stage_h = fov_h_mm * 2
+
+        vb_w = stage_w + fov_w_mm
+        vb_h = stage_h + fov_h_mm
+        if vb_w <= 0 or vb_h <= 0:
+            return
+
+        aspect = vb_w / vb_h
+
+        # Available space for canvas (subtract slider tracks, gap)
+        avail_w = total_w - _TRACK_WIDTH - _TRACK_WIDTH - _STAGE_GAP
+        avail_h = total_h - _TRACK_WIDTH
+        if avail_w <= 0 or avail_h <= 0:
+            return
+
+        # Fit canvas to viewBox aspect ratio
+        if avail_w / avail_h > aspect:
+            canvas_h = avail_h
+            canvas_w = avail_h * aspect
+        else:
+            canvas_w = avail_w
+            canvas_h = avail_w / aspect
+
+        # Pixel sizes for stage area and margins within the canvas
+        scale = canvas_w / vb_w
+        margin_px_x = margin_x * scale
+        margin_px_y = margin_y * scale
+        stage_px_x = stage_w * scale
+        stage_px_y = stage_h * scale
+
+        # Canvas position (right of Y slider, below X slider)
+        canvas_x = pad + _TRACK_WIDTH
+        canvas_y = pad + _TRACK_WIDTH
+        self._canvas.setGeometry(int(canvas_x), int(canvas_y), int(canvas_w), int(canvas_h))
+
+        # X slider: spans the stage area width, aligned horizontally with stage
+        x_sl_x = canvas_x + margin_px_x
+        x_sl_y = pad
+        self._x_slider.setGeometry(int(x_sl_x), int(x_sl_y), int(stage_px_x), _TRACK_WIDTH)
+
+        # Y slider: spans the stage area height, aligned vertically with stage
+        y_sl_x = pad
+        y_sl_y = canvas_y + margin_px_y
+        self._y_slider.setGeometry(int(y_sl_x), int(y_sl_y), _TRACK_WIDTH, int(stage_px_y))
+
+        # Z area: to the right of canvas, spanning canvas height + x-slider height
+        z_x = int(canvas_x + canvas_w) + _STAGE_GAP
+        z_y = pad
+        z_h = _TRACK_WIDTH + int(canvas_h)
+        self._z_slider.setGeometry(z_x, z_y, _TRACK_WIDTH, z_h)
+        self._z_viz.setGeometry(z_x, z_y, _TRACK_WIDTH, z_h)
+
+        # Toggle bar: top-right corner
         bar_w = self._toggle_bar.sizeHint().width()
-        self._toggle_bar.move(self.width() - bar_w - 8, 4)
+        self._toggle_bar.move(self.width() - bar_w - 8, pad)
         self._toggle_bar.raise_()
 
     def _sync_sliders(self) -> None:
@@ -1507,10 +1562,11 @@ class GridCanvas(QWidget):
         self._y_slider.setMoving(self._stage.is_xy_moving)
         self._z_slider.setMoving(self._stage.is_z_moving)
 
-    def _sync_slider_ranges(self) -> None:
+    def _on_limits_changed(self) -> None:
         self._x_slider.setRange(self._stage.x.lower_limit, self._stage.x.upper_limit)
         self._y_slider.setRange(self._stage.y.lower_limit, self._stage.y.upper_limit)
         self._z_slider.setRange(self._stage.z.lower_limit, self._stage.z.upper_limit)
+        self._update_layout()
 
     def _on_x_slider(self, value: float) -> None:
         if self._stage.x_adapter and not self._stage.is_xy_moving:
