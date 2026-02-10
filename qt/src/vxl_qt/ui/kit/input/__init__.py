@@ -3,7 +3,7 @@
 from .select import Select, SelectOption
 from .slider import LockableSlider, LockButton, Slider, SliderSpinBox
 from .spinbox import DoubleSpinBox, SpinBox
-from .text_input import TextInput
+from .text_input import TextArea, TextInput
 from .toggle import Toggle
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     "Slider",
     "SliderSpinBox",
     "SpinBox",
+    "TextArea",
     "TextInput",
     "Toggle",
 ]

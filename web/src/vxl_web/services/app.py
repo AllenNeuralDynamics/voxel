@@ -14,19 +14,18 @@ import uuid
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from pathlib import Path
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from vxl import Session
+from vxl.metadata import BASE_METADATA_TARGET
 from vxl.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxlib import fire_and_forget
 
 from .session import SessionService, SessionStatus, session_router
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 router = APIRouter(tags=["app"])
 router.include_router(session_router)  # Include session routes (requires active session)
@@ -60,12 +59,20 @@ class LogMessage(BaseModel):
     timestamp: str
 
 
-class LaunchRequest(BaseModel):
-    """Request to launch a session."""
+class CreateSessionRequest(BaseModel):
+    """Request to create a new session."""
 
     root_name: str
-    session_name: str
-    rig_config: str | None = None  # None = use existing, else rig name from ~/.voxel/rigs/
+    rig_config: str
+    session_name: str = ""
+    metadata_target: str = BASE_METADATA_TARGET
+    metadata: dict[str, Any] | None = None
+
+
+class ResumeSessionRequest(BaseModel):
+    """Request to resume an existing session."""
+
+    session_dir: str
 
 
 class AppService:
@@ -186,58 +193,62 @@ class AppService:
 
     # ==================== Session Lifecycle ====================
 
-    async def launch_session(
+    async def create_session(
         self,
         root_name: str,
-        session_name: str,
-        rig_config: str | None = None,
+        rig_config: str,
+        session_name: str = "",
+        metadata_target: str = BASE_METADATA_TARGET,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Launch a new session or resume an existing one."""
+        """Create a new session."""
         if self.session_service is not None:
             raise RuntimeError("A session is already active. Close it first.")
 
-        # Resolve session directory
         root = self.system_config.get_root(root_name)
         if root is None:
             raise ValueError(f"Session root '{root_name}' not found")
 
-        session_dir = root.session_path(session_name)
+        config_path = get_rig_path(rig_config)
+        if config_path is None:
+            raise ValueError(f"Rig config '{rig_config}' not found in ~/.voxel/rigs/")
 
-        # Resolve rig config path
-        config_path: Path | None = None
-        if rig_config:
-            config_path = get_rig_path(rig_config)
-            if config_path is None:
-                raise ValueError(f"Rig config '{rig_config}' not found in ~/.voxel/rigs/")
-
-        # Check if this is a new session or resume
-        session_file = session_dir / "session.voxel.yaml"
-        if session_file.exists():
-            log.info(f"Resuming existing session: {session_dir}")
-            config_path = None  # Use existing config
-        else:
-            if config_path is None:
-                raise ValueError("Rig config required for new session")
-            log.info(f"Creating new session: {session_dir}")
-            session_dir.mkdir(parents=True, exist_ok=True)
-
-        # Set phase to launching and broadcast
         self._phase = "launching"
         await self._broadcast_status()
 
-        # Launch the session
         try:
-            session = await Session.launch(session_dir, config_path)
-
-            # Create SessionService with broadcast callback
+            session = await Session.create(root.path, config_path, session_name, metadata_target, metadata)
             self.session_service = SessionService(session=session, broadcast=self._broadcast)
 
-            log.info(f"Session launched: {session_dir}")
+            log.info(f"Session created: {session.session_dir}")
             self._phase = "ready"
             await self._broadcast_status()
 
         except Exception:
-            log.exception("Failed to launch session")
+            log.exception("Failed to create session")
+            self.session_service = None
+            self._phase = "idle"
+            await self._broadcast_status()
+            raise
+
+    async def resume_session(self, session_dir: Path) -> None:
+        """Resume an existing session."""
+        if self.session_service is not None:
+            raise RuntimeError("A session is already active. Close it first.")
+
+        self._phase = "launching"
+        await self._broadcast_status()
+
+        try:
+            session = await Session.resume(session_dir)
+            self.session_service = SessionService(session=session, broadcast=self._broadcast)
+
+            log.info(f"Session resumed: {session_dir}")
+            self._phase = "ready"
+            await self._broadcast_status()
+
+        except Exception:
+            log.exception("Failed to resume session")
             self.session_service = None
             self._phase = "idle"
             await self._broadcast_status()
@@ -411,14 +422,18 @@ async def list_sessions(root_name: str, service: Annotated[AppService, Depends(g
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
-@router.post("/session/launch")
-async def launch_session(request: LaunchRequest, service: Annotated[AppService, Depends(get_app_service)]) -> AppStatus:
-    """Launch a new session or resume an existing one."""
+@router.post("/session/create")
+async def create_session(
+    request: CreateSessionRequest, service: Annotated[AppService, Depends(get_app_service)]
+) -> AppStatus:
+    """Create a new session."""
     try:
-        await service.launch_session(
+        await service.create_session(
             root_name=request.root_name,
-            session_name=request.session_name,
             rig_config=request.rig_config,
+            session_name=request.session_name,
+            metadata_target=request.metadata_target,
+            metadata=request.metadata,
         )
         return await service.get_app_status()
     except RuntimeError as e:
@@ -426,7 +441,24 @@ async def launch_session(request: LaunchRequest, service: Annotated[AppService, 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        log.exception("Failed to launch session")
+        log.exception("Failed to create session")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/session/resume")
+async def resume_session(
+    request: ResumeSessionRequest, service: Annotated[AppService, Depends(get_app_service)]
+) -> AppStatus:
+    """Resume an existing session."""
+    try:
+        await service.resume_session(Path(request.session_dir))
+        return await service.get_app_status()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except Exception as e:
+        log.exception("Failed to resume session")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

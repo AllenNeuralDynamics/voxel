@@ -29,6 +29,7 @@ from .input import (
     SelectOption,
     SliderSpinBox,
     SpinBox,
+    TextArea,
     TextInput,
     Toggle,
 )
@@ -85,6 +86,7 @@ __all__ = [
     "TableModel",
     "TableToolbar",
     "Text",
+    "TextArea",
     "TextInput",
     "Toggle",
     "ToolButton",

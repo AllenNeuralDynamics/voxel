@@ -10,17 +10,17 @@ Uses Qt signals for state change notifications, enabling reactive UI updates.
 """
 
 import logging
-from typing import TYPE_CHECKING, Literal
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
 from PySide6.QtCore import QObject, Signal
 
 from vxl import Session
+from vxl.metadata import BASE_METADATA_TARGET
 from vxl.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxl_qt.store import DevicesStore, GridStore, PreviewStore, StageStore
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from vxl import VoxelRig
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class VoxelApp(QObject):
         app.session_changed.connect(on_session_ready)
 
         # Launch a session
-        await app.launch_session("playground", "test-session", "simulated.local")
+        await app.create_session("playground", "simulated.local")
 
         # Access devices
         laser = app.devices.get_adapter("laser_488")
@@ -165,26 +165,25 @@ class VoxelApp(QObject):
         all_sessions.sort(key=lambda s: s.modified, reverse=True)
         return all_sessions
 
-    async def launch_session(
+    async def create_session(
         self,
         root_name: str,
-        session_name: str,
-        rig_config: str | None = None,
+        rig_config: str,
+        session_name: str = "",
+        metadata_target: str = BASE_METADATA_TARGET,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Launch a new session or resume an existing one.
+        """Create a new session.
 
         Args:
             root_name: Name of the session root
-            session_name: Name of the session (folder name)
-            rig_config: Rig config name (required for new sessions, ignored for existing)
-
-        Raises:
-            RuntimeError: If a session is already active
-            ValueError: If root or rig config not found
+            rig_config: Rig config name
+            session_name: Optional session name suffix
+            metadata_target: Import path for metadata class
+            metadata: Experiment metadata values
         """
         if self._session is not None:
             raise RuntimeError("A session is already active. Close it first.")
-
         if self._system_config is None:
             raise RuntimeError("System config not loaded")
 
@@ -192,56 +191,69 @@ class VoxelApp(QObject):
         if root is None:
             raise ValueError(f"Session root '{root_name}' not found")
 
-        session_dir = root.session_path(session_name)
-
-        config_path: Path | None = None
-        if rig_config:
-            config_path = get_rig_path(rig_config)
-            if config_path is None:
-                raise ValueError(f"Rig config '{rig_config}' not found in ~/.voxel/rigs/")
-
-        session_file = session_dir / "session.voxel.yaml"
-        if session_file.exists():
-            log.info("Resuming existing session: %s", session_dir)
-            config_path = None
-        else:
-            if config_path is None:
-                raise ValueError("Rig config required for new session")
-            log.info("Creating new session: %s", session_dir)
-            session_dir.mkdir(parents=True, exist_ok=True)
+        config_path = get_rig_path(rig_config)
+        if config_path is None:
+            raise ValueError(f"Rig config '{rig_config}' not found in ~/.voxel/rigs/")
 
         self._set_phase("launching")
 
         try:
-            self._session = await Session.launch(session_dir, config_path)
-            log.info("Session launched: %s", session_dir)
-
-            await self.devices.start(self._session)
-            log.info("DevicesStore started")
-
-            # Bind stage store to axis adapters
-            stage_cfg = self._session.rig.config.stage
-            x_adapter = self.devices.get_adapter(stage_cfg.x)
-            y_adapter = self.devices.get_adapter(stage_cfg.y)
-            z_adapter = self.devices.get_adapter(stage_cfg.z)
-            if x_adapter and y_adapter and z_adapter:
-                self.stage.bind(x_adapter, y_adapter, z_adapter)
-                log.info("StageStore bound")
-
-            self.devices_ready.emit()
-
-            await self.grid.bind_session(self._session)
-            log.info("GridStore bound to session")
-
-            self._set_phase("ready")
-            self.session_changed.emit(self._session)
-
+            self._session = await Session.create(root.path, config_path, session_name, metadata_target, metadata)
+            log.info("Session created: %s", self._session.session_dir)
+            await self._wire_session()
         except Exception as e:
-            log.exception("Failed to launch session")
+            log.exception("Failed to create session")
             self._session = None
             self._set_phase("idle")
-            self._set_error(f"Failed to launch session: {e}")
+            self._set_error(f"Failed to create session: {e}")
             raise
+
+    async def resume_session(self, session_dir: Path) -> None:
+        """Resume an existing session.
+
+        Args:
+            session_dir: Path to the session directory
+        """
+        if self._session is not None:
+            raise RuntimeError("A session is already active. Close it first.")
+
+        self._set_phase("launching")
+
+        try:
+            self._session = await Session.resume(session_dir)
+            log.info("Session resumed: %s", session_dir)
+            await self._wire_session()
+        except Exception as e:
+            log.exception("Failed to resume session")
+            self._session = None
+            self._set_phase("idle")
+            self._set_error(f"Failed to resume session: {e}")
+            raise
+
+    async def _wire_session(self) -> None:
+        """Wire up stores and signals after session create/resume."""
+        if self._session is None:
+            raise RuntimeError("No session to wire")
+
+        await self.devices.start(self._session)
+        log.info("DevicesStore started")
+
+        # Bind stage store to axis adapters
+        stage_cfg = self._session.rig.config.stage
+        x_adapter = self.devices.get_adapter(stage_cfg.x)
+        y_adapter = self.devices.get_adapter(stage_cfg.y)
+        z_adapter = self.devices.get_adapter(stage_cfg.z)
+        if x_adapter and y_adapter and z_adapter:
+            self.stage.bind(x_adapter, y_adapter, z_adapter)
+            log.info("StageStore bound")
+
+        self.devices_ready.emit()
+
+        await self.grid.bind_session(self._session)
+        log.info("GridStore bound to session")
+
+        self._set_phase("ready")
+        self.session_changed.emit(self._session)
 
     async def close_session(self) -> None:
         """Close the current session.

@@ -10,6 +10,7 @@ and VoxelApp (application logic).
 """
 
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
 )
 
+from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets
 from vxl.system import SessionDirectory
 from vxl_qt.app import VoxelApp
 from vxl_qt.ui.control_page import ControlPage
@@ -62,7 +64,7 @@ class MainWindow(QMainWindow):
     def _configure_window(self) -> None:
         """Configure window properties."""
         self.setWindowTitle("Voxel")
-        self.setMinimumSize(1280, 800)
+        self.setMinimumSize(1920, 1080)
         self.showMaximized()
         # self.showFullScreen()
 
@@ -96,6 +98,7 @@ class MainWindow(QMainWindow):
         """Refresh launch page data from app."""
         self._launch_page.set_roots(self._app.session_roots)
         self._launch_page.set_rigs(self._app.available_rigs)
+        self._launch_page.set_metadata_targets(discover_metadata_targets())
         self._launch_page.set_sessions(self._app.list_all_sessions())
 
     @Slot(str)
@@ -115,24 +118,40 @@ class MainWindow(QMainWindow):
             self._control_page.refresh()
             self._stack.setCurrentWidget(self._control_page)
 
-    @Slot(str, str, str)
-    def _on_new_session_requested(self, root_name: str, session_name: str, rig_config: str) -> None:
+    @Slot(str, str, str, str, object)
+    def _on_new_session_requested(
+        self, root_name: str, rig_config: str, session_name: str, metadata_target: str, metadata: dict
+    ) -> None:
         """Handle new session creation request from LaunchPage."""
-        log.info("Creating new session: %s/%s with rig %s", root_name, session_name, rig_config)
-        fire_and_forget(self._launch_session(root_name, session_name, rig_config), log=log)
+        log.info("Creating new session: root=%s, rig=%s, target=%s", root_name, rig_config, metadata_target)
+        fire_and_forget(self._create_session(root_name, rig_config, session_name, metadata_target, metadata), log=log)
 
     @Slot(object)
     def _on_session_resumed(self, session: SessionDirectory) -> None:
         """Handle session resume request from LaunchPage."""
-        log.info("Resuming session: %s/%s", session.root_name, session.name)
-        fire_and_forget(self._launch_session(session.root_name, session.name), log=log)
+        log.info("Resuming session: %s", session.path)
+        fire_and_forget(self._resume_session(session.path), log=log)
 
-    async def _launch_session(self, root_name: str, session_name: str, rig_config: str | None = None) -> None:
-        """Launch a session (new or resumed)."""
+    async def _create_session(
+        self,
+        root_name: str,
+        rig_config: str,
+        session_name: str = "",
+        metadata_target: str = BASE_METADATA_TARGET,
+        metadata: dict | None = None,
+    ) -> None:
+        """Create a new session."""
         try:
-            await self._app.launch_session(root_name, session_name, rig_config)
+            await self._app.create_session(root_name, rig_config, session_name, metadata_target, metadata)
         except Exception:
-            log.exception("Failed to launch session")
+            log.exception("Failed to create session")
+
+    async def _resume_session(self, session_dir: Path) -> None:
+        """Resume an existing session."""
+        try:
+            await self._app.resume_session(session_dir)
+        except Exception:
+            log.exception("Failed to resume session")
 
     @Slot(str)
     def _on_error(self, message: str) -> None:

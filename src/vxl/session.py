@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
 from vxl.config import TileOrder, VoxelRigConfig
+from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
 from vxl.rig import RigMode, VoxelRig
 from vxl.tile import Stack, StackResult, StackStatus, Tile
 
@@ -41,6 +42,9 @@ class SessionConfig(BaseModel):
     """
 
     rig: VoxelRigConfig
+    session_name: str = Field(default="", description="Optional session name suffix")
+    metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
     grid_config: GridConfig = Field(default_factory=GridConfig)
     tile_order: TileOrder = "unset"
     stacks: list[Stack] = Field(default_factory=list)
@@ -59,6 +63,11 @@ class SessionConfig(BaseModel):
             self.tile_order = self.rig.globals.default_tile_order
         return self
 
+    def resolve_metadata(self) -> ExperimentMetadata:
+        """Resolve metadata_target and validate metadata dict against it."""
+        cls = resolve_metadata_class(self.metadata_target)
+        return cls(**self.metadata)
+
     @classmethod
     def from_yaml(cls, path: Path) -> "SessionConfig":
         """Load from .voxel.yaml file, preserving anchors for round-tripping."""
@@ -67,6 +76,9 @@ class SessionConfig(BaseModel):
 
         config = cls(
             rig=VoxelRigConfig.model_validate(raw_data.get("rig", {})),
+            session_name=raw_data.get("session_name", ""),
+            metadata_target=raw_data.get("metadata_target", BASE_METADATA_TARGET) or BASE_METADATA_TARGET,
+            metadata=raw_data.get("metadata", {}),
             grid_config=GridConfig.model_validate(raw_data.get("grid_config", {})),
             tile_order=raw_data.get("tile_order", "snake_row"),
             stacks=[Stack.model_validate(s) for s in raw_data.get("stacks", [])],
@@ -75,7 +87,13 @@ class SessionConfig(BaseModel):
         return config
 
     @classmethod
-    def create_new(cls, rig_config_path: Path) -> "SessionConfig":
+    def create_new(
+        cls,
+        rig_config_path: Path,
+        session_name: str = "",
+        metadata_target: str = BASE_METADATA_TARGET,
+        metadata: dict[str, Any] | None = None,
+    ) -> "SessionConfig":
         """Create new session config from a rig config file.
 
         Preserves YAML anchors from the original config file.
@@ -89,9 +107,12 @@ class SessionConfig(BaseModel):
 
         rig = VoxelRigConfig.model_validate(rig_data)
 
-        config = cls(rig=rig)
+        config = cls(rig=rig, session_name=session_name, metadata_target=metadata_target, metadata=metadata or {})
         config._raw_data = {
             "rig": rig_data,
+            "session_name": config.session_name,
+            "metadata_target": config.metadata_target,
+            "metadata": config.metadata,
             "grid_config": config.grid_config.model_dump(),
             "tile_order": config.tile_order,
             "stacks": [],
@@ -110,6 +131,9 @@ class SessionConfig(BaseModel):
         """
         if self._raw_data is not None:
             # Update session fields in raw data to preserve anchors in rig section
+            self._raw_data["session_name"] = self.session_name
+            self._raw_data["metadata_target"] = self.metadata_target
+            self._raw_data["metadata"] = self.metadata
             self._raw_data["grid_config"] = self.grid_config.model_dump()
             self._raw_data["tile_order"] = self.tile_order
             # Use mode='json' to serialize enums as strings for YAML compatibility
@@ -119,6 +143,9 @@ class SessionConfig(BaseModel):
             # Fresh config without raw_data, just dump normally
             data = {
                 "rig": self.rig.model_dump(),
+                "session_name": self.session_name,
+                "metadata_target": self.metadata_target,
+                "metadata": self.metadata,
                 "grid_config": self.grid_config.model_dump(),
                 "tile_order": self.tile_order,
                 # Use mode='json' to serialize enums as strings for YAML compatibility
@@ -157,12 +184,7 @@ class Session:
     SESSION_FILENAME = "session.voxel.yaml"
     DATA_DIRNAME = "data"
 
-    def __init__(
-        self,
-        config: SessionConfig,
-        rig: VoxelRig,
-        session_dir: Path,
-    ) -> None:
+    def __init__(self, config: SessionConfig, rig: VoxelRig, session_dir: Path) -> None:
         self._config = config
         self._rig = rig
         self._session_dir = session_dir
@@ -177,45 +199,54 @@ class Session:
         self._config.to_yaml(session_file)
 
     @classmethod
-    async def launch(cls, session_dir: Path, config_path: Path | None = None) -> "Session":
-        """Launch a new session or resume an existing one.
+    async def create(
+        cls,
+        root_path: Path,
+        config_path: Path,
+        session_name: str = "",
+        metadata_target: str = BASE_METADATA_TARGET,
+        metadata: dict[str, Any] | None = None,
+    ) -> "Session":
+        """Create a new session.
 
-        Args:
-            session_dir: Directory for session data and state.
-            config_path: Path to rig config (only used for new sessions).
-                If session_dir already has a session.voxel.yaml, this is ignored.
+        Builds SessionConfig, derives folder name from metadata, creates the
+        session directory under root_path, and starts the rig.
         """
+        config = SessionConfig.create_new(config_path, session_name, metadata_target, metadata)
+
+        # Derive folder name: rig name prefix + metadata suffix + optional session name
+        meta = config.resolve_metadata()
+        parts = [config.rig.info.name, meta.uid(), config.session_name]
+        folder = "-".join(p for p in parts if p)
+        session_dir = root_path / folder
+
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / cls.DATA_DIRNAME).mkdir(exist_ok=True)
+
+        config.to_yaml(session_dir / cls.SESSION_FILENAME)
+
+        rig = VoxelRig(config=config.rig)
+        await rig.start()
+
+        session = cls(config=config, rig=rig, session_dir=session_dir)
+        session._log.info("Created new session")
+        return session
+
+    @classmethod
+    async def resume(cls, session_dir: Path) -> "Session":
+        """Resume an existing session from its directory."""
         session_file = session_dir / cls.SESSION_FILENAME
+        if not session_file.exists():
+            raise FileNotFoundError(f"No session file found at {session_file}")
 
-        if session_file.exists():
-            # Resume existing session
-            session_file.touch()  # Update mtime so it sorts as recently accessed
-            config = SessionConfig.from_yaml(session_file)
+        session_file.touch()  # Update mtime so it sorts as recently accessed
+        config = SessionConfig.from_yaml(session_file)
 
-            rig = VoxelRig(config=config.rig)
-            await rig.start()
+        rig = VoxelRig(config=config.rig)
+        await rig.start()
 
-            session = cls(config=config, rig=rig, session_dir=session_dir)
-            session._log.info(f"Resumed session with {len(config.stacks)} stacks")
-        else:
-            # Create new session
-            if config_path is None:
-                raise ValueError("config_path is required for new sessions")
-
-            session_dir.mkdir(parents=True, exist_ok=True)
-            (session_dir / cls.DATA_DIRNAME).mkdir(exist_ok=True)
-
-            config = SessionConfig.create_new(config_path)
-
-            # Write session file
-            config.to_yaml(session_file)
-
-            rig = VoxelRig(config=config.rig)
-            await rig.start()
-
-            session = cls(config=config, rig=rig, session_dir=session_dir)
-            session._log.info("Created new session")
-
+        session = cls(config=config, rig=rig, session_dir=session_dir)
+        session._log.info(f"Resumed session with {len(config.stacks)} stacks")
         return session
 
     # ==================== Properties ====================

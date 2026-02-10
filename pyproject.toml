@@ -32,6 +32,9 @@ dependencies = [
 Repository = "https://github.com/AllenNeuralDynamics/voxel"
 Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
+[project.entry-points."vxl.metadata"]
+exaspim = "vxl.metadata.ExaspimMetadata"
+
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
