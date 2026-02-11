@@ -48,7 +48,9 @@
 	{indeterminate}
 	onCheckedChange={handleChange}
 	{disabled}
-	class="flex items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600 data-[state=indeterminate]:border-emerald-500 data-[state=indeterminate]:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 {sizeClasses[size]} {className}"
+	class="flex items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600 data-[state=indeterminate]:border-emerald-500 data-[state=indeterminate]:bg-emerald-600 {sizeClasses[
+		size
+	]} {className}"
 >
 	{#if checked}
 		<Icon icon="mdi:check" class="text-white" width={iconSizes[size]} height={iconSizes[size]} />

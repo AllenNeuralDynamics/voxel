@@ -233,7 +233,7 @@
 											type="text"
 											value={item}
 											oninput={(e) => updateListItem(key, i, e.currentTarget.value)}
-											class="w-full rounded border border-input bg-transparent py-1 pl-2 pr-6 text-xs transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none"
+											class="w-full rounded border border-input bg-transparent py-1 pr-6 pl-2 text-xs transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none"
 										/>
 										<button
 											type="button"

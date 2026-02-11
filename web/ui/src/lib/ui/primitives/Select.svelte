@@ -77,18 +77,13 @@
 				<span class="text-muted-foreground">{placeholder}</span>
 			{/if}
 		</span>
-		<Icon
-			icon="mdi:chevron-down"
-			class="shrink-0 opacity-50"
-			width={iconSizes[size]}
-			height={iconSizes[size]}
-		/>
+		<Icon icon="mdi:chevron-down" class="shrink-0 opacity-50" width={iconSizes[size]} height={iconSizes[size]} />
 	</SelectPrimitive.Trigger>
 
 	<SelectPrimitive.Portal>
 		<SelectPrimitive.Content
 			align="start"
-			class="z-50 mt-1 min-w-[8rem] w-(--bits-select-anchor-width) origin-(--bits-select-content-transform-origin) rounded border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+			class="z-50 mt-1 w-(--bits-select-anchor-width) min-w-[8rem] origin-(--bits-select-content-transform-origin) rounded border bg-popover p-1 text-popover-foreground shadow-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
 		>
 			<SelectPrimitive.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
 				<SelectPrimitive.Group>

@@ -128,7 +128,9 @@
 					New Session
 					<Icon icon="mdi:chevron-right" width="16" height="16" class="transition-transform duration-200" />
 				</Collapsible.Trigger>
-				<Collapsible.Content class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+				<Collapsible.Content
+					class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"
+				>
 					<SessionForm
 						{roots}
 						{rigs}

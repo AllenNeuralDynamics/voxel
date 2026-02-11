@@ -587,9 +587,7 @@ export class App {
 
 	async fetchMetadataSchema(target: string): Promise<JsonSchema> {
 		try {
-			const response = await fetch(
-				`${this.client.baseUrl}/metadata/schema?target=${encodeURIComponent(target)}`
-			);
+			const response = await fetch(`${this.client.baseUrl}/metadata/schema?target=${encodeURIComponent(target)}`);
 			if (!response.ok) {
 				throw new Error(`Failed to fetch metadata schema: ${response.statusText}`);
 			}

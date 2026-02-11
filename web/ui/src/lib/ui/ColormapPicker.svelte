@@ -117,8 +117,8 @@
 					<details
 						class="group-section"
 						open={openGroup === group.uid}
-						ontoggle={(e: ToggleEvent) => {
-							if (e.newState === 'open') {
+						ontoggle={(e) => {
+							if ((e as unknown as ToggleEvent).newState === 'open') {
 								openGroup = group.uid;
 							} else if (openGroup === group.uid) {
 								openGroup = null;

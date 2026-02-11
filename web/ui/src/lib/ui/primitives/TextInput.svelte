@@ -32,5 +32,7 @@
 	bind:value
 	{placeholder}
 	oninput={handleInput}
-	class="w-full rounded border border-input bg-transparent placeholder-muted-foreground transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none {sizeClasses[size]} {className}"
+	class="w-full rounded border border-input bg-transparent placeholder-muted-foreground transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none {sizeClasses[
+		size
+	]} {className}"
 />
