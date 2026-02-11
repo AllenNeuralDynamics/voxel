@@ -427,7 +427,6 @@ class SessionCard(Flex):
         super().__init__(
             Text(display_name(session.name)),
             Text.muted(session.root_name),
-            Text.muted(session.rig_name),
             Stretch(),
             Text.muted(format_relative_time(session.modified)),
             folder_btn,

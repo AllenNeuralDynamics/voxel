@@ -57,7 +57,6 @@ class SessionDirectory(BaseModel):
     name: str  # Folder name
     path: Path  # Full path to session dir
     root_name: str  # Which root it's in
-    rig_name: str  # From session.voxel.yaml rig.info.name
     modified: datetime  # Last modified time of session.voxel.yaml
 
 
@@ -168,19 +167,12 @@ class SystemConfig(BaseModel):
                 continue
 
             try:
-                with session_file.open() as f:
-                    data = yaml.load(f) or {}
-
-                rig_info = data.get("rig", {}).get("info", {})
-                rig_name = rig_info.get("name", "Unknown")
                 modified = datetime.fromtimestamp(session_file.stat().st_mtime)
-
                 sessions.append(
                     SessionDirectory(
                         name=child.name,
                         path=child,
                         root_name=root_name,
-                        rig_name=rig_name,
                         modified=modified,
                     ),
                 )

@@ -94,63 +94,69 @@
 
 <div class="flex h-screen w-full bg-background">
 	<!-- Sidebar -->
-	<div class="flex w-[600px] shrink-0 flex-col overflow-y-auto border-r border-border p-4">
-		<!-- Header -->
-		<div class="mb-6 flex flex-col gap-4">
-			<div class="flex items-center gap-3">
-				<img src="/voxel-logo.png" alt="Voxel" class="h-10 w-10" />
-				<div>
-					<h1 class="text-2xl font-semibold text-foreground">Voxel</h1>
-					<p class="text-sm text-muted-foreground">Light sheet microscope control</p>
+	<div class="flex w-150 shrink-0 flex-col border-r border-border">
+		<!-- Header (pinned) -->
+		<div class="shrink-0 p-4 pb-0">
+			<div class="mb-6 flex flex-col gap-1">
+				<div class="flex items-center gap-2">
+					<!-- <img src="/voxel-logo.png" alt="Voxel PNG" class="h-10 w-10" /> -->
+					<img src="/voxel-logo.svg" alt="Voxel" class="h-8 w-8" />
+					<h1 class="text-2xl font-light text-foreground uppercase">Voxel</h1>
 				</div>
+				<p class="text-xs text-muted-foreground">Light sheet microscopy</p>
+
+				{#if isLaunching}
+					<div class="flex items-center gap-2">
+						<div class="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary"></div>
+						<p class="text-sm text-muted-foreground">Starting session...</p>
+					</div>
+				{/if}
 			</div>
 
-			{#if isLaunching}
-				<div class="flex items-center gap-2">
-					<div class="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-					<p class="text-sm text-muted-foreground">Starting session...</p>
+			<!-- Error display -->
+			{#if error}
+				<div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
+					{error}
 				</div>
 			{/if}
 		</div>
 
-		<!-- Error display -->
-		{#if error}
-			<div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
-				{error}
-			</div>
-		{/if}
-
 		{#if !isLaunching}
-			<Collapsible.Root class="mb-6">
-				<Collapsible.Trigger
-					class="flex w-full items-center justify-between py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground/80 [&[data-state=open]>svg]:rotate-90"
-				>
-					New Session
-					<Icon icon="mdi:chevron-right" width="16" height="16" class="transition-transform duration-200" />
-				</Collapsible.Trigger>
-				<Collapsible.Content
-					class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"
-				>
-					<SessionForm
-						{roots}
-						{rigs}
-						{metadataTargets}
-						{metadataSchema}
-						onMetadataTargetChanged={handleMetadataTargetChanged}
-						onSubmit={handleLaunchSession}
-					/>
-				</Collapsible.Content>
-			</Collapsible.Root>
+			<!-- New Session (pinned) -->
+			<div class="shrink-0 px-4">
+				<Collapsible.Root class="mb-6">
+					<Collapsible.Trigger
+						class="flex w-full items-center justify-between py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground/80 [&[data-state=open]>svg]:rotate-90"
+					>
+						New Session
+						<Icon icon="mdi:chevron-right" width="16" height="16" class="transition-transform duration-200" />
+					</Collapsible.Trigger>
+					<Collapsible.Content
+						class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"
+					>
+						<SessionForm
+							{roots}
+							{rigs}
+							{metadataTargets}
+							{metadataSchema}
+							onMetadataTargetChanged={handleMetadataTargetChanged}
+							onSubmit={handleLaunchSession}
+						/>
+					</Collapsible.Content>
+				</Collapsible.Root>
+			</div>
 
-			<!-- Recent sessions from all roots -->
-			<div class="space-y-2">
+			<!-- Recent sessions (scrollable) -->
+			<div class="px-4">
 				<h2 class="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
+			</div>
+			<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-2">
 				<SessionList {sessions} loading={loadingSessions} onResume={handleResumeSession} />
 			</div>
 		{/if}
 
-		<!-- Connection status (pushed to bottom) -->
-		<div class="mt-auto pt-4">
+		<!-- Connection status (pinned to bottom) -->
+		<div class="shrink-0 p-4 pt-2">
 			<ClientStatus client={app.client} />
 		</div>
 	</div>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-7 -5 360 360">
+  <style>
+    .light   { --top: #C1D9EC; --left: #7EB0CF; --right: #9DC3DB; }
+    .og      { --top: #0C3F63; --left: #0B2F49; --right: #0B2437; }
+    .dark    { --top: #1A6A9E; --left: #134D73; --right: #0F3A58; }
+    .gfp     { --top: #1A9E5C; --left: #137347; --right: #0F5838; }
+    .cherry  { --top: #9E1A3D; --left: #73132D; --right: #580F23; }
+    .dapi    { --top: #5C1A9E; --left: #421373; --right: #330F58; }
+    .yfp     { --top: #9E8A1A; --left: #736513; --right: #584D0F; }
+  </style>
+  <!-- Top-Left Cube -->
+  <g class="gfp">
+    <polygon points="86.6,0 173.2,50 86.6,100 0,50" style="fill: var(--top)"/>
+    <polygon points="0,50 86.6,100 86.6,200 0,150" style="fill: var(--left)"/>
+    <polygon points="86.6,100 173.2,50 173.2,150 86.6,200" style="fill: var(--right)"/>
+  </g>
+  <!-- Top-Right Cube -->
+  <g class="cherry">
+    <polygon points="259.8,0 346.4,50 259.8,100 173.2,50" style="fill: var(--top)"/>
+    <polygon points="173.2,50 259.8,100 259.8,200 173.2,150" style="fill: var(--left)"/>
+    <polygon points="259.8,100 346.4,50 346.4,150 259.8,200" style="fill: var(--right)"/>
+  </g>
+  <!-- Bottom Cube -->
+  <g class="yfp">
+    <polygon points="173.2,150 259.8,200 173.2,250 86.6,200" style="fill: var(--top)"/>
+    <polygon points="86.6,200 173.2,250 173.2,350 86.6,300" style="fill: var(--left)"/>
+    <polygon points="173.2,250 259.8,200 259.8,300 173.2,350" style="fill: var(--right)"/>
+  </g>
+</svg>

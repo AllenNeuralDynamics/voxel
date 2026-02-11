@@ -22,7 +22,6 @@ export interface SessionDirectory {
 	name: string;
 	path: string;
 	root_name: string;
-	rig_name: string;
 	modified: string; // ISO timestamp
 }
 

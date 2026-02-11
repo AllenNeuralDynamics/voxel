@@ -16,15 +16,15 @@
 	function getLevelColor(level: LogMessage['level']): string {
 		switch (level) {
 			case 'debug':
-				return 'text-zinc-500';
+				return 'text-muted-foreground';
 			case 'info':
-				return 'text-blue-400';
+				return 'text-info';
 			case 'warning':
-				return 'text-amber-400';
+				return 'text-warning';
 			case 'error':
-				return 'text-rose-400';
+				return 'text-danger';
 			default:
-				return 'text-zinc-400';
+				return 'text-muted-foreground';
 		}
 	}
 
@@ -62,11 +62,11 @@
 
 <div class="flex h-full flex-col overflow-hidden">
 	<div class="mb-2 flex shrink-0 items-center justify-between">
-		<h2 class="text-sm font-medium text-zinc-300">Log</h2>
+		<h2 class="text-sm font-medium text-foreground">Log</h2>
 		{#if onClear}
 			<button
 				onclick={onClear}
-				class="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+				class="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 				title="Clear logs"
 			>
 				<Icon icon="mdi:delete-outline" width="14" height="14" />
@@ -76,21 +76,19 @@
 	</div>
 	<div
 		bind:this={container}
-		class="log-container min-h-0 flex-1 overflow-y-auto rounded border border-zinc-700 bg-zinc-800 font-mono text-xs"
+		class="log-container min-h-0 flex-1 overflow-y-auto rounded border border-border bg-surface font-mono text-xs"
 	>
 		{#if logs.length === 0}
-			<div class="flex h-full items-center justify-center text-zinc-500">Waiting for logs...</div>
+			<div class="flex h-full items-center justify-center text-muted-foreground">Waiting for logs...</div>
 		{:else}
 			<div class="space-y-0.5 p-2">
 				{#each logs as log, i (i)}
 					<div class="flex items-center gap-2">
-						<!-- Time: fixed 8 chars "HH:MM:SS" -->
-						<span class="w-[8ch] shrink-0 text-zinc-600">{formatTime(log.timestamp)}</span>
-						<!-- Logger: fixed width, middle-truncated -->
-						<span class="w-[28ch] shrink-0 text-zinc-500" title={log.logger}>{truncateMiddle(log.logger, 36)}</span>
-						<!-- Message: fills remaining space -->
-						<span class="min-w-0 flex-1 text-zinc-300">{log.message}</span>
-						<!-- Level: icon at end -->
+						<span class="w-[8ch] shrink-0 text-muted-foreground/50">{formatTime(log.timestamp)}</span>
+						<span class="w-[42ch] shrink-0 text-muted-foreground" title={log.logger}
+							>{truncateMiddle(log.logger, 42)}</span
+						>
+						<span class="min-w-0 flex-1 text-foreground">{log.message}</span>
 						<span class="shrink-0 {getLevelColor(log.level)}" title={log.level}>
 							<Icon icon={getLevelIcon(log.level)} width="14" height="14" />
 						</span>
@@ -104,7 +102,7 @@
 <style>
 	.log-container {
 		scrollbar-width: thin;
-		scrollbar-color: #3f3f46 transparent;
+		scrollbar-color: var(--border) transparent;
 	}
 
 	.log-container::-webkit-scrollbar {
@@ -116,11 +114,11 @@
 	}
 
 	.log-container::-webkit-scrollbar-thumb {
-		background-color: #3f3f46;
+		background-color: var(--border);
 		border-radius: 3px;
 	}
 
 	.log-container::-webkit-scrollbar-thumb:hover {
-		background-color: #52525b;
+		background-color: var(--muted-foreground);
 	}
 </style>

@@ -30,10 +30,6 @@
 			day: 'numeric'
 		});
 	}
-
-	function formatSessionName(name: string): string {
-		return name.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-	}
 </script>
 
 {#if loading}
@@ -51,39 +47,20 @@
 	<div class="space-y-2">
 		{#each sessions as session (session.path)}
 			<button
-				class="group flex w-full items-center gap-4 rounded border border-border bg-card px-4 py-3 text-left transition-colors hover:border-foreground/20 hover:bg-accent"
+				class="group flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-foreground/20 hover:bg-accent"
 				onclick={() => onResume(session)}
 			>
-				<!-- Content -->
-				<div class="min-w-0 flex-1 space-y-2">
-					<!-- Session name -->
-					<div class="flex items-center gap-2">
-						<Icon icon="mdi:flask-outline" width="14" height="14" class="shrink-0 text-primary" />
-						<span class="truncate text-sm font-medium text-foreground">{formatSessionName(session.name)}</span>
-					</div>
-					<!-- Meta row -->
-					<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-						<span class="flex items-center gap-1.5 text-foreground">
-							<Icon icon="mdi:folder-outline" width="12" height="12" class="text-warning" />
-							{session.root_name}
-						</span>
-						<span class="flex items-center gap-1.5 text-muted-foreground">
-							<Icon icon="mdi:cog-outline" width="12" height="12" class="text-muted-foreground" />
-							{session.rig_name}
-						</span>
-						<span class="text-muted-foreground">
-							{formatRelativeTime(session.modified)}
-						</span>
-					</div>
-				</div>
-
-				<!-- Resume indicator -->
-				<div
-					class="flex shrink-0 items-center gap-1.5 rounded bg-secondary px-2.5 py-1 text-xs text-secondary-foreground transition-colors group-hover:bg-success group-hover:text-success-fg"
-				>
-					<span>Resume</span>
-					<Icon icon="mdi:arrow-right" width="14" height="14" />
-				</div>
+				<span class="min-w-0 flex-1 truncate text-xs text-foreground">
+					<span class="text-muted-foreground">{session.root_name} /</span>
+					{session.name}
+				</span>
+				<span class="shrink-0 text-[0.65rem] text-muted-foreground/60">{formatRelativeTime(session.modified)}</span>
+				<Icon
+					icon="mdi:arrow-right"
+					width="14"
+					height="14"
+					class="shrink-0 text-muted-foreground/30 transition-colors group-hover:text-foreground"
+				/>
 			</button>
 		{/each}
 	</div>
