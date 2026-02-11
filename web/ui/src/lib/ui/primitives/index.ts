@@ -11,6 +11,7 @@ export { default as PaneDivider } from './PaneDivider.svelte';
 export { default as Select } from './Select.svelte';
 export { default as SelectInput } from './SelectInput.svelte';
 export { default as SliderInput } from './SliderInput.svelte';
+export { default as LegacySpinBox } from './LegacySpinBox.svelte';
 export { default as SpinBox } from './SpinBox.svelte';
 export { default as Switch } from './Switch.svelte';
 export { default as TextInput } from './TextInput.svelte';

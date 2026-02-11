@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
-	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
+	import LegacySpinBox from '$lib/ui/primitives/LegacySpinBox.svelte';
 	import SelectInput from '$lib/ui/primitives/SelectInput.svelte';
 	import type { App } from '$lib/app';
 	import { getStackStatusColor, type TileOrder } from '$lib/core/types';
@@ -151,7 +151,17 @@
 	<div class="flex items-center justify-between">
 		<span class="text-zinc-400">{label}</span>
 		<span class="flex items-center gap-1">
-			<SpinBox {value} {onChange} {min} {max} {step} {decimals} numCharacters={5} showButtons={true} align="right" />
+			<LegacySpinBox
+				{value}
+				{onChange}
+				{min}
+				{max}
+				{step}
+				{decimals}
+				numCharacters={5}
+				showButtons={true}
+				align="right"
+			/>
 			{#if unit}<span class="w-3 text-zinc-400">{unit}</span>{/if}
 		</span>
 	</div>
@@ -175,7 +185,7 @@
 					class="rounded px-1 text-[0.55rem] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
 					title="Use current Z">Current</button
 				>
-				<SpinBox
+				<LegacySpinBox
 					value={inputValue}
 					{onChange}
 					{min}

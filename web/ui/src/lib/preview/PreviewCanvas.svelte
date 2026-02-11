@@ -41,7 +41,7 @@
 </script>
 
 <div
-	class="relative flex h-full items-start justify-center bg-zinc-950 px-4 pt-18 pb-8"
+	class="relative flex h-full items-start justify-center bg-background px-4 pt-18 pb-8"
 	bind:this={previewCanvasContainer}
 >
 	<canvas

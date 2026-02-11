@@ -14,8 +14,12 @@
 
 	const defaultScheme: CubeScheme = { top: 'currentColor', left: 'currentColor', right: 'currentColor' };
 
-	const { topLeft = defaultScheme, topRight = defaultScheme, bottom = defaultScheme, class: className = '' }: Props =
-		$props();
+	const {
+		topLeft = defaultScheme,
+		topRight = defaultScheme,
+		bottom = defaultScheme,
+		class: className = ''
+	}: Props = $props();
 </script>
 
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-7 -5 360 360" class={className}>

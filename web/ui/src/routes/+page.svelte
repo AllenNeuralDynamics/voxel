@@ -114,21 +114,21 @@
 		<LaunchPage {app} />
 	{:else if viewName === 'control' && app.previewState}
 		<!-- Control view -->
-		<div class="flex h-screen w-full bg-zinc-950 text-zinc-100">
-			<aside class="flex h-full w-96 min-w-80 flex-col border-r border-zinc-700 bg-zinc-900">
+		<div class="flex h-screen w-full bg-background text-foreground">
+			<aside class="flex h-full w-96 min-w-80 flex-col border-r border-border bg-card">
 				<!-- Profile Selector -->
-				<div class="space-y-3 border-b border-zinc-600 p-4">
+				<div class="space-y-3 border-b border-border p-4">
 					<ProfileSelector {app} />
 					<div class="flex items-center">
 						<div class="flex-1">
 							<DeviceFilterToggle bind:value={deviceFilter} onValueChange={(v) => (deviceFilter = v)} />
 						</div>
-						<div class="mx-2 h-4 w-px bg-zinc-600"></div>
+						<div class="mx-2 h-4 w-px bg-border"></div>
 						<button
 							onclick={() => (showHistograms = !showHistograms)}
-							class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-all hover:bg-zinc-800 {showHistograms
-								? ' text-emerald-400 '
-								: ' text-rose-400'}"
+							class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-all hover:bg-accent {showHistograms
+								? ' text-success '
+								: ' text-danger'}"
 							aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
 							title={showHistograms ? 'Hide histograms' : 'Show histograms'}
 						>
@@ -139,7 +139,7 @@
 
 				{#if app.previewState.channels.length === 0}
 					<div class="flex flex-1 items-center justify-center p-4">
-						<p class="text-sm text-zinc-500">No channels available</p>
+						<p class="text-sm text-muted-foreground">No channels available</p>
 					</div>
 				{:else}
 					<div class="flex flex-1 flex-col overflow-y-auto">
@@ -155,7 +155,7 @@
 										catalog={app.colormapCatalog}
 									/>
 								</div>
-								<div class="border-t border-zinc-600"></div>
+								<div class="border-t border-border"></div>
 							{/if}
 						{/each}
 					</div>
@@ -172,24 +172,24 @@
 								<Pane defaultSize={50} minSize={30} class="h-full flex-1 px-4">
 									<PreviewCanvas previewer={app.previewState} />
 								</Pane>
-								<PaneDivider class="text-zinc-700 hover:text-zinc-600" />
+								<PaneDivider class="text-border hover:text-muted-foreground" />
 								<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
 									<GridCanvas {app} />
 								</Pane>
 							</PaneGroup>
 						</Pane>
-						<PaneDivider direction="horizontal" class="text-zinc-700 hover:text-zinc-600" />
+						<PaneDivider direction="horizontal" class="text-border hover:text-muted-foreground" />
 						<Pane defaultSize={40} maxSize={70} minSize={30} class="overflow-hidden">
 							<!-- Bottom Panel Tab Content -->
-							<Tabs.Content value="grid" class="h-full overflow-hidden bg-zinc-900">
+							<Tabs.Content value="grid" class="h-full overflow-hidden bg-card">
 								<GridTable {app} />
 							</Tabs.Content>
 
-							<Tabs.Content value="waveforms" class="h-full overflow-hidden bg-zinc-900">
+							<Tabs.Content value="waveforms" class="h-full overflow-hidden bg-card">
 								<WaveformViewer {app} />
 							</Tabs.Content>
 
-							<Tabs.Content value="logs" class="h-full overflow-hidden bg-zinc-900 p-2">
+							<Tabs.Content value="logs" class="h-full overflow-hidden bg-card p-2">
 								{#if app}
 									<LogViewer
 										logs={app.logs}
@@ -201,25 +201,25 @@
 							</Tabs.Content>
 						</Pane>
 					</PaneGroup>
-					<footer class="relative flex items-center justify-between border-t border-zinc-700 px-4 py-3">
+					<footer class="relative flex items-center justify-between border-t border-border px-4 py-3">
 						<!-- Tab Switcher & Preview Controls -->
 						<div class="flex items-center gap-3">
-							<Tabs.List class="flex rounded border border-zinc-700">
+							<Tabs.List class="flex rounded border border-border">
 								<Tabs.Trigger
 									value="grid"
-									class="px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
+									class="px-2 py-0.5 text-xs transition-colors hover:bg-accent data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground"
 								>
 									Grid
 								</Tabs.Trigger>
 								<Tabs.Trigger
 									value="waveforms"
-									class="border-l border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
+									class="border-l border-border px-2 py-0.5 text-xs transition-colors hover:bg-accent data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground"
 								>
 									Waveforms
 								</Tabs.Trigger>
 								<Tabs.Trigger
 									value="logs"
-									class="border-l border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-400"
+									class="border-l border-border px-2 py-0.5 text-xs transition-colors hover:bg-accent data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground"
 								>
 									Logs
 								</Tabs.Trigger>
@@ -237,19 +237,19 @@
 					</footer>
 				</Tabs.Root>
 			</main>
-			<aside class="flex h-full w-96 min-w-96 flex-col border-l border-zinc-700 bg-zinc-900">
+			<aside class="flex h-full w-96 min-w-96 flex-col border-l border-border bg-card">
 				<header class="flex h-18 items-start justify-start gap-2 p-4">
 					<button
 						onclick={handleStartPreview}
 						disabled={app.previewState.isPreviewing}
-						class="rounded bg-emerald-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+						class="rounded bg-success px-3 py-2 text-sm font-medium text-success-fg transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Start
 					</button>
 					<button
 						onclick={handleStopPreview}
 						disabled={!app.previewState.isPreviewing}
-						class="rounded bg-rose-600 px-3 py-2 text-sm font-medium transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+						class="rounded bg-danger px-3 py-2 text-sm font-medium text-danger-fg transition-colors hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Stop
 					</button>
@@ -258,7 +258,7 @@
 				<footer class="mt-auto flex flex-row-reverse justify-between p-4">
 					<button
 						onclick={() => app?.closeSession()}
-						class="flex cursor-pointer items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+						class="flex cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 						aria-label="Close Session"
 						title="Close Session"
 					>
@@ -270,7 +270,7 @@
 	{/if}
 {:else}
 	<!-- Fallback -->
-	<div class="flex h-screen w-full items-center justify-center bg-zinc-950 text-zinc-100">
-		<p class="text-zinc-500">Loading...</p>
+	<div class="flex h-screen w-full items-center justify-center bg-background text-foreground">
+		<p class="text-muted-foreground">Loading...</p>
 	</div>
 {/if}

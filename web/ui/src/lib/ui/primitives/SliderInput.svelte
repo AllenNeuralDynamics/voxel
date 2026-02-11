@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SpinBox from './SpinBox.svelte';
+	import LegacySpinBox from './LegacySpinBox.svelte';
 
 	interface Props {
 		label: string;
@@ -29,7 +29,7 @@
 		<label for={label} class="text-left text-[0.65rem] font-medium text-zinc-400">
 			{label}
 		</label>
-		<SpinBox
+		<LegacySpinBox
 			bind:value
 			{min}
 			{max}

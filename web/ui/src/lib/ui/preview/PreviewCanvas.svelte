@@ -154,7 +154,7 @@
 	});
 </script>
 
-<div class="relative flex h-full items-start justify-center bg-zinc-950 px-4 pt-18 pb-8" bind:this={containerEl}>
+<div class="relative flex h-full items-start justify-center bg-background px-4 pt-18 pb-8" bind:this={containerEl}>
 	<canvas
 		bind:this={canvasEl}
 		class="preview-canvas max-h-full max-w-full border border-emerald-400"

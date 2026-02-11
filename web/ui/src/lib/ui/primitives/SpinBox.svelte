@@ -13,8 +13,11 @@
 		align?: 'left' | 'right';
 		showButtons?: boolean;
 		draggable?: boolean;
-		classNames?: string;
+		prefix?: string;
+		suffix?: string;
+		defaultValue?: number;
 		size?: Size;
+		class?: string;
 		onChange?: (newValue: number) => void;
 	}
 
@@ -30,18 +33,34 @@
 		align = 'left',
 		showButtons = true,
 		draggable = true,
-		classNames = '',
+		prefix,
+		suffix,
+		defaultValue,
 		size = 'md',
+		class: className = '',
 		onChange: onValueChange
 	}: Props = $props();
 
-	const sizeMap: Record<Size, { height: string; fontSize: string }> = {
-		sm: { height: '1.5rem', fontSize: '0.65rem' },
-		md: { height: '1.75rem', fontSize: '0.75rem' },
-		lg: { height: '2rem', fontSize: '0.875rem' }
+	const sizeClasses: Record<Size, { wrapper: string; input: string; stack: string }> = {
+		sm: {
+			wrapper: 'h-6',
+			input: 'text-[0.65rem]',
+			stack: 'w-4'
+		},
+		md: {
+			wrapper: 'h-7',
+			input: 'text-xs',
+			stack: 'w-5'
+		},
+		lg: {
+			wrapper: 'h-8',
+			input: 'text-sm',
+			stack: 'w-5'
+		}
 	};
 
-	let inputElement: HTMLInputElement | undefined;
+	let inputElement = $state<HTMLInputElement | undefined>();
+	let wrapperElement = $state<HTMLDivElement | undefined>();
 
 	let displayValue = $derived(() => {
 		if (decimals !== undefined) {
@@ -74,6 +93,7 @@
 
 		if (!isDragging && Math.abs(deltaX) > DRAG_THRESHOLD) {
 			isDragging = true;
+			document.body.style.cursor = 'ew-resize';
 			e.preventDefault();
 		}
 
@@ -93,8 +113,17 @@
 	function handleMouseUp() {
 		isDragging = false;
 		isPotentialDrag = false;
+		document.body.style.cursor = '';
 		document.removeEventListener('mousemove', handleMouseMove);
 		document.removeEventListener('mouseup', handleMouseUp);
+	}
+
+	function handleDoubleClick() {
+		if (defaultValue === undefined) return;
+		value = defaultValue;
+		if (onValueChange) {
+			onValueChange(defaultValue);
+		}
 	}
 
 	function handleInput(e: Event) {
@@ -150,166 +179,121 @@
 	});
 
 	$effect(() => {
-		if (!inputElement) return;
+		if (!wrapperElement) return;
 
-		inputElement.addEventListener('wheel', handleWheel, { passive: false });
+		wrapperElement.addEventListener('wheel', handleWheel, { passive: false });
 
 		return () => {
-			if (inputElement) {
-				inputElement.removeEventListener('wheel', handleWheel);
+			if (wrapperElement) {
+				wrapperElement.removeEventListener('wheel', handleWheel);
 			}
 		};
 	});
 </script>
 
-<div
-	class="input-wrapper {classNames}"
-	class:with-buttons={showButtons}
-	style:--spinbox-height={sizeMap[size].height}
-	style:--spinbox-font-size={sizeMap[size].fontSize}
->
-	<input
-		bind:this={inputElement}
-		type="text"
-		{placeholder}
-		value={displayValue()}
-		oninput={handleInput}
-		onmousedown={handleMouseDown}
-		style:width="{numCharacters + 1}ch"
-		style:color
-		style:text-align={align}
-		class:draggable
-	/>
-	{#if showButtons}
-		<div class="button-stack">
-			<button class="spin-button spin-up" onclick={increment} disabled={value >= max} aria-label="Increment">
-				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor">
-					<path d="M4 0L8 5H0L4 0Z" />
-				</svg>
+{#if showButtons}
+	<div
+		bind:this={wrapperElement}
+		class="flex items-stretch rounded border border-input bg-transparent transition-colors hover:border-foreground/20 {sizeClasses[
+			size
+		].wrapper} {className}"
+	>
+		{#if prefix}
+			<span
+				role="button"
+				tabindex="-1"
+				onmousedown={draggable ? handleMouseDown : undefined}
+				ondblclick={defaultValue !== undefined ? handleDoubleClick : undefined}
+				class="flex shrink-0 items-center ps-1.5 pe-1 font-mono whitespace-nowrap text-muted-foreground select-none {sizeClasses[
+					size
+				].input}"
+				class:cursor-ew-resize={draggable}>{prefix}</span
+			>
+		{/if}
+		<input
+			bind:this={inputElement}
+			type="text"
+			{placeholder}
+			value={displayValue()}
+			oninput={handleInput}
+			style:width="{numCharacters + 1}ch"
+			style:color
+			style:text-align={align}
+			class="flex-1 border-none bg-transparent ps-1.5 pe-1 font-mono text-foreground outline-none {sizeClasses[size]
+				.input}"
+		/>
+		{#if suffix}
+			<span
+				class="pointer-events-none flex items-center pe-1.5 font-mono text-muted-foreground {sizeClasses[size].input}"
+				>{suffix}</span
+			>
+		{/if}
+		<div class="flex cursor-pointer flex-col border-l border-input {sizeClasses[size].stack}">
+			<button
+				class="flex flex-1 items-center justify-center rounded-tr border-b border-input bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+				onclick={increment}
+				disabled={value >= max}
+				aria-label="Increment"
+			>
+				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z" /></svg>
 			</button>
-			<button class="spin-button spin-down" onclick={decrement} disabled={value <= min} aria-label="Decrement">
-				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor">
-					<path d="M4 5L0 0H8L4 5Z" />
-				</svg>
+			<button
+				class="flex flex-1 items-center justify-center rounded-br bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+				onclick={decrement}
+				disabled={value <= min}
+				aria-label="Decrement"
+			>
+				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 5L0 0H8L4 5Z" /></svg>
 			</button>
 		</div>
-	{/if}
-</div>
+	</div>
+{:else}
+	<div
+		bind:this={wrapperElement}
+		class="inline-flex items-stretch rounded border border-transparent bg-transparent transition-colors focus-within:border-ring hover:border-foreground/20 {sizeClasses[
+			size
+		].wrapper} {className}"
+	>
+		{#if prefix}
+			<span
+				role="button"
+				tabindex="-1"
+				onmousedown={draggable ? handleMouseDown : undefined}
+				ondblclick={defaultValue !== undefined ? handleDoubleClick : undefined}
+				class="flex shrink-0 items-center ps-1 pe-0.5 font-mono whitespace-nowrap text-muted-foreground select-none {sizeClasses[
+					size
+				].input}"
+				class:cursor-ew-resize={draggable}>{prefix}</span
+			>
+		{/if}
+		<input
+			bind:this={inputElement}
+			type="text"
+			{placeholder}
+			value={displayValue()}
+			oninput={handleInput}
+			style:width="{numCharacters + 1}ch"
+			style:color
+			style:text-align={align}
+			class="border-none bg-transparent px-0.5 py-0.5 font-mono text-foreground outline-none {sizeClasses[size].input}"
+		/>
+		{#if suffix}
+			<span class="pointer-events-none flex items-center font-mono text-muted-foreground {sizeClasses[size].input}"
+				>{suffix}</span
+			>
+		{/if}
+	</div>
+{/if}
 
 <style>
-	.input-wrapper {
-		--border-width: 1px;
-
-		display: inline-flex;
-		align-items: stretch;
-		height: var(--spinbox-height, 1.75rem);
-		transition: all 0.15s;
-	}
-
-	.input-wrapper.with-buttons {
-		display: flex;
-		width: 100%;
-		border: var(--border-width) solid var(--input);
-		border-radius: 2px;
-		background: transparent;
-
-		&:hover {
-			border-color: color-mix(in oklch, var(--foreground) 20%, transparent);
-		}
-	}
-
-	.input-wrapper.with-buttons input {
-		flex: 1;
-		border: none;
-		background: transparent;
-		padding-inline-start: 0.2rem;
-		margin-inline-end: 0.2rem;
-	}
-
-	.input-wrapper.with-buttons input.draggable {
-		cursor: ew-resize;
-	}
-
-	.input-wrapper.with-buttons input:hover,
-	.input-wrapper.with-buttons input:focus {
-		border: none;
-		background: transparent;
-	}
-
-	input {
-		user-select: none;
-		border: 1px solid transparent;
-		background: transparent;
-		padding: 0.125rem 0.05rem;
-		font-family: monospace;
-		font-size: var(--spinbox-font-size, 0.75rem);
-		color: var(--foreground);
-		transition: all 0.15s;
-	}
-
-	input.draggable {
-		cursor: ew-resize;
-	}
-
-	input:hover {
-		border-color: color-mix(in oklch, var(--foreground) 20%, transparent);
-	}
-
-	input:focus {
-		border-color: var(--ring);
-		outline: none;
-	}
-
+	/* Hide native spin buttons */
 	input::-webkit-inner-spin-button,
 	input::-webkit-outer-spin-button {
 		-webkit-appearance: none;
 		margin: 0;
 	}
 
-	.button-stack {
-		display: flex;
-		flex-direction: column;
-		width: 1.25rem;
-		cursor: pointer;
-	}
-
-	.spin-button {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex: 1;
-		padding: 0;
-		margin: 0;
-		border: none;
-		background: transparent;
-		color: var(--input);
-		border-left: var(--border-width) solid var(--input);
-
-		transition: all 0.1s;
-
-		& svg {
-			pointer-events: none;
-		}
-
-		&:disabled {
-			cursor: not-allowed;
-			opacity: 0.4;
-		}
-
-		&:not(disabled) {
-			&:active,
-			&:hover {
-				color: var(--muted-foreground);
-				background: var(--accent);
-			}
-		}
-	}
-
-	.spin-up {
-		border-top-right-radius: 2px;
-	}
-	.spin-down {
-		border-bottom-right-radius: 2px;
-		border-top: var(--border-width) solid var(--input);
+	input {
+		user-select: none;
 	}
 </style>

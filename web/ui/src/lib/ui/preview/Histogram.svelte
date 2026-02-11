@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
+	import LegacySpinBox from '$lib/ui/primitives/LegacySpinBox.svelte';
 	import { computeAutoLevels } from '$lib/preview/utils';
 
 	interface Props {
@@ -190,7 +190,7 @@
 <div class="histogram-widget flex flex-col">
 	<div class="flex items-center justify-between text-zinc-300">
 		{#if onLevelsChange}
-			<SpinBox
+			<LegacySpinBox
 				value={minIntensity}
 				min={0}
 				max={maxIntensity - 1}
@@ -214,7 +214,7 @@
 		{/if}
 
 		{#if onLevelsChange}
-			<SpinBox
+			<LegacySpinBox
 				value={maxIntensity}
 				min={minIntensity + 1}
 				max={dataTypeMax}
@@ -378,7 +378,7 @@
 		{/if}
 	</div>
 	<div class="flex items-center justify-between text-zinc-300">
-		<SpinBox
+		<LegacySpinBox
 			bind:value={displayWindowMin}
 			min={0}
 			max={displayWindowMax - 1}
@@ -391,7 +391,7 @@
 		<button type="button" onclick={handleFitDisplayWindow} disabled={!hasValidData} class={ghostButtonClass}>
 			auto fit
 		</button>
-		<SpinBox
+		<LegacySpinBox
 			bind:value={displayWindowMax}
 			min={displayWindowMin + 1}
 			max={dataTypeMax}

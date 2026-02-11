@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
-	import DraggableNumberInput from '$lib/ui/primitives/SpinBox.svelte';
+	import DraggableNumberInput from '$lib/ui/primitives/LegacySpinBox.svelte';
 	import type { Previewer } from './previewer.svelte';
 
 	interface Props {

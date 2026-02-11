@@ -3,7 +3,7 @@
 	import type { App } from '$lib/app';
 	import { onDestroy } from 'svelte';
 	import ProfileDevicesToggle from './ProfileDevicesToggle.svelte';
-	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
+	import LegacySpinBox from '$lib/ui/primitives/LegacySpinBox.svelte';
 	import 'uplot/dist/uPlot.min.css';
 
 	interface Props {
@@ -280,7 +280,7 @@
 		</div>
 		<div class="flex flex-col justify-center gap-2">
 			<span class="text-[0.65rem] text-zinc-400">Cycles:</span>
-			<SpinBox bind:value={numCycles} min={1} max={4} step={1} numCharacters={1} />
+			<LegacySpinBox bind:value={numCycles} min={1} max={4} step={1} numCharacters={1} />
 		</div>
 	</div>
 </div>
