@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { App } from '$lib/app';
-	import type { SessionDirectory } from '$lib/core';
+	import type { SessionDirectory, JsonSchema } from '$lib/core';
 	import SessionList from './SessionList.svelte';
-	import NewSessionForm from './NewSessionForm.svelte';
+	import SessionForm from './SessionForm.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
+	import { Collapsible } from 'bits-ui';
+	import Icon from '@iconify/svelte';
 
 	const { app }: { app: App } = $props();
 
@@ -12,6 +14,8 @@
 	let sessions = $state<SessionDirectory[]>([]);
 	let loadingSessions = $state(false);
 	let error = $state<string | null>(null);
+	let metadataTargets = $state<Record<string, string>>({});
+	let metadataSchema = $state<JsonSchema | null>(null);
 
 	// Derived
 	const roots = $derived(app.status?.roots ?? []);
@@ -24,6 +28,18 @@
 		if (roots.length > 0) {
 			loadAllSessions();
 		}
+	});
+
+	// Fetch metadata targets on mount
+	$effect(() => {
+		app
+			.fetchMetadataTargets()
+			.then((targets) => {
+				metadataTargets = targets;
+			})
+			.catch((e) => {
+				console.warn('[LaunchPage] Failed to fetch metadata targets:', e);
+			});
 	});
 
 	async function loadAllSessions() {
@@ -42,65 +58,91 @@
 		}
 	}
 
-	async function handleLaunchSession(rootName: string, sessionName: string, rigConfig?: string) {
+	async function handleMetadataTargetChanged(target: string) {
+		try {
+			metadataSchema = await app.fetchMetadataSchema(target);
+		} catch (e) {
+			console.warn('[LaunchPage] Failed to fetch metadata schema:', e);
+			metadataSchema = null;
+		}
+	}
+
+	async function handleLaunchSession(
+		rootName: string,
+		rigConfig: string,
+		sessionName: string,
+		metadataTarget: string,
+		metadata: Record<string, unknown>
+	) {
 		error = null;
 		try {
-			await app.launchSession(rootName, sessionName, rigConfig);
+			await app.createSession(rootName, rigConfig, sessionName, metadataTarget, metadata);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to launch session';
+			error = e instanceof Error ? e.message : 'Failed to create session';
 		}
 	}
 
 	async function handleResumeSession(session: SessionDirectory) {
 		error = null;
 		try {
-			await app.launchSession(session.root_name, session.name);
+			await app.resumeSession(session.path);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to resume session';
 		}
 	}
 </script>
 
-<div class="flex h-screen w-full bg-zinc-950">
-	<!-- Main content panel -->
-	<div class="flex w-2/5 flex-col overflow-y-auto p-8">
+<div class="flex h-screen w-full bg-background">
+	<!-- Sidebar -->
+	<div class="flex w-[600px] shrink-0 flex-col overflow-y-auto border-r border-border p-4">
 		<!-- Header -->
 		<div class="mb-6 flex flex-col gap-4">
 			<div class="flex items-center gap-3">
 				<img src="/voxel-logo.png" alt="Voxel" class="h-10 w-10" />
 				<div>
-					<h1 class="text-2xl font-semibold text-zinc-100">Voxel</h1>
-					<p class="text-sm text-zinc-400">Light sheet microscope control</p>
+					<h1 class="text-2xl font-semibold text-foreground">Voxel</h1>
+					<p class="text-sm text-muted-foreground">Light sheet microscope control</p>
 				</div>
 			</div>
 
 			{#if isLaunching}
 				<div class="flex items-center gap-2">
-					<div class="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-blue-500"></div>
-					<p class="text-sm text-zinc-400">Starting session...</p>
+					<div class="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary"></div>
+					<p class="text-sm text-muted-foreground">Starting session...</p>
 				</div>
-			{:else}
-				<p class="text-sm text-zinc-300">Select or create a session to get started</p>
 			{/if}
 		</div>
 
 		<!-- Error display -->
 		{#if error}
-			<div class="mb-6 rounded border border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
+			<div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
 				{error}
 			</div>
 		{/if}
 
 		{#if !isLaunching}
-			<!-- New session form -->
-			<div class="mb-6 space-y-2">
-				<h2 class="text-sm font-medium text-zinc-300">New Session</h2>
-				<NewSessionForm {roots} {rigs} onLaunch={handleLaunchSession} />
-			</div>
+			<Collapsible.Root class="mb-6">
+				<Collapsible.Trigger
+					class="flex w-full items-center justify-between py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground/80 [&[data-state=open]>svg]:rotate-90"
+				>
+					New Session
+					<Icon icon="mdi:chevron-right" width="16" height="16" class="transition-transform duration-200" />
+				</Collapsible.Trigger>
+				<Collapsible.Content class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+					<SessionForm
+						{roots}
+						{rigs}
+						{metadataTargets}
+						{metadataSchema}
+						onMetadataTargetChanged={handleMetadataTargetChanged}
+						onSubmit={handleLaunchSession}
+					/>
+				</Collapsible.Content>
+			</Collapsible.Root>
 
 			<!-- Recent sessions from all roots -->
 			<div class="space-y-2">
-				<h2 class="text-sm font-medium text-zinc-300">Recent Sessions</h2>
+				<h2 class="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
 				<SessionList {sessions} loading={loadingSessions} onResume={handleResumeSession} />
 			</div>
 		{/if}
@@ -111,8 +153,8 @@
 		</div>
 	</div>
 
-	<!-- Log viewer panel (always visible) -->
-	<div class="flex w-3/5 flex-col border-l border-zinc-700 bg-zinc-900 p-4">
+	<!-- Log viewer -->
+	<div class="flex flex-1 flex-col bg-card p-4">
 		<LogViewer {logs} onClear={() => app.clearLogs()} />
 	</div>
 </div>

@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSo
 from pydantic import BaseModel
 
 from vxl import Session
-from vxl.metadata import BASE_METADATA_TARGET
+from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets, resolve_metadata_class
 from vxl.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxlib import fire_and_forget
 
@@ -473,3 +473,19 @@ async def close_session(service: Annotated[AppService, Depends(get_app_service)]
     except Exception as e:
         log.exception("Failed to close session")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/metadata/targets")
+async def get_metadata_targets() -> dict:
+    """Return available metadata targets for session creation."""
+    return {"targets": discover_metadata_targets()}
+
+
+@router.get("/metadata/schema")
+async def get_metadata_schema(target: str) -> dict:
+    """Return JSON Schema for a metadata target class."""
+    try:
+        cls = resolve_metadata_class(target)
+        return cls.model_json_schema()
+    except (ImportError, AttributeError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e

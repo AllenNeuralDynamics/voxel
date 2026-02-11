@@ -45,6 +45,8 @@ export type {
 	ErrorPayload,
 	ProfileChangedPayload,
 	PreviewConfig,
+	JsonSchema,
+	JsonSchemaProperty,
 	Vec2D,
 	Vec3D
 } from './types.ts';

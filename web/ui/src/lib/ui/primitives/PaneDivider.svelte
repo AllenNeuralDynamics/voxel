@@ -15,7 +15,7 @@
 	);
 </script>
 
-<PaneResizer class="relative">
+<PaneResizer class="relative z-50">
 	<div
 		class={`absolute flex items-center justify-center gap-2 transition-all duration-300 ${separatorClass} ${positionClass} ${className || 'text-zinc-800 hover:text-zinc-600'}`}
 	>

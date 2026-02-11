@@ -209,6 +209,29 @@ export interface PreviewConfig {
 }
 
 // ============================================================================
+// METADATA TYPES
+// JSON Schema types for metadata-driven session creation
+// ============================================================================
+
+/** JSON Schema property definition (subset used by metadata forms) */
+export interface JsonSchemaProperty {
+	type?: string;
+	default?: unknown;
+	description?: string;
+	enum?: string[];
+	items?: { type: string };
+	title?: string;
+}
+
+/** JSON Schema from pydantic model_json_schema() */
+export interface JsonSchema {
+	title: string;
+	type: string;
+	properties: Record<string, JsonSchemaProperty>;
+	required?: string[];
+}
+
+// ============================================================================
 // VECTOR TYPES
 // 2D and 3D vectors matching backend vxlib.vec types
 // ============================================================================

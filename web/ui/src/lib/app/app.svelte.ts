@@ -11,7 +11,8 @@ import {
 	type Stack,
 	type LayerVisibility,
 	type TileOrder,
-	type Vec2D
+	type Vec2D,
+	type JsonSchema
 } from '../core/types.ts';
 import type { VoxelRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
 import { fetchColormapCatalog, type ColormapCatalog } from '../core/colormaps.ts';
@@ -496,27 +497,37 @@ export class App {
 		}
 	}
 
-	async launchSession(rootName: string, sessionName: string, rigConfig?: string): Promise<void> {
+	async createSession(
+		rootName: string,
+		rigConfig: string,
+		sessionName: string = '',
+		metadataTarget?: string,
+		metadata?: Record<string, unknown>
+	): Promise<void> {
 		if (!browser) return;
 		if (this.hasSession) {
 			throw new Error('A session is already active. Close it first.');
 		}
 
 		if (!this.status) {
-			throw new Error('Cannot launch session: not connected');
+			throw new Error('Cannot create session: not connected');
 		}
 
 		this.error = null;
 
 		try {
-			const response = await fetch(`${this.client.baseUrl}/session/launch`, {
+			const body: Record<string, unknown> = {
+				root_name: rootName,
+				rig_config: rigConfig,
+				session_name: sessionName
+			};
+			if (metadataTarget) body.metadata_target = metadataTarget;
+			if (metadata) body.metadata = metadata;
+
+			const response = await fetch(`${this.client.baseUrl}/session/create`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					root_name: rootName,
-					session_name: sessionName,
-					rig_config: rigConfig ?? null
-				})
+				body: JSON.stringify(body)
 			});
 
 			if (!response.ok) {
@@ -524,10 +535,67 @@ export class App {
 				throw new Error(errorData.detail || response.statusText);
 			}
 
-			console.debug('[App] Session launch request sent');
+			console.debug('[App] Session create request sent');
 		} catch (error) {
-			console.error('[App] Failed to launch session:', error);
-			this.error = error instanceof Error ? error.message : 'Failed to launch session';
+			console.error('[App] Failed to create session:', error);
+			this.error = error instanceof Error ? error.message : 'Failed to create session';
+			throw error;
+		}
+	}
+
+	async resumeSession(sessionDir: string): Promise<void> {
+		if (!browser) return;
+		if (this.hasSession) {
+			throw new Error('A session is already active. Close it first.');
+		}
+
+		this.error = null;
+
+		try {
+			const response = await fetch(`${this.client.baseUrl}/session/resume`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ session_dir: sessionDir })
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+				throw new Error(errorData.detail || response.statusText);
+			}
+
+			console.debug('[App] Session resume request sent');
+		} catch (error) {
+			console.error('[App] Failed to resume session:', error);
+			this.error = error instanceof Error ? error.message : 'Failed to resume session';
+			throw error;
+		}
+	}
+
+	async fetchMetadataTargets(): Promise<Record<string, string>> {
+		try {
+			const response = await fetch(`${this.client.baseUrl}/metadata/targets`);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch metadata targets: ${response.statusText}`);
+			}
+			const data = await response.json();
+			return data.targets ?? {};
+		} catch (error) {
+			console.error('[App] Failed to fetch metadata targets:', error);
+			throw error;
+		}
+	}
+
+	async fetchMetadataSchema(target: string): Promise<JsonSchema> {
+		try {
+			const response = await fetch(
+				`${this.client.baseUrl}/metadata/schema?target=${encodeURIComponent(target)}`
+			);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch metadata schema: ${response.statusText}`);
+			}
+			return await response.json();
+		} catch (error) {
+			console.error('[App] Failed to fetch metadata schema:', error);
 			throw error;
 		}
 	}

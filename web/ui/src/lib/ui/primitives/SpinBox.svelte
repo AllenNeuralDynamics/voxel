@@ -1,4 +1,6 @@
 <script lang="ts">
+	type Size = 'sm' | 'md' | 'lg';
+
 	interface Props {
 		value?: number;
 		min?: number;
@@ -12,6 +14,7 @@
 		showButtons?: boolean;
 		draggable?: boolean;
 		classNames?: string;
+		size?: Size;
 		onChange?: (newValue: number) => void;
 	}
 
@@ -28,8 +31,15 @@
 		showButtons = true,
 		draggable = true,
 		classNames = '',
+		size = 'md',
 		onChange: onValueChange
 	}: Props = $props();
+
+	const sizeMap: Record<Size, { height: string; fontSize: string }> = {
+		sm: { height: '1.5rem', fontSize: '0.65rem' },
+		md: { height: '1.75rem', fontSize: '0.75rem' },
+		lg: { height: '2rem', fontSize: '0.875rem' }
+	};
 
 	let inputElement: HTMLInputElement | undefined;
 
@@ -152,7 +162,12 @@
 	});
 </script>
 
-<div class="input-wrapper {classNames}" class:with-buttons={showButtons}>
+<div
+	class="input-wrapper {classNames}"
+	class:with-buttons={showButtons}
+	style:--spinbox-height={sizeMap[size].height}
+	style:--spinbox-font-size={sizeMap[size].fontSize}
+>
 	<input
 		bind:this={inputElement}
 		type="text"
@@ -184,23 +199,22 @@
 <style>
 	.input-wrapper {
 		--border-width: 1px;
-		--border-color: rgb(63 63 70);
-		--border-color-hover: rgb(82 82 91);
 
 		display: inline-flex;
 		align-items: stretch;
+		height: var(--spinbox-height, 1.75rem);
 		transition: all 0.15s;
 	}
 
 	.input-wrapper.with-buttons {
 		display: flex;
 		width: 100%;
-		border: var(--border-width) solid var(--border-color);
+		border: var(--border-width) solid var(--input);
 		border-radius: 2px;
-		background: rgb(24 24 27);
+		background: transparent;
 
 		&:hover {
-			border-color: var(--border-color-hover);
+			border-color: color-mix(in oklch, var(--foreground) 20%, transparent);
 		}
 	}
 
@@ -228,7 +242,8 @@
 		background: transparent;
 		padding: 0.125rem 0.05rem;
 		font-family: monospace;
-		font-size: 0.65rem;
+		font-size: var(--spinbox-font-size, 0.75rem);
+		color: var(--foreground);
 		transition: all 0.15s;
 	}
 
@@ -237,14 +252,11 @@
 	}
 
 	input:hover {
-		border-color: rgb(82 82 91);
-		background: rgb(24 24 27);
-		color: rgb(212 212 216);
+		border-color: color-mix(in oklch, var(--foreground) 20%, transparent);
 	}
 
 	input:focus {
-		border-color: rgb(113 113 122);
-		background: rgb(24 24 27);
+		border-color: var(--ring);
 		outline: none;
 	}
 
@@ -257,17 +269,11 @@
 	.button-stack {
 		display: flex;
 		flex-direction: column;
-		align-self: stretch;
 		width: 1.25rem;
 		cursor: pointer;
 	}
 
-	.input-wrapper.with-buttons:hover .button-stack {
-		border-color: var(--border-color-hover);
-	}
-
 	.spin-button {
-		z-index: 999;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -276,9 +282,8 @@
 		margin: 0;
 		border: none;
 		background: transparent;
-		color: rgb(113 113 122);
-		margin-right: calc(-1 * var(--border-width));
-		border: var(--border-width) solid var(--border-color);
+		color: var(--input);
+		border-left: var(--border-width) solid var(--input);
 
 		transition: all 0.1s;
 
@@ -287,7 +292,6 @@
 		}
 
 		&:disabled {
-			color: rgb(63 63 70);
 			cursor: not-allowed;
 			opacity: 0.4;
 		}
@@ -295,20 +299,17 @@
 		&:not(disabled) {
 			&:active,
 			&:hover {
-				color: rgb(212 212 216);
-				background: rgb(39 39 42);
+				color: var(--muted-foreground);
+				background: var(--accent);
 			}
 		}
 	}
 
 	.spin-up {
-		margin-top: calc(-1 * var(--border-width));
 		border-top-right-radius: 2px;
-		border-bottom: none;
 	}
 	.spin-down {
 		border-bottom-right-radius: 2px;
-		margin-bottom: calc(-1 * var(--border-width));
-		border-top: none;
+		border-top: var(--border-width) solid var(--input);
 	}
 </style>
