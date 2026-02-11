@@ -7,6 +7,7 @@
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 	import { Collapsible } from 'bits-ui';
 	import Icon from '@iconify/svelte';
+	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 
 	const { app }: { app: App } = $props();
 
@@ -99,8 +100,12 @@
 		<div class="shrink-0 p-4 pb-0">
 			<div class="mb-6 flex flex-col gap-1">
 				<div class="flex items-center gap-2">
-					<!-- <img src="/voxel-logo.png" alt="Voxel PNG" class="h-10 w-10" /> -->
-					<img src="/voxel-logo.svg" alt="Voxel" class="h-8 w-8" />
+					<VoxelLogo
+						class="h-8 w-8"
+						topLeft={{ top: '#2EF58D', left: '#22CC75', right: '#189960' }}
+						topRight={{ top: '#F52E64', left: '#CC2250', right: '#99193C' }}
+						bottom={{ top: '#F5D62E', left: '#CCB222', right: '#998619' }}
+					/>
 					<h1 class="text-2xl font-light text-foreground uppercase">Voxel</h1>
 				</div>
 				<p class="text-xs text-muted-foreground">Light sheet microscopy</p>
