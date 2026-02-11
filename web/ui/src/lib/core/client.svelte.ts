@@ -141,10 +141,12 @@ const DEFAULT_OPTIONS: Required<ClientOptions> = {
 	maxReconnectAttempts: 10
 };
 
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
+
 export class Client {
 	private ws: WebSocket | null = null;
 	private handlers = new SvelteMap<string, SvelteSet<MessageHandler>>();
-	private reconnectAttempts = 0;
+	private reconnectAttempts = $state(0);
 	private reconnectDelay: number;
 	private reconnectTimer: number | null = null;
 	private shouldReconnect: boolean;
@@ -156,8 +158,22 @@ export class Client {
 	/** Base URL for REST API (derived from WebSocket URL) */
 	readonly baseUrl: string;
 
-	statusMessage = $state('Idle');
-	isConnected = $state(false);
+	connectionState = $state<ConnectionState>('idle');
+	connectionMessage = $derived.by(() => {
+		switch (this.connectionState) {
+			case 'idle':
+				return '';
+			case 'connecting':
+				return 'Connecting to server...';
+			case 'connected':
+				return 'Connected';
+			case 'reconnecting':
+				return `Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`;
+			case 'failed':
+				return 'Connection failed';
+		}
+	});
+	isConnected = $derived(this.connectionState === 'connected');
 
 	constructor(
 		private url: string,
@@ -180,7 +196,9 @@ export class Client {
 	 * Connect to the WebSocket server.
 	 */
 	connect(): Promise<void> {
-		this.statusMessage = 'Connecting...';
+		if (this.connectionState !== 'reconnecting') {
+			this.connectionState = 'connecting';
+		}
 		return new Promise((resolve, reject) => {
 			try {
 				this.cleanupSocket();
@@ -188,9 +206,8 @@ export class Client {
 				this.ws.binaryType = 'arraybuffer';
 
 				this.ws.onopen = () => {
-					console.log('[Client] Connected');
-					this.statusMessage = 'Connected';
-					this.isConnected = true;
+					console.debug('[Client] Connected');
+					this.connectionState = 'connected';
 					this.reconnectAttempts = 0;
 					this.reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
 					this.notifyConnectionChange(true);
@@ -207,25 +224,27 @@ export class Client {
 				};
 
 				this.ws.onerror = (event) => {
-					console.error('[Client] WebSocket error:', event);
+					console.debug('[Client] WebSocket error:', event);
 					const error = new Error('WebSocket connection error');
-					this.statusMessage = 'Connection error';
+					if (!this.shouldReconnect) {
+						this.connectionState = 'failed';
+					}
 					this.notifyError(error);
 					reject(error);
 				};
 
 				this.ws.onclose = (event) => {
-					console.log('[Client] Connection closed:', event.code, event.reason);
-					this.statusMessage = 'Disconnected';
-					this.isConnected = false;
+					console.debug('[Client] Connection closed:', event.code, event.reason);
 					this.notifyConnectionChange(false);
 
 					if (this.shouldReconnect) {
 						this.scheduleReconnect();
+					} else {
+						this.connectionState = 'idle';
 					}
 				};
 			} catch (error) {
-				this.statusMessage = 'Failed to connect';
+				this.connectionState = 'failed';
 				reject(error);
 			}
 		});
@@ -238,9 +257,8 @@ export class Client {
 		this.shouldReconnect = false;
 		this.clearReconnectTimer();
 		this.cleanupSocket();
-		this.isConnected = false;
+		this.connectionState = 'idle';
 		this.notifyConnectionChange(false);
-		this.statusMessage = 'Disconnected';
 	}
 
 	/**
@@ -322,7 +340,7 @@ export class Client {
 		if (this.ws?.readyState === WebSocket.OPEN) {
 			this.ws.send(JSON.stringify(message));
 		} else {
-			console.warn('[Client] Cannot send message: not connected');
+			console.debug('[Client] Cannot send message: not connected');
 		}
 	}
 
@@ -494,7 +512,6 @@ export class Client {
 	 * Notify all error handlers.
 	 */
 	private notifyError(error: Error): void {
-		this.statusMessage = error.message;
 		for (const h of this.errorHandlers) {
 			h(error);
 		}
@@ -509,21 +526,21 @@ export class Client {
 		}
 
 		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-			console.error('[Client] Max reconnection attempts reached');
-			this.statusMessage = 'Reconnection failed';
+			console.debug('[Client] Max reconnection attempts reached');
+			this.connectionState = 'failed';
 			this.notifyError(new Error('Failed to reconnect after multiple attempts'));
 			return;
 		}
 
 		this.reconnectAttempts++;
-		this.statusMessage = `Reconnecting... (attempt ${this.reconnectAttempts})`;
-		console.log(`[Client] Reconnecting... attempt ${this.reconnectAttempts} in ${this.reconnectDelay}ms`);
+		this.connectionState = 'reconnecting';
+		console.debug(`[Client] Reconnecting... attempt ${this.reconnectAttempts} in ${this.reconnectDelay}ms`);
 
 		this.reconnectTimer = window.setTimeout(() => {
 			this.reconnectTimer = null;
 			this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, this.maxReconnectDelay);
 			this.connect().catch((error) => {
-				console.error('[Client] Reconnection failed:', error);
+				console.debug('[Client] Reconnection failed:', error);
 			});
 		}, this.reconnectDelay);
 	}

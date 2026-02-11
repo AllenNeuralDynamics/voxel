@@ -7,13 +7,17 @@
 		if (!client) {
 			return { color: 'bg-muted-foreground', text: 'Not initialized' };
 		}
-		if (!client.isConnected) {
-			return { color: 'bg-danger', text: 'Offline' };
+		switch (client.connectionState) {
+			case 'connected':
+				return { color: 'bg-success', text: 'Connected' };
+			case 'connecting':
+			case 'reconnecting':
+				return { color: 'bg-warning', text: client.connectionMessage };
+			case 'failed':
+				return { color: 'bg-danger', text: client.connectionMessage };
+			default:
+				return { color: 'bg-muted-foreground', text: 'Offline' };
 		}
-		if (client.statusMessage === 'Connecting...' || client.statusMessage.startsWith('Reconnecting')) {
-			return { color: 'bg-warning', text: client.statusMessage };
-		}
-		return { color: 'bg-success', text: 'Connected' };
 	});
 </script>
 

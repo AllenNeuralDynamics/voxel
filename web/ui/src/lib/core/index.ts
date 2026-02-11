@@ -3,7 +3,7 @@
  * Exports networking, device management, and type definitions.
  */
 
-export { Client, type ClientOptions, type TopicHandlers } from './client.svelte.ts';
+export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';
 export { DevicesManager } from './devices.svelte.ts';
 export type { DeviceInfo } from './devices.svelte.ts';
 

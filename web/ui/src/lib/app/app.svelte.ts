@@ -104,7 +104,6 @@ export class App {
 	status = $state<AppStatus | null>(null);
 	activeProfileId = $derived<string | null>(this.status?.session?.active_profile_id ?? null);
 	hasSession = $derived<boolean>(this.status?.session !== null && this.status?.session !== undefined);
-	connectionError = $state<string | null>(null);
 
 	config = $state<VoxelRigConfig | null>(null);
 	configLoading = $state(false);
@@ -275,16 +274,9 @@ export class App {
 	}
 
 	async initialize(): Promise<void> {
-		this.connectionError = null;
 		this.subscribeToTopics();
-
-		try {
-			await this.#client.connect();
-			this.#client.requestStatus();
-		} catch (error) {
-			this.connectionError = error instanceof Error ? error.message : 'Failed to connect';
-			throw error;
-		}
+		await this.#client.connect();
+		this.#client.requestStatus();
 	}
 
 	private subscribeToTopics(): void {
@@ -319,9 +311,7 @@ export class App {
 			const wasDisconnected = this.wasDisconnected;
 			this.wasDisconnected = !connected;
 
-			if (!connected && this.status !== null) {
-				this.connectionError = 'Connection lost. Attempting to reconnect...';
-			} else if (connected && wasDisconnected) {
+			if (connected && wasDisconnected) {
 				this.handleReconnection();
 			}
 		});
@@ -391,7 +381,6 @@ export class App {
 
 	private handleReconnection(): void {
 		console.debug('[App] Reconnected - refetching data');
-		this.connectionError = null;
 		this.#client.requestStatus();
 	}
 
@@ -640,14 +629,9 @@ export class App {
 	}
 
 	async retryConnection(): Promise<void> {
-		this.connectionError = null;
 		this.status = null;
-		try {
-			await this.#client.connect();
-			this.#client.requestStatus();
-		} catch (error) {
-			this.connectionError = error instanceof Error ? error.message : 'Failed to connect';
-		}
+		await this.#client.connect();
+		this.#client.requestStatus();
 	}
 
 	clearLogs(): void {

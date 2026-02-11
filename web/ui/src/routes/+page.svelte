@@ -27,9 +27,8 @@
 
 	// Derived state from App
 	const viewName = $derived.by(() => {
-		if (!app) return 'connecting';
-		if (app.connectionError) return 'error';
-		if (!app.status) return 'connecting';
+		if (!app) return 'splash';
+		if (!app.client.isConnected || !app.status) return 'splash';
 		switch (app.status.phase) {
 			case 'idle':
 				return 'launch';
@@ -55,9 +54,9 @@
 		try {
 			app = new App();
 			await app.initialize();
-			console.log('[Page] App initialized');
-		} catch (error) {
-			console.error('[Page] Initialization failed:', error);
+			console.debug('[Page] App initialized');
+		} catch {
+			// Connection state is managed by the client — splash screen handles the UI
 		}
 	});
 
@@ -76,26 +75,28 @@
 </script>
 
 {#if app}
-	{#if viewName === 'connecting'}
-		<!-- Connecting to WebSocket -->
-		<div class="flex h-screen w-full items-center justify-center bg-zinc-950 text-zinc-100">
-			<div class="text-center">
-				<div class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-zinc-700 border-t-blue-500"></div>
-				<p class="mt-4 text-zinc-500">Connecting to server...</p>
+	{#if viewName === 'splash'}
+		<div class="flex h-screen w-full flex-col items-center justify-center gap-6 bg-background">
+			<div class="flex items-center gap-3">
+				<img src="/voxel-logo.svg" alt="Voxel" class="h-10 w-10" />
+				<h1 class="text-3xl font-light text-foreground uppercase">Voxel</h1>
 			</div>
-		</div>
-	{:else if viewName === 'error'}
-		<!-- Error state -->
-		<div class="flex h-screen w-full items-center justify-center bg-zinc-950 text-zinc-100">
-			<div class="text-center">
-				<p class="text-rose-400">{app.connectionError}</p>
-				<button
-					onclick={() => app?.retryConnection()}
-					class="mt-4 rounded bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600"
-				>
-					Retry Connection
-				</button>
-			</div>
+			{#if app.client.connectionState === 'failed'}
+				<div class="flex flex-col items-center gap-3">
+					<p class="text-sm text-danger">{app.client.connectionMessage}</p>
+					<button
+						onclick={() => app?.retryConnection()}
+						class="rounded border border-input bg-transparent px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					>
+						Retry
+					</button>
+				</div>
+			{:else}
+				<div class="flex items-center gap-2">
+					<div class="size-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
+					<p class="text-xs leading-none text-muted-foreground">{app.client.connectionMessage}</p>
+				</div>
+			{/if}
 		</div>
 	{:else if viewName === 'launch' || viewName === 'loading'}
 		<!-- Launch page (includes loading state) -->
