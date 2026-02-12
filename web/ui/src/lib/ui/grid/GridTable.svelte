@@ -2,7 +2,7 @@
 	import Icon from '@iconify/svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { App } from '$lib/app';
-	import type { Tile, Stack, StackStatus } from '$lib/core/types';
+	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
 	import { Select, Checkbox, LegacySpinBox } from '$lib/ui/primitives';
 
 	interface Props {
@@ -128,35 +128,28 @@
 		}
 	}
 
-	const statusColors: Record<StackStatus, string> = {
-		planned: 'text-blue-400',
-		acquiring: 'text-cyan-400',
-		completed: 'text-emerald-400',
-		failed: 'text-rose-400',
-		skipped: 'text-zinc-500'
-	};
 </script>
 
-<div class="flex h-full flex-col text-xs text-zinc-300">
+<div class="flex h-full flex-col text-xs text-foreground">
 	<!-- Table -->
 	<div class="flex-1 overflow-auto">
 		<table class="w-full border-collapse">
-			<thead class="sticky top-0 z-1000 bg-zinc-800 text-zinc-300 uppercase">
+			<thead class="sticky top-0 z-1000 bg-card text-foreground uppercase">
 				<tr class="text-[0.65rem] font-medium">
-					<th class="w-8 border-b border-zinc-700 px-5 py-1.5">
+					<th class="w-8 border-b border-border px-5 py-1.5">
 						<div class="flex items-center justify-center">
 							<Checkbox checked={allChecked} indeterminate={someChecked} onchange={handleSelectAll} size="sm" />
 						</div>
 					</th>
-					<th class="w-26 border-b border-zinc-700 p-1.5 text-left capitalize">
+					<th class="w-26 border-b border-border p-1.5 text-left capitalize">
 						<Select bind:value={filterMode} options={filterOptions} size="sm" />
 					</th>
-					<th class="w-32 border-b border-zinc-700 p-2 text-left font-medium tracking-wider"> Position </th>
-					<th class="min-w-16 border-b border-zinc-700 p-1.5"></th>
-					<th class="w-56 border-b border-zinc-700 p-1.5 text-left">
+					<th class="w-32 border-b border-border p-2 text-left font-medium tracking-wider"> Position </th>
+					<th class="min-w-16 border-b border-border p-1.5"></th>
+					<th class="w-56 border-b border-border p-1.5 text-left">
 						<div class="flex items-center gap-1">
 							<LegacySpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={13} showButtons={false} />
-							<span class="text-zinc-500">→</span>
+							<span class="text-muted-foreground">→</span>
 							<LegacySpinBox
 								bind:value={defaultZEnd}
 								min={0}
@@ -165,21 +158,21 @@
 								showButtons={false}
 								align="right"
 							/>
-							<span class="ml-1 text-[0.65rem] text-zinc-400 lowercase">µm</span>
+							<span class="ml-1 text-[0.65rem] text-muted-foreground lowercase">µm</span>
 						</div>
 					</th>
-					<th class="w-16 border-b border-zinc-700 p-2 text-right font-medium tracking-wider"> Slices </th>
-					<th class="w-20 border-b border-zinc-700 p-2 text-right font-medium tracking-wider"> Profile </th>
-					<th class="w-20 border-b border-zinc-700 p-2 pr-4 text-right font-medium tracking-wider"> Stacks </th>
+					<th class="w-16 border-b border-border p-2 text-right font-medium tracking-wider"> Slices </th>
+					<th class="w-20 border-b border-border p-2 text-right font-medium tracking-wider"> Profile </th>
+					<th class="w-20 border-b border-border p-2 pr-4 text-right font-medium tracking-wider"> Stacks </th>
 				</tr>
 			</thead>
-			<tbody>
+			<tbody class="bg-surface">
 				{#each filteredTiles as tile (tileKey(tile.row, tile.col))}
 					{@const stack = getStack(tile)}
 					{@const focused = isFocused(tile)}
 					<tr
-						class="cursor-pointer border-b border-l-2 border-zinc-800 border-l-transparent transition-[background-color] hover:bg-zinc-800/50"
-						class:!border-l-amber-500={focused}
+						class="cursor-pointer border-b border-l-2 border-border border-l-transparent transition-[background-color] hover:bg-accent"
+						class:!border-l-warning={focused}
 						onclick={() => handleRowClick(tile)}
 					>
 						<td class="p-1.5 px-5">
@@ -194,7 +187,7 @@
 						<td class="p-1.5 px-3 text-left font-mono" ondblclick={() => handleTileDoubleClick(tile)}>
 							R{tile.row}, C{tile.col}
 						</td>
-						<td class="p-1.5 font-mono text-[0.65rem] text-zinc-400">
+						<td class="p-1.5 font-mono text-[0.65rem] text-muted-foreground">
 							{(tile.x_um / 1000).toFixed(2)}, {(tile.y_um / 1000).toFixed(2)} mm
 						</td>
 						<td class="p-1.5"></td>
@@ -209,7 +202,7 @@
 										showButtons={true}
 										onChange={(v) => handleZChange(tile, v, stack.z_end_um)}
 									/>
-									<span class="text-zinc-600">→</span>
+									<span class="text-muted-foreground/50">→</span>
 									<LegacySpinBox
 										value={stack.z_end_um}
 										min={0}
@@ -219,32 +212,32 @@
 										onChange={(v) => handleZChange(tile, stack.z_start_um, v)}
 										align="right"
 									/>
-									<span class="ml-1 text-[0.65rem] text-zinc-400">µm</span>
+									<span class="ml-1 text-[0.65rem] text-muted-foreground">µm</span>
 								</div>
 							{:else}
-								<span class="text-zinc-700">—</span>
+								<span class="text-muted-foreground/30">—</span>
 							{/if}
 						</td>
-						<td class="p-1.5 text-right font-mono text-zinc-400">
+						<td class="p-1.5 text-right font-mono text-muted-foreground">
 							{#if stack}
 								{stack.num_frames}
 							{:else}
-								<span class="text-zinc-700">—</span>
+								<span class="text-muted-foreground/30">—</span>
 							{/if}
 						</td>
-						<td class="p-1.5 text-right text-zinc-400">
+						<td class="p-1.5 text-right text-muted-foreground">
 							{#if stack}
 								<span class="font-mono text-[0.65rem]">{stack.profile_id}</span>
 							{:else}
-								<span class="text-zinc-700">—</span>
+								<span class="text-muted-foreground/30">—</span>
 							{/if}
 						</td>
 						<td class="p-1.5 pr-4 text-right">
 							{#if stack}
-								<span class={statusColors[stack.status]}>{stack.status}</span>
+								<span class={getStackStatusColor(stack.status)}>{stack.status}</span>
 							{:else}
 								<button
-									class="inline-flex items-center gap-1 rounded border border-zinc-700 bg-transparent px-1.5 py-0.5 text-[0.65rem] text-zinc-400 transition-colors hover:border-emerald-500 hover:text-emerald-500"
+									class="inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-[0.65rem] text-muted-foreground transition-colors hover:border-success hover:text-success"
 									onclick={() => handleAddStack(tile)}
 								>
 									Add
@@ -258,7 +251,7 @@
 		</table>
 
 		{#if filteredTiles.length === 0}
-			<div class="flex items-center justify-center p-8 text-zinc-600">
+			<div class="flex items-center justify-center p-8 text-muted-foreground/50">
 				{#if app.tiles.length === 0}
 					No tiles in grid
 				{:else}
@@ -270,10 +263,10 @@
 
 	<!-- Toolbar (only shown when items selected) -->
 	{#if checkedCount > 0}
-		<div class="flex items-center justify-end gap-3 border-t border-zinc-700 bg-zinc-900 p-2">
-			<span class="text-[0.65rem] text-zinc-400">{checkedCount} selected</span>
+		<div class="flex items-center justify-end gap-3 border-t border-border bg-background p-2">
+			<span class="text-[0.65rem] text-muted-foreground">{checkedCount} selected</span>
 			<button
-				class="rounded border border-red-500 bg-transparent px-2 py-1 text-[0.65rem] text-red-500 transition-colors hover:bg-red-500 hover:text-white"
+				class="rounded border border-danger bg-transparent px-2 py-1 text-[0.65rem] text-danger transition-colors hover:bg-danger hover:text-danger-fg"
 				onclick={handleDeleteSelected}
 			>
 				Delete

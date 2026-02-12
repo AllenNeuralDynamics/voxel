@@ -7,7 +7,7 @@
 	import ProfileSelector from '$lib/ui/ProfileSelector.svelte';
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/ui/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
-	import { GridCanvas, GridEditor, GridTable, GridControls } from '$lib/ui/grid';
+	import { GridCanvas, GridEditor, GridTable } from '$lib/ui/grid';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
 	import ChannelSection from '$lib/ui/ChannelSection.svelte';
@@ -173,7 +173,17 @@
 						<Pane defaultSize={40} maxSize={70} minSize={30} class="overflow-hidden">
 							<!-- Bottom Panel Tab Content -->
 							<Tabs.Content value="grid" class="h-full overflow-hidden bg-card">
-								<GridTable {app} />
+								<PaneGroup direction="horizontal" autoSaveId="gridEditor">
+									<Pane minSize={40} class="overflow-hidden">
+										<GridTable {app} />
+									</Pane>
+									<PaneDivider class="text-border hover:text-muted-foreground" />
+									<Pane defaultSize={30} minSize={20} maxSize={50} class="overflow-y-auto bg-card">
+										<div class="flex flex-col justify-between">
+											<GridEditor {app} />
+										</div>
+									</Pane>
+								</PaneGroup>
 							</Tabs.Content>
 
 							<Tabs.Content value="waveforms" class="h-full overflow-hidden bg-card">
@@ -217,38 +227,20 @@
 							</Tabs.List>
 						</div>
 
-						<!-- Laser indicators -->
-						<div class="px-4">
+						<div class="flex items-center gap-3">
 							<LaserIndicators {app} />
+							<button
+								onclick={() => app?.closeSession()}
+								class="flex cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+								aria-label="Close Session"
+								title="Close Session"
+							>
+								<Icon icon="mdi:exit-to-app" width="20" height="20" />
+							</button>
 						</div>
-
-						<button
-							onclick={() => app?.closeSession()}
-							class="flex cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-							aria-label="Close Session"
-							title="Close Session"
-						>
-							<Icon icon="mdi:exit-to-app" width="20" height="20" />
-						</button>
 					</footer>
 				</Tabs.Root>
 			</main>
-			<aside class="flex h-full w-96 min-w-96 flex-col border-l border-border bg-card">
-				<div class="flex flex-col justify-between">
-					<GridEditor {app} />
-					<GridControls {app} />
-				</div>
-				<footer class="mt-auto flex flex-row-reverse justify-between p-4">
-					<button
-						onclick={() => app?.closeSession()}
-						class="flex cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-						aria-label="Close Session"
-						title="Close Session"
-					>
-						<Icon icon="mdi:exit-to-app" width="20" height="20" />
-					</button>
-				</footer>
-			</aside>
 		</div>
 	{/if}
 {:else}

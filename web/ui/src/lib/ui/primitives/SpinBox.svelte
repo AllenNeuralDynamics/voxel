@@ -15,7 +15,7 @@
 		draggable?: boolean;
 		prefix?: string;
 		suffix?: string;
-		defaultValue?: number;
+		snapValue?: number | (() => number);
 		size?: Size;
 		class?: string;
 		onChange?: (newValue: number) => void;
@@ -35,7 +35,7 @@
 		draggable = true,
 		prefix,
 		suffix,
-		defaultValue,
+		snapValue,
 		size = 'md',
 		class: className = '',
 		onChange: onValueChange
@@ -119,10 +119,11 @@
 	}
 
 	function handleDoubleClick() {
-		if (defaultValue === undefined) return;
-		value = defaultValue;
+		if (snapValue === undefined) return;
+		const resolved = typeof snapValue === 'function' ? snapValue() : snapValue;
+		value = resolved;
 		if (onValueChange) {
-			onValueChange(defaultValue);
+			onValueChange(resolved);
 		}
 	}
 
@@ -203,7 +204,7 @@
 				role="button"
 				tabindex="-1"
 				onmousedown={draggable ? handleMouseDown : undefined}
-				ondblclick={defaultValue !== undefined ? handleDoubleClick : undefined}
+				ondblclick={snapValue !== undefined ? handleDoubleClick : undefined}
 				class="flex shrink-0 items-center ps-1.5 pe-1 font-mono whitespace-nowrap text-muted-foreground select-none {sizeClasses[
 					size
 				].input}"
@@ -259,7 +260,7 @@
 				role="button"
 				tabindex="-1"
 				onmousedown={draggable ? handleMouseDown : undefined}
-				ondblclick={defaultValue !== undefined ? handleDoubleClick : undefined}
+				ondblclick={snapValue !== undefined ? handleDoubleClick : undefined}
 				class="flex shrink-0 items-center ps-1 pe-0.5 font-mono whitespace-nowrap text-muted-foreground select-none {sizeClasses[
 					size
 				].input}"

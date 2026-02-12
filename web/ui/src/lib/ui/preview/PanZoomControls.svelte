@@ -46,7 +46,7 @@
 			min={1}
 			max={100}
 			step={0.1}
-			defaultValue={1}
+			snapValue={1}
 			decimals={1}
 			numCharacters={5}
 			size="sm"
@@ -59,7 +59,7 @@
 			min={0}
 			max={1}
 			step={0.01}
-			defaultValue={0}
+			snapValue={0}
 			decimals={2}
 			numCharacters={5}
 			size="sm"
@@ -71,7 +71,7 @@
 			min={0}
 			max={1}
 			step={0.01}
-			defaultValue={0}
+			snapValue={0}
 			decimals={2}
 			numCharacters={5}
 			size="sm"

@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import Icon from '@iconify/svelte';
 	import { compositeFullFrames } from '$lib/app/preview.svelte.ts';
-	import StageControls from './StageControls.svelte';
+	import GridToolbar from './GridToolbar.svelte';
 
 	interface Props {
 		app: App;
@@ -25,6 +25,7 @@
 	let viewBoxWidth = $derived(app.stageWidth + app.fov.width);
 	let viewBoxHeight = $derived(app.stageHeight + app.fov.height);
 	let stageAspectRatio = $derived(viewBoxWidth / viewBoxHeight);
+	let cornerLen = $derived(Math.min(app.fov.width, app.fov.height) / 8);
 
 	let showThumbnail = $state(true);
 
@@ -228,243 +229,251 @@
 	</rect>
 {/snippet}
 
-<div class="relative grid h-full w-full px-4 pt-18 pb-8">
+<div class="flex h-full w-full flex-col pb-8">
 	{#if hasStage}
-		<div class="stage-container flex flex-1 justify-center overflow-hidden" bind:this={containerRef}>
-			<div class="absolute top-0 right-0 left-0 z-10 flex h-18 items-center justify-between">
-				<div class="flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
-					<button
-						onclick={toggleGrid}
-						class="rounded p-1 transition-colors {app.layerVisibility.grid
-							? 'text-blue-400 hover:bg-zinc-700'
-							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
-						title="Toggle grid"
-					>
-						<Icon icon="mdi:grid" width="14" height="14" />
-					</button>
-					<button
-						onclick={toggleStacks}
-						class="rounded p-1 transition-colors {app.layerVisibility.stacks
-							? 'text-purple-400 hover:bg-zinc-700'
-							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
-						title="Toggle stacks"
-					>
-						<Icon icon="mdi:layers" width="14" height="14" />
-					</button>
-					<button
-						onclick={togglePath}
-						class="rounded p-1 transition-colors {app.layerVisibility.path
-							? 'text-fuchsia-400 hover:bg-zinc-700'
-							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
-						title="Toggle acquisition path"
-					>
-						<Icon icon="mdi:vector-polyline" width="14" height="14" />
-					</button>
-					<button
-						onclick={toggleFov}
-						class="rounded p-1 transition-colors {app.layerVisibility.fov
-							? 'text-emerald-400 hover:bg-zinc-700'
-							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
-						title="Toggle FOV"
-					>
-						<Icon icon="mdi:crosshairs" width="14" height="14" />
-					</button>
-					<button
-						onclick={() => (showThumbnail = !showThumbnail)}
-						disabled={!app.layerVisibility.fov}
-						class="rounded p-1 transition-colors {showThumbnail && app.layerVisibility.fov
-							? 'text-cyan-400 hover:bg-zinc-700'
-							: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'} disabled:cursor-not-allowed disabled:opacity-50"
-						title="Toggle thumbnail"
-					>
-						<Icon icon="mdi:image" width="14" height="14" />
-					</button>
-				</div>
-				<StageControls {app} />
-			</div>
+		<div class="py-6">
+			<GridToolbar {app} />
+		</div>
 
-			<div
-				class="stage-canvas"
-				style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
-			>
-				<div class="flex flex-col">
-					<input
-						type="range"
-						class="x-slider"
-						style="width: {stagePixelsX}px; margin-left: {TRACK_WIDTH + STAGE_BORDER + marginPixelsX}px;"
-						min={app.xAxis?.lowerLimit}
-						max={app.xAxis?.upperLimit}
-						step={0.1}
-						value={app.xAxis?.position}
-						disabled={isXYMoving}
-						oninput={handleXSliderChange}
-					/>
-
-					<div class="flex min-h-0 items-start">
+		<div class="stage-container relative flex min-h-0 flex-1 justify-center overflow-hidden" bind:this={containerRef}>
+				<div
+					class="stage-canvas"
+					style="--track-width: {TRACK_WIDTH}px; --z-area-width: {Z_AREA_WIDTH}px; --stage-gap: {STAGE_GAP}px; --stage-border-width: {STAGE_BORDER}px;"
+				>
+					<div class="flex flex-col">
 						<input
 							type="range"
-							class="y-slider"
-							style="height: {stagePixelsY}px; margin-top: {STAGE_BORDER + marginPixelsY}px;"
-							min={app.yAxis?.lowerLimit}
-							max={app.yAxis?.upperLimit}
+							class="x-slider"
+							style="width: {stagePixelsX}px; margin-left: {TRACK_WIDTH + STAGE_BORDER + marginPixelsX}px;"
+							min={app.xAxis?.lowerLimit}
+							max={app.xAxis?.upperLimit}
 							step={0.1}
-							value={app.yAxis?.position}
+							value={app.xAxis?.position}
 							disabled={isXYMoving}
-							oninput={handleYSliderChange}
+							oninput={handleXSliderChange}
 						/>
 
-						<svg
-							viewBox="{-marginX} {-marginY} {viewBoxWidth} {viewBoxHeight}"
-							class="xy-svg"
-							style="width: {canvasWidth}px; height: {canvasHeight}px;"
-						>
-							{#if app.layerVisibility.stacks}
-								<g class="stacks-layer">
-									{#each app.stacks as stack (`${stack.row}_${stack.col}`)}
-										{@const cx = toMm(stack.x_um)}
-										{@const cy = toMm(stack.y_um)}
-										{@const w = toMm(stack.w_um)}
-										{@const h = toMm(stack.h_um)}
-										{@const x = cx - w / 2}
-										{@const y = cy - h / 2}
-										<rect
-											{x}
-											{y}
-											width={w}
-											height={h}
-											stroke-width={0.075}
-											class="stack outline-none {getStackStatusColor(stack.status)}"
-											class:cursor-pointer={!isXYMoving}
-											class:cursor-not-allowed={isXYMoving}
-											role="button"
-											tabindex={isXYMoving ? -1 : 0}
-											onclick={() => handleStackSelect(stack)}
-											ondblclick={() => handleStackMove(stack)}
-											onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
-										>
-											<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
-										</rect>
-									{/each}
-								</g>
-							{/if}
+						<div class="flex min-h-0 items-start">
+							<input
+								type="range"
+								class="y-slider"
+								style="height: {stagePixelsY}px; margin-top: {STAGE_BORDER + marginPixelsY}px;"
+								min={app.yAxis?.lowerLimit}
+								max={app.yAxis?.upperLimit}
+								step={0.1}
+								value={app.yAxis?.position}
+								disabled={isXYMoving}
+								oninput={handleYSliderChange}
+							/>
 
-							{#if app.layerVisibility.path && app.stacks.length > 1}
-								{@const pathPoints = app.stacks.map((s) => ({
-									x: toMm(s.x_um),
-									y: toMm(s.y_um)
-								}))}
-								<g class="path-layer">
-									<polyline points={pathPoints.map((p) => `${p.x},${p.y}`).join(' ')} class="acquisition-path" />
-									{#each pathPoints.slice(0, -1) as p1, i (i)}
-										{@const p2 = pathPoints[i + 1]}
-										{@const midX = (p1.x + p2.x) / 2}
-										{@const midY = (p1.y + p2.y) / 2}
-										{@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
-										<path
-											d="M -0.15 -0.2 L 0.15 0 L -0.15 0.2"
-											class="path-arrow-head"
-											transform="translate({midX}, {midY}) rotate({angle})"
-										/>
-									{/each}
-								</g>
-							{/if}
-
-							{#if app.layerVisibility.fov}
-								{@const fovLeft = fovX - app.fov.width / 2}
-								{@const fovTop = fovY - app.fov.height / 2}
-								<g class="fov-layer pointer-events-none">
-									<defs>
-										<clipPath id="fov-clip">
-											<rect x={fovLeft} y={fovTop} width={app.fov.width} height={app.fov.height} />
-										</clipPath>
-									</defs>
-
-									{#if showThumbnail && thumbnail}
-										<image
-											href={thumbnail}
-											x={fovLeft}
-											y={fovTop}
-											width={app.fov.width}
-											height={app.fov.height}
-											clip-path="url(#fov-clip)"
-											preserveAspectRatio="xMidYMid slice"
-										/>
-									{/if}
-
-									<rect
-										x={fovLeft - 0.025}
-										y={fovTop - 0.025}
-										width={app.fov.width + 0.05}
-										height={app.fov.height + 0.05}
-										class="fov-rect"
-										class:moving={isXYMoving}
-									>
-										<title>FOV: ({app.xAxis?.position.toFixed(1)}, {app.yAxis?.position.toFixed(1)}) mm</title>
-									</rect>
-
-									<g class="fov-crosshair" class:moving={isXYMoving}>
-										<line x1={fovX - 0.3} y1={fovY} x2={fovX + 0.3} y2={fovY} />
-										<line x1={fovX} y1={fovY - 0.3} x2={fovX} y2={fovY + 0.3} />
+							<svg
+								viewBox="{-marginX} {-marginY} {viewBoxWidth} {viewBoxHeight}"
+								class="xy-svg"
+								style="width: {canvasWidth}px; height: {canvasHeight}px;"
+							>
+								{#if app.layerVisibility.stacks}
+									<g class="stacks-layer">
+										{#each app.stacks as stack (`${stack.row}_${stack.col}`)}
+											{@const cx = toMm(stack.x_um)}
+											{@const cy = toMm(stack.y_um)}
+											{@const w = toMm(stack.w_um)}
+											{@const h = toMm(stack.h_um)}
+											{@const x = cx - w / 2}
+											{@const y = cy - h / 2}
+											<rect
+												{x}
+												{y}
+												width={w}
+												height={h}
+												stroke-width={0.075}
+												class="stack outline-none {getStackStatusColor(stack.status)}"
+												class:cursor-pointer={!isXYMoving}
+												class:cursor-not-allowed={isXYMoving}
+												role="button"
+												tabindex={isXYMoving ? -1 : 0}
+												onclick={() => handleStackSelect(stack)}
+												ondblclick={() => handleStackMove(stack)}
+												onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
+											>
+												<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
+											</rect>
+										{/each}
 									</g>
-								</g>
-							{/if}
+								{/if}
 
-							{#if app.layerVisibility.grid}
-								{@const selectedTileData = app.tiles.find((t) => isSelected(t))}
-								<g class="grid-layer">
-									{#each app.tiles as tile (`${tile.row}_${tile.col}`)}
-										{#if !isSelected(tile)}
-											{@render tileRect(tile, false)}
+								{#if app.layerVisibility.path && app.stacks.length > 1}
+									{@const pathPoints = app.stacks.map((s) => ({
+										x: toMm(s.x_um),
+										y: toMm(s.y_um)
+									}))}
+									<g class="path-layer">
+										<polyline points={pathPoints.map((p) => `${p.x},${p.y}`).join(' ')} class="acquisition-path" />
+										{#each pathPoints.slice(0, -1) as p1, i (i)}
+											{@const p2 = pathPoints[i + 1]}
+											{@const midX = (p1.x + p2.x) / 2}
+											{@const midY = (p1.y + p2.y) / 2}
+											{@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
+											<path
+												d="M -0.15 -0.2 L 0.15 0 L -0.15 0.2"
+												class="path-arrow-head"
+												transform="translate({midX}, {midY}) rotate({angle})"
+											/>
+										{/each}
+									</g>
+								{/if}
+
+								{#if app.layerVisibility.fov}
+									{@const fovLeft = fovX - app.fov.width / 2}
+									{@const fovTop = fovY - app.fov.height / 2}
+									<g class="fov-layer pointer-events-none">
+										<defs>
+											<clipPath id="fov-clip">
+												<rect x={fovLeft} y={fovTop} width={app.fov.width} height={app.fov.height} />
+											</clipPath>
+										</defs>
+
+										{#if showThumbnail && thumbnail}
+											<image
+												href={thumbnail}
+												x={fovLeft}
+												y={fovTop}
+												width={app.fov.width}
+												height={app.fov.height}
+												clip-path="url(#fov-clip)"
+												preserveAspectRatio="xMidYMid slice"
+											/>
 										{/if}
-									{/each}
-									{#if selectedTileData}
-										{@render tileRect(selectedTileData, true)}
-									{/if}
+
+										<rect
+											x={fovLeft - 0.025}
+											y={fovTop - 0.025}
+											width={app.fov.width + 0.05}
+											height={app.fov.height + 0.05}
+											class="fov-rect"
+											class:moving={isXYMoving}
+										>
+											<title>FOV: ({app.xAxis?.position.toFixed(1)}, {app.yAxis?.position.toFixed(1)}) mm</title>
+										</rect>
+
+										<g class="fov-crosshair" class:moving={isXYMoving}>
+											<line x1={fovX - 0.3} y1={fovY} x2={fovX + 0.3} y2={fovY} />
+											<line x1={fovX} y1={fovY - 0.3} x2={fovX} y2={fovY + 0.3} />
+										</g>
+									</g>
+								{/if}
+
+								{#if app.layerVisibility.grid}
+									{@const selectedTileData = app.tiles.find((t) => isSelected(t))}
+									<g class="grid-layer">
+										{#each app.tiles as tile (`${tile.row}_${tile.col}`)}
+											{#if !isSelected(tile)}
+												{@render tileRect(tile, false)}
+											{/if}
+										{/each}
+										{#if selectedTileData}
+											{@render tileRect(selectedTileData, true)}
+										{/if}
+									</g>
+								{/if}
+
+								<g class="corner-marks">
+									<polyline points="{-marginX + cornerLen},{-marginY} {-marginX},{-marginY} {-marginX},{-marginY + cornerLen}" />
+									<polyline points="{-marginX + viewBoxWidth - cornerLen},{-marginY} {-marginX + viewBoxWidth},{-marginY} {-marginX + viewBoxWidth},{-marginY + cornerLen}" />
+									<polyline points="{-marginX},{-marginY + viewBoxHeight - cornerLen} {-marginX},{-marginY + viewBoxHeight} {-marginX + cornerLen},{-marginY + viewBoxHeight}" />
+									<polyline points="{-marginX + viewBoxWidth - cornerLen},{-marginY + viewBoxHeight} {-marginX + viewBoxWidth},{-marginY + viewBoxHeight} {-marginX + viewBoxWidth},{-marginY + viewBoxHeight - cornerLen}" />
+								</g>
+							</svg>
+						</div>
+					</div>
+
+					<div class="z-area" style="height: {canvasHeight + TRACK_WIDTH}px;">
+						<input
+							type="range"
+							class="z-slider"
+							min={app.zAxis?.lowerLimit}
+							max={app.zAxis?.upperLimit}
+							step={0.1}
+							value={app.zAxis?.position}
+							disabled={isZMoving}
+							oninput={handleZSliderChange}
+						/>
+						<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
+							{#if app.selectedStack && app.zAxis}
+								{@const z0Offset = app.selectedStack.z_start_um / 1000 - app.zAxis.lowerLimit}
+								{@const z1Offset = app.selectedStack.z_end_um / 1000 - app.zAxis.lowerLimit}
+								{@const y0 = (1 - z0Offset / app.stageDepth) * canvasHeight - 1}
+								{@const y1 = (1 - z1Offset / app.stageDepth) * canvasHeight - 1}
+								<g class={getStackStatusColor(app.selectedStack.status)}>
+									<line x1="0" y1={y0} x2="30" y2={y0} class="z-marker" />
+									<line x1="0" {y1} x2="30" y2={y1} class="z-marker" />
 								</g>
 							{/if}
+							<line
+								x1="0"
+								y1={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
+								x2="30"
+								y2={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
+								class="z-line"
+								class:moving={isZMoving}
+							>
+								<title>Z: {app.zAxis?.position.toFixed(1)} mm</title>
+							</line>
 						</svg>
 					</div>
 				</div>
 
-				<div class="z-area" style="height: {canvasHeight + TRACK_WIDTH}px;">
-					<input
-						type="range"
-						class="z-slider"
-						min={app.zAxis?.lowerLimit}
-						max={app.zAxis?.upperLimit}
-						step={0.1}
-						value={app.zAxis?.position}
-						disabled={isZMoving}
-						oninput={handleZSliderChange}
-					/>
-					<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
-						{#if app.selectedStack && app.zAxis}
-							{@const z0Offset = app.selectedStack.z_start_um / 1000 - app.zAxis.lowerLimit}
-							{@const z1Offset = app.selectedStack.z_end_um / 1000 - app.zAxis.lowerLimit}
-							{@const y0 = (1 - z0Offset / app.stageDepth) * canvasHeight - 1}
-							{@const y1 = (1 - z1Offset / app.stageDepth) * canvasHeight - 1}
-							<g class={getStackStatusColor(app.selectedStack.status)}>
-								<line x1="0" y1={y0} x2="30" y2={y0} class="z-marker" />
-								<line x1="0" {y1} x2="30" y2={y1} class="z-marker" />
-							</g>
-						{/if}
-						<line
-							x1="0"
-							y1={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
-							x2="30"
-							y2={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
-							class="z-line"
-							class:moving={isZMoving}
-						>
-							<title>Z: {app.zAxis?.position.toFixed(1)} mm</title>
-						</line>
-					</svg>
-				</div>
+			<div class="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
+				<button
+					onclick={toggleGrid}
+					class="rounded p-1 transition-colors {app.layerVisibility.grid
+						? 'text-blue-400 hover:bg-zinc-700'
+						: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+					title="Toggle grid"
+				>
+					<Icon icon="mdi:grid" width="14" height="14" />
+				</button>
+				<button
+					onclick={toggleStacks}
+					class="rounded p-1 transition-colors {app.layerVisibility.stacks
+						? 'text-purple-400 hover:bg-zinc-700'
+						: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+					title="Toggle stacks"
+				>
+					<Icon icon="mdi:layers" width="14" height="14" />
+				</button>
+				<button
+					onclick={togglePath}
+					class="rounded p-1 transition-colors {app.layerVisibility.path
+						? 'text-fuchsia-400 hover:bg-zinc-700'
+						: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+					title="Toggle acquisition path"
+				>
+					<Icon icon="mdi:vector-polyline" width="14" height="14" />
+				</button>
+				<button
+					onclick={toggleFov}
+					class="rounded p-1 transition-colors {app.layerVisibility.fov
+						? 'text-emerald-400 hover:bg-zinc-700'
+						: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}"
+					title="Toggle FOV"
+				>
+					<Icon icon="mdi:crosshairs" width="14" height="14" />
+				</button>
+				<button
+					onclick={() => (showThumbnail = !showThumbnail)}
+					disabled={!app.layerVisibility.fov}
+					class="rounded p-1 transition-colors {showThumbnail && app.layerVisibility.fov
+						? 'text-cyan-400 hover:bg-zinc-700'
+						: 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'} disabled:cursor-not-allowed disabled:opacity-50"
+					title="Toggle thumbnail"
+				>
+					<Icon icon="mdi:image" width="14" height="14" />
+				</button>
 			</div>
 		</div>
 	{:else}
-		<div class="flex h-64 items-center justify-center rounded border border-zinc-700">
-			<p class="text-sm text-zinc-500">Stage not available</p>
+		<div class="flex h-64 items-center justify-center rounded border border-border">
+			<p class="text-sm text-muted-foreground">Stage not available</p>
 		</div>
 	{/if}
 </div>
@@ -580,7 +589,16 @@
 
 	.xy-svg {
 		flex-shrink: 0;
-		border: var(--stage-border);
+	}
+
+	.corner-marks {
+		pointer-events: none;
+		& polyline {
+			fill: none;
+			stroke: var(--color-zinc-600);
+			stroke-width: 0.08;
+			stroke-linecap: square;
+		}
 	}
 
 	.z-svg {

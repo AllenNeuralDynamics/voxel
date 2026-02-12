@@ -41,7 +41,7 @@
 	}
 </script>
 
-<div class="flex items-center gap-4 font-mono text-[0.65rem]">
+<div class="flex items-center gap-2 font-mono text-[0.65rem]">
 	{#if xAxis}
 		<SpinBox
 			bind:value={posX}

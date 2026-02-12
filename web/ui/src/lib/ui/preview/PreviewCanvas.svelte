@@ -35,7 +35,7 @@
 		}
 
 		// Reduce intensity by mixing with transparent
-		return `color-mix(in oklch, ${blended} 50%, transparent)`;
+		return `color-mix(in oklch, ${blended} 40%, transparent)`;
 	});
 
 	// Watch for redraw signals from PreviewState
@@ -176,7 +176,7 @@
 <div class="relative flex h-full items-start justify-center bg-background px-4 pt-18 pb-8" bind:this={containerEl}>
 	<canvas
 		bind:this={canvasEl}
-		class="preview-canvas max-h-full max-w-full border"
+		class="preview-canvas max-h-full max-w-3/4 border"
 		style:border-color={borderColor}
 		class:panning={previewer.isPanZoomActive}
 		class:is-idle={!previewer.isPreviewing}
