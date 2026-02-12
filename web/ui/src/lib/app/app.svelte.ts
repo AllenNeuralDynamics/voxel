@@ -15,7 +15,6 @@ import {
 	type JsonSchema
 } from '../core/types.ts';
 import type { VoxelRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
-import { fetchColormapCatalog, type ColormapCatalog } from '../core/colormaps.ts';
 import { PreviewState } from './preview.svelte.ts';
 import { Axis } from './axis.svelte.ts';
 import { SvelteDate } from 'svelte/reactivity';
@@ -109,7 +108,6 @@ export class App {
 	configLoading = $state(false);
 	configError = $state<string | null>(null);
 
-	colormapCatalog = $state<ColormapCatalog>([]);
 	profiles = $state<Profile[]>([]);
 
 	error = $state<string | null>(null);
@@ -329,7 +327,6 @@ export class App {
 					this.previewState?.shutdown();
 					this.previewState = null;
 					this.config = null;
-					this.colormapCatalog = [];
 					this.profiles = [];
 				}
 				this.sessionInitializing = false;
@@ -359,12 +356,6 @@ export class App {
 		await this.fetchConfig();
 		await this.devices.initialize();
 		this.#client.requestWaveforms();
-
-		fetchColormapCatalog(this.#client.baseUrl)
-			.then((catalog) => {
-				this.colormapCatalog = catalog;
-			})
-			.catch((e) => console.warn('[App] Failed to fetch colormap catalog:', e));
 
 		if (this.config) {
 			this.previewState = new PreviewState(this.client, {

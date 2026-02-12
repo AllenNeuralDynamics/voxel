@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import Icon from '@iconify/svelte';
 	import { compositeFullFrames } from '$lib/app/preview.svelte.ts';
+	import StageControls from './StageControls.svelte';
 
 	interface Props {
 		app: App;
@@ -230,7 +231,7 @@
 <div class="relative grid h-full w-full px-4 pt-18 pb-8">
 	{#if hasStage}
 		<div class="stage-container flex flex-1 justify-center overflow-hidden" bind:this={containerRef}>
-			<div class="absolute top-0 right-0 z-10 flex h-18 items-center">
+			<div class="absolute top-0 right-0 left-0 z-10 flex h-18 items-center justify-between">
 				<div class="flex gap-0.5 rounded bg-zinc-800/80 p-1 backdrop-blur-sm">
 					<button
 						onclick={toggleGrid}
@@ -279,6 +280,7 @@
 						<Icon icon="mdi:image" width="14" height="14" />
 					</button>
 				</div>
+				<StageControls {app} />
 			</div>
 
 			<div

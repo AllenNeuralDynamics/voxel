@@ -8,7 +8,6 @@
 	import DeviceFilterToggle, { type DeviceFilter } from '$lib/ui/DeviceFilterToggle.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 	import { GridCanvas, GridPanel, GridTable } from '$lib/ui/grid';
-	import StagePosition from '$lib/ui/StagePosition.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
 	import ChannelSection from '$lib/ui/ChannelSection.svelte';
@@ -66,14 +65,6 @@
 		window.removeEventListener('beforeunload', cleanup);
 		cleanup();
 	});
-
-	function handleStartPreview() {
-		app?.previewState?.startPreview();
-	}
-
-	function handleStopPreview() {
-		app?.previewState?.stopPreview();
-	}
 </script>
 
 {#if app}
@@ -152,7 +143,7 @@
 										devices={app.devices}
 										{deviceFilter}
 										{showHistograms}
-										catalog={app.colormapCatalog}
+										catalog={app.previewState.catalog}
 									/>
 								</div>
 								<div class="border-t border-border"></div>
@@ -231,29 +222,18 @@
 							<LaserIndicators {app} />
 						</div>
 
-						{#if app.stageConnected}
-							<StagePosition {app} />
-						{/if}
+						<button
+							onclick={() => app?.closeSession()}
+							class="flex cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							aria-label="Close Session"
+							title="Close Session"
+						>
+							<Icon icon="mdi:exit-to-app" width="20" height="20" />
+						</button>
 					</footer>
 				</Tabs.Root>
 			</main>
 			<aside class="flex h-full w-96 min-w-96 flex-col border-l border-border bg-card">
-				<header class="flex h-18 items-start justify-start gap-2 p-4">
-					<button
-						onclick={handleStartPreview}
-						disabled={app.previewState.isPreviewing}
-						class="rounded bg-success px-3 py-2 text-sm font-medium text-success-fg transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						Start
-					</button>
-					<button
-						onclick={handleStopPreview}
-						disabled={!app.previewState.isPreviewing}
-						class="rounded bg-danger px-3 py-2 text-sm font-medium text-danger-fg transition-colors hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						Stop
-					</button>
-				</header>
 				<GridPanel {app} />
 				<footer class="mt-auto flex flex-row-reverse justify-between p-4">
 					<button

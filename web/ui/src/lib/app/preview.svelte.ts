@@ -6,8 +6,10 @@ import type {
 	PreviewConfig,
 	AppStatus,
 	Client,
-	ProfileConfig
+	ProfileConfig,
+	ColormapCatalog
 } from '$lib/core';
+import { fetchColormapCatalog } from '$lib/core';
 
 import { sanitizeString } from '$lib/utils';
 import { SvelteMap } from 'svelte/reactivity';
@@ -127,6 +129,7 @@ export class PreviewState {
 	isPanZoomActive = $state(false);
 	crop = $state<PreviewCrop>({ x: 0, y: 0, k: 0 });
 	channels = $state<PreviewChannel[]>([]);
+	catalog = $state<ColormapCatalog>([]);
 	redrawGeneration = $state(0);
 	previewWidth = $state(0);
 	previewHeight = $state(0);
@@ -146,10 +149,27 @@ export class PreviewState {
 
 		this.#subscribeToClient();
 		this.#client.requestStatus();
+
+		fetchColormapCatalog(client.baseUrl)
+			.then((catalog) => {
+				this.catalog = catalog;
+			})
+			.catch((e) => console.warn('[PreviewState] Failed to fetch colormap catalog:', e));
 	}
 
 	get client(): Client {
 		return this.#client;
+	}
+
+	/** Resolve a colormap name or hex string to a hex color. */
+	resolveColor(colormap: string | null): string | null {
+		if (!colormap) return null;
+		if (colormap.startsWith('#')) return colormap;
+		for (const group of this.catalog) {
+			const stops = group.colormaps[colormap];
+			if (stops && stops.length > 0) return stops[stops.length - 1];
+		}
+		return null;
 	}
 
 	shutdown(): void {

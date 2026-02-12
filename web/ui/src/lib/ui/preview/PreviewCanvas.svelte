@@ -19,6 +19,25 @@
 	let needsRedraw = false;
 	let animFrameId: number | null = null;
 
+	// Compute border color from visible channel colormaps
+	let borderColor = $derived.by(() => {
+		const colors = previewer.channels
+			.filter((c) => c.visible && c.colormap)
+			.map((c) => previewer.resolveColor(c.colormap))
+			.filter((c): c is string => c !== null);
+
+		if (colors.length === 0) return 'var(--border)';
+
+		// Blend all channel colors together
+		let blended = colors[0];
+		for (let i = 1; i < colors.length; i++) {
+			blended = `color-mix(in oklch, ${blended}, ${colors[i]})`;
+		}
+
+		// Reduce intensity by mixing with transparent
+		return `color-mix(in oklch, ${blended} 50%, transparent)`;
+	});
+
 	// Watch for redraw signals from PreviewState
 	$effect(() => {
 		void previewer.redrawGeneration;
@@ -157,7 +176,8 @@
 <div class="relative flex h-full items-start justify-center bg-background px-4 pt-18 pb-8" bind:this={containerEl}>
 	<canvas
 		bind:this={canvasEl}
-		class="preview-canvas max-h-full max-w-full border border-emerald-400"
+		class="preview-canvas max-h-full max-w-full border"
+		style:border-color={borderColor}
 		class:panning={previewer.isPanZoomActive}
 		class:is-idle={!previewer.isPreviewing}
 	>
