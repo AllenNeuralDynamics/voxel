@@ -27,6 +27,12 @@
 	let isZMoving = $derived(app.zAxis?.isMoving ?? false);
 	let isStageMoving = $derived(isXYMoving || isZMoving);
 
+	// Primary selection (first selected tile) — used for z-sidebar markers
+	let primaryTile = $derived(app.selectedTiles[0] ?? null);
+	let primaryStack = $derived(
+		primaryTile ? (app.stacks.find((s) => s.row === primaryTile.row && s.col === primaryTile.col) ?? null) : null
+	);
+
 	// FOV position relative to stage origin (lower limits)
 	let fovX = $derived(app.xAxis ? app.xAxis.position - app.xAxis.lowerLimit : 0);
 	let fovY = $derived(app.yAxis ? app.yAxis.position - app.yAxis.lowerLimit : 0);
@@ -140,7 +146,7 @@
 	}
 
 	function isSelected(tile: Tile): boolean {
-		return tile.row === app.selectedTile.row && tile.col === app.selectedTile.col;
+		return app.isTileSelected(tile.row, tile.col);
 	}
 
 	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
@@ -159,8 +165,13 @@
 		app.moveXY(clampedX, clampedY);
 	}
 
-	function handleTileSelect(tile: Tile) {
-		app.selectTile(tile.row, tile.col);
+	function handleTileSelect(e: MouseEvent, tile: Tile) {
+		if (e.ctrlKey || e.metaKey) {
+			if (app.isTileSelected(tile.row, tile.col)) app.removeFromSelection([[tile.row, tile.col]]);
+			else app.addToSelection([[tile.row, tile.col]]);
+		} else {
+			app.selectTiles([[tile.row, tile.col]]);
+		}
 	}
 
 	function handleTileMove(e: MouseEvent, tile: Tile) {
@@ -169,8 +180,13 @@
 		moveToTilePosition(tile.x_um, tile.y_um);
 	}
 
-	function handleStackSelect(stack: Stack) {
-		app.selectTile(stack.row, stack.col);
+	function handleStackSelect(e: MouseEvent, stack: Stack) {
+		if (e.ctrlKey || e.metaKey) {
+			if (app.isTileSelected(stack.row, stack.col)) app.removeFromSelection([[stack.row, stack.col]]);
+			else app.addToSelection([[stack.row, stack.col]]);
+		} else {
+			app.selectTiles([[stack.row, stack.col]]);
+		}
 	}
 
 	function handleStackMove(e: MouseEvent, stack: Stack) {
@@ -304,9 +320,9 @@
 					class:cursor-not-allowed={isXYMoving}
 					role="button"
 					tabindex={isXYMoving ? -1 : 0}
-					onclick={() => handleStackSelect(stack)}
+					onclick={(e) => handleStackSelect(e, stack)}
 					onauxclick={(e) => handleStackMove(e, stack)}
-					onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
+					onkeydown={(e) => handleKeydown(e, () => app.selectTiles([[stack.row, stack.col]]))}
 				>
 					<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
 				</rect>
@@ -397,9 +413,9 @@
 		class:cursor-not-allowed={isXYMoving}
 		role="button"
 		tabindex={isXYMoving ? -1 : 0}
-		onclick={() => handleTileSelect(tile)}
+		onclick={(e) => handleTileSelect(e, tile)}
 		onauxclick={(e) => handleTileMove(e, tile)}
-		onkeydown={(e) => handleKeydown(e, () => handleTileSelect(tile))}
+		onkeydown={(e) => handleKeydown(e, () => app.selectTiles([[tile.row, tile.col]]))}
 	>
 		<title>Tile [{tile.row}, {tile.col}]</title>
 	</rect>
@@ -407,16 +423,17 @@
 
 {#snippet gridLayer()}
 	{#if app.layerVisibility.grid}
-		{@const selectedTileData = app.tiles.find((t) => isSelected(t))}
 		<g class="grid-layer">
 			{#each app.tiles as tile (`${tile.row}_${tile.col}`)}
 				{#if !isSelected(tile)}
 					{@render tileRect(tile, false)}
 				{/if}
 			{/each}
-			{#if selectedTileData}
-				{@render tileRect(selectedTileData, true)}
-			{/if}
+			{#each app.tiles as tile (`s_${tile.row}_${tile.col}`)}
+				{#if isSelected(tile)}
+					{@render tileRect(tile, true)}
+				{/if}
+			{/each}
 		</g>
 	{/if}
 {/snippet}
@@ -453,7 +470,6 @@
 				class="flex"
 				style:gap="{STAGE_GAP}px"
 				style:--slider-width="{SLIDER_WIDTH}px"
-				style:--track-width="2px"
 				style:--stage-border="{STAGE_BORDER}px solid var(--color-zinc-600)"
 				style:--thumb-width="{thumbThickness}px"
 			>
@@ -461,7 +477,7 @@
 					<input
 						type="range"
 						class="x-slider"
-						style="width: {stagePixelsX}px; margin-left: {SLIDER_WIDTH + marginPixelsX}px;"
+						style="width: {stagePixelsX}px; margin-left: {SLIDER_WIDTH + marginPixelsX + 1}px;"
 						min={app.xAxis.lowerLimit}
 						max={app.xAxis.upperLimit}
 						step={0.1}
@@ -485,7 +501,7 @@
 
 						<svg
 							viewBox={viewBoxStr}
-							class="border border-zinc-600"
+							class="border border-zinc-700"
 							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 							overflow="hidden"
 						>
@@ -519,12 +535,12 @@
 						width="100%"
 						height="100%"
 					>
-						{#if app.selectedStack && app.zAxis}
+						{#if primaryStack && app.zAxis}
 							{@const z0Y =
-								(1 - (app.selectedStack.z_start_um / 1000 - app.zAxis.lowerLimit) / app.stageDepth) * canvasHeight - 1}
+								(1 - (primaryStack.z_start_um / 1000 - app.zAxis.lowerLimit) / app.stageDepth) * canvasHeight - 1}
 							{@const z1Y =
-								(1 - (app.selectedStack.z_end_um / 1000 - app.zAxis.lowerLimit) / app.stageDepth) * canvasHeight - 1}
-							<g class={getStackStatusColor(app.selectedStack.status)} stroke-width="1" stroke="currentColor">
+								(1 - (primaryStack.z_end_um / 1000 - app.zAxis.lowerLimit) / app.stageDepth) * canvasHeight - 1}
+							<g class={getStackStatusColor(primaryStack.status)} stroke-width="1" stroke="currentColor">
 								<line x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
 								<line x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
 							</g>
@@ -618,10 +634,11 @@
 		padding: 0;
 		border: none;
 		background-color: transparent;
-		--_track-c: var(--color-zinc-700);
+		--_track-color: var(--color-slate-600);
+		--_track-width: 1px;
 
 		&:hover {
-			--_track-c: var(--color-zinc-600);
+			--_track-color: var(--color-slate-500);
 		}
 
 		&::-webkit-slider-runnable-track {
@@ -635,13 +652,17 @@
 		&::-webkit-slider-thumb {
 			-webkit-appearance: none;
 			appearance: none;
-			background: var(--color-emerald-500);
+			inline-size: var(--thumb-width);
+			block-size: var(--slider-width);
+			background: var(--color-success);
 			border-radius: 1px;
 			cursor: pointer;
 		}
 		&::-moz-range-thumb {
 			appearance: none;
-			background: var(--color-emerald-500);
+			inline-size: var(--thumb-width);
+			block-size: var(--slider-width);
+			background: var(--color-success);
 			border: none;
 			border-radius: 1px;
 			cursor: pointer;
@@ -649,24 +670,11 @@
 		&:disabled {
 			cursor: not-allowed;
 			&::-webkit-slider-thumb {
-				background: var(--color-rose-500);
+				background: var(--color-danger);
 			}
 			&::-moz-range-thumb {
-				background: var(--color-rose-500);
+				background: var(--color-danger);
 			}
-		}
-	}
-
-	.x-slider,
-	.y-slider,
-	.z-slider {
-		&::-webkit-slider-thumb {
-			inline-size: var(--thumb-width);
-			block-size: var(--slider-width);
-		}
-		&::-moz-range-thumb {
-			inline-size: var(--thumb-width);
-			block-size: var(--slider-width);
 		}
 	}
 
@@ -678,11 +686,13 @@
 	.y-slider {
 		writing-mode: vertical-rl;
 		direction: ltr;
-		--_track-bg: linear-gradient(var(--_track-c), var(--_track-c)) center / var(--track-width) 100% no-repeat;
+		transform: translateX(50%);
+		--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / var(--_track-width) 100% no-repeat;
 	}
 
 	.x-slider {
-		--_track-bg: linear-gradient(var(--_track-c), var(--_track-c)) center / 100% var(--track-width) no-repeat;
+		transform: translateY(50%);
+		--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / 100% var(--_track-width) no-repeat;
 	}
 
 	/* SVG elements */
@@ -697,7 +707,7 @@
 			fill 300ms ease,
 			stroke 150ms ease;
 		&:hover {
-			fill: color-mix(in srgb, var(--color-zinc-500) 15%, transparent);
+			fill: color-mix(in srgb, var(--color-zinc-500) 25%, transparent);
 		}
 		&.selected {
 			stroke: var(--color-amber-500);
@@ -710,9 +720,9 @@
 		fill-opacity: 0.15;
 		/*stroke-width: 0.03;*/
 		/*stroke: currentColor;*/
-		transition: fill-opacity 150ms ease;
+		transition: fill-opacity 300ms ease;
 		&:hover {
-			fill-opacity: 0.35;
+			fill-opacity: 0.25;
 		}
 	}
 </style>

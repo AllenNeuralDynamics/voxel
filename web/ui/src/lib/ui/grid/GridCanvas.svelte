@@ -19,6 +19,11 @@
 	let isXYMoving = $derived(app.xAxis?.isMoving || app.yAxis?.isMoving);
 	let isZMoving = $derived(app.zAxis?.isMoving ?? false);
 
+	let primaryTile = $derived(app.selectedTiles[0] ?? null);
+	let primaryStack = $derived(
+		primaryTile ? (app.stacks.find((s) => s.row === primaryTile.row && s.col === primaryTile.col) ?? null) : null
+	);
+
 	let marginX = $derived(app.fov.width / 2);
 	let marginY = $derived(app.fov.height / 2);
 
@@ -125,11 +130,16 @@
 	}
 
 	function isSelected(tile: Tile): boolean {
-		return tile.row === app.selectedTile.row && tile.col === app.selectedTile.col;
+		return app.isTileSelected(tile.row, tile.col);
 	}
 
-	function handleTileSelect(tile: Tile) {
-		app.selectTile(tile.row, tile.col);
+	function handleTileSelect(e: MouseEvent, tile: Tile) {
+		if (e.ctrlKey || e.metaKey) {
+			if (app.isTileSelected(tile.row, tile.col)) app.removeFromSelection([[tile.row, tile.col]]);
+			else app.addToSelection([[tile.row, tile.col]]);
+		} else {
+			app.selectTiles([[tile.row, tile.col]]);
+		}
 	}
 
 	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
@@ -151,8 +161,13 @@
 		app.moveXY(clampedX, clampedY);
 	}
 
-	function handleStackSelect(stack: Stack) {
-		app.selectTile(stack.row, stack.col);
+	function handleStackSelect(e: MouseEvent, stack: Stack) {
+		if (e.ctrlKey || e.metaKey) {
+			if (app.isTileSelected(stack.row, stack.col)) app.removeFromSelection([[stack.row, stack.col]]);
+			else app.addToSelection([[stack.row, stack.col]]);
+		} else {
+			app.selectTiles([[stack.row, stack.col]]);
+		}
 	}
 
 	function handleStackMove(e: MouseEvent, stack: Stack) {
@@ -209,9 +224,9 @@
 		class:cursor-not-allowed={isXYMoving}
 		role="button"
 		tabindex={isXYMoving ? -1 : 0}
-		onclick={() => handleTileSelect(tile)}
+		onclick={(e) => handleTileSelect(e, tile)}
 		onauxclick={(e) => handleTileMove(e, tile)}
-		onkeydown={(e) => handleKeydown(e, () => handleTileSelect(tile))}
+		onkeydown={(e) => handleKeydown(e, () => app.selectTiles([[tile.row, tile.col]]))}
 	>
 		<title>Tile [{tile.row}, {tile.col}]</title>
 	</rect>
@@ -282,9 +297,9 @@
 											class:cursor-not-allowed={isXYMoving}
 											role="button"
 											tabindex={isXYMoving ? -1 : 0}
-											onclick={() => handleStackSelect(stack)}
+											onclick={(e) => handleStackSelect(e, stack)}
 											onauxclick={(e) => handleStackMove(e, stack)}
-											onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
+											onkeydown={(e) => handleKeydown(e, () => app.selectTiles([[stack.row, stack.col]]))}
 										>
 											<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
 										</rect>
@@ -354,16 +369,17 @@
 							{/if}
 
 							{#if app.layerVisibility.grid}
-								{@const selectedTileData = app.tiles.find((t) => isSelected(t))}
 								<g class="grid-layer">
 									{#each app.tiles as tile (`${tile.row}_${tile.col}`)}
 										{#if !isSelected(tile)}
 											{@render tileRect(tile, false)}
 										{/if}
 									{/each}
-									{#if selectedTileData}
-										{@render tileRect(selectedTileData, true)}
-									{/if}
+									{#each app.tiles as tile (`s_${tile.row}_${tile.col}`)}
+										{#if isSelected(tile)}
+											{@render tileRect(tile, true)}
+										{/if}
+									{/each}
 								</g>
 							{/if}
 
@@ -402,12 +418,12 @@
 						oninput={handleZSliderChange}
 					/>
 					<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
-						{#if app.selectedStack && app.zAxis}
-							{@const z0Offset = app.selectedStack.z_start_um / 1000 - app.zAxis.lowerLimit}
-							{@const z1Offset = app.selectedStack.z_end_um / 1000 - app.zAxis.lowerLimit}
+						{#if primaryStack && app.zAxis}
+							{@const z0Offset = primaryStack.z_start_um / 1000 - app.zAxis.lowerLimit}
+							{@const z1Offset = primaryStack.z_end_um / 1000 - app.zAxis.lowerLimit}
 							{@const y0 = (1 - z0Offset / app.stageDepth) * canvasHeight - 1}
 							{@const y1 = (1 - z1Offset / app.stageDepth) * canvasHeight - 1}
-							<g class={getStackStatusColor(app.selectedStack.status)}>
+							<g class={getStackStatusColor(primaryStack.status)}>
 								<line x1="0" y1={y0} x2="30" y2={y0} class="z-marker" />
 								<line x1="0" {y1} x2="30" y2={y1} class="z-marker" />
 							</g>

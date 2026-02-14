@@ -17,7 +17,7 @@ import {
 import type { VoxelRigConfig, ProfileConfig, ChannelConfig } from '../core/config.ts';
 import { PreviewState } from './preview.svelte.ts';
 import { Axis } from './axis.svelte.ts';
-import { SvelteDate } from 'svelte/reactivity';
+import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 function getDefaultSocketUrl(): string {
 	if (!browser) return 'ws://localhost:8000/ws';
@@ -129,11 +129,8 @@ export class App {
 
 	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true });
 
-	#selectedTilePos = $state<[number, number]>([0, 0]);
-	selectedTile = $derived<Tile>(this.#getSelectedTile());
-	selectedStack = $derived<Stack | null>(
-		this.stacks.find((s) => s.row === this.selectedTile.row && s.col === this.selectedTile.col) ?? null
-	);
+	#selection = new SvelteMap<number, SvelteSet<number>>([[0, new SvelteSet([0])]]);
+	selectedTiles = $derived<Tile[]>(this.#getSelectedTiles());
 
 	private wasDisconnected = false;
 	private sessionInitializing = false;
@@ -208,23 +205,49 @@ export class App {
 		await Promise.all([this.xAxis?.halt(), this.yAxis?.halt(), this.zAxis?.halt()]);
 	}
 
-	#getSelectedTile(): Tile {
-		const [row, col] = this.#selectedTilePos;
-		const tile = this.tiles.find((t) => t.row === row && t.col === col);
-		if (tile) return tile;
-
-		return {
-			row,
-			col,
-			x_um: 0,
-			y_um: 0,
-			w_um: this.fov.width * 1000,
-			h_um: this.fov.height * 1000
-		};
+	#getSelectedTiles(): Tile[] {
+		const result: Tile[] = [];
+		for (const [row, cols] of this.#selection) {
+			for (const col of cols) {
+				const tile = this.tiles.find((t) => t.row === row && t.col === col);
+				if (tile) result.push(tile);
+			}
+		}
+		return result;
 	}
 
-	selectTile(row: number, col: number): void {
-		this.#selectedTilePos = [row, col];
+	isTileSelected(row: number, col: number): boolean {
+		return this.#selection.get(row)?.has(col) ?? false;
+	}
+
+	selectTiles(positions: [number, number][]): void {
+		this.#selection.clear();
+		for (const [row, col] of positions) {
+			const cols = this.#selection.get(row);
+			if (cols) cols.add(col);
+			else this.#selection.set(row, new SvelteSet([col]));
+		}
+	}
+
+	addToSelection(positions: [number, number][]): void {
+		for (const [row, col] of positions) {
+			const cols = this.#selection.get(row);
+			if (cols) cols.add(col);
+			else this.#selection.set(row, new SvelteSet([col]));
+		}
+	}
+
+	removeFromSelection(positions: [number, number][]): void {
+		for (const [row, col] of positions) {
+			const cols = this.#selection.get(row);
+			if (!cols) continue;
+			cols.delete(col);
+			if (cols.size === 0) this.#selection.delete(row);
+		}
+	}
+
+	clearSelection(): void {
+		this.#selection.clear();
 	}
 
 	setGridOffset(xOffsetUm: number, yOffsetUm: number): void {

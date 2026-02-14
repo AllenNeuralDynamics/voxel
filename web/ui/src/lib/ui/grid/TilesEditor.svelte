@@ -25,7 +25,10 @@
 	let stepY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
 	let maxOffsetX = $derived(stepX);
 	let maxOffsetY = $derived(stepY);
-	let stack = $derived(app.selectedStack);
+	let selectedTile = $derived(app.selectedTiles[0] ?? null);
+	let stack = $derived(
+		selectedTile ? (app.stacks.find((s) => s.row === selectedTile.row && s.col === selectedTile.col) ?? null) : null
+	);
 
 	let isEditing = $state(false);
 	let zStartInput = $state(0);
@@ -45,7 +48,7 @@
 	}
 
 	$effect(() => {
-		void app.selectedTile;
+		void selectedTile;
 		isEditing = false;
 		const defaults = getDefaultZ();
 		zStartInput = defaults.start;
@@ -87,7 +90,8 @@
 	}
 
 	function handleSubmit() {
-		const { row, col } = app.selectedTile;
+		if (!selectedTile) return;
+		const { row, col } = selectedTile;
 		if (hasStack) {
 			app.editStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		} else {
@@ -99,8 +103,9 @@
 	}
 
 	function handleDelete() {
+		if (!selectedTile) return;
 		if (confirm('Delete this stack?')) {
-			app.removeStacks([{ row: app.selectedTile.row, col: app.selectedTile.col }]);
+			app.removeStacks([{ row: selectedTile.row, col: selectedTile.col }]);
 		}
 	}
 
@@ -204,13 +209,13 @@
 	</div>
 {/snippet}
 
-{#if app.zAxis}
+{#if app.zAxis && selectedTile}
 	<div class="flex flex-col border-y border-zinc-700 bg-zinc-800/30">
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
 				<span class="flex items-center gap-3">
 					<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
-						R{app.selectedTile.row}, C{app.selectedTile.col}
+						R{selectedTile.row}, C{selectedTile.col}
 					</span>
 					{#if stack}<span class="text-[0.6rem] {getStackStatusColor(stack.status)}">{stack.status}</span>{/if}
 				</span>
@@ -254,10 +259,10 @@
 			</div>
 
 			<div class="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.65rem]">
-				{@render staticItem('X', formatMm(app.selectedTile.x_um), 'mm')}
-				{@render staticItem('Y', formatMm(app.selectedTile.y_um), 'mm')}
-				{@render staticItem('W', formatMm(app.selectedTile.w_um, 1), 'mm')}
-				{@render staticItem('H', formatMm(app.selectedTile.h_um, 1), 'mm')}
+				{@render staticItem('X', formatMm(selectedTile.x_um), 'mm')}
+				{@render staticItem('Y', formatMm(selectedTile.y_um), 'mm')}
+				{@render staticItem('W', formatMm(selectedTile.w_um, 1), 'mm')}
+				{@render staticItem('H', formatMm(selectedTile.h_um, 1), 'mm')}
 
 				{@render editableZItem(
 					'Z0',

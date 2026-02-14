@@ -65,11 +65,16 @@
 	}
 
 	function isFocused(tile: Tile): boolean {
-		return app.selectedTile.row === tile.row && app.selectedTile.col === tile.col;
+		return app.isTileSelected(tile.row, tile.col);
 	}
 
-	function handleRowClick(tile: Tile) {
-		app.selectTile(tile.row, tile.col);
+	function handleRowClick(e: MouseEvent, tile: Tile) {
+		if (e.ctrlKey || e.metaKey) {
+			if (app.isTileSelected(tile.row, tile.col)) app.removeFromSelection([[tile.row, tile.col]]);
+			else app.addToSelection([[tile.row, tile.col]]);
+		} else {
+			app.selectTiles([[tile.row, tile.col]]);
+		}
 	}
 
 	function handleCheckboxChange(tile: Tile, checked: boolean) {
@@ -79,7 +84,7 @@
 		} else {
 			checkedItems.delete(key);
 		}
-		handleRowClick(tile);
+		app.selectTiles([[tile.row, tile.col]]);
 	}
 
 	function isChecked(tile: Tile): boolean {
@@ -88,11 +93,11 @@
 
 	function handleAddStack(tile: Tile) {
 		app.addStacks([{ row: tile.row, col: tile.col, zStartUm: defaultZStart, zEndUm: defaultZEnd }]);
-		handleRowClick(tile);
+		app.selectTiles([[tile.row, tile.col]]);
 	}
 
 	function handleTileDoubleClick(tile: Tile) {
-		handleRowClick(tile);
+		app.selectTiles([[tile.row, tile.col]]);
 		app.moveToGridCell(tile.row, tile.col);
 	}
 
@@ -111,7 +116,7 @@
 	}
 
 	function handleZChange(tile: Tile, zStart: number, zEnd: number) {
-		handleRowClick(tile);
+		app.selectTiles([[tile.row, tile.col]]);
 		const key = tileKey(tile.row, tile.col);
 
 		const checkedWithStacks = Array.from(checkedItems)
@@ -173,7 +178,7 @@
 					<tr
 						class="cursor-pointer border-b border-l-2 border-border border-l-transparent transition-[background-color] hover:bg-accent"
 						class:!border-l-warning={focused}
-						onclick={() => handleRowClick(tile)}
+						onclick={(e) => handleRowClick(e, tile)}
 					>
 						<td class="p-1.5 px-5">
 							<div class="flex items-center justify-center">
@@ -191,7 +196,7 @@
 							{(tile.x_um / 1000).toFixed(2)}, {(tile.y_um / 1000).toFixed(2)} mm
 						</td>
 						<td class="p-1.5"></td>
-						<td class="p-1.5" onclick={() => handleRowClick(tile)}>
+						<td class="p-1.5" onclick={(e) => handleRowClick(e, tile)}>
 							{#if stack}
 								<div class="flex items-center gap-1">
 									<LegacySpinBox
