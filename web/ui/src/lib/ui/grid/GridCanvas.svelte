@@ -141,7 +141,9 @@
 		return [Math.max(minX, Math.min(maxX, targetX)), Math.max(minY, Math.min(maxY, targetY))];
 	}
 
-	function handleTileMove(tile: Tile) {
+	function handleTileMove(e: MouseEvent, tile: Tile) {
+		if (e.button !== 1) return;
+		e.preventDefault();
 		if (isXYMoving || !app.xAxis || !app.yAxis) return;
 		const targetX = app.xAxis.lowerLimit + toMm(tile.x_um);
 		const targetY = app.yAxis.lowerLimit + toMm(tile.y_um);
@@ -153,7 +155,9 @@
 		app.selectTile(stack.row, stack.col);
 	}
 
-	function handleStackMove(stack: Stack) {
+	function handleStackMove(e: MouseEvent, stack: Stack) {
+		if (e.button !== 1) return;
+		e.preventDefault();
 		if (isXYMoving || !app.xAxis || !app.yAxis) return;
 		const targetX = app.xAxis.lowerLimit + toMm(stack.x_um);
 		const targetY = app.yAxis.lowerLimit + toMm(stack.y_um);
@@ -206,7 +210,7 @@
 		role="button"
 		tabindex={isXYMoving ? -1 : 0}
 		onclick={() => handleTileSelect(tile)}
-		ondblclick={() => handleTileMove(tile)}
+		onauxclick={(e) => handleTileMove(e, tile)}
 		onkeydown={(e) => handleKeydown(e, () => handleTileSelect(tile))}
 	>
 		<title>Tile [{tile.row}, {tile.col}]</title>
@@ -279,7 +283,7 @@
 											role="button"
 											tabindex={isXYMoving ? -1 : 0}
 											onclick={() => handleStackSelect(stack)}
-											ondblclick={() => handleStackMove(stack)}
+											onauxclick={(e) => handleStackMove(e, stack)}
 											onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
 										>
 											<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
