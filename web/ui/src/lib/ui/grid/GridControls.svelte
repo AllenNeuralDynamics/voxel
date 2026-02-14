@@ -1,5 +1,4 @@
 <script lang="ts">
-	import Icon from '@iconify/svelte';
 	import { SpinBox } from '$lib/ui/primitives';
 	import type { App } from '$lib/app';
 
@@ -32,51 +31,45 @@
 	}
 </script>
 
-<div class="flex items-center gap-2">
-	<div class="rounded {app.gridLocked ? 'text-warning' : 'text-muted-foreground'}">
-		<Icon icon={app.gridLocked ? 'mdi:lock' : 'mdi:lock-open-outline'} width="14" height="14" />
-	</div>
-
-	<div
-		class="flex gap-2 text-[0.65rem]"
-		class:opacity-70={app.gridLocked}
-		class:pointer-events-none={app.gridLocked}
-	>
-		<SpinBox
-			value={gridOffsetXMm}
-			min={-maxOffsetX}
-			max={maxOffsetX}
-			step={0.1}
-			decimals={1}
-			numCharacters={5}
-			size="sm"
-			prefix="X"
-			suffix="mm"
-			onChange={updateGridOffsetX}
-		/>
-		<SpinBox
-			value={gridOffsetYMm}
-			min={-maxOffsetY}
-			max={maxOffsetY}
-			step={0.1}
-			decimals={1}
-			numCharacters={5}
-			size="sm"
-			prefix="Y"
-			suffix="mm"
-			onChange={updateGridOffsetY}
-		/>
-		<SpinBox
-			value={app.gridConfig.overlap}
-			min={0}
-			max={0.5}
-			step={0.01}
-			decimals={2}
-			numCharacters={5}
-			size="sm"
-			prefix="Overlap"
-			suffix="%"
-			onChange={updateGridOverlap}
-		/>
-	</div>
+<div
+	class="flex items-center gap-2 text-[0.65rem]"
+	class:opacity-70={app.gridLocked}
+	class:pointer-events-none={app.gridLocked}
+>
+	<SpinBox
+		value={gridOffsetXMm}
+		min={-maxOffsetX}
+		max={maxOffsetX}
+		step={0.1}
+		decimals={1}
+		numCharacters={5}
+		size="sm"
+		prefix="Grid dX"
+		suffix="mm"
+		onChange={updateGridOffsetX}
+	/>
+	<SpinBox
+		value={gridOffsetYMm}
+		min={-maxOffsetY}
+		max={maxOffsetY}
+		step={0.1}
+		decimals={1}
+		numCharacters={5}
+		size="sm"
+		prefix="Grid dY"
+		suffix="mm"
+		onChange={updateGridOffsetY}
+	/>
+	<SpinBox
+		value={app.gridConfig.overlap}
+		min={0}
+		max={0.5}
+		step={0.01}
+		decimals={2}
+		numCharacters={5}
+		size="sm"
+		prefix="Overlap"
+		suffix="%"
+		onChange={updateGridOverlap}
+	/>
 </div>

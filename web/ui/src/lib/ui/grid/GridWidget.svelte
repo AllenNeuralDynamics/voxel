@@ -1,0 +1,714 @@
+<script lang="ts">
+	import type { App } from '$lib/app';
+	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
+	import { onMount } from 'svelte';
+	import { compositeFullFrames } from '$lib/app/preview.svelte.ts';
+	import { Button, SpinBox } from '../primitives';
+	import Icon from '@iconify/svelte';
+
+	interface Props {
+		app: App;
+	}
+
+	let { app }: Props = $props();
+
+	// ── Geometry ─────────────────────────────────────────────────────────
+
+	const SLIDER_WIDTH = 16;
+	const Z_AREA_WIDTH = SLIDER_WIDTH * 2;
+	const STAGE_GAP = 16;
+	const STAGE_BORDER = 0.5;
+
+	const CROSSHAIR_STROKE = 0.05;
+	const ARROW_HEAD = 'M -0.15 -0.2 L 0.15 0 L -0.15 0.2';
+	const Z_SVG_WIDTH = 30;
+
+	let isXYMoving = $derived(app.xAxis?.isMoving || app.yAxis?.isMoving);
+	let isZMoving = $derived(app.zAxis?.isMoving ?? false);
+	let isStageMoving = $derived(isXYMoving || isZMoving);
+
+	// FOV position relative to stage origin (lower limits)
+	let fovX = $derived(app.xAxis ? app.xAxis.position - app.xAxis.lowerLimit : 0);
+	let fovY = $derived(app.yAxis ? app.yAxis.position - app.yAxis.lowerLimit : 0);
+	let fovZ = $derived(app.zAxis ? app.zAxis.position - app.zAxis.lowerLimit : 0);
+	let fovLeft = $derived(fovX - app.fov.width / 2);
+	let fovTop = $derived(fovY - app.fov.height / 2);
+
+	// ViewBox: stage bounds + one FOV of margin on each side
+	let marginX = $derived(app.fov.width / 2);
+	let marginY = $derived(app.fov.height / 2);
+	let viewBoxWidth = $derived(app.stageWidth + app.fov.width);
+	let viewBoxHeight = $derived(app.stageHeight + app.fov.height);
+	let viewBoxStr = $derived(`${-marginX} ${-marginY} ${viewBoxWidth} ${viewBoxHeight}`);
+
+	// ── Canvas sizing ────────────────────────────────────────────────────
+
+	let containerRef = $state<HTMLDivElement | null>(null);
+	let canvasWidth = $state(400);
+	let canvasHeight = $state(250);
+
+	let stageAspectRatio = $derived(viewBoxWidth / viewBoxHeight);
+	let scale = $derived(canvasWidth / viewBoxWidth);
+	let marginPixelsX = $derived(marginX * scale);
+	let marginPixelsY = $derived(marginY * scale);
+	let stagePixelsX = $derived(app.stageWidth * scale);
+	let stagePixelsY = $derived(app.stageHeight * scale);
+	let thumbThickness = $derived(CROSSHAIR_STROKE * scale);
+
+	let zLineY = $derived((1 - fovZ / app.stageDepth) * canvasHeight - 1);
+
+	function updateCanvasSize(containerWidth: number, containerHeight: number) {
+		const availableWidth = containerWidth - SLIDER_WIDTH - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 2;
+		const availableHeight = containerHeight - SLIDER_WIDTH;
+		if (availableWidth <= 0 || availableHeight <= 0) return;
+
+		const containerAspect = availableWidth / availableHeight;
+		if (containerAspect > stageAspectRatio) {
+			canvasHeight = availableHeight;
+			canvasWidth = availableHeight * stageAspectRatio;
+		} else {
+			canvasWidth = availableWidth;
+			canvasHeight = availableWidth / stageAspectRatio;
+		}
+	}
+
+	onMount(() => {
+		if (!containerRef) return;
+
+		const resizeObserver = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				const { width, height } = entry.contentRect;
+				updateCanvasSize(width, height);
+			}
+		});
+		resizeObserver.observe(containerRef);
+		fovFrameLoop();
+
+		return () => {
+			resizeObserver.disconnect();
+			if (fovAnimFrameId !== null) cancelAnimationFrame(fovAnimFrameId);
+		};
+	});
+
+	$effect(() => {
+		if (containerRef) {
+			const { width, height } = containerRef.getBoundingClientRect();
+			updateCanvasSize(width, height);
+		}
+	});
+
+	// ── FOV thumbnail ────────────────────────────────────────────────────
+
+	let showThumbnail = $state(true);
+
+	const FOV_RESOLUTION = 256;
+	let thumbnail = $state('');
+	let fovNeedsRedraw = false;
+	let fovAnimFrameId: number | null = null;
+
+	const offscreen = document.createElement('canvas');
+	offscreen.width = FOV_RESOLUTION;
+	const offscreenCtx = offscreen.getContext('2d')!;
+
+	$effect(() => {
+		const aspect = app.fov.width / app.fov.height;
+		if (aspect > 0 && Number.isFinite(aspect)) {
+			offscreen.height = Math.round(FOV_RESOLUTION / aspect);
+		}
+	});
+
+	$effect(() => {
+		if (app.previewState) {
+			void app.previewState.redrawGeneration;
+			fovNeedsRedraw = true;
+		}
+	});
+
+	function fovFrameLoop() {
+		if (fovNeedsRedraw && app.previewState) {
+			fovNeedsRedraw = false;
+			compositeFullFrames(offscreenCtx, offscreen, app.previewState.channels);
+			thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
+		}
+		fovAnimFrameId = requestAnimationFrame(fovFrameLoop);
+	}
+
+	// ── Interaction handlers ─────────────────────────────────────────────
+
+	function toMm(um: number): number {
+		return um / 1000;
+	}
+
+	function isSelected(tile: Tile): boolean {
+		return tile.row === app.selectedTile.row && tile.col === app.selectedTile.col;
+	}
+
+	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
+		if (!app.xAxis || !app.yAxis) return [targetX, targetY];
+		return [
+			Math.max(app.xAxis.lowerLimit, Math.min(app.xAxis.upperLimit, targetX)),
+			Math.max(app.yAxis.lowerLimit, Math.min(app.yAxis.upperLimit, targetY))
+		];
+	}
+
+	function moveToTilePosition(x_um: number, y_um: number) {
+		if (isXYMoving || !app.xAxis || !app.yAxis) return;
+		const targetX = app.xAxis.lowerLimit + toMm(x_um);
+		const targetY = app.yAxis.lowerLimit + toMm(y_um);
+		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
+		app.moveXY(clampedX, clampedY);
+	}
+
+	function handleTileSelect(tile: Tile) {
+		app.selectTile(tile.row, tile.col);
+	}
+
+	function handleTileMove(tile: Tile) {
+		moveToTilePosition(tile.x_um, tile.y_um);
+	}
+
+	function handleStackSelect(stack: Stack) {
+		app.selectTile(stack.row, stack.col);
+	}
+
+	function handleStackMove(stack: Stack) {
+		moveToTilePosition(stack.x_um, stack.y_um);
+	}
+
+	function handleSliderInput(axis: 'x' | 'y' | 'z', e: Event) {
+		const value = parseFloat((e.target as HTMLInputElement).value);
+		if (axis === 'x') app.xAxis?.move(value);
+		else if (axis === 'y') app.yAxis?.move(value);
+		else app.zAxis?.move(value);
+	}
+
+	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			selectFn();
+		}
+	}
+
+	let gridLimX = $derived(app.fov.width * (1 - app.gridConfig.overlap));
+	let gridLimY = $derived(app.fov.height * (1 - app.gridConfig.overlap));
+
+	function toggleLayer(key: keyof typeof app.layerVisibility) {
+		app.layerVisibility = { ...app.layerVisibility, [key]: !app.layerVisibility[key] };
+	}
+
+	type Layer = {
+		key: keyof typeof app.layerVisibility;
+		color: string;
+		icon: string;
+		title: string;
+	};
+</script>
+
+{#snippet gridControls()}
+	<div
+		class="flex items-center gap-2 text-[0.65rem]"
+		class:opacity-70={app.gridLocked}
+		class:pointer-events-none={app.gridLocked}
+	>
+		<SpinBox
+			value={app.gridConfig.x_offset_um / 1000}
+			min={-gridLimX}
+			max={gridLimX}
+			step={0.1}
+			snapValue={0.0}
+			decimals={1}
+			numCharacters={5}
+			size="sm"
+			prefix="Grid dX"
+			suffix="mm"
+			onChange={(value: number) => {
+				if (app.gridLocked) return;
+				app.setGridOffset(value * 1000, app.gridConfig.y_offset_um);
+			}}
+		/>
+		<SpinBox
+			value={app.gridConfig.y_offset_um / 1000}
+			min={-gridLimY}
+			max={gridLimY}
+			snapValue={0.0}
+			step={0.1}
+			decimals={1}
+			numCharacters={5}
+			size="sm"
+			prefix="Grid dY"
+			suffix="mm"
+			onChange={(value: number) => {
+				if (app.gridLocked) return;
+				app.setGridOffset(app.gridConfig.x_offset_um, value * 1000);
+			}}
+		/>
+		<SpinBox
+			value={app.gridConfig.overlap}
+			min={0}
+			max={0.5}
+			snapValue={0.1}
+			step={0.01}
+			decimals={2}
+			numCharacters={5}
+			size="sm"
+			prefix="Overlap"
+			suffix="%"
+			onChange={(value: number) => {
+				if (app.gridLocked) return;
+				app.setGridOverlap(value);
+			}}
+		/>
+	</div>
+{/snippet}
+
+{#snippet layerToggle(
+	active: boolean,
+	activeColor: string,
+	icon: string,
+	title: string,
+	onclick: () => void,
+	disabled?: boolean
+)}
+	<button
+		{onclick}
+		{disabled}
+		class="rounded p-1 transition-colors {active
+			? `${activeColor} hover:bg-zinc-700`
+			: 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'} disabled:cursor-not-allowed disabled:opacity-50"
+		{title}
+	>
+		<Icon {icon} width="14" height="14" />
+	</button>
+{/snippet}
+<!-- ── SVG layer snippets ─────────────────────────────────────────────── -->
+
+{#snippet stacksLayer()}
+	{#if app.layerVisibility.stacks}
+		<g class="stacks-layer">
+			{#each app.stacks as stack (`${stack.row}_${stack.col}`)}
+				{@const cx = toMm(stack.x_um)}
+				{@const cy = toMm(stack.y_um)}
+				{@const w = toMm(stack.w_um)}
+				{@const h = toMm(stack.h_um)}
+				<rect
+					x={cx - w / 2}
+					y={cy - h / 2}
+					width={w}
+					height={h}
+					class="stack outline-none {getStackStatusColor(stack.status)}"
+					class:cursor-pointer={!isXYMoving}
+					class:cursor-not-allowed={isXYMoving}
+					role="button"
+					tabindex={isXYMoving ? -1 : 0}
+					onclick={() => handleStackSelect(stack)}
+					ondblclick={() => handleStackMove(stack)}
+					onkeydown={(e) => handleKeydown(e, () => handleStackSelect(stack))}
+				>
+					<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
+				</rect>
+			{/each}
+		</g>
+	{/if}
+{/snippet}
+
+{#snippet pathLayer()}
+	{#if app.layerVisibility.path && app.stacks.length > 1}
+		{@const points = app.stacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
+		<g class="pointer-none text-slate-400" stroke="currentColor" stroke-linecap="square">
+			<polyline
+				class="fill-none opacity-35"
+				stroke-width="0.15"
+				points={points.map((p) => `${p.x},${p.y}`).join(' ')}
+			/>
+			{#each points.slice(0, -1) as p1, i (i)}
+				{@const p2 = points[i + 1]}
+				{@const midX = (p1.x + p2.x) / 2}
+				{@const midY = (p1.y + p2.y) / 2}
+				{@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
+				<path
+					d={ARROW_HEAD}
+					stroke-width="0.10"
+					class="opacity-70"
+					transform="translate({midX}, {midY}) rotate({angle})"
+				/>
+			{/each}
+		</g>
+	{/if}
+{/snippet}
+
+{#snippet fovLayer()}
+	{#if app.layerVisibility.fov}
+		<g class="fov-layer pointer-events-none">
+			<defs>
+				<clipPath id="fov-clip">
+					<rect x={fovLeft} y={fovTop} width={app.fov.width} height={app.fov.height} />
+				</clipPath>
+			</defs>
+
+			{#if showThumbnail && thumbnail}
+				<image
+					href={thumbnail}
+					x={fovLeft}
+					y={fovTop}
+					width={app.fov.width}
+					height={app.fov.height}
+					clip-path="url(#fov-clip)"
+					preserveAspectRatio="xMidYMid slice"
+				/>
+			{/if}
+
+			<g stroke-width="0.05">
+				<line
+					x1={-marginX}
+					y1={fovY}
+					x2={-marginX + viewBoxWidth}
+					y2={fovY}
+					stroke={app.yAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+				/>
+				<line
+					x1={fovX}
+					y1={-marginY}
+					x2={fovX}
+					y2={-marginY + viewBoxHeight}
+					stroke={app.xAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+				/>
+			</g>
+		</g>
+	{/if}
+{/snippet}
+
+{#snippet tileRect(tile: Tile, selected: boolean)}
+	{@const cx = toMm(tile.x_um)}
+	{@const cy = toMm(tile.y_um)}
+	{@const w = toMm(tile.w_um)}
+	{@const h = toMm(tile.h_um)}
+	<rect
+		x={cx - w / 2}
+		y={cy - h / 2}
+		width={w}
+		height={h}
+		class="tile outline-none"
+		class:selected
+		class:cursor-pointer={!isXYMoving}
+		class:cursor-not-allowed={isXYMoving}
+		role="button"
+		tabindex={isXYMoving ? -1 : 0}
+		onclick={() => handleTileSelect(tile)}
+		ondblclick={() => handleTileMove(tile)}
+		onkeydown={(e) => handleKeydown(e, () => handleTileSelect(tile))}
+	>
+		<title>Tile [{tile.row}, {tile.col}]</title>
+	</rect>
+{/snippet}
+
+{#snippet gridLayer()}
+	{#if app.layerVisibility.grid}
+		{@const selectedTileData = app.tiles.find((t) => isSelected(t))}
+		<g class="grid-layer">
+			{#each app.tiles as tile (`${tile.row}_${tile.col}`)}
+				{#if !isSelected(tile)}
+					{@render tileRect(tile, false)}
+				{/if}
+			{/each}
+			{#if selectedTileData}
+				{@render tileRect(selectedTileData, true)}
+			{/if}
+		</g>
+	{/if}
+{/snippet}
+
+<!-- ── Layout ─────────────────────────────────────────────────────────── -->
+
+<div class="grid h-full w-full grid-rows-[auto_1fr_auto] p-2">
+	{#if app.xAxis && app.yAxis && app.zAxis}
+		{@const layers: Layer[] = [
+          { key: 'grid', color: 'text-blue-500', icon: 'lucide-lab:grid-lines', title: 'Toggle grid' },
+          { key: 'stacks', color: 'text-blue-400', icon: 'ph:stack-light', title: 'Toggle stacks' },
+          { key: 'path', color: 'text-slate-400', icon: 'iconoir:path-arrow', title: 'Toggle path' },
+          { key: 'fov', color: 'text-success', icon: 'mdi:plus', title: 'Toggle FOV' },
+      ]}
+		<div class="flex flex-wrap items-center justify-between py-4">
+			{@render gridControls()}
+			<div class="flex gap-0.5 rounded p-1">
+				{#each layers as { key, color, icon, title } (key)}
+					{@render layerToggle(app.layerVisibility[key], color, icon, title, () => toggleLayer(key))}
+				{/each}
+				{@render layerToggle(
+					showThumbnail && app.layerVisibility.fov,
+					'text-success',
+					'ph:image-light',
+					'Toggle thumbnail',
+					() => (showThumbnail = !showThumbnail),
+					!app.layerVisibility.fov
+				)}
+			</div>
+		</div>
+
+		<div class="flex justify-center overflow-hidden" bind:this={containerRef}>
+			<div
+				class="flex"
+				style:gap="{STAGE_GAP}px"
+				style:--slider-width="{SLIDER_WIDTH}px"
+				style:--track-width="2px"
+				style:--stage-border="{STAGE_BORDER}px solid var(--color-zinc-600)"
+				style:--thumb-width="{thumbThickness}px"
+			>
+				<div class="flex flex-col">
+					<input
+						type="range"
+						class="x-slider"
+						style="width: {stagePixelsX}px; margin-left: {SLIDER_WIDTH + marginPixelsX}px;"
+						min={app.xAxis.lowerLimit}
+						max={app.xAxis.upperLimit}
+						step={0.1}
+						value={app.xAxis.position}
+						disabled={app.xAxis.isMoving}
+						oninput={(e) => handleSliderInput('x', e)}
+					/>
+
+					<div class="flex items-start">
+						<input
+							type="range"
+							class="y-slider"
+							style="height: {stagePixelsY}px; margin-top: {marginPixelsY}px;"
+							min={app.yAxis.lowerLimit}
+							max={app.yAxis.upperLimit}
+							step={0.1}
+							value={app.yAxis.position}
+							disabled={app.yAxis.isMoving}
+							oninput={(e) => handleSliderInput('y', e)}
+						/>
+
+						<svg
+							viewBox={viewBoxStr}
+							class="border border-zinc-600"
+							style="width: {canvasWidth}px; height: {canvasHeight}px;"
+							overflow="hidden"
+						>
+							{@render fovLayer()}
+							{@render gridLayer()}
+							{@render stacksLayer()}
+							{@render pathLayer()}
+						</svg>
+					</div>
+				</div>
+
+				<div
+					class="relative flex-1 border border-zinc-600 transition-colors duration-300 ease-in-out hover:bg-zinc-900"
+					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH}px; width: {Z_AREA_WIDTH}px"
+				>
+					<input
+						type="range"
+						class="z-slider absolute inset-0 z-10 h-full w-full bg-transparent"
+						style:--slider-width={Z_AREA_WIDTH}
+						min={app.zAxis?.lowerLimit}
+						max={app.zAxis?.upperLimit}
+						step={0.1}
+						value={app.zAxis?.position}
+						disabled={isZMoving}
+						oninput={(e) => handleSliderInput('z', e)}
+					/>
+					<svg
+						viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
+						class="z-svg pointer-none absolute inset-0 z-0"
+						preserveAspectRatio="none"
+						width="100%"
+						height="100%"
+					>
+						{#if app.selectedStack && app.zAxis}
+							{@const z0Y =
+								(1 - (app.selectedStack.z_start_um / 1000 - app.zAxis.lowerLimit) / app.stageDepth) * canvasHeight - 1}
+							{@const z1Y =
+								(1 - (app.selectedStack.z_end_um / 1000 - app.zAxis.lowerLimit) / app.stageDepth) * canvasHeight - 1}
+							<g class={getStackStatusColor(app.selectedStack.status)} stroke-width="1" stroke="currentColor">
+								<line x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
+								<line x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
+							</g>
+						{/if}
+						<line
+							x1="0"
+							y1={zLineY}
+							x2={Z_SVG_WIDTH}
+							y2={zLineY}
+							class="z-line"
+							class:moving={isZMoving}
+							stroke-width="1"
+							stroke={app.zAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success'}
+						>
+							<title>Z: {app.zAxis?.position.toFixed(1)} mm</title>
+						</line>
+					</svg>
+				</div>
+			</div>
+		</div>
+
+		<div class="flex items-center justify-between py-4">
+			<div class="flex items-center gap-2">
+				<SpinBox
+					value={app.xAxis.position}
+					min={app.xAxis.lowerLimit}
+					max={app.xAxis.upperLimit}
+					step={0.01}
+					decimals={2}
+					numCharacters={8}
+					size="sm"
+					prefix="X"
+					suffix="mm"
+					color={app.xAxis.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => app.xAxis && app.xAxis.move(v)}
+				/>
+				<SpinBox
+					value={app.yAxis.position}
+					min={app.yAxis.lowerLimit}
+					max={app.yAxis.upperLimit}
+					step={0.01}
+					decimals={2}
+					numCharacters={8}
+					size="sm"
+					prefix="Y"
+					suffix="mm"
+					color={app.yAxis.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => app.yAxis && app.yAxis.move(v)}
+				/>
+				<SpinBox
+					value={app.zAxis.position}
+					min={app.zAxis.lowerLimit}
+					max={app.zAxis.upperLimit}
+					step={0.001}
+					decimals={3}
+					numCharacters={8}
+					size="sm"
+					prefix="Z"
+					suffix="mm"
+					color={app.zAxis.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => app.zAxis && app.zAxis.move(v)}
+				/>
+			</div>
+			<Button
+				variant={isStageMoving ? 'danger' : 'outline'}
+				size="sm"
+				onclick={() => app.haltStage()}
+				disabled={!isStageMoving}
+				aria-label="Halt stage"
+			>
+				Halt
+			</Button>
+		</div>
+	{:else}
+		<div class="row-start-2 grid place-content-center">
+			<p class="text-sm text-muted-foreground">Stage not available</p>
+		</div>
+	{/if}
+</div>
+
+<!-- ── Styles ─────────────────────────────────────────────────────────── -->
+
+<style>
+	.x-slider,
+	.y-slider,
+	.z-slider {
+		-webkit-appearance: none;
+		appearance: none;
+		cursor: pointer;
+		margin: 0;
+		padding: 0;
+		border: none;
+		background-color: transparent;
+		--_track-c: var(--color-zinc-700);
+
+		&:hover {
+			--_track-c: var(--color-zinc-600);
+		}
+
+		&::-webkit-slider-runnable-track {
+			background: var(--_track-bg, transparent);
+			border-radius: 0;
+		}
+		&::-moz-range-track {
+			background: var(--_track-bg, transparent);
+			border-radius: 0;
+		}
+		&::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			background: var(--color-emerald-500);
+			border-radius: 1px;
+			cursor: pointer;
+		}
+		&::-moz-range-thumb {
+			appearance: none;
+			background: var(--color-emerald-500);
+			border: none;
+			border-radius: 1px;
+			cursor: pointer;
+		}
+		&:disabled {
+			cursor: not-allowed;
+			&::-webkit-slider-thumb {
+				background: var(--color-rose-500);
+			}
+			&::-moz-range-thumb {
+				background: var(--color-rose-500);
+			}
+		}
+	}
+
+	.x-slider,
+	.y-slider,
+	.z-slider {
+		&::-webkit-slider-thumb {
+			inline-size: var(--thumb-width);
+			block-size: var(--slider-width);
+		}
+		&::-moz-range-thumb {
+			inline-size: var(--thumb-width);
+			block-size: var(--slider-width);
+		}
+	}
+
+	.z-slider {
+		writing-mode: vertical-rl;
+		direction: rtl;
+	}
+
+	.y-slider {
+		writing-mode: vertical-rl;
+		direction: ltr;
+		--_track-bg: linear-gradient(var(--_track-c), var(--_track-c)) center / var(--track-width) 100% no-repeat;
+	}
+
+	.x-slider {
+		--_track-bg: linear-gradient(var(--_track-c), var(--_track-c)) center / 100% var(--track-width) no-repeat;
+	}
+
+	/* SVG elements */
+
+	.tile {
+		fill: transparent;
+		stroke: var(--color-blue-400);
+		stroke-opacity: 0.75;
+		stroke-width: 0.05;
+		stroke-dasharray: 0.1 0.2;
+		transition:
+			fill 300ms ease,
+			stroke 150ms ease;
+		&:hover {
+			fill: color-mix(in srgb, var(--color-zinc-500) 15%, transparent);
+		}
+		&.selected {
+			stroke: var(--color-amber-500);
+			stroke-width: 0.05;
+		}
+	}
+
+	.stack {
+		fill: currentColor;
+		fill-opacity: 0.15;
+		/*stroke-width: 0.03;*/
+		/*stroke: currentColor;*/
+		transition: fill-opacity 150ms ease;
+		&:hover {
+			fill-opacity: 0.35;
+		}
+	}
+</style>

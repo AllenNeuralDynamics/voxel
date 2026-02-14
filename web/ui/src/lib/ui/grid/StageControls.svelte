@@ -1,97 +1,69 @@
 <script lang="ts">
 	import { Button, SpinBox } from '$lib/ui/primitives';
-	import type { App } from '$lib/app';
+	import type { Axis } from '$lib/app';
 
 	interface Props {
-		app: App;
+		xAxis: Axis;
+		yAxis: Axis;
+		zAxis: Axis;
 	}
 
-	let { app }: Props = $props();
+	let { xAxis, yAxis, zAxis }: Props = $props();
 
-	let xAxis = $derived(app.xAxis);
-	let yAxis = $derived(app.yAxis);
-	let zAxis = $derived(app.zAxis);
+	let stageIsMoving = $derived(xAxis.isMoving || yAxis.isMoving || zAxis.isMoving);
 
-	let posX = $state(0);
-	let posY = $state(0);
-	let posZ = $state(0);
-
-	$effect.pre(() => {
-		if (xAxis) posX = xAxis.position;
-	});
-
-	$effect.pre(() => {
-		if (yAxis) posY = yAxis.position;
-	});
-
-	$effect.pre(() => {
-		if (zAxis) posZ = zAxis.position;
-	});
-
-	function handleXChange(value: number) {
-		xAxis?.move(value);
-	}
-
-	function handleYChange(value: number) {
-		yAxis?.move(value);
-	}
-
-	function handleZChange(value: number) {
-		zAxis?.move(value);
-	}
+	let posX = $derived.by(() => xAxis.position);
+	let posY = $derived.by(() => yAxis.position);
+	let posZ = $derived.by(() => zAxis.position);
 </script>
 
-<div class="flex items-center gap-2 font-mono text-[0.65rem]">
-	{#if xAxis}
+<div class="flex items-center justify-between gap-2 font-mono text-[0.65rem]">
+	<div class="flex items-center gap-2">
 		<SpinBox
-			bind:value={posX}
+			value={posX}
 			min={xAxis.lowerLimit}
 			max={xAxis.upperLimit}
 			step={0.01}
 			decimals={2}
-			numCharacters={6}
+			numCharacters={8}
 			size="sm"
 			prefix="X"
 			suffix="mm"
 			color={xAxis.isMoving ? 'var(--danger)' : undefined}
-			onChange={handleXChange}
+			onChange={(v) => xAxis.move(v)}
 		/>
-	{/if}
-	{#if yAxis}
 		<SpinBox
-			bind:value={posY}
+			value={posY}
 			min={yAxis.lowerLimit}
 			max={yAxis.upperLimit}
 			step={0.01}
 			decimals={2}
-			numCharacters={6}
+			numCharacters={8}
 			size="sm"
 			prefix="Y"
 			suffix="mm"
 			color={yAxis.isMoving ? 'var(--danger)' : undefined}
-			onChange={handleYChange}
+			onChange={(v) => yAxis.move(v)}
 		/>
-	{/if}
-	{#if zAxis}
 		<SpinBox
-			bind:value={posZ}
+			value={posZ}
 			min={zAxis.lowerLimit}
 			max={zAxis.upperLimit}
 			step={0.001}
 			decimals={3}
-			numCharacters={6}
+			numCharacters={8}
 			size="sm"
 			prefix="Z"
 			suffix="mm"
 			color={zAxis.isMoving ? 'var(--danger)' : undefined}
-			onChange={handleZChange}
+			onChange={(v) => zAxis.move(v)}
 		/>
-	{/if}
+	</div>
 	<Button
-		variant={app.stageIsMoving ? 'danger' : 'outline'}
+		variant={stageIsMoving ? 'danger' : 'outline'}
 		size="sm"
-		onclick={() => app.haltStage()}
-		disabled={!app.stageIsMoving}
+		onclick={() => Promise.all([xAxis.halt(), yAxis.halt(), zAxis.halt()])}
+		disabled={!stageIsMoving}
 		aria-label="Halt stage"
 	>
 		Halt
