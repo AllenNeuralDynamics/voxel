@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/app/preview.svelte.ts';
 	import { Button, SpinBox } from '../primitives';
+	import StageSlider from './StageSlider.svelte';
 	import Icon from '@iconify/svelte';
 
 	interface Props {
@@ -193,13 +194,6 @@
 		if (e.button !== 1) return;
 		e.preventDefault();
 		moveToTilePosition(stack.x_um, stack.y_um);
-	}
-
-	function handleSliderInput(axis: 'x' | 'y' | 'z', e: Event) {
-		const value = parseFloat((e.target as HTMLInputElement).value);
-		if (axis === 'x') app.xAxis?.move(value);
-		else if (axis === 'y') app.yAxis?.move(value);
-		else app.zAxis?.move(value);
 	}
 
 	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
@@ -466,37 +460,31 @@
 		</div>
 
 		<div class="flex justify-center overflow-hidden" bind:this={containerRef}>
-			<div
-				class="flex"
-				style:gap="{STAGE_GAP}px"
-				style:--slider-width="{SLIDER_WIDTH}px"
-				style:--stage-border="{STAGE_BORDER}px solid var(--color-zinc-600)"
-				style:--thumb-width="{thumbThickness}px"
-			>
-				<div class="flex flex-col">
-					<input
-						type="range"
-						class="x-slider"
-						style="width: {stagePixelsX}px; margin-left: {SLIDER_WIDTH + marginPixelsX + 1}px;"
+			<div class="flex" style:gap="{STAGE_GAP}px" style:--thumb-width="{thumbThickness}px">
+				<div class="flex flex-col" style:--slider-width="{SLIDER_WIDTH}px">
+					<StageSlider
+						orientation="horizontal"
+						style="width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {SLIDER_WIDTH +
+							marginPixelsX +
+							0.5}px; transform: translateY(50%);"
 						min={app.xAxis.lowerLimit}
 						max={app.xAxis.upperLimit}
 						step={0.1}
-						value={app.xAxis.position}
-						disabled={app.xAxis.isMoving}
-						oninput={(e) => handleSliderInput('x', e)}
+						position={app.xAxis.position}
+						isMoving={app.xAxis.isMoving}
+						onmove={(v) => app.xAxis?.move(v)}
 					/>
 
 					<div class="flex items-start">
-						<input
-							type="range"
-							class="y-slider"
-							style="height: {stagePixelsY}px; margin-top: {marginPixelsY}px;"
+						<StageSlider
+							orientation="vertical-ltr"
+							style="width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(50%);"
 							min={app.yAxis.lowerLimit}
 							max={app.yAxis.upperLimit}
 							step={0.1}
-							value={app.yAxis.position}
-							disabled={app.yAxis.isMoving}
-							oninput={(e) => handleSliderInput('y', e)}
+							position={app.yAxis.position}
+							isMoving={app.yAxis.isMoving}
+							onmove={(v) => app.yAxis?.move(v)}
 						/>
 
 						<svg
@@ -517,16 +505,15 @@
 					class="relative flex-1 border border-zinc-600 transition-colors duration-300 ease-in-out hover:bg-zinc-900"
 					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH}px; width: {Z_AREA_WIDTH}px"
 				>
-					<input
-						type="range"
-						class="z-slider absolute inset-0 z-10 h-full w-full bg-transparent"
-						style:--slider-width={Z_AREA_WIDTH}
-						min={app.zAxis?.lowerLimit}
-						max={app.zAxis?.upperLimit}
+					<StageSlider
+						orientation="vertical-rtl"
+						style="position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: {Z_AREA_WIDTH}px;"
+						min={app.zAxis.lowerLimit}
+						max={app.zAxis.upperLimit}
 						step={0.1}
-						value={app.zAxis?.position}
-						disabled={isZMoving}
-						oninput={(e) => handleSliderInput('z', e)}
+						position={app.zAxis.position}
+						isMoving={isZMoving}
+						onmove={(v) => app.zAxis?.move(v)}
 					/>
 					<svg
 						viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
@@ -624,85 +611,12 @@
 <!-- ── Styles ─────────────────────────────────────────────────────────── -->
 
 <style>
-	.x-slider,
-	.y-slider,
-	.z-slider {
-		-webkit-appearance: none;
-		appearance: none;
-		cursor: pointer;
-		margin: 0;
-		padding: 0;
-		border: none;
-		background-color: transparent;
-		--_track-color: var(--color-slate-600);
-		--_track-width: 1px;
-
-		&:hover {
-			--_track-color: var(--color-slate-500);
-		}
-
-		&::-webkit-slider-runnable-track {
-			background: var(--_track-bg, transparent);
-			border-radius: 0;
-		}
-		&::-moz-range-track {
-			background: var(--_track-bg, transparent);
-			border-radius: 0;
-		}
-		&::-webkit-slider-thumb {
-			-webkit-appearance: none;
-			appearance: none;
-			inline-size: var(--thumb-width);
-			block-size: var(--slider-width);
-			background: var(--color-success);
-			border-radius: 1px;
-			cursor: pointer;
-		}
-		&::-moz-range-thumb {
-			appearance: none;
-			inline-size: var(--thumb-width);
-			block-size: var(--slider-width);
-			background: var(--color-success);
-			border: none;
-			border-radius: 1px;
-			cursor: pointer;
-		}
-		&:disabled {
-			cursor: not-allowed;
-			&::-webkit-slider-thumb {
-				background: var(--color-danger);
-			}
-			&::-moz-range-thumb {
-				background: var(--color-danger);
-			}
-		}
-	}
-
-	.z-slider {
-		writing-mode: vertical-rl;
-		direction: rtl;
-	}
-
-	.y-slider {
-		writing-mode: vertical-rl;
-		direction: ltr;
-		transform: translateX(50%);
-		--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / var(--_track-width) 100% no-repeat;
-	}
-
-	.x-slider {
-		transform: translateY(50%);
-		--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / 100% var(--_track-width) no-repeat;
-	}
-
 	/* SVG elements */
 
 	.tile {
 		fill: transparent;
-		stroke: var(--color-blue-400);
-		stroke-opacity: 0.75;
+		stroke: var(--color-zinc-700);
 		stroke-width: 0.05;
-		stroke-dasharray: 0.1 0.2;
 		transition:
 			fill 300ms ease,
 			stroke 150ms ease;
@@ -710,19 +624,17 @@
 			fill: color-mix(in srgb, var(--color-zinc-500) 25%, transparent);
 		}
 		&.selected {
-			stroke: var(--color-amber-500);
-			stroke-width: 0.05;
+			stroke: var(--color-amber-400);
+			stroke-width: 0.03;
 		}
 	}
 
 	.stack {
 		fill: currentColor;
-		fill-opacity: 0.15;
-		/*stroke-width: 0.03;*/
-		/*stroke: currentColor;*/
+		fill-opacity: 0.2;
 		transition: fill-opacity 300ms ease;
 		&:hover {
-			fill-opacity: 0.25;
+			fill-opacity: 0.3;
 		}
 	}
 </style>
