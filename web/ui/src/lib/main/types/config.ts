@@ -9,6 +9,7 @@ export type TileOrder = 'row_wise' | 'column_wise' | 'snake_row' | 'snake_column
 export interface GlobalsConfig {
 	default_overlap: number;
 	default_tile_order: TileOrder;
+	default_z_step_um: number;
 }
 
 /**
@@ -28,10 +29,16 @@ export interface NodeConfig {
 }
 
 /**
- * Rig metadata (matches backend RigMetadata from rigup.config)
+ * Rig info (matches backend RigInfo from rigup.rig)
  */
-export interface RigMetadata {
+export interface RigInfo {
 	name: string;
+}
+
+/**
+ * Cluster configuration (matches backend ClusterConfig from rigup.rig)
+ */
+export interface ClusterConfig {
 	control_port: number;
 	log_port: number;
 }
@@ -212,9 +219,11 @@ export interface ProfileConfig {
  * Complete Voxel rig configuration (matches backend VoxelRigConfig from voxel.config)
  */
 export interface VoxelRigConfig {
-	metadata: RigMetadata;
-	globals: GlobalsConfig;
+	info: RigInfo;
+	cluster: ClusterConfig;
+	devices: Record<string, DeviceConfig>;
 	nodes: Record<string, NodeConfig>;
+	globals: GlobalsConfig;
 	daq: DaqConfig;
 	stage: StageConfig;
 	detection: Record<string, DetectionPathConfig>;

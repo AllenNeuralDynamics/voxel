@@ -1,16 +1,16 @@
 <script lang="ts">
 	import uPlot from 'uplot';
-	import type { App } from '$lib/app';
+	import type { Session } from '$lib/main';
 	import { onDestroy } from 'svelte';
 	import ProfileDevicesToggle from './ProfileDevicesToggle.svelte';
 	import LegacySpinBox from '$lib/ui/primitives/LegacySpinBox.svelte';
 	import 'uplot/dist/uPlot.min.css';
 
 	interface Props {
-		app: App;
+		session: Session;
 	}
 
-	let { app }: Props = $props();
+	let { session }: Props = $props();
 
 	// Internal state for visible devices
 	let visibleDevices = $state(new Set<string>());
@@ -20,7 +20,7 @@
 	let containerHeight = $state(400);
 
 	// Get active profile and waveforms
-	const activeProfile = $derived(app.activeProfile);
+	const activeProfile = $derived(session.activeProfile);
 	const waveforms = $derived(activeProfile?.waveforms);
 	const timing = $derived(activeProfile?.daq?.timing);
 
@@ -276,7 +276,7 @@
 			</div>
 		{/if}
 		<div class="rounded border border-zinc-700 bg-zinc-800/50 p-3">
-			<ProfileDevicesToggle {app} bind:visible={visibleDevices} colors={deviceColors} waveformsOnly={true} />
+			<ProfileDevicesToggle {session} bind:visible={visibleDevices} colors={deviceColors} waveformsOnly={true} />
 		</div>
 		<div class="flex flex-col justify-center gap-2">
 			<span class="text-[0.65rem] text-zinc-400">Cycles:</span>

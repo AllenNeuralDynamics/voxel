@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { SpinBox } from '$lib/ui/primitives';
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
 	import type { ColormapCatalog } from '$lib/main';
+
+	type WindowMode = 'visible' | 'hover' | 'inline';
 
 	interface Props {
 		label: string;
@@ -13,6 +16,7 @@
 		catalog: ColormapCatalog;
 		onColormapChange: (colormap: string) => void;
 		dataTypeMax?: number;
+		windowMode?: WindowMode;
 	}
 
 	let {
@@ -24,7 +28,8 @@
 		colormap,
 		catalog,
 		onColormapChange,
-		dataTypeMax = 65535
+		dataTypeMax = 65535,
+		windowMode = 'hover'
 	}: Props = $props();
 
 	// ── Colormap Colors ────────────────────────────────────────────────
@@ -203,11 +208,12 @@
 		if (result) onLevelsChange(result.min, result.max);
 	}
 
-	// ── Scroll-to-Zoom ───────────────────────────────────────────────
+	// ── Scroll-to-Zoom (inline mode) ─────────────────────────────────
 
 	let histContainerEl = $state<HTMLDivElement | undefined>();
 
 	function onHistWheel(e: WheelEvent) {
+		if (windowMode !== 'inline') return;
 		e.preventDefault();
 
 		const range = windowMax - windowMin;
@@ -223,115 +229,78 @@
 	}
 
 	$effect(() => {
-		if (!histContainerEl) return;
+		if (!histContainerEl || windowMode !== 'inline') return;
 		histContainerEl.addEventListener('wheel', onHistWheel, { passive: false });
 		return () => histContainerEl?.removeEventListener('wheel', onHistWheel);
-	});
-
-	// ── Floating Level Inputs ─────────────────────────────────────────
-
-	const labelWidth = 36;
-	const labelGap = 4;
-
-	function commitFloatingInput(e: Event, handle: 'min' | 'max') {
-		const val = parseInt((e.target as HTMLInputElement).value);
-		if (isNaN(val)) return;
-		if (handle === 'min') {
-			onLevelsChange(Math.max(0, Math.min(val, maxIntensity - 1)) / dataTypeMax, levelsMax);
-		} else {
-			onLevelsChange(levelsMin, Math.min(dataTypeMax, Math.max(val, minIntensity + 1)) / dataTypeMax);
-		}
-	}
-
-	function commitWindowInput(e: Event, bound: 'min' | 'max') {
-		const val = parseInt((e.target as HTMLInputElement).value);
-		if (isNaN(val)) return;
-		if (bound === 'min') {
-			windowMin = Math.max(0, Math.min(val, windowMax - 1));
-		} else {
-			windowMax = Math.min(dataTypeMax, Math.max(val, windowMin + 1));
-		}
-	}
-
-	const labelPositions = $derived.by(() => {
-		const containerW = svgWidth;
-
-		// Position left edge at handle X; CSS margin handles the visual offset
-		let minLeft = minHandleX;
-		let maxLeft = maxHandleX;
-
-		// Ensure they don't overlap
-		const minDist = labelWidth + labelGap;
-		if (maxLeft - minLeft < minDist) {
-			const mid = (minLeft + maxLeft) / 2;
-			minLeft = mid - minDist / 2;
-			maxLeft = mid + minDist / 2;
-		}
-
-		// Shift pair into bounds
-		if (minLeft < 0) {
-			const shift = -minLeft;
-			minLeft += shift;
-			maxLeft += shift;
-		}
-		if (maxLeft > containerW - labelWidth) {
-			const shift = maxLeft - (containerW - labelWidth);
-			maxLeft -= shift;
-			minLeft -= shift;
-		}
-
-		// Final safety clamp
-		minLeft = Math.max(0, minLeft);
-		maxLeft = Math.min(containerW - labelWidth, maxLeft);
-
-		return { minLeft, maxLeft };
 	});
 
 	// ── Layout ────────────────────────────────────────────────────────
 
 	let columnWidth = $state(288);
+
+	const ghostBtnClass =
+		'min-w-14 rounded-sm px-1.5 py-px text-[0.6rem] text-zinc-400 ' +
+		'transition-colors hover:bg-zinc-800 hover:text-zinc-300 ' +
+		'disabled:cursor-not-allowed disabled:opacity-0';
 </script>
 
-<div class="flex flex-col" bind:clientWidth={columnWidth} style:--label-width="{labelWidth}px">
-	<!-- Floating Level Inputs -->
-	<div class="floating-row relative" class:invisible={!hasValidData}>
-		<input
-			type="text"
-			class="hist-input floating-input"
-			style:left="{labelPositions.minLeft}px"
-			value={minIntensity}
-			onchange={(e) => commitFloatingInput(e, 'min')}
-		/>
-		<input
-			type="text"
-			class="hist-input floating-input"
-			style:left="{labelPositions.maxLeft}px"
-			value={maxIntensity}
-			onchange={(e) => commitFloatingInput(e, 'max')}
-		/>
-	</div>
+<div class="channel-histogram flex flex-col" bind:clientWidth={columnWidth}>
+	<!-- Window Range -->
+	{#if windowMode !== 'inline'}
+		<div
+			class="flex items-center justify-between text-zinc-400"
+			class:window-row-hover={windowMode === 'hover'}
+		>
+			<SpinBox
+				bind:value={windowMin}
+				min={0}
+				max={windowMax - 1}
+				step={100}
+				numCharacters={5}
+				align="left"
+				showButtons={false}
+				size="xs"
+			/>
+			<button type="button" onclick={autoFit} disabled={!hasValidData} class={ghostBtnClass}>auto fit</button>
+			<SpinBox
+				bind:value={windowMax}
+				min={windowMin + 1}
+				max={dataTypeMax}
+				step={100}
+				numCharacters={5}
+				align="right"
+				showButtons={false}
+				size="xs"
+			/>
+		</div>
+	{/if}
 
 	<!-- Histogram -->
-	<div class="border-b border-b-input bg-transparent" bind:this={histContainerEl}>
+	<div class="border border-zinc-600 bg-transparent" bind:this={histContainerEl}>
 		{#if hasValidData}
 			<svg
 				width="100%"
 				height={svgHeight}
 				role="img"
 				aria-label="Histogram for {label}"
-				class="bg-zinc-950"
+				class="cursor-crosshair bg-zinc-950"
 				onmousemove={onSvgMouseMove}
 				ondblclick={autoLevels}
 				oncontextmenu={(e) => {
-					e.preventDefault();
-					autoFit();
+					if (windowMode === 'inline') {
+						e.preventDefault();
+						autoFit();
+					}
 				}}
 				bind:clientWidth={svgWidth}
 			>
 				<defs>
 					<linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
 						{#each colors as stop, i (i)}
-							<stop offset="{colors.length === 1 ? 100 : (i / (colors.length - 1)) * 100}%" stop-color={stop} />
+							<stop
+								offset="{colors.length === 1 ? 100 : (i / (colors.length - 1)) * 100}%"
+								stop-color={stop}
+							/>
 						{/each}
 					</linearGradient>
 				</defs>
@@ -343,71 +312,44 @@
 					<polygon points={fgPolygon} fill="url(#{gradientId})" fill-opacity="0.15" stroke="none" />
 				{/if}
 				{#if fgPoints}
-					<polyline points={fgPoints} fill="none" stroke="url(#{gradientId})" stroke-width="1.5" class="non-scaling" />
+					<polyline
+						points={fgPoints}
+						fill="none"
+						stroke="url(#{gradientId})"
+						stroke-width="1.5"
+						class="non-scaling"
+					/>
 				{/if}
 
 				<!-- Min handle -->
 				<line
-					x1={minHandleX}
-					y1="0"
-					x2={minHandleX}
-					y2={svgHeight}
-					stroke="#10b981"
-					stroke-width="1"
-					stroke-opacity="0.9"
-					pointer-events="none"
+					x1={minHandleX} y1="0" x2={minHandleX} y2={svgHeight}
+					stroke="#10b981" stroke-width="1.5" stroke-opacity="0.9" pointer-events="none"
 				/>
 				<line
-					x1={minHandleX}
-					y1="0"
-					x2={minHandleX}
-					y2={svgHeight}
-					stroke="transparent"
-					stroke-width="12"
-					class="cursor-ew-resize"
+					x1={minHandleX} y1="0" x2={minHandleX} y2={svgHeight}
+					stroke="transparent" stroke-width="12" class="cursor-ew-resize"
 					onmousedown={(e) => onHandleDown(e, 'min')}
-					role="slider"
-					tabindex="0"
-					aria-label="Minimum level"
-					aria-valuenow={levelsMin}
+					role="slider" tabindex="0" aria-label="Minimum level" aria-valuenow={levelsMin}
 				/>
 
 				<!-- Max handle -->
 				<line
-					x1={maxHandleX}
-					y1="0"
-					x2={maxHandleX}
-					y2={svgHeight}
-					stroke="#f59e0b"
-					stroke-width="1"
-					stroke-opacity="0.9"
-					pointer-events="none"
+					x1={maxHandleX} y1="0" x2={maxHandleX} y2={svgHeight}
+					stroke="#f59e0b" stroke-width="1.5" stroke-opacity="0.9" pointer-events="none"
 				/>
 				<line
-					x1={maxHandleX}
-					y1="0"
-					x2={maxHandleX}
-					y2={svgHeight}
-					stroke="transparent"
-					stroke-width="12"
-					class="cursor-ew-resize"
+					x1={maxHandleX} y1="0" x2={maxHandleX} y2={svgHeight}
+					stroke="transparent" stroke-width="12" class="cursor-ew-resize"
 					onmousedown={(e) => onHandleDown(e, 'max')}
-					role="slider"
-					tabindex="0"
-					aria-label="Maximum level"
-					aria-valuenow={levelsMax}
+					role="slider" tabindex="0" aria-label="Maximum level" aria-valuenow={levelsMax}
 				/>
 
 				<!-- Dimming outside range -->
 				<rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
 				<rect
-					x={maxHandleX}
-					y="0"
-					width={svgWidth - maxHandleX}
-					height={svgHeight}
-					fill="black"
-					opacity="0.4"
-					pointer-events="none"
+					x={maxHandleX} y="0" width={svgWidth - maxHandleX} height={svgHeight}
+					fill="black" opacity="0.4" pointer-events="none"
 				/>
 			</svg>
 		{:else}
@@ -417,9 +359,19 @@
 		{/if}
 	</div>
 
-	<!-- Window Range + Label -->
-	<div class="flex -translate-y-px items-center justify-between">
-		<input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
+	<!-- Levels + Label -->
+	<div class="flex items-center justify-between text-zinc-400">
+		<SpinBox
+			value={minIntensity}
+			min={0}
+			max={maxIntensity - 1}
+			step={100}
+			numCharacters={5}
+			align="left"
+			showButtons={false}
+			size="xs"
+			onChange={(v) => onLevelsChange(v / dataTypeMax, levelsMax)}
+		/>
 
 		<ColormapPicker
 			{label}
@@ -431,11 +383,16 @@
 			triggerClass="cursor-pointer text-[0.65rem] leading-none font-medium transition-colors hover:brightness-125"
 		/>
 
-		<input
-			type="text"
-			class="hist-input hist-input-right"
-			value={windowMax}
-			onchange={(e) => commitWindowInput(e, 'max')}
+		<SpinBox
+			value={maxIntensity}
+			min={minIntensity + 1}
+			max={dataTypeMax}
+			step={100}
+			numCharacters={5}
+			align="right"
+			showButtons={false}
+			size="xs"
+			onChange={(v) => onLevelsChange(levelsMin, v / dataTypeMax)}
 		/>
 	</div>
 </div>
@@ -445,45 +402,15 @@
 		vector-effect: non-scaling-stroke;
 	}
 
-	.floating-row {
-		height: 14px;
-		overflow: visible;
+	.window-row-hover {
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.15s ease;
 	}
 
-	.hist-input {
-		--char-offset: 3px;
-		width: var(--label-width, 36px);
-		margin-left: calc(-1 * var(--char-offset));
-		font-family: var(--font-mono, ui-monospace, monospace);
-		font-size: 0.6rem;
-		line-height: 1;
-		color: var(--color-muted-foreground);
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: 2px;
-		outline: none;
-		padding: 0;
-		user-select: none;
-		transition: border-color 0.15s ease;
-	}
-
-	.hist-input-right {
-		margin-left: 0;
-		margin-right: calc(-1 * var(--char-offset));
-		text-align: right;
-	}
-
-	.hist-input:hover {
-		border-color: var(--color-input);
-	}
-
-	.hist-input:focus {
-		color: var(--color-foreground);
-		border-color: var(--color-ring);
-	}
-
-	.floating-input {
-		position: absolute;
-		bottom: 0;
+	.channel-histogram:hover .window-row-hover,
+	.channel-histogram:focus-within .window-row-hover {
+		opacity: 1;
+		pointer-events: auto;
 	}
 </style>

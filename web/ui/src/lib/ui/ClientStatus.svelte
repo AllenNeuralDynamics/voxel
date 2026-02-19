@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Client } from '$lib/core';
+	import type { Client } from '$lib/main';
 
 	const { client } = $props<{ client: Client | null | undefined }>();
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	type Size = 'sm' | 'md' | 'lg';
+	type Size = 'xs' | 'sm' | 'md' | 'lg';
 
 	interface Props {
 		value?: number;
@@ -42,19 +42,24 @@
 	}: Props = $props();
 
 	const sizeClasses: Record<Size, { wrapper: string; input: string; stack: string }> = {
+		xs: {
+			wrapper: 'h-4 rounded-[2px]',
+			input: 'text-[0.6rem] px-0 py-0',
+			stack: 'w-4'
+		},
 		sm: {
-			wrapper: 'h-6',
-			input: 'text-[0.65rem]',
+			wrapper: 'h-5 rounded',
+			input: 'text-[0.65rem] px-0.5 py-0.5',
 			stack: 'w-4'
 		},
 		md: {
-			wrapper: 'h-7',
-			input: 'text-xs',
+			wrapper: 'h-7 rounded',
+			input: 'text-xs px-0.5 py-0.5',
 			stack: 'w-5'
 		},
 		lg: {
-			wrapper: 'h-8',
-			input: 'text-sm',
+			wrapper: 'h-8 rounded',
+			input: 'text-sm px-0.5 py-0.5',
 			stack: 'w-5'
 		}
 	};
@@ -195,7 +200,7 @@
 {#if showButtons}
 	<div
 		bind:this={wrapperElement}
-		class="flex items-stretch rounded border border-input bg-transparent transition-colors hover:border-foreground/20 {sizeClasses[
+		class="flex items-stretch border border-input bg-transparent transition-colors hover:border-foreground/20 {sizeClasses[
 			size
 		].wrapper} {className}"
 	>
@@ -251,7 +256,7 @@
 {:else}
 	<div
 		bind:this={wrapperElement}
-		class="inline-flex items-stretch rounded border border-transparent bg-transparent transition-colors focus-within:border-ring hover:border-foreground/20 {sizeClasses[
+		class="inline-flex items-stretch border border-transparent bg-transparent transition-colors focus-within:border-ring hover:border-input {sizeClasses[
 			size
 		].wrapper} {className}"
 	>
@@ -276,7 +281,7 @@
 			style:width="{numCharacters + 1}ch"
 			style:color
 			style:text-align={align}
-			class="border-none bg-transparent px-0.5 py-0.5 font-mono text-foreground outline-none {sizeClasses[size].input}"
+			class="border-none bg-transparent font-mono text-foreground outline-none {sizeClasses[size].input}"
 		/>
 		{#if suffix}
 			<span class="pointer-events-none flex items-center font-mono text-muted-foreground {sizeClasses[size].input}"

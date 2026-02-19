@@ -1,19 +1,11 @@
-import type {
-	ChannelConfig,
-	PreviewCrop,
-	PreviewFrameInfo,
-	PreviewLevels,
-	PreviewConfig,
-	AppStatus,
-	Client,
-	ProfileConfig,
-	ColormapCatalog
-} from '$lib/core';
-import { fetchColormapCatalog } from '$lib/core';
+import type { ChannelConfig, PreviewConfig, ProfileConfig } from './types';
+import type { PreviewCrop, PreviewFrameInfo, PreviewLevels, Client } from './client.svelte';
+import type { ColormapCatalog } from './colormaps';
+import { fetchColormapCatalog } from './colormaps';
+import type { AppStatus } from './types';
 
-import { sanitizeString } from '$lib/utils';
+import { computeAutoLevels, sanitizeString } from '$lib/utils';
 import { SvelteMap } from 'svelte/reactivity';
-import { computeAutoLevels } from '$lib/preview/utils';
 
 export function isCropEqual(a: PreviewCrop, b: PreviewCrop): boolean {
 	return a.k === b.k && a.x === b.x && a.y === b.y;

@@ -1,14 +1,14 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { Select, SpinBox } from '$lib/ui/primitives';
-	import type { App } from '$lib/app';
-	import { getStackStatusColor, type TileOrder } from '$lib/core/types';
+	import type { Session } from '$lib/main';
+	import { getStackStatusColor, type TileOrder } from '$lib/main/types';
 
 	interface Props {
-		app: App;
+		session: Session;
 	}
 
-	let { app }: Props = $props();
+	let { session }: Props = $props();
 
 	const TILE_ORDER_OPTIONS: { value: TileOrder; label: string }[] = [
 		{ value: 'row_wise', label: 'Row-wise' },
@@ -18,12 +18,12 @@
 	];
 
 	function handleTileOrderChange(value: string) {
-		app.setTileOrder(value as TileOrder);
+		session.setTileOrder(value as TileOrder);
 	}
 
-	let selectedTile = $derived(app.selectedTiles[0] ?? null);
+	let selectedTile = $derived(session.selectedTiles[0] ?? null);
 	let stack = $derived(
-		selectedTile ? (app.stacks.find((s) => s.row === selectedTile.row && s.col === selectedTile.col) ?? null) : null
+		selectedTile ? (session.stacks.find((s) => s.row === selectedTile.row && s.col === selectedTile.col) ?? null) : null
 	);
 
 	let isEditing = $state(false);
@@ -40,7 +40,7 @@
 		if (lastZStart !== null && lastZEnd !== null) {
 			return { start: lastZStart, end: lastZEnd };
 		}
-		return { start: app.gridConfig.default_z_start_um, end: app.gridConfig.default_z_end_um };
+		return { start: session.gridConfig.default_z_start_um, end: session.gridConfig.default_z_end_um };
 	}
 
 	$effect(() => {
@@ -52,7 +52,7 @@
 	});
 
 	let isDirty = $derived(stack ? zStartInput !== stack.z_start_um || zEndInput !== stack.z_end_um : true);
-	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / app.gridConfig.z_step_um));
+	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / session.gridConfig.z_step_um));
 	let hasStack = $derived(stack !== null);
 
 	function formatMm(um: number, decimals: number = 2): string {
@@ -70,9 +70,9 @@
 		if (!selectedTile) return;
 		const { row, col } = selectedTile;
 		if (hasStack) {
-			app.editStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
+			session.editStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		} else {
-			app.addStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
+			session.addStacks([{ row, col, zStartUm: zStartInput, zEndUm: zEndInput }]);
 		}
 		lastZStart = zStartInput;
 		lastZEnd = zEndInput;
@@ -82,7 +82,7 @@
 	function handleDelete() {
 		if (!selectedTile) return;
 		if (confirm('Delete this stack?')) {
-			app.removeStacks([{ row: selectedTile.row, col: selectedTile.col }]);
+			session.removeStacks([{ row: selectedTile.row, col: selectedTile.col }]);
 		}
 	}
 
@@ -140,7 +140,7 @@
 	{/if}
 {/snippet}
 
-{#if app.zAxis && selectedTile}
+{#if session.zAxis && selectedTile}
 	<div class="flex flex-col border-y border-border bg-accent/30">
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
@@ -200,18 +200,18 @@
 					zStartInput,
 					stack?.z_start_um ?? null,
 					updateZStart,
-					() => Math.round(app.zAxis!.position * 1000),
-					app.zAxis.lowerLimit * 1000,
-					app.zAxis.upperLimit * 1000
+					() => Math.round(session.zAxis!.position * 1000),
+					session.zAxis.lowerLimit * 1000,
+					session.zAxis.upperLimit * 1000
 				)}
 				{@render editableZItem(
 					'Z1',
 					zEndInput,
 					stack?.z_end_um ?? null,
 					updateZEnd,
-					() => Math.round(app.zAxis!.position * 1000),
-					app.zAxis.lowerLimit * 1000,
-					app.zAxis.upperLimit * 1000
+					() => Math.round(session.zAxis!.position * 1000),
+					session.zAxis.lowerLimit * 1000,
+					session.zAxis.upperLimit * 1000
 				)}
 
 				{@render staticItem('Slices', isEditing ? String(numSlices) : (stack?.num_frames?.toString() ?? '—'))}
@@ -223,6 +223,6 @@
 
 <div class="flex items-center justify-between border-t border-border p-3 text-[0.65rem]">
 	<span class="text-muted-foreground">Order</span>
-	<Select value={app.tileOrder} options={TILE_ORDER_OPTIONS} onchange={handleTileOrderChange} size="sm" />
-	{@render staticItem('Z Step', String(app.gridConfig.z_step_um), 'µm')}
+	<Select value={session.tileOrder} options={TILE_ORDER_OPTIONS} onchange={handleTileOrderChange} size="sm" />
+	{@render staticItem('Z Step', String(session.gridConfig.z_step_um), 'µm')}
 </div>

@@ -1,16 +1,16 @@
 <script lang="ts">
 	import { Tooltip } from 'bits-ui';
 	import Icon from '@iconify/svelte';
-	import type { App } from '$lib/app';
+	import type { Session } from '$lib/main';
 	import { wavelengthToColor } from '$lib/utils';
 	import Switch from '$lib/ui/primitives/Switch.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 
 	interface Props {
-		app: App;
+		session: Session;
 	}
 
-	let { app }: Props = $props();
+	let { session }: Props = $props();
 
 	interface LaserInfo {
 		deviceId: string;
@@ -25,17 +25,17 @@
 		const laserMap = new SvelteMap<string, LaserInfo>();
 
 		// Extract unique laser device IDs from channel configs
-		if (app.config?.channels) {
-			for (const channel of Object.values(app.config.channels)) {
+		if (session.config?.channels) {
+			for (const channel of Object.values(session.config.channels)) {
 				if (channel.illumination) {
 					const deviceId = channel.illumination;
 
 					// Skip if we already have this laser
 					if (laserMap.has(deviceId)) continue;
 
-					const wavelength = app.devices.getPropertyValue(deviceId, 'wavelength') as number | undefined;
-					const isEnabled = (app.devices.getPropertyValue(deviceId, 'is_enabled') as boolean) ?? false;
-					const powerMw = app.devices.getPropertyValue(deviceId, 'power_mw') as number | undefined;
+					const wavelength = session.devices.getPropertyValue(deviceId, 'wavelength') as number | undefined;
+					const isEnabled = (session.devices.getPropertyValue(deviceId, 'is_enabled') as boolean) ?? false;
+					const powerMw = session.devices.getPropertyValue(deviceId, 'power_mw') as number | undefined;
 
 					laserMap.set(deviceId, {
 						deviceId,
@@ -60,16 +60,16 @@
 
 	function handleToggleLaser(deviceId: string, currentState: boolean) {
 		if (currentState) {
-			app.devices.executeCommand(deviceId, 'disable');
+			session.devices.executeCommand(deviceId, 'disable');
 		} else {
-			app.devices.executeCommand(deviceId, 'enable');
+			session.devices.executeCommand(deviceId, 'enable');
 		}
 	}
 
 	function handleEmergencyStop() {
 		for (const laser of lasers) {
 			if (laser.isEnabled) {
-				app.devices.executeCommand(laser.deviceId, 'disable');
+				session.devices.executeCommand(laser.deviceId, 'disable');
 			}
 		}
 	}

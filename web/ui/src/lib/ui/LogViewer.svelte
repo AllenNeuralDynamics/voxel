@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { LogMessage } from '$lib/core';
+	import type { LogMessage } from '$lib/main';
 	import Icon from '@iconify/svelte';
 
 	const { logs, onClear }: { logs: LogMessage[]; onClear?: () => void } = $props();

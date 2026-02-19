@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { SpinBox } from '$lib/ui/primitives';
-	import type { PreviewState } from '$lib/app/preview.svelte';
+	import type { PreviewState } from '$lib/main';
 
 	interface Props {
 		previewer: PreviewState;

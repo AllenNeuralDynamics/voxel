@@ -6,7 +6,7 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type { AppStatus, ErrorPayload, LogMessage, ProfileChangedPayload, Stack, TileOrder } from './types.ts';
+import type { AppStatus, ErrorPayload, LogMessage, ProfileChangedPayload, Stack, TileOrder } from './types';
 
 export interface PreviewStatus {
 	previewing: boolean;

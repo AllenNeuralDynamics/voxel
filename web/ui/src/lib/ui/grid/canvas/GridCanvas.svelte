@@ -1,36 +1,36 @@
 <script lang="ts">
-	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
+	import type { Session } from '$lib/main';
+	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
 	import { onMount } from 'svelte';
-	import { compositeFullFrames } from '$lib/app/preview.svelte.ts';
-	import GridControls from './GridControls.svelte';
-	import StageControls from './StageControls.svelte';
-	import LayerToggles from './LayerToggles.svelte';
+	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
+	import { Button, SpinBox } from '$lib/ui/primitives';
+	import Icon from '@iconify/svelte';
 
 	interface Props {
-		app: App;
+		session: Session;
 	}
 
-	let { app }: Props = $props();
+	let { session }: Props = $props();
 
-	let fovX = $derived(app.xAxis ? app.xAxis.position - app.xAxis.lowerLimit : 0);
-	let fovY = $derived(app.yAxis ? app.yAxis.position - app.yAxis.lowerLimit : 0);
-	let fovZ = $derived(app.zAxis ? app.zAxis.position - app.zAxis.lowerLimit : 0);
-	let isXYMoving = $derived(app.xAxis?.isMoving || app.yAxis?.isMoving);
-	let isZMoving = $derived(app.zAxis?.isMoving ?? false);
+	let fovX = $derived(session.xAxis ? session.xAxis.position - session.xAxis.lowerLimit : 0);
+	let fovY = $derived(session.yAxis ? session.yAxis.position - session.yAxis.lowerLimit : 0);
+	let fovZ = $derived(session.zAxis ? session.zAxis.position - session.zAxis.lowerLimit : 0);
+	let isXYMoving = $derived(session.xAxis?.isMoving || session.yAxis?.isMoving);
+	let isZMoving = $derived(session.zAxis?.isMoving ?? false);
+	let isStageMoving = $derived(isXYMoving || isZMoving);
 
-	let primaryTile = $derived(app.selectedTiles[0] ?? null);
+	let primaryTile = $derived(session.selectedTiles[0] ?? null);
 	let primaryStack = $derived(
-		primaryTile ? (app.stacks.find((s) => s.row === primaryTile.row && s.col === primaryTile.col) ?? null) : null
+		primaryTile ? (session.stacks.find((s) => s.row === primaryTile.row && s.col === primaryTile.col) ?? null) : null
 	);
 
-	let marginX = $derived(app.fov.width / 2);
-	let marginY = $derived(app.fov.height / 2);
+	let marginX = $derived(session.fov.width / 2);
+	let marginY = $derived(session.fov.height / 2);
 
-	let viewBoxWidth = $derived(app.stageWidth + app.fov.width);
-	let viewBoxHeight = $derived(app.stageHeight + app.fov.height);
+	let viewBoxWidth = $derived(session.stageWidth + session.fov.width);
+	let viewBoxHeight = $derived(session.stageHeight + session.fov.height);
 	let stageAspectRatio = $derived(viewBoxWidth / viewBoxHeight);
-	let cornerLen = $derived(Math.min(app.fov.width, app.fov.height) / 8);
+	let cornerLen = $derived(Math.min(session.fov.width, session.fov.height) / 8);
 
 	let showThumbnail = $state(true);
 
@@ -44,23 +44,23 @@
 	const offscreenCtx = offscreen.getContext('2d')!;
 
 	$effect(() => {
-		const aspect = app.fov.width / app.fov.height;
+		const aspect = session.fov.width / session.fov.height;
 		if (aspect > 0 && Number.isFinite(aspect)) {
 			offscreen.height = Math.round(FOV_RESOLUTION / aspect);
 		}
 	});
 
 	$effect(() => {
-		if (app.previewState) {
-			void app.previewState.redrawGeneration;
+		if (session.previewState) {
+			void session.previewState.redrawGeneration;
 			fovNeedsRedraw = true;
 		}
 	});
 
 	function fovFrameLoop() {
-		if (fovNeedsRedraw && app.previewState) {
+		if (fovNeedsRedraw && session.previewState) {
 			fovNeedsRedraw = false;
-			compositeFullFrames(offscreenCtx, offscreen, app.previewState.channels);
+			compositeFullFrames(offscreenCtx, offscreen, session.previewState.channels);
 			thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
 		}
 		fovAnimFrameId = requestAnimationFrame(fovFrameLoop);
@@ -78,8 +78,8 @@
 	let scale = $derived(canvasWidth / viewBoxWidth);
 	let marginPixelsX = $derived(marginX * scale);
 	let marginPixelsY = $derived(marginY * scale);
-	let stagePixelsX = $derived(app.stageWidth * scale);
-	let stagePixelsY = $derived(app.stageHeight * scale);
+	let stagePixelsX = $derived(session.stageWidth * scale);
+	let stagePixelsY = $derived(session.stageHeight * scale);
 
 	function updateCanvasSize(containerWidth: number, containerHeight: number) {
 		const availableWidth = containerWidth - TRACK_WIDTH - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 4;
@@ -130,72 +130,72 @@
 	}
 
 	function isSelected(tile: Tile): boolean {
-		return app.isTileSelected(tile.row, tile.col);
+		return session.isTileSelected(tile.row, tile.col);
 	}
 
 	function handleTileSelect(e: MouseEvent, tile: Tile) {
 		if (e.ctrlKey || e.metaKey) {
-			if (app.isTileSelected(tile.row, tile.col)) app.removeFromSelection([[tile.row, tile.col]]);
-			else app.addToSelection([[tile.row, tile.col]]);
+			if (session.isTileSelected(tile.row, tile.col)) session.removeFromSelection([[tile.row, tile.col]]);
+			else session.addToSelection([[tile.row, tile.col]]);
 		} else {
-			app.selectTiles([[tile.row, tile.col]]);
+			session.selectTiles([[tile.row, tile.col]]);
 		}
 	}
 
 	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
-		if (!app.xAxis || !app.yAxis) return [targetX, targetY];
-		const minX = app.xAxis.lowerLimit;
-		const maxX = app.xAxis.upperLimit;
-		const minY = app.yAxis.lowerLimit;
-		const maxY = app.yAxis.upperLimit;
+		if (!session.xAxis || !session.yAxis) return [targetX, targetY];
+		const minX = session.xAxis.lowerLimit;
+		const maxX = session.xAxis.upperLimit;
+		const minY = session.yAxis.lowerLimit;
+		const maxY = session.yAxis.upperLimit;
 		return [Math.max(minX, Math.min(maxX, targetX)), Math.max(minY, Math.min(maxY, targetY))];
 	}
 
 	function handleTileMove(e: MouseEvent, tile: Tile) {
 		if (e.button !== 1) return;
 		e.preventDefault();
-		if (isXYMoving || !app.xAxis || !app.yAxis) return;
-		const targetX = app.xAxis.lowerLimit + toMm(tile.x_um);
-		const targetY = app.yAxis.lowerLimit + toMm(tile.y_um);
+		if (isXYMoving || !session.xAxis || !session.yAxis) return;
+		const targetX = session.xAxis.lowerLimit + toMm(tile.x_um);
+		const targetY = session.yAxis.lowerLimit + toMm(tile.y_um);
 		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
-		app.moveXY(clampedX, clampedY);
+		session.moveXY(clampedX, clampedY);
 	}
 
 	function handleStackSelect(e: MouseEvent, stack: Stack) {
 		if (e.ctrlKey || e.metaKey) {
-			if (app.isTileSelected(stack.row, stack.col)) app.removeFromSelection([[stack.row, stack.col]]);
-			else app.addToSelection([[stack.row, stack.col]]);
+			if (session.isTileSelected(stack.row, stack.col)) session.removeFromSelection([[stack.row, stack.col]]);
+			else session.addToSelection([[stack.row, stack.col]]);
 		} else {
-			app.selectTiles([[stack.row, stack.col]]);
+			session.selectTiles([[stack.row, stack.col]]);
 		}
 	}
 
 	function handleStackMove(e: MouseEvent, stack: Stack) {
 		if (e.button !== 1) return;
 		e.preventDefault();
-		if (isXYMoving || !app.xAxis || !app.yAxis) return;
-		const targetX = app.xAxis.lowerLimit + toMm(stack.x_um);
-		const targetY = app.yAxis.lowerLimit + toMm(stack.y_um);
+		if (isXYMoving || !session.xAxis || !session.yAxis) return;
+		const targetX = session.xAxis.lowerLimit + toMm(stack.x_um);
+		const targetY = session.yAxis.lowerLimit + toMm(stack.y_um);
 		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
-		app.moveXY(clampedX, clampedY);
+		session.moveXY(clampedX, clampedY);
 	}
 
 	function handleXSliderChange(e: Event) {
-		if (!app.xAxis) return;
+		if (!session.xAxis) return;
 		const target = e.target as HTMLInputElement;
-		app.xAxis.move(parseFloat(target.value));
+		session.xAxis.move(parseFloat(target.value));
 	}
 
 	function handleYSliderChange(e: Event) {
-		if (!app.yAxis) return;
+		if (!session.yAxis) return;
 		const target = e.target as HTMLInputElement;
-		app.yAxis.move(parseFloat(target.value));
+		session.yAxis.move(parseFloat(target.value));
 	}
 
 	function handleZSliderChange(e: Event) {
-		if (!app.zAxis) return;
+		if (!session.zAxis) return;
 		const target = e.target as HTMLInputElement;
-		app.zAxis.move(parseFloat(target.value));
+		session.zAxis.move(parseFloat(target.value));
 	}
 
 	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
@@ -204,6 +204,20 @@
 			selectFn();
 		}
 	}
+
+	let gridLimX = $derived(session.fov.width * (1 - session.gridConfig.overlap));
+	let gridLimY = $derived(session.fov.height * (1 - session.gridConfig.overlap));
+
+	function toggleLayer(key: keyof typeof session.layerVisibility) {
+		session.layerVisibility = { ...session.layerVisibility, [key]: !session.layerVisibility[key] };
+	}
+
+	type Layer = {
+		key: keyof typeof session.layerVisibility;
+		color: string;
+		icon: string;
+		title: string;
+	};
 </script>
 
 {#snippet tileRect(tile: Tile, selected: boolean)}
@@ -226,16 +240,110 @@
 		tabindex={isXYMoving ? -1 : 0}
 		onclick={(e) => handleTileSelect(e, tile)}
 		onauxclick={(e) => handleTileMove(e, tile)}
-		onkeydown={(e) => handleKeydown(e, () => app.selectTiles([[tile.row, tile.col]]))}
+		onkeydown={(e) => handleKeydown(e, () => session.selectTiles([[tile.row, tile.col]]))}
 	>
 		<title>Tile [{tile.row}, {tile.col}]</title>
 	</rect>
 {/snippet}
 
+{#snippet gridControls()}
+	<div
+		class="flex items-center gap-2 text-[0.65rem]"
+		class:opacity-70={session.gridLocked}
+		class:pointer-events-none={session.gridLocked}
+	>
+		<SpinBox
+			value={session.gridConfig.x_offset_um / 1000}
+			min={-gridLimX}
+			max={gridLimX}
+			step={0.1}
+			snapValue={0.0}
+			decimals={1}
+			numCharacters={5}
+			size="sm"
+			prefix="Grid dX"
+			suffix="mm"
+			onChange={(value: number) => {
+				if (session.gridLocked) return;
+				session.setGridOffset(value * 1000, session.gridConfig.y_offset_um);
+			}}
+		/>
+		<SpinBox
+			value={session.gridConfig.y_offset_um / 1000}
+			min={-gridLimY}
+			max={gridLimY}
+			snapValue={0.0}
+			step={0.1}
+			decimals={1}
+			numCharacters={5}
+			size="sm"
+			prefix="Grid dY"
+			suffix="mm"
+			onChange={(value: number) => {
+				if (session.gridLocked) return;
+				session.setGridOffset(session.gridConfig.x_offset_um, value * 1000);
+			}}
+		/>
+		<SpinBox
+			value={session.gridConfig.overlap}
+			min={0}
+			max={0.5}
+			snapValue={0.1}
+			step={0.01}
+			decimals={2}
+			numCharacters={5}
+			size="sm"
+			prefix="Overlap"
+			suffix="%"
+			onChange={(value: number) => {
+				if (session.gridLocked) return;
+				session.setGridOverlap(value);
+			}}
+		/>
+	</div>
+{/snippet}
+{#snippet layerToggle(
+	active: boolean,
+	activeColor: string,
+	icon: string,
+	title: string,
+	onclick: () => void,
+	disabled?: boolean
+)}
+	<button
+		{onclick}
+		{disabled}
+		class="rounded p-1 transition-colors {active
+			? `${activeColor} hover:bg-zinc-700`
+			: 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'} disabled:cursor-not-allowed disabled:opacity-50"
+		{title}
+	>
+		<Icon {icon} width="14" height="14" />
+	</button>
+{/snippet}
 <div class="flex h-full w-full flex-col p-2">
-	{#if app.xAxis && app.yAxis && app.zAxis}
-		<div class="py-4">
-			<StageControls xAxis={app.xAxis} yAxis={app.yAxis} zAxis={app.zAxis} />
+	{#if session.xAxis && session.yAxis && session.zAxis}
+		{@const layers: Layer[] = [
+          { key: 'grid', color: 'text-blue-500', icon: 'lucide-lab:grid-lines', title: 'Toggle grid' },
+          { key: 'stacks', color: 'text-blue-400', icon: 'ph:stack-light', title: 'Toggle stacks' },
+          { key: 'path', color: 'text-slate-400', icon: 'iconoir:path-arrow', title: 'Toggle path' },
+          { key: 'fov', color: 'text-success', icon: 'mdi:plus', title: 'Toggle FOV' },
+      ]}
+		<div class="flex flex-wrap items-center justify-between py-4">
+			{@render gridControls()}
+			<div class="flex gap-0.5 rounded p-1">
+				{#each layers as { key, color, icon, title } (key)}
+					{@render layerToggle(session.layerVisibility[key], color, icon, title, () => toggleLayer(key))}
+				{/each}
+				{@render layerToggle(
+					showThumbnail && session.layerVisibility.fov,
+					'text-success',
+					'ph:image-light',
+					'Toggle thumbnail',
+					() => (showThumbnail = !showThumbnail),
+					!session.layerVisibility.fov
+				)}
+			</div>
 		</div>
 
 		<div class="stage-container relative flex min-h-0 flex-1 justify-center overflow-hidden" bind:this={containerRef}>
@@ -251,10 +359,10 @@
 						type="range"
 						class="x-slider"
 						style="width: {stagePixelsX}px; margin-left: {TRACK_WIDTH + STAGE_BORDER + marginPixelsX}px;"
-						min={app.xAxis?.lowerLimit}
-						max={app.xAxis?.upperLimit}
+						min={session.xAxis?.lowerLimit}
+						max={session.xAxis?.upperLimit}
 						step={0.1}
-						value={app.xAxis?.position}
+						value={session.xAxis?.position}
 						disabled={isXYMoving}
 						oninput={handleXSliderChange}
 					/>
@@ -264,10 +372,10 @@
 							type="range"
 							class="y-slider"
 							style="height: {stagePixelsY}px; margin-top: {STAGE_BORDER + marginPixelsY}px;"
-							min={app.yAxis?.lowerLimit}
-							max={app.yAxis?.upperLimit}
+							min={session.yAxis?.lowerLimit}
+							max={session.yAxis?.upperLimit}
 							step={0.1}
-							value={app.yAxis?.position}
+							value={session.yAxis?.position}
 							disabled={isXYMoving}
 							oninput={handleYSliderChange}
 						/>
@@ -277,9 +385,9 @@
 							class="xy-svg"
 							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 						>
-							{#if app.layerVisibility.stacks}
+							{#if session.layerVisibility.stacks}
 								<g class="stacks-layer">
-									{#each app.stacks as stack (`${stack.row}_${stack.col}`)}
+									{#each session.stacks as stack (`${stack.row}_${stack.col}`)}
 										{@const cx = toMm(stack.x_um)}
 										{@const cy = toMm(stack.y_um)}
 										{@const w = toMm(stack.w_um)}
@@ -299,7 +407,7 @@
 											tabindex={isXYMoving ? -1 : 0}
 											onclick={(e) => handleStackSelect(e, stack)}
 											onauxclick={(e) => handleStackMove(e, stack)}
-											onkeydown={(e) => handleKeydown(e, () => app.selectTiles([[stack.row, stack.col]]))}
+											onkeydown={(e) => handleKeydown(e, () => session.selectTiles([[stack.row, stack.col]]))}
 										>
 											<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
 										</rect>
@@ -307,8 +415,8 @@
 								</g>
 							{/if}
 
-							{#if app.layerVisibility.path && app.stacks.length > 1}
-								{@const pathPoints = app.stacks.map((s) => ({
+							{#if session.layerVisibility.path && session.stacks.length > 1}
+								{@const pathPoints = session.stacks.map((s) => ({
 									x: toMm(s.x_um),
 									y: toMm(s.y_um)
 								}))}
@@ -328,13 +436,13 @@
 								</g>
 							{/if}
 
-							{#if app.layerVisibility.fov}
-								{@const fovLeft = fovX - app.fov.width / 2}
-								{@const fovTop = fovY - app.fov.height / 2}
+							{#if session.layerVisibility.fov}
+								{@const fovLeft = fovX - session.fov.width / 2}
+								{@const fovTop = fovY - session.fov.height / 2}
 								<g class="fov-layer pointer-events-none">
 									<defs>
 										<clipPath id="fov-clip">
-											<rect x={fovLeft} y={fovTop} width={app.fov.width} height={app.fov.height} />
+											<rect x={fovLeft} y={fovTop} width={session.fov.width} height={session.fov.height} />
 										</clipPath>
 									</defs>
 
@@ -343,8 +451,8 @@
 											href={thumbnail}
 											x={fovLeft}
 											y={fovTop}
-											width={app.fov.width}
-											height={app.fov.height}
+											width={session.fov.width}
+											height={session.fov.height}
 											clip-path="url(#fov-clip)"
 											preserveAspectRatio="xMidYMid slice"
 										/>
@@ -353,12 +461,12 @@
 									<rect
 										x={fovLeft - 0.025}
 										y={fovTop - 0.025}
-										width={app.fov.width + 0.05}
-										height={app.fov.height + 0.05}
+										width={session.fov.width + 0.05}
+										height={session.fov.height + 0.05}
 										class="fov-rect"
 										class:moving={isXYMoving}
 									>
-										<title>FOV: ({app.xAxis?.position.toFixed(1)}, {app.yAxis?.position.toFixed(1)}) mm</title>
+										<title>FOV: ({session.xAxis?.position.toFixed(1)}, {session.yAxis?.position.toFixed(1)}) mm</title>
 									</rect>
 
 									<g class="fov-crosshair" class:moving={isXYMoving}>
@@ -368,14 +476,14 @@
 								</g>
 							{/if}
 
-							{#if app.layerVisibility.grid}
+							{#if session.layerVisibility.grid}
 								<g class="grid-layer">
-									{#each app.tiles as tile (`${tile.row}_${tile.col}`)}
+									{#each session.tiles as tile (`${tile.row}_${tile.col}`)}
 										{#if !isSelected(tile)}
 											{@render tileRect(tile, false)}
 										{/if}
 									{/each}
-									{#each app.tiles as tile (`s_${tile.row}_${tile.col}`)}
+									{#each session.tiles as tile (`s_${tile.row}_${tile.col}`)}
 										{#if isSelected(tile)}
 											{@render tileRect(tile, true)}
 										{/if}
@@ -410,19 +518,19 @@
 					<input
 						type="range"
 						class="z-slider"
-						min={app.zAxis?.lowerLimit}
-						max={app.zAxis?.upperLimit}
+						min={session.zAxis?.lowerLimit}
+						max={session.zAxis?.upperLimit}
 						step={0.1}
-						value={app.zAxis?.position}
+						value={session.zAxis?.position}
 						disabled={isZMoving}
 						oninput={handleZSliderChange}
 					/>
 					<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
-						{#if primaryStack && app.zAxis}
-							{@const z0Offset = primaryStack.z_start_um / 1000 - app.zAxis.lowerLimit}
-							{@const z1Offset = primaryStack.z_end_um / 1000 - app.zAxis.lowerLimit}
-							{@const y0 = (1 - z0Offset / app.stageDepth) * canvasHeight - 1}
-							{@const y1 = (1 - z1Offset / app.stageDepth) * canvasHeight - 1}
+						{#if primaryStack && session.zAxis}
+							{@const z0Offset = primaryStack.z_start_um / 1000 - session.zAxis.lowerLimit}
+							{@const z1Offset = primaryStack.z_end_um / 1000 - session.zAxis.lowerLimit}
+							{@const y0 = (1 - z0Offset / session.stageDepth) * canvasHeight - 1}
+							{@const y1 = (1 - z1Offset / session.stageDepth) * canvasHeight - 1}
 							<g class={getStackStatusColor(primaryStack.status)}>
 								<line x1="0" y1={y0} x2="30" y2={y0} class="z-marker" />
 								<line x1="0" {y1} x2="30" y2={y1} class="z-marker" />
@@ -430,13 +538,13 @@
 						{/if}
 						<line
 							x1="0"
-							y1={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
+							y1={(1 - fovZ / session.stageDepth) * canvasHeight - 1}
 							x2="30"
-							y2={(1 - fovZ / app.stageDepth) * canvasHeight - 1}
+							y2={(1 - fovZ / session.stageDepth) * canvasHeight - 1}
 							class="z-line"
 							class:moving={isZMoving}
 						>
-							<title>Z: {app.zAxis?.position.toFixed(1)} mm</title>
+							<title>Z: {session.zAxis?.position.toFixed(1)} mm</title>
 						</line>
 					</svg>
 				</div>
@@ -444,8 +552,56 @@
 		</div>
 
 		<div class="flex items-center justify-between py-4">
-			<GridControls {app} />
-			<LayerToggles {app} bind:showThumbnail />
+			<div class="flex items-center gap-2">
+				<SpinBox
+					value={session.xAxis.position}
+					min={session.xAxis.lowerLimit}
+					max={session.xAxis.upperLimit}
+					step={0.01}
+					decimals={2}
+					numCharacters={8}
+					size="sm"
+					prefix="X"
+					suffix="mm"
+					color={session.xAxis.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => session.xAxis && session.xAxis.move(v)}
+				/>
+				<SpinBox
+					value={session.yAxis.position}
+					min={session.yAxis.lowerLimit}
+					max={session.yAxis.upperLimit}
+					step={0.01}
+					decimals={2}
+					numCharacters={8}
+					size="sm"
+					prefix="Y"
+					suffix="mm"
+					color={session.yAxis.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => session.yAxis && session.yAxis.move(v)}
+				/>
+				<SpinBox
+					value={session.zAxis.position}
+					min={session.zAxis.lowerLimit}
+					max={session.zAxis.upperLimit}
+					step={0.001}
+					decimals={3}
+					numCharacters={8}
+					size="sm"
+					prefix="Z"
+					suffix="mm"
+					color={session.zAxis.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => session.zAxis && session.zAxis.move(v)}
+				/>
+			</div>
+			<Button
+				variant={isStageMoving ? 'danger' : 'outline'}
+				size="sm"
+				onclick={() => session.haltStage()}
+				disabled={!isStageMoving}
+				aria-label="Halt stage"
+			>
+				Halt
+			</Button>
 		</div>
 	{:else}
 		<div class="flex h-64 items-center justify-center rounded border border-border">

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SessionRoot, JsonSchema, JsonSchemaProperty } from '$lib/core';
+	import type { SessionRoot, JsonSchema, JsonSchemaProperty } from '$lib/main';
 	import { Button, Field, Select, SpinBox, TextInput } from '$lib/ui/primitives';
 	import { sanitizeString } from '$lib/utils';
 	import Icon from '@iconify/svelte';

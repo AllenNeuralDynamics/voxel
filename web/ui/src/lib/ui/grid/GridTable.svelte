@@ -1,15 +1,15 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import type { App } from '$lib/app';
-	import { getStackStatusColor, type Tile, type Stack } from '$lib/core/types';
+	import type { Session } from '$lib/main';
+	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
 	import { Select, Checkbox, LegacySpinBox } from '$lib/ui/primitives';
 
 	interface Props {
-		app: App;
+		session: Session;
 	}
 
-	let { app }: Props = $props();
+	let { session }: Props = $props();
 
 	type FilterMode = 'all' | 'with_stack' | 'without_stack';
 	let filterMode = $state<FilterMode>('all');
@@ -30,17 +30,17 @@
 	}
 
 	function getStack(tile: Tile): Stack | null {
-		return app.stacks.find((s) => s.row === tile.row && s.col === tile.col) ?? null;
+		return session.stacks.find((s) => s.row === tile.row && s.col === tile.col) ?? null;
 	}
 
 	const filteredTiles = $derived.by(() => {
 		switch (filterMode) {
 			case 'with_stack':
-				return app.tiles.filter((t) => getStack(t) !== null);
+				return session.tiles.filter((t) => getStack(t) !== null);
 			case 'without_stack':
-				return app.tiles.filter((t) => getStack(t) === null);
+				return session.tiles.filter((t) => getStack(t) === null);
 			default:
-				return app.tiles;
+				return session.tiles;
 		}
 	});
 
@@ -65,15 +65,15 @@
 	}
 
 	function isFocused(tile: Tile): boolean {
-		return app.isTileSelected(tile.row, tile.col);
+		return session.isTileSelected(tile.row, tile.col);
 	}
 
 	function handleRowClick(e: MouseEvent, tile: Tile) {
 		if (e.ctrlKey || e.metaKey) {
-			if (app.isTileSelected(tile.row, tile.col)) app.removeFromSelection([[tile.row, tile.col]]);
-			else app.addToSelection([[tile.row, tile.col]]);
+			if (session.isTileSelected(tile.row, tile.col)) session.removeFromSelection([[tile.row, tile.col]]);
+			else session.addToSelection([[tile.row, tile.col]]);
 		} else {
-			app.selectTiles([[tile.row, tile.col]]);
+			session.selectTiles([[tile.row, tile.col]]);
 		}
 	}
 
@@ -84,7 +84,7 @@
 		} else {
 			checkedItems.delete(key);
 		}
-		app.selectTiles([[tile.row, tile.col]]);
+		session.selectTiles([[tile.row, tile.col]]);
 	}
 
 	function isChecked(tile: Tile): boolean {
@@ -92,13 +92,13 @@
 	}
 
 	function handleAddStack(tile: Tile) {
-		app.addStacks([{ row: tile.row, col: tile.col, zStartUm: defaultZStart, zEndUm: defaultZEnd }]);
-		app.selectTiles([[tile.row, tile.col]]);
+		session.addStacks([{ row: tile.row, col: tile.col, zStartUm: defaultZStart, zEndUm: defaultZEnd }]);
+		session.selectTiles([[tile.row, tile.col]]);
 	}
 
 	function handleTileDoubleClick(tile: Tile) {
-		app.selectTiles([[tile.row, tile.col]]);
-		app.moveToGridCell(tile.row, tile.col);
+		session.selectTiles([[tile.row, tile.col]]);
+		session.moveToGridCell(tile.row, tile.col);
 	}
 
 	function handleDeleteSelected() {
@@ -107,16 +107,16 @@
 				const [row, col] = key.split(',').map(Number);
 				return { row, col };
 			})
-			.filter(({ row, col }) => app.stacks.some((s) => s.row === row && s.col === col));
+			.filter(({ row, col }) => session.stacks.some((s) => s.row === row && s.col === col));
 
 		if (positions.length > 0) {
-			app.removeStacks(positions);
+			session.removeStacks(positions);
 		}
 		checkedItems.clear();
 	}
 
 	function handleZChange(tile: Tile, zStart: number, zEnd: number) {
-		app.selectTiles([[tile.row, tile.col]]);
+		session.selectTiles([[tile.row, tile.col]]);
 		const key = tileKey(tile.row, tile.col);
 
 		const checkedWithStacks = Array.from(checkedItems)
@@ -124,15 +124,14 @@
 				const [row, col] = k.split(',').map(Number);
 				return { row, col };
 			})
-			.filter(({ row, col }) => app.stacks.some((s) => s.row === row && s.col === col));
+			.filter(({ row, col }) => session.stacks.some((s) => s.row === row && s.col === col));
 
 		if (checkedItems.has(key) && checkedWithStacks.length > 1) {
-			app.editStacks(checkedWithStacks.map((p) => ({ ...p, zStartUm: zStart, zEndUm: zEnd })));
+			session.editStacks(checkedWithStacks.map((p) => ({ ...p, zStartUm: zStart, zEndUm: zEnd })));
 		} else {
-			app.editStacks([{ row: tile.row, col: tile.col, zStartUm: zStart, zEndUm: zEnd }]);
+			session.editStacks([{ row: tile.row, col: tile.col, zStartUm: zStart, zEndUm: zEnd }]);
 		}
 	}
-
 </script>
 
 <div class="flex h-full flex-col text-xs text-foreground">
@@ -257,7 +256,7 @@
 
 		{#if filteredTiles.length === 0}
 			<div class="flex items-center justify-center p-8 text-muted-foreground/50">
-				{#if app.tiles.length === 0}
+				{#if session.tiles.length === 0}
 					No tiles in grid
 				{:else}
 					No tiles match filter

@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import PreviewOverlay from './PreviewOverlay.svelte';
-	import type { PreviewState } from '$lib/app/preview.svelte';
-	import { compositeCroppedFrames } from '$lib/app/preview.svelte.ts';
+	import Icon from '@iconify/svelte';
+	import PreviewInfo from './PreviewInfo.svelte';
+	import PanZoomControls from './PanZoomControls.svelte';
+	import Histogram from './Histogram.svelte';
+	import type { PreviewState } from '$lib/main';
+	import { compositeCroppedFrames } from '$lib/main/preview.svelte.ts';
 	import { clampTopLeft } from '$lib/utils';
 
 	let canvasEl: HTMLCanvasElement;
@@ -18,6 +21,7 @@
 	let isRendering = false;
 	let needsRedraw = false;
 	let animFrameId: number | null = null;
+	let showHistograms = $state(true);
 
 	// Compute border color from visible channel colormaps
 	let borderColor = $derived.by(() => {
@@ -171,18 +175,75 @@
 			cleanupPanZoom();
 		};
 	});
+
+	// Channels with names (for histogram strip)
+	const namedChannels = $derived(previewer.channels.filter((c) => c.name));
 </script>
 
-<div class="relative flex h-full items-start justify-center bg-background px-4 pt-18 pb-8" bind:this={containerEl}>
-	<canvas
-		bind:this={canvasEl}
-		class="preview-canvas max-h-full max-w-3/4 border"
-		style:border-color={borderColor}
-		class:panning={previewer.isPanZoomActive}
-		class:is-idle={!previewer.isPreviewing}
-	>
-	</canvas>
-	<PreviewOverlay {previewer} />
+<div class="grid h-full grid-rows-[auto_1fr_auto] gap-6 bg-background" bind:this={containerEl}>
+	<!-- Top: Controls -->
+	<div class="flex items-center justify-between px-4 py-2">
+		<div class="flex items-center gap-3">
+			<button
+				onclick={() => (previewer.isPreviewing ? previewer.stopPreview() : previewer.startPreview())}
+				class="w-12 rounded py-1 text-center text-[0.65rem] font-medium transition-colors {previewer.isPreviewing
+					? 'bg-danger text-danger-fg hover:bg-danger/90'
+					: 'bg-success text-success-fg hover:bg-success/90'}"
+			>
+				{previewer.isPreviewing ? 'Stop' : 'Start'}
+			</button>
+			<PreviewInfo {previewer} />
+		</div>
+		<div class="flex items-center gap-1">
+			<PanZoomControls {previewer} />
+			<button
+				onclick={() => (showHistograms = !showHistograms)}
+				class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors hover:bg-accent {showHistograms
+					? 'text-muted-foreground'
+					: 'text-muted-foreground/40'}"
+				aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
+				title={showHistograms ? 'Hide histograms' : 'Show histograms'}
+			>
+				<Icon icon="et:bargraph" width="14" height="14" />
+			</button>
+		</div>
+	</div>
+
+	<!-- Center: Canvas -->
+	<div class="flex items-center justify-center overflow-hidden px-4">
+		<canvas
+			bind:this={canvasEl}
+			class="preview-canvas max-h-full max-w-full border"
+			style:border-color={borderColor}
+			class:panning={previewer.isPanZoomActive}
+			class:is-idle={!previewer.isPreviewing}
+		>
+		</canvas>
+	</div>
+
+	<!-- Bottom: Channel Histograms -->
+	<div class="flex justify-around gap-8 px-4 py-2">
+		{#if showHistograms}
+			{#each namedChannels as channel (channel.idx)}
+				<div class=" min-w-0 flex-1">
+					<Histogram
+						label={channel.label ?? channel.config?.label ?? channel.name ?? ''}
+						histData={channel.latestHistogram}
+						levelsMin={channel.levelsMin}
+						levelsMax={channel.levelsMax}
+						onLevelsChange={(min, max) => {
+							if (channel.name) previewer.setChannelLevels(channel.name, min, max);
+						}}
+						colormap={channel.colormap}
+						catalog={previewer.catalog}
+						onColormapChange={(cmap) => {
+							if (channel.name) previewer.setChannelColormap(channel.name, cmap);
+						}}
+					/>
+				</div>
+			{/each}
+		{/if}
+	</div>
 </div>
 
 <style>

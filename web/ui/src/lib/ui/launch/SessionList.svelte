@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SessionDirectory } from '$lib/core';
+	import type { SessionDirectory } from '$lib/main';
 	import Icon from '@iconify/svelte';
 
 	const {

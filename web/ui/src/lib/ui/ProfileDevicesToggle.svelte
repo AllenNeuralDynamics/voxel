@@ -1,18 +1,18 @@
 <script lang="ts">
 	import { ToggleGroup, Checkbox, Collapsible } from 'bits-ui';
 	import Icon from '@iconify/svelte';
-	import type { App } from '$lib/app';
-	import type { VoxelRigConfig, ChannelConfig } from '$lib/core/config';
+	import type { Session } from '$lib/main';
+	import type { VoxelRigConfig, ChannelConfig } from '$lib/main';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 	interface Props {
-		app: App;
+		session: Session;
 		visible?: Set<string>;
 		colors?: Record<string, string>; // Optional color map for device indicators
 		waveformsOnly?: boolean; // Optional: filter to show only devices with waveforms (those with acq_port in DAQ config)
 	}
 
-	let { app, visible = $bindable(new Set<string>()), colors, waveformsOnly = false }: Props = $props();
+	let { session, visible = $bindable(new Set<string>()), colors, waveformsOnly = false }: Props = $props();
 
 	type GroupMode = 'none' | 'type' | 'path' | 'channel';
 
@@ -25,8 +25,8 @@
 	let groupMode = $state<GroupMode>('none');
 
 	// Get active profile and its config
-	const activeProfile = $derived(app.activeProfile);
-	const config = $derived(app.config);
+	const activeProfile = $derived(session.activeProfile);
+	const config = $derived(session.config);
 
 	// Get set of devices with waveforms (those with acq_port in DAQ config)
 	const devicesWithWaveforms = $derived.by(() => {

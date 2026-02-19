@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { App } from '$lib/app';
-	import type { SessionDirectory, JsonSchema } from '$lib/core';
-	import SessionList from './SessionList.svelte';
-	import SessionForm from './SessionForm.svelte';
+	import type { App } from '$lib/main';
+	import type { SessionDirectory, JsonSchema } from '$lib/main';
+	import SessionList from '$lib/ui/launch/SessionList.svelte';
+	import SessionForm from '$lib/ui/launch/SessionForm.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 	import { Collapsible } from 'bits-ui';
@@ -11,27 +11,23 @@
 
 	const { app }: { app: App } = $props();
 
-	// State
 	let sessions = $state<SessionDirectory[]>([]);
 	let loadingSessions = $state(false);
 	let error = $state<string | null>(null);
 	let metadataTargets = $state<Record<string, string>>({});
 	let metadataSchema = $state<JsonSchema | null>(null);
 
-	// Derived
 	const roots = $derived(app.status?.roots ?? []);
 	const rigs = $derived(app.status?.rigs ?? []);
 	const isLaunching = $derived(app.status?.phase === 'launching');
 	const logs = $derived(app.logs);
 
-	// Load sessions from ALL roots when roots change
 	$effect(() => {
 		if (roots.length > 0) {
 			loadAllSessions();
 		}
 	});
 
-	// Fetch metadata targets on mount
 	$effect(() => {
 		app
 			.fetchMetadataTargets()
@@ -39,7 +35,7 @@
 				metadataTargets = targets;
 			})
 			.catch((e) => {
-				console.warn('[LaunchPage] Failed to fetch metadata targets:', e);
+				console.warn('[LaunchScreen] Failed to fetch metadata targets:', e);
 			});
 	});
 
@@ -47,9 +43,7 @@
 		loadingSessions = true;
 		error = null;
 		try {
-			// Fetch sessions from all roots in parallel
 			const allSessions = await Promise.all(roots.map((root) => app.fetchSessions(root.name)));
-			// Flatten and sort by modified date (newest first)
 			sessions = allSessions.flat().sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load sessions';
@@ -63,7 +57,7 @@
 		try {
 			metadataSchema = await app.fetchMetadataSchema(target);
 		} catch (e) {
-			console.warn('[LaunchPage] Failed to fetch metadata schema:', e);
+			console.warn('[LaunchScreen] Failed to fetch metadata schema:', e);
 			metadataSchema = null;
 		}
 	}
@@ -94,9 +88,7 @@
 </script>
 
 <div class="flex h-screen w-full bg-background">
-	<!-- Sidebar -->
 	<div class="flex w-150 shrink-0 flex-col border-r border-border">
-		<!-- Header (pinned) -->
 		<div class="shrink-0 p-4 pb-0">
 			<div class="mb-6 flex flex-col gap-1">
 				<div class="flex items-center gap-2">
@@ -118,7 +110,6 @@
 				{/if}
 			</div>
 
-			<!-- Error display -->
 			{#if error}
 				<div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
 					{error}
@@ -127,7 +118,6 @@
 		</div>
 
 		{#if !isLaunching}
-			<!-- New Session (pinned) -->
 			<div class="shrink-0 px-4">
 				<Collapsible.Root class="mb-6">
 					<Collapsible.Trigger
@@ -151,7 +141,6 @@
 				</Collapsible.Root>
 			</div>
 
-			<!-- Recent sessions (scrollable) -->
 			<div class="px-4">
 				<h2 class="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
 			</div>
@@ -160,13 +149,11 @@
 			</div>
 		{/if}
 
-		<!-- Connection status (pinned to bottom) -->
 		<div class="shrink-0 p-4 pt-2">
 			<ClientStatus client={app.client} />
 		</div>
 	</div>
 
-	<!-- Log viewer -->
 	<div class="flex flex-1 flex-col bg-card p-4">
 		<LogViewer {logs} onClear={() => app.clearLogs()} />
 	</div>

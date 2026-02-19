@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { type DevicesManager, parseVec2D } from '$lib/core';
+	import { type DevicesManager, parseVec2D } from '$lib/main';
 	import SliderInput from '$lib/ui/primitives/SliderInput.svelte';
 	import SelectInput from '$lib/ui/primitives/SelectInput.svelte';
 	import CardAccordion from '$lib/ui/primitives/CardAccordion.svelte';
