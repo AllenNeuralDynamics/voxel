@@ -64,8 +64,8 @@
 		inset: 0;
 		width: 100%;
 		height: 100%;
-		--_track-color: var(--color-zinc-600);
-		--_track-width: 2px;
+		--_track-color: var(--color-zinc-700);
+		--_track-width: 1px;
 
 		&:hover {
 			--_track-color: var(--color-zinc-500);

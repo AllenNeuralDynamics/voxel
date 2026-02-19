@@ -4,6 +4,7 @@
 	import PreviewInfo from './PreviewInfo.svelte';
 	import PanZoomControls from './PanZoomControls.svelte';
 	import Histogram from './Histogram.svelte';
+	import Button from '$lib/ui/primitives/Button.svelte';
 	import type { PreviewState } from '$lib/main';
 	import { compositeCroppedFrames } from '$lib/main/preview.svelte.ts';
 	import { clampTopLeft } from '$lib/utils';
@@ -180,20 +181,9 @@
 	const namedChannels = $derived(previewer.channels.filter((c) => c.name));
 </script>
 
-<div class="grid h-full grid-rows-[auto_1fr_auto] gap-6 bg-background" bind:this={containerEl}>
+<div class="grid h-full grid-rows-[auto_1fr_auto] gap-6 bg-background p-2" bind:this={containerEl}>
 	<!-- Top: Controls -->
-	<div class="flex items-center justify-between px-4 py-2">
-		<div class="flex items-center gap-3">
-			<button
-				onclick={() => (previewer.isPreviewing ? previewer.stopPreview() : previewer.startPreview())}
-				class="w-12 rounded py-1 text-center text-[0.65rem] font-medium transition-colors {previewer.isPreviewing
-					? 'bg-danger text-danger-fg hover:bg-danger/90'
-					: 'bg-success text-success-fg hover:bg-success/90'}"
-			>
-				{previewer.isPreviewing ? 'Stop' : 'Start'}
-			</button>
-			<PreviewInfo {previewer} />
-		</div>
+	<div class="flex items-center justify-between py-4">
 		<div class="flex items-center gap-1">
 			<PanZoomControls {previewer} />
 			<button
@@ -206,6 +196,16 @@
 			>
 				<Icon icon="et:bargraph" width="14" height="14" />
 			</button>
+		</div>
+		<div class="flex items-center gap-3">
+			<PreviewInfo {previewer} />
+			<Button
+				variant={previewer.isPreviewing ? 'danger' : 'success'}
+				size="sm"
+				onclick={() => (previewer.isPreviewing ? previewer.stopPreview() : previewer.startPreview())}
+			>
+				{previewer.isPreviewing ? 'Stop' : 'Start'}
+			</Button>
 		</div>
 	</div>
 

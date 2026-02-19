@@ -466,7 +466,7 @@
 						orientation="horizontal"
 						style="width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {SLIDER_WIDTH +
 							marginPixelsX +
-							0.5}px; transform: translateY(50%);"
+							0.5}px; transform: translateY(calc(50% + 0.5px));"
 						min={session.xAxis.lowerLimit}
 						max={session.xAxis.upperLimit}
 						step={0.1}
@@ -478,7 +478,7 @@
 					<div class="flex items-start">
 						<StageSlider
 							orientation="vertical-ltr"
-							style="width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(50%);"
+							style="width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(calc(50% + 0.5px));"
 							min={session.yAxis.lowerLimit}
 							max={session.yAxis.upperLimit}
 							step={0.1}

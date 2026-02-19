@@ -40,7 +40,7 @@
 			disabled={isDisabled}
 		>
 			<SelectPrimitive.Trigger
-				class="group flex h-10 w-full items-center justify-between rounded border border-input bg-transparent px-3 text-sm transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+				class="group flex h-8 w-full items-center justify-between rounded border border-input bg-transparent px-3 text-sm transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				<span class="truncate text-left">
 					{#if selectedProfile}

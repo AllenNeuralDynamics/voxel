@@ -222,7 +222,7 @@ export class App {
 			this.#handleStatusUpdate(status);
 		});
 
-		const unsubProfile = this.#client.on('profile/changed', (_payload) => {
+		const unsubProfile = this.#client.on('profile/changed', () => {
 			this.session?.requestWaveforms();
 		});
 
