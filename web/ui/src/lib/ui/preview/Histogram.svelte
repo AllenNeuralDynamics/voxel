@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
+	import Icon from '@iconify/svelte';
 	import type { ColormapCatalog } from '$lib/main';
 
 	interface Props {
@@ -13,6 +14,8 @@
 		catalog: ColormapCatalog;
 		onColormapChange: (colormap: string) => void;
 		dataTypeMax?: number;
+		visible?: boolean;
+		onVisibilityChange?: (visible: boolean) => void;
 	}
 
 	let {
@@ -24,7 +27,9 @@
 		colormap,
 		catalog,
 		onColormapChange,
-		dataTypeMax = 65535
+		dataTypeMax = 65535,
+		visible,
+		onVisibilityChange
 	}: Props = $props();
 
 	// ── Colormap Colors ────────────────────────────────────────────────
@@ -292,7 +297,12 @@
 	let columnWidth = $state(288);
 </script>
 
-<div class="flex flex-col" bind:clientWidth={columnWidth} style:--label-width="{labelWidth}px">
+<div
+	class="flex flex-col transition-opacity"
+	class:opacity-40={visible === false}
+	bind:clientWidth={columnWidth}
+	style:--label-width="{labelWidth}px"
+>
 	<!-- Floating Level Inputs -->
 	<div class="floating-row relative" class:invisible={!hasValidData}>
 		<input
@@ -421,15 +431,27 @@
 	<div class="flex -translate-y-px items-center justify-between">
 		<input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
 
-		<ColormapPicker
-			{label}
-			{colormap}
-			{catalog}
-			{onColormapChange}
-			width={columnWidth}
-			align="center"
-			triggerClass="cursor-pointer text-[0.65rem] leading-none font-medium transition-colors hover:brightness-125"
-		/>
+		<div class="flex items-center gap-1">
+			{#if onVisibilityChange}
+				<button
+					onclick={() => onVisibilityChange?.(!visible)}
+					class="flex items-center rounded"
+					style="color: {colors[colors.length - 1]};"
+					aria-label={visible ? 'Hide channel' : 'Show channel'}
+				>
+					<Icon icon={visible ? 'mdi:eye' : 'mdi:eye-off'} width="12" height="12" />
+				</button>
+			{/if}
+			<ColormapPicker
+				{label}
+				{colormap}
+				{catalog}
+				{onColormapChange}
+				width={columnWidth}
+				align="center"
+				triggerClass="cursor-pointer text-[0.65rem] leading-none font-medium transition-colors hover:brightness-125"
+			/>
+		</div>
 
 		<input
 			type="text"

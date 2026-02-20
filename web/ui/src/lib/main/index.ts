@@ -1,5 +1,5 @@
 export { App, type AppOptions } from './app.svelte.ts';
-export { Session, type SessionInit } from './session.svelte.ts';
+export { Session, type SessionInit, type LaserInfo } from './session.svelte.ts';
 export { Profile, type ProfileContext } from './profile.svelte.ts';
 export { Axis } from './axis.svelte.ts';
 export { PreviewState, PreviewChannel } from './preview.svelte.ts';

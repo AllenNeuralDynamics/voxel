@@ -5,6 +5,15 @@ import { PreviewState } from './preview.svelte';
 import { Profile, type ProfileContext } from './profile.svelte';
 import { Axis } from './axis.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { wavelengthToColor } from '$lib/utils';
+
+export interface LaserInfo {
+	deviceId: string;
+	wavelength: number | undefined;
+	isEnabled: boolean;
+	powerMw: number | undefined;
+	color: string;
+}
 
 export interface SessionInit {
 	client: Client;
@@ -53,6 +62,25 @@ export class Session implements ProfileContext {
 	stageDepth = $derived(this.zAxis.range);
 	stageIsMoving = $derived(this.xAxis.isMoving || this.yAxis.isMoving || this.zAxis.isMoving);
 	stageConnected = $derived(this.xAxis.isConnected && this.yAxis.isConnected && this.zAxis.isConnected);
+
+	lasers = $derived.by<LaserInfo[]>(() => {
+		const laserMap = new SvelteMap<string, LaserInfo>();
+		if (this.config?.channels) {
+			for (const channel of Object.values(this.config.channels)) {
+				if (!channel.illumination || laserMap.has(channel.illumination)) continue;
+				const deviceId = channel.illumination;
+				const wavelength = this.devices.getPropertyValue(deviceId, 'wavelength') as number | undefined;
+				laserMap.set(deviceId, {
+					deviceId,
+					wavelength,
+					isEnabled: (this.devices.getPropertyValue(deviceId, 'is_enabled') as boolean) ?? false,
+					powerMw: this.devices.getPropertyValue(deviceId, 'power_mw') as number | undefined,
+					color: wavelengthToColor(wavelength)
+				});
+			}
+		}
+		return Array.from(laserMap.values()).sort((a, b) => (a.wavelength ?? Infinity) - (b.wavelength ?? Infinity));
+	});
 
 	isMutating = $state(false);
 	error = $state<string | null>(null);

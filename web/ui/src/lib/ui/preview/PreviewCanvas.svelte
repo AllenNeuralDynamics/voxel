@@ -4,7 +4,6 @@
 	import PreviewInfo from './PreviewInfo.svelte';
 	import PanZoomControls from './PanZoomControls.svelte';
 	import Histogram from './Histogram.svelte';
-	import Button from '$lib/ui/primitives/Button.svelte';
 	import type { PreviewState } from '$lib/main';
 	import { compositeCroppedFrames } from '$lib/main/preview.svelte.ts';
 	import { clampTopLeft } from '$lib/utils';
@@ -185,7 +184,6 @@
 	<!-- Top: Controls -->
 	<div class="flex items-center justify-between py-4">
 		<div class="flex items-center gap-1">
-			<PanZoomControls {previewer} />
 			<button
 				onclick={() => (showHistograms = !showHistograms)}
 				class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors hover:bg-accent {showHistograms
@@ -196,17 +194,9 @@
 			>
 				<Icon icon="et:bargraph" width="14" height="14" />
 			</button>
-		</div>
-		<div class="flex items-center gap-3">
 			<PreviewInfo {previewer} />
-			<Button
-				variant={previewer.isPreviewing ? 'danger' : 'success'}
-				size="sm"
-				onclick={() => (previewer.isPreviewing ? previewer.stopPreview() : previewer.startPreview())}
-			>
-				{previewer.isPreviewing ? 'Stop' : 'Start'}
-			</Button>
 		</div>
+		<PanZoomControls {previewer} />
 	</div>
 
 	<!-- Center: Canvas -->
@@ -239,6 +229,8 @@
 						onColormapChange={(cmap) => {
 							if (channel.name) previewer.setChannelColormap(channel.name, cmap);
 						}}
+						visible={channel.visible}
+						onVisibilityChange={(v) => (channel.visible = v)}
 					/>
 				</div>
 			{/each}

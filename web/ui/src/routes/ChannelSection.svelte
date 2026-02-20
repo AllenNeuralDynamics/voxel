@@ -1,39 +1,22 @@
 <script lang="ts">
-	import ChannelInfoTooltip from './ChannelInfoTooltip.svelte';
-	import ColormapPicker from './preview/ColormapPicker.svelte';
-	import Icon from '@iconify/svelte';
-	import Histogram from '$lib/ui/Histogram.svelte';
+	import ChannelInfoTooltip from '$lib/ui/ChannelInfoTooltip.svelte';
 	import LaserControl from '$lib/ui/devices/LaserControl.svelte';
 	import CameraControl from '$lib/ui/devices/CameraControl.svelte';
-	import type { PreviewState, PreviewChannel } from '$lib/main';
-	import type { DevicesManager, ColormapCatalog } from '$lib/main';
+	import type { PreviewChannel } from '$lib/main';
+	import type { DevicesManager } from '$lib/main';
 	import type { DeviceFilter } from './DeviceFilterToggle.svelte';
 
 	interface Props {
 		channel: PreviewChannel;
-		previewer: PreviewState;
 		devices: DevicesManager;
 		deviceFilter: DeviceFilter;
-		showHistograms: boolean;
-		catalog: ColormapCatalog;
 	}
 
-	let { channel, previewer, devices: devicesManager, deviceFilter, showHistograms, catalog }: Props = $props();
-
-	function handleVisibilityToggle() {
-		channel.visible = !channel.visible;
-	}
-
-	function handleLevelsChange(min: number, max: number) {
-		if (channel.name) {
-			previewer.setChannelLevels(channel.name, min, max);
-		}
-	}
+	let { channel, devices: devicesManager, deviceFilter }: Props = $props();
 
 	// Determine which device controls to show based on filter
 	const showIllumination = $derived(deviceFilter === 'all' || deviceFilter === 'illumination');
 	const showDetection = $derived(deviceFilter === 'all' || deviceFilter === 'detection');
-	const showAuxiliary = $derived(deviceFilter === 'all' || deviceFilter === 'auxiliary');
 
 	// Get device status for footer when hidden
 	const laserEnabled = $derived(
@@ -58,74 +41,26 @@
 	);
 
 	const isStreaming = $derived(cameraStreamInfo && cameraStreamInfo !== null && cameraStreamInfo !== undefined);
-
-	// Resolve colormap name to gradient color stops for the histogram
-	const colormapColors = $derived.by(() => {
-		const name = channel.colormap;
-		if (!name) return undefined;
-		// Check if it's a direct hex color
-		if (name.startsWith('#')) return [name];
-		for (const group of catalog) {
-			const stops = group.colormaps[name];
-			if (stops) return stops;
-		}
-		return undefined;
-	});
 </script>
 
 <div class="space-y-4 px-4 py-4">
-	<!-- Channel Header with Inline Controls -->
+	<!-- Channel Header -->
 	{#if channel.name}
 		<div class="-mt-2 flex items-center justify-between">
-			<ColormapPicker
-				label={channel.label ?? channel.config?.label ?? channel.name ?? ''}
-				colormap={channel.colormap}
-				{catalog}
-				onColormapChange={(cmap) => {
-					if (channel.name) previewer.setChannelColormap(channel.name, cmap);
-				}}
-			/>
-			<div class="flex items-center gap-2">
-				<ChannelInfoTooltip name={channel.name} label={channel.label} config={channel.config} />
-				<button
-					onclick={handleVisibilityToggle}
-					class="flex items-center rounded p-1 transition-colors {channel.visible
-						? 'text-zinc-300 hover:bg-zinc-800'
-						: 'text-zinc-500 hover:bg-zinc-800'}"
-					aria-label={channel.visible ? 'Hide channel' : 'Show channel'}
-				>
-					<Icon icon={channel.visible ? 'mdi:eye' : 'mdi:eye-off'} width="14" height="14" />
-				</button>
-			</div>
+			<span class="text-xs font-medium text-zinc-200">
+				{channel.label ?? channel.config?.label ?? channel.name}
+			</span>
+			<ChannelInfoTooltip name={channel.name} label={channel.label} config={channel.config} />
 		</div>
 	{/if}
 
-	<!-- Histogram -->
-	{#if showHistograms}
-		<Histogram
-			histData={channel.latestHistogram}
-			levelsMin={channel.levelsMin}
-			levelsMax={channel.levelsMax}
-			dataTypeMax={65535}
-			colors={colormapColors}
-			onLevelsChange={handleLevelsChange}
-		/>
-	{/if}
-
 	<!-- Device Controls -->
-	<!-- Illumination -->
 	{#if channel.config?.illumination && showIllumination}
 		<LaserControl deviceId={channel.config.illumination} {devicesManager} />
 	{/if}
 
-	<!-- Detection -->
 	{#if channel.config?.detection && showDetection}
 		<CameraControl deviceId={channel.config.detection} {devicesManager} />
-	{/if}
-
-	<!-- Auxilliary -->
-	{#if channel.config && showAuxiliary}
-		<div class="text-[0.5rem] text-zinc-600"></div>
 	{/if}
 
 	{#snippet statusItemDivider()}

@@ -4,7 +4,6 @@
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
 	import StageSlider from './StageSlider.svelte';
-	import StagePosition from './StagePosition.svelte';
 	import Icon from '@iconify/svelte';
 
 	interface Props {
@@ -19,7 +18,6 @@
 	const Z_AREA_WIDTH = SLIDER_WIDTH * 2;
 	const STAGE_GAP = 16;
 	const STAGE_BORDER = 0.5;
-	const TOGGLES_HEIGHT = 30;
 
 	const CROSSHAIR_STROKE = 0.05;
 	const ARROW_HEAD = 'M -0.15 -0.2 L 0.15 0 L -0.15 0.2';
@@ -27,6 +25,12 @@
 
 	let isXYMoving = $derived(session.xAxis?.isMoving || session.yAxis?.isMoving);
 	let isZMoving = $derived(session.zAxis?.isMoving ?? false);
+
+	// Primary selection (first selected tile) — used for z-sidebar markers
+	let primaryTile = $derived(session.selectedTiles[0] ?? null);
+	let primaryStack = $derived(
+		primaryTile ? (session.stacks.find((s) => s.row === primaryTile.row && s.col === primaryTile.col) ?? null) : null
+	);
 
 	// FOV position relative to stage origin (lower limits)
 	let fovX = $derived(session.xAxis ? session.xAxis.position - session.xAxis.lowerLimit : 0);
@@ -59,8 +63,8 @@
 	let zLineY = $derived((1 - fovZ / session.stageDepth) * canvasHeight - 1);
 
 	function updateCanvasSize(containerWidth: number, containerHeight: number) {
-		const availableWidth = containerWidth - SLIDER_WIDTH / 2 - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 2;
-		const availableHeight = containerHeight - SLIDER_WIDTH / 2 - TOGGLES_HEIGHT;
+		const availableWidth = containerWidth - SLIDER_WIDTH - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 2;
+		const availableHeight = containerHeight - SLIDER_WIDTH;
 		if (availableWidth <= 0 || availableHeight <= 0) return;
 
 		const containerAspect = availableWidth / availableHeight;
@@ -378,28 +382,26 @@
 			{ key: 'fov', color: 'text-success', icon: 'mdi:plus', title: 'Toggle FOV' },
 		]}
 
-		<div class="grid flex-1 grid-rows-[1fr_auto] overflow-hidden" bind:this={containerRef}>
-			<div class="flex place-self-center" style:gap="{STAGE_GAP}px" style:--thumb-width="{thumbThickness}px">
-					<div
-						class="grid"
-						style="grid-template-columns: {SLIDER_WIDTH / 2}px auto; grid-template-rows: {SLIDER_WIDTH / 2}px 1fr;"
-						style:--slider-width="{SLIDER_WIDTH}px"
-					>
-						<StageSlider
-							orientation="horizontal"
-							style="grid-column: 2; width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {marginPixelsX +
-								0.5}px; transform: translateY(0.5px);"
-							min={session.xAxis.lowerLimit}
-							max={session.xAxis.upperLimit}
-							step={0.1}
-							position={session.xAxis.position}
-							isMoving={session.xAxis.isMoving}
-							onmove={(v) => session.xAxis?.move(v)}
-						/>
+		<div class="flex flex-1 justify-center overflow-hidden" bind:this={containerRef}>
+			<div class="flex" style:gap="{STAGE_GAP}px" style:--thumb-width="{thumbThickness}px">
+				<div class="flex flex-col" style:--slider-width="{SLIDER_WIDTH}px">
+					<StageSlider
+						orientation="horizontal"
+						style="width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {SLIDER_WIDTH +
+							marginPixelsX +
+							0.5}px; transform: translateY(calc(50% + 0.5px));"
+						min={session.xAxis.lowerLimit}
+						max={session.xAxis.upperLimit}
+						step={0.1}
+						position={session.xAxis.position}
+						isMoving={session.xAxis.isMoving}
+						onmove={(v) => session.xAxis?.move(v)}
+					/>
 
+					<div class="flex items-start">
 						<StageSlider
 							orientation="vertical-ltr"
-							style="grid-column: 1; grid-row: 2; width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(0.5px);"
+							style="width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(calc(50% + 0.5px));"
 							min={session.yAxis.lowerLimit}
 							max={session.yAxis.upperLimit}
 							step={0.1}
@@ -411,7 +413,7 @@
 						<svg
 							viewBox={viewBoxStr}
 							class="border border-zinc-700"
-							style="grid-column: 2; grid-row: 2; width: {canvasWidth}px; height: {canvasHeight}px;"
+							style="width: {canvasWidth}px; height: {canvasHeight}px;"
 							overflow="hidden"
 						>
 							{@render fovLayer()}
@@ -421,76 +423,67 @@
 						</svg>
 					</div>
 
-					<div
-						class="relative border border-zinc-600 transition-colors duration-300 ease-in-out hover:bg-zinc-900"
-						style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
-					>
-						<StageSlider
-							orientation="vertical-rtl"
-							style="position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: {Z_AREA_WIDTH}px;"
-							min={session.zAxis.lowerLimit}
-							max={session.zAxis.upperLimit}
-							step={0.1}
-							position={session.zAxis.position}
-							isMoving={isZMoving}
-							onmove={(v) => session.zAxis?.move(v)}
-						/>
-						<svg
-							viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
-							class="z-svg pointer-none absolute inset-0 z-0"
-							preserveAspectRatio="none"
-							width="100%"
-							height="100%"
-						>
-							{#if session.zAxis}
-								{#each session.stacks as stack (`z_${stack.row}_${stack.col}`)}
-									{@const selected = session.isTileSelected(stack.row, stack.col)}
-									{@const z0Y =
-										(1 - (stack.z_start_um / 1000 - session.zAxis.lowerLimit) / session.stageDepth) * canvasHeight - 1}
-									{@const z1Y =
-										(1 - (stack.z_end_um / 1000 - session.zAxis.lowerLimit) / session.stageDepth) * canvasHeight - 1}
-									<g
-										class={getStackStatusColor(stack.status)}
-										stroke-width={selected ? '1.5' : '0.5'}
-										stroke="currentColor"
-										opacity={selected ? 1 : 0.3}
-									>
-										<line x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
-										<line x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
-									</g>
-								{/each}
-							{/if}
-							<line
-								x1="0"
-								y1={zLineY}
-								x2={Z_SVG_WIDTH}
-								y2={zLineY}
-								class="z-line"
-								class:moving={isZMoving}
-								stroke-width="1"
-								stroke={session.zAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success'}
-							>
-								<title>Z: {session.zAxis?.position.toFixed(1)} mm</title>
-							</line>
-						</svg>
+					<div class="flex justify-center gap-0.5 p-1">
+						{#each layers as { key, color, icon, title } (key)}
+							{@render layerToggle(session.layerVisibility[key], color, icon, title, () => toggleLayer(key))}
+						{/each}
+						{@render layerToggle(
+							showThumbnail && session.layerVisibility.fov,
+							'text-success',
+							'ph:image-light',
+							'Toggle thumbnail',
+							() => (showThumbnail = !showThumbnail),
+							!session.layerVisibility.fov
+						)}
 					</div>
-			</div>
-
-			<div class="flex w-full items-center justify-between">
-				<div class="flex gap-0.5">
-					{#each layers as { key, color, icon, title } (key)}
-						{@render layerToggle(session.layerVisibility[key], color, icon, title, () => toggleLayer(key))}
-					{/each}
-					{@render layerToggle(
-						showThumbnail && session.layerVisibility.fov,
-						'text-success',
-						'ph:image-light',
-						'Toggle thumbnail',
-						() => (showThumbnail = !showThumbnail),
-						!session.layerVisibility.fov
-					)}
 				</div>
-				<StagePosition {session} />
+
+				<div
+					class="relative flex-1 border border-zinc-600 transition-colors duration-300 ease-in-out hover:bg-zinc-900"
+					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH}px; width: {Z_AREA_WIDTH}px"
+				>
+					<StageSlider
+						orientation="vertical-rtl"
+						style="position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: {Z_AREA_WIDTH}px;"
+						min={session.zAxis.lowerLimit}
+						max={session.zAxis.upperLimit}
+						step={0.1}
+						position={session.zAxis.position}
+						isMoving={isZMoving}
+						onmove={(v) => session.zAxis?.move(v)}
+					/>
+					<svg
+						viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
+						class="z-svg pointer-none absolute inset-0 z-0"
+						preserveAspectRatio="none"
+						width="100%"
+						height="100%"
+					>
+						{#if primaryStack && session.zAxis}
+							{@const z0Y =
+								(1 - (primaryStack.z_start_um / 1000 - session.zAxis.lowerLimit) / session.stageDepth) * canvasHeight -
+								1}
+							{@const z1Y =
+								(1 - (primaryStack.z_end_um / 1000 - session.zAxis.lowerLimit) / session.stageDepth) * canvasHeight - 1}
+							<g class={getStackStatusColor(primaryStack.status)} stroke-width="1" stroke="currentColor">
+								<line x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
+								<line x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
+							</g>
+						{/if}
+						<line
+							x1="0"
+							y1={zLineY}
+							x2={Z_SVG_WIDTH}
+							y2={zLineY}
+							class="z-line"
+							class:moving={isZMoving}
+							stroke-width="1"
+							stroke={session.zAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success'}
+						>
+							<title>Z: {session.zAxis?.position.toFixed(1)} mm</title>
+						</line>
+					</svg>
+				</div>
 			</div>
 		</div>
 	{:else}
