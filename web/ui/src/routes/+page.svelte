@@ -22,7 +22,7 @@
 
 	// Control view state
 	let deviceFilter = $state<DeviceFilter>('all');
-	let bottomPanelTab = $state('session');
+	let bottomPanelTab = $state('logs');
 	let bottomPane: Pane | undefined = $state(undefined);
 
 	function selectBottomTab(tab: string) {
@@ -162,7 +162,7 @@
 					bind:this={bottomPane}
 					collapsible
 					collapsedSize={0}
-					defaultSize={0}
+					defaultSize={20}
 					minSize={15}
 					maxSize={50}
 					onCollapse={() => {}}
@@ -227,7 +227,7 @@
 
 			<footer class="flex items-center justify-between border-t border-border bg-card px-4 py-2">
 				<div class="flex rounded border border-border">
-					{#each [{ id: 'session', label: 'Session' }, { id: 'waveforms', label: 'Waveforms' }, { id: 'logs', label: 'Logs' }] as tab, i (tab.id)}
+					{#each [{ id: 'waveforms', label: 'Waveforms' }, { id: 'session', label: 'Session' }, { id: 'logs', label: 'Logs' }] as tab, i (tab.id)}
 						<button
 							onclick={() => selectBottomTab(tab.id)}
 							class="px-2 py-0.5 text-xs transition-colors hover:bg-accent {bottomPanelTab === tab.id

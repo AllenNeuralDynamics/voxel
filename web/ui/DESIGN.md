@@ -39,7 +39,7 @@ You can be in `plan` workflow with rig `previewing` (checking positions with liv
 
 Grid locking becomes mode-based rather than derived from stack statuses.
 
-## Layout (Route 3)
+## Layout
 
 ### Three-column layout
 

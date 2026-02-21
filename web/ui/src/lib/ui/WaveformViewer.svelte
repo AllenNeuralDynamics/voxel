@@ -229,8 +229,46 @@
 	});
 </script>
 
-<div class="flex h-full px-4">
-	<div class="flex flex-1 flex-col p-4">
+<div class="flex h-full gap-4 p-4">
+	<div class="my-4 flex flex-col justify-between gap-2">
+		{#if timing}
+			<!-- class="rounded border border-zinc-700 bg-zinc-800/50 p-3" -->
+			<div class="w-40">
+				<h3 class="mb-2 text-xs font-medium text-zinc-300">Acquisition Timing</h3>
+				<div class="space-y-1.5 text-[0.65rem] text-zinc-400">
+					<div class="flex justify-between">
+						<span>Sample Rate</span>
+						<span class="font-mono text-zinc-300">{formatFrequency(Number(timing.sample_rate))}</span>
+					</div>
+					<div class="flex justify-between">
+						<span>Duration</span>
+						<span class="font-mono text-zinc-300">{formatTime(Number(timing.duration))}</span>
+					</div>
+					<div class="flex justify-between">
+						<span>Rest Time</span>
+						<span class="font-mono text-zinc-300">{formatTime(Number(timing.rest_time || 0))}</span>
+					</div>
+					<div class="flex justify-between border-t border-zinc-700 pt-1.5">
+						<span>Frequency</span>
+						<span class="font-mono text-zinc-300"
+							>{formatFrequency(1 / (Number(timing.duration) + Number(timing.rest_time || 0)))}</span
+						>
+					</div>
+					<div class="flex justify-between">
+						<span>Samples</span>
+						<span class="font-mono text-zinc-300"
+							>{Math.floor(Number(timing.sample_rate) * Number(timing.duration))}</span
+						>
+					</div>
+				</div>
+			</div>
+		{/if}
+		<div class="flex flex-col justify-center gap-2">
+			<span class="text-[0.65rem] text-zinc-400">Cycles:</span>
+			<LegacySpinBox bind:value={numCycles} min={1} max={4} step={1} numCharacters={1} />
+		</div>
+	</div>
+	<div class="flex flex-1 flex-col">
 		{#if !waveforms}
 			<div class="flex h-full items-center justify-center">
 				<p class="text-xs text-zinc-500">No waveform data available</p>
@@ -243,44 +281,8 @@
 			<div bind:this={plotContainer} class="h-full w-full"></div>
 		{/if}
 	</div>
-	<div class="flex flex-col gap-6 py-8">
-		{#if timing}
-			<div class="rounded border border-zinc-700 bg-zinc-800/50 p-3">
-				<h3 class="mb-2 text-xs font-medium text-zinc-300">Acquisition Timing</h3>
-				<div class="space-y-1.5 text-[0.65rem] text-zinc-400">
-					<div class="flex justify-between">
-						<span>Sample Rate:</span>
-						<span class="font-mono text-zinc-300">{formatFrequency(Number(timing.sample_rate))}</span>
-					</div>
-					<div class="flex justify-between">
-						<span>Duration:</span>
-						<span class="font-mono text-zinc-300">{formatTime(Number(timing.duration))}</span>
-					</div>
-					<div class="flex justify-between">
-						<span>Rest Time:</span>
-						<span class="font-mono text-zinc-300">{formatTime(Number(timing.rest_time || 0))}</span>
-					</div>
-					<div class="flex justify-between border-t border-zinc-700 pt-1.5">
-						<span>Frequency:</span>
-						<span class="font-mono text-zinc-300"
-							>{formatFrequency(1 / (Number(timing.duration) + Number(timing.rest_time || 0)))}</span
-						>
-					</div>
-					<div class="flex justify-between">
-						<span>Samples:</span>
-						<span class="font-mono text-zinc-300"
-							>{Math.floor(Number(timing.sample_rate) * Number(timing.duration))}</span
-						>
-					</div>
-				</div>
-			</div>
-		{/if}
-		<div class="rounded border border-zinc-700 bg-zinc-800/50 p-3">
-			<ProfileDevicesToggle {session} bind:visible={visibleDevices} colors={deviceColors} waveformsOnly={true} />
-		</div>
-		<div class="flex flex-col justify-center gap-2">
-			<span class="text-[0.65rem] text-zinc-400">Cycles:</span>
-			<LegacySpinBox bind:value={numCycles} min={1} max={4} step={1} numCharacters={1} />
-		</div>
+
+	<div class="mt-4">
+		<ProfileDevicesToggle {session} bind:visible={visibleDevices} colors={deviceColors} waveformsOnly={true} />
 	</div>
 </div>
