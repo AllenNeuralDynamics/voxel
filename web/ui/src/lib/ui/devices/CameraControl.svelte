@@ -7,9 +7,10 @@
 	interface Props {
 		deviceId: string;
 		devicesManager: DevicesManager;
+		collapsed?: boolean;
 	}
 
-	let { deviceId, devicesManager }: Props = $props();
+	let { deviceId, devicesManager, collapsed = false }: Props = $props();
 
 	// Reactive device properties
 	let cameraDevice = $derived(devicesManager.getDevice(deviceId));
@@ -54,121 +55,138 @@
 </script>
 
 {#if cameraDevice?.connected}
-	<div class="rounded-lg border border-zinc-700 bg-zinc-800/80 shadow-sm">
-		<!-- Camera Header -->
-		<div class="flex items-center justify-between px-3 py-2">
-			<div class="text-sm font-medium text-zinc-200">Camera</div>
-		</div>
-
-		<div class="mb-4 flex flex-col gap-3">
-			<!-- Exposure Time Slider -->
-			<div class="px-3">
-				{#if exposureTimeInfo && exposureTimeModel && typeof exposureTimeModel.value === 'number'}
-					<SliderInput
-						label={exposureTimeInfo.label}
-						bind:value={exposureTimeModel.value}
-						min={exposureTimeModel.min_val ?? 0}
-						max={exposureTimeModel.max_val ?? 100}
-						step={exposureTimeModel.step ?? 0.1}
-						onChange={(newValue) => {
-							devicesManager.setProperty(deviceId, 'exposure_time_ms', newValue);
-						}}
-					/>
+	{#if collapsed}
+		<div class="flex items-center justify-between py-1 font-mono text-[0.6rem] text-zinc-300">
+			<span class="text-zinc-400/90">Camera</span>
+			<div class="flex items-center">
+				{#if typeof frameRateHz === 'number'}
+					<span>{frameRateHz.toFixed(1)} Hz</span>
 				{/if}
-			</div>
-
-			<!-- Pixel Format and Binning Selectors -->
-			<div class="grid grid-cols-2 gap-4 px-3">
-				<!-- Pixel Format Selector -->
-				{#if pixelFormatInfo && pixelFormatModel && pixelFormatModel.options && (typeof pixelFormatModel.value === 'string' || typeof pixelFormatModel.value === 'number')}
-					<SelectInput
-						label={pixelFormatInfo.label}
-						bind:value={pixelFormatModel.value}
-						options={pixelFormatModel.options}
-						id="pixel-format-{deviceId}"
-						onChange={(newValue) => {
-							devicesManager.setProperty(deviceId, 'pixel_format', newValue);
-						}}
-					/>
+				{#if typeof exposureTimeModel?.value === 'number'}
+					<div class="mx-3 h-2.5 w-px bg-zinc-500"></div>
+					<span>{exposureTimeModel.value.toFixed(1)} ms</span>
 				{/if}
-
-				<!-- Binning Selector -->
-				{#if binningInfo && binningModel && binningModel.options && (typeof binningModel.value === 'string' || typeof binningModel.value === 'number')}
-					<SelectInput
-						label={binningInfo.label}
-						bind:value={binningModel.value}
-						options={binningModel.options}
-						id="binning-{deviceId}"
-						formatOption={(option) => `${option}x${option}`}
-						onChange={(newValue) => {
-							devicesManager.setProperty(deviceId, 'binning', newValue);
-						}}
-					/>
-				{/if}
+					<div class="ml-3 h-1.5 w-1.5 rounded-full {streamInfo ? 'bg-emerald-500' : 'bg-zinc-600'}"></div>
 			</div>
 		</div>
+	{:else}
+		<div class="rounded-lg border border-zinc-700 bg-zinc-800/80 shadow-sm">
+			<!-- Camera Header -->
+			<div class="flex items-center justify-between px-3 py-2">
+				<div class="text-sm font-medium text-zinc-200">Camera</div>
+			</div>
 
-		<!-- Sensor & ROI Collapsible Section (using CardAccordion component) -->
-		{#if frameSize}
-			{@const summary = `${frameSize.y} × ${frameSize.x} px${typeof frameSizeMb === 'number' ? ` | ${frameSizeMb.toFixed(2)} MB` : ''}`}
-			<CardAccordion label="Frame Size" summaryValue={summary}>
-				<!-- Sensor Size -->
-				{#if sensorSize}
-					<div class="flex justify-between">
-						<span class="label">Sensor Size</span>
-						<span class="value">{sensorSize.y} × {sensorSize.x} px</span>
-					</div>
-				{/if}
+			<div class="mb-4 flex flex-col gap-3">
+				<!-- Exposure Time Slider -->
+				<div class="px-3">
+					{#if exposureTimeInfo && exposureTimeModel && typeof exposureTimeModel.value === 'number'}
+						<SliderInput
+							label={exposureTimeInfo.label}
+							bind:value={exposureTimeModel.value}
+							min={exposureTimeModel.min_val ?? 0}
+							max={exposureTimeModel.max_val ?? 100}
+							step={exposureTimeModel.step ?? 0.1}
+							onChange={(newValue) => {
+								devicesManager.setProperty(deviceId, 'exposure_time_ms', newValue);
+							}}
+						/>
+					{/if}
+				</div>
 
-				<!-- Pixel Size -->
-				{#if pixelSize}
-					<div class="flex justify-between">
-						<span class="label">Pixel Size</span>
-						<span class="value">{pixelSize.y} × {pixelSize.x} µm</span>
-					</div>
-				{/if}
+				<!-- Pixel Format and Binning Selectors -->
+				<div class="grid grid-cols-2 gap-4 px-3">
+					<!-- Pixel Format Selector -->
+					{#if pixelFormatInfo && pixelFormatModel && pixelFormatModel.options && (typeof pixelFormatModel.value === 'string' || typeof pixelFormatModel.value === 'number')}
+						<SelectInput
+							label={pixelFormatInfo.label}
+							bind:value={pixelFormatModel.value}
+							options={pixelFormatModel.options}
+							id="pixel-format-{deviceId}"
+							onChange={(newValue) => {
+								devicesManager.setProperty(deviceId, 'pixel_format', newValue);
+							}}
+						/>
+					{/if}
 
-				<!-- ROI -->
-				{#if roiInfo && roiModel && Array.isArray(roiModel.value) && roiModel.value.length === 4}
-					<div class="flex justify-between">
-						<span class="label">ROI</span>
-						<span class="value">{roiModel.value[0]}, {roiModel.value[1]}, {roiModel.value[2]}, {roiModel.value[3]}</span
-						>
+					<!-- Binning Selector -->
+					{#if binningInfo && binningModel && binningModel.options && (typeof binningModel.value === 'string' || typeof binningModel.value === 'number')}
+						<SelectInput
+							label={binningInfo.label}
+							bind:value={binningModel.value}
+							options={binningModel.options}
+							id="binning-{deviceId}"
+							formatOption={(option) => `${option}x${option}`}
+							onChange={(newValue) => {
+								devicesManager.setProperty(deviceId, 'binning', newValue);
+							}}
+						/>
+					{/if}
+				</div>
+			</div>
+
+			<!-- Sensor & ROI Collapsible Section (using CardAccordion component) -->
+			{#if frameSize}
+				{@const summary = `${frameSize.y} × ${frameSize.x} px${typeof frameSizeMb === 'number' ? ` | ${frameSizeMb.toFixed(2)} MB` : ''}`}
+				<CardAccordion label="Frame Size" summaryValue={summary}>
+					<!-- Sensor Size -->
+					{#if sensorSize}
+						<div class="flex justify-between">
+							<span class="label">Sensor Size</span>
+							<span class="value">{sensorSize.y} × {sensorSize.x} px</span>
+						</div>
+					{/if}
+
+					<!-- Pixel Size -->
+					{#if pixelSize}
+						<div class="flex justify-between">
+							<span class="label">Pixel Size</span>
+							<span class="value">{pixelSize.y} × {pixelSize.x} µm</span>
+						</div>
+					{/if}
+
+					<!-- ROI -->
+					{#if roiInfo && roiModel && Array.isArray(roiModel.value) && roiModel.value.length === 4}
+						<div class="flex justify-between">
+							<span class="label">ROI</span>
+							<span class="value"
+								>{roiModel.value[0]}, {roiModel.value[1]}, {roiModel.value[2]}, {roiModel.value[3]}</span
+							>
+						</div>
+					{/if}
+				</CardAccordion>
+			{/if}
+
+			<!-- Stream Info Collapsible Section -->
+			<CardAccordion label="Stream Info" summaryValue={streamInfoSummary + ' fps'}>
+				{#if streamInfo && typeof streamInfo === 'object'}
+					{#if 'data_rate_mbs' in streamInfo && typeof streamInfo.data_rate_mbs === 'number'}
+						<div class="flex justify-between">
+							<span class="label">Data Rate</span>
+							<span class="value">{streamInfo.data_rate_mbs.toFixed(1)} MB/s</span>
+						</div>
+					{/if}
+					{#if 'dropped_frames' in streamInfo && typeof streamInfo.dropped_frames === 'number'}
+						<div class="flex justify-between">
+							<span class="label">Dropped Frames</span>
+							<span class="value" class:text-red-400={streamInfo.dropped_frames > 0}>
+								{streamInfo.dropped_frames}
+							</span>
+						</div>
+					{/if}
+					{#if 'frame_index' in streamInfo && typeof streamInfo.frame_index === 'number'}
+						<div class="flex justify-between">
+							<span class="label">Frame Index</span>
+							<span class="value">{streamInfo.frame_index}</span>
+						</div>
+					{/if}
+				{:else}
+					<div class="value flex justify-center">
+						<span class="text-zinc-600">Not Available</span>
 					</div>
 				{/if}
 			</CardAccordion>
-		{/if}
-
-		<!-- Stream Info Collapsible Section -->
-		<CardAccordion label="Stream Info" summaryValue={streamInfoSummary + ' fps'}>
-			{#if streamInfo && typeof streamInfo === 'object'}
-				{#if 'data_rate_mbs' in streamInfo && typeof streamInfo.data_rate_mbs === 'number'}
-					<div class="flex justify-between">
-						<span class="label">Data Rate</span>
-						<span class="value">{streamInfo.data_rate_mbs.toFixed(1)} MB/s</span>
-					</div>
-				{/if}
-				{#if 'dropped_frames' in streamInfo && typeof streamInfo.dropped_frames === 'number'}
-					<div class="flex justify-between">
-						<span class="label">Dropped Frames</span>
-						<span class="value" class:text-red-400={streamInfo.dropped_frames > 0}>
-							{streamInfo.dropped_frames}
-						</span>
-					</div>
-				{/if}
-				{#if 'frame_index' in streamInfo && typeof streamInfo.frame_index === 'number'}
-					<div class="flex justify-between">
-						<span class="label">Frame Index</span>
-						<span class="value">{streamInfo.frame_index}</span>
-					</div>
-				{/if}
-			{:else}
-				<div class="value flex justify-center">
-					<span class="text-zinc-600">Not Available</span>
-				</div>
-			{/if}
-		</CardAccordion>
-	</div>
+		</div>
+	{/if}
 {:else}
 	<div class="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center text-xs text-zinc-500">
 		Camera not available

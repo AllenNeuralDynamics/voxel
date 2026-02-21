@@ -8,8 +8,7 @@
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import WaveformViewer from '$lib/ui/WaveformViewer.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
-	import DeviceFilterToggle, { type DeviceFilter } from './DeviceFilterToggle.svelte';
-	import ChannelSection from './ChannelSection.svelte';
+	import ChannelPanel from './ChannelPanel.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
 	import { Button } from '$lib/ui/primitives';
@@ -21,7 +20,6 @@
 	let app = $state<App | undefined>(undefined);
 
 	// Control view state
-	let deviceFilter = $state<DeviceFilter>('all');
 	let bottomPanelTab = $state('logs');
 	let bottomPane: Pane | undefined = $state(undefined);
 
@@ -72,27 +70,11 @@
 	<div class="flex h-screen w-full bg-background text-foreground">
 		<!-- Left panel: Channels & Imaging -->
 		<aside class="flex h-full w-96 min-w-80 flex-col border-r border-border bg-card">
-			<div class="space-y-3 border-b border-border p-4">
+			<!-- <div class="space-y-3 border-b border-border p-4">
 				<ProfileSelector {session} />
-				<DeviceFilterToggle bind:value={deviceFilter} onValueChange={(v) => (deviceFilter = v)} />
-			</div>
+			</div> -->
 
-			{#if session.previewState.channels.length === 0}
-				<div class="flex flex-1 items-center justify-center p-4">
-					<p class="text-sm text-muted-foreground">No channels available</p>
-				</div>
-			{:else}
-				<div class="flex flex-1 flex-col overflow-y-auto">
-					{#each session.previewState.channels as channel (channel.idx)}
-						{#if channel.name}
-							<div>
-								<ChannelSection {channel} devices={session.devices} {deviceFilter} />
-							</div>
-							<div class="border-t border-border"></div>
-						{/if}
-					{/each}
-				</div>
-			{/if}
+			<ChannelPanel {session} />
 
 			<footer class="mt-auto flex p-4">
 				<ClientStatus client={app.client} />
@@ -102,6 +84,9 @@
 		<!-- Middle column: Acquisition planning -->
 		<div class="flex h-full flex-1 flex-col border-r border-border">
 			<header class="flex items-center justify-between border-b border-border bg-card px-4 py-4">
+				<div class="min-w-64">
+					<ProfileSelector {session} />
+				</div>
 				<div class="flex items-center gap-3">
 					{#each [{ id: 'scout', label: 'Scout' }, { id: 'plan', label: 'Plan' }, { id: 'acquire', label: 'Acquire' }] as mode, i (mode.id)}
 						{@const isActive = workflowMode === mode.id}
@@ -130,16 +115,18 @@
 						</button>
 					{/each}
 				</div>
-				<Button
-					variant={session.previewState.isPreviewing ? 'danger' : 'success'}
-					size="xs"
-					onclick={() =>
-						session.previewState.isPreviewing
-							? session.previewState.stopPreview()
-							: session.previewState.startPreview()}
-				>
-					{session.previewState.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-				</Button>
+				<div class="flex min-w-64 items-center justify-end">
+					<Button
+						variant={session.previewState.isPreviewing ? 'danger' : 'success'}
+						size="sm"
+						onclick={() =>
+							session.previewState.isPreviewing
+								? session.previewState.stopPreview()
+								: session.previewState.startPreview()}
+					>
+						{session.previewState.isPreviewing ? 'Stop Preview' : 'Start Preview'}
+					</Button>
+				</div>
 			</header>
 			<PaneGroup direction="vertical" autoSaveId="midCol-v3">
 				<Pane minSize={30}>
