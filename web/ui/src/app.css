@@ -86,8 +86,8 @@
 	/* --border: oklch(1 0 0 / 10%); white/10 */
 	--border: oklch(0.371 0.013 285.805); /* zinc-700 */
 	/* --input: oklch(1 0 0 / 15%); white/15 */
-	--input: oklch(0.407 0.015 285.795); /* ~zinc-650 */
-	--ring: oklch(0.556 0 0); /* zinc-500 */
+	--input: oklch(0.371 0.013 285.805); /* zinc-700 */
+	--ring: oklch(0.499 0.017 285.786); /* ~zinc-550 */
 }
 
 @theme inline {

@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { LaserInfo } from '$lib/main';
+	import type { Laser } from '$lib/main';
 
 	interface Props {
-		lasers: LaserInfo[];
+		lasers: Record<string, Laser>;
 		size?: 'sm' | 'md';
 	}
 
@@ -11,7 +11,7 @@
 	const sizeClass = $derived(size === 'md' ? 'h-2 w-2' : 'h-1.5 w-1.5');
 </script>
 
-{#each lasers as laser (laser.deviceId)}
+{#each Object.values(lasers) as laser (laser.deviceId)}
 	<div class="relative">
 		{#if laser.isEnabled}
 			<div class="{sizeClass} rounded-full" style="background-color: {laser.color};"></div>

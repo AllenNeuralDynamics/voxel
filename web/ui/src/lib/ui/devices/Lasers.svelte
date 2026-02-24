@@ -9,16 +9,12 @@
 
 	let { session }: Props = $props();
 
-	const lasers = $derived(session.lasers);
+	const lasers = $derived(Object.values(session.lasers));
 	const anyLaserEnabled = $derived(lasers.some((l) => l.isEnabled));
-
-	function toggleLaser(deviceId: string, currentState: boolean) {
-		session.devices.executeCommand(deviceId, currentState ? 'disable' : 'enable');
-	}
 
 	function stopAllLasers() {
 		for (const laser of lasers) {
-			if (laser.isEnabled) session.devices.executeCommand(laser.deviceId, 'disable');
+			if (laser.isEnabled) laser.disable();
 		}
 	}
 </script>
@@ -48,11 +44,11 @@
 				</div>
 				<Switch
 					checked={laser.isEnabled}
-					onCheckedChange={(checked) => toggleLaser(laser.deviceId, !checked)}
+					onCheckedChange={() => laser.toggle()}
 				/>
 			</div>
 		{/each}
-		{#if lasers.length === 0}
+		{#if Object.keys(session.lasers).length === 0}
 			<p class="text-xs text-muted-foreground">No lasers configured</p>
 		{/if}
 	</div>

@@ -11,30 +11,24 @@
 
 	let { session }: Props = $props();
 
-	const lasers = $derived(session.lasers);
+	const lasers = $derived(Object.values(session.lasers));
 	const anyLaserEnabled = $derived(lasers.some((l) => l.isEnabled));
-
-	function handleToggleLaser(deviceId: string, currentState: boolean) {
-		session.devices.executeCommand(deviceId, currentState ? 'disable' : 'enable');
-	}
 
 	function handleEmergencyStop() {
 		for (const laser of lasers) {
-			if (laser.isEnabled) {
-				session.devices.executeCommand(laser.deviceId, 'disable');
-			}
+			if (laser.isEnabled) laser.disable();
 		}
 	}
 </script>
 
-{#if lasers.length > 0}
+{#if Object.keys(session.lasers).length > 0}
 	<Tooltip.Provider>
 		<Tooltip.Root delayDuration={150}>
 			<Tooltip.Trigger
 				class="flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-zinc-800/50 focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 focus-visible:outline-none"
 				aria-label="Laser controls"
 			>
-				<LaserIndicators {lasers} size="md" />
+				<LaserIndicators lasers={session.lasers} size="md" />
 			</Tooltip.Trigger>
 			<Tooltip.Content
 				class="z-50 w-72 rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-xs text-zinc-200 shadow-xl outline-none"
@@ -81,7 +75,7 @@
 								<!-- Toggle switch -->
 								<Switch
 									checked={laser.isEnabled}
-									onCheckedChange={(checked) => handleToggleLaser(laser.deviceId, !checked)}
+									onCheckedChange={() => laser.toggle()}
 								/>
 							</div>
 						{/each}

@@ -18,6 +18,7 @@
 		snapValue?: number | (() => number);
 		size?: Size;
 		class?: string;
+		throttle?: number;
 		onChange?: (newValue: number) => void;
 	}
 
@@ -38,8 +39,31 @@
 		snapValue,
 		size = 'md',
 		class: className = '',
+		throttle = 0,
 		onChange: onValueChange
 	}: Props = $props();
+
+	let lastDragCallTime = 0;
+	let dragThrottleTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function throttledCallback(newValue: number) {
+		if (!onValueChange) return;
+		if (throttle <= 0) {
+			onValueChange(newValue);
+			return;
+		}
+		const now = Date.now();
+		if (now - lastDragCallTime >= throttle) {
+			lastDragCallTime = now;
+			onValueChange(newValue);
+		} else {
+			clearTimeout(dragThrottleTimer);
+			dragThrottleTimer = setTimeout(() => {
+				lastDragCallTime = Date.now();
+				onValueChange(newValue);
+			}, throttle - (now - lastDragCallTime));
+		}
+	}
 
 	const sizeClasses: Record<Size, { wrapper: string; input: string; stack: string }> = {
 		xs: {
@@ -110,12 +134,14 @@
 		newValue = Math.max(min, Math.min(max, newValue));
 		value = newValue;
 
-		if (onValueChange) {
-			onValueChange(newValue);
-		}
+		throttledCallback(newValue);
 	}
 
 	function handleMouseUp() {
+		clearTimeout(dragThrottleTimer);
+		if (isDragging && onValueChange) {
+			onValueChange(value);
+		}
 		isDragging = false;
 		isPotentialDrag = false;
 		document.body.style.cursor = '';
@@ -200,7 +226,7 @@
 {#if showButtons}
 	<div
 		bind:this={wrapperElement}
-		class="flex items-stretch border border-input bg-transparent transition-colors hover:border-foreground/20 {sizeClasses[
+		class="flex items-stretch border border-input bg-transparent transition-colors focus-within:border-ring {sizeClasses[
 			size
 		].wrapper} {className}"
 	>
@@ -256,7 +282,7 @@
 {:else}
 	<div
 		bind:this={wrapperElement}
-		class="inline-flex items-stretch border border-transparent bg-transparent transition-colors focus-within:border-ring hover:border-input {sizeClasses[
+		class="inline-flex items-stretch border border-transparent bg-transparent transition-colors focus-within:border-ring {sizeClasses[
 			size
 		].wrapper} {className}"
 	>
