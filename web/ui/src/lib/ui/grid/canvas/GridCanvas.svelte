@@ -3,7 +3,6 @@
 	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
-	import StageSlider from './StageSlider.svelte';
 	import StagePosition from './StagePosition.svelte';
 	import Icon from '@iconify/svelte';
 
@@ -53,7 +52,7 @@
 	let marginPixelsY = $derived(marginY * scale);
 	let stagePixelsX = $derived(session.stageWidth * scale);
 	let stagePixelsY = $derived(session.stageHeight * scale);
-	let thumbThickness = 1;
+	let fovExtension = $derived(SLIDER_WIDTH / 2 / scale);
 
 	let zLineY = $derived((1 - fovZ / session.stageDepth) * canvasHeight - 1);
 
@@ -133,6 +132,30 @@
 		fovAnimFrameId = requestAnimationFrame(fovFrameLoop);
 	}
 
+	// ── Slider targets ──────────────────────────────────────────────────
+
+	let targetX = $state<number | null>(null);
+	let targetY = $state<number | null>(null);
+	let targetZ = $state<number | null>(null);
+
+	function handleXInput(e: Event) {
+		const v = parseFloat((e.target as HTMLInputElement).value);
+		targetX = v;
+		session.xAxis?.move(v);
+	}
+
+	function handleYInput(e: Event) {
+		const v = parseFloat((e.target as HTMLInputElement).value);
+		targetY = v;
+		session.yAxis?.move(v);
+	}
+
+	function handleZInput(e: Event) {
+		const v = parseFloat((e.target as HTMLInputElement).value);
+		targetZ = v;
+		session.zAxis?.move(v);
+	}
+
 	// ── Interaction handlers ─────────────────────────────────────────────
 
 	function toMm(um: number): number {
@@ -143,20 +166,22 @@
 		return session.isTileSelected(tile.row, tile.col);
 	}
 
-	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
-		if (!session.xAxis || !session.yAxis) return [targetX, targetY];
+	function clampToStageLimits(x: number, y: number): [number, number] {
+		if (!session.xAxis || !session.yAxis) return [x, y];
 		return [
-			Math.max(session.xAxis.lowerLimit, Math.min(session.xAxis.upperLimit, targetX)),
-			Math.max(session.yAxis.lowerLimit, Math.min(session.yAxis.upperLimit, targetY))
+			Math.max(session.xAxis.lowerLimit, Math.min(session.xAxis.upperLimit, x)),
+			Math.max(session.yAxis.lowerLimit, Math.min(session.yAxis.upperLimit, y))
 		];
 	}
 
 	function moveToTilePosition(x_um: number, y_um: number) {
 		if (isXYMoving || !session.xAxis || !session.yAxis) return;
-		const targetX = session.xAxis.lowerLimit + toMm(x_um);
-		const targetY = session.yAxis.lowerLimit + toMm(y_um);
-		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
-		session.moveXY(clampedX, clampedY);
+		const tx = session.xAxis.lowerLimit + toMm(x_um);
+		const ty = session.yAxis.lowerLimit + toMm(y_um);
+		const [cx, cy] = clampToStageLimits(tx, ty);
+		targetX = cx;
+		targetY = cy;
+		session.moveXY(cx, cy);
 	}
 
 	function handleTileSelect(e: MouseEvent, tile: Tile) {
@@ -226,6 +251,27 @@
 	>
 		<Icon {icon} width="14" height="14" />
 	</button>
+{/snippet}
+
+{#snippet stageSlider(
+	orientation: 'horizontal' | 'vertical-ltr' | 'vertical-rtl',
+	min: number,
+	max: number,
+	value: number,
+	disabled: boolean,
+	oninput: (e: Event) => void,
+	style: string
+)}
+	<div
+		class="stage-slider"
+		class:horizontal={orientation === 'horizontal'}
+		class:vertical={orientation !== 'horizontal'}
+		class:ltr={orientation === 'vertical-ltr'}
+		class:rtl={orientation === 'vertical-rtl'}
+		{style}
+	>
+		<input type="range" {min} {max} step={0.1} {value} {disabled} {oninput} />
+	</div>
 {/snippet}
 
 <!-- ── SVG layer snippets ─────────────────────────────────────────────── -->
@@ -308,7 +354,7 @@
 			<g>
 				<line
 					class="nss"
-					x1={-marginX}
+					x1={-marginX - fovExtension}
 					y1={fovY}
 					x2={-marginX + viewBoxWidth}
 					y2={fovY}
@@ -318,7 +364,7 @@
 				<line
 					class="nss"
 					x1={fovX}
-					y1={-marginY}
+					y1={-marginY - fovExtension}
 					x2={fovX}
 					y2={-marginY + viewBoxHeight}
 					stroke-width="1"
@@ -382,40 +428,37 @@
 		]}
 
 		<div class="grid flex-1 grid-rows-[1fr_auto] overflow-hidden" bind:this={containerRef}>
-			<div class="flex place-self-center" style:gap="{STAGE_GAP}px" style:--thumb-width="{thumbThickness}px">
+			<div class="flex place-self-center" style:gap="{STAGE_GAP}px">
 					<div
 						class="grid"
 						style="grid-template-columns: {SLIDER_WIDTH / 2}px auto; grid-template-rows: {SLIDER_WIDTH / 2}px 1fr;"
 						style:--slider-width="{SLIDER_WIDTH}px"
 					>
-						<StageSlider
-							orientation="horizontal"
-							style="grid-column: 2; width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {marginPixelsX +
-								0.5}px; transform: translateY(0.5px);"
-							min={session.xAxis.lowerLimit}
-							max={session.xAxis.upperLimit}
-							step={0.1}
-							position={session.xAxis.position}
-							isMoving={session.xAxis.isMoving}
-							onmove={(v) => session.xAxis?.move(v)}
-						/>
+						{@render stageSlider(
+							'horizontal',
+							session.xAxis.lowerLimit,
+							session.xAxis.upperLimit,
+							session.xAxis.isMoving && targetX !== null ? targetX : session.xAxis.position,
+							session.xAxis.isMoving,
+							handleXInput,
+							`grid-column: 2; width: ${stagePixelsX}px; height: ${SLIDER_WIDTH}px; margin-left: ${marginPixelsX + 0.5}px; transform: translateY(0.5px);`
+						)}
 
-						<StageSlider
-							orientation="vertical-ltr"
-							style="grid-column: 1; grid-row: 2; width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(0.5px);"
-							min={session.yAxis.lowerLimit}
-							max={session.yAxis.upperLimit}
-							step={0.1}
-							position={session.yAxis.position}
-							isMoving={session.yAxis.isMoving}
-							onmove={(v) => session.yAxis?.move(v)}
-						/>
+						{@render stageSlider(
+							'vertical-ltr',
+							session.yAxis.lowerLimit,
+							session.yAxis.upperLimit,
+							session.yAxis.isMoving && targetY !== null ? targetY : session.yAxis.position,
+							session.yAxis.isMoving,
+							handleYInput,
+							`grid-column: 1; grid-row: 2; width: ${SLIDER_WIDTH}px; height: ${stagePixelsY}px; margin-top: ${marginPixelsY}px; transform: translateX(0.5px);`
+						)}
 
 						<svg
 							viewBox={viewBoxStr}
 							class="border border-zinc-700"
 							style="grid-column: 2; grid-row: 2; width: {canvasWidth}px; height: {canvasHeight}px;"
-							overflow="hidden"
+							overflow="visible"
 						>
 							{@render fovLayer()}
 							{@render gridLayer()}
@@ -428,16 +471,15 @@
 						class="relative border border-zinc-600 transition-colors duration-300 ease-in-out hover:bg-zinc-900"
 						style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
 					>
-						<StageSlider
-							orientation="vertical-rtl"
-							style="position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: {Z_AREA_WIDTH}px;"
-							min={session.zAxis.lowerLimit}
-							max={session.zAxis.upperLimit}
-							step={0.1}
-							position={session.zAxis.position}
-							isMoving={isZMoving}
-							onmove={(v) => session.zAxis?.move(v)}
-						/>
+						{@render stageSlider(
+							'vertical-rtl',
+							session.zAxis.lowerLimit,
+							session.zAxis.upperLimit,
+							isZMoving && targetZ !== null ? targetZ : session.zAxis.position,
+							isZMoving,
+							handleZInput,
+							`position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: ${Z_AREA_WIDTH}px;`
+						)}
 						<svg
 							viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
 							class="z-svg pointer-none absolute inset-0 z-0"
@@ -523,7 +565,7 @@
 			fill: color-mix(in srgb, var(--color-zinc-500) 25%, transparent);
 		}
 		&.selected {
-			stroke: var(--color-amber-400);
+			stroke: var(--color-zinc-400);
 		}
 	}
 
@@ -534,5 +576,84 @@
 		&:hover {
 			fill-opacity: 0.3;
 		}
+	}
+
+	/* Stage sliders */
+
+	.stage-slider {
+		position: relative;
+	}
+
+	.stage-slider input {
+		-webkit-appearance: none;
+		appearance: none;
+		cursor: pointer;
+		margin: 0;
+		padding: 0;
+		border: none;
+		background-color: transparent;
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		--_track-color: var(--color-zinc-700);
+		--_track-width: 1px;
+
+		&:hover {
+			--_track-color: var(--color-zinc-500);
+		}
+
+		&::-webkit-slider-runnable-track {
+			background: var(--_track-bg, transparent);
+			border-radius: 0;
+		}
+		&::-moz-range-track {
+			background: var(--_track-bg, transparent);
+			border-radius: 0;
+		}
+		&::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			inline-size: 1px;
+			block-size: var(--slider-width);
+			border-radius: 1px;
+			cursor: pointer;
+			background: transparent;
+		}
+		&::-moz-range-thumb {
+			appearance: none;
+			inline-size: 1px;
+			block-size: var(--slider-width);
+			border: none;
+			border-radius: 1px;
+			cursor: pointer;
+			background: transparent;
+		}
+		&:disabled {
+			cursor: not-allowed;
+			&::-webkit-slider-thumb {
+				background: var(--color-danger);
+			}
+			&::-moz-range-thumb {
+				background: var(--color-danger);
+			}
+		}
+	}
+
+	.horizontal input {
+		--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / 100% var(--_track-width) no-repeat;
+	}
+
+	.vertical input {
+		writing-mode: vertical-rl;
+	}
+
+	.ltr input {
+		direction: ltr;
+		--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / var(--_track-width) 100% no-repeat;
+	}
+
+	.rtl input {
+		direction: rtl;
 	}
 </style>

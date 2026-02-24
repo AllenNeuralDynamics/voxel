@@ -40,10 +40,8 @@
 	class:vertical={orientation !== 'horizontal'}
 	class:ltr={orientation === 'vertical-ltr'}
 	class:rtl={orientation === 'vertical-rtl'}
-	class:moving={isMoving}
 	style={styleStr}
 >
-	<input type="range" {min} {max} {step} value={position} class="shadow" tabindex={-1} aria-hidden="true" />
 	<input type="range" {min} {max} {step} value={target ?? position} disabled={isMoving} oninput={handleInput} />
 </div>
 
@@ -86,6 +84,7 @@
 			block-size: var(--slider-width);
 			border-radius: 1px;
 			cursor: pointer;
+			background: transparent;
 		}
 		&::-moz-range-thumb {
 			appearance: none;
@@ -94,46 +93,10 @@
 			border: none;
 			border-radius: 1px;
 			cursor: pointer;
+			background: transparent;
 		}
 		&:disabled {
 			cursor: not-allowed;
-		}
-	}
-
-	/* Shadow input: shows live position */
-	.shadow {
-		pointer-events: none;
-		z-index: 0;
-
-		&::-webkit-slider-thumb {
-			background: var(--color-success);
-		}
-		&::-moz-range-thumb {
-			background: var(--color-success);
-		}
-	}
-
-	.moving .shadow {
-		&::-webkit-slider-thumb {
-			background: var(--color-danger);
-		}
-		&::-moz-range-thumb {
-			background: var(--color-danger);
-		}
-	}
-
-	/* Interactive input: shows target while moving */
-	input:not(.shadow) {
-		z-index: 1;
-
-		&::-webkit-slider-thumb {
-			background: transparent;
-		}
-		&::-moz-range-thumb {
-			background: transparent;
-		}
-
-		&:disabled {
 			&::-webkit-slider-thumb {
 				background: var(--color-danger);
 			}
