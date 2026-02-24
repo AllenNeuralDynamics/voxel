@@ -40,7 +40,7 @@
 			disabled={isDisabled}
 		>
 			<SelectPrimitive.Trigger
-				class="group flex h-8 w-full min-w-88 items-center justify-between rounded border border-input bg-transparent px-3 text-sm transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+				class="group flex h-8 w-full min-w-72 items-center justify-between rounded border border-input bg-transparent px-3 text-sm transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				<span class="truncate text-left">
 					{#if session.activeProfileId}
@@ -65,7 +65,7 @@
 					{#if profileEntries.length === 0}
 						<div class="px-3 py-2 text-sm text-muted-foreground">No profiles available</div>
 					{:else}
-						<SelectPrimitive.Viewport class="max-h-56 overflow-y-auto">
+						<SelectPrimitive.Viewport class="max-h-144 overflow-y-auto">
 							<SelectPrimitive.Group>
 								{#each profileEntries as [profileId, profileConfig] (profileId)}
 									<SelectPrimitive.Item

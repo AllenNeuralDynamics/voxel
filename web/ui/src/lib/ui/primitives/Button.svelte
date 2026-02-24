@@ -16,8 +16,8 @@
 			size: {
 				xs: 'h-6 gap-1.5 px-2 text-[0.65rem]',
 				sm: 'h-7 min-w-14 gap-1.5 px-3 text-[0.65rem]',
-				md: 'h-7 gap-2 px-3 text-xs',
-				lg: 'h-8 gap-2 px-4 text-sm',
+				md: 'h-8 gap-2 px-3 text-xs',
+				lg: 'h-9 gap-2 px-4 text-sm',
 				'icon-xs': 'size-6',
 				icon: 'size-7',
 				'icon-lg': 'size-8'
