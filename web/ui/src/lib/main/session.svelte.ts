@@ -5,6 +5,7 @@ import { PreviewState } from './preview.svelte';
 import { Profile, type ProfileContext } from './profile.svelte';
 import { Axis } from './axis.svelte';
 import { Laser } from './laser.svelte';
+import { Camera } from './camera.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 export interface SessionInit {
@@ -56,6 +57,7 @@ export class Session implements ProfileContext {
 	stageConnected = $derived(this.xAxis.isConnected && this.yAxis.isConnected && this.zAxis.isConnected);
 
 	lasers: Record<string, Laser>;
+	cameras: Record<string, Camera>;
 
 	isMutating = $state(false);
 	error = $state<string | null>(null);
@@ -88,6 +90,16 @@ export class Session implements ProfileContext {
 			}
 		}
 		this.lasers = lasers;
+
+		const cameras: Record<string, Camera> = {};
+		if (init.config.channels) {
+			for (const channel of Object.values(init.config.channels)) {
+				if (channel.detection && !cameras[channel.detection]) {
+					cameras[channel.detection] = new Camera(this.devices, channel.detection);
+				}
+			}
+		}
+		this.cameras = cameras;
 
 		this.#buildProfiles();
 	}

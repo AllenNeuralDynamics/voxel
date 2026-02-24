@@ -202,7 +202,6 @@
 						decimals={1}
 						suffix="mW"
 						size="sm"
-						throttle={100}
 						class="w-full"
 						onChange={(v) => laser.setPower(v)}
 					/>

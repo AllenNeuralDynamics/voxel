@@ -19,6 +19,7 @@
 		size?: Size;
 		class?: string;
 		throttle?: number;
+		debounce?: number;
 		onChange?: (newValue: number) => void;
 	}
 
@@ -39,7 +40,8 @@
 		snapValue,
 		size = 'md',
 		class: className = '',
-		throttle = 0,
+		throttle = 100,
+		debounce = 400,
 		onChange: onValueChange
 	}: Props = $props();
 
@@ -64,6 +66,32 @@
 			}, throttle - (now - lastDragCallTime));
 		}
 	}
+
+	// --- Debounce state ---
+	let isEditing = $state(false);
+	let editingText = $state('');
+	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function commitEdit() {
+		clearTimeout(debounceTimer);
+		if (!isEditing) return;
+		isEditing = false;
+
+		const parsed = parseFloat(editingText);
+		if (isNaN(parsed)) return; // discard invalid input
+
+		const clamped = Math.max(min, Math.min(max, parsed));
+		value = clamped;
+		if (onValueChange) {
+			onValueChange(clamped);
+		}
+	}
+
+	let inputValue = $derived(() => {
+		if (isEditing) return editingText;
+		if (decimals !== undefined) return value.toFixed(decimals);
+		return value.toString();
+	});
 
 	const sizeClasses: Record<Size, { wrapper: string; input: string; stack: string }> = {
 		xs: {
@@ -91,12 +119,6 @@
 	let inputElement = $state<HTMLInputElement | undefined>();
 	let wrapperElement = $state<HTMLDivElement | undefined>();
 
-	let displayValue = $derived(() => {
-		if (decimals !== undefined) {
-			return value.toFixed(decimals);
-		}
-		return value.toString();
-	});
 
 	let isDragging = $state(false);
 	let isPotentialDrag = $state(false);
@@ -160,8 +182,16 @@
 
 	function handleInput(e: Event) {
 		const target = e.target as HTMLInputElement;
-		let newValue = parseFloat(target.value);
 
+		if (debounce > 0) {
+			isEditing = true;
+			editingText = target.value;
+			clearTimeout(debounceTimer);
+			debounceTimer = setTimeout(commitEdit, debounce);
+			return;
+		}
+
+		let newValue = parseFloat(target.value);
 		if (isNaN(newValue)) return;
 
 		newValue = Math.max(min, Math.min(max, newValue));
@@ -169,6 +199,16 @@
 
 		if (onValueChange) {
 			onValueChange(newValue);
+		}
+	}
+
+	function handleBlur() {
+		if (debounce > 0) commitEdit();
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' && debounce > 0) {
+			commitEdit();
 		}
 	}
 
@@ -205,6 +245,7 @@
 
 	$effect(() => {
 		return () => {
+			clearTimeout(debounceTimer);
 			document.removeEventListener('mousemove', handleMouseMove);
 			document.removeEventListener('mouseup', handleMouseUp);
 		};
@@ -246,8 +287,10 @@
 			bind:this={inputElement}
 			type="text"
 			{placeholder}
-			value={displayValue()}
+			value={inputValue()}
 			oninput={handleInput}
+			onblur={handleBlur}
+			onkeydown={handleKeydown}
 			style:width="{numCharacters + 1}ch"
 			style:color
 			style:text-align={align}
@@ -302,8 +345,10 @@
 			bind:this={inputElement}
 			type="text"
 			{placeholder}
-			value={displayValue()}
+			value={inputValue()}
 			oninput={handleInput}
+			onblur={handleBlur}
+			onkeydown={handleKeydown}
 			style:width="{numCharacters + 1}ch"
 			style:color
 			style:text-align={align}

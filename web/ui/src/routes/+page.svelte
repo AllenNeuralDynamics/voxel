@@ -17,6 +17,7 @@
 	import { LaserIndicators } from '$lib/ui/devices';
 	import DevicesPanel from './DevicesPanel.svelte';
 	import LasersPanel from './LasersPanel.svelte';
+	import CamerasPanel from './CamerasPanel.svelte';
 
 	let app = $state<App | undefined>(undefined);
 
@@ -209,6 +210,8 @@
 										</div>
 									{:else if bottomPanelTab === 'lasers'}
 										<LasersPanel {session} />
+									{:else if bottomPanelTab === 'cameras'}
+										<CamerasPanel {session} />
 									{:else if bottomPanelTab === 'logs'}
 										<div class="h-full overflow-hidden bg-card p-2">
 											<LogViewer logs={app.logs} onClear={() => app?.clearLogs()} />
@@ -229,6 +232,15 @@
 										{#if Object.keys(session.lasers).length > 0}
 											<LaserIndicators lasers={session.lasers} size="md" />
 										{/if}
+									</button>
+									<button
+										onclick={() => selectBottomTab('cameras')}
+										class="border-l border-border px-2 py-0.5 text-xs transition-colors hover:bg-accent {bottomPanelTab ===
+										'cameras'
+											? 'bg-accent text-foreground'
+											: 'text-muted-foreground'}"
+									>
+										Cameras
 									</button>
 									{#each [{ id: 'devices', label: 'Devices' }, { id: 'waveforms', label: 'Waveforms' }, { id: 'session', label: 'Session' }, { id: 'logs', label: 'Logs' }] as tab (tab.id)}
 										<button
