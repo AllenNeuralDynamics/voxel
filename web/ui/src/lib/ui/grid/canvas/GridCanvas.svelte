@@ -21,7 +21,6 @@
 	const STAGE_BORDER = 0.5;
 	const TOGGLES_HEIGHT = 30;
 
-	const CROSSHAIR_STROKE = 0.05;
 	const ARROW_HEAD = 'M -0.15 -0.2 L 0.15 0 L -0.15 0.2';
 	const Z_SVG_WIDTH = 30;
 
@@ -54,7 +53,7 @@
 	let marginPixelsY = $derived(marginY * scale);
 	let stagePixelsX = $derived(session.stageWidth * scale);
 	let stagePixelsY = $derived(session.stageHeight * scale);
-	let thumbThickness = $derived(CROSSHAIR_STROKE * scale);
+	let thumbThickness = 1;
 
 	let zLineY = $derived((1 - fovZ / session.stageDepth) * canvasHeight - 1);
 
@@ -244,7 +243,7 @@
 					y={cy - h / 2}
 					width={w}
 					height={h}
-					class="stack outline-none {getStackStatusColor(stack.status)}"
+					class="nss stack outline-none {getStackStatusColor(stack.status)}"
 					class:cursor-pointer={!isXYMoving}
 					class:cursor-not-allowed={isXYMoving}
 					role="button"
@@ -265,8 +264,8 @@
 		{@const points = session.stacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
 		<g class="pointer-none text-slate-400" stroke="currentColor" stroke-linecap="square">
 			<polyline
-				class="fill-none opacity-35"
-				stroke-width="0.15"
+				class="nss fill-none opacity-35"
+				stroke-width="1.5"
 				points={points.map((p) => `${p.x},${p.y}`).join(' ')}
 			/>
 			{#each points.slice(0, -1) as p1, i (i)}
@@ -276,8 +275,8 @@
 				{@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
 				<path
 					d={ARROW_HEAD}
-					stroke-width="0.10"
-					class="opacity-70"
+					stroke-width="1"
+					class="nss opacity-70"
 					transform="translate({midX}, {midY}) rotate({angle})"
 				/>
 			{/each}
@@ -306,19 +305,23 @@
 				/>
 			{/if}
 
-			<g stroke-width="0.05">
+			<g>
 				<line
+					class="nss"
 					x1={-marginX}
 					y1={fovY}
 					x2={-marginX + viewBoxWidth}
 					y2={fovY}
+					stroke-width="1"
 					stroke={session.yAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
 				/>
 				<line
+					class="nss"
 					x1={fovX}
 					y1={-marginY}
 					x2={fovX}
 					y2={-marginY + viewBoxHeight}
+					stroke-width="1"
 					stroke={session.xAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
 				/>
 			</g>
@@ -336,7 +339,7 @@
 		y={cy - h / 2}
 		width={w}
 		height={h}
-		class="tile outline-none"
+		class="nss tile outline-none"
 		class:selected
 		class:cursor-pointer={!isXYMoving}
 		class:cursor-not-allowed={isXYMoving}
@@ -455,8 +458,8 @@
 										stroke="currentColor"
 										opacity={selected ? 1 : 0.3}
 									>
-										<line x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
-										<line x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
+										<line class="nss" x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
+										<line class="nss" x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
 									</g>
 								{/each}
 							{/if}
@@ -465,7 +468,7 @@
 								y1={zLineY}
 								x2={Z_SVG_WIDTH}
 								y2={zLineY}
-								class="z-line"
+								class="nss z-line"
 								class:moving={isZMoving}
 								stroke-width="1"
 								stroke={session.zAxis?.isMoving ? 'var(--color-danger)' : 'var(--color-success'}
@@ -505,10 +508,14 @@
 <style>
 	/* SVG elements */
 
+	.nss {
+		vector-effect: non-scaling-stroke;
+	}
+
 	.tile {
 		fill: transparent;
 		stroke: var(--color-zinc-700);
-		stroke-width: 0.05;
+		stroke-width: 1;
 		transition:
 			fill 300ms ease,
 			stroke 150ms ease;
@@ -517,7 +524,6 @@
 		}
 		&.selected {
 			stroke: var(--color-amber-400);
-			stroke-width: 0.03;
 		}
 	}
 
