@@ -1,7 +1,6 @@
 export { App, type AppOptions } from './app.svelte.ts';
 export { Session, type SessionInit } from './session.svelte.ts';
-export { Profile, type ProfileContext } from './profile.svelte.ts';
-export { Axis } from './axis.svelte.ts';
+export { Stage, Axis } from './axis.svelte.ts';
 export { Laser, POWER_HISTORY_MAX } from './laser.svelte.ts';
 export { Camera, type CameraMode, type FrameRegionData, type StreamInfoData, type DeliminatedIntData } from './camera.svelte.ts';
 export { PreviewState, PreviewChannel } from './preview.svelte.ts';

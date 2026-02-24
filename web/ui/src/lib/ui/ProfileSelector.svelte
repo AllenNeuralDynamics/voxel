@@ -2,23 +2,23 @@
 	import Icon from '@iconify/svelte';
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { sanitizeString } from '$lib/utils';
-	import type { Session, Profile } from '$lib/main';
+	import type { Session } from '$lib/main';
 
 	const { session }: { session: Session } = $props();
 
-	const selectedProfile = $derived(session.profiles.find((p: Profile) => p.id === session.activeProfileId) ?? null);
+	const profileEntries = $derived(Object.entries(session.config.profiles));
 	const selectItems = $derived(
-		session.profiles.map((p: Profile) => ({
-			value: p.id,
-			label: p.label ?? p.desc ?? sanitizeString(p.id)
+		profileEntries.map(([id, cfg]) => ({
+			value: id,
+			label: cfg.label ?? cfg.desc ?? sanitizeString(id)
 		}))
 	);
-	const selectedValue = $derived(selectedProfile ? selectedProfile.id : '');
-	const isDisabled = $derived(session.isMutating || session.profiles.length === 0);
+	const selectedValue = $derived(session.activeProfileId ?? '');
+	const isDisabled = $derived(session.isMutating || profileEntries.length === 0);
 
-	function formatProfileName(profile: Profile | null) {
-		if (!profile) return '';
-		return profile.label ?? sanitizeString(profile.id);
+	function formatProfileName(id: string) {
+		const cfg = session.config.profiles[id];
+		return cfg?.label ?? sanitizeString(id);
 	}
 
 	function handleChange(value: string) {
@@ -43,8 +43,8 @@
 				class="group flex h-8 w-full min-w-88 items-center justify-between rounded border border-input bg-transparent px-3 text-sm transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				<span class="truncate text-left">
-					{#if selectedProfile}
-						{formatProfileName(selectedProfile)}
+					{#if session.activeProfileId}
+						{formatProfileName(session.activeProfileId)}
 					{:else}
 						<span class="text-muted-foreground">Select a profile</span>
 					{/if}
@@ -62,25 +62,25 @@
 					align="start"
 					class="z-50 mt-1 w-(--bits-select-anchor-width) min-w-(--bits-select-anchor-width) origin-(--bits-select-content-transform-origin) rounded border bg-popover p-1.5 text-popover-foreground shadow-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
 				>
-					{#if session.profiles.length === 0}
+					{#if profileEntries.length === 0}
 						<div class="px-3 py-2 text-sm text-muted-foreground">No profiles available</div>
 					{:else}
 						<SelectPrimitive.Viewport class="max-h-56 overflow-y-auto">
 							<SelectPrimitive.Group>
-								{#each session.profiles as profile (profile.id)}
+								{#each profileEntries as [profileId, profileConfig] (profileId)}
 									<SelectPrimitive.Item
-										value={profile.id}
-										label={profile.desc}
+										value={profileId}
+										label={profileConfig.desc}
 										class="relative flex w-full cursor-default items-start gap-2 rounded-md px-3 py-2 text-sm outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-accent-foreground"
 									>
 										<span class="inline-flex h-4 w-4 items-center justify-center text-xs text-success">
-											{#if session.activeProfileId === profile.id}
+											{#if session.activeProfileId === profileId}
 												<Icon icon="material-symbols:check-small-rounded" class="h-4 w-4" />
 											{/if}
 										</span>
 										<div class="flex flex-col">
-											<p class="text-sm font-medium text-popover-foreground">{formatProfileName(profile)}</p>
-											<p class="text-[0.7rem] text-muted-foreground">{profile.desc}</p>
+											<p class="text-sm font-medium text-popover-foreground">{formatProfileName(profileId)}</p>
+											<p class="text-[0.7rem] text-muted-foreground">{profileConfig.desc}</p>
 										</div>
 									</SelectPrimitive.Item>
 								{/each}

@@ -8,60 +8,58 @@
 
 	let { session }: Props = $props();
 
-	let isStageMoving = $derived(session.xAxis?.isMoving || session.yAxis?.isMoving || session.zAxis?.isMoving);
+	let { stage } = $derived(session);
 </script>
 
-{#if session.xAxis && session.yAxis && session.zAxis}
-	<div class="flex items-center gap-3">
-		<div class="flex items-center gap-2">
-			<SpinBox
-				value={session.xAxis.position}
-				min={session.xAxis.lowerLimit}
-				max={session.xAxis.upperLimit}
-				step={0.01}
-				decimals={2}
-				numCharacters={8}
-				size="sm"
-				prefix="X"
-				suffix="mm"
-				color={session.xAxis.isMoving ? 'var(--danger)' : undefined}
-				onChange={(v) => session.xAxis && session.xAxis.move(v)}
-			/>
-			<SpinBox
-				value={session.yAxis.position}
-				min={session.yAxis.lowerLimit}
-				max={session.yAxis.upperLimit}
-				step={0.01}
-				decimals={2}
-				numCharacters={8}
-				size="sm"
-				prefix="Y"
-				suffix="mm"
-				color={session.yAxis.isMoving ? 'var(--danger)' : undefined}
-				onChange={(v) => session.yAxis && session.yAxis.move(v)}
-			/>
-			<SpinBox
-				value={session.zAxis.position}
-				min={session.zAxis.lowerLimit}
-				max={session.zAxis.upperLimit}
-				step={0.001}
-				decimals={3}
-				numCharacters={8}
-				size="sm"
-				prefix="Z"
-				suffix="mm"
-				color={session.zAxis.isMoving ? 'var(--danger)' : undefined}
-				onChange={(v) => session.zAxis && session.zAxis.move(v)}
-			/>
-		</div>
-		<Button
-			variant={isStageMoving ? 'danger' : 'outline'}
-			size="xs"
-			onclick={() => session.haltStage()}
-			disabled={!isStageMoving}
-			aria-label="Halt stage"
-		>
-			Halt
-		</Button>
+<div class="flex items-center gap-3">
+	<div class="flex items-center gap-2">
+		<SpinBox
+			value={stage.x.position}
+			min={stage.x.lowerLimit}
+			max={stage.x.upperLimit}
+			step={0.01}
+			decimals={2}
+			numCharacters={8}
+			size="sm"
+			prefix="X"
+			suffix="mm"
+			color={stage.x.isMoving ? 'var(--danger)' : undefined}
+			onChange={(v) => stage.x.move(v)}
+		/>
+		<SpinBox
+			value={stage.y.position}
+			min={stage.y.lowerLimit}
+			max={stage.y.upperLimit}
+			step={0.01}
+			decimals={2}
+			numCharacters={8}
+			size="sm"
+			prefix="Y"
+			suffix="mm"
+			color={stage.y.isMoving ? 'var(--danger)' : undefined}
+			onChange={(v) => stage.y.move(v)}
+		/>
+		<SpinBox
+			value={stage.z.position}
+			min={stage.z.lowerLimit}
+			max={stage.z.upperLimit}
+			step={0.001}
+			decimals={3}
+			numCharacters={8}
+			size="sm"
+			prefix="Z"
+			suffix="mm"
+			color={stage.z.isMoving ? 'var(--danger)' : undefined}
+			onChange={(v) => stage.z.move(v)}
+		/>
 	</div>
-{/if}
+	<Button
+		variant={stage.isMoving ? 'danger' : 'outline'}
+		size="xs"
+		onclick={() => stage.halt()}
+		disabled={!stage.isMoving}
+		aria-label="Halt stage"
+	>
+		Halt
+	</Button>
+</div>

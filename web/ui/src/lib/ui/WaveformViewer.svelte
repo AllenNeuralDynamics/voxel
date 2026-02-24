@@ -19,10 +19,9 @@
 	let chart: uPlot | undefined;
 	let containerHeight = $state(400);
 
-	// Get active profile and waveforms
-	const activeProfile = $derived(session.activeProfile);
-	const waveforms = $derived(activeProfile?.waveforms);
-	const timing = $derived(activeProfile?.daq?.timing);
+	// Get waveforms and timing from session
+	const waveforms = $derived(session.waveforms);
+	const timing = $derived(session.activeProfileConfig?.daq?.timing);
 
 	let numCycles = $state(1);
 

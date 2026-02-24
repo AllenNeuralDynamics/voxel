@@ -6,7 +6,6 @@
 	import Slider from '$lib/ui/primitives/Slider.svelte';
 	import Icon from '@iconify/svelte';
 	import { Popover } from 'bits-ui';
-	import { SvelteMap } from 'svelte/reactivity';
 
 	interface Props {
 		session: Session;
@@ -26,43 +25,12 @@
 		return () => clearInterval(interval);
 	});
 
-	interface LaserRow {
-		laser: Laser;
-		channelLabel: string | null;
-		channelId: string | null;
-		channelConfig: ChannelConfig | null;
-		inProfile: boolean;
-	}
-
-	const laserRows = $derived.by<LaserRow[]>(() => {
-		const profile = session.activeProfile;
-		const profileChannels: Record<string, ChannelConfig> = profile?.channels ?? {};
-
-		const laserToChannel = new SvelteMap<string, { id: string; config: ChannelConfig }>();
-		for (const [channelId, config] of Object.entries(profileChannels)) {
-			if (config.illumination && !laserToChannel.has(config.illumination)) {
-				laserToChannel.set(config.illumination, { id: channelId, config });
-			}
-		}
-
-		return allLasers.map((laser) => {
-			const ch = laserToChannel.get(laser.deviceId);
-			return {
-				laser,
-				channelLabel: ch ? (ch.config.label ?? ch.id) : null,
-				channelId: ch?.id ?? null,
-				channelConfig: ch?.config ?? null,
-				inProfile: !!ch
-			};
-		});
-	});
-
-	const profileRows = $derived(laserRows.filter((r) => r.inProfile));
-	const otherRows = $derived(laserRows.filter((r) => !r.inProfile));
+	const profileLasers = $derived(allLasers.filter((l) => session.getChannelFor(l.deviceId)));
+	const otherLasers = $derived(allLasers.filter((l) => !session.getChannelFor(l.deviceId)));
 
 	const activeProfileLabel = $derived.by(() => {
-		const p = session.activeProfile;
-		return p ? (p.label ?? p.id) : 'None';
+		const p = session.activeProfileConfig;
+		return p ? (p.label ?? session.activeProfileId) : 'None';
 	});
 
 	const anyLaserEnabled = $derived(allLasers.some((l) => l.isEnabled));
@@ -71,8 +39,8 @@
 
 	let _selectedDeviceId = $state('');
 
-	const selectedRow = $derived(laserRows.find((r) => r.laser.deviceId === _selectedDeviceId) ?? laserRows[0] ?? null);
-	const selectedDeviceId = $derived(selectedRow?.laser.deviceId ?? '');
+	const selectedLaser = $derived(allLasers.find((l) => l.deviceId === _selectedDeviceId) ?? allLasers[0] ?? null);
+	const selectedDeviceId = $derived(selectedLaser?.deviceId ?? '');
 
 	function selectRow(deviceId: string) {
 		_selectedDeviceId = deviceId;
@@ -270,19 +238,19 @@
 	</div>
 {/snippet}
 
-{#if laserRows.length === 0}
+{#if allLasers.length === 0}
 	<div class="flex h-full items-center justify-center">
 		<p class="text-xs text-muted-foreground">No lasers configured</p>
 	</div>
-{:else}
+{:else if selectedLaser}
 	<div class="flex h-full">
 		<!-- Left: detail panel -->
-		{@render detailPanel(selectedRow.laser, selectedRow.channelConfig)}
+		{@render detailPanel(selectedLaser, session.getChannelFor(selectedLaser.deviceId)?.config ?? null)}
 
 		<!-- Right: laser list -->
 		<div class="flex flex-1 flex-col overflow-auto px-4">
 			<div class="flex h-full flex-col gap-3">
-				{#if profileRows.length > 0}
+				{#if profileLasers.length > 0}
 					<div>
 						<div class="flex items-center justify-between py-3">
 							<h4 class="text-[0.65rem] font-medium text-muted-foreground/60 uppercase">
@@ -299,19 +267,19 @@
 							</button>
 						</div>
 						<div class="space-y-2">
-							{#each profileRows as row (row.laser.deviceId)}
-								{@render laserRow(row.laser)}
+							{#each profileLasers as laser (laser.deviceId)}
+								{@render laserRow(laser)}
 							{/each}
 						</div>
 					</div>
 				{/if}
 
-				{#if otherRows.length > 0}
+				{#if otherLasers.length > 0}
 					<div>
 						<h4 class="mb-1 text-[0.65rem] font-medium text-muted-foreground/60 uppercase">Other Lasers</h4>
 						<div class="space-y-2">
-							{#each otherRows as row (row.laser.deviceId)}
-								{@render laserRow(row.laser)}
+							{#each otherLasers as laser (laser.deviceId)}
+								{@render laserRow(laser)}
 							{/each}
 						</div>
 					</div>

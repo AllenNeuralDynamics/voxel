@@ -24,8 +24,6 @@
 
 	let groupMode = $state<GroupMode>('none');
 
-	// Get active profile and its config
-	const activeProfile = $derived(session.activeProfile);
 	const config = $derived(session.config);
 
 	// Get set of devices with waveforms (those with acq_port in DAQ config)
@@ -46,18 +44,20 @@
 	}
 
 	// Build device groups based on mode
+	const activeChannels = $derived(session.activeChannels);
+
 	const groups = $derived.by(() => {
-		if (!activeProfile || !config) return [];
+		if (Object.keys(activeChannels).length === 0 || !config) return [];
 
 		switch (groupMode) {
 			case 'none':
-				return buildGroupsFlat(config, activeProfile.channels);
+				return buildGroupsFlat(config, activeChannels);
 			case 'type':
-				return buildGroupsByType(config, activeProfile.channels);
+				return buildGroupsByType(config, activeChannels);
 			case 'path':
-				return buildGroupsByPath(config, activeProfile.channels);
+				return buildGroupsByPath(config, activeChannels);
 			case 'channel':
-				return buildGroupsByChannel(config, activeProfile.channels);
+				return buildGroupsByChannel(config, activeChannels);
 			default:
 				return [];
 		}

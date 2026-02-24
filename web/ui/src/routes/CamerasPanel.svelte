@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Session, Camera } from '$lib/main';
-	import type { ChannelConfig } from '$lib/main/types';
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import Select from '$lib/ui/primitives/Select.svelte';
 	import { Button, Checkbox } from '$lib/ui/primitives';
@@ -17,7 +16,7 @@
 	const allCameraIds = $derived(Object.keys(session.cameras));
 
 	// Selection — default all selected
-	let selectedIds = $state(new SvelteSet<string>());
+	let selectedIds = new SvelteSet<string>();
 
 	$effect(() => {
 		if (selectedIds.size === 0 && allCameraIds.length > 0) {
@@ -42,18 +41,6 @@
 	const someSelected = $derived(selectedIds.size > 0 && selectedIds.size < allCameraIds.length);
 	const selectedCameras = $derived(allCameras.filter((c) => selectedIds.has(c.deviceId)));
 
-	// Channel map: camera deviceId -> { id, config }
-	const cameraChannelMap = $derived.by(() => {
-		const profile = session.activeProfile;
-		const profileChannels: Record<string, ChannelConfig> = profile?.channels ?? {};
-		const map = new Map<string, { id: string; config: ChannelConfig }>();
-		for (const [channelId, config] of Object.entries(profileChannels)) {
-			if (config.detection && !map.has(config.detection)) {
-				map.set(config.detection, { id: channelId, config });
-			}
-		}
-		return map;
-	});
 
 	// Form state — undefined means "no change"
 	let formExposure = $state<number | undefined>(undefined);
@@ -138,7 +125,7 @@
 </script>
 
 {#snippet cameraCard(camera: Camera)}
-	{@const ch = cameraChannelMap.get(camera.deviceId)}
+	{@const ch = session.getChannelFor(camera.deviceId)}
 	{@const isSelected = selectedIds.has(camera.deviceId)}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div

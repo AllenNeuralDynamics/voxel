@@ -1,9 +1,9 @@
 import type { Client, DaqWaveforms } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
 import type { AppStatus, GridConfig, Tile, Stack, LayerVisibility, TileOrder, VoxelRigConfig, ProfileConfig, ChannelConfig } from './types';
+import { parseVec2D } from './types';
 import { PreviewState } from './preview.svelte';
-import { Profile, type ProfileContext } from './profile.svelte';
-import { Axis } from './axis.svelte';
+import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -14,16 +14,12 @@ export interface SessionInit {
 	status: AppStatus;
 }
 
-export class Session implements ProfileContext {
+export class Session {
 	readonly client!: Client;
 	readonly config!: VoxelRigConfig;
 	readonly devices!: DevicesManager;
 	readonly previewState!: PreviewState;
-	readonly xAxis!: Axis;
-	readonly yAxis!: Axis;
-	readonly zAxis!: Axis;
-
-	profiles = $state<Profile[]>([]);
+	readonly stage!: Stage;
 
 	#appStatus = $state<AppStatus>();
 
@@ -43,18 +39,51 @@ export class Session implements ProfileContext {
 	tileOrder = $derived<TileOrder>(this.#appStatus?.session?.tile_order ?? 'snake_row');
 	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
 
-	activeProfile = $derived.by(() => {
-		if (!this.activeProfileId) return null;
-		return this.profiles.find((p) => p.id === this.activeProfileId) ?? null;
+	activeProfileConfig = $derived<ProfileConfig | null>(
+		this.activeProfileId ? this.config.profiles[this.activeProfileId] ?? null : null
+	);
+
+	activeChannels = $derived.by(() => {
+		if (!this.activeProfileId) return {};
+		const profile = this.config.profiles[this.activeProfileId];
+		if (!profile) return {};
+		const result: Record<string, ChannelConfig> = {};
+		for (const channelId of profile.channels) {
+			const ch = this.config.channels[channelId];
+			if (ch) result[channelId] = ch;
+		}
+		return result;
 	});
 
-	fov = $derived<{ width: number; height: number }>(this.activeProfile?.fovDimensions ?? { width: 5, height: 5 });
+	/** Find the first active channel where `detection` or `illumination` matches `deviceId`. */
+	getChannelFor(deviceId: string): { id: string; config: ChannelConfig } | undefined {
+		for (const [id, config] of Object.entries(this.activeChannels)) {
+			if (config.detection === deviceId || config.illumination === deviceId) {
+				return { id, config };
+			}
+		}
+		return undefined;
+	}
 
-	stageWidth = $derived(this.xAxis.range);
-	stageHeight = $derived(this.yAxis.range);
-	stageDepth = $derived(this.zAxis.range);
-	stageIsMoving = $derived(this.xAxis.isMoving || this.yAxis.isMoving || this.zAxis.isMoving);
-	stageConnected = $derived(this.xAxis.isConnected && this.yAxis.isConnected && this.zAxis.isConnected);
+	fov = $derived.by(() => {
+		if (!this.activeProfileId) return { width: 5, height: 5 };
+		const profile = this.config.profiles[this.activeProfileId];
+		if (!profile?.channels?.length) return { width: 5, height: 5 };
+		const firstChannelId = profile.channels[0];
+		const cameraId = this.config.channels[firstChannelId]?.detection;
+		if (!cameraId) return { width: 5, height: 5 };
+		const frameSizePx = parseVec2D(this.devices.getPropertyValue(cameraId, 'frame_size_px'));
+		const pixelSizeUm = parseVec2D(this.devices.getPropertyValue(cameraId, 'pixel_size_um'));
+		const magnification = this.config.detection?.[cameraId]?.magnification ?? 1.0;
+		if (!frameSizePx || !pixelSizeUm) return { width: 5, height: 5 };
+		return {
+			width: (frameSizePx.x * pixelSizeUm.x) / (1000 * magnification),
+			height: (frameSizePx.y * pixelSizeUm.y) / (1000 * magnification)
+		};
+	});
+
+	waveforms = $state<DaqWaveforms | null>(null);
+	waveformsLoading = $state(false);
 
 	lasers: Record<string, Laser>;
 	cameras: Record<string, Camera>;
@@ -77,9 +106,7 @@ export class Session implements ProfileContext {
 			profiles: init.config.profiles
 		});
 
-		this.xAxis = new Axis(this.devices, init.config.stage.x);
-		this.yAxis = new Axis(this.devices, init.config.stage.y);
-		this.zAxis = new Axis(this.devices, init.config.stage.z);
+		this.stage = new Stage(this.devices, init.config.stage);
 
 		const lasers: Record<string, Laser> = {};
 		if (init.config.channels) {
@@ -100,8 +127,6 @@ export class Session implements ProfileContext {
 			}
 		}
 		this.cameras = cameras;
-
-		this.#buildProfiles();
 	}
 
 	async initialize(): Promise<void> {
@@ -125,18 +150,13 @@ export class Session implements ProfileContext {
 	}
 
 	handleWaveforms(waveforms: DaqWaveforms): void {
-		if (this.activeProfile) {
-			this.activeProfile.waveforms = waveforms;
-			this.activeProfile.waveformsLoading = false;
-			console.debug('[Session] Received waveforms for active profile:', Object.keys(waveforms));
-		}
+		this.waveforms = waveforms;
+		this.waveformsLoading = false;
 	}
 
 	requestWaveforms(): void {
-		if (this.activeProfile) {
-			this.activeProfile.waveformsLoading = true;
-			this.client.requestWaveforms();
-		}
+		this.waveformsLoading = true;
+		this.client.requestWaveforms();
 	}
 
 	async activateProfile(profileId: string): Promise<void> {
@@ -145,11 +165,7 @@ export class Session implements ProfileContext {
 
 		this.error = null;
 		this.isMutating = true;
-
-		const newProfile = this.profiles.find((p) => p.id === profileId);
-		if (newProfile) {
-			newProfile.waveformsLoading = true;
-		}
+		this.waveformsLoading = true;
 
 		try {
 			const response = await fetch(`${this.client.baseUrl}/profiles/active`, {
@@ -163,9 +179,7 @@ export class Session implements ProfileContext {
 			}
 		} catch (error) {
 			console.error('[Session] Failed to activate profile:', error);
-			if (newProfile) {
-				newProfile.waveformsLoading = false;
-			}
+			this.waveformsLoading = false;
 			if (error instanceof Error) {
 				this.error = error.message || 'Failed to activate profile';
 			}
@@ -270,26 +284,11 @@ export class Session implements ProfileContext {
 		this.#selection.clear();
 	}
 
-	// --- Movement ---
-
-	moveXY(x: number, y: number): void {
-		this.xAxis.move(x);
-		this.yAxis.move(y);
-	}
-
-	moveZ(z: number): void {
-		this.zAxis.move(z);
-	}
-
-	async haltStage(): Promise<void> {
-		await Promise.all([this.xAxis.halt(), this.yAxis.halt(), this.zAxis.halt()]);
-	}
-
 	moveToGridCell(row: number, col: number): void {
-		if (this.stageIsMoving) return;
+		if (this.stage.isMoving) return;
 		const targetX = this.gridCellToPosition(col, 'x');
 		const targetY = this.gridCellToPosition(row, 'y');
-		this.moveXY(targetX, targetY);
+		this.stage.moveXY(targetX, targetY);
 	}
 
 	// --- Geometry ---
@@ -313,29 +312,15 @@ export class Session implements ProfileContext {
 	positionToGridCell(positionMm: number, axis: 'x' | 'y'): number {
 		const offset = axis === 'x' ? this.gridOffsetX : this.gridOffsetY;
 		const spacing = axis === 'x' ? this.tileSpacingX : this.tileSpacingY;
-		const lowerLimit = axis === 'x' ? this.xAxis.lowerLimit : this.yAxis.lowerLimit;
+		const lowerLimit = axis === 'x' ? this.stage.x.lowerLimit : this.stage.y.lowerLimit;
 		return Math.floor((positionMm - lowerLimit - offset) / spacing);
 	}
 
 	gridCellToPosition(gridCell: number, axis: 'x' | 'y'): number {
 		const offset = axis === 'x' ? this.gridOffsetX : this.gridOffsetY;
 		const spacing = axis === 'x' ? this.tileSpacingX : this.tileSpacingY;
-		const lowerLimit = axis === 'x' ? this.xAxis.lowerLimit : this.yAxis.lowerLimit;
+		const lowerLimit = axis === 'x' ? this.stage.x.lowerLimit : this.stage.y.lowerLimit;
 		return lowerLimit + offset + gridCell * spacing;
 	}
 
-	// --- Private ---
-
-	#buildProfiles(): void {
-		this.profiles = Object.entries(this.config.profiles).map(([profileId, profileConfig]: [string, ProfileConfig]) => {
-			const channels: Record<string, ChannelConfig> = {};
-			for (const channelId of profileConfig.channels) {
-				const channelConfig = this.config.channels[channelId];
-				if (channelConfig) {
-					channels[channelId] = channelConfig;
-				}
-			}
-			return new Profile(profileId, profileConfig, channels, this);
-		});
-	}
 }

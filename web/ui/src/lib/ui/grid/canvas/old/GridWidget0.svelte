@@ -12,11 +12,11 @@
 
 	let { session }: Props = $props();
 
-	let fovX = $derived(session.xAxis ? session.xAxis.position - session.xAxis.lowerLimit : 0);
-	let fovY = $derived(session.yAxis ? session.yAxis.position - session.yAxis.lowerLimit : 0);
-	let fovZ = $derived(session.zAxis ? session.zAxis.position - session.zAxis.lowerLimit : 0);
-	let isXYMoving = $derived(session.xAxis?.isMoving || session.yAxis?.isMoving);
-	let isZMoving = $derived(session.zAxis?.isMoving ?? false);
+	let fovX = $derived(session.stage.x ? session.stage.x.position - session.stage.x.lowerLimit : 0);
+	let fovY = $derived(session.stage.y ? session.stage.y.position - session.stage.y.lowerLimit : 0);
+	let fovZ = $derived(session.stage.z ? session.stage.z.position - session.stage.z.lowerLimit : 0);
+	let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
+	let isZMoving = $derived(session.stage.z?.isMoving ?? false);
 	let isStageMoving = $derived(isXYMoving || isZMoving);
 
 	let primaryTile = $derived(session.selectedTiles[0] ?? null);
@@ -27,8 +27,8 @@
 	let marginX = $derived(session.fov.width / 2);
 	let marginY = $derived(session.fov.height / 2);
 
-	let viewBoxWidth = $derived(session.stageWidth + session.fov.width);
-	let viewBoxHeight = $derived(session.stageHeight + session.fov.height);
+	let viewBoxWidth = $derived(session.stage.width + session.fov.width);
+	let viewBoxHeight = $derived(session.stage.height + session.fov.height);
 	let stageAspectRatio = $derived(viewBoxWidth / viewBoxHeight);
 	let cornerLen = $derived(Math.min(session.fov.width, session.fov.height) / 8);
 
@@ -78,8 +78,8 @@
 	let scale = $derived(canvasWidth / viewBoxWidth);
 	let marginPixelsX = $derived(marginX * scale);
 	let marginPixelsY = $derived(marginY * scale);
-	let stagePixelsX = $derived(session.stageWidth * scale);
-	let stagePixelsY = $derived(session.stageHeight * scale);
+	let stagePixelsX = $derived(session.stage.width * scale);
+	let stagePixelsY = $derived(session.stage.height * scale);
 
 	function updateCanvasSize(containerWidth: number, containerHeight: number) {
 		const availableWidth = containerWidth - TRACK_WIDTH - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 4;
@@ -143,22 +143,22 @@
 	}
 
 	function clampToStageLimits(targetX: number, targetY: number): [number, number] {
-		if (!session.xAxis || !session.yAxis) return [targetX, targetY];
-		const minX = session.xAxis.lowerLimit;
-		const maxX = session.xAxis.upperLimit;
-		const minY = session.yAxis.lowerLimit;
-		const maxY = session.yAxis.upperLimit;
+		if (!session.stage.x || !session.stage.y) return [targetX, targetY];
+		const minX = session.stage.x.lowerLimit;
+		const maxX = session.stage.x.upperLimit;
+		const minY = session.stage.y.lowerLimit;
+		const maxY = session.stage.y.upperLimit;
 		return [Math.max(minX, Math.min(maxX, targetX)), Math.max(minY, Math.min(maxY, targetY))];
 	}
 
 	function handleTileMove(e: MouseEvent, tile: Tile) {
 		if (e.button !== 1) return;
 		e.preventDefault();
-		if (isXYMoving || !session.xAxis || !session.yAxis) return;
-		const targetX = session.xAxis.lowerLimit + toMm(tile.x_um);
-		const targetY = session.yAxis.lowerLimit + toMm(tile.y_um);
+		if (isXYMoving || !session.stage.x || !session.stage.y) return;
+		const targetX = session.stage.x.lowerLimit + toMm(tile.x_um);
+		const targetY = session.stage.y.lowerLimit + toMm(tile.y_um);
 		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
-		session.moveXY(clampedX, clampedY);
+		session.stage.moveXY(clampedX, clampedY);
 	}
 
 	function handleStackSelect(e: MouseEvent, stack: Stack) {
@@ -173,29 +173,29 @@
 	function handleStackMove(e: MouseEvent, stack: Stack) {
 		if (e.button !== 1) return;
 		e.preventDefault();
-		if (isXYMoving || !session.xAxis || !session.yAxis) return;
-		const targetX = session.xAxis.lowerLimit + toMm(stack.x_um);
-		const targetY = session.yAxis.lowerLimit + toMm(stack.y_um);
+		if (isXYMoving || !session.stage.x || !session.stage.y) return;
+		const targetX = session.stage.x.lowerLimit + toMm(stack.x_um);
+		const targetY = session.stage.y.lowerLimit + toMm(stack.y_um);
 		const [clampedX, clampedY] = clampToStageLimits(targetX, targetY);
-		session.moveXY(clampedX, clampedY);
+		session.stage.moveXY(clampedX, clampedY);
 	}
 
 	function handleXSliderChange(e: Event) {
-		if (!session.xAxis) return;
+		if (!session.stage.x) return;
 		const target = e.target as HTMLInputElement;
-		session.xAxis.move(parseFloat(target.value));
+		session.stage.x.move(parseFloat(target.value));
 	}
 
 	function handleYSliderChange(e: Event) {
-		if (!session.yAxis) return;
+		if (!session.stage.y) return;
 		const target = e.target as HTMLInputElement;
-		session.yAxis.move(parseFloat(target.value));
+		session.stage.y.move(parseFloat(target.value));
 	}
 
 	function handleZSliderChange(e: Event) {
-		if (!session.zAxis) return;
+		if (!session.stage.z) return;
 		const target = e.target as HTMLInputElement;
-		session.zAxis.move(parseFloat(target.value));
+		session.stage.z.move(parseFloat(target.value));
 	}
 
 	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
@@ -322,7 +322,7 @@
 	</button>
 {/snippet}
 <div class="flex h-full w-full flex-col p-2">
-	{#if session.xAxis && session.yAxis && session.zAxis}
+	{#if session.stage.x && session.stage.y && session.stage.z}
 		{@const layers: Layer[] = [
           { key: 'grid', color: 'text-blue-500', icon: 'lucide-lab:grid-lines', title: 'Toggle grid' },
           { key: 'stacks', color: 'text-blue-400', icon: 'ph:stack-light', title: 'Toggle stacks' },
@@ -359,10 +359,10 @@
 						type="range"
 						class="x-slider"
 						style="width: {stagePixelsX}px; margin-left: {TRACK_WIDTH + STAGE_BORDER + marginPixelsX}px;"
-						min={session.xAxis?.lowerLimit}
-						max={session.xAxis?.upperLimit}
+						min={session.stage.x?.lowerLimit}
+						max={session.stage.x?.upperLimit}
 						step={0.1}
-						value={session.xAxis?.position}
+						value={session.stage.x?.position}
 						disabled={isXYMoving}
 						oninput={handleXSliderChange}
 					/>
@@ -372,10 +372,10 @@
 							type="range"
 							class="y-slider"
 							style="height: {stagePixelsY}px; margin-top: {STAGE_BORDER + marginPixelsY}px;"
-							min={session.yAxis?.lowerLimit}
-							max={session.yAxis?.upperLimit}
+							min={session.stage.y?.lowerLimit}
+							max={session.stage.y?.upperLimit}
 							step={0.1}
-							value={session.yAxis?.position}
+							value={session.stage.y?.position}
 							disabled={isXYMoving}
 							oninput={handleYSliderChange}
 						/>
@@ -466,7 +466,7 @@
 										class="fov-rect"
 										class:moving={isXYMoving}
 									>
-										<title>FOV: ({session.xAxis?.position.toFixed(1)}, {session.yAxis?.position.toFixed(1)}) mm</title>
+										<title>FOV: ({session.stage.x?.position.toFixed(1)}, {session.stage.y?.position.toFixed(1)}) mm</title>
 									</rect>
 
 									<g class="fov-crosshair" class:moving={isXYMoving}>
@@ -518,19 +518,19 @@
 					<input
 						type="range"
 						class="z-slider"
-						min={session.zAxis?.lowerLimit}
-						max={session.zAxis?.upperLimit}
+						min={session.stage.z?.lowerLimit}
+						max={session.stage.z?.upperLimit}
 						step={0.1}
-						value={session.zAxis?.position}
+						value={session.stage.z?.position}
 						disabled={isZMoving}
 						oninput={handleZSliderChange}
 					/>
 					<svg viewBox="0 0 30 {canvasHeight}" class="z-svg" preserveAspectRatio="none" width="100%" height="100%">
-						{#if primaryStack && session.zAxis}
-							{@const z0Offset = primaryStack.z_start_um / 1000 - session.zAxis.lowerLimit}
-							{@const z1Offset = primaryStack.z_end_um / 1000 - session.zAxis.lowerLimit}
-							{@const y0 = (1 - z0Offset / session.stageDepth) * canvasHeight - 1}
-							{@const y1 = (1 - z1Offset / session.stageDepth) * canvasHeight - 1}
+						{#if primaryStack && session.stage.z}
+							{@const z0Offset = primaryStack.z_start_um / 1000 - session.stage.z.lowerLimit}
+							{@const z1Offset = primaryStack.z_end_um / 1000 - session.stage.z.lowerLimit}
+							{@const y0 = (1 - z0Offset / session.stage.depth) * canvasHeight - 1}
+							{@const y1 = (1 - z1Offset / session.stage.depth) * canvasHeight - 1}
 							<g class={getStackStatusColor(primaryStack.status)}>
 								<line x1="0" y1={y0} x2="30" y2={y0} class="z-marker" />
 								<line x1="0" {y1} x2="30" y2={y1} class="z-marker" />
@@ -538,13 +538,13 @@
 						{/if}
 						<line
 							x1="0"
-							y1={(1 - fovZ / session.stageDepth) * canvasHeight - 1}
+							y1={(1 - fovZ / session.stage.depth) * canvasHeight - 1}
 							x2="30"
-							y2={(1 - fovZ / session.stageDepth) * canvasHeight - 1}
+							y2={(1 - fovZ / session.stage.depth) * canvasHeight - 1}
 							class="z-line"
 							class:moving={isZMoving}
 						>
-							<title>Z: {session.zAxis?.position.toFixed(1)} mm</title>
+							<title>Z: {session.stage.z?.position.toFixed(1)} mm</title>
 						</line>
 					</svg>
 				</div>
@@ -554,49 +554,49 @@
 		<div class="flex items-center justify-between py-4">
 			<div class="flex items-center gap-2">
 				<SpinBox
-					value={session.xAxis.position}
-					min={session.xAxis.lowerLimit}
-					max={session.xAxis.upperLimit}
+					value={session.stage.x.position}
+					min={session.stage.x.lowerLimit}
+					max={session.stage.x.upperLimit}
 					step={0.01}
 					decimals={2}
 					numCharacters={8}
 					size="sm"
 					prefix="X"
 					suffix="mm"
-					color={session.xAxis.isMoving ? 'var(--danger)' : undefined}
-					onChange={(v) => session.xAxis && session.xAxis.move(v)}
+					color={session.stage.x.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => session.stage.x && session.stage.x.move(v)}
 				/>
 				<SpinBox
-					value={session.yAxis.position}
-					min={session.yAxis.lowerLimit}
-					max={session.yAxis.upperLimit}
+					value={session.stage.y.position}
+					min={session.stage.y.lowerLimit}
+					max={session.stage.y.upperLimit}
 					step={0.01}
 					decimals={2}
 					numCharacters={8}
 					size="sm"
 					prefix="Y"
 					suffix="mm"
-					color={session.yAxis.isMoving ? 'var(--danger)' : undefined}
-					onChange={(v) => session.yAxis && session.yAxis.move(v)}
+					color={session.stage.y.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => session.stage.y && session.stage.y.move(v)}
 				/>
 				<SpinBox
-					value={session.zAxis.position}
-					min={session.zAxis.lowerLimit}
-					max={session.zAxis.upperLimit}
+					value={session.stage.z.position}
+					min={session.stage.z.lowerLimit}
+					max={session.stage.z.upperLimit}
 					step={0.001}
 					decimals={3}
 					numCharacters={8}
 					size="sm"
 					prefix="Z"
 					suffix="mm"
-					color={session.zAxis.isMoving ? 'var(--danger)' : undefined}
-					onChange={(v) => session.zAxis && session.zAxis.move(v)}
+					color={session.stage.z.isMoving ? 'var(--danger)' : undefined}
+					onChange={(v) => session.stage.z && session.stage.z.move(v)}
 				/>
 			</div>
 			<Button
 				variant={isStageMoving ? 'danger' : 'outline'}
 				size="sm"
-				onclick={() => session.haltStage()}
+				onclick={() => session.stage.halt()}
 				disabled={!isStageMoving}
 				aria-label="Halt stage"
 			>

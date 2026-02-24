@@ -1,4 +1,37 @@
 import type { DevicesManager } from './devices.svelte';
+import type { StageConfig } from './types';
+
+export class Stage {
+	readonly x!: Axis;
+	readonly y!: Axis;
+	readonly z!: Axis;
+
+	constructor(devices: DevicesManager, config: StageConfig) {
+		this.x = new Axis(devices, config.x);
+		this.y = new Axis(devices, config.y);
+		this.z = new Axis(devices, config.z);
+	}
+
+	width = $derived(this.x.range);
+	height = $derived(this.y.range);
+	depth = $derived(this.z.range);
+
+	isMoving = $derived(this.x.isMoving || this.y.isMoving || this.z.isMoving);
+	connected = $derived(this.x.isConnected && this.y.isConnected && this.z.isConnected);
+
+	moveXY(x: number, y: number): void {
+		this.x.move(x);
+		this.y.move(y);
+	}
+
+	moveZ(z: number): void {
+		this.z.move(z);
+	}
+
+	async halt(): Promise<void> {
+		await Promise.all([this.x.halt(), this.y.halt(), this.z.halt()]);
+	}
+}
 
 export class Axis {
 	readonly #devices: DevicesManager;

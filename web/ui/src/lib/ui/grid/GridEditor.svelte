@@ -140,7 +140,7 @@
 	{/if}
 {/snippet}
 
-{#if session.zAxis && selectedTile}
+{#if session.stage.z && selectedTile}
 	<div class="flex flex-col border-y border-border bg-accent/30">
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
@@ -200,18 +200,18 @@
 					zStartInput,
 					stack?.z_start_um ?? null,
 					updateZStart,
-					() => Math.round(session.zAxis!.position * 1000),
-					session.zAxis.lowerLimit * 1000,
-					session.zAxis.upperLimit * 1000
+					() => Math.round(session.stage.z!.position * 1000),
+					session.stage.z.lowerLimit * 1000,
+					session.stage.z.upperLimit * 1000
 				)}
 				{@render editableZItem(
 					'Z1',
 					zEndInput,
 					stack?.z_end_um ?? null,
 					updateZEnd,
-					() => Math.round(session.zAxis!.position * 1000),
-					session.zAxis.lowerLimit * 1000,
-					session.zAxis.upperLimit * 1000
+					() => Math.round(session.stage.z!.position * 1000),
+					session.stage.z.lowerLimit * 1000,
+					session.stage.z.upperLimit * 1000
 				)}
 
 				{@render staticItem('Slices', isEditing ? String(numSlices) : (stack?.num_frames?.toString() ?? '—'))}
