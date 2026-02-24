@@ -41,7 +41,6 @@
 	const someSelected = $derived(selectedIds.size > 0 && selectedIds.size < allCameraIds.length);
 	const selectedCameras = $derived(allCameras.filter((c) => selectedIds.has(c.deviceId)));
 
-
 	// Form state — undefined means "no change"
 	let formExposure = $state<number | undefined>(undefined);
 	let formBinning = $state<string | undefined>(undefined);
@@ -196,40 +195,56 @@
 			</div>
 		</div>
 
+		<!-- Stream info (when streaming) -->
+		{#if camera.streamInfo}
+			{@const info = camera.streamInfo}
+			<div class="flex items-center gap-4 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+				<span class="font-mono tabular-nums">{info.frame_rate_fps.toFixed(1)} fps</span>
+				<span class="font-mono tabular-nums">{info.data_rate_mbs.toFixed(1)} MB/s</span>
+				{#if info.dropped_frames > 0}
+					<span class="font-mono text-danger tabular-nums">{info.dropped_frames} dropped</span>
+				{/if}
+			</div>
+		{/if}
 		<!-- Channel -->
 		{#if ch}
 			<div class="border-t border-border/50 pt-2">
 				<button
-					onclick={(e) => { e.stopPropagation(); channelExpanded = !channelExpanded; }}
+					onclick={(e) => {
+						e.stopPropagation();
+						channelExpanded = !channelExpanded;
+					}}
 					class="flex w-full cursor-pointer items-center justify-between text-xs"
 				>
-					<span class="text-muted-foreground">Channel</span>
-					<div class="flex items-center gap-1.5">
-						<span class="font-mono tabular-nums">{ch.config.label ?? ch.id}</span>
-						<Icon
-							icon="mdi:chevron-right"
-							width="14"
-							height="14"
-							class="text-muted-foreground transition-transform {channelExpanded ? 'rotate-90' : ''}"
-						/>
-					</div>
-				</button>
-				{#if channelExpanded}
-					<div class="mt-2 space-y-1 text-xs">
-						{#if ch.config.desc}
-							<p class="text-muted-foreground">{ch.config.desc}</p>
-						{/if}
+					<div class="flex items-center gap-4">
+						<div class="flex justify-between gap-1">
+							<span class="text-muted-foreground">Channel</span>
+							<span class="font-mono">{ch.config.label ?? ch.id}</span>
+						</div>
 						{#if ch.config.emission}
-							<div class="flex justify-between">
+							<div class="flex justify-between gap-1">
 								<span class="text-muted-foreground">Emission</span>
 								<span class="font-mono tabular-nums">{ch.config.emission} nm</span>
 							</div>
 						{/if}
 						{#if ch.config.illumination}
-							<div class="flex justify-between">
+							<div class="flex justify-between gap-2">
 								<span class="text-muted-foreground">Illumination</span>
 								<span class="font-mono tabular-nums">{ch.config.illumination}</span>
 							</div>
+						{/if}
+					</div>
+					<Icon
+						icon="mdi:chevron-right"
+						width="14"
+						height="14"
+						class="text-muted-foreground transition-transform {channelExpanded ? 'rotate-90' : ''}"
+					/>
+				</button>
+				{#if channelExpanded}
+					<div class="mt-2 space-y-1 text-xs">
+						{#if ch.config.desc}
+							<p class="text-foreground">{ch.config.desc}</p>
 						{/if}
 						{#if Object.keys(ch.config.filters).length > 0}
 							{#each Object.entries(ch.config.filters) as [wheelId, position] (position)}
@@ -240,18 +255,6 @@
 							{/each}
 						{/if}
 					</div>
-				{/if}
-			</div>
-		{/if}
-
-		<!-- Stream info (when streaming) -->
-		{#if camera.streamInfo}
-			{@const info = camera.streamInfo}
-			<div class="flex items-center gap-4 border-t border-border/50 pt-2 text-xs text-muted-foreground">
-				<span class="font-mono tabular-nums">{info.frame_rate_fps.toFixed(1)} fps</span>
-				<span class="font-mono tabular-nums">{info.data_rate_mbs.toFixed(1)} MB/s</span>
-				{#if info.dropped_frames > 0}
-					<span class="font-mono tabular-nums text-danger">{info.dropped_frames} dropped</span>
 				{/if}
 			</div>
 		{/if}
@@ -272,7 +275,7 @@
 					decimals={1}
 					suffix="ms"
 					size="sm"
-						class="w-full"
+					class="w-full"
 					onChange={(v) => (formExposure = v)}
 				/>
 			</div>
@@ -317,7 +320,7 @@
 								max={refRegion.x.max_val}
 								step={refRegion.x.step}
 								size="sm"
-												class="w-full"
+								class="w-full"
 								onChange={(v) => (formRegionX = v)}
 							/>
 						</div>
@@ -329,7 +332,7 @@
 								max={refRegion.y.max_val}
 								step={refRegion.y.step}
 								size="sm"
-												class="w-full"
+								class="w-full"
 								onChange={(v) => (formRegionY = v)}
 							/>
 						</div>
@@ -341,7 +344,7 @@
 								max={refRegion.width.max_val}
 								step={refRegion.width.step}
 								size="sm"
-												class="w-full"
+								class="w-full"
 								onChange={(v) => (formRegionWidth = v)}
 							/>
 						</div>
@@ -353,7 +356,7 @@
 								max={refRegion.height.max_val}
 								step={refRegion.height.step}
 								size="sm"
-												class="w-full"
+								class="w-full"
 								onChange={(v) => (formRegionHeight = v)}
 							/>
 						</div>
@@ -364,13 +367,7 @@
 
 		<!-- Apply button -->
 		<div class="px-4 py-3">
-			<Button
-				variant="default"
-				size="sm"
-				class="w-full"
-				disabled={!hasFormChanges}
-				onclick={applyChanges}
-			>
+			<Button variant="default" size="sm" class="w-full" disabled={!hasFormChanges} onclick={applyChanges}>
 				Apply to {cameras.length} camera{cameras.length !== 1 ? 's' : ''}
 			</Button>
 		</div>
@@ -396,12 +393,7 @@
 		<div class="flex flex-1 flex-col overflow-auto px-4">
 			<div class="flex h-full flex-col gap-2">
 				<div class="flex items-center gap-2.5 py-3 pl-4">
-					<Checkbox
-						checked={allSelected}
-						indeterminate={someSelected}
-						onchange={toggleAll}
-						size="sm"
-					/>
+					<Checkbox checked={allSelected} indeterminate={someSelected} onchange={toggleAll} size="sm" />
 					<span class="text-xs text-muted-foreground">
 						{selectedIds.size} of {allCameras.length} camera{allCameras.length !== 1 ? 's' : ''} selected
 					</span>

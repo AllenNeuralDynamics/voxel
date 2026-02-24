@@ -45,7 +45,7 @@
 		}
 	});
 
-	export type SelectSize = VariantProps<typeof selectVariants>['size'];
+	export type SelectVariants = VariantProps<typeof selectVariants>;
 
 	export interface SelectOption<T extends string = string> {
 		value: T;
@@ -59,7 +59,7 @@
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { cn } from '$lib/utils';
 
-	interface Props<T extends string = string> {
+	interface Props<T extends string = string> extends SelectVariants {
 		value: T;
 		options: SelectOption<T>[];
 		onchange?: (value: T) => void;
@@ -69,7 +69,6 @@
 		showCheckmark?: boolean;
 		icon?: string;
 		emptyMessage?: string;
-		size?: SelectSize;
 		class?: string;
 	}
 
@@ -98,7 +97,7 @@
 	const items = $derived(options.map((o) => ({ value: o.value, label: o.label })));
 	const styles = $derived(selectVariants({ size }));
 
-	const iconSizes: Record<NonNullable<SelectSize>, number> = {
+	const iconSizes: Record<NonNullable<SelectVariants['size']>, number> = {
 		sm: 12,
 		md: 14,
 		lg: 16

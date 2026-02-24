@@ -1,12 +1,34 @@
-<script lang="ts">
-	type Size = 'sm' | 'md' | 'lg';
+<script lang="ts" module>
+	import { tv, type VariantProps } from 'tailwind-variants';
 
-	interface Props {
+	export const textInputVariants = tv({
+		base: [
+			'w-full rounded border border-input bg-transparent',
+			'placeholder-muted-foreground',
+			'transition-colors hover:border-foreground/20',
+			'focus:border-ring focus:outline-none'
+		],
+		variants: {
+			size: {
+				sm: 'h-6 px-1.5 text-[0.65rem]',
+				md: 'h-7 px-2 text-xs',
+				lg: 'h-8 px-2.5 text-sm'
+			}
+		},
+		defaultVariants: {
+			size: 'md'
+		}
+	});
+
+	export type TextInputVariants = VariantProps<typeof textInputVariants>;
+</script>
+
+<script lang="ts">
+	interface Props extends TextInputVariants {
 		value: string;
 		placeholder?: string;
 		onChange?: (newValue: string) => void;
 		id?: string;
-		size?: Size;
 		class?: string;
 	}
 
@@ -18,12 +40,6 @@
 			onChange(value);
 		}
 	}
-
-	const sizeClasses: Record<Size, string> = {
-		sm: 'h-6 px-1.5 text-[0.65rem]',
-		md: 'h-7 px-2 text-xs',
-		lg: 'h-8 px-2.5 text-sm'
-	};
 </script>
 
 <input
@@ -32,7 +48,5 @@
 	bind:value
 	{placeholder}
 	oninput={handleInput}
-	class="w-full rounded border border-input bg-transparent placeholder-muted-foreground transition-colors hover:border-foreground/20 focus:border-ring focus:outline-none {sizeClasses[
-		size
-	]} {className}"
+	class={textInputVariants({ size, class: className })}
 />

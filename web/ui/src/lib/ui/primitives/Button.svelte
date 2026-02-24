@@ -2,7 +2,13 @@
 	import { tv, type VariantProps } from 'tailwind-variants';
 
 	export const buttonVariants = tv({
-		base: 'inline-flex shrink-0 items-center justify-center rounded border font-medium transition-colors focus:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0',
+		base: [
+			'inline-flex shrink-0 items-center justify-center',
+			'rounded border font-medium',
+			'transition-colors focus:outline-none',
+			'disabled:pointer-events-none disabled:opacity-50',
+			'[&_svg]:pointer-events-none [&_svg]:shrink-0'
+		],
 		variants: {
 			variant: {
 				default: 'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
@@ -29,17 +35,14 @@
 		}
 	});
 
-	export type ButtonVariant = VariantProps<typeof buttonVariants>['variant'];
-	export type ButtonSize = VariantProps<typeof buttonVariants>['size'];
+	export type ButtonVariants = VariantProps<typeof buttonVariants>;
 </script>
 
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
 
-	interface Props extends HTMLButtonAttributes {
-		variant?: ButtonVariant;
-		size?: ButtonSize;
+	interface Props extends HTMLButtonAttributes, ButtonVariants {
 		class?: string;
 		children?: Snippet;
 	}

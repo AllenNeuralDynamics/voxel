@@ -1,8 +1,9 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { type DevicesManager, parseVec2D } from '$lib/main';
 	import SliderInput from '$lib/ui/primitives/SliderInput.svelte';
 	import Select from '$lib/ui/primitives/Select.svelte';
-	import CardAccordion from '$lib/ui/primitives/CardAccordion.svelte';
+	import Icon from '@iconify/svelte';
 
 	interface Props {
 		deviceId: string;
@@ -54,6 +55,23 @@
 	let roiInfo = $derived(devicesManager.getPropertyInfo(deviceId, 'roi'));
 </script>
 
+{#snippet collapsible(label: string, summaryValue: string, body: Snippet)}
+	<details class="group border-t border-zinc-700">
+		<summary
+			class="flex cursor-pointer items-center justify-between px-3 py-2 font-mono text-xs transition-colors hover:bg-zinc-700/30"
+		>
+			<div class="flex items-center gap-1">
+				<span class="text-[0.65rem] font-medium text-zinc-400">{label}</span>
+				<Icon icon="mdi:chevron-right" class="text-zinc-500 transition-transform group-open:rotate-90" />
+			</div>
+			<span class="text-[0.6rem] text-zinc-300">{summaryValue}</span>
+		</summary>
+		<div class="space-y-2 bg-zinc-800/40 px-3 pb-2 text-xs">
+			{@render body()}
+		</div>
+	</details>
+{/snippet}
+
 {#if cameraDevice?.connected}
 	{#if collapsed}
 		<div class="flex items-center justify-between py-1 font-mono text-[0.6rem] text-zinc-300">
@@ -82,7 +100,7 @@
 					{#if exposureTimeInfo && exposureTimeModel && typeof exposureTimeModel.value === 'number'}
 						<SliderInput
 							label={exposureTimeInfo.label}
-							bind:value={exposureTimeModel.value}
+							bind:target={exposureTimeModel.value}
 							min={exposureTimeModel.min_val ?? 0}
 							max={exposureTimeModel.max_val ?? 100}
 							step={exposureTimeModel.step ?? 0.1}
@@ -123,40 +141,30 @@
 				</div>
 			</div>
 
-			<!-- Sensor & ROI Collapsible Section (using CardAccordion component) -->
-			{#if frameSize}
-				{@const summary = `${frameSize.y} × ${frameSize.x} px${typeof frameSizeMb === 'number' ? ` | ${frameSizeMb.toFixed(2)} MB` : ''}`}
-				<CardAccordion label="Frame Size" summaryValue={summary}>
-					<!-- Sensor Size -->
-					{#if sensorSize}
-						<div class="flex justify-between">
-							<span class="label">Sensor Size</span>
-							<span class="value">{sensorSize.y} × {sensorSize.x} px</span>
-						</div>
-					{/if}
+			{#snippet frameSizeBody()}
+				{#if sensorSize}
+					<div class="flex justify-between">
+						<span class="label">Sensor Size</span>
+						<span class="value">{sensorSize.y} × {sensorSize.x} px</span>
+					</div>
+				{/if}
+				{#if pixelSize}
+					<div class="flex justify-between">
+						<span class="label">Pixel Size</span>
+						<span class="value">{pixelSize.y} × {pixelSize.x} µm</span>
+					</div>
+				{/if}
+				{#if roiInfo && roiModel && Array.isArray(roiModel.value) && roiModel.value.length === 4}
+					<div class="flex justify-between">
+						<span class="label">ROI</span>
+						<span class="value"
+							>{roiModel.value[0]}, {roiModel.value[1]}, {roiModel.value[2]}, {roiModel.value[3]}</span
+						>
+					</div>
+				{/if}
+			{/snippet}
 
-					<!-- Pixel Size -->
-					{#if pixelSize}
-						<div class="flex justify-between">
-							<span class="label">Pixel Size</span>
-							<span class="value">{pixelSize.y} × {pixelSize.x} µm</span>
-						</div>
-					{/if}
-
-					<!-- ROI -->
-					{#if roiInfo && roiModel && Array.isArray(roiModel.value) && roiModel.value.length === 4}
-						<div class="flex justify-between">
-							<span class="label">ROI</span>
-							<span class="value"
-								>{roiModel.value[0]}, {roiModel.value[1]}, {roiModel.value[2]}, {roiModel.value[3]}</span
-							>
-						</div>
-					{/if}
-				</CardAccordion>
-			{/if}
-
-			<!-- Stream Info Collapsible Section -->
-			<CardAccordion label="Stream Info" summaryValue={streamInfoSummary + ' fps'}>
+			{#snippet streamInfoBody()}
 				{#if streamInfo && typeof streamInfo === 'object'}
 					{#if 'data_rate_mbs' in streamInfo && typeof streamInfo.data_rate_mbs === 'number'}
 						<div class="flex justify-between">
@@ -183,7 +191,13 @@
 						<span class="text-zinc-600">Not Available</span>
 					</div>
 				{/if}
-			</CardAccordion>
+			{/snippet}
+
+			{#if frameSize}
+				{@const summary = `${frameSize.y} × ${frameSize.x} px${typeof frameSizeMb === 'number' ? ` | ${frameSizeMb.toFixed(2)} MB` : ''}`}
+				{@render collapsible('Frame Size', summary, frameSizeBody)}
+			{/if}
+			{@render collapsible('Stream Info', streamInfoSummary + ' fps', streamInfoBody)}
 		</div>
 	{/if}
 {:else}

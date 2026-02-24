@@ -2,12 +2,14 @@
 	import LaserControl from '$lib/ui/devices/LaserControl.svelte';
 	import CameraControl from '$lib/ui/devices/CameraControl.svelte';
 	import type { Session } from '$lib/main';
+	import { cn } from '$lib/utils';
 
 	interface Props {
 		session: Session;
+		class?: string;
 	}
 
-	let { session }: Props = $props();
+	let { session, class: className }: Props = $props();
 
 	const laserIds = $derived([
 		...new Set(
@@ -26,7 +28,7 @@
 	]);
 </script>
 
-<div class="h-full overflow-auto bg-card p-4">
+<div class={cn('h-full overflow-auto bg-card p-4', className)}>
 	{#if laserIds.length === 0 && cameraIds.length === 0}
 		<div class="flex h-full items-center justify-center">
 			<p class="text-xs text-muted-foreground">No devices in active profile</p>

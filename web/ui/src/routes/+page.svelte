@@ -18,6 +18,7 @@
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
+	import DevicesPanel from './DevicesPanel.svelte';
 	import { cn } from '$lib/utils';
 
 	let app = $state<App | undefined>(undefined);
@@ -87,7 +88,7 @@
 					<header class="flex items-center justify-between border-b border-border bg-card px-4 py-4">
 						<div class="flex items-center gap-8">
 							<div class="flex items-center gap-3">
-								{#each [{ id: 'scout', label: 'Scout' }, { id: 'plan', label: 'Plan' }, { id: 'acquire', label: 'Acquire' }] as mode, i (mode.id)}
+								{#each [{ id: 'scout', label: 'Scout' }, { id: 'plan', label: 'Plan' }, { id: 'acquire', label: 'Acquire' }, { id: 'extra', label: 'Extras' }] as mode, i (mode.id)}
 									{@const isActive = workflowMode === mode.id}
 									{@const isComplete = completedModes.has(mode.id as WorkflowMode)}
 									{#if i > 0}
@@ -147,21 +148,25 @@
 					<PaneGroup direction="vertical" autoSaveId="midCol-v3">
 						<Pane>
 							<div class="h-full overflow-auto">
-								<div class="flex">
-									{#if workflowMode === 'scout'}
-										<div class="flex flex-col p-4">
+								{#if workflowMode === 'scout'}
+									<div class="flex h-full flex-col justify-between">
+										<div class="p-4">
 											<GridControls {session} />
 										</div>
-									{:else if workflowMode === 'plan'}
-										<div class="flex h-full items-center justify-center">
-											<p class="text-sm text-muted-foreground">Plan — configure grid and define stacks</p>
-										</div>
-									{:else if workflowMode === 'acquire'}
-										<div class="flex h-full items-center justify-center">
-											<p class="text-sm text-muted-foreground">Acquire — run acquisition and monitor progress</p>
-										</div>
-									{/if}
-								</div>
+									</div>
+								{:else if workflowMode === 'plan'}
+									<div class="flex h-full items-center justify-center">
+										<p class="text-sm text-muted-foreground">Plan — configure grid and define stacks</p>
+									</div>
+								{:else if workflowMode === 'acquire'}
+									<div class="flex h-full items-center justify-center">
+										<p class="text-sm text-muted-foreground">Acquire — run acquisition and monitor progress</p>
+									</div>
+								{:else if workflowMode === 'extra'}
+									<div class="flex h-full flex-col justify-between">
+										<DevicesPanel {session} class="h-auto" />
+									</div>
+								{/if}
 							</div>
 						</Pane>
 						<PaneDivider direction="horizontal" class="text-border hover:text-muted-foreground" />

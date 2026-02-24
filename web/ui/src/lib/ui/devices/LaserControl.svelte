@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DevicesManager } from '$lib/main';
+	import { wavelengthToColor } from '$lib/utils';
 	import SliderInput from '$lib/ui/primitives/SliderInput.svelte';
 	import Switch from '$lib/ui/primitives/Switch.svelte';
 
@@ -14,6 +15,7 @@
 	// Reactive device properties
 	let laserDevice = $derived(devicesManager.getDevice(deviceId));
 	let wavelength = $derived(devicesManager.getPropertyValue(deviceId, 'wavelength'));
+	let laserColor = $derived(wavelengthToColor(typeof wavelength === 'number' ? wavelength : undefined));
 	let isEnabled = $derived(devicesManager.getPropertyValue(deviceId, 'is_enabled'));
 	let powerMw = $derived(devicesManager.getPropertyValue(deviceId, 'power_mw'));
 	let temperatureC = $derived(devicesManager.getPropertyValue(deviceId, 'temperature_c'));
@@ -59,14 +61,15 @@
 				<div class="text-sm font-medium text-zinc-200">
 					{typeof wavelength === 'number' ? `${wavelength} nm Laser` : 'Laser'}
 				</div>
-				<Switch checked={switchChecked} onCheckedChange={handleToggle} />
+				<Switch checked={switchChecked} onCheckedChange={handleToggle} size="sm" style="--switch-accent: {laserColor}" />
 			</div>
 			<!-- Power Setpoint Slider -->
 			<div class="px-3">
 				{#if powerSetpointInfo && powerSetpointModel && typeof powerSetpointModel.value === 'number'}
 					<SliderInput
 						label={powerSetpointInfo.label}
-						bind:value={powerSetpointModel.value}
+						bind:target={powerSetpointModel.value}
+						readback={typeof powerMw === 'number' ? powerMw : undefined}
 						min={powerSetpointModel.min_val ?? 0}
 						max={powerSetpointModel.max_val ?? 100}
 						step={powerSetpointModel.step ?? 1}
@@ -77,9 +80,7 @@
 				{/if}
 			</div>
 
-			<div
-				class="flex items-center justify-between border-t border-zinc-700 px-3 py-2 font-mono text-xs text-zinc-300"
-			>
+			<div class="flex items-center justify-between border-t border-zinc-700 px-3 py-2 font-mono text-xs text-zinc-300">
 				{#if typeof temperatureC === 'number'}
 					<div>
 						{temperatureC.toFixed(1)}°C

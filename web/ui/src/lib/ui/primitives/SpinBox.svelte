@@ -1,7 +1,89 @@
-<script lang="ts">
-	type Size = 'xs' | 'sm' | 'md' | 'lg';
+<script lang="ts" module>
+	import { tv, type VariantProps } from 'tailwind-variants';
 
-	interface Props {
+	export const spinBoxVariants = tv({
+		slots: {
+			wrapper: [
+				'items-stretch bg-transparent',
+				'transition-colors focus-within:border-ring'
+			],
+			input: [
+				'border-none bg-transparent font-mono text-foreground outline-none'
+			],
+			stack: [
+				'flex cursor-pointer flex-col border-l border-input'
+			],
+			stepButton: [
+				'flex flex-1 items-center justify-center',
+				'bg-transparent text-muted-foreground',
+				'transition-colors hover:bg-accent hover:text-foreground',
+				'disabled:cursor-not-allowed disabled:opacity-40'
+			],
+			prefix: [
+				'flex shrink-0 items-center font-mono whitespace-nowrap',
+				'text-muted-foreground select-none'
+			],
+			suffix: [
+				'pointer-events-none flex items-center font-mono text-muted-foreground'
+			]
+		},
+		variants: {
+			size: {
+				xs: {
+					wrapper: 'h-4 rounded-[2px]',
+					input: 'text-[0.6rem] px-0 py-0',
+					prefix: 'text-[0.6rem]',
+					suffix: 'text-[0.6rem]',
+					stack: 'w-4'
+				},
+				sm: {
+					wrapper: 'h-5 rounded',
+					input: 'text-[0.65rem] px-0.5 py-0.5',
+					prefix: 'text-[0.65rem]',
+					suffix: 'text-[0.65rem]',
+					stack: 'w-4'
+				},
+				md: {
+					wrapper: 'h-7 rounded',
+					input: 'text-xs px-0.5 py-0.5',
+					prefix: 'text-xs',
+					suffix: 'text-xs',
+					stack: 'w-5'
+				},
+				lg: {
+					wrapper: 'h-8 rounded',
+					input: 'text-sm px-0.5 py-0.5',
+					prefix: 'text-sm',
+					suffix: 'text-sm',
+					stack: 'w-5'
+				}
+			},
+			showButtons: {
+				true: {
+					wrapper: 'flex border border-input',
+					input: 'flex-1 ps-1.5 pe-1',
+					prefix: 'ps-1.5 pe-1',
+					suffix: 'pe-1.5'
+				},
+				false: {
+					wrapper: 'inline-flex border border-transparent',
+					prefix: 'ps-1 pe-0.5'
+				}
+			}
+		},
+		defaultVariants: {
+			size: 'md',
+			showButtons: true
+		}
+	});
+
+	export type SpinBoxVariants = VariantProps<typeof spinBoxVariants>;
+</script>
+
+<script lang="ts">
+	import { cn } from '$lib/utils';
+
+	interface Props extends SpinBoxVariants {
 		value?: number;
 		min?: number;
 		max?: number;
@@ -11,12 +93,10 @@
 		numCharacters?: number;
 		color?: string;
 		align?: 'left' | 'right';
-		showButtons?: boolean;
 		draggable?: boolean;
 		prefix?: string;
 		suffix?: string;
 		snapValue?: number | (() => number);
-		size?: Size;
 		class?: string;
 		throttle?: number;
 		debounce?: number;
@@ -44,6 +124,8 @@
 		debounce = 400,
 		onChange: onValueChange
 	}: Props = $props();
+
+	const styles = $derived(spinBoxVariants({ size, showButtons }));
 
 	let lastDragCallTime = 0;
 	let dragThrottleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -92,29 +174,6 @@
 		if (decimals !== undefined) return value.toFixed(decimals);
 		return value.toString();
 	});
-
-	const sizeClasses: Record<Size, { wrapper: string; input: string; stack: string }> = {
-		xs: {
-			wrapper: 'h-4 rounded-[2px]',
-			input: 'text-[0.6rem] px-0 py-0',
-			stack: 'w-4'
-		},
-		sm: {
-			wrapper: 'h-5 rounded',
-			input: 'text-[0.65rem] px-0.5 py-0.5',
-			stack: 'w-4'
-		},
-		md: {
-			wrapper: 'h-7 rounded',
-			input: 'text-xs px-0.5 py-0.5',
-			stack: 'w-5'
-		},
-		lg: {
-			wrapper: 'h-8 rounded',
-			input: 'text-sm px-0.5 py-0.5',
-			stack: 'w-5'
-		}
-	};
 
 	let inputElement = $state<HTMLInputElement | undefined>();
 	let wrapperElement = $state<HTMLDivElement | undefined>();
@@ -264,48 +323,39 @@
 	});
 </script>
 
-{#if showButtons}
-	<div
-		bind:this={wrapperElement}
-		class="flex items-stretch border border-input bg-transparent transition-colors focus-within:border-ring {sizeClasses[
-			size
-		].wrapper} {className}"
-	>
-		{#if prefix}
-			<span
-				role="button"
-				tabindex="-1"
-				onmousedown={draggable ? handleMouseDown : undefined}
-				ondblclick={snapValue !== undefined ? handleDoubleClick : undefined}
-				class="flex shrink-0 items-center ps-1.5 pe-1 font-mono whitespace-nowrap text-muted-foreground select-none {sizeClasses[
-					size
-				].input}"
-				class:cursor-ew-resize={draggable}>{prefix}</span
-			>
-		{/if}
-		<input
-			bind:this={inputElement}
-			type="text"
-			{placeholder}
-			value={inputValue()}
-			oninput={handleInput}
-			onblur={handleBlur}
-			onkeydown={handleKeydown}
-			style:width="{numCharacters + 1}ch"
-			style:color
-			style:text-align={align}
-			class="flex-1 border-none bg-transparent ps-1.5 pe-1 font-mono text-foreground outline-none {sizeClasses[size]
-				.input}"
-		/>
-		{#if suffix}
-			<span
-				class="pointer-events-none flex items-center pe-1.5 font-mono text-muted-foreground {sizeClasses[size].input}"
-				>{suffix}</span
-			>
-		{/if}
-		<div class="flex cursor-pointer flex-col border-l border-input {sizeClasses[size].stack}">
+<div
+	bind:this={wrapperElement}
+	class={styles.wrapper({ class: className })}
+>
+	{#if prefix}
+		<span
+			role="button"
+			tabindex="-1"
+			onmousedown={draggable ? handleMouseDown : undefined}
+			ondblclick={snapValue !== undefined ? handleDoubleClick : undefined}
+			class={cn(styles.prefix(), draggable && 'cursor-ew-resize')}
+		>{prefix}</span>
+	{/if}
+	<input
+		bind:this={inputElement}
+		type="text"
+		{placeholder}
+		value={inputValue()}
+		oninput={handleInput}
+		onblur={handleBlur}
+		onkeydown={handleKeydown}
+		style:width="{numCharacters + 1}ch"
+		style:color
+		style:text-align={align}
+		class={styles.input()}
+	/>
+	{#if suffix}
+		<span class={styles.suffix()}>{suffix}</span>
+	{/if}
+	{#if showButtons}
+		<div class={styles.stack()}>
 			<button
-				class="flex flex-1 items-center justify-center rounded-tr border-b border-input bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+				class={cn(styles.stepButton(), 'rounded-tr border-b border-input')}
 				onclick={increment}
 				disabled={value >= max}
 				aria-label="Increment"
@@ -313,7 +363,7 @@
 				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z" /></svg>
 			</button>
 			<button
-				class="flex flex-1 items-center justify-center rounded-br bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+				class={cn(styles.stepButton(), 'rounded-br')}
 				onclick={decrement}
 				disabled={value <= min}
 				aria-label="Decrement"
@@ -321,46 +371,8 @@
 				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 5L0 0H8L4 5Z" /></svg>
 			</button>
 		</div>
-	</div>
-{:else}
-	<div
-		bind:this={wrapperElement}
-		class="inline-flex items-stretch border border-transparent bg-transparent transition-colors focus-within:border-ring {sizeClasses[
-			size
-		].wrapper} {className}"
-	>
-		{#if prefix}
-			<span
-				role="button"
-				tabindex="-1"
-				onmousedown={draggable ? handleMouseDown : undefined}
-				ondblclick={snapValue !== undefined ? handleDoubleClick : undefined}
-				class="flex shrink-0 items-center ps-1 pe-0.5 font-mono whitespace-nowrap text-muted-foreground select-none {sizeClasses[
-					size
-				].input}"
-				class:cursor-ew-resize={draggable}>{prefix}</span
-			>
-		{/if}
-		<input
-			bind:this={inputElement}
-			type="text"
-			{placeholder}
-			value={inputValue()}
-			oninput={handleInput}
-			onblur={handleBlur}
-			onkeydown={handleKeydown}
-			style:width="{numCharacters + 1}ch"
-			style:color
-			style:text-align={align}
-			class="border-none bg-transparent font-mono text-foreground outline-none {sizeClasses[size].input}"
-		/>
-		{#if suffix}
-			<span class="pointer-events-none flex items-center font-mono text-muted-foreground {sizeClasses[size].input}"
-				>{suffix}</span
-			>
-		{/if}
-	</div>
-{/if}
+	{/if}
+</div>
 
 <style>
 	/* Hide native spin buttons */

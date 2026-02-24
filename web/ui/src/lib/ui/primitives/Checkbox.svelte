@@ -1,15 +1,41 @@
+<script lang="ts" module>
+	import { tv, type VariantProps } from 'tailwind-variants';
+
+	export const checkboxVariants = tv({
+		base: [
+			'flex items-center justify-center rounded border',
+			'[--switch-accent:var(--color-emerald-600)]',
+			'border-zinc-600 bg-zinc-800',
+			'transition-colors',
+			'disabled:cursor-not-allowed disabled:opacity-50',
+			'data-[state=checked]:border-(--switch-accent) data-[state=checked]:bg-(--switch-accent)',
+			'data-[state=indeterminate]:border-(--switch-accent) data-[state=indeterminate]:bg-(--switch-accent)'
+		],
+		variants: {
+			size: {
+				sm: 'h-3 w-3',
+				md: 'h-3.5 w-3.5',
+				lg: 'h-4 w-4'
+			}
+		},
+		defaultVariants: {
+			size: 'md'
+		}
+	});
+
+	export type CheckboxVariants = VariantProps<typeof checkboxVariants>;
+</script>
+
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { Checkbox as CheckboxPrimitive } from 'bits-ui';
 
-	type Size = 'sm' | 'md' | 'lg';
-
-	interface Props {
+	interface Props extends CheckboxVariants {
 		checked?: boolean;
 		indeterminate?: boolean;
 		onchange?: (checked: boolean) => void;
 		disabled?: boolean;
-		size?: Size;
+		style?: string;
 		class?: string;
 	}
 
@@ -19,6 +45,7 @@
 		onchange,
 		disabled = false,
 		size = 'md',
+		style,
 		class: className = ''
 	}: Props = $props();
 
@@ -28,15 +55,7 @@
 		onchange?.(newChecked);
 	}
 
-	// Size classes
-	const sizeClasses: Record<Size, string> = {
-		sm: 'h-3 w-3',
-		md: 'h-3.5 w-3.5',
-		lg: 'h-4 w-4'
-	};
-
-	// Icon sizes
-	const iconSizes: Record<Size, number> = {
+	const iconSizes: Record<NonNullable<CheckboxVariants['size']>, number> = {
 		sm: 10,
 		md: 12,
 		lg: 14
@@ -48,9 +67,8 @@
 	{indeterminate}
 	onCheckedChange={handleChange}
 	{disabled}
-	class="flex items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600 data-[state=indeterminate]:border-emerald-500 data-[state=indeterminate]:bg-emerald-600 {sizeClasses[
-		size
-	]} {className}"
+	{style}
+	class={checkboxVariants({ size, class: className })}
 >
 	{#if checked}
 		<Icon icon="mdi:check" class="text-white" width={iconSizes[size]} height={iconSizes[size]} />
