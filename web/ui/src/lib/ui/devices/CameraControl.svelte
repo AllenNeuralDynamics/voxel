@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { type DevicesManager, parseVec2D } from '$lib/main';
 	import SliderInput from '$lib/ui/primitives/SliderInput.svelte';
-	import SelectInput from '$lib/ui/primitives/SelectInput.svelte';
+	import Select from '$lib/ui/primitives/Select.svelte';
 	import CardAccordion from '$lib/ui/primitives/CardAccordion.svelte';
 
 	interface Props {
@@ -97,29 +97,28 @@
 				<div class="grid grid-cols-2 gap-4 px-3">
 					<!-- Pixel Format Selector -->
 					{#if pixelFormatInfo && pixelFormatModel && pixelFormatModel.options && (typeof pixelFormatModel.value === 'string' || typeof pixelFormatModel.value === 'number')}
-						<SelectInput
-							label={pixelFormatInfo.label}
-							bind:value={pixelFormatModel.value}
-							options={pixelFormatModel.options}
-							id="pixel-format-{deviceId}"
-							onChange={(newValue) => {
-								devicesManager.setProperty(deviceId, 'pixel_format', newValue);
-							}}
-						/>
+						<div class="grid gap-1">
+							<span class="text-left text-[0.65rem] font-medium text-zinc-400">{pixelFormatInfo.label}</span>
+							<Select
+								value={String(pixelFormatModel.value)}
+								options={pixelFormatModel.options.map((o) => ({ value: String(o), label: String(o) }))}
+								onchange={(v) => devicesManager.setProperty(deviceId, 'pixel_format', v)}
+								size="sm"
+							/>
+						</div>
 					{/if}
 
 					<!-- Binning Selector -->
 					{#if binningInfo && binningModel && binningModel.options && (typeof binningModel.value === 'string' || typeof binningModel.value === 'number')}
-						<SelectInput
-							label={binningInfo.label}
-							bind:value={binningModel.value}
-							options={binningModel.options}
-							id="binning-{deviceId}"
-							formatOption={(option) => `${option}x${option}`}
-							onChange={(newValue) => {
-								devicesManager.setProperty(deviceId, 'binning', newValue);
-							}}
-						/>
+						<div class="grid gap-1">
+							<span class="text-left text-[0.65rem] font-medium text-zinc-400">{binningInfo.label}</span>
+							<Select
+								value={String(binningModel.value)}
+								options={binningModel.options.map((o) => ({ value: String(o), label: `${o}x${o}` }))}
+								onchange={(v) => devicesManager.setProperty(deviceId, 'binning', Number(v))}
+								size="sm"
+							/>
+						</div>
 					{/if}
 				</div>
 			</div>

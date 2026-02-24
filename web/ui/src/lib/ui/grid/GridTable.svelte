@@ -3,7 +3,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
-	import { Select, Checkbox, LegacySpinBox } from '$lib/ui/primitives';
+	import { Select, Checkbox, SpinBox } from '$lib/ui/primitives';
 
 	interface Props {
 		session: Session;
@@ -152,9 +152,9 @@
 					<th class="min-w-16 border-b border-border p-1.5"></th>
 					<th class="w-56 border-b border-border p-1.5 text-left">
 						<div class="flex items-center gap-1">
-							<LegacySpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={13} showButtons={false} />
+							<SpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={13} showButtons={false} />
 							<span class="text-muted-foreground">→</span>
-							<LegacySpinBox
+							<SpinBox
 								bind:value={defaultZEnd}
 								min={0}
 								step={10}
@@ -198,7 +198,7 @@
 						<td class="p-1.5" onclick={(e) => handleRowClick(e, tile)}>
 							{#if stack}
 								<div class="flex items-center gap-1">
-									<LegacySpinBox
+									<SpinBox
 										value={stack.z_start_um}
 										min={0}
 										step={100}
@@ -207,7 +207,7 @@
 										onChange={(v) => handleZChange(tile, v, stack.z_end_um)}
 									/>
 									<span class="text-muted-foreground/50">→</span>
-									<LegacySpinBox
+									<SpinBox
 										value={stack.z_end_um}
 										min={0}
 										step={100}

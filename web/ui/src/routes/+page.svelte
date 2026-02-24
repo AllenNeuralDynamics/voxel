@@ -12,17 +12,26 @@
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
 	import { Button } from '$lib/ui/primitives';
 	import Icon from '@iconify/svelte';
-	import ProfileSelector from '$lib/ui/ProfileSelector.svelte';
+	import { Select } from '$lib/ui/primitives';
+	import { sanitizeString } from '$lib/utils';
 	import { LaserIndicators } from '$lib/ui/devices';
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
+	import { cn } from '$lib/utils';
 
 	let app = $state<App | undefined>(undefined);
 
 	// Control view state
 	let bottomPanelTab = $state('lasers');
 	let bottomPane: Pane | undefined = $state(undefined);
+
+	function tabButtonClass(selected: boolean): string {
+		return cn(
+			'flex items-center gap-2 px-2 py-0.5 text-xs transition-colors hover:bg-muted',
+			selected ? 'bg-muted text-foreground' : 'text-muted-foreground'
+		);
+	}
 
 	function selectBottomTab(tab: string) {
 		if (bottomPanelTab === tab) {
@@ -61,6 +70,12 @@
 		cleanup();
 	});
 </script>
+
+{#snippet tabButton(id: string, label: string)}
+	<button onclick={() => selectBottomTab(id)} class={tabButtonClass(bottomPanelTab === id)}>
+		{label}
+	</button>
+{/snippet}
 
 {#if app?.session}
 	{@const session = app.session}
@@ -101,7 +116,21 @@
 							</div>
 						</div>
 						<div class="flex items-center justify-end gap-4">
-							<ProfileSelector {session} />
+							<Select
+								value={session.activeProfileId ?? ''}
+								options={Object.entries(session.config.profiles).map(([id, cfg]) => ({
+									value: id,
+									label: cfg.label ?? sanitizeString(id),
+									description: cfg.desc
+								}))}
+								onchange={(v) => session.activateProfile(v)}
+								icon="mdi:chevron-up-down"
+								loading={session.isMutating}
+								showCheckmark
+								emptyMessage="No profiles available"
+								size="lg"
+								class="min-w-72"
+							/>
 							<Button
 								class="min-w-28"
 								variant={session.previewState.isPreviewing ? 'danger' : 'success'}
@@ -163,39 +192,17 @@
 						</Pane>
 					</PaneGroup>
 					<footer class="flex items-center justify-between border-t border-border px-4 py-2">
-						<div class="flex rounded border border-border">
-							<button
-								onclick={() => selectBottomTab('lasers')}
-								class="flex items-center gap-2 px-2 py-0.5 text-xs transition-colors hover:bg-accent {bottomPanelTab ===
-								'lasers'
-									? 'bg-accent text-foreground'
-									: 'text-muted-foreground'}"
-							>
+						<div class="flex divide-x divide-border rounded border border-border">
+							{@render tabButton('cameras', 'Cameras')}
+							<button onclick={() => selectBottomTab('lasers')} class={tabButtonClass(bottomPanelTab === 'lasers')}>
 								Lasers
 								{#if Object.keys(session.lasers).length > 0}
 									<LaserIndicators lasers={session.lasers} size="md" />
 								{/if}
 							</button>
-							<button
-								onclick={() => selectBottomTab('cameras')}
-								class="border-l border-border px-2 py-0.5 text-xs transition-colors hover:bg-accent {bottomPanelTab ===
-								'cameras'
-									? 'bg-accent text-foreground'
-									: 'text-muted-foreground'}"
-							>
-								Cameras
-							</button>
-							{#each [{ id: 'waveforms', label: 'Waveforms' }, { id: 'session', label: 'Session' }, { id: 'logs', label: 'Logs' }] as tab (tab.id)}
-								<button
-									onclick={() => selectBottomTab(tab.id)}
-									class="border-l border-border px-2 py-0.5 text-xs transition-colors hover:bg-accent {bottomPanelTab ===
-									tab.id
-										? 'bg-accent text-foreground'
-										: 'text-muted-foreground'}"
-								>
-									{tab.label}
-								</button>
-							{/each}
+							{@render tabButton('waveforms', 'Waveforms')}
+							{@render tabButton('session', 'Session')}
+							{@render tabButton('logs', 'Logs')}
 						</div>
 						<div class="flex items-center">
 							<ClientStatus client={app.client} />
