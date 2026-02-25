@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Slider } from 'bits-ui';
+	import { ContextMenu } from 'bits-ui';
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
 	import Icon from '@iconify/svelte';
@@ -75,12 +75,6 @@
 	const minIntensity = $derived(Math.round(levelsMin * dataTypeMax));
 	const maxIntensity = $derived(Math.round(levelsMax * dataTypeMax));
 
-	// Expand display window if levels are dragged outside it
-	$effect(() => {
-		if (minIntensity < windowMin) windowMin = Math.max(0, minIntensity);
-		if (maxIntensity > windowMax) windowMax = Math.min(dataTypeMax, maxIntensity);
-	});
-
 	// ── Histogram SVG ─────────────────────────────────────────────────
 
 	let svgWidth = $state(256);
@@ -139,32 +133,39 @@
 		return `${first.x},${svgHeight} ${fgEntries.map((p) => `${p.x},${p.y}`).join(' ')} ${last.x},${svgHeight}`;
 	});
 
-	// ── Slider Interaction ───────────────────────────────────────────
+	// ── Drag Interaction ──────────────────────────────────────────────
 
-	// Keep bits-ui internal step array small (≤ svgWidth entries)
-	const sliderStep = $derived(Math.max(1, Math.round((windowMax - windowMin) / svgWidth)));
+	let dragging = $state<'min' | 'max' | null>(null);
 
-	let sliderInteracting = $state(false);
-	let sliderValue = $state<number[]>([0, 0]);
-
-	// Sync from props only when the user is NOT dragging
-	$effect(() => {
-		const vals = [minIntensity, maxIntensity];
-		if (!sliderInteracting) {
-			sliderValue = vals;
-		}
-	});
-
-	function handleSliderChange(values: number[]) {
-		sliderInteracting = true;
-		sliderValue = values;
-		const newMin = values[0] / dataTypeMax;
-		const newMax = values[1] / dataTypeMax;
-		onLevelsChange(Math.max(0, newMin), Math.min(1, newMax));
+	function xToLevel(clientX: number, rect: DOMRect): number {
+		const x = Math.max(0, Math.min(svgWidth, clientX - rect.left));
+		const rel = x / svgWidth;
+		const bin = startBin + rel * (endBin - startBin);
+		return bin / (numBins - 1);
 	}
 
-	function handleSliderCommit() {
-		sliderInteracting = false;
+	function onHandleDown(e: PointerEvent, handle: 'min' | 'max') {
+		e.preventDefault();
+		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		dragging = handle;
+	}
+
+	function onHandleMove(e: PointerEvent) {
+		if (!dragging) return;
+		const svg = (e.currentTarget as SVGElement).closest('svg');
+		if (!svg) return;
+		const level = xToLevel(e.clientX, svg.getBoundingClientRect());
+
+		if (dragging === 'min') {
+			onLevelsChange(Math.max(0, Math.min(level, levelsMax - 0.001)), levelsMax);
+		} else {
+			onLevelsChange(levelsMin, Math.min(1, Math.max(level, levelsMin + 0.001)));
+		}
+	}
+
+	function onHandleUp(e: PointerEvent) {
+		(e.currentTarget as SVGElement).releasePointerCapture(e.pointerId);
+		dragging = null;
 	}
 
 	// ── Auto Fit & Auto Levels ────────────────────────────────────────
@@ -203,7 +204,7 @@
 
 	// ── Scroll-to-Zoom ───────────────────────────────────────────────
 
-	let histContainerEl = $state<HTMLDivElement | undefined>();
+	let histContainerEl = $state<HTMLElement | null>(null);
 
 	function onHistWheel(e: WheelEvent) {
 		e.preventDefault();
@@ -290,6 +291,101 @@
 	let columnWidth = $state(288);
 </script>
 
+{#snippet histSvg()}
+	{#if hasValidData}
+		<svg
+			width="100%"
+			height={svgHeight}
+			role="img"
+			aria-label="Histogram for {label}"
+			class="bg-zinc-950"
+			bind:clientWidth={svgWidth}
+		>
+			<defs>
+				<linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+					{#each colors as stop, i (i)}
+						<stop offset="{colors.length === 1 ? 100 : (i / (colors.length - 1)) * 100}%" stop-color={stop} />
+					{/each}
+				</linearGradient>
+			</defs>
+
+			{#if bgPoints}
+				<polyline points={bgPoints} fill="none" stroke="#3f3f46" stroke-width="1" class="non-scaling" />
+			{/if}
+			{#if fgPolygon}
+				<polygon points={fgPolygon} fill="url(#{gradientId})" fill-opacity="0.15" stroke="none" />
+			{/if}
+			{#if fgPoints}
+				<polyline points={fgPoints} fill="none" stroke="url(#{gradientId})" stroke-width="1.5" class="non-scaling" />
+			{/if}
+
+			<!-- Min handle -->
+			<line
+				x1={minHandleX}
+				y1="0"
+				x2={minHandleX}
+				y2={svgHeight}
+				stroke="#10b981"
+				stroke-width="1"
+				stroke-opacity="0.9"
+				pointer-events="none"
+			/>
+			<line
+				x1={minHandleX}
+				y1="0"
+				x2={minHandleX}
+				y2={svgHeight}
+				stroke="transparent"
+				stroke-width="12"
+				class="cursor-ew-resize"
+				onpointerdown={(e) => onHandleDown(e, 'min')}
+				onpointermove={onHandleMove}
+				onpointerup={onHandleUp}
+				role="slider"
+				tabindex="0"
+				aria-label="Minimum level"
+				aria-valuenow={minIntensity}
+			/>
+
+			<!-- Max handle -->
+			<line
+				x1={maxHandleX}
+				y1="0"
+				x2={maxHandleX}
+				y2={svgHeight}
+				stroke="#f59e0b"
+				stroke-width="1"
+				stroke-opacity="0.9"
+				pointer-events="none"
+			/>
+			<line
+				x1={maxHandleX}
+				y1="0"
+				x2={maxHandleX}
+				y2={svgHeight}
+				stroke="transparent"
+				stroke-width="12"
+				class="cursor-ew-resize"
+				onpointerdown={(e) => onHandleDown(e, 'max')}
+				onpointermove={onHandleMove}
+				onpointerup={onHandleUp}
+				role="slider"
+				tabindex="0"
+				aria-label="Maximum level"
+				aria-valuenow={maxIntensity}
+			/>
+
+			<!-- Dimming outside range -->
+			<rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
+			<rect x={maxHandleX} y="0" width={svgWidth - maxHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
+		</svg>
+	{:else}
+		<div class="flex items-center justify-center" style:height="{svgHeight}px">
+			<span class="text-[0.65rem] text-muted-foreground">No histogram data</span>
+		</div>
+	{/if}
+{/snippet}
+
 <div
 	class="flex flex-col transition-opacity"
 	class:opacity-40={visible === false}
@@ -315,80 +411,56 @@
 	</div>
 
 	<!-- Histogram -->
-	<div
-		class="relative border-b border-b-input bg-transparent"
-		bind:this={histContainerEl}
-		ondblclick={autoLevels}
-		oncontextmenu={(e) => { e.preventDefault(); autoFit(); }}
-	>
-		{#if hasValidData}
-			<svg
-				width="100%"
-				height={svgHeight}
-				role="img"
-				aria-label="Histogram for {label}"
-				class="pointer-events-none bg-zinc-950"
-				bind:clientWidth={svgWidth}
+	<ContextMenu.Root>
+		<ContextMenu.Trigger
+			class="relative border-b border-b-input bg-transparent"
+			bind:ref={histContainerEl}
+			ondblclick={autoLevels}
+		>
+			{@render histSvg()}
+		</ContextMenu.Trigger>
+		<ContextMenu.Portal>
+			<ContextMenu.Content
+				class="z-50 min-w-36 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-xl outline-none"
+				side="top"
+				align="start"
 			>
-				<defs>
-					<linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-						{#each colors as stop, i (i)}
-							<stop offset="{colors.length === 1 ? 100 : (i / (colors.length - 1)) * 100}%" stop-color={stop} />
-						{/each}
-					</linearGradient>
-				</defs>
-
-				{#if bgPoints}
-					<polyline points={bgPoints} fill="none" stroke="#3f3f46" stroke-width="1" class="non-scaling" />
+				<ContextMenu.Item
+					class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none disabled:pointer-events-none disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+					onSelect={autoLevels}
+					disabled={!hasValidData}
+				>
+					Auto Levels
+				</ContextMenu.Item>
+				<ContextMenu.Item
+					class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none disabled:pointer-events-none disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+					onSelect={autoFit}
+					disabled={!hasValidData}
+				>
+					Auto Fit
+				</ContextMenu.Item>
+				<ContextMenu.Separator class="my-1 h-px bg-border" />
+				<ContextMenu.Item
+					class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+					onSelect={() => {
+						windowMin = 0;
+						windowMax = dataTypeMax;
+					}}
+				>
+					Reset Window
+				</ContextMenu.Item>
+				{#if onVisibilityChange}
+					<ContextMenu.Separator class="my-1 h-px bg-border" />
+					<ContextMenu.Item
+						class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+						onSelect={() => onVisibilityChange?.(!visible)}
+					>
+						{visible ? 'Hide' : 'Show'} Channel
+					</ContextMenu.Item>
 				{/if}
-				{#if fgPolygon}
-					<polygon points={fgPolygon} fill="url(#{gradientId})" fill-opacity="0.15" stroke="none" />
-				{/if}
-				{#if fgPoints}
-					<polyline points={fgPoints} fill="none" stroke="url(#{gradientId})" stroke-width="1.5" class="non-scaling" />
-				{/if}
-
-				<!-- Dimming outside range -->
-				<rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" />
-				<rect
-					x={maxHandleX}
-					y="0"
-					width={svgWidth - maxHandleX}
-					height={svgHeight}
-					fill="black"
-					opacity="0.4"
-				/>
-			</svg>
-
-			<!-- Slider overlay for level handles -->
-			<Slider.Root
-				type="multiple"
-				value={sliderValue}
-				min={windowMin}
-				max={windowMax}
-				step={sliderStep}
-				onValueChange={handleSliderChange}
-				onValueCommit={handleSliderCommit}
-				class="absolute inset-0 flex touch-none items-center select-none"
-			>
-				{#snippet children({ thumbItems })}
-					<span class="relative flex h-full w-full items-center">
-						<Slider.Range class="absolute h-full bg-transparent" />
-					</span>
-					{#each thumbItems as { index }}
-						<Slider.Thumb
-							{index}
-							class="block h-full w-0.5 cursor-ew-resize rounded-none border-none opacity-90 outline-none hover:w-1 hover:opacity-100 focus-visible:w-1 focus-visible:opacity-100 {index === 0 ? 'bg-emerald-500' : 'bg-amber-500'}"
-						/>
-					{/each}
-				{/snippet}
-			</Slider.Root>
-		{:else}
-			<div class="flex items-center justify-center" style:height="{svgHeight}px">
-				<span class="text-[0.65rem] text-zinc-600">No histogram data</span>
-			</div>
-		{/if}
-	</div>
+			</ContextMenu.Content>
+		</ContextMenu.Portal>
+	</ContextMenu.Root>
 
 	<!-- Window Range + Label -->
 	<div class="flex -translate-y-px items-center justify-between">
