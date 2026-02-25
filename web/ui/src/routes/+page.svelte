@@ -19,6 +19,7 @@
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
 	import DevicesPanel from './DevicesPanel.svelte';
+	import ConfigurePanel from './ConfigurePanel.svelte';
 	import { cn } from '$lib/utils';
 
 	let app = $state<App | undefined>(undefined);
@@ -45,9 +46,16 @@
 	}
 
 	// Workflow modes
-	type WorkflowMode = 'scout' | 'plan' | 'acquire' | 'extra'; // extra is for debugging widgets.
-	let workflowMode = $state<WorkflowMode>('extra');
+	type WorkflowMode = 'configure' | 'scout' | 'plan' | 'acquire' | 'extra';
+	let workflowMode = $state<WorkflowMode>('scout');
 	let completedModes = $state(new Set<WorkflowMode>());
+
+	function setWorkflowMode(mode: WorkflowMode) {
+		if (mode === 'configure' && (workflowMode === 'plan' || workflowMode === 'acquire')) {
+			return;
+		}
+		workflowMode = mode;
+	}
 
 	function cleanup() {
 		if (app) {
@@ -87,15 +95,30 @@
 				<div class="grid h-full grid-rows-[auto_1fr_auto] border-r border-border">
 					<header class="flex items-center justify-between border-b border-border bg-card px-4 py-4">
 						<div class="flex items-center gap-8">
+							<!-- Configure: standalone icon button, no step indicator -->
+							<button
+								onclick={() => setWorkflowMode('configure')}
+								disabled={workflowMode === 'plan' || workflowMode === 'acquire'}
+								class="flex items-center justify-center rounded transition-colors {workflowMode === 'plan' ||
+								workflowMode === 'acquire'
+									? 'cursor-not-allowed opacity-40'
+									: workflowMode === 'configure'
+										? 'text-foreground'
+										: 'text-muted-foreground hover:text-foreground'}"
+								title="Configure"
+							>
+								<Icon icon="mdi:cog" width="16" height="16" />
+							</button>
+							<!-- Workflow steps -->
 							<div class="flex items-center gap-3">
-								{#each [{ id: 'scout', label: 'Scout' }, { id: 'plan', label: 'Plan' }, { id: 'acquire', label: 'Acquire' }, { id: 'extra', label: 'Extras' }] as mode, i (mode.id)}
+								{#each [{ id: 'scout', label: 'Scout' }, { id: 'plan', label: 'Plan' }, { id: 'acquire', label: 'Acquire' }] as mode, i (mode.id)}
 									{@const isActive = workflowMode === mode.id}
 									{@const isComplete = completedModes.has(mode.id as WorkflowMode)}
 									{#if i > 0}
 										<div class="h-px w-4 bg-border"></div>
 									{/if}
 									<button
-										onclick={() => (workflowMode = mode.id as WorkflowMode)}
+										onclick={() => setWorkflowMode(mode.id as WorkflowMode)}
 										class="flex items-center gap-2 text-xs transition-colors {isActive
 											? 'text-foreground'
 											: 'text-muted-foreground hover:text-foreground'}"
@@ -117,6 +140,25 @@
 							</div>
 						</div>
 						<div class="flex items-center justify-end gap-4">
+							<button
+								onclick={() => setWorkflowMode('extra')}
+								class="text-xs transition-colors {workflowMode === 'extra'
+									? 'font-medium text-foreground'
+									: 'text-muted-foreground hover:text-foreground'}"
+							>
+								Extras
+							</button>
+							<Button
+								class="min-w-26"
+								variant={session.previewState.isPreviewing ? 'danger' : 'success'}
+								size="md"
+								onclick={() =>
+									session.previewState.isPreviewing
+										? session.previewState.stopPreview()
+										: session.previewState.startPreview()}
+							>
+								{session.previewState.isPreviewing ? 'Stop Preview' : 'Start Preview'}
+							</Button>
 							<Select
 								value={session.activeProfileId ?? ''}
 								options={Object.entries(session.config.profiles).map(([id, cfg]) => ({
@@ -130,25 +172,16 @@
 								showCheckmark
 								emptyMessage="No profiles available"
 								size="lg"
-								class="min-w-72"
+								class="min-w-68"
 							/>
-							<Button
-								class="min-w-28"
-								variant={session.previewState.isPreviewing ? 'danger' : 'success'}
-								size="md"
-								onclick={() =>
-									session.previewState.isPreviewing
-										? session.previewState.stopPreview()
-										: session.previewState.startPreview()}
-							>
-								{session.previewState.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-							</Button>
 						</div>
 					</header>
 					<PaneGroup direction="vertical" autoSaveId="midCol-v3">
 						<Pane>
 							<div class="h-full overflow-auto">
-								{#if workflowMode === 'scout'}
+								{#if workflowMode === 'configure'}
+									<ConfigurePanel {session} />
+								{:else if workflowMode === 'scout'}
 									<div class="flex h-full flex-col justify-between">
 										<div class="p-4">
 											<GridControls {session} />
