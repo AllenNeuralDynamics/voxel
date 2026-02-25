@@ -103,6 +103,7 @@ export class Session {
 	isMutating = $state(false);
 	error = $state<string | null>(null);
 
+	#unsubscribers: Array<() => void> = [];
 	#selection = new SvelteMap<number, SvelteSet<number>>([[0, new SvelteSet([0])]]);
 	selectedTiles = $derived<Tile[]>(this.#getSelectedTiles());
 	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true });
@@ -118,6 +119,16 @@ export class Session {
 			channels: init.config.channels,
 			profiles: init.config.profiles
 		});
+
+		this.#unsubscribers.push(
+			init.client.on('daq/waveforms', (waveforms) => {
+				this.waveforms = waveforms;
+				this.waveformsLoading = false;
+			}),
+			init.client.on('profile/changed', () => {
+				this.requestWaveforms();
+			})
+		);
 
 		this.stage = new Stage(this.devices, init.config.stage);
 
@@ -148,24 +159,15 @@ export class Session {
 	}
 
 	destroy(): void {
+		this.#unsubscribers.forEach((unsub) => unsub());
+		this.#unsubscribers = [];
 		this.workflow.destroy();
 		this.preview.destroy();
 		this.devices.destroy();
 	}
 
 	updateStatus(status: AppStatus): void {
-		const previousProfileId = this.activeProfileId;
 		this.#appStatus = status;
-
-		const currentProfileId = status.session?.active_profile_id ?? null;
-		if (currentProfileId && currentProfileId !== previousProfileId) {
-			this.requestWaveforms();
-		}
-	}
-
-	handleWaveforms(waveforms: DaqWaveforms): void {
-		this.waveforms = waveforms;
-		this.waveformsLoading = false;
 	}
 
 	requestWaveforms(): void {

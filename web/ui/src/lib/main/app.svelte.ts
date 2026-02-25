@@ -222,14 +222,6 @@ export class App {
 			this.#handleStatusUpdate(status);
 		});
 
-		const unsubProfile = this.#client.on('profile/changed', () => {
-			this.session?.requestWaveforms();
-		});
-
-		const unsubWaveforms = this.#client.on('daq/waveforms', (waveforms) => {
-			this.session?.handleWaveforms(waveforms);
-		});
-
 		const unsubLogs = this.#client.on('log/message', (log) => {
 			this.#handleLog(log);
 		});
@@ -253,7 +245,7 @@ export class App {
 			}
 		});
 
-		this.unsubscribers.push(unsubStatus, unsubProfile, unsubWaveforms, unsubLogs, unsubError, unsubConnection);
+		this.unsubscribers.push(unsubStatus, unsubLogs, unsubError, unsubConnection);
 	}
 
 	async #handleStatusUpdate(status: AppStatus): Promise<void> {
