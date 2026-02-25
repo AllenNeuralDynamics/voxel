@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Slider } from 'bits-ui';
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
 	import Icon from '@iconify/svelte';
@@ -138,41 +139,33 @@
 		return `${first.x},${svgHeight} ${fgEntries.map((p) => `${p.x},${p.y}`).join(' ')} ${last.x},${svgHeight}`;
 	});
 
-	// ── Drag Interaction ──────────────────────────────────────────────
+	// ── Slider Interaction ───────────────────────────────────────────
 
-	let dragging = $state<'min' | 'max' | null>(null);
+	// Keep bits-ui internal step array small (≤ svgWidth entries)
+	const sliderStep = $derived(Math.max(1, Math.round((windowMax - windowMin) / svgWidth)));
 
-	function onHandleDown(e: MouseEvent, handle: 'min' | 'max') {
-		e.preventDefault();
-		dragging = handle;
-	}
+	let sliderInteracting = $state(false);
+	let sliderValue = $state<number[]>([0, 0]);
 
-	function onSvgMouseMove(e: MouseEvent) {
-		if (!dragging) return;
-		const svg = e.currentTarget as SVGSVGElement;
-		const rect = svg.getBoundingClientRect();
-		const x = Math.max(0, Math.min(svgWidth, e.clientX - rect.left));
-		const rel = x / svgWidth;
-		const bin = startBin + rel * (endBin - startBin);
-		const level = bin / (numBins - 1);
-
-		if (dragging === 'min') {
-			onLevelsChange(Math.max(0, Math.min(level, levelsMax - 0.01)), levelsMax);
-		} else {
-			onLevelsChange(levelsMin, Math.min(1, Math.max(level, levelsMin + 0.01)));
-		}
-	}
-
-	function onMouseUp() {
-		dragging = null;
-	}
-
+	// Sync from props only when the user is NOT dragging
 	$effect(() => {
-		if (dragging) {
-			document.addEventListener('mouseup', onMouseUp);
-			return () => document.removeEventListener('mouseup', onMouseUp);
+		const vals = [minIntensity, maxIntensity];
+		if (!sliderInteracting) {
+			sliderValue = vals;
 		}
 	});
+
+	function handleSliderChange(values: number[]) {
+		sliderInteracting = true;
+		sliderValue = values;
+		const newMin = values[0] / dataTypeMax;
+		const newMax = values[1] / dataTypeMax;
+		onLevelsChange(Math.max(0, newMin), Math.min(1, newMax));
+	}
+
+	function handleSliderCommit() {
+		sliderInteracting = false;
+	}
 
 	// ── Auto Fit & Auto Levels ────────────────────────────────────────
 
@@ -322,20 +315,19 @@
 	</div>
 
 	<!-- Histogram -->
-	<div class="border-b border-b-input bg-transparent" bind:this={histContainerEl}>
+	<div
+		class="relative border-b border-b-input bg-transparent"
+		bind:this={histContainerEl}
+		ondblclick={autoLevels}
+		oncontextmenu={(e) => { e.preventDefault(); autoFit(); }}
+	>
 		{#if hasValidData}
 			<svg
 				width="100%"
 				height={svgHeight}
 				role="img"
 				aria-label="Histogram for {label}"
-				class="bg-zinc-950"
-				onmousemove={onSvgMouseMove}
-				ondblclick={autoLevels}
-				oncontextmenu={(e) => {
-					e.preventDefault();
-					autoFit();
-				}}
+				class="pointer-events-none bg-zinc-950"
 				bind:clientWidth={svgWidth}
 			>
 				<defs>
@@ -356,60 +348,8 @@
 					<polyline points={fgPoints} fill="none" stroke="url(#{gradientId})" stroke-width="1.5" class="non-scaling" />
 				{/if}
 
-				<!-- Min handle -->
-				<line
-					x1={minHandleX}
-					y1="0"
-					x2={minHandleX}
-					y2={svgHeight}
-					stroke="#10b981"
-					stroke-width="1"
-					stroke-opacity="0.9"
-					pointer-events="none"
-				/>
-				<line
-					x1={minHandleX}
-					y1="0"
-					x2={minHandleX}
-					y2={svgHeight}
-					stroke="transparent"
-					stroke-width="12"
-					class="cursor-ew-resize"
-					onmousedown={(e) => onHandleDown(e, 'min')}
-					role="slider"
-					tabindex="0"
-					aria-label="Minimum level"
-					aria-valuenow={levelsMin}
-				/>
-
-				<!-- Max handle -->
-				<line
-					x1={maxHandleX}
-					y1="0"
-					x2={maxHandleX}
-					y2={svgHeight}
-					stroke="#f59e0b"
-					stroke-width="1"
-					stroke-opacity="0.9"
-					pointer-events="none"
-				/>
-				<line
-					x1={maxHandleX}
-					y1="0"
-					x2={maxHandleX}
-					y2={svgHeight}
-					stroke="transparent"
-					stroke-width="12"
-					class="cursor-ew-resize"
-					onmousedown={(e) => onHandleDown(e, 'max')}
-					role="slider"
-					tabindex="0"
-					aria-label="Maximum level"
-					aria-valuenow={levelsMax}
-				/>
-
 				<!-- Dimming outside range -->
-				<rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
+				<rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" />
 				<rect
 					x={maxHandleX}
 					y="0"
@@ -417,9 +357,32 @@
 					height={svgHeight}
 					fill="black"
 					opacity="0.4"
-					pointer-events="none"
 				/>
 			</svg>
+
+			<!-- Slider overlay for level handles -->
+			<Slider.Root
+				type="multiple"
+				value={sliderValue}
+				min={windowMin}
+				max={windowMax}
+				step={sliderStep}
+				onValueChange={handleSliderChange}
+				onValueCommit={handleSliderCommit}
+				class="absolute inset-0 flex touch-none items-center select-none"
+			>
+				{#snippet children({ thumbItems })}
+					<span class="relative flex h-full w-full items-center">
+						<Slider.Range class="absolute h-full bg-transparent" />
+					</span>
+					{#each thumbItems as { index }}
+						<Slider.Thumb
+							{index}
+							class="block h-full w-0.5 cursor-ew-resize rounded-none border-none opacity-90 outline-none hover:w-1 hover:opacity-100 focus-visible:w-1 focus-visible:opacity-100 {index === 0 ? 'bg-emerald-500' : 'bg-amber-500'}"
+						/>
+					{/each}
+				{/snippet}
+			</Slider.Root>
 		{:else}
 			<div class="flex items-center justify-center" style:height="{svgHeight}px">
 				<span class="text-[0.65rem] text-zinc-600">No histogram data</span>

@@ -130,8 +130,10 @@ export class PreviewState {
 	#config: RigLayout;
 	#unsubscribers: Array<() => void> = [];
 	#cropUpdateTimer: number | null = null;
+	#cropLastSent = 0;
 	#levelsUpdateTimers = new SvelteMap<string, number>();
-	readonly #DEBOUNCE_DELAY_MS = 150;
+	#levelsLastSent = new SvelteMap<string, number>();
+	readonly #THROTTLE_MS = 100;
 
 	constructor(client: Client, config: RigLayout) {
 		this.#client = client;
@@ -370,21 +372,34 @@ export class PreviewState {
 
 	#queueCropUpdate(crop: PreviewCrop): void {
 		if (this.#cropUpdateTimer !== null) clearTimeout(this.#cropUpdateTimer);
-		this.#cropUpdateTimer = window.setTimeout(() => {
+		const now = Date.now();
+		if (now - this.#cropLastSent >= this.#THROTTLE_MS) {
+			this.#cropLastSent = now;
 			this.#client.updateCrop(crop.x, crop.y, crop.k);
-			this.#cropUpdateTimer = null;
-		}, this.#DEBOUNCE_DELAY_MS);
+		} else {
+			this.#cropUpdateTimer = window.setTimeout(() => {
+				this.#cropLastSent = Date.now();
+				this.#client.updateCrop(crop.x, crop.y, crop.k);
+				this.#cropUpdateTimer = null;
+			}, this.#THROTTLE_MS - (now - this.#cropLastSent));
+		}
 	}
 
 	#queueLevelsUpdate(channelName: string, levels: PreviewLevels): void {
 		const existing = this.#levelsUpdateTimers.get(channelName);
 		if (existing !== undefined) clearTimeout(existing);
-
-		const timer = window.setTimeout(() => {
+		const now = Date.now();
+		const lastSent = this.#levelsLastSent.get(channelName) ?? 0;
+		if (now - lastSent >= this.#THROTTLE_MS) {
+			this.#levelsLastSent.set(channelName, now);
 			this.#client.updateLevels(channelName, levels.min, levels.max);
-			this.#levelsUpdateTimers.delete(channelName);
-		}, this.#DEBOUNCE_DELAY_MS);
-
-		this.#levelsUpdateTimers.set(channelName, timer);
+		} else {
+			const timer = window.setTimeout(() => {
+				this.#levelsLastSent.set(channelName, Date.now());
+				this.#client.updateLevels(channelName, levels.min, levels.max);
+				this.#levelsUpdateTimers.delete(channelName);
+			}, this.#THROTTLE_MS - (now - lastSent));
+			this.#levelsUpdateTimers.set(channelName, timer);
+		}
 	}
 }

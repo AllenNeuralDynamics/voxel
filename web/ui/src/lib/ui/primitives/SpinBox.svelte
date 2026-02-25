@@ -154,6 +154,11 @@
 	let editingText = $state('');
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+	function snapToStep(v: number): number {
+		if (step <= 0 || !isFinite(step)) return v;
+		return min + Math.round((v - min) / step) * step;
+	}
+
 	function commitEdit() {
 		clearTimeout(debounceTimer);
 		if (!isEditing) return;
@@ -162,7 +167,8 @@
 		const parsed = parseFloat(editingText);
 		if (isNaN(parsed)) return; // discard invalid input
 
-		const clamped = Math.max(min, Math.min(max, parsed));
+		const snapped = snapToStep(Math.max(min, Math.min(max, parsed)));
+		const clamped = Math.max(min, Math.min(max, snapped));
 		value = clamped;
 		if (onValueChange) {
 			onValueChange(clamped);
@@ -253,7 +259,7 @@
 		let newValue = parseFloat(target.value);
 		if (isNaN(newValue)) return;
 
-		newValue = Math.max(min, Math.min(max, newValue));
+		newValue = Math.max(min, Math.min(max, snapToStep(newValue)));
 		value = newValue;
 
 		if (onValueChange) {
