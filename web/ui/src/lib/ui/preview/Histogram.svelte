@@ -387,11 +387,22 @@
 {/snippet}
 
 <div
-	class="flex flex-col transition-opacity"
-	class:opacity-40={visible === false}
+	class="relative flex flex-col"
 	bind:clientWidth={columnWidth}
 	style:--label-width="{labelWidth}px"
 >
+	{#if visible === false && onVisibilityChange}
+		<div class="absolute inset-0 z-10 flex items-center justify-center bg-black/50">
+			<button
+				class="flex items-center justify-center rounded p-1 text-zinc-400 transition-colors hover:text-zinc-200"
+				onclick={() => onVisibilityChange?.(true)}
+				aria-label="Show channel"
+			>
+				<Icon icon="mdi:eye-off" width="14" height="14" />
+			</button>
+		</div>
+	{/if}
+
 	<!-- Floating Level Inputs -->
 	<div class="floating-row relative" class:invisible={!hasValidData}>
 		<input
@@ -467,16 +478,6 @@
 		<input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
 
 		<div class="flex items-center gap-1">
-			{#if onVisibilityChange}
-				<button
-					onclick={() => onVisibilityChange?.(!visible)}
-					class="flex items-center rounded"
-					style="color: {colors[colors.length - 1]};"
-					aria-label={visible ? 'Hide channel' : 'Show channel'}
-				>
-					<Icon icon={visible ? 'mdi:eye' : 'mdi:eye-off'} width="12" height="12" />
-				</button>
-			{/if}
 			<ColormapPicker
 				{label}
 				{colormap}
