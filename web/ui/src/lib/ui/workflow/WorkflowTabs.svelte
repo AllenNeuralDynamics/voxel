@@ -25,7 +25,8 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { cn } from '$lib/utils';
-	import type { Workflow, WorkflowStep } from './workflow.svelte';
+	import type { WorkflowStepConfig } from '$lib/main/types';
+	import type { Workflow } from './workflow.svelte';
 
 	interface Props {
 		workflow: Workflow;
@@ -50,7 +51,7 @@
 		onnavigate?.();
 	}
 
-	function tabState(step: WorkflowStep): 'viewing' | 'current' | 'default' {
+	function tabState(step: WorkflowStepConfig): 'viewing' | 'current' | 'default' {
 		if (workflow.isViewing(step.id)) return 'viewing';
 		if (workflow.isCurrent(step.id)) return 'current';
 		return 'default';
@@ -60,7 +61,7 @@
 <div class={cn(workflowTabsVariants(), className)}>
 	{#each workflow.visibleSteps as step (step.id)}
 		<div class={tabVariants({ state: tabState(step) })}>
-			{#if step.completed && !workflow.isViewing(step.id)}
+			{#if step.state === 'completed' && !workflow.isViewing(step.id)}
 				<button
 					onclick={() => handleReopen(step.id)}
 					class="flex h-3 w-3 cursor-pointer items-center justify-center rounded-full border border-success bg-success text-white transition-colors hover:border-destructive hover:bg-destructive"
@@ -72,14 +73,14 @@
 				<span
 					class={cn(
 						'flex h-3 w-3 items-center justify-center rounded-full border transition-colors',
-						step.completed
+						step.state === 'completed'
 							? 'border-success bg-success text-white'
 							: workflow.isCurrent(step.id)
 								? 'border-foreground/50'
 								: 'border-muted-foreground/30'
 					)}
 				>
-					{#if step.completed}
+					{#if step.state === 'completed'}
 						<Icon icon="mdi:check" width="8" height="8" class="pointer-events-none" />
 					{/if}
 				</span>

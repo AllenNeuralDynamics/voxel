@@ -91,7 +91,10 @@ type ClientMessage =
 			topic: 'stacks/edit';
 			payload: { edits: Array<{ row: number; col: number; z_start_um?: number; z_end_um?: number }> };
 	  }
-	| { topic: 'stacks/remove'; payload: { positions: Array<{ row: number; col: number }> } };
+	| { topic: 'stacks/remove'; payload: { positions: Array<{ row: number; col: number }> } }
+	// Workflow messages
+	| { topic: 'workflow/next'; payload?: Record<string, never> }
+	| { topic: 'workflow/reopen'; payload: { step_id: string } };
 /**
  * Message handler callback type
  */

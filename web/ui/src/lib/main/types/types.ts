@@ -36,11 +36,26 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
  */
 import type { TileOrder } from './config.ts';
 
+/**
+ * Workflow step state enum matching backend StepState
+ */
+export type StepState = 'locked' | 'active' | 'completed';
+
+/**
+ * Workflow step configuration matching backend WorkflowStepConfig
+ */
+export interface WorkflowStepConfig {
+	id: string;
+	label: string;
+	state: StepState;
+}
+
 export interface SessionStatus {
 	active_profile_id: string | null;
 	mode: RigMode;
 	session_dir: string;
 	grid_locked: boolean;
+	workflow_steps: WorkflowStepConfig[];
 	timestamp: string;
 
 	// Server-authoritative tile/stack data

@@ -20,10 +20,19 @@
 	import SessionPanel from './SessionPanel.svelte';
 	import DevicesPanel from './DevicesPanel.svelte';
 	import ConfigurePanel from './ConfigurePanel.svelte';
-	import { WorkflowTabs, Workflow, WorkflowStep } from '$lib/ui/workflow';
+	import { WorkflowTabs, Workflow } from '$lib/ui/workflow';
 	import { cn } from '$lib/utils';
 
 	let app = $state<App | undefined>(undefined);
+	let workflow = $state<Workflow | null>(null);
+
+	$effect(() => {
+		if (app?.session && !workflow) {
+			workflow = new Workflow(app.session);
+		} else if (!app?.session) {
+			workflow = null;
+		}
+	});
 
 	// Control view state
 	let bottomPanelTab = $state('lasers');
@@ -46,17 +55,10 @@
 		}
 	}
 
-	// Workflow
-	const workflow = new Workflow([
-		new WorkflowStep('scout', 'Scout'),
-		new WorkflowStep('plan', 'Plan'),
-		new WorkflowStep('acquire', 'Acquire')
-	]);
-
 	// Configure overlays the current workflow step
 	let showingConfigure = $state(false);
 
-	const activeView = $derived(showingConfigure ? 'configure' : workflow.viewStep.id);
+	const activeView = $derived(showingConfigure ? 'configure' : workflow?.viewStep?.id ?? 'scout');
 
 	function toggleConfigure() {
 		showingConfigure = !showingConfigure;
@@ -95,7 +97,7 @@
 	</button>
 {/snippet}
 
-{#if app?.session}
+{#if app?.session && workflow}
 	{@const session = app.session}
 	<div class="h-screen w-full bg-background text-foreground">
 		<PaneGroup direction="horizontal" autoSaveId="main-h">

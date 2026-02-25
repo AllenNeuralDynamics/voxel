@@ -5,168 +5,13 @@ import math
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, PrivateAttr, model_validator
-from ruyaml import YAML
-
-from vxl.config import TileOrder, VoxelRigConfig
-from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
+from vxl.config import TileOrder
+from vxl.metadata import BASE_METADATA_TARGET
 from vxl.rig import RigMode, VoxelRig
 from vxl.tile import Stack, StackResult, StackStatus, Tile
 
-# Round-trip YAML preserves anchors, aliases, and comments
-yaml = YAML()
-yaml.preserve_quotes = True  # type: ignore[assignment]
-
-
-class GridConfig(BaseModel):
-    """Grid configuration for tile planning."""
-
-    x_offset_um: float = 0.0
-    y_offset_um: float = 0.0
-    overlap: float = Field(default=0.1, ge=0.0, lt=1.0)
-    z_step_um: float = -1.0  # sentinel: -1 means use rig default
-    default_z_start_um: float = 0.0
-    default_z_end_um: float = 100.0
-
-
-class SessionConfig(BaseModel):
-    """Combined rig configuration and session state.
-
-    This model represents the complete session file (.voxel.yaml) with:
-    - rig: The full VoxelRigConfig
-    - grid_config: Grid configuration for tile planning
-    - tile_order: Order for acquiring tiles
-    - stacks: List of planned/completed stacks
-
-    YAML anchors and aliases are preserved when loading and saving via raw_data.
-    """
-
-    rig: VoxelRigConfig
-    session_name: str = Field(default="", description="Optional session name suffix")
-    metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
-    grid_config: GridConfig = Field(default_factory=GridConfig)
-    tile_order: TileOrder = "unset"
-    stacks: list[Stack] = Field(default_factory=list)
-
-    model_config = {"extra": "forbid"}
-
-    # Private attr for round-trip YAML preservation
-    _raw_data: dict[str, Any] | None = PrivateAttr(default=None)
-
-    @model_validator(mode="after")
-    def apply_rig_defaults(self) -> "SessionConfig":
-        """Copy defaults from rig globals if not set."""
-        if self.grid_config.z_step_um < 0:
-            self.grid_config.z_step_um = self.rig.globals.default_z_step_um
-        if self.tile_order == "unset":
-            self.tile_order = self.rig.globals.default_tile_order
-        return self
-
-    def resolve_metadata(self) -> ExperimentMetadata:
-        """Resolve metadata_target and validate metadata dict against it."""
-        cls = resolve_metadata_class(self.metadata_target)
-        return cls(**self.metadata)
-
-    @classmethod
-    def from_yaml(cls, path: Path) -> "SessionConfig":
-        """Load from .voxel.yaml file, preserving anchors for round-tripping."""
-        with path.open() as f:
-            raw_data = yaml.load(f)
-
-        config = cls(
-            rig=VoxelRigConfig.model_validate(raw_data.get("rig", {})),
-            session_name=raw_data.get("session_name", ""),
-            metadata_target=raw_data.get("metadata_target", BASE_METADATA_TARGET) or BASE_METADATA_TARGET,
-            metadata=raw_data.get("metadata", {}),
-            grid_config=GridConfig.model_validate(raw_data.get("grid_config", {})),
-            tile_order=raw_data.get("tile_order", "snake_row"),
-            stacks=[Stack.model_validate(s) for s in raw_data.get("stacks", [])],
-        )
-        config._raw_data = raw_data
-        return config
-
-    @classmethod
-    def create_new(
-        cls,
-        rig_config_path: Path,
-        session_name: str = "",
-        metadata_target: str = BASE_METADATA_TARGET,
-        metadata: dict[str, Any] | None = None,
-    ) -> "SessionConfig":
-        """Create new session config from a rig config file.
-
-        Preserves YAML anchors from the original config file.
-        """
-        with rig_config_path.open() as f:
-            rig_data = yaml.load(f)
-
-        # Remove _anchors key if present (it's just for defining reusable anchors)
-        if "_anchors" in rig_data:
-            del rig_data["_anchors"]
-
-        rig = VoxelRigConfig.model_validate(rig_data)
-
-        config = cls(rig=rig, session_name=session_name, metadata_target=metadata_target, metadata=metadata or {})
-        config._raw_data = {
-            "rig": rig_data,
-            "session_name": config.session_name,
-            "metadata_target": config.metadata_target,
-            "metadata": config.metadata,
-            "grid_config": config.grid_config.model_dump(),
-            "tile_order": config.tile_order,
-            "stacks": [],
-        }
-        return config
-
-    def to_yaml(self, path: Path) -> None:
-        """Save to .voxel.yaml file, preserving YAML anchors if present.
-
-        Uses atomic write with backup to prevent data loss on serialization failure:
-        1. Write to temp file first
-        2. If successful, backup existing file (if any)
-        3. Atomically replace target with temp file
-
-        Cross-platform: uses Path.replace() which is atomic on POSIX, Linux, and Windows.
-        """
-        if self._raw_data is not None:
-            # Update session fields in raw data to preserve anchors in rig section
-            self._raw_data["session_name"] = self.session_name
-            self._raw_data["metadata_target"] = self.metadata_target
-            self._raw_data["metadata"] = self.metadata
-            self._raw_data["grid_config"] = self.grid_config.model_dump()
-            self._raw_data["tile_order"] = self.tile_order
-            # Use mode='json' to serialize enums as strings for YAML compatibility
-            self._raw_data["stacks"] = [s.model_dump(mode="json") for s in self.stacks]
-            data = self._raw_data
-        else:
-            # Fresh config without raw_data, just dump normally
-            data = {
-                "rig": self.rig.model_dump(),
-                "session_name": self.session_name,
-                "metadata_target": self.metadata_target,
-                "metadata": self.metadata,
-                "grid_config": self.grid_config.model_dump(),
-                "tile_order": self.tile_order,
-                # Use mode='json' to serialize enums as strings for YAML compatibility
-                "stacks": [s.model_dump(mode="json") for s in self.stacks],
-            }
-
-        # Atomic write: temp file -> backup existing -> replace target
-        temp_path = path.with_suffix(".yaml.tmp")
-        backup_path = path.with_suffix(".yaml.bak")
-
-        # Write to temp file first (if this fails, original is untouched)
-        with temp_path.open("w") as f:
-            yaml.dump(data, f)
-
-        # Backup existing file if present
-        if path.exists():
-            # replace() is atomic and works cross-platform
-            path.replace(backup_path)
-
-        # Atomically move temp to target
-        temp_path.replace(path)
+from ._config import GridConfig, SessionConfig
+from ._workflow import StepState, Workflow, WorkflowStepConfig
 
 
 class Session:
@@ -189,6 +34,7 @@ class Session:
         self._rig = rig
         self._session_dir = session_dir
         self._log = logging.getLogger(f"Session({session_dir.name})")
+        self._workflow = Workflow(self._config.workflow_steps)
 
         # Cache for tile size (derived from cameras + magnification)
         self._tile_size_um: tuple[float, float] | None = None
@@ -277,9 +123,34 @@ class Session:
         return self._config.tile_order
 
     @property
+    def workflow(self) -> Workflow:
+        """Get the workflow state machine."""
+        return self._workflow
+
+    @property
+    def workflow_steps(self) -> list[WorkflowStepConfig]:
+        """Get the workflow step configurations."""
+        return self._workflow.steps
+
+    def workflow_next(self) -> bool:
+        """Advance the workflow to the next step."""
+        if self._workflow.next():
+            self._save()
+            return True
+        return False
+
+    def workflow_reopen(self, step_id: str) -> bool:
+        """Reopen a workflow step and its downstream steps."""
+        if self._workflow.reopen(step_id):
+            self._save()
+            return True
+        return False
+
+    @property
     def grid_locked(self) -> bool:
-        """Grid is locked if any non-PLANNED stacks exist (acquisition has started)."""
-        return any(s.status != StackStatus.PLANNED for s in self._config.stacks)
+        """Grid is locked when the Scout step is not active."""
+        scout = next((s for s in self._workflow.steps if s.id == "scout"), None)
+        return scout is None or scout.state != StepState.ACTIVE
 
     # ==================== Grid Management ====================
 

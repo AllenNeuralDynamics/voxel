@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from vxl import RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import TileOrder
-from vxl.session import GridConfig
+from vxl.session import GridConfig, WorkflowStepConfig
 from vxl.tile import Stack, StackStatus, Tile
 from vxlib import fire_and_forget
 
@@ -45,6 +45,7 @@ class SessionStatus(BaseModel):
     # Session status
     session_dir: str
     grid_locked: bool
+    workflow_steps: list[WorkflowStepConfig]
 
     # Full data (replaces separate broadcasts)
     grid_config: GridConfig
@@ -87,6 +88,7 @@ class SessionService:
             mode=self.session.rig.mode,
             session_dir=str(self.session.session_dir),
             grid_locked=self.session.grid_locked,
+            workflow_steps=self.session.workflow_steps,
             grid_config=self.session.grid_config,
             tile_order=self.session.tile_order,
             tiles=tiles,
@@ -123,12 +125,31 @@ class SessionService:
                 await self._handle_stacks_edit(payload)
             case "stacks/remove":
                 await self._handle_stacks_remove(payload)
+            case "workflow/next":
+                await self._handle_workflow_next()
+            case "workflow/reopen":
+                await self._handle_workflow_reopen(payload)
             case "acq/start":
                 await self.handle_acq_start(payload)
             case "acq/stop":
                 await self.handle_acq_stop()
             case _:
                 log.warning("Unknown topic from client %s: %s", client_id, topic)
+
+    # ==================== Workflow ====================
+
+    async def _handle_workflow_next(self) -> None:
+        """Handle workflow next step request."""
+        self.session.workflow_next()
+        self.broadcast({}, with_status=True)
+
+    async def _handle_workflow_reopen(self, payload: dict[str, Any]) -> None:
+        """Handle workflow reopen step request."""
+        step_id = payload.get("step_id")
+        if not step_id:
+            raise ValueError("Missing step_id")
+        self.session.workflow_reopen(step_id)
+        self.broadcast({}, with_status=True)
 
     # ==================== Grid Management ====================
 

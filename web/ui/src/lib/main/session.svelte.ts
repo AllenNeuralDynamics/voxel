@@ -1,6 +1,6 @@
 import type { Client, DaqWaveforms } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
-import type { AppStatus, GridConfig, Tile, Stack, LayerVisibility, TileOrder, VoxelRigConfig, ProfileConfig, ChannelConfig } from './types';
+import type { AppStatus, GridConfig, Tile, Stack, LayerVisibility, TileOrder, VoxelRigConfig, ProfileConfig, ChannelConfig, WorkflowStepConfig } from './types';
 import { parseVec2D } from './types';
 import { PreviewState } from './preview.svelte';
 import { Stage } from './axis.svelte';
@@ -38,6 +38,7 @@ export class Session {
 	stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
 	tileOrder = $derived<TileOrder>(this.#appStatus?.session?.tile_order ?? 'snake_row');
 	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
+	workflowSteps = $derived<WorkflowStepConfig[]>(this.#appStatus?.session?.workflow_steps ?? []);
 
 	activeProfileConfig = $derived<ProfileConfig | null>(
 		this.activeProfileId ? this.config.profiles[this.activeProfileId] ?? null : null
@@ -235,6 +236,16 @@ export class Session {
 
 	removeStacks(positions: Array<{ row: number; col: number }>): void {
 		this.client.send({ topic: 'stacks/remove', payload: { positions } });
+	}
+
+	// --- Workflow ---
+
+	workflowNext(): void {
+		this.client.send({ topic: 'workflow/next' });
+	}
+
+	workflowReopen(stepId: string): void {
+		this.client.send({ topic: 'workflow/reopen', payload: { step_id: stepId } });
 	}
 
 	// --- Selection ---
