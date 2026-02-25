@@ -20,6 +20,7 @@
 	import SessionPanel from './SessionPanel.svelte';
 	import DevicesPanel from './DevicesPanel.svelte';
 	import ConfigurePanel from './ConfigurePanel.svelte';
+	import { WorkflowTabs, Workflow, WorkflowStep } from '$lib/ui/workflow';
 	import { cn } from '$lib/utils';
 
 	let app = $state<App | undefined>(undefined);
@@ -45,16 +46,24 @@
 		}
 	}
 
-	// Workflow modes
-	type WorkflowMode = 'configure' | 'scout' | 'plan' | 'acquire' | 'extra';
-	let workflowMode = $state<WorkflowMode>('scout');
-	let completedModes = $state(new Set<WorkflowMode>());
+	// Workflow
+	const workflow = new Workflow([
+		new WorkflowStep('scout', 'Scout'),
+		new WorkflowStep('plan', 'Plan'),
+		new WorkflowStep('acquire', 'Acquire')
+	]);
 
-	function setWorkflowMode(mode: WorkflowMode) {
-		if (mode === 'configure' && (workflowMode === 'plan' || workflowMode === 'acquire')) {
-			return;
-		}
-		workflowMode = mode;
+	// Configure overlays the current workflow step
+	let showingConfigure = $state(false);
+
+	const activeView = $derived(showingConfigure ? 'configure' : workflow.viewStep.id);
+
+	function toggleConfigure() {
+		showingConfigure = !showingConfigure;
+	}
+
+	function onWorkflowNavigate() {
+		showingConfigure = false;
 	}
 
 	function cleanup() {
@@ -93,72 +102,18 @@
 			<Pane defaultSize={55} minSize={50} maxSize={70}>
 				<!-- Control area: header + main + footer -->
 				<div class="grid h-full grid-rows-[auto_1fr_auto] border-r border-border">
-					<header class="flex items-center justify-between border-b border-border bg-card px-4 py-4">
-						<div class="flex items-center gap-8">
-							<!-- Configure: standalone icon button, no step indicator -->
+					<header class="flex items-center justify-between gap-8 border-b border-border bg-card px-4 py-4">
+						<div class="flex flex-1 items-center gap-4">
+							<!-- Configure: standalone icon button -->
 							<button
-								onclick={() => setWorkflowMode('configure')}
-								disabled={workflowMode === 'plan' || workflowMode === 'acquire'}
-								class="flex items-center justify-center rounded transition-colors {workflowMode === 'plan' ||
-								workflowMode === 'acquire'
-									? 'cursor-not-allowed opacity-40'
-									: workflowMode === 'configure'
-										? 'text-foreground'
-										: 'text-muted-foreground hover:text-foreground'}"
+								onclick={toggleConfigure}
+								class="flex items-center justify-center rounded transition-colors {showingConfigure
+									? 'text-foreground'
+									: 'text-muted-foreground hover:text-foreground'}"
 								title="Configure"
 							>
 								<Icon icon="mdi:cog" width="16" height="16" />
 							</button>
-							<!-- Workflow steps -->
-							<div class="flex items-center gap-3">
-								{#each [{ id: 'scout', label: 'Scout' }, { id: 'plan', label: 'Plan' }, { id: 'acquire', label: 'Acquire' }] as mode, i (mode.id)}
-									{@const isActive = workflowMode === mode.id}
-									{@const isComplete = completedModes.has(mode.id as WorkflowMode)}
-									{#if i > 0}
-										<div class="h-px w-4 bg-border"></div>
-									{/if}
-									<button
-										onclick={() => setWorkflowMode(mode.id as WorkflowMode)}
-										class="flex items-center gap-2 text-xs transition-colors {isActive
-											? 'text-foreground'
-											: 'text-muted-foreground hover:text-foreground'}"
-									>
-										<div
-											class="flex h-3.5 w-3.5 items-center justify-center rounded-full border transition-colors {isComplete
-												? 'border-success bg-success text-white'
-												: isActive
-													? 'border-foreground'
-													: 'border-muted-foreground/50'}"
-										>
-											{#if isComplete}
-												<Icon icon="mdi:check" width="8" height="8" />
-											{/if}
-										</div>
-										<span class:font-medium={isActive}>{mode.label}</span>
-									</button>
-								{/each}
-							</div>
-						</div>
-						<div class="flex items-center justify-end gap-4">
-							<button
-								onclick={() => setWorkflowMode('extra')}
-								class="text-xs transition-colors {workflowMode === 'extra'
-									? 'font-medium text-foreground'
-									: 'text-muted-foreground hover:text-foreground'}"
-							>
-								Extras
-							</button>
-							<Button
-								class="min-w-26"
-								variant={session.previewState.isPreviewing ? 'danger' : 'success'}
-								size="md"
-								onclick={() =>
-									session.previewState.isPreviewing
-										? session.previewState.stopPreview()
-										: session.previewState.startPreview()}
-							>
-								{session.previewState.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-							</Button>
 							<Select
 								value={session.activeProfileId ?? ''}
 								options={Object.entries(session.config.profiles).map(([id, cfg]) => ({
@@ -172,30 +127,41 @@
 								showCheckmark
 								emptyMessage="No profiles available"
 								size="lg"
-								class="min-w-68"
+								class="max-w-68"
 							/>
+						</div>
+						<!-- Workflow steps -->
+						<WorkflowTabs {workflow} onnavigate={onWorkflowNavigate} class="max-w-96 min-w-88 flex-2" />
+						<div class="flex flex-1 items-center justify-end gap-4">
+							<Button
+								class="min-w-26"
+								variant={session.previewState.isPreviewing ? 'danger' : 'success'}
+								size="md"
+								onclick={() =>
+									session.previewState.isPreviewing
+										? session.previewState.stopPreview()
+										: session.previewState.startPreview()}
+							>
+								{session.previewState.isPreviewing ? 'Stop Preview' : 'Start Preview'}
+							</Button>
 						</div>
 					</header>
 					<PaneGroup direction="vertical" autoSaveId="midCol-v3">
 						<Pane>
 							<div class="h-full overflow-auto">
-								{#if workflowMode === 'configure'}
+								{#if activeView === 'configure'}
 									<ConfigurePanel {session} />
-								{:else if workflowMode === 'scout'}
+								{:else if activeView === 'scout'}
 									<div class="flex h-full flex-col justify-between">
 										<div class="p-4">
 											<GridControls {session} />
 										</div>
 									</div>
-								{:else if workflowMode === 'plan'}
+								{:else if activeView === 'plan'}
 									<div class="flex h-full items-center justify-center">
 										<p class="text-sm text-muted-foreground">Plan — configure grid and define stacks</p>
 									</div>
-								{:else if workflowMode === 'acquire'}
-									<div class="flex h-full items-center justify-center">
-										<p class="text-sm text-muted-foreground">Acquire — run acquisition and monitor progress</p>
-									</div>
-								{:else if workflowMode === 'extra'}
+								{:else if activeView === 'acquire'}
 									<div class="flex h-full flex-col justify-between">
 										<DevicesPanel {session} class="h-auto" />
 									</div>
