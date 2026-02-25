@@ -21,7 +21,7 @@
 			for (const laser of allLasers) {
 				laser.recordPower();
 			}
-		}, 1000);
+		}, 100);
 		return () => clearInterval(interval);
 	});
 

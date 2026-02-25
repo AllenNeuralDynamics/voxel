@@ -272,6 +272,7 @@
 	}
 
 	function handleWheel(e: WheelEvent) {
+		if (!e.ctrlKey) return;
 		e.preventDefault();
 
 		const direction = e.deltaY < 0 ? 1 : -1;

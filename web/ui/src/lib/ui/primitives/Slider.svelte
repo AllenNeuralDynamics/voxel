@@ -14,6 +14,7 @@
 
 	const fillPercentage = $derived(value != null ? ((value - min) / (max - min)) * 100 : ((target - min) / (max - min)) * 100);
 
+	let inputElement = $state<HTMLInputElement | undefined>();
 	let lastInputTime = 0;
 	let throttleTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -32,10 +33,29 @@
 			}, throttle - (now - lastInputTime));
 		}
 	}
+
+	let isFocused = $state(false);
+
+	function handleWheel(e: WheelEvent) {
+		if (!isFocused || !e.ctrlKey) return;
+		e.preventDefault();
+		const direction = e.deltaY < 0 ? 1 : -1;
+		const newValue = Math.max(min, Math.min(max, target + direction * step));
+		onChange?.(newValue);
+	}
+
+	$effect(() => {
+		if (!inputElement) return;
+		inputElement.addEventListener('wheel', handleWheel, { passive: false });
+		return () => inputElement?.removeEventListener('wheel', handleWheel);
+	});
 </script>
 
 <input
+	bind:this={inputElement}
 	type="range"
+	onfocus={() => (isFocused = true)}
+	onblur={() => (isFocused = false)}
 	{min}
 	{max}
 	{step}

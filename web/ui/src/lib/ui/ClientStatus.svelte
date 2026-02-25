@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Client } from '$lib/main';
+	import { Tooltip } from 'bits-ui';
 
 	interface Props {
 		client: Client;
@@ -22,7 +23,18 @@
 	});
 </script>
 
-<div class="flex items-center gap-2 rounded border border-transparent px-2 py-0.5">
-	<span class="h-2 w-2 rounded-full {connectionStatus.color}"></span>
-	<span class="text-xs text-muted-foreground">{connectionStatus.text}</span>
-</div>
+<Tooltip.Provider>
+	<Tooltip.Root delayDuration={200}>
+		<Tooltip.Trigger class="cursor-pointer">
+			<span class="block h-2 w-2 rounded-full {connectionStatus.color}"></span>
+		</Tooltip.Trigger>
+		<Tooltip.Portal>
+			<Tooltip.Content
+				sideOffset={4}
+				class="z-50 rounded border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
+			>
+				{connectionStatus.text}
+			</Tooltip.Content>
+		</Tooltip.Portal>
+	</Tooltip.Root>
+</Tooltip.Provider>

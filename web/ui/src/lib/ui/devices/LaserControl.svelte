@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { DevicesManager } from '$lib/main';
 	import { wavelengthToColor } from '$lib/utils';
-	import SliderInput from '$lib/ui/primitives/SliderInput.svelte';
+	import SliderInput from '$lib/ui/SliderInput.svelte';
 	import Switch from '$lib/ui/primitives/Switch.svelte';
 
 	interface Props {

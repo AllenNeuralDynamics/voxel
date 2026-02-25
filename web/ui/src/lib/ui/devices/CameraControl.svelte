@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { type DevicesManager, parseVec2D } from '$lib/main';
-	import SliderInput from '$lib/ui/primitives/SliderInput.svelte';
+	import SliderInput from '$lib/ui/SliderInput.svelte';
 	import Select from '$lib/ui/primitives/Select.svelte';
 	import Icon from '@iconify/svelte';
 

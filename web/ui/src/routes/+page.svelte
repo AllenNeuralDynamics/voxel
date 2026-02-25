@@ -29,7 +29,7 @@
 
 	function tabButtonClass(selected: boolean): string {
 		return cn(
-			'flex items-center gap-2 px-2 py-0.5 text-xs transition-colors hover:bg-muted',
+			'gap-2 flex items-center px-2 py-0.5 text-xs transition-colors hover:bg-muted',
 			selected ? 'bg-muted text-foreground' : 'text-muted-foreground'
 		);
 	}
@@ -45,8 +45,8 @@
 	}
 
 	// Workflow modes
-	type WorkflowMode = 'scout' | 'plan' | 'acquire';
-	let workflowMode = $state<WorkflowMode>('scout');
+	type WorkflowMode = 'scout' | 'plan' | 'acquire' | 'extra'; // extra is for debugging widgets.
+	let workflowMode = $state<WorkflowMode>('extra');
 	let completedModes = $state(new Set<WorkflowMode>());
 
 	function cleanup() {
@@ -206,22 +206,26 @@
 								{/if}
 							</button>
 							{@render tabButton('waveforms', 'Waveforms')}
-							{@render tabButton('session', 'Session')}
-							{@render tabButton('logs', 'Logs')}
 						</div>
-						<div class="flex items-center">
-							<ClientStatus client={app.client} />
-							<div class="flex rounded border border-border">
-								<button
-									onclick={() => app?.closeSession()}
-									class="flex cursor-pointer items-center gap-1 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-									aria-label="Close Session"
-									title="Close Session"
-								>
-									<Icon icon="mdi:power" width="12" height="12" />
-									Exit
+						<div class="flex items-center gap-3">
+							<div class="flex divide-x divide-border rounded border border-border">
+								<button onclick={() => selectBottomTab('session')} class={tabButtonClass(bottomPanelTab === 'session')}>
+									<ClientStatus client={app.client} />
+									Session
 								</button>
+								<!-- {@render tabButton('session', 'Session')} -->
+								{@render tabButton('logs', 'Logs')}
 							</div>
+							<div class="h-4 w-px bg-border"></div>
+							<button
+								onclick={() => app?.closeSession()}
+								class="flex cursor-pointer items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+								aria-label="Close Session"
+								title="Close Session"
+							>
+								Exit
+								<Icon icon="mdi:logout" width="12" height="12" />
+							</button>
 						</div>
 					</footer>
 				</div>

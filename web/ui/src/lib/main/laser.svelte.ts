@@ -1,7 +1,7 @@
 import type { DevicesManager } from './devices.svelte';
 import { wavelengthToColor } from '$lib/utils';
 
-export const POWER_HISTORY_MAX = 60;
+export const POWER_HISTORY_MAX = 600;
 
 export class Laser {
 	readonly #devices: DevicesManager;
