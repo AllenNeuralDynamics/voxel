@@ -20,19 +20,11 @@
 	import SessionPanel from './SessionPanel.svelte';
 	import DevicesPanel from './DevicesPanel.svelte';
 	import ConfigurePanel from './ConfigurePanel.svelte';
-	import { WorkflowTabs, Workflow } from '$lib/ui/workflow';
+	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
 	let app = $state<App | undefined>(undefined);
-	let workflow = $state<Workflow | null>(null);
-
-	$effect(() => {
-		if (app?.session && !workflow) {
-			workflow = new Workflow(app.session);
-		} else if (!app?.session) {
-			workflow = null;
-		}
-	});
+	let viewId = $state('scout');
 
 	// Control view state
 	let bottomPanelTab = $state('lasers');
@@ -55,17 +47,12 @@
 		}
 	}
 
-	// Configure overlays the current workflow step
-	let showingConfigure = $state(false);
-
-	const activeView = $derived(showingConfigure ? 'configure' : workflow?.viewStep?.id ?? 'scout');
-
-	function toggleConfigure() {
-		showingConfigure = !showingConfigure;
-	}
-
-	function onWorkflowNavigate() {
-		showingConfigure = false;
+	function toggleView(id: string) {
+		if (viewId === id) {
+			viewId = app?.session?.workflow.steps[0]?.id ?? 'scout';
+		} else {
+			viewId = id;
+		}
 	}
 
 	function cleanup() {
@@ -97,25 +84,47 @@
 	</button>
 {/snippet}
 
-{#if app?.session && workflow}
+{#if app?.session}
 	{@const session = app.session}
+	{@const workflow = session.workflow}
 	<div class="h-screen w-full bg-background text-foreground">
 		<PaneGroup direction="horizontal" autoSaveId="main-h">
 			<Pane defaultSize={55} minSize={50} maxSize={70}>
 				<!-- Control area: header + main + footer -->
 				<div class="grid h-full grid-rows-[auto_1fr_auto] border-r border-border">
 					<header class="flex items-center justify-between gap-8 border-b border-border bg-card px-4 py-4">
-						<div class="flex flex-1 items-center gap-4">
-							<!-- Configure: standalone icon button -->
+						<!-- Configure + Workflow + Acquire -->
+						<div class="flex flex-1 items-center gap-3">
 							<button
-								onclick={toggleConfigure}
-								class="flex items-center justify-center rounded transition-colors {showingConfigure
+								onclick={() => toggleView('configure')}
+								class="flex items-center justify-center rounded transition-colors {viewId === 'configure'
 									? 'text-foreground'
 									: 'text-muted-foreground hover:text-foreground'}"
 								title="Configure"
 							>
 								<Icon icon="mdi:cog" width="16" height="16" />
 							</button>
+							<WorkflowTabs {workflow} bind:viewId class="max-w-96 min-w-88" />
+							<button
+								onclick={() => toggleView('acquire')}
+								class="flex items-center justify-center rounded transition-colors {viewId === 'acquire'
+									? 'text-foreground'
+									: 'text-muted-foreground hover:text-foreground'}"
+								title="Acquire"
+							>
+								<Icon icon="mdi:play-circle-outline" width="16" height="16" />
+							</button>
+						</div>
+						<div class="flex items-center gap-4">
+							<Button
+								class="min-w-26"
+								variant={session.preview.isPreviewing ? 'danger' : 'success'}
+								size="md"
+								onclick={() =>
+									session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
+							>
+								{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
+							</Button>
 							<Select
 								value={session.activeProfileId ?? ''}
 								options={Object.entries(session.config.profiles).map(([id, cfg]) => ({
@@ -129,44 +138,35 @@
 								showCheckmark
 								emptyMessage="No profiles available"
 								size="lg"
-								class="max-w-68"
+								class="min-w-56"
 							/>
-						</div>
-						<!-- Workflow steps -->
-						<WorkflowTabs {workflow} onnavigate={onWorkflowNavigate} class="max-w-96 min-w-88 flex-2" />
-						<div class="flex flex-1 items-center justify-end gap-4">
-							<Button
-								class="min-w-26"
-								variant={session.previewState.isPreviewing ? 'danger' : 'success'}
-								size="md"
-								onclick={() =>
-									session.previewState.isPreviewing
-										? session.previewState.stopPreview()
-										: session.previewState.startPreview()}
-							>
-								{session.previewState.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-							</Button>
 						</div>
 					</header>
 					<PaneGroup direction="vertical" autoSaveId="midCol-v3">
 						<Pane>
 							<div class="h-full overflow-auto">
-								{#if activeView === 'configure'}
+								{#if viewId === 'configure'}
 									<ConfigurePanel {session} />
-								{:else if activeView === 'scout'}
+								{:else if viewId === 'scout'}
 									<div class="flex h-full flex-col justify-between">
 										<div class="p-4">
 											<GridControls {session} />
 										</div>
 									</div>
-								{:else if activeView === 'plan'}
+								{:else if viewId === 'plan'}
 									<div class="flex h-full items-center justify-center">
-										<p class="text-sm text-muted-foreground">Plan — configure grid and define stacks</p>
+										<p class="text-sm text-muted-foreground">Plan — define stacks for acquisition</p>
 									</div>
-								{:else if activeView === 'acquire'}
-									<div class="flex h-full flex-col justify-between">
-										<DevicesPanel {session} class="h-auto" />
-									</div>
+								{:else if viewId === 'acquire'}
+									{#if workflow.allCommitted}
+										<div class="flex h-full flex-col justify-between">
+											<DevicesPanel {session} class="h-auto" />
+										</div>
+									{:else}
+										<div class="flex h-full items-center justify-center">
+											<p class="text-sm text-muted-foreground">Complete all workflow steps before acquiring</p>
+										</div>
+									{/if}
 								{/if}
 							</div>
 						</Pane>
@@ -239,7 +239,7 @@
 				<main class="flex h-full flex-col overflow-hidden">
 					<PaneGroup direction="vertical" autoSaveId="rightCol-v3">
 						<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
-							<PreviewCanvas previewer={session.previewState} />
+							<PreviewCanvas previewer={session.preview} />
 						</Pane>
 						<PaneDivider direction="horizontal" class="text-border hover:text-muted-foreground" />
 						<Pane defaultSize={50} minSize={30} class="h-full flex-1 px-4">

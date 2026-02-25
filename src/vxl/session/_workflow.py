@@ -1,90 +1,99 @@
-"""Workflow state machine for Voxel acquisition sessions."""
+"""Workflow state machine for Voxel acquisition sessions.
+
+Two-step preparation workflow: Scout → Plan.
+State is a single cursor: the id of the last committed step (or None).
+Step states (pending/active/committed) are derived from the cursor position.
+"""
 
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 
 class StepState(StrEnum):
-    LOCKED = "locked"
+    """Derived step state — not stored, computed from committed cursor."""
+
+    PENDING = "pending"
     ACTIVE = "active"
-    COMPLETED = "completed"
+    COMMITTED = "committed"
 
 
 class WorkflowStepConfig(BaseModel):
+    """Step definition — just identity, no mutable state."""
+
     id: str
     label: str
-    state: StepState = StepState.LOCKED
 
 
 class Workflow:
-    """Generic step-based workflow state machine.
+    """Cursor-based workflow: stores the last committed step id.
 
-    Step states are the single source of truth; current_index is derived.
+    Steps before and including the cursor are committed.
+    The first step after the cursor is active.
+    Everything else is pending.
     """
 
-    def __init__(self, steps: list[WorkflowStepConfig]) -> None:
+    def __init__(self, steps: list[WorkflowStepConfig], committed: str | None = None) -> None:
         self.steps = steps
+        self.committed = committed
 
     @property
-    def current_index(self) -> int:
-        """Index of the first non-completed step, or last step if all complete."""
+    def _committed_index(self) -> int:
+        """Index of the last committed step, or -1 if none."""
+        if self.committed is None:
+            return -1
         for i, step in enumerate(self.steps):
-            if step.state != StepState.COMPLETED:
+            if step.id == self.committed:
                 return i
-        return len(self.steps) - 1
+        return -1
+
+    def step_state(self, step_id: str) -> StepState:
+        """Derive the state of a step from the committed cursor."""
+        idx = next((i for i, s in enumerate(self.steps) if s.id == step_id), None)
+        if idx is None:
+            return StepState.PENDING
+        ci = self._committed_index
+        if idx <= ci:
+            return StepState.COMMITTED
+        if idx == ci + 1:
+            return StepState.ACTIVE
+        return StepState.PENDING
 
     @property
-    def current_step(self) -> WorkflowStepConfig:
-        return self.steps[self.current_index]
+    def active_index(self) -> int:
+        """Index of the active step (first after committed cursor)."""
+        return min(self._committed_index + 1, len(self.steps) - 1)
 
     @property
-    def all_complete(self) -> bool:
-        return all(s.state == StepState.COMPLETED for s in self.steps)
+    def active_step(self) -> WorkflowStepConfig:
+        return self.steps[self.active_index]
 
-    def next(self, can_complete: Callable[[], bool] | None = None) -> bool:
-        """Advance: active -> completed on current, locked -> active on next.
+    @property
+    def all_committed(self) -> bool:
+        return self._committed_index == len(self.steps) - 1
+
+    def next(self) -> bool:
+        """Commit the active step.
 
         Returns True if a transition occurred.
         """
-        idx = self.current_index
-        step = self.steps[idx]
-        if step.state != StepState.ACTIVE:
+        if self.all_committed:
             return False
-        if can_complete is not None and not can_complete():
-            return False
-
-        step.state = StepState.COMPLETED
-
-        # Activate the next step if there is one
-        if idx + 1 < len(self.steps):
-            self.steps[idx + 1].state = StepState.ACTIVE
-
+        self.committed = self.steps[self.active_index].id
         return True
 
     def reopen(self, step_id: str) -> bool:
-        """Reopen a completed step: target + downstream -> locked, target -> active.
+        """Uncommit back to before a step, making it active.
 
+        Sets committed cursor to the step before the target (or None if target is first).
         Returns True if a transition occurred.
         """
         idx = next((i for i, s in enumerate(self.steps) if s.id == step_id), None)
         if idx is None:
             return False
-
-        step = self.steps[idx]
-        if step.state == StepState.LOCKED:
+        if self.step_state(step_id) != StepState.COMMITTED:
             return False
-
-        # Set target and all downstream to locked
-        for i in range(idx, len(self.steps)):
-            self.steps[i].state = StepState.LOCKED
-
-        # Activate the target step
-        step.state = StepState.ACTIVE
+        self.committed = self.steps[idx - 1].id if idx > 0 else None
         return True

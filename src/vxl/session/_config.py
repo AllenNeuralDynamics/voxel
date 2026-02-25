@@ -10,7 +10,7 @@ from vxl.config import TileOrder, VoxelRigConfig
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
 from vxl.tile import Stack
 
-from ._workflow import StepState, WorkflowStepConfig
+from ._workflow import WorkflowStepConfig
 
 # Round-trip YAML preserves anchors, aliases, and comments
 yaml = YAML()
@@ -49,11 +49,11 @@ class SessionConfig(BaseModel):
     stacks: list[Stack] = Field(default_factory=list)
     workflow_steps: list[WorkflowStepConfig] = Field(
         default_factory=lambda: [
-            WorkflowStepConfig(id="scout", label="Scout", state=StepState.ACTIVE),
+            WorkflowStepConfig(id="scout", label="Scout"),
             WorkflowStepConfig(id="plan", label="Plan"),
-            WorkflowStepConfig(id="acquire", label="Acquire"),
         ]
     )
+    workflow_committed: str | None = Field(default=None, description="ID of the last committed workflow step")
 
     model_config = {"extra": "forbid"}
 
@@ -91,6 +91,8 @@ class SessionConfig(BaseModel):
         }
         if "workflow_steps" in raw_data:
             kwargs["workflow_steps"] = [WorkflowStepConfig.model_validate(ws) for ws in raw_data["workflow_steps"]]
+        if "workflow_committed" in raw_data:
+            kwargs["workflow_committed"] = raw_data["workflow_committed"]
         config = cls(**kwargs)
         config._raw_data = raw_data
         return config
@@ -126,6 +128,7 @@ class SessionConfig(BaseModel):
             "tile_order": config.tile_order,
             "stacks": [],
             "workflow_steps": [ws.model_dump(mode="json") for ws in config.workflow_steps],
+            "workflow_committed": config.workflow_committed,
         }
         return config
 
@@ -149,6 +152,7 @@ class SessionConfig(BaseModel):
             # Use mode='json' to serialize enums as strings for YAML compatibility
             self._raw_data["stacks"] = [s.model_dump(mode="json") for s in self.stacks]
             self._raw_data["workflow_steps"] = [ws.model_dump(mode="json") for ws in self.workflow_steps]
+            self._raw_data["workflow_committed"] = self.workflow_committed
             data = self._raw_data
         else:
             # Fresh config without raw_data, just dump normally
@@ -162,6 +166,7 @@ class SessionConfig(BaseModel):
                 # Use mode='json' to serialize enums as strings for YAML compatibility
                 "stacks": [s.model_dump(mode="json") for s in self.stacks],
                 "workflow_steps": [ws.model_dump(mode="json") for ws in self.workflow_steps],
+                "workflow_committed": self.workflow_committed,
             }
 
         # Atomic write: temp file -> backup existing -> replace target

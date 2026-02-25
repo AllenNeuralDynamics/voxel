@@ -37,17 +37,17 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
 import type { TileOrder } from './config.ts';
 
 /**
- * Workflow step state enum matching backend StepState
+ * Workflow step state — derived from committed cursor position, not stored per step.
  */
-export type StepState = 'locked' | 'active' | 'completed';
+export type StepState = 'pending' | 'active' | 'committed';
 
 /**
- * Workflow step configuration matching backend WorkflowStepConfig
+ * Workflow step configuration matching backend WorkflowStepConfig.
+ * State is NOT stored per step — it's derived from workflow_committed cursor.
  */
 export interface WorkflowStepConfig {
 	id: string;
 	label: string;
-	state: StepState;
 }
 
 export interface SessionStatus {
@@ -56,6 +56,7 @@ export interface SessionStatus {
 	session_dir: string;
 	grid_locked: boolean;
 	workflow_steps: WorkflowStepConfig[];
+	workflow_committed: string | null;
 	timestamp: string;
 
 	// Server-authoritative tile/stack data

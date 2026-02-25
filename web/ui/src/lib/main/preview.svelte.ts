@@ -182,6 +182,10 @@ export class PreviewState {
 		this.#levelsUpdateTimers.clear();
 	}
 
+	destroy(): void {
+		this.shutdown();
+	}
+
 	startPreview(): void {
 		if (!this.channels.some((c) => c.visible)) {
 			console.warn('[PreviewState] No visible channels to preview');

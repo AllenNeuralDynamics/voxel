@@ -4,6 +4,7 @@ export { Stage, Axis } from './axis.svelte.ts';
 export { Laser, POWER_HISTORY_MAX } from './laser.svelte.ts';
 export { Camera, type CameraMode, type FrameRegionData, type StreamInfoData, type DeliminatedIntData } from './camera.svelte.ts';
 export { PreviewState, PreviewChannel } from './preview.svelte.ts';
+export { Workflow } from './workflow.svelte.ts';
 
 export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';
 export { DevicesManager } from './devices.svelte.ts';

@@ -111,13 +111,13 @@
 	{@render deviceGroupToggle()}
 </div>
 
-{#if session.previewState.channels.length === 0}
+{#if session.preview.channels.length === 0}
 	<div class="flex flex-1 items-center justify-center p-4">
 		<p class="text-sm text-muted-foreground">No channels available</p>
 	</div>
 {:else}
 	<div class="flex flex-1 flex-col overflow-y-auto">
-		{#each session.previewState.channels as channel (channel.idx)}
+		{#each session.preview.channels as channel (channel.idx)}
 			{#if channel.name}
 				<div class="space-y-4 px-4 py-4">
 					<div class="-mt-2 flex items-center justify-between">

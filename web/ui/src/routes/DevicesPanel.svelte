@@ -12,19 +12,11 @@
 	let { session, class: className }: Props = $props();
 
 	const laserIds = $derived([
-		...new Set(
-			session.previewState.channels
-				.filter((ch) => ch.config?.illumination)
-				.map((ch) => ch.config!.illumination!)
-		)
+		...new Set(session.preview.channels.filter((ch) => ch.config?.illumination).map((ch) => ch.config!.illumination!))
 	]);
 
 	const cameraIds = $derived([
-		...new Set(
-			session.previewState.channels
-				.filter((ch) => ch.config?.detection)
-				.map((ch) => ch.config!.detection!)
-		)
+		...new Set(session.preview.channels.filter((ch) => ch.config?.detection).map((ch) => ch.config!.detection!))
 	]);
 </script>
 

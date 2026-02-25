@@ -1,8 +1,19 @@
 import type { Client, DaqWaveforms } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
-import type { AppStatus, GridConfig, Tile, Stack, LayerVisibility, TileOrder, VoxelRigConfig, ProfileConfig, ChannelConfig, WorkflowStepConfig } from './types';
+import type {
+	AppStatus,
+	GridConfig,
+	Tile,
+	Stack,
+	LayerVisibility,
+	TileOrder,
+	VoxelRigConfig,
+	ProfileConfig,
+	ChannelConfig
+} from './types';
 import { parseVec2D } from './types';
 import { PreviewState } from './preview.svelte';
+import { Workflow } from './workflow.svelte';
 import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
@@ -18,7 +29,8 @@ export class Session {
 	readonly client!: Client;
 	readonly config!: VoxelRigConfig;
 	readonly devices!: DevicesManager;
-	readonly previewState!: PreviewState;
+	readonly preview!: PreviewState;
+	readonly workflow!: Workflow;
 	readonly stage!: Stage;
 
 	#appStatus = $state<AppStatus>();
@@ -38,10 +50,9 @@ export class Session {
 	stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
 	tileOrder = $derived<TileOrder>(this.#appStatus?.session?.tile_order ?? 'snake_row');
 	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
-	workflowSteps = $derived<WorkflowStepConfig[]>(this.#appStatus?.session?.workflow_steps ?? []);
 
 	activeProfileConfig = $derived<ProfileConfig | null>(
-		this.activeProfileId ? this.config.profiles[this.activeProfileId] ?? null : null
+		this.activeProfileId ? (this.config.profiles[this.activeProfileId] ?? null) : null
 	);
 
 	activeChannels = $derived.by(() => {
@@ -102,7 +113,8 @@ export class Session {
 		this.#appStatus = init.status;
 
 		this.devices = new DevicesManager(init.client);
-		this.previewState = new PreviewState(init.client, {
+		this.workflow = new Workflow(init.client);
+		this.preview = new PreviewState(init.client, {
 			channels: init.config.channels,
 			profiles: init.config.profiles
 		});
@@ -136,7 +148,8 @@ export class Session {
 	}
 
 	destroy(): void {
-		this.previewState.shutdown();
+		this.workflow.destroy();
+		this.preview.destroy();
 		this.devices.destroy();
 	}
 
@@ -238,16 +251,6 @@ export class Session {
 		this.client.send({ topic: 'stacks/remove', payload: { positions } });
 	}
 
-	// --- Workflow ---
-
-	workflowNext(): void {
-		this.client.send({ topic: 'workflow/next' });
-	}
-
-	workflowReopen(stepId: string): void {
-		this.client.send({ topic: 'workflow/reopen', payload: { step_id: stepId } });
-	}
-
 	// --- Selection ---
 
 	#getSelectedTiles(): Tile[] {
@@ -333,5 +336,4 @@ export class Session {
 		const lowerLimit = axis === 'x' ? this.stage.x.lowerLimit : this.stage.y.lowerLimit;
 		return lowerLimit + offset + gridCell * spacing;
 	}
-
 }

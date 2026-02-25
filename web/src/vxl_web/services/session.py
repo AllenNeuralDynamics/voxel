@@ -46,6 +46,7 @@ class SessionStatus(BaseModel):
     session_dir: str
     grid_locked: bool
     workflow_steps: list[WorkflowStepConfig]
+    workflow_committed: str | None
 
     # Full data (replaces separate broadcasts)
     grid_config: GridConfig
@@ -89,6 +90,7 @@ class SessionService:
             session_dir=str(self.session.session_dir),
             grid_locked=self.session.grid_locked,
             workflow_steps=self.session.workflow_steps,
+            workflow_committed=self.session.workflow_committed,
             grid_config=self.session.grid_config,
             tile_order=self.session.tile_order,
             tiles=tiles,
