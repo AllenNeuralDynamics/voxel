@@ -184,7 +184,7 @@
 							bind:this={bottomPane}
 							collapsible
 							collapsedSize={0}
-							defaultSize={40}
+							defaultSize={30}
 							minSize={30}
 							maxSize={50}
 							onCollapse={() => {}}

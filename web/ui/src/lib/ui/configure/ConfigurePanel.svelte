@@ -14,10 +14,7 @@
 	const config = $derived(session.config);
 	const daqDeviceId = $derived(config.daq.device);
 
-	type NavTarget =
-		| { type: 'device'; id: string }
-		| { type: 'channels' }
-		| { type: 'profile'; id: string };
+	type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id: string };
 
 	let activeNav = $state<NavTarget>({ type: 'channels' });
 
@@ -53,9 +50,7 @@
 		<!-- Profiles -->
 		<Collapsible.Root open>
 			<Collapsible.Trigger class="group flex w-full items-center justify-between px-2 py-1">
-				<span class="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">
-					Profiles
-				</span>
+				<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"> Profiles </span>
 				<Icon
 					icon="mdi:chevron-right"
 					width="12"
@@ -78,9 +73,7 @@
 
 		<!-- Devices -->
 		<div>
-			<h3 class="mb-1 px-2 text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">
-				Devices
-			</h3>
+			<h3 class="mb-1 px-2 text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Devices</h3>
 			<nav class="space-y-0.5">
 				{#each [...session.devices.devices] as [id, device] (id)}
 					<button onclick={() => (activeNav = { type: 'device', id })} class={navClass({ type: 'device', id })}>
@@ -103,12 +96,10 @@
 		{#if activeNav.type === 'channels'}
 			<!-- Channel cards -->
 			<section>
-				<h3 class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-					Channels
-				</h3>
-				<div class="grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+				<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Channels</h3>
+				<div class="grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
 					{#each Object.entries(config.channels) as [channelId, channel] (channelId)}
-						<div class="rounded-lg border bg-card text-card-foreground shadow-sm p-3 text-xs">
+						<div class="rounded-lg border bg-card p-3 text-xs text-card-foreground shadow-sm">
 							<div class="mb-2 flex items-center gap-2">
 								{#if channel.emission}
 									<span
@@ -145,9 +136,7 @@
 		{:else if activeNav.type === 'device'}
 			{#if activeNav.id === daqDeviceId}
 				<section>
-					<h3 class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-						Acquisition Ports
-					</h3>
+					<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Acquisition Ports</h3>
 					<div class="space-y-1">
 						{#each Object.entries(config.daq.acq_ports) as [deviceId, port] (deviceId)}
 							<div class="flex items-center justify-between rounded px-2 py-1.5 text-xs">
