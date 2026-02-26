@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
-	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
+	import { getStackStatusColor, type Tile, type StackStatus } from '$lib/main/types';
+	import * as ContextMenu from '$lib/kit/ui/context-menu';
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
 	import StagePosition from './StagePosition.svelte';
@@ -193,26 +194,6 @@
 		}
 	}
 
-	function handleTileMove(e: MouseEvent, tile: Tile) {
-		if (e.button !== 1) return;
-		e.preventDefault();
-		moveToTilePosition(tile.x_um, tile.y_um);
-	}
-
-	function handleStackSelect(e: MouseEvent, stack: Stack) {
-		if (e.ctrlKey || e.metaKey) {
-			if (session.isTileSelected(stack.row, stack.col)) session.removeFromSelection([[stack.row, stack.col]]);
-			else session.addToSelection([[stack.row, stack.col]]);
-		} else {
-			session.selectTiles([[stack.row, stack.col]]);
-		}
-	}
-
-	function handleStackMove(e: MouseEvent, stack: Stack) {
-		if (e.button !== 1) return;
-		e.preventDefault();
-		moveToTilePosition(stack.x_um, stack.y_um);
-	}
 
 	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
 		if (e.key === 'Enter' || e.key === ' ') {
@@ -231,6 +212,87 @@
 		icon: string;
 		title: string;
 	};
+
+	// ── Context menu ────────────────────────────────────────────────────
+
+	type ContextTarget = { kind: 'tile'; tile: Tile } | { kind: 'empty'; x: number; y: number } | null;
+
+	let contextTarget = $state<ContextTarget>(null);
+	let zRangeBuffer = $state<{ zStartUm: number; zEndUm: number } | null>(null);
+	let svgRef = $state<SVGSVGElement | null>(null);
+
+	let contextTile = $derived(contextTarget?.kind === 'tile' ? contextTarget.tile : null);
+	let contextStack = $derived(contextTile ? session.getStack(contextTile.row, contextTile.col) : null);
+	let isMultiSelection = $derived(session.selectedTiles.length > 1);
+	// Derived: how many selected tiles have/lack stacks
+	let selectedWithStacks = $derived(session.selectedTiles.filter((t) => session.getStack(t.row, t.col)).length);
+	let selectedWithoutStacks = $derived(session.selectedTiles.length - selectedWithStacks);
+
+	const STACK_STATUSES: StackStatus[] = ['planned', 'completed', 'failed', 'skipped'];
+
+	function handleTileContext(e: MouseEvent, tile: Tile) {
+		if (!session.isTileSelected(tile.row, tile.col)) {
+			session.selectTiles([[tile.row, tile.col]]);
+		}
+		contextTarget = { kind: 'tile', tile };
+	}
+
+	function handleCanvasContext(e: MouseEvent) {
+		if (e.target !== svgRef) return;
+		if (!svgRef || !session.stage.x || !session.stage.y) return;
+		const ctm = svgRef.getScreenCTM()?.inverse();
+		if (!ctm) return;
+		const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm);
+		contextTarget = {
+			kind: 'empty',
+			x: session.stage.x.lowerLimit + pt.x,
+			y: session.stage.y.lowerLimit + pt.y
+		};
+	}
+
+	function contextMoveHere() {
+		if (isXYMoving) return;
+		if (contextTarget?.kind === 'tile') {
+			moveToTilePosition(contextTarget.tile.x_um, contextTarget.tile.y_um);
+		} else if (contextTarget?.kind === 'empty') {
+			const [cx, cy] = clampToStageLimits(contextTarget.x, contextTarget.y);
+			targetX = cx;
+			targetY = cy;
+			session.stage.moveXY(cx, cy);
+		}
+	}
+
+	function contextAddStack() {
+		const tiles = session.selectedTiles.filter((t) => !session.getStack(t.row, t.col));
+		if (tiles.length === 0) return;
+		session.addStacks(
+			tiles.map((t) => ({
+				row: t.row,
+				col: t.col,
+				zStartUm: session.gridConfig.default_z_start_um,
+				zEndUm: session.gridConfig.default_z_end_um
+			}))
+		);
+	}
+
+	function contextDeleteStack() {
+		const tiles = session.selectedTiles.filter((t) => session.getStack(t.row, t.col));
+		if (tiles.length === 0) return;
+		session.removeStacks(tiles.map((t) => ({ row: t.row, col: t.col })));
+	}
+
+	function contextCopyZRange() {
+		if (!contextStack) return;
+		zRangeBuffer = { zStartUm: contextStack.z_start_um, zEndUm: contextStack.z_end_um };
+	}
+
+	function contextPasteZRange() {
+		if (!zRangeBuffer) return;
+		const edits = session.selectedTiles
+			.filter((t) => session.getStack(t.row, t.col))
+			.map((t) => ({ row: t.row, col: t.col, zStartUm: zRangeBuffer!.zStartUm, zEndUm: zRangeBuffer!.zEndUm }));
+		if (edits.length > 0) session.editStacks(edits);
+	}
 </script>
 
 {#snippet layerToggle(
@@ -294,8 +356,8 @@
 					class:cursor-not-allowed={isXYMoving}
 					role="button"
 					tabindex={isXYMoving ? -1 : 0}
-					onclick={(e) => handleStackSelect(e, stack)}
-					onauxclick={(e) => handleStackMove(e, stack)}
+					onclick={(e) => handleTileSelect(e, stack)}
+					oncontextmenu={(e) => handleTileContext(e, stack)}
 					onkeydown={(e) => handleKeydown(e, () => session.selectTiles([[stack.row, stack.col]]))}
 				>
 					<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
@@ -392,7 +454,7 @@
 		role="button"
 		tabindex={isXYMoving ? -1 : 0}
 		onclick={(e) => handleTileSelect(e, tile)}
-		onauxclick={(e) => handleTileMove(e, tile)}
+		oncontextmenu={(e) => handleTileContext(e, tile)}
 		onkeydown={(e) => handleKeydown(e, () => session.selectTiles([[tile.row, tile.col]]))}
 	>
 		<title>Tile [{tile.row}, {tile.col}]</title>
@@ -454,17 +516,115 @@
 						`grid-column: 1; grid-row: 2; width: ${SLIDER_WIDTH}px; height: ${stagePixelsY}px; margin-top: ${marginPixelsY}px; transform: translateX(0.5px);`
 					)}
 
-					<svg
-						viewBox={viewBoxStr}
-						class="border border-zinc-700"
-						style="grid-column: 2; grid-row: 2; width: {canvasWidth}px; height: {canvasHeight}px;"
-						overflow="visible"
-					>
-						{@render fovLayer()}
-						{@render gridLayer()}
-						{@render stacksLayer()}
-						{@render pathLayer()}
-					</svg>
+					<ContextMenu.Root>
+						<ContextMenu.Trigger style="grid-column: 2; grid-row: 2;">
+							<svg
+								bind:this={svgRef}
+								viewBox={viewBoxStr}
+								class="border border-zinc-700"
+								style="width: {canvasWidth}px; height: {canvasHeight}px;"
+								overflow="visible"
+								role="img"
+								oncontextmenu={handleCanvasContext}
+							>
+								{@render fovLayer()}
+								{@render gridLayer()}
+								{@render stacksLayer()}
+								{@render pathLayer()}
+							</svg>
+						</ContextMenu.Trigger>
+
+						<ContextMenu.Content class="min-w-44">
+								<ContextMenu.Item disabled={isXYMoving} onSelect={contextMoveHere}>
+									Move here
+								</ContextMenu.Item>
+
+								{#if contextTile}
+									<ContextMenu.Separator />
+									<ContextMenu.Item onSelect={() => session.selectRow(contextTile!.row)}>
+										Select row {contextTile.row}
+									</ContextMenu.Item>
+									<ContextMenu.Item onSelect={() => session.selectColumn(contextTile!.col)}>
+										Select column {contextTile.col}
+									</ContextMenu.Item>
+								{/if}
+
+								<ContextMenu.Separator />
+								<ContextMenu.Item onSelect={() => session.selectAll()}>Select all</ContextMenu.Item>
+								{#if session.selectedTiles.length > 0}
+									<ContextMenu.Item onSelect={() => session.clearSelection()}>
+										Deselect all
+									</ContextMenu.Item>
+								{/if}
+								<ContextMenu.Item onSelect={() => session.invertSelection()}>
+									Invert selection
+								</ContextMenu.Item>
+
+								{#if !contextTile}
+									{#if session.stacks.length > 0 || session.tiles.length > 0}
+										<ContextMenu.Separator />
+									{/if}
+									{#if session.stacks.length > 0}
+										<ContextMenu.Item onSelect={() => session.selectWithStacks()}>
+											Select with stacks
+										</ContextMenu.Item>
+									{/if}
+									{#if session.tiles.length > 0}
+										<ContextMenu.Item onSelect={() => session.selectWithoutStacks()}>
+											Select without stacks
+										</ContextMenu.Item>
+									{/if}
+									{#if session.stacks.length > 0}
+										<ContextMenu.Sub>
+											<ContextMenu.SubTrigger>Select by status</ContextMenu.SubTrigger>
+											<ContextMenu.SubContent>
+												{#each STACK_STATUSES as status (status)}
+													<ContextMenu.Item onSelect={() => session.selectByStackStatus(status)}>
+														{status[0].toUpperCase() + status.slice(1)}
+													</ContextMenu.Item>
+												{/each}
+											</ContextMenu.SubContent>
+										</ContextMenu.Sub>
+									{/if}
+								{/if}
+
+								{#if contextTile}
+									<ContextMenu.Separator />
+
+									{#if !isMultiSelection}
+										{#if !contextStack}
+											<ContextMenu.Item onSelect={contextAddStack}>Add stack</ContextMenu.Item>
+										{:else}
+											<ContextMenu.Item onSelect={contextCopyZRange}>Copy Z range</ContextMenu.Item>
+											{#if zRangeBuffer}
+												<ContextMenu.Item onSelect={contextPasteZRange}>
+													Paste Z range
+												</ContextMenu.Item>
+											{/if}
+											<ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>
+												Delete stack
+											</ContextMenu.Item>
+										{/if}
+									{:else}
+										{#if selectedWithoutStacks > 0}
+											<ContextMenu.Item onSelect={contextAddStack}>
+												Add stacks to selected ({selectedWithoutStacks})
+											</ContextMenu.Item>
+										{/if}
+										{#if zRangeBuffer && selectedWithStacks > 0}
+											<ContextMenu.Item onSelect={contextPasteZRange}>
+												Paste Z range ({selectedWithStacks})
+											</ContextMenu.Item>
+										{/if}
+										{#if selectedWithStacks > 0}
+											<ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>
+												Delete selected stacks ({selectedWithStacks})
+											</ContextMenu.Item>
+										{/if}
+									{/if}
+								{/if}
+							</ContextMenu.Content>
+					</ContextMenu.Root>
 				</div>
 
 				<div
@@ -513,7 +673,7 @@
 							class="nss z-line"
 							class:moving={isZMoving}
 							stroke-width="1"
-							stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success'}
+							stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
 						>
 							<title>Z: {session.stage.z?.position.toFixed(1)} mm</title>
 						</line>

@@ -87,6 +87,10 @@
 {#if app?.session}
 	{@const session = app.session}
 	{@const workflow = session.workflow}
+	{@const tabClasses = cn(
+		'flex gap-1 items-center justify-center rounded-xl border border-border',
+		'px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors'
+	)}
 	<div class="h-screen w-full bg-background text-foreground">
 		<PaneGroup direction="horizontal" autoSaveId="main-h">
 			<Pane defaultSize={55} minSize={50} maxSize={70}>
@@ -97,22 +101,25 @@
 						<div class="flex flex-1 items-center gap-3">
 							<button
 								onclick={() => toggleView('configure')}
-								class="flex items-center justify-center rounded transition-colors {viewId === 'configure'
-									? 'text-foreground'
-									: 'text-muted-foreground hover:text-foreground'}"
+								class={cn(
+									tabClasses,
+									viewId === 'configure' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
+								)}
 								title="Configure"
 							>
-								<Icon icon="mdi:cog" width="16" height="16" />
+								<Icon icon="mdi:cog" width="16" height="16" /> Configure
 							</button>
 							<WorkflowTabs {workflow} bind:viewId class="max-w-96 min-w-88" />
 							<button
 								onclick={() => toggleView('acquire')}
-								class="flex items-center justify-center rounded transition-colors {viewId === 'acquire'
-									? 'text-foreground'
-									: 'text-muted-foreground hover:text-foreground'}"
+								class={cn(
+									tabClasses,
+									viewId === 'acquire' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
+								)}
 								title="Acquire"
 							>
 								<Icon icon="mdi:play-circle-outline" width="16" height="16" />
+								Acquire
 							</button>
 						</div>
 						<div class="flex items-center gap-4">

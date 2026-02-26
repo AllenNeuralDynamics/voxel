@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ContextMenu } from 'bits-ui';
+	import * as ContextMenu from '$lib/kit/ui/context-menu';
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
 	import Icon from '@iconify/svelte';
@@ -430,47 +430,25 @@
 		>
 			{@render histSvg()}
 		</ContextMenu.Trigger>
-		<ContextMenu.Portal>
-			<ContextMenu.Content
-				class="z-50 min-w-36 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-xl outline-none"
-				side="top"
-				align="start"
+		<ContextMenu.Content class="min-w-36" side="top" align="start">
+			<ContextMenu.Item onSelect={autoLevels} disabled={!hasValidData}>Auto Levels</ContextMenu.Item>
+			<ContextMenu.Item onSelect={autoFit} disabled={!hasValidData}>Auto Fit</ContextMenu.Item>
+			<ContextMenu.Separator />
+			<ContextMenu.Item
+				onSelect={() => {
+					windowMin = 0;
+					windowMax = dataTypeMax;
+				}}
 			>
-				<ContextMenu.Item
-					class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none disabled:pointer-events-none disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-					onSelect={autoLevels}
-					disabled={!hasValidData}
-				>
-					Auto Levels
+				Reset Window
+			</ContextMenu.Item>
+			{#if onVisibilityChange}
+				<ContextMenu.Separator />
+				<ContextMenu.Item onSelect={() => onVisibilityChange?.(!visible)}>
+					{visible ? 'Hide' : 'Show'} Channel
 				</ContextMenu.Item>
-				<ContextMenu.Item
-					class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none disabled:pointer-events-none disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-					onSelect={autoFit}
-					disabled={!hasValidData}
-				>
-					Auto Fit
-				</ContextMenu.Item>
-				<ContextMenu.Separator class="my-1 h-px bg-border" />
-				<ContextMenu.Item
-					class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-					onSelect={() => {
-						windowMin = 0;
-						windowMax = dataTypeMax;
-					}}
-				>
-					Reset Window
-				</ContextMenu.Item>
-				{#if onVisibilityChange}
-					<ContextMenu.Separator class="my-1 h-px bg-border" />
-					<ContextMenu.Item
-						class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-xs outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-						onSelect={() => onVisibilityChange?.(!visible)}
-					>
-						{visible ? 'Hide' : 'Show'} Channel
-					</ContextMenu.Item>
-				{/if}
-			</ContextMenu.Content>
-		</ContextMenu.Portal>
+			{/if}
+		</ContextMenu.Content>
 	</ContextMenu.Root>
 
 	<!-- Window Range + Label -->

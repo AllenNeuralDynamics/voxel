@@ -5,6 +5,7 @@ import type {
 	GridConfig,
 	Tile,
 	Stack,
+	StackStatus,
 	LayerVisibility,
 	TileOrder,
 	VoxelRigConfig,
@@ -290,6 +291,44 @@ export class Session {
 
 	clearSelection(): void {
 		this.#selection.clear();
+	}
+
+	selectAll(): void {
+		this.selectTiles(this.tiles.map((t) => [t.row, t.col]));
+	}
+
+	invertSelection(): void {
+		const inverted: [number, number][] = [];
+		for (const t of this.tiles) {
+			if (!this.isTileSelected(t.row, t.col)) inverted.push([t.row, t.col]);
+		}
+		this.selectTiles(inverted);
+	}
+
+	selectRow(row: number): void {
+		this.selectTiles(this.tiles.filter((t) => t.row === row).map((t) => [t.row, t.col]));
+	}
+
+	selectColumn(col: number): void {
+		this.selectTiles(this.tiles.filter((t) => t.col === col).map((t) => [t.row, t.col]));
+	}
+
+	selectWithStacks(): void {
+		const stackPositions = new SvelteSet(this.stacks.map((s) => `${s.row},${s.col}`));
+		this.selectTiles(this.tiles.filter((t) => stackPositions.has(`${t.row},${t.col}`)).map((t) => [t.row, t.col]));
+	}
+
+	selectWithoutStacks(): void {
+		const stackPositions = new SvelteSet(this.stacks.map((s) => `${s.row},${s.col}`));
+		this.selectTiles(this.tiles.filter((t) => !stackPositions.has(`${t.row},${t.col}`)).map((t) => [t.row, t.col]));
+	}
+
+	selectByStackStatus(status: StackStatus): void {
+		this.selectTiles(this.stacks.filter((s) => s.status === status).map((s) => [s.row, s.col]));
+	}
+
+	getStack(row: number, col: number): Stack | undefined {
+		return this.stacks.find((s) => s.row === row && s.col === col);
 	}
 
 	moveToGridCell(row: number, col: number): void {

@@ -2,22 +2,22 @@
 	import { tv, type VariantProps } from 'tailwind-variants';
 
 	export const workflowTabsVariants = tv({
-		base: 'flex items-center rounded-lg border border-border'
+		base: 'flex items-center  border border-border rounded-3xl'
 	});
 
 	export type WorkflowTabsVariants = VariantProps<typeof workflowTabsVariants>;
 
 	const tabVariants = tv({
-		base: 'flex flex-1 items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-wide transition-colors',
+		base: 'flex flex-1 items-center gap-2 px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors text-muted-foreground rounded-xl transition-colors',
 		variants: {
 			viewing: {
-				true: 'bg-muted font-medium',
+				true: 'bg-muted font-medium text-foreground',
 				false: ''
 			},
 			state: {
-				committed: 'text-foreground',
-				active: 'text-foreground',
-				pending: 'text-muted-foreground'
+				committed: '',
+				active: '',
+				pending: ''
 			}
 		},
 		defaultVariants: {
@@ -56,7 +56,7 @@
 		disabled={!workflow.canGoBack}
 		onclick={handleBack}
 		class={cn(
-			'flex items-center justify-center border-r border-border px-2 py-1.5 text-muted-foreground transition-colors',
+			'flex items-center justify-center border-r border-transparent px-2 py-1.5 text-muted-foreground transition-colors',
 			!workflow.canGoBack ? 'cursor-not-allowed opacity-40' : 'hover:bg-muted hover:text-foreground'
 		)}
 		title="Re-open previous step"
@@ -65,14 +65,17 @@
 	</button>
 	{#each workflow.steps as step (step.id)}
 		{@const state = workflow.stepStates[step.id]}
-		<button onclick={() => (viewId = step.id)} class={cn(tabVariants({ viewing: viewId === step.id, state }), 'cursor-pointer hover:text-foreground')}>
+		<button
+			onclick={() => (viewId = step.id)}
+			class={cn(tabVariants({ viewing: viewId === step.id, state }), 'cursor-pointer hover:text-foreground')}
+		>
 			<span
 				class={cn(
 					'flex h-3 w-3 items-center justify-center rounded-full border transition-colors',
 					state === 'committed'
 						? 'border-success bg-success text-white'
 						: state === 'active'
-							? 'border-foreground/50'
+							? 'border-success'
 							: 'border-muted-foreground/30'
 				)}
 			>
@@ -87,7 +90,7 @@
 		disabled={!workflow.canAdvance}
 		onclick={handleNext}
 		class={cn(
-			'flex items-center justify-center border-l border-border px-2 py-1.5 text-muted-foreground transition-colors',
+			'flex items-center justify-center border-l border-transparent px-2 py-1.5 text-muted-foreground transition-colors',
 			!workflow.canAdvance ? 'cursor-not-allowed opacity-40' : 'hover:bg-muted hover:text-foreground'
 		)}
 		title="Commit step and advance"
