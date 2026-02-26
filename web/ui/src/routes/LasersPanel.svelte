@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { POWER_HISTORY_MAX, type Session, type Laser } from '$lib/main';
 	import type { ChannelConfig } from '$lib/main/types';
-	import Switch from '$lib/ui/primitives/Switch.svelte';
-	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
-	import Slider from '$lib/ui/primitives/Slider.svelte';
+	import Switch from '$lib/ui/kit/Switch.svelte';
+	import SpinBox from '$lib/ui/kit/SpinBox.svelte';
+	import Slider from '$lib/ui/kit/Slider.svelte';
 	import { InformationOutline, Power } from '$lib/icons';
 	import { Popover } from 'bits-ui';
 

@@ -82,7 +82,7 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
 			const phase = waveform.phase ?? 0;
 			const val = Math.sin(2 * Math.PI * freq * tWindow + phase);
 			// Map [-1, 1] → [vMin, vMax]
-			return vMin + (vMax - vMin) * (val + 1) / 2;
+			return vMin + ((vMax - vMin) * (val + 1)) / 2;
 		}
 
 		case 'triangle': {

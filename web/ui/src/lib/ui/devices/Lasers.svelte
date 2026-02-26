@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
-	import Switch from '$lib/ui/primitives/Switch.svelte';
+	import Switch from '$lib/ui/kit/Switch.svelte';
 	import { Power } from '$lib/icons';
 
 	interface Props {
@@ -42,10 +42,7 @@
 						<span class="text-xs text-muted-foreground">{laser.powerMw.toFixed(1)} mW</span>
 					{/if}
 				</div>
-				<Switch
-					checked={laser.isEnabled}
-					onCheckedChange={() => laser.toggle()}
-				/>
+				<Switch checked={laser.isEnabled} onCheckedChange={() => laser.toggle()} />
 			</div>
 		{/each}
 		{#if Object.keys(session.lasers).length === 0}

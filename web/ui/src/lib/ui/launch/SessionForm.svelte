@@ -1,9 +1,8 @@
 <script lang="ts">
 	import type { SessionRoot, JsonSchema, JsonSchemaProperty } from '$lib/main';
-	import { Button, Field, Select, SpinBox, TextInput } from '$lib/ui/primitives';
+	import { Button, Field, Select, SpinBox, TextInput } from '$lib/ui/kit';
 	import { sanitizeString } from '$lib/utils';
 	import { Plus, Close, ContentSaveOutline, RocketLaunchOutline } from '$lib/icons';
-	import type { Component } from 'svelte';
 
 	interface Props {
 		roots: SessionRoot[];
@@ -261,7 +260,7 @@
 			<span>{editing ? 'Saving...' : 'Creating...'}</span>
 		{:else}
 			{@const SubmitIcon = editing ? ContentSaveOutline : RocketLaunchOutline}
-		<SubmitIcon width="16" height="16" />
+			<SubmitIcon width="16" height="16" />
 			<span>{editing ? 'Save' : 'Create'}</span>
 		{/if}
 	</Button>

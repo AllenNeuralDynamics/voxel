@@ -8,10 +8,12 @@
 
 	let { session }: Props = $props();
 
-	const activeProfileLabel = $derived((() => {
-		const p = session.activeProfileConfig;
-		return p ? (p.label ?? p.desc ?? sanitizeString(session.activeProfileId ?? '')) : 'No profile';
-	})());
+	const activeProfileLabel = $derived(
+		(() => {
+			const p = session.activeProfileConfig;
+			return p ? (p.label ?? p.desc ?? sanitizeString(session.activeProfileId ?? '')) : 'No profile';
+		})()
+	);
 </script>
 
 <div class="h-full overflow-auto bg-card p-4">
@@ -51,9 +53,7 @@
 			<span>Grid locked</span>
 			<span class="text-foreground">{session.gridLocked ? 'Yes' : 'No'}</span>
 			<span>FOV</span>
-			<span class="text-foreground"
-				>{session.fov.width.toFixed(2)} x {session.fov.height.toFixed(2)} mm</span
-			>
+			<span class="text-foreground">{session.fov.width.toFixed(2)} x {session.fov.height.toFixed(2)} mm</span>
 		</div>
 	</div>
 </div>

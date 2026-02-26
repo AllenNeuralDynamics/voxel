@@ -14,6 +14,7 @@ export { default as Close } from '~icons/mdi/close';
 export { default as Cog } from '~icons/mdi/cog';
 export { default as ContentSaveOutline } from '~icons/mdi/content-save-outline';
 export { default as DeleteOutline } from '~icons/mdi/delete-outline';
+export { default as Eye } from '~icons/mdi/eye';
 export { default as EyeOff } from '~icons/mdi/eye-off';
 export { default as FilterVariant } from '~icons/mdi/filter-variant';
 export { default as FolderOpenOutline } from '~icons/mdi/folder-open-outline';

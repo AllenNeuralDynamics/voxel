@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type Tile, type StackStatus } from '$lib/main/types';
-	import * as ContextMenu from '$lib/kit/ui/context-menu';
+	import { ContextMenu } from '$lib/ui/kit';
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
 	import StagePosition from './StagePosition.svelte';
@@ -194,7 +194,6 @@
 			session.selectTiles([[tile.row, tile.col]]);
 		}
 	}
-
 
 	function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
 		if (e.key === 'Enter' || e.key === ' ') {
@@ -536,95 +535,85 @@
 						</ContextMenu.Trigger>
 
 						<ContextMenu.Content class="min-w-44">
-								<ContextMenu.Item disabled={isXYMoving} onSelect={contextMoveHere}>
-									Move here
-								</ContextMenu.Item>
+							<ContextMenu.Item disabled={isXYMoving} onSelect={contextMoveHere}>Move here</ContextMenu.Item>
 
-								{#if contextTile}
-									<ContextMenu.Separator />
-									<ContextMenu.Item onSelect={() => session.selectRow(contextTile!.row)}>
-										Select row {contextTile.row}
-									</ContextMenu.Item>
-									<ContextMenu.Item onSelect={() => session.selectColumn(contextTile!.col)}>
-										Select column {contextTile.col}
-									</ContextMenu.Item>
-								{/if}
-
+							{#if contextTile}
 								<ContextMenu.Separator />
-								<ContextMenu.Item onSelect={() => session.selectAll()}>Select all</ContextMenu.Item>
-								{#if session.selectedTiles.length > 0}
-									<ContextMenu.Item onSelect={() => session.clearSelection()}>
-										Deselect all
+								<ContextMenu.Item onSelect={() => session.selectRow(contextTile!.row)}>
+									Select row {contextTile.row}
+								</ContextMenu.Item>
+								<ContextMenu.Item onSelect={() => session.selectColumn(contextTile!.col)}>
+									Select column {contextTile.col}
+								</ContextMenu.Item>
+							{/if}
+
+							<ContextMenu.Separator />
+							<ContextMenu.Item onSelect={() => session.selectAll()}>Select all</ContextMenu.Item>
+							{#if session.selectedTiles.length > 0}
+								<ContextMenu.Item onSelect={() => session.clearSelection()}>Deselect all</ContextMenu.Item>
+							{/if}
+							<ContextMenu.Item onSelect={() => session.invertSelection()}>Invert selection</ContextMenu.Item>
+
+							{#if !contextTile}
+								{#if session.stacks.length > 0 || session.tiles.length > 0}
+									<ContextMenu.Separator />
+								{/if}
+								{#if session.stacks.length > 0}
+									<ContextMenu.Item onSelect={() => session.selectWithStacks()}>Select with stacks</ContextMenu.Item>
+								{/if}
+								{#if session.tiles.length > 0}
+									<ContextMenu.Item onSelect={() => session.selectWithoutStacks()}>
+										Select without stacks
 									</ContextMenu.Item>
 								{/if}
-								<ContextMenu.Item onSelect={() => session.invertSelection()}>
-									Invert selection
-								</ContextMenu.Item>
-
-								{#if !contextTile}
-									{#if session.stacks.length > 0 || session.tiles.length > 0}
-										<ContextMenu.Separator />
-									{/if}
-									{#if session.stacks.length > 0}
-										<ContextMenu.Item onSelect={() => session.selectWithStacks()}>
-											Select with stacks
-										</ContextMenu.Item>
-									{/if}
-									{#if session.tiles.length > 0}
-										<ContextMenu.Item onSelect={() => session.selectWithoutStacks()}>
-											Select without stacks
-										</ContextMenu.Item>
-									{/if}
-									{#if session.stacks.length > 0}
-										<ContextMenu.Sub>
-											<ContextMenu.SubTrigger>Select by status</ContextMenu.SubTrigger>
-											<ContextMenu.SubContent>
-												{#each STACK_STATUSES as status (status)}
-													<ContextMenu.Item onSelect={() => session.selectByStackStatus(status)}>
-														{status[0].toUpperCase() + status.slice(1)}
-													</ContextMenu.Item>
-												{/each}
-											</ContextMenu.SubContent>
-										</ContextMenu.Sub>
-									{/if}
-								{/if}
-
-								{#if contextTile}
-									<ContextMenu.Separator />
-
-									{#if !isMultiSelection}
-										{#if !contextStack}
-											<ContextMenu.Item onSelect={contextAddStack}>Add stack</ContextMenu.Item>
-										{:else}
-											<ContextMenu.Item onSelect={contextCopyZRange}>Copy Z range</ContextMenu.Item>
-											{#if zRangeBuffer}
-												<ContextMenu.Item onSelect={contextPasteZRange}>
-													Paste Z range
+								{#if session.stacks.length > 0}
+									<ContextMenu.Sub>
+										<ContextMenu.SubTrigger>Select by status</ContextMenu.SubTrigger>
+										<ContextMenu.SubContent>
+											{#each STACK_STATUSES as status (status)}
+												<ContextMenu.Item onSelect={() => session.selectByStackStatus(status)}>
+													{status[0].toUpperCase() + status.slice(1)}
 												</ContextMenu.Item>
-											{/if}
-											<ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>
-												Delete stack
-											</ContextMenu.Item>
-										{/if}
+											{/each}
+										</ContextMenu.SubContent>
+									</ContextMenu.Sub>
+								{/if}
+							{/if}
+
+							{#if contextTile}
+								<ContextMenu.Separator />
+
+								{#if !isMultiSelection}
+									{#if !contextStack}
+										<ContextMenu.Item onSelect={contextAddStack}>Add stack</ContextMenu.Item>
 									{:else}
-										{#if selectedWithoutStacks > 0}
-											<ContextMenu.Item onSelect={contextAddStack}>
-												Add stacks to selected ({selectedWithoutStacks})
-											</ContextMenu.Item>
+										<ContextMenu.Item onSelect={contextCopyZRange}>Copy Z range</ContextMenu.Item>
+										{#if zRangeBuffer}
+											<ContextMenu.Item onSelect={contextPasteZRange}>Paste Z range</ContextMenu.Item>
 										{/if}
-										{#if zRangeBuffer && selectedWithStacks > 0}
-											<ContextMenu.Item onSelect={contextPasteZRange}>
-												Paste Z range ({selectedWithStacks})
-											</ContextMenu.Item>
-										{/if}
-										{#if selectedWithStacks > 0}
-											<ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>
-												Delete selected stacks ({selectedWithStacks})
-											</ContextMenu.Item>
-										{/if}
+										<ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>
+											Delete stack
+										</ContextMenu.Item>
+									{/if}
+								{:else}
+									{#if selectedWithoutStacks > 0}
+										<ContextMenu.Item onSelect={contextAddStack}>
+											Add stacks to selected ({selectedWithoutStacks})
+										</ContextMenu.Item>
+									{/if}
+									{#if zRangeBuffer && selectedWithStacks > 0}
+										<ContextMenu.Item onSelect={contextPasteZRange}>
+											Paste Z range ({selectedWithStacks})
+										</ContextMenu.Item>
+									{/if}
+									{#if selectedWithStacks > 0}
+										<ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>
+											Delete selected stacks ({selectedWithStacks})
+										</ContextMenu.Item>
 									{/if}
 								{/if}
-							</ContextMenu.Content>
+							{/if}
+						</ContextMenu.Content>
 					</ContextMenu.Root>
 				</div>
 

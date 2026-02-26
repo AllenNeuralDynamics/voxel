@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Session, Camera } from '$lib/main';
-	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
-	import Select from '$lib/ui/primitives/Select.svelte';
-	import { Button, Checkbox } from '$lib/ui/primitives';
+	import SpinBox from '$lib/ui/kit/SpinBox.svelte';
+	import Select from '$lib/ui/kit/Select.svelte';
+	import { Button, Checkbox } from '$lib/ui/kit';
 	import { ChevronRight } from '$lib/icons';
 	import { SvelteSet } from 'svelte/reactivity';
 

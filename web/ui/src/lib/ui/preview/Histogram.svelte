@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as ContextMenu from '$lib/kit/ui/context-menu';
+	import { ContextMenu } from '$lib/ui/kit';
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
 	import { EyeOff } from '$lib/icons';
@@ -377,7 +377,15 @@
 
 			<!-- Dimming outside range -->
 			<rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
-			<rect x={maxHandleX} y="0" width={svgWidth - maxHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
+			<rect
+				x={maxHandleX}
+				y="0"
+				width={svgWidth - maxHandleX}
+				height={svgHeight}
+				fill="black"
+				opacity="0.4"
+				pointer-events="none"
+			/>
 		</svg>
 	{:else}
 		<div class="flex items-center justify-center" style:height="{svgHeight}px">
@@ -386,11 +394,7 @@
 	{/if}
 {/snippet}
 
-<div
-	class="relative flex flex-col"
-	bind:clientWidth={columnWidth}
-	style:--label-width="{labelWidth}px"
->
+<div class="relative flex flex-col" bind:clientWidth={columnWidth} style:--label-width="{labelWidth}px">
 	{#if visible === false && onVisibilityChange}
 		<div class="absolute inset-0 z-10 flex items-center justify-center bg-black/50">
 			<button

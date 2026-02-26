@@ -81,9 +81,7 @@
 								{#each channelFrameInfos as channel (channel.name)}
 									<div class="flex justify-between gap-2">
 										<span class="text-muted-foreground">{channel.label ?? channel.name}</span>
-										<span class="text-right"
-											>{channel.frameInfo.full_width} × {channel.frameInfo.full_height}</span
-										>
+										<span class="text-right">{channel.frameInfo.full_width} × {channel.frameInfo.full_height}</span>
 									</div>
 								{/each}
 							</div>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
-	import { SpinBox } from '$lib/ui/primitives';
+	import { SpinBox } from '$lib/ui/kit';
 
 	interface Props {
 		session: Session;

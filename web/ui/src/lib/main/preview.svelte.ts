@@ -377,11 +377,14 @@ export class PreviewState {
 			this.#cropLastSent = now;
 			this.#client.updateCrop(crop.x, crop.y, crop.k);
 		} else {
-			this.#cropUpdateTimer = window.setTimeout(() => {
-				this.#cropLastSent = Date.now();
-				this.#client.updateCrop(crop.x, crop.y, crop.k);
-				this.#cropUpdateTimer = null;
-			}, this.#THROTTLE_MS - (now - this.#cropLastSent));
+			this.#cropUpdateTimer = window.setTimeout(
+				() => {
+					this.#cropLastSent = Date.now();
+					this.#client.updateCrop(crop.x, crop.y, crop.k);
+					this.#cropUpdateTimer = null;
+				},
+				this.#THROTTLE_MS - (now - this.#cropLastSent)
+			);
 		}
 	}
 
@@ -394,11 +397,14 @@ export class PreviewState {
 			this.#levelsLastSent.set(channelName, now);
 			this.#client.updateLevels(channelName, levels.min, levels.max);
 		} else {
-			const timer = window.setTimeout(() => {
-				this.#levelsLastSent.set(channelName, Date.now());
-				this.#client.updateLevels(channelName, levels.min, levels.max);
-				this.#levelsUpdateTimers.delete(channelName);
-			}, this.#THROTTLE_MS - (now - lastSent));
+			const timer = window.setTimeout(
+				() => {
+					this.#levelsLastSent.set(channelName, Date.now());
+					this.#client.updateLevels(channelName, levels.min, levels.max);
+					this.#levelsUpdateTimers.delete(channelName);
+				},
+				this.#THROTTLE_MS - (now - lastSent)
+			);
 			this.#levelsUpdateTimers.set(channelName, timer);
 		}
 	}

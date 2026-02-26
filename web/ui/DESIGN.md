@@ -128,11 +128,11 @@ Two complementary views, togglable:
 
 ### Workspace content per mode
 
-| | Configure | Scout | Plan | Acquire |
-|---|---|---|---|---|
-| **Primary content** | Profile editor, DAQ timing/waveforms, channel config, device health | Grid config (offset, overlap), live device tuning | Tile settings, tile order, stack config (z-range, step), stack list | Acquisition progress, controls |
-| **Key actions** | Edit profile, compose waveforms, assign channels, verify devices | Dial in live params, configure grid, bookmark positions | Select tiles, set z-range, add stacks, per-tile overrides | Start/stop, pause/abort, monitor |
-| **Settings focus** | Rig-level: microscope configuration | Profile-level: establishing defaults from live tuning | Tile-level: overrides and stack params | Read-only: effective settings |
+|                     | Configure                                                           | Scout                                                   | Plan                                                                | Acquire                          |
+| ------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------- |
+| **Primary content** | Profile editor, DAQ timing/waveforms, channel config, device health | Grid config (offset, overlap), live device tuning       | Tile settings, tile order, stack config (z-range, step), stack list | Acquisition progress, controls   |
+| **Key actions**     | Edit profile, compose waveforms, assign channels, verify devices    | Dial in live params, configure grid, bookmark positions | Select tiles, set z-range, add stacks, per-tile overrides           | Start/stop, pause/abort, monitor |
+| **Settings focus**  | Rig-level: microscope configuration                                 | Profile-level: establishing defaults from live tuning   | Tile-level: overrides and stack params                              | Read-only: effective settings    |
 
 ### Configure workspace detail
 
@@ -188,16 +188,17 @@ Sample-level exploration — "where is my sample and how does it look?"
 
 ### Viewer (right panel)
 
-| | Configure | Scout | Plan | Acquire |
-|---|---|---|---|---|
-| **GridCanvas** | Inactive or minimal — no sample context yet | Navigation mode — FOV follows stage, grid lines visible, click-to-move, bookmark pins | Selection mode — click/drag to select tiles, planned stacks as colored overlays | Progress mode — read-only, stacks colored by status, current stack highlighted |
-| **PreviewCanvas** | Optional — may show live preview for testing config | Primary — full size, all controls, live preview is main focus | Reference — still live, secondary importance | Minimal — preview paused during stack capture, shows last frame |
+|                   | Configure                                           | Scout                                                                                 | Plan                                                                            | Acquire                                                                        |
+| ----------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **GridCanvas**    | Inactive or minimal — no sample context yet         | Navigation mode — FOV follows stage, grid lines visible, click-to-move, bookmark pins | Selection mode — click/drag to select tiles, planned stacks as colored overlays | Progress mode — read-only, stacks colored by status, current stack highlighted |
+| **PreviewCanvas** | Optional — may show live preview for testing config | Primary — full size, all controls, live preview is main focus                         | Reference — still live, secondary importance                                    | Minimal — preview paused during stack capture, shows last frame                |
 
 ## Backend Changes Required
 
 ### SessionWorkflow on Session model
 
 Add `workflow: SessionWorkflow` field to `SessionConfig` and `Session`:
+
 - Enum values: `configure`, `scout`, `plan`, `acquire`
 - Default: `scout` for new sessions (auto-skip Configure on startup)
 - Persisted in `.voxel.yaml`
@@ -212,6 +213,7 @@ Backend validates transition rules before accepting.
 ### Settings hierarchy support
 
 Backend needs to support the profile → tile settings inheritance model:
+
 - **Profile settings** — already exists as profile config (channels, device params)
 - **Tile/stack overrides** — per-tile device parameter overrides (laser power, exposure, etc.)
 - Could be a `settings: dict[str, Any]` or typed override model on `Stack`
@@ -229,7 +231,6 @@ Backend has no `capture_snapshot` method. Preview frames stream but aren't persi
 
 Backend `Stack` model only stores z-range and profile_id. No per-tile laser power, exposure, or device overrides. Plan mode needs this for the profile → tile settings inheritance model. Backend model needs extension.
 
-
 ## Bottom Panel — Device & Tab Inventory
 
 ### Current tab layout
@@ -245,19 +246,20 @@ Tab selection toggles collapse: clicking the active tab collapses/expands the bo
 
 ### Tab completion status
 
-| Tab | Completeness | Summary |
-|-----|-------------|---------|
-| **Lasers** | ~95% | Gold standard. Dual-panel, power history sparklines, profile-aware grouping, quick presets, stop-all. |
-| **Waveforms** | ~85% | uPlot chart, timing sidebar, device toggle tree, cycle control. Viewer only. |
-| **Cameras** | ~80% | Multi-select batch editing, property cards, stream stats. No detail panel. |
-| **Session** | ~60% | Read-only metadata grid (config, stage, grid info). |
-| **Logs** | — | LogViewer component, not assessed. |
+| Tab           | Completeness | Summary                                                                                               |
+| ------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| **Lasers**    | ~95%         | Gold standard. Dual-panel, power history sparklines, profile-aware grouping, quick presets, stop-all. |
+| **Waveforms** | ~85%         | uPlot chart, timing sidebar, device toggle tree, cycle control. Viewer only.                          |
+| **Cameras**   | ~80%         | Multi-select batch editing, property cards, stream stats. No detail panel.                            |
+| **Session**   | ~60%         | Read-only metadata grid (config, stage, grid info).                                                   |
+| **Logs**      | —            | LogViewer component, not assessed.                                                                    |
 
 ### Lasers tab — reference implementation
 
 **Layout:** Left detail panel (384px fixed) + Right scrollable laser list.
 
 **Left panel (selected laser):**
+
 - Header: wavelength, laser color dot, device ID
 - Power setpoint: SpinBox (0–max, 1mW steps, 1 decimal)
 - Quick presets: 0% / 25% / 50% / 75% / 100% buttons
@@ -265,12 +267,14 @@ Tab selection toggles collapse: clicking the active tab collapses/expands the bo
 - Footer: current temperature (°C), channel info popover button
 
 **Right panel (laser list):**
+
 - Organized into "Active Profile [name]" and "Other Lasers" sections
 - "Stop All" button (danger, hidden when no lasers enabled)
 - Per-laser row: wavelength dot + label | power Slider (shows both setpoint and actual) | power readout | Toggle switch
 - 100ms throttled slider updates
 
 **What makes it the gold standard:**
+
 1. Dual-panel architecture — list for overview, detail panel for deep inspection
 2. Rich visual feedback — color dots, sparklines, dual power display (target + actual)
 3. Multiple control modalities — slider, spinbox, quick presets, toggle
@@ -283,6 +287,7 @@ Tab selection toggles collapse: clicking the active tab collapses/expands the bo
 **Layout:** Left edit panel (384px fixed, shown when cameras selected) + Right scrollable camera grid.
 
 **Right panel (camera cards):**
+
 - Grid layout (auto-fit, min 256px)
 - "Select All" checkbox + count indicator
 - Per-camera card:
@@ -292,6 +297,7 @@ Tab selection toggles collapse: clicking the active tab collapses/expands the bo
   - Expandable channel info: label, emission wavelength, illumination device, filter positions
 
 **Left panel (batch editor, shown when cameras selected):**
+
 - Exposure: SpinBox with min/max from first selected camera
 - Binning: Select, shows only common options across selection
 - Pixel format: Select, shows only common options
@@ -303,10 +309,12 @@ Tab selection toggles collapse: clicking the active tab collapses/expands the bo
 **Layout:** Three-column — Left sidebar (timing + cycles) | Center (uPlot chart) | Right sidebar (device toggle tree).
 
 **Left sidebar:**
+
 - Static timing info from active profile: sample rate (formatted Hz/kHz/MHz), duration (µs/ms/s), rest time, frequency (calculated), sample count (calculated)
 - Cycle control: SpinBox (1–4) to expand timeline visualization
 
 **Center chart:**
+
 - uPlot with time (ms) x-axis, voltage (V) y-axis
 - Multiple series with 10-color palette (emerald, blue, amber, red, violet, pink, cyan, lime, orange, indigo)
 - Dashed lines (5px dash, 10px gap)
@@ -315,6 +323,7 @@ Tab selection toggles collapse: clicking the active tab collapses/expands the bo
 - Single cycle data repeated for selected cycle count
 
 **Right sidebar:**
+
 - `ProfileDevicesToggle` component
 - Grouping modes: All | Type | Path | Channel
 - Filters to only devices with waveforms (in DAQ's acq_ports)
@@ -326,6 +335,7 @@ Tab selection toggles collapse: clicking the active tab collapses/expands the bo
 ### Session tab — current state
 
 Read-only grid (2 columns) displaying:
+
 - Config name, active profile, tile count, stack count, stage connection status
 - Stage X/Y/Z position (mm, 3 decimals), moving status
 - Grid overlap, tile order, locked status, field of view (W×H mm)
@@ -334,30 +344,30 @@ Read-only grid (2 columns) displaying:
 
 ### Device types (`src/vxl/device.py` DeviceType enum)
 
-| DeviceType | Description | VoxelRig field |
-|------------|-------------|----------------|
-| `CAMERA` | Image sensor | `cameras: dict[str, CameraHandle]` |
-| `LASER` | Light source | `lasers: dict[str, DeviceHandle]` |
-| `AOTF` | Acousto-optic tunable filter | `aotfs: dict[str, DeviceHandle]` |
-| `DAQ` | Data acquisition | `daq: DaqHandle \| None` |
-| `CONTINUOUS_AXIS` | Linear/rotational motor | `continuous_axes: dict[str, ContinuousAxisHandle]` |
-| `LINEAR_AXIS` | Variant of CONTINUOUS_AXIS | (categorized as continuous_axis) |
-| `ROTATION_AXIS` | Variant of CONTINUOUS_AXIS | (categorized as continuous_axis) |
-| `DISCRETE_AXIS` | Filter wheel, turret, slider | `discrete_axes: dict[str, DeviceHandle]` |
+| DeviceType        | Description                  | VoxelRig field                                     |
+| ----------------- | ---------------------------- | -------------------------------------------------- |
+| `CAMERA`          | Image sensor                 | `cameras: dict[str, CameraHandle]`                 |
+| `LASER`           | Light source                 | `lasers: dict[str, DeviceHandle]`                  |
+| `AOTF`            | Acousto-optic tunable filter | `aotfs: dict[str, DeviceHandle]`                   |
+| `DAQ`             | Data acquisition             | `daq: DaqHandle \| None`                           |
+| `CONTINUOUS_AXIS` | Linear/rotational motor      | `continuous_axes: dict[str, ContinuousAxisHandle]` |
+| `LINEAR_AXIS`     | Variant of CONTINUOUS_AXIS   | (categorized as continuous_axis)                   |
+| `ROTATION_AXIS`   | Variant of CONTINUOUS_AXIS   | (categorized as continuous_axis)                   |
+| `DISCRETE_AXIS`   | Filter wheel, turret, slider | `discrete_axes: dict[str, DeviceHandle]`           |
 
 Additionally: `fws: dict[str, DeviceHandle]` is a subset of discrete_axes populated from config filter wheel IDs. `stage: VoxelStage` bundles x/y/z from continuous_axes.
 
 ### Web UI representation status
 
-| Device Type | Has Dedicated UI? | Has Frontend Model? | Notes |
-|-------------|-------------------|---------------------|-------|
-| Camera | Yes — CamerasPanel | Yes — `camera.svelte.ts` | Batch editing, property cards, stream stats |
-| Laser | Yes — LasersPanel | Yes — `laser.svelte.ts` | Gold standard: dual-panel, sparklines, presets |
-| Continuous Axis (stage) | Partial — SessionPanel | Yes — `axis.svelte.ts` | Position display, movement in grid canvas |
-| DAQ | Yes — WaveformViewer | No dedicated model | Waveform visualization only, no direct DAQ control |
-| **Filter Wheel** | **No** | **No** | Only shown indirectly in channel info popovers |
-| **AOTF** | **No** | **No** | Fully functional backend, zero UI |
-| **Rotation Axes** | **No** | **No** | Stage config supports roll/pitch/yaw but UI shows only x/y/z |
+| Device Type             | Has Dedicated UI?      | Has Frontend Model?      | Notes                                                        |
+| ----------------------- | ---------------------- | ------------------------ | ------------------------------------------------------------ |
+| Camera                  | Yes — CamerasPanel     | Yes — `camera.svelte.ts` | Batch editing, property cards, stream stats                  |
+| Laser                   | Yes — LasersPanel      | Yes — `laser.svelte.ts`  | Gold standard: dual-panel, sparklines, presets               |
+| Continuous Axis (stage) | Partial — SessionPanel | Yes — `axis.svelte.ts`   | Position display, movement in grid canvas                    |
+| DAQ                     | Yes — WaveformViewer   | No dedicated model       | Waveform visualization only, no direct DAQ control           |
+| **Filter Wheel**        | **No**                 | **No**                   | Only shown indirectly in channel info popovers               |
+| **AOTF**                | **No**                 | **No**                   | Fully functional backend, zero UI                            |
+| **Rotation Axes**       | **No**                 | **No**                   | Stage config supports roll/pitch/yaw but UI shows only x/y/z |
 
 ### Camera properties and commands
 
@@ -397,6 +407,7 @@ StreamInfo includes: `frame_index`, `input_buffer_size`, `output_buffer_size`, `
 **Task management:** `create_ao_task()`, `create_co_task()`, `close_task()`, `start_task()`, `stop_task()`, `write_ao_task()`, `stop_all_tasks()`, `close_all_tasks()`
 
 **Waveform types** (defined in `src/vxl/daq/wave.py`):
+
 - `PulseWaveform` — on/off within timing window
 - `SquareWave` — square wave with duty cycle
 - `SineWave` — sinusoidal
@@ -412,11 +423,13 @@ All waveforms define voltage range and a normalized time window.
 ### Optical paths (connect hardware to channels)
 
 **Detection paths** (keyed by camera device ID):
+
 - `filter_wheels: list[str]` — filter wheel device IDs in this path
 - `magnification: float` — optical magnification
 - `aux_devices: list[str]` — other devices (AOTFs for blanking, shutters, etc.)
 
 **Illumination paths** (keyed by laser device ID):
+
 - `aux_devices: list[str]` — other devices (AOTF blanking, shutter control, etc.)
 
 ### Channels (pair detection + illumination)
@@ -448,33 +461,33 @@ All waveforms define voltage range and a normalized time window.
 
 ### Device control
 
-| Topic | Direction | Payload |
-|-------|-----------|---------|
-| `device/set_property` | Client→Server | `{device, properties: {...}}` |
-| `device/execute_command` | Client→Server | `{device, command, args, kwargs}` |
-| `device/{id}/properties` | Server→Client | Property stream updates |
+| Topic                        | Direction     | Payload                                     |
+| ---------------------------- | ------------- | ------------------------------------------- |
+| `device/set_property`        | Client→Server | `{device, properties: {...}}`               |
+| `device/execute_command`     | Client→Server | `{device, command, args, kwargs}`           |
+| `device/{id}/properties`     | Server→Client | Property stream updates                     |
 | `device/{id}/command_result` | Server→Client | `{device, command, success, result, error}` |
 
 ### DAQ / Waveforms
 
-| Topic | Direction | Payload |
-|-------|-----------|---------|
-| `daq/request_waveforms` | Client→Server | (empty) |
-| `daq/waveforms` | Server→Client | `{device_id: [voltage_values]}` |
+| Topic                   | Direction     | Payload                         |
+| ----------------------- | ------------- | ------------------------------- |
+| `daq/request_waveforms` | Client→Server | (empty)                         |
+| `daq/waveforms`         | Server→Client | `{device_id: [voltage_values]}` |
 
 ### Profile
 
-| Topic | Direction | Payload |
-|-------|-----------|---------|
-| `profile/update` | Client→Server | `{profile_id}` |
+| Topic             | Direction     | Payload        |
+| ----------------- | ------------- | -------------- |
+| `profile/update`  | Client→Server | `{profile_id}` |
 | `profile/changed` | Server→Client | `{profile_id}` |
 
 ### Preview
 
-| Topic | Direction | Payload |
-|-------|-----------|---------|
-| `preview/start` | Client→Server | (empty) |
-| `preview/stop` | Client→Server | (empty) |
+| Topic           | Direction     | Payload                                     |
+| --------------- | ------------- | ------------------------------------------- |
+| `preview/start` | Client→Server | (empty)                                     |
+| `preview/stop`  | Client→Server | (empty)                                     |
 | `preview/frame` | Server→Client | Binary hybrid: JSON envelope + msgpack data |
 
 Preview frames include optional histogram data in `PreviewFrameInfo`.
@@ -487,11 +500,12 @@ Preview frames include optional histogram data in `PreviewFrameInfo`.
 
 ### Resolved: Waveform editing vs viewing
 
-**Decision:** Waveform *editing* (composition, timing parameters, waveform type selection) belongs in the **Configure workspace**. The bottom panel Waveforms tab remains a *viewer only* — but enhanced with better data visualization. This keeps the bottom panel as a monitoring/inspection tool and the workspace as the action area.
+**Decision:** Waveform _editing_ (composition, timing parameters, waveform type selection) belongs in the **Configure workspace**. The bottom panel Waveforms tab remains a _viewer only_ — but enhanced with better data visualization. This keeps the bottom panel as a monitoring/inspection tool and the workspace as the action area.
 
 ### Resolved: Cameras tab direction
 
 **Decision:** Focus on **configuration UX improvements**, not monitoring. Live histogram is already in PreviewCanvas. Priority additions:
+
 - ROI visualizer — graphical frame region editor overlaid on sensor dimensions
 - Trigger configuration — trigger mode and polarity
 - Better detail panel (matching Lasers tab dual-panel pattern)
@@ -505,6 +519,7 @@ Preview frames include optional histogram data in `PreviewFrameInfo`.
 ### Session tab enrichment (lower priority)
 
 Currently minimal read-only grid. Could expand to include:
+
 - Active profile details and channel summary cards
 - Full acquisition parameters and estimated timing
 - Disk usage projections

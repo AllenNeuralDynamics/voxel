@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Slider, SpinBox } from '$lib/ui/primitives';
+	import { Slider, SpinBox } from '$lib/ui/kit';
 
 	interface Props {
 		label: string;

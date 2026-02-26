@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { sanitizeString } from '$lib/utils';
-	import { Button } from '$lib/ui/primitives';
+	import { Button } from '$lib/ui/kit';
 	import { Collapsible } from 'bits-ui';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { ChevronRight } from '$lib/icons';
 	import { WaveformPlot } from '$lib/ui/waveform';
 
@@ -17,12 +18,12 @@
 	const activeProfileId = $derived(session.activeProfileId);
 	const isActive = $derived(profileId === activeProfileId);
 	const profile = $derived(config.profiles[profileId]);
-	const stackOnlySet = $derived(new Set(profile?.daq.stack_only ?? []));
+	const stackOnlySet = $derived(new SvelteSet(profile?.daq.stack_only ?? []));
 
 	/** Unique device IDs from the profile's channels + waveform-only devices. */
 	const profileDeviceIds = $derived.by(() => {
 		if (!profile) return [];
-		const ids = new Set<string>();
+		const ids = new SvelteSet<string>();
 		for (const chId of profile.channels) {
 			const ch = config.channels[chId];
 			if (!ch) continue;
@@ -39,8 +40,16 @@
 	const restTime = $derived(Number(profile?.daq.timing.rest_time ?? 0));
 
 	const traceColors: string[] = [
-		'#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
-		'#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+		'#10b981',
+		'#3b82f6',
+		'#f59e0b',
+		'#ef4444',
+		'#8b5cf6',
+		'#ec4899',
+		'#06b6d4',
+		'#84cc16',
+		'#f97316',
+		'#6366f1'
 	];
 
 	const waveformColors = $derived.by(() => {
@@ -69,7 +78,9 @@
 						</span>
 					{/each}
 					{#if isActive}
-						<span class="inline-flex h-6 items-center justify-center rounded-full bg-success/15 px-3.5 text-[0.65rem] font-medium text-success">
+						<span
+							class="inline-flex h-6 items-center justify-center rounded-full bg-success/15 px-3.5 text-[0.65rem] font-medium text-success"
+						>
 							Active
 						</span>
 					{:else}
@@ -92,15 +103,13 @@
 
 		<!-- Settings -->
 		<section>
-			<h3 class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-				Settings
-			</h3>
+			<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Settings</h3>
 			<div class="space-y-0.5">
 				{#each profileDeviceIds as deviceId (deviceId)}
 					<Collapsible.Root
 						open={expandedDevices.has(deviceId)}
 						onOpenChange={(open) => {
-							const next = new Set(expandedDevices);
+							const next = new SvelteSet(expandedDevices);
 							if (open) next.add(deviceId);
 							else next.delete(deviceId);
 							expandedDevices = next;
@@ -112,11 +121,13 @@
 							<ChevronRight
 								width="14"
 								height="14"
-								class="shrink-0 text-muted-foreground transition-transform {expandedDevices.has(deviceId) ? 'rotate-90' : ''}"
+								class="shrink-0 text-muted-foreground transition-transform {expandedDevices.has(deviceId)
+									? 'rotate-90'
+									: ''}"
 							/>
 							<span class="font-medium text-foreground">{sanitizeString(deviceId)}</span>
 						</Collapsible.Trigger>
-						<Collapsible.Content class="pb-2 pl-7 pr-2 pt-1">
+						<Collapsible.Content class="pt-1 pr-2 pb-2 pl-7">
 							<p class="text-xs text-muted-foreground/60">Coming soon</p>
 						</Collapsible.Content>
 					</Collapsible.Root>
@@ -126,9 +137,7 @@
 
 		<!-- Waveforms -->
 		<section>
-			<h3 class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-				Waveforms
-			</h3>
+			<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Waveforms</h3>
 
 			<!-- Frame Timing -->
 			<div class="mb-4 grid grid-cols-3 gap-4 text-xs">
@@ -155,12 +164,7 @@
 			<!-- SVG Plot -->
 			{#if waveformDeviceIds.length > 0 && duration > 0}
 				<div class="mb-4 rounded-lg border bg-card p-3 shadow-sm">
-					<WaveformPlot
-						waveforms={profile.daq.waveforms}
-						{duration}
-						{restTime}
-						colors={waveformColors}
-					/>
+					<WaveformPlot waveforms={profile.daq.waveforms} {duration} {restTime} colors={waveformColors} />
 				</div>
 			{/if}
 
@@ -169,10 +173,7 @@
 				{#each waveformDeviceIds as deviceId (deviceId)}
 					{@const waveform = profile.daq.waveforms[deviceId]}
 					<div class="flex items-center gap-3 px-3 py-2 text-xs">
-						<span
-							class="h-2 w-2 shrink-0 rounded-full"
-							style="background-color: {waveformColors[deviceId]}"
-						></span>
+						<span class="h-2 w-2 shrink-0 rounded-full" style="background-color: {waveformColors[deviceId]}"></span>
 						<span class="w-28 font-medium text-foreground">{sanitizeString(deviceId)}</span>
 						<span class="text-muted-foreground">{waveform.type}</span>
 						<span class="text-muted-foreground">
@@ -182,9 +183,7 @@
 							[{waveform.window.min}–{waveform.window.max}]
 						</span>
 						{#if stackOnlySet.has(deviceId)}
-							<span class="rounded bg-muted px-1.5 py-0.5 text-[0.6rem] uppercase text-muted-foreground">
-								stack
-							</span>
+							<span class="rounded bg-muted px-1.5 py-0.5 text-[0.6rem] text-muted-foreground uppercase"> stack </span>
 						{/if}
 					</div>
 				{/each}

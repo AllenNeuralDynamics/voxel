@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Restore } from '$lib/icons';
-	import { SpinBox } from '$lib/ui/primitives';
+	import { SpinBox } from '$lib/ui/kit';
 	import type { PreviewState } from '$lib/main';
 
 	interface Props {

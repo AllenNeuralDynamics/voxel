@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { TrashCanOutline, Check, Close, PencilOutline } from '$lib/icons';
-	import { Select, SpinBox } from '$lib/ui/primitives';
+	import { Select, SpinBox } from '$lib/ui/kit';
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type TileOrder } from '$lib/main/types';
 

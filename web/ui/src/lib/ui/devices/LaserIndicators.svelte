@@ -15,9 +15,7 @@
 	<div class="relative">
 		{#if laser.isEnabled}
 			<div class="{sizeClass} rounded-full" style="background-color: {laser.color};"></div>
-			<span
-				class="absolute inset-0 animate-ping rounded-full opacity-75"
-				style="background-color: {laser.color};"
+			<span class="absolute inset-0 animate-ping rounded-full opacity-75" style="background-color: {laser.color};"
 			></span>
 		{:else}
 			<div class="{sizeClass} rounded-full border opacity-70" style="border-color: {laser.color};"></div>

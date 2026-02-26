@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SpinBox } from '$lib/ui/primitives';
+	import { SpinBox } from '$lib/ui/kit';
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
 	import type { ColormapCatalog } from '$lib/main';
@@ -247,10 +247,7 @@
 <div class="channel-histogram flex flex-col" bind:clientWidth={columnWidth}>
 	<!-- Window Range -->
 	{#if windowMode !== 'inline'}
-		<div
-			class="flex items-center justify-between text-zinc-400"
-			class:window-row-hover={windowMode === 'hover'}
-		>
+		<div class="flex items-center justify-between text-zinc-400" class:window-row-hover={windowMode === 'hover'}>
 			<SpinBox
 				bind:value={windowMin}
 				min={0}
@@ -297,10 +294,7 @@
 				<defs>
 					<linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
 						{#each colors as stop, i (i)}
-							<stop
-								offset="{colors.length === 1 ? 100 : (i / (colors.length - 1)) * 100}%"
-								stop-color={stop}
-							/>
+							<stop offset="{colors.length === 1 ? 100 : (i / (colors.length - 1)) * 100}%" stop-color={stop} />
 						{/each}
 					</linearGradient>
 				</defs>
@@ -312,44 +306,71 @@
 					<polygon points={fgPolygon} fill="url(#{gradientId})" fill-opacity="0.15" stroke="none" />
 				{/if}
 				{#if fgPoints}
-					<polyline
-						points={fgPoints}
-						fill="none"
-						stroke="url(#{gradientId})"
-						stroke-width="1.5"
-						class="non-scaling"
-					/>
+					<polyline points={fgPoints} fill="none" stroke="url(#{gradientId})" stroke-width="1.5" class="non-scaling" />
 				{/if}
 
 				<!-- Min handle -->
 				<line
-					x1={minHandleX} y1="0" x2={minHandleX} y2={svgHeight}
-					stroke="#10b981" stroke-width="1.5" stroke-opacity="0.9" pointer-events="none"
+					x1={minHandleX}
+					y1="0"
+					x2={minHandleX}
+					y2={svgHeight}
+					stroke="#10b981"
+					stroke-width="1.5"
+					stroke-opacity="0.9"
+					pointer-events="none"
 				/>
 				<line
-					x1={minHandleX} y1="0" x2={minHandleX} y2={svgHeight}
-					stroke="transparent" stroke-width="12" class="cursor-ew-resize"
+					x1={minHandleX}
+					y1="0"
+					x2={minHandleX}
+					y2={svgHeight}
+					stroke="transparent"
+					stroke-width="12"
+					class="cursor-ew-resize"
 					onmousedown={(e) => onHandleDown(e, 'min')}
-					role="slider" tabindex="0" aria-label="Minimum level" aria-valuenow={levelsMin}
+					role="slider"
+					tabindex="0"
+					aria-label="Minimum level"
+					aria-valuenow={levelsMin}
 				/>
 
 				<!-- Max handle -->
 				<line
-					x1={maxHandleX} y1="0" x2={maxHandleX} y2={svgHeight}
-					stroke="#f59e0b" stroke-width="1.5" stroke-opacity="0.9" pointer-events="none"
+					x1={maxHandleX}
+					y1="0"
+					x2={maxHandleX}
+					y2={svgHeight}
+					stroke="#f59e0b"
+					stroke-width="1.5"
+					stroke-opacity="0.9"
+					pointer-events="none"
 				/>
 				<line
-					x1={maxHandleX} y1="0" x2={maxHandleX} y2={svgHeight}
-					stroke="transparent" stroke-width="12" class="cursor-ew-resize"
+					x1={maxHandleX}
+					y1="0"
+					x2={maxHandleX}
+					y2={svgHeight}
+					stroke="transparent"
+					stroke-width="12"
+					class="cursor-ew-resize"
 					onmousedown={(e) => onHandleDown(e, 'max')}
-					role="slider" tabindex="0" aria-label="Maximum level" aria-valuenow={levelsMax}
+					role="slider"
+					tabindex="0"
+					aria-label="Maximum level"
+					aria-valuenow={levelsMax}
 				/>
 
 				<!-- Dimming outside range -->
 				<rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
 				<rect
-					x={maxHandleX} y="0" width={svgWidth - maxHandleX} height={svgHeight}
-					fill="black" opacity="0.4" pointer-events="none"
+					x={maxHandleX}
+					y="0"
+					width={svgWidth - maxHandleX}
+					height={svgHeight}
+					fill="black"
+					opacity="0.4"
+					pointer-events="none"
 				/>
 			</svg>
 		{:else}

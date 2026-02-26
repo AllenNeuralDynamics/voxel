@@ -2,7 +2,7 @@
 	import { Tooltip } from 'bits-ui';
 	import { Power } from '$lib/icons';
 	import type { Session } from '$lib/main';
-	import Switch from '$lib/ui/primitives/Switch.svelte';
+	import Switch from '$lib/ui/kit/Switch.svelte';
 	import LaserIndicators from './LaserIndicators.svelte';
 
 	interface Props {
@@ -73,10 +73,7 @@
 								</div>
 
 								<!-- Toggle switch -->
-								<Switch
-									checked={laser.isEnabled}
-									onCheckedChange={() => laser.toggle()}
-								/>
+								<Switch checked={laser.isEnabled} onCheckedChange={() => laser.toggle()} />
 							</div>
 						{/each}
 					</div>

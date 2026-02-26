@@ -27,7 +27,10 @@
 			</defs>
 			<rect width="100%" height="100%" fill="url(#voxel-bg)" />
 		</svg>
-		<div class="absolute inset-0" style="background: radial-gradient(ellipse at center, transparent 0%, var(--background) 60%);"></div>
+		<div
+			class="absolute inset-0"
+			style="background: radial-gradient(ellipse at center, transparent 0%, var(--background) 60%);"
+		></div>
 	</div>
 {/snippet}
 

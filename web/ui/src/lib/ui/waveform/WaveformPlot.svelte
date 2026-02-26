@@ -12,15 +12,7 @@
 		height?: number;
 	}
 
-	let {
-		waveforms,
-		duration,
-		restTime,
-		visible,
-		colors = {},
-		numPoints = 500,
-		height = 200
-	}: Props = $props();
+	let { waveforms, duration, restTime, visible, colors = {}, numPoints = 500, height = 200 }: Props = $props();
 
 	const padding = { top: 12, right: 16, bottom: 28, left: 48 };
 
@@ -45,7 +37,7 @@
 	}
 
 	function toSvgX(t: number, width: number): number {
-		return padding.left + ((t / totalTime) * (width - padding.left - padding.right));
+		return padding.left + (t / totalTime) * (width - padding.left - padding.right);
 	}
 
 	function toSvgY(v: number): number {
@@ -78,26 +70,14 @@
 </script>
 
 <div class="w-full" bind:clientWidth={containerWidth}>
-	<svg
-		width={containerWidth}
-		{height}
-		viewBox="0 0 {containerWidth} {height}"
-		class="select-none"
-	>
+	<svg width={containerWidth} {height} viewBox="0 0 {containerWidth} {height}" class="select-none">
 		<!-- Horizontal grid + Y-axis labels -->
-		{#each Array.from({ length: 5 }, (_, i) => vRange.min + ((vRange.max - vRange.min) * i) / 4) as v}
+		{#each Array.from({ length: 5 }, (_, i) => vRange.min + ((vRange.max - vRange.min) * i) / 4) as v (v)}
 			{@const y = toSvgY(v)}
-			<line
-				x1={padding.left}
-				y1={y}
-				x2={padding.left + plotW}
-				y2={y}
-				class="stroke-border"
-				stroke-width="1"
-			/>
+			<line x1={padding.left} y1={y} x2={padding.left + plotW} y2={y} class="stroke-border" stroke-width="1" />
 			<text
 				x={padding.left - 6}
-				y={y}
+				{y}
 				text-anchor="end"
 				dominant-baseline="middle"
 				class="fill-muted-foreground text-[0.55rem]"
@@ -109,25 +89,14 @@
 		<!-- Rest region indicator -->
 		{#if restTime > 0}
 			{@const restX = toSvgX(duration, containerWidth)}
-			<rect
-				x={restX}
-				y={padding.top}
-				width={padding.left + plotW - restX}
-				height={plotH}
-				class="fill-muted/30"
-			/>
+			<rect x={restX} y={padding.top} width={padding.left + plotW - restX} height={plotH} class="fill-muted/30" />
 		{/if}
 
 		<!-- X-axis labels -->
-		{#each [0, 0.25, 0.5, 0.75, 1] as frac}
+		{#each [0, 0.25, 0.5, 0.75, 1] as frac (frac)}
 			{@const t = frac * totalTime}
 			{@const x = toSvgX(t, containerWidth)}
-			<text
-				{x}
-				y={height - 4}
-				text-anchor="middle"
-				class="fill-muted-foreground text-[0.55rem]"
-			>
+			<text {x} y={height - 4} text-anchor="middle" class="fill-muted-foreground text-[0.55rem]">
 				{formatTime(t)}
 			</text>
 		{/each}

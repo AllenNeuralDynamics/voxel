@@ -2,7 +2,7 @@
 	import type { DevicesManager } from '$lib/main';
 	import { wavelengthToColor } from '$lib/utils';
 	import SliderInput from '$lib/ui/SliderInput.svelte';
-	import Switch from '$lib/ui/primitives/Switch.svelte';
+	import Switch from '$lib/ui/kit/Switch.svelte';
 
 	interface Props {
 		deviceId: string;
@@ -61,7 +61,12 @@
 				<div class="text-sm font-medium text-zinc-200">
 					{typeof wavelength === 'number' ? `${wavelength} nm Laser` : 'Laser'}
 				</div>
-				<Switch checked={switchChecked} onCheckedChange={handleToggle} size="sm" style="--switch-accent: {laserColor}" />
+				<Switch
+					checked={switchChecked}
+					onCheckedChange={handleToggle}
+					size="sm"
+					style="--switch-accent: {laserColor}"
+				/>
 			</div>
 			<!-- Power Setpoint Slider -->
 			<div class="px-3">

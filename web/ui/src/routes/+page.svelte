@@ -6,13 +6,13 @@
 	import { PreviewCanvas } from '$lib/ui/preview';
 	import { GridCanvas, GridControls } from '$lib/ui/grid/canvas';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
-	import WaveformViewer from '$lib/ui/WaveformViewer.svelte';
+	import { WaveformViewer } from '$lib/ui/waveform';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
-	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
-	import { Button } from '$lib/ui/primitives';
+	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
+	import { Button } from '$lib/ui/kit';
 	import { Cog, PlayCircleOutline, Logout, ChevronUpDown } from '$lib/icons';
-	import { Select } from '$lib/ui/primitives';
+	import { Select } from '$lib/ui/kit';
 	import { sanitizeString } from '$lib/utils';
 	import { LaserIndicators } from '$lib/ui/devices';
 	import LasersPanel from './LasersPanel.svelte';
@@ -95,7 +95,7 @@
 	)}
 	<div class="h-screen w-full bg-background text-foreground">
 		<PaneGroup direction="horizontal" autoSaveId="main-h">
-			<Pane defaultSize={55} minSize={50} maxSize={70}>
+			<Pane defaultSize={60} minSize={60} maxSize={70}>
 				<!-- Control area: header + main + footer -->
 				<div class="grid h-full grid-rows-[auto_1fr_auto] border-r border-border">
 					<header class="flex items-center justify-between gap-8 border-b border-border bg-card px-4 py-4">

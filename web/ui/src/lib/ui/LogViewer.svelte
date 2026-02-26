@@ -1,6 +1,13 @@
 <script lang="ts">
 	import type { LogMessage } from '$lib/main';
-	import { BugOutline, InformationOutline, AlertOutline, AlertCircleOutline, CircleSmall, DeleteOutline } from '$lib/icons';
+	import {
+		BugOutline,
+		InformationOutline,
+		AlertOutline,
+		AlertCircleOutline,
+		CircleSmall,
+		DeleteOutline
+	} from '$lib/icons';
 	import type { Component } from 'svelte';
 
 	const { logs, onClear }: { logs: LogMessage[]; onClear?: () => void } = $props();

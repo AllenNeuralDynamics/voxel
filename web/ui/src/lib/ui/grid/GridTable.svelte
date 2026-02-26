@@ -3,7 +3,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
-	import { Select, Checkbox, SpinBox } from '$lib/ui/primitives';
+	import { Select, Checkbox, SpinBox } from '$lib/ui/kit';
 
 	interface Props {
 		session: Session;

@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { type DevicesManager, parseVec2D } from '$lib/main';
 	import SliderInput from '$lib/ui/SliderInput.svelte';
-	import Select from '$lib/ui/primitives/Select.svelte';
+	import Select from '$lib/ui/kit/Select.svelte';
 	import { ChevronRight } from '$lib/icons';
 
 	interface Props {
@@ -84,7 +84,7 @@
 					<div class="mx-3 h-2.5 w-px bg-zinc-500"></div>
 					<span>{exposureTimeModel.value.toFixed(1)} ms</span>
 				{/if}
-					<div class="ml-3 h-1.5 w-1.5 rounded-full {streamInfo ? 'bg-emerald-500' : 'bg-zinc-600'}"></div>
+				<div class="ml-3 h-1.5 w-1.5 rounded-full {streamInfo ? 'bg-emerald-500' : 'bg-zinc-600'}"></div>
 			</div>
 		</div>
 	{:else}
@@ -157,8 +157,7 @@
 				{#if roiInfo && roiModel && Array.isArray(roiModel.value) && roiModel.value.length === 4}
 					<div class="flex justify-between">
 						<span class="label">ROI</span>
-						<span class="value"
-							>{roiModel.value[0]}, {roiModel.value[1]}, {roiModel.value[2]}, {roiModel.value[3]}</span
+						<span class="value">{roiModel.value[0]}, {roiModel.value[1]}, {roiModel.value[2]}, {roiModel.value[3]}</span
 						>
 					</div>
 				{/if}
