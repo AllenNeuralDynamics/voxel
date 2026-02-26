@@ -26,7 +26,7 @@
 <Tooltip.Provider>
 	<Tooltip.Root delayDuration={200}>
 		<Tooltip.Trigger class="cursor-pointer">
-			<span class="block h-2 w-2 rounded-full {connectionStatus.color}"></span>
+			<span class="block h-1.5 w-1.5 rounded-full {connectionStatus.color}"></span>
 		</Tooltip.Trigger>
 		<Tooltip.Portal>
 			<Tooltip.Content

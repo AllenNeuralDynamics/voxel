@@ -180,20 +180,20 @@
 							maxSize={50}
 							onCollapse={() => {}}
 						>
-							{#if bottomPanelTab === 'session'}
-								<SessionPanel {session} />
+							{#if bottomPanelTab === 'cameras'}
+								<CamerasPanel {session} />
+							{:else if bottomPanelTab === 'lasers'}
+								<LasersPanel {session} />
 							{:else if bottomPanelTab === 'waveforms'}
 								<div class="h-full overflow-hidden bg-card">
 									<WaveformViewer {session} />
 								</div>
-							{:else if bottomPanelTab === 'lasers'}
-								<LasersPanel {session} />
-							{:else if bottomPanelTab === 'cameras'}
-								<CamerasPanel {session} />
 							{:else if bottomPanelTab === 'logs'}
 								<div class="h-full overflow-hidden bg-card p-2">
 									<LogViewer logs={app.logs} onClear={() => app?.clearLogs()} />
 								</div>
+							{:else if bottomPanelTab === 'session'}
+								<SessionPanel {session} />
 							{/if}
 						</Pane>
 					</PaneGroup>
@@ -210,12 +210,11 @@
 						</div>
 						<div class="flex items-center gap-3">
 							<div class="flex divide-x divide-border rounded border border-border">
-								<button onclick={() => selectBottomTab('session')} class={tabButtonClass(bottomPanelTab === 'session')}>
-									<ClientStatus client={app.client} />
-									Session
-								</button>
-								<!-- {@render tabButton('session', 'Session')} -->
 								{@render tabButton('logs', 'Logs')}
+								<button onclick={() => selectBottomTab('session')} class={tabButtonClass(bottomPanelTab === 'session')}>
+									Session
+									<ClientStatus client={app.client} />
+								</button>
 							</div>
 							<div class="h-4 w-px bg-border"></div>
 							<button
