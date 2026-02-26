@@ -19,12 +19,14 @@
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
 	import DevicesPanel from './DevicesPanel.svelte';
-	import ConfigurePanel from './ConfigurePanel.svelte';
+	import { ConfigurePanel } from '$lib/ui/configure';
 	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
+	const DEFAULT_HEADER_TAB = 'configure';
+
 	let app = $state<App | undefined>(undefined);
-	let viewId = $state('scout');
+	let viewId = $state(DEFAULT_HEADER_TAB);
 
 	// Control view state
 	let bottomPanelTab = $state('lasers');
@@ -49,7 +51,7 @@
 
 	function toggleView(id: string) {
 		if (viewId === id) {
-			viewId = app?.session?.workflow.steps[0]?.id ?? 'scout';
+			viewId = app?.session?.workflow.steps[0]?.id ?? DEFAULT_HEADER_TAB;
 		} else {
 			viewId = id;
 		}
