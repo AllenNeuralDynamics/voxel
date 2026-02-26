@@ -2,7 +2,7 @@
 	import * as ContextMenu from '$lib/kit/ui/context-menu';
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
-	import Icon from '@iconify/svelte';
+	import { EyeOff } from '$lib/icons';
 	import type { ColormapCatalog } from '$lib/main';
 
 	interface Props {
@@ -398,7 +398,7 @@
 				onclick={() => onVisibilityChange?.(true)}
 				aria-label="Show channel"
 			>
-				<Icon icon="mdi:eye-off" width="14" height="14" />
+				<EyeOff width="14" height="14" />
 			</button>
 		</div>
 	{/if}

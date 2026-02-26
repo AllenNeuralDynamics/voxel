@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Icon from '@iconify/svelte';
+	import { Plus } from '$lib/icons';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
@@ -245,7 +245,7 @@
 									onclick={() => handleAddStack(tile)}
 								>
 									Add
-									<Icon icon="mdi:plus" width="12" height="12" />
+									<Plus width="12" height="12" />
 								</button>
 							{/if}
 						</td>

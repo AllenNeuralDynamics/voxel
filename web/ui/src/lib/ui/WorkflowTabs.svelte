@@ -28,7 +28,7 @@
 </script>
 
 <script lang="ts">
-	import Icon from '@iconify/svelte';
+	import { ChevronLeft, Check, ChevronRight } from '$lib/icons';
 	import { cn } from '$lib/utils';
 	import type { Workflow } from '$lib/main';
 
@@ -61,7 +61,7 @@
 		)}
 		title="Re-open previous step"
 	>
-		<Icon icon="mdi:chevron-left" width="14" height="14" />
+		<ChevronLeft width="14" height="14" />
 	</button>
 	{#each workflow.steps as step (step.id)}
 		{@const state = workflow.stepStates[step.id]}
@@ -80,7 +80,7 @@
 				)}
 			>
 				{#if state === 'committed'}
-					<Icon icon="mdi:check" width="8" height="8" class="pointer-events-none" />
+					<Check width="8" height="8" class="pointer-events-none" />
 				{/if}
 			</span>
 			{step.label}
@@ -95,6 +95,6 @@
 		)}
 		title="Commit step and advance"
 	>
-		<Icon icon="mdi:chevron-right" width="14" height="14" />
+		<ChevronRight width="14" height="14" />
 	</button>
 </div>

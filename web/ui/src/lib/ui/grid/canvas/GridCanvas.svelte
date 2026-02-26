@@ -5,7 +5,8 @@
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
 	import StagePosition from './StagePosition.svelte';
-	import Icon from '@iconify/svelte';
+	import { GridLines, StackLight, PathArrow, Plus, ImageLight } from '$lib/icons';
+	import type { Component } from 'svelte';
 
 	interface Props {
 		session: Session;
@@ -209,7 +210,7 @@
 	type Layer = {
 		key: keyof typeof session.layerVisibility;
 		color: string;
-		icon: string;
+		Icon: Component;
 		title: string;
 	};
 
@@ -298,7 +299,7 @@
 {#snippet layerToggle(
 	active: boolean,
 	activeColor: string,
-	icon: string,
+	Icon: Component,
 	title: string,
 	onclick: () => void,
 	disabled?: boolean
@@ -311,7 +312,7 @@
 			: 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'} disabled:cursor-not-allowed disabled:opacity-50"
 		{title}
 	>
-		<Icon {icon} width="14" height="14" />
+		<Icon width="14" height="14" />
 	</button>
 {/snippet}
 
@@ -483,10 +484,10 @@
 <div class="flex h-full w-full flex-col p-2">
 	{#if session.stage.x && session.stage.y && session.stage.z}
 		{@const layers: Layer[] = [
-			{ key: 'grid', color: 'text-blue-500', icon: 'lucide-lab:grid-lines', title: 'Toggle grid' },
-			{ key: 'stacks', color: 'text-blue-400', icon: 'ph:stack-light', title: 'Toggle stacks' },
-			{ key: 'path', color: 'text-slate-400', icon: 'iconoir:path-arrow', title: 'Toggle path' },
-			{ key: 'fov', color: 'text-success', icon: 'mdi:plus', title: 'Toggle FOV' },
+			{ key: 'grid', color: 'text-blue-500', Icon: GridLines, title: 'Toggle grid' },
+			{ key: 'stacks', color: 'text-blue-400', Icon: StackLight, title: 'Toggle stacks' },
+			{ key: 'path', color: 'text-slate-400', Icon: PathArrow, title: 'Toggle path' },
+			{ key: 'fov', color: 'text-success', Icon: Plus, title: 'Toggle FOV' },
 		]}
 
 		<div class="grid flex-1 grid-rows-[1fr_auto] overflow-hidden" bind:this={containerRef}>
@@ -683,13 +684,13 @@
 
 			<div class="flex w-full items-center justify-between">
 				<div class="flex gap-0.5">
-					{#each layers as { key, color, icon, title } (key)}
-						{@render layerToggle(session.layerVisibility[key], color, icon, title, () => toggleLayer(key))}
+					{#each layers as { key, color, Icon, title } (key)}
+						{@render layerToggle(session.layerVisibility[key], color, Icon, title, () => toggleLayer(key))}
 					{/each}
 					{@render layerToggle(
 						showThumbnail && session.layerVisibility.fov,
 						'text-success',
-						'ph:image-light',
+						ImageLight,
 						'Toggle thumbnail',
 						() => (showThumbnail = !showThumbnail),
 						!session.layerVisibility.fov

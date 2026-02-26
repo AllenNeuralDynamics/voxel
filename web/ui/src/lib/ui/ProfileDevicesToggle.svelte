@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ToggleGroup, Checkbox, Collapsible } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { Check, Minus, ChevronRight } from '$lib/icons';
 	import type { Session } from '$lib/main';
 	import type { VoxelRigConfig, ChannelConfig } from '$lib/main';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -303,16 +303,15 @@
 							class="mt-0 flex h-3.5 w-3.5 items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600"
 						>
 							{#if groupState.checked}
-								<Icon icon="mdi:check" class="text-white" width="12" height="12" />
+								<Check class="text-white" width="12" height="12" />
 							{:else if groupState.indeterminate}
-								<Icon icon="mdi:minus" class="text-white" width="12" height="12" />
+								<Minus class="text-white" width="12" height="12" />
 							{/if}
 						</Checkbox.Root>
 
 						<!-- Group Label + Expand/Collapse -->
 						<Collapsible.Trigger class="flex flex-1 items-center gap-1 text-xs font-medium hover:text-zinc-300">
-							<Icon
-								icon="mdi:chevron-right"
+							<ChevronRight
 								class="text-zinc-500 transition-transform data-[state=open]:rotate-90"
 								width="14"
 								height="14"
@@ -334,7 +333,7 @@
 									class="flex h-3 w-3 items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600"
 								>
 									{#if visible.has(deviceId)}
-										<Icon icon="mdi:check" class="text-white" width="10" height="10" />
+										<Check class="text-white" width="10" height="10" />
 									{/if}
 								</Checkbox.Root>
 								<span class="text-xs">{deviceId}</span>

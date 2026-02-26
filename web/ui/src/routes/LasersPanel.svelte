@@ -4,7 +4,7 @@
 	import Switch from '$lib/ui/primitives/Switch.svelte';
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import Slider from '$lib/ui/primitives/Slider.svelte';
-	import Icon from '@iconify/svelte';
+	import { InformationOutline, Power } from '$lib/icons';
 	import { Popover } from 'bits-ui';
 
 	interface Props {
@@ -100,7 +100,7 @@
 	<Popover.Root>
 		<Popover.Trigger class="flex items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-accent">
 			<span class="font-medium text-foreground">{cfg.label}</span>
-			<Icon icon="mdi:information-outline" width="14" height="14" class="text-muted-foreground" />
+			<InformationOutline width="14" height="14" class="text-muted-foreground" />
 		</Popover.Trigger>
 		<Popover.Content
 			class="z-50 w-64 rounded border border-zinc-700 bg-zinc-900 p-3 text-left text-xs text-zinc-200 shadow-xl outline-none"
@@ -262,7 +262,7 @@
 									? ''
 									: 'pointer-events-none opacity-0'}"
 							>
-								<Icon icon="mdi:power" width="14" height="14" />
+								<Power width="14" height="14" />
 								<span>Stop All</span>
 							</button>
 						</div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Icon from '@iconify/svelte';
+	import { TrashCanOutline, Check, Close, PencilOutline } from '$lib/icons';
 	import { Select, SpinBox } from '$lib/ui/primitives';
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type TileOrder } from '$lib/main/types';
@@ -158,7 +158,7 @@
 								class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-rose-400"
 								title="Delete stack"
 							>
-								<Icon icon="mdi:trash-can-outline" width="14" height="14" />
+								<TrashCanOutline width="14" height="14" />
 							</button>
 						{/if}
 						{#if isDirty}
@@ -167,7 +167,7 @@
 								class="rounded p-1 text-emerald-500 transition-colors hover:bg-zinc-700 hover:text-emerald-400"
 								title={hasStack ? 'Save changes' : 'Add stack'}
 							>
-								<Icon icon="mdi:check" width="14" height="14" />
+								<Check width="14" height="14" />
 							</button>
 						{/if}
 						<button
@@ -175,7 +175,7 @@
 							class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
 							title="Cancel"
 						>
-							<Icon icon="mdi:close" width="14" height="14" />
+							<Close width="14" height="14" />
 						</button>
 					{:else}
 						<button
@@ -183,7 +183,7 @@
 							class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
 							title={hasStack ? 'Edit stack' : 'Add stack'}
 						>
-							<Icon icon="mdi:pencil-outline" width="14" height="14" />
+							<PencilOutline width="14" height="14" />
 						</button>
 					{/if}
 				</div>

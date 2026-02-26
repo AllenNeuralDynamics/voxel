@@ -3,7 +3,7 @@
 	import { type DevicesManager, parseVec2D } from '$lib/main';
 	import SliderInput from '$lib/ui/SliderInput.svelte';
 	import Select from '$lib/ui/primitives/Select.svelte';
-	import Icon from '@iconify/svelte';
+	import { ChevronRight } from '$lib/icons';
 
 	interface Props {
 		deviceId: string;
@@ -62,7 +62,7 @@
 		>
 			<div class="flex items-center gap-1">
 				<span class="text-[0.65rem] font-medium text-zinc-400">{label}</span>
-				<Icon icon="mdi:chevron-right" class="text-zinc-500 transition-transform group-open:rotate-90" />
+				<ChevronRight class="text-zinc-500 transition-transform group-open:rotate-90" />
 			</div>
 			<span class="text-[0.6rem] text-zinc-300">{summaryValue}</span>
 		</summary>

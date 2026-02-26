@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Tooltip } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { Power } from '$lib/icons';
 	import type { Session } from '$lib/main';
 	import Switch from '$lib/ui/primitives/Switch.svelte';
 	import LaserIndicators from './LaserIndicators.svelte';
@@ -45,7 +45,7 @@
 								class="flex items-center gap-1.5 rounded bg-rose-600/20 px-2 py-1 text-xs text-rose-400 transition-colors hover:bg-rose-600/30 active:bg-rose-600/40"
 								aria-label="Disable all lasers"
 							>
-								<Icon icon="mdi:power" width="14" height="14" />
+								<Power width="14" height="14" />
 								<span>Stop All</span>
 							</button>
 						{/if}

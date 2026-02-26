@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SessionDirectory } from '$lib/main';
-	import Icon from '@iconify/svelte';
+	import { FolderOpenOutline, ArrowRight } from '$lib/icons';
 
 	const {
 		sessions,
@@ -39,7 +39,7 @@
 	</div>
 {:else if sessions.length === 0}
 	<div class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10">
-		<Icon icon="mdi:folder-open-outline" width="32" height="32" class="text-muted-foreground/50" />
+		<FolderOpenOutline width="32" height="32" class="text-muted-foreground/50" />
 		<p class="mt-2 text-sm text-muted-foreground">No recent sessions</p>
 		<p class="text-xs text-muted-foreground/60">Create a new session to get started</p>
 	</div>
@@ -55,8 +55,7 @@
 					{session.name}
 				</span>
 				<span class="shrink-0 text-[0.65rem] text-muted-foreground/60">{formatRelativeTime(session.modified)}</span>
-				<Icon
-					icon="mdi:arrow-right"
+				<ArrowRight
 					width="14"
 					height="14"
 					class="shrink-0 text-muted-foreground/30 transition-colors group-hover:text-foreground"

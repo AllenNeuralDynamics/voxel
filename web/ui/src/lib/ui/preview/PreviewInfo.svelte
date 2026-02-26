@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Tooltip } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { Alert } from '$lib/icons';
 	import type { PreviewState } from '$lib/main';
 
 	interface Props {
@@ -53,7 +53,7 @@
 				<span class="text-muted-foreground">No frames</span>
 			{/if}
 			{#if hasMismatch}
-				<Icon icon="mdi:alert" width="12" height="12" class="text-warning" />
+				<Alert width="12" height="12" class="text-warning" />
 			{/if}
 		</Tooltip.Trigger>
 		<Tooltip.Content
@@ -73,7 +73,7 @@
 						<div class="space-y-1 border-t border-border pt-2 text-[0.7rem]">
 							{#if hasMismatch}
 								<div class="mb-1 flex items-center gap-1.5 text-warning">
-									<Icon icon="mdi:alert" width="12" height="12" />
+									<Alert width="12" height="12" />
 									<span class="font-medium">Frame Size Mismatch</span>
 								</div>
 							{/if}

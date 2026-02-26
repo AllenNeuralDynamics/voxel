@@ -27,7 +27,7 @@
 </script>
 
 <script lang="ts">
-	import Icon from '@iconify/svelte';
+	import { Check, Minus } from '$lib/icons';
 	import { Checkbox as CheckboxPrimitive } from 'bits-ui';
 
 	interface Props extends CheckboxVariants {
@@ -71,8 +71,8 @@
 	class={checkboxVariants({ size, class: className })}
 >
 	{#if checked}
-		<Icon icon="mdi:check" class="text-white" width={iconSizes[size]} height={iconSizes[size]} />
+		<Check class="text-white" width={iconSizes[size]} height={iconSizes[size]} />
 	{:else if indeterminate}
-		<Icon icon="mdi:minus" class="text-white" width={iconSizes[size]} height={iconSizes[size]} />
+		<Minus class="text-white" width={iconSizes[size]} height={iconSizes[size]} />
 	{/if}
 </CheckboxPrimitive.Root>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import Icon from '@iconify/svelte';
+	import { Bargraph } from '$lib/icons';
 	import PreviewInfo from './PreviewInfo.svelte';
 	import PanZoomControls from './PanZoomControls.svelte';
 	import Histogram from './Histogram.svelte';
@@ -192,7 +192,7 @@
 				aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
 				title={showHistograms ? 'Hide histograms' : 'Show histograms'}
 			>
-				<Icon icon="et:bargraph" width="14" height="14" />
+				<Bargraph width="14" height="14" />
 			</button>
 			<PreviewInfo {previewer} />
 		</div>

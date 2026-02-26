@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import Switch from '$lib/ui/primitives/Switch.svelte';
-	import Icon from '@iconify/svelte';
+	import { Power } from '$lib/icons';
 
 	interface Props {
 		session: Session;
@@ -29,7 +29,7 @@
 					? ''
 					: 'pointer-events-none opacity-0'}"
 			>
-				<Icon icon="mdi:power" width="14" height="14" />
+				<Power width="14" height="14" />
 				<span>Stop All</span>
 			</button>
 		</div>

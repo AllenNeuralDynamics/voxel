@@ -3,7 +3,7 @@
 	import SpinBox from '$lib/ui/primitives/SpinBox.svelte';
 	import Select from '$lib/ui/primitives/Select.svelte';
 	import { Button, Checkbox } from '$lib/ui/primitives';
-	import Icon from '@iconify/svelte';
+	import { ChevronRight } from '$lib/icons';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	interface Props {
@@ -234,8 +234,7 @@
 							</div>
 						{/if}
 					</div>
-					<Icon
-						icon="mdi:chevron-right"
+					<ChevronRight
 						width="14"
 						height="14"
 						class="text-muted-foreground transition-transform {channelExpanded ? 'rotate-90' : ''}"
@@ -367,7 +366,7 @@
 
 		<!-- Apply button -->
 		<div class="px-4 py-3">
-			<Button variant="default" size="sm" class="w-full" disabled={!hasFormChanges} onclick={applyChanges}>
+			<Button variant="secondary" size="sm" class="w-full" disabled={!hasFormChanges} onclick={applyChanges}>
 				Apply to {cameras.length} camera{cameras.length !== 1 ? 's' : ''}
 			</Button>
 		</div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Icon from '@iconify/svelte';
+	import { Restore } from '$lib/icons';
 	import { SpinBox } from '$lib/ui/primitives';
 	import type { PreviewState } from '$lib/main';
 
@@ -85,6 +85,6 @@
 		class="flex items-center rounded p-1 text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 		aria-label="Reset pan and zoom"
 	>
-		<Icon icon="mdi:restore" width="12" height="12" />
+		<Restore width="12" height="12" />
 	</button>
 </div>

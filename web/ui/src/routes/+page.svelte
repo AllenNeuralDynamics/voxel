@@ -11,7 +11,7 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/primitives/PaneDivider.svelte';
 	import { Button } from '$lib/ui/primitives';
-	import Icon from '@iconify/svelte';
+	import { Cog, PlayCircleOutline, Logout, ChevronUpDown } from '$lib/icons';
 	import { Select } from '$lib/ui/primitives';
 	import { sanitizeString } from '$lib/utils';
 	import { LaserIndicators } from '$lib/ui/devices';
@@ -109,7 +109,7 @@
 								)}
 								title="Configure"
 							>
-								<Icon icon="mdi:cog" width="16" height="16" /> Configure
+								<Cog width="16" height="16" /> Configure
 							</button>
 							<WorkflowTabs {workflow} bind:viewId class="max-w-96 min-w-88" />
 							<button
@@ -120,7 +120,7 @@
 								)}
 								title="Acquire"
 							>
-								<Icon icon="mdi:play-circle-outline" width="16" height="16" />
+								<PlayCircleOutline width="16" height="16" />
 								Acquire
 							</button>
 						</div>
@@ -142,7 +142,7 @@
 									description: cfg.desc
 								}))}
 								onchange={(v) => session.activateProfile(v)}
-								icon="mdi:chevron-up-down"
+								icon={ChevronUpDown}
 								loading={session.isMutating}
 								showCheckmark
 								emptyMessage="No profiles available"
@@ -179,7 +179,13 @@
 								{/if}
 							</div>
 						</Pane>
-						<PaneDivider direction="horizontal" class="text-border hover:text-muted-foreground" />
+						<PaneDivider
+							direction="horizontal"
+							ondblclick={() => {
+								if (bottomPane?.isCollapsed()) bottomPane.expand();
+								else bottomPane?.collapse();
+							}}
+						/>
 						<Pane
 							bind:this={bottomPane}
 							collapsible
@@ -233,14 +239,14 @@
 								title="Close Session"
 							>
 								Exit
-								<Icon icon="mdi:logout" width="12" height="12" />
+								<Logout width="12" height="12" />
 							</button>
 						</div>
 					</footer>
 				</div>
 			</Pane>
 
-			<PaneDivider direction="vertical" class="text-border hover:text-muted-foreground" />
+			<PaneDivider direction="vertical" />
 
 			<!-- Right column: Viewer (Preview + Grid Canvas) -->
 			<Pane defaultSize={45}>
@@ -249,7 +255,7 @@
 						<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
 							<PreviewCanvas previewer={session.preview} />
 						</Pane>
-						<PaneDivider direction="horizontal" class="text-border hover:text-muted-foreground" />
+						<PaneDivider direction="horizontal" />
 						<Pane defaultSize={50} minSize={30} class="h-full flex-1 px-4">
 							<GridCanvas {session} />
 						</Pane>

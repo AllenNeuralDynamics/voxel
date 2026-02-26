@@ -55,9 +55,10 @@
 </script>
 
 <script lang="ts">
-	import Icon from '@iconify/svelte';
+	import { ChevronDown, DotsSpinner, Check } from '$lib/icons';
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { cn } from '$lib/utils';
+	import type { Component } from 'svelte';
 
 	interface Props<T extends string = string> extends SelectVariants {
 		value: T;
@@ -67,7 +68,7 @@
 		disabled?: boolean;
 		loading?: boolean;
 		showCheckmark?: boolean;
-		icon?: string;
+		icon?: Component;
 		emptyMessage?: string;
 		class?: string;
 	}
@@ -80,7 +81,7 @@
 		disabled = false,
 		loading = false,
 		showCheckmark = false,
-		icon = 'mdi:chevron-down',
+		icon = ChevronDown,
 		emptyMessage,
 		size = 'md',
 		class: className = ''
@@ -114,9 +115,10 @@
 			{/if}
 		</span>
 		{#if loading}
-			<Icon icon="svg-spinners:3-dots-fade" class="shrink-0 text-muted-foreground" width={iconSizes[size]} height={iconSizes[size]} />
+			<DotsSpinner class="shrink-0 text-muted-foreground" width={iconSizes[size]} height={iconSizes[size]} />
 		{:else}
-			<Icon icon={icon} class="shrink-0 opacity-50" width={iconSizes[size]} height={iconSizes[size]} />
+			{@const IconComponent = icon}
+			<IconComponent class="shrink-0 opacity-50" width={iconSizes[size]} height={iconSizes[size]} />
 		{/if}
 	</SelectPrimitive.Trigger>
 
@@ -136,7 +138,7 @@
 								{#if showCheckmark}
 									<span class="inline-flex h-3 w-3 shrink-0 items-center justify-center text-success">
 										{#if value === option.value}
-											<Icon icon="mdi:check" class="h-3 w-3" />
+											<Check class="h-3 w-3" />
 										{/if}
 									</span>
 								{/if}

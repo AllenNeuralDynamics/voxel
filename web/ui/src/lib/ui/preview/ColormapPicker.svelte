@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { DropdownMenu, Popover } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { FilterVariant, Check } from '$lib/icons';
 	import { isValidHex } from '$lib/utils';
 	import type { ColormapCatalog } from '$lib/main';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -111,7 +111,7 @@
 							: 'text-zinc-400'}"
 						aria-label="Filter groups"
 					>
-						<Icon icon="mdi:filter-variant" width="14" height="14" />
+						<FilterVariant width="14" height="14" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Portal>
 						<DropdownMenu.Content
@@ -135,7 +135,7 @@
 									{#snippet children({ checked })}
 										<span class="inline-flex h-3 w-3 shrink-0 items-center justify-center">
 											{#if checked}
-												<Icon icon="mdi:check" class="h-3 w-3 text-foreground" />
+												<Check class="h-3 w-3 text-foreground" />
 											{/if}
 										</span>
 										<span>{group.label}</span>
@@ -210,7 +210,7 @@
 					class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-zinc-600 bg-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
 					aria-label="Apply custom hex color"
 				>
-					<Icon icon="mdi:check" width="14" height="14" />
+					<Check width="14" height="14" />
 				</button>
 			</div>
 		</Popover.Content>

@@ -3,7 +3,7 @@
 	import { sanitizeString } from '$lib/utils';
 	import { Button } from '$lib/ui/primitives';
 	import { Collapsible } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { ChevronRight } from '$lib/icons';
 	import { WaveformPlot } from '$lib/ui/waveform';
 
 	interface Props {
@@ -109,8 +109,7 @@
 						<Collapsible.Trigger
 							class="-ml-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-muted"
 						>
-							<Icon
-								icon="mdi:chevron-right"
+							<ChevronRight
 								width="14"
 								height="14"
 								class="shrink-0 text-muted-foreground transition-transform {expandedDevices.has(deviceId) ? 'rotate-90' : ''}"

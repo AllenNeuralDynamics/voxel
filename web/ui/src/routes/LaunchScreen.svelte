@@ -6,7 +6,7 @@
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 	import { Collapsible } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { ChevronRight } from '$lib/icons';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 
 	const { app }: { app: App } = $props();
@@ -124,7 +124,7 @@
 						class="flex w-full items-center justify-between py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground/80 [&[data-state=open]>svg]:rotate-90"
 					>
 						New Session
-						<Icon icon="mdi:chevron-right" width="16" height="16" class="transition-transform duration-200" />
+						<ChevronRight width="16" height="16" class="transition-transform duration-200" />
 					</Collapsible.Trigger>
 					<Collapsible.Content
 						class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"

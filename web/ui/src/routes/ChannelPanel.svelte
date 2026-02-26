@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ToggleGroup, Tooltip } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { InformationOutline } from '$lib/icons';
 	import LaserControl from '$lib/ui/devices/LaserControl.svelte';
 	import CameraControl from '$lib/ui/devices/CameraControl.svelte';
 	import type { Session, ChannelConfig } from '$lib/main';
@@ -32,7 +32,7 @@
 				class="flex items-center rounded p-1 text-zinc-300 transition-colors hover:bg-zinc-800"
 				aria-label="Channel info"
 			>
-				<Icon icon="mdi:information-outline" width="14" height="14" />
+				<InformationOutline width="14" height="14" />
 			</Tooltip.Trigger>
 			<Tooltip.Content
 				class="z-50 w-64 rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-xs text-zinc-200 shadow-xl outline-none"

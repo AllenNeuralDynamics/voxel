@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { LogMessage } from '$lib/main';
-	import Icon from '@iconify/svelte';
+	import { BugOutline, InformationOutline, AlertOutline, AlertCircleOutline, CircleSmall, DeleteOutline } from '$lib/icons';
+	import type { Component } from 'svelte';
 
 	const { logs, onClear }: { logs: LogMessage[]; onClear?: () => void } = $props();
 
@@ -28,20 +29,12 @@
 		}
 	}
 
-	function getLevelIcon(level: LogMessage['level']): string {
-		switch (level) {
-			case 'debug':
-				return 'mdi:bug-outline';
-			case 'info':
-				return 'mdi:information-outline';
-			case 'warning':
-				return 'mdi:alert-outline';
-			case 'error':
-				return 'mdi:alert-circle-outline';
-			default:
-				return 'mdi:circle-small';
-		}
-	}
+	const levelIcons: Record<string, Component> = {
+		debug: BugOutline,
+		info: InformationOutline,
+		warning: AlertOutline,
+		error: AlertCircleOutline
+	};
 
 	function formatTime(timestamp: string): string {
 		const date = new Date(timestamp);
@@ -69,7 +62,7 @@
 				class="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 				title="Clear logs"
 			>
-				<Icon icon="mdi:delete-outline" width="14" height="14" />
+				<DeleteOutline width="14" height="14" />
 				Clear
 			</button>
 		{/if}
@@ -83,6 +76,7 @@
 		{:else}
 			<div class="space-y-0.5 p-2">
 				{#each logs as log, i (i)}
+					{@const LevelIcon = levelIcons[log.level] ?? CircleSmall}
 					<div class="flex items-center gap-2">
 						<span class="w-[8ch] shrink-0 text-muted-foreground/50">{formatTime(log.timestamp)}</span>
 						<span class="w-[42ch] shrink-0 text-muted-foreground" title={log.logger}
@@ -90,7 +84,7 @@
 						>
 						<span class="min-w-0 flex-1 text-foreground">{log.message}</span>
 						<span class="shrink-0 {getLevelColor(log.level)}" title={log.level}>
-							<Icon icon={getLevelIcon(log.level)} width="14" height="14" />
+							<LevelIcon width="14" height="14" />
 						</span>
 					</div>
 				{/each}

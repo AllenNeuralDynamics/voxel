@@ -2,7 +2,8 @@
 	import type { SessionRoot, JsonSchema, JsonSchemaProperty } from '$lib/main';
 	import { Button, Field, Select, SpinBox, TextInput } from '$lib/ui/primitives';
 	import { sanitizeString } from '$lib/utils';
-	import Icon from '@iconify/svelte';
+	import { Plus, Close, ContentSaveOutline, RocketLaunchOutline } from '$lib/icons';
+	import type { Component } from 'svelte';
 
 	interface Props {
 		roots: SessionRoot[];
@@ -222,7 +223,7 @@
 								onclick={() => addListItem(key)}
 								class="rounded border border-dashed border-border px-1.5 text-[0.65rem] leading-none text-muted-foreground/50 transition-colors hover:border-muted-foreground hover:text-muted-foreground"
 							>
-								<Icon icon="mdi:plus" width="12" height="12" class="inline" /> Add
+								<Plus width="12" height="12" class="inline" /> Add
 							</button>
 						</div>
 						{#if ((metadata[key] as string[]) ?? []).length > 0}
@@ -240,7 +241,7 @@
 											onclick={() => removeListItem(key, i)}
 											class="absolute inset-y-0 right-1 flex items-center text-muted-foreground/50 transition-colors hover:text-danger"
 										>
-											<Icon icon="mdi:close" width="12" height="12" />
+											<Close width="12" height="12" />
 										</button>
 									</div>
 								{/each}
@@ -259,7 +260,8 @@
 			></div>
 			<span>{editing ? 'Saving...' : 'Creating...'}</span>
 		{:else}
-			<Icon icon={editing ? 'mdi:content-save-outline' : 'mdi:rocket-launch-outline'} width="16" height="16" />
+			{@const SubmitIcon = editing ? ContentSaveOutline : RocketLaunchOutline}
+		<SubmitIcon width="16" height="16" />
 			<span>{editing ? 'Save' : 'Create'}</span>
 		{/if}
 	</Button>

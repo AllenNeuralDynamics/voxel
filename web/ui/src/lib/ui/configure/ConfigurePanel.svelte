@@ -2,7 +2,7 @@
 	import type { Session } from '$lib/main';
 	import { cn, sanitizeString, wavelengthToColor } from '$lib/utils';
 	import { Collapsible } from 'bits-ui';
-	import Icon from '@iconify/svelte';
+	import { ChevronRight } from '$lib/icons';
 	import ProfileConfig from './ProfileConfig.svelte';
 
 	interface Props {
@@ -51,8 +51,7 @@
 		<Collapsible.Root open>
 			<Collapsible.Trigger class="group flex w-full items-center justify-between px-2 py-1">
 				<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"> Profiles </span>
-				<Icon
-					icon="mdi:chevron-right"
+				<ChevronRight
 					width="12"
 					height="12"
 					class="shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
