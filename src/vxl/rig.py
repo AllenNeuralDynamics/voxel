@@ -102,9 +102,7 @@ class VoxelRig(Rig):
         return self._topic_values.get(topic)
 
     async def _publish(self, topic: str, value: Any) -> None:
-        """Publish a value to a topic. Deduplicates and notifies subscribers."""
-        if self._topic_values.get(topic) == value:
-            return
+        """Publish a value to a topic and notify subscribers."""
         self._topic_values[topic] = value
         for cb in self._topic_callbacks.get(topic, []):
             try:
@@ -138,7 +136,8 @@ class VoxelRig(Rig):
             if not all(f == fovs[0] for f in fovs):
                 self.log.warning("Cameras disagree on FOV; using first camera's value")
 
-            await self._publish("fov", fovs[0])
+            if fovs[0] != self._topic_values.get("fov"):
+                await self._publish("fov", fovs[0])
 
     def _make_camera_props_callback(self, camera_id: str) -> PropsCallback:
         """Create a property-change callback that triggers FOV recomputation."""
@@ -151,6 +150,17 @@ class VoxelRig(Rig):
             await self._compute_and_publish_fov()
 
         return _on_camera_props
+
+    async def _subscribe_device_props(self) -> None:
+        """Subscribe to all device property streams and publish as topics.
+
+        Also wires camera property changes to FOV recomputation.
+        """
+        for uid, handle in self.handles.items():
+            await handle.on_props_changed(lambda props, _uid=uid: self._publish(f"device/{_uid}/props", props))
+
+        for cam_id in self.cameras:
+            self.subscribe(f"device/{cam_id}/props", self._make_camera_props_callback(cam_id))
 
     async def _on_start_complete(self) -> None:
         """Categorize devices by type and validate Voxel-specific assignments."""
@@ -193,9 +203,7 @@ class VoxelRig(Rig):
         # Subscribe to all camera preview streams (subscriptions are stable for rig lifetime)
         await self.preview.subscribe_cameras(self.cameras)
 
-        # Subscribe to camera property changes for FOV recomputation
-        for cam_id, camera in self.cameras.items():
-            await camera.on_props_changed(self._make_camera_props_callback(cam_id))
+        await self._subscribe_device_props()
 
         await self.set_active_profile(self._active_profile_id)
 

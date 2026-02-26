@@ -18,7 +18,7 @@ from rigup.device import PropsResponse
 from vxl import VoxelRig
 from vxl.camera.preview import PreviewCrop, PreviewLevels
 from vxl.config import VoxelRigConfig
-from vxlib import fire_and_forget, get_colormap_catalog
+from vxlib import get_colormap_catalog
 
 router = APIRouter(tags=["rig"])
 log = logging.getLogger(__name__)
@@ -46,8 +46,11 @@ class RigService:
         self._broadcast = broadcast
         self._preview_lock = asyncio.Lock()
 
-        # Subscribe to device property streams in background
-        fire_and_forget(self._subscribe_to_device_streams(), log=log)
+        # Subscribe to device property topics from rig
+        self._unsub_device_props: list[Callable[[], None]] = []
+        for device_id in rig.handles:
+            unsub = rig.subscribe(f"device/{device_id}/props", self._make_props_forwarder(device_id))
+            self._unsub_device_props.append(unsub)
 
     async def handle_message(self, topic: str, payload: dict[str, Any]) -> bool:
         """Handle rig-related messages. Returns True if handled."""
@@ -247,22 +250,16 @@ class RigService:
 
         return result_payload
 
-    async def _subscribe_to_device_streams(self):
-        """Subscribe to device streams and forward them to WebSocket clients."""
-        for device_id, handle in self.rig.handles.items():
+    def _make_props_forwarder(self, device_id: str) -> Callable[[PropsResponse], Awaitable[None]]:
+        """Create a callback that forwards device property changes to WebSocket clients."""
 
-            def make_forwarder(dev_id: str) -> Callable[[PropsResponse], Awaitable[None]]:
-                async def forwarder(props: PropsResponse) -> None:
-                    try:
-                        payload = props.model_dump()
-                        self._broadcast({"topic": f"device/{dev_id}/properties", "payload": payload})
-                    except Exception:
-                        log.exception(f"Error forwarding properties for {dev_id}")
+        async def forwarder(props: PropsResponse) -> None:
+            try:
+                self._broadcast({"topic": f"device/{device_id}/properties", "payload": props.model_dump()})
+            except Exception:
+                log.exception(f"Error forwarding properties for {device_id}")
 
-                return forwarder
-
-            await handle.on_props_changed(make_forwarder(device_id))
-            log.debug(f"Subscribed to property updates for device: {device_id}")
+        return forwarder
 
     # ==================== DAQ ====================
 
