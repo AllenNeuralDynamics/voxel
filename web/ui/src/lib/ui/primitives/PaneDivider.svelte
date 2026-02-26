@@ -4,9 +4,9 @@
 	export const paneDividerVariants = tv({
 		slots: {
 			separator: [
-				'absolute flex items-center justify-center gap-2',
+				'absolute flex items-center justify-center',
 				'transition-all duration-300',
-				'text-zinc-800 hover:text-zinc-600'
+				'text-zinc-700 hover:text-zinc-500'
 			],
 			line: 'grow bg-current opacity-[0.85]'
 		},
@@ -18,7 +18,7 @@
 				},
 				horizontal: {
 					separator: 'h-3 flex-row top-1/2 left-0 right-0 -translate-y-1/2',
-					line: 'h-[1px]'
+					line: 'h-[2px]'
 				}
 			}
 		},
@@ -35,35 +35,16 @@
 
 	interface Props extends PaneDividerVariants {
 		class?: string;
+		ondblclick?: () => void;
 	}
 
-	let { direction = 'vertical', class: className = '' }: Props = $props();
+	let { direction = 'vertical', class: className = '', ondblclick }: Props = $props();
 
 	const styles = $derived(paneDividerVariants({ direction }));
 </script>
 
-<PaneResizer class="relative z-50">
+<PaneResizer class="relative z-50" {ondblclick}>
 	<div class={styles.separator({ class: className })}>
-		<div class={styles.line()}></div>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			width="1.2em"
-			height="1.2em"
-			viewBox="0 0 15 15"
-			fill-rule="evenodd"
-			fill="currentColor"
-			clip-rule="evenodd"
-		>
-			{#if direction === 'vertical'}
-				<path
-					d="M8.625 2.5a1.125 1.125 0 1 1-2.25 0a1.125 1.125 0 0 1 2.25 0m0 5a1.125 1.125 0 1 1-2.25 0a1.125 1.125 0 0 1 2.25 0M7.5 13.625a1.125 1.125 0 1 0 0-2.25a1.125 1.125 0 0 0 0 2.25"
-				/>
-			{:else}
-				<path
-					d="M3.625 7.5a1.125 1.125 0 1 1-2.25 0a1.125 1.125 0 0 1 2.25 0m5 0a1.125 1.125 0 1 1-2.25 0a1.125 1.125 0 0 1 2.25 0M12.5 8.625a1.125 1.125 0 1 0 0-2.25a1.125 1.125 0 0 0 0 2.25"
-				/>
-			{/if}
-		</svg>
 		<div class={styles.line()}></div>
 	</div>
 </PaneResizer>
