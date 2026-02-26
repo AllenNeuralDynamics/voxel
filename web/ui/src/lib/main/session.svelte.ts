@@ -11,7 +11,7 @@ import type {
 	ProfileConfig,
 	ChannelConfig
 } from './types';
-import { parseVec2D } from './types';
+
 import { PreviewState } from './preview.svelte';
 import { Workflow } from './workflow.svelte';
 import { Stage } from './axis.svelte';
@@ -78,19 +78,11 @@ export class Session {
 	}
 
 	fov = $derived.by(() => {
-		if (!this.activeProfileId) return { width: 5, height: 5 };
-		const profile = this.config.profiles[this.activeProfileId];
-		if (!profile?.channels?.length) return { width: 5, height: 5 };
-		const firstChannelId = profile.channels[0];
-		const cameraId = this.config.channels[firstChannelId]?.detection;
-		if (!cameraId) return { width: 5, height: 5 };
-		const frameSizePx = parseVec2D(this.devices.getPropertyValue(cameraId, 'frame_size_px'));
-		const pixelSizeUm = parseVec2D(this.devices.getPropertyValue(cameraId, 'pixel_size_um'));
-		const magnification = this.config.detection?.[cameraId]?.magnification ?? 1.0;
-		if (!frameSizePx || !pixelSizeUm) return { width: 5, height: 5 };
+		const fovUm = this.#appStatus?.session?.fov_um;
+		if (!fovUm) return { width: 5, height: 5 };
 		return {
-			width: (frameSizePx.x * pixelSizeUm.x) / (1000 * magnification),
-			height: (frameSizePx.y * pixelSizeUm.y) / (1000 * magnification)
+			width: fovUm[0] / 1000,
+			height: fovUm[1] / 1000
 		};
 	});
 

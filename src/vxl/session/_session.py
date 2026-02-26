@@ -36,8 +36,9 @@ class Session:
         self._log = logging.getLogger(f"Session({session_dir.name})")
         self._workflow = Workflow(self._config.workflow_steps, self._config.workflow_committed)
 
-        # Cache for tile size (derived from cameras + magnification)
-        self._tile_size_um: tuple[float, float] | None = None
+        # FOV from rig topic (set during rig.start(), updated via subscription)
+        self._tile_size_um: tuple[float, float] | None = rig.get_topic_value("fov")
+        self._unsubscribe_fov = rig.subscribe("fov", self._on_fov_changed)
 
     def _save(self) -> None:
         """Save session to disk, preserving YAML anchors."""
@@ -158,9 +159,14 @@ class Session:
         """Grid is locked when the Scout step is not active."""
         return self._workflow.step_state("scout") != StepState.ACTIVE
 
+    async def _on_fov_changed(self, fov: tuple[float, float]) -> None:
+        """Handle FOV changes from rig topic."""
+        self._tile_size_um = fov
+        self._recalculate_planned_stack_positions()
+
     # ==================== Grid Management ====================
 
-    async def _recalculate_planned_stack_positions(self) -> None:
+    def _recalculate_planned_stack_positions(self) -> None:
         """Recalculate (x_um, y_um) for all PLANNED stacks based on current grid config.
 
         Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
@@ -169,8 +175,8 @@ class Session:
         if not any(s.status == StackStatus.PLANNED for s in self._config.stacks):
             return
 
-        fov_w, fov_h = await self.get_fov_size()
-        step_w, step_h = await self.get_step_size()
+        fov_w, fov_h = self.get_fov_size()
+        step_w, step_h = self.get_step_size()
         offset_x = self._config.grid_config.x_offset_um
         offset_y = self._config.grid_config.y_offset_um
 
@@ -181,7 +187,7 @@ class Session:
                 stack.w_um = fov_w
                 stack.h_um = fov_h
 
-    async def set_grid_offset(self, x_offset_um: float, y_offset_um: float) -> None:
+    def set_grid_offset(self, x_offset_um: float, y_offset_um: float) -> None:
         """Set grid offset. Recalculates PLANNED stack positions.
 
         Raises RuntimeError if grid is locked (non-PLANNED stacks exist).
@@ -190,11 +196,10 @@ class Session:
             raise RuntimeError("Cannot modify grid: acquisition has started")
         self._config.grid_config.x_offset_um = x_offset_um
         self._config.grid_config.y_offset_um = y_offset_um
-        self._tile_size_um = None  # Invalidate cache
-        await self._recalculate_planned_stack_positions()
+        self._recalculate_planned_stack_positions()
         self._save()
 
-    async def set_overlap(self, overlap: float) -> None:
+    def set_overlap(self, overlap: float) -> None:
         """Set overlap. Recalculates PLANNED stack positions.
 
         Raises RuntimeError if grid is locked (non-PLANNED stacks exist).
@@ -204,48 +209,22 @@ class Session:
         if not 0.0 <= overlap < 1.0:
             raise ValueError(f"Overlap must be in [0.0, 1.0), got {overlap}")
         self._config.grid_config.overlap = overlap
-        self._tile_size_um = None  # Invalidate cache
-        await self._recalculate_planned_stack_positions()
+        self._recalculate_planned_stack_positions()
         self._save()
 
-    async def get_fov_size(self) -> tuple[float, float]:
-        """Get FOV size from active profile's detection paths and cameras.
+    def get_fov_size(self) -> tuple[float, float]:
+        """Get FOV size in micrometers from rig-published topic.
 
         Returns the actual field of view dimensions in micrometers.
         This is the physical size each tile covers, regardless of overlap.
         """
-        if self._tile_size_um is not None:
-            return self._tile_size_um
-
-        # Get detection paths and cameras for active channels
-        fovs: list[tuple[float, float]] = []
-
-        for channel in self._rig.active_channels.values():
-            detection_path = self._rig.config.detection[channel.detection]
-            magnification = detection_path.magnification
-
-            # Get camera's frame_area_mm via handle
-            camera = self._rig.cameras[channel.detection]
-            frame_area_mm = await camera.get_frame_area_mm()
-
-            # FOV = frame_area * 1000 / magnification (mm -> um)
-            fov_width_um = frame_area_mm.x * 1000 / magnification
-            fov_height_um = frame_area_mm.y * 1000 / magnification
-            fovs.append((fov_width_um, fov_height_um))
-
-        if not fovs:
-            raise ValueError("No cameras found in active profile")
-
-        # Verify all FOVs match
-        if not all(f == fovs[0] for f in fovs):
-            raise ValueError("All detection paths in profile must have matching FOV")
-
-        self._tile_size_um = fovs[0]
+        if self._tile_size_um is None:
+            raise ValueError("FOV not available (no active profile or cameras)")
         return self._tile_size_um
 
-    async def get_step_size(self) -> tuple[float, float]:
+    def get_step_size(self) -> tuple[float, float]:
         """Get step size between tile positions (FOV adjusted for overlap)."""
-        fov_w, fov_h = await self.get_fov_size()
+        fov_w, fov_h = self.get_fov_size()
         overlap = self._config.grid_config.overlap
         return (fov_w * (1 - overlap), fov_h * (1 - overlap))
 
@@ -263,8 +242,8 @@ class Session:
         """
         # Get FOV and step size (requires active profile with cameras)
         try:
-            fov_w, fov_h = await self.get_fov_size()
-            step_w, step_h = await self.get_step_size()
+            fov_w, fov_h = self.get_fov_size()
+            step_w, step_h = self.get_step_size()
         except (ValueError, KeyError):
             # No active profile or cameras - return empty grid
             return []
@@ -332,7 +311,7 @@ class Session:
 
     # ==================== Stack Management ====================
 
-    async def add_stacks(self, stacks: list[dict[str, int | float]]) -> list[Stack]:
+    def add_stacks(self, stacks: list[dict[str, int | float]]) -> list[Stack]:
         """Add multiple stacks at grid positions. Single save at end.
 
         Args:
@@ -346,8 +325,8 @@ class Session:
         if self._rig.active_profile_id is None:
             raise RuntimeError("No active profile - select a profile before adding stacks")
 
-        fov_w, fov_h = await self.get_fov_size()
-        step_w, step_h = await self.get_step_size()
+        fov_w, fov_h = self.get_fov_size()
+        step_w, step_h = self.get_step_size()
 
         added: list[Stack] = []
         for s in stacks:
@@ -525,6 +504,7 @@ class Session:
 
     async def close(self) -> None:
         """Save final state and stop rig."""
+        self._unsubscribe_fov()
         self._save()
         await self._rig.stop()
         self._log.info("Session closed")

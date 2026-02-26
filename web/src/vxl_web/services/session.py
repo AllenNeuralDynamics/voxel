@@ -54,6 +54,9 @@ class SessionStatus(BaseModel):
     tiles: list[Tile]
     stacks: list[Stack]
 
+    # Derived values
+    fov_um: tuple[float, float] | None = None
+
     timestamp: str
 
 
@@ -71,11 +74,18 @@ class SessionService:
         self.session = session
         self.broadcast = broadcast
 
+        # Subscribe to FOV changes to trigger status broadcasts
+        self._unsubscribe_fov = session.rig.subscribe("fov", self._on_fov_changed)
+
         # Compose RigService with broadcast callback
         self.rig_service = RigService(
             rig=session.rig,
             broadcast=broadcast,
         )
+
+    async def _on_fov_changed(self, _fov: tuple[float, float]) -> None:
+        """Broadcast updated status when FOV changes."""
+        self.broadcast({}, with_status=True)
 
     # ==================== Status ====================
 
@@ -83,6 +93,11 @@ class SessionService:
         """Get current session status with full tile/stack data."""
         tiles = await self.session.get_tiles()
         preview = await self.session.rig.get_channel_preview_configs()
+
+        try:
+            fov_um = self.session.get_fov_size()
+        except ValueError:
+            fov_um = None
 
         return SessionStatus(
             active_profile_id=self.session.rig.active_profile_id,
@@ -95,6 +110,7 @@ class SessionService:
             tile_order=self.session.tile_order,
             tiles=tiles,
             stacks=self.session.stacks,
+            fov_um=fov_um,
             preview=preview,
             timestamp=_utc_timestamp(),
         )
@@ -163,7 +179,7 @@ class SessionService:
         if x_offset is None or y_offset is None:
             raise ValueError("Missing x_offset_um or y_offset_um")
 
-        await self.session.set_grid_offset(x_offset, y_offset)
+        self.session.set_grid_offset(x_offset, y_offset)
         # Status broadcast includes grid_config, tiles, and stacks
         self.broadcast({}, with_status=True)
 
@@ -174,7 +190,7 @@ class SessionService:
         if overlap is None:
             raise ValueError("Missing overlap")
 
-        await self.session.set_overlap(overlap)
+        self.session.set_overlap(overlap)
         # Status broadcast includes grid_config, tiles, and stacks
         self.broadcast({}, with_status=True)
 
@@ -200,7 +216,7 @@ class SessionService:
         if not stacks or not isinstance(stacks, list):
             raise ValueError("Missing or invalid 'stacks' array")
 
-        await self.session.add_stacks(stacks)
+        self.session.add_stacks(stacks)
         self.broadcast({}, with_status=True)
 
     async def _handle_stacks_edit(self, payload: dict[str, Any]) -> None:
@@ -357,9 +373,9 @@ async def update_grid(
     """Update grid configuration."""
     try:
         if request.x_offset_um is not None and request.y_offset_um is not None:
-            await service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
+            service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
         if request.overlap is not None:
-            await service.session.set_overlap(request.overlap)
+            service.session.set_overlap(request.overlap)
 
         # Status broadcast includes grid_config, tiles, and stacks
         service.broadcast({}, with_status=True)
@@ -418,7 +434,7 @@ async def add_stacks(
 ) -> dict:
     """Add stacks at the specified grid positions (bulk)."""
     try:
-        stacks = await service.session.add_stacks([s.model_dump() for s in request.stacks])
+        stacks = service.session.add_stacks([s.model_dump() for s in request.stacks])
         service.broadcast({}, with_status=True)
         return {"added": len(stacks), "stacks": [s.model_dump() for s in stacks]}
     except RuntimeError as e:

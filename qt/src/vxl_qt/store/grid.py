@@ -216,7 +216,7 @@ class GridStore(QObject):
         else:
             try:
                 self._tiles = await self._session.get_tiles()
-                self._fov_size = await self._session.get_fov_size()
+                self._fov_size = self._session.get_fov_size()
             except (ValueError, KeyError):
                 # No active profile or cameras
                 self._tiles = []
@@ -233,7 +233,7 @@ class GridStore(QObject):
             log.warning("Cannot modify grid: acquisition has started")
             return
 
-        await self._session.set_grid_offset(x_um, y_um)
+        self._session.set_grid_offset(x_um, y_um)
         await self.refresh_tiles()
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
@@ -246,7 +246,7 @@ class GridStore(QObject):
             log.warning("Cannot modify grid: acquisition has started")
             return
 
-        await self._session.set_overlap(overlap)
+        self._session.set_overlap(overlap)
         await self.refresh_tiles()
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
@@ -272,7 +272,7 @@ class GridStore(QObject):
         if self._session is None:
             return []
 
-        added = await self._session.add_stacks(stacks)
+        added = self._session.add_stacks(stacks)
         self.stacks_changed.emit()
         if added:
             self.grid_locked_changed.emit(self.grid_locked)

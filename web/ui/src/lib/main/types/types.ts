@@ -65,6 +65,9 @@ export interface SessionStatus {
 	tiles: Tile[];
 	stacks: Stack[];
 
+	// Derived values
+	fov_um: [number, number] | null;
+
 	// Preview display config per channel (channel_id -> PreviewConfig)
 	preview: Record<string, PreviewConfig>;
 }

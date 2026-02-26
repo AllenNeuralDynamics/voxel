@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import zmq.asyncio
+from rigup.device import PropsCallback, PropsResponse
 from vxlib.color import Color
 
 from rigup import DeviceHandle, Rig
@@ -20,6 +22,10 @@ from vxl.device import DeviceType
 from vxl.node import VoxelNode
 from vxl.sync import SyncTask
 from vxl.tile import Stack, StackResult, StackStatus
+
+_FOV_PROPERTIES = frozenset({"frame_area_mm"})
+
+Unsubscribe = Callable[[], None]
 
 
 class RigMode(StrEnum):
@@ -73,6 +79,79 @@ class VoxelRig(Rig):
         self._preview_crop: PreviewCrop = PreviewCrop()
         self.sync_task: SyncTask | None = None
 
+        # Topic registry for derived values (e.g. FOV)
+        self._topic_callbacks: dict[str, list[Callable]] = {}
+        self._topic_values: dict[str, Any] = {}
+        self._fov_lock = asyncio.Lock()
+
+    # ===================== Topic Registry =====================
+
+    def subscribe(self, topic: str, callback: Callable) -> Unsubscribe:
+        """Subscribe to a derived topic. Returns an unsubscribe callable."""
+        self._topic_callbacks.setdefault(topic, []).append(callback)
+
+        def _unsub() -> None:
+            cbs = self._topic_callbacks.get(topic)
+            if cbs and callback in cbs:
+                cbs.remove(callback)
+
+        return _unsub
+
+    def get_topic_value(self, topic: str) -> Any | None:
+        """Get the current value of a topic (synchronous snapshot)."""
+        return self._topic_values.get(topic)
+
+    async def _publish(self, topic: str, value: Any) -> None:
+        """Publish a value to a topic. Deduplicates and notifies subscribers."""
+        if self._topic_values.get(topic) == value:
+            return
+        self._topic_values[topic] = value
+        for cb in self._topic_callbacks.get(topic, []):
+            try:
+                await cb(value)
+            except Exception:
+                self.log.exception(f"Error in topic '{topic}' callback")
+
+    # ===================== FOV Computation =====================
+
+    async def _compute_and_publish_fov(self) -> None:
+        """Compute FOV from active profile cameras and publish to 'fov' topic."""
+        async with self._fov_lock:
+            if not self.active_profile:
+                return
+
+            fovs: list[tuple[float, float]] = []
+            for channel in self.active_channels.values():
+                detection_path = self.config.detection[channel.detection]
+                magnification = detection_path.magnification
+                camera = self.cameras.get(channel.detection)
+                if not camera:
+                    continue
+                frame_area_mm = await camera.get_frame_area_mm()
+                fov_w = frame_area_mm.x * 1000 / magnification
+                fov_h = frame_area_mm.y * 1000 / magnification
+                fovs.append((fov_w, fov_h))
+
+            if not fovs:
+                return
+
+            if not all(f == fovs[0] for f in fovs):
+                self.log.warning("Cameras disagree on FOV; using first camera's value")
+
+            await self._publish("fov", fovs[0])
+
+    def _make_camera_props_callback(self, camera_id: str) -> PropsCallback:
+        """Create a property-change callback that triggers FOV recomputation."""
+
+        async def _on_camera_props(props: PropsResponse) -> None:
+            if camera_id not in self._get_profile_cameras():
+                return
+            if not (set(props.res.keys()) & _FOV_PROPERTIES):
+                return
+            await self._compute_and_publish_fov()
+
+        return _on_camera_props
+
     async def _on_start_complete(self) -> None:
         """Categorize devices by type and validate Voxel-specific assignments."""
         # Categorize all handles by device type
@@ -113,6 +192,10 @@ class VoxelRig(Rig):
 
         # Subscribe to all camera preview streams (subscriptions are stable for rig lifetime)
         await self.preview.subscribe_cameras(self.cameras)
+
+        # Subscribe to camera property changes for FOV recomputation
+        for cam_id, camera in self.cameras.items():
+            await camera.on_props_changed(self._make_camera_props_callback(cam_id))
 
         await self.set_active_profile(self._active_profile_id)
 
@@ -342,7 +425,10 @@ class VoxelRig(Rig):
         if default_colormaps:
             await self.update_preview_colormaps(default_colormaps)
 
-        # 7. Restart preview if it was running
+        # 7. Compute and publish FOV for this profile
+        await self._compute_and_publish_fov()
+
+        # 8. Restart preview if it was running
         if restart_preview:
             if frame_callback:
                 self.log.info("Restarting preview after profile change")
