@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
-	import { cn, sanitizeString } from '$lib/utils';
-	import ChannelsConfig from './ChannelsConfig.svelte';
+	import { cn, sanitizeString, wavelengthToColor } from '$lib/utils';
+	import { Collapsible } from 'bits-ui';
+	import Icon from '@iconify/svelte';
+	import ProfileConfig from './ProfileConfig.svelte';
 
 	interface Props {
 		session: Session;
@@ -12,12 +14,17 @@
 	const config = $derived(session.config);
 	const daqDeviceId = $derived(config.daq.device);
 
-	type NavTarget = { type: 'device'; id: string } | { type: 'channels' };
+	type NavTarget =
+		| { type: 'device'; id: string }
+		| { type: 'channels' }
+		| { type: 'profile'; id: string };
+
 	let activeNav = $state<NavTarget>({ type: 'channels' });
 
 	function isActive(target: NavTarget): boolean {
 		if (activeNav.type !== target.type) return false;
 		if (target.type === 'device' && activeNav.type === 'device') return activeNav.id === target.id;
+		if (target.type === 'profile' && activeNav.type === 'profile') return activeNav.id === target.id;
 		return true;
 	}
 
@@ -40,6 +47,32 @@
 				Channels
 			</button>
 		</nav>
+
+		<div class="my-3 border-t border-border"></div>
+
+		<!-- Profiles -->
+		<Collapsible.Root open>
+			<Collapsible.Trigger class="group flex w-full items-center justify-between px-2 py-1">
+				<span class="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">
+					Profiles
+				</span>
+				<Icon
+					icon="mdi:chevron-right"
+					width="12"
+					height="12"
+					class="shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
+				/>
+			</Collapsible.Trigger>
+			<Collapsible.Content>
+				<nav class="mt-1 space-y-0.5">
+					{#each Object.entries(config.profiles) as [id, profile] (id)}
+						<button onclick={() => (activeNav = { type: 'profile', id })} class={navClass({ type: 'profile', id })}>
+							<span class="truncate">{profile.label ?? sanitizeString(id)}</span>
+						</button>
+					{/each}
+				</nav>
+			</Collapsible.Content>
+		</Collapsible.Root>
 
 		<div class="my-3 border-t border-border"></div>
 
@@ -68,11 +101,49 @@
 	<!-- Main Content -->
 	<div class="flex-1 overflow-auto p-6">
 		{#if activeNav.type === 'channels'}
-			<ChannelsConfig {session} />
+			<!-- Channel cards -->
+			<section>
+				<h3 class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+					Channels
+				</h3>
+				<div class="grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+					{#each Object.entries(config.channels) as [channelId, channel] (channelId)}
+						<div class="rounded-lg border bg-card text-card-foreground shadow-sm p-3 text-xs">
+							<div class="mb-2 flex items-center gap-2">
+								{#if channel.emission}
+									<span
+										class="h-2.5 w-2.5 shrink-0 rounded-full"
+										style="background-color: {wavelengthToColor(channel.emission)}"
+									></span>
+								{/if}
+								<span class="font-medium text-foreground">
+									{channel.label ?? sanitizeString(channelId)}
+								</span>
+							</div>
+							<div class="space-y-1 text-muted-foreground">
+								<div class="flex justify-between">
+									<span>Detection</span>
+									<span class="text-foreground">{channel.detection}</span>
+								</div>
+								<div class="flex justify-between">
+									<span>Illumination</span>
+									<span class="text-foreground">{channel.illumination}</span>
+								</div>
+								{#each Object.entries(channel.filters) as [fwId, position] (fwId)}
+									<div class="flex justify-between">
+										<span>{fwId}</span>
+										<span class="text-foreground">{position}</span>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</div>
+			</section>
+		{:else if activeNav.type === 'profile'}
+			<ProfileConfig {session} profileId={activeNav.id} />
 		{:else if activeNav.type === 'device'}
-			<!-- Device Detail -->
 			{#if activeNav.id === daqDeviceId}
-				<!-- DAQ device page — show acquisition ports -->
 				<section>
 					<h3 class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
 						Acquisition Ports
