@@ -305,8 +305,14 @@ class AppService:
 
             await self.session_service.handle_message(client_id, topic, payload)
 
+        except (ValueError, RuntimeError) as e:
+            log.warning("Client %s message '%s' rejected: %s", client_id, topic, e)
+            await self._send_to_client(
+                client_id,
+                {"topic": "error", "payload": {"error": str(e), "topic": topic}},
+            )
         except Exception as e:
-            log.exception("Error handling message from client %s", client_id)
+            log.exception("Unexpected error handling message '%s' from client %s", topic, client_id)
             await self._send_to_client(
                 client_id,
                 {"topic": "error", "payload": {"error": str(e), "topic": topic}},

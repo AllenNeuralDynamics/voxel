@@ -371,6 +371,9 @@ class Session:
         if active_pid is None:
             raise RuntimeError("No active profile - select a profile before adding stacks")
 
+        if self._workflow.step_state("plan") != StepState.ACTIVE:
+            raise RuntimeError("Cannot add stacks: plan step must be active")
+
         gc = self.grid_config
         if gc is None:
             raise RuntimeError(f"Profile '{active_pid}' is not in the acquisition plan")
@@ -424,10 +427,13 @@ class Session:
         Args:
             edits: List of {row, col, z_start_um?, z_end_um?}
 
-        Only PLANNED stacks can be edited.
+        Only PLANNED stacks can be edited. Plan step must be active.
         """
         if not edits:
             return []
+
+        if self._workflow.step_state("plan") != StepState.ACTIVE:
+            raise RuntimeError("Cannot edit stacks: plan step must be active")
 
         edited: list[Stack] = []
         for e in edits:
@@ -458,9 +464,14 @@ class Session:
 
         Args:
             positions: List of {row, col}
+
+        Plan step must be active.
         """
         if not positions:
             return
+
+        if self._workflow.step_state("plan") != StepState.ACTIVE:
+            raise RuntimeError("Cannot remove stacks: plan step must be active")
 
         active_pid = self._rig.active_profile_id
         for p in positions:

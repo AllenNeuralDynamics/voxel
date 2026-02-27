@@ -55,14 +55,14 @@
 	{#each workflow.steps as step (step.id)}
 		{@const state = workflow.stepStates[step.id]}
 		{@const isActive = state === 'active'}
-		<div class={cn(tabVariants({ viewing: viewId === step.id, state }), 'justify-between cursor-pointer hover:text-foreground')}>
+		<div class={cn(tabVariants({ viewing: viewId === step.id, state }), 'justify-between hover:text-foreground')}>
 			<button
 				disabled={!workflow.canGoBack}
 				onclick={handleBack}
 				class={cn(
-					'overflow-hidden transition-all duration-200',
+					'cursor-pointer overflow-hidden transition-all  duration-200',
 					isActive ? 'w-3.5' : 'w-0',
-					isActive && workflow.canGoBack ? 'opacity-100' : 'opacity-0 pointer-events-none'
+					isActive && workflow.canGoBack ? 'opacity-100' : 'pointer-events-none cursor-not-allowed opacity-40'
 				)}
 				title="Re-open previous step"
 			>
@@ -70,7 +70,7 @@
 			</button>
 			<button
 				onclick={() => (viewId = step.id)}
-				class="flex w-20 items-center justify-center gap-2 cursor-pointer uppercase"
+				class="flex w-20 cursor-pointer items-center justify-center gap-2 uppercase"
 			>
 				<span
 					class={cn(
@@ -92,9 +92,9 @@
 				disabled={!workflow.canAdvance}
 				onclick={handleNext}
 				class={cn(
-					'overflow-hidden transition-all duration-200',
+					'cursor-pointer overflow-hidden transition-all  duration-200',
 					isActive ? 'w-3.5' : 'w-0',
-					isActive && workflow.canAdvance ? 'opacity-100' : 'opacity-0 pointer-events-none'
+					isActive && workflow.canAdvance ? 'opacity-100' : 'pointer-events-none cursor-not-allowed opacity-40'
 				)}
 				title="Commit step and advance"
 			>

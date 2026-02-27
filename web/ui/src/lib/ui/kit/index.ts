@@ -14,3 +14,4 @@ export { default as Switch, switchVariants, type SwitchVariants } from './Switch
 export { default as TextInput, textInputVariants, type TextInputVariants } from './TextInput.svelte';
 
 export * as ContextMenu from './cn/context-menu';
+export { Toaster } from './cn/sonner';

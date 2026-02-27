@@ -1,3 +1,4 @@
+import { toast } from 'svelte-sonner';
 import type { Client, DaqWaveforms } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
 import type {
@@ -185,9 +186,9 @@ export class Session {
 		} catch (error) {
 			console.error('[Session] Failed to activate profile:', error);
 			this.waveformsLoading = false;
-			if (error instanceof Error) {
-				this.error = error.message || 'Failed to activate profile';
-			}
+			const msg = error instanceof Error ? error.message : 'Failed to activate profile';
+			this.error = msg;
+			toast.error(msg);
 			throw error;
 		} finally {
 			this.isMutating = false;

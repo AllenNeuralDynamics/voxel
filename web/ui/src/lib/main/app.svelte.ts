@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { toast } from 'svelte-sonner';
 import { Client, type ClientOptions } from './client.svelte';
 import type { AppStatus, SessionDirectory, LogMessage, JsonSchema, VoxelRigConfig } from './types';
 import { Session } from './session.svelte';
@@ -110,7 +111,9 @@ export class App {
 			console.debug('[App] Session create request sent');
 		} catch (error) {
 			console.error('[App] Failed to create session:', error);
-			this.error = error instanceof Error ? error.message : 'Failed to create session';
+			const msg = error instanceof Error ? error.message : 'Failed to create session';
+			this.error = msg;
+			toast.error(msg);
 			throw error;
 		}
 	}
@@ -138,7 +141,9 @@ export class App {
 			console.debug('[App] Session resume request sent');
 		} catch (error) {
 			console.error('[App] Failed to resume session:', error);
-			this.error = error instanceof Error ? error.message : 'Failed to resume session';
+			const msg = error instanceof Error ? error.message : 'Failed to resume session';
+			this.error = msg;
+			toast.error(msg);
 			throw error;
 		}
 	}
@@ -165,7 +170,9 @@ export class App {
 			console.debug('[App] Session close request sent');
 		} catch (error) {
 			console.error('[App] Failed to close session:', error);
-			this.error = error instanceof Error ? error.message : 'Failed to close session';
+			const msg = error instanceof Error ? error.message : 'Failed to close session';
+			this.error = msg;
+			toast.error(msg);
 			throw error;
 		}
 	}
@@ -226,6 +233,7 @@ export class App {
 
 		const unsubError = this.#client.on('error', (payload) => {
 			console.error('[App] Error from backend:', payload.error);
+			toast.error(payload.error);
 			this.#handleLog({
 				level: 'error',
 				message: payload.error,

@@ -27,6 +27,8 @@
 
 	let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
 	let isZMoving = $derived(session.stage.z?.isMoving ?? false);
+	// let isPlanning = $derived(session.workflow.stepStates['plan'] === 'active');
+	let isPlanning = true;
 
 	// FOV position relative to stage origin (lower limits)
 	let fovX = $derived(session.stage.x ? session.stage.x.position - session.stage.x.lowerLimit : 0);
@@ -364,7 +366,11 @@
 					oncontextmenu={(e) => !isOtherProfile && handleTileContext(e, stack)}
 					onkeydown={(e) => !isOtherProfile && handleKeydown(e, () => session.selectTiles([[stack.row, stack.col]]))}
 				>
-					<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames){isOtherProfile ? ` [${stack.profile_id}]` : ''}</title>
+					<title
+						>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames){isOtherProfile
+							? ` [${stack.profile_id}]`
+							: ''}</title
+					>
 				</rect>
 			{/each}
 		</g>
@@ -584,7 +590,7 @@
 								{/if}
 							{/if}
 
-							{#if contextTile}
+							{#if contextTile && isPlanning}
 								<ContextMenu.Separator />
 
 								{#if !isMultiSelection}
