@@ -12,7 +12,7 @@
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button } from '$lib/ui/kit';
 	import { Cog, PlayCircleOutline, Logout, ChevronLeft } from '$lib/icons';
-	import { ProfileSelector, ProfileChips } from '$lib/ui/profile';
+	import { ProfileSelector } from '$lib/ui/profile';
 	import { LaserIndicators } from '$lib/ui/devices';
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
@@ -125,15 +125,18 @@
 								Acquire
 							</button>
 						</div>
-						<Button
-							class="min-w-26"
-							variant={session.preview.isPreviewing ? 'danger' : 'success'}
-							size="md"
-							onclick={() =>
-								session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
-						>
-							{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-						</Button>
+						<div class="flex items-center gap-3">
+							<ProfileSelector {session} size="lg" class="max-w-64 min-w-56" />
+							<Button
+								class="min-w-26"
+								variant={session.preview.isPreviewing ? 'danger' : 'success'}
+								size="md"
+								onclick={() =>
+									session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
+							>
+								{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
+							</Button>
+						</div>
 					</header>
 					<PaneGroup direction="vertical" autoSaveId="midCol-v3">
 						<Pane>
@@ -144,10 +147,7 @@
 									<div class="flex h-full flex-col justify-between">
 										<div class="space-y-4 p-4">
 											<div class="flex items-center justify-between gap-3">
-												<ProfileSelector {session} size="md" class="min-w-56 max-w-72" />
-												{#if session.activeProfileId}
-													<ProfileChips {session} profileId={session.activeProfileId} />
-												{/if}
+												<p class="text-sm text-muted-foreground">Adding Acquisition Profile and configuring the grid</p>
 											</div>
 											<GridControls {session} />
 										</div>
@@ -159,7 +159,10 @@
 								{:else if viewId === 'acquire'}
 									{#if workflow.allCommitted}
 										<div class="flex h-full flex-col justify-between">
-											<div class="px-4 pt-3">
+											<div class="flex h-full items-center justify-between px-4">
+												<p class="w-full text-center text-sm text-muted-foreground">Coming soon</p>
+											</div>
+											<div class="px-4 py-3">
 												<Button
 													variant="ghost"
 													size="xs"
