@@ -180,9 +180,9 @@
 	const namedChannels = $derived(previewer.channels.filter((c) => c.name));
 </script>
 
-<div class="grid h-full grid-rows-[auto_1fr_auto] gap-6 bg-background p-2" bind:this={containerEl}>
+<div class="grid h-full grid-rows-[auto_1fr_auto] gap-0 bg-background" bind:this={containerEl}>
 	<!-- Top: Controls -->
-	<div class="flex items-center justify-between py-4">
+	<div class="flex items-center justify-between px-2 pt-5 pb-3">
 		<div class="flex items-center gap-1">
 			<button
 				onclick={() => (showHistograms = !showHistograms)}
@@ -200,7 +200,7 @@
 	</div>
 
 	<!-- Center: Canvas -->
-	<div class="flex items-center justify-center overflow-hidden px-4">
+	<div class="flex items-center justify-center overflow-hidden p-2">
 		<canvas
 			bind:this={canvasEl}
 			class="preview-canvas max-h-full max-w-full border"
@@ -212,7 +212,7 @@
 	</div>
 
 	<!-- Bottom: Channel Histograms -->
-	<div class="flex justify-around gap-8 px-4 py-2">
+	<div class="flex justify-around gap-8 px-2 py-4">
 		{#if showHistograms}
 			{#each namedChannels as channel (channel.idx)}
 				<div class=" min-w-0 flex-1">

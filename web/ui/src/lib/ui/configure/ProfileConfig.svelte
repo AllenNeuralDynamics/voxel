@@ -1,11 +1,11 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { sanitizeString } from '$lib/utils';
-	import { Button } from '$lib/ui/kit';
 	import { Collapsible } from 'bits-ui';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { ChevronRight } from '$lib/icons';
 	import { WaveformPlot } from '$lib/ui/waveform';
+	import { ProfileChips } from '$lib/ui/profile';
 
 	interface Props {
 		session: Session;
@@ -15,8 +15,6 @@
 	let { session, profileId }: Props = $props();
 
 	const config = $derived(session.config);
-	const activeProfileId = $derived(session.activeProfileId);
-	const isActive = $derived(profileId === activeProfileId);
 	const profile = $derived(config.profiles[profileId]);
 	const stackOnlySet = $derived(new SvelteSet(profile?.daq.stack_only ?? []));
 
@@ -71,30 +69,7 @@
 				<h2 class="text-sm font-medium text-foreground">
 					{profile.label ?? sanitizeString(profileId)}
 				</h2>
-				<div class="ml-auto flex items-center gap-1.5">
-					{#each profile.channels as chId (chId)}
-						<span class="rounded-full bg-muted px-1.5 py-px text-[0.65rem] text-foreground">
-							{config.channels[chId]?.label ?? sanitizeString(chId)}
-						</span>
-					{/each}
-					{#if isActive}
-						<span
-							class="inline-flex h-6 items-center justify-center rounded-full bg-success/15 px-3.5 text-[0.65rem] font-medium text-success"
-						>
-							Active
-						</span>
-					{:else}
-						<Button
-							size="xs"
-							variant="outline"
-							class="rounded-full"
-							onclick={() => session.activateProfile(profileId)}
-							disabled={session.isMutating}
-						>
-							Activate
-						</Button>
-					{/if}
-				</div>
+				<ProfileChips {session} {profileId} showStatus class="ml-auto" />
 			</div>
 			{#if profile.desc}
 				<p class="mt-1 text-xs text-muted-foreground">{profile.desc}</p>

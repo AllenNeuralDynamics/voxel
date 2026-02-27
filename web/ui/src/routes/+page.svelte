@@ -11,15 +11,13 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button } from '$lib/ui/kit';
-	import { Cog, PlayCircleOutline, Logout, ChevronUpDown } from '$lib/icons';
-	import { Select } from '$lib/ui/kit';
-	import { sanitizeString } from '$lib/utils';
+	import { Cog, PlayCircleOutline, Logout, ChevronLeft } from '$lib/icons';
+	import { ProfileSelector, ProfileChips } from '$lib/ui/profile';
 	import { LaserIndicators } from '$lib/ui/devices';
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
-	import DevicesPanel from './DevicesPanel.svelte';
-	import { ConfigurePanel } from '$lib/ui/configure';
+	import { ConfigurePanel, type ConfigureNavTarget } from '$lib/ui/configure';
 	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
@@ -27,6 +25,9 @@
 
 	let app = $state<App | undefined>(undefined);
 	let viewId = $state(DEFAULT_HEADER_TAB);
+
+	// Configure panel nav state (persists across tab switches)
+	let configureNav = $state<ConfigureNavTarget>({ type: 'channels' });
 
 	// Control view state
 	let bottomPanelTab = $state('lasers');
@@ -111,7 +112,7 @@
 							>
 								<Cog width="16" height="16" /> Configure
 							</button>
-							<WorkflowTabs {workflow} bind:viewId class="max-w-96 min-w-88" />
+							<WorkflowTabs {workflow} bind:viewId class="max-w-96" />
 							<button
 								onclick={() => toggleView('acquire')}
 								class={cn(
@@ -124,41 +125,30 @@
 								Acquire
 							</button>
 						</div>
-						<div class="flex items-center gap-4">
-							<Button
-								class="min-w-26"
-								variant={session.preview.isPreviewing ? 'danger' : 'success'}
-								size="md"
-								onclick={() =>
-									session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
-							>
-								{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-							</Button>
-							<Select
-								value={session.activeProfileId ?? ''}
-								options={Object.entries(session.config.profiles).map(([id, cfg]) => ({
-									value: id,
-									label: cfg.label ?? sanitizeString(id),
-									description: cfg.desc
-								}))}
-								onchange={(v) => session.activateProfile(v)}
-								icon={ChevronUpDown}
-								loading={session.isMutating}
-								showCheckmark
-								emptyMessage="No profiles available"
-								size="lg"
-								class="min-w-56"
-							/>
-						</div>
+						<Button
+							class="min-w-26"
+							variant={session.preview.isPreviewing ? 'danger' : 'success'}
+							size="md"
+							onclick={() =>
+								session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
+						>
+							{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
+						</Button>
 					</header>
 					<PaneGroup direction="vertical" autoSaveId="midCol-v3">
 						<Pane>
 							<div class="h-full overflow-auto">
 								{#if viewId === 'configure'}
-									<ConfigurePanel {session} />
+									<ConfigurePanel {session} bind:activeNav={configureNav} />
 								{:else if viewId === 'scout'}
 									<div class="flex h-full flex-col justify-between">
-										<div class="p-4">
+										<div class="space-y-4 p-4">
+											<div class="flex items-center justify-between gap-3">
+												<ProfileSelector {session} size="md" class="min-w-56 max-w-72" />
+												{#if session.activeProfileId}
+													<ProfileChips {session} profileId={session.activeProfileId} />
+												{/if}
+											</div>
 											<GridControls {session} />
 										</div>
 									</div>
@@ -169,7 +159,18 @@
 								{:else if viewId === 'acquire'}
 									{#if workflow.allCommitted}
 										<div class="flex h-full flex-col justify-between">
-											<DevicesPanel {session} class="h-auto" />
+											<div class="px-4 pt-3">
+												<Button
+													variant="ghost"
+													size="xs"
+													onclick={() => {
+														const stepId = workflow.back();
+														if (stepId) viewId = stepId;
+													}}
+												>
+													<ChevronLeft width="12" height="12" /> Back to setup
+												</Button>
+											</div>
 										</div>
 									{:else}
 										<div class="flex h-full items-center justify-center">

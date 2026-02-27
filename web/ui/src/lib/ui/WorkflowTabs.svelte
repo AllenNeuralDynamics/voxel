@@ -2,13 +2,13 @@
 	import { tv, type VariantProps } from 'tailwind-variants';
 
 	export const workflowTabsVariants = tv({
-		base: 'flex items-center  border border-border rounded-3xl'
+		base: 'flex items-center gap-1.5'
 	});
 
 	export type WorkflowTabsVariants = VariantProps<typeof workflowTabsVariants>;
 
 	const tabVariants = tv({
-		base: 'flex flex-1 items-center gap-2 px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors text-muted-foreground rounded-xl transition-colors',
+		base: 'flex items-center gap-1 px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-all text-muted-foreground rounded-xl border border-border',
 		variants: {
 			viewing: {
 				true: 'bg-muted font-medium text-foreground',
@@ -52,49 +52,54 @@
 </script>
 
 <div class={cn(workflowTabsVariants(), className)}>
-	<button
-		disabled={!workflow.canGoBack}
-		onclick={handleBack}
-		class={cn(
-			'flex items-center justify-center border-r border-transparent px-2 py-1.5 text-muted-foreground transition-colors',
-			!workflow.canGoBack ? 'cursor-not-allowed opacity-40' : 'hover:bg-muted hover:text-foreground'
-		)}
-		title="Re-open previous step"
-	>
-		<ChevronLeft width="14" height="14" />
-	</button>
 	{#each workflow.steps as step (step.id)}
 		{@const state = workflow.stepStates[step.id]}
-		<button
-			onclick={() => (viewId = step.id)}
-			class={cn(tabVariants({ viewing: viewId === step.id, state }), 'cursor-pointer hover:text-foreground')}
-		>
-			<span
+		{@const isActive = state === 'active'}
+		<div class={cn(tabVariants({ viewing: viewId === step.id, state }), 'justify-between cursor-pointer hover:text-foreground')}>
+			<button
+				disabled={!workflow.canGoBack}
+				onclick={handleBack}
 				class={cn(
-					'flex h-3 w-3 items-center justify-center rounded-full border transition-colors',
-					state === 'committed'
-						? 'border-success bg-success text-white'
-						: state === 'active'
-							? 'border-success'
-							: 'border-muted-foreground/30'
+					'overflow-hidden transition-all duration-200',
+					isActive ? 'w-3.5' : 'w-0',
+					isActive && workflow.canGoBack ? 'opacity-100' : 'opacity-0 pointer-events-none'
 				)}
+				title="Re-open previous step"
 			>
-				{#if state === 'committed'}
-					<Check width="8" height="8" class="pointer-events-none" />
-				{/if}
-			</span>
-			{step.label}
-		</button>
+				<ChevronLeft width="14" height="14" />
+			</button>
+			<button
+				onclick={() => (viewId = step.id)}
+				class="flex w-20 items-center justify-center gap-2 cursor-pointer uppercase"
+			>
+				<span
+					class={cn(
+						'flex h-3 w-3 items-center justify-center rounded-full border transition-colors',
+						state === 'committed'
+							? 'border-success bg-success text-white'
+							: state === 'active'
+								? 'border-success'
+								: 'border-muted-foreground/30'
+					)}
+				>
+					{#if state === 'committed'}
+						<Check width="8" height="8" class="pointer-events-none" />
+					{/if}
+				</span>
+				{step.label}
+			</button>
+			<button
+				disabled={!workflow.canAdvance}
+				onclick={handleNext}
+				class={cn(
+					'overflow-hidden transition-all duration-200',
+					isActive ? 'w-3.5' : 'w-0',
+					isActive && workflow.canAdvance ? 'opacity-100' : 'opacity-0 pointer-events-none'
+				)}
+				title="Commit step and advance"
+			>
+				<ChevronRight width="14" height="14" />
+			</button>
+		</div>
 	{/each}
-	<button
-		disabled={!workflow.canAdvance}
-		onclick={handleNext}
-		class={cn(
-			'flex items-center justify-center border-l border-transparent px-2 py-1.5 text-muted-foreground transition-colors',
-			!workflow.canAdvance ? 'cursor-not-allowed opacity-40' : 'hover:bg-muted hover:text-foreground'
-		)}
-		title="Commit step and advance"
-	>
-		<ChevronRight width="14" height="14" />
-	</button>
 </div>

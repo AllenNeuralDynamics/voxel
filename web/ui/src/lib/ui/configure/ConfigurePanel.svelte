@@ -4,19 +4,21 @@
 	import { Collapsible } from 'bits-ui';
 	import { ChevronRight } from '$lib/icons';
 	import ProfileConfig from './ProfileConfig.svelte';
+	import CameraConfig from './CameraConfig.svelte';
+	import LaserConfig from './LaserConfig.svelte';
+	import GenericDeviceConfig from './GenericDeviceConfig.svelte';
+
+	export type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id: string };
 
 	interface Props {
 		session: Session;
+		activeNav?: NavTarget;
 	}
 
-	let { session }: Props = $props();
+	let { session, activeNav = $bindable({ type: 'channels' }) }: Props = $props();
 
 	const config = $derived(session.config);
 	const daqDeviceId = $derived(config.daq.device);
-
-	type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id: string };
-
-	let activeNav = $state<NavTarget>({ type: 'channels' });
 
 	function isActive(target: NavTarget): boolean {
 		if (activeNav.type !== target.type) return false;
@@ -133,7 +135,11 @@
 		{:else if activeNav.type === 'profile'}
 			<ProfileConfig {session} profileId={activeNav.id} />
 		{:else if activeNav.type === 'device'}
-			{#if activeNav.id === daqDeviceId}
+			{#if activeNav.id in session.cameras}
+				<CameraConfig {session} deviceId={activeNav.id} />
+			{:else if activeNav.id in session.lasers}
+				<LaserConfig {session} deviceId={activeNav.id} />
+			{:else if activeNav.id === daqDeviceId}
 				<section>
 					<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Acquisition Ports</h3>
 					<div class="space-y-1">
@@ -146,11 +152,7 @@
 					</div>
 				</section>
 			{:else}
-				<div class="flex items-center justify-center py-12">
-					<p class="text-sm text-muted-foreground">
-						{sanitizeString(activeNav.id)} — device details coming soon
-					</p>
-				</div>
+				<GenericDeviceConfig {session} deviceId={activeNav.id} />
 			{/if}
 		{/if}
 	</div>
