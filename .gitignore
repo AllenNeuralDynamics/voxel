@@ -12,3 +12,7 @@ wheels/
 
 # SSL Certificates
 *.pem
+
+# notes in obsidian
+notes
+.obsidian
