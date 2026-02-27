@@ -28,14 +28,25 @@ class GridConfig(BaseModel):
     default_z_end_um: float = 100.0
 
 
+class AcquisitionPlan(BaseModel):
+    """Per-profile grid configs and a flat list of stacks.
+
+    The keys of ``grid_configs`` implicitly define which profiles are selected
+    for acquisition.  Stacks are kept in a single flat list for future
+    interleaving support.
+    """
+
+    grid_configs: dict[str, GridConfig] = Field(default_factory=dict)
+    stacks: list[Stack] = Field(default_factory=list)
+
+
 class SessionConfig(BaseModel):
     """Combined rig configuration and session state.
 
     This model represents the complete session file (.voxel.yaml) with:
     - rig: The full VoxelRigConfig
-    - grid_config: Grid configuration for tile planning
+    - plan: AcquisitionPlan with per-profile grid configs and stacks
     - tile_order: Order for acquiring tiles
-    - stacks: List of planned/completed stacks
 
     YAML anchors and aliases are preserved when loading and saving via raw_data.
     """
@@ -44,9 +55,8 @@ class SessionConfig(BaseModel):
     session_name: str = Field(default="", description="Optional session name suffix")
     metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
-    grid_config: GridConfig = Field(default_factory=GridConfig)
+    plan: AcquisitionPlan = Field(default_factory=AcquisitionPlan)
     tile_order: TileOrder = "unset"
-    stacks: list[Stack] = Field(default_factory=list)
     workflow_steps: list[WorkflowStepConfig] = Field(
         default_factory=lambda: [
             WorkflowStepConfig(id="scout", label="Scout"),
@@ -63,8 +73,9 @@ class SessionConfig(BaseModel):
     @model_validator(mode="after")
     def apply_rig_defaults(self) -> "SessionConfig":
         """Copy defaults from rig globals if not set."""
-        if self.grid_config.z_step_um < 0:
-            self.grid_config.z_step_um = self.rig.globals.default_z_step_um
+        for gc in self.plan.grid_configs.values():
+            if gc.z_step_um < 0:
+                gc.z_step_um = self.rig.globals.default_z_step_um
         if self.tile_order == "unset":
             self.tile_order = self.rig.globals.default_tile_order
         return self
@@ -80,14 +91,37 @@ class SessionConfig(BaseModel):
         with path.open() as f:
             raw_data = yaml.load(f)
 
+        rig = VoxelRigConfig.model_validate(raw_data.get("rig", {}))
+
+        # Build AcquisitionPlan — new format or migrate from old flat fields
+        if "plan" in raw_data:
+            plan_data = raw_data["plan"]
+            plan = AcquisitionPlan(
+                grid_configs={k: GridConfig.model_validate(v) for k, v in plan_data.get("grid_configs", {}).items()},
+                stacks=[Stack.model_validate(s) for s in plan_data.get("stacks", [])],
+            )
+        else:
+            # Backward compat: migrate old-style grid_config + stacks
+            old_gc = GridConfig.model_validate(raw_data.get("grid_config", {}))
+            old_stacks = [Stack.model_validate(s) for s in raw_data.get("stacks", [])]
+
+            grid_configs: dict[str, GridConfig] = {}
+            profile_ids_with_stacks = {s.profile_id for s in old_stacks}
+            if not profile_ids_with_stacks and rig.profiles:
+                # Fallback: assign to first rig profile
+                profile_ids_with_stacks = {next(iter(rig.profiles))}
+            for pid in profile_ids_with_stacks:
+                grid_configs[pid] = old_gc.model_copy()
+
+            plan = AcquisitionPlan(grid_configs=grid_configs, stacks=old_stacks)
+
         kwargs: dict[str, Any] = {
-            "rig": VoxelRigConfig.model_validate(raw_data.get("rig", {})),
+            "rig": rig,
             "session_name": raw_data.get("session_name", ""),
             "metadata_target": raw_data.get("metadata_target", BASE_METADATA_TARGET) or BASE_METADATA_TARGET,
             "metadata": raw_data.get("metadata", {}),
-            "grid_config": GridConfig.model_validate(raw_data.get("grid_config", {})),
+            "plan": plan,
             "tile_order": raw_data.get("tile_order", "snake_row"),
-            "stacks": [Stack.model_validate(s) for s in raw_data.get("stacks", [])],
         }
         if "workflow_steps" in raw_data:
             kwargs["workflow_steps"] = [WorkflowStepConfig.model_validate(ws) for ws in raw_data["workflow_steps"]]
@@ -124,9 +158,8 @@ class SessionConfig(BaseModel):
             "session_name": config.session_name,
             "metadata_target": config.metadata_target,
             "metadata": config.metadata,
-            "grid_config": config.grid_config.model_dump(),
+            "plan": {"grid_configs": {}, "stacks": []},
             "tile_order": config.tile_order,
-            "stacks": [],
             "workflow_steps": [ws.model_dump(mode="json") for ws in config.workflow_steps],
             "workflow_committed": config.workflow_committed,
         }
@@ -142,17 +175,23 @@ class SessionConfig(BaseModel):
 
         Cross-platform: uses Path.replace() which is atomic on POSIX, Linux, and Windows.
         """
+        plan_data = {
+            "grid_configs": {k: v.model_dump() for k, v in self.plan.grid_configs.items()},
+            "stacks": [s.model_dump(mode="json") for s in self.plan.stacks],
+        }
+
         if self._raw_data is not None:
             # Update session fields in raw data to preserve anchors in rig section
             self._raw_data["session_name"] = self.session_name
             self._raw_data["metadata_target"] = self.metadata_target
             self._raw_data["metadata"] = self.metadata
-            self._raw_data["grid_config"] = self.grid_config.model_dump()
+            self._raw_data["plan"] = plan_data
             self._raw_data["tile_order"] = self.tile_order
-            # Use mode='json' to serialize enums as strings for YAML compatibility
-            self._raw_data["stacks"] = [s.model_dump(mode="json") for s in self.stacks]
             self._raw_data["workflow_steps"] = [ws.model_dump(mode="json") for ws in self.workflow_steps]
             self._raw_data["workflow_committed"] = self.workflow_committed
+            # Remove old flat keys on forward migration
+            self._raw_data.pop("grid_config", None)
+            self._raw_data.pop("stacks", None)
             data = self._raw_data
         else:
             # Fresh config without raw_data, just dump normally
@@ -161,10 +200,8 @@ class SessionConfig(BaseModel):
                 "session_name": self.session_name,
                 "metadata_target": self.metadata_target,
                 "metadata": self.metadata,
-                "grid_config": self.grid_config.model_dump(),
+                "plan": plan_data,
                 "tile_order": self.tile_order,
-                # Use mode='json' to serialize enums as strings for YAML compatibility
-                "stacks": [s.model_dump(mode="json") for s in self.stacks],
                 "workflow_steps": [ws.model_dump(mode="json") for ws in self.workflow_steps],
                 "workflow_committed": self.workflow_committed,
             }

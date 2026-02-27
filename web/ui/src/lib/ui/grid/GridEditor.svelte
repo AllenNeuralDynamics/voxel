@@ -40,7 +40,7 @@
 		if (lastZStart !== null && lastZEnd !== null) {
 			return { start: lastZStart, end: lastZEnd };
 		}
-		return { start: session.gridConfig.default_z_start_um, end: session.gridConfig.default_z_end_um };
+		return { start: session.gridConfig?.default_z_start_um ?? 0, end: session.gridConfig?.default_z_end_um ?? 100 };
 	}
 
 	$effect(() => {
@@ -52,7 +52,7 @@
 	});
 
 	let isDirty = $derived(stack ? zStartInput !== stack.z_start_um || zEndInput !== stack.z_end_um : true);
-	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / session.gridConfig.z_step_um));
+	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / (session.gridConfig?.z_step_um ?? 1)));
 	let hasStack = $derived(stack !== null);
 
 	function formatMm(um: number, decimals: number = 2): string {
@@ -224,5 +224,5 @@
 <div class="flex items-center justify-between border-t border-border p-3 text-[0.65rem]">
 	<span class="text-muted-foreground">Order</span>
 	<Select value={session.tileOrder} options={TILE_ORDER_OPTIONS} onchange={handleTileOrderChange} size="sm" />
-	{@render staticItem('Z Step', String(session.gridConfig.z_step_um), 'µm')}
+	{@render staticItem('Z Step', String(session.gridConfig?.z_step_um ?? '—'), 'µm')}
 </div>

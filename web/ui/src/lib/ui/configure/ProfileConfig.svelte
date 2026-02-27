@@ -5,7 +5,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { ChevronRight } from '$lib/icons';
 	import { WaveformPlot } from '$lib/ui/waveform';
-	import { ProfileChips } from '$lib/ui/profile';
+	import { ProfileChips, ProfileStatus } from '$lib/ui/profile';
 
 	interface Props {
 		session: Session;
@@ -69,7 +69,8 @@
 				<h2 class="text-sm font-medium text-foreground">
 					{profile.label ?? sanitizeString(profileId)}
 				</h2>
-				<ProfileChips {session} {profileId} showStatus class="ml-auto" />
+				<ProfileChips {session} {profileId} class="ml-auto" />
+				<ProfileStatus {session} {profileId} />
 			</div>
 			{#if profile.desc}
 				<p class="mt-1 text-xs text-muted-foreground">{profile.desc}</p>

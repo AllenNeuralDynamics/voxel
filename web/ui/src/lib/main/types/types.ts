@@ -50,6 +50,15 @@ export interface WorkflowStepConfig {
 	label: string;
 }
 
+/**
+ * Acquisition plan - per-profile grid configs and flat stacks list.
+ * The keys of grid_configs define which profiles are selected for acquisition.
+ */
+export interface AcquisitionPlan {
+	grid_configs: Record<string, GridConfig>;
+	stacks: Stack[];
+}
+
 export interface SessionStatus {
 	active_profile_id: string | null;
 	mode: RigMode;
@@ -59,8 +68,11 @@ export interface SessionStatus {
 	workflow_committed: string | null;
 	timestamp: string;
 
-	// Server-authoritative tile/stack data
-	grid_config: GridConfig;
+	// Acquisition plan (per-profile grid configs + all stacks)
+	plan: AcquisitionPlan;
+
+	// Convenience fields (active profile's data)
+	grid_config: GridConfig | null;
 	tile_order: TileOrder;
 	tiles: Tile[];
 	stacks: Stack[];

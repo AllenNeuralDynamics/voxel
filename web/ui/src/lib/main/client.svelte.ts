@@ -92,6 +92,9 @@ type ClientMessage =
 			payload: { edits: Array<{ row: number; col: number; z_start_um?: number; z_end_um?: number }> };
 	  }
 	| { topic: 'stacks/remove'; payload: { positions: Array<{ row: number; col: number }> } }
+	// Acquisition plan messages
+	| { topic: 'plan/add_profile'; payload: { profile_id: string } }
+	| { topic: 'plan/remove_profile'; payload: { profile_id: string } }
 	// Workflow messages
 	| { topic: 'workflow/next'; payload?: Record<string, never> }
 	| { topic: 'workflow/reopen'; payload: { step_id: string } };

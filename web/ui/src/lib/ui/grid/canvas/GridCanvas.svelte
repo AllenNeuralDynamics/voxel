@@ -263,14 +263,16 @@
 	}
 
 	function contextAddStack() {
+		const gc = session.gridConfig;
+		if (!gc) return;
 		const tiles = session.selectedTiles.filter((t) => !session.getStack(t.row, t.col));
 		if (tiles.length === 0) return;
 		session.addStacks(
 			tiles.map((t) => ({
 				row: t.row,
 				col: t.col,
-				zStartUm: session.gridConfig.default_z_start_um,
-				zEndUm: session.gridConfig.default_z_end_um
+				zStartUm: gc.default_z_start_um,
+				zEndUm: gc.default_z_end_um
 			}))
 		);
 	}
@@ -341,26 +343,28 @@
 {#snippet stacksLayer()}
 	{#if session.layerVisibility.stacks}
 		<g class="stacks-layer">
-			{#each session.stacks as stack (`${stack.row}_${stack.col}`)}
+			{#each session.stacks as stack (`${stack.row}_${stack.col}_${stack.profile_id}`)}
 				{@const cx = toMm(stack.x_um)}
 				{@const cy = toMm(stack.y_um)}
 				{@const w = toMm(stack.w_um)}
 				{@const h = toMm(stack.h_um)}
+				{@const isOtherProfile = stack.profile_id !== session.activeProfileId}
 				<rect
 					x={cx - w / 2}
 					y={cy - h / 2}
 					width={w}
 					height={h}
 					class="nss stack outline-none {getStackStatusColor(stack.status)}"
-					class:cursor-pointer={!isXYMoving}
+					class:cursor-pointer={!isXYMoving && !isOtherProfile}
 					class:cursor-not-allowed={isXYMoving}
+					class:dimmed={isOtherProfile}
 					role="button"
-					tabindex={isXYMoving ? -1 : 0}
-					onclick={(e) => handleTileSelect(e, stack)}
-					oncontextmenu={(e) => handleTileContext(e, stack)}
-					onkeydown={(e) => handleKeydown(e, () => session.selectTiles([[stack.row, stack.col]]))}
+					tabindex={isXYMoving || isOtherProfile ? -1 : 0}
+					onclick={(e) => !isOtherProfile && handleTileSelect(e, stack)}
+					oncontextmenu={(e) => !isOtherProfile && handleTileContext(e, stack)}
+					onkeydown={(e) => !isOtherProfile && handleKeydown(e, () => session.selectTiles([[stack.row, stack.col]]))}
 				>
-					<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
+					<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames){isOtherProfile ? ` [${stack.profile_id}]` : ''}</title>
 				</rect>
 			{/each}
 		</g>
@@ -638,17 +642,18 @@
 						height="100%"
 					>
 						{#if session.stage.z}
-							{#each session.stacks as stack (`z_${stack.row}_${stack.col}`)}
+							{#each session.stacks as stack (`z_${stack.row}_${stack.col}_${stack.profile_id}`)}
 								{@const selected = session.isTileSelected(stack.row, stack.col)}
+								{@const isOther = stack.profile_id !== session.activeProfileId}
 								{@const z0Y =
 									(1 - (stack.z_start_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
 								{@const z1Y =
 									(1 - (stack.z_end_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
 								<g
 									class={getStackStatusColor(stack.status)}
-									stroke-width={selected ? '1.5' : '0.5'}
+									stroke-width={selected && !isOther ? '1.5' : '0.5'}
 									stroke="currentColor"
-									opacity={selected ? 1 : 0.3}
+									opacity={isOther ? 0.1 : selected ? 1 : 0.3}
 								>
 									<line class="nss" x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
 									<line class="nss" x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
@@ -725,6 +730,11 @@
 		transition: fill-opacity 300ms ease;
 		&:hover {
 			fill-opacity: 0.3;
+		}
+		&.dimmed {
+			fill-opacity: 0.07;
+			stroke-opacity: 0.3;
+			pointer-events: none;
 		}
 	}
 

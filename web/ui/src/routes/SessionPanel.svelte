@@ -47,7 +47,7 @@
 		<h3 class="text-xs font-medium uppercase">Grid</h3>
 		<div class="grid grid-cols-2 gap-2 text-xs">
 			<span>Overlap</span>
-			<span class="text-foreground">{(session.gridConfig.overlap * 100).toFixed(0)}%</span>
+			<span class="text-foreground">{((session.gridConfig?.overlap ?? 0) * 100).toFixed(0)}%</span>
 			<span>Tile order</span>
 			<span class="text-foreground">{session.tileOrder}</span>
 			<span>Grid locked</span>

@@ -2,6 +2,7 @@ import type { Client, DaqWaveforms } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
 import type {
 	AppStatus,
+	AcquisitionPlan,
 	GridConfig,
 	Tile,
 	Stack,
@@ -37,16 +38,11 @@ export class Session {
 	#appStatus = $state<AppStatus>();
 
 	activeProfileId = $derived<string | null>(this.#appStatus?.session?.active_profile_id ?? null);
-	gridConfig = $derived<GridConfig>(
-		this.#appStatus?.session?.grid_config ?? {
-			x_offset_um: 0,
-			y_offset_um: 0,
-			overlap: 0.1,
-			z_step_um: 2.0,
-			default_z_start_um: 0,
-			default_z_end_um: 100
-		}
+	plan = $derived<AcquisitionPlan>(
+		this.#appStatus?.session?.plan ?? { grid_configs: {}, stacks: [] }
 	);
+	acquisitionProfileIds = $derived<string[]>(Object.keys(this.plan.grid_configs));
+	gridConfig = $derived<GridConfig | null>(this.#appStatus?.session?.grid_config ?? null);
 	tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
 	stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
 	tileOrder = $derived<TileOrder>(this.#appStatus?.session?.tile_order ?? 'snake_row');
@@ -212,6 +208,16 @@ export class Session {
 		this.client.send({ topic: 'grid/set_tile_order', payload: { tile_order: order } });
 	}
 
+	// --- Acquisition Plan ---
+
+	addAcquisitionProfile(profileId: string): void {
+		this.client.send({ topic: 'plan/add_profile', payload: { profile_id: profileId } });
+	}
+
+	removeAcquisitionProfile(profileId: string): void {
+		this.client.send({ topic: 'plan/remove_profile', payload: { profile_id: profileId } });
+	}
+
 	// --- Stacks ---
 
 	addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
@@ -341,19 +347,19 @@ export class Session {
 	// --- Geometry ---
 
 	get tileSpacingX(): number {
-		return this.fov.width * (1 - this.gridConfig.overlap);
+		return this.fov.width * (1 - (this.gridConfig?.overlap ?? 0.1));
 	}
 
 	get tileSpacingY(): number {
-		return this.fov.height * (1 - this.gridConfig.overlap);
+		return this.fov.height * (1 - (this.gridConfig?.overlap ?? 0.1));
 	}
 
 	get gridOffsetX(): number {
-		return this.gridConfig.x_offset_um / 1000;
+		return (this.gridConfig?.x_offset_um ?? 0) / 1000;
 	}
 
 	get gridOffsetY(): number {
-		return this.gridConfig.y_offset_um / 1000;
+		return (this.gridConfig?.y_offset_um ?? 0) / 1000;
 	}
 
 	positionToGridCell(positionMm: number, axis: 'x' | 'y'): number {

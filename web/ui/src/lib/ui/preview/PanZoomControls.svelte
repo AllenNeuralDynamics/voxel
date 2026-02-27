@@ -39,7 +39,14 @@
 </script>
 
 <div class="flex items-center gap-1 font-mono text-[0.65rem]">
-	<!-- Pan/Zoom section -->
+	<button
+		onclick={() => previewer.resetCrop()}
+		disabled={isDefaultCrop}
+		class="flex items-center rounded p-1 text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-0"
+		aria-label="Reset pan and zoom"
+	>
+		<Restore width="12" height="12" />
+	</button>
 	<div class="flex items-center gap-4">
 		<SpinBox
 			bind:value={magnification}
@@ -79,12 +86,4 @@
 			onChange={handleCropXChange}
 		/>
 	</div>
-	<button
-		onclick={() => previewer.resetCrop()}
-		disabled={isDefaultCrop}
-		class="flex items-center rounded p-1 text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-		aria-label="Reset pan and zoom"
-	>
-		<Restore width="12" height="12" />
-	</button>
 </div>

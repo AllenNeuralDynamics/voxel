@@ -183,7 +183,9 @@
 <div class="grid h-full grid-rows-[auto_1fr_auto] gap-0 bg-background" bind:this={containerEl}>
 	<!-- Top: Controls -->
 	<div class="flex items-center justify-between px-2 pt-5 pb-3">
+		<PreviewInfo {previewer} />
 		<div class="flex items-center gap-1">
+			<PanZoomControls {previewer} />
 			<button
 				onclick={() => (showHistograms = !showHistograms)}
 				class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors hover:bg-accent {showHistograms
@@ -194,9 +196,7 @@
 			>
 				<Bargraph width="14" height="14" />
 			</button>
-			<PreviewInfo {previewer} />
 		</div>
-		<PanZoomControls {previewer} />
 	</div>
 
 	<!-- Center: Canvas -->

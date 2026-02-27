@@ -12,8 +12,9 @@
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button } from '$lib/ui/kit';
 	import { Cog, PlayCircleOutline, Logout, ChevronLeft } from '$lib/icons';
-	import { ProfileSelector } from '$lib/ui/profile';
+	import { ProfileSelector, ProfilePopover, ProfileStatus } from '$lib/ui/profile';
 	import { LaserIndicators } from '$lib/ui/devices';
+	import { sanitizeString } from '$lib/utils';
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
@@ -21,13 +22,22 @@
 	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
-	const DEFAULT_HEADER_TAB = 'configure';
+	const DEFAULT_HEADER_TAB = 'scout';
 
 	let app = $state<App | undefined>(undefined);
 	let viewId = $state(DEFAULT_HEADER_TAB);
 
 	// Configure panel nav state (persists across tab switches)
 	let configureNav = $state<ConfigureNavTarget>({ type: 'channels' });
+
+	// Scout: selected acquisition profile tab (null = auto-follow active profile)
+	let scoutProfileTab = $state<string | null>(null);
+
+	// Auto-select active profile's tab when it changes
+	$effect(() => {
+		const activeId = app?.session?.activeProfileId;
+		if (activeId) scoutProfileTab = activeId;
+	});
 
 	// Control view state
 	let bottomPanelTab = $state('lasers');
@@ -144,12 +154,57 @@
 								{#if viewId === 'configure'}
 									<ConfigurePanel {session} bind:activeNav={configureNav} />
 								{:else if viewId === 'scout'}
+									{@const acqIds = session.acquisitionProfileIds}
+									{@const scoutLocked = workflow.stepStates['scout'] === 'committed'}
+									{@const phantomId = session.activeProfileId != null && !acqIds.includes(session.activeProfileId) ? session.activeProfileId : null}
+									{@const tabIds = phantomId ? [...acqIds, phantomId] : acqIds}
+									{@const selectedTab = tabIds.includes(scoutProfileTab ?? '') ? scoutProfileTab : (tabIds[0] ?? null)}
+									{@const pillBase =
+										'rounded-xl border px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors'}
 									<div class="flex h-full flex-col justify-between">
-										<div class="space-y-4 p-4">
-											<div class="flex items-center justify-between gap-3">
-												<p class="text-sm text-muted-foreground">Adding Acquisition Profile and configuring the grid</p>
+										<div class="space-y-3 p-4">
+											<!-- Profile pill tabs + actions -->
+											<div class="flex flex-wrap items-center gap-2">
+												{#each tabIds as pid (pid)}
+													{@const profile = session.config.profiles[pid]}
+													{@const isPhantom = pid === phantomId}
+													{@const isSelected = pid === selectedTab}
+													<button
+														onclick={() => {
+															scoutProfileTab = pid;
+														}}
+														class={cn(
+															pillBase,
+															isPhantom ? 'border-dashed' : '',
+															isSelected
+																? 'border-border bg-muted text-foreground'
+																: 'border-border bg-surface text-muted-foreground hover:bg-muted hover:text-foreground'
+														)}
+													>
+														{profile?.label ?? sanitizeString(pid)}
+													</button>
+												{/each}
+												{#if selectedTab}
+													<div class="ml-auto flex items-center gap-1.5">
+														<ProfileStatus {session} profileId={selectedTab} size="sm" />
+														<ProfilePopover
+															{session}
+															profileId={selectedTab}
+															size="sm"
+															locked={scoutLocked}
+															onRemove={() => {
+																session.removeAcquisitionProfile(selectedTab);
+																scoutProfileTab = null;
+															}}
+														/>
+													</div>
+												{/if}
 											</div>
-											<GridControls {session} />
+
+											<!-- Grid controls -->
+											{#if selectedTab && acqIds.includes(selectedTab)}
+												<GridControls {session} profileId={selectedTab} />
+											{/if}
 										</div>
 									</div>
 								{:else if viewId === 'plan'}

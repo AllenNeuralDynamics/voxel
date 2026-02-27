@@ -14,7 +14,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from vxl import RigMode, Session
+from vxl import AcquisitionPlan, RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import TileOrder
 from vxl.session import GridConfig, WorkflowStepConfig
@@ -48,8 +48,11 @@ class SessionStatus(BaseModel):
     workflow_steps: list[WorkflowStepConfig]
     workflow_committed: str | None
 
-    # Full data (replaces separate broadcasts)
-    grid_config: GridConfig
+    # Acquisition plan (per-profile grid configs + all stacks)
+    plan: AcquisitionPlan
+
+    # Convenience fields (active profile's data)
+    grid_config: GridConfig | None
     tile_order: TileOrder
     tiles: list[Tile]
     stacks: list[Stack]
@@ -106,6 +109,7 @@ class SessionService:
             grid_locked=self.session.grid_locked,
             workflow_steps=self.session.workflow_steps,
             workflow_committed=self.session.workflow_committed,
+            plan=self.session.plan,
             grid_config=self.session.grid_config,
             tile_order=self.session.tile_order,
             tiles=tiles,
@@ -143,6 +147,10 @@ class SessionService:
                 await self._handle_stacks_edit(payload)
             case "stacks/remove":
                 await self._handle_stacks_remove(payload)
+            case "plan/add_profile":
+                await self._handle_plan_add_profile(payload)
+            case "plan/remove_profile":
+                await self._handle_plan_remove_profile(payload)
             case "workflow/next":
                 await self._handle_workflow_next()
             case "workflow/reopen":
@@ -153,6 +161,24 @@ class SessionService:
                 await self.handle_acq_stop()
             case _:
                 log.warning("Unknown topic from client %s: %s", client_id, topic)
+
+    # ==================== Acquisition Plan ====================
+
+    async def _handle_plan_add_profile(self, payload: dict[str, Any]) -> None:
+        """Handle adding a profile to the acquisition plan."""
+        profile_id = payload.get("profile_id")
+        if not profile_id:
+            raise ValueError("Missing profile_id")
+        self.session.add_acquisition_profile(profile_id)
+        self.broadcast({}, with_status=True)
+
+    async def _handle_plan_remove_profile(self, payload: dict[str, Any]) -> None:
+        """Handle removing a profile from the acquisition plan."""
+        profile_id = payload.get("profile_id")
+        if not profile_id:
+            raise ValueError("Missing profile_id")
+        self.session.remove_acquisition_profile(profile_id)
+        self.broadcast({}, with_status=True)
 
     # ==================== Workflow ====================
 
@@ -352,8 +378,8 @@ async def get_session_status(service: Annotated[SessionService, Depends(get_sess
 
 
 @session_router.get("/session/grid")
-async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig:
-    """Get current grid configuration."""
+async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig | None:
+    """Get current grid configuration for the active profile."""
     return service.session.grid_config
 
 
@@ -369,8 +395,8 @@ class GridUpdateRequest(BaseModel):
 async def update_grid(
     request: GridUpdateRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
-) -> GridConfig:
-    """Update grid configuration."""
+) -> GridConfig | None:
+    """Update grid configuration for the active profile."""
     try:
         if request.x_offset_um is not None and request.y_offset_um is not None:
             service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
