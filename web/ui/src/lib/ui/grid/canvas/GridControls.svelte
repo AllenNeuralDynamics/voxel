@@ -16,11 +16,7 @@
 </script>
 
 {#if gc}
-	<div
-		class="flex items-center gap-2"
-		class:opacity-70={disabled}
-		class:pointer-events-none={disabled}
-	>
+	<div class="flex items-center gap-2" class:opacity-70={disabled} class:pointer-events-none={disabled}>
 		<SpinBox
 			value={gc.x_offset_um / 1000}
 			min={-gridLimX}
@@ -68,6 +64,7 @@
 				session.setGridOverlap(value);
 			}}
 		/>
+		<span class="text-xs text-muted-foreground">Make overlap also x, y configurable with linkage capability</span>
 	</div>
 {:else}
 	<p class="text-xs text-muted-foreground">No grid config for this profile</p>

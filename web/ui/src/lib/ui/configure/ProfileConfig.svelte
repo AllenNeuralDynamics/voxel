@@ -2,9 +2,10 @@
 	import type { Session } from '$lib/main';
 	import { sanitizeString } from '$lib/utils';
 	import { Collapsible } from 'bits-ui';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { ChevronRight } from '$lib/icons';
 	import { WaveformPlot } from '$lib/ui/waveform';
+	import { SpinBox } from '$lib/ui/kit';
 	import { ProfileChips, ProfileStatus } from '$lib/ui/profile';
 
 	interface Props {
@@ -18,24 +19,55 @@
 	const profile = $derived(config.profiles[profileId]);
 	const stackOnlySet = $derived(new SvelteSet(profile?.daq.stack_only ?? []));
 
-	/** Unique device IDs from the profile's channels + waveform-only devices. */
+	type DeviceRole = 'camera' | 'laser' | 'filter' | 'aux' | 'waveform';
+	const ROLE_ORDER: Record<DeviceRole, number> = { camera: 0, laser: 1, filter: 2, aux: 3, waveform: 4 };
+
+	/** Unique device IDs from the profile's channels + aux devices + waveform-only devices, sorted by role. */
 	const profileDeviceIds = $derived.by(() => {
 		if (!profile) return [];
-		const ids = new SvelteSet<string>();
+		const roles = new SvelteMap<string, DeviceRole>();
 		for (const chId of profile.channels) {
 			const ch = config.channels[chId];
 			if (!ch) continue;
-			ids.add(ch.detection);
-			ids.add(ch.illumination);
-			for (const fwId of Object.keys(ch.filters)) ids.add(fwId);
+			if (!roles.has(ch.detection)) roles.set(ch.detection, 'camera');
+			if (!roles.has(ch.illumination)) roles.set(ch.illumination, 'laser');
+			for (const fwId of Object.keys(ch.filters)) {
+				if (!roles.has(fwId)) roles.set(fwId, 'filter');
+			}
+			// Aux devices from detection/illumination optical paths
+			const detPath = config.detection[ch.detection];
+			if (detPath) {
+				for (const auxId of detPath.aux_devices) {
+					if (!roles.has(auxId)) roles.set(auxId, 'aux');
+				}
+			}
+			const illPath = config.illumination[ch.illumination];
+			if (illPath) {
+				for (const auxId of illPath.aux_devices) {
+					if (!roles.has(auxId)) roles.set(auxId, 'aux');
+				}
+			}
 		}
-		for (const devId of Object.keys(profile.daq.waveforms)) ids.add(devId);
-		return [...ids];
+		for (const devId of Object.keys(profile.daq.waveforms)) {
+			if (!roles.has(devId)) roles.set(devId, 'waveform');
+		}
+		return [...roles.keys()].sort((a, b) => ROLE_ORDER[roles.get(a)!] - ROLE_ORDER[roles.get(b)!]);
 	});
 
-	const waveformDeviceIds = $derived(profile ? Object.keys(profile.daq.waveforms) : []);
+	/** Waveform device IDs in role-sorted order (subset of profileDeviceIds). */
+	const waveformDeviceIds = $derived(profileDeviceIds.filter((id) => profile?.daq.waveforms[id] != null));
+
+	/** Waveforms record matching the sorted device order. */
+	const sortedWaveforms = $derived.by(() => {
+		if (!profile) return {};
+		const sorted: Record<string, (typeof profile.daq.waveforms)[string]> = {};
+		for (const id of waveformDeviceIds) sorted[id] = profile.daq.waveforms[id];
+		return sorted;
+	});
+
 	const duration = $derived(Number(profile?.daq.timing.duration ?? 0));
 	const restTime = $derived(Number(profile?.daq.timing.rest_time ?? 0));
+	const sampleRate = $derived(Number(profile?.daq.timing.sample_rate ?? 0));
 
 	const traceColors: string[] = [
 		'#10b981',
@@ -77,11 +109,78 @@
 			{/if}
 		</div>
 
-		<!-- Settings -->
+		<!-- Waveforms -->
 		<section>
-			<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Settings</h3>
+			{#if waveformDeviceIds.length > 0 && duration > 0}
+				<!-- Unified plot card -->
+				<div class="rounded-lg border bg-card shadow-sm">
+					<div class="p-3">
+						<WaveformPlot waveforms={sortedWaveforms} {duration} {restTime} colors={waveformColors}>
+							{#snippet footerLeft()}
+								<div class="flex items-center gap-2">
+									<SpinBox
+										value={sampleRate}
+										prefix="rate"
+										suffix=" Hz"
+										size="sm"
+										showButtons={false}
+										numCharacters={6}
+									/>
+									<SpinBox
+										value={duration}
+										prefix="dur"
+										suffix=" s"
+										size="sm"
+										showButtons={false}
+										decimals={4}
+										numCharacters={6}
+									/>
+									<SpinBox
+										value={restTime}
+										prefix="rest"
+										suffix=" s"
+										size="sm"
+										showButtons={false}
+										decimals={4}
+										numCharacters={6}
+									/>
+								</div>
+							{/snippet}
+						</WaveformPlot>
+					</div>
+				</div>
+			{:else}
+				<!-- Fallback: timing spinboxes only -->
+				<div class="flex items-center gap-3">
+					<SpinBox value={sampleRate} prefix="rate" suffix=" Hz" size="sm" showButtons={false} numCharacters={6} />
+					<SpinBox
+						value={duration}
+						prefix="dur"
+						suffix=" s"
+						size="sm"
+						showButtons={false}
+						decimals={4}
+						numCharacters={6}
+					/>
+					<SpinBox
+						value={restTime}
+						prefix="rest"
+						suffix=" s"
+						size="sm"
+						showButtons={false}
+						decimals={4}
+						numCharacters={6}
+					/>
+				</div>
+			{/if}
+		</section>
+
+		<!-- Devices -->
+		<section>
+			<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Devices</h3>
 			<div class="space-y-0.5">
 				{#each profileDeviceIds as deviceId (deviceId)}
+					{@const waveform = profile.daq.waveforms[deviceId] ?? null}
 					<Collapsible.Root
 						open={expandedDevices.has(deviceId)}
 						onOpenChange={(open) => {
@@ -102,66 +201,26 @@
 									: ''}"
 							/>
 							<span class="font-medium text-foreground">{sanitizeString(deviceId)}</span>
+							{#if waveform}
+								<span class="text-muted-foreground">{waveform.type}</span>
+								<span class="text-muted-foreground">
+									{waveform.voltage.min}–{waveform.voltage.max} V
+								</span>
+								<span class="text-muted-foreground">
+									[{waveform.window.min}–{waveform.window.max}]
+								</span>
+								{#if stackOnlySet.has(deviceId)}
+									<span class="rounded bg-muted px-1.5 py-0.5 text-[0.6rem] text-muted-foreground uppercase">stack</span
+									>
+								{/if}
+								<span class="ml-auto h-2 w-2 shrink-0 rounded-full" style="background-color: {waveformColors[deviceId]}"
+								></span>
+							{/if}
 						</Collapsible.Trigger>
 						<Collapsible.Content class="pt-1 pr-2 pb-2 pl-7">
 							<p class="text-xs text-muted-foreground/60">Coming soon</p>
 						</Collapsible.Content>
 					</Collapsible.Root>
-				{/each}
-			</div>
-		</section>
-
-		<!-- Waveforms -->
-		<section>
-			<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Waveforms</h3>
-
-			<!-- Frame Timing -->
-			<div class="mb-4 grid grid-cols-3 gap-4 text-xs">
-				<div>
-					<span class="text-muted-foreground">Sample Rate</span>
-					<div class="mt-0.5 font-medium text-foreground">
-						{profile.daq.timing.sample_rate}
-					</div>
-				</div>
-				<div>
-					<span class="text-muted-foreground">Duration</span>
-					<div class="mt-0.5 font-medium text-foreground">
-						{profile.daq.timing.duration}
-					</div>
-				</div>
-				<div>
-					<span class="text-muted-foreground">Rest Time</span>
-					<div class="mt-0.5 font-medium text-foreground">
-						{profile.daq.timing.rest_time}
-					</div>
-				</div>
-			</div>
-
-			<!-- SVG Plot -->
-			{#if waveformDeviceIds.length > 0 && duration > 0}
-				<div class="mb-4 rounded-lg border bg-card p-3 shadow-sm">
-					<WaveformPlot waveforms={profile.daq.waveforms} {duration} {restTime} colors={waveformColors} />
-				</div>
-			{/if}
-
-			<!-- Per-device waveform details -->
-			<div class="divide-y divide-border rounded-lg border">
-				{#each waveformDeviceIds as deviceId (deviceId)}
-					{@const waveform = profile.daq.waveforms[deviceId]}
-					<div class="flex items-center gap-3 px-3 py-2 text-xs">
-						<span class="h-2 w-2 shrink-0 rounded-full" style="background-color: {waveformColors[deviceId]}"></span>
-						<span class="w-28 font-medium text-foreground">{sanitizeString(deviceId)}</span>
-						<span class="text-muted-foreground">{waveform.type}</span>
-						<span class="text-muted-foreground">
-							{waveform.voltage.min}–{waveform.voltage.max} V
-						</span>
-						<span class="text-muted-foreground">
-							[{waveform.window.min}–{waveform.window.max}]
-						</span>
-						{#if stackOnlySet.has(deviceId)}
-							<span class="rounded bg-muted px-1.5 py-0.5 text-[0.6rem] text-muted-foreground uppercase"> stack </span>
-						{/if}
-					</div>
 				{/each}
 			</div>
 		</section>

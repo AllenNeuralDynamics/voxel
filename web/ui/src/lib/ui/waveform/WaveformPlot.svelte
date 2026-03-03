@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack, type Snippet } from 'svelte';
 	import type { Waveform } from '$lib/main';
 	import { generateTraces, voltageRange } from './generate';
 
@@ -6,13 +7,30 @@
 		waveforms: Record<string, Waveform>;
 		duration: number;
 		restTime: number;
-		visible?: Set<string>;
 		colors?: Record<string, string>;
 		numPoints?: number;
 		height?: number;
+		footerLeft?: Snippet;
 	}
 
-	let { waveforms, duration, restTime, visible, colors = {}, numPoints = 500, height = 200 }: Props = $props();
+	let { waveforms, duration, restTime, colors = {}, numPoints = 500, height = 200, footerLeft }: Props = $props();
+
+	let layerVisibility = $state<Record<string, boolean>>({});
+
+	$effect(() => {
+		const keys = Object.keys(waveforms);
+		untrack(() => {
+			const next: Record<string, boolean> = {};
+			for (const k of keys) {
+				next[k] = layerVisibility[k] ?? true;
+			}
+			layerVisibility = next;
+		});
+	});
+
+	function toggleLayer(deviceId: string) {
+		layerVisibility = { ...layerVisibility, [deviceId]: !layerVisibility[deviceId] };
+	}
 
 	const padding = { top: 12, right: 16, bottom: 28, left: 48 };
 
@@ -20,9 +38,7 @@
 	const vRange = $derived(voltageRange(waveforms));
 	const totalTime = $derived(duration + restTime);
 
-	const visibleIds = $derived(
-		visible ? Object.keys(waveforms).filter((id) => visible.has(id)) : Object.keys(waveforms)
-	);
+	const visibleIds = $derived(Object.keys(waveforms).filter((id) => layerVisibility[id] !== false));
 
 	const defaultColors = [
 		'var(--color-chart-1)',
@@ -69,7 +85,7 @@
 	const plotH = $derived(height - padding.top - padding.bottom);
 </script>
 
-<div class="w-full" bind:clientWidth={containerWidth}>
+<div class="flex w-full flex-col" bind:clientWidth={containerWidth}>
 	<svg width={containerWidth} {height} viewBox="0 0 {containerWidth} {height}" class="select-none">
 		<!-- Horizontal grid + Y-axis labels -->
 		{#each Array.from({ length: 5 }, (_, i) => vRange.min + ((vRange.max - vRange.min) * i) / 4) as v (v)}
@@ -115,4 +131,27 @@
 			{/if}
 		{/each}
 	</svg>
+
+	<!-- Footer: optional left content + toggle chips right -->
+	<div class="flex items-center gap-3 border-t px-3 py-2">
+		{#if footerLeft}
+			{@render footerLeft()}
+		{/if}
+		<div class="ml-auto flex flex-wrap items-center gap-1.5">
+			{#each Object.keys(waveforms) as deviceId, idx (deviceId)}
+				{@const visible = layerVisibility[deviceId] !== false}
+				<button
+					type="button"
+					class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] transition-colors hover:bg-muted"
+					onclick={() => toggleLayer(deviceId)}
+				>
+					<span
+						class="inline-block h-2 w-2 shrink-0 rounded-full {visible ? '' : 'opacity-30'}"
+						style="background-color: {colorFor(deviceId, idx)}"
+					></span>
+					<span class={visible ? 'text-foreground' : 'text-muted-foreground/50'}>{deviceId}</span>
+				</button>
+			{/each}
+		</div>
+	</div>
 </div>
