@@ -6,7 +6,7 @@ from enum import StrEnum
 from functools import wraps
 from typing import Any, ClassVar, Literal, Self, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field, ValidationError, create_model
+from pydantic import BaseModel, Field, RootModel, ValidationError, create_model
 
 from .props import PropertyModel
 
@@ -286,25 +286,23 @@ class ErrorMsg(BaseModel):
     msg: str
 
 
-class Result[T](BaseModel):
-    res: T | ErrorMsg
-
+class Result[T](RootModel[T | ErrorMsg]):
     def __bool__(self) -> bool:
-        return not isinstance(self.res, ErrorMsg)
+        return not isinstance(self.root, ErrorMsg)
 
     def unwrap(self) -> T:
-        if isinstance(self.res, ErrorMsg):
-            raise RuntimeError(self.res.msg)
-        return self.res
+        if isinstance(self.root, ErrorMsg):
+            raise RuntimeError(self.root.msg)
+        return self.root
 
     def unwrap_or(self, default: T) -> T:
         """Get result or return default if error occurred."""
-        return default if isinstance(self.res, ErrorMsg) else self.res
+        return default if isinstance(self.root, ErrorMsg) else self.root
 
     @property
     def is_ok(self) -> bool:
         """Check if response is successful."""
-        return not isinstance(self.res, ErrorMsg)
+        return not isinstance(self.root, ErrorMsg)
 
 
 class Results[V](BaseModel):

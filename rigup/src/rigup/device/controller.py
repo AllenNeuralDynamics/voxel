@@ -85,7 +85,7 @@ class DeviceController[D: Device]:
 
     async def execute_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         if command not in self._commands:
-            return Result(res=ErrorMsg(msg=f"Unknown command: {command}"))
+            return Result(ErrorMsg(msg=f"Unknown command: {command}"))
 
         cmd = self._commands[command]
         try:
@@ -93,10 +93,10 @@ class DeviceController[D: Device]:
                 result = await cmd(*args, **kwargs)
             else:
                 result = await self._run_sync(cmd, *args, **kwargs)
-            return Result(res=result)
+            return Result(result)
         except Exception as e:
             self.log.exception(f"Command '{command}' failed")
-            return Result(res=ErrorMsg(msg=str(e)))
+            return Result(ErrorMsg(msg=str(e)))
 
     async def execute_commands(self, commands: list[CommandRequest]) -> Results:
         """Execute multiple commands and collect results.
@@ -112,7 +112,7 @@ class DeviceController[D: Device]:
         for i, cmd_req in enumerate(commands):
             key = f"{i}:{cmd_req.attr}"
             if cmd_req.attr not in self._commands:
-                results[key] = Result(res=ErrorMsg(msg=f"Unknown command: {cmd_req.attr}"))
+                results[key] = Result(ErrorMsg(msg=f"Unknown command: {cmd_req.attr}"))
                 continue
             cmd = self._commands[cmd_req.attr]
             try:
@@ -120,10 +120,10 @@ class DeviceController[D: Device]:
                     result = await cmd(*cmd_req.args, **cmd_req.kwargs)
                 else:
                     result = await self._run_sync(cmd, *cmd_req.args, **cmd_req.kwargs)
-                results[key] = Result(res=result)
+                results[key] = Result(result)
             except Exception as e:
                 self.log.exception(f"Command '{cmd_req.attr}' failed")
-                results[key] = Result(res=ErrorMsg(msg=str(e)))
+                results[key] = Result(ErrorMsg(msg=str(e)))
         return Results(results=results)
 
     async def get_props(self, *props: str) -> PropResults:
@@ -133,9 +133,9 @@ class DeviceController[D: Device]:
             results: dict[str, Result] = {}
             for name in props_to_get:
                 try:
-                    results[name] = Result(res=PropertyModel.from_value(getattr(self._device, name)))
+                    results[name] = Result(PropertyModel.from_value(getattr(self._device, name)))
                 except Exception as e:
-                    results[name] = Result(res=ErrorMsg(msg=str(e)))
+                    results[name] = Result(ErrorMsg(msg=str(e)))
             return PropResults(results=results)
 
         return await self._run_sync(_get)
@@ -146,9 +146,9 @@ class DeviceController[D: Device]:
             for name, value in props.items():
                 try:
                     setattr(self._device, name, value)
-                    results[name] = Result(res=PropertyModel.from_value(getattr(self._device, name)))
+                    results[name] = Result(PropertyModel.from_value(getattr(self._device, name)))
                 except Exception as e:
-                    results[name] = Result(res=ErrorMsg(msg=str(e)))
+                    results[name] = Result(ErrorMsg(msg=str(e)))
             return PropResults(results=results)
 
         return await self._run_sync(_set)

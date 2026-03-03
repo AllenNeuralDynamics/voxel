@@ -81,8 +81,11 @@ export interface DevicesResponse {
 }
 
 export interface DevicePropertyPayload {
-	res: Record<string, PropertyModel>;
-	err: Record<string, ErrorMsg>;
+	results: Record<string, PropertyModel | ErrorMsg>;
+}
+
+function isErrorMsg(res: unknown): res is ErrorMsg {
+	return typeof res === 'object' && res !== null && 'msg' in res;
 }
 
 export class DevicesManager {
@@ -142,13 +145,7 @@ export class DevicesManager {
 		await Promise.all(fetchPromises);
 	}
 
-	private handlePropertyUpdate(
-		topic: string,
-		payload: {
-			res: Record<string, PropertyModel>;
-			err: Record<string, ErrorMsg>;
-		}
-	): void {
+	private handlePropertyUpdate(topic: string, payload: DevicePropertyPayload): void {
 		const parts = topic.split('/');
 		if (parts.length < 3 || parts[0] !== 'device' || parts[2] !== 'properties') {
 			return;
@@ -162,18 +159,16 @@ export class DevicesManager {
 			device.propertyValues = {};
 		}
 
-		for (const [propName, propModel] of Object.entries(payload.res)) {
-			if (device.interface.properties[propName]) {
+		for (const [propName, result] of Object.entries(payload.results)) {
+			if (isErrorMsg(result)) {
+				console.error(`[DevicesManager] Error setting ${deviceId}.${propName}: ${result.msg}`);
+			} else if (device.interface.properties[propName]) {
 				if (device.propertyValues[propName]) {
-					device.propertyValues[propName].update(propModel);
+					device.propertyValues[propName].update(result);
 				} else {
-					device.propertyValues[propName] = new ReactivePropertyModel(propModel);
+					device.propertyValues[propName] = new ReactivePropertyModel(result);
 				}
 			}
-		}
-
-		for (const [propName, errorMsg] of Object.entries(payload.err)) {
-			console.error(`[DevicesManager] Error setting ${deviceId}.${propName}: ${errorMsg.msg}`);
 		}
 	}
 
@@ -238,24 +233,21 @@ export class DevicesManager {
 			throw new Error(`Failed to fetch properties: ${response.statusText}`);
 		}
 
-		const data: { device: string; res: Record<string, PropertyModel>; err: Record<string, ErrorMsg> } =
-			await response.json();
+		const data: { device: string; results: Record<string, PropertyModel | ErrorMsg> } = await response.json();
 		const device = this.devices.get(deviceId);
 		if (device) {
 			if (!device.propertyValues) {
 				device.propertyValues = {};
 			}
 
-			for (const [propName, propModel] of Object.entries(data.res)) {
-				if (device.propertyValues[propName]) {
-					device.propertyValues[propName].update(propModel);
+			for (const [propName, result] of Object.entries(data.results)) {
+				if (isErrorMsg(result)) {
+					console.error(`[DevicesManager] Error fetching ${deviceId}.${propName}: ${result.msg}`);
+				} else if (device.propertyValues[propName]) {
+					device.propertyValues[propName].update(result);
 				} else {
-					device.propertyValues[propName] = new ReactivePropertyModel(propModel);
+					device.propertyValues[propName] = new ReactivePropertyModel(result);
 				}
-			}
-
-			for (const [propName, errorMsg] of Object.entries(data.err)) {
-				console.error(`[DevicesManager] Error fetching ${deviceId}.${propName}: ${errorMsg.msg}`);
 			}
 		}
 	}

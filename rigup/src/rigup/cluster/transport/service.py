@@ -81,7 +81,7 @@ class ZMQService:
 
             if topic not in (_RUN_CMDS_, _GET_PROPS_, _SET_PROPS_, _INTERFACE_):
                 self.log.warning("Unknown topic: %r", topic)
-                await _reply(Results(results={"_error": Result(res=ErrorMsg(msg=f"Unknown topic: {topic!r}"))}))
+                await _reply(Results(results={"_error": Result(ErrorMsg(msg=f"Unknown topic: {topic!r}"))}))
                 continue
 
             try:
@@ -95,10 +95,10 @@ class ZMQService:
                     req = PropsSetRequest.model_validate_json(payload_bytes)
                     await _reply(await self._controller.set_props(**req.props))
                 elif topic == _INTERFACE_:
-                    await _reply(Results(results={"interface": Result(res=self._controller.interface)}))
+                    await _reply(Results(results={"interface": Result(self._controller.interface)}))
             except Exception as e:
                 self.log.exception("Command loop error")
-                await _reply(Results(results={"_error": Result(res=ErrorMsg(msg=str(e)))}))
+                await _reply(Results(results={"_error": Result(ErrorMsg(msg=str(e)))}))
 
     def close(self):
         """Close sockets and cleanup."""
