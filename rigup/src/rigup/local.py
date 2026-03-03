@@ -5,13 +5,15 @@ from typing import Any
 
 from rigup.device import (
     Adapter,
-    CommandResponse,
+    CommandRequest,
     Device,
     DeviceController,
     DeviceHandle,
     DeviceInterface,
+    PropResults,
     PropsCallback,
-    PropsResponse,
+    Result,
+    Results,
     StreamCallback,
 )
 
@@ -36,7 +38,7 @@ class LocalAdapter[D: Device](Adapter[D]):
                     self.log.exception("Stream callback error for %s", full_topic)
             # Handle properties topic specially
             if topic == "properties":
-                props = PropsResponse.model_validate_json(data)
+                props = PropResults.model_validate_json(data)
                 for callback in self._props_callbacks:
                     try:
                         await callback(props)
@@ -58,15 +60,19 @@ class LocalAdapter[D: Device](Adapter[D]):
         """Return the interface."""
         return self._controller.interface
 
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
+    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         """Execute a command and return CommandResponse."""
         return await self._controller.execute_command(command, *args, **kwargs)
 
-    async def get_props(self, *props: str) -> PropsResponse:
+    async def run_commands(self, commands: list[CommandRequest]) -> Results:
+        """Execute multiple commands via controller."""
+        return await self._controller.execute_commands(commands)
+
+    async def get_props(self, *props: str) -> PropResults:
         """Get property values."""
         return await self._controller.get_props(*props)
 
-    async def set_props(self, **props: Any) -> PropsResponse:
+    async def set_props(self, **props: Any) -> PropResults:
         """Set property values."""
         return await self._controller.set_props(**props)
 

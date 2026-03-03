@@ -5,11 +5,19 @@ import logging
 
 import zmq
 import zmq.asyncio
-from pydantic import ValidationError
 
-from rigup.device import AttributeRequest, CommandResponse, Device, DeviceController, ErrorMsg, PropsResponse
+from rigup.device import (
+    CommandRequests,
+    Device,
+    DeviceController,
+    ErrorMsg,
+    PropsGetRequest,
+    PropsSetRequest,
+    Result,
+    Results,
+)
 
-from .comm import _GET_CMD_, _INT_CMD_, _REQ_CMD_, _SET_CMD_, DeviceAddress, DeviceAddressTCP
+from .comm import _GET_PROPS_, _INTERFACE_, _RUN_CMDS_, _SET_PROPS_, DeviceAddress, DeviceAddressTCP
 
 
 class ZMQService:
@@ -56,35 +64,41 @@ class ZMQService:
     def client_conn(self) -> DeviceAddress:
         return self._client_conn
 
-    async def _handle_req(self, req: AttributeRequest) -> CommandResponse:
-        return await self._controller.execute_command(req.attr, *req.args, **req.kwargs)
-
     async def _cmd_loop(self) -> None:
         """Listens for, decodes, executes, and replies to commands."""
+
+        async def _reply(res: Results) -> None:
+            await self._rep_socket.send_json(res.model_dump())
+
         while True:
-            res: CommandResponse | PropsResponse | None = None
             try:
                 topic, payload_bytes = await self._rep_socket.recv_multipart()
-                try:
-                    req = AttributeRequest.model_validate_json(payload_bytes)
-                    if topic == _INT_CMD_:
-                        res = CommandResponse(res=self._controller.interface)
-                    if topic == _GET_CMD_:
-                        props = [p for p in (list(req.args) + list(req.kwargs.keys())) if isinstance(p, str)]
-                        res = await self._controller.get_props(*props) if props else await self._controller.get_props()
-                    elif topic == _SET_CMD_:
-                        res = await self._controller.set_props(**req.kwargs)
-                    elif topic == _REQ_CMD_:
-                        res = await self._handle_req(req)
-                except ValidationError as e:
-                    res = CommandResponse(res=ErrorMsg(msg=f"Invalid command payload: {e}"))
             except asyncio.CancelledError:
                 break
+            except Exception:
+                self.log.exception("recv error in command loop")
+                continue
+
+            if topic not in (_RUN_CMDS_, _GET_PROPS_, _SET_PROPS_, _INTERFACE_):
+                self.log.warning("Unknown topic: %r", topic)
+                await _reply(Results(results={"_error": Result(res=ErrorMsg(msg=f"Unknown topic: {topic!r}"))}))
+                continue
+
+            try:
+                if topic == _RUN_CMDS_:
+                    batch_req = CommandRequests.model_validate_json(payload_bytes)
+                    await _reply(await self._controller.execute_commands(batch_req.commands))
+                elif topic == _GET_PROPS_:
+                    req = PropsGetRequest.model_validate_json(payload_bytes)
+                    await _reply(await self._controller.get_props(*req.props))
+                elif topic == _SET_PROPS_:
+                    req = PropsSetRequest.model_validate_json(payload_bytes)
+                    await _reply(await self._controller.set_props(**req.props))
+                elif topic == _INTERFACE_:
+                    await _reply(Results(results={"interface": Result(res=self._controller.interface)}))
             except Exception as e:
-                res = CommandResponse(res=ErrorMsg(msg=f"Command execution failed: {e}"))
-            finally:
-                if res is not None:
-                    await self._rep_socket.send_json(res.model_dump())
+                self.log.exception("Command loop error")
+                await _reply(Results(results={"_error": Result(res=ErrorMsg(msg=str(e)))}))
 
     def close(self):
         """Close sockets and cleanup."""

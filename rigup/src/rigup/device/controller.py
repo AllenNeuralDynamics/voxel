@@ -8,11 +8,13 @@ from typing import Any
 
 from .base import (
     Command,
-    CommandResponse,
+    CommandRequest,
     Device,
     DeviceInterface,
     ErrorMsg,
-    PropsResponse,
+    PropResults,
+    Result,
+    Results,
     collect_commands,
     collect_properties,
 )
@@ -81,9 +83,9 @@ class DeviceController[D: Device]:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._thread_pool, lambda: fn(*args, **kwargs))
 
-    async def execute_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
+    async def execute_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         if command not in self._commands:
-            return CommandResponse(res=ErrorMsg(msg=f"Unknown command: {command}"))
+            return Result(res=ErrorMsg(msg=f"Unknown command: {command}"))
 
         cmd = self._commands[command]
         try:
@@ -91,37 +93,63 @@ class DeviceController[D: Device]:
                 result = await cmd(*args, **kwargs)
             else:
                 result = await self._run_sync(cmd, *args, **kwargs)
-            return CommandResponse(res=result)
+            return Result(res=result)
         except Exception as e:
             self.log.exception(f"Command '{command}' failed")
-            return CommandResponse(res=ErrorMsg(msg=str(e)))
+            return Result(res=ErrorMsg(msg=str(e)))
 
-    async def get_props(self, *props: str) -> PropsResponse:
+    async def execute_commands(self, commands: list[CommandRequest]) -> Results:
+        """Execute multiple commands and collect results.
+
+        Args:
+            commands: List of CommandRequest objects, each specifying a command name,
+                      optional positional args, and optional keyword args.
+
+        Returns:
+            Results with per-command Result entries keyed as "{index}:{command_name}".
+        """
+        results: dict[str, Result] = {}
+        for i, cmd_req in enumerate(commands):
+            key = f"{i}:{cmd_req.attr}"
+            if cmd_req.attr not in self._commands:
+                results[key] = Result(res=ErrorMsg(msg=f"Unknown command: {cmd_req.attr}"))
+                continue
+            cmd = self._commands[cmd_req.attr]
+            try:
+                if cmd.is_async:
+                    result = await cmd(*cmd_req.args, **cmd_req.kwargs)
+                else:
+                    result = await self._run_sync(cmd, *cmd_req.args, **cmd_req.kwargs)
+                results[key] = Result(res=result)
+            except Exception as e:
+                self.log.exception(f"Command '{cmd_req.attr}' failed")
+                results[key] = Result(res=ErrorMsg(msg=str(e)))
+        return Results(results=results)
+
+    async def get_props(self, *props: str) -> PropResults:
         props_to_get = list(props) if props else list(self._interface.properties.keys())
 
-        def _get() -> PropsResponse:
-            res: dict[str, PropertyModel] = {}
-            err: dict[str, ErrorMsg] = {}
+        def _get() -> PropResults:
+            results: dict[str, Result] = {}
             for name in props_to_get:
                 try:
-                    res[name] = PropertyModel.from_value(getattr(self._device, name))
+                    results[name] = Result(res=PropertyModel.from_value(getattr(self._device, name)))
                 except Exception as e:
-                    err[name] = ErrorMsg(msg=str(e))
-            return PropsResponse(res=res, err=err)
+                    results[name] = Result(res=ErrorMsg(msg=str(e)))
+            return PropResults(results=results)
 
         return await self._run_sync(_get)
 
-    async def set_props(self, **props: Any) -> PropsResponse:
-        def _set() -> PropsResponse:
-            res: dict[str, PropertyModel] = {}
-            err: dict[str, ErrorMsg] = {}
+    async def set_props(self, **props: Any) -> PropResults:
+        def _set() -> PropResults:
+            results: dict[str, Result] = {}
             for name, value in props.items():
                 try:
                     setattr(self._device, name, value)
-                    res[name] = PropertyModel.from_value(getattr(self._device, name))
+                    results[name] = Result(res=PropertyModel.from_value(getattr(self._device, name)))
                 except Exception as e:
-                    err[name] = ErrorMsg(msg=str(e))
-            return PropsResponse(res=res, err=err)
+                    results[name] = Result(res=ErrorMsg(msg=str(e)))
+            return PropResults(results=results)
 
         return await self._run_sync(_set)
 
@@ -143,18 +171,18 @@ class DeviceController[D: Device]:
             self._stream_task = None
 
     async def _stream_loop(self) -> None:
-        last_state: PropsResponse | None = None
+        last_state: PropResults | None = None
         while True:
             try:
                 current = await self.get_props(*self._stream_props)
-                changed: dict[str, PropertyModel] = {}
-                for name, value in current.res.items():
-                    last = last_state.res.get(name) if last_state else None
+                changed: dict[str, Result] = {}
+                for name, value in current.ok.items():
+                    last = last_state.ok.get(name) if last_state else None
                     if last is None or value != last:
-                        changed[name] = value
+                        changed[name] = current[name]
 
                 if changed and self._publish_fn is not None:
-                    payload = PropsResponse(res=changed).model_dump_json().encode()
+                    payload = PropResults(results=changed).model_dump_json().encode()
                     await self._publish_fn("properties", payload)
 
                 last_state = current

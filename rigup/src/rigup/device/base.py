@@ -266,19 +266,31 @@ class Command[R]:
             raise CommandParamsError(self, errors) from e
 
 
-class AttributeRequest(BaseModel):
-    device: str
+############################# Command Req/Res ###################################
+
+
+class CommandRequest(BaseModel):
     attr: str
     args: list[Any] = Field(default_factory=list)
     kwargs: dict[str, Any] = Field(default_factory=dict)
+
+
+class CommandRequests(BaseModel):
+    """Request payload for batch command execution over ZMQ."""
+
+    device: str
+    commands: list[CommandRequest]
 
 
 class ErrorMsg(BaseModel):
     msg: str
 
 
-class CommandResponse[T](BaseModel):
+class Result[T](BaseModel):
     res: T | ErrorMsg
+
+    def __bool__(self) -> bool:
+        return not isinstance(self.res, ErrorMsg)
 
     def unwrap(self) -> T:
         if isinstance(self.res, ErrorMsg):
@@ -295,13 +307,61 @@ class CommandResponse[T](BaseModel):
         return not isinstance(self.res, ErrorMsg)
 
 
-class PropsResponse(BaseModel):
-    res: dict[str, PropertyModel] = Field(default_factory=dict)
-    err: dict[str, ErrorMsg] = Field(default_factory=dict)
+class Results[V](BaseModel):
+    """Batch results. Each entry is an individually unwrappable Result[V]."""
+
+    results: dict[str, Result[V]] = Field(default_factory=dict)
+
+    def __bool__(self) -> bool:
+        return all(r.is_ok for r in self.results.values())
+
+    def __getitem__(self, key: str) -> Result[V]:
+        return self.results[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.results
+
+    @property
+    def is_ok(self) -> bool:
+        return all(r.is_ok for r in self.results.values())
+
+    @property
+    def ok(self) -> dict[str, V]:
+        """Return only successful results, unwrapped."""
+        return {k: v.unwrap() for k, v in self.results.items() if v.is_ok}
+
+    def unwrap(self) -> dict[str, V]:
+        """Unwrap all results. Raises on first error."""
+        return {k: v.unwrap() for k, v in self.results.items()}
+
+    def unwrap_or(self, default: V) -> dict[str, V]:
+        """Unwrap all, substituting default for errors."""
+        return {k: v.unwrap_or(default) for k, v in self.results.items()}
 
 
-# Type alias for property change callbacks - receives parsed PropsResponse
-PropsCallback = Callable[[PropsResponse], Awaitable[None]]
+############################# Props Req/Res ###################################
+
+
+class PropsGetRequest(BaseModel):
+    """Request payload for getting properties over ZMQ."""
+
+    device: str
+    props: list[str] = Field(default_factory=list)
+
+
+class PropsSetRequest(BaseModel):
+    """Request payload for setting properties over ZMQ."""
+
+    device: str
+    props: dict[str, Any]
+
+
+class PropResults(Results[PropertyModel]):
+    """Property results. Concrete subclass for proper deserialization of PropertyModel values."""
+
+
+# Type alias for property change callbacks
+PropsCallback = Callable[["PropResults"], Awaitable[None]]
 
 
 def collect_properties(obj: Any) -> dict[str, PropertyInfo]:

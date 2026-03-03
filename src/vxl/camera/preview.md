@@ -17,7 +17,7 @@ This document describes the detailed execution flow when the rig calls `camera.s
 [Rig Process]
 ├─ rig calls: await camera_client.start_preview("tcp://rig:5555", "channel_0")
 ├─ camera_client serializes command to JSON
-├─ Sends ZMQ REQ message: [b"REQ", b'{"attr":"start_preview","args":["tcp://rig:5555","channel_0"],...}']
+├─ Sends ZMQ REQ message: [b"CMD", b'{"device":"...","commands":[{"attr":"start_preview","args":["tcp://rig:5555","channel_0"]}]}']
 └─ Blocks waiting for ZMQ REP response
 ```
 
@@ -26,8 +26,8 @@ This document describes the detailed execution flow when the rig calls `camera.s
 ```
 [Camera Service Process - Event Loop Thread]
 ├─ DeviceService._cmd_loop() is running: while True: await self._rep_socket.recv_multipart()
-├─ Receives: topic=b"REQ", payload=b'{"attr":"start_preview",...}'
-├─ Parses: AttributeRequest.model_validate_json(payload)
+├─ Receives: topic=b"CMD", payload=b'{"device":"...","commands":[{"attr":"start_preview",...}]}'
+├─ Parses: CommandRequests.model_validate_json(payload)
 ├─ Looks up command: self._commands["start_preview"]
 ├─ Command is async, so: out = await command(*args, **kwargs)
 └─ Calls: await CameraService.start_preview("tcp://rig:5555", "channel_0", ...)

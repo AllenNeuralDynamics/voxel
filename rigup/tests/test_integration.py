@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import ClassVar
 
 import pytest
-from rigup.device import DeviceController, describe
+from rigup.device import CommandRequest, DeviceController, Results, describe
 
 from rigup import Device, LocalAdapter, Rig, RigConfig
 
@@ -342,12 +342,12 @@ class TestDeviceController:
         try:
             # Get props
             props = await ctrl.get_props("exposure_ms", "frame_count")
-            assert props.res["exposure_ms"].value == 10.0
-            assert props.res["frame_count"].value == 0
+            assert props["exposure_ms"].unwrap().value == 10.0
+            assert props["frame_count"].unwrap().value == 0
 
             # Set props
             result = await ctrl.set_props(exposure_ms=25.0)
-            assert result.res["exposure_ms"].value == 25.0
+            assert result["exposure_ms"].unwrap().value == 25.0
         finally:
             ctrl.close()
 
@@ -426,6 +426,130 @@ class TestLocalAdapter:
             # Should have received at least one update
             assert len(received_updates) >= 1
             # The update should contain the power property
-            assert any("power" in update.res for update in received_updates)
+            assert any("power" in update.ok for update in received_updates)
+        finally:
+            await adapter.close()
+
+
+class TestBatchCommands:
+    """Test batch command execution via execute_commands / run_commands."""
+
+    @pytest.fixture
+    def local_config(self) -> RigConfig:
+        """Create a config with a local laser for handle-level tests."""
+        return RigConfig.model_validate(
+            {
+                "info": {"name": "test-rig"},
+                "devices": {
+                    "laser_1": {
+                        "target": f"{__name__}.MockLaser",
+                        "init": {"max_power": 100.0},
+                    },
+                },
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_controller_execute_commands(self):
+        """Test batch execution through controller."""
+        laser = MockLaser("test_laser", max_power=100.0)
+        ctrl = DeviceController(laser)
+        try:
+            await ctrl.set_props(power=50.0)
+            result = await ctrl.execute_commands(
+                [
+                    CommandRequest(attr="enable"),
+                ]
+            )
+            assert result.is_ok
+            assert "0:enable" in result.results
+            assert result.results["0:enable"].is_ok
+        finally:
+            ctrl.close()
+
+    @pytest.mark.asyncio
+    async def test_controller_execute_commands_mixed_results(self):
+        """Test that partial failures don't block successes."""
+        laser = MockLaser("test_laser", max_power=100.0)
+        ctrl = DeviceController(laser)
+        try:
+            result = await ctrl.execute_commands(
+                [
+                    CommandRequest(attr="enable"),
+                    CommandRequest(attr="disable"),
+                    CommandRequest(attr="nonexistent"),
+                ]
+            )
+            assert not result.is_ok
+            assert result.results["1:disable"].is_ok
+            assert not result.results["0:enable"].is_ok
+            assert not result.results["2:nonexistent"].is_ok
+        finally:
+            ctrl.close()
+
+    @pytest.mark.asyncio
+    async def test_controller_execute_commands_with_args(self):
+        """Test batch execution with positional args."""
+        laser = MockLaser("test_laser", max_power=100.0)
+        ctrl = DeviceController(laser)
+        try:
+            result = await ctrl.execute_commands(
+                [
+                    CommandRequest(attr="set_power_and_enable", args=[50.0]),
+                ]
+            )
+            assert result.is_ok
+            assert result.results["0:set_power_and_enable"].is_ok
+        finally:
+            ctrl.close()
+
+    @pytest.mark.asyncio
+    async def test_handle_run_commands(self, local_config: RigConfig):
+        """Test batch execution through handle."""
+        rig = Rig(local_config)
+        await rig.start()
+        try:
+            laser = rig.get_handle("laser_1")
+            await laser.set_prop("power", 30.0)
+            result = await laser.run_commands(
+                [
+                    CommandRequest(attr="enable"),
+                ]
+            )
+            assert isinstance(result, Results)
+            assert result.is_ok
+            assert result.results["0:enable"].is_ok
+        finally:
+            await rig.stop()
+
+    @pytest.mark.asyncio
+    async def test_empty_commands(self):
+        """Test that empty command list returns empty success."""
+        laser = MockLaser("test_laser")
+        ctrl = DeviceController(laser)
+        try:
+            result = await ctrl.execute_commands([])
+            assert result.is_ok
+            assert result.results == {}
+        finally:
+            ctrl.close()
+
+    @pytest.mark.asyncio
+    async def test_local_adapter_run_commands(self):
+        """Test batch execution through LocalAdapter directly."""
+        laser = MockLaser("test_laser", max_power=100.0)
+        ctrl = DeviceController(laser)
+        adapter = LocalAdapter(ctrl)
+        try:
+            await adapter.set_props(power=50.0)
+            result = await adapter.run_commands(
+                [
+                    CommandRequest(attr="enable"),
+                    CommandRequest(attr="disable"),
+                ]
+            )
+            assert result.is_ok
+            assert result.results["0:enable"].is_ok
+            assert result.results["1:disable"].is_ok
         finally:
             await adapter.close()

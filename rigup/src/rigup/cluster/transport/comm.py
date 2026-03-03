@@ -3,10 +3,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-_REQ_CMD_ = b"REQ"
-_GET_CMD_ = b"GET"
-_SET_CMD_ = b"SET"
-_INT_CMD_ = b"INT"
+_RUN_CMDS_ = b"CMD"
+_GET_PROPS_ = b"GET"
+_SET_PROPS_ = b"SET"
+_INTERFACE_ = b"INT"
 
 
 class Proto(StrEnum):

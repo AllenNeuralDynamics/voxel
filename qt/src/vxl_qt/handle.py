@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
-from rigup.device import PropsResponse
+from rigup.device import PropResults
 
 from rigup import DeviceHandle
 from vxlib import fire_and_forget
@@ -79,7 +79,7 @@ class DeviceHandleQt(QObject):
             self.log.debug("Fetching initial properties: %s", prop_names)
             if prop_names:
                 props = await self._handle.get_props(*prop_names)
-                self.log.debug("Got initial properties: %s", list(props.res.keys()))
+                self.log.debug("Got initial properties: %s", list(props.ok.keys()))
                 await self._on_properties(props)
         except Exception as e:
             self.log.warning("Failed to fetch initial properties: %s", e, exc_info=True)
@@ -99,10 +99,10 @@ class DeviceHandleQt(QObject):
             self.log.exception("Error stopping adapter")
             self.fault.emit(f"Stop error: {e!r}")
 
-    async def _on_properties(self, props: PropsResponse) -> None:
+    async def _on_properties(self, props: PropResults) -> None:
         """Handle property update from device."""
-        # Emit a dict of property name -> value for simpler widget handling
-        values = {name: prop.value for name, prop in props.res.items()}
+        # Emit a dict of property name -> value for simpler widget handling (skip errors)
+        values = {name: prop.value for name, prop in props.ok.items()}
         self.properties_changed.emit(values)
 
     async def call(self, command: str, *args: Any, **kwargs: Any) -> Any:

@@ -3,7 +3,15 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .base import CommandResponse, Device, DeviceInterface, PropsCallback, PropsResponse
+from .base import (
+    CommandRequest,
+    Device,
+    DeviceInterface,
+    PropResults,
+    PropsCallback,
+    Result,
+    Results,
+)
 from .controller import StreamCallback
 from .props import PropertyModel
 
@@ -23,13 +31,16 @@ class Adapter[D: Device](ABC):
     async def interface(self) -> DeviceInterface: ...
 
     @abstractmethod
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse: ...
+    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result: ...
 
     @abstractmethod
-    async def get_props(self, *props: str) -> PropsResponse: ...
+    async def run_commands(self, commands: list[CommandRequest]) -> Results: ...
 
     @abstractmethod
-    async def set_props(self, **props: Any) -> PropsResponse: ...
+    async def get_props(self, *props: str) -> PropResults: ...
+
+    @abstractmethod
+    async def set_props(self, **props: Any) -> PropResults: ...
 
     @abstractmethod
     async def on_props_changed(self, callback: PropsCallback) -> None: ...
@@ -71,9 +82,13 @@ class DeviceHandle[D: Device]:
         response = await self._adapter.run_command(command, *args, **kwargs)
         return response.unwrap()
 
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
+    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         """Execute a command and return CommandResponse."""
         return await self._adapter.run_command(command, *args, **kwargs)
+
+    async def run_commands(self, commands: list[CommandRequest]) -> Results:
+        """Execute multiple commands and return batch result."""
+        return await self._adapter.run_commands(commands)
 
     async def get_prop_value(self, prop_name: str) -> Any:
         """Get a single property value."""
@@ -83,20 +98,17 @@ class DeviceHandle[D: Device]:
     async def get_prop(self, prop_name: str) -> PropertyModel:
         """Get a single property as PropertyModel."""
         props = await self._adapter.get_props(prop_name)
-        if prop_name in props.err:
-            raise RuntimeError(f"Failed to get {prop_name}: {props.err[prop_name].msg}")
-        return props.res[prop_name]
+        return props[prop_name].unwrap()
 
     async def set_prop(self, prop_name: str, value: Any) -> None:
         """Set a single property value."""
         props = await self._adapter.set_props(**{prop_name: value})
-        if prop_name in props.err:
-            raise RuntimeError(f"Failed to set {prop_name}: {props.err[prop_name].msg}")
+        props[prop_name].unwrap()
 
-    async def get_props(self, *props: str) -> PropsResponse:
+    async def get_props(self, *props: str) -> PropResults:
         return await self._adapter.get_props(*props)
 
-    async def set_props(self, **props: Any) -> PropsResponse:
+    async def set_props(self, **props: Any) -> PropResults:
         return await self._adapter.set_props(**props)
 
     async def interface(self) -> DeviceInterface:

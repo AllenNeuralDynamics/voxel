@@ -11,16 +11,20 @@ import zmq.asyncio
 
 from rigup.device import (
     Adapter,
-    AttributeRequest,
-    CommandResponse,
+    CommandRequest,
+    CommandRequests,
     Device,
     DeviceInterface,
+    PropResults,
     PropsCallback,
-    PropsResponse,
+    PropsGetRequest,
+    PropsSetRequest,
+    Result,
+    Results,
     StreamCallback,
 )
 
-from .comm import _GET_CMD_, _INT_CMD_, _REQ_CMD_, _SET_CMD_, DeviceAddress
+from .comm import _GET_PROPS_, _INTERFACE_, _RUN_CMDS_, _SET_PROPS_, DeviceAddress
 
 
 def set_tcp_keepalive(socket: zmq.asyncio.Socket) -> zmq.asyncio.Socket:
@@ -92,44 +96,45 @@ class ZMQAdapter[D: Device](Adapter[D]):
             with suppress(ValueError):
                 self._stream_callbacks[subscribe_topic].remove(callback)
 
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> CommandResponse:
-        """Execute a command and return raw CommandResponse."""
-        req = AttributeRequest(device=self.uid, attr=command, args=list(args), kwargs=kwargs)
+    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
+        """Execute a single command via the batch path."""
+        results = await self.run_commands([CommandRequest(attr=command, args=list(args), kwargs=kwargs)])
+        return results[f"0:{command}"]
+
+    async def run_commands(self, commands: list[CommandRequest]) -> Results:
+        """Execute multiple commands in a single round-trip."""
+        req = CommandRequests(device=self.uid, commands=commands)
         payload = req.model_dump_json().encode()
-
         async with self._lock:
-            await self._req_socket.send_multipart([_REQ_CMD_, payload])
+            await self._req_socket.send_multipart([_RUN_CMDS_, payload])
             response_json = await self._req_socket.recv_json()
-            return CommandResponse.model_validate(response_json)
+            return Results.model_validate(response_json)
 
-    async def get_props(self, *props: str) -> PropsResponse:
+    async def get_props(self, *props: str) -> PropResults:
         """Get property values from the device."""
-        req = AttributeRequest(device=self.uid, attr="", args=list(props))
+        req = PropsGetRequest(device=self.uid, props=list(props))
         payload = req.model_dump_json().encode()
         async with self._lock:
-            await self._req_socket.send_multipart([_GET_CMD_, payload])
+            await self._req_socket.send_multipart([_GET_PROPS_, payload])
             response_json = await self._req_socket.recv_json()
-            return PropsResponse.model_validate(response_json)
+            return PropResults.model_validate(response_json)
 
-    async def set_props(self, **props: Any) -> PropsResponse:
+    async def set_props(self, **props: Any) -> PropResults:
         """Set property values on the device."""
-        req = AttributeRequest(device=self.uid, attr="", kwargs=props)
+        req = PropsSetRequest(device=self.uid, props=props)
         payload = req.model_dump_json().encode()
         async with self._lock:
-            await self._req_socket.send_multipart([_SET_CMD_, payload])
+            await self._req_socket.send_multipart([_SET_PROPS_, payload])
             response_json = await self._req_socket.recv_json()
-            return PropsResponse.model_validate(response_json)
+            return PropResults.model_validate(response_json)
 
     async def interface(self) -> DeviceInterface:
         """Get the device interface information."""
-        req = AttributeRequest(device=self.uid, attr="")
-        payload = req.model_dump_json().encode()
         async with self._lock:
-            await self._req_socket.send_multipart([_INT_CMD_, payload])
+            await self._req_socket.send_multipart([_INTERFACE_, b""])
             response_json = await self._req_socket.recv_json()
-            cmd_response: CommandResponse[dict] = CommandResponse.model_validate(response_json)
-            interface_dict = cmd_response.unwrap()
-            return DeviceInterface.model_validate(interface_dict)
+            results = Results.model_validate(response_json)
+            return DeviceInterface.model_validate(results["interface"].unwrap())
 
     async def close(self) -> None:
         """Close sockets and cleanup."""
@@ -165,7 +170,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
                 # Check for property updates
                 if topic == props_topic and self._props_callbacks:
                     try:
-                        props = PropsResponse.model_validate_json(payload_bytes.decode())
+                        props = PropResults.model_validate_json(payload_bytes.decode())
                         for callback in self._props_callbacks:
                             try:
                                 await callback(props)

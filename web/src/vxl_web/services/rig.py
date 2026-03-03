@@ -13,7 +13,7 @@ from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from rigup.device import PropsResponse
+from rigup.device import PropResults
 
 from vxl import VoxelRig
 from vxl.camera.preview import PreviewCrop, PreviewLevels
@@ -214,8 +214,8 @@ class RigService:
 
         result = await client.set_props(**properties)
 
-        if result.err:
-            log.warning(f"Errors setting properties on {device_id}: {result.err}")
+        if not result.is_ok:
+            log.warning(f"Errors setting properties on {device_id}: {result.model_dump()}")
 
         self._broadcast({"topic": f"device/{device_id}/properties", "payload": result.model_dump()})
 
@@ -250,10 +250,10 @@ class RigService:
 
         return result_payload
 
-    def _make_props_forwarder(self, device_id: str) -> Callable[[PropsResponse], Awaitable[None]]:
+    def _make_props_forwarder(self, device_id: str) -> Callable[[PropResults], Awaitable[None]]:
         """Create a callback that forwards device property changes to WebSocket clients."""
 
-        async def forwarder(props: PropsResponse) -> None:
+        async def forwarder(props: PropResults) -> None:
             try:
                 self._broadcast({"topic": f"device/{device_id}/properties", "payload": props.model_dump()})
             except Exception:

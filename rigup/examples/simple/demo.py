@@ -81,9 +81,9 @@ async def main():
 
             # Get initial state
             props = await temp.get_props()
-            print(f"Target: {props.res['target_temperature'].value}°C")
-            print(f"Current: {props.res['current_temperature'].value}°C")
-            print(f"Regulating: {props.res['is_regulating'].value}")
+            print(f"Target: {props.ok['target_temperature'].value}°C")
+            print(f"Current: {props.ok['current_temperature'].value}°C")
+            print(f"Regulating: {props.ok['is_regulating'].value}")
 
             # Start regulation
             print("\n[cyan]Starting temperature regulation...[/cyan]")
@@ -92,7 +92,7 @@ async def main():
 
             # Check updated state
             props = await temp.get_props()
-            print(f"Heater power: {props.res['heater_power'].value}%")
+            print(f"Heater power: {props.ok['heater_power'].value}%")
 
         # Work with motor stage
         if "x_stage" in rig.handles:
@@ -107,8 +107,8 @@ async def main():
 
             # Get properties
             props = await stage.get_props()
-            print(f"Position: {props.res['position'].value} mm")
-            print(f"Homed: {props.res['is_homed'].value}")
+            print(f"Position: {props.ok['position'].value} mm")
+            print(f"Homed: {props.ok['is_homed'].value}")
 
             # Move to position
             print("\n[cyan]Moving to 25.0 mm...[/cyan]")
@@ -116,7 +116,7 @@ async def main():
             print(f"  {result}")
 
             props = await stage.get_props()
-            print(f"New position: {props.res['position'].value} mm")
+            print(f"New position: {props.ok['position'].value} mm")
 
         # Work with pump
         if "pump_1" in rig.handles:
@@ -126,8 +126,8 @@ async def main():
 
             # Check initial state
             props = await pump.get_props()
-            print(f"Flow rate: {props.res['flow_rate'].value} mL/min")
-            print(f"Running: {props.res['is_running'].value}")
+            print(f"Flow rate: {props.ok['flow_rate'].value} mL/min")
+            print(f"Running: {props.ok['is_running'].value}")
 
             # Dispense volume
             print("\n[cyan]Dispensing 5.0 mL...[/cyan]")
@@ -135,7 +135,7 @@ async def main():
             print(f"  {result}")
 
             props = await pump.get_props()
-            print(f"Total dispensed: {props.res['total_volume_dispensed'].value} mL")
+            print(f"Total dispensed: {props.ok['total_volume_dispensed'].value} mL")
 
         # Keep running
         print("\n[cyan]Press Ctrl+C to exit[/cyan]")

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import zmq.asyncio
-from rigup.device import PropsCallback, PropsResponse
+from rigup.device import PropResults, PropsCallback
 from vxlib.color import Color
 
 from rigup import DeviceHandle, Rig
@@ -142,10 +142,10 @@ class VoxelRig(Rig):
     def _make_camera_props_callback(self, camera_id: str) -> PropsCallback:
         """Create a property-change callback that triggers FOV recomputation."""
 
-        async def _on_camera_props(props: PropsResponse) -> None:
+        async def _on_camera_props(props: PropResults) -> None:
             if camera_id not in self._get_profile_cameras():
                 return
-            if not (set(props.res.keys()) & _FOV_PROPERTIES):
+            if not (set(props.ok.keys()) & _FOV_PROPERTIES):
                 return
             await self._compute_and_publish_fov()
 

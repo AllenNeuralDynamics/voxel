@@ -28,7 +28,7 @@ result = await temp.call("start_regulation")
 
 # Get properties
 props = await temp.get_props()
-current_temp = props.res['current_temperature'].value
+current_temp = props.ok['current_temperature'].value
 
 # Introspection
 interface = await temp.interface()

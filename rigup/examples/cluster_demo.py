@@ -7,7 +7,7 @@ from typing import ClassVar
 import zmq.asyncio
 from rich import print
 from rigup.cluster.transport import DeviceAddressTCP, ZMQAdapter, ZMQService
-from rigup.device import Device, DeviceController, DeviceHandle, PropsResponse, describe
+from rigup.device import Device, DeviceController, DeviceHandle, PropResults, describe
 
 
 class DataProcessor(Device):
@@ -189,7 +189,7 @@ async def main():
     _ = ZMQService(proc_ctrl, proc_conn, zctx)
     _ = ZMQService(laser_ctrl, laser_conn, zctx)
 
-    async def on_properties(props: PropsResponse):
+    async def on_properties(props: PropResults):
         print(f"Received properties: {props}")
 
     proc_transport = ZMQAdapter(processor.uid, zctx, proc_conn)
