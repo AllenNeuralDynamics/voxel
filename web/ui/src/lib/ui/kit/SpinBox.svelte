@@ -46,22 +46,30 @@
 					stack: 'w-5'
 				}
 			},
-			showButtons: {
-				true: {
+			appearance: {
+				full: {
 					wrapper: 'flex border border-input',
 					input: 'flex-1 ps-1.5 pe-1',
 					prefix: 'ps-1.5 pe-1',
 					suffix: 'pe-1.5'
 				},
-				false: {
+				bordered: {
+					wrapper: 'flex border border-input',
+					input: 'flex-1 ps-1.5 pe-1',
+					prefix: 'ps-1.5 pe-1',
+					suffix: 'pe-1.5',
+					stack: 'hidden'
+				},
+				inline: {
 					wrapper: 'inline-flex border border-transparent',
-					prefix: 'ps-1 pe-0.5'
+					prefix: 'ps-1 pe-0.5',
+					stack: 'hidden'
 				}
 			}
 		},
 		defaultVariants: {
 			size: 'md',
-			showButtons: true
+			appearance: 'full'
 		}
 	});
 
@@ -101,7 +109,7 @@
 		numCharacters = 4,
 		color = 'inherit',
 		align = 'left',
-		showButtons = true,
+		appearance = 'full',
 		draggable = true,
 		prefix,
 		suffix,
@@ -113,7 +121,7 @@
 		onChange: onValueChange
 	}: Props = $props();
 
-	const styles = $derived(spinBoxVariants({ size, showButtons }));
+	const styles = $derived(spinBoxVariants({ size, appearance }));
 
 	let lastDragCallTime = 0;
 	let dragThrottleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -346,26 +354,24 @@
 	{#if suffix}
 		<span class={styles.suffix()}>{suffix}</span>
 	{/if}
-	{#if showButtons}
-		<div class={styles.stack()}>
-			<button
-				class={cn(styles.stepButton(), 'rounded-tr border-b border-input')}
-				onclick={increment}
-				disabled={value >= max}
-				aria-label="Increment"
-			>
-				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z" /></svg>
-			</button>
-			<button
-				class={cn(styles.stepButton(), 'rounded-br')}
-				onclick={decrement}
-				disabled={value <= min}
-				aria-label="Decrement"
-			>
-				<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 5L0 0H8L4 5Z" /></svg>
-			</button>
-		</div>
-	{/if}
+	<div class={styles.stack()}>
+		<button
+			class={cn(styles.stepButton(), 'rounded-tr border-b border-input')}
+			onclick={increment}
+			disabled={value >= max}
+			aria-label="Increment"
+		>
+			<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z" /></svg>
+		</button>
+		<button
+			class={cn(styles.stepButton(), 'rounded-br')}
+			onclick={decrement}
+			disabled={value <= min}
+			aria-label="Decrement"
+		>
+			<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 5L0 0H8L4 5Z" /></svg>
+		</button>
+	</div>
 </div>
 
 <style>

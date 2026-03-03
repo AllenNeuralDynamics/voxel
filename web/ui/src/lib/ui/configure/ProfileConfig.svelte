@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Session } from '$lib/main';
 	import { sanitizeString } from '$lib/utils';
 	import { Collapsible } from 'bits-ui';
@@ -91,6 +92,21 @@
 	});
 
 	let expandedDevices = $state(new Set<string>());
+
+	let layerVisibility = $state<Record<string, boolean>>({});
+
+	$effect(() => {
+		const keys = waveformDeviceIds;
+		untrack(() => {
+			const next: Record<string, boolean> = {};
+			for (const k of keys) next[k] = layerVisibility[k] ?? true;
+			layerVisibility = next;
+		});
+	});
+
+	function toggleLayer(deviceId: string) {
+		layerVisibility = { ...layerVisibility, [deviceId]: !layerVisibility[deviceId] };
+	}
 </script>
 
 {#if profile}
@@ -111,68 +127,60 @@
 
 		<!-- Waveforms -->
 		<section>
-			{#if waveformDeviceIds.length > 0 && duration > 0}
-				<!-- Unified plot card -->
-				<div class="rounded-lg border bg-card shadow-sm">
-					<div class="p-3">
-						<WaveformPlot waveforms={sortedWaveforms} {duration} {restTime} colors={waveformColors}>
-							{#snippet footerLeft()}
-								<div class="flex items-center gap-2">
-									<SpinBox
-										value={sampleRate}
-										prefix="rate"
-										suffix=" Hz"
-										size="sm"
-										showButtons={false}
-										numCharacters={6}
-									/>
-									<SpinBox
-										value={duration}
-										prefix="dur"
-										suffix=" s"
-										size="sm"
-										showButtons={false}
-										decimals={4}
-										numCharacters={6}
-									/>
-									<SpinBox
-										value={restTime}
-										prefix="rest"
-										suffix=" s"
-										size="sm"
-										showButtons={false}
-										decimals={4}
-										numCharacters={6}
-									/>
-								</div>
-							{/snippet}
-						</WaveformPlot>
-					</div>
+			<div class="rounded border bg-card shadow-sm">
+				<div class="flex items-center justify-center gap-2 px-3 py-2">
+					{#each waveformDeviceIds as deviceId (deviceId)}
+						{@const visible = layerVisibility[deviceId] !== false}
+						<button
+							type="button"
+							class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] transition-colors hover:bg-muted"
+							onclick={() => toggleLayer(deviceId)}
+						>
+							<span
+								class="inline-block h-2 w-2 shrink-0 rounded-full {visible ? '' : 'opacity-30'}"
+								style="background-color: {waveformColors[deviceId]}"
+							></span>
+							<span class={visible ? 'text-foreground' : 'text-muted-foreground/50'}>{deviceId}</span>
+						</button>
+					{/each}
 				</div>
-			{:else}
-				<!-- Fallback: timing spinboxes only -->
-				<div class="flex items-center gap-3">
-					<SpinBox value={sampleRate} prefix="rate" suffix=" Hz" size="sm" showButtons={false} numCharacters={6} />
+				<div class="border-y px-4 py-2">
+					{#if waveformDeviceIds.length > 0 && duration > 0}
+						<WaveformPlot waveforms={sortedWaveforms} {duration} {restTime} {layerVisibility} colors={waveformColors} />
+					{/if}
+				</div>
+				<div class="flex items-center justify-center gap-2 px-3 py-2">
+					<SpinBox
+						value={sampleRate}
+						prefix="Sample Rate"
+						suffix=" Hz"
+						size="sm"
+						appearance="full"
+						numCharacters={7}
+						align="right"
+					/>
 					<SpinBox
 						value={duration}
-						prefix="dur"
+						prefix="Duration"
 						suffix=" s"
 						size="sm"
-						showButtons={false}
+						appearance="full"
 						decimals={4}
-						numCharacters={6}
+						numCharacters={7}
+						align="right"
 					/>
 					<SpinBox
 						value={restTime}
-						prefix="rest"
+						prefix="Rest Time"
 						suffix=" s"
 						size="sm"
-						showButtons={false}
+						appearance="full"
 						decimals={4}
-						numCharacters={6}
+						numCharacters={8}
+						align="right"
 					/>
 				</div>
-			{/if}
+			</div>
 		</section>
 
 		<!-- Devices -->

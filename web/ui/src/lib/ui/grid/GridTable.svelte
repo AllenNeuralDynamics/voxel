@@ -152,14 +152,14 @@
 					<th class="min-w-16 border-b border-border p-1.5"></th>
 					<th class="w-56 border-b border-border p-1.5 text-left">
 						<div class="flex items-center gap-1">
-							<SpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={13} showButtons={false} />
+							<SpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={13} appearance="inline" />
 							<span class="text-muted-foreground">→</span>
 							<SpinBox
 								bind:value={defaultZEnd}
 								min={0}
 								step={10}
 								numCharacters={13}
-								showButtons={false}
+								appearance="inline"
 								align="right"
 							/>
 							<span class="ml-1 text-[0.65rem] text-muted-foreground lowercase">µm</span>
@@ -203,7 +203,6 @@
 										min={0}
 										step={100}
 										numCharacters={5}
-										showButtons={true}
 										onChange={(v) => handleZChange(tile, v, stack.z_end_um)}
 									/>
 									<span class="text-muted-foreground/50">→</span>
@@ -212,7 +211,6 @@
 										min={0}
 										step={100}
 										numCharacters={5}
-										showButtons={true}
 										onChange={(v) => handleZChange(tile, stack.z_start_um, v)}
 										align="right"
 									/>

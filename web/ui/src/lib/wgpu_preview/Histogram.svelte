@@ -230,7 +230,7 @@
 				step={100}
 				numCharacters={5}
 				align="left"
-				showButtons={false}
+				appearance="inline"
 				onChange={(newValue) => {
 					const newMin = newValue / dataTypeMax;
 					onLevelsChange(newMin, levelsMax);
@@ -254,7 +254,7 @@
 				step={100}
 				numCharacters={5}
 				align="right"
-				showButtons={false}
+				appearance="inline"
 				onChange={(newValue) => {
 					const newMax = newValue / dataTypeMax;
 					onLevelsChange(levelsMin, newMax);
@@ -387,7 +387,7 @@
 			step={100}
 			placeholder="0"
 			numCharacters={5}
-			showButtons={false}
+			appearance="inline"
 			align="left"
 		/>
 		<button type="button" onclick={handleFitDisplayWindow} disabled={!hasValidData} class={ghostButtonClass}>
@@ -400,7 +400,7 @@
 			step={100}
 			placeholder={dataTypeMax.toString()}
 			numCharacters={5}
-			showButtons={false}
+			appearance="inline"
 			align="right"
 		/>
 	</div>

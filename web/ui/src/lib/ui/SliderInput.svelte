@@ -26,7 +26,7 @@
 			decimals={1}
 			numCharacters={5}
 			{onChange}
-			showButtons={false}
+			appearance="inline"
 			align="right"
 			size="xs"
 		/>

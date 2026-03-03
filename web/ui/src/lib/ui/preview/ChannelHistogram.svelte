@@ -255,7 +255,7 @@
 				step={100}
 				numCharacters={5}
 				align="left"
-				showButtons={false}
+				appearance="inline"
 				size="xs"
 			/>
 			<button type="button" onclick={autoFit} disabled={!hasValidData} class={ghostBtnClass}>auto fit</button>
@@ -266,7 +266,7 @@
 				step={100}
 				numCharacters={5}
 				align="right"
-				showButtons={false}
+				appearance="inline"
 				size="xs"
 			/>
 		</div>
@@ -389,7 +389,7 @@
 			step={100}
 			numCharacters={5}
 			align="left"
-			showButtons={false}
+			appearance="inline"
 			size="xs"
 			onChange={(v) => onLevelsChange(v / dataTypeMax, levelsMax)}
 		/>
@@ -411,7 +411,7 @@
 			step={100}
 			numCharacters={5}
 			align="right"
-			showButtons={false}
+			appearance="inline"
 			size="xs"
 			onChange={(v) => onLevelsChange(levelsMin, v / dataTypeMax)}
 		/>
