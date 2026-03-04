@@ -8,17 +8,17 @@
 				'transition-all duration-300',
 				'text-zinc-700 hover:text-zinc-500'
 			],
-			line: 'grow bg-current opacity-[0.85]'
+			line: 'grow stroke-current opacity-[0.85]'
 		},
 		variants: {
 			direction: {
 				vertical: {
 					separator: 'w-3 flex-col left-1/2 top-0 bottom-0 -translate-x-1/2',
-					line: 'w-[1px]'
+					line: 'w-px'
 				},
 				horizontal: {
 					separator: 'h-3 flex-row top-1/2 left-0 right-0 -translate-y-1/2',
-					line: 'h-[2px]'
+					line: 'h-px'
 				}
 			}
 		},
@@ -43,8 +43,20 @@
 	const styles = $derived(paneDividerVariants({ direction }));
 </script>
 
+{#snippet line()}
+	{#if direction === 'vertical'}
+		<svg class={styles.line()} preserveAspectRatio="none">
+			<line x1="50%" y1="0" x2="50%" y2="100%" stroke-width="0.5" />
+		</svg>
+	{:else}
+		<svg class={styles.line()} preserveAspectRatio="none">
+			<line x1="0" y1="50%" x2="100%" y2="50%" stroke-width="2" />
+		</svg>
+	{/if}
+{/snippet}
+
 <PaneResizer class="relative z-50" {ondblclick}>
 	<div class={styles.separator({ class: className })}>
-		<div class={styles.line()}></div>
+		{@render line()}
 	</div>
 </PaneResizer>

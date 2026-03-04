@@ -35,19 +35,20 @@
 	interface Props {
 		workflow: Workflow;
 		viewId: string;
+		onViewChange?: (id: string) => void;
 		class?: string;
 	}
 
-	let { workflow, viewId = $bindable(), class: className }: Props = $props();
+	let { workflow, viewId, onViewChange, class: className }: Props = $props();
 
 	function handleBack() {
 		const stepId = workflow.back();
-		if (stepId) viewId = stepId;
+		if (stepId) onViewChange?.(stepId);
 	}
 
 	function handleNext() {
 		const stepId = workflow.next();
-		viewId = stepId ?? 'acquire';
+		onViewChange?.(stepId ?? 'acquire');
 	}
 </script>
 
@@ -69,7 +70,7 @@
 				<ChevronLeft width="14" height="14" />
 			</button>
 			<button
-				onclick={() => (viewId = step.id)}
+				onclick={() => onViewChange?.(step.id)}
 				class="flex w-20 cursor-pointer items-center justify-center gap-2 uppercase"
 			>
 				<span

@@ -9,28 +9,23 @@
 	import DaqConfig from './DaqConfig.svelte';
 	import DeviceConfig from './DeviceConfig.svelte';
 
-	export type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id?: string };
+	export type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id: string };
 
 	interface Props {
 		session: Session;
 		activeNav?: NavTarget;
+		onNavChange?: (nav: NavTarget) => void;
 	}
 
-	let { session, activeNav = $bindable({ type: 'profile' }) }: Props = $props();
+	let { session, activeNav = { type: 'channels' }, onNavChange }: Props = $props();
 
 	const config = $derived(session.config);
 	const daqDeviceId = $derived(config.daq.device);
 
-	// Resolve profile id: use explicit id or fall back to first profile
-	const resolvedProfileId = $derived(
-		activeNav.type === 'profile' ? (activeNav.id ?? Object.keys(config.profiles)[0]) : undefined
-	);
-
 	function isActive(target: NavTarget): boolean {
 		if (activeNav.type !== target.type) return false;
 		if (target.type === 'device' && activeNav.type === 'device') return activeNav.id === target.id;
-		if (target.type === 'profile' && activeNav.type === 'profile')
-			return (activeNav.id ?? Object.keys(config.profiles)[0]) === target.id;
+		if (target.type === 'profile' && activeNav.type === 'profile') return activeNav.id === target.id;
 		return true;
 	}
 
@@ -49,7 +44,7 @@
 	<aside class="flex w-52 shrink-0 flex-col overflow-auto border-r border-border bg-card p-3">
 		<!-- Channels -->
 		<nav class="space-y-0.5">
-			<button onclick={() => (activeNav = { type: 'channels' })} class={navClass({ type: 'channels' })}>
+			<button onclick={() => onNavChange?.({ type: 'channels' })} class={navClass({ type: 'channels' })}>
 				Channels
 			</button>
 		</nav>
@@ -57,7 +52,7 @@
 		<div class="my-3 border-t border-border"></div>
 
 		<!-- Profiles -->
-		<Collapsible.Root open>
+		<Collapsible.Root open={activeNav.type === 'profile'}>
 			<Collapsible.Trigger class="group flex w-full items-center justify-between px-2 py-1">
 				<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"> Profiles </span>
 				<ChevronRight
@@ -69,7 +64,7 @@
 			<Collapsible.Content>
 				<nav class="mt-1 space-y-0.5">
 					{#each Object.entries(config.profiles) as [id, profile] (id)}
-						<button onclick={() => (activeNav = { type: 'profile', id })} class={navClass({ type: 'profile', id })}>
+						<button onclick={() => onNavChange?.({ type: 'profile', id })} class={navClass({ type: 'profile', id })}>
 							<span class="truncate">{profile.label ?? sanitizeString(id)}</span>
 						</button>
 					{/each}
@@ -84,7 +79,7 @@
 			<h3 class="mb-1 px-2 text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Devices</h3>
 			<nav class="space-y-0.5">
 				{#each [...session.devices.devices] as [id, device] (id)}
-					<button onclick={() => (activeNav = { type: 'device', id })} class={navClass({ type: 'device', id })}>
+					<button onclick={() => onNavChange?.({ type: 'device', id })} class={navClass({ type: 'device', id })}>
 						<span class="truncate">{sanitizeString(id)}</span>
 						<span
 							class={cn(
@@ -139,8 +134,8 @@
 					{/each}
 				</div>
 			</section>
-		{:else if activeNav.type === 'profile' && resolvedProfileId}
-			<ProfileConfig {session} profileId={resolvedProfileId} />
+		{:else if activeNav.type === 'profile' && activeNav.id}
+			<ProfileConfig {session} profileId={activeNav.id} />
 		{:else if activeNav.type === 'device'}
 			{#if activeNav.id in session.cameras}
 				<CameraConfig {session} deviceId={activeNav.id} />
