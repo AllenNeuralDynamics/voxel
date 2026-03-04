@@ -133,14 +133,46 @@ export interface TopicHandlers {
 	'stacks/updated'?: (payload: { stacks: Stack[] }) => void;
 }
 
+// --- Backend resolution ---
+
+const DEFAULT_API_URL = 'http://localhost:8000';
+
+interface BackendConfig {
+	wsUrl: string;
+	baseUrl: string;
+}
+
+/**
+ * Resolve backend URLs for WebSocket and REST.
+ *
+ * - SSR: full URLs so server-side fetches can reach the backend
+ * - Dev: WS direct to backend (bun can't proxy upgrades), REST relative (Vite proxy)
+ * - Prod: same origin for both
+ */
+function resolveBackend(apiUrl?: string): BackendConfig {
+	const api = apiUrl || import.meta.env.VITE_API_URL || DEFAULT_API_URL;
+
+	if (typeof window === 'undefined') {
+		return { wsUrl: api.replace(/^http/, 'ws') + '/ws', baseUrl: api };
+	}
+	if (import.meta.env.DEV) {
+		return { wsUrl: api.replace(/^http/, 'ws') + '/ws', baseUrl: location.origin };
+	}
+	const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+	return { wsUrl: `${wsProto}//${location.host}/ws`, baseUrl: location.origin };
+}
+
+// --- Client ---
+
 export interface ClientOptions {
+	apiUrl?: string;
 	autoReconnect?: boolean;
 	initialReconnectDelayMs?: number;
 	maxReconnectDelayMs?: number;
 	maxReconnectAttempts?: number;
 }
 
-const DEFAULT_OPTIONS: Required<ClientOptions> = {
+const DEFAULT_OPTIONS: Required<Omit<ClientOptions, 'apiUrl'>> = {
 	autoReconnect: true,
 	initialReconnectDelayMs: 1000,
 	maxReconnectDelayMs: 15000,
@@ -161,7 +193,7 @@ export class Client {
 	private connectionHandlers = new SvelteSet<ConnectionHandler>();
 	private errorHandlers = new SvelteSet<ErrorHandler>();
 
-	/** Base URL for REST API (derived from WebSocket URL) */
+	private url: string;
 	readonly baseUrl: string;
 
 	connectionState = $state<ConnectionState>('idle');
@@ -181,21 +213,17 @@ export class Client {
 	});
 	isConnected = $derived(this.connectionState === 'connected');
 
-	constructor(
-		private url: string,
-		options: ClientOptions = {}
-	) {
-		const resolved = { ...DEFAULT_OPTIONS, ...options };
+	constructor(options: ClientOptions = {}) {
+		const { apiUrl, ...connectionOpts } = options;
+		const resolved = { ...DEFAULT_OPTIONS, ...connectionOpts };
 		this.shouldReconnect = resolved.autoReconnect;
 		this.reconnectDelay = resolved.initialReconnectDelayMs;
 		this.maxReconnectDelay = resolved.maxReconnectDelayMs;
 		this.maxReconnectAttempts = resolved.maxReconnectAttempts;
 
-		// Derive baseUrl from WebSocket URL: ws://host:port/ws -> http://host:port
-		this.baseUrl = url
-			.replace(/^ws:/, 'http:')
-			.replace(/^wss:/, 'https:')
-			.replace(/\/ws\/?$/, '');
+		const backend = resolveBackend(apiUrl);
+		this.url = backend.wsUrl;
+		this.baseUrl = backend.baseUrl;
 	}
 
 	/**

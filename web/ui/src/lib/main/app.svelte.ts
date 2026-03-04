@@ -5,14 +5,7 @@ import type { AppStatus, SessionDirectory, LogMessage, JsonSchema, VoxelRigConfi
 import { Session } from './session.svelte';
 import { SvelteDate } from 'svelte/reactivity';
 
-function getDefaultSocketUrl(): string {
-	if (!browser) return 'ws://localhost:8000/ws';
-	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-	return `${protocol}//${window.location.host}/ws`;
-}
-
 export interface AppOptions {
-	socketUrl?: string;
 	clientOptions?: ClientOptions;
 }
 
@@ -33,8 +26,7 @@ export class App {
 	private unsubscribers: Array<() => void> = [];
 
 	constructor(options: AppOptions = {}) {
-		const socketUrl = options.socketUrl ?? getDefaultSocketUrl();
-		this.#client = new Client(socketUrl, options.clientOptions);
+		this.#client = new Client(options.clientOptions);
 	}
 
 	get client(): Client {

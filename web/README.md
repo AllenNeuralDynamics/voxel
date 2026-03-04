@@ -9,7 +9,7 @@ Web interface and CLI for controlling Voxel microscopes.
 uv sync --all-packages --all-extras
 
 # Build web UI
-cd web/ui && pnpm install && pnpm run build && cd ../..
+cd web/ui && bun install && bun run build && cd ../..
 
 # Run
 uv run vxl

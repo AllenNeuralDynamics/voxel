@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/state';
 	import { App } from '$lib/main';
+	import { parseView, parseConfigureNav, navigate, DEFAULT_VIEW } from '$lib/navigation';
 	import SplashScreen from './SplashScreen.svelte';
 	import LaunchScreen from './LaunchScreen.svelte';
 	import { PreviewCanvas } from '$lib/ui/preview';
@@ -17,60 +19,15 @@
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
-	import { ConfigurePanel, type ConfigureNavTarget } from '$lib/ui/configure';
+	import { ConfigurePanel } from '$lib/ui/configure';
 	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
-	const DEFAULT_HEADER_TAB = 'configure';
-	const VALID_VIEWS = ['configure', 'scout', 'plan', 'acquire'] as const;
-
-	// --- URL parsing (pure functions) ---
-
-	function parseView(params: URLSearchParams): string {
-		const view = params.get('view');
-		return view && (VALID_VIEWS as readonly string[]).includes(view) ? view : DEFAULT_HEADER_TAB;
-	}
-
-	function parseConfigureNav(params: URLSearchParams): ConfigureNavTarget {
-		const nav = params.get('nav');
-		const id = params.get('id');
-		if (nav === 'device' && id) return { type: 'device', id };
-		if (nav === 'profile' && id) return { type: 'profile', id };
-		return { type: 'channels' };
-	}
-
-	function parseUrl() {
-		const params = new URLSearchParams(window.location.search);
-		return { view: parseView(params), nav: parseConfigureNav(params) };
-	}
-
-	// --- State (source of truth for UI), synced to URL via mutation helpers ---
+	// --- Reactive state derived from URL (single source of truth) ---
 
 	let app = $state<App | undefined>(undefined);
-	const initial = parseUrl();
-	let viewId = $state(initial.view);
-	let configureNav = $state<ConfigureNavTarget>(initial.nav);
-
-	// --- Mutation helpers: update state + URL atomically ---
-	function syncUrl(method: 'push' | 'replace' = 'replace') {
-		const parts = [`view=${viewId}`];
-		if (viewId === 'configure') {
-			parts.push(`nav=${configureNav.type}`);
-			if ('id' in configureNav && configureNav.id) parts.push(`id=${encodeURIComponent(configureNav.id)}`);
-		}
-		const fn = method === 'push' ? history.pushState : history.replaceState;
-		fn.call(history, {}, '', window.location.pathname + '?' + parts.join('&'));
-	}
-
-	function setView(id: string) {
-		viewId = id;
-		syncUrl('push');
-	}
-
-	function setConfigureNav(nav: ConfigureNavTarget) {
-		configureNav = nav;
-		syncUrl();
-	}
+	const viewId = $derived(parseView(page.url));
+	const configureNav = $derived(parseConfigureNav(page.url));
 
 	// --- Validate nav targets once session is available ---
 
@@ -80,10 +37,10 @@
 			const devices = app.session.devices.devices;
 			if (!devices.has(configureNav.id)) {
 				const firstId = [...devices.keys()][0];
-				setConfigureNav(firstId ? { type: 'device', id: firstId } : { type: 'channels' });
+				navigate('configure', firstId ? { type: 'device', id: firstId } : { type: 'channels' }, { replace: true });
 			}
 		} else if (configureNav.type === 'profile' && !(configureNav.id in app.session.config.profiles)) {
-			setConfigureNav({ type: 'channels' });
+			navigate('configure', { type: 'channels' }, { replace: true });
 		}
 	});
 
@@ -118,11 +75,7 @@
 	}
 
 	function toggleView(id: string) {
-		if (viewId === id) {
-			setView(app?.session?.workflow.steps[0]?.id ?? DEFAULT_HEADER_TAB);
-		} else {
-			setView(id);
-		}
+		navigate(viewId === id ? (app?.session?.workflow.steps[0]?.id ?? DEFAULT_VIEW) : id);
 	}
 
 	function cleanup() {
@@ -132,15 +85,8 @@
 		}
 	}
 
-	function handlePopstate() {
-		const { view, nav } = parseUrl();
-		viewId = view;
-		configureNav = nav;
-	}
-
 	onMount(async () => {
 		window.addEventListener('beforeunload', cleanup);
-		window.addEventListener('popstate', handlePopstate);
 		try {
 			app = new App();
 			await app.initialize();
@@ -151,7 +97,6 @@
 
 	onDestroy(() => {
 		window.removeEventListener('beforeunload', cleanup);
-		window.removeEventListener('popstate', handlePopstate);
 		cleanup();
 	});
 </script>
@@ -171,7 +116,7 @@
 	)}
 	<div class="h-screen w-full bg-background text-foreground">
 		<PaneGroup direction="horizontal" autoSaveId="main-h">
-			<Pane defaultSize={60} minSize={60} maxSize={70}>
+			<Pane defaultSize={60} minSize={60} maxSize={70} class="bg-zinc-900">
 				<!-- Control area: header + main + footer -->
 				<div class="grid h-full grid-rows-[auto_1fr_auto] border-r border-border">
 					<header class="flex items-center justify-between gap-8 border-b border-border bg-card px-4 py-4">
@@ -187,7 +132,7 @@
 							>
 								<Cog width="16" height="16" /> Configure
 							</button>
-							<WorkflowTabs {workflow} {viewId} onViewChange={setView} class="max-w-96" />
+							<WorkflowTabs {workflow} {viewId} onViewChange={navigate} class="max-w-96" />
 							<button
 								onclick={() => toggleView('acquire')}
 								class={cn(
@@ -217,7 +162,11 @@
 						<Pane>
 							<div class="h-full overflow-auto">
 								{#if viewId === 'configure'}
-									<ConfigurePanel {session} activeNav={configureNav} onNavChange={setConfigureNav} />
+									<ConfigurePanel
+										{session}
+										activeNav={configureNav}
+										onNavChange={(nav) => navigate('configure', nav)}
+									/>
 								{:else if viewId === 'scout'}
 									{@const acqIds = session.acquisitionProfileIds}
 									{@const scoutLocked = workflow.stepStates['scout'] === 'committed'}
@@ -291,7 +240,7 @@
 													size="xs"
 													onclick={() => {
 														const stepId = workflow.back();
-														if (stepId) setView(stepId);
+														if (stepId) navigate(stepId);
 													}}
 												>
 													<ChevronLeft width="12" height="12" /> Back to setup
@@ -358,10 +307,10 @@
 									</div>
 								{/each}
 							</button>
-							{@render tabButton('waveforms', 'Waveforms')}
 						</div>
 						<div class="flex items-center gap-3">
 							<div class="flex divide-x divide-border rounded border border-border">
+								{@render tabButton('waveforms', 'Waveforms')}
 								{@render tabButton('logs', 'Logs')}
 								<button onclick={() => selectBottomTab('session')} class={tabButtonClass(bottomPanelTab === 'session')}>
 									Session
