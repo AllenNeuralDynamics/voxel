@@ -37,6 +37,14 @@
 	const duration = $derived(Number(profile?.daq.timing.duration ?? 0));
 	const restTime = $derived(Number(profile?.daq.timing.rest_time ?? 0));
 	const sampleRate = $derived(Number(profile?.daq.timing.sample_rate ?? 0));
+	const frequency = $derived(duration + restTime > 0 ? 1 / (duration + restTime) : 0);
+	const samples = $derived(Math.floor(sampleRate * duration));
+
+	const formatFrequency = (hz: number) => {
+		if (hz >= 1_000_000) return `${(hz / 1_000_000).toFixed(2)} MHz`;
+		if (hz >= 1_000) return `${(hz / 1_000).toFixed(2)} kHz`;
+		return `${hz.toFixed(2)} Hz`;
+	};
 
 	const traceColors: string[] = [
 		'#10b981',
@@ -95,8 +103,62 @@
 
 		<!-- Waveforms -->
 		<section>
-			<div class="rounded border bg-card shadow-sm">
-				<div class="flex items-center justify-center gap-2 px-3 py-2">
+			<div class="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[1fr_auto] rounded border bg-card shadow-sm">
+				<!-- Plot: row 1, col 1 -->
+				<div class="px-4 py-2">
+					{#if waveformDeviceIds.length > 0 && duration > 0}
+						<WaveformPlot waveforms={sortedWaveforms} {duration} {restTime} {layerVisibility} colors={waveformColors} />
+					{/if}
+				</div>
+
+				<!-- Timing controls: row 1, col 2 -->
+				<div class="flex flex-col justify-between border-l">
+					<div class="space-y-1.5 px-3 py-3">
+						<SpinBox
+							value={sampleRate}
+							prefix="Rate"
+							suffix=" Hz"
+							size="sm"
+							appearance="full"
+							numCharacters={10}
+							align="right"
+						/>
+						<SpinBox
+							value={duration}
+							prefix="Duration"
+							suffix=" s"
+							size="sm"
+							appearance="full"
+							decimals={4}
+							numCharacters={10}
+							align="right"
+						/>
+						<SpinBox
+							value={restTime}
+							prefix="Rest"
+							suffix=" s"
+							size="sm"
+							appearance="full"
+							decimals={4}
+							numCharacters={10}
+							align="right"
+						/>
+					</div>
+
+					<div class="space-y-1 border-t px-3 py-2 text-[0.65rem] text-muted-foreground">
+						<div class="flex justify-between">
+							<span>Frequency</span>
+							<span class="font-mono text-foreground">{formatFrequency(frequency)}</span>
+						</div>
+						<div class="flex justify-between">
+							<span>Samples</span>
+							<span class="font-mono text-foreground">{samples.toLocaleString()}</span>
+						</div>
+					</div>
+				</div>
+
+				<!-- Layer toggles: row 2, col 1 -->
+				<div class="flex flex-wrap items-center gap-1.5 border-t px-3 py-2">
 					{#each waveformDeviceIds as deviceId (deviceId)}
 						{@const visible = layerVisibility[deviceId] !== false}
 						<button
@@ -112,40 +174,19 @@
 						</button>
 					{/each}
 				</div>
-				<div class="border-y px-4 py-2">
-					{#if waveformDeviceIds.length > 0 && duration > 0}
-						<WaveformPlot waveforms={sortedWaveforms} {duration} {restTime} {layerVisibility} colors={waveformColors} />
-					{/if}
-				</div>
-				<div class="flex items-center justify-center gap-2 px-3 py-2">
+
+				<!-- Cycles: row 2, col 2 -->
+				<div class="border-t border-l px-3 py-2">
 					<SpinBox
-						value={sampleRate}
-						prefix="Sample Rate"
-						suffix=" Hz"
+						value={1}
+						prefix="Cycles"
+						min={1}
+						max={4}
+						step={1}
 						size="sm"
 						appearance="full"
-						numCharacters={7}
-						align="right"
-					/>
-					<SpinBox
-						value={duration}
-						prefix="Duration"
-						suffix=" s"
-						size="sm"
-						appearance="full"
-						decimals={4}
-						numCharacters={7}
-						align="right"
-					/>
-					<SpinBox
-						value={restTime}
-						prefix="Rest Time"
-						suffix=" s"
-						size="sm"
-						appearance="full"
-						decimals={4}
-						numCharacters={8}
-						align="right"
+						numCharacters={1}
+						disabled
 					/>
 				</div>
 			</div>

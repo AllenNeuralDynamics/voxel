@@ -93,6 +93,7 @@
 		prefix?: string;
 		suffix?: string;
 		snapValue?: number | (() => number);
+		disabled?: boolean;
 		class?: string;
 		throttle?: number;
 		debounce?: number;
@@ -114,6 +115,7 @@
 		prefix,
 		suffix,
 		snapValue,
+		disabled = false,
 		size = 'md',
 		class: className = '',
 		throttle = 100,
@@ -328,7 +330,10 @@
 	});
 </script>
 
-<div bind:this={wrapperElement} class={styles.wrapper({ class: className })}>
+<div
+	bind:this={wrapperElement}
+	class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none opacity-50')}
+>
 	{#if prefix}
 		<span
 			role="button"
