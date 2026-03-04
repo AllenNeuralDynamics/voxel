@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { HTMLAttributes } from "svelte/elements";
-	import { cn, type WithElementRef } from "$lib/utils";
+	import type { HTMLAttributes } from 'svelte/elements';
+	import { cn, type WithElementRef } from '$lib/utils';
 
 	let {
 		ref = $bindable(null),
@@ -10,11 +10,6 @@
 	}: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
 </script>
 
-<div
-	bind:this={ref}
-	data-slot="dialog-header"
-	class={cn("flex flex-col gap-1 text-start", className)}
-	{...restProps}
->
+<div bind:this={ref} data-slot="dialog-header" class={cn('flex flex-col gap-1 text-start', className)} {...restProps}>
 	{@render children?.()}
 </div>

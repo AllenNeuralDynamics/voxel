@@ -48,7 +48,8 @@
 				{/if}
 				{#if profile.channels.length > 0}
 					<p class="text-xs {profile.desc ? 'mt-1.5' : ''} text-muted-foreground">
-						{#each profile.channels as chId, i (chId)}{#if i > 0}, {/if}{config.channels[chId]?.label ?? sanitizeString(chId)}{/each}
+						{#each profile.channels as chId, i (chId)}{#if i > 0},
+							{/if}{config.channels[chId]?.label ?? sanitizeString(chId)}{/each}
 					</p>
 				{/if}
 				{#if !locked}

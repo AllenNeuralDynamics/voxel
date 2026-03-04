@@ -39,9 +39,7 @@ export class Session {
 	#appStatus = $state<AppStatus>();
 
 	activeProfileId = $derived<string | null>(this.#appStatus?.session?.active_profile_id ?? null);
-	plan = $derived<AcquisitionPlan>(
-		this.#appStatus?.session?.plan ?? { grid_configs: {}, stacks: [] }
-	);
+	plan = $derived<AcquisitionPlan>(this.#appStatus?.session?.plan ?? { grid_configs: {}, stacks: [] });
 	acquisitionProfileIds = $derived<string[]>(Object.keys(this.plan.grid_configs));
 	gridConfig = $derived<GridConfig | null>(this.#appStatus?.session?.grid_config ?? null);
 	tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);

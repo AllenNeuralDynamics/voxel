@@ -2,17 +2,32 @@
 	import { tv, type VariantProps } from 'tailwind-variants';
 
 	export const textInputVariants = tv({
-		base: [
-			'w-full rounded border border-input bg-transparent',
-			'placeholder-muted-foreground',
-			'transition-colors hover:border-foreground/20',
-			'focus:border-ring focus:outline-none'
-		],
+		slots: {
+			wrapper: [
+				'flex items-center rounded border border-input bg-transparent',
+				'transition-colors hover:border-foreground/20',
+				'focus-within:border-ring'
+			],
+			input: ['w-full bg-transparent outline-none', 'placeholder-muted-foreground'],
+			prefix: ['flex shrink-0 items-center font-mono whitespace-nowrap', 'text-muted-foreground select-none']
+		},
 		variants: {
 			size: {
-				sm: 'h-6 px-1.5 text-[0.65rem]',
-				md: 'h-7 px-2 text-xs',
-				lg: 'h-8 px-2.5 text-sm'
+				sm: {
+					wrapper: 'h-5',
+					input: 'px-1.5 text-[0.65rem]',
+					prefix: 'ps-1.5 text-[0.65rem]'
+				},
+				md: {
+					wrapper: 'h-7',
+					input: 'px-2 text-xs',
+					prefix: 'ps-2 text-xs'
+				},
+				lg: {
+					wrapper: 'h-8',
+					input: 'px-2.5 text-sm',
+					prefix: 'ps-2.5 text-sm'
+				}
 			}
 		},
 		defaultVariants: {
@@ -27,12 +42,27 @@
 	interface Props extends TextInputVariants {
 		value: string;
 		placeholder?: string;
+		prefix?: string;
+		numCharacters?: number;
+		align?: 'left' | 'right';
 		onChange?: (newValue: string) => void;
 		id?: string;
 		class?: string;
 	}
 
-	let { value = $bindable(), placeholder, onChange, id, size = 'md', class: className = '' }: Props = $props();
+	let {
+		value = $bindable(),
+		placeholder,
+		prefix,
+		numCharacters,
+		align = 'right',
+		onChange,
+		id,
+		size = 'md',
+		class: className = ''
+	}: Props = $props();
+
+	const styles = $derived(textInputVariants({ size }));
 
 	function handleInput(event: Event & { currentTarget: HTMLInputElement }) {
 		value = event.currentTarget.value;
@@ -42,11 +72,18 @@
 	}
 </script>
 
-<input
-	{id}
-	type="text"
-	bind:value
-	{placeholder}
-	oninput={handleInput}
-	class={textInputVariants({ size, class: className })}
-/>
+<div class={styles.wrapper({ class: className })}>
+	{#if prefix}
+		<span class={styles.prefix()}>{prefix}</span>
+	{/if}
+	<input
+		{id}
+		type="text"
+		bind:value
+		{placeholder}
+		oninput={handleInput}
+		style:width={numCharacters ? `${numCharacters + 1}ch` : undefined}
+		style:text-align={align}
+		class={styles.input({ class: numCharacters ? 'w-auto' : '' })}
+	/>
+</div>

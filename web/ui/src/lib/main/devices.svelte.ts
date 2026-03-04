@@ -84,7 +84,13 @@ export interface DevicePropertyPayload {
 	results: Record<string, PropertyModel | ErrorMsg>;
 }
 
-function isErrorMsg(res: unknown): res is ErrorMsg {
+export interface CommandResult {
+	device: string;
+	command: string;
+	result: unknown;
+}
+
+export function isErrorMsg(res: unknown): res is ErrorMsg {
 	return typeof res === 'object' && res !== null && 'msg' in res;
 }
 
@@ -205,7 +211,7 @@ export class DevicesManager {
 		await this.setProperties(deviceId, { [propName]: value });
 	}
 
-	async executeCommand(
+	async fireCommand(
 		deviceId: string,
 		command: string,
 		args: unknown[] = [],
@@ -220,6 +226,23 @@ export class DevicesManager {
 				kwargs
 			}
 		});
+	}
+
+	async executeCommand(
+		deviceId: string,
+		command: string,
+		args: unknown[] = [],
+		kwargs: Record<string, unknown> = {}
+	): Promise<CommandResult> {
+		const response = await fetch(`${this.baseUrl}/devices/${deviceId}/commands/${command}`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ args, kwargs })
+		});
+		if (!response.ok) {
+			return { device: deviceId, command, result: { msg: `HTTP ${response.status}: ${response.statusText}` } };
+		}
+		return response.json();
 	}
 
 	async fetchProperties(deviceId: string, props?: string[]): Promise<void> {

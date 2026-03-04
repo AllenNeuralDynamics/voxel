@@ -22,13 +22,13 @@
 	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
-	const DEFAULT_HEADER_TAB = 'scout';
+	const DEFAULT_HEADER_TAB = 'configure';
 
 	let app = $state<App | undefined>(undefined);
 	let viewId = $state(DEFAULT_HEADER_TAB);
 
 	// Configure panel nav state (persists across tab switches)
-	let configureNav = $state<ConfigureNavTarget>({ type: 'channels' });
+	let configureNav = $state<ConfigureNavTarget>({ type: 'profile' });
 
 	// Scout: selected acquisition profile tab (null = auto-follow active profile)
 	let scoutProfileTab = $state<string | null>(null);
@@ -156,7 +156,10 @@
 								{:else if viewId === 'scout'}
 									{@const acqIds = session.acquisitionProfileIds}
 									{@const scoutLocked = workflow.stepStates['scout'] === 'committed'}
-									{@const phantomId = session.activeProfileId != null && !acqIds.includes(session.activeProfileId) ? session.activeProfileId : null}
+									{@const phantomId =
+										session.activeProfileId != null && !acqIds.includes(session.activeProfileId)
+											? session.activeProfileId
+											: null}
 									{@const tabIds = phantomId ? [...acqIds, phantomId] : acqIds}
 									{@const selectedTab = tabIds.includes(scoutProfileTab ?? '') ? scoutProfileTab : (tabIds[0] ?? null)}
 									{@const pillBase =

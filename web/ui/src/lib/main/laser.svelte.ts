@@ -65,11 +65,11 @@ export class Laser {
 	}
 
 	enable(): void {
-		this.#devices.executeCommand(this.#deviceId, 'enable');
+		this.#devices.fireCommand(this.#deviceId, 'enable');
 	}
 
 	disable(): void {
-		this.#devices.executeCommand(this.#deviceId, 'disable');
+		this.#devices.fireCommand(this.#deviceId, 'disable');
 	}
 
 	toggle(): void {

@@ -32,7 +32,7 @@
 		/>
 	</div>
 	<Slider {target} value={readback} {min} {max} {step} {onChange} />
-	<div class="flex justify-between text-[0.6rem] text-zinc-300">
+	<div class="flex justify-between text-[0.6rem] text-muted-foreground">
 		<span>{min}</span>
 		<span>{max}</span>
 	</div>

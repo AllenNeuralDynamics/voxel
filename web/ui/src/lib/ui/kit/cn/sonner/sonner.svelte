@@ -1,11 +1,11 @@
 <script lang="ts">
-	import CircleCheck from "~icons/lucide/circle-check";
-	import Info from "~icons/lucide/info";
-	import Loader2 from "~icons/lucide/loader-2";
-	import OctagonX from "~icons/lucide/octagon-x";
-	import TriangleAlert from "~icons/lucide/triangle-alert";
+	import CircleCheck from '~icons/lucide/circle-check';
+	import Info from '~icons/lucide/info';
+	import Loader2 from '~icons/lucide/loader-2';
+	import OctagonX from '~icons/lucide/octagon-x';
+	import TriangleAlert from '~icons/lucide/triangle-alert';
 
-	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
+	import { Toaster as Sonner, type ToasterProps as SonnerProps } from 'svelte-sonner';
 
 	let { ...restProps }: SonnerProps = $props();
 </script>

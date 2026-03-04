@@ -6,24 +6,31 @@
 	import ProfileConfig from './ProfileConfig.svelte';
 	import CameraConfig from './CameraConfig.svelte';
 	import LaserConfig from './LaserConfig.svelte';
-	import GenericDeviceConfig from './GenericDeviceConfig.svelte';
+	import DaqConfig from './DaqConfig.svelte';
+	import DeviceConfig from './DeviceConfig.svelte';
 
-	export type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id: string };
+	export type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id?: string };
 
 	interface Props {
 		session: Session;
 		activeNav?: NavTarget;
 	}
 
-	let { session, activeNav = $bindable({ type: 'channels' }) }: Props = $props();
+	let { session, activeNav = $bindable({ type: 'profile' }) }: Props = $props();
 
 	const config = $derived(session.config);
 	const daqDeviceId = $derived(config.daq.device);
 
+	// Resolve profile id: use explicit id or fall back to first profile
+	const resolvedProfileId = $derived(
+		activeNav.type === 'profile' ? (activeNav.id ?? Object.keys(config.profiles)[0]) : undefined
+	);
+
 	function isActive(target: NavTarget): boolean {
 		if (activeNav.type !== target.type) return false;
 		if (target.type === 'device' && activeNav.type === 'device') return activeNav.id === target.id;
-		if (target.type === 'profile' && activeNav.type === 'profile') return activeNav.id === target.id;
+		if (target.type === 'profile' && activeNav.type === 'profile')
+			return (activeNav.id ?? Object.keys(config.profiles)[0]) === target.id;
 		return true;
 	}
 
@@ -132,27 +139,17 @@
 					{/each}
 				</div>
 			</section>
-		{:else if activeNav.type === 'profile'}
-			<ProfileConfig {session} profileId={activeNav.id} />
+		{:else if activeNav.type === 'profile' && resolvedProfileId}
+			<ProfileConfig {session} profileId={resolvedProfileId} />
 		{:else if activeNav.type === 'device'}
 			{#if activeNav.id in session.cameras}
 				<CameraConfig {session} deviceId={activeNav.id} />
 			{:else if activeNav.id in session.lasers}
 				<LaserConfig {session} deviceId={activeNav.id} />
 			{:else if activeNav.id === daqDeviceId}
-				<section>
-					<h3 class="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Acquisition Ports</h3>
-					<div class="space-y-1">
-						{#each Object.entries(config.daq.acq_ports) as [deviceId, port] (deviceId)}
-							<div class="flex items-center justify-between rounded px-2 py-1.5 text-xs">
-								<span class="text-foreground">{deviceId}</span>
-								<span class="font-mono text-muted-foreground">{port}</span>
-							</div>
-						{/each}
-					</div>
-				</section>
+				<DaqConfig {session} deviceId={activeNav.id} />
 			{:else}
-				<GenericDeviceConfig {session} deviceId={activeNav.id} />
+				<DeviceConfig {session} deviceId={activeNav.id} />
 			{/if}
 		{/if}
 	</div>

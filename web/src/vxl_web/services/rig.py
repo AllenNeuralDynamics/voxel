@@ -235,16 +235,14 @@ class RigService:
 
         response = await client.run_command(command, *args, **kwargs)
 
+        if not response.is_ok:
+            log.warning(f"Error executing {command} on {device_id}: {response.root.msg}")
+
         result_payload = {
             "device": device_id,
             "command": command,
-            "success": response.is_ok,
-            "result": response.res if response.is_ok else None,
-            "error": response.res.msg if not response.is_ok else None,
+            "result": response.model_dump(),
         }
-
-        if not response.is_ok:
-            log.warning(f"Error executing {command} on {device_id}: {response.res.msg}")
 
         self._broadcast({"topic": f"device/{device_id}/command_result", "payload": result_payload})
 

@@ -32,7 +32,9 @@
 <!-- Grid overlap: both states occupy the same cell so the container sizes to the larger one -->
 <div class="grid {className}">
 	<span
-		class="col-start-1 row-start-1 inline-flex items-center justify-center rounded-full bg-success/15 font-medium text-success {badgeClasses[size]}"
+		class="col-start-1 row-start-1 inline-flex items-center justify-center rounded-full bg-success/15 font-medium text-success {badgeClasses[
+			size
+		]}"
 		class:invisible={!isActive}
 	>
 		Active

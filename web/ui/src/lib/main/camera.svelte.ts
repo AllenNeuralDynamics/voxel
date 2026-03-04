@@ -141,6 +141,6 @@ export class Camera {
 	}
 
 	updateFrameRegion(region: { x?: number; y?: number; width?: number; height?: number }): void {
-		this.#devices.executeCommand(this.#deviceId, 'update_frame_region', [], region);
+		this.#devices.fireCommand(this.#deviceId, 'update_frame_region', [], region);
 	}
 }

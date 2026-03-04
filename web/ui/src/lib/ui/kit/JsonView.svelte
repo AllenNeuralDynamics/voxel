@@ -1,4 +1,6 @@
 <script lang="ts">
+	import JsonView from './JsonView.svelte';
+
 	interface Props {
 		data: unknown;
 		expandDepth?: number;
@@ -43,7 +45,7 @@
 			{#if isContainer(value)}
 				<details open={depth < expandDepth}>
 					<summary
-						class="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 select-none hover:bg-muted/50 [&::-webkit-details-marker]:hidden"
+						class="flex cursor-pointer list-none items-center gap-1.5 px-1 py-0.5 select-none [&::-webkit-details-marker]:hidden"
 					>
 						<svg
 							class="h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform [[open]>&]:rotate-90"
@@ -56,7 +58,7 @@
 						<span class="text-muted-foreground/60">{summary(value)}</span>
 					</summary>
 					<div class="ml-2 border-l border-border/50 pl-2">
-						<svelte:self data={value} depth={depth + 1} {expandDepth} />
+						<JsonView data={value} depth={depth + 1} {expandDepth} />
 					</div>
 				</details>
 			{:else}
