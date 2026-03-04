@@ -3,7 +3,7 @@
 	import { cn, sanitizeString, wavelengthToColor } from '$lib/utils';
 	import { Collapsible } from 'bits-ui';
 	import { ChevronRight } from '$lib/icons';
-	import ProfileConfig from './ProfileConfig.svelte';
+	import { ProfileConfig } from '$lib/ui/profile';
 	import CameraConfig from './CameraConfig.svelte';
 	import LaserConfig from './LaserConfig.svelte';
 	import DaqConfig from './DaqConfig.svelte';

@@ -20,6 +20,7 @@ import { Workflow } from './workflow.svelte';
 import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
+import { ProfileDevices } from './profile.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 export interface SessionInit {
@@ -35,6 +36,7 @@ export class Session {
 	readonly preview!: PreviewState;
 	readonly workflow!: Workflow;
 	readonly stage!: Stage;
+	readonly profileDevices!: ProfileDevices;
 
 	#appStatus = $state<AppStatus>();
 
@@ -119,6 +121,7 @@ export class Session {
 		);
 
 		this.stage = new Stage(this.devices, init.config.stage);
+		this.profileDevices = new ProfileDevices(init.config);
 
 		const lasers: Record<string, Laser> = {};
 		if (init.config.channels) {

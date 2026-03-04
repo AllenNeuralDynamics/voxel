@@ -13,7 +13,6 @@
 	import { Button } from '$lib/ui/kit';
 	import { Cog, PlayCircleOutline, Logout, ChevronLeft } from '$lib/icons';
 	import { ProfileSelector, ProfilePopover, ProfileStatus } from '$lib/ui/profile';
-	import { LaserIndicators } from '$lib/ui/devices';
 	import { sanitizeString } from '$lib/utils';
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
@@ -279,9 +278,19 @@
 							{@render tabButton('cameras', 'Cameras')}
 							<button onclick={() => selectBottomTab('lasers')} class={tabButtonClass(bottomPanelTab === 'lasers')}>
 								Lasers
-								{#if Object.keys(session.lasers).length > 0}
-									<LaserIndicators lasers={session.lasers} size="md" />
-								{/if}
+								{#each Object.values(session.lasers) as laser (laser.deviceId)}
+									<div class="relative">
+										{#if laser.isEnabled}
+											<div class="h-2 w-2 rounded-full" style="background-color: {laser.color};"></div>
+											<span
+												class="absolute inset-0 animate-ping rounded-full opacity-75"
+												style="background-color: {laser.color};"
+											></span>
+										{:else}
+											<div class="h-2 w-2 rounded-full border opacity-70" style="border-color: {laser.color};"></div>
+										{/if}
+									</div>
+								{/each}
 							</button>
 							{@render tabButton('waveforms', 'Waveforms')}
 						</div>

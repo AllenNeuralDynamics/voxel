@@ -3,7 +3,7 @@
 	import type { Session } from '$lib/main';
 	import { sanitizeString } from '$lib/utils';
 	import { Collapsible } from 'bits-ui';
-	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { ChevronRight } from '$lib/icons';
 	import { WaveformPlot } from '$lib/ui/waveform';
 	import { SpinBox } from '$lib/ui/kit';
@@ -20,40 +20,8 @@
 	const profile = $derived(config.profiles[profileId]);
 	const stackOnlySet = $derived(new SvelteSet(profile?.daq.stack_only ?? []));
 
-	type DeviceRole = 'camera' | 'laser' | 'filter' | 'aux' | 'waveform';
-	const ROLE_ORDER: Record<DeviceRole, number> = { camera: 0, laser: 1, filter: 2, aux: 3, waveform: 4 };
-
-	/** Unique device IDs from the profile's channels + aux devices + waveform-only devices, sorted by role. */
-	const profileDeviceIds = $derived.by(() => {
-		if (!profile) return [];
-		const roles = new SvelteMap<string, DeviceRole>();
-		for (const chId of profile.channels) {
-			const ch = config.channels[chId];
-			if (!ch) continue;
-			if (!roles.has(ch.detection)) roles.set(ch.detection, 'camera');
-			if (!roles.has(ch.illumination)) roles.set(ch.illumination, 'laser');
-			for (const fwId of Object.keys(ch.filters)) {
-				if (!roles.has(fwId)) roles.set(fwId, 'filter');
-			}
-			// Aux devices from detection/illumination optical paths
-			const detPath = config.detection[ch.detection];
-			if (detPath) {
-				for (const auxId of detPath.aux_devices) {
-					if (!roles.has(auxId)) roles.set(auxId, 'aux');
-				}
-			}
-			const illPath = config.illumination[ch.illumination];
-			if (illPath) {
-				for (const auxId of illPath.aux_devices) {
-					if (!roles.has(auxId)) roles.set(auxId, 'aux');
-				}
-			}
-		}
-		for (const devId of Object.keys(profile.daq.waveforms)) {
-			if (!roles.has(devId)) roles.set(devId, 'waveform');
-		}
-		return [...roles.keys()].sort((a, b) => ROLE_ORDER[roles.get(a)!] - ROLE_ORDER[roles.get(b)!]);
-	});
+	/** Unique device IDs from the profile, sorted by role via ProfileDevices. */
+	const profileDeviceIds = $derived(session.profileDevices.discover(profileId).map((d) => d.id));
 
 	/** Waveform device IDs in role-sorted order (subset of profileDeviceIds). */
 	const waveformDeviceIds = $derived(profileDeviceIds.filter((id) => profile?.daq.waveforms[id] != null));

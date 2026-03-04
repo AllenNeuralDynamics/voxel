@@ -1,8 +1,11 @@
 <script lang="ts">
 	import uPlot from 'uplot';
 	import type { Session } from '$lib/main';
+	import type { GroupMode, DeviceGroup } from '$lib/main';
 	import { onDestroy } from 'svelte';
-	import ProfileDevicesToggle from '../ProfileDevicesToggle.svelte';
+	import { ToggleGroup, Checkbox, Collapsible } from 'bits-ui';
+	import { Check, Minus, ChevronRight } from '$lib/icons';
+	import { SvelteSet } from 'svelte/reactivity';
 	import SpinBox from '$lib/ui/kit/SpinBox.svelte';
 	import 'uplot/dist/uPlot.min.css';
 
@@ -226,7 +229,165 @@
 			chart.destroy();
 		}
 	});
+
+	// --- Device toggle (inlined from ProfileDevicesToggle) ---
+
+	type UiGroupMode = 'none' | 'type' | 'path' | 'channel';
+	let groupMode = $state<UiGroupMode>('none');
+
+	const config = $derived(session.config);
+
+	// Devices with waveforms (those with acq_port in DAQ config)
+	const devicesWithWaveforms = $derived.by(() => {
+		if (!config?.daq?.acq_ports) return new Set<string>();
+		return new Set(Object.keys(config.daq.acq_ports));
+	});
+
+	const resolvedMode = $derived<GroupMode>(groupMode === 'none' ? 'role' : groupMode);
+
+	const groups = $derived.by((): DeviceGroup[] => {
+		const profileId = session.activeProfileId;
+		if (!profileId) return [];
+
+		return session.profileDevices
+			.group(profileId, resolvedMode)
+			.map((g) => ({
+				...g,
+				devices: g.devices.filter((d) => devicesWithWaveforms.has(d))
+			}))
+			.filter((g) => g.devices.length > 0);
+	});
+
+	// Initialize visible set with all devices when profile changes
+	$effect(() => {
+		if (groups.length > 0) {
+			const allDevices = new SvelteSet<string>();
+			groups.forEach((group) => group.devices.forEach((d) => allDevices.add(d)));
+			visibleDevices = allDevices;
+		}
+	});
+
+	function getGroupCheckState(group: DeviceGroup): { checked: boolean; indeterminate: boolean } {
+		const visibleInGroup = group.devices.filter((d) => visibleDevices.has(d)).length;
+		if (visibleInGroup === 0) return { checked: false, indeterminate: false };
+		if (visibleInGroup === group.devices.length) return { checked: true, indeterminate: false };
+		return { checked: false, indeterminate: true };
+	}
+
+	function getVisibleCount(group: DeviceGroup): number {
+		return group.devices.filter((d) => visibleDevices.has(d)).length;
+	}
+
+	function toggleGroup(group: DeviceGroup, checked: boolean) {
+		const next = new SvelteSet(visibleDevices);
+		if (checked) group.devices.forEach((d) => next.add(d));
+		else group.devices.forEach((d) => next.delete(d));
+		visibleDevices = next;
+	}
+
+	function toggleDevice(deviceId: string, checked: boolean) {
+		const next = new SvelteSet(visibleDevices);
+		if (checked) next.add(deviceId);
+		else next.delete(deviceId);
+		visibleDevices = next;
+	}
 </script>
+
+{#snippet deviceToggle()}
+	<div class="flex flex-col gap-2">
+		<!-- Mode Toggle -->
+		<div class="flex items-center gap-1.5">
+			<ToggleGroup.Root type="single" bind:value={groupMode} class="inline-flex rounded border border-zinc-700">
+				<ToggleGroup.Item
+					value="none"
+					class="px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=on]:bg-zinc-700 data-[state=on]:text-zinc-100"
+				>
+					All
+				</ToggleGroup.Item>
+				<ToggleGroup.Item
+					value="type"
+					class="border-x border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=on]:bg-zinc-700 data-[state=on]:text-zinc-100"
+				>
+					Type
+				</ToggleGroup.Item>
+				<ToggleGroup.Item
+					value="path"
+					class="border-x border-zinc-700 px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=on]:bg-zinc-700 data-[state=on]:text-zinc-100"
+				>
+					Path
+				</ToggleGroup.Item>
+				<ToggleGroup.Item
+					value="channel"
+					class="px-2 py-0.5 text-xs transition-colors hover:bg-zinc-800 data-[state=on]:bg-zinc-700 data-[state=on]:text-zinc-100"
+				>
+					Channel
+				</ToggleGroup.Item>
+			</ToggleGroup.Root>
+		</div>
+
+		<!-- Device Tree -->
+		<div class="mt-3 space-y-4">
+			{#if groups.length === 0}
+				<p class="text-xs text-zinc-500">No devices available</p>
+			{:else}
+				{#each groups as group (group.id)}
+					{@const groupState = getGroupCheckState(group)}
+					<Collapsible.Root open={true}>
+						<div class="flex items-start gap-0.5">
+							<Checkbox.Root
+								checked={groupState.checked}
+								indeterminate={groupState.indeterminate}
+								onCheckedChange={(checked) => toggleGroup(group, checked ?? false)}
+								class="mt-0 flex h-3.5 w-3.5 items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600"
+							>
+								{#if groupState.checked}
+									<Check class="text-white" width="12" height="12" />
+								{:else if groupState.indeterminate}
+									<Minus class="text-white" width="12" height="12" />
+								{/if}
+							</Checkbox.Root>
+
+							<Collapsible.Trigger class="flex flex-1 items-center gap-1 text-xs font-medium hover:text-zinc-300">
+								<ChevronRight
+									class="text-zinc-500 transition-transform data-[state=open]:rotate-90"
+									width="14"
+									height="14"
+								/>
+								<span>
+									{group.label}
+									<span class="text-zinc-500">({getVisibleCount(group)}/{group.devices.length})</span>
+								</span>
+							</Collapsible.Trigger>
+						</div>
+
+						<Collapsible.Content class="mt-3 ml-3.5 space-y-2">
+							{#each group.devices as deviceId (deviceId)}
+								<label class="flex cursor-pointer items-center gap-2 hover:text-zinc-300">
+									<Checkbox.Root
+										checked={visibleDevices.has(deviceId)}
+										onCheckedChange={(checked) => toggleDevice(deviceId, checked ?? false)}
+										class="flex h-3 w-3 items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600"
+									>
+										{#if visibleDevices.has(deviceId)}
+											<Check class="text-white" width="10" height="10" />
+										{/if}
+									</Checkbox.Root>
+									<span class="text-xs">{deviceId}</span>
+									{#if deviceColors[deviceId]}
+										<div
+											class="ml-auto h-1.5 w-1.5 rounded-full"
+											style="background-color: {deviceColors[deviceId]};"
+										></div>
+									{/if}
+								</label>
+							{/each}
+						</Collapsible.Content>
+					</Collapsible.Root>
+				{/each}
+			{/if}
+		</div>
+	</div>
+{/snippet}
 
 <div class="flex h-full gap-4 p-4">
 	<div class="my-4 flex flex-col justify-between gap-2">
@@ -282,6 +443,6 @@
 	</div>
 
 	<div class="mt-4">
-		<ProfileDevicesToggle {session} bind:visible={visibleDevices} colors={deviceColors} waveformsOnly={true} />
+		{@render deviceToggle()}
 	</div>
 </div>
