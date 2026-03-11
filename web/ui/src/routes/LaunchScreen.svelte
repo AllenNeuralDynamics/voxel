@@ -126,7 +126,9 @@
 		{:else if !isIdle || isLaunching}
 			<div class="flex flex-1 items-center justify-center gap-2">
 				<div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-				<p class="text-xs text-muted-foreground">{isLaunching ? 'Starting session...' : app.client.connectionMessage}</p>
+				<p class="text-xs text-muted-foreground">
+					{isLaunching ? 'Starting session...' : app.client.connectionMessage}
+				</p>
 			</div>
 		{:else}
 			<div class="shrink-0 px-4">

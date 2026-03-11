@@ -2,20 +2,20 @@
 	import { tv, type VariantProps } from 'tailwind-variants';
 
 	export const workflowTabsVariants = tv({
-		base: 'flex items-center gap-1.5'
+		base: 'flex items-center [&>*:not(:first-child)]:-ml-px'
 	});
 
 	export type WorkflowTabsVariants = VariantProps<typeof workflowTabsVariants>;
 
 	const tabVariants = tv({
-		base: 'flex items-center gap-1 px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-all text-muted-foreground rounded-xl border border-border',
+		base: 'flex items-center gap-1 text-[0.65rem] uppercase tracking-wide transition-all text-muted-foreground rounded-none border border-border',
 		variants: {
 			viewing: {
-				true: 'bg-muted font-medium text-foreground',
+				true: 'bg-muted',
 				false: ''
 			},
 			state: {
-				committed: '',
+				committed: 'text-success',
 				active: '',
 				pending: ''
 			}
@@ -28,7 +28,7 @@
 </script>
 
 <script lang="ts">
-	import { ChevronLeft, Check, ChevronRight } from '$lib/icons';
+	import { ChevronLeft, ChevronRight } from '$lib/icons';
 	import { cn } from '$lib/utils';
 	import type { Workflow } from '$lib/main';
 
@@ -61,8 +61,8 @@
 				disabled={!workflow.canGoBack}
 				onclick={handleBack}
 				class={cn(
-					'cursor-pointer overflow-hidden transition-all  duration-200',
-					isActive ? 'w-3.5' : 'w-0',
+					'grid h-6 cursor-pointer place-content-center overflow-hidden py-1.5 transition-all duration-200',
+					isActive ? 'w-6' : 'w-0',
 					isActive && workflow.canGoBack ? 'opacity-100' : 'pointer-events-none cursor-not-allowed opacity-40'
 				)}
 				title="Re-open previous step"
@@ -71,30 +71,16 @@
 			</button>
 			<button
 				onclick={() => onViewChange?.(step.id)}
-				class="flex w-20 cursor-pointer items-center justify-center gap-2 uppercase"
+				class="flex w-20 cursor-pointer items-center justify-center p-1.5 uppercase"
 			>
-				<span
-					class={cn(
-						'flex h-3 w-3 items-center justify-center rounded-full border transition-colors',
-						state === 'committed'
-							? 'border-success bg-success text-white'
-							: state === 'active'
-								? 'border-success'
-								: 'border-muted-foreground/30'
-					)}
-				>
-					{#if state === 'committed'}
-						<Check width="8" height="8" class="pointer-events-none" />
-					{/if}
-				</span>
 				{step.label}
 			</button>
 			<button
 				disabled={!workflow.canAdvance}
 				onclick={handleNext}
 				class={cn(
-					'cursor-pointer overflow-hidden transition-all  duration-200',
-					isActive ? 'w-3.5' : 'w-0',
+					'grid h-6 cursor-pointer place-content-center overflow-hidden py-1.5 transition-all duration-200',
+					isActive ? 'w-6' : 'w-0',
 					isActive && workflow.canAdvance ? 'opacity-100' : 'pointer-events-none cursor-not-allowed opacity-40'
 				)}
 				title="Commit step and advance"

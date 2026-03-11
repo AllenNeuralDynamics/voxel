@@ -20,6 +20,7 @@ export { default as FilterVariant } from '~icons/mdi/filter-variant';
 export { default as FolderOpenOutline } from '~icons/mdi/folder-open-outline';
 export { default as InformationOutline } from '~icons/mdi/information-outline';
 export { default as Logout } from '~icons/mdi/logout';
+export { default as Microscope } from '~icons/mdi/microscope';
 export { default as Minus } from '~icons/mdi/minus';
 export { default as PencilOutline } from '~icons/mdi/pencil-outline';
 export { default as PlayCircleOutline } from '~icons/mdi/play-circle-outline';
@@ -28,6 +29,8 @@ export { default as Power } from '~icons/mdi/power';
 export { default as Restore } from '~icons/mdi/restore';
 export { default as RocketLaunchOutline } from '~icons/mdi/rocket-launch-outline';
 export { default as TrashCanOutline } from '~icons/mdi/trash-can-outline';
+export { default as TuneVertical } from '~icons/mdi/tune-vertical';
+export { default as ViewDashboardOutline } from '~icons/mdi/view-dashboard-outline';
 
 // Phosphor Icons
 export { default as ImageLight } from '~icons/ph/image-light';
