@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getAppContext } from '$lib/context';
+	import { getSessionContext } from '$lib/context';
 	import { page } from '$app/state';
 	import { cn, sanitizeString } from '$lib/utils';
 	import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
@@ -7,8 +7,7 @@
 	import LaserConfig from './LaserConfig.svelte';
 	import DaqConfig from './DaqConfig.svelte';
 
-	const app = getAppContext();
-	const session = $derived(app.session!);
+	const session = getSessionContext();
 	const deviceId = $derived(page.params.id!);
 	const daqDeviceId = $derived(session.config.daq.device);
 	const devicesManager = $derived(session.devices);

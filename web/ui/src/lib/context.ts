@@ -1,12 +1,32 @@
 import { setContext, getContext } from 'svelte';
-import type { App } from './main';
+import type { Session } from './main';
+import type { LogMessage } from './main/types/types';
 
-const APP_KEY = Symbol('app');
+// --- Session context (set inside session gate, always non-null) ---
 
-export function setAppContext(app: App) {
-	setContext(APP_KEY, app);
+const SESSION_KEY = Symbol('session');
+
+export function setSessionContext(getter: () => Session) {
+	setContext(SESSION_KEY, getter);
 }
 
-export function getAppContext(): App {
-	return getContext<App>(APP_KEY);
+export function getSessionContext(): Session {
+	return getContext<() => Session>(SESSION_KEY)();
+}
+
+// --- Logs context (set alongside session) ---
+
+export interface LogsContext {
+	readonly logs: LogMessage[];
+	clearLogs(): void;
+}
+
+const LOGS_KEY = Symbol('logs');
+
+export function setLogsContext(ctx: LogsContext) {
+	setContext(LOGS_KEY, ctx);
+}
+
+export function getLogsContext(): LogsContext {
+	return getContext<LogsContext>(LOGS_KEY);
 }

@@ -1,5 +1,9 @@
+<script lang="ts" module>
+	let savedTab = 'lasers';
+</script>
+
 <script lang="ts">
-	import { getAppContext } from '$lib/context';
+	import { getSessionContext, getLogsContext } from '$lib/context';
 	import { cn } from '$lib/utils';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
@@ -10,10 +14,13 @@
 
 	let { children } = $props();
 
-	const app = getAppContext();
-	const session = $derived(app.session!);
+	const session = getSessionContext();
+	const { logs, clearLogs } = $derived(getLogsContext());
 
-	let bottomPanelTab = $state('lasers');
+	let bottomPanelTab = $state(savedTab);
+	$effect(() => {
+		savedTab = bottomPanelTab;
+	});
 	let bottomPane: Pane | undefined = $state(undefined);
 
 	function selectTab(id: string) {
@@ -62,7 +69,7 @@
 			<LasersPanel {session} />
 		{:else if bottomPanelTab === 'logs'}
 			<div class="h-full overflow-hidden bg-card p-2">
-				<LogViewer logs={app.logs} onClear={() => app.clearLogs()} />
+				<LogViewer {logs} onClear={clearLogs} />
 			</div>
 		{/if}
 	</Pane>

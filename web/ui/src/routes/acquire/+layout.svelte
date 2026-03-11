@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { getAppContext } from '$lib/context';
+	import { getLogsContext } from '$lib/context';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 
 	let { children } = $props();
 
-	const app = getAppContext();
+	const { logs, clearLogs } = $derived(getLogsContext());
 
 	let logPane: Pane | undefined = $state(undefined);
 </script>
@@ -34,7 +34,7 @@
 		onCollapse={() => {}}
 	>
 		<div class="h-full overflow-hidden bg-card p-2">
-			<LogViewer logs={app.logs} onClear={() => app.clearLogs()} />
+			<LogViewer {logs} onClear={clearLogs} />
 		</div>
 	</Pane>
 </PaneGroup>

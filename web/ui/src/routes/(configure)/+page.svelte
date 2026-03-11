@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { getAppContext } from '$lib/context';
+	import { getSessionContext } from '$lib/context';
 	import { sanitizeString, wavelengthToColor } from '$lib/utils';
 
-	const app = getAppContext();
-	const session = $derived(app.session!);
+	const session = getSessionContext();
 	const config = $derived(session.config);
 </script>
 

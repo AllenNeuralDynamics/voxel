@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { getAppContext } from '$lib/context';
+	import { getSessionContext } from '$lib/context';
 	import ScoutPanel from '../ScoutPanel.svelte';
 
-	const app = getAppContext();
-	const session = $derived(app.session!);
+	const session = getSessionContext();
 	const stepId = $derived(page.params.step);
 </script>
 

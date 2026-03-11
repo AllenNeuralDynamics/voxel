@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getAppContext } from '$lib/context';
+	import { getSessionContext, getLogsContext } from '$lib/context';
 	import { cn, sanitizeString } from '$lib/utils';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -12,8 +12,8 @@
 
 	let { children } = $props();
 
-	const app = getAppContext();
-	const session = $derived(app.session!);
+	const session = getSessionContext();
+	const { logs, clearLogs } = $derived(getLogsContext());
 	const config = $derived(session.config);
 
 	// --- Sidebar nav (driven by routes) ---
@@ -175,7 +175,7 @@
 			onCollapse={() => {}}
 		>
 			<div class="h-full overflow-hidden bg-card p-2">
-				<LogViewer logs={app.logs} onClear={() => app.clearLogs()} />
+				<LogViewer {logs} onClear={clearLogs} />
 			</div>
 		</Pane>
 	</PaneGroup>

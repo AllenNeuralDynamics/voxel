@@ -1,12 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { getAppContext } from '$lib/context';
+	import { getSessionContext } from '$lib/context';
 	import { Button } from '$lib/ui/kit';
 	import { ChevronLeft } from '$lib/icons';
 	import { resolve } from '$app/paths';
 
-	const app = getAppContext();
-	const session = $derived(app.session!);
+	const session = getSessionContext();
 	const workflow = $derived(session.workflow);
 </script>
 

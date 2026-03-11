@@ -1,13 +1,12 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
-	import { getAppContext } from '$lib/context';
+	import { getSessionContext } from '$lib/context';
 	import { page } from '$app/state';
 	import { sanitizeString } from '$lib/utils';
 	import ProfileProperties from './ProfileProperties.svelte';
 	import ProfileWaveforms from './ProfileWaveforms.svelte';
 
-	const app = getAppContext();
-	const session = $derived(app.session!);
+	const session = getSessionContext();
 	const profileId = $derived(page.params.id!);
 	const profile = $derived(session.config.profiles[profileId]);
 	let activeTab = $state('waveforms');
