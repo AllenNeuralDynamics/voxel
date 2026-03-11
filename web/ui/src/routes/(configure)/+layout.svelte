@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { getAppContext } from '$lib/context';
-	import { useSearchParams, createSearchParamsSchema } from 'runed/kit';
 	import { cn, sanitizeString } from '$lib/utils';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { Collapsible } from 'bits-ui';
 	import { ChevronRight } from '$lib/icons';
 	import { Pane, PaneGroup } from 'paneforge';
@@ -14,49 +16,22 @@
 	const session = $derived(app.session!);
 	const config = $derived(session.config);
 
-	// --- Sidebar nav state (driven by URL search params) ---
+	// --- Sidebar nav (driven by routes) ---
 
-	const params = useSearchParams(
-		createSearchParamsSchema({
-			nav: { type: 'string', default: 'channels' },
-			id: { type: 'string', default: '' }
-		}),
-		{ pushHistory: false, noScroll: true }
-	);
+	const activeDeviceId = $derived(page.route.id === '/(configure)/devices/[id]' ? page.params.id : undefined);
 
-	type NavTarget = { type: 'device'; id: string } | { type: 'channels' } | { type: 'profile'; id: string };
+	const activeProfileId = $derived(page.route.id === '/(configure)/profiles/[id]' ? page.params.id : undefined);
 
-	const activeNav = $derived<NavTarget>(
-		params.nav === 'device' && params.id
-			? { type: 'device', id: params.id }
-			: params.nav === 'profile' && params.id
-				? { type: 'profile', id: params.id }
-				: { type: 'channels' }
-	);
+	const isChannelsActive = $derived(!activeDeviceId && !activeProfileId);
 
-	function setNav(nav: NavTarget) {
-		if (nav.type === 'channels') {
-			params.nav = 'channels';
-			params.id = '';
-		} else {
-			params.nav = nav.type;
-			params.id = nav.id;
-		}
+	function nav(path: string) {
+		goto(resolve(path as '/'), { keepFocus: true, noScroll: true });
 	}
 
-	function isActive(target: NavTarget): boolean {
-		if (activeNav.type !== target.type) return false;
-		if (target.type === 'device' && activeNav.type === 'device') return activeNav.id === target.id;
-		if (target.type === 'profile' && activeNav.type === 'profile') return activeNav.id === target.id;
-		return true;
-	}
-
-	function navClass(target: NavTarget): string {
+	function navClass(active: boolean): string {
 		return cn(
 			'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs cursor-pointer transition-colors',
-			isActive(target)
-				? 'bg-accent text-accent-foreground'
-				: 'text-muted-foreground hover:bg-muted hover:text-foreground'
+			active ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
 		);
 	}
 
@@ -78,14 +53,10 @@
 	// --- Validate nav targets ---
 
 	$effect(() => {
-		if (activeNav.type === 'device') {
-			const devices = session.devices.devices;
-			if (!devices.has(activeNav.id)) {
-				const firstId = [...devices.keys()][0];
-				setNav(firstId ? { type: 'device', id: firstId } : { type: 'channels' });
-			}
-		} else if (activeNav.type === 'profile' && !(activeNav.id in session.config.profiles)) {
-			setNav({ type: 'channels' });
+		if (activeDeviceId && !session.devices.devices.has(activeDeviceId)) {
+			nav('/');
+		} else if (activeProfileId && !(activeProfileId in session.config.profiles)) {
+			nav('/');
 		}
 	});
 </script>
@@ -96,7 +67,7 @@
 		<div class="flex-1 space-y-4 overflow-auto">
 			<!-- Channels -->
 			<nav class="space-y-0.5 px-3">
-				<button onclick={() => setNav({ type: 'channels' })} class={navClass({ type: 'channels' })}> Channels </button>
+				<button onclick={() => nav('/')} class={navClass(isChannelsActive)}> Channels </button>
 			</nav>
 
 			<!-- Profiles -->
@@ -113,8 +84,8 @@
 					<nav class="mt-1 space-y-0.5 px-3">
 						{#each Object.entries(config.profiles) as [id, profile] (id)}
 							{@const isActiveProfile = id === session.activeProfileId}
-							{@const isViewed = activeNav.type === 'profile' && activeNav.id === id}
-							<button onclick={() => setNav({ type: 'profile', id })} class="group {navClass({ type: 'profile', id })}">
+							{@const isViewed = activeProfileId === id}
+							<button onclick={() => nav(`/profiles/${id}`)} class="group {navClass(isViewed)}">
 								<span class="truncate">{profile.label ?? sanitizeString(id)}</span>
 								{#if isActiveProfile}
 									<span
@@ -135,13 +106,13 @@
 										onclick={(e: MouseEvent) => {
 											e.stopPropagation();
 											session.activateProfile(id);
-											setNav({ type: 'profile', id });
+											nav(`/profiles/${id}`);
 										}}
 										onkeydown={(e: KeyboardEvent) => {
 											if (e.key === 'Enter') {
 												e.stopPropagation();
 												session.activateProfile(id);
-												setNav({ type: 'profile', id });
+												nav(`/profiles/${id}`);
 											}
 										}}
 									>
@@ -167,7 +138,7 @@
 				<Collapsible.Content>
 					<nav class="mt-1 space-y-0.5 px-3">
 						{#each [...session.devices.devices] as [id, device] (id)}
-							<button onclick={() => setNav({ type: 'device', id })} class={navClass({ type: 'device', id })}>
+							<button onclick={() => nav(`/devices/${id}`)} class={navClass(activeDeviceId === id)}>
 								<span class="truncate">{sanitizeString(id)}</span>
 								<span
 									class={cn(

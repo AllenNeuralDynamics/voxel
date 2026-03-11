@@ -136,7 +136,7 @@ class GridStore(QObject):
         """Current grid configuration."""
         if self._session is None:
             return GridConfig()
-        return self._session.grid_config
+        return self._session.grid_config or GridConfig()
 
     @property
     def tile_order(self) -> TileOrder:

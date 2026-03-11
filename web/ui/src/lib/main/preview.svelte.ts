@@ -21,7 +21,7 @@ export type ColormapCatalog = ColormapGroup[];
 
 /** Fetch the colormap catalog from the backend. */
 export async function fetchColormapCatalog(baseUrl: string): Promise<ColormapCatalog> {
-	const response = await fetch(`${baseUrl}/colormaps`);
+	const response = await fetch(`${baseUrl}/api/colormaps`);
 	if (!response.ok) {
 		throw new Error(`Failed to fetch colormaps: ${response.statusText}`);
 	}

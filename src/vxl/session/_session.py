@@ -198,9 +198,7 @@ class Session:
 
     # ==================== Waveform Updates ====================
 
-    async def update_profile_waveforms(
-        self, waveforms: dict | None = None, timing: dict | None = None
-    ) -> None:
+    async def update_profile_waveforms(self, waveforms: dict | None = None, timing: dict | None = None) -> None:
         """Update waveform definitions for the active profile and recreate DAQ tasks.
 
         Session updates config + saves; rig recreates SyncTask.

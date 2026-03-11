@@ -89,7 +89,7 @@ export class App {
 			if (metadataTarget) body.metadata_target = metadataTarget;
 			if (metadata) body.metadata = metadata;
 
-			const response = await fetch(`${this.#client.baseUrl}/session/create`, {
+			const response = await fetch(`${this.#client.baseUrl}/api/session/create`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
@@ -119,7 +119,7 @@ export class App {
 		this.error = null;
 
 		try {
-			const response = await fetch(`${this.#client.baseUrl}/session/resume`, {
+			const response = await fetch(`${this.#client.baseUrl}/api/session/resume`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ session_dir: sessionDir })
@@ -150,7 +150,7 @@ export class App {
 		this.error = null;
 
 		try {
-			const response = await fetch(`${this.#client.baseUrl}/session`, {
+			const response = await fetch(`${this.#client.baseUrl}/api/session`, {
 				method: 'DELETE'
 			});
 
@@ -173,7 +173,7 @@ export class App {
 
 	async fetchSessions(rootName: string): Promise<SessionDirectory[]> {
 		try {
-			const response = await fetch(`${this.#client.baseUrl}/roots/${encodeURIComponent(rootName)}/sessions`);
+			const response = await fetch(`${this.#client.baseUrl}/api/roots/${encodeURIComponent(rootName)}/sessions`);
 			if (!response.ok) {
 				throw new Error(`Failed to fetch sessions: ${response.statusText}`);
 			}
@@ -187,7 +187,7 @@ export class App {
 
 	async fetchMetadataTargets(): Promise<Record<string, string>> {
 		try {
-			const response = await fetch(`${this.#client.baseUrl}/metadata/targets`);
+			const response = await fetch(`${this.#client.baseUrl}/api/metadata/targets`);
 			if (!response.ok) {
 				throw new Error(`Failed to fetch metadata targets: ${response.statusText}`);
 			}
@@ -201,7 +201,7 @@ export class App {
 
 	async fetchMetadataSchema(target: string): Promise<JsonSchema> {
 		try {
-			const response = await fetch(`${this.#client.baseUrl}/metadata/schema?target=${encodeURIComponent(target)}`);
+			const response = await fetch(`${this.#client.baseUrl}/api/metadata/schema?target=${encodeURIComponent(target)}`);
 			if (!response.ok) {
 				throw new Error(`Failed to fetch metadata schema: ${response.statusText}`);
 			}
@@ -295,7 +295,7 @@ export class App {
 
 	async #fetchConfig(): Promise<VoxelRigConfig | null> {
 		try {
-			const response = await fetch(`${this.#client.baseUrl}/config`);
+			const response = await fetch(`${this.#client.baseUrl}/api/config`);
 			if (!response.ok) {
 				throw new Error(`Failed to fetch config: ${response.statusText}`);
 			}

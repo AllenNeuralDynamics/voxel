@@ -153,13 +153,13 @@ function resolveBackend(apiUrl?: string): BackendConfig {
 	const api = apiUrl || import.meta.env.VITE_API_URL || DEFAULT_API_URL;
 
 	if (typeof window === 'undefined') {
-		return { wsUrl: api.replace(/^http/, 'ws') + '/ws', baseUrl: api };
+		return { wsUrl: api.replace(/^http/, 'ws') + '/api/ws', baseUrl: api };
 	}
 	if (import.meta.env.DEV) {
-		return { wsUrl: api.replace(/^http/, 'ws') + '/ws', baseUrl: location.origin };
+		return { wsUrl: api.replace(/^http/, 'ws') + '/api/ws', baseUrl: location.origin };
 	}
 	const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-	return { wsUrl: `${wsProto}//${location.host}/ws`, baseUrl: location.origin };
+	return { wsUrl: `${wsProto}//${location.host}/api/ws`, baseUrl: location.origin };
 }
 
 // --- Client ---
@@ -393,7 +393,7 @@ export class Client {
 	 * Fetch DAQ waveforms for the active profile via REST.
 	 */
 	async fetchWaveforms(): Promise<DaqWaveformsResponse> {
-		const res = await fetch(`${this.baseUrl}/daq/waveforms`);
+		const res = await fetch(`${this.baseUrl}/api/daq/waveforms`);
 		if (!res.ok) return { profile_id: null, traces: {} };
 		return res.json();
 	}

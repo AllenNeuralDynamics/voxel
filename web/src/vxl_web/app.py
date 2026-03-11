@@ -81,10 +81,10 @@ def create_app(system_config: SystemConfig | None = None, serve_static: bool = T
         allow_headers=["*"],
     )
 
-    # Include app router (includes session and rig routes)
-    app.include_router(app_router)
+    # Include app router (includes session and rig routes) under /api
+    app.include_router(app_router, prefix="/api")
 
-    @app.get("/health")
+    @app.get("/api/health")
     async def health() -> dict[str, str]:
         """Basic health check."""
         return {

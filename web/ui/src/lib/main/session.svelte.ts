@@ -154,7 +154,7 @@ export class Session {
 		this.isSwitchingProfile = true;
 
 		try {
-			const response = await fetch(`${this.client.baseUrl}/profiles/active`, {
+			const response = await fetch(`${this.client.baseUrl}/api/profiles/active`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ profile_id: profileId })
