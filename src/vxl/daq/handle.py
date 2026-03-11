@@ -2,11 +2,20 @@
 
 from rigup.device import DeviceHandle
 
+from vxl.quantity import QuantityRange, VoltageRange
+
 from .base import AcqSampleMode, PinInfo, TaskInfo, VoxelDaq
 
 
 class DaqHandle(DeviceHandle[VoxelDaq]):
     """DAQ handle with typed methods for task operations."""
+
+    async def get_ao_voltage_range(self) -> VoltageRange:
+        """Get the analog output voltage range from the DAQ hardware."""
+        val = await self.get_prop_value("ao_voltage_range")
+        if isinstance(val, QuantityRange):
+            return val  # type: ignore[return-value]
+        return VoltageRange.model_validate(val)
 
     # ==================== Pin Management ====================
 

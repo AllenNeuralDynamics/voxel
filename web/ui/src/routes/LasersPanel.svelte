@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { POWER_HISTORY_MAX, type Session, type Laser } from '$lib/main';
+	import { POWER_HISTORY_MAX, getChannelFor, type Session, type Laser } from '$lib/main';
 	import type { ChannelConfig } from '$lib/main/types';
 	import Switch from '$lib/ui/kit/Switch.svelte';
 	import SpinBox from '$lib/ui/kit/SpinBox.svelte';
@@ -25,12 +25,21 @@
 		return () => clearInterval(interval);
 	});
 
-	const profileLasers = $derived(allLasers.filter((l) => session.getChannelFor(l.deviceId)));
-	const otherLasers = $derived(allLasers.filter((l) => !session.getChannelFor(l.deviceId)));
+	const profileLasers = $derived(
+		session.activeProfileId
+			? allLasers.filter((l) => getChannelFor(session.config, session.activeProfileId!, l.deviceId))
+			: []
+	);
+	const otherLasers = $derived(
+		session.activeProfileId
+			? allLasers.filter((l) => !getChannelFor(session.config, session.activeProfileId!, l.deviceId))
+			: allLasers
+	);
 
 	const activeProfileLabel = $derived.by(() => {
-		const p = session.activeProfileConfig;
-		return p ? (p.label ?? session.activeProfileId) : 'None';
+		const id = session.activeProfileId;
+		const p = id ? (session.config.profiles[id] ?? null) : null;
+		return p ? (p.label ?? id) : 'None';
 	});
 
 	const anyLaserEnabled = $derived(allLasers.some((l) => l.isEnabled));
@@ -145,7 +154,7 @@
 {/snippet}
 
 {#snippet detailPanel(laser: Laser, cfg: ChannelConfig | null)}
-	<div class="flex h-full w-96 shrink-0 flex-col border-r border-border bg-card">
+	<div class="flex h-full w-80 shrink-0 flex-col bg-card">
 		<!-- Header -->
 		<div class="flex items-center justify-between px-4 pt-4">
 			<div class="flex items-center gap-2">
@@ -189,14 +198,14 @@
 		{/if}
 
 		<!-- Power history sparkline (all lasers) — fills remaining space -->
-		<div class="flex max-h-40 min-h-16 flex-1 flex-col px-4 pt-4">
+		<div class="flex flex-1 flex-col px-4 pt-4">
 			<div class="mb-1.5 flex items-baseline justify-between">
 				<h5 class="text-[0.6rem] font-medium text-muted-foreground uppercase">Power</h5>
 				<span class="font-mono text-xs text-foreground tabular-nums">
 					{typeof laser.powerMw === 'number' ? `${laser.powerMw.toFixed(1)} mW` : '—'}
 				</span>
 			</div>
-			<div class="min-h-16 flex-1 rounded border border-border bg-muted/30">
+			<div class="mb-4 max-h-36 min-h-12 flex-1 rounded border border-border bg-muted/30">
 				{#if anyHistory}
 					<svg viewBox="0 0 {POWER_HISTORY_MAX} 100" preserveAspectRatio="none" class="h-full w-full">
 						{#each allLasers as l (l.deviceId)}
@@ -244,11 +253,8 @@
 	</div>
 {:else if selectedLaser}
 	<div class="flex h-full">
-		<!-- Left: detail panel -->
-		{@render detailPanel(selectedLaser, session.getChannelFor(selectedLaser.deviceId)?.config ?? null)}
-
 		<!-- Right: laser list -->
-		<div class="flex flex-1 flex-col overflow-auto px-4">
+		<div class="flex flex-1 flex-col overflow-auto border-r border-border px-4">
 			<div class="flex h-full flex-col gap-3">
 				{#if profileLasers.length > 0}
 					<div>
@@ -286,5 +292,13 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Left: detail panel -->
+		{@render detailPanel(
+			selectedLaser,
+			session.activeProfileId
+				? (getChannelFor(session.config, session.activeProfileId, selectedLaser.deviceId)?.config ?? null)
+				: null
+		)}
 	</div>
 {/if}

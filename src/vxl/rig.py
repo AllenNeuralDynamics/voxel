@@ -364,6 +364,32 @@ class VoxelRig(Rig):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+        # Apply props (declarative property values per device)
+        for device_id, device_props in profile.props.items():
+            handle = self.handles.get(device_id)
+            if not handle:
+                self.log.warning(f"props: device '{device_id}' not found, skipping")
+                continue
+            try:
+                result = await handle.set_props(**device_props)
+                if not result.is_ok:
+                    self.log.warning(f"Some properties failed for '{device_id}'")
+            except Exception:
+                self.log.exception(f"Failed to apply props to '{device_id}'")
+
+        # Run setup commands (imperative initialization per device)
+        for device_id, commands in profile.setup.items():
+            handle = self.handles.get(device_id)
+            if not handle:
+                self.log.warning(f"setup: device '{device_id}' not found, skipping")
+                continue
+            try:
+                result = await handle.run_commands(commands)
+                if not result.is_ok:
+                    self.log.warning(f"Some setup commands failed for '{device_id}'")
+            except Exception:
+                self.log.exception(f"Failed to run setup for '{device_id}'")
+
         self.log.info(f"Configured devices for profile '{profile_id}'")
 
     async def set_active_profile(self, profile_id: str) -> None:
@@ -445,6 +471,79 @@ class VoxelRig(Rig):
                 self.log.warning("Preview was running but no callback found; not restarting automatically")
 
         self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_channels)})")
+
+    async def update_active_waveforms(self) -> None:
+        """Recreate SyncTask with current profile's waveform/timing config.
+
+        Called after Session has already mutated profile.daq in the config.
+        Only allowed when IDLE — DAQ must not be actively running.
+
+        Raises:
+            RuntimeError: If mode is not IDLE or no active profile.
+        """
+        if self._mode != RigMode.IDLE:
+            raise RuntimeError(f"Cannot update waveforms while {self._mode}")
+        if not self._active_profile_id:
+            raise RuntimeError("No active profile")
+
+        # Close old SyncTask
+        if self.sync_task:
+            await self.sync_task.close()
+            self.sync_task = None
+
+        # Recreate from current profile config
+        profile = self.config.profiles[self._active_profile_id]
+        if self.daq is None:
+            raise RuntimeError("DAQ client not initialized")
+
+        profile_device_ids = self.config.get_profile_device_ids(self._active_profile_id)
+        filtered_ports = {
+            device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
+        }
+
+        self.sync_task = SyncTask(
+            uid=f"acq_{self._active_profile_id}",
+            daq=self.daq,
+            timing=profile.daq.timing,
+            waveforms=profile.daq.waveforms,
+            ports=filtered_ports,
+        )
+        await self.sync_task.setup()
+        self.log.info("Recreated acquisition task with updated waveforms")
+
+    async def capture_device_props(self, device_id: str) -> dict[str, Any]:
+        """Capture current writable property values for a device.
+
+        Args:
+            device_id: Device to capture from. Must be in the active profile
+                       and not a filter wheel.
+
+        Returns:
+            Dict of property_name → current_value for all rw properties.
+        """
+        if not self._active_profile_id:
+            raise ValueError("No active profile set")
+
+        profile_devices = self.config.get_profile_device_ids(self._active_profile_id)
+        settable_devices = profile_devices - self.config.filter_wheels
+        if device_id not in settable_devices:
+            raise ValueError(f"Device '{device_id}' is not a settable device for the active profile")
+
+        handle = self.handles.get(device_id)
+        if not handle:
+            raise ValueError(f"Device '{device_id}' not found")
+
+        iface = await handle.interface()
+        rw_props = [name for name, info in iface.properties.items() if info.access == "rw"]
+
+        captured: dict[str, Any] = {}
+        if rw_props:
+            results = await handle.get_props(*rw_props)
+            for name in rw_props:
+                if name in results and results[name].is_ok:
+                    captured[name] = results[name].unwrap().value
+
+        return captured
 
     async def get_channel_preview_configs(self) -> dict[str, PreviewConfig]:
         """Query cameras for current preview configs of active channels.

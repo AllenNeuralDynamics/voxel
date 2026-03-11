@@ -149,6 +149,15 @@ class SyncTask:
             if name not in self._waveforms:
                 raise ValueError(f"No waveform defined for port '{name}'")
 
+        # Validate waveform voltages against DAQ hardware range
+        ao_range = await self._daq.get_ao_voltage_range()
+        for name, wf in self._waveforms.items():
+            if wf.voltage.min < ao_range.min or wf.voltage.max > ao_range.max:
+                raise ValueError(
+                    f"Waveform '{name}' voltage [{wf.voltage.min}, {wf.voltage.max}]V "
+                    f"exceeds DAQ range [{ao_range.min}, {ao_range.max}]V"
+                )
+
         # Store channel info
         for name, port in self._ports.items():
             self._channels[name] = WaveGenChannel(name=name, pin=port, wave=self._waveforms[name])
@@ -278,7 +287,8 @@ class SyncTask:
 
             rest_samples = int(self._timing.sample_rate * self._timing.rest_time)
             if rest_samples > 0:
-                waveform_array = np.concatenate([waveform_array, np.zeros(rest_samples)])
+                rest_value = float(channel.wave.rest_voltage)
+                waveform_array = np.concatenate([waveform_array, np.full(rest_samples, rest_value)])
 
             if target_points and len(waveform_array) > target_points:
                 waveforms[name] = self._downsample_minmax(waveform_array, target_points)

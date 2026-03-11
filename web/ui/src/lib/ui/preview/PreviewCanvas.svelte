@@ -23,25 +23,6 @@
 	let animFrameId: number | null = null;
 	let showHistograms = $state(true);
 
-	// Compute border color from visible channel colormaps
-	let borderColor = $derived.by(() => {
-		const colors = previewer.channels
-			.filter((c) => c.visible && c.colormap)
-			.map((c) => previewer.resolveColor(c.colormap))
-			.filter((c): c is string => c !== null);
-
-		if (colors.length === 0) return 'var(--border)';
-
-		// Blend all channel colors together
-		let blended = colors[0];
-		for (let i = 1; i < colors.length; i++) {
-			blended = `color-mix(in oklch, ${blended}, ${colors[i]})`;
-		}
-
-		// Reduce intensity by mixing with transparent
-		return `color-mix(in oklch, ${blended} 40%, transparent)`;
-	});
-
 	// Watch for redraw signals from PreviewState
 	$effect(() => {
 		void previewer.redrawGeneration;
@@ -203,8 +184,7 @@
 	<div class="flex items-center justify-center overflow-hidden p-2">
 		<canvas
 			bind:this={canvasEl}
-			class="preview-canvas max-h-full max-w-full border"
-			style:border-color={borderColor}
+			class="preview-canvas max-h-full max-w-full"
 			class:panning={previewer.isPanZoomActive}
 			class:is-idle={!previewer.isPreviewing}
 		>

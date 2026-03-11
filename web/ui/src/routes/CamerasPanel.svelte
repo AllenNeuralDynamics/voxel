@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Session, Camera } from '$lib/main';
+	import { getChannelFor, type Session, type Camera } from '$lib/main';
 	import SpinBox from '$lib/ui/kit/SpinBox.svelte';
 	import Select from '$lib/ui/kit/Select.svelte';
 	import { Button, Checkbox } from '$lib/ui/kit';
@@ -124,7 +124,9 @@
 </script>
 
 {#snippet cameraCard(camera: Camera)}
-	{@const ch = session.getChannelFor(camera.deviceId)}
+	{@const ch = session.activeProfileId
+		? getChannelFor(session.config, session.activeProfileId, camera.deviceId)
+		: undefined}
 	{@const isSelected = selectedIds.has(camera.deviceId)}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
@@ -261,7 +263,7 @@
 {/snippet}
 
 {#snippet editPanel(cameras: Camera[])}
-	<div class="flex h-full w-96 shrink-0 flex-col border-r border-border bg-card">
+	<div class="flex h-full w-80 shrink-0 flex-col bg-card">
 		<div class="flex-1 space-y-4 overflow-auto px-4 pt-4">
 			<!-- Exposure -->
 			<div>
@@ -379,17 +381,8 @@
 	</div>
 {:else}
 	<div class="flex h-full">
-		<!-- Left: edit panel -->
-		{#if selectedCameras.length > 0}
-			{@render editPanel(selectedCameras)}
-		{:else}
-			<div class="flex h-full w-96 shrink-0 flex-col items-center justify-center border-r border-border bg-card">
-				<p class="text-xs text-muted-foreground">Select cameras to edit</p>
-			</div>
-		{/if}
-
-		<!-- Right: camera cards -->
-		<div class="flex flex-1 flex-col overflow-auto px-4">
+		<!-- Left: camera cards -->
+		<div class="flex flex-1 flex-col overflow-auto border-r border-border px-4">
 			<div class="flex h-full flex-col gap-2">
 				<div class="flex items-center gap-2.5 py-3 pl-4">
 					<Checkbox checked={allSelected} indeterminate={someSelected} onchange={toggleAll} size="sm" />
@@ -404,5 +397,13 @@
 				</div>
 			</div>
 		</div>
+		<!-- Right: edit panel -->
+		{#if selectedCameras.length > 0}
+			{@render editPanel(selectedCameras)}
+		{:else}
+			<div class="flex h-full w-96 shrink-0 flex-col items-center justify-center bg-card">
+				<p class="text-xs text-muted-foreground">Select cameras to edit</p>
+			</div>
+		{/if}
 	</div>
 {/if}

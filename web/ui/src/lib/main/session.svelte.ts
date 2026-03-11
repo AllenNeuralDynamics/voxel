@@ -1,5 +1,5 @@
 import { toast } from 'svelte-sonner';
-import type { Client, DaqWaveforms } from './client.svelte';
+import type { Client, DaqWaveformsResponse } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
 import type {
 	AppStatus,
@@ -10,9 +10,8 @@ import type {
 	StackStatus,
 	LayerVisibility,
 	TileOrder,
-	VoxelRigConfig,
-	ProfileConfig,
-	ChannelConfig
+	RigMode,
+	VoxelRigConfig
 } from './types';
 
 import { PreviewState } from './preview.svelte';
@@ -20,7 +19,6 @@ import { Workflow } from './workflow.svelte';
 import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
-import { ProfileDevices } from './profile.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 export interface SessionInit {
@@ -31,16 +29,14 @@ export interface SessionInit {
 
 export class Session {
 	readonly client!: Client;
-	readonly config!: VoxelRigConfig;
+	config = $state<VoxelRigConfig>(null!);
 	readonly devices!: DevicesManager;
 	readonly preview!: PreviewState;
 	readonly workflow!: Workflow;
 	readonly stage!: Stage;
-	readonly profileDevices!: ProfileDevices;
 
 	#appStatus = $state<AppStatus>();
 
-	activeProfileId = $derived<string | null>(this.#appStatus?.session?.active_profile_id ?? null);
 	plan = $derived<AcquisitionPlan>(this.#appStatus?.session?.plan ?? { grid_configs: {}, stacks: [] });
 	acquisitionProfileIds = $derived<string[]>(Object.keys(this.plan.grid_configs));
 	gridConfig = $derived<GridConfig | null>(this.#appStatus?.session?.grid_config ?? null);
@@ -48,32 +44,8 @@ export class Session {
 	stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
 	tileOrder = $derived<TileOrder>(this.#appStatus?.session?.tile_order ?? 'snake_row');
 	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
-
-	activeProfileConfig = $derived<ProfileConfig | null>(
-		this.activeProfileId ? (this.config.profiles[this.activeProfileId] ?? null) : null
-	);
-
-	activeChannels = $derived.by(() => {
-		if (!this.activeProfileId) return {};
-		const profile = this.config.profiles[this.activeProfileId];
-		if (!profile) return {};
-		const result: Record<string, ChannelConfig> = {};
-		for (const channelId of profile.channels) {
-			const ch = this.config.channels[channelId];
-			if (ch) result[channelId] = ch;
-		}
-		return result;
-	});
-
-	/** Find the first active channel where `detection` or `illumination` matches `deviceId`. */
-	getChannelFor(deviceId: string): { id: string; config: ChannelConfig } | undefined {
-		for (const [id, config] of Object.entries(this.activeChannels)) {
-			if (config.detection === deviceId || config.illumination === deviceId) {
-				return { id, config };
-			}
-		}
-		return undefined;
-	}
+	mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
+	sessionDir = $derived<string>(this.#appStatus?.session?.session_dir ?? '');
 
 	fov = $derived.by(() => {
 		const fovUm = this.#appStatus?.session?.fov_um;
@@ -84,14 +56,16 @@ export class Session {
 		};
 	});
 
-	waveforms = $state<DaqWaveforms | null>(null);
-	waveformsLoading = $state(false);
-
 	lasers: Record<string, Laser>;
 	cameras: Record<string, Camera>;
 
-	isMutating = $state(false);
-	error = $state<string | null>(null);
+	// ── Profile state ───────────────────────────────────────
+
+	activeProfileId = $derived<string | null>(this.#appStatus?.session?.active_profile_id ?? null);
+	appliedWaveforms = $state<DaqWaveformsResponse | null>(null);
+	isSwitchingProfile = $state(false);
+
+	// ── Internal ────────────────────────────────────────────
 
 	#unsubscribers: Array<() => void> = [];
 	#selection = new SvelteMap<number, SvelteSet<number>>([[0, new SvelteSet([0])]]);
@@ -109,19 +83,7 @@ export class Session {
 			channels: init.config.channels,
 			profiles: init.config.profiles
 		});
-
-		this.#unsubscribers.push(
-			init.client.on('daq/waveforms', (waveforms) => {
-				this.waveforms = waveforms;
-				this.waveformsLoading = false;
-			}),
-			init.client.on('profile/changed', () => {
-				this.requestWaveforms();
-			})
-		);
-
 		this.stage = new Stage(this.devices, init.config.stage);
-		this.profileDevices = new ProfileDevices(init.config);
 
 		const lasers: Record<string, Laser> = {};
 		if (init.config.channels) {
@@ -142,11 +104,34 @@ export class Session {
 			}
 		}
 		this.cameras = cameras;
+
+		// Profile WebSocket subscriptions
+		this.#unsubscribers.push(
+			init.client.on('daq/waveforms', (data) => {
+				this.appliedWaveforms = data;
+				// Update config with broadcasted waveform descriptors + timing
+				if (data.profile_id && this.config.profiles[data.profile_id]) {
+					const profile = this.config.profiles[data.profile_id];
+					if (data.waveforms) profile.daq.waveforms = data.waveforms;
+					if (data.timing) profile.daq.timing = data.timing;
+				}
+			}),
+			init.client.on('profile/props_saved', (payload) => {
+				if (payload.devices) {
+					toast.success(`Saved props for ${payload.devices.length} device(s)`);
+				} else if (payload.device_id) {
+					toast.success(`Saved props for ${payload.device_id}`);
+				}
+			}),
+			init.client.on('profile/props_applied', (payload) => {
+				toast.success(`Applied saved props to ${payload.devices.length} device(s)`);
+			})
+		);
 	}
 
 	async initialize(): Promise<void> {
 		await this.devices.initialize();
-		this.client.requestWaveforms();
+		this.appliedWaveforms = await this.client.fetchWaveforms();
 	}
 
 	destroy(): void {
@@ -161,18 +146,12 @@ export class Session {
 		this.#appStatus = status;
 	}
 
-	requestWaveforms(): void {
-		this.waveformsLoading = true;
-		this.client.requestWaveforms();
-	}
+	// ── Profile commands ────────────────────────────────────
 
 	async activateProfile(profileId: string): Promise<void> {
-		if (!profileId) return;
-		if (profileId === this.activeProfileId) return;
+		if (!profileId || profileId === this.activeProfileId) return;
 
-		this.error = null;
-		this.isMutating = true;
-		this.waveformsLoading = true;
+		this.isSwitchingProfile = true;
 
 		try {
 			const response = await fetch(`${this.client.baseUrl}/profiles/active`, {
@@ -180,20 +159,27 @@ export class Session {
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ profile_id: profileId })
 			});
-
-			if (!response.ok) {
-				throw new Error(response.statusText);
-			}
+			if (!response.ok) throw new Error(response.statusText);
 		} catch (error) {
 			console.error('[Session] Failed to activate profile:', error);
-			this.waveformsLoading = false;
 			const msg = error instanceof Error ? error.message : 'Failed to activate profile';
-			this.error = msg;
 			toast.error(msg);
 			throw error;
 		} finally {
-			this.isMutating = false;
+			this.isSwitchingProfile = false;
 		}
+	}
+
+	saveProfileProps(deviceId: string): void {
+		this.client.send({ topic: 'profile/save_props', payload: { device_id: deviceId } });
+	}
+
+	saveAllProfileProps(): void {
+		this.client.send({ topic: 'profile/save_props', payload: { all: true } });
+	}
+
+	applyProfileProps(): void {
+		this.client.send({ topic: 'profile/apply_props', payload: {} });
 	}
 
 	// --- Grid ---

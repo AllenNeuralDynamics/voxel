@@ -121,14 +121,6 @@ export interface ErrorPayload {
 	topic?: string;
 }
 
-/**
- * Profile changed payload
- * Topic: 'profile/changed'
- */
-export interface ProfileChangedPayload {
-	profile_id: string;
-}
-
 // ============================================================================
 // GRID & STACK TYPES
 // Types for grid planning and stack acquisition

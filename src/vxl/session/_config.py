@@ -192,6 +192,24 @@ class SessionConfig(BaseModel):
             # Remove old flat keys on forward migration
             self._raw_data.pop("grid_config", None)
             self._raw_data.pop("stacks", None)
+            # Sync props/setup changes into raw rig profiles
+            if "profiles" in self._raw_data.get("rig", {}):
+                for profile_id, profile in self.rig.profiles.items():
+                    raw_profile = self._raw_data["rig"]["profiles"].get(profile_id)
+                    if raw_profile is not None:
+                        if profile.props:
+                            raw_profile["props"] = dict(profile.props)
+                        elif "props" in raw_profile:
+                            del raw_profile["props"]
+                        if profile.setup:
+                            raw_profile["setup"] = {
+                                dev_id: [cmd.model_dump(mode="json") for cmd in cmds]
+                                for dev_id, cmds in profile.setup.items()
+                            }
+                        elif "setup" in raw_profile:
+                            del raw_profile["setup"]
+                        # Remove old field on forward migration
+                        raw_profile.pop("device_settings", None)
             data = self._raw_data
         else:
             # Fresh config without raw_data, just dump normally

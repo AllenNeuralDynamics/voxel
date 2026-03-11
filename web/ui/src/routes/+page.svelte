@@ -6,19 +6,18 @@
 	import SplashScreen from './SplashScreen.svelte';
 	import LaunchScreen from './LaunchScreen.svelte';
 	import { PreviewCanvas } from '$lib/ui/preview';
-	import { GridCanvas, GridControls } from '$lib/ui/grid/canvas';
+	import { GridCanvas } from '$lib/ui/grid/canvas';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
-	import { WaveformViewer } from '$lib/ui/waveform';
 	import ClientStatus from '$lib/ui/ClientStatus.svelte';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button } from '$lib/ui/kit';
-	import { Cog, PlayCircleOutline, Logout, ChevronLeft } from '$lib/icons';
-	import { ProfileSelector, ProfilePopover, ProfileStatus } from '$lib/ui/profile';
-	import { sanitizeString } from '$lib/utils';
+	import { Cog, PlayCircleOutline, ChevronLeft } from '$lib/icons';
+	import { ProfileSelector } from '$lib/ui/profile';
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
 	import SessionPanel from './SessionPanel.svelte';
+	import ScoutPanel from './ScoutPanel.svelte';
 	import { ConfigurePanel } from '$lib/ui/configure';
 	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
@@ -42,15 +41,6 @@
 		} else if (configureNav.type === 'profile' && !(configureNav.id in app.session.config.profiles)) {
 			navigate('configure', { type: 'channels' }, { replace: true });
 		}
-	});
-
-	// Scout: selected acquisition profile tab (null = auto-follow active profile)
-	let scoutProfileTab = $state<string | null>(null);
-
-	// Auto-select active profile's tab when it changes
-	$effect(() => {
-		const activeId = app?.session?.activeProfileId;
-		if (activeId) scoutProfileTab = activeId;
 	});
 
 	// Control view state
@@ -116,7 +106,7 @@
 	)}
 	<div class="h-screen w-full bg-background text-foreground">
 		<PaneGroup direction="horizontal" autoSaveId="main-h">
-			<Pane defaultSize={60} minSize={60} maxSize={70} class="bg-zinc-900">
+			<Pane defaultSize={60} minSize={50} maxSize={70} class="bg-zinc-900">
 				<!-- Control area: header + main + footer -->
 				<div class="grid h-full grid-rows-[auto_1fr_auto] border-r border-border">
 					<header class="flex items-center justify-between gap-8 border-b border-border bg-card px-4 py-4">
@@ -146,7 +136,9 @@
 							</button>
 						</div>
 						<div class="flex items-center gap-3">
-							<ProfileSelector {session} size="lg" class="max-w-64 min-w-56" />
+							{#if viewId !== 'configure'}
+								<ProfileSelector {session} size="lg" class="max-w-64 min-w-56" />
+							{/if}
 							<Button
 								class="min-w-26"
 								variant={session.preview.isPreviewing ? 'danger' : 'success'}
@@ -168,62 +160,7 @@
 										onNavChange={(nav) => navigate('configure', nav)}
 									/>
 								{:else if viewId === 'scout'}
-									{@const acqIds = session.acquisitionProfileIds}
-									{@const scoutLocked = workflow.stepStates['scout'] === 'committed'}
-									{@const phantomId =
-										session.activeProfileId != null && !acqIds.includes(session.activeProfileId)
-											? session.activeProfileId
-											: null}
-									{@const tabIds = phantomId ? [...acqIds, phantomId] : acqIds}
-									{@const selectedTab = tabIds.includes(scoutProfileTab ?? '') ? scoutProfileTab : (tabIds[0] ?? null)}
-									{@const pillBase =
-										'rounded-xl border px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors'}
-									<div class="flex h-full flex-col justify-between">
-										<div class="space-y-3 p-4">
-											<!-- Profile pill tabs + actions -->
-											<div class="flex flex-wrap items-center gap-2">
-												{#each tabIds as pid (pid)}
-													{@const profile = session.config.profiles[pid]}
-													{@const isPhantom = pid === phantomId}
-													{@const isSelected = pid === selectedTab}
-													<button
-														onclick={() => {
-															scoutProfileTab = pid;
-														}}
-														class={cn(
-															pillBase,
-															isPhantom ? 'border-dashed' : '',
-															isSelected
-																? 'border-border bg-muted text-foreground'
-																: 'border-border bg-surface text-muted-foreground hover:bg-muted hover:text-foreground'
-														)}
-													>
-														{profile?.label ?? sanitizeString(pid)}
-													</button>
-												{/each}
-												{#if selectedTab}
-													<div class="ml-auto flex items-center gap-1.5">
-														<ProfileStatus {session} profileId={selectedTab} size="sm" />
-														<ProfilePopover
-															{session}
-															profileId={selectedTab}
-															size="sm"
-															locked={scoutLocked}
-															onRemove={() => {
-																session.removeAcquisitionProfile(selectedTab);
-																scoutProfileTab = null;
-															}}
-														/>
-													</div>
-												{/if}
-											</div>
-
-											<!-- Grid controls -->
-											{#if selectedTab && acqIds.includes(selectedTab)}
-												<GridControls {session} profileId={selectedTab} />
-											{/if}
-										</div>
-									</div>
+									<ScoutPanel {session} />
 								{:else if viewId === 'plan'}
 									<div class="flex h-full items-center justify-center">
 										<p class="text-sm text-muted-foreground">Plan — define stacks for acquisition</p>
@@ -275,20 +212,23 @@
 								<CamerasPanel {session} />
 							{:else if bottomPanelTab === 'lasers'}
 								<LasersPanel {session} />
-							{:else if bottomPanelTab === 'waveforms'}
-								<div class="h-full overflow-hidden bg-card">
-									<WaveformViewer {session} />
-								</div>
 							{:else if bottomPanelTab === 'logs'}
 								<div class="h-full overflow-hidden bg-card p-2">
 									<LogViewer logs={app.logs} onClear={() => app?.clearLogs()} />
 								</div>
 							{:else if bottomPanelTab === 'session'}
-								<SessionPanel {session} />
+								<SessionPanel {session} onExit={() => app?.closeSession()} />
 							{/if}
 						</Pane>
 					</PaneGroup>
 					<footer class="flex items-center justify-between border-t border-border px-4 py-2">
+						<div class="flex divide-x divide-border rounded border border-border">
+							<button onclick={() => selectBottomTab('session')} class={tabButtonClass(bottomPanelTab === 'session')}>
+								<ClientStatus client={app.client} />
+								Session
+							</button>
+							{@render tabButton('logs', 'Logs')}
+						</div>
 						<div class="flex divide-x divide-border rounded border border-border">
 							{@render tabButton('cameras', 'Cameras')}
 							<button onclick={() => selectBottomTab('lasers')} class={tabButtonClass(bottomPanelTab === 'lasers')}>
@@ -306,26 +246,6 @@
 										{/if}
 									</div>
 								{/each}
-							</button>
-						</div>
-						<div class="flex items-center gap-3">
-							<div class="flex divide-x divide-border rounded border border-border">
-								{@render tabButton('waveforms', 'Waveforms')}
-								{@render tabButton('logs', 'Logs')}
-								<button onclick={() => selectBottomTab('session')} class={tabButtonClass(bottomPanelTab === 'session')}>
-									Session
-									<ClientStatus client={app.client} />
-								</button>
-							</div>
-							<div class="h-4 w-px bg-border"></div>
-							<button
-								onclick={() => app?.closeSession()}
-								class="flex cursor-pointer items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-								aria-label="Close Session"
-								title="Close Session"
-							>
-								Exit
-								<Logout width="12" height="12" />
 							</button>
 						</div>
 					</footer>

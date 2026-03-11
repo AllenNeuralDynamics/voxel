@@ -42,7 +42,7 @@
 	{options}
 	onchange={handleChange}
 	icon={ChevronUpDown}
-	loading={switchOnChange ? session.isMutating : false}
+	loading={switchOnChange ? session.isSwitchingProfile : false}
 	showCheckmark
 	emptyMessage="No profiles available"
 	{size}

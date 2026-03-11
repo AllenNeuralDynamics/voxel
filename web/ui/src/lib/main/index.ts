@@ -9,15 +9,10 @@ export {
 	type StreamInfoData,
 	type DeliminatedIntData
 } from './camera.svelte.ts';
-export { PreviewState, PreviewChannel } from './preview.svelte.ts';
+export { PreviewState, PreviewChannel, fetchColormapCatalog } from './preview.svelte.ts';
+export type { ColormapDef, ColormapGroup, ColormapCatalog } from './preview.svelte.ts';
 export { Workflow } from './workflow.svelte.ts';
-export {
-	ProfileDevices,
-	type DeviceRole,
-	type GroupMode,
-	type ProfileDevice,
-	type DeviceGroup
-} from './profile.svelte.ts';
+export { discoverProfileDevices, isFilterWheel, getChannelFor } from './profile.ts';
 
 export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';
 export { DevicesManager } from './devices.svelte.ts';
@@ -35,8 +30,5 @@ export type {
 	DevicesResponse
 } from './devices.svelte.ts';
 export type { PreviewCrop, PreviewFrameInfo, PreviewLevels } from './client.svelte.ts';
-
-export type { ColormapDef, ColormapGroup, ColormapCatalog } from './colormaps.ts';
-export { fetchColormapCatalog } from './colormaps.ts';
 
 export * from './types';

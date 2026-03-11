@@ -41,7 +41,9 @@ export function generateTraces(
  * @param duration - Active frame duration in seconds.
  */
 export function sampleWaveform(waveform: Waveform, t: number, duration: number): number {
+	if (!waveform?.voltage || !waveform?.window) return 0;
 	const { min: vMin, max: vMax } = waveform.voltage;
+	if (!isFinite(vMin) || !isFinite(vMax) || !isFinite(duration) || duration <= 0) return 0;
 	const restV = waveform.rest_voltage ?? vMin;
 
 	// Outside active duration → rest voltage
@@ -118,18 +120,63 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
 }
 
 /**
+ * Compute "nice" round tick values for an axis given a data range.
+ *
+ * Uses the standard "nice numbers" algorithm (same as D3.js / matplotlib):
+ * picks a step size that is 1, 2, or 5 × 10^n so tick labels are round numbers.
+ *
+ * @param dataMin - Minimum data value.
+ * @param dataMax - Maximum data value.
+ * @param maxTicks - Desired maximum number of ticks (default 6).
+ * @returns Array of tick values and the padded axis range.
+ */
+export function niceTicks(
+	dataMin: number,
+	dataMax: number,
+	maxTicks = 6
+): { ticks: number[]; min: number; max: number } {
+	if (!isFinite(dataMin) || !isFinite(dataMax) || dataMin >= dataMax) {
+		return { ticks: [0], min: -0.5, max: 0.5 };
+	}
+
+	const range = dataMax - dataMin;
+	const roughStep = range / (maxTicks - 1);
+	const mag = Math.pow(10, Math.floor(Math.log10(roughStep)));
+	const normalized = roughStep / mag;
+
+	let step: number;
+	if (normalized <= 1.5) step = 1 * mag;
+	else if (normalized <= 3.5) step = 2 * mag;
+	else if (normalized <= 7.5) step = 5 * mag;
+	else step = 10 * mag;
+
+	const niceMin = Math.floor(dataMin / step) * step;
+	const niceMax = Math.ceil(dataMax / step) * step;
+
+	const ticks: number[] = [];
+	for (let v = niceMin; v <= niceMax + step * 0.5; v += step) {
+		ticks.push(Math.round(v / step) * step); // avoid floating-point drift
+	}
+
+	return { ticks, min: niceMin, max: niceMax };
+}
+
+/**
  * Compute the global voltage range across all waveforms.
  */
 export function voltageRange(waveforms: Record<string, Waveform>): { min: number; max: number } {
+	if (Object.keys(waveforms).length === 0) return { min: -0.1, max: 0.1 };
 	let min = Infinity;
 	let max = -Infinity;
 	for (const wf of Object.values(waveforms)) {
+		if (!wf?.voltage) continue;
 		if (wf.voltage.min < min) min = wf.voltage.min;
 		if (wf.voltage.max > max) max = wf.voltage.max;
 		const rest = wf.rest_voltage ?? wf.voltage.min;
 		if (rest < min) min = rest;
 		if (rest > max) max = rest;
 	}
+	if (!isFinite(min) || !isFinite(max)) return { min: -0.1, max: 0.1 };
 	// Add a small margin
 	const margin = (max - min) * 0.05 || 0.1;
 	return { min: min - margin, max: max + margin };

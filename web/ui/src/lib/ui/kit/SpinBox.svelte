@@ -157,6 +157,7 @@
 
 	function snapToStep(v: number): number {
 		if (step <= 0 || !isFinite(step)) return v;
+		if (!isFinite(min)) return Math.round(v / step) * step;
 		return min + Math.round((v - min) / step) * step;
 	}
 

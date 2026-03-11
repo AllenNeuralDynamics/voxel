@@ -27,6 +27,25 @@ export function isValidHex(color: string): boolean {
  * wavelengthToColor(640) // "#ff0000" (red)
  * wavelengthToColor(undefined) // "#6366f1" (default indigo)
  */
+/**
+ * Desaturate a hex color by blending toward white (pastel effect).
+ * Used to visually distinguish camera traces from laser traces sharing the same emission.
+ *
+ * // TODO: For light mode, blend toward black instead of white to maintain contrast.
+ *
+ * @param hex - Hex color string (e.g., "#ff0000")
+ * @param amount - Blend amount from 0 (no change) to 1 (fully white). Default 0.5.
+ * @returns A lightened, desaturated hex color string
+ */
+export function desaturateColor(hex: string, amount = 0.5): string {
+	const r = parseInt(hex.slice(1, 3), 16);
+	const g = parseInt(hex.slice(3, 5), 16);
+	const b = parseInt(hex.slice(5, 7), 16);
+	const mix = (c: number) => Math.round(c + (255 - c) * amount);
+	const toHex = (v: number) => v.toString(16).padStart(2, '0');
+	return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+}
+
 export function wavelengthToColor(wavelength: number | undefined): string {
 	if (!wavelength) return '#6366f1'; // Default indigo for unknown wavelengths
 

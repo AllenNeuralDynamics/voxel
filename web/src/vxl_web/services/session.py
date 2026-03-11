@@ -121,7 +121,7 @@ class SessionService:
 
     # ==================== Message Handling ====================
 
-    async def handle_message(self, client_id: str, topic: str, payload: dict[str, Any]) -> None:
+    async def handle_message(self, client_id: str, topic: str, payload: dict[str, Any]) -> None:  # noqa: C901
         """Handle incoming message from a client.
 
         Args:
@@ -155,6 +155,12 @@ class SessionService:
                 await self._handle_workflow_next()
             case "workflow/reopen":
                 await self._handle_workflow_reopen(payload)
+            case "profile/save_props":
+                await self._handle_save_props(payload)
+            case "profile/update_waveforms":
+                await self._handle_update_waveforms(payload)
+            case "profile/apply_props":
+                await self._handle_apply_props(payload)
             case "acq/start":
                 await self.handle_acq_start(payload)
             case "acq/stop":
@@ -194,6 +200,43 @@ class SessionService:
             raise ValueError("Missing step_id")
         self.session.workflow_reopen(step_id)
         self.broadcast({}, with_status=True)
+
+    # ==================== Device Props ====================
+
+    async def _handle_save_props(self, payload: dict[str, Any]) -> None:
+        """Handle saving device properties to the active profile."""
+        if payload.get("all", False):
+            saved = await self.session.save_all_device_props()
+            self.broadcast(
+                {"topic": "profile/props_saved", "payload": {"devices": saved}},
+                with_status=True,
+            )
+        else:
+            device_id = payload.get("device_id")
+            if not device_id:
+                raise ValueError("Missing 'device_id'")
+            await self.session.save_device_props(device_id)
+            self.broadcast(
+                {"topic": "profile/props_saved", "payload": {"device_id": device_id}},
+                with_status=True,
+            )
+
+    async def _handle_update_waveforms(self, payload: dict[str, Any]) -> None:
+        """Handle waveform update for the active profile."""
+        await self.session.update_profile_waveforms(
+            waveforms=payload.get("waveforms"),
+            timing=payload.get("timing"),
+        )
+        self.rig_service.broadcast_waveforms()
+        self.broadcast({}, with_status=True)
+
+    async def _handle_apply_props(self, _payload: dict[str, Any]) -> None:
+        """Handle applying saved profile properties to hardware."""
+        applied = await self.session.apply_profile_props()
+        self.broadcast(
+            {"topic": "profile/props_applied", "payload": {"devices": applied}},
+            with_status=True,
+        )
 
     # ==================== Grid Management ====================
 

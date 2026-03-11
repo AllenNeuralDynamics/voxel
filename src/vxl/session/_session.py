@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from vxl.config import TileOrder
+from vxl.daq.wave import validate_waveform
 from vxl.metadata import BASE_METADATA_TARGET
 from vxl.rig import RigMode, VoxelRig
+from vxl.sync import FrameTiming
 from vxl.tile import Stack, StackResult, StackStatus, Tile
 
 from ._config import AcquisitionPlan, GridConfig, SessionConfig
@@ -166,6 +168,89 @@ class Session:
     def grid_locked(self) -> bool:
         """Grid is locked when the Scout step is not active."""
         return self._workflow.step_state("scout") != StepState.ACTIVE
+
+    # ==================== Device Props (Save to Profile) ====================
+
+    async def save_device_props(self, device_id: str) -> None:
+        """Capture and persist current device properties to the active profile."""
+        if not self._rig.active_profile_id:
+            raise RuntimeError("No active profile")
+        profile_id = self._rig.active_profile_id
+        captured = await self._rig.capture_device_props(device_id)
+        self._config.rig.profiles[profile_id].props[device_id] = captured
+        self._save()
+        self._log.info(f"Saved props for '{device_id}' in profile '{profile_id}'")
+
+    async def save_all_device_props(self) -> list[str]:
+        """Capture and persist properties for all settable devices in the active profile."""
+        if not self._rig.active_profile_id:
+            raise RuntimeError("No active profile")
+        profile_id = self._rig.active_profile_id
+        profile_devices = self._rig.config.get_profile_device_ids(profile_id)
+        settable = profile_devices - self._rig.config.filter_wheels
+        saved: list[str] = []
+        for device_id in sorted(settable):
+            if device_id not in self._rig.handles:
+                continue
+            await self.save_device_props(device_id)
+            saved.append(device_id)
+        return saved
+
+    # ==================== Waveform Updates ====================
+
+    async def update_profile_waveforms(
+        self, waveforms: dict | None = None, timing: dict | None = None
+    ) -> None:
+        """Update waveform definitions for the active profile and recreate DAQ tasks.
+
+        Session updates config + saves; rig recreates SyncTask.
+        Rig will raise RuntimeError if mode is not IDLE.
+        """
+        profile_id = self._rig.active_profile_id
+        if not profile_id:
+            raise RuntimeError("No active profile")
+        profile = self._config.rig.profiles[profile_id]
+        if waveforms is not None:
+            for device_id, wf_data in waveforms.items():
+                profile.daq.waveforms[device_id] = validate_waveform(wf_data)
+        if timing is not None:
+            profile.daq.timing = FrameTiming.model_validate(timing)
+
+        # Validate all waveform voltages against DAQ hardware range
+        if self._rig.daq is not None:
+            ao_range = await self._rig.daq.get_ao_voltage_range()
+            for device_id, wf in profile.daq.waveforms.items():
+                if wf.voltage.min < ao_range.min or wf.voltage.max > ao_range.max:
+                    raise ValueError(
+                        f"Waveform '{device_id}' voltage [{wf.voltage.min}, {wf.voltage.max}]V "
+                        f"exceeds DAQ range [{ao_range.min}, {ao_range.max}]V"
+                    )
+
+        self._save()
+        await self._rig.update_active_waveforms()
+
+    async def apply_profile_props(self) -> list[str]:
+        """Apply saved profile properties to hardware devices (inverse of save).
+
+        Reads profile.props and pushes values to hardware via handle.set_props().
+        """
+        profile_id = self._rig.active_profile_id
+        if not profile_id:
+            raise RuntimeError("No active profile")
+        profile = self._config.rig.profiles[profile_id]
+        applied: list[str] = []
+        for device_id, props in profile.props.items():
+            handle = self._rig.handles.get(device_id)
+            if not handle or not props:
+                continue
+            try:
+                result = await handle.set_props(**props)
+                if not result.is_ok:
+                    self._log.warning(f"Some properties failed for '{device_id}'")
+                applied.append(device_id)
+            except Exception:
+                self._log.exception(f"Failed to apply props for '{device_id}'")
+        return applied
 
     # ==================== Acquisition Profile Management ====================
 

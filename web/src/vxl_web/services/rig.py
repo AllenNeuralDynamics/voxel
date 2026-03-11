@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Annotated, Any, Protocol
 
@@ -72,8 +73,6 @@ class RigService:
                     await self._handle_device_set_property(payload)
                 case "device/execute_command":
                     await self._handle_device_execute_command(payload)
-                case "daq/request_waveforms":
-                    await self._broadcast_waveforms()
                 case _:
                     return False
             return True
@@ -90,7 +89,7 @@ class RigService:
         if not profile_id:
             raise ValueError("Missing profile_id")
         await self.rig.set_active_profile(profile_id)
-        await self._broadcast_waveforms()
+        self.broadcast_waveforms()
         self._broadcast({"topic": "profile/changed", "payload": {"profile_id": profile_id}}, with_status=True)
 
     # ==================== Preview ====================
@@ -102,7 +101,7 @@ class RigService:
                 log.info("Starting rig preview")
                 await self.rig.start_preview(frame_callback=self._distribute_frames)
 
-        await self._broadcast_preview_status()
+        self._broadcast({}, with_status=True)
 
     async def _handle_preview_stop(self):
         """Stop preview streaming."""
@@ -111,7 +110,7 @@ class RigService:
                 log.info("Stopping rig preview")
                 await self.rig.stop_preview()
 
-        await self._broadcast_preview_status()
+        self._broadcast({}, with_status=True)
 
     async def stop_preview(self):
         """Stop preview (used during last client disconnect)."""
@@ -119,7 +118,7 @@ class RigService:
             if self.is_previewing:
                 log.info("Last client disconnected. Stopping rig preview.")
                 await self.rig.stop_preview()
-        await self._broadcast_preview_status()
+        self._broadcast({}, with_status=True)
 
     async def _handle_preview_crop(self, payload: dict[str, Any]):
         """Handle preview crop update."""
@@ -167,16 +166,6 @@ class RigService:
         """
         envelope = json.dumps({"topic": "preview/frame", "channel": channel}).encode("utf-8")
         self._broadcast(envelope + b"\n" + packed_frame)
-
-    async def _broadcast_preview_status(self):
-        """Broadcast the current previewing status (also triggers app status update)."""
-        self._broadcast(
-            {
-                "topic": "preview/status",
-                "payload": {"previewing": self.rig.preview.is_active, "timestamp": _utc_timestamp()},
-            },
-            with_status=True,
-        )
 
     # ==================== Devices ====================
 
@@ -261,14 +250,33 @@ class RigService:
 
     # ==================== DAQ ====================
 
-    async def _broadcast_waveforms(self):
-        """Broadcast DAQ waveforms to all clients."""
+    def get_waveform_traces(self) -> dict:
+        """Get computed DAQ waveform traces and config for the active profile.
+
+        Returns traces (voltage arrays), waveform descriptors, and timing
+        for the active profile. Used by both REST endpoint and WS broadcast.
+        """
+        profile_id = self.rig.active_profile_id
+        profile = self.rig.config.profiles.get(profile_id) if profile_id else None
+
+        traces: dict = {}
         if self.rig.sync_task:
-            try:
-                waveforms = self.rig.sync_task.get_written_waveforms(target_points=1000)
-                self._broadcast({"topic": "daq/waveforms", "payload": waveforms})
-            except Exception:
-                log.exception("Failed to get waveforms")
+            with suppress(RuntimeError):
+                traces = self.rig.sync_task.get_written_waveforms(target_points=1000)
+
+        result: dict = {"profile_id": profile_id, "traces": traces}
+        if profile:
+            daq = profile.daq.model_dump(mode="json")
+            result["waveforms"] = daq["waveforms"]
+            result["timing"] = daq["timing"]
+        return result
+
+    def broadcast_waveforms(self):
+        """Broadcast DAQ waveform traces to all clients."""
+        try:
+            self._broadcast({"topic": "daq/waveforms", "payload": self.get_waveform_traces()})
+        except Exception:
+            log.exception("Failed to broadcast waveforms")
 
     @property
     def is_previewing(self) -> bool:
@@ -299,6 +307,12 @@ def get_rig_service(request: Request) -> RigService:
 async def get_config(rig: Annotated[VoxelRig, Depends(get_rig)]) -> VoxelRigConfig:
     """Get the full rig configuration."""
     return rig.config
+
+
+@router.get("/daq/waveforms")
+async def get_waveforms(service: Annotated[RigService, Depends(get_rig_service)]) -> dict:
+    """Get computed DAQ waveform traces for the active sync task."""
+    return service.get_waveform_traces()
 
 
 @router.get("/colormaps")

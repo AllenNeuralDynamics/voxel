@@ -41,20 +41,20 @@
 
 <div class="flex h-full">
 	<!-- Sidebar Navigation -->
-	<aside class="flex w-52 shrink-0 flex-col overflow-auto border-r border-border bg-card p-3">
+	<aside class="flex w-56 shrink-0 flex-col gap-4 overflow-auto border-r border-border bg-card py-3">
 		<!-- Channels -->
-		<nav class="space-y-0.5">
+		<nav class="space-y-0.5 px-3">
 			<button onclick={() => onNavChange?.({ type: 'channels' })} class={navClass({ type: 'channels' })}>
 				Channels
 			</button>
 		</nav>
 
-		<div class="my-3 border-t border-border"></div>
+		<!-- <div class="my-3 border-t border-border"></div> -->
 
 		<!-- Profiles -->
-		<Collapsible.Root open={activeNav.type === 'profile'}>
-			<Collapsible.Trigger class="group flex w-full items-center justify-between px-2 py-1">
-				<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"> Profiles </span>
+		<Collapsible.Root open>
+			<Collapsible.Trigger class="group flex w-full items-center justify-between px-5 py-1">
+				<span class="text-[0.5rem] font-medium tracking-wide text-muted-foreground uppercase"> Profiles </span>
 				<ChevronRight
 					width="12"
 					height="12"
@@ -62,20 +62,83 @@
 				/>
 			</Collapsible.Trigger>
 			<Collapsible.Content>
-				<nav class="mt-1 space-y-0.5">
+				<nav class="mt-1 space-y-0.5 px-3">
 					{#each Object.entries(config.profiles) as [id, profile] (id)}
-						<button onclick={() => onNavChange?.({ type: 'profile', id })} class={navClass({ type: 'profile', id })}>
+						{@const isActiveProfile = id === session.activeProfileId}
+						{@const isViewed = activeNav.type === 'profile' && activeNav.id === id}
+						<button
+							onclick={() => onNavChange?.({ type: 'profile', id })}
+							class="group {navClass({ type: 'profile', id })}"
+						>
 							<span class="truncate">{profile.label ?? sanitizeString(id)}</span>
+							{#if isActiveProfile}
+								<span
+									class="w-13 shrink-0 rounded-full bg-success/15 py-0.5 text-center text-[0.5rem] font-medium text-success"
+								>
+									Active
+								</span>
+							{:else}
+								<span
+									role="button"
+									tabindex="0"
+									class={cn(
+										'w-13 shrink-0 rounded-full border py-0.5 text-center text-[0.5rem] font-medium transition-all',
+										isViewed
+											? 'pointer-events-auto border-amber-500/40 bg-amber-500/10 text-amber-500 opacity-100 hover:bg-amber-500/20'
+											: 'pointer-events-none border-border text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-muted hover:text-foreground'
+									)}
+									onclick={(e: MouseEvent) => {
+										e.stopPropagation();
+										session.activateProfile(id);
+										onNavChange?.({ type: 'profile', id });
+									}}
+									onkeydown={(e: KeyboardEvent) => {
+										if (e.key === 'Enter') {
+											e.stopPropagation();
+											session.activateProfile(id);
+											onNavChange?.({ type: 'profile', id });
+										}
+									}}
+								>
+									Activate
+								</span>
+							{/if}
 						</button>
 					{/each}
 				</nav>
 			</Collapsible.Content>
 		</Collapsible.Root>
 
-		<div class="my-3 border-t border-border"></div>
+		<!-- <div class="my-3 border-t border-border"></div> -->
 
 		<!-- Devices -->
-		<div>
+		<Collapsible.Root open>
+			<Collapsible.Trigger class="group flex w-full items-center justify-between px-5 py-1">
+				<span class="text-[0.5rem] font-medium tracking-wide text-muted-foreground uppercase"> Devices </span>
+				<ChevronRight
+					width="12"
+					height="12"
+					class="shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
+				/>
+			</Collapsible.Trigger>
+			<Collapsible.Content>
+				<nav class="mt-1 space-y-0.5 px-3">
+					{#each [...session.devices.devices] as [id, device] (id)}
+						<button onclick={() => onNavChange?.({ type: 'device', id })} class={navClass({ type: 'device', id })}>
+							<span class="truncate">{sanitizeString(id)}</span>
+							<span
+								class={cn(
+									'h-1.5 w-1.5 shrink-0 rounded-full',
+									device.connected ? 'bg-success' : 'bg-muted-foreground/30'
+								)}
+								title={device.connected ? 'Connected' : 'Disconnected'}
+							></span>
+						</button>
+					{/each}
+				</nav>
+			</Collapsible.Content>
+		</Collapsible.Root>
+		<!-- <div>
 			<h3 class="mb-1 px-2 text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Devices</h3>
 			<nav class="space-y-0.5">
 				{#each [...session.devices.devices] as [id, device] (id)}
@@ -91,7 +154,7 @@
 					</button>
 				{/each}
 			</nav>
-		</div>
+		</div> -->
 	</aside>
 
 	<!-- Main Content -->

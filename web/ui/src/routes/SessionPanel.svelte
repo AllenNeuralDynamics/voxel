@@ -1,59 +1,65 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
+	import { Logout } from '$lib/icons';
 	import { sanitizeString } from '$lib/utils';
 
 	interface Props {
 		session: Session;
+		onExit?: () => void;
 	}
 
-	let { session }: Props = $props();
+	let { session, onExit }: Props = $props();
 
-	const activeProfileLabel = $derived(
-		(() => {
-			const p = session.activeProfileConfig;
-			return p ? (p.label ?? p.desc ?? sanitizeString(session.activeProfileId ?? '')) : 'No profile';
-		})()
-	);
+	const activeProfileLabel = $derived.by(() => {
+		const id = session.activeProfileId;
+		const p = id ? (session.config.profiles[id] ?? null) : null;
+		return p ? (p.label ?? sanitizeString(id ?? '')) : '—';
+	});
+
+	const deviceCount = $derived(session.devices.devices.size);
+	const connectedCount = $derived([...session.devices.devices.values()].filter((d) => d.connected).length);
+
+	/** Truncate directory path to last N segments. */
+	function shortenPath(path: string, segments = 3): string {
+		const parts = path.split('/').filter(Boolean);
+		if (parts.length <= segments) return path;
+		return '.../' + parts.slice(-segments).join('/');
+	}
 </script>
 
-<div class="h-full overflow-auto bg-card p-4">
-	<div class="space-y-4 text-sm text-muted-foreground">
-		<h3 class="text-xs font-medium uppercase">Session Info</h3>
-		<div class="grid grid-cols-2 gap-2 text-xs">
-			<span>Config</span>
-			<span class="text-foreground">{session.config.info.name}</span>
-			<span>Active profile</span>
-			<span class="text-foreground">{activeProfileLabel}</span>
-			<span>Tiles</span>
-			<span class="text-foreground">{session.tiles.length}</span>
-			<span>Stacks</span>
-			<span class="text-foreground">{session.stacks.length}</span>
-			<span>Stage connected</span>
-			<span class="text-foreground">{session.stage.connected ? 'Yes' : 'No'}</span>
-		</div>
+<div class="flex h-full flex-col justify-between bg-card px-4 py-3 text-xs">
+	<div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+		<span class="text-muted-foreground">Rig</span>
+		<span class="text-foreground">{session.config.info.name}</span>
 
-		<h3 class="text-xs font-medium uppercase">Stage</h3>
-		<div class="grid grid-cols-2 gap-2 text-xs">
-			<span>X position</span>
-			<span class="text-foreground">{session.stage.x.position.toFixed(3)} mm</span>
-			<span>Y position</span>
-			<span class="text-foreground">{session.stage.y.position.toFixed(3)} mm</span>
-			<span>Z position</span>
-			<span class="text-foreground">{session.stage.z.position.toFixed(3)} mm</span>
-			<span>Moving</span>
-			<span class="text-foreground">{session.stage.isMoving ? 'Yes' : 'No'}</span>
-		</div>
+		<span class="text-muted-foreground">Profile</span>
+		<span class="text-foreground">{activeProfileLabel}</span>
 
-		<h3 class="text-xs font-medium uppercase">Grid</h3>
-		<div class="grid grid-cols-2 gap-2 text-xs">
-			<span>Overlap</span>
-			<span class="text-foreground">{((session.gridConfig?.overlap ?? 0) * 100).toFixed(0)}%</span>
-			<span>Tile order</span>
-			<span class="text-foreground">{session.tileOrder}</span>
-			<span>Grid locked</span>
-			<span class="text-foreground">{session.gridLocked ? 'Yes' : 'No'}</span>
-			<span>FOV</span>
-			<span class="text-foreground">{session.fov.width.toFixed(2)} x {session.fov.height.toFixed(2)} mm</span>
-		</div>
+		<span class="text-muted-foreground">Devices</span>
+		<span class="text-foreground">{connectedCount}/{deviceCount}</span>
+
+		<span class="text-muted-foreground">Tiles</span>
+		<span class="text-foreground">{session.tiles.length}</span>
+
+		<span class="text-muted-foreground">Stacks</span>
+		<span class="text-foreground">{session.stacks.length}</span>
+
+		{#if session.sessionDir}
+			<span class="text-muted-foreground">Directory</span>
+			<span class="truncate text-foreground" title={session.sessionDir}>
+				{shortenPath(session.sessionDir)}
+			</span>
+		{/if}
+	</div>
+
+	<div class="flex justify-end">
+		<button
+			onclick={() => onExit?.()}
+			class="flex cursor-pointer items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+			aria-label="Close Session"
+			title="Close Session"
+		>
+			Exit <Logout width="11" height="11" />
+		</button>
 	</div>
 </div>

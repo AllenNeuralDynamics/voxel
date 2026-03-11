@@ -1,10 +1,10 @@
 import csv
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal, Self
 
 import numpy as np
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Discriminator, Field, TypeAdapter, model_validator
 
 from vxl.quantity import Angle, Frequency, NormalizedRange, Voltage, VoltageRange
 
@@ -13,6 +13,11 @@ class BaseWaveform(BaseModel, ABC):
     voltage: VoltageRange
     window: NormalizedRange
     rest_voltage: Voltage = Voltage(0.0)
+
+    @model_validator(mode="after")
+    def clamp_rest_voltage(self) -> Self:
+        self.rest_voltage = Voltage(max(self.voltage.min, min(self.voltage.max, float(self.rest_voltage))))
+        return self
 
     def get_array(self, total_samples: int) -> np.ndarray:
         """Generate the waveform array for the entire task duration."""
@@ -218,4 +223,14 @@ class CSVWaveform(BaseWaveform):
         return generate_multi_point_waveform(n=n, points=self._points, voltage_range=self.voltage)
 
 
-Waveform = SquareWave | SineWave | TriangleWave | SawtoothWave | MultiPointWaveform | PulseWaveform | CSVWaveform
+Waveform = Annotated[
+    SquareWave | SineWave | TriangleWave | SawtoothWave | MultiPointWaveform | PulseWaveform | CSVWaveform,
+    Discriminator("type"),
+]
+
+_WaveformAdapter = TypeAdapter(Waveform)
+
+
+def validate_waveform(data: dict) -> Waveform:
+    """Validate a single waveform dict into the appropriate Waveform subtype."""
+    return _WaveformAdapter.validate_python(data)

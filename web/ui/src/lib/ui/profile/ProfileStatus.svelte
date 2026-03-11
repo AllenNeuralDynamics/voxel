@@ -45,7 +45,7 @@
 			variant="outline"
 			class="rounded-full"
 			onclick={() => session.activateProfile(profileId)}
-			disabled={session.isMutating}
+			disabled={session.isSwitchingProfile}
 		>
 			Activate
 		</Button>

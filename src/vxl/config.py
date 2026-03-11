@@ -1,6 +1,7 @@
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from rigup.device.base import CommandRequest
 
 from rigup import RigConfig
 from vxl.sync import SyncTaskData
@@ -79,6 +80,8 @@ class ChannelConfig(BaseModel):
 class ProfileConfig(BaseModel):
     channels: list[str]
     daq: SyncTaskData
+    props: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)
     desc: str = ""
     label: str | None = None
 
@@ -319,6 +322,21 @@ class VoxelRigConfig(RigConfig):
                     f"Profile '{profile_id}' defines waveforms for devices not in daq.acq_ports: "
                     f"{sorted(extra_waveforms)}",
                 )
+
+            # 7. Props/setup - device IDs must belong to the profile (excluding filter wheels)
+            settable_devices = profile_devices - self.filter_wheels
+            for device_id in profile.props:
+                if device_id not in settable_devices:
+                    errors.append(
+                        f"Profile '{profile_id}' props references '{device_id}' "
+                        f"which is not a settable device for this profile",
+                    )
+            for device_id in profile.setup:
+                if device_id not in settable_devices:
+                    errors.append(
+                        f"Profile '{profile_id}' setup references '{device_id}' "
+                        f"which is not a settable device for this profile",
+                    )
 
         return errors
 

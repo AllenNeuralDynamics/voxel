@@ -106,11 +106,15 @@ export interface TriggerConfig {
 
 /**
  * Acquisition timing parameters (matches backend FrameTiming from voxel.sync_task)
+ *
+ * Quantity fields (sample_rate, duration, rest_time) are floats in SI base units
+ * (Hz, seconds). YAML uses unit strings for readability (e.g. "100 kHz"),
+ * but Pydantic's Quantity(float) subclass parses them to SI floats on load.
  */
 export interface FrameTiming {
-	sample_rate: string; // Frequency with unit, e.g., "100 kHz"
-	duration: string; // Time with unit, e.g., "0.1 s"
-	rest_time: string; // Time with unit, e.g., "0 s"
+	sample_rate: number; // Hz (SI)
+	duration: number; // seconds (SI)
+	rest_time: number; // seconds (SI)
 	clock?: TriggerConfig | null;
 }
 
@@ -137,7 +141,7 @@ export interface SquareWaveform extends BaseWaveform {
 	type: 'square';
 	duty_cycle: number;
 	cycles?: number | null;
-	frequency?: string | null; // Frequency with unit
+	frequency?: number | null; // Hz (SI)
 }
 
 /**
@@ -145,7 +149,7 @@ export interface SquareWaveform extends BaseWaveform {
  */
 export interface SineWaveform extends BaseWaveform {
 	type: 'sine';
-	frequency: string; // Frequency with unit
+	frequency: number; // Hz (SI)
 	phase?: number; // Radians
 }
 
@@ -154,7 +158,7 @@ export interface SineWaveform extends BaseWaveform {
  */
 export interface TriangleWaveform extends BaseWaveform {
 	type: 'triangle';
-	frequency: string; // Frequency with unit
+	frequency: number; // Hz (SI)
 	symmetry?: number; // 0.0 to 1.0
 }
 
@@ -163,7 +167,7 @@ export interface TriangleWaveform extends BaseWaveform {
  */
 export interface SawtoothWaveform extends BaseWaveform {
 	type: 'sawtooth';
-	frequency: string; // Frequency with unit
+	frequency: number; // Hz (SI)
 	width?: number;
 }
 
@@ -206,6 +210,15 @@ export interface SyncTaskData {
 }
 
 /**
+ * Setup command entry (matches backend CommandRequest from rigup.device.base)
+ */
+export interface SetupCommand {
+	attr: string;
+	args?: unknown[];
+	kwargs?: Record<string, unknown>;
+}
+
+/**
  * Profile configuration - backend model (matches backend ProfileConfig from voxel.config)
  */
 export interface ProfileConfig {
@@ -213,6 +226,8 @@ export interface ProfileConfig {
 	desc: string;
 	channels: string[]; // list of channel IDs
 	daq: SyncTaskData; // DAQ sync task configuration
+	props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
+	setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
 }
 
 /**
