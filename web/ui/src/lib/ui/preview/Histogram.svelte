@@ -4,6 +4,7 @@
 	import ColormapPicker from './ColormapPicker.svelte';
 	import { EyeOff } from '$lib/icons';
 	import type { ColormapCatalog } from '$lib/main';
+	import { useEventListener } from 'runed';
 
 	interface Props {
 		label: string;
@@ -221,11 +222,7 @@
 		windowMax = Math.min(dataTypeMax, Math.round(pivot + newRange * (1 - mouseRel)));
 	}
 
-	$effect(() => {
-		if (!histContainerEl) return;
-		histContainerEl.addEventListener('wheel', onHistWheel, { passive: false });
-		return () => histContainerEl?.removeEventListener('wheel', onHistWheel);
-	});
+	useEventListener(() => histContainerEl, 'wheel', onHistWheel, { passive: false });
 
 	// ── Floating Level Inputs ─────────────────────────────────────────
 

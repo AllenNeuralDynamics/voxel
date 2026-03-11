@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { useEventListener, useThrottle } from 'runed';
+
 	interface Props {
 		value?: number;
 		target: number;
@@ -17,26 +19,17 @@
 	);
 
 	let inputElement = $state<HTMLInputElement | undefined>();
-	let lastInputTime = 0;
-	let throttleTimer: ReturnType<typeof setTimeout> | undefined;
+
+	const throttledChange = useThrottle(
+		(v: number) => {
+			onChange?.(v);
+		},
+		() => throttle
+	);
 
 	function handleInput(e: Event) {
-		if (throttle <= 0 || !onChange) return;
-		const v = parseFloat((e.currentTarget as HTMLInputElement).value);
-		const now = Date.now();
-		if (now - lastInputTime >= throttle) {
-			lastInputTime = now;
-			onChange(v);
-		} else {
-			clearTimeout(throttleTimer);
-			throttleTimer = setTimeout(
-				() => {
-					lastInputTime = Date.now();
-					onChange(v);
-				},
-				throttle - (now - lastInputTime)
-			);
-		}
+		if (!onChange) return;
+		throttledChange(parseFloat((e.currentTarget as HTMLInputElement).value));
 	}
 
 	let isFocused = $state(false);
@@ -49,11 +42,7 @@
 		onChange?.(newValue);
 	}
 
-	$effect(() => {
-		if (!inputElement) return;
-		inputElement.addEventListener('wheel', handleWheel, { passive: false });
-		return () => inputElement?.removeEventListener('wheel', handleWheel);
-	});
+	useEventListener(() => inputElement, 'wheel', handleWheel, { passive: false });
 </script>
 
 <input
@@ -67,7 +56,7 @@
 	value={target}
 	oninput={throttle > 0 ? handleInput : undefined}
 	onchange={(e) => {
-		clearTimeout(throttleTimer);
+		throttledChange.cancel();
 		onChange?.(parseFloat(e.currentTarget.value));
 	}}
 	class="slider {className}"

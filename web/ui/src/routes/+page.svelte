@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { useEventListener } from 'runed';
 	import { page } from '$app/state';
 	import { App } from '$lib/main';
 	import { parseView, parseConfigureNav, navigate, DEFAULT_VIEW } from '$lib/navigation';
@@ -75,8 +76,9 @@
 		}
 	}
 
+	useEventListener(window, 'beforeunload', cleanup);
+
 	onMount(async () => {
-		window.addEventListener('beforeunload', cleanup);
 		try {
 			app = new App();
 			await app.initialize();
@@ -85,10 +87,7 @@
 		}
 	});
 
-	onDestroy(() => {
-		window.removeEventListener('beforeunload', cleanup);
-		cleanup();
-	});
+	onDestroy(cleanup);
 </script>
 
 {#snippet tabButton(id: string, label: string)}

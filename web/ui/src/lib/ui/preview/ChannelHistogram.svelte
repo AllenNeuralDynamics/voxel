@@ -3,6 +3,7 @@
 	import { computeAutoLevels } from '$lib/utils';
 	import ColormapPicker from './ColormapPicker.svelte';
 	import type { ColormapCatalog } from '$lib/main';
+	import { useEventListener } from 'runed';
 
 	type WindowMode = 'visible' | 'hover' | 'inline';
 
@@ -167,12 +168,7 @@
 		dragging = null;
 	}
 
-	$effect(() => {
-		if (dragging) {
-			document.addEventListener('mouseup', onMouseUp);
-			return () => document.removeEventListener('mouseup', onMouseUp);
-		}
-	});
+	useEventListener(() => (dragging ? document : null), 'mouseup', onMouseUp);
 
 	// ── Auto Fit & Auto Levels ────────────────────────────────────────
 
@@ -228,10 +224,8 @@
 		windowMax = Math.min(dataTypeMax, Math.round(pivot + newRange * (1 - mouseRel)));
 	}
 
-	$effect(() => {
-		if (!histContainerEl || windowMode !== 'inline') return;
-		histContainerEl.addEventListener('wheel', onHistWheel, { passive: false });
-		return () => histContainerEl?.removeEventListener('wheel', onHistWheel);
+	useEventListener(() => (histContainerEl && windowMode === 'inline' ? histContainerEl : null), 'wheel', onHistWheel, {
+		passive: false
 	});
 
 	// ── Layout ────────────────────────────────────────────────────────

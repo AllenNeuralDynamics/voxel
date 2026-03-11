@@ -78,6 +78,7 @@
 
 <script lang="ts">
 	import { cn } from '$lib/utils';
+	import { useEventListener, useThrottle, useDebounce } from 'runed';
 
 	interface Props extends SpinBoxVariants {
 		value?: number;
@@ -125,35 +126,19 @@
 
 	const styles = $derived(spinBoxVariants({ size, appearance }));
 
-	let lastDragCallTime = 0;
-	let dragThrottleTimer: ReturnType<typeof setTimeout> | undefined;
+	const throttledDragCallback = useThrottle(
+		(newValue: number) => {
+			onValueChange?.(newValue);
+		},
+		() => throttle
+	);
 
-	function throttledCallback(newValue: number) {
-		if (!onValueChange) return;
-		if (throttle <= 0) {
-			onValueChange(newValue);
-			return;
-		}
-		const now = Date.now();
-		if (now - lastDragCallTime >= throttle) {
-			lastDragCallTime = now;
-			onValueChange(newValue);
-		} else {
-			clearTimeout(dragThrottleTimer);
-			dragThrottleTimer = setTimeout(
-				() => {
-					lastDragCallTime = Date.now();
-					onValueChange(newValue);
-				},
-				throttle - (now - lastDragCallTime)
-			);
-		}
-	}
-
-	// --- Debounce state ---
 	let isEditing = $state(false);
 	let editingText = $state('');
-	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+	const debouncedCommit = useDebounce(
+		() => commitEdit(),
+		() => debounce
+	);
 
 	function snapToStep(v: number): number {
 		if (step <= 0 || !isFinite(step)) return v;
@@ -162,7 +147,6 @@
 	}
 
 	function commitEdit() {
-		clearTimeout(debounceTimer);
 		if (!isEditing) return;
 		isEditing = false;
 
@@ -222,11 +206,11 @@
 		newValue = Math.max(min, Math.min(max, newValue));
 		value = newValue;
 
-		throttledCallback(newValue);
+		throttledDragCallback(newValue);
 	}
 
 	function handleMouseUp() {
-		clearTimeout(dragThrottleTimer);
+		throttledDragCallback.cancel();
 		if (isDragging && onValueChange) {
 			onValueChange(value);
 		}
@@ -252,8 +236,7 @@
 		if (debounce > 0) {
 			isEditing = true;
 			editingText = target.value;
-			clearTimeout(debounceTimer);
-			debounceTimer = setTimeout(commitEdit, debounce);
+			debouncedCommit();
 			return;
 		}
 
@@ -269,11 +252,15 @@
 	}
 
 	function handleBlur() {
-		if (debounce > 0) commitEdit();
+		if (debounce > 0) {
+			debouncedCommit.cancel();
+			commitEdit();
+		}
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && debounce > 0) {
+			debouncedCommit.cancel();
 			commitEdit();
 		}
 	}
@@ -310,23 +297,13 @@
 		}
 	}
 
+	useEventListener(() => wrapperElement, 'wheel', handleWheel, { passive: false });
+
+	// Safety net: clean up drag listeners if component unmounts mid-drag
 	$effect(() => {
 		return () => {
-			clearTimeout(debounceTimer);
 			document.removeEventListener('mousemove', handleMouseMove);
 			document.removeEventListener('mouseup', handleMouseUp);
-		};
-	});
-
-	$effect(() => {
-		if (!wrapperElement) return;
-
-		wrapperElement.addEventListener('wheel', handleWheel, { passive: false });
-
-		return () => {
-			if (wrapperElement) {
-				wrapperElement.removeEventListener('wheel', handleWheel);
-			}
 		};
 	});
 </script>

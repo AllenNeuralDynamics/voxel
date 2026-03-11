@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { SpinBox } from '$lib/ui/kit';
 	import { computeAutoLevels } from '$lib/utils';
+	import { useEventListener } from 'runed';
 
 	interface Props {
 		histData: number[] | undefined | null; // Allow null/undefined
@@ -139,14 +140,7 @@
 		isDraggingMax = false;
 	}
 
-	$effect(() => {
-		if (isDraggingMin || isDraggingMax) {
-			document.addEventListener('mouseup', handleMouseUp);
-			return () => {
-				document.removeEventListener('mouseup', handleMouseUp);
-			};
-		}
-	});
+	useEventListener(() => (isDraggingMin || isDraggingMax ? document : null), 'mouseup', handleMouseUp);
 
 	function handleFitDisplayWindow() {
 		if (!hasValidData || !histogram) return;
