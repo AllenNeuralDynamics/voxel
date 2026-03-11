@@ -1,10 +1,9 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type Tile, type StackStatus } from '$lib/main/types';
-	import { ContextMenu } from '$lib/ui/kit';
+	import { Button, ContextMenu, SpinBox } from '$lib/ui/kit';
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
-	import StagePosition from './StagePosition.svelte';
 	import { GridLines, StackLight, PathArrow, Plus, ImageLight } from '$lib/icons';
 	import type { Component } from 'svelte';
 
@@ -696,7 +695,58 @@
 						!session.layerVisibility.fov
 					)}
 				</div>
-				<StagePosition {session} />
+				<div class="flex items-center gap-3">
+					<div class="flex items-center gap-2">
+						<SpinBox
+							value={session.stage.x.position}
+							min={session.stage.x.lowerLimit}
+							max={session.stage.x.upperLimit}
+							step={0.01}
+							decimals={2}
+							numCharacters={8}
+							size="sm"
+							prefix="X"
+							suffix="mm"
+							color={session.stage.x.isMoving ? 'var(--danger)' : undefined}
+							onChange={(v) => session.stage.x.move(v)}
+						/>
+						<SpinBox
+							value={session.stage.y.position}
+							min={session.stage.y.lowerLimit}
+							max={session.stage.y.upperLimit}
+							step={0.01}
+							decimals={2}
+							numCharacters={8}
+							size="sm"
+							prefix="Y"
+							suffix="mm"
+							color={session.stage.y.isMoving ? 'var(--danger)' : undefined}
+							onChange={(v) => session.stage.y.move(v)}
+						/>
+						<SpinBox
+							value={session.stage.z.position}
+							min={session.stage.z.lowerLimit}
+							max={session.stage.z.upperLimit}
+							step={0.001}
+							decimals={3}
+							numCharacters={8}
+							size="sm"
+							prefix="Z"
+							suffix="mm"
+							color={session.stage.z.isMoving ? 'var(--danger)' : undefined}
+							onChange={(v) => session.stage.z.move(v)}
+						/>
+					</div>
+					<Button
+						variant={session.stage.isMoving ? 'danger' : 'outline'}
+						size="xs"
+						onclick={() => session.stage.halt()}
+						disabled={!session.stage.isMoving}
+						aria-label="Halt stage"
+					>
+						Halt
+					</Button>
+				</div>
 			</div>
 		</div>
 	{:else}

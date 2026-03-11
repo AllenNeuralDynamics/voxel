@@ -3,8 +3,25 @@
 	import { cn, sanitizeString } from '$lib/utils';
 	import SliderInput from '$lib/ui/SliderInput.svelte';
 	import { Select, SpinBox, Button } from '$lib/ui/kit';
-	import DynamicProperties from './DynamicProperties.svelte';
-	import { camera as cameraExclusions } from './utils';
+	import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
+
+	const cameraExclusions = {
+		props: [
+			'exposure_time_ms',
+			'pixel_format',
+			'binning',
+			'sensor_size_px',
+			'pixel_size_um',
+			'pixel_type',
+			'frame_size_px',
+			'frame_size_mb',
+			'frame_area_mm',
+			'frame_region',
+			'frame_rate_hz',
+			'stream_info'
+		],
+		cmds: ['update_frame_region']
+	};
 
 	interface Props {
 		session: Session;
@@ -223,7 +240,7 @@
 				</div>
 
 				<!-- Dynamic: remaining properties + commands -->
-				<DynamicProperties {deviceId} {devicesManager} exclusions={cameraExclusions} />
+				<DeviceBrowser {deviceId} {devicesManager} exclusions={cameraExclusions} />
 			</div>
 
 			<!-- RIGHT COLUMN: sensor info, stream -->

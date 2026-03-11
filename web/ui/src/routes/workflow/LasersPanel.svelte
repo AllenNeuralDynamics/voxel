@@ -6,6 +6,7 @@
 	import Slider from '$lib/ui/kit/Slider.svelte';
 	import { InformationOutline, Power } from '$lib/icons';
 	import { Popover } from 'bits-ui';
+	import { useInterval } from 'runed';
 
 	interface Props {
 		session: Session;
@@ -16,13 +17,12 @@
 	const allLasers = $derived(Object.values(session.lasers));
 
 	// Record power history on all lasers
-	$effect(() => {
-		const interval = setInterval(() => {
+	useInterval(100, {
+		callback: () => {
 			for (const laser of allLasers) {
 				laser.recordPower();
 			}
-		}, 100);
-		return () => clearInterval(interval);
+		}
 	});
 
 	const profileLasers = $derived(

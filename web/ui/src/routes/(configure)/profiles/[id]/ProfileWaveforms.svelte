@@ -140,11 +140,13 @@
 	let timingDirty = $state(false);
 
 	// Reset local timing when config timing changes (e.g. from backend broadcast)
-	$effect(() => {
-		const t = configTiming;
-		localTiming = { sample_rate: t.sample_rate, duration: t.duration, rest_time: t.rest_time };
-		timingDirty = false;
-	});
+	watch(
+		() => configTiming,
+		(t) => {
+			localTiming = { sample_rate: t.sample_rate, duration: t.duration, rest_time: t.rest_time };
+			timingDirty = false;
+		}
+	);
 
 	function updateTimingField(field: keyof FrameTiming, value: number) {
 		if (!isFinite(value)) return;

@@ -1,12 +1,10 @@
 <script lang="ts">
 	import type { App } from '$lib/main';
 	import type { SessionDirectory, JsonSchema } from '$lib/main';
-	import SessionList from '$lib/ui/launch/SessionList.svelte';
-	import SessionForm from '$lib/ui/launch/SessionForm.svelte';
+	import SessionForm from './SessionForm.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
-	import ClientStatus from '$lib/ui/ClientStatus.svelte';
-	import { Collapsible } from 'bits-ui';
-	import { ChevronRight } from '$lib/icons';
+	import { Collapsible, Tooltip } from 'bits-ui';
+	import { ChevronRight, FolderOpenOutline, ArrowRight } from '$lib/icons';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 
 	const { app }: { app: App } = $props();
@@ -23,6 +21,19 @@
 	const isIdle = $derived(phase === 'idle');
 	const isLaunching = $derived(phase === 'launching');
 	const connectionState = $derived(app.client.connectionState);
+	const connectionStatus = $derived.by(() => {
+		switch (connectionState) {
+			case 'connected':
+				return { color: 'bg-success', text: 'Connected' };
+			case 'connecting':
+			case 'reconnecting':
+				return { color: 'bg-warning', text: app.client.connectionMessage };
+			case 'failed':
+				return { color: 'bg-danger', text: app.client.connectionMessage };
+			default:
+				return { color: 'bg-muted-foreground', text: 'Offline' };
+		}
+	});
 	const logs = $derived(app.logs);
 
 	$effect(() => {
@@ -87,6 +98,22 @@
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to resume session';
 		}
+	}
+
+	function formatRelativeTime(isoString: string): string {
+		const date = new Date(isoString);
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffMins = Math.floor(diffMs / 60000);
+		const diffHours = Math.floor(diffMs / 3600000);
+		const diffDays = Math.floor(diffMs / 86400000);
+
+		if (diffMins < 1) return 'Just now';
+		if (diffMins < 60) return `${diffMins}m ago`;
+		if (diffHours < 24) return `${diffHours}h ago`;
+		if (diffDays < 7) return `${diffDays}d ago`;
+
+		return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 	}
 </script>
 
@@ -158,12 +185,61 @@
 				<h2 class="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
 			</div>
 			<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-2">
-				<SessionList {sessions} loading={loadingSessions} onResume={handleResumeSession} />
+				{#if loadingSessions}
+					<div class="flex items-center justify-center rounded border border-border bg-card py-12">
+						<div class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground"></div>
+						<span class="ml-3 text-sm text-muted-foreground">Loading sessions...</span>
+					</div>
+				{:else if sessions.length === 0}
+					<div
+						class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10"
+					>
+						<FolderOpenOutline width="32" height="32" class="text-muted-foreground/50" />
+						<p class="mt-2 text-sm text-muted-foreground">No recent sessions</p>
+						<p class="text-xs text-muted-foreground/60">Create a new session to get started</p>
+					</div>
+				{:else}
+					<div class="space-y-2">
+						{#each sessions as session (session.path)}
+							<button
+								class="group flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-foreground/20 hover:bg-accent"
+								onclick={() => handleResumeSession(session)}
+							>
+								<span class="min-w-0 flex-1 truncate text-xs text-foreground">
+									<span class="text-muted-foreground">{session.root_name} /</span>
+									{session.name}
+								</span>
+								<span class="shrink-0 text-[0.65rem] text-muted-foreground/60">
+									{formatRelativeTime(session.modified)}
+								</span>
+								<ArrowRight
+									width="14"
+									height="14"
+									class="shrink-0 text-muted-foreground/30 transition-colors group-hover:text-foreground"
+								/>
+							</button>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		{/if}
 
 		<div class="shrink-0 p-4 pt-2">
-			<ClientStatus client={app.client} />
+			<Tooltip.Provider>
+				<Tooltip.Root delayDuration={200}>
+					<Tooltip.Trigger class="cursor-pointer">
+						<span class="block h-1.5 w-1.5 rounded-full {connectionStatus.color}"></span>
+					</Tooltip.Trigger>
+					<Tooltip.Portal>
+						<Tooltip.Content
+							sideOffset={4}
+							class="z-50 rounded border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
+						>
+							{connectionStatus.text}
+						</Tooltip.Content>
+					</Tooltip.Portal>
+				</Tooltip.Root>
+			</Tooltip.Provider>
 		</div>
 	</div>
 

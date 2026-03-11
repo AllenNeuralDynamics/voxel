@@ -1,9 +1,12 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
-	import { ProfilePopover, ProfileStatus } from '$lib/ui/profile';
-	import { GridControls } from '$lib/ui/grid/canvas';
+	import { ProfileInfoPopover, ProfileStatus } from '$lib/ui/profile';
+	import { GridControls } from '$lib/ui/grid';
+	import { Dialog } from '$lib/ui/kit';
 	import { sanitizeString } from '$lib/utils';
+	import { Plus, TrashCanOutline } from '$lib/icons';
 	import { tv } from 'tailwind-variants';
+	import { watch } from 'runed';
 
 	interface Props {
 		session: Session;
@@ -36,10 +39,12 @@
 	// Selected tab auto-follows the active profile
 	let selectedTab = $state<string | null>(null);
 
-	$effect(() => {
-		const activeId = session.activeProfileId;
-		if (activeId) selectedTab = activeId;
-	});
+	watch(
+		() => session.activeProfileId,
+		(activeId) => {
+			if (activeId) selectedTab = activeId;
+		}
+	);
 
 	const acqIds = $derived(session.acquisitionProfileIds);
 	const scoutLocked = $derived(session.workflow.stepStates['scout'] === 'committed');
@@ -54,6 +59,27 @@
 	const activeTab = $derived.by(() => {
 		return tabIds.includes(selectedTab ?? '') ? selectedTab! : (tabIds[0] ?? null);
 	});
+
+	const activeTabLabel = $derived(
+		activeTab ? (session.config.profiles[activeTab]?.label ?? sanitizeString(activeTab)) : ''
+	);
+	const isActiveInPlan = $derived(activeTab ? activeTab in session.plan.grid_configs : false);
+
+	let addDialogOpen = $state(false);
+	let removeDialogOpen = $state(false);
+
+	function confirmAddToPlan() {
+		if (!activeTab) return;
+		session.addAcquisitionProfile(activeTab);
+		addDialogOpen = false;
+	}
+
+	function confirmRemoveFromPlan() {
+		if (!activeTab) return;
+		session.removeAcquisitionProfile(activeTab);
+		selectedTab = null;
+		removeDialogOpen = false;
+	}
 </script>
 
 <div class="flex h-full flex-col justify-between">
@@ -73,16 +99,26 @@
 			{#if activeTab}
 				<div class="ml-auto flex items-center gap-1.5">
 					<ProfileStatus {session} profileId={activeTab} size="sm" />
-					<ProfilePopover
-						{session}
-						profileId={activeTab}
-						size="sm"
-						locked={scoutLocked}
-						onRemove={() => {
-							session.removeAcquisitionProfile(activeTab);
-							selectedTab = null;
-						}}
-					/>
+					<ProfileInfoPopover {session} profileId={activeTab} size="sm" />
+					{#if !scoutLocked}
+						{#if isActiveInPlan}
+							<button
+								onclick={() => (removeDialogOpen = true)}
+								class="rounded-lg px-1 py-0.5 text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger"
+								title="Remove from plan"
+							>
+								<TrashCanOutline width="16" height="16" />
+							</button>
+						{:else}
+							<button
+								onclick={() => (addDialogOpen = true)}
+								class="rounded-lg px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								title="Add to plan"
+							>
+								<Plus width="16" height="16" />
+							</button>
+						{/if}
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -93,3 +129,63 @@
 		{/if}
 	</div>
 </div>
+
+<!-- Add to plan confirmation -->
+<Dialog.Root bind:open={addDialogOpen}>
+	<Dialog.Portal>
+		<Dialog.Overlay />
+		<Dialog.Content>
+			<Dialog.Header>
+				<Dialog.Title>Add to plan</Dialog.Title>
+				<Dialog.Description>
+					Add <strong>{activeTabLabel}</strong> to the acquisition plan? A default grid configuration will be created for
+					this profile.
+				</Dialog.Description>
+			</Dialog.Header>
+			<Dialog.Footer>
+				<button
+					onclick={() => (addDialogOpen = false)}
+					class="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={confirmAddToPlan}
+					class="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+				>
+					Add
+				</button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>
+
+<!-- Remove from plan confirmation -->
+<Dialog.Root bind:open={removeDialogOpen}>
+	<Dialog.Portal>
+		<Dialog.Overlay />
+		<Dialog.Content>
+			<Dialog.Header>
+				<Dialog.Title>Remove from plan</Dialog.Title>
+				<Dialog.Description>
+					Remove <strong>{activeTabLabel}</strong> from the acquisition plan? Grid configuration and stacks for this profile
+					will be discarded.
+				</Dialog.Description>
+			</Dialog.Header>
+			<Dialog.Footer>
+				<button
+					onclick={() => (removeDialogOpen = false)}
+					class="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={confirmRemoveFromPlan}
+					class="rounded bg-danger px-3 py-1.5 text-xs text-white transition-colors hover:bg-danger/90"
+				>
+					Remove
+				</button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

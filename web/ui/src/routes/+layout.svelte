@@ -10,12 +10,12 @@
 	import { App } from '$lib/main';
 	import { setAppContext } from '$lib/context';
 	import { PreviewCanvas } from '$lib/ui/preview';
-	import { GridCanvas } from '$lib/ui/grid/canvas';
+	import { GridCanvas } from '$lib/ui/grid';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button, Dialog } from '$lib/ui/kit';
 	import { AlertCircleOutline, TuneVertical, Power } from '$lib/icons';
-	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
+	import WorkflowTabs from './WorkflowTabs.svelte';
 	import LaunchScreen from './LaunchScreen.svelte';
 	import { cn } from '$lib/utils';
 

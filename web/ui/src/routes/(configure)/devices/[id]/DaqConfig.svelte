@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { cn, sanitizeString } from '$lib/utils';
-	import DynamicProperties from './DynamicProperties.svelte';
+	import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
 
 	interface Props {
 		session: Session;
@@ -42,7 +42,7 @@
 		{/if}
 
 		{#if device?.connected}
-			<DynamicProperties {deviceId} {devicesManager} />
+			<DeviceBrowser {deviceId} {devicesManager} />
 		{:else}
 			<div class="flex items-center justify-center py-12">
 				<p class="text-sm text-muted-foreground">DAQ device not available</p>

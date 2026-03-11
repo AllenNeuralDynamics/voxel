@@ -3,8 +3,12 @@
 	import { cn, sanitizeString, wavelengthToColor } from '$lib/utils';
 	import SliderInput from '$lib/ui/SliderInput.svelte';
 	import { Switch } from '$lib/ui/kit';
-	import DynamicProperties from './DynamicProperties.svelte';
-	import { laser as laserExclusions } from './utils';
+	import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
+
+	const laserExclusions = {
+		props: ['wavelength', 'is_enabled', 'power_setpoint_mw', 'power_mw', 'temperature_c'],
+		cmds: ['enable', 'disable']
+	};
 
 	interface Props {
 		session: Session;
@@ -96,7 +100,7 @@
 			{/if}
 
 			<!-- Dynamic: remaining properties + commands -->
-			<DynamicProperties {deviceId} {devicesManager} exclusions={laserExclusions} />
+			<DeviceBrowser {deviceId} {devicesManager} exclusions={laserExclusions} />
 		</div>
 	{:else}
 		<div class="flex items-center justify-center py-12">
