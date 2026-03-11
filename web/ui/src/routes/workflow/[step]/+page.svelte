@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { getAppContext } from '$lib/context';
-	import ScoutPanel from '../../ScoutPanel.svelte';
+	import ScoutPanel from '../ScoutPanel.svelte';
 
 	const app = getAppContext();
 	const session = $derived(app.session!);

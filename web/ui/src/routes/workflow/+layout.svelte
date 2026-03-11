@@ -4,8 +4,8 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
-	import LasersPanel from '../LasersPanel.svelte';
-	import CamerasPanel from '../CamerasPanel.svelte';
+	import LasersPanel from './LasersPanel.svelte';
+	import CamerasPanel from './CamerasPanel.svelte';
 	import { ProfileSelector } from '$lib/ui/profile';
 
 	let { children } = $props();
