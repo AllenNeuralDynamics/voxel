@@ -19,7 +19,10 @@
 
 	const roots = $derived(app.status?.roots ?? []);
 	const rigs = $derived(app.status?.rigs ?? []);
-	const isLaunching = $derived(app.status?.phase === 'launching');
+	const phase = $derived(app.status?.phase);
+	const isIdle = $derived(phase === 'idle');
+	const isLaunching = $derived(phase === 'launching');
+	const connectionState = $derived(app.client.connectionState);
 	const logs = $derived(app.logs);
 
 	$effect(() => {
@@ -101,13 +104,6 @@
 					<h1 class="text-2xl font-light text-foreground uppercase">Voxel</h1>
 				</div>
 				<p class="text-xs text-muted-foreground">Light sheet microscopy</p>
-
-				{#if isLaunching}
-					<div class="flex items-center gap-2">
-						<div class="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-						<p class="text-sm text-muted-foreground">Starting session...</p>
-					</div>
-				{/if}
 			</div>
 
 			{#if error}
@@ -117,7 +113,22 @@
 			{/if}
 		</div>
 
-		{#if !isLaunching}
+		{#if connectionState === 'failed'}
+			<div class="flex flex-1 flex-col items-center justify-center gap-3">
+				<p class="text-sm text-danger">{app.client.connectionMessage}</p>
+				<button
+					onclick={() => app.retryConnection()}
+					class="rounded border border-input bg-transparent px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				>
+					Retry
+				</button>
+			</div>
+		{:else if !isIdle || isLaunching}
+			<div class="flex flex-1 items-center justify-center gap-2">
+				<div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
+				<p class="text-xs text-muted-foreground">{isLaunching ? 'Starting session...' : app.client.connectionMessage}</p>
+			</div>
+		{:else}
 			<div class="shrink-0 px-4">
 				<Collapsible.Root class="mb-6">
 					<Collapsible.Trigger

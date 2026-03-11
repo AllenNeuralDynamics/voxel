@@ -1,11 +1,7 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import { useEventListener } from 'runed';
 	import { page } from '$app/state';
-	import { App } from '$lib/main';
+	import { getAppContext } from '$lib/context';
 	import { parseView, parseConfigureNav, navigate, DEFAULT_VIEW } from '$lib/navigation';
-	import SplashScreen from './SplashScreen.svelte';
-	import LaunchScreen from './LaunchScreen.svelte';
 	import { PreviewCanvas } from '$lib/ui/preview';
 	import { GridCanvas } from '$lib/ui/grid/canvas';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
@@ -23,23 +19,24 @@
 	import WorkflowTabs from '$lib/ui/WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
+	const app = getAppContext();
+	const session = $derived(app.session!);
+
 	// --- Reactive state derived from URL (single source of truth) ---
 
-	let app = $state<App | undefined>(undefined);
 	const viewId = $derived(parseView(page.url));
 	const configureNav = $derived(parseConfigureNav(page.url));
 
 	// --- Validate nav targets once session is available ---
 
 	$effect(() => {
-		if (!app?.session) return;
 		if (configureNav.type === 'device') {
-			const devices = app.session.devices.devices;
+			const devices = session.devices.devices;
 			if (!devices.has(configureNav.id)) {
 				const firstId = [...devices.keys()][0];
 				navigate('configure', firstId ? { type: 'device', id: firstId } : { type: 'channels' }, { replace: true });
 			}
-		} else if (configureNav.type === 'profile' && !(configureNav.id in app.session.config.profiles)) {
+		} else if (configureNav.type === 'profile' && !(configureNav.id in session.config.profiles)) {
 			navigate('configure', { type: 'channels' }, { replace: true });
 		}
 	});
@@ -66,28 +63,14 @@
 	}
 
 	function toggleView(id: string) {
-		navigate(viewId === id ? (app?.session?.workflow.steps[0]?.id ?? DEFAULT_VIEW) : id);
+		navigate(viewId === id ? (session.workflow.steps[0]?.id ?? DEFAULT_VIEW) : id);
 	}
 
-	function cleanup() {
-		if (app) {
-			app.destroy();
-			app = undefined;
-		}
-	}
-
-	useEventListener(window, 'beforeunload', cleanup);
-
-	onMount(async () => {
-		try {
-			app = new App();
-			await app.initialize();
-		} catch {
-			// Connection state managed by client — splash handles the UI
-		}
-	});
-
-	onDestroy(cleanup);
+	const workflow = $derived(session.workflow);
+	const tabClasses = cn(
+		'flex gap-1 items-center justify-center rounded-xl border border-border',
+		'px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors'
+	);
 </script>
 
 {#snippet tabButton(id: string, label: string)}
@@ -96,14 +79,7 @@
 	</button>
 {/snippet}
 
-{#if app?.session}
-	{@const session = app.session}
-	{@const workflow = session.workflow}
-	{@const tabClasses = cn(
-		'flex gap-1 items-center justify-center rounded-xl border border-border',
-		'px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors'
-	)}
-	<div class="h-screen w-full bg-background text-foreground">
+<div class="h-screen w-full bg-background text-foreground">
 		<PaneGroup direction="horizontal" autoSaveId="main-h">
 			<Pane defaultSize={60} minSize={50} maxSize={70} class="bg-zinc-900">
 				<!-- Control area: header + main + footer -->
@@ -213,10 +189,10 @@
 								<LasersPanel {session} />
 							{:else if bottomPanelTab === 'logs'}
 								<div class="h-full overflow-hidden bg-card p-2">
-									<LogViewer logs={app.logs} onClear={() => app?.clearLogs()} />
+									<LogViewer logs={app.logs} onClear={() => app.clearLogs()} />
 								</div>
 							{:else if bottomPanelTab === 'session'}
-								<SessionPanel {session} onExit={() => app?.closeSession()} />
+								<SessionPanel {session} onExit={() => app.closeSession()} />
 							{/if}
 						</Pane>
 					</PaneGroup>
@@ -269,8 +245,3 @@
 			</Pane>
 		</PaneGroup>
 	</div>
-{:else if app?.status?.phase === 'idle'}
-	<LaunchScreen {app} />
-{:else}
-	<SplashScreen {app} />
-{/if}
