@@ -9,6 +9,7 @@ This is a pure view component that emits signals for user actions.
 The parent (MainWindow) handles orchestration with VoxelQtApp.
 """
 
+import datetime
 import typing
 from typing import Any, cast, get_args, get_origin
 
@@ -363,9 +364,7 @@ class NewSessionForm(QWidget):
     def _update_path_preview(self) -> None:
         root_name = self._root_select.currentData()
         rig_name = self._rig_select.currentData()
-        target = self._metadata_select.get_value()
         session_name = self._name_input.text().strip()
-        values = self._metadata_form.get_values()
 
         if not root_name or not rig_name:
             self._path_preview.setText("")
@@ -377,10 +376,9 @@ class NewSessionForm(QWidget):
             return
 
         try:
-            cls = resolve_metadata_class(str(target))
-            meta = cls(**values)
-            parts = [rig_name, meta.uid(), session_name]
-            folder = "-".join(p for p in parts if p)
+            date = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
+            suffix = session_name or "auto"
+            folder = f"{rig_name}-{date}-{suffix}"
             self._path_preview.setText(str(root.path / folder))
         except Exception:
             self._path_preview.setText("")

@@ -5,6 +5,7 @@ import type {
 	AppStatus,
 	AcquisitionPlan,
 	GridConfig,
+	SessionInfo,
 	Tile,
 	Stack,
 	StackStatus,
@@ -36,6 +37,7 @@ export class Session {
 	readonly stage!: Stage;
 
 	#appStatus = $state<AppStatus>();
+	info = $state<SessionInfo>(null!);
 
 	plan = $derived<AcquisitionPlan>(this.#appStatus?.session?.plan ?? { grid_configs: {}, stacks: [] });
 	acquisitionProfileIds = $derived<string[]>(Object.keys(this.plan.grid_configs));
@@ -45,7 +47,7 @@ export class Session {
 	tileOrder = $derived<TileOrder>(this.#appStatus?.session?.tile_order ?? 'snake_row');
 	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
 	mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
-	sessionDir = $derived<string>(this.#appStatus?.session?.session_dir ?? '');
+	metadata = $derived<Record<string, unknown>>(this.#appStatus?.session?.metadata ?? {});
 
 	fov = $derived.by(() => {
 		const fovUm = this.#appStatus?.session?.fov_um;
@@ -130,7 +132,9 @@ export class Session {
 	}
 
 	async initialize(): Promise<void> {
-		await this.devices.initialize();
+		const [info] = await Promise.all([this.client.fetchSessionInfo(), this.devices.initialize()]);
+		this.info = info;
+		this.workflow.steps = info.workflow_steps;
 		this.appliedWaveforms = await this.client.fetchWaveforms();
 	}
 
@@ -188,8 +192,8 @@ export class Session {
 		this.client.send({ topic: 'grid/set_offset', payload: { x_offset_um: xOffsetUm, y_offset_um: yOffsetUm } });
 	}
 
-	setGridOverlap(overlap: number): void {
-		this.client.send({ topic: 'grid/set_overlap', payload: { overlap } });
+	setGridOverlap(overlapX: number, overlapY: number): void {
+		this.client.send({ topic: 'grid/set_overlap', payload: { overlap_x: overlapX, overlap_y: overlapY } });
 	}
 
 	setTileOrder(order: TileOrder): void {
@@ -335,11 +339,11 @@ export class Session {
 	// --- Geometry ---
 
 	get tileSpacingX(): number {
-		return this.fov.width * (1 - (this.gridConfig?.overlap ?? 0.1));
+		return this.fov.width * (1 - (this.gridConfig?.overlap_x ?? 0.1));
 	}
 
 	get tileSpacingY(): number {
-		return this.fov.height * (1 - (this.gridConfig?.overlap ?? 0.1));
+		return this.fov.height * (1 - (this.gridConfig?.overlap_y ?? 0.1));
 	}
 
 	get gridOffsetX(): number {

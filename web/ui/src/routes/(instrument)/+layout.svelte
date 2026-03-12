@@ -18,9 +18,9 @@
 
 	// --- Sidebar nav (driven by routes) ---
 
-	const activeDeviceId = $derived(page.route.id === '/(configure)/devices/[id]' ? page.params.id : undefined);
+	const activeDeviceId = $derived(page.route.id === '/(instrument)/devices/[id]' ? page.params.id : undefined);
 
-	const activeProfileId = $derived(page.route.id === '/(configure)/profiles/[id]' ? page.params.id : undefined);
+	const activeProfileId = $derived(page.route.id === '/(instrument)/profiles/[id]' ? page.params.id : undefined);
 
 	const isChannelsActive = $derived(!activeDeviceId && !activeProfileId);
 
@@ -158,9 +158,9 @@
 	</aside>
 
 	<!-- Main Content -->
-	<PaneGroup direction="vertical" autoSaveId="configure-v" class="flex-1">
+	<PaneGroup direction="vertical" autoSaveId="instrument-v" class="flex-1">
 		<Pane>
-			<div class="h-full overflow-auto p-6">
+			<div class="h-full overflow-auto px-4 py-2">
 				{@render children()}
 			</div>
 		</Pane>

@@ -5,9 +5,7 @@
 
 	const session = getSessionContext();
 	const stepId = $derived(page.params.step!);
-	const stepLabel = $derived(
-		session.workflow.steps.find((s) => s.id === stepId)?.label ?? sanitizeString(stepId)
-	);
+	const stepLabel = $derived(session.workflow.steps.find((s) => s.id === stepId)?.label ?? sanitizeString(stepId));
 </script>
 
 <div class="flex h-full items-center justify-center">

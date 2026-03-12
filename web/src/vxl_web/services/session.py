@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from vxl import AcquisitionPlan, RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import TileOrder
+from vxl.metadata import resolve_metadata_class
 from vxl.session import GridConfig, WorkflowStepConfig
 from vxl.tile import Stack, StackStatus, Tile
 from vxlib import fire_and_forget
@@ -34,8 +35,19 @@ def _utc_timestamp() -> str:
     return datetime.now(UTC).isoformat()
 
 
+class SessionInfo(BaseModel):
+    """Static session information fetched once at session start."""
+
+    session_dir: str
+    session_name: str
+    metadata_target: str
+    metadata_schema: dict[str, Any]
+    workflow_steps: list[WorkflowStepConfig]
+    rig_name: str
+
+
 class SessionStatus(BaseModel):
-    """Combined rig and session status with full tile/stack data."""
+    """Dynamic session state broadcast via WebSocket."""
 
     # Rig status
     active_profile_id: str | None
@@ -43,9 +55,8 @@ class SessionStatus(BaseModel):
     preview: dict[str, PreviewConfig] = Field(default_factory=dict)
 
     # Session status
-    session_dir: str
+    metadata: dict[str, Any]
     grid_locked: bool
-    workflow_steps: list[WorkflowStepConfig]
     workflow_committed: str | None
 
     # Acquisition plan (per-profile grid configs + all stacks)
@@ -90,10 +101,24 @@ class SessionService:
         """Broadcast updated status when FOV changes."""
         self.broadcast({}, with_status=True)
 
-    # ==================== Status ====================
+    # ==================== Info & Status ====================
+
+    def get_info(self) -> SessionInfo:
+        """Get static session information (fetched once at session start)."""
+        cls = resolve_metadata_class(self.session.metadata_target)
+        schema = cls.model_json_schema()
+
+        return SessionInfo(
+            session_dir=str(self.session.session_dir),
+            session_name=self.session.session_name,
+            metadata_target=self.session.metadata_target,
+            metadata_schema=schema,
+            workflow_steps=self.session.workflow_steps,
+            rig_name=self.session.rig.config.info.name,
+        )
 
     async def get_status(self) -> SessionStatus:
-        """Get current session status with full tile/stack data."""
+        """Get current dynamic session status."""
         tiles = await self.session.get_tiles()
         preview = await self.session.rig.get_channel_preview_configs()
 
@@ -105,9 +130,8 @@ class SessionService:
         return SessionStatus(
             active_profile_id=self.session.rig.active_profile_id,
             mode=self.session.rig.mode,
-            session_dir=str(self.session.session_dir),
+            metadata=self.session.metadata,
             grid_locked=self.session.grid_locked,
-            workflow_steps=self.session.workflow_steps,
             workflow_committed=self.session.workflow_committed,
             plan=self.session.plan,
             grid_config=self.session.grid_config,
@@ -254,12 +278,13 @@ class SessionService:
 
     async def _handle_grid_overlap(self, payload: dict[str, Any]) -> None:
         """Handle grid overlap update."""
-        overlap = payload.get("overlap")
+        overlap_x = payload.get("overlap_x")
+        overlap_y = payload.get("overlap_y")
 
-        if overlap is None:
-            raise ValueError("Missing overlap")
+        if overlap_x is None or overlap_y is None:
+            raise ValueError("Missing overlap_x or overlap_y")
 
-        self.session.set_overlap(overlap)
+        self.session.set_overlap(overlap_x, overlap_y)
         # Status broadcast includes grid_config, tiles, and stacks
         self.broadcast({}, with_status=True)
 
@@ -414,10 +439,36 @@ def get_session_service(request: Request) -> SessionService:
     return app_service.session_service
 
 
+@session_router.get("/session/info")
+async def get_session_info(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionInfo:
+    """Get static session information (fetched once at session start)."""
+    return service.get_info()
+
+
 @session_router.get("/session/status")
 async def get_session_status(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionStatus:
     """Get current session status."""
     return await service.get_status()
+
+
+class MetadataUpdateRequest(BaseModel):
+    """Request model for updating session metadata."""
+
+    metadata: dict[str, Any]
+
+
+@session_router.patch("/session/metadata")
+async def update_metadata(
+    request: MetadataUpdateRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict[str, Any]:
+    """Update session metadata (annotation fields always, provenance fields only pre-acquisition)."""
+    try:
+        service.session.update_metadata(request.metadata)
+        service.broadcast({}, with_status=True)
+        return {"metadata": service.session.metadata}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @session_router.get("/session/grid")
@@ -431,7 +482,8 @@ class GridUpdateRequest(BaseModel):
 
     x_offset_um: float | None = None
     y_offset_um: float | None = None
-    overlap: float | None = None
+    overlap_x: float | None = None
+    overlap_y: float | None = None
 
 
 @session_router.patch("/session/grid")
@@ -443,8 +495,8 @@ async def update_grid(
     try:
         if request.x_offset_um is not None and request.y_offset_um is not None:
             service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
-        if request.overlap is not None:
-            service.session.set_overlap(request.overlap)
+        if request.overlap_x is not None and request.overlap_y is not None:
+            service.session.set_overlap(request.overlap_x, request.overlap_y)
 
         # Status broadcast includes grid_config, tiles, and stacks
         service.broadcast({}, with_status=True)

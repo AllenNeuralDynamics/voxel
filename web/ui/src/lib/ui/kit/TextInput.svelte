@@ -39,12 +39,15 @@
 </script>
 
 <script lang="ts">
+	import { cn } from '$lib/utils';
+
 	interface Props extends TextInputVariants {
 		value: string;
 		placeholder?: string;
 		prefix?: string;
 		numCharacters?: number;
 		align?: 'left' | 'right';
+		disabled?: boolean;
 		onChange?: (newValue: string) => void;
 		id?: string;
 		class?: string;
@@ -56,6 +59,7 @@
 		prefix,
 		numCharacters,
 		align = 'right',
+		disabled = false,
 		onChange,
 		id,
 		size = 'md',
@@ -72,7 +76,7 @@
 	}
 </script>
 
-<div class={styles.wrapper({ class: className })}>
+<div class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none border-input/50')}>
 	{#if prefix}
 		<span class={styles.prefix()}>{prefix}</span>
 	{/if}
@@ -80,6 +84,7 @@
 		{id}
 		type="text"
 		bind:value
+		{disabled}
 		{placeholder}
 		oninput={handleInput}
 		style:width={numCharacters ? `${numCharacters + 1}ch` : undefined}

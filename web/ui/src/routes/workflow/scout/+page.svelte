@@ -2,7 +2,7 @@
 	import { getSessionContext } from '$lib/context';
 	import { ProfileInfoPopover, ProfileStatus } from '$lib/ui/profile';
 	import { GridControls } from '$lib/ui/grid';
-	import { Dialog } from '$lib/ui/kit';
+	import { Button, Dialog } from '$lib/ui/kit';
 	import { sanitizeString } from '$lib/utils';
 	import { Plus, TrashCanOutline } from '$lib/icons';
 	import { tv } from 'tailwind-variants';
@@ -96,24 +96,27 @@
 				<div class="ml-auto flex items-center gap-1.5">
 					<ProfileStatus {session} profileId={activeTab} size="sm" />
 					<ProfileInfoPopover {session} profileId={activeTab} size="sm" />
-					{#if !scoutLocked}
-						{#if isActiveInPlan}
-							<button
-								onclick={() => (removeDialogOpen = true)}
-								class="rounded-lg px-1 py-0.5 text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger"
-								title="Remove from plan"
-							>
-								<TrashCanOutline width="16" height="16" />
-							</button>
-						{:else}
-							<button
-								onclick={() => (addDialogOpen = true)}
-								class="rounded-lg px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-								title="Add to plan"
-							>
-								<Plus width="16" height="16" />
-							</button>
-						{/if}
+					{#if isActiveInPlan}
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							class="text-muted-foreground hover:bg-danger/10 hover:text-danger"
+							title="Remove from plan"
+							disabled={scoutLocked}
+							onclick={() => (removeDialogOpen = true)}
+						>
+							<TrashCanOutline width="16" height="16" />
+						</Button>
+					{:else}
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							title="Add to plan"
+							disabled={scoutLocked}
+							onclick={() => (addDialogOpen = true)}
+						>
+							<Plus width="16" height="16" />
+						</Button>
 					{/if}
 				</div>
 			{/if}

@@ -6,7 +6,7 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type { AppStatus, ErrorPayload, FrameTiming, LogMessage, TileOrder, Waveform } from './types';
+import type { AppStatus, ErrorPayload, FrameTiming, LogMessage, SessionInfo, TileOrder, Waveform } from './types';
 
 /**
  * DAQ waveforms response from REST endpoint and WS broadcast.
@@ -79,7 +79,7 @@ type ClientMessage =
 	  }
 	// Grid/Stack messages
 	| { topic: 'grid/set_offset'; payload: { x_offset_um: number; y_offset_um: number } }
-	| { topic: 'grid/set_overlap'; payload: { overlap: number } }
+	| { topic: 'grid/set_overlap'; payload: { overlap_x: number; overlap_y: number } }
 	| { topic: 'grid/set_tile_order'; payload: { tile_order: TileOrder } }
 	| {
 			topic: 'stacks/add';
@@ -387,6 +387,32 @@ export class Client {
 	 */
 	requestStatus(): void {
 		this.send({ topic: 'request_status' });
+	}
+
+	/**
+	 * Fetch static session info (called once at session start).
+	 */
+	async fetchSessionInfo(): Promise<SessionInfo> {
+		const res = await fetch(`${this.baseUrl}/api/session/info`);
+		if (!res.ok) throw new Error(`Failed to fetch session info: ${res.statusText}`);
+		return res.json();
+	}
+
+	/**
+	 * Update session metadata via REST.
+	 */
+	async updateMetadata(metadata: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const res = await fetch(`${this.baseUrl}/api/session/metadata`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ metadata })
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({ detail: res.statusText }));
+			throw new Error(data.detail || res.statusText);
+		}
+		const data = await res.json();
+		return data.metadata;
 	}
 
 	/**

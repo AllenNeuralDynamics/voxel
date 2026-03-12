@@ -238,7 +238,7 @@ class GridStore(QObject):
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
 
-    async def set_overlap(self, overlap: float) -> None:
+    async def set_overlap(self, overlap_x: float, overlap_y: float) -> None:
         """Set tile overlap (0.0 to <1.0)."""
         if self._session is None:
             return
@@ -246,7 +246,7 @@ class GridStore(QObject):
             log.warning("Cannot modify grid: acquisition has started")
             return
 
-        self._session.set_overlap(overlap)
+        self._session.set_overlap(overlap_x, overlap_y)
         await self.refresh_tiles()
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed

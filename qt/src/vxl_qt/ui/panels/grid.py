@@ -716,8 +716,21 @@ class GridSettingsSection(QWidget):
         )
         self._offset_y_spin.setSuffix(" mm")
 
-        self._overlap_spin = DoubleSpinBox(
+        self._overlap_x_spin = DoubleSpinBox(
             value=0.1, min_val=0.0, max_val=0.5, decimals=2, step=0.05, size=ControlSize.SM
+        )
+        self._overlap_y_spin = DoubleSpinBox(
+            value=0.1, min_val=0.0, max_val=0.5, decimals=2, step=0.05, size=ControlSize.SM
+        )
+        self._overlap_link = ToolButton(("mdi.link", "mdi.link-off"), size=ControlSize.SM)
+        self._overlap_link.setCheckable(True)
+        self._overlap_link.setChecked(True)
+
+        overlap_row = Flex.hstack(
+            self._overlap_x_spin,
+            self._overlap_link,
+            self._overlap_y_spin,
+            spacing=Spacing.XS,
         )
 
         self._z_step_label = Text.muted("1.0 µm")
@@ -727,8 +740,8 @@ class GridSettingsSection(QWidget):
         form = (
             GridFormBuilder(columns=2, spacing=Spacing.SM)
             .row(Field("Offset X", self._offset_x_spin), Field("Y", self._offset_y_spin))
-            .row(Field("Overlap", self._overlap_spin), Field("Z Step", self._z_step_label))
-            .row(Field("Order", self._order_select, span=2))
+            .row(Field("Overlap", overlap_row, span=2))
+            .row(Field("Z Step", self._z_step_label), Field("Order", self._order_select))
             .build()
         )
         layout.addWidget(form)
@@ -739,7 +752,9 @@ class GridSettingsSection(QWidget):
 
         self._offset_x_spin.valueChanged.connect(self._on_offset_changed)
         self._offset_y_spin.valueChanged.connect(self._on_offset_changed)
-        self._overlap_spin.valueChanged.connect(self._on_overlap_changed)
+        self._overlap_x_spin.valueChanged.connect(self._on_overlap_x_changed)
+        self._overlap_y_spin.valueChanged.connect(self._on_overlap_y_changed)
+        self._overlap_link.toggled.connect(self._on_overlap_link_toggled)
         self._order_select.value_changed.connect(self._on_order_changed)
 
     def _refresh_display(self) -> None:
@@ -749,18 +764,21 @@ class GridSettingsSection(QWidget):
         # Block signals to prevent feedback loops
         self._offset_x_spin.blockSignals(True)
         self._offset_y_spin.blockSignals(True)
-        self._overlap_spin.blockSignals(True)
+        self._overlap_x_spin.blockSignals(True)
+        self._overlap_y_spin.blockSignals(True)
         self._order_select.blockSignals(True)
 
         self._offset_x_spin.setValue(config.x_offset_um / 1000)
         self._offset_y_spin.setValue(config.y_offset_um / 1000)
-        self._overlap_spin.setValue(config.overlap)
+        self._overlap_x_spin.setValue(config.overlap_x)
+        self._overlap_y_spin.setValue(config.overlap_y)
         self._z_step_label.setText(f"{config.z_step_um:.1f} µm")
         self._order_select.set_value(self._store.tile_order)
 
         self._offset_x_spin.blockSignals(False)
         self._offset_y_spin.blockSignals(False)
-        self._overlap_spin.blockSignals(False)
+        self._overlap_x_spin.blockSignals(False)
+        self._overlap_y_spin.blockSignals(False)
         self._order_select.blockSignals(False)
 
         self._update_locked_state()
@@ -776,7 +794,9 @@ class GridSettingsSection(QWidget):
         self._lock_icon.setChecked(locked)
         self._offset_x_spin.setEnabled(not locked)
         self._offset_y_spin.setEnabled(not locked)
-        self._overlap_spin.setEnabled(not locked)
+        self._overlap_x_spin.setEnabled(not locked)
+        self._overlap_y_spin.setEnabled(not locked)
+        self._overlap_link.setEnabled(not locked)
         # Order can always be changed
 
     def _on_offset_changed(self) -> None:
@@ -787,11 +807,40 @@ class GridSettingsSection(QWidget):
         y_um = self._offset_y_spin.value() * 1000
         fire_and_forget(self._store.set_grid_offset(x_um, y_um), log=log)
 
-    def _on_overlap_changed(self) -> None:
-        """Handle overlap change."""
+    def _on_overlap_x_changed(self) -> None:
+        """Handle overlap X change."""
         if self._store.grid_locked:
             return
-        fire_and_forget(self._store.set_overlap(self._overlap_spin.value()), log=log)
+        x = self._overlap_x_spin.value()
+        if self._overlap_link.isChecked():
+            self._overlap_y_spin.blockSignals(True)
+            self._overlap_y_spin.setValue(x)
+            self._overlap_y_spin.blockSignals(False)
+            fire_and_forget(self._store.set_overlap(x, x), log=log)
+        else:
+            fire_and_forget(self._store.set_overlap(x, self._overlap_y_spin.value()), log=log)
+
+    def _on_overlap_y_changed(self) -> None:
+        """Handle overlap Y change."""
+        if self._store.grid_locked:
+            return
+        y = self._overlap_y_spin.value()
+        if self._overlap_link.isChecked():
+            self._overlap_x_spin.blockSignals(True)
+            self._overlap_x_spin.setValue(y)
+            self._overlap_x_spin.blockSignals(False)
+            fire_and_forget(self._store.set_overlap(y, y), log=log)
+        else:
+            fire_and_forget(self._store.set_overlap(self._overlap_x_spin.value(), y), log=log)
+
+    def _on_overlap_link_toggled(self, checked: bool) -> None:
+        """Handle overlap link toggle — sync Y to X when linking."""
+        if checked and not self._store.grid_locked:
+            x = self._overlap_x_spin.value()
+            self._overlap_y_spin.blockSignals(True)
+            self._overlap_y_spin.setValue(x)
+            self._overlap_y_spin.blockSignals(False)
+            fire_and_forget(self._store.set_overlap(x, x), log=log)
 
     def _on_order_changed(self, order: TileOrder) -> None:
         """Handle tile order change."""

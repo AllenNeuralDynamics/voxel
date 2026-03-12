@@ -1,13 +1,15 @@
 """Session management for Voxel acquisition."""
 
+import datetime
 import logging
 import math
+import secrets
 from pathlib import Path
 from typing import Any
 
 from vxl.config import TileOrder
 from vxl.daq.wave import validate_waveform
-from vxl.metadata import BASE_METADATA_TARGET
+from vxl.metadata import BASE_METADATA_TARGET, resolve_metadata_class
 from vxl.rig import RigMode, VoxelRig
 from vxl.sync import FrameTiming
 from vxl.tile import Stack, StackResult, StackStatus, Tile
@@ -63,10 +65,10 @@ class Session:
         """
         config = SessionConfig.create_new(config_path, session_name, metadata_target, metadata)
 
-        # Derive folder name: rig name prefix + metadata suffix + optional session name
-        meta = config.resolve_metadata()
-        parts = [config.rig.info.name, meta.uid(), config.session_name]
-        folder = "-".join(p for p in parts if p)
+        # Derive folder name: {rig}-{date}-{session_name or short_id}
+        date = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
+        suffix = config.session_name or secrets.token_hex(2)
+        folder = f"{config.rig.info.name}-{date}-{suffix}"
         session_dir = root_path / folder
 
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -104,6 +106,11 @@ class Session:
     def rig(self) -> VoxelRig:
         """Get the underlying VoxelRig instance."""
         return self._rig
+
+    @property
+    def session_name(self) -> str:
+        """Get the session name."""
+        return self._config.session_name
 
     @property
     def session_dir(self) -> Path:
@@ -168,6 +175,45 @@ class Session:
     def grid_locked(self) -> bool:
         """Grid is locked when the Scout step is not active."""
         return self._workflow.step_state("scout") != StepState.ACTIVE
+
+    # ==================== Metadata ====================
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """Get the experiment metadata values."""
+        return self._config.metadata
+
+    @property
+    def metadata_target(self) -> str:
+        """Get the metadata target import path."""
+        return self._config.metadata_target
+
+    @property
+    def has_acquired(self) -> bool:
+        """True if any stack has moved past PLANNED status."""
+        return any(s.status != StackStatus.PLANNED for s in self._config.plan.stacks)
+
+    def update_metadata(self, values: dict[str, Any]) -> None:
+        """Update experiment metadata, respecting provenance locking.
+
+        Annotation fields are always editable. Provenance fields are locked
+        once any stack has been acquired.
+
+        Raises ValueError if provenance fields are modified post-acquisition.
+        """
+        cls = resolve_metadata_class(self._config.metadata_target)
+
+        if self.has_acquired:
+            annotation_fields = cls.annotation_fields()
+            for key in values:
+                if key not in annotation_fields:
+                    raise ValueError(f"Cannot modify provenance field '{key}' after acquisition has started")
+
+        merged = {**self._config.metadata, **values}
+        cls(**merged)  # validate against schema
+        self._config.metadata = merged
+        self._save()
+        self._log.info("Updated metadata: %s", list(values.keys()))
 
     # ==================== Device Props (Save to Profile) ====================
 
@@ -318,19 +364,22 @@ class Session:
         self._recalculate_planned_stack_positions()
         self._save()
 
-    def set_overlap(self, overlap: float) -> None:
+    def set_overlap(self, overlap_x: float, overlap_y: float) -> None:
         """Set overlap for the active profile. Recalculates PLANNED stack positions.
 
         Raises RuntimeError if grid is locked (non-PLANNED stacks exist).
         """
         if self.grid_locked:
             raise RuntimeError("Cannot modify grid: acquisition has started")
-        if not 0.0 <= overlap < 1.0:
-            raise ValueError(f"Overlap must be in [0.0, 1.0), got {overlap}")
+        if not 0.0 <= overlap_x < 1.0:
+            raise ValueError(f"Overlap X must be in [0.0, 1.0), got {overlap_x}")
+        if not 0.0 <= overlap_y < 1.0:
+            raise ValueError(f"Overlap Y must be in [0.0, 1.0), got {overlap_y}")
         gc = self.grid_config
         if gc is None:
             raise RuntimeError("Active profile is not in the acquisition plan")
-        gc.overlap = overlap
+        gc.overlap_x = overlap_x
+        gc.overlap_y = overlap_y
         self._recalculate_planned_stack_positions()
         self._save()
 
@@ -348,8 +397,9 @@ class Session:
         """Get step size between tile positions (FOV adjusted for overlap)."""
         fov_w, fov_h = self.get_fov_size()
         gc = self.grid_config
-        overlap = gc.overlap if gc is not None else 0.1
-        return (fov_w * (1 - overlap), fov_h * (1 - overlap))
+        overlap_x = gc.overlap_x if gc is not None else 0.1
+        overlap_y = gc.overlap_y if gc is not None else 0.1
+        return (fov_w * (1 - overlap_x), fov_h * (1 - overlap_y))
 
     async def get_tiles(self) -> list[Tile]:
         """Generate the tile grid based on grid config and stage dimensions.

@@ -59,12 +59,26 @@ export interface AcquisitionPlan {
 	stacks: Stack[];
 }
 
+/**
+ * Static session information fetched once at session start.
+ */
+export interface SessionInfo {
+	session_dir: string;
+	session_name: string;
+	metadata_target: string;
+	metadata_schema: JsonSchema;
+	workflow_steps: WorkflowStepConfig[];
+	rig_name: string;
+}
+
+/**
+ * Dynamic session state broadcast via WebSocket.
+ */
 export interface SessionStatus {
 	active_profile_id: string | null;
 	mode: RigMode;
-	session_dir: string;
+	metadata: Record<string, unknown>;
 	grid_locked: boolean;
-	workflow_steps: WorkflowStepConfig[];
 	workflow_committed: string | null;
 	timestamp: string;
 
@@ -133,7 +147,8 @@ export interface ErrorPayload {
 export interface GridConfig {
 	x_offset_um: number;
 	y_offset_um: number;
-	overlap: number; // 0.0 to 1.0
+	overlap_x: number; // 0.0 to 1.0
+	overlap_y: number; // 0.0 to 1.0
 	z_step_um: number;
 	default_z_start_um: number;
 	default_z_end_um: number;
@@ -240,6 +255,7 @@ export interface JsonSchemaProperty {
 	enum?: string[];
 	items?: { type: string };
 	title?: string;
+	isAnnotation?: boolean;
 }
 
 /** JSON Schema from pydantic model_json_schema() */

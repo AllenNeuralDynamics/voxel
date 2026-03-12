@@ -22,10 +22,21 @@ class GridConfig(BaseModel):
 
     x_offset_um: float = 0.0
     y_offset_um: float = 0.0
-    overlap: float = Field(default=0.1, ge=0.0, lt=1.0)
+    overlap_x: float = Field(default=0.1, ge=0.0, lt=1.0)
+    overlap_y: float = Field(default=0.1, ge=0.0, lt=1.0)
     z_step_um: float = -1.0  # sentinel: -1 means use rig default
     default_z_start_um: float = 0.0
     default_z_end_um: float = 100.0
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_overlap(cls, data: Any) -> Any:
+        """Migrate single 'overlap' field to overlap_x/overlap_y."""
+        if isinstance(data, dict) and "overlap" in data:
+            overlap = data.pop("overlap")
+            data.setdefault("overlap_x", overlap)
+            data.setdefault("overlap_y", overlap)
+        return data
 
 
 class AcquisitionPlan(BaseModel):

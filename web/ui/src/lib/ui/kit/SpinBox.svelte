@@ -310,7 +310,7 @@
 
 <div
 	bind:this={wrapperElement}
-	class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none opacity-50')}
+	class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none border-input/50')}
 >
 	{#if prefix}
 		<span

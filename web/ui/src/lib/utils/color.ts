@@ -37,7 +37,7 @@ export function isValidHex(color: string): boolean {
  * @param amount - Blend amount from 0 (no change) to 1 (fully white). Default 0.5.
  * @returns A lightened, desaturated hex color string
  */
-export function desaturateColor(hex: string, amount = 0.5): string {
+export function desaturateColor(hex: string, amount = 0.7): string {
 	const r = parseInt(hex.slice(1, 3), 16);
 	const g = parseInt(hex.slice(3, 5), 16);
 	const b = parseInt(hex.slice(5, 7), 16);

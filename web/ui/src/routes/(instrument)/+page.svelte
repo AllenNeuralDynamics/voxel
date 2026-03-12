@@ -24,10 +24,10 @@
 		<span class="text-muted-foreground">Stacks</span>
 		<span class="text-foreground">{session.stacks.length}</span>
 
-		{#if session.sessionDir}
+		{#if session.info?.session_dir}
 			<span class="text-muted-foreground">Directory</span>
-			<span class="truncate text-foreground" title={session.sessionDir}>
-				{session.sessionDir}
+			<span class="truncate text-foreground" title={session.info.session_dir}>
+				{session.info.session_dir}
 			</span>
 		{/if}
 	</div>

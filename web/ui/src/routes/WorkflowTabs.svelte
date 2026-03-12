@@ -48,7 +48,7 @@
 
 	function handleNext() {
 		const stepId = workflow.next();
-		onViewChange?.(stepId ?? 'acquire');
+		onViewChange?.(stepId ?? 'acquisition');
 	}
 </script>
 

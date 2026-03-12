@@ -8,7 +8,7 @@
 				'rounded border border-input bg-transparent',
 				'transition-colors hover:border-foreground/20',
 				'focus:border-ring focus:outline-none',
-				'disabled:cursor-not-allowed disabled:opacity-50'
+				'disabled:cursor-not-allowed disabled:border-input/50'
 			],
 			content: [
 				'z-50 mt-1 rounded border bg-popover p-1 shadow-md',
@@ -27,8 +27,8 @@
 		variants: {
 			size: {
 				sm: {
-					trigger: 'h-6 px-1.5 text-[0.65rem]',
-					item: 'min-h-6 px-1.5 py-1 text-[0.65rem]'
+					trigger: 'h-5 px-1.5 text-[0.65rem]',
+					item: 'min-h-5 px-1.5 py-1 text-[0.65rem]'
 				},
 				md: {
 					trigger: 'h-7 px-2 text-xs',

@@ -120,7 +120,7 @@
 <div class="flex h-screen w-full bg-background">
 	<div class="flex w-150 shrink-0 flex-col border-r border-border">
 		<div class="shrink-0 p-4 pb-0">
-			<div class="mb-6 flex flex-col gap-1">
+			<div class="mb-6 flex flex-col gap-2">
 				<div class="flex items-center gap-2">
 					<VoxelLogo
 						class="h-8 w-8"

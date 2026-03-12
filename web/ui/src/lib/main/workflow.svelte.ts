@@ -44,7 +44,6 @@ export class Workflow {
 	}
 
 	#handleStatus = (status: AppStatus): void => {
-		this.steps = status.session?.workflow_steps ?? [];
 		this.committed = status.session?.workflow_committed ?? null;
 	};
 
