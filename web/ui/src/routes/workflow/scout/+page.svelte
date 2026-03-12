@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Session } from '$lib/main';
+	import { getSessionContext } from '$lib/context';
 	import { ProfileInfoPopover, ProfileStatus } from '$lib/ui/profile';
 	import { GridControls } from '$lib/ui/grid';
 	import { Dialog } from '$lib/ui/kit';
@@ -8,11 +8,7 @@
 	import { tv } from 'tailwind-variants';
 	import { watch } from 'runed';
 
-	interface Props {
-		session: Session;
-	}
-
-	let { session }: Props = $props();
+	const session = getSessionContext();
 
 	const profilePill = tv({
 		base: 'rounded-xl border border-border px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors',

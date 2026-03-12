@@ -39,8 +39,8 @@
 	const viewId = $derived<string>(
 		page.route.id === '/acquire'
 			? 'acquire'
-			: page.route.id === '/workflow/[step]'
-				? (page.params.step ?? 'configure')
+			: page.route.id?.startsWith('/workflow/')
+				? (page.params.step ?? page.route.id.split('/').pop() ?? 'configure')
 				: 'configure'
 	);
 

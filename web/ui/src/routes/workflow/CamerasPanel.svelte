@@ -218,11 +218,21 @@
 					}}
 					class="flex w-full cursor-pointer items-center justify-between text-xs"
 				>
-					<div class="flex items-center gap-4">
-						<div class="flex justify-between gap-1">
-							<span class="text-muted-foreground">Channel</span>
-							<span class="font-mono">{ch.config.label ?? ch.id}</span>
-						</div>
+					<span class="text-muted-foreground">Channel</span>
+					<div class="flex justify-between gap-1">
+						<span class="font-mono">{ch.config.label ?? ch.id}</span>
+						<ChevronRight
+							width="14"
+							height="14"
+							class="text-muted-foreground transition-transform {channelExpanded ? 'rotate-90' : ''}"
+						/>
+					</div>
+				</button>
+				{#if channelExpanded}
+					<div class="mt-2 space-y-1 text-xs">
+						<!-- {#if ch.config.desc}
+							<p class="text-[0.5rem] text-muted-foreground">{ch.config.desc}</p>
+						{/if} -->
 						{#if ch.config.emission}
 							<div class="flex justify-between gap-1">
 								<span class="text-muted-foreground">Emission</span>
@@ -234,18 +244,6 @@
 								<span class="text-muted-foreground">Illumination</span>
 								<span class="font-mono tabular-nums">{ch.config.illumination}</span>
 							</div>
-						{/if}
-					</div>
-					<ChevronRight
-						width="14"
-						height="14"
-						class="text-muted-foreground transition-transform {channelExpanded ? 'rotate-90' : ''}"
-					/>
-				</button>
-				{#if channelExpanded}
-					<div class="mt-2 space-y-1 text-xs">
-						{#if ch.config.desc}
-							<p class="text-foreground">{ch.config.desc}</p>
 						{/if}
 						{#if Object.keys(ch.config.filters).length > 0}
 							{#each Object.entries(ch.config.filters) as [wheelId, position] (position)}

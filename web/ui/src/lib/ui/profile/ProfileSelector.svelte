@@ -3,6 +3,7 @@
 	import { sanitizeString } from '$lib/utils';
 	import { Select } from '$lib/ui/kit';
 	import { ChevronUpDown } from '$lib/icons';
+	import { watch } from 'runed';
 	import type { SelectVariants } from '$lib/ui/kit/Select.svelte';
 
 	interface Props {
@@ -20,6 +21,15 @@
 		size = 'md',
 		class: className
 	}: Props = $props();
+
+	// Keep selected in sync when activeProfileId changes externally
+	// (e.g. ProfileStatus activate button, backend broadcast)
+	watch(
+		() => session.activeProfileId,
+		(id) => {
+			if (id) selected = id;
+		}
+	);
 
 	const options = $derived(
 		Object.entries(session.config.profiles).map(([id, cfg]) => ({
