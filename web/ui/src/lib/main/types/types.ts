@@ -164,12 +164,12 @@ export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'sk
  * Uses Tailwind's color classes - derive CSS vars/hex from these in components
  */
 export const STACK_STATUS_COLORS: Record<StackStatus | 'none', string> = {
-	none: 'text-zinc-200',
-	planned: 'text-blue-400',
-	acquiring: 'text-cyan-400',
-	completed: 'text-emerald-400',
-	failed: 'text-rose-400',
-	skipped: 'text-amber-600'
+	none: 'text-muted-foreground',
+	planned: 'text-info',
+	acquiring: 'text-active',
+	completed: 'text-success',
+	failed: 'text-danger',
+	skipped: 'text-warning'
 };
 
 /**

@@ -86,7 +86,7 @@
 	);
 </script>
 
-<div class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none border-input/50')}>
+<div class={cn(styles.wrapper({ class: className }), disabled && 'border-input/50')}>
 	<textarea
 		bind:this={textareaEl}
 		{id}

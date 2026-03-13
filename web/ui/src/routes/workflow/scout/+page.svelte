@@ -17,11 +17,11 @@
 			selected: { true: '' }
 		},
 		compoundVariants: [
-			{ phantom: true, selected: true, class: 'border-amber-400/60 bg-amber-950/40 text-amber-200' },
+			{ phantom: true, selected: true, class: 'border-warning/60 bg-warning/10 text-warning' },
 			{
 				phantom: true,
 				selected: false,
-				class: 'border-amber-400/30 bg-surface text-amber-400/60 hover:bg-amber-950/20 hover:text-amber-200'
+				class: 'border-warning/30 bg-surface text-warning/60 hover:bg-warning/10 hover:text-warning'
 			},
 			{ phantom: false, selected: true, class: 'border-ring bg-muted text-foreground' },
 			{
@@ -180,7 +180,7 @@
 				</button>
 				<button
 					onclick={confirmRemoveFromPlan}
-					class="rounded bg-danger px-3 py-1.5 text-xs text-white transition-colors hover:bg-danger/90"
+					class="rounded bg-danger px-3 py-1.5 text-xs text-danger-fg transition-colors hover:bg-danger/90"
 				>
 					Remove
 				</button>

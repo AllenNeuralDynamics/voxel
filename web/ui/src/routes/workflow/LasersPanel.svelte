@@ -112,7 +112,7 @@
 			<InformationOutline width="14" height="14" class="text-muted-foreground" />
 		</Popover.Trigger>
 		<Popover.Content
-			class="z-50 w-64 rounded border border-zinc-700 bg-zinc-900 p-3 text-left text-xs text-zinc-200 shadow-xl outline-none"
+			class="z-50 w-64 rounded border border-border bg-popover p-3 text-left text-xs text-foreground shadow-xl outline-none"
 			sideOffset={4}
 			side="top"
 			align="end"
@@ -120,29 +120,29 @@
 			<div class="space-y-2">
 				<div>
 					{#if cfg.desc}
-						<p class="mt-1 text-xs text-zinc-300">{cfg.desc}</p>
+						<p class="mt-1 text-xs text-foreground">{cfg.desc}</p>
 					{/if}
 				</div>
-				<div class="space-y-1 border-t border-zinc-800 pt-2 text-[0.7rem] text-zinc-300">
+				<div class="space-y-1 border-t border-border pt-2 text-[0.7rem] text-foreground">
 					{#if cfg.emission}
 						<div class="flex justify-between gap-2">
-							<span class="text-zinc-400">Emission</span>
-							<span class="text-right text-zinc-200">{cfg.emission} nm</span>
+							<span class="text-muted-foreground">Emission</span>
+							<span class="text-right text-foreground">{cfg.emission} nm</span>
 						</div>
 					{/if}
 					{#if cfg.detection}
 						<div class="flex justify-between gap-2">
-							<span class="text-zinc-400">Detection</span>
-							<span class="text-right text-zinc-200">{cfg.detection}</span>
+							<span class="text-muted-foreground">Detection</span>
+							<span class="text-right text-foreground">{cfg.detection}</span>
 						</div>
 					{/if}
 					{#if Object.keys(cfg.filters).length > 0}
 						<div class="space-y-1">
-							<div class="mb-1 border-b border-zinc-800 pt-1 text-zinc-500/90">Filters</div>
+							<div class="mb-1 border-b border-border pt-1 text-muted-foreground">Filters</div>
 							{#each Object.entries(cfg.filters) as [wheelId, position] (position)}
 								<div class="flex justify-between gap-2">
-									<span class="text-zinc-400">{wheelId}:</span>
-									<span class="text-right text-zinc-200">{position}</span>
+									<span class="text-muted-foreground">{wheelId}:</span>
+									<span class="text-right text-foreground">{position}</span>
 								</div>
 							{/each}
 						</div>

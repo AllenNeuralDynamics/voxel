@@ -155,7 +155,7 @@
 						{#if hasStack}
 							<button
 								onclick={handleDelete}
-								class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-rose-400"
+								class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-danger"
 								title="Delete stack"
 							>
 								<TrashCanOutline width="14" height="14" />
@@ -164,7 +164,7 @@
 						{#if isDirty}
 							<button
 								onclick={handleSubmit}
-								class="rounded p-1 text-emerald-500 transition-colors hover:bg-zinc-700 hover:text-emerald-400"
+								class="rounded p-1 text-success transition-colors hover:bg-muted hover:text-success"
 								title={hasStack ? 'Save changes' : 'Add stack'}
 							>
 								<Check width="14" height="14" />
@@ -172,7 +172,7 @@
 						{/if}
 						<button
 							onclick={handleCancel}
-							class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
+							class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 							title="Cancel"
 						>
 							<Close width="14" height="14" />
@@ -180,7 +180,7 @@
 					{:else}
 						<button
 							onclick={handleEdit}
-							class="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-300"
+							class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 							title={hasStack ? 'Edit stack' : 'Add stack'}
 						>
 							<PencilOutline width="14" height="14" />

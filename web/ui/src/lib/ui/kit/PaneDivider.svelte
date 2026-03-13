@@ -6,7 +6,7 @@
 			separator: [
 				'absolute flex items-center justify-center',
 				'transition-all duration-300',
-				'text-zinc-700 hover:text-zinc-500'
+				'text-divider hover:text-divider-active'
 			],
 			line: 'grow stroke-current opacity-[0.85]'
 		},

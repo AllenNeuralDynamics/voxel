@@ -48,13 +48,13 @@
 
 <Popover.Root>
 	<Popover.Trigger
-		class="h-2.5 w-2.5 rounded-full border border-zinc-600/50 transition-all hover:border-zinc-300"
+		class="h-2.5 w-2.5 rounded-full border border-border transition-all hover:border-muted-foreground"
 		style="background-color: {color}"
 		aria-label="Pick color"
 	/>
 
 	<Popover.Content
-		class="z-50 rounded-md border border-zinc-700 bg-zinc-900 p-2 shadow-xl outline-none"
+		class="z-50 rounded-md border border-border bg-popover p-2 shadow-xl outline-none"
 		sideOffset={4}
 		{align}
 	>
@@ -68,8 +68,8 @@
 							onclick={() => handlePresetClick(presetColor)}
 							class="h-5 w-5 rounded-full border transition-all hover:scale-110 {color.toLowerCase() ===
 							presetColor.toLowerCase()
-								? 'border-zinc-300 ring-1 ring-zinc-400'
-								: 'border-zinc-600/50 hover:border-zinc-500'}"
+								? 'border-ring ring-1 ring-ring'
+								: 'border-border hover:border-muted-foreground'}"
 							style="background-color: {presetColor}"
 							aria-label="Select preset color"
 						></button>
@@ -79,14 +79,14 @@
 		{/if}
 
 		<!-- Custom color -->
-		<div class={presetColors.length > 0 ? 'border-t border-zinc-700 pt-2' : ''}>
+		<div class={presetColors.length > 0 ? 'border-t border-border pt-2' : ''}>
 			<div class="flex gap-1.5">
 				<!-- Native color picker -->
 				<input
 					type="color"
 					value={color}
 					oninput={handleCustomColorChange}
-					class="h-6 w-8 cursor-pointer rounded border border-zinc-600 bg-zinc-800"
+					class="h-6 w-8 cursor-pointer rounded border border-input bg-muted"
 				/>
 				<!-- Hex input -->
 				<input
@@ -96,7 +96,7 @@
 					onblur={handleCustomInputBlur}
 					placeholder="#ff00ff"
 					size="7"
-					class="h-6 min-w-0 rounded border border-zinc-600 bg-zinc-800 px-1.5 font-mono text-[0.65rem] text-zinc-200 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none"
+					class="h-6 min-w-0 rounded border border-input bg-muted px-1.5 font-mono text-[0.65rem] text-foreground placeholder-muted-foreground focus:border-ring focus:outline-none"
 				/>
 			</div>
 		</div>

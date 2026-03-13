@@ -91,7 +91,7 @@
 								class={cn(
 									'w-13 shrink-0 rounded-full border py-0.5 text-center text-[0.5rem] font-medium transition-all',
 									isViewed
-										? 'pointer-events-auto border-amber-500/40 bg-amber-500/10 text-amber-500 opacity-100 hover:bg-amber-500/20'
+										? 'pointer-events-auto border-warning/40 bg-warning/10 text-warning opacity-100 hover:bg-warning/20'
 										: 'pointer-events-none border-border text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-muted hover:text-foreground'
 								)}
 								onclick={(e: MouseEvent) => {

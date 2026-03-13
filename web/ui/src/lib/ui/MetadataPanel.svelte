@@ -99,7 +99,7 @@
 					type="button"
 					onclick={saveAll}
 					disabled={saving || !isDirty}
-					class="rounded p-0.5 text-green-500 transition-colors hover:bg-green-500/10 disabled:opacity-30"
+					class="rounded p-0.5 text-success transition-colors hover:bg-success/10 disabled:opacity-30"
 					title="Save changes"
 				>
 					<Check width="14" height="14" />

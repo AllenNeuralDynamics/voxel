@@ -89,7 +89,7 @@
 
 	<Popover.Portal>
 		<Popover.Content
-			class="z-50 flex flex-col-reverse rounded-t border border-zinc-700 bg-zinc-900 shadow-xl outline-none {width
+			class="z-50 flex flex-col-reverse rounded-t border border-border bg-popover shadow-xl outline-none {width
 				? ''
 				: 'w-72'}"
 			style={width ? `width: ${width}px;` : undefined}
@@ -102,20 +102,20 @@
 					type="text"
 					bind:value={search}
 					placeholder="Search colormaps..."
-					class="h-6 min-w-0 flex-1 rounded border border-zinc-600 bg-zinc-800 px-1.5 text-[0.65rem] text-zinc-200 placeholder-zinc-500 focus:border-ring focus:outline-none"
+					class="h-6 min-w-0 flex-1 rounded border border-input bg-muted px-1.5 text-[0.65rem] text-foreground placeholder-muted-foreground focus:border-ring focus:outline-none"
 				/>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger
-						class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-zinc-600 bg-zinc-800 transition-colors hover:bg-zinc-700 {hasFilter
-							? 'text-zinc-200'
-							: 'text-zinc-400'}"
+						class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input bg-muted transition-colors hover:bg-accent {hasFilter
+							? 'text-foreground'
+							: 'text-muted-foreground'}"
 						aria-label="Filter groups"
 					>
 						<FilterVariant width="14" height="14" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Portal>
 						<DropdownMenu.Content
-							class="z-60 min-w-32 rounded border border-zinc-700 bg-zinc-900 p-1 shadow-xl outline-none"
+							class="z-60 min-w-32 rounded border border-border bg-popover p-1 shadow-xl outline-none"
 							side="top"
 							sideOffset={4}
 							align="end"
@@ -147,7 +147,7 @@
 				</DropdownMenu.Root>
 			</div>
 
-			<div class="max-h-80 overflow-y-auto border-y border-zinc-700 px-2">
+			<div class="max-h-80 overflow-y-auto border-y border-border px-2">
 				{#if searchResults}
 					{#if searchResults.length > 0}
 						<div class="swatch-grid pb-2">
@@ -201,13 +201,13 @@
 					}}
 					placeholder={triggerColor}
 					size="5"
-					class="h-6 min-w-0 flex-1 rounded border border-l-[3px] border-zinc-600 border-l-(--hex-color) bg-zinc-800 px-1.5 font-mono text-[0.65rem] text-zinc-200 placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+					class="h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) bg-muted px-1.5 font-mono text-[0.65rem] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
 					style:--hex-color={triggerColor}
 				/>
 				<button
 					type="button"
 					onclick={submitHex}
-					class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-zinc-600 bg-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+					class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 					aria-label="Apply custom hex color"
 				>
 					<Check width="14" height="14" />

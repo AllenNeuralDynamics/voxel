@@ -4,12 +4,11 @@
 	export const checkboxVariants = tv({
 		base: [
 			'flex items-center justify-center rounded border',
-			'[--switch-accent:var(--color-emerald-600)]',
-			'border-zinc-600 bg-zinc-800',
+			'border-input bg-muted',
 			'transition-colors',
 			'disabled:cursor-not-allowed disabled:opacity-50',
-			'data-[state=checked]:border-(--switch-accent) data-[state=checked]:bg-(--switch-accent)',
-			'data-[state=indeterminate]:border-(--switch-accent) data-[state=indeterminate]:bg-(--switch-accent)'
+			'data-[state=checked]:border-success data-[state=checked]:bg-success',
+			'data-[state=indeterminate]:border-success data-[state=indeterminate]:bg-success'
 		],
 		variants: {
 			size: {
@@ -71,8 +70,8 @@
 	class={checkboxVariants({ size, class: className })}
 >
 	{#if checked}
-		<Check class="text-white" width={iconSizes[size]} height={iconSizes[size]} />
+		<Check class="text-success-fg" width={iconSizes[size]} height={iconSizes[size]} />
 	{:else if indeterminate}
-		<Minus class="text-white" width={iconSizes[size]} height={iconSizes[size]} />
+		<Minus class="text-success-fg" width={iconSizes[size]} height={iconSizes[size]} />
 	{/if}
 </CheckboxPrimitive.Root>

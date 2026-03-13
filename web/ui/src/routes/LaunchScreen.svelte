@@ -4,7 +4,8 @@
 	import SessionForm from './SessionForm.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import { Collapsible, Tooltip } from 'bits-ui';
-	import { ChevronRight, FolderOpenOutline, ArrowRight } from '$lib/icons';
+	import { ChevronRight, FolderOpenOutline, ArrowRight, Sun, Moon, Monitor } from '$lib/icons';
+	import { setMode, mode, userPrefersMode } from 'mode-watcher';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 
 	const { app }: { app: App } = $props();
@@ -224,7 +225,7 @@
 			</div>
 		{/if}
 
-		<div class="shrink-0 p-4 pt-2">
+		<div class="flex shrink-0 items-center justify-between p-4 pt-2">
 			<Tooltip.Provider>
 				<Tooltip.Root delayDuration={200}>
 					<Tooltip.Trigger class="cursor-pointer">
@@ -240,6 +241,28 @@
 					</Tooltip.Portal>
 				</Tooltip.Root>
 			</Tooltip.Provider>
+			<button
+				onclick={() => {
+					const pref = userPrefersMode.current;
+					if (pref === 'dark') setMode('light');
+					else if (pref === 'light') setMode('system');
+					else setMode('dark');
+				}}
+				class="flex size-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				title={userPrefersMode.current === 'system'
+					? 'Theme: System'
+					: mode.current === 'dark'
+						? 'Theme: Dark'
+						: 'Theme: Light'}
+			>
+				{#if userPrefersMode.current === 'system'}
+					<Monitor width="14" height="14" />
+				{:else if mode.current === 'dark'}
+					<Moon width="14" height="14" />
+				{:else}
+					<Sun width="14" height="14" />
+				{/if}
+			</button>
 		</div>
 	</div>
 

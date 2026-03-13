@@ -5,14 +5,13 @@
 		slots: {
 			root: [
 				'relative cursor-pointer rounded-full border',
-				'[--switch-accent:var(--color-emerald-600)]',
-				'border-zinc-600/50 bg-zinc-700/80',
-				'transition-colors hover:bg-zinc-700',
+				'border-border bg-muted',
+				'transition-colors hover:bg-accent',
 				'data-disabled:cursor-not-allowed data-disabled:opacity-40',
-				'data-[state=checked]:border-(--switch-accent) data-[state=checked]:bg-(--switch-accent)/90',
-				'data-[state=checked]:hover:bg-(--switch-accent)'
+				'data-[state=checked]:border-success data-[state=checked]:bg-success/90',
+				'data-[state=checked]:hover:bg-success'
 			],
-			thumb: ['block rounded-full bg-zinc-100 transition-transform']
+			thumb: ['block rounded-full bg-foreground transition-transform']
 		},
 		variants: {
 			size: {

@@ -233,15 +233,18 @@
 	let columnWidth = $state(288);
 
 	const ghostBtnClass =
-		'min-w-14 rounded-sm px-1.5 py-px text-[0.6rem] text-zinc-400 ' +
-		'transition-colors hover:bg-zinc-800 hover:text-zinc-300 ' +
+		'min-w-14 rounded-sm px-1.5 py-px text-[0.6rem] text-muted-foreground ' +
+		'transition-colors hover:bg-muted hover:text-foreground ' +
 		'disabled:cursor-not-allowed disabled:opacity-0';
 </script>
 
 <div class="channel-histogram flex flex-col" bind:clientWidth={columnWidth}>
 	<!-- Window Range -->
 	{#if windowMode !== 'inline'}
-		<div class="flex items-center justify-between text-zinc-400" class:window-row-hover={windowMode === 'hover'}>
+		<div
+			class="flex items-center justify-between text-muted-foreground"
+			class:window-row-hover={windowMode === 'hover'}
+		>
 			<SpinBox
 				bind:value={windowMin}
 				min={0}
@@ -267,14 +270,14 @@
 	{/if}
 
 	<!-- Histogram -->
-	<div class="border border-zinc-600 bg-transparent" bind:this={histContainerEl}>
+	<div class="border border-border bg-transparent" bind:this={histContainerEl}>
 		{#if hasValidData}
 			<svg
 				width="100%"
 				height={svgHeight}
 				role="img"
 				aria-label="Histogram for {label}"
-				class="cursor-crosshair bg-zinc-950"
+				class="cursor-crosshair bg-background"
 				onmousemove={onSvgMouseMove}
 				ondblclick={autoLevels}
 				oncontextmenu={(e) => {
@@ -369,13 +372,13 @@
 			</svg>
 		{:else}
 			<div class="flex items-center justify-center" style:height="{svgHeight}px">
-				<span class="text-[0.65rem] text-zinc-600">No histogram data</span>
+				<span class="text-[0.65rem] text-muted-foreground">No histogram data</span>
 			</div>
 		{/if}
 	</div>
 
 	<!-- Levels + Label -->
-	<div class="flex items-center justify-between text-zinc-400">
+	<div class="flex items-center justify-between text-muted-foreground">
 		<SpinBox
 			value={minIntensity}
 			min={0}

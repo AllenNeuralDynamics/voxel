@@ -19,4 +19,5 @@ export { default as TextInput, textInputVariants, type TextInputVariants } from 
 export * as Collapsible from './cn/collapsible';
 export * as ContextMenu from './cn/context-menu';
 export * as Dialog from './cn/dialog';
+export * as DropdownMenu from './cn/dropdown-menu';
 export { Toaster } from './cn/sonner';

@@ -310,8 +310,8 @@
 		{onclick}
 		{disabled}
 		class="rounded p-1 transition-colors {active
-			? `${activeColor} hover:bg-zinc-700`
-			: 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'} disabled:cursor-not-allowed disabled:opacity-50"
+			? `${activeColor} hover:bg-muted`
+			: 'text-muted-foreground hover:bg-muted hover:text-foreground'} disabled:cursor-not-allowed disabled:opacity-50"
 		{title}
 	>
 		<Icon width="14" height="14" />
@@ -379,7 +379,7 @@
 {#snippet pathLayer()}
 	{#if session.layerVisibility.path && session.stacks.length > 1}
 		{@const points = session.stacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
-		<g class="pointer-none text-slate-400" stroke="currentColor" stroke-linecap="square">
+		<g class="pointer-none text-muted-foreground" stroke="currentColor" stroke-linecap="square">
 			<polyline
 				class="nss fill-none opacity-35"
 				stroke-width="1.5"
@@ -492,9 +492,9 @@
 <div class="flex h-full w-full flex-col p-2">
 	{#if session.stage.x && session.stage.y && session.stage.z}
 		{@const layers: Layer[] = [
-			{ key: 'grid', color: 'text-blue-500', Icon: GridLines, title: 'Toggle grid' },
-			{ key: 'stacks', color: 'text-blue-400', Icon: StackLight, title: 'Toggle stacks' },
-			{ key: 'path', color: 'text-slate-400', Icon: PathArrow, title: 'Toggle path' },
+			{ key: 'grid', color: 'text-info', Icon: GridLines, title: 'Toggle grid' },
+			{ key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
+			{ key: 'path', color: 'text-muted-foreground', Icon: PathArrow, title: 'Toggle path' },
 			{ key: 'fov', color: 'text-success', Icon: Plus, title: 'Toggle FOV' },
 		]}
 
@@ -530,7 +530,7 @@
 							<svg
 								bind:this={svgRef}
 								viewBox={viewBoxStr}
-								class="border border-zinc-700"
+								class="border border-border"
 								style="width: {canvasWidth}px; height: {canvasHeight}px;"
 								overflow="visible"
 								role="img"
@@ -627,7 +627,7 @@
 				</div>
 
 				<div
-					class="relative border border-zinc-600 transition-colors duration-300 ease-in-out hover:bg-zinc-900"
+					class="relative border border-border transition-colors duration-300 ease-in-out hover:bg-background"
 					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
 				>
 					{@render stageSlider(

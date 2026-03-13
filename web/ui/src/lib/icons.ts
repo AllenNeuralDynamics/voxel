@@ -14,6 +14,7 @@ export { default as Close } from '~icons/mdi/close';
 export { default as Cog } from '~icons/mdi/cog';
 export { default as ContentSaveOutline } from '~icons/mdi/content-save-outline';
 export { default as DeleteOutline } from '~icons/mdi/delete-outline';
+export { default as DotsVertical } from '~icons/mdi/dots-vertical';
 export { default as Eye } from '~icons/mdi/eye';
 export { default as EyeOff } from '~icons/mdi/eye-off';
 export { default as FilterVariant } from '~icons/mdi/filter-variant';
@@ -49,3 +50,8 @@ export { default as GridLines } from '~icons/lucide-lab/grid-lines';
 export { default as LucideCheck } from '~icons/lucide/check';
 export { default as LucideCircle } from '~icons/lucide/circle';
 export { default as LucideChevronRight } from '~icons/lucide/chevron-right';
+
+// Theme mode
+export { default as Sun } from '~icons/lucide/sun';
+export { default as Moon } from '~icons/lucide/moon';
+export { default as Monitor } from '~icons/lucide/monitor';

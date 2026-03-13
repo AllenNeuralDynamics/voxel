@@ -295,7 +295,7 @@
 			height={svgHeight}
 			role="img"
 			aria-label="Histogram for {label}"
-			class="bg-zinc-950"
+			class="bg-background"
 			bind:clientWidth={svgWidth}
 		>
 			<defs>
@@ -393,9 +393,9 @@
 
 <div class="relative flex flex-col" bind:clientWidth={columnWidth} style:--label-width="{labelWidth}px">
 	{#if visible === false && onVisibilityChange}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-black/50">
+		<div class="absolute inset-0 z-10 flex items-center justify-center bg-overlay">
 			<button
-				class="flex items-center justify-center rounded p-1 text-zinc-400 transition-colors hover:text-zinc-200"
+				class="flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
 				onclick={() => onVisibilityChange?.(true)}
 				aria-label="Show channel"
 			>

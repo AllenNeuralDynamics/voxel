@@ -865,7 +865,7 @@
 			{:else if canEdit}
 				<span class="text-[0.65rem] text-muted-foreground">Select a device to edit its waveform</span>
 			{:else}
-				<span class="text-[0.65rem] text-amber-500/50">
+				<span class="text-[0.65rem] text-warning/50">
 					{!isActiveProfile
 						? 'Activate profile to edit timing and waveforms'
 						: 'Stop preview to edit timing and waveforms'}

@@ -15,8 +15,8 @@
 				secondary: 'border-secondary bg-secondary text-secondary-foreground hover:bg-secondary/80',
 				outline: 'border-input bg-transparent hover:bg-accent hover:text-accent-foreground focus:border-ring',
 				ghost: 'border-transparent hover:bg-accent hover:text-accent-foreground focus:border-ring',
-				danger: 'border-danger bg-danger text-white hover:bg-danger/90',
-				success: 'border-success bg-success text-white hover:bg-success/90',
+				danger: 'border-danger bg-danger text-danger-fg hover:bg-danger/90',
+				success: 'border-success bg-success text-success-fg hover:bg-success/90',
 				link: 'border-transparent text-primary underline-offset-4 hover:underline'
 			},
 			size: {

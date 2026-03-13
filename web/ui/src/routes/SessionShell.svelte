@@ -9,8 +9,9 @@
 	import { GridCanvas } from '$lib/ui/grid';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-	import { Button, Dialog } from '$lib/ui/kit';
-	import { AlertCircleOutline, LayersOutline, Microscope, Power } from '$lib/icons';
+	import { Button, Dialog, DropdownMenu } from '$lib/ui/kit';
+	import { AlertOutline, DotsVertical, LayersOutline, Microscope, Monitor, Power, Restore, Sun, Moon } from '$lib/icons';
+	import { setMode, mode } from 'mode-watcher';
 	import WorkflowTabs from './WorkflowTabs.svelte';
 	import { cn } from '$lib/utils';
 
@@ -79,31 +80,93 @@
 		}
 	});
 
+	let closeDialogOpen = $state(false);
+
 	const tabClasses = cn(
 		'flex min-w-24 gap-1 items-center justify-center rounded border border-border',
 		'px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors'
 	);
 </script>
 
-<div class="h-screen w-full bg-background text-foreground">
+<div class="h-screen w-full text-foreground">
 	<PaneGroup direction="horizontal" autoSaveId="main-h">
-		<Pane defaultSize={60} minSize={50} maxSize={70} class="bg-zinc-900">
+		<Pane defaultSize={60} minSize={50} maxSize={70} class="bg-surface  ">
 			<div class="grid h-full grid-rows-[auto_1fr] border-r border-border">
 				<header class="flex items-center justify-between border-b border-border bg-card px-2 py-4">
-					<!-- Left: session + instrument + workflow + acquisition -->
+					<!-- Left: session menu + instrument + workflow + acquisition -->
 					<nav class="flex items-center gap-4">
-						<!-- Session power -->
-						<Dialog.Root>
-							<Dialog.Trigger class={cn(tabClasses, 'min-w-0 cursor-pointer')} title={connectionStatus.label}>
+						<!-- Session menu -->
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger
+								class="flex size-8 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+								title={connectionStatus.label}
+							>
 								{#if session.client.connectionState === 'failed'}
-									<AlertCircleOutline width="14" height="14" class={connectionStatus.color} />
+									<AlertOutline width="16" height="16" class="text-danger" />
+								{:else if session.client.connectionState === 'connecting' || session.client.connectionState === 'reconnecting'}
+									<AlertOutline width="16" height="16" class="text-warning" />
 								{:else}
-									<Power width="14" height="14" class={connectionStatus.color} />
+									<DotsVertical width="16" height="16" />
 								{/if}
-							</Dialog.Trigger>
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content align="start">
+								{#if session.client.connectionState !== 'connected'}
+									<DropdownMenu.Label class="flex items-center gap-2 text-xs font-normal">
+										<span
+											class="inline-block h-2 w-2 shrink-0 rounded-full {session.client.connectionState === 'failed'
+												? 'bg-danger'
+												: 'bg-warning'}"
+										></span>
+										<span class="text-muted-foreground">
+											{connectionStatus.label}{#if connectionStatus.message}
+												&mdash; {connectionStatus.message}{/if}
+										</span>
+									</DropdownMenu.Label>
+									{#if session.client.connectionState === 'failed'}
+										<DropdownMenu.Item onclick={() => app.retryConnection()}>
+											<Restore width="14" height="14" />
+											Retry Connection
+										</DropdownMenu.Item>
+									{/if}
+									<DropdownMenu.Separator />
+								{/if}
+								<DropdownMenu.Sub>
+									<DropdownMenu.SubTrigger>
+										{#if mode.current === 'dark'}
+											<Moon width="14" height="14" />
+										{:else}
+											<Sun width="14" height="14" />
+										{/if}
+										Theme
+									</DropdownMenu.SubTrigger>
+									<DropdownMenu.SubContent>
+										<DropdownMenu.Item onclick={() => setMode('light')}>
+											<Sun width="14" height="14" />
+											Light
+										</DropdownMenu.Item>
+										<DropdownMenu.Item onclick={() => setMode('dark')}>
+											<Moon width="14" height="14" />
+											Dark
+										</DropdownMenu.Item>
+										<DropdownMenu.Item onclick={() => setMode('system')}>
+											<Monitor width="14" height="14" />
+											System
+										</DropdownMenu.Item>
+									</DropdownMenu.SubContent>
+								</DropdownMenu.Sub>
+								<DropdownMenu.Separator />
+								<DropdownMenu.Item variant="destructive" onclick={() => (closeDialogOpen = true)}>
+									<Power width="14" height="14" />
+									Close Session
+								</DropdownMenu.Item>
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
+
+						<!-- Close session confirmation dialog -->
+						<Dialog.Root bind:open={closeDialogOpen}>
 							<Dialog.Content size="sm" showCloseButton={false}>
 								<Dialog.Header>
-									<Dialog.Title>Session</Dialog.Title>
+									<Dialog.Title>Close Session</Dialog.Title>
 									<Dialog.Description>
 										<span class="flex items-center gap-2">
 											<span
