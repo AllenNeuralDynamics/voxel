@@ -29,6 +29,8 @@
 	// let isPlanning = $derived(session.workflow.stepStates['plan'] === 'active');
 	let isPlanning = true;
 
+	let profileStacks = $derived(session.stacks.filter((s) => s.profile_id === session.activeProfileId));
+
 	// FOV position relative to stage origin (lower limits)
 	let fovX = $derived(session.stage.x ? session.stage.x.position - session.stage.x.lowerLimit : 0);
 	let fovY = $derived(session.stage.y ? session.stage.y.position - session.stage.y.lowerLimit : 0);
@@ -101,8 +103,6 @@
 
 	// ── FOV thumbnail ────────────────────────────────────────────────────
 
-	let showThumbnail = $state(true);
-
 	const FOV_RESOLUTION = 256;
 	let thumbnail = $state('');
 	let fovNeedsRedraw = false;
@@ -129,8 +129,13 @@
 	function fovFrameLoop() {
 		if (fovNeedsRedraw && session.preview) {
 			fovNeedsRedraw = false;
-			compositeFullFrames(offscreenCtx, offscreen, session.preview.channels);
-			thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
+			const hasFrames = session.preview.channels.some((ch) => ch.visible && ch.frame);
+			if (hasFrames) {
+				compositeFullFrames(offscreenCtx, offscreen, session.preview.channels);
+				thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
+			} else {
+				thumbnail = '';
+			}
 		}
 		fovAnimFrameId = requestAnimationFrame(fovFrameLoop);
 	}
@@ -310,8 +315,8 @@
 		{onclick}
 		{disabled}
 		class="rounded p-1 transition-colors {active
-			? `${activeColor} hover:bg-muted`
-			: 'text-muted-foreground hover:bg-muted hover:text-foreground'} disabled:cursor-not-allowed disabled:opacity-50"
+			? `${activeColor} hover:bg-element-hover`
+			: 'text-fg-muted hover:text-fg hover:bg-element-hover'} disabled:cursor-not-allowed disabled:opacity-50"
 		{title}
 	>
 		<Icon width="14" height="14" />
@@ -344,32 +349,26 @@
 {#snippet stacksLayer()}
 	{#if session.layerVisibility.stacks}
 		<g class="stacks-layer">
-			{#each session.stacks as stack (`${stack.row}_${stack.col}_${stack.profile_id}`)}
+			{#each profileStacks as stack (`${stack.row}_${stack.col}`)}
 				{@const cx = toMm(stack.x_um)}
 				{@const cy = toMm(stack.y_um)}
 				{@const w = toMm(stack.w_um)}
 				{@const h = toMm(stack.h_um)}
-				{@const isOtherProfile = stack.profile_id !== session.activeProfileId}
 				<rect
 					x={cx - w / 2}
 					y={cy - h / 2}
 					width={w}
 					height={h}
 					class="nss stack outline-none {getStackStatusColor(stack.status)}"
-					class:cursor-pointer={!isXYMoving && !isOtherProfile}
+					class:cursor-pointer={!isXYMoving}
 					class:cursor-not-allowed={isXYMoving}
-					class:dimmed={isOtherProfile}
 					role="button"
-					tabindex={isXYMoving || isOtherProfile ? -1 : 0}
-					onclick={(e) => !isOtherProfile && handleTileSelect(e, stack)}
-					oncontextmenu={(e) => !isOtherProfile && handleTileContext(e, stack)}
-					onkeydown={(e) => !isOtherProfile && handleKeydown(e, () => session.selectTiles([[stack.row, stack.col]]))}
+					tabindex={isXYMoving ? -1 : 0}
+					onclick={(e) => handleTileSelect(e, stack)}
+					oncontextmenu={(e) => handleTileContext(e, stack)}
+					onkeydown={(e) => handleKeydown(e, () => session.selectTiles([[stack.row, stack.col]]))}
 				>
-					<title
-						>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames){isOtherProfile
-							? ` [${stack.profile_id}]`
-							: ''}</title
-					>
+					<title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
 				</rect>
 			{/each}
 		</g>
@@ -377,9 +376,9 @@
 {/snippet}
 
 {#snippet pathLayer()}
-	{#if session.layerVisibility.path && session.stacks.length > 1}
-		{@const points = session.stacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
-		<g class="pointer-none text-muted-foreground" stroke="currentColor" stroke-linecap="square">
+	{#if session.layerVisibility.path && profileStacks.length > 1}
+		{@const points = profileStacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
+		<g class="pointer-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
 			<polyline
 				class="nss fill-none opacity-35"
 				stroke-width="1.5"
@@ -393,7 +392,7 @@
 				<path
 					d={ARROW_HEAD}
 					stroke-width="1"
-					class="nss opacity-70"
+					class="nss fill-none opacity-70"
 					transform="translate({midX}, {midY}) rotate({angle})"
 				/>
 			{/each}
@@ -404,44 +403,24 @@
 {#snippet fovLayer()}
 	{#if session.layerVisibility.fov}
 		<g class="fov-layer pointer-events-none">
-			<defs>
-				<clipPath id="fov-clip">
-					<rect x={fovLeft} y={fovTop} width={session.fov.width} height={session.fov.height} />
-				</clipPath>
-			</defs>
-
-			{#if showThumbnail && thumbnail}
-				<image
-					href={thumbnail}
-					x={fovLeft}
-					y={fovTop}
-					width={session.fov.width}
-					height={session.fov.height}
-					clip-path="url(#fov-clip)"
-					preserveAspectRatio="xMidYMid slice"
-				/>
-			{/if}
-
-			<g>
-				<line
-					class="nss"
-					x1={-marginX - fovExtension}
-					y1={fovY}
-					x2={-marginX + viewBoxWidth}
-					y2={fovY}
-					stroke-width="1"
-					stroke={session.stage.y?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
-				/>
-				<line
-					class="nss"
-					x1={fovX}
-					y1={-marginY - fovExtension}
-					x2={fovX}
-					y2={-marginY + viewBoxHeight}
-					stroke-width="1"
-					stroke={session.stage.x?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
-				/>
-			</g>
+			<line
+				class="nss"
+				x1={-marginX - fovExtension}
+				y1={fovY}
+				x2={-marginX + viewBoxWidth}
+				y2={fovY}
+				stroke-width="1"
+				stroke={session.stage.y?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+			/>
+			<line
+				class="nss"
+				x1={fovX}
+				y1={-marginY - fovExtension}
+				x2={fovX}
+				y2={-marginY + viewBoxHeight}
+				stroke-width="1"
+				stroke={session.stage.x?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+			/>
 		</g>
 	{/if}
 {/snippet}
@@ -489,17 +468,70 @@
 
 <!-- ── Layout ─────────────────────────────────────────────────────────── -->
 
-<div class="flex h-full w-full flex-col p-2">
+<div class="flex h-full w-full flex-col gap-2 p-2">
 	{#if session.stage.x && session.stage.y && session.stage.z}
 		{@const layers: Layer[] = [
 			{ key: 'grid', color: 'text-info', Icon: GridLines, title: 'Toggle grid' },
 			{ key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
-			{ key: 'path', color: 'text-muted-foreground', Icon: PathArrow, title: 'Toggle path' },
+			{ key: 'path', color: 'text-fg-muted', Icon: PathArrow, title: 'Toggle path' },
 			{ key: 'fov', color: 'text-success', Icon: Plus, title: 'Toggle FOV' },
+			{ key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' },
 		]}
 
 		<div class="grid flex-1 grid-rows-[1fr_auto] overflow-hidden" bind:this={containerRef}>
 			<div class="flex place-self-center" style:gap="{STAGE_GAP}px">
+				<div
+					class="hover:bg-canvas relative border border-border transition-colors duration-300 ease-in-out"
+					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
+				>
+					{@render stageSlider(
+						'vertical-rtl',
+						session.stage.z.lowerLimit,
+						session.stage.z.upperLimit,
+						isZMoving && targetZ !== null ? targetZ : session.stage.z.position,
+						isZMoving,
+						handleZInput,
+						`position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: ${Z_AREA_WIDTH}px;`
+					)}
+					<svg
+						viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
+						class="z-svg pointer-none absolute inset-0 z-0"
+						preserveAspectRatio="none"
+						width="100%"
+						height="100%"
+					>
+						{#if session.stage.z}
+							{#each profileStacks as stack (`z_${stack.row}_${stack.col}`)}
+								{@const selected = session.isTileSelected(stack.row, stack.col)}
+								{@const z0Y =
+									(1 - (stack.z_start_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
+								{@const z1Y =
+									(1 - (stack.z_end_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
+								<g
+									class={getStackStatusColor(stack.status)}
+									stroke-width={selected ? '1.5' : '0.5'}
+									stroke="currentColor"
+									opacity={selected ? 1 : 0.3}
+								>
+									<line class="nss" x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
+									<line class="nss" x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
+								</g>
+							{/each}
+						{/if}
+						<line
+							x1="0"
+							y1={zLineY}
+							x2={Z_SVG_WIDTH}
+							y2={zLineY}
+							class="nss z-line"
+							class:moving={isZMoving}
+							stroke-width="1"
+							stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+						>
+							<title>Z: {session.stage.z?.position.toFixed(1)} mm</title>
+						</line>
+					</svg>
+				</div>
 				<div
 					class="grid"
 					style="grid-template-columns: {SLIDER_WIDTH / 2}px auto; grid-template-rows: {SLIDER_WIDTH / 2}px 1fr;"
@@ -536,6 +568,17 @@
 								role="img"
 								oncontextmenu={handleCanvasContext}
 							>
+								{#if session.layerVisibility.thumbnail && thumbnail}
+									<image
+										href={thumbnail}
+										x={fovLeft}
+										y={fovTop}
+										width={session.fov.width}
+										height={session.fov.height}
+										preserveAspectRatio="xMidYMid slice"
+										class="pointer-events-none"
+									/>
+								{/if}
 								{@render fovLayer()}
 								{@render gridLayer()}
 								{@render stacksLayer()}
@@ -564,10 +607,10 @@
 							<ContextMenu.Item onSelect={() => session.invertSelection()}>Invert selection</ContextMenu.Item>
 
 							{#if !contextTile}
-								{#if session.stacks.length > 0 || session.tiles.length > 0}
+								{#if profileStacks.length > 0 || session.tiles.length > 0}
 									<ContextMenu.Separator />
 								{/if}
-								{#if session.stacks.length > 0}
+								{#if profileStacks.length > 0}
 									<ContextMenu.Item onSelect={() => session.selectWithStacks()}>Select with stacks</ContextMenu.Item>
 								{/if}
 								{#if session.tiles.length > 0}
@@ -575,7 +618,7 @@
 										Select without stacks
 									</ContextMenu.Item>
 								{/if}
-								{#if session.stacks.length > 0}
+								{#if profileStacks.length > 0}
 									<ContextMenu.Sub>
 										<ContextMenu.SubTrigger>Select by status</ContextMenu.SubTrigger>
 										<ContextMenu.SubContent>
@@ -625,133 +668,70 @@
 						</ContextMenu.Content>
 					</ContextMenu.Root>
 				</div>
-
-				<div
-					class="relative border border-border transition-colors duration-300 ease-in-out hover:bg-background"
-					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
-				>
-					{@render stageSlider(
-						'vertical-rtl',
-						session.stage.z.lowerLimit,
-						session.stage.z.upperLimit,
-						isZMoving && targetZ !== null ? targetZ : session.stage.z.position,
-						isZMoving,
-						handleZInput,
-						`position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: ${Z_AREA_WIDTH}px;`
-					)}
-					<svg
-						viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
-						class="z-svg pointer-none absolute inset-0 z-0"
-						preserveAspectRatio="none"
-						width="100%"
-						height="100%"
-					>
-						{#if session.stage.z}
-							{#each session.stacks as stack (`z_${stack.row}_${stack.col}_${stack.profile_id}`)}
-								{@const selected = session.isTileSelected(stack.row, stack.col)}
-								{@const isOther = stack.profile_id !== session.activeProfileId}
-								{@const z0Y =
-									(1 - (stack.z_start_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
-								{@const z1Y =
-									(1 - (stack.z_end_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
-								<g
-									class={getStackStatusColor(stack.status)}
-									stroke-width={selected && !isOther ? '1.5' : '0.5'}
-									stroke="currentColor"
-									opacity={isOther ? 0.1 : selected ? 1 : 0.3}
-								>
-									<line class="nss" x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
-									<line class="nss" x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
-								</g>
-							{/each}
-						{/if}
-						<line
-							x1="0"
-							y1={zLineY}
-							x2={Z_SVG_WIDTH}
-							y2={zLineY}
-							class="nss z-line"
-							class:moving={isZMoving}
-							stroke-width="1"
-							stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
-						>
-							<title>Z: {session.stage.z?.position.toFixed(1)} mm</title>
-						</line>
-					</svg>
-				</div>
 			</div>
-
-			<div class="flex w-full items-center justify-between">
-				<div class="flex gap-0.5">
-					{#each layers as { key, color, Icon, title } (key)}
-						{@render layerToggle(session.layerVisibility[key], color, Icon, title, () => toggleLayer(key))}
-					{/each}
-					{@render layerToggle(
-						showThumbnail && session.layerVisibility.fov,
-						'text-success',
-						ImageLight,
-						'Toggle thumbnail',
-						() => (showThumbnail = !showThumbnail),
-						!session.layerVisibility.fov
-					)}
-				</div>
-				<div class="flex items-center gap-3">
-					<div class="flex items-center gap-2">
-						<SpinBox
-							value={session.stage.x.position}
-							min={session.stage.x.lowerLimit}
-							max={session.stage.x.upperLimit}
-							step={0.01}
-							decimals={2}
-							numCharacters={8}
-							size="sm"
-							prefix="X"
-							suffix="mm"
-							color={session.stage.x.isMoving ? 'var(--danger)' : undefined}
-							onChange={(v) => session.stage.x.move(v)}
-						/>
-						<SpinBox
-							value={session.stage.y.position}
-							min={session.stage.y.lowerLimit}
-							max={session.stage.y.upperLimit}
-							step={0.01}
-							decimals={2}
-							numCharacters={8}
-							size="sm"
-							prefix="Y"
-							suffix="mm"
-							color={session.stage.y.isMoving ? 'var(--danger)' : undefined}
-							onChange={(v) => session.stage.y.move(v)}
-						/>
-						<SpinBox
-							value={session.stage.z.position}
-							min={session.stage.z.lowerLimit}
-							max={session.stage.z.upperLimit}
-							step={0.001}
-							decimals={3}
-							numCharacters={8}
-							size="sm"
-							prefix="Z"
-							suffix="mm"
-							color={session.stage.z.isMoving ? 'var(--danger)' : undefined}
-							onChange={(v) => session.stage.z.move(v)}
-						/>
-					</div>
-					<Button
-						variant={session.stage.isMoving ? 'danger' : 'outline'}
-						size="xs"
-						onclick={() => session.stage.halt()}
-						disabled={!session.stage.isMoving}
-						aria-label="Halt stage"
-					>
-						Halt
-					</Button>
+		</div>
+		<div class="flex w-full flex-row-reverse items-center justify-between">
+			<div class="flex gap-0.5">
+				{#each layers as { key, color, Icon, title } (key)}
+					{@render layerToggle(session.layerVisibility[key], color, Icon, title, () => toggleLayer(key))}
+				{/each}
+			</div>
+			<div class="flex items-center gap-3">
+				<Button
+					variant={session.stage.isMoving ? 'danger' : 'outline'}
+					size="xs"
+					onclick={() => session.stage.halt()}
+					disabled={!session.stage.isMoving}
+					aria-label="Halt stage"
+				>
+					Halt
+				</Button>
+				<div class="flex items-center gap-2">
+					<SpinBox
+						value={session.stage.x.position}
+						min={session.stage.x.lowerLimit}
+						max={session.stage.x.upperLimit}
+						step={0.01}
+						decimals={2}
+						numCharacters={8}
+						size="sm"
+						prefix="X"
+						suffix="mm"
+						color={session.stage.x.isMoving ? 'var(--danger)' : undefined}
+						onChange={(v) => session.stage.x.move(v)}
+					/>
+					<SpinBox
+						value={session.stage.y.position}
+						min={session.stage.y.lowerLimit}
+						max={session.stage.y.upperLimit}
+						step={0.01}
+						decimals={2}
+						numCharacters={8}
+						size="sm"
+						prefix="Y"
+						suffix="mm"
+						color={session.stage.y.isMoving ? 'var(--danger)' : undefined}
+						onChange={(v) => session.stage.y.move(v)}
+					/>
+					<SpinBox
+						value={session.stage.z.position}
+						min={session.stage.z.lowerLimit}
+						max={session.stage.z.upperLimit}
+						step={0.001}
+						decimals={3}
+						numCharacters={8}
+						size="sm"
+						prefix="Z"
+						suffix="mm"
+						color={session.stage.z.isMoving ? 'var(--danger)' : undefined}
+						onChange={(v) => session.stage.z.move(v)}
+					/>
 				</div>
 			</div>
 		</div>
 	{:else}
 		<div class="grid flex-1 place-content-center">
-			<p class="text-sm text-muted-foreground">Stage not available</p>
+			<p class="text-fg-muted text-sm">Stage not available</p>
 		</div>
 	{/if}
 </div>
@@ -786,11 +766,6 @@
 		transition: fill-opacity 300ms ease;
 		&:hover {
 			fill-opacity: 0.3;
-		}
-		&.dimmed {
-			fill-opacity: 0.07;
-			stroke-opacity: 0.3;
-			pointer-events: none;
 		}
 	}
 

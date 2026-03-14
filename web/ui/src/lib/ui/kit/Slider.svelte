@@ -73,27 +73,22 @@
 		--thumb-width: 0.2rem;
 		--thumb-height: 0.75rem;
 		--thumb-radius: 2px;
-		--thumb-color: var(--color-muted-foreground);
-		--track-filled: var(--color-muted-foreground);
-		--track-unfilled: transparent;
+		--thumb-color: var(--color-fg);
+		--track-filled: var(--color-primary);
+		--track-unfilled: var(--color-element-bg);
 		--track-height: 0.5rem;
 		--track-radius: 0.25rem;
-		--track-border-color: var(--color-input);
-		--track-border: 1px solid var(--track-border-color);
+		--track-border: 1px solid var(--color-fg-faint);
 	}
 
 	.slider:hover {
-		--thumb-color: var(--color-foreground);
-		--track-filled: var(--color-foreground);
-		--track-unfilled: var(--color-muted);
+		--track-unfilled: var(--color-element-hover);
 	}
 
 	.slider:focus,
 	.slider:active {
-		--thumb-color: var(--color-foreground);
-		--track-filled: var(--color-foreground);
-		--track-unfilled: var(--color-muted);
-		--track-border-color: var(--color-ring);
+		--track-unfilled: var(--color-element-hover);
+		--track-border: 1px solid var(--color-border-focused);
 	}
 
 	.slider::-webkit-slider-runnable-track {
@@ -108,7 +103,7 @@
 		);
 		border: var(--track-border);
 		border-radius: var(--track-radius);
-		transition: border-color 150ms ease;
+		transition: background 150ms ease;
 	}
 
 	.slider::-webkit-slider-thumb {
@@ -127,7 +122,7 @@
 		background: var(--track-unfilled);
 		border: var(--track-border);
 		border-radius: var(--track-radius);
-		transition: border-color 150ms ease;
+		transition: background 150ms ease;
 	}
 
 	.slider::-moz-range-progress {

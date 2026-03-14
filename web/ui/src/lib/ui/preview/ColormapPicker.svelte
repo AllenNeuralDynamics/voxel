@@ -89,7 +89,7 @@
 
 	<Popover.Portal>
 		<Popover.Content
-			class="z-50 flex flex-col-reverse rounded-t border border-border bg-popover shadow-xl outline-none {width
+			class="bg-floating z-50 flex flex-col-reverse rounded-t border border-border shadow-xl outline-none {width
 				? ''
 				: 'w-72'}"
 			style={width ? `width: ${width}px;` : undefined}
@@ -102,20 +102,20 @@
 					type="text"
 					bind:value={search}
 					placeholder="Search colormaps..."
-					class="h-6 min-w-0 flex-1 rounded border border-input bg-muted px-1.5 text-[0.65rem] text-foreground placeholder-muted-foreground focus:border-ring focus:outline-none"
+					class="bg-element-bg text-fg placeholder-fg-muted focus:border-focused h-6 min-w-0 flex-1 rounded border border-input px-1.5 text-[0.65rem] focus:outline-none"
 				/>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger
-						class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input bg-muted transition-colors hover:bg-accent {hasFilter
-							? 'text-foreground'
-							: 'text-muted-foreground'}"
+						class="bg-element-bg hover:bg-element-hover flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input transition-colors {hasFilter
+							? 'text-fg'
+							: 'text-fg-muted'}"
 						aria-label="Filter groups"
 					>
 						<FilterVariant width="14" height="14" />
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Portal>
 						<DropdownMenu.Content
-							class="z-60 min-w-32 rounded border border-border bg-popover p-1 shadow-xl outline-none"
+							class="bg-floating z-60 min-w-32 rounded border border-border p-1 shadow-xl outline-none"
 							side="top"
 							sideOffset={4}
 							align="end"
@@ -130,12 +130,12 @@
 										else next.add(group.uid);
 										hiddenGroups = next;
 									}}
-									class="flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-[0.6rem] text-muted-foreground outline-none select-none data-highlighted:bg-accent data-highlighted:text-foreground"
+									class="text-fg-muted data-highlighted:bg-element-hover data-highlighted:text-fg flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-[0.6rem] outline-none select-none"
 								>
 									{#snippet children({ checked })}
 										<span class="inline-flex h-3 w-3 shrink-0 items-center justify-center">
 											{#if checked}
-												<Check class="h-3 w-3 text-foreground" />
+												<Check class="text-fg h-3 w-3" />
 											{/if}
 										</span>
 										<span>{group.label}</span>
@@ -159,19 +159,17 @@
 									aria-label="Select colormap {name}"
 								>
 									<span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
-									<span class="truncate text-[0.6rem] text-muted-foreground">{name}</span>
+									<span class="text-fg-muted truncate text-[0.6rem]">{name}</span>
 								</button>
 							{/each}
 						</div>
 					{:else}
-						<div class="pb-2 text-[0.65rem] text-muted-foreground">No matches</div>
+						<div class="text-fg-muted pb-2 text-[0.65rem]">No matches</div>
 					{/if}
 				{:else}
 					{#each catalog as group (group.uid)}
 						{#if !hiddenGroups.has(group.uid)}
-							<div
-								class="pt-1 pb-0.5 text-[0.5rem] font-medium tracking-wide text-muted-foreground uppercase opacity-60"
-							>
+							<div class="text-fg-muted pt-1 pb-0.5 text-[0.5rem] font-medium tracking-wide uppercase opacity-60">
 								{group.label}
 							</div>
 							<div class="swatch-grid pb-2">
@@ -183,7 +181,7 @@
 										aria-label="Select colormap {name}"
 									>
 										<span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
-										<span class="truncate text-[0.6rem] text-muted-foreground">{name}</span>
+										<span class="text-fg-muted truncate text-[0.6rem]">{name}</span>
 									</button>
 								{/each}
 							</div>
@@ -201,13 +199,13 @@
 					}}
 					placeholder={triggerColor}
 					size="5"
-					class="h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) bg-muted px-1.5 font-mono text-[0.65rem] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+					class="bg-element-bg text-fg placeholder:text-fg-muted focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) px-1.5 font-mono text-[0.65rem] focus:outline-none"
 					style:--hex-color={triggerColor}
 				/>
 				<button
 					type="button"
 					onclick={submitHex}
-					class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					class="bg-element-bg text-fg-muted hover:bg-element-hover hover:text-fg flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input transition-colors"
 					aria-label="Apply custom hex color"
 				>
 					<Check width="14" height="14" />

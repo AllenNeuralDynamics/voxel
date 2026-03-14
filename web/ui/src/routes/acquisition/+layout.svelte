@@ -36,8 +36,8 @@
 				</Button>
 			{/if}
 			{#if session.info}
-				<div class="ml-auto text-xs text-muted-foreground">
-					<!-- <span class="text-foreground">{session.info.rig_name}</span> -->
+				<div class="text-fg-muted ml-auto text-xs">
+					<!-- <span class="text-fg">{session.info.rig_name}</span> -->
 					{#if session.info.session_name}
 						<span class="mx-1.5 text-border">·</span>
 						<span>{session.info.session_name}</span>

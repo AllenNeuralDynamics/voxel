@@ -2,10 +2,10 @@
 	import type { App } from '$lib/main';
 	import type { SessionDirectory, JsonSchema } from '$lib/main';
 	import SessionForm from './SessionForm.svelte';
+	import AppMenu from './AppMenu.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
-	import { Collapsible, Tooltip } from 'bits-ui';
-	import { ChevronRight, FolderOpenOutline, ArrowRight, Sun, Moon, Monitor } from '$lib/icons';
-	import { setMode, mode, userPrefersMode } from 'mode-watcher';
+	import { Collapsible } from 'bits-ui';
+	import { ChevronRight, FolderOpenOutline, ArrowRight } from '$lib/icons';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 
 	const { app }: { app: App } = $props();
@@ -22,19 +22,6 @@
 	const isIdle = $derived(phase === 'idle');
 	const isLaunching = $derived(phase === 'launching');
 	const connectionState = $derived(app.client.connectionState);
-	const connectionStatus = $derived.by(() => {
-		switch (connectionState) {
-			case 'connected':
-				return { color: 'bg-success', text: 'Connected' };
-			case 'connecting':
-			case 'reconnecting':
-				return { color: 'bg-warning', text: app.client.connectionMessage };
-			case 'failed':
-				return { color: 'bg-danger', text: app.client.connectionMessage };
-			default:
-				return { color: 'bg-muted-foreground', text: 'Offline' };
-		}
-	});
 	const logs = $derived(app.logs);
 
 	$effect(() => {
@@ -118,20 +105,18 @@
 	}
 </script>
 
-<div class="flex h-screen w-full bg-background">
+<div class="bg-canvas flex h-screen w-full">
 	<div class="flex w-150 shrink-0 flex-col border-r border-border">
 		<div class="shrink-0 p-4 pb-0">
 			<div class="mb-6 flex flex-col gap-2">
-				<div class="flex items-center gap-2">
-					<VoxelLogo
-						class="h-8 w-8"
-						topLeft={{ top: '#2EF58D', left: '#22CC75', right: '#189960' }}
-						topRight={{ top: '#F52E64', left: '#CC2250', right: '#99193C' }}
-						bottom={{ top: '#F5D62E', left: '#CCB222', right: '#998619' }}
-					/>
-					<h1 class="text-2xl font-light text-foreground uppercase">Voxel</h1>
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<VoxelLogo class="h-8 w-8" />
+						<h1 class="text-fg text-2xl font-light uppercase">Voxel</h1>
+					</div>
+					<AppMenu {app} class="w-4" />
 				</div>
-				<p class="text-xs text-muted-foreground">Light sheet microscopy</p>
+				<p class="text-fg-muted text-xs">Light sheet microscopy</p>
 			</div>
 
 			{#if error}
@@ -146,7 +131,7 @@
 				<p class="text-sm text-danger">{app.client.connectionMessage}</p>
 				<button
 					onclick={() => app.retryConnection()}
-					class="rounded border border-input bg-transparent px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					class="text-fg-muted hover:text-fg hover:bg-element-hover rounded border border-input bg-transparent px-4 py-1.5 text-xs transition-colors"
 				>
 					Retry
 				</button>
@@ -154,7 +139,7 @@
 		{:else if !isIdle || isLaunching}
 			<div class="flex flex-1 items-center justify-center gap-2">
 				<div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-				<p class="text-xs text-muted-foreground">
+				<p class="text-fg-muted text-xs">
 					{isLaunching ? 'Starting session...' : app.client.connectionMessage}
 				</p>
 			</div>
@@ -162,7 +147,7 @@
 			<div class="shrink-0 px-4">
 				<Collapsible.Root class="mb-6">
 					<Collapsible.Trigger
-						class="flex w-full items-center justify-between py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground/80 [&[data-state=open]>svg]:rotate-90"
+						class="text-fg-muted hover:text-fg/80 flex w-full items-center justify-between py-2 text-sm font-medium transition-colors [&[data-state=open]>svg]:rotate-90"
 					>
 						New Session
 						<ChevronRight width="16" height="16" class="transition-transform duration-200" />
@@ -183,40 +168,40 @@
 			</div>
 
 			<div class="px-4">
-				<h2 class="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
+				<h2 class="text-fg-muted text-sm font-medium">Recent Sessions</h2>
 			</div>
 			<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-2">
 				{#if loadingSessions}
 					<div class="flex items-center justify-center rounded border border-border bg-card py-12">
-						<div class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground"></div>
-						<span class="ml-3 text-sm text-muted-foreground">Loading sessions...</span>
+						<div class="border-t-fg-muted h-5 w-5 animate-spin rounded-full border-2 border-border"></div>
+						<span class="text-fg-muted ml-3 text-sm">Loading sessions...</span>
 					</div>
 				{:else if sessions.length === 0}
 					<div
 						class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10"
 					>
-						<FolderOpenOutline width="32" height="32" class="text-muted-foreground/50" />
-						<p class="mt-2 text-sm text-muted-foreground">No recent sessions</p>
-						<p class="text-xs text-muted-foreground/60">Create a new session to get started</p>
+						<FolderOpenOutline width="32" height="32" class="text-fg-muted/50" />
+						<p class="text-fg-muted mt-2 text-sm">No recent sessions</p>
+						<p class="text-fg-muted/60 text-xs">Create a new session to get started</p>
 					</div>
 				{:else}
 					<div class="space-y-2">
 						{#each sessions as session (session.path)}
 							<button
-								class="group flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-foreground/20 hover:bg-accent"
+								class="group hover:border-fg/20 hover:bg-element-hover flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors"
 								onclick={() => handleResumeSession(session)}
 							>
-								<span class="min-w-0 flex-1 truncate text-xs text-foreground">
-									<span class="text-muted-foreground">{session.root_name} /</span>
+								<span class="text-fg min-w-0 flex-1 truncate text-xs">
+									<span class="text-fg-muted">{session.root_name} /</span>
 									{session.name}
 								</span>
-								<span class="shrink-0 text-[0.65rem] text-muted-foreground/60">
+								<span class="text-fg-muted/60 shrink-0 text-[0.65rem]">
 									{formatRelativeTime(session.modified)}
 								</span>
 								<ArrowRight
 									width="14"
 									height="14"
-									class="shrink-0 text-muted-foreground/30 transition-colors group-hover:text-foreground"
+									class="text-fg-muted/30 group-hover:text-fg shrink-0 transition-colors"
 								/>
 							</button>
 						{/each}
@@ -224,46 +209,6 @@
 				{/if}
 			</div>
 		{/if}
-
-		<div class="flex shrink-0 items-center justify-between p-4 pt-2">
-			<Tooltip.Provider>
-				<Tooltip.Root delayDuration={200}>
-					<Tooltip.Trigger class="cursor-pointer">
-						<span class="block h-1.5 w-1.5 rounded-full {connectionStatus.color}"></span>
-					</Tooltip.Trigger>
-					<Tooltip.Portal>
-						<Tooltip.Content
-							sideOffset={4}
-							class="z-50 rounded border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
-						>
-							{connectionStatus.text}
-						</Tooltip.Content>
-					</Tooltip.Portal>
-				</Tooltip.Root>
-			</Tooltip.Provider>
-			<button
-				onclick={() => {
-					const pref = userPrefersMode.current;
-					if (pref === 'dark') setMode('light');
-					else if (pref === 'light') setMode('system');
-					else setMode('dark');
-				}}
-				class="flex size-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-				title={userPrefersMode.current === 'system'
-					? 'Theme: System'
-					: mode.current === 'dark'
-						? 'Theme: Dark'
-						: 'Theme: Light'}
-			>
-				{#if userPrefersMode.current === 'system'}
-					<Monitor width="14" height="14" />
-				{:else if mode.current === 'dark'}
-					<Moon width="14" height="14" />
-				{:else}
-					<Sun width="14" height="14" />
-				{/if}
-			</button>
-		</div>
 	</div>
 
 	<div class="flex flex-1 flex-col bg-card p-4">

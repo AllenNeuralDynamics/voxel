@@ -14,7 +14,9 @@
 
 	const schema = $derived<JsonSchema | null>(session.info?.metadata_schema ?? null);
 	const metadata = $derived(session.metadata);
-	const hasAcquired = $derived(session.stacks.some((s) => s.status !== 'planned'));
+	const hasAcquired = $derived(
+		session.stacks.some((s) => s.profile_id === session.activeProfileId && s.status !== 'planned')
+	);
 
 	// Editing state
 	let editing = $state(false);
@@ -92,7 +94,7 @@
 	<section>
 		<!-- Header -->
 		<div class="mb-2 flex items-center gap-2">
-			<h3 class="text-[0.65rem] font-medium tracking-wide text-muted-foreground/70 uppercase">Metadata</h3>
+			<h3 class="text-fg-muted/70 text-[0.65rem] font-medium tracking-wide uppercase">Metadata</h3>
 			<div class="flex-1"></div>
 			{#if editing}
 				<button
@@ -107,7 +109,7 @@
 				<button
 					type="button"
 					onclick={cancelEditing}
-					class="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted"
+					class="text-fg-muted hover:bg-element-hover rounded p-0.5 transition-colors"
 					title="Discard changes"
 				>
 					<Close width="14" height="14" />
@@ -116,7 +118,7 @@
 				<button
 					type="button"
 					onclick={startEditing}
-					class="rounded px-1.5 py-0.5 text-[0.6rem] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded px-1.5 py-0.5 text-[0.6rem] transition-colors"
 				>
 					Edit
 				</button>
@@ -127,11 +129,11 @@
 		<div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2">
 			<MetadataFields {schema} {values} onChange={setDraft} disabled={isFieldDisabled} size="sm">
 				{#snippet field(key, prop, input)}
-					<div class="max-w-48 pt-1 text-[0.65rem] text-muted-foreground/70" title={sanitizeString(key)}>
+					<div class="text-fg-muted/70 max-w-48 pt-1 text-[0.65rem]" title={sanitizeString(key)}>
 						<span class="flex items-center gap-1">
 							<span class="truncate">{sanitizeString(key)}</span>
 							{#if isLocked(prop)}
-								<LockOutline width="10" height="10" class="shrink-0 text-muted-foreground/30" />
+								<LockOutline width="10" height="10" class="text-fg-muted/30 shrink-0" />
 							{/if}
 						</span>
 					</div>

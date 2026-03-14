@@ -21,9 +21,11 @@
 		session.setTileOrder(value as TileOrder);
 	}
 
+	let profileStacks = $derived(session.stacks.filter((s) => s.profile_id === session.activeProfileId));
+
 	let selectedTile = $derived(session.selectedTiles[0] ?? null);
 	let stack = $derived(
-		selectedTile ? (session.stacks.find((s) => s.row === selectedTile.row && s.col === selectedTile.col) ?? null) : null
+		selectedTile ? (profileStacks.find((s) => s.row === selectedTile.row && s.col === selectedTile.col) ?? null) : null
 	);
 
 	let isEditing = $state(false);
@@ -106,9 +108,9 @@
 	<div
 		class="flex h-6 cursor-default items-stretch rounded border border-muted bg-transparent font-mono text-[0.65rem]"
 	>
-		<span class="flex shrink-0 items-center ps-1.5 pe-2 text-muted-foreground">{label}</span>
-		<span class="flex flex-1 items-center px-0.5 text-foreground">{value}</span>
-		<span class="flex items-center pe-1.5 text-muted-foreground">{unit}</span>
+		<span class="text-fg-muted flex shrink-0 items-center ps-1.5 pe-2">{label}</span>
+		<span class="text-fg flex flex-1 items-center px-0.5">{value}</span>
+		<span class="text-fg-muted flex items-center pe-1.5">{unit}</span>
 	</div>
 {/snippet}
 
@@ -141,7 +143,7 @@
 {/snippet}
 
 {#if session.stage.z && selectedTile}
-	<div class="flex flex-col border-y border-border bg-accent/30">
+	<div class="bg-element-hover/30 flex flex-col border-y border-border">
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
 				<span class="flex items-center gap-3">
@@ -155,7 +157,7 @@
 						{#if hasStack}
 							<button
 								onclick={handleDelete}
-								class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-danger"
+								class="text-fg-muted hover:bg-element-hover rounded p-1 transition-colors hover:text-danger"
 								title="Delete stack"
 							>
 								<TrashCanOutline width="14" height="14" />
@@ -164,7 +166,7 @@
 						{#if isDirty}
 							<button
 								onclick={handleSubmit}
-								class="rounded p-1 text-success transition-colors hover:bg-muted hover:text-success"
+								class="hover:bg-element-hover rounded p-1 text-success transition-colors hover:text-success"
 								title={hasStack ? 'Save changes' : 'Add stack'}
 							>
 								<Check width="14" height="14" />
@@ -172,7 +174,7 @@
 						{/if}
 						<button
 							onclick={handleCancel}
-							class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							class="text-fg-muted hover:bg-element-hover hover:text-fg rounded p-1 transition-colors"
 							title="Cancel"
 						>
 							<Close width="14" height="14" />
@@ -180,7 +182,7 @@
 					{:else}
 						<button
 							onclick={handleEdit}
-							class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							class="text-fg-muted hover:bg-element-hover hover:text-fg rounded p-1 transition-colors"
 							title={hasStack ? 'Edit stack' : 'Add stack'}
 						>
 							<PencilOutline width="14" height="14" />
@@ -222,7 +224,7 @@
 {/if}
 
 <div class="flex items-center justify-between border-t border-border p-3 text-[0.65rem]">
-	<span class="text-muted-foreground">Order</span>
+	<span class="text-fg-muted">Order</span>
 	<Select value={session.tileOrder} options={TILE_ORDER_OPTIONS} onchange={handleTileOrderChange} size="sm" />
 	{@render staticItem('Z Step', String(session.gridConfig?.z_step_um ?? '—'), 'µm')}
 </div>

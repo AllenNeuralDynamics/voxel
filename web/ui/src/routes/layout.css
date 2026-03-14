@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '$lib/themes/index.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+	/* ── Surfaces ──────────────────────────────────────────────────────── */
+	--color-canvas: var(--canvas);
+	--color-surface: var(--surface);
+	--color-panel: var(--panel);
+	--color-elevated: var(--elevated);
+	--color-floating: var(--floating);
+	--color-backdrop: var(--backdrop);
+
+	/* ── Element ───────────────────────────────────────────────────────── */
+	--color-element-bg: var(--element-bg);
+	--color-element-hover: var(--element-hover);
+	--color-element-active: var(--element-active);
+	--color-element-selected: var(--element-selected);
+
+	/* ── Text ──────────────────────────────────────────────────────────── */
+	--color-fg: var(--fg);
+	--color-fg-muted: var(--fg-muted);
+	--color-fg-faint: var(--fg-faint);
+	--color-fg-accent: var(--fg-accent);
+
+	/* ── Borders ───────────────────────────────────────────────────────── */
+	--color-border: var(--border);
+	--color-border-variant: var(--border-variant);
+	--color-border-focused: var(--border-focused);
+	--color-border-selected: var(--border-selected);
+	--color-border-disabled: var(--border-disabled);
+	--color-input: var(--border-variant);
+	--color-ring: var(--border-focused);
+
+	/* ── Interactive ───────────────────────────────────────────────────── */
+	--color-primary: var(--primary);
+	--color-primary-fg: var(--primary-fg);
+	--color-secondary: var(--secondary);
+	--color-secondary-fg: var(--secondary-fg);
+
+	/* ── Semantic ──────────────────────────────────────────────────────── */
+	--color-danger: var(--danger);
+	--color-danger-bg: var(--danger-bg);
+	--color-danger-fg: var(--danger-fg);
+	--color-success: var(--success);
+	--color-success-bg: var(--success-bg);
+	--color-success-fg: var(--success-fg);
+	--color-warning: var(--warning);
+	--color-warning-bg: var(--warning-bg);
+	--color-warning-fg: var(--warning-fg);
+	--color-info: var(--info);
+	--color-info-bg: var(--info-bg);
+	--color-info-fg: var(--info-fg);
+	--color-active: var(--active);
+	--color-active-bg: var(--active-bg);
+	--color-active-fg: var(--active-fg);
+
+	/* ── Animations ────────────────────────────────────────────────────── */
+	--animate-collapsible-down: collapsible-down 0.2s ease-out;
+	--animate-collapsible-up: collapsible-up 0.2s ease-out;
+
+	/* ── shadcn legacy (remove after migration) ────────────────────────
+	 * These keep bg-background, text-muted-foreground, etc. working
+	 * until all components are migrated to the new token names.
+	 * ──────────────────────────────────────────────────────────────────── */
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	/* ── voxel legacy (remove after migration) ─────────────────────────
+	 * These keep bg-surface, text-surface-foreground, etc. working
+	 * until all components are migrated to the new token names.
+	 * ──────────────────────────────────────────────────────────────────── */
+	--color-surface-foreground: var(--surface-foreground);
+	--color-overlay: var(--overlay);
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────── */
+
+@keyframes collapsible-down {
+	from {
+		height: 0;
+	}
+	to {
+		height: var(--bits-collapsible-content-height);
+	}
+}
+
+@keyframes collapsible-up {
+	from {
+		height: var(--bits-collapsible-content-height);
+	}
+	to {
+		height: 0;
+	}
+}
+
+/* ── Base layer ───────────────────────────────────────────────────────── */
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+	}
+
+	/* Thin scrollbars — webkit (Chrome, Safari, Edge) */
+	::-webkit-scrollbar {
+		width: 2px !important;
+		height: 2px !important;
+	}
+	::-webkit-scrollbar-track {
+		background: transparent !important;
+	}
+	::-webkit-scrollbar-thumb {
+		background: var(--scrollbar-thumb) !important;
+		border-radius: 3px !important;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: var(--scrollbar-thumb-hover) !important;
+	}
+
+	/* Thin scrollbars — Firefox */
+	* {
+		scrollbar-width: thin !important;
+		scrollbar-color: var(--scrollbar-thumb) transparent !important;
+	}
+}

@@ -1,0 +1,73 @@
+/*
+ * Voxel Theme: GitHub Dark
+ * Based on: Zed "GitHub Dark" from github-theme extension
+ * Source: ~/Library/Application Support/Zed/extensions/installed/github-theme/themes/github_theme.json
+ * See base.css for token documentation.
+ */
+
+[data-theme='github'].dark {
+	/* ── Surfaces ──────────────────────────────────────────────────────── */
+
+	--canvas: #0d1117; /* zed: editor.background, background, toolbar.background */
+	--surface: #010409; /* zed: surface.background, panel.background, status_bar.background, tab_bar.background */
+	--panel: var(--surface); /* zed: panel.background */
+	--elevated: #151b23; /* zed: editor.subheader.background, editor.active_line.background */
+	--floating: #010409; /* zed: elevated_surface.background */
+	--backdrop: #000000cc;
+
+	/* ── Element ───────────────────────────────────────────────────────── */
+
+	--element-bg: #656c7633; /* zed: element.background — semi-transparent gray */
+	--element-hover: #656c7633; /* zed: element.hover (same value in GitHub) */
+	--element-active: #656c7633; /* zed: element.active */
+	--element-selected: #656c7633; /* zed: element.selected */
+
+	/* ── Text ──────────────────────────────────────────────────────────── */
+
+	--fg: #f0f6fc; /* zed: text */
+	--fg-muted: #9198a1; /* zed: icon.muted, text.placeholder */
+	--fg-faint: #656c76; /* zed: text.disabled */
+	--fg-accent: #4493f8; /* zed: text.accent */
+
+	/* ── Borders ───────────────────────────────────────────────────────── */
+
+	--border: #3d444d; /* zed: border */
+	--border-variant: #3d444db3; /* zed: border.variant (70% alpha) */
+	--border-focused: #1f6feb; /* zed: border.focused */
+	--border-selected: #1f6feb; /* zed: border.selected */
+	--border-disabled: #3d444d66; /* zed: border.disabled (40% alpha) */
+
+	/* ── Interactive ───────────────────────────────────────────────────── */
+
+	--primary: #1f6feb; /* zed: border.focused, border.selected */
+	--primary-fg: #ffffff;
+	--secondary: #656c7633; /* zed: element.background */
+	--secondary-fg: #f0f6fc;
+
+	/* ── Semantic ──────────────────────────────────────────────────────── */
+
+	--danger: #f85149; /* zed: error */
+	--danger-bg: #f851491a; /* zed: deleted.background (semi-transparent red) */
+	--danger-fg: #f0f6fc;
+
+	--success: #3fb950; /* zed: success */
+	--success-bg: #2ea04326; /* zed: success.background (semi-transparent green) */
+	--success-fg: #f0f6fc;
+
+	--warning: #d29922; /* zed: warning */
+	--warning-bg: #bb800926; /* zed: modified.background (semi-transparent amber) */
+	--warning-fg: #f0f6fc;
+
+	--info: #4493f8; /* derived: using accent blue */
+	--info-bg: #388bfd1a; /* zed: drop_target.background (semi-transparent blue) */
+	--info-fg: #f0f6fc;
+
+	--active: #db6d28; /* zed: conflict (orange) */
+	--active-bg: #db6d281a; /* zed: conflict.background */
+	--active-fg: #f0f6fc;
+
+	/* ── Scrollbar ─────────────────────────────────────────────────────── */
+
+	--scrollbar-thumb: #656c764d; /* zed: scrollbar.thumb.background */
+	--scrollbar-thumb-hover: #656c7666; /* zed: scrollbar.thumb.hover_background */
+}

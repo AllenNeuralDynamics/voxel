@@ -24,7 +24,7 @@
 	function getLevelColor(level: LogMessage['level']): string {
 		switch (level) {
 			case 'debug':
-				return 'text-muted-foreground';
+				return 'text-fg-muted';
 			case 'info':
 				return 'text-info';
 			case 'warning':
@@ -32,7 +32,7 @@
 			case 'error':
 				return 'text-danger';
 			default:
-				return 'text-muted-foreground';
+				return 'text-fg-muted';
 		}
 	}
 
@@ -62,11 +62,11 @@
 
 <div class="flex h-full flex-col overflow-hidden">
 	<div class="mb-2 flex shrink-0 items-center justify-between">
-		<h2 class="text-sm font-medium text-foreground">Log</h2>
+		<h2 class="text-fg text-sm font-medium">Log</h2>
 		{#if onClear}
 			<button
 				onclick={onClear}
-				class="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				class="text-fg-muted hover:bg-element-hover hover:text-fg flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
 				title="Clear logs"
 			>
 				<DeleteOutline width="14" height="14" />
@@ -76,20 +76,18 @@
 	</div>
 	<div
 		bind:this={container}
-		class="log-container min-h-0 flex-1 overflow-y-auto rounded border border-border bg-surface font-mono text-xs"
+		class="log-container bg-canvas min-h-0 flex-1 overflow-y-auto rounded border border-border font-mono text-xs"
 	>
 		{#if logs.length === 0}
-			<div class="flex h-full items-center justify-center text-muted-foreground">Waiting for logs...</div>
+			<div class="text-fg-muted flex h-full items-center justify-center">Waiting for logs...</div>
 		{:else}
 			<div class="space-y-0.5 p-2">
 				{#each logs as log, i (i)}
 					{@const LevelIcon = levelIcons[log.level] ?? CircleSmall}
 					<div class="flex items-center gap-2">
-						<span class="w-[8ch] shrink-0 text-muted-foreground/50">{formatTime(log.timestamp)}</span>
-						<span class="w-[42ch] shrink-0 text-muted-foreground" title={log.logger}
-							>{truncateMiddle(log.logger, 42)}</span
-						>
-						<span class="min-w-0 flex-1 text-foreground">{log.message}</span>
+						<span class="text-fg-muted/50 w-[8ch] shrink-0">{formatTime(log.timestamp)}</span>
+						<span class="text-fg-muted w-[42ch] shrink-0" title={log.logger}>{truncateMiddle(log.logger, 42)}</span>
+						<span class="text-fg min-w-0 flex-1">{log.message}</span>
 						<span class="shrink-0 {getLevelColor(log.level)}" title={log.level}>
 							<LevelIcon width="14" height="14" />
 						</span>
@@ -120,6 +118,6 @@
 	}
 
 	.log-container::-webkit-scrollbar-thumb:hover {
-		background-color: var(--muted-foreground);
+		background-color: var(--fg-muted);
 	}
 </style>

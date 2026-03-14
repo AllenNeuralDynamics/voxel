@@ -11,10 +11,10 @@
 		],
 		variants: {
 			variant: {
-				default: 'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
-				secondary: 'border-secondary bg-secondary text-secondary-foreground hover:bg-secondary/80',
-				outline: 'border-input bg-transparent hover:bg-accent hover:text-accent-foreground focus:border-ring',
-				ghost: 'border-transparent hover:bg-accent hover:text-accent-foreground focus:border-ring',
+				default: 'border-primary bg-primary text-primary-fg hover:bg-primary/90',
+				secondary: 'border-secondary bg-secondary text-secondary-fg hover:bg-secondary/80',
+				outline: 'border-input bg-transparent hover:bg-element-hover hover:text-secondary-fg focus:border-focused',
+				ghost: 'border-transparent hover:bg-element-hover hover:text-secondary-fg focus:border-focused',
 				danger: 'border-danger bg-danger text-danger-fg hover:bg-danger/90',
 				success: 'border-success bg-success text-success-fg hover:bg-success/90',
 				link: 'border-transparent text-primary underline-offset-4 hover:underline'

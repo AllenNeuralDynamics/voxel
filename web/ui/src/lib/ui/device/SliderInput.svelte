@@ -15,7 +15,7 @@
 
 <div class="grid grid-rows-[auto_1fr_auto] gap-1">
 	<div class="flex items-baseline justify-between">
-		<label for={label} class="text-left text-[0.65rem] font-medium text-muted-foreground">
+		<label for={label} class="text-fg-muted text-left text-[0.65rem] font-medium">
 			{label}
 		</label>
 		<SpinBox
@@ -32,7 +32,7 @@
 		/>
 	</div>
 	<Slider {target} value={readback} {min} {max} {step} {onChange} />
-	<div class="flex justify-between text-[0.6rem] text-muted-foreground">
+	<div class="text-fg-muted flex justify-between text-[0.6rem]">
 		<span>{min}</span>
 		<span>{max}</span>
 	</div>

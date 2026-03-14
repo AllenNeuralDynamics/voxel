@@ -4,20 +4,24 @@
 	export const tagInputVariants = tv({
 		slots: {
 			wrapper: 'flex flex-wrap gap-1',
-			chip: [
-				'flex items-center rounded border border-input bg-transparent',
-				'transition-colors hover:border-foreground/20',
-				'focus-within:border-ring'
-			],
-			input: 'bg-transparent outline-none placeholder-muted-foreground',
-			remove: 'shrink-0 rounded-r text-muted-foreground/50 transition-colors hover:text-danger',
+			chip: ['flex items-center rounded border border-input', 'transition-colors', 'focus-within:border-focused'],
+			input: 'bg-transparent outline-none placeholder-fg-muted',
+			remove: 'shrink-0 rounded-r text-fg-muted/50 transition-colors hover:text-danger',
 			add: [
 				'flex items-center justify-center rounded border border-dashed border-input',
-				'text-muted-foreground/50 transition-colors',
-				'hover:border-foreground/20 hover:text-foreground'
+				'text-fg-muted/50 transition-colors',
+				'hover:border-fg/20 hover:text-fg'
 			]
 		},
 		variants: {
+			variant: {
+				ghost: {
+					chip: 'bg-transparent hover:border-fg/20'
+				},
+				filled: {
+					chip: 'bg-element-bg hover:bg-element-hover'
+				}
+			},
 			size: {
 				sm: {
 					chip: 'h-5',
@@ -40,6 +44,7 @@
 			}
 		},
 		defaultVariants: {
+			variant: 'filled',
 			size: 'md'
 		}
 	});
@@ -59,9 +64,16 @@
 		class?: string;
 	}
 
-	let { value = $bindable(), disabled = false, onChange, size = 'md', class: className = '' }: Props = $props();
+	let {
+		value = $bindable(),
+		disabled = false,
+		onChange,
+		variant = 'filled',
+		size = 'md',
+		class: className = ''
+	}: Props = $props();
 
-	const styles = $derived(tagInputVariants({ size }));
+	const styles = $derived(tagInputVariants({ variant, size }));
 
 	const iconSizes: Record<NonNullable<TagInputVariants['size']>, number> = {
 		sm: 10,

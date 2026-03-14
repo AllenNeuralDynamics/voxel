@@ -233,18 +233,15 @@
 	let columnWidth = $state(288);
 
 	const ghostBtnClass =
-		'min-w-14 rounded-sm px-1.5 py-px text-[0.6rem] text-muted-foreground ' +
-		'transition-colors hover:bg-muted hover:text-foreground ' +
+		'min-w-14 rounded-sm px-1.5 py-px text-[0.6rem] text-fg-muted ' +
+		'transition-colors hover:bg-element-hover hover:text-fg ' +
 		'disabled:cursor-not-allowed disabled:opacity-0';
 </script>
 
 <div class="channel-histogram flex flex-col" bind:clientWidth={columnWidth}>
 	<!-- Window Range -->
 	{#if windowMode !== 'inline'}
-		<div
-			class="flex items-center justify-between text-muted-foreground"
-			class:window-row-hover={windowMode === 'hover'}
-		>
+		<div class="text-fg-muted flex items-center justify-between" class:window-row-hover={windowMode === 'hover'}>
 			<SpinBox
 				bind:value={windowMin}
 				min={0}
@@ -277,7 +274,7 @@
 				height={svgHeight}
 				role="img"
 				aria-label="Histogram for {label}"
-				class="cursor-crosshair bg-background"
+				class="bg-canvas cursor-crosshair"
 				onmousemove={onSvgMouseMove}
 				ondblclick={autoLevels}
 				oncontextmenu={(e) => {
@@ -372,13 +369,13 @@
 			</svg>
 		{:else}
 			<div class="flex items-center justify-center" style:height="{svgHeight}px">
-				<span class="text-[0.65rem] text-muted-foreground">No histogram data</span>
+				<span class="text-fg-muted text-[0.65rem]">No histogram data</span>
 			</div>
 		{/if}
 	</div>
 
 	<!-- Levels + Label -->
-	<div class="flex items-center justify-between text-muted-foreground">
+	<div class="text-fg-muted flex items-center justify-between">
 		<SpinBox
 			value={minIntensity}
 			min={0}

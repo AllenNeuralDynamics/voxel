@@ -161,7 +161,7 @@
 	const namedChannels = $derived(previewer.channels.filter((c) => c.name));
 </script>
 
-<div class="grid h-full grid-rows-[auto_1fr_auto] gap-0 bg-background" bind:this={containerEl}>
+<div class="bg-canvas grid h-full grid-rows-[auto_1fr_auto] gap-0" bind:this={containerEl}>
 	<!-- Top: Controls -->
 	<div class="flex items-center justify-between px-2 pt-5 pb-3">
 		<PreviewInfo {previewer} />
@@ -169,9 +169,9 @@
 			<PanZoomControls {previewer} />
 			<button
 				onclick={() => (showHistograms = !showHistograms)}
-				class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors hover:bg-accent {showHistograms
-					? 'text-muted-foreground'
-					: 'text-muted-foreground/40'}"
+				class="hover:bg-element-hover flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors {showHistograms
+					? 'text-fg-muted'
+					: 'text-fg-muted/40'}"
 				aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
 				title={showHistograms ? 'Hide histograms' : 'Show histograms'}
 			>

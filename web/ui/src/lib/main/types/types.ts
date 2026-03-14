@@ -226,6 +226,7 @@ export interface LayerVisibility {
 	stacks: boolean;
 	path: boolean;
 	fov: boolean;
+	thumbnail: boolean;
 }
 
 // ============================================================================

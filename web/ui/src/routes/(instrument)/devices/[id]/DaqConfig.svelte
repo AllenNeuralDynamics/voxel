@@ -18,9 +18,9 @@
 <section class="space-y-6">
 	<!-- Header -->
 	<div class="flex items-center justify-between">
-		<h2 class="text-sm font-medium text-foreground">{sanitizeString(deviceId)}</h2>
+		<h2 class="text-fg text-sm font-medium">{sanitizeString(deviceId)}</h2>
 		<span
-			class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-muted-foreground/30')}
+			class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
 			title={device?.connected ? 'Connected' : 'Disconnected'}
 		></span>
 	</div>
@@ -29,12 +29,12 @@
 		<!-- Acquisition Ports -->
 		{#if acqPorts.length > 0}
 			<div class="rounded border border-border bg-card p-3">
-				<h4 class="mb-2 text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Acquisition Ports</h4>
+				<h4 class="text-fg-muted mb-2 text-[0.65rem] font-medium tracking-wide uppercase">Acquisition Ports</h4>
 				<div class="grid gap-1.5 text-xs">
 					{#each acqPorts as [portDevice, port] (portDevice)}
 						<div class="flex items-center justify-between">
-							<span class="text-foreground">{portDevice}</span>
-							<span class="font-mono text-muted-foreground">{port}</span>
+							<span class="text-fg">{portDevice}</span>
+							<span class="text-fg-muted font-mono">{port}</span>
 						</div>
 					{/each}
 				</div>
@@ -45,7 +45,7 @@
 			<DeviceBrowser {deviceId} {devicesManager} />
 		{:else}
 			<div class="flex items-center justify-center py-12">
-				<p class="text-sm text-muted-foreground">DAQ device not available</p>
+				<p class="text-fg-muted text-sm">DAQ device not available</p>
 			</div>
 		{/if}
 	</div>

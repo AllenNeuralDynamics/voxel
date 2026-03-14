@@ -43,21 +43,21 @@
 <Tooltip.Provider>
 	<Tooltip.Root delayDuration={150}>
 		<Tooltip.Trigger
-			class="flex items-center gap-1.5 rounded p-1 font-mono text-[0.65rem] transition-colors hover:bg-accent"
+			class="hover:bg-element-hover flex items-center gap-1.5 rounded p-1 font-mono text-[0.65rem] transition-colors"
 			aria-label="Preview info"
 		>
 			{#if frameInfo}
-				<span class="text-muted-foreground">Frame</span>
-				<span class="text-foreground">#{maxFrameIdx}</span>
+				<span class="text-fg-muted">Frame</span>
+				<span class="text-fg">#{maxFrameIdx}</span>
 			{:else}
-				<span class="text-muted-foreground">No frames</span>
+				<span class="text-fg-muted">No frames</span>
 			{/if}
 			{#if hasMismatch}
 				<Alert width="12" height="12" class="text-warning" />
 			{/if}
 		</Tooltip.Trigger>
 		<Tooltip.Content
-			class="z-50 w-64 rounded-md border border-border bg-popover p-3 text-left text-xs text-popover-foreground shadow-xl outline-none"
+			class="bg-floating text-fg z-50 w-64 rounded-md border border-border p-3 text-left text-xs shadow-xl outline-none"
 			sideOffset={4}
 			align="start"
 		>
@@ -65,7 +65,7 @@
 				<div class="space-y-2">
 					<div class="space-y-1 text-[0.7rem]">
 						<div class="flex justify-between gap-2">
-							<span class="text-muted-foreground">Preview Size</span>
+							<span class="text-fg-muted">Preview Size</span>
 							<span class="text-right">{frameInfo.preview_width} × {frameInfo.preview_height}</span>
 						</div>
 					</div>
@@ -80,7 +80,7 @@
 							<div class="space-y-1">
 								{#each channelFrameInfos as channel (channel.name)}
 									<div class="flex justify-between gap-2">
-										<span class="text-muted-foreground">{channel.label ?? channel.name}</span>
+										<span class="text-fg-muted">{channel.label ?? channel.name}</span>
 										<span class="text-right">{channel.frameInfo.full_width} × {channel.frameInfo.full_height}</span>
 									</div>
 								{/each}
@@ -90,7 +90,7 @@
 				</div>
 			{:else}
 				<div>
-					<p class="text-xs text-muted-foreground">No frames available</p>
+					<p class="text-fg-muted text-xs">No frames available</p>
 				</div>
 			{/if}
 		</Tooltip.Content>

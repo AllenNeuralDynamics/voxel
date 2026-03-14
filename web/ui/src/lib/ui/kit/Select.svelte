@@ -5,15 +5,15 @@
 		slots: {
 			trigger: [
 				'group flex w-full items-center justify-between gap-2',
-				'rounded border border-input bg-transparent',
-				'transition-colors hover:border-foreground/20',
-				'focus:border-ring focus:outline-none',
+				'rounded border border-input',
+				'transition-colors',
+				'focus:border-focused focus:outline-none',
 				'disabled:cursor-not-allowed disabled:border-input/50'
 			],
 			content: [
-				'z-50 mt-1 rounded border bg-popover p-1 shadow-md',
+				'z-50 mt-1 rounded border bg-floating p-1 shadow-md',
 				'w-(--bits-select-anchor-width) min-w-(--bits-select-anchor-width)',
-				'origin-(--bits-select-content-transform-origin) text-popover-foreground',
+				'origin-(--bits-select-content-transform-origin) text-fg',
 				'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
 				'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95'
 			],
@@ -21,10 +21,18 @@
 				'relative flex w-full cursor-default gap-2 rounded',
 				'outline-none select-none',
 				'data-disabled:pointer-events-none data-disabled:opacity-50',
-				'data-highlighted:bg-accent data-highlighted:text-accent-foreground'
+				'data-highlighted:bg-element-hover data-highlighted:text-fg'
 			]
 		},
 		variants: {
+			variant: {
+				ghost: {
+					trigger: 'bg-transparent hover:border-fg/20'
+				},
+				filled: {
+					trigger: 'bg-element-bg hover:bg-element-hover'
+				}
+			},
 			size: {
 				sm: {
 					trigger: 'h-5 px-1.5 text-[0.65rem]',
@@ -41,6 +49,7 @@
 			}
 		},
 		defaultVariants: {
+			variant: 'filled',
 			size: 'md'
 		}
 	});
@@ -83,6 +92,7 @@
 		showCheckmark = false,
 		icon = ChevronDown,
 		emptyMessage,
+		variant = 'filled',
 		size = 'md',
 		class: className = ''
 	}: Props = $props();
@@ -96,7 +106,7 @@
 	}
 
 	const items = $derived(options.map((o) => ({ value: o.value, label: o.label })));
-	const styles = $derived(selectVariants({ size }));
+	const styles = $derived(selectVariants({ variant, size }));
 
 	const iconSizes: Record<NonNullable<SelectVariants['size']>, number> = {
 		sm: 12,
@@ -111,11 +121,11 @@
 			{#if selectedLabel}
 				{selectedLabel}
 			{:else}
-				<span class="text-muted-foreground">{placeholder}</span>
+				<span class="text-fg-muted">{placeholder}</span>
 			{/if}
 		</span>
 		{#if loading}
-			<DotsSpinner class="shrink-0 text-muted-foreground" width={iconSizes[size]} height={iconSizes[size]} />
+			<DotsSpinner class="text-fg-muted shrink-0" width={iconSizes[size]} height={iconSizes[size]} />
 		{:else}
 			{@const IconComponent = icon}
 			<IconComponent class="shrink-0 opacity-50" width={iconSizes[size]} height={iconSizes[size]} />
@@ -125,7 +135,7 @@
 	<SelectPrimitive.Portal>
 		<SelectPrimitive.Content align="start" class={styles.content()}>
 			{#if options.length === 0 && emptyMessage}
-				<div class="px-3 py-2 text-sm text-muted-foreground">{emptyMessage}</div>
+				<div class="text-fg-muted px-3 py-2 text-sm">{emptyMessage}</div>
 			{:else}
 				<SelectPrimitive.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
 					<SelectPrimitive.Group>
@@ -136,16 +146,16 @@
 								class={cn(styles.item(), option.description ? 'items-start' : 'items-center')}
 							>
 								{#if showCheckmark}
-									<span class="inline-flex h-3 w-3 shrink-0 items-center justify-center text-success">
+									<span class="inline-flex h-3 w-3 shrink-0 items-center justify-center text-primary">
 										{#if value === option.value}
 											<Check class="h-3 w-3" />
 										{/if}
 									</span>
 								{/if}
 								<div class="flex flex-col gap-0.5">
-									<span class="text-popover-foreground">{option.label}</span>
+									<span class="text-fg">{option.label}</span>
 									{#if option.description}
-										<span class="text-[0.65rem] text-muted-foreground">{option.description}</span>
+										<span class="text-fg-muted text-[0.65rem]">{option.description}</span>
 									{/if}
 								</div>
 							</SelectPrimitive.Item>

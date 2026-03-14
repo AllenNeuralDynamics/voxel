@@ -3,15 +3,19 @@
 
 	export const textInputVariants = tv({
 		slots: {
-			wrapper: [
-				'flex items-center rounded border border-input bg-transparent',
-				'transition-colors hover:border-foreground/20',
-				'focus-within:border-ring'
-			],
-			input: ['w-full bg-transparent outline-none', 'placeholder-muted-foreground'],
-			prefix: ['flex shrink-0 items-center font-mono whitespace-nowrap', 'text-muted-foreground select-none']
+			wrapper: ['flex items-center rounded border border-input', 'transition-colors', 'focus-within:border-focused'],
+			input: ['w-full bg-transparent outline-none', 'placeholder-fg-muted'],
+			prefix: ['flex shrink-0 items-center font-mono whitespace-nowrap', 'text-fg-muted select-none']
 		},
 		variants: {
+			variant: {
+				ghost: {
+					wrapper: 'bg-transparent hover:border-fg/20'
+				},
+				filled: {
+					wrapper: 'bg-element-bg hover:bg-element-hover'
+				}
+			},
 			size: {
 				sm: {
 					wrapper: 'h-5',
@@ -31,6 +35,7 @@
 			}
 		},
 		defaultVariants: {
+			variant: 'filled',
 			size: 'md'
 		}
 	});
@@ -62,11 +67,12 @@
 		disabled = false,
 		onChange,
 		id,
+		variant = 'filled',
 		size = 'md',
 		class: className = ''
 	}: Props = $props();
 
-	const styles = $derived(textInputVariants({ size }));
+	const styles = $derived(textInputVariants({ variant, size }));
 
 	function handleInput(event: Event & { currentTarget: HTMLInputElement }) {
 		value = event.currentTarget.value;

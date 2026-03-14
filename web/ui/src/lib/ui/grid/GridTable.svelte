@@ -29,8 +29,10 @@
 		return `${row},${col}`;
 	}
 
+	let profileStacks = $derived(session.stacks.filter((s) => s.profile_id === session.activeProfileId));
+
 	function getStack(tile: Tile): Stack | null {
-		return session.stacks.find((s) => s.row === tile.row && s.col === tile.col) ?? null;
+		return profileStacks.find((s) => s.row === tile.row && s.col === tile.col) ?? null;
 	}
 
 	const filteredTiles = $derived.by(() => {
@@ -107,7 +109,7 @@
 				const [row, col] = key.split(',').map(Number);
 				return { row, col };
 			})
-			.filter(({ row, col }) => session.stacks.some((s) => s.row === row && s.col === col));
+			.filter(({ row, col }) => profileStacks.some((s) => s.row === row && s.col === col));
 
 		if (positions.length > 0) {
 			session.removeStacks(positions);
@@ -124,7 +126,7 @@
 				const [row, col] = k.split(',').map(Number);
 				return { row, col };
 			})
-			.filter(({ row, col }) => session.stacks.some((s) => s.row === row && s.col === col));
+			.filter(({ row, col }) => profileStacks.some((s) => s.row === row && s.col === col));
 
 		if (checkedItems.has(key) && checkedWithStacks.length > 1) {
 			session.editStacks(checkedWithStacks.map((p) => ({ ...p, zStartUm: zStart, zEndUm: zEnd })));
@@ -134,11 +136,11 @@
 	}
 </script>
 
-<div class="flex h-full flex-col text-xs text-foreground">
+<div class="text-fg flex h-full flex-col text-xs">
 	<!-- Table -->
 	<div class="flex-1 overflow-auto">
 		<table class="w-full border-collapse">
-			<thead class="sticky top-0 z-1000 bg-card text-foreground uppercase">
+			<thead class="text-fg sticky top-0 z-1000 bg-card uppercase">
 				<tr class="text-[0.65rem] font-medium">
 					<th class="w-8 border-b border-border px-5 py-1.5">
 						<div class="flex items-center justify-center">
@@ -153,7 +155,7 @@
 					<th class="w-56 border-b border-border p-1.5 text-left">
 						<div class="flex items-center gap-1">
 							<SpinBox bind:value={defaultZStart} min={0} step={10} numCharacters={13} appearance="inline" />
-							<span class="text-muted-foreground">→</span>
+							<span class="text-fg-muted">→</span>
 							<SpinBox
 								bind:value={defaultZEnd}
 								min={0}
@@ -162,7 +164,7 @@
 								appearance="inline"
 								align="right"
 							/>
-							<span class="ml-1 text-[0.65rem] text-muted-foreground lowercase">µm</span>
+							<span class="text-fg-muted ml-1 text-[0.65rem] lowercase">µm</span>
 						</div>
 					</th>
 					<th class="w-16 border-b border-border p-2 text-right font-medium tracking-wider"> Slices </th>
@@ -175,7 +177,7 @@
 					{@const stack = getStack(tile)}
 					{@const focused = isFocused(tile)}
 					<tr
-						class="cursor-pointer border-b border-l-2 border-border border-l-transparent transition-[background-color] hover:bg-accent"
+						class="hover:bg-element-hover cursor-pointer border-b border-l-2 border-border border-l-transparent transition-[background-color]"
 						class:!border-l-warning={focused}
 						onclick={(e) => handleRowClick(e, tile)}
 					>
@@ -191,7 +193,7 @@
 						<td class="p-1.5 px-3 text-left font-mono" ondblclick={() => handleTileDoubleClick(tile)}>
 							R{tile.row}, C{tile.col}
 						</td>
-						<td class="p-1.5 font-mono text-[0.65rem] text-muted-foreground">
+						<td class="text-fg-muted p-1.5 font-mono text-[0.65rem]">
 							{(tile.x_um / 1000).toFixed(2)}, {(tile.y_um / 1000).toFixed(2)} mm
 						</td>
 						<td class="p-1.5"></td>
@@ -205,7 +207,7 @@
 										numCharacters={5}
 										onChange={(v) => handleZChange(tile, v, stack.z_end_um)}
 									/>
-									<span class="text-muted-foreground/50">→</span>
+									<span class="text-fg-muted/50">→</span>
 									<SpinBox
 										value={stack.z_end_um}
 										min={0}
@@ -214,24 +216,24 @@
 										onChange={(v) => handleZChange(tile, stack.z_start_um, v)}
 										align="right"
 									/>
-									<span class="ml-1 text-[0.65rem] text-muted-foreground">µm</span>
+									<span class="text-fg-muted ml-1 text-[0.65rem]">µm</span>
 								</div>
 							{:else}
-								<span class="text-muted-foreground/30">—</span>
+								<span class="text-fg-muted/30">—</span>
 							{/if}
 						</td>
-						<td class="p-1.5 text-right font-mono text-muted-foreground">
+						<td class="text-fg-muted p-1.5 text-right font-mono">
 							{#if stack}
 								{stack.num_frames}
 							{:else}
-								<span class="text-muted-foreground/30">—</span>
+								<span class="text-fg-muted/30">—</span>
 							{/if}
 						</td>
-						<td class="p-1.5 text-right text-muted-foreground">
+						<td class="text-fg-muted p-1.5 text-right">
 							{#if stack}
 								<span class="font-mono text-[0.65rem]">{stack.profile_id}</span>
 							{:else}
-								<span class="text-muted-foreground/30">—</span>
+								<span class="text-fg-muted/30">—</span>
 							{/if}
 						</td>
 						<td class="p-1.5 pr-4 text-right">
@@ -239,7 +241,7 @@
 								<span class={getStackStatusColor(stack.status)}>{stack.status}</span>
 							{:else}
 								<button
-									class="inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-[0.65rem] text-muted-foreground transition-colors hover:border-success hover:text-success"
+									class="text-fg-muted inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-[0.65rem] transition-colors hover:border-success hover:text-success"
 									onclick={() => handleAddStack(tile)}
 								>
 									Add
@@ -253,7 +255,7 @@
 		</table>
 
 		{#if filteredTiles.length === 0}
-			<div class="flex items-center justify-center p-8 text-muted-foreground/50">
+			<div class="text-fg-muted/50 flex items-center justify-center p-8">
 				{#if session.tiles.length === 0}
 					No tiles in grid
 				{:else}
@@ -265,8 +267,8 @@
 
 	<!-- Toolbar (only shown when items selected) -->
 	{#if checkedCount > 0}
-		<div class="flex items-center justify-end gap-3 border-t border-border bg-background p-2">
-			<span class="text-[0.65rem] text-muted-foreground">{checkedCount} selected</span>
+		<div class="bg-canvas flex items-center justify-end gap-3 border-t border-border p-2">
+			<span class="text-fg-muted text-[0.65rem]">{checkedCount} selected</span>
 			<button
 				class="rounded border border-danger bg-transparent px-2 py-1 text-[0.65rem] text-danger transition-colors hover:bg-danger hover:text-danger-fg"
 				onclick={handleDeleteSelected}

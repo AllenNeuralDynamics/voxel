@@ -3,14 +3,18 @@
 
 	export const textAreaVariants = tv({
 		slots: {
-			wrapper: [
-				'rounded border border-input bg-transparent',
-				'transition-colors hover:border-foreground/20',
-				'focus-within:border-ring'
-			],
-			textarea: ['w-full bg-transparent outline-none', 'placeholder-muted-foreground']
+			wrapper: ['rounded border border-input', 'transition-colors', 'focus-within:border-focused'],
+			textarea: ['w-full bg-transparent outline-none', 'placeholder-fg-muted']
 		},
 		variants: {
+			variant: {
+				ghost: {
+					wrapper: 'bg-transparent hover:border-fg/20'
+				},
+				filled: {
+					wrapper: 'bg-element-bg hover:bg-element-hover'
+				}
+			},
 			size: {
 				sm: {
 					wrapper: 'px-1.5 py-0.5',
@@ -27,6 +31,7 @@
 			}
 		},
 		defaultVariants: {
+			variant: 'filled',
 			size: 'md'
 		}
 	});
@@ -59,11 +64,12 @@
 		disabled = false,
 		onChange,
 		id,
+		variant = 'filled',
 		size = 'md',
 		class: className = ''
 	}: Props = $props();
 
-	const styles = $derived(textAreaVariants({ size }));
+	const styles = $derived(textAreaVariants({ variant, size }));
 
 	let textareaEl = $state<HTMLTextAreaElement>();
 

@@ -41,7 +41,7 @@
 					}}
 				/>
 				<button
-					class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg flex h-6 w-6 items-center justify-center rounded transition-colors"
 					title={offsetLinked ? 'Unlink offset X/Y' : 'Link offset X/Y'}
 					onclick={() => {
 						offsetLinked = !offsetLinked;
@@ -93,7 +93,7 @@
 					}}
 				/>
 				<button
-					class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg flex h-6 w-6 items-center justify-center rounded transition-colors"
 					title={overlapLinked ? 'Unlink overlap X/Y' : 'Link overlap X/Y'}
 					onclick={() => {
 						overlapLinked = !overlapLinked;
@@ -127,5 +127,5 @@
 		</Field>
 	</div>
 {:else}
-	<p class="text-xs text-muted-foreground">No grid config for this profile</p>
+	<p class="text-fg-muted text-xs">No grid config for this profile</p>
 {/if}

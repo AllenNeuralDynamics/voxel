@@ -95,7 +95,7 @@
 				<div>
 					<!-- Device header -->
 					<div class="mb-1.5 flex items-center gap-2 text-xs">
-						<span class="font-medium text-foreground">{sanitizeString(deviceId)}</span>
+						<span class="text-fg font-medium">{sanitizeString(deviceId)}</span>
 						{#if diverged}
 							<span class="h-1.5 w-1.5 rounded-full bg-warning" title="Properties diverged"></span>
 						{/if}
@@ -103,7 +103,7 @@
 
 					<!-- Property table -->
 					<div class="text-[0.65rem]">
-						<div class="grid grid-cols-[1fr_auto_auto] gap-x-4 border-b pb-1 text-muted-foreground">
+						<div class="text-fg-muted grid grid-cols-[1fr_auto_auto] gap-x-4 border-b pb-1">
 							<span>Property</span>
 							<span class="w-24 text-right">Saved</span>
 							<span class="w-24 text-right">Current</span>
@@ -115,22 +115,20 @@
 							{@const current = model?.value}
 							{@const propDiverged = isPropDiverged(saved, current)}
 							<div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 py-0.5">
-								<span class="truncate text-muted-foreground" title={propInfo.label || propName}>
+								<span class="text-fg-muted truncate" title={propInfo.label || propName}>
 									{propInfo.label || propName}
 									{#if propInfo.units}
-										<span class="text-muted-foreground/50">({propInfo.units})</span>
+										<span class="text-fg-muted/50">({propInfo.units})</span>
 									{/if}
 								</span>
-								<span
-									class="w-24 text-right font-mono {saved != null ? 'text-foreground' : 'text-muted-foreground/40'}"
-								>
+								<span class="w-24 text-right font-mono {saved != null ? 'text-fg' : 'text-fg-muted/40'}">
 									{formatPropValue(saved, model?.step)}
 								</span>
 								<span class="flex w-24 items-center justify-end gap-1 font-mono">
 									{#if propDiverged}
 										<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" title="Diverged from saved"></span>
 									{/if}
-									<span class={current != null ? 'text-foreground' : 'text-muted-foreground/40'}>
+									<span class={current != null ? 'text-fg' : 'text-fg-muted/40'}>
 										{formatPropValue(current, model?.step)}
 									</span>
 								</span>
@@ -147,9 +145,7 @@
 									setupOpen = { ...setupOpen, [deviceId]: open };
 								}}
 							>
-								<Collapsible.Trigger
-									class="flex items-center gap-1 text-[0.6rem] text-muted-foreground hover:text-foreground"
-								>
+								<Collapsible.Trigger class="text-fg-muted hover:text-fg flex items-center gap-1 text-[0.6rem]">
 									<ChevronRight
 										width="12"
 										height="12"
@@ -159,10 +155,10 @@
 								</Collapsible.Trigger>
 								<Collapsible.Content class="mt-1 space-y-0.5 pl-4">
 									{#each setupCommands as cmd, i (i)}
-										<div class="font-mono text-[0.6rem] text-muted-foreground">
-											<span class="text-foreground">{cmd.attr}</span>
+										<div class="text-fg-muted font-mono text-[0.6rem]">
+											<span class="text-fg">{cmd.attr}</span>
 											{#if cmd.kwargs && Object.keys(cmd.kwargs).length > 0}
-												<span class="text-muted-foreground/60">
+												<span class="text-fg-muted/60">
 													({Object.entries(cmd.kwargs)
 														.map(([k, v]) => `${k}=${JSON.stringify(v)}`)
 														.join(', ')})
@@ -181,7 +177,7 @@
 		<!-- Footer: divergence summary + actions -->
 		{#if isActiveProfile}
 			<div class="flex items-center justify-between border-t pt-3 text-[0.65rem]">
-				<span class="text-muted-foreground">
+				<span class="text-fg-muted">
 					{#if divergedCount > 0}
 						{divergedCount} {divergedCount === 1 ? 'property' : 'properties'} diverged
 					{:else}

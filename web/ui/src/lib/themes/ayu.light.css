@@ -1,0 +1,73 @@
+/*
+ * Voxel Theme: Ayu Light
+ * Based on: Zed "Ayu Light" (bundled theme by Zed Industries)
+ * Source: zed-industries/zed assets/themes/ayu/ayu.json
+ * See base.css for token documentation.
+ */
+
+[data-theme='ayu'] {
+	/* ── Surfaces ──────────────────────────────────────────────────────── */
+
+	--canvas: #fcfcfc; /* zed: editor.background, toolbar.background, tab.active_background */
+	--surface: #ececed; /* zed: surface.background, background */
+	--panel: var(--surface); /* zed: panel.background */
+	--elevated: #ececed; /* zed: elevated_surface.background */
+	--floating: #fcfcfc; /* zed: toolbar.background */
+	--backdrop: #00000040;
+
+	/* ── Element ───────────────────────────────────────────────────────── */
+
+	--element-bg: #ececed; /* zed: element.background */
+	--element-hover: #dfe0e1; /* zed: element.hover */
+	--element-active: #cfd0d2; /* zed: element.active */
+	--element-selected: #cfd0d2; /* zed: element.selected */
+
+	/* ── Text ──────────────────────────────────────────────────────────── */
+
+	--fg: #5c6166; /* zed: text */
+	--fg-muted: #8b8e92; /* zed: text.muted */
+	--fg-faint: #a9acae; /* zed: text.placeholder */
+	--fg-accent: #3b9ee5; /* zed: text.accent */
+
+	/* ── Borders ───────────────────────────────────────────────────────── */
+
+	--border: #cfd1d2; /* zed: border */
+	--border-variant: #dfe0e1; /* zed: border.variant */
+	--border-focused: #c4daf6; /* zed: border.focused */
+	--border-selected: #c4daf6; /* zed: border.selected */
+	--border-disabled: #d5d6d8; /* zed: border.disabled */
+
+	/* ── Interactive ───────────────────────────────────────────────────── */
+
+	--primary: #3b9ee5; /* zed: text.accent */
+	--primary-fg: #ffffff;
+	--secondary: #cfd0d2; /* zed: element.selected */
+	--secondary-fg: #5c6166;
+
+	/* ── Semantic ──────────────────────────────────────────────────────── */
+
+	--danger: #ef7271; /* zed: error */
+	--danger-bg: #ffe3e1; /* zed: error.background */
+	--danger-fg: #ffffff;
+
+	--success: #85b304; /* zed: success */
+	--success-bg: #e9efd2; /* zed: success.background */
+	--success-fg: #ffffff;
+
+	--warning: #f1ad49; /* zed: warning */
+	--warning-bg: #ffeeda; /* zed: warning.background */
+	--warning-fg: #5c6166;
+
+	--info: #3b9ee5; /* zed: info */
+	--info-bg: #deebfa; /* zed: info.background */
+	--info-fg: #ffffff;
+
+	--active: #f98d3f; /* derived: players[2].cursor */
+	--active-bg: #ffeed0;
+	--active-fg: #ffffff;
+
+	/* ── Scrollbar ─────────────────────────────────────────────────────── */
+
+	--scrollbar-thumb: #5c61664c; /* zed: scrollbar.thumb.background */
+	--scrollbar-thumb-hover: #dfe0e1; /* zed: scrollbar.thumb.hover_background */
+}

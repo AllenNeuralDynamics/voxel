@@ -31,7 +31,7 @@
 	function navClass(active: boolean): string {
 		return cn(
 			'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs cursor-pointer transition-colors',
-			active ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+			active ? 'bg-element-selected text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
 		);
 	}
 
@@ -72,7 +72,7 @@
 
 			<!-- Profiles -->
 			<nav class="mt-1 space-y-0.5 border-y border-border px-3 py-2">
-				<p class="px-2 py-1 text-[0.55rem] font-semibold tracking-wide text-muted-foreground/60 uppercase">Profiles</p>
+				<p class="text-fg-muted/60 px-2 py-1 text-[0.55rem] font-semibold tracking-wide uppercase">Profiles</p>
 				{#each Object.entries(config.profiles) as [id, profile] (id)}
 					{@const isActiveProfile = id === session.activeProfileId}
 					{@const isViewed = activeProfileId === id}
@@ -92,7 +92,7 @@
 									'w-13 shrink-0 rounded-full border py-0.5 text-center text-[0.5rem] font-medium transition-all',
 									isViewed
 										? 'pointer-events-auto border-warning/40 bg-warning/10 text-warning opacity-100 hover:bg-warning/20'
-										: 'pointer-events-none border-border text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-muted hover:text-foreground'
+										: 'text-fg-muted hover:bg-element-hover hover:text-fg pointer-events-none border-border opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'
 								)}
 								onclick={(e: MouseEvent) => {
 									e.stopPropagation();
@@ -117,11 +117,11 @@
 			<!-- Devices -->
 			<Collapsible.Root open>
 				<Collapsible.Trigger class="group flex w-full items-center justify-between px-5 py-1">
-					<p class="text-[0.55rem] font-semibold tracking-wide text-muted-foreground/60 uppercase">Devices</p>
+					<p class="text-fg-muted/60 text-[0.55rem] font-semibold tracking-wide uppercase">Devices</p>
 					<ChevronRight
 						width="12"
 						height="12"
-						class="shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
+						class="text-fg-muted shrink-0 transition-transform group-data-[state=open]:rotate-90"
 					/>
 				</Collapsible.Trigger>
 				<Collapsible.Content>
@@ -130,10 +130,7 @@
 							<button onclick={() => nav(`/devices/${id}`)} class={navClass(activeDeviceId === id)}>
 								<span class="truncate">{sanitizeString(id)}</span>
 								<span
-									class={cn(
-										'h-1.5 w-1.5 shrink-0 rounded-full',
-										device.connected ? 'bg-success' : 'bg-muted-foreground/30'
-									)}
+									class={cn('h-1.5 w-1.5 shrink-0 rounded-full', device.connected ? 'bg-success' : 'bg-fg-muted/30')}
 									title={device.connected ? 'Connected' : 'Disconnected'}
 								></span>
 							</button>
@@ -143,13 +140,13 @@
 			</Collapsible.Root>
 		</div>
 
-		<!-- Logs trigger pinned to bottom -->
-		<div class="border-t border-border px-3 pt-3">
+		<!-- Logs pinned to bottom -->
+		<div class="space-y-0.5 border-t border-border px-3 pt-3">
 			<button
 				onclick={toggleLogs}
 				class={cn(
 					'flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
-					logsOpen ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+					logsOpen ? 'bg-element-selected text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
 				)}
 			>
 				Logs

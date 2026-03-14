@@ -72,7 +72,7 @@ export class Session {
 	#unsubscribers: Array<() => void> = [];
 	#selection = new SvelteMap<number, SvelteSet<number>>([[0, new SvelteSet([0])]]);
 	selectedTiles = $derived<Tile[]>(this.#getSelectedTiles());
-	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true });
+	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true, thumbnail: true });
 
 	constructor(init: SessionInit) {
 		this.client = init.client;

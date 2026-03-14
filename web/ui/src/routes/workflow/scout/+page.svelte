@@ -23,11 +23,11 @@
 				selected: false,
 				class: 'border-warning/30 bg-surface text-warning/60 hover:bg-warning/10 hover:text-warning'
 			},
-			{ phantom: false, selected: true, class: 'border-ring bg-muted text-foreground' },
+			{ phantom: false, selected: true, class: 'border-focused bg-element-selected text-fg' },
 			{
 				phantom: false,
 				selected: false,
-				class: 'bg-surface text-muted-foreground hover:bg-muted hover:text-foreground'
+				class: 'bg-surface text-fg-muted hover:bg-element-hover hover:text-fg'
 			}
 		]
 	});
@@ -100,7 +100,7 @@
 						<Button
 							variant="ghost"
 							size="icon-xs"
-							class="text-muted-foreground hover:bg-danger/10 hover:text-danger"
+							class="text-fg-muted hover:bg-danger/10 hover:text-danger"
 							title="Remove from plan"
 							disabled={scoutLocked}
 							onclick={() => (removeDialogOpen = true)}
@@ -144,13 +144,13 @@
 			<Dialog.Footer>
 				<button
 					onclick={() => (addDialogOpen = false)}
-					class="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-xs transition-colors"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={confirmAddToPlan}
-					class="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+					class="text-primary-fg rounded bg-primary px-3 py-1.5 text-xs transition-colors hover:bg-primary/90"
 				>
 					Add
 				</button>
@@ -174,7 +174,7 @@
 			<Dialog.Footer>
 				<button
 					onclick={() => (removeDialogOpen = false)}
-					class="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-xs transition-colors"
 				>
 					Cancel
 				</button>

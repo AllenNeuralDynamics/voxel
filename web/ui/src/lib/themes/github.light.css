@@ -1,0 +1,73 @@
+/*
+ * Voxel Theme: GitHub Light
+ * Based on: Zed "GitHub Light" from github-theme extension
+ * Source: ~/Library/Application Support/Zed/extensions/installed/github-theme/themes/github_theme.json
+ * See base.css for token documentation.
+ */
+
+[data-theme='github'] {
+	/* ── Surfaces ──────────────────────────────────────────────────────── */
+
+	--canvas: #ffffff; /* zed: editor.background, background, toolbar.background */
+	--surface: #f6f8fa; /* zed: surface.background, panel.background, status_bar.background, tab_bar.background */
+	--panel: var(--surface); /* zed: panel.background */
+	--elevated: #f6f8fa; /* zed: editor.subheader.background */
+	--floating: #ffffff; /* zed: elevated_surface.background */
+	--backdrop: #000000aa;
+
+	/* ── Element ───────────────────────────────────────────────────────── */
+
+	--element-bg: #818b981f; /* zed: element.background — semi-transparent gray */
+	--element-hover: #818b981f; /* zed: element.hover (same value in GitHub) */
+	--element-active: #818b981f; /* zed: element.active */
+	--element-selected: #818b981f; /* zed: element.selected */
+
+	/* ── Text ──────────────────────────────────────────────────────────── */
+
+	--fg: #1f2328; /* zed: text */
+	--fg-muted: #59636e; /* zed: icon.muted, text.placeholder */
+	--fg-faint: #818b98; /* zed: text.disabled */
+	--fg-accent: #0969da; /* zed: text.accent */
+
+	/* ── Borders ───────────────────────────────────────────────────────── */
+
+	--border: #d1d9e0; /* zed: border */
+	--border-variant: #d1d9e0b3; /* zed: border.variant (70% alpha) */
+	--border-focused: #0969da; /* zed: border.focused */
+	--border-selected: #0969da; /* zed: border.selected */
+	--border-disabled: #d1d9e066; /* zed: border.disabled (40% alpha) */
+
+	/* ── Interactive ───────────────────────────────────────────────────── */
+
+	--primary: #0969da; /* zed: text.accent, border.focused */
+	--primary-fg: #ffffff;
+	--secondary: #818b981f; /* zed: element.background */
+	--secondary-fg: #1f2328;
+
+	/* ── Semantic ──────────────────────────────────────────────────────── */
+
+	--danger: #d1242f; /* zed: error */
+	--danger-bg: #ffebe9; /* zed: deleted.background (red-tinted) */
+	--danger-fg: #ffffff;
+
+	--success: #1a7f37; /* zed: success */
+	--success-bg: #dafbe1; /* zed: success.background */
+	--success-fg: #ffffff;
+
+	--warning: #9a6700; /* zed: warning */
+	--warning-bg: #fff8c5; /* zed: modified.background (yellow-tinted) */
+	--warning-fg: #ffffff;
+
+	--info: #0969da; /* derived: using accent blue instead of GitHub's amber */
+	--info-bg: #ddf4ff; /* zed: drop_target.background (blue-tinted) */
+	--info-fg: #ffffff;
+
+	--active: #bc4c00; /* zed: conflict (orange) */
+	--active-bg: #fff1e5; /* zed: conflict.background */
+	--active-fg: #ffffff;
+
+	/* ── Scrollbar ─────────────────────────────────────────────────────── */
+
+	--scrollbar-thumb: #59636e1a; /* zed: scrollbar.thumb.background */
+	--scrollbar-thumb-hover: #59636e33; /* zed: scrollbar.thumb.hover_background */
+}

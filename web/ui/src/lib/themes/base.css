@@ -1,0 +1,343 @@
+/*
+ * Voxel Theme: Base (Zinc)
+ * The default theme — neutral zinc palette with blue primary.
+ * Provides both light and dark mode variants.
+ *
+ * Token naming follows the Voxel design system with Zed theme equivalents
+ * noted in comments for cross-compatibility.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * LIGHT MODE
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+	/* ── Surfaces ───────────────────────────────────────────────────────
+	 * canvas < surface < elevated < floating
+	 * ─────────────────────────────────────────────────────────────────── */
+
+	--canvas: oklch(1 0 0);
+	/* zed: background — white
+	 * App-level base. Body background, empty areas. */
+
+	--surface: oklch(0.985 0 0);
+	/* zed: surface.background — zinc-50
+	 * Panels, content panes. Where most UI lives. */
+
+	--panel: var(--surface);
+	/* zed: panel.background
+	 * Secondary panels. Falls back to surface; override per-theme. */
+
+	--elevated: oklch(0.967 0.001 286.375);
+	/* zed: elevated_surface.background, tab_bar.background, toolbar.background — zinc-100
+	 * Cards, headers, toolbars, detail panels. */
+
+	--floating: oklch(1 0 0);
+	/* zed: elevated_surface.background (for popups) — white
+	 * Popovers, dropdowns, dialog panels. */
+
+	--backdrop: oklch(0 0 0 / 50%);
+	/* No Zed equivalent.
+	 * Modal/dialog scrim overlay. */
+
+	/* ── Element ───────────────────────────────────────────────────────
+	 * Interactive element fills — buttons, inputs, list items.
+	 * Maps to Zed's element.* / ghost_element.* family.
+	 * ─────────────────────────────────────────────────────────────────── */
+
+	--element-bg: oklch(0 0 0 / 5%);
+	/* zed: element.background — ~zinc-100 on white
+	 * Default fill. Inputs, secondary buttons, muted containers.
+	 * Transparent so it adapts to any parent surface. */
+
+	--element-hover: oklch(0 0 0 / 8%);
+	/* zed: element.hover, ghost_element.hover — ~zinc-150 on white
+	 * Hovered interactive elements. */
+
+	--element-active: oklch(0 0 0 / 12%);
+	/* zed: element.active, ghost_element.active — ~zinc-200 on white
+	 * Pressed/clicked interactive elements. */
+
+	--element-selected: oklch(0 0 0 / 8%);
+	/* zed: element.selected, ghost_element.selected — ~zinc-150 on white
+	 * Selected state. Current tab, chosen list item. */
+
+	/* ── Text ──────────────────────────────────────────────────────────
+	 * Flat hierarchy. Icons inherit text color.
+	 * ─────────────────────────────────────────────────────────────────── */
+
+	--fg: oklch(0.141 0.005 285.823);
+	/* zed: text — zinc-950
+	 * Primary text. Body copy, headings, values. */
+
+	--fg-muted: oklch(0.552 0.016 285.938);
+	/* zed: text.muted — zinc-500
+	 * Secondary text. Labels, descriptions, inactive items. */
+
+	--fg-faint: oklch(0.705 0.015 286.067);
+	/* zed: text.placeholder, text.disabled — zinc-400
+	 * Tertiary. Placeholders, disabled text, subtle hints. */
+
+	--fg-accent: oklch(0.623 0.214 259.815);
+	/* zed: text.accent — blue-500
+	 * Emphasized. Active items, links, matched search characters. */
+
+	/* ── Borders ───────────────────────────────────────────────────────
+	 * ─────────────────────────────────────────────────────────────────── */
+
+	--border: oklch(0.92 0.004 286.32);
+	/* zed: border — zinc-200
+	 * Structural borders. Panel edges, section dividers. */
+
+	--border-variant: oklch(0.92 0.004 286.32);
+	/* zed: border.variant — zinc-200
+	 * Contained elements — inputs, cards, soft divisions. */
+
+	--border-focused: oklch(0.623 0.214 259.815);
+	/* zed: border.focused — blue-500
+	 * Focus rings on inputs, buttons, interactive elements. */
+
+	--border-selected: oklch(0.623 0.214 259.815);
+	/* zed: border.selected — blue-500
+	 * Selected element borders. */
+
+	--border-disabled: oklch(0.941 0.003 286.375);
+	/* zed: border.disabled — zinc-150
+	 * Disabled element borders. */
+
+	/* ── Interactive ───────────────────────────────────────────────────
+	 * ─────────────────────────────────────────────────────────────────── */
+
+	--primary: oklch(0.623 0.214 259.815);
+	/* zed: (derived from text.accent) — blue-500
+	 * Main action color. CTA buttons, links. */
+
+	--primary-fg: oklch(0.97 0.014 254.604);
+	/* zed: (light text on accent) — blue-50
+	 * Text on primary backgrounds. */
+
+	--secondary: oklch(0.967 0.001 286.375);
+	/* zed: element.background — zinc-100
+	 * Secondary/subtle button fills. */
+
+	--secondary-fg: oklch(0.21 0.006 285.885);
+	/* zed: text — zinc-900
+	 * Text on secondary backgrounds. */
+
+	/* ── Semantic: Danger ──────────────────────────────────────────── */
+
+	--danger: oklch(0.577 0.245 27.325);
+	/* zed: error — red-500
+	 * Error/destructive. Text, icons, solid button fills. */
+
+	--danger-bg: oklch(0.971 0.013 17.38);
+	/* zed: error.background — red-50
+	 * Subtle fill. Error containers, alert backgrounds. */
+
+	--danger-fg: oklch(0.985 0 0);
+	/* Text on solid danger backgrounds. — zinc-50 */
+
+	/* ── Semantic: Success ─────────────────────────────────────────── */
+
+	--success: oklch(0.596 0.145 163.225);
+	/* zed: success — emerald-600
+	 * Positive state. Text, icons, enabled toggles. */
+
+	--success-bg: oklch(0.962 0.044 166.519);
+	/* zed: success.background — emerald-50
+	 * Subtle fill. Success containers. */
+
+	--success-fg: oklch(0.985 0 0);
+	/* Text on solid success backgrounds. — zinc-50 */
+
+	/* ── Semantic: Warning ─────────────────────────────────────────── */
+
+	--warning: oklch(0.769 0.188 70.08);
+	/* zed: warning — amber-500
+	 * Caution. Text, icons, solid fills. */
+
+	--warning-bg: oklch(0.987 0.057 82.669);
+	/* zed: warning.background — amber-50
+	 * Subtle fill. Warning containers. */
+
+	--warning-fg: oklch(0.141 0.005 285.823);
+	/* Dark text on bright yellow — contrast. — zinc-950 */
+
+	/* ── Semantic: Info ────────────────────────────────────────────── */
+
+	--info: oklch(0.623 0.214 259.815);
+	/* zed: info — blue-500
+	 * Informational. Text, icons, planned status. */
+
+	--info-bg: oklch(0.97 0.014 254.604);
+	/* zed: info.background — blue-50
+	 * Subtle fill. Info containers. */
+
+	--info-fg: oklch(0.985 0 0);
+	/* Text on solid info backgrounds. — zinc-50 */
+
+	/* ── Semantic: Active ──────────────────────────────────────────── */
+
+	--active: oklch(0.702 0.183 55.934);
+	/* No Zed equivalent — orange-500
+	 * In-progress/acquiring status. */
+
+	--active-bg: oklch(0.98 0.036 73.684);
+	/* Derived — orange-50
+	 * Subtle fill. Active/in-progress containers. */
+
+	--active-fg: oklch(0.985 0 0);
+	/* Text on solid active backgrounds. — zinc-50 */
+
+	/* ── Scrollbar ─────────────────────────────────────────────────── */
+
+	--scrollbar-thumb: var(--border);
+	/* zed: scrollbar.thumb.background */
+
+	--scrollbar-thumb-hover: var(--fg-muted);
+	/* zed: scrollbar.thumb.hover_background */
+
+	/* ── Misc ──────────────────────────────────────────────────────── */
+
+	--radius: 0.625rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * DARK MODE
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.dark {
+	/* ── Surfaces ─────────────────────────────────────────────────────── */
+
+	--canvas: oklch(0.141 0.005 285.823);
+	/* zed: background — zinc-950 */
+
+	--surface: oklch(0.175 0.005 285.823);
+	/* zed: surface.background — ~zinc-925 */
+
+	/* --panel: var(--surface); — inherited from :root */
+
+	--elevated: oklch(0.21 0.006 285.885);
+	/* zed: elevated_surface.background — zinc-900 */
+
+	--floating: oklch(0.21 0.006 285.885);
+	/* zed: elevated_surface.background — zinc-900 */
+
+	--backdrop: oklch(0 0 0 / 60%);
+
+	/* ── Element ──────────────────────────────────────────────────────── */
+
+	--element-bg: oklch(1 0 0 / 8%);
+	/* zed: element.background — ~zinc-800 on zinc-950
+	 * Transparent: adapts to any parent surface. */
+
+	--element-hover: oklch(1 0 0 / 12%);
+	/* zed: element.hover — ~zinc-750 */
+
+	--element-active: oklch(1 0 0 / 16%);
+	/* zed: element.active — ~zinc-700 */
+
+	--element-selected: oklch(1 0 0 / 12%);
+	/* zed: element.selected — ~zinc-750 */
+
+	/* ── Text ─────────────────────────────────────────────────────────── */
+
+	--fg: oklch(0.985 0 0);
+	/* zed: text — zinc-50 */
+
+	--fg-muted: oklch(0.705 0.015 286.067);
+	/* zed: text.muted — zinc-400 */
+
+	--fg-faint: oklch(0.552 0.016 285.938);
+	/* zed: text.placeholder — zinc-500 */
+
+	--fg-accent: oklch(0.623 0.214 259.815);
+	/* zed: text.accent — blue-500 */
+
+	/* ── Borders ──────────────────────────────────────────────────────── */
+
+	--border: oklch(1 0 0 / 10%);
+	/* zed: border — white/10 */
+
+	--border-variant: oklch(1 0 0 / 15%);
+	/* zed: border.variant — white/15 */
+
+	--border-focused: oklch(0.488 0.243 264.376);
+	/* zed: border.focused — blue-600 */
+
+	--border-selected: oklch(0.488 0.243 264.376);
+	/* zed: border.selected — blue-600 */
+
+	--border-disabled: oklch(1 0 0 / 5%);
+	/* zed: border.disabled — white/5 */
+
+	/* ── Interactive ──────────────────────────────────────────────────── */
+
+	--primary: oklch(0.528 0.132 234.76);
+	/* sky-700 */
+
+	--primary-fg: oklch(0.985 0 0);
+	/* white */
+
+	--secondary: oklch(0.274 0.006 286.033);
+	/* zed: element.background — zinc-800 */
+
+	--secondary-fg: oklch(0.985 0 0);
+	/* zinc-50 */
+
+	/* ── Semantic: Danger ────────────────────────────────────────────── */
+
+	--danger: oklch(0.704 0.191 22.216);
+	/* zed: error */
+
+	--danger-bg: oklch(0.258 0.042 17.911);
+	/* zed: error.background — ~red-950/80 */
+
+	--danger-fg: oklch(0.985 0 0);
+
+	/* ── Semantic: Success ───────────────────────────────────────────── */
+
+	--success: oklch(0.596 0.145 163.225);
+	/* zed: success — emerald-600 */
+
+	--success-bg: oklch(0.214 0.051 163.357);
+	/* zed: success.background — ~emerald-950/80 */
+
+	--success-fg: oklch(0.985 0 0);
+
+	/* ── Semantic: Warning ───────────────────────────────────────────── */
+
+	--warning: oklch(0.769 0.188 70.08);
+	/* zed: warning — amber-500 */
+
+	--warning-bg: oklch(0.306 0.066 53.813);
+	/* zed: warning.background — ~amber-950/80 */
+
+	--warning-fg: oklch(0.141 0.005 285.823);
+	/* zinc-950 — dark text on bright yellow */
+
+	/* ── Semantic: Info ──────────────────────────────────────────────── */
+
+	--info: oklch(0.623 0.214 259.815);
+	/* zed: info — blue-500 */
+
+	--info-bg: oklch(0.257 0.065 261.395);
+	/* zed: info.background — ~blue-950/80 */
+
+	--info-fg: oklch(0.985 0 0);
+
+	/* ── Semantic: Active ────────────────────────────────────────────── */
+
+	--active: oklch(0.702 0.183 55.934);
+	/* orange-500 */
+
+	--active-bg: oklch(0.285 0.06 49.769);
+	/* ~orange-950/80 */
+
+	--active-fg: oklch(0.985 0 0);
+
+	/* ── Scrollbar ───────────────────────────────────────────────────── */
+
+	--scrollbar-thumb: var(--border);
+	--scrollbar-thumb-hover: var(--fg-muted);
+}

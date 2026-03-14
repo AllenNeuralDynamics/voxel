@@ -13,7 +13,7 @@
 </script>
 
 <div class="grid gap-1">
-	<label for={id} class="text-[0.65rem] text-muted-foreground/70">
+	<label for={id} class="text-fg-muted/70 text-[0.65rem]">
 		{label}
 	</label>
 	{@render children()}

@@ -464,9 +464,9 @@
 					</Button>
 				</div>
 			{/if}
-			<div class="ml-auto flex gap-4 text-[0.65rem] text-muted-foreground">
-				<span>Freq <span class="font-mono text-foreground">{formatFrequency(frequency)}</span></span>
-				<span>Samples <span class="font-mono text-foreground">{samples.toLocaleString()}</span></span>
+			<div class="text-fg-muted ml-auto flex gap-4 text-[0.65rem]">
+				<span>Freq <span class="text-fg font-mono">{formatFrequency(frequency)}</span></span>
+				<span>Samples <span class="text-fg font-mono">{samples.toLocaleString()}</span></span>
 			</div>
 		</div>
 
@@ -478,8 +478,8 @@
 					{@const isSelected = deviceId === selectedDeviceId}
 					{@const isHidden = hiddenDevices.has(deviceId)}
 					<div
-						class="flex items-center gap-1.5 rounded px-1.5 py-1 text-[0.65rem] text-muted-foreground transition-colors
-							{isSelected ? 'bg-muted text-foreground' : ''}"
+						class="text-fg-muted flex items-center gap-1.5 rounded px-1.5 py-1 text-[0.65rem] transition-colors
+							{isSelected ? 'bg-element-selected text-fg' : ''}"
 					>
 						<button
 							type="button"
@@ -494,7 +494,7 @@
 						<button
 							type="button"
 							class="truncate text-left transition-colors
-								{isSelected ? 'text-foreground' : canEdit ? 'cursor-pointer hover:text-foreground' : ''}"
+								{isSelected ? 'text-fg' : canEdit ? 'hover:text-fg cursor-pointer' : ''}"
 							onclick={() => {
 								if (canEdit) {
 									if (isSelected) cancelEditing();
@@ -574,7 +574,7 @@
 								{y}
 								text-anchor="end"
 								dominant-baseline="middle"
-								class="fill-muted-foreground text-[0.55rem]"
+								class="fill-fg-muted text-[0.55rem]"
 							>
 								{formatVoltage(v)}
 							</text>
@@ -632,7 +632,7 @@
 						{#each [0, 0.25, 0.5, 0.75, 1] as frac (frac)}
 							{@const t = frac * totalTime}
 							{@const x = toSvgX(t)}
-							<text {x} y={plotHeight - 4} text-anchor="middle" class="fill-muted-foreground text-[0.55rem]">
+							<text {x} y={plotHeight - 4} text-anchor="middle" class="fill-fg-muted text-[0.55rem]">
 								{formatPlotTime(t)}
 							</text>
 						{/each}
@@ -746,7 +746,7 @@
 					</svg>
 				{:else}
 					<div class="flex items-center justify-center" style:height="{plotHeight}px">
-						<span class="text-xs text-muted-foreground">No waveform data</span>
+						<span class="text-fg-muted text-xs">No waveform data</span>
 					</div>
 				{/if}
 			</div>
@@ -863,7 +863,7 @@
 					</div>
 				</div>
 			{:else if canEdit}
-				<span class="text-[0.65rem] text-muted-foreground">Select a device to edit its waveform</span>
+				<span class="text-fg-muted text-[0.65rem]">Select a device to edit its waveform</span>
 			{:else}
 				<span class="text-[0.65rem] text-warning/50">
 					{!isActiveProfile

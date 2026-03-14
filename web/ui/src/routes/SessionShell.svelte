@@ -10,9 +10,10 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button, Dialog, DropdownMenu } from '$lib/ui/kit';
-	import { AlertOutline, DotsVertical, LayersOutline, Microscope, Monitor, Power, Restore, Sun, Moon } from '$lib/icons';
-	import { setMode, mode } from 'mode-watcher';
+	import { ChevronDown, LayersOutline, Microscope, Power } from '$lib/icons';
 	import WorkflowTabs from './WorkflowTabs.svelte';
+	import AppMenu from './AppMenu.svelte';
+	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 	import { cn } from '$lib/utils';
 
 	interface Props {
@@ -40,13 +41,18 @@
 	const viewId = $derived<string>(
 		page.route.id === '/acquisition'
 			? 'acquisition'
-			: page.route.id?.startsWith('/workflow/')
-				? (page.params.step ?? page.route.id.split('/').pop() ?? 'instrument')
-				: 'instrument'
+			: page.route.id === '/debug'
+				? 'debug'
+				: page.route.id?.startsWith('/workflow/')
+					? (page.params.step ?? page.route.id.split('/').pop() ?? 'instrument')
+					: 'instrument'
 	);
 
 	function viewPath(id: string): string {
-		return id === 'instrument' ? '/' : id === 'acquisition' ? '/acquisition' : `/workflow/${id}`;
+		if (id === 'acquisition') return '/acquisition';
+		if (id === 'debug') return '/debug';
+		if (id === 'instrument') return '/';
+		return `/workflow/${id}`;
 	}
 
 	function gotoView(id: string) {
@@ -57,29 +63,6 @@
 		gotoView(viewId === id ? (workflow.steps[0]?.id ?? 'instrument') : id);
 	}
 
-	const connectionStatus = $derived.by(() => {
-		const state = session.client.connectionState ?? 'idle';
-		switch (state) {
-			case 'connected':
-				return { color: 'text-muted-foreground', label: 'Connected', message: '' };
-			case 'connecting':
-			case 'reconnecting':
-				return {
-					color: 'text-warning',
-					label: state === 'connecting' ? 'Connecting' : 'Reconnecting',
-					message: session.client.connectionMessage ?? ''
-				};
-			case 'failed':
-				return {
-					color: 'text-danger',
-					label: 'Connection Failed',
-					message: session.client.connectionMessage ?? ''
-				};
-			default:
-				return { color: 'text-muted-foreground', label: 'Offline', message: '' };
-		}
-	});
-
 	let closeDialogOpen = $state(false);
 
 	const tabClasses = cn(
@@ -88,100 +71,33 @@
 	);
 </script>
 
-<div class="h-screen w-full text-foreground">
+<div class="text-fg h-screen w-full">
 	<PaneGroup direction="horizontal" autoSaveId="main-h">
-		<Pane defaultSize={60} minSize={50} maxSize={70} class="bg-surface  ">
-			<div class="grid h-full grid-rows-[auto_1fr] border-r border-border">
-				<header class="flex items-center justify-between border-b border-border bg-card px-2 py-4">
-					<!-- Left: session menu + instrument + workflow + acquisition -->
-					<nav class="flex items-center gap-4">
-						<!-- Session menu -->
-						<DropdownMenu.Root>
-							<DropdownMenu.Trigger
-								class="flex size-8 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-								title={connectionStatus.label}
-							>
-								{#if session.client.connectionState === 'failed'}
-									<AlertOutline width="16" height="16" class="text-danger" />
-								{:else if session.client.connectionState === 'connecting' || session.client.connectionState === 'reconnecting'}
-									<AlertOutline width="16" height="16" class="text-warning" />
-								{:else}
-									<DotsVertical width="16" height="16" />
-								{/if}
-							</DropdownMenu.Trigger>
-							<DropdownMenu.Content align="start">
-								{#if session.client.connectionState !== 'connected'}
-									<DropdownMenu.Label class="flex items-center gap-2 text-xs font-normal">
-										<span
-											class="inline-block h-2 w-2 shrink-0 rounded-full {session.client.connectionState === 'failed'
-												? 'bg-danger'
-												: 'bg-warning'}"
-										></span>
-										<span class="text-muted-foreground">
-											{connectionStatus.label}{#if connectionStatus.message}
-												&mdash; {connectionStatus.message}{/if}
-										</span>
-									</DropdownMenu.Label>
-									{#if session.client.connectionState === 'failed'}
-										<DropdownMenu.Item onclick={() => app.retryConnection()}>
-											<Restore width="14" height="14" />
-											Retry Connection
-										</DropdownMenu.Item>
-									{/if}
-									<DropdownMenu.Separator />
-								{/if}
-								<DropdownMenu.Sub>
-									<DropdownMenu.SubTrigger>
-										{#if mode.current === 'dark'}
-											<Moon width="14" height="14" />
-										{:else}
-											<Sun width="14" height="14" />
-										{/if}
-										Theme
-									</DropdownMenu.SubTrigger>
-									<DropdownMenu.SubContent>
-										<DropdownMenu.Item onclick={() => setMode('light')}>
-											<Sun width="14" height="14" />
-											Light
-										</DropdownMenu.Item>
-										<DropdownMenu.Item onclick={() => setMode('dark')}>
-											<Moon width="14" height="14" />
-											Dark
-										</DropdownMenu.Item>
-										<DropdownMenu.Item onclick={() => setMode('system')}>
-											<Monitor width="14" height="14" />
-											System
-										</DropdownMenu.Item>
-									</DropdownMenu.SubContent>
-								</DropdownMenu.Sub>
-								<DropdownMenu.Separator />
+		<Pane defaultSize={60} minSize={50} maxSize={70}>
+			<div class="grid h-full grid-rows-[auto_1fr]">
+				<header class="bg-elevated flex items-center justify-between border-b border-border px-4 py-4">
+					<!-- Left: app menu + instrument + workflow + acquisition -->
+					<nav class="flex items-stretch gap-4">
+						<AppMenu {app}>
+							{#snippet trigger()}
+								<VoxelLogo class="size-6" />
+								<ChevronDown width="14" height="14" class="text-fg-muted/60 ml-1" />
+							{/snippet}
+							{#snippet extraItems()}
 								<DropdownMenu.Item variant="destructive" onclick={() => (closeDialogOpen = true)}>
 									<Power width="14" height="14" />
 									Close Session
 								</DropdownMenu.Item>
-							</DropdownMenu.Content>
-						</DropdownMenu.Root>
+							{/snippet}
+						</AppMenu>
 
 						<!-- Close session confirmation dialog -->
 						<Dialog.Root bind:open={closeDialogOpen}>
 							<Dialog.Content size="sm" showCloseButton={false}>
 								<Dialog.Header>
 									<Dialog.Title>Close Session</Dialog.Title>
-									<Dialog.Description>
-										<span class="flex items-center gap-2">
-											<span
-												class="inline-block h-2 w-2 rounded-full {connectionStatus.color === 'text-warning'
-													? 'bg-warning'
-													: connectionStatus.color === 'text-danger'
-														? 'bg-danger'
-														: 'bg-success'}"
-											></span>
-											{connectionStatus.label}{#if connectionStatus.message}
-												&mdash; {connectionStatus.message}{/if}
-										</span>
-									</Dialog.Description>
 								</Dialog.Header>
-								<p class="text-xs text-muted-foreground">
+								<p class="text-fg-muted text-xs">
 									Are you sure you want to close the current session? Any unsaved progress will be lost.
 								</p>
 								<Dialog.Footer>
@@ -196,10 +112,7 @@
 						<!-- Instrument -->
 						<button
 							onclick={() => toggleView('instrument')}
-							class={cn(
-								tabClasses,
-								viewId === 'instrument' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
-							)}
+							class={cn(tabClasses, viewId === 'instrument' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
 							title="Instrument"
 						>
 							<Microscope width="16" height="16" />
@@ -212,14 +125,20 @@
 						<!-- Acquire -->
 						<button
 							onclick={() => toggleView('acquisition')}
-							class={cn(
-								tabClasses,
-								viewId === 'acquisition' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
-							)}
+							class={cn(tabClasses, viewId === 'acquisition' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
 							title="Acquisition"
 						>
 							<LayersOutline width="16" height="16" />
 							Acquisition
+						</button>
+
+						<!-- Debug -->
+						<button
+							onclick={() => toggleView('debug')}
+							class={cn(tabClasses, viewId === 'debug' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
+							title="Debug"
+						>
+							Debug
 						</button>
 					</nav>
 

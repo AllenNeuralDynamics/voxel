@@ -35,8 +35,8 @@
 
 	function tabClass(selected: boolean): string {
 		return cn(
-			'gap-2 flex items-center px-2 py-0.5 text-xs transition-colors hover:bg-muted',
-			selected ? 'bg-muted text-foreground' : 'text-muted-foreground'
+			'gap-2 flex items-center px-2 py-0.5 text-xs transition-colors hover:bg-element-hover',
+			selected ? 'bg-element-bg text-fg' : 'text-fg-muted'
 		);
 	}
 </script>

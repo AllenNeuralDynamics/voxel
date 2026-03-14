@@ -1,8 +1,7 @@
 <script lang="ts">
-	import '../app.css';
+	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { Toaster } from '$lib/ui/kit';
-	import { ModeWatcher } from 'mode-watcher';
 	import { onMount, onDestroy } from 'svelte';
 	import { useEventListener } from 'runed';
 	import { App } from '$lib/main';
@@ -46,5 +45,4 @@
 {:else}
 	<LaunchScreen {app} />
 {/if}
-<ModeWatcher defaultMode="dark" />
 <Toaster position="bottom-left" />

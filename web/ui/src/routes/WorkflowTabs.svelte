@@ -8,10 +8,10 @@
 	export type WorkflowTabsVariants = VariantProps<typeof workflowTabsVariants>;
 
 	const tabVariants = tv({
-		base: 'flex items-center gap-1 text-[0.65rem] uppercase tracking-wide transition-all text-muted-foreground rounded-none border border-border',
+		base: 'flex items-center gap-1 text-[0.65rem] uppercase tracking-wide transition-all text-fg-muted rounded-none border border-border',
 		variants: {
 			viewing: {
-				true: 'bg-muted',
+				true: 'bg-element-bg',
 				false: ''
 			},
 			state: {
@@ -56,7 +56,7 @@
 	{#each workflow.steps as step (step.id)}
 		{@const state = workflow.stepStates[step.id]}
 		{@const isActive = state === 'active'}
-		<div class={cn(tabVariants({ viewing: viewId === step.id, state }), 'justify-between hover:text-foreground')}>
+		<div class={cn(tabVariants({ viewing: viewId === step.id, state }), 'hover:text-fg justify-between')}>
 			<button
 				disabled={!workflow.canGoBack}
 				onclick={handleBack}

@@ -295,7 +295,7 @@
 			height={svgHeight}
 			role="img"
 			aria-label="Histogram for {label}"
-			class="bg-background"
+			class="bg-canvas"
 			bind:clientWidth={svgWidth}
 		>
 			<defs>
@@ -379,23 +379,23 @@
 				y="0"
 				width={svgWidth - maxHandleX}
 				height={svgHeight}
-				fill="black"
+				fill="var(--surface)"
 				opacity="0.4"
 				pointer-events="none"
 			/>
 		</svg>
 	{:else}
 		<div class="flex items-center justify-center" style:height="{svgHeight}px">
-			<span class="text-[0.65rem] text-muted-foreground">No histogram data</span>
+			<span class="text-fg-muted text-[0.65rem]">No histogram data</span>
 		</div>
 	{/if}
 {/snippet}
 
 <div class="relative flex flex-col" bind:clientWidth={columnWidth} style:--label-width="{labelWidth}px">
 	{#if visible === false && onVisibilityChange}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-overlay">
+		<div class="bg-backdrop absolute inset-0 z-10 flex items-center justify-center">
 			<button
-				class="flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+				class="text-fg-muted hover:text-fg flex items-center justify-center rounded p-1 transition-colors"
 				onclick={() => onVisibilityChange?.(true)}
 				aria-label="Show channel"
 			>
@@ -494,7 +494,7 @@
 		font-family: var(--font-mono, ui-monospace, monospace);
 		font-size: 0.6rem;
 		line-height: 1;
-		color: var(--color-muted-foreground);
+		color: var(--color-fg-muted);
 		background: transparent;
 		border: 1px solid transparent;
 		border-radius: 2px;

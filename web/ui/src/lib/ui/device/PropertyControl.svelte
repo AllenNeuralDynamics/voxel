@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { DevicesManager } from '$lib/main';
 	import { JsonView, Select, Switch, SpinBox, TextInput } from '$lib/ui/kit';
-	import SliderInput from '$lib/ui/SliderInput.svelte';
+	import SliderInput from './SliderInput.svelte';
 	import { isStructuredValue } from './utils';
 
 	interface Props {
@@ -60,7 +60,7 @@
 		{#if isStructured}
 			<JsonView data={model.value} />
 		{:else}
-			<span class="font-mono text-xs text-muted-foreground">
+			<span class="text-fg-muted font-mono text-xs">
 				{formatValue(model.value, info.units || undefined)}
 			</span>
 		{/if}
@@ -113,7 +113,7 @@
 		{#if isStructured}
 			<JsonView data={model.value} />
 		{:else}
-			<span class="font-mono text-xs text-muted-foreground">
+			<span class="text-fg-muted font-mono text-xs">
 				{formatValue(model.value, info.units || undefined)}
 			</span>
 		{/if}

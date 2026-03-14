@@ -3,19 +3,27 @@
 
 	export const spinBoxVariants = tv({
 		slots: {
-			wrapper: ['items-stretch bg-transparent', 'transition-colors focus-within:border-ring'],
-			input: ['border-none bg-transparent font-mono text-foreground outline-none'],
+			wrapper: ['items-stretch', 'transition-colors focus-within:border-focused'],
+			input: ['border-none bg-transparent font-mono text-fg outline-none'],
 			stack: ['flex cursor-pointer flex-col border-l border-input'],
 			stepButton: [
 				'flex flex-1 items-center justify-center',
-				'bg-transparent text-muted-foreground',
-				'transition-colors hover:bg-accent hover:text-foreground',
+				'bg-transparent text-fg-muted',
+				'transition-colors hover:bg-element-hover hover:text-fg',
 				'disabled:cursor-not-allowed disabled:opacity-40'
 			],
-			prefix: ['flex shrink-0 items-center font-mono whitespace-nowrap', 'text-muted-foreground select-none'],
-			suffix: ['pointer-events-none flex items-center font-mono text-muted-foreground']
+			prefix: ['flex shrink-0 items-center font-mono whitespace-nowrap', 'text-fg-muted select-none'],
+			suffix: ['pointer-events-none flex items-center font-mono text-fg-muted']
 		},
 		variants: {
+			variant: {
+				ghost: {
+					wrapper: 'bg-transparent hover:border-fg/20'
+				},
+				filled: {
+					wrapper: 'bg-element-bg hover:bg-element-hover'
+				}
+			},
 			size: {
 				xs: {
 					wrapper: 'h-4 rounded-[2px]',
@@ -68,6 +76,7 @@
 			}
 		},
 		defaultVariants: {
+			variant: 'filled',
 			size: 'md',
 			appearance: 'full'
 		}
@@ -111,6 +120,7 @@
 		numCharacters = 4,
 		color = 'inherit',
 		align = 'left',
+		variant = 'filled',
 		appearance = 'full',
 		draggable = true,
 		prefix,
@@ -124,7 +134,7 @@
 		onChange: onValueChange
 	}: Props = $props();
 
-	const styles = $derived(spinBoxVariants({ size, appearance }));
+	const styles = $derived(spinBoxVariants({ variant, size, appearance }));
 
 	const throttledDragCallback = useThrottle(
 		(newValue: number) => {

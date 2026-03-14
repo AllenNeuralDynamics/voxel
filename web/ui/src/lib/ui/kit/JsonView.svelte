@@ -48,14 +48,14 @@
 						class="flex cursor-pointer list-none items-center gap-1.5 px-1 py-0.5 select-none [&::-webkit-details-marker]:hidden"
 					>
 						<svg
-							class="h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform [[open]>&]:rotate-90"
+							class="text-fg-muted/60 h-3 w-3 shrink-0 transition-transform [[open]>&]:rotate-90"
 							viewBox="0 0 16 16"
 							fill="currentColor"
 						>
 							<path d="M6 4l4 4-4 4z" />
 						</svg>
-						<span class="text-foreground">{key}</span>
-						<span class="text-muted-foreground/60">{summary(value)}</span>
+						<span class="text-fg">{key}</span>
+						<span class="text-fg-muted/60">{summary(value)}</span>
 					</summary>
 					<div class="ml-2 border-l border-border/50 pl-2">
 						<JsonView data={value} depth={depth + 1} {expandDepth} />
@@ -63,12 +63,12 @@
 				</details>
 			{:else}
 				<div class="flex items-baseline gap-2 px-1 py-0.5">
-					<span class="shrink-0 text-muted-foreground">{key}</span>
-					<span class="font-mono text-foreground">{formatPrimitive(value)}</span>
+					<span class="text-fg-muted shrink-0">{key}</span>
+					<span class="text-fg font-mono">{formatPrimitive(value)}</span>
 				</div>
 			{/if}
 		{/each}
 	</div>
 {:else if data != null && typeof data !== 'object'}
-	<span class="font-mono text-xs text-foreground">{formatPrimitive(data)}</span>
+	<span class="text-fg font-mono text-xs">{formatPrimitive(data)}</span>
 {/if}

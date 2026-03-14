@@ -1,0 +1,73 @@
+/*
+ * Voxel Theme: JetBrains Dark
+ * Based on: Zed "JetBrains Dark" by Artem Evsevev (jetbrains-themes)
+ * Source: ~/Library/Application Support/Zed/extensions/installed/jetbrains-themes/themes/jetbrains-dark.json
+ * See base.css for token documentation.
+ */
+
+[data-theme='jetbrains'].dark {
+	/* ── Surfaces ──────────────────────────────────────────────────────── */
+
+	--canvas: #191a1c; /* zed: editor.background, toolbar.background, tab.active_background, terminal.background */
+	--surface: #26282b; /* zed: surface.background, background, status_bar.background, title_bar.background, tab_bar.background */
+	--panel: var(--surface); /* zed: panel.background */
+	--elevated: #26282b; /* zed: elevated_surface.background, editor.subheader.background */
+	--floating: #26282b; /* zed: elevated_surface.background */
+	--backdrop: #000000aa;
+
+	/* ── Element ───────────────────────────────────────────────────────── */
+
+	--element-bg: #393b41; /* zed: element.background */
+	--element-hover: #3c3e41; /* zed: element.hover, ghost_element.hover */
+	--element-active: #494a4d; /* zed: element.active, ghost_element.active */
+	--element-selected: #43454a; /* zed: element.selected, ghost_element.selected */
+
+	/* ── Text ──────────────────────────────────────────────────────────── */
+
+	--fg: #dfe1e5; /* zed: text */
+	--fg-muted: #b0b1b3; /* zed: text.muted */
+	--fg-faint: #6f737a; /* zed: text.placeholder */
+	--fg-accent: #3474f0; /* zed: text.accent */
+
+	/* ── Borders ───────────────────────────────────────────────────────── */
+
+	--border: #393b41; /* zed: border */
+	--border-variant: #393b41; /* zed: border.variant (same as border in this theme) */
+	--border-focused: #467ff2; /* zed: border.focused */
+	--border-selected: #467ff2; /* zed: border.selected */
+	--border-disabled: #2e3035; /* zed: border.disabled */
+
+	/* ── Interactive ───────────────────────────────────────────────────── */
+
+	--primary: #3474f0; /* zed: text.accent, border.selected */
+	--primary-fg: #dfe1e5;
+	--secondary: #43454a; /* zed: element.selected, ghost_element.selected */
+	--secondary-fg: #dfe1e5;
+
+	/* ── Semantic ──────────────────────────────────────────────────────── */
+
+	--danger: #fa6675; /* zed: error */
+	--danger-bg: #402929; /* zed: error.background */
+	--danger-fg: #dfe1e5;
+
+	--success: #57965d; /* zed: success */
+	--success-bg: #253627; /* zed: success.background */
+	--success-fg: #dfe1e5;
+
+	--warning: #f2c55c; /* zed: warning */
+	--warning-bg: #665014; /* zed: warning.background */
+	--warning-fg: #191a1c;
+
+	--info: #3592c4; /* zed: info */
+	--info-bg: #393b41; /* zed: info.background */
+	--info-fg: #dfe1e5;
+
+	--active: #e08855; /* derived: players[4].cursor */
+	--active-bg: #3d2e22;
+	--active-fg: #dfe1e5;
+
+	/* ── Scrollbar ─────────────────────────────────────────────────────── */
+
+	--scrollbar-thumb: #ffffff26; /* zed: scrollbar.thumb.background */
+	--scrollbar-thumb-hover: #ffffff40; /* zed: scrollbar.thumb.hover_background */
+}

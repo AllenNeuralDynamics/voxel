@@ -110,7 +110,7 @@
 	function modeDotColor(mode: string | undefined): string {
 		if (mode === 'PREVIEW') return 'bg-success';
 		if (mode === 'ACQUISITION') return 'bg-warning';
-		return 'bg-muted-foreground/40';
+		return 'bg-fg-muted/40';
 	}
 
 	function modeLabel(mode: string | undefined): string {
@@ -133,7 +133,7 @@
 		role="button"
 		tabindex="0"
 		onclick={() => toggleCamera(camera.deviceId)}
-		class="flex w-full cursor-pointer flex-col gap-3 rounded-md bg-muted/50 px-4 py-3 text-left"
+		class="bg-element-bg flex w-full cursor-pointer flex-col gap-3 rounded-md px-4 py-3 text-left"
 	>
 		<!-- Header: checkbox + device ID + mode -->
 		<div class="flex items-center justify-between">
@@ -142,7 +142,7 @@
 				<span class="text-sm font-medium">{camera.deviceId}</span>
 			</div>
 			<div class="flex items-center gap-1.5">
-				<span class="text-[0.65rem] text-muted-foreground">{modeLabel(camera.mode)}</span>
+				<span class="text-fg-muted text-[0.65rem]">{modeLabel(camera.mode)}</span>
 				<div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
 			</div>
 		</div>
@@ -150,23 +150,23 @@
 		<!-- Properties -->
 		<div class="space-y-1 text-xs">
 			<div class="flex justify-between">
-				<span class="text-muted-foreground">Exposure</span>
+				<span class="text-fg-muted">Exposure</span>
 				<span class="font-mono tabular-nums">
 					{camera.exposureTimeMs !== undefined ? `${camera.exposureTimeMs.toFixed(1)} ms` : '—'}
 				</span>
 			</div>
 			<div class="flex justify-between">
-				<span class="text-muted-foreground">Binning</span>
+				<span class="text-fg-muted">Binning</span>
 				<span class="font-mono tabular-nums">
 					{camera.binning !== undefined ? `${camera.binning}x` : '—'}
 				</span>
 			</div>
 			<div class="flex justify-between">
-				<span class="text-muted-foreground">Format</span>
+				<span class="text-fg-muted">Format</span>
 				<span class="font-mono tabular-nums">{camera.pixelFormat ?? '—'}</span>
 			</div>
 			<div class="flex justify-between">
-				<span class="text-muted-foreground">Frame</span>
+				<span class="text-fg-muted">Frame</span>
 				<span class="font-mono tabular-nums">
 					{#if camera.frameSizePx}
 						{camera.frameSizePx.x}&times;{camera.frameSizePx.y}
@@ -176,7 +176,7 @@
 				</span>
 			</div>
 			<div class="flex justify-between">
-				<span class="text-muted-foreground">Sensor</span>
+				<span class="text-fg-muted">Sensor</span>
 				<span class="font-mono tabular-nums">
 					{#if camera.sensorSizePx}
 						{camera.sensorSizePx.x}&times;{camera.sensorSizePx.y}
@@ -186,7 +186,7 @@
 				</span>
 			</div>
 			<div class="flex justify-between">
-				<span class="text-muted-foreground">Pixel</span>
+				<span class="text-fg-muted">Pixel</span>
 				<span class="font-mono tabular-nums">
 					{#if camera.pixelSizeUm}
 						{camera.pixelSizeUm.x.toFixed(2)} &mu;m
@@ -200,7 +200,7 @@
 		<!-- Stream info (when streaming) -->
 		{#if camera.streamInfo}
 			{@const info = camera.streamInfo}
-			<div class="flex items-center gap-4 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+			<div class="text-fg-muted flex items-center gap-4 border-t border-border/50 pt-2 text-xs">
 				<span class="font-mono tabular-nums">{info.frame_rate_fps.toFixed(1)} fps</span>
 				<span class="font-mono tabular-nums">{info.data_rate_mbs.toFixed(1)} MB/s</span>
 				{#if info.dropped_frames > 0}
@@ -218,37 +218,37 @@
 					}}
 					class="flex w-full cursor-pointer items-center justify-between text-xs"
 				>
-					<span class="text-muted-foreground">Channel</span>
+					<span class="text-fg-muted">Channel</span>
 					<div class="flex justify-between gap-1">
 						<span class="font-mono">{ch.config.label ?? ch.id}</span>
 						<ChevronRight
 							width="14"
 							height="14"
-							class="text-muted-foreground transition-transform {channelExpanded ? 'rotate-90' : ''}"
+							class="text-fg-muted transition-transform {channelExpanded ? 'rotate-90' : ''}"
 						/>
 					</div>
 				</button>
 				{#if channelExpanded}
 					<div class="mt-2 space-y-1 text-xs">
 						<!-- {#if ch.config.desc}
-							<p class="text-[0.5rem] text-muted-foreground">{ch.config.desc}</p>
+							<p class="text-[0.5rem] text-fg-muted">{ch.config.desc}</p>
 						{/if} -->
 						{#if ch.config.emission}
 							<div class="flex justify-between gap-1">
-								<span class="text-muted-foreground">Emission</span>
+								<span class="text-fg-muted">Emission</span>
 								<span class="font-mono tabular-nums">{ch.config.emission} nm</span>
 							</div>
 						{/if}
 						{#if ch.config.illumination}
 							<div class="flex justify-between gap-2">
-								<span class="text-muted-foreground">Illumination</span>
+								<span class="text-fg-muted">Illumination</span>
 								<span class="font-mono tabular-nums">{ch.config.illumination}</span>
 							</div>
 						{/if}
 						{#if Object.keys(ch.config.filters).length > 0}
 							{#each Object.entries(ch.config.filters) as [wheelId, position] (position)}
 								<div class="flex justify-between">
-									<span class="text-muted-foreground">{wheelId}</span>
+									<span class="text-fg-muted">{wheelId}</span>
 									<span class="font-mono tabular-nums">{position}</span>
 								</div>
 							{/each}
@@ -261,11 +261,11 @@
 {/snippet}
 
 {#snippet editPanel(cameras: Camera[])}
-	<div class="flex h-full w-80 shrink-0 flex-col bg-card">
-		<div class="flex-1 space-y-4 overflow-auto px-4 pt-4">
+	<div class="bg-panel flex h-full w-80 shrink-0 flex-col px-3">
+		<div class="flex-1 space-y-4 overflow-auto pt-4">
 			<!-- Exposure -->
 			<div>
-				<h5 class="mb-1.5 text-[0.6rem] font-medium text-muted-foreground uppercase">Exposure</h5>
+				<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Exposure</h5>
 				<SpinBox
 					value={formExposure ?? cameras[0]?.exposureTimeMs ?? 0}
 					min={cameras[0]?.exposureMin ?? 0}
@@ -282,7 +282,7 @@
 			<!-- Binning -->
 			{#if mergedBinningOptions.length > 0}
 				<div>
-					<h5 class="mb-1.5 text-[0.6rem] font-medium text-muted-foreground uppercase">Binning</h5>
+					<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Binning</h5>
 					<Select
 						value={formBinning ?? String(cameras[0]?.binning ?? '')}
 						options={mergedBinningOptions.map((b) => ({ value: String(b), label: `${b}x` }))}
@@ -295,7 +295,7 @@
 			<!-- Pixel Format -->
 			{#if mergedPixelFormatOptions.length > 0}
 				<div>
-					<h5 class="mb-1.5 text-[0.6rem] font-medium text-muted-foreground uppercase">Pixel Format</h5>
+					<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Pixel Format</h5>
 					<Select
 						value={formPixelFormat ?? cameras[0]?.pixelFormat ?? ''}
 						options={mergedPixelFormatOptions.map((f) => ({ value: f, label: f }))}
@@ -309,10 +309,10 @@
 			{#if cameras[0]?.frameRegion}
 				{@const refRegion = cameras[0].frameRegion}
 				<div>
-					<h5 class="mb-1.5 text-[0.6rem] font-medium text-muted-foreground uppercase">Frame Region</h5>
+					<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Frame Region</h5>
 					<div class="grid grid-cols-2 gap-2">
 						<div>
-							<span class="text-[0.55rem] text-muted-foreground">X</span>
+							<span class="text-fg-muted text-[0.55rem]">X</span>
 							<SpinBox
 								value={formRegionX ?? refRegion.x.value}
 								min={refRegion.x.min_val}
@@ -324,7 +324,7 @@
 							/>
 						</div>
 						<div>
-							<span class="text-[0.55rem] text-muted-foreground">Y</span>
+							<span class="text-fg-muted text-[0.55rem]">Y</span>
 							<SpinBox
 								value={formRegionY ?? refRegion.y.value}
 								min={refRegion.y.min_val}
@@ -336,7 +336,7 @@
 							/>
 						</div>
 						<div>
-							<span class="text-[0.55rem] text-muted-foreground">Width</span>
+							<span class="text-fg-muted text-[0.55rem]">Width</span>
 							<SpinBox
 								value={formRegionWidth ?? refRegion.width.value}
 								min={refRegion.width.min_val}
@@ -348,7 +348,7 @@
 							/>
 						</div>
 						<div>
-							<span class="text-[0.55rem] text-muted-foreground">Height</span>
+							<span class="text-fg-muted text-[0.55rem]">Height</span>
 							<SpinBox
 								value={formRegionHeight ?? refRegion.height.value}
 								min={refRegion.height.min_val}
@@ -365,17 +365,15 @@
 		</div>
 
 		<!-- Apply button -->
-		<div class="px-4 py-3">
-			<Button variant="secondary" size="sm" class="w-full" disabled={!hasFormChanges} onclick={applyChanges}>
-				Apply to {cameras.length} camera{cameras.length !== 1 ? 's' : ''}
-			</Button>
-		</div>
+		<Button variant="secondary" size="sm" class="my-3 w-full" disabled={!hasFormChanges} onclick={applyChanges}>
+			Apply to {cameras.length} camera{cameras.length !== 1 ? 's' : ''}
+		</Button>
 	</div>
 {/snippet}
 
 {#if allCameras.length === 0}
 	<div class="flex h-full items-center justify-center">
-		<p class="text-xs text-muted-foreground">No cameras configured</p>
+		<p class="text-fg-muted text-xs">No cameras configured</p>
 	</div>
 {:else}
 	<div class="flex h-full">
@@ -384,7 +382,7 @@
 			<div class="flex h-full flex-col gap-2">
 				<div class="flex items-center gap-2.5 py-3 pl-4">
 					<Checkbox checked={allSelected} indeterminate={someSelected} onchange={toggleAll} size="sm" />
-					<span class="text-xs text-muted-foreground">
+					<span class="text-fg-muted text-xs">
 						{selectedIds.size} of {allCameras.length} camera{allCameras.length !== 1 ? 's' : ''} selected
 					</span>
 				</div>
@@ -400,7 +398,7 @@
 			{@render editPanel(selectedCameras)}
 		{:else}
 			<div class="flex h-full w-96 shrink-0 flex-col items-center justify-center bg-card">
-				<p class="text-xs text-muted-foreground">Select cameras to edit</p>
+				<p class="text-fg-muted text-xs">Select cameras to edit</p>
 			</div>
 		{/if}
 	</div>

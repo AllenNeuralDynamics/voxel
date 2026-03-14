@@ -65,7 +65,7 @@
 	<div class="grid gap-2">
 		{#each filteredProperties.rw as [name, info] (name)}
 			<div class="flex items-center justify-between gap-4">
-				<span class="shrink-0 text-xs text-foreground" title={info.desc ?? ''}>
+				<span class="text-fg shrink-0 text-xs" title={info.desc ?? ''}>
 					{info.label}
 				</span>
 				<div class="max-w-64 min-w-0">
@@ -82,9 +82,9 @@
 			{#if isStructuredProp(name)}
 				<Collapsible.Root>
 					<Collapsible.Trigger class="flex h-5 w-full items-center justify-between">
-						<span class="text-xs text-muted-foreground">{info.label}</span>
+						<span class="text-fg-muted text-xs">{info.label}</span>
 						<ChevronDown
-							class="h-3.5 w-3.5 -rotate-90 text-muted-foreground/60 transition-transform duration-200 [[data-state=open]>&]:rotate-0"
+							class="text-fg-muted/60 h-3.5 w-3.5 -rotate-90 transition-transform duration-200 [[data-state=open]>&]:rotate-0"
 						/>
 					</Collapsible.Trigger>
 					<Collapsible.Content class="pt-1">
@@ -95,7 +95,7 @@
 				</Collapsible.Root>
 			{:else}
 				<div class="flex min-h-5 items-baseline justify-between gap-4">
-					<span class="shrink-0 text-xs text-muted-foreground" title={info.desc ?? ''}>
+					<span class="text-fg-muted shrink-0 text-xs" title={info.desc ?? ''}>
 						{info.label}
 					</span>
 					<PropertyControl {deviceId} propName={name} {devicesManager} {size} />
@@ -108,9 +108,9 @@
 {#if showCmds}
 	<Collapsible.Root>
 		<Collapsible.Trigger class="flex w-full items-center justify-between">
-			<h4 class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Commands</h4>
+			<h4 class="text-fg-muted text-[0.65rem] font-medium tracking-wide uppercase">Commands</h4>
 			<ChevronDown
-				class="h-3.5 w-3.5 -rotate-90 text-muted-foreground/60 transition-transform duration-200 [[data-state=open]>&]:rotate-0"
+				class="text-fg-muted/60 h-3.5 w-3.5 -rotate-90 transition-transform duration-200 [[data-state=open]>&]:rotate-0"
 			/>
 		</Collapsible.Trigger>
 		<Collapsible.Content class="pt-1">

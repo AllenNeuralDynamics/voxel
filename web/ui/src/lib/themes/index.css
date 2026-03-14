@@ -1,0 +1,60 @@
+/* ── Theme imports ─────────────────────────────────────────────────────
+ * base.css provides the default (zinc) theme with :root (light) and .dark variants.
+ * Additional themes use [data-theme="name"] selectors and only apply when active.
+ * ───────────────────────────────────────────────────────────────────── */
+
+@import './base.css';
+@import './jetbrains.light.css';
+@import './jetbrains.dark.css';
+@import './github.light.css';
+@import './github.dark.css';
+@import './ayu.light.css';
+@import './ayu.dark.css';
+@import './catppuccin.latte.css';
+@import './catppuccin.mocha.css';
+
+/* ── shadcn bridge ─────────────────────────────────────────────────────
+ * Maps shadcn token names to the Voxel design system.
+ * Tokens with identical names in both systems (--primary, --secondary,
+ * --border, --radius) are defined directly by the theme — no bridge needed.
+ * ───────────────────────────────────────────────────────────────────── */
+
+:root {
+	/* --radius: defined by theme */
+	--background: var(--canvas);
+	--foreground: var(--fg);
+	--card: var(--elevated);
+	--card-foreground: var(--fg);
+	--popover: var(--floating);
+	--popover-foreground: var(--fg);
+	/* --primary: defined by theme */
+	--primary-foreground: var(--primary-fg);
+	/* --secondary: defined by theme */
+	--secondary-foreground: var(--secondary-fg);
+	--muted: var(--element-bg);
+	--muted-foreground: var(--fg-muted);
+	--accent: var(--element-hover);
+	--accent-foreground: var(--secondary-fg);
+	--destructive: var(--danger);
+	/* --border: defined by theme */
+	--input: var(--border-variant);
+	--ring: var(--border-focused);
+}
+
+/* ── voxel bridge ─────────────────────────────────────────────────────
+ * Maps legacy voxel token names to the new system.
+ * Tokens with identical names (--surface, --danger, --success, --warning,
+ * --info, --active, and all *-fg variants) are defined directly by the theme.
+ * ───────────────────────────────────────────────────────────────────── */
+
+:root {
+	--surface-foreground: var(--fg);
+	--overlay: var(--backdrop);
+	/* --divider tokens removed — PaneDivider uses --border / --border-focused directly */
+	/* --surface: defined by theme */
+	/* --danger, --danger-fg: defined by theme */
+	/* --success, --success-fg: defined by theme */
+	/* --warning, --warning-fg: defined by theme */
+	/* --info, --info-fg: defined by theme */
+	/* --active, --active-fg: defined by theme */
+}

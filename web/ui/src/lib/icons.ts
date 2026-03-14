@@ -50,6 +50,7 @@ export { default as GridLines } from '~icons/lucide-lab/grid-lines';
 export { default as LucideCheck } from '~icons/lucide/check';
 export { default as LucideCircle } from '~icons/lucide/circle';
 export { default as LucideChevronRight } from '~icons/lucide/chevron-right';
+export { default as LucideX } from '~icons/lucide/x';
 
 // Theme mode
 export { default as Sun } from '~icons/lucide/sun';

@@ -96,7 +96,7 @@
 				<div class="grid gap-2">
 					{#each params as [name, param] (name)}
 						<div class="grid gap-1">
-							<span class="text-[0.65rem] font-medium text-muted-foreground">
+							<span class="text-fg-muted text-[0.65rem] font-medium">
 								{sanitizeString(name)}
 							</span>
 							{#if param.dtype === 'int' || param.dtype === 'float' || param.dtype === 'number'}
@@ -121,12 +121,13 @@
 
 			<!-- Result -->
 			{#if lastResult}
-				<div class={cn('rounded border p-2', isError ? 'border-danger/30 bg-danger/5' : 'border-border bg-muted/30')}>
+				<div
+					class={cn('rounded border p-2', isError ? 'border-danger/30 bg-danger/5' : 'bg-element-bg/30 border-border')}
+				>
 					<pre
-						class={cn(
-							'max-h-40 overflow-auto font-mono text-xs',
-							isError ? 'text-danger' : 'text-foreground'
-						)}>{formatResult(lastResult.result)}</pre>
+						class={cn('max-h-40 overflow-auto font-mono text-xs', isError ? 'text-danger' : 'text-fg')}>{formatResult(
+							lastResult.result
+						)}</pre>
 				</div>
 			{/if}
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { cn, sanitizeString, wavelengthToColor } from '$lib/utils';
-	import SliderInput from '$lib/ui/SliderInput.svelte';
+	import { SliderInput } from '$lib/ui/device';
 	import { Switch } from '$lib/ui/kit';
 	import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
 
@@ -41,13 +41,13 @@
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-2">
 			<span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
-			<h2 class="text-sm font-medium text-foreground">
+			<h2 class="text-fg text-sm font-medium">
 				{typeof wavelength === 'number' ? `${wavelength} nm Laser` : sanitizeString(deviceId)}
 			</h2>
 		</div>
 		<div class="flex items-center gap-3">
 			<span
-				class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-muted-foreground/30')}
+				class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
 				title={device?.connected ? 'Connected' : 'Disconnected'}
 			></span>
 			{#if device?.connected}
@@ -81,18 +81,18 @@
 			<!-- Status readback -->
 			{#if typeof powerMw === 'number' || typeof temperatureC === 'number'}
 				<div class="rounded border border-border bg-card p-3">
-					<h4 class="mb-2 text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Status</h4>
+					<h4 class="text-fg-muted mb-2 text-[0.65rem] font-medium tracking-wide uppercase">Status</h4>
 					<div class="grid gap-1.5 text-xs">
 						{#if typeof powerMw === 'number'}
 							<div class="flex justify-between">
-								<span class="text-muted-foreground">Power</span>
-								<span class="font-mono text-foreground">{powerMw.toFixed(1)} mW</span>
+								<span class="text-fg-muted">Power</span>
+								<span class="text-fg font-mono">{powerMw.toFixed(1)} mW</span>
 							</div>
 						{/if}
 						{#if typeof temperatureC === 'number'}
 							<div class="flex justify-between">
-								<span class="text-muted-foreground">Temperature</span>
-								<span class="font-mono text-foreground">{temperatureC.toFixed(1)} &deg;C</span>
+								<span class="text-fg-muted">Temperature</span>
+								<span class="text-fg font-mono">{temperatureC.toFixed(1)} &deg;C</span>
 							</div>
 						{/if}
 					</div>
@@ -104,7 +104,7 @@
 		</div>
 	{:else}
 		<div class="flex items-center justify-center py-12">
-			<p class="text-sm text-muted-foreground">Laser not available</p>
+			<p class="text-fg-muted text-sm">Laser not available</p>
 		</div>
 	{/if}
 </section>

@@ -1,0 +1,73 @@
+/*
+ * Voxel Theme: Catppuccin Latte
+ * Based on: Zed "Catppuccin Latte" (catppuccin extension, mauve accent)
+ * Source: ~/Library/Application Support/Zed/extensions/installed/catppuccin/themes/catppuccin-mauve.json
+ * See base.css for token documentation.
+ */
+
+[data-theme='catppuccin'] {
+	/* ── Surfaces ──────────────────────────────────────────────────────── */
+
+	--canvas: #eff1f5; /* zed: editor.background, toolbar.background, tab.active_background */
+	--surface: #e6e9ef; /* zed: surface.background */
+	--panel: var(--surface); /* zed: panel.background */
+	--elevated: #e6e9ef; /* zed: elevated_surface.background */
+	--floating: #eff1f5; /* zed: toolbar.background */
+	--backdrop: #00000040;
+
+	/* ── Element ───────────────────────────────────────────────────────── */
+
+	--element-bg: #dce0e8; /* zed: element.background */
+	--element-hover: #ccd0da; /* zed: element.hover */
+	--element-active: #acb0be4d; /* zed: element.active */
+	--element-selected: #ccd0da4d; /* zed: element.selected */
+
+	/* ── Text ──────────────────────────────────────────────────────────── */
+
+	--fg: #4c4f69; /* zed: text */
+	--fg-muted: #5c5f77; /* zed: text.muted */
+	--fg-faint: #acb0be; /* zed: text.placeholder */
+	--fg-accent: #8839ef; /* zed: text.accent */
+
+	/* ── Borders ───────────────────────────────────────────────────────── */
+
+	--border: #ccd0da; /* zed: border */
+	--border-variant: #ccd0da; /* zed: border (using border instead of variant which is accent-colored) */
+	--border-focused: #7287fd; /* zed: border.focused */
+	--border-selected: #8839ef; /* zed: border.selected */
+	--border-disabled: #9ca0b0; /* zed: border.disabled */
+
+	/* ── Interactive ───────────────────────────────────────────────────── */
+
+	--primary: #8839ef; /* zed: text.accent, border.selected */
+	--primary-fg: #eff1f5;
+	--secondary: #ccd0da; /* zed: element.hover */
+	--secondary-fg: #4c4f69;
+
+	/* ── Semantic ──────────────────────────────────────────────────────── */
+
+	--danger: #d20f39; /* zed: error */
+	--danger-bg: #d20f391f; /* zed: error.background */
+	--danger-fg: #eff1f5;
+
+	--success: #40a02b; /* zed: success */
+	--success-bg: #40a02b1f; /* zed: success.background */
+	--success-fg: #eff1f5;
+
+	--warning: #df8e1d; /* zed: warning */
+	--warning-bg: #df8e1d1f; /* zed: warning.background */
+	--warning-fg: #4c4f69;
+
+	--info: #179299; /* zed: info */
+	--info-bg: #7c7f9333; /* zed: info.background */
+	--info-fg: #eff1f5;
+
+	--active: #fe640b; /* catppuccin peach */
+	--active-bg: #fe640b1f;
+	--active-fg: #eff1f5;
+
+	/* ── Scrollbar ─────────────────────────────────────────────────────── */
+
+	--scrollbar-thumb: #acb0be80; /* zed: scrollbar.thumb.background */
+	--scrollbar-thumb-hover: #9ca0b0; /* zed: scrollbar.thumb.hover_background */
+}

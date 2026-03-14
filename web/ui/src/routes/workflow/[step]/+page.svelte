@@ -9,5 +9,5 @@
 </script>
 
 <div class="flex h-full items-center justify-center">
-	<p class="text-sm text-muted-foreground">{stepLabel} — coming soon</p>
+	<p class="text-fg-muted text-sm">{stepLabel} — coming soon</p>
 </div>

@@ -5,11 +5,11 @@
 		slots: {
 			root: [
 				'relative cursor-pointer rounded-full border',
-				'border-border bg-muted',
-				'transition-colors hover:bg-accent',
+				'border-border bg-element-bg',
+				'transition-colors hover:bg-element-hover',
 				'data-disabled:cursor-not-allowed data-disabled:opacity-40',
-				'data-[state=checked]:border-success data-[state=checked]:bg-success/90',
-				'data-[state=checked]:hover:bg-success'
+				'data-[state=checked]:border-primary data-[state=checked]:bg-primary/90',
+				'data-[state=checked]:hover:bg-primary'
 			],
 			thumb: ['block rounded-full bg-foreground transition-transform']
 		},

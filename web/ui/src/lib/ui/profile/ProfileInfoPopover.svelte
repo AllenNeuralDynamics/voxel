@@ -27,13 +27,13 @@
 {#if profile && (profile.desc || profile.channels.length > 0)}
 	<Popover.Root>
 		<Popover.Trigger
-			class="rounded-lg px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+			class="text-fg-muted hover:bg-element-hover hover:text-fg rounded-lg px-1 py-0.5 transition-colors"
 		>
 			<InformationOutline width={iconSize[size]} height={iconSize[size]} />
 		</Popover.Trigger>
 		<Popover.Portal>
 			<Popover.Content
-				class="z-50 w-72 rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-md"
+				class="bg-floating text-fg z-50 w-72 rounded-xl border border-border p-4 shadow-md"
 				side="bottom"
 				align="end"
 				sideOffset={6}
@@ -42,7 +42,7 @@
 					<p class="text-xs">{profile.desc}</p>
 				{/if}
 				{#if profile.channels.length > 0}
-					<p class="text-xs {profile.desc ? 'mt-1.5' : ''} text-muted-foreground">
+					<p class="text-xs {profile.desc ? 'mt-1.5' : ''} text-fg-muted">
 						{#each profile.channels as chId, i (chId)}{#if i > 0},
 							{/if}{config.channels[chId]?.label ?? sanitizeString(chId)}{/each}
 					</p>
