@@ -25,7 +25,7 @@
 		<!-- Generic device config -->
 		<section class="flex h-full flex-col gap-6">
 			<div class="flex items-center justify-between">
-				<h2 class="text-fg text-sm font-medium">{sanitizeString(deviceId)}</h2>
+				<h2 class="text-fg text-base font-medium">{sanitizeString(deviceId)}</h2>
 				<span
 					class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
 					title={device?.connected ? 'Connected' : 'Disconnected'}
@@ -38,7 +38,7 @@
 				</div>
 			{:else}
 				<div class="flex items-center justify-center py-12">
-					<p class="text-fg-muted text-sm">Device not available</p>
+					<p class="text-fg-muted text-base">Device not available</p>
 				</div>
 			{/if}
 		</section>

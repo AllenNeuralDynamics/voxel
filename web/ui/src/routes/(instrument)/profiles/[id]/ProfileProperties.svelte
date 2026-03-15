@@ -94,7 +94,7 @@
 			{#if hasContent}
 				<div>
 					<!-- Device header -->
-					<div class="mb-1.5 flex items-center gap-2 text-xs">
+					<div class="mb-1.5 flex items-center gap-2 text-sm">
 						<span class="text-fg font-medium">{sanitizeString(deviceId)}</span>
 						{#if diverged}
 							<span class="h-1.5 w-1.5 rounded-full bg-warning" title="Properties diverged"></span>
@@ -102,7 +102,7 @@
 					</div>
 
 					<!-- Property table -->
-					<div class="text-[0.65rem]">
+					<div class="text-xs">
 						<div class="text-fg-muted grid grid-cols-[1fr_auto_auto] gap-x-4 border-b pb-1">
 							<span>Property</span>
 							<span class="w-24 text-right">Saved</span>
@@ -145,7 +145,7 @@
 									setupOpen = { ...setupOpen, [deviceId]: open };
 								}}
 							>
-								<Collapsible.Trigger class="text-fg-muted hover:text-fg flex items-center gap-1 text-[0.6rem]">
+								<Collapsible.Trigger class="text-fg-muted hover:text-fg flex items-center gap-1 text-xs">
 									<ChevronRight
 										width="12"
 										height="12"
@@ -155,7 +155,7 @@
 								</Collapsible.Trigger>
 								<Collapsible.Content class="mt-1 space-y-0.5 pl-4">
 									{#each setupCommands as cmd, i (i)}
-										<div class="text-fg-muted font-mono text-[0.6rem]">
+										<div class="text-fg-muted font-mono text-xs">
 											<span class="text-fg">{cmd.attr}</span>
 											{#if cmd.kwargs && Object.keys(cmd.kwargs).length > 0}
 												<span class="text-fg-muted/60">
@@ -176,7 +176,7 @@
 
 		<!-- Footer: divergence summary + actions -->
 		{#if isActiveProfile}
-			<div class="flex items-center justify-between border-t pt-3 text-[0.65rem]">
+			<div class="flex items-center justify-between border-t pt-3 text-xs">
 				<span class="text-fg-muted">
 					{#if divergedCount > 0}
 						{divergedCount} {divergedCount === 1 ? 'property' : 'properties'} diverged
@@ -185,8 +185,8 @@
 					{/if}
 				</span>
 				<div class="flex gap-1.5">
-					<Button variant="outline" size="xs" onclick={() => session.applyProfileProps()}>Reset</Button>
-					<Button variant="outline" size="xs" onclick={() => session.saveAllProfileProps()}>Save All</Button>
+					<Button variant="outline" size="sm" onclick={() => session.applyProfileProps()}>Reset</Button>
+					<Button variant="outline" size="sm" onclick={() => session.saveAllProfileProps()}>Save All</Button>
 				</div>
 			</div>
 		{/if}

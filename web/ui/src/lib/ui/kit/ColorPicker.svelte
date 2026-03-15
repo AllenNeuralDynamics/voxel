@@ -96,7 +96,7 @@
 					onblur={handleCustomInputBlur}
 					placeholder="#ff00ff"
 					size="7"
-					class="bg-element-bg text-fg placeholder-fg-muted focus:border-focused h-6 min-w-0 rounded border border-input px-1.5 font-mono text-[0.65rem] focus:outline-none"
+					class="bg-element-bg text-fg placeholder-fg-muted focus:border-focused h-6 min-w-0 rounded border border-input px-1.5 font-mono text-xs focus:outline-none"
 				/>
 			</div>
 		</div>

@@ -4,7 +4,36 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Density tokens ───────────────────────────────────────────────────── */
+
+:root {
+	--ui-xs: 1.75rem;
+	--ui-sm: 2rem;
+	--ui-md: 2.25rem;
+	--ui-lg: 2.5rem;
+}
+
+.density-compact {
+	--ui-xs: 1.5rem;
+	--ui-sm: 1.75rem;
+	--ui-md: 2rem;
+	--ui-lg: 2.25rem;
+}
+
+.density-comfortable {
+	--ui-xs: 2rem;
+	--ui-sm: 2.25rem;
+	--ui-md: 2.5rem;
+	--ui-lg: 2.75rem;
+}
+
 @theme inline {
+	/* ── Density ───────────────────────────────────────────────────────── */
+	--spacing-ui-xs: var(--ui-xs);
+	--spacing-ui-sm: var(--ui-sm);
+	--spacing-ui-md: var(--ui-md);
+	--spacing-ui-lg: var(--ui-lg);
+
 	/* ── Surfaces ──────────────────────────────────────────────────────── */
 	--color-canvas: var(--canvas);
 	--color-surface: var(--surface);

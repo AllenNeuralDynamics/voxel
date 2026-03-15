@@ -49,15 +49,15 @@
 			{/if}
 		</Tooltip.Trigger>
 		<Tooltip.Content
-			class="z-50 w-64 rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-xs text-zinc-200 shadow-xl outline-none"
+			class="z-50 w-64 rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-sm text-zinc-200 shadow-xl outline-none"
 			sideOffset={4}
 			align="end"
 		>
 			{#if frameInfo}
 				<div class="space-y-2">
-					<p class="text-sm font-semibold text-zinc-100">Preview Canvas</p>
+					<p class="text-base font-semibold text-zinc-100">Preview Canvas</p>
 
-					<div class="space-y-1 border-t border-zinc-800 pt-2 text-[0.7rem] text-zinc-300">
+					<div class="space-y-1 border-t border-zinc-800 pt-2 text-sm text-zinc-300">
 						<div class="flex justify-between gap-2">
 							<span class="text-zinc-400">Preview Size</span>
 							<span class="text-right text-zinc-200">{frameInfo.preview_width} × {frameInfo.preview_height}</span>
@@ -65,7 +65,7 @@
 					</div>
 
 					{#if visibleChannels.length > 0}
-						<div class="space-y-1 border-t border-zinc-800 pt-2 text-[0.7rem] text-zinc-300">
+						<div class="space-y-1 border-t border-zinc-800 pt-2 text-sm text-zinc-300">
 							{#if hasMismatch}
 								<div class="mb-1 flex items-center gap-1.5 text-amber-400">
 									<Alert width="12" height="12" />
@@ -87,8 +87,8 @@
 				</div>
 			{:else}
 				<div>
-					<p class="text-sm font-semibold text-zinc-100">Preview Canvas</p>
-					<p class="mt-1 text-xs text-zinc-400">No frames available</p>
+					<p class="text-base font-semibold text-zinc-100">Preview Canvas</p>
+					<p class="mt-1 text-sm text-zinc-400">No frames available</p>
 				</div>
 			{/if}
 		</Tooltip.Content>

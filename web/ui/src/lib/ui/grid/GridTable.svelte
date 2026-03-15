@@ -136,19 +136,19 @@
 	}
 </script>
 
-<div class="text-fg flex h-full flex-col text-xs">
+<div class="text-fg flex h-full flex-col text-sm">
 	<!-- Table -->
 	<div class="flex-1 overflow-auto">
 		<table class="w-full border-collapse">
 			<thead class="text-fg sticky top-0 z-1000 bg-card uppercase">
-				<tr class="text-[0.65rem] font-medium">
+				<tr class="text-xs font-medium">
 					<th class="w-8 border-b border-border px-5 py-1.5">
 						<div class="flex items-center justify-center">
 							<Checkbox checked={allChecked} indeterminate={someChecked} onchange={handleSelectAll} size="sm" />
 						</div>
 					</th>
 					<th class="w-26 border-b border-border p-1.5 text-left capitalize">
-						<Select bind:value={filterMode} options={filterOptions} size="sm" />
+						<Select bind:value={filterMode} options={filterOptions} size="xs" />
 					</th>
 					<th class="w-32 border-b border-border p-2 text-left font-medium tracking-wider"> Position </th>
 					<th class="min-w-16 border-b border-border p-1.5"></th>
@@ -164,7 +164,7 @@
 								appearance="inline"
 								align="right"
 							/>
-							<span class="text-fg-muted ml-1 text-[0.65rem] lowercase">µm</span>
+							<span class="text-fg-muted ml-1 text-xs lowercase">µm</span>
 						</div>
 					</th>
 					<th class="w-16 border-b border-border p-2 text-right font-medium tracking-wider"> Slices </th>
@@ -193,7 +193,7 @@
 						<td class="p-1.5 px-3 text-left font-mono" ondblclick={() => handleTileDoubleClick(tile)}>
 							R{tile.row}, C{tile.col}
 						</td>
-						<td class="text-fg-muted p-1.5 font-mono text-[0.65rem]">
+						<td class="text-fg-muted p-1.5 font-mono text-xs">
 							{(tile.x_um / 1000).toFixed(2)}, {(tile.y_um / 1000).toFixed(2)} mm
 						</td>
 						<td class="p-1.5"></td>
@@ -216,7 +216,7 @@
 										onChange={(v) => handleZChange(tile, stack.z_start_um, v)}
 										align="right"
 									/>
-									<span class="text-fg-muted ml-1 text-[0.65rem]">µm</span>
+									<span class="text-fg-muted ml-1 text-xs">µm</span>
 								</div>
 							{:else}
 								<span class="text-fg-muted/30">—</span>
@@ -231,7 +231,7 @@
 						</td>
 						<td class="text-fg-muted p-1.5 text-right">
 							{#if stack}
-								<span class="font-mono text-[0.65rem]">{stack.profile_id}</span>
+								<span class="font-mono text-xs">{stack.profile_id}</span>
 							{:else}
 								<span class="text-fg-muted/30">—</span>
 							{/if}
@@ -241,7 +241,7 @@
 								<span class={getStackStatusColor(stack.status)}>{stack.status}</span>
 							{:else}
 								<button
-									class="text-fg-muted inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-[0.65rem] transition-colors hover:border-success hover:text-success"
+									class="text-fg-muted inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-xs transition-colors hover:border-success hover:text-success"
 									onclick={() => handleAddStack(tile)}
 								>
 									Add
@@ -268,9 +268,9 @@
 	<!-- Toolbar (only shown when items selected) -->
 	{#if checkedCount > 0}
 		<div class="bg-canvas flex items-center justify-end gap-3 border-t border-border p-2">
-			<span class="text-fg-muted text-[0.65rem]">{checkedCount} selected</span>
+			<span class="text-fg-muted text-xs">{checkedCount} selected</span>
 			<button
-				class="rounded border border-danger bg-transparent px-2 py-1 text-[0.65rem] text-danger transition-colors hover:bg-danger hover:text-danger-fg"
+				class="rounded border border-danger bg-transparent px-2 py-1 text-xs text-danger transition-colors hover:bg-danger hover:text-danger-fg"
 				onclick={handleDeleteSelected}
 			>
 				Delete

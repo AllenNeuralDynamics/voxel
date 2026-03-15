@@ -48,21 +48,21 @@
 						<InformationOutline width="14" height="14" />
 					</Tooltip.Trigger>
 					<Tooltip.Content
-						class="z-50 w-64 rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-xs text-zinc-200 shadow-xl outline-none"
+						class="z-50 w-64 rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-sm text-zinc-200 shadow-xl outline-none"
 						sideOffset={4}
 						align="end"
 					>
 						<div class="space-y-2">
 							<div>
-								<p class="text-sm font-semibold text-zinc-100">
+								<p class="text-base font-semibold text-zinc-100">
 									{channel.label ?? channel.name ?? 'Channel'}
 								</p>
-								<p class="mt-1 text-xs text-zinc-300">
+								<p class="mt-1 text-sm text-zinc-300">
 									{channel.config?.desc ?? 'No description available.'}
 								</p>
 							</div>
 							{#if channel.config?.illumination || filterEntries.length || channel.config?.detection}
-								<div class="space-y-1 border-t border-zinc-800 pt-2 text-[0.7rem] text-zinc-300">
+								<div class="space-y-1 border-t border-zinc-800 pt-2 text-sm text-zinc-300">
 									{#if channel.config?.illumination}
 										<div class="flex justify-between gap-2">
 											<span class="text-zinc-400">Illumination</span>

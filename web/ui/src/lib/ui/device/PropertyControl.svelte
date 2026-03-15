@@ -60,7 +60,7 @@
 		{#if isStructured}
 			<JsonView data={model.value} />
 		{:else}
-			<span class="text-fg-muted font-mono text-xs">
+			<span class="text-fg-muted font-mono text-sm">
 				{formatValue(model.value, info.units || undefined)}
 			</span>
 		{/if}
@@ -113,7 +113,7 @@
 		{#if isStructured}
 			<JsonView data={model.value} />
 		{:else}
-			<span class="text-fg-muted font-mono text-xs">
+			<span class="text-fg-muted font-mono text-sm">
 				{formatValue(model.value, info.units || undefined)}
 			</span>
 		{/if}

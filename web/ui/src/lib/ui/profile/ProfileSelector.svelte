@@ -44,6 +44,7 @@
 	const styles = $derived(selectVariants({ variant: 'filled', size }));
 
 	const iconSizes: Record<NonNullable<SelectVariants['size']>, number> = {
+		xs: 10,
 		sm: 12,
 		md: 14,
 		lg: 16
@@ -88,7 +89,7 @@
 	<Select.Portal>
 		<Select.Content align="start" class={styles.content()}>
 			{#if profiles.length === 0}
-				<div class="text-fg-muted px-3 py-2 text-sm">No profiles available</div>
+				<div class="text-fg-muted px-3 py-2 text-base">No profiles available</div>
 			{:else}
 				<Select.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
 					<Select.Group>
@@ -107,7 +108,7 @@
 								<div class="flex min-w-0 flex-1 flex-col gap-0.5">
 									<span class="text-fg">{profile.label}</span>
 									{#if profile.description}
-										<span class="text-fg-muted text-[0.65rem]">{profile.description}</span>
+										<span class="text-fg-muted text-xs">{profile.description}</span>
 									{/if}
 								</div>
 								{#if status}

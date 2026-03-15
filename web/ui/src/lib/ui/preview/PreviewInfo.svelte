@@ -43,7 +43,7 @@
 <Tooltip.Provider>
 	<Tooltip.Root delayDuration={150}>
 		<Tooltip.Trigger
-			class="hover:bg-element-hover flex items-center gap-1.5 rounded p-1 font-mono text-[0.65rem] transition-colors"
+			class="hover:bg-element-hover flex items-center gap-1.5 rounded p-1 font-mono text-xs transition-colors"
 			aria-label="Preview info"
 		>
 			{#if frameInfo}
@@ -57,20 +57,20 @@
 			{/if}
 		</Tooltip.Trigger>
 		<Tooltip.Content
-			class="bg-floating text-fg z-50 w-64 rounded-md border border-border p-3 text-left text-xs shadow-xl outline-none"
+			class="bg-floating text-fg z-50 w-64 rounded-md border border-border p-3 text-left text-sm shadow-xl outline-none"
 			sideOffset={4}
 			align="start"
 		>
 			{#if frameInfo}
 				<div class="space-y-2">
-					<div class="space-y-1 text-[0.7rem]">
+					<div class="space-y-1 text-sm">
 						<div class="flex justify-between gap-2">
 							<span class="text-fg-muted">Preview Size</span>
 							<span class="text-right">{frameInfo.preview_width} × {frameInfo.preview_height}</span>
 						</div>
 					</div>
 					{#if channelFrameInfos.length > 0}
-						<div class="space-y-1 border-t border-border pt-2 text-[0.7rem]">
+						<div class="space-y-1 border-t border-border pt-2 text-sm">
 							{#if hasMismatch}
 								<div class="mb-1 flex items-center gap-1.5 text-warning">
 									<Alert width="12" height="12" />
@@ -90,7 +90,7 @@
 				</div>
 			{:else}
 				<div>
-					<p class="text-fg-muted text-xs">No frames available</p>
+					<p class="text-fg-muted text-sm">No frames available</p>
 				</div>
 			{/if}
 		</Tooltip.Content>

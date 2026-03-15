@@ -59,12 +59,12 @@
 	</div>
 	<div class="absolute top-0 left-0 flex h-18 items-center">
 		{#if frameInfo}
-			<div class="flex items-center gap-1.5 font-mono text-[0.65rem]">
+			<div class="flex items-center gap-1.5 font-mono text-xs">
 				<span class="text-zinc-400">Frame</span>
 				<span class="text-zinc-300">#{maxFrameIdx}</span>
 			</div>
 		{:else}
-			<span class="font-mono text-[0.65rem] text-zinc-500">No frames</span>
+			<span class="font-mono text-xs text-zinc-500">No frames</span>
 		{/if}
 	</div>
 </div>

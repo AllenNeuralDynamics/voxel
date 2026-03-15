@@ -3,17 +3,17 @@
 
 	export const spinBoxVariants = tv({
 		slots: {
-			wrapper: ['items-stretch', 'transition-colors focus-within:border-focused'],
-			input: ['border-none bg-transparent font-mono text-fg outline-none'],
-			stack: ['flex cursor-pointer flex-col border-l border-input'],
+			wrapper: ['items-center', 'transition-colors focus-within:border-focused'],
+			input: ['m-0 border-none bg-transparent py-0 font-mono text-fg outline-none'],
+			stack: ['flex cursor-pointer self-stretch flex-col border-l border-input'],
 			stepButton: [
 				'flex flex-1 items-center justify-center',
 				'bg-transparent text-fg-muted',
 				'transition-colors hover:bg-element-hover hover:text-fg',
 				'disabled:cursor-not-allowed disabled:opacity-40'
 			],
-			prefix: ['flex shrink-0 items-center font-mono whitespace-nowrap', 'text-fg-muted select-none'],
-			suffix: ['pointer-events-none flex items-center font-mono text-fg-muted']
+			prefix: ['shrink-0 font-mono whitespace-nowrap', 'text-fg-muted select-none'],
+			suffix: ['pointer-events-none font-mono text-fg-muted']
 		},
 		variants: {
 			variant: {
@@ -26,31 +26,31 @@
 			},
 			size: {
 				xs: {
-					wrapper: 'h-4 rounded-[2px]',
-					input: 'text-[0.6rem] px-0 py-0',
-					prefix: 'text-[0.6rem]',
-					suffix: 'text-[0.6rem]',
+					wrapper: 'h-ui-xs rounded',
+					input: 'text-xs leading-none px-0.5',
+					prefix: 'text-xs leading-none',
+					suffix: 'text-xs leading-none',
 					stack: 'w-4'
 				},
 				sm: {
-					wrapper: 'h-5 rounded',
-					input: 'text-[0.65rem] px-0.5 py-0.5',
-					prefix: 'text-[0.65rem]',
-					suffix: 'text-[0.65rem]',
+					wrapper: 'h-ui-sm rounded',
+					input: 'text-xs leading-none px-0.5',
+					prefix: 'text-xs leading-none',
+					suffix: 'text-xs leading-none',
 					stack: 'w-4'
 				},
 				md: {
-					wrapper: 'h-7 rounded',
-					input: 'text-xs px-0.5 py-0.5',
-					prefix: 'text-xs',
-					suffix: 'text-xs',
+					wrapper: 'h-ui-md rounded',
+					input: 'text-sm leading-none px-0.5',
+					prefix: 'text-sm leading-none',
+					suffix: 'text-sm leading-none',
 					stack: 'w-5'
 				},
 				lg: {
-					wrapper: 'h-8 rounded',
-					input: 'text-sm px-0.5 py-0.5',
-					prefix: 'text-sm',
-					suffix: 'text-sm',
+					wrapper: 'h-ui-lg rounded',
+					input: 'text-base leading-none px-0.5',
+					prefix: 'text-base leading-none',
+					suffix: 'text-base leading-none',
 					stack: 'w-5'
 				}
 			},

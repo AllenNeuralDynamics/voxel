@@ -8,7 +8,7 @@
 	export type WorkflowTabsVariants = VariantProps<typeof workflowTabsVariants>;
 
 	const tabVariants = tv({
-		base: 'flex items-center gap-1 text-[0.65rem] uppercase tracking-wide transition-all text-fg-muted rounded-none border border-border',
+		base: 'flex h-ui-lg items-center gap-1 text-xs uppercase tracking-wide transition-all text-fg-muted rounded-none border border-border first:rounded-l last:rounded-r',
 		variants: {
 			viewing: {
 				true: 'bg-element-bg',
@@ -61,7 +61,7 @@
 				disabled={!workflow.canGoBack}
 				onclick={handleBack}
 				class={cn(
-					'grid h-6 cursor-pointer place-content-center overflow-hidden py-1.5 transition-all duration-200',
+					'grid h-full cursor-pointer place-content-center overflow-hidden transition-all duration-200',
 					isActive ? 'w-6' : 'w-0',
 					isActive && workflow.canGoBack ? 'opacity-100' : 'pointer-events-none cursor-not-allowed opacity-40'
 				)}
@@ -71,7 +71,7 @@
 			</button>
 			<button
 				onclick={() => onViewChange?.(step.id)}
-				class="flex w-20 cursor-pointer items-center justify-center p-1.5 uppercase"
+				class="flex w-20 cursor-pointer items-center justify-center px-1.5 uppercase"
 			>
 				{step.label}
 			</button>
@@ -79,7 +79,7 @@
 				disabled={!workflow.canAdvance}
 				onclick={handleNext}
 				class={cn(
-					'grid h-6 cursor-pointer place-content-center overflow-hidden py-1.5 transition-all duration-200',
+					'grid h-full cursor-pointer place-content-center overflow-hidden transition-all duration-200',
 					isActive ? 'w-6' : 'w-0',
 					isActive && workflow.canAdvance ? 'opacity-100' : 'pointer-events-none cursor-not-allowed opacity-40'
 				)}

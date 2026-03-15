@@ -23,8 +23,8 @@
 
 			<!-- Acquisition plan -->
 			<div class="min-w-0 flex-1">
-				<h3 class="text-fg-muted/70 mb-2 text-[0.65rem] font-medium tracking-wide uppercase">Plan</h3>
-				<div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+				<h3 class="text-fg-muted/70 mb-2 text-xs font-medium tracking-wide uppercase">Plan</h3>
+				<div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
 					<span class="text-fg-muted">Stacks</span>
 					<span class="text-fg">
 						{stackSummary.completed}/{stackSummary.total}

@@ -66,8 +66,8 @@
 	let closeDialogOpen = $state(false);
 
 	const tabClasses = cn(
-		'flex min-w-24 gap-1 items-center justify-center rounded border border-border',
-		'px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors'
+		'flex h-ui-lg min-w-24 gap-1 items-center justify-center rounded border border-border',
+		'px-3 text-xs uppercase tracking-wide transition-colors'
 	);
 </script>
 
@@ -80,7 +80,7 @@
 					<nav class="flex items-stretch gap-4">
 						<AppMenu {app}>
 							{#snippet trigger()}
-								<VoxelLogo class="size-6" />
+								<VoxelLogo class="size-ui-md" />
 								<ChevronDown width="14" height="14" class="text-fg-muted/60 ml-1" />
 							{/snippet}
 							{#snippet extraItems()}
@@ -97,14 +97,14 @@
 								<Dialog.Header>
 									<Dialog.Title>Close Session</Dialog.Title>
 								</Dialog.Header>
-								<p class="text-fg-muted text-xs">
+								<p class="text-fg-muted text-sm">
 									Are you sure you want to close the current session? Any unsaved progress will be lost.
 								</p>
 								<Dialog.Footer>
 									<Dialog.Close>
-										<Button variant="ghost" size="sm">Cancel</Button>
+										<Button variant="ghost">Cancel</Button>
 									</Dialog.Close>
-									<Button variant="danger" size="sm" onclick={() => app.closeSession()}>Close Session</Button>
+									<Button variant="danger" onclick={() => app.closeSession()}>Close Session</Button>
 								</Dialog.Footer>
 							</Dialog.Content>
 						</Dialog.Root>
@@ -146,7 +146,7 @@
 					<Button
 						class="min-w-26"
 						variant={session.preview.isPreviewing ? 'danger' : 'success'}
-						size="md"
+						size="lg"
 						onclick={() =>
 							session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
 					>

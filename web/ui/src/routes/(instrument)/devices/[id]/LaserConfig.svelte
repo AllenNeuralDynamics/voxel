@@ -41,7 +41,7 @@
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-2">
 			<span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
-			<h2 class="text-fg text-sm font-medium">
+			<h2 class="text-fg text-base font-medium">
 				{typeof wavelength === 'number' ? `${wavelength} nm Laser` : sanitizeString(deviceId)}
 			</h2>
 		</div>
@@ -81,8 +81,8 @@
 			<!-- Status readback -->
 			{#if typeof powerMw === 'number' || typeof temperatureC === 'number'}
 				<div class="rounded border border-border bg-card p-3">
-					<h4 class="text-fg-muted mb-2 text-[0.65rem] font-medium tracking-wide uppercase">Status</h4>
-					<div class="grid gap-1.5 text-xs">
+					<h4 class="text-fg-muted mb-2 text-xs font-medium tracking-wide uppercase">Status</h4>
+					<div class="grid gap-1.5 text-sm">
 						{#if typeof powerMw === 'number'}
 							<div class="flex justify-between">
 								<span class="text-fg-muted">Power</span>
@@ -104,7 +104,7 @@
 		</div>
 	{:else}
 		<div class="flex items-center justify-center py-12">
-			<p class="text-fg-muted text-sm">Laser not available</p>
+			<p class="text-fg-muted text-base">Laser not available</p>
 		</div>
 	{/if}
 </section>

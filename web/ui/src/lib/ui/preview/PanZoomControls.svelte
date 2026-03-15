@@ -38,7 +38,7 @@
 	}
 </script>
 
-<div class="flex items-center gap-1 font-mono text-[0.65rem]">
+<div class="flex items-center gap-1 font-mono text-xs">
 	<button
 		onclick={() => previewer.resetCrop()}
 		disabled={isDefaultCrop}
@@ -56,7 +56,7 @@
 			snapValue={1}
 			decimals={1}
 			numCharacters={5}
-			size="sm"
+			size="xs"
 			prefix="Zoom"
 			suffix="x"
 			onChange={handleZoomChange}
@@ -69,7 +69,7 @@
 			snapValue={0}
 			decimals={2}
 			numCharacters={5}
-			size="sm"
+			size="xs"
 			prefix="Pan X"
 			onChange={handleCropYChange}
 		/>
@@ -81,7 +81,7 @@
 			snapValue={0}
 			decimals={2}
 			numCharacters={5}
-			size="sm"
+			size="xs"
 			prefix="Pan Y"
 			onChange={handleCropXChange}
 		/>

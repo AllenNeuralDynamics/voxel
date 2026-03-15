@@ -92,7 +92,7 @@
 <section class="space-y-5">
 	<!-- Header -->
 	<div class="flex items-center justify-between">
-		<h2 class="text-fg text-sm font-medium">{sanitizeString(deviceId)}</h2>
+		<h2 class="text-fg text-base font-medium">{sanitizeString(deviceId)}</h2>
 		<span
 			class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
 			title={device?.connected ? 'Connected' : 'Disconnected'}
@@ -119,24 +119,24 @@
 				<div class="grid grid-cols-2 gap-4">
 					{#if pixelFormatInfo && pixelFormatModel && pixelFormatModel.options && (typeof pixelFormatModel.value === 'string' || typeof pixelFormatModel.value === 'number')}
 						<div class="grid gap-1">
-							<span class="text-fg-muted text-[0.65rem] font-medium">{pixelFormatInfo.label}</span>
+							<span class="text-fg-muted text-xs font-medium">{pixelFormatInfo.label}</span>
 							<Select
 								value={String(pixelFormatModel.value)}
 								options={pixelFormatModel.options.map((o) => ({ value: String(o), label: String(o) }))}
 								onchange={(v) => devicesManager.setProperty(deviceId, 'pixel_format', v)}
-								size="sm"
+								size="xs"
 							/>
 						</div>
 					{/if}
 
 					{#if binningInfo && binningModel && binningModel.options && (typeof binningModel.value === 'string' || typeof binningModel.value === 'number')}
 						<div class="grid gap-1">
-							<span class="text-fg-muted text-[0.65rem] font-medium">{binningInfo.label}</span>
+							<span class="text-fg-muted text-xs font-medium">{binningInfo.label}</span>
 							<Select
 								value={String(binningModel.value)}
 								options={binningModel.options.map((o) => ({ value: String(o), label: `${o}x${o}` }))}
 								onchange={(v) => devicesManager.setProperty(deviceId, 'binning', Number(v))}
-								size="sm"
+								size="xs"
 							/>
 						</div>
 					{/if}
@@ -145,9 +145,9 @@
 				<!-- Frame Region -->
 				<div class="space-y-3">
 					<div class="flex items-baseline justify-between">
-						<h4 class="text-fg-muted text-[0.65rem] font-medium tracking-wide uppercase">Frame Region</h4>
+						<h4 class="text-fg-muted text-xs font-medium tracking-wide uppercase">Frame Region</h4>
 						{#if frameSize}
-							<span class="text-fg-muted font-mono text-xs">
+							<span class="text-fg-muted font-mono text-sm">
 								{frameSize.x} &times; {frameSize.y} px{#if frameSizeMb != null}
 									&ensp;|&ensp;{frameSizeMb.toFixed(1)} MB{/if}
 							</span>
@@ -187,7 +187,7 @@
 						</svg>
 					{:else}
 						<div class="bg-element-bg flex aspect-4/3 items-center justify-center rounded border border-border">
-							<span class="text-fg-muted text-xs">No region data</span>
+							<span class="text-fg-muted text-sm">No region data</span>
 						</div>
 					{/if}
 
@@ -235,7 +235,7 @@
 								size="xs"
 							/>
 						</div>
-						<Button variant="outline" size="xs" onclick={resetRegion} class="w-full">Reset Region</Button>
+						<Button variant="outline" size="sm" onclick={resetRegion} class="w-full">Reset Region</Button>
 					{/if}
 				</div>
 
@@ -246,7 +246,7 @@
 			<!-- RIGHT COLUMN: sensor info, stream -->
 			<div class="space-y-5">
 				<!-- Sensor / Pixel size -->
-				<div class="grid gap-1 text-xs">
+				<div class="grid gap-1 text-sm">
 					{#if sensorSize}
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Sensor</span>
@@ -275,8 +275,8 @@
 
 				<!-- Stream info -->
 				<div class="space-y-1">
-					<h4 class="text-fg-muted text-[0.65rem] font-medium tracking-wide uppercase">Stream</h4>
-					<div class="grid gap-1 text-xs">
+					<h4 class="text-fg-muted text-xs font-medium tracking-wide uppercase">Stream</h4>
+					<div class="grid gap-1 text-sm">
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Frame Rate</span>
 							<span class="text-fg font-mono">
@@ -307,7 +307,7 @@
 		</div>
 	{:else}
 		<div class="flex items-center justify-center py-12">
-			<p class="text-fg-muted text-sm">Camera not available</p>
+			<p class="text-fg-muted text-base">Camera not available</p>
 		</div>
 	{/if}
 </section>

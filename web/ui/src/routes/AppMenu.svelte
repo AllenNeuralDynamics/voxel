@@ -3,7 +3,7 @@
 	import type { App } from '$lib/main';
 	import { DropdownMenu } from '$lib/ui/kit';
 	import { AlertOutline, DotsVertical, Restore } from '$lib/icons';
-	import { ThemePicker } from '$lib/themes';
+	import { AppearanceSheet } from '$lib/themes';
 	import { cn } from '$lib/utils';
 
 	interface Props {
@@ -65,7 +65,7 @@
 	</DropdownMenu.Trigger>
 	<DropdownMenu.Content align="start">
 		{#if app.client.connectionState !== 'connected'}
-			<DropdownMenu.Label class="flex items-center gap-2 text-xs font-normal">
+			<DropdownMenu.Label class="flex items-center gap-2 text-sm font-normal">
 				<span
 					class="inline-block h-2 w-2 shrink-0 rounded-full {app.client.connectionState === 'failed'
 						? 'bg-danger'
@@ -92,4 +92,4 @@
 	</DropdownMenu.Content>
 </DropdownMenu.Root>
 
-<ThemePicker bind:open={themePickerOpen} />
+<AppearanceSheet bind:open={themePickerOpen} />

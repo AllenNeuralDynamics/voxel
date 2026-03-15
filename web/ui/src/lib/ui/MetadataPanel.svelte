@@ -94,7 +94,7 @@
 	<section>
 		<!-- Header -->
 		<div class="mb-2 flex items-center gap-2">
-			<h3 class="text-fg-muted/70 text-[0.65rem] font-medium tracking-wide uppercase">Metadata</h3>
+			<h3 class="text-fg-muted/70 text-xs font-medium tracking-wide uppercase">Metadata</h3>
 			<div class="flex-1"></div>
 			{#if editing}
 				<button
@@ -118,7 +118,7 @@
 				<button
 					type="button"
 					onclick={startEditing}
-					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded px-1.5 py-0.5 text-[0.6rem] transition-colors"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded px-1.5 py-0.5 text-xs transition-colors"
 				>
 					Edit
 				</button>
@@ -129,7 +129,7 @@
 		<div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2">
 			<MetadataFields {schema} {values} onChange={setDraft} disabled={isFieldDisabled} size="sm">
 				{#snippet field(key, prop, input)}
-					<div class="text-fg-muted/70 max-w-48 pt-1 text-[0.65rem]" title={sanitizeString(key)}>
+					<div class="text-fg-muted/70 max-w-48 pt-1 text-xs" title={sanitizeString(key)}>
 						<span class="flex items-center gap-1">
 							<span class="truncate">{sanitizeString(key)}</span>
 							{#if isLocked(prop)}

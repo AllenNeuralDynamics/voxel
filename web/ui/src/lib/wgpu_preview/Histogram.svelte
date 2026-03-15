@@ -43,7 +43,7 @@
 
 	// Shared button styling for ghost/inline action buttons
 	const ghostButtonClass =
-		'min-w-14 justify-self-center rounded-sm px-1.5 py-[0.25] text-[0.6rem] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-0';
+		'min-w-14 justify-self-center rounded-sm px-1.5 py-[0.25] text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-0';
 
 	// SVG dimensions
 	let width = $state(256); // Default, will be updated by bind:clientWidth
@@ -369,7 +369,7 @@
 			</svg>
 		{:else}
 			<div class="flex items-center justify-center" style="height: {height}px;">
-				<span class="my-auto text-[0.65rem] text-zinc-600">No histogram data</span>
+				<span class="my-auto text-xs text-zinc-600">No histogram data</span>
 			</div>
 		{/if}
 	</div>

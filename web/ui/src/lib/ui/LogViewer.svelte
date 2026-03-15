@@ -62,11 +62,11 @@
 
 <div class="flex h-full flex-col overflow-hidden">
 	<div class="mb-2 flex shrink-0 items-center justify-between">
-		<h2 class="text-fg text-sm font-medium">Log</h2>
+		<h2 class="text-fg text-base font-medium">Log</h2>
 		{#if onClear}
 			<button
 				onclick={onClear}
-				class="text-fg-muted hover:bg-element-hover hover:text-fg flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+				class="text-fg-muted hover:bg-element-hover hover:text-fg flex items-center gap-1 rounded px-2 py-1 text-sm transition-colors"
 				title="Clear logs"
 			>
 				<DeleteOutline width="14" height="14" />
@@ -76,7 +76,7 @@
 	</div>
 	<div
 		bind:this={container}
-		class="log-container bg-canvas min-h-0 flex-1 overflow-y-auto rounded border border-border font-mono text-xs"
+		class="log-container bg-canvas min-h-0 flex-1 overflow-y-auto rounded border border-border font-mono text-sm"
 	>
 		{#if logs.length === 0}
 			<div class="text-fg-muted flex h-full items-center justify-center">Waiting for logs...</div>

@@ -386,7 +386,7 @@
 		</svg>
 	{:else}
 		<div class="flex items-center justify-center" style:height="{svgHeight}px">
-			<span class="text-fg-muted text-[0.65rem]">No histogram data</span>
+			<span class="text-fg-muted text-xs">No histogram data</span>
 		</div>
 	{/if}
 {/snippet}
@@ -464,7 +464,7 @@
 				{onColormapChange}
 				width={columnWidth}
 				align="center"
-				triggerClass="cursor-pointer text-[0.65rem] leading-none font-medium transition-colors hover:brightness-125"
+				triggerClass="cursor-pointer text-xs leading-none font-medium transition-colors hover:brightness-125"
 			/>
 		</div>
 

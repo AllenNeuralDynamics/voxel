@@ -17,20 +17,25 @@
 				}
 			},
 			size: {
+				xs: {
+					wrapper: 'h-ui-xs',
+					input: 'px-1.5 text-xs',
+					prefix: 'ps-1.5 text-xs'
+				},
 				sm: {
-					wrapper: 'h-5',
-					input: 'px-1.5 text-[0.65rem]',
-					prefix: 'ps-1.5 text-[0.65rem]'
+					wrapper: 'h-ui-sm',
+					input: 'px-1.5 text-xs',
+					prefix: 'ps-1.5 text-xs'
 				},
 				md: {
-					wrapper: 'h-7',
-					input: 'px-2 text-xs',
-					prefix: 'ps-2 text-xs'
+					wrapper: 'h-ui-md',
+					input: 'px-2 text-sm',
+					prefix: 'ps-2 text-sm'
 				},
 				lg: {
-					wrapper: 'h-8',
-					input: 'px-2.5 text-sm',
-					prefix: 'ps-2.5 text-sm'
+					wrapper: 'h-ui-lg',
+					input: 'px-2.5 text-base',
+					prefix: 'ps-2.5 text-base'
 				}
 			}
 		},

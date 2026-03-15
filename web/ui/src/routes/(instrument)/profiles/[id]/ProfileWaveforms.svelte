@@ -417,7 +417,7 @@
 				value={sampleRate}
 				prefix="Sample Rate"
 				suffix=" Hz"
-				size="sm"
+				size="xs"
 				appearance="full"
 				numCharacters={8}
 				align="right"
@@ -430,7 +430,7 @@
 				value={duration}
 				prefix="Duration"
 				suffix=" s"
-				size="sm"
+				size="xs"
 				appearance="full"
 				decimals={4}
 				numCharacters={8}
@@ -444,7 +444,7 @@
 				value={restTime}
 				prefix="Rest Time"
 				suffix=" s"
-				size="sm"
+				size="xs"
 				appearance="full"
 				decimals={4}
 				numCharacters={8}
@@ -456,15 +456,15 @@
 			/>
 			{#if timingDirty && canEdit}
 				<div class="flex gap-1">
-					<Button variant="ghost" size="xs" onclick={cancelTiming} title="Reset timing">
+					<Button variant="ghost" size="sm" onclick={cancelTiming} title="Reset timing">
 						<Close width="12" height="12" />
 					</Button>
-					<Button variant="outline" size="xs" onclick={commitTiming} title="Apply timing">
+					<Button variant="outline" size="sm" onclick={commitTiming} title="Apply timing">
 						<Check width="12" height="12" />
 					</Button>
 				</div>
 			{/if}
-			<div class="text-fg-muted ml-auto flex gap-4 text-[0.65rem]">
+			<div class="text-fg-muted ml-auto flex gap-4 text-xs">
 				<span>Freq <span class="text-fg font-mono">{formatFrequency(frequency)}</span></span>
 				<span>Samples <span class="text-fg font-mono">{samples.toLocaleString()}</span></span>
 			</div>
@@ -478,7 +478,7 @@
 					{@const isSelected = deviceId === selectedDeviceId}
 					{@const isHidden = hiddenDevices.has(deviceId)}
 					<div
-						class="text-fg-muted flex items-center gap-1.5 rounded px-1.5 py-1 text-[0.65rem] transition-colors
+						class="text-fg-muted flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors
 							{isSelected ? 'bg-element-selected text-fg' : ''}"
 					>
 						<button
@@ -574,7 +574,7 @@
 								{y}
 								text-anchor="end"
 								dominant-baseline="middle"
-								class="fill-fg-muted text-[0.55rem]"
+								class="fill-fg-muted text-xs"
 							>
 								{formatVoltage(v)}
 							</text>
@@ -594,7 +594,7 @@
 									stroke-dasharray="6 3"
 									opacity="0.4"
 								/>
-								<text x={plotPadding.left + 4} y={y - 3} class="text-[0.5rem]" fill="#ef4444" opacity="0.6">
+								<text x={plotPadding.left + 4} y={y - 3} class="text-xs" fill="#ef4444" opacity="0.6">
 									DAQ min
 								</text>
 							{/if}
@@ -610,7 +610,7 @@
 									stroke-dasharray="6 3"
 									opacity="0.4"
 								/>
-								<text x={plotPadding.left + 4} y={y + 10} class="text-[0.5rem]" fill="#ef4444" opacity="0.6">
+								<text x={plotPadding.left + 4} y={y + 10} class="text-xs" fill="#ef4444" opacity="0.6">
 									DAQ max
 								</text>
 							{/if}
@@ -632,7 +632,7 @@
 						{#each [0, 0.25, 0.5, 0.75, 1] as frac (frac)}
 							{@const t = frac * totalTime}
 							{@const x = toSvgX(t)}
-							<text {x} y={plotHeight - 4} text-anchor="middle" class="fill-fg-muted text-[0.55rem]">
+							<text {x} y={plotHeight - 4} text-anchor="middle" class="fill-fg-muted text-xs">
 								{formatPlotTime(t)}
 							</text>
 						{/each}
@@ -746,7 +746,7 @@
 					</svg>
 				{:else}
 					<div class="flex items-center justify-center" style:height="{plotHeight}px">
-						<span class="text-fg-muted text-xs">No waveform data</span>
+						<span class="text-fg-muted text-sm">No waveform data</span>
 					</div>
 				{/if}
 			</div>
@@ -759,14 +759,14 @@
 				<div class="flex flex-wrap items-end gap-3">
 					<!-- Type selector -->
 					<div class="w-24">
-						<Select size="sm" value={wf.type} options={waveformTypeOptions} onchange={(v) => changeEditingType(v)} />
+						<Select size="xs" value={wf.type} options={waveformTypeOptions} onchange={(v) => changeEditingType(v)} />
 					</div>
 
 					<SpinBox
 						value={wf.rest_voltage ?? 0}
 						prefix="Rest V"
 						suffix=" V"
-						size="sm"
+						size="xs"
 						appearance="full"
 						decimals={2}
 						step={0.1}
@@ -786,7 +786,7 @@
 							min={0}
 							max={1}
 							step={0.05}
-							size="sm"
+							size="xs"
 							appearance="full"
 							decimals={2}
 							numCharacters={6}
@@ -799,7 +799,7 @@
 							value={wf.frequency ?? 0}
 							prefix="Freq"
 							suffix=" Hz"
-							size="sm"
+							size="xs"
 							appearance="full"
 							step={1}
 							min={0}
@@ -813,7 +813,7 @@
 							value={(wf.phase ?? 0) * (180 / Math.PI)}
 							prefix="Phase"
 							suffix=" deg"
-							size="sm"
+							size="xs"
 							appearance="full"
 							step={5}
 							numCharacters={6}
@@ -828,7 +828,7 @@
 							min={0}
 							max={1}
 							step={0.05}
-							size="sm"
+							size="xs"
 							appearance="full"
 							decimals={2}
 							numCharacters={6}
@@ -843,7 +843,7 @@
 							min={0}
 							max={1}
 							step={0.05}
-							size="sm"
+							size="xs"
 							appearance="full"
 							decimals={2}
 							numCharacters={6}
@@ -854,18 +854,18 @@
 
 					<!-- Commit / Cancel -->
 					<div class="ml-auto flex gap-1.5">
-						<Button variant="ghost" size="xs" onclick={cancelEditing} title="Cancel">
+						<Button variant="ghost" size="sm" onclick={cancelEditing} title="Cancel">
 							<Close width="14" height="14" />
 						</Button>
-						<Button variant="outline" size="xs" onclick={commitEditing} title="Apply changes">
+						<Button variant="outline" size="sm" onclick={commitEditing} title="Apply changes">
 							<Check width="14" height="14" />
 						</Button>
 					</div>
 				</div>
 			{:else if canEdit}
-				<span class="text-fg-muted text-[0.65rem]">Select a device to edit its waveform</span>
+				<span class="text-fg-muted text-xs">Select a device to edit its waveform</span>
 			{:else}
-				<span class="text-[0.65rem] text-warning/50">
+				<span class="text-xs text-warning/50">
 					{!isActiveProfile
 						? 'Activate profile to edit timing and waveforms'
 						: 'Stop preview to edit timing and waveforms'}

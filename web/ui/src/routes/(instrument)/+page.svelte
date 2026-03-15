@@ -8,8 +8,8 @@
 
 <!-- Session info -->
 <section class="mb-6">
-	<h3 class="text-fg-muted mb-3 text-xs font-medium tracking-wide uppercase">Session</h3>
-	<div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+	<h3 class="text-fg-muted mb-3 text-sm font-medium tracking-wide uppercase">Session</h3>
+	<div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
 		<span class="text-fg-muted">Rig</span>
 		<span class="text-fg">{config.info.name}</span>
 
@@ -35,10 +35,10 @@
 
 <!-- Channel cards -->
 <section>
-	<h3 class="text-fg-muted mb-3 text-xs font-medium tracking-wide uppercase">Channels</h3>
+	<h3 class="text-fg-muted mb-3 text-sm font-medium tracking-wide uppercase">Channels</h3>
 	<div class="grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
 		{#each Object.entries(config.channels) as [channelId, channel] (channelId)}
-			<div class="text-fg rounded-lg border bg-card p-3 text-xs shadow-sm">
+			<div class="text-fg rounded-lg border bg-card p-3 text-sm shadow-sm">
 				<div class="mb-2 flex items-center gap-2">
 					{#if channel.emission}
 						<span

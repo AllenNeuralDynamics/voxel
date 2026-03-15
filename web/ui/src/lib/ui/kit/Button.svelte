@@ -20,13 +20,13 @@
 				link: 'border-transparent text-primary underline-offset-4 hover:underline'
 			},
 			size: {
-				xs: 'h-6 gap-1.5 px-2 text-[0.65rem]',
-				sm: 'h-7 min-w-14 gap-1.5 px-3 text-[0.65rem]',
-				md: 'h-8 gap-2 px-3 text-xs',
-				lg: 'h-9 gap-2 px-4 text-sm',
-				'icon-xs': 'size-6',
-				icon: 'size-7',
-				'icon-lg': 'size-8'
+				xs: 'h-ui-xs gap-1 px-1.5 text-xs',
+				sm: 'h-ui-sm gap-1.5 px-2 text-xs',
+				md: 'h-ui-md gap-1.5 px-3 text-xs',
+				lg: 'h-ui-lg gap-2 px-3 text-sm',
+				'icon-xs': 'size-ui-xs',
+				icon: 'size-ui-sm',
+				'icon-lg': 'size-ui-md'
 			}
 		},
 		defaultVariants: {

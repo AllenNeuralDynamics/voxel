@@ -116,11 +116,11 @@
 					</div>
 					<AppMenu {app} class="w-4" />
 				</div>
-				<p class="text-fg-muted text-xs">Light sheet microscopy</p>
+				<p class="text-fg-muted text-sm">Light sheet microscopy</p>
 			</div>
 
 			{#if error}
-				<div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
+				<div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-base text-danger">
 					{error}
 				</div>
 			{/if}
@@ -128,10 +128,10 @@
 
 		{#if connectionState === 'failed'}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3">
-				<p class="text-sm text-danger">{app.client.connectionMessage}</p>
+				<p class="text-base text-danger">{app.client.connectionMessage}</p>
 				<button
 					onclick={() => app.retryConnection()}
-					class="text-fg-muted hover:text-fg hover:bg-element-hover rounded border border-input bg-transparent px-4 py-1.5 text-xs transition-colors"
+					class="text-fg-muted hover:text-fg hover:bg-element-hover rounded border border-input bg-transparent px-4 py-1.5 text-sm transition-colors"
 				>
 					Retry
 				</button>
@@ -139,7 +139,7 @@
 		{:else if !isIdle || isLaunching}
 			<div class="flex flex-1 items-center justify-center gap-2">
 				<div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-				<p class="text-fg-muted text-xs">
+				<p class="text-fg-muted text-sm">
 					{isLaunching ? 'Starting session...' : app.client.connectionMessage}
 				</p>
 			</div>
@@ -147,7 +147,7 @@
 			<div class="shrink-0 px-4">
 				<Collapsible.Root class="mb-6">
 					<Collapsible.Trigger
-						class="text-fg-muted hover:text-fg/80 flex w-full items-center justify-between py-2 text-sm font-medium transition-colors [&[data-state=open]>svg]:rotate-90"
+						class="text-fg-muted hover:text-fg/80 flex w-full items-center justify-between py-2 text-base font-medium transition-colors [&[data-state=open]>svg]:rotate-90"
 					>
 						New Session
 						<ChevronRight width="16" height="16" class="transition-transform duration-200" />
@@ -168,21 +168,21 @@
 			</div>
 
 			<div class="px-4">
-				<h2 class="text-fg-muted text-sm font-medium">Recent Sessions</h2>
+				<h2 class="text-fg-muted text-base font-medium">Recent Sessions</h2>
 			</div>
 			<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-2">
 				{#if loadingSessions}
 					<div class="flex items-center justify-center rounded border border-border bg-card py-12">
 						<div class="border-t-fg-muted h-5 w-5 animate-spin rounded-full border-2 border-border"></div>
-						<span class="text-fg-muted ml-3 text-sm">Loading sessions...</span>
+						<span class="text-fg-muted ml-3 text-base">Loading sessions...</span>
 					</div>
 				{:else if sessions.length === 0}
 					<div
 						class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10"
 					>
 						<FolderOpenOutline width="32" height="32" class="text-fg-muted/50" />
-						<p class="text-fg-muted mt-2 text-sm">No recent sessions</p>
-						<p class="text-fg-muted/60 text-xs">Create a new session to get started</p>
+						<p class="text-fg-muted mt-2 text-base">No recent sessions</p>
+						<p class="text-fg-muted/60 text-sm">Create a new session to get started</p>
 					</div>
 				{:else}
 					<div class="space-y-2">
@@ -191,11 +191,11 @@
 								class="group hover:border-fg/20 hover:bg-element-hover flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors"
 								onclick={() => handleResumeSession(session)}
 							>
-								<span class="text-fg min-w-0 flex-1 truncate text-xs">
+								<span class="text-fg min-w-0 flex-1 truncate text-sm">
 									<span class="text-fg-muted">{session.root_name} /</span>
 									{session.name}
 								</span>
-								<span class="text-fg-muted/60 shrink-0 text-[0.65rem]">
+								<span class="text-fg-muted/60 shrink-0 text-xs">
 									{formatRelativeTime(session.modified)}
 								</span>
 								<ArrowRight

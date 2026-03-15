@@ -96,7 +96,7 @@
 				<div class="grid gap-2">
 					{#each params as [name, param] (name)}
 						<div class="grid gap-1">
-							<span class="text-fg-muted text-[0.65rem] font-medium">
+							<span class="text-fg-muted text-xs font-medium">
 								{sanitizeString(name)}
 							</span>
 							{#if param.dtype === 'int' || param.dtype === 'float' || param.dtype === 'number'}
@@ -105,13 +105,13 @@
 									onChange={(v) => (paramValues[name] = v)}
 									step={param.dtype === 'int' ? 1 : 0.1}
 									appearance="bordered"
-									size="sm"
+									size="xs"
 								/>
 							{:else}
 								<TextInput
 									value={typeof paramValues[name] === 'string' ? paramValues[name] : String(getDefaultValue(param))}
 									onChange={(v) => (paramValues[name] = v)}
-									size="sm"
+									size="xs"
 								/>
 							{/if}
 						</div>
@@ -125,15 +125,15 @@
 					class={cn('rounded border p-2', isError ? 'border-danger/30 bg-danger/5' : 'bg-element-bg/30 border-border')}
 				>
 					<pre
-						class={cn('max-h-40 overflow-auto font-mono text-xs', isError ? 'text-danger' : 'text-fg')}>{formatResult(
+						class={cn('max-h-40 overflow-auto font-mono text-sm', isError ? 'text-danger' : 'text-fg')}>{formatResult(
 							lastResult.result
 						)}</pre>
 				</div>
 			{/if}
 
 			<Dialog.Footer>
-				<Button variant="outline" size="sm" onclick={() => (open = false)}>Close</Button>
-				<Button size="sm" onclick={execute} disabled={executing}>
+				<Button variant="outline" onclick={() => (open = false)}>Close</Button>
+				<Button onclick={execute} disabled={executing}>
 					{executing ? 'Running\u2026' : 'Execute'}
 				</Button>
 			</Dialog.Footer>

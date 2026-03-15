@@ -139,16 +139,16 @@
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-2.5">
 				<Checkbox checked={isSelected} size="sm" />
-				<span class="text-sm font-medium">{camera.deviceId}</span>
+				<span class="text-base font-medium">{camera.deviceId}</span>
 			</div>
 			<div class="flex items-center gap-1.5">
-				<span class="text-fg-muted text-[0.65rem]">{modeLabel(camera.mode)}</span>
+				<span class="text-fg-muted text-xs">{modeLabel(camera.mode)}</span>
 				<div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
 			</div>
 		</div>
 
 		<!-- Properties -->
-		<div class="space-y-1 text-xs">
+		<div class="space-y-1 text-sm">
 			<div class="flex justify-between">
 				<span class="text-fg-muted">Exposure</span>
 				<span class="font-mono tabular-nums">
@@ -200,7 +200,7 @@
 		<!-- Stream info (when streaming) -->
 		{#if camera.streamInfo}
 			{@const info = camera.streamInfo}
-			<div class="text-fg-muted flex items-center gap-4 border-t border-border/50 pt-2 text-xs">
+			<div class="text-fg-muted flex items-center gap-4 border-t border-border/50 pt-2 text-sm">
 				<span class="font-mono tabular-nums">{info.frame_rate_fps.toFixed(1)} fps</span>
 				<span class="font-mono tabular-nums">{info.data_rate_mbs.toFixed(1)} MB/s</span>
 				{#if info.dropped_frames > 0}
@@ -216,7 +216,7 @@
 						e.stopPropagation();
 						channelExpanded = !channelExpanded;
 					}}
-					class="flex w-full cursor-pointer items-center justify-between text-xs"
+					class="flex w-full cursor-pointer items-center justify-between text-sm"
 				>
 					<span class="text-fg-muted">Channel</span>
 					<div class="flex justify-between gap-1">
@@ -229,9 +229,9 @@
 					</div>
 				</button>
 				{#if channelExpanded}
-					<div class="mt-2 space-y-1 text-xs">
+					<div class="mt-2 space-y-1 text-sm">
 						<!-- {#if ch.config.desc}
-							<p class="text-[0.5rem] text-fg-muted">{ch.config.desc}</p>
+							<p class="text-xs text-fg-muted">{ch.config.desc}</p>
 						{/if} -->
 						{#if ch.config.emission}
 							<div class="flex justify-between gap-1">
@@ -265,7 +265,7 @@
 		<div class="flex-1 space-y-4 overflow-auto pt-4">
 			<!-- Exposure -->
 			<div>
-				<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Exposure</h5>
+				<h5 class="text-fg-muted mb-1.5 text-xs font-medium uppercase">Exposure</h5>
 				<SpinBox
 					value={formExposure ?? cameras[0]?.exposureTimeMs ?? 0}
 					min={cameras[0]?.exposureMin ?? 0}
@@ -273,7 +273,7 @@
 					step={cameras[0]?.exposureStep ?? 0.1}
 					decimals={1}
 					suffix="ms"
-					size="sm"
+					size="xs"
 					class="w-full"
 					onChange={(v) => (formExposure = v)}
 				/>
@@ -282,11 +282,11 @@
 			<!-- Binning -->
 			{#if mergedBinningOptions.length > 0}
 				<div>
-					<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Binning</h5>
+					<h5 class="text-fg-muted mb-1.5 text-xs font-medium uppercase">Binning</h5>
 					<Select
 						value={formBinning ?? String(cameras[0]?.binning ?? '')}
 						options={mergedBinningOptions.map((b) => ({ value: String(b), label: `${b}x` }))}
-						size="sm"
+						size="xs"
 						onchange={(v) => (formBinning = v)}
 					/>
 				</div>
@@ -295,11 +295,11 @@
 			<!-- Pixel Format -->
 			{#if mergedPixelFormatOptions.length > 0}
 				<div>
-					<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Pixel Format</h5>
+					<h5 class="text-fg-muted mb-1.5 text-xs font-medium uppercase">Pixel Format</h5>
 					<Select
 						value={formPixelFormat ?? cameras[0]?.pixelFormat ?? ''}
 						options={mergedPixelFormatOptions.map((f) => ({ value: f, label: f }))}
-						size="sm"
+						size="xs"
 						onchange={(v) => (formPixelFormat = v)}
 					/>
 				</div>
@@ -309,52 +309,52 @@
 			{#if cameras[0]?.frameRegion}
 				{@const refRegion = cameras[0].frameRegion}
 				<div>
-					<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Frame Region</h5>
+					<h5 class="text-fg-muted mb-1.5 text-xs font-medium uppercase">Frame Region</h5>
 					<div class="grid grid-cols-2 gap-2">
 						<div>
-							<span class="text-fg-muted text-[0.55rem]">X</span>
+							<span class="text-fg-muted text-xs">X</span>
 							<SpinBox
 								value={formRegionX ?? refRegion.x.value}
 								min={refRegion.x.min_val}
 								max={refRegion.x.max_val}
 								step={refRegion.x.step}
-								size="sm"
+								size="xs"
 								class="w-full"
 								onChange={(v) => (formRegionX = v)}
 							/>
 						</div>
 						<div>
-							<span class="text-fg-muted text-[0.55rem]">Y</span>
+							<span class="text-fg-muted text-xs">Y</span>
 							<SpinBox
 								value={formRegionY ?? refRegion.y.value}
 								min={refRegion.y.min_val}
 								max={refRegion.y.max_val}
 								step={refRegion.y.step}
-								size="sm"
+								size="xs"
 								class="w-full"
 								onChange={(v) => (formRegionY = v)}
 							/>
 						</div>
 						<div>
-							<span class="text-fg-muted text-[0.55rem]">Width</span>
+							<span class="text-fg-muted text-xs">Width</span>
 							<SpinBox
 								value={formRegionWidth ?? refRegion.width.value}
 								min={refRegion.width.min_val}
 								max={refRegion.width.max_val}
 								step={refRegion.width.step}
-								size="sm"
+								size="xs"
 								class="w-full"
 								onChange={(v) => (formRegionWidth = v)}
 							/>
 						</div>
 						<div>
-							<span class="text-fg-muted text-[0.55rem]">Height</span>
+							<span class="text-fg-muted text-xs">Height</span>
 							<SpinBox
 								value={formRegionHeight ?? refRegion.height.value}
 								min={refRegion.height.min_val}
 								max={refRegion.height.max_val}
 								step={refRegion.height.step}
-								size="sm"
+								size="xs"
 								class="w-full"
 								onChange={(v) => (formRegionHeight = v)}
 							/>
@@ -365,7 +365,7 @@
 		</div>
 
 		<!-- Apply button -->
-		<Button variant="secondary" size="sm" class="my-3 w-full" disabled={!hasFormChanges} onclick={applyChanges}>
+		<Button variant="secondary" class="my-3 w-full" disabled={!hasFormChanges} onclick={applyChanges}>
 			Apply to {cameras.length} camera{cameras.length !== 1 ? 's' : ''}
 		</Button>
 	</div>
@@ -373,7 +373,7 @@
 
 {#if allCameras.length === 0}
 	<div class="flex h-full items-center justify-center">
-		<p class="text-fg-muted text-xs">No cameras configured</p>
+		<p class="text-fg-muted text-sm">No cameras configured</p>
 	</div>
 {:else}
 	<div class="flex h-full">
@@ -382,7 +382,7 @@
 			<div class="flex h-full flex-col gap-2">
 				<div class="flex items-center gap-2.5 py-3 pl-4">
 					<Checkbox checked={allSelected} indeterminate={someSelected} onchange={toggleAll} size="sm" />
-					<span class="text-fg-muted text-xs">
+					<span class="text-fg-muted text-sm">
 						{selectedIds.size} of {allCameras.length} camera{allCameras.length !== 1 ? 's' : ''} selected
 					</span>
 				</div>
@@ -398,7 +398,7 @@
 			{@render editPanel(selectedCameras)}
 		{:else}
 			<div class="flex h-full w-96 shrink-0 flex-col items-center justify-center bg-card">
-				<p class="text-fg-muted text-xs">Select cameras to edit</p>
+				<p class="text-fg-muted text-sm">Select cameras to edit</p>
 			</div>
 		{/if}
 	</div>

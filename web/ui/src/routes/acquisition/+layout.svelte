@@ -26,7 +26,7 @@
 			{#if session.workflow.allCommitted}
 				<Button
 					variant="outline"
-					size="xs"
+					size="sm"
 					onclick={() => {
 						const stepId = session.workflow.back();
 						if (stepId) goto(resolve(`/workflow/${stepId}`), { keepFocus: true, noScroll: true });
@@ -36,7 +36,7 @@
 				</Button>
 			{/if}
 			{#if session.info}
-				<div class="text-fg-muted ml-auto text-xs">
+				<div class="text-fg-muted ml-auto text-sm">
 					<!-- <span class="text-fg">{session.info.rig_name}</span> -->
 					{#if session.info.session_name}
 						<span class="mx-1.5 text-border">·</span>

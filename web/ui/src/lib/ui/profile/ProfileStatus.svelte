@@ -15,9 +15,9 @@
 
 	// Match Button size classes exactly (h, px, text) + transparent border for identical box model
 	const badgeClasses: Record<Size, string> = {
-		sm: 'h-6 px-2 text-[0.65rem] border border-transparent',
-		md: 'h-7 px-3 text-[0.65rem] border border-transparent',
-		lg: 'h-8 px-3 text-xs border border-transparent'
+		sm: 'h-6 px-2 text-xs border border-transparent',
+		md: 'h-7 px-3 text-xs border border-transparent',
+		lg: 'h-8 px-3 text-sm border border-transparent'
 	};
 
 	const buttonSize: Record<Size, 'xs' | 'sm' | 'md'> = {

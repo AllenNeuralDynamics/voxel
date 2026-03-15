@@ -72,7 +72,7 @@
 		<!-- Wavelength dot + label -->
 		<div class="flex w-20 shrink-0 items-center gap-2">
 			<div class="h-2.5 w-2.5 rounded-full" style="background-color: {laser.color};"></div>
-			<span class="text-xs font-medium tabular-nums">
+			<span class="text-sm font-medium tabular-nums">
 				{laser.wavelength ? `${laser.wavelength} nm` : 'Laser'}
 			</span>
 		</div>
@@ -93,7 +93,7 @@
 		</div>
 
 		<!-- Actual power readout -->
-		<div class="text-fg-muted min-w-18 shrink-0 text-right font-mono text-xs text-nowrap tabular-nums">
+		<div class="text-fg-muted min-w-18 shrink-0 text-right font-mono text-sm text-nowrap tabular-nums">
 			{#if typeof laser.powerMw === 'number'}
 				{laser.powerMw.toFixed(1)} mW
 			{/if}
@@ -107,13 +107,13 @@
 {#snippet channelInfoPopover(cfg: ChannelConfig)}
 	<Popover.Root>
 		<Popover.Trigger
-			class="text-fg-muted hover:text-fg hover:bg-element-hover flex items-center gap-1 rounded px-1 py-0.5 text-[0.65rem] transition-colors"
+			class="text-fg-muted hover:text-fg hover:bg-element-hover flex items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors"
 		>
 			<!-- <span>{cfg.label}</span> -->
 			<InformationOutline width="11" height="11" />
 		</Popover.Trigger>
 		<Popover.Content
-			class="bg-floating text-fg z-50 w-64 rounded border border-border p-3 text-left text-xs shadow-xl outline-none"
+			class="bg-floating text-fg z-50 w-64 rounded border border-border p-3 text-left text-sm shadow-xl outline-none"
 			sideOffset={4}
 			side="top"
 			align="end"
@@ -121,10 +121,10 @@
 			<div class="space-y-2">
 				<div>
 					{#if cfg.desc}
-						<p class="text-fg mt-1 text-xs">{cfg.desc}</p>
+						<p class="text-fg mt-1 text-sm">{cfg.desc}</p>
 					{/if}
 				</div>
-				<div class="text-fg space-y-1 border-t border-border pt-2 text-[0.7rem]">
+				<div class="text-fg space-y-1 border-t border-border pt-2 text-sm">
 					{#if cfg.emission}
 						<div class="flex justify-between gap-2">
 							<span class="text-fg-muted">Emission</span>
@@ -161,12 +161,12 @@
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2">
 					<div class="h-3 w-3 rounded-full" style="background-color: {laser.color};"></div>
-					<span class="text-sm font-medium">
+					<span class="text-base font-medium">
 						{laser.wavelength ? `${laser.wavelength} nm` : 'Laser'}
 					</span>
 				</div>
 				<div class="flex items-center gap-2">
-					<span class="text-fg-muted text-[0.65rem]">{laser.deviceId}</span>
+					<span class="text-fg-muted text-xs">{laser.deviceId}</span>
 					{#if cfg}
 						{@render channelInfoPopover(cfg)}
 					{/if}
@@ -177,7 +177,7 @@
 			{#if typeof laser.powerSetpoint === 'number'}
 				<div class="space-y-3">
 					<div>
-						<h5 class="text-fg-muted mb-1.5 text-[0.6rem] font-medium uppercase">Power Setpoint</h5>
+						<h5 class="text-fg-muted mb-1.5 text-xs font-medium uppercase">Power Setpoint</h5>
 						<SpinBox
 							value={laser.powerSetpoint}
 							min={0}
@@ -185,7 +185,7 @@
 							step={1}
 							decimals={1}
 							suffix="mW"
-							size="sm"
+							size="xs"
 							class="w-full"
 							onChange={(v) => laser.setPower(v)}
 						/>
@@ -195,7 +195,7 @@
 							{@const targetValue = (laser.maxPower * pct) / 100}
 							<button
 								onclick={() => laser.setPower(targetValue)}
-								class="text-fg-muted hover:text-fg hover:bg-element-hover flex-1 rounded border border-border px-1 py-1 text-[0.65rem] transition-colors"
+								class="text-fg-muted hover:text-fg hover:bg-element-hover flex-1 rounded border border-border px-1 py-1 text-xs transition-colors"
 							>
 								{pct}%
 							</button>
@@ -207,8 +207,8 @@
 			<div class="space-y-3">
 				<!-- Power readout -->
 				<div class="flex items-baseline justify-between">
-					<h5 class="text-fg-muted text-[0.6rem] font-medium uppercase">Power</h5>
-					<span class="text-fg font-mono text-xs tabular-nums">
+					<h5 class="text-fg-muted text-xs font-medium uppercase">Power</h5>
+					<span class="text-fg font-mono text-sm tabular-nums">
 						{typeof laser.powerMw === 'number' ? `${laser.powerMw.toFixed(1)} mW` : '—'}
 					</span>
 				</div>
@@ -216,8 +216,8 @@
 				<!-- Temperature -->
 				{#if typeof laser.temperatureC === 'number'}
 					<div class="flex items-baseline justify-between">
-						<h5 class="text-fg-muted text-[0.6rem] font-medium uppercase">Temperature</h5>
-						<span class="text-fg font-mono text-xs tabular-nums">{laser.temperatureC.toFixed(1)}°C</span>
+						<h5 class="text-fg-muted text-xs font-medium uppercase">Temperature</h5>
+						<span class="text-fg font-mono text-sm tabular-nums">{laser.temperatureC.toFixed(1)}°C</span>
 					</div>
 				{/if}
 			</div>
@@ -225,7 +225,7 @@
 
 		<!-- Power history sparkline (all lasers) — fills remaining space -->
 		<div class="flex max-h-36 min-h-12 flex-1 flex-col rounded-t-lg border-t border-border p-2">
-			<p class="text-fg-muted pb-2font-mono pointer-events-none text-[0.55rem] tabular-nums">
+			<p class="text-fg-muted pb-2font-mono pointer-events-none text-xs tabular-nums">
 				All Lasers: {currentMaxPower.toFixed(0)} / {globalMaxPower.toFixed(0)} mW
 			</p>
 			{#if anyHistory}
@@ -251,7 +251,7 @@
 				</svg>
 			{:else}
 				<div class="flex h-full items-center justify-center">
-					<span class="text-fg-muted/50 text-[0.6rem]">Collecting data...</span>
+					<span class="text-fg-muted/50 text-xs">Collecting data...</span>
 				</div>
 			{/if}
 		</div>
@@ -260,7 +260,7 @@
 
 {#if allLasers.length === 0}
 	<div class="flex h-full items-center justify-center">
-		<p class="text-fg-muted text-xs">No lasers configured</p>
+		<p class="text-fg-muted text-sm">No lasers configured</p>
 	</div>
 {:else if selectedLaser}
 	<div class="flex h-full">
@@ -270,12 +270,12 @@
 				{#if profileLasers.length > 0}
 					<div>
 						<div class="flex items-center justify-between py-3">
-							<h4 class="text-fg-muted/60 text-[0.65rem] font-medium uppercase">
+							<h4 class="text-fg-muted/60 text-xs font-medium uppercase">
 								Active Profile <span class="text-fg-muted pl-2">{activeProfileLabel}</span>
 							</h4>
 							<button
 								onclick={stopAllLasers}
-								class="flex items-center gap-1.5 rounded bg-danger/20 px-2 py-1 text-xs text-danger transition-all hover:bg-danger/30 {anyLaserEnabled
+								class="flex items-center gap-1.5 rounded bg-danger/20 px-2 py-1 text-sm text-danger transition-all hover:bg-danger/30 {anyLaserEnabled
 									? ''
 									: 'pointer-events-none opacity-0'}"
 							>
@@ -293,7 +293,7 @@
 
 				{#if otherLasers.length > 0}
 					<div>
-						<h4 class="text-fg-muted/60 mb-1 text-[0.65rem] font-medium uppercase">Other Lasers</h4>
+						<h4 class="text-fg-muted/60 mb-1 text-xs font-medium uppercase">Other Lasers</h4>
 						<div class="space-y-2">
 							{#each otherLasers as laser (laser.deviceId)}
 								{@render laserRow(laser)}

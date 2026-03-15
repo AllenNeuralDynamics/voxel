@@ -11,7 +11,7 @@
 	const session = getSessionContext();
 
 	const profilePill = tv({
-		base: 'rounded-xl border border-border px-3 py-1.5 text-[0.65rem] uppercase tracking-wide transition-colors',
+		base: 'rounded-xl border border-border px-3 py-1.5 text-xs uppercase tracking-wide transition-colors',
 		variants: {
 			phantom: { true: 'border-dashed' },
 			selected: { true: '' }
@@ -144,13 +144,13 @@
 			<Dialog.Footer>
 				<button
 					onclick={() => (addDialogOpen = false)}
-					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-xs transition-colors"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={confirmAddToPlan}
-					class="text-primary-fg rounded bg-primary px-3 py-1.5 text-xs transition-colors hover:bg-primary/90"
+					class="text-primary-fg rounded bg-primary px-3 py-1.5 text-sm transition-colors hover:bg-primary/90"
 				>
 					Add
 				</button>
@@ -174,13 +174,13 @@
 			<Dialog.Footer>
 				<button
 					onclick={() => (removeDialogOpen = false)}
-					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-xs transition-colors"
+					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={confirmRemoveFromPlan}
-					class="rounded bg-danger px-3 py-1.5 text-xs text-danger-fg transition-colors hover:bg-danger/90"
+					class="rounded bg-danger px-3 py-1.5 text-sm text-danger-fg transition-colors hover:bg-danger/90"
 				>
 					Remove
 				</button>

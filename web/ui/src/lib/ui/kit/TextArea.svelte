@@ -16,17 +16,21 @@
 				}
 			},
 			size: {
+				xs: {
+					wrapper: 'px-1.5 py-0.5',
+					textarea: 'text-xs'
+				},
 				sm: {
 					wrapper: 'px-1.5 py-0.5',
-					textarea: 'text-[0.65rem]'
+					textarea: 'text-xs'
 				},
 				md: {
 					wrapper: 'px-2 py-1',
-					textarea: 'text-xs'
+					textarea: 'text-sm'
 				},
 				lg: {
 					wrapper: 'px-2.5 py-1.5',
-					textarea: 'text-sm'
+					textarea: 'text-base'
 				}
 			}
 		},

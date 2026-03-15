@@ -23,23 +23,29 @@
 				}
 			},
 			size: {
-				sm: {
-					chip: 'h-5',
-					input: 'px-1.5 text-[0.65rem]',
+				xs: {
+					chip: 'h-ui-xs',
+					input: 'px-1.5 text-xs',
 					remove: 'px-0.5',
-					add: 'h-5 w-5'
+					add: 'size-ui-xs'
+				},
+				sm: {
+					chip: 'h-ui-sm',
+					input: 'px-1.5 text-xs',
+					remove: 'px-0.5',
+					add: 'size-ui-sm'
 				},
 				md: {
-					chip: 'h-7',
-					input: 'px-2 text-xs',
+					chip: 'h-ui-md',
+					input: 'px-2 text-sm',
 					remove: 'px-1',
-					add: 'h-7 w-7'
+					add: 'size-ui-md'
 				},
 				lg: {
-					chip: 'h-8',
-					input: 'px-2.5 text-sm',
+					chip: 'h-ui-lg',
+					input: 'px-2.5 text-base',
 					remove: 'px-1',
-					add: 'h-8 w-8'
+					add: 'size-ui-lg'
 				}
 			}
 		},
@@ -76,6 +82,7 @@
 	const styles = $derived(tagInputVariants({ variant, size }));
 
 	const iconSizes: Record<NonNullable<TagInputVariants['size']>, number> = {
+		xs: 8,
 		sm: 10,
 		md: 12,
 		lg: 14

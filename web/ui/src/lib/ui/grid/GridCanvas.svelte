@@ -679,7 +679,7 @@
 			<div class="flex items-center gap-3">
 				<Button
 					variant={session.stage.isMoving ? 'danger' : 'outline'}
-					size="xs"
+					size="sm"
 					onclick={() => session.stage.halt()}
 					disabled={!session.stage.isMoving}
 					aria-label="Halt stage"
@@ -694,7 +694,7 @@
 						step={0.01}
 						decimals={2}
 						numCharacters={8}
-						size="sm"
+						size="xs"
 						prefix="X"
 						suffix="mm"
 						color={session.stage.x.isMoving ? 'var(--danger)' : undefined}
@@ -707,7 +707,7 @@
 						step={0.01}
 						decimals={2}
 						numCharacters={8}
-						size="sm"
+						size="xs"
 						prefix="Y"
 						suffix="mm"
 						color={session.stage.y.isMoving ? 'var(--danger)' : undefined}
@@ -720,7 +720,7 @@
 						step={0.001}
 						decimals={3}
 						numCharacters={8}
-						size="sm"
+						size="xs"
 						prefix="Z"
 						suffix="mm"
 						color={session.stage.z.isMoving ? 'var(--danger)' : undefined}
@@ -731,7 +731,7 @@
 		</div>
 	{:else}
 		<div class="grid flex-1 place-content-center">
-			<p class="text-fg-muted text-sm">Stage not available</p>
+			<p class="text-fg-muted text-base">Stage not available</p>
 		</div>
 	{/if}
 </div>

@@ -52,17 +52,41 @@ export type ThemeId = (typeof registry)[number]['id'];
 export type ThemeEntry = (typeof registry)[number];
 
 export type Mode = 'light' | 'dark' | 'auto';
+export type Density = 'compact' | 'cozy' | 'comfortable';
+export type Scale = 'xs' | 'sm' | 'default' | 'lg' | 'xl';
 
 export interface ThemePrefs {
 	mode: Mode;
 	light: ThemeId;
 	dark: ThemeId;
+	density: Density;
+	scale: Scale;
 }
 
 // ── Manager ──────────────────────────────────────────────────────────
 
-const DEFAULTS: ThemePrefs = { mode: 'auto', light: 'base', dark: 'jetbrains' };
+const DEFAULTS: ThemePrefs = {
+	mode: 'auto',
+	light: 'base',
+	dark: 'jetbrains',
+	density: 'cozy',
+	scale: 'default'
+};
 const MEDIA = '(prefers-color-scheme: dark)';
+
+const DENSITY_CLASSES: Record<Density, string> = {
+	compact: 'density-compact',
+	cozy: '',
+	comfortable: 'density-comfortable'
+};
+
+const SCALE_PX: Record<Scale, number> = {
+	xs: 12,
+	sm: 13,
+	default: 14,
+	lg: 15,
+	xl: 16
+};
 
 class ThemeManager {
 	/** All available themes. */
@@ -91,6 +115,7 @@ class ThemeManager {
 		mql.addEventListener('change', () => (this.systemDark = mql.matches));
 
 		$effect.root(() => {
+			// Theme + mode
 			$effect(() => {
 				const root = document.documentElement;
 				root.classList.toggle('dark', this.resolvedMode === 'dark');
@@ -101,6 +126,21 @@ class ThemeManager {
 				} else {
 					root.removeAttribute('data-theme');
 				}
+			});
+
+			// Density
+			$effect(() => {
+				const root = document.documentElement;
+				for (const cls of Object.values(DENSITY_CLASSES)) {
+					if (cls) root.classList.remove(cls);
+				}
+				const cls = DENSITY_CLASSES[this.prefs.current.density];
+				if (cls) root.classList.add(cls);
+			});
+
+			// Scale
+			$effect(() => {
+				document.documentElement.style.fontSize = `${SCALE_PX[this.prefs.current.scale]}px`;
 			});
 		});
 	}
@@ -115,6 +155,14 @@ class ThemeManager {
 
 	setDark(id: ThemeId) {
 		this.prefs.current = { ...this.prefs.current, dark: id };
+	}
+
+	setDensity(density: Density) {
+		this.prefs.current = { ...this.prefs.current, density };
+	}
+
+	setScale(scale: Scale) {
+		this.prefs.current = { ...this.prefs.current, scale };
 	}
 }
 

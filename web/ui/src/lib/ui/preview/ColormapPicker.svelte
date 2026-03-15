@@ -38,7 +38,7 @@
 
 	const triggerColor = $derived(getTriggerColor(colormap, catalog));
 
-	const defaultTriggerClass = 'cursor-pointer text-sm leading-5 font-medium transition-colors hover:brightness-125';
+	const defaultTriggerClass = 'cursor-pointer text-base leading-5 font-medium transition-colors hover:brightness-125';
 
 	// ── Grid State ────────────────────────────────────────────────────
 
@@ -102,7 +102,7 @@
 					type="text"
 					bind:value={search}
 					placeholder="Search colormaps..."
-					class="bg-element-bg text-fg placeholder-fg-muted focus:border-focused h-6 min-w-0 flex-1 rounded border border-input px-1.5 text-[0.65rem] focus:outline-none"
+					class="bg-element-bg text-fg placeholder-fg-muted focus:border-focused h-6 min-w-0 flex-1 rounded border border-input px-1.5 text-xs focus:outline-none"
 				/>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger
@@ -130,7 +130,7 @@
 										else next.add(group.uid);
 										hiddenGroups = next;
 									}}
-									class="text-fg-muted data-highlighted:bg-element-hover data-highlighted:text-fg flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-[0.6rem] outline-none select-none"
+									class="text-fg-muted data-highlighted:bg-element-hover data-highlighted:text-fg flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-xs outline-none select-none"
 								>
 									{#snippet children({ checked })}
 										<span class="inline-flex h-3 w-3 shrink-0 items-center justify-center">
@@ -159,17 +159,17 @@
 									aria-label="Select colormap {name}"
 								>
 									<span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
-									<span class="text-fg-muted truncate text-[0.6rem]">{name}</span>
+									<span class="text-fg-muted truncate text-xs">{name}</span>
 								</button>
 							{/each}
 						</div>
 					{:else}
-						<div class="text-fg-muted pb-2 text-[0.65rem]">No matches</div>
+						<div class="text-fg-muted pb-2 text-xs">No matches</div>
 					{/if}
 				{:else}
 					{#each catalog as group (group.uid)}
 						{#if !hiddenGroups.has(group.uid)}
-							<div class="text-fg-muted pt-1 pb-0.5 text-[0.5rem] font-medium tracking-wide uppercase opacity-60">
+							<div class="text-fg-muted pt-1 pb-0.5 text-xs font-medium tracking-wide uppercase opacity-60">
 								{group.label}
 							</div>
 							<div class="swatch-grid pb-2">
@@ -181,7 +181,7 @@
 										aria-label="Select colormap {name}"
 									>
 										<span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
-										<span class="text-fg-muted truncate text-[0.6rem]">{name}</span>
+										<span class="text-fg-muted truncate text-xs">{name}</span>
 									</button>
 								{/each}
 							</div>
@@ -199,7 +199,7 @@
 					}}
 					placeholder={triggerColor}
 					size="5"
-					class="bg-element-bg text-fg placeholder:text-fg-muted focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) px-1.5 font-mono text-[0.65rem] focus:outline-none"
+					class="bg-element-bg text-fg placeholder:text-fg-muted focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) px-1.5 font-mono text-xs focus:outline-none"
 					style:--hex-color={triggerColor}
 				/>
 				<button

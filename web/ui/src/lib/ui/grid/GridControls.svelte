@@ -127,5 +127,5 @@
 		</Field>
 	</div>
 {:else}
-	<p class="text-fg-muted text-xs">No grid config for this profile</p>
+	<p class="text-fg-muted text-sm">No grid config for this profile</p>
 {/if}

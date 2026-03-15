@@ -40,7 +40,7 @@
 </script>
 
 {#if entries.length > 0}
-	<div class="space-y-px text-xs">
+	<div class="space-y-px text-sm">
 		{#each entries as { key, value } (key)}
 			{#if isContainer(value)}
 				<details open={depth < expandDepth}>
@@ -70,5 +70,5 @@
 		{/each}
 	</div>
 {:else if data != null && typeof data !== 'object'}
-	<span class="text-fg font-mono text-xs">{formatPrimitive(data)}</span>
+	<span class="text-fg font-mono text-sm">{formatPrimitive(data)}</span>
 {/if}

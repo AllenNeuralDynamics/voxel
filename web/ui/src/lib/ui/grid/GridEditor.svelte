@@ -106,7 +106,7 @@
 
 {#snippet staticItem(label: string, value: string, unit: string = '')}
 	<div
-		class="flex h-6 cursor-default items-stretch rounded border border-muted bg-transparent font-mono text-[0.65rem]"
+		class="flex h-6 cursor-default items-stretch rounded border border-muted bg-transparent font-mono text-xs"
 	>
 		<span class="text-fg-muted flex shrink-0 items-center ps-1.5 pe-2">{label}</span>
 		<span class="text-fg flex flex-1 items-center px-0.5">{value}</span>
@@ -132,7 +132,7 @@
 			step={0.1}
 			decimals={1}
 			numCharacters={5}
-			size="sm"
+			size="xs"
 			prefix={label}
 			suffix="µm"
 			{onChange}
@@ -147,10 +147,10 @@
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
 				<span class="flex items-center gap-3">
-					<span class="font-mono text-xs font-semibold {getStackStatusColor(stack?.status ?? null)}">
+					<span class="font-mono text-sm font-semibold {getStackStatusColor(stack?.status ?? null)}">
 						R{selectedTile.row}, C{selectedTile.col}
 					</span>
-					{#if stack}<span class="text-[0.6rem] {getStackStatusColor(stack.status)}">{stack.status}</span>{/if}
+					{#if stack}<span class="text-xs {getStackStatusColor(stack.status)}">{stack.status}</span>{/if}
 				</span>
 				<div class="flex items-center gap-0.5">
 					{#if isEditing}
@@ -191,7 +191,7 @@
 				</div>
 			</div>
 
-			<div class="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.65rem]">
+			<div class="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
 				{@render staticItem('X', formatMm(selectedTile.x_um), 'mm')}
 				{@render staticItem('Y', formatMm(selectedTile.y_um), 'mm')}
 				{@render staticItem('W', formatMm(selectedTile.w_um, 1), 'mm')}
@@ -223,8 +223,8 @@
 	</div>
 {/if}
 
-<div class="flex items-center justify-between border-t border-border p-3 text-[0.65rem]">
+<div class="flex items-center justify-between border-t border-border p-3 text-xs">
 	<span class="text-fg-muted">Order</span>
-	<Select value={session.tileOrder} options={TILE_ORDER_OPTIONS} onchange={handleTileOrderChange} size="sm" />
+	<Select value={session.tileOrder} options={TILE_ORDER_OPTIONS} onchange={handleTileOrderChange} size="xs" />
 	{@render staticItem('Z Step', String(session.gridConfig?.z_step_um ?? '—'), 'µm')}
 </div>

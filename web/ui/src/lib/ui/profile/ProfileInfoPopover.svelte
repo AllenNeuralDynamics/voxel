@@ -39,10 +39,10 @@
 				sideOffset={6}
 			>
 				{#if profile.desc}
-					<p class="text-xs">{profile.desc}</p>
+					<p class="text-sm">{profile.desc}</p>
 				{/if}
 				{#if profile.channels.length > 0}
-					<p class="text-xs {profile.desc ? 'mt-1.5' : ''} text-fg-muted">
+					<p class="text-sm {profile.desc ? 'mt-1.5' : ''} text-fg-muted">
 						{#each profile.channels as chId, i (chId)}{#if i > 0},
 							{/if}{config.channels[chId]?.label ?? sanitizeString(chId)}{/each}
 					</p>

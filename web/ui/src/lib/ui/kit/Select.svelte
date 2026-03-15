@@ -34,17 +34,21 @@
 				}
 			},
 			size: {
+				xs: {
+					trigger: 'h-ui-xs px-1.5 text-xs',
+					item: 'min-h-ui-xs px-1.5 py-1 text-xs'
+				},
 				sm: {
-					trigger: 'h-5 px-1.5 text-[0.65rem]',
-					item: 'min-h-5 px-1.5 py-1 text-[0.65rem]'
+					trigger: 'h-ui-sm px-1.5 text-xs',
+					item: 'min-h-ui-sm px-1.5 py-1 text-xs'
 				},
 				md: {
-					trigger: 'h-7 px-2 text-xs',
-					item: 'min-h-7 px-2 py-1 text-xs'
+					trigger: 'h-ui-md px-2 text-sm',
+					item: 'min-h-ui-md px-2 py-1 text-sm'
 				},
 				lg: {
-					trigger: 'h-8 px-2.5 text-sm',
-					item: 'min-h-8 px-2.5 py-1.5 text-sm'
+					trigger: 'h-ui-lg px-2.5 text-base',
+					item: 'min-h-ui-lg px-2.5 py-1.5 text-base'
 				}
 			}
 		},
@@ -109,6 +113,7 @@
 	const styles = $derived(selectVariants({ variant, size }));
 
 	const iconSizes: Record<NonNullable<SelectVariants['size']>, number> = {
+		xs: 10,
 		sm: 12,
 		md: 14,
 		lg: 16
@@ -135,7 +140,7 @@
 	<SelectPrimitive.Portal>
 		<SelectPrimitive.Content align="start" class={styles.content()}>
 			{#if options.length === 0 && emptyMessage}
-				<div class="text-fg-muted px-3 py-2 text-sm">{emptyMessage}</div>
+				<div class="text-fg-muted px-3 py-2 text-base">{emptyMessage}</div>
 			{:else}
 				<SelectPrimitive.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
 					<SelectPrimitive.Group>
@@ -155,7 +160,7 @@
 								<div class="flex flex-col gap-0.5">
 									<span class="text-fg">{option.label}</span>
 									{#if option.description}
-										<span class="text-fg-muted text-[0.65rem]">{option.description}</span>
+										<span class="text-fg-muted text-xs">{option.description}</span>
 									{/if}
 								</div>
 							</SelectPrimitive.Item>
