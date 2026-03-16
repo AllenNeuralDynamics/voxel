@@ -6,7 +6,7 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type { AppStatus, ErrorPayload, FrameTiming, LogMessage, SessionInfo, TileOrder, Waveform } from './types';
+import type { AppStatus, ErrorPayload, FrameTiming, LogMessage, SessionInfo, Waveform } from './types';
 
 /**
  * DAQ waveforms response from REST endpoint and WS broadcast.
@@ -64,11 +64,13 @@ interface RigMessage {
  */
 type ClientMessage =
 	| { topic: 'request_status'; payload?: Record<string, never> }
+	// Preview (high-frequency streaming, stays on WS)
 	| { topic: 'preview/start'; payload?: Record<string, never> }
 	| { topic: 'preview/stop'; payload?: Record<string, never> }
 	| { topic: 'preview/crop'; payload: PreviewCrop }
 	| { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
 	| { topic: 'preview/colormap'; payload: { channel: string; colormap: string } }
+	// Device control (stays on WS for real-time property updates)
 	| {
 			topic: 'device/set_property';
 			payload: { device: string; properties: Record<string, unknown> };
@@ -76,31 +78,7 @@ type ClientMessage =
 	| {
 			topic: 'device/execute_command';
 			payload: { device: string; command: string; args?: unknown[]; kwargs?: Record<string, unknown> };
-	  }
-	// Grid/Stack messages
-	| { topic: 'grid/set_offset'; payload: { x_offset_um: number; y_offset_um: number } }
-	| { topic: 'grid/set_overlap'; payload: { overlap_x: number; overlap_y: number } }
-	| { topic: 'grid/set_tile_order'; payload: { tile_order: TileOrder } }
-	| {
-			topic: 'stacks/add';
-			payload: { stacks: Array<{ row: number; col: number; z_start_um: number; z_end_um: number }> };
-	  }
-	| {
-			topic: 'stacks/edit';
-			payload: { edits: Array<{ row: number; col: number; z_start_um?: number; z_end_um?: number }> };
-	  }
-	| { topic: 'stacks/remove'; payload: { positions: Array<{ row: number; col: number }> } }
-	// Acquisition plan messages
-	| { topic: 'plan/add_profile'; payload: { profile_id: string } }
-	| { topic: 'plan/remove_profile'; payload: { profile_id: string } }
-	// Workflow messages
-	| { topic: 'workflow/next'; payload?: Record<string, never> }
-	| { topic: 'workflow/reopen'; payload: { step_id: string } }
-	// Profile device props
-	| { topic: 'profile/save_props'; payload: { device_id: string } | { all: true } }
-	// Waveform updates
-	| { topic: 'profile/update_waveforms'; payload: { waveforms?: Record<string, unknown>; timing?: unknown } }
-	| { topic: 'profile/apply_props'; payload: Record<string, never> };
+	  };
 /**
  * Message handler callback type
  */
@@ -419,7 +397,7 @@ export class Client {
 	 * Fetch DAQ waveforms for the active profile via REST.
 	 */
 	async fetchWaveforms(): Promise<DaqWaveformsResponse> {
-		const res = await fetch(`${this.baseUrl}/api/daq/waveforms`);
+		const res = await fetch(`${this.baseUrl}/api/rig/daq/waveforms`);
 		if (!res.ok) return { profile_id: null, traces: {} };
 		return res.json();
 	}

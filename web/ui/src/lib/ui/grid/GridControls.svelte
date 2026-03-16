@@ -10,7 +10,7 @@
 
 	let { session, profileId }: Props = $props();
 
-	let gc = $derived(session.plan.grid_configs[profileId] ?? null);
+	let gc = $derived(session.plan.profiles.find((p) => p.profile_id === profileId)?.grid ?? null);
 	let disabled = $derived(profileId !== session.activeProfileId || session.gridLocked);
 	let gridLimX = $derived(session.fov.width * (1 - (gc?.overlap_x ?? 0.1)));
 	let gridLimY = $derived(session.fov.height * (1 - (gc?.overlap_y ?? 0.1)));

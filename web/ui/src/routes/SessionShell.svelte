@@ -80,7 +80,7 @@
 					<nav class="flex items-stretch gap-4">
 						<AppMenu {app}>
 							{#snippet trigger()}
-								<VoxelLogo class="size-ui-md" />
+								<VoxelLogo class="size-ui-sm" />
 								<ChevronDown width="14" height="14" class="text-fg-muted/60 ml-1" />
 							{/snippet}
 							{#snippet extraItems()}
@@ -120,7 +120,7 @@
 						</button>
 
 						<!-- Workflow steps -->
-						<WorkflowTabs {workflow} {viewId} onViewChange={gotoView} class="max-w-96" />
+						<WorkflowTabs {session} {viewId} onViewChange={gotoView} class="max-w-96" />
 
 						<!-- Acquire -->
 						<button

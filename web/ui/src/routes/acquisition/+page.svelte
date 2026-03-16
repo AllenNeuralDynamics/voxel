@@ -7,7 +7,7 @@
 	const stackSummary = $derived.by(() => {
 		const total = session.stacks.length;
 		const completed = session.stacks.filter((s) => s.status === 'completed').length;
-		const profiles = Object.keys(session.plan.grid_configs).length;
+		const profiles = session.plan.profiles.length;
 		return { total, completed, profiles };
 	});
 </script>

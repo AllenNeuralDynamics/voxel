@@ -5,6 +5,7 @@ import type {
 	AppStatus,
 	AcquisitionPlan,
 	GridConfig,
+	Interleaving,
 	SessionInfo,
 	Tile,
 	Stack,
@@ -39,12 +40,20 @@ export class Session {
 	#appStatus = $state<AppStatus>();
 	info = $state<SessionInfo>(null!);
 
-	plan = $derived<AcquisitionPlan>(this.#appStatus?.session?.plan ?? { grid_configs: {}, stacks: [] });
-	acquisitionProfileIds = $derived<string[]>(Object.keys(this.plan.grid_configs));
+	plan = $derived<AcquisitionPlan>(
+		this.#appStatus?.session?.plan ?? {
+			profiles: [],
+			tile_order: 'row_wise',
+			interleaving: 'position_first',
+			stacks: []
+		}
+	);
+	acquisitionProfileIds = $derived<string[]>(this.plan.profiles.map((p) => p.profile_id));
 	gridConfig = $derived<GridConfig | null>(this.#appStatus?.session?.grid_config ?? null);
 	tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
 	stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
-	tileOrder = $derived<TileOrder>(this.#appStatus?.session?.tile_order ?? 'snake_row');
+	tileOrder = $derived<TileOrder>(this.plan.tile_order);
+	interleaving = $derived<Interleaving>(this.plan.interleaving);
 	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
 	mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
 	metadata = $derived<Record<string, unknown>>(this.#appStatus?.session?.metadata ?? {});
@@ -150,6 +159,23 @@ export class Session {
 		this.#appStatus = status;
 	}
 
+	// ── REST helpers ────────────────────────────────────────
+
+	async #rest(method: string, path: string, body?: unknown): Promise<Response> {
+		const res = await fetch(`${this.client.baseUrl}/api${path}`, {
+			method,
+			...(body !== undefined && {
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			})
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({ detail: res.statusText }));
+			throw new Error(data.detail || res.statusText);
+		}
+		return res;
+	}
+
 	// ── Profile commands ────────────────────────────────────
 
 	async activateProfile(profileId: string): Promise<void> {
@@ -158,12 +184,7 @@ export class Session {
 		this.isSwitchingProfile = true;
 
 		try {
-			const response = await fetch(`${this.client.baseUrl}/api/profiles/active`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ profile_id: profileId })
-			});
-			if (!response.ok) throw new Error(response.statusText);
+			await this.#rest('POST', '/rig/profile/active', { profile_id: profileId });
 		} catch (error) {
 			console.error('[Session] Failed to activate profile:', error);
 			const msg = error instanceof Error ? error.message : 'Failed to activate profile';
@@ -174,74 +195,154 @@ export class Session {
 		}
 	}
 
-	saveProfileProps(deviceId: string): void {
-		this.client.send({ topic: 'profile/save_props', payload: { device_id: deviceId } });
+	async saveProfileProps(deviceId: string): Promise<void> {
+		try {
+			await this.#rest('POST', '/rig/profile/save-props', { device_id: deviceId });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to save props');
+		}
 	}
 
-	saveAllProfileProps(): void {
-		this.client.send({ topic: 'profile/save_props', payload: { all: true } });
+	async saveAllProfileProps(): Promise<void> {
+		try {
+			await this.#rest('POST', '/rig/profile/save-props', { all: true });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to save all props');
+		}
 	}
 
-	applyProfileProps(): void {
-		this.client.send({ topic: 'profile/apply_props', payload: {} });
+	async applyProfileProps(): Promise<void> {
+		try {
+			await this.#rest('POST', '/rig/profile/apply-props');
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to apply props');
+		}
 	}
 
 	// --- Grid ---
 
-	setGridOffset(xOffsetUm: number, yOffsetUm: number): void {
-		this.client.send({ topic: 'grid/set_offset', payload: { x_offset_um: xOffsetUm, y_offset_um: yOffsetUm } });
+	async setGridOffset(xOffsetUm: number, yOffsetUm: number): Promise<void> {
+		try {
+			await this.#rest('PATCH', '/plan/grid', { x_offset_um: xOffsetUm, y_offset_um: yOffsetUm });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to set grid offset');
+		}
 	}
 
-	setGridOverlap(overlapX: number, overlapY: number): void {
-		this.client.send({ topic: 'grid/set_overlap', payload: { overlap_x: overlapX, overlap_y: overlapY } });
+	async setGridOverlap(overlapX: number, overlapY: number): Promise<void> {
+		try {
+			await this.#rest('PATCH', '/plan/grid', { overlap_x: overlapX, overlap_y: overlapY });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to set grid overlap');
+		}
 	}
 
-	setTileOrder(order: TileOrder): void {
-		this.client.send({ topic: 'grid/set_tile_order', payload: { tile_order: order } });
+	async setTileOrder(order: TileOrder): Promise<void> {
+		try {
+			await this.#rest('PUT', '/plan/tile-order', { tile_order: order });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to set tile order');
+		}
 	}
 
 	// --- Acquisition Plan ---
 
-	addAcquisitionProfile(profileId: string): void {
-		this.client.send({ topic: 'plan/add_profile', payload: { profile_id: profileId } });
+	async addAcquisitionProfile(profileId: string): Promise<void> {
+		try {
+			await this.#rest('POST', '/plan/profiles', { profile_id: profileId });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to add profile');
+		}
 	}
 
-	removeAcquisitionProfile(profileId: string): void {
-		this.client.send({ topic: 'plan/remove_profile', payload: { profile_id: profileId } });
+	async removeAcquisitionProfile(profileId: string): Promise<void> {
+		try {
+			await this.#rest('DELETE', '/plan/profiles', { profile_id: profileId });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to remove profile');
+		}
+	}
+
+	async setInterleaving(interleaving: Interleaving): Promise<void> {
+		try {
+			await this.#rest('PUT', '/plan/interleaving', { interleaving });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to set interleaving');
+		}
+	}
+
+	async reorderProfiles(profileIds: string[]): Promise<void> {
+		try {
+			await this.#rest('PUT', '/plan/profiles/reorder', { profile_ids: profileIds });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to reorder profiles');
+		}
+	}
+
+	// --- Workflow ---
+
+	async workflowNext(): Promise<string | null> {
+		if (!this.workflow.canAdvance) return null;
+		try {
+			await this.#rest('POST', '/workflow/next');
+			const nextIdx = this.workflow.activeIndex + 1;
+			return nextIdx < this.workflow.steps.length ? this.workflow.steps[nextIdx].id : null;
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to advance workflow');
+			return null;
+		}
+	}
+
+	async workflowBack(): Promise<string | null> {
+		if (!this.workflow.canGoBack) return null;
+		const stepId = this.workflow.steps[this.workflow.committedIndex].id;
+		try {
+			await this.#rest('POST', '/workflow/reopen', { step_id: stepId });
+			return stepId;
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to reopen step');
+			return null;
+		}
 	}
 
 	// --- Stacks ---
 
-	addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
-		this.client.send({
-			topic: 'stacks/add',
-			payload: {
+	async addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): Promise<void> {
+		try {
+			await this.#rest('POST', '/plan/stacks', {
 				stacks: stacks.map((s) => ({
 					row: s.row,
 					col: s.col,
 					z_start_um: s.zStartUm,
 					z_end_um: s.zEndUm
 				}))
-			}
-		});
+			});
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to add stacks');
+		}
 	}
 
-	editStacks(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): void {
-		this.client.send({
-			topic: 'stacks/edit',
-			payload: {
+	async editStacks(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): Promise<void> {
+		try {
+			await this.#rest('PATCH', '/plan/stacks', {
 				edits: edits.map((e) => ({
 					row: e.row,
 					col: e.col,
 					z_start_um: e.zStartUm,
 					z_end_um: e.zEndUm
 				}))
-			}
-		});
+			});
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to edit stacks');
+		}
 	}
 
-	removeStacks(positions: Array<{ row: number; col: number }>): void {
-		this.client.send({ topic: 'stacks/remove', payload: { positions } });
+	async removeStacks(positions: Array<{ row: number; col: number }>): Promise<void> {
+		try {
+			await this.#rest('DELETE', '/plan/stacks', { positions });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to remove stacks');
+		}
 	}
 
 	// --- Selection ---

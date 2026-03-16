@@ -113,7 +113,7 @@ export class DevicesManager {
 	}
 
 	async initialize(): Promise<void> {
-		const response = await fetch(`${this.baseUrl}/api/devices`);
+		const response = await fetch(`${this.baseUrl}/api/rig/devices`);
 		if (!response.ok) {
 			throw new Error(`Failed to fetch devices: ${response.statusText}`);
 		}
@@ -234,7 +234,7 @@ export class DevicesManager {
 		args: unknown[] = [],
 		kwargs: Record<string, unknown> = {}
 	): Promise<CommandResult> {
-		const response = await fetch(`${this.baseUrl}/api/devices/${deviceId}/commands/${command}`, {
+		const response = await fetch(`${this.baseUrl}/api/rig/devices/${deviceId}/commands/${command}`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ args, kwargs })
@@ -246,7 +246,7 @@ export class DevicesManager {
 	}
 
 	async fetchProperties(deviceId: string, props?: string[]): Promise<void> {
-		const url = new SvelteURL(`${this.baseUrl}/api/devices/${deviceId}/properties`);
+		const url = new SvelteURL(`${this.baseUrl}/api/rig/devices/${deviceId}/properties`);
 		if (props) {
 			props.forEach((p) => url.searchParams.append('props', p));
 		}

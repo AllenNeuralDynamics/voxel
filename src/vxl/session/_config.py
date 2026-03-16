@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
-from vxl.config import TileOrder, VoxelRigConfig
+from vxl.config import Interleaving, TileOrder, VoxelRigConfig
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
 from vxl.tile import Stack
 
@@ -39,16 +39,40 @@ class GridConfig(BaseModel):
         return data
 
 
-class AcquisitionPlan(BaseModel):
-    """Per-profile grid configs and a flat list of stacks.
+class PlanProfile(BaseModel):
+    """A profile entry in the acquisition plan with its per-profile grid config."""
 
-    The keys of ``grid_configs`` implicitly define which profiles are selected
-    for acquisition.  Stacks are kept in a single flat list for future
-    interleaving support.
+    profile_id: str
+    grid: GridConfig = Field(default_factory=GridConfig)
+
+
+class AcquisitionPlan(BaseModel):
+    """Ordered list of profiles with per-profile grid configs and a flat list of stacks.
+
+    Profiles are stored as an ordered list so ordering is explicit and portable
+    across serialization boundaries (Python → msgpack → JS).
     """
 
-    grid_configs: dict[str, GridConfig] = Field(default_factory=dict)
+    profiles: list[PlanProfile] = Field(default_factory=list)
+    tile_order: TileOrder = "row_wise"
+    interleaving: Interleaving = "position_first"
     stacks: list[Stack] = Field(default_factory=list)
+
+    @property
+    def profile_ids(self) -> list[str]:
+        """Get ordered list of profile IDs in the plan."""
+        return [p.profile_id for p in self.profiles]
+
+    def get_grid(self, profile_id: str) -> GridConfig | None:
+        """Get grid config for a profile, or None if not in plan."""
+        for p in self.profiles:
+            if p.profile_id == profile_id:
+                return p.grid
+        return None
+
+    def has_profile(self, profile_id: str) -> bool:
+        """Check if a profile is in the plan."""
+        return any(p.profile_id == profile_id for p in self.profiles)
 
 
 class SessionConfig(BaseModel):
@@ -67,7 +91,6 @@ class SessionConfig(BaseModel):
     metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
     plan: AcquisitionPlan = Field(default_factory=AcquisitionPlan)
-    tile_order: TileOrder = "unset"
     workflow_steps: list[WorkflowStepConfig] = Field(
         default_factory=lambda: [
             WorkflowStepConfig(id="scout", label="Scout"),
@@ -84,11 +107,9 @@ class SessionConfig(BaseModel):
     @model_validator(mode="after")
     def apply_rig_defaults(self) -> "SessionConfig":
         """Copy defaults from rig globals if not set."""
-        for gc in self.plan.grid_configs.values():
-            if gc.z_step_um < 0:
-                gc.z_step_um = self.rig.globals.default_z_step_um
-        if self.tile_order == "unset":
-            self.tile_order = self.rig.globals.default_tile_order
+        for pp in self.plan.profiles:
+            if pp.grid.z_step_um < 0:
+                pp.grid.z_step_um = self.rig.globals.default_z_step_um
         return self
 
     def resolve_metadata(self) -> ExperimentMetadata:
@@ -98,33 +119,64 @@ class SessionConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: Path) -> "SessionConfig":
-        """Load from .voxel.yaml file, preserving anchors for round-tripping."""
+        """Load from .voxel.yaml file, preserving anchors for round-tripping.
+
+        Handles three formats:
+        1. New: plan.profiles (list) + plan.tile_order + plan.interleaving
+        2. Current: plan.grid_configs (dict) + root tile_order → migrate
+        3. Legacy: no plan key → migrate from flat grid_config + stacks
+        """
         with path.open() as f:
             raw_data = yaml.load(f)
 
         rig = VoxelRigConfig.model_validate(raw_data.get("rig", {}))
+        default_tile_order = rig.globals.default_tile_order
 
-        # Build AcquisitionPlan — new format or migrate from old flat fields
         if "plan" in raw_data:
             plan_data = raw_data["plan"]
+
+            if "profiles" in plan_data and isinstance(plan_data["profiles"], list):
+                # Format 1: New list-based profiles
+                profiles = [PlanProfile.model_validate(p) for p in plan_data["profiles"]]
+                tile_order = plan_data.get("tile_order", "row_wise")
+                interleaving = plan_data.get("interleaving", "position_first")
+            else:
+                # Format 2: Current dict-based grid_configs → migrate to list
+                gc_dict = plan_data.get("grid_configs", {})
+                profiles = [
+                    PlanProfile(profile_id=pid, grid=GridConfig.model_validate(gc)) for pid, gc in gc_dict.items()
+                ]
+                # Move root tile_order into plan
+                raw_tile_order = raw_data.get("tile_order", "row_wise")
+                tile_order = default_tile_order if raw_tile_order == "unset" else raw_tile_order
+                interleaving = "position_first"
+
+            stacks = [Stack.model_validate(s) for s in plan_data.get("stacks", [])]
             plan = AcquisitionPlan(
-                grid_configs={k: GridConfig.model_validate(v) for k, v in plan_data.get("grid_configs", {}).items()},
-                stacks=[Stack.model_validate(s) for s in plan_data.get("stacks", [])],
+                profiles=profiles,
+                tile_order=tile_order,
+                interleaving=interleaving,
+                stacks=stacks,
             )
         else:
-            # Backward compat: migrate old-style grid_config + stacks
+            # Format 3: Legacy flat grid_config + stacks
             old_gc = GridConfig.model_validate(raw_data.get("grid_config", {}))
             old_stacks = [Stack.model_validate(s) for s in raw_data.get("stacks", [])]
 
-            grid_configs: dict[str, GridConfig] = {}
             profile_ids_with_stacks = {s.profile_id for s in old_stacks}
             if not profile_ids_with_stacks and rig.profiles:
-                # Fallback: assign to first rig profile
                 profile_ids_with_stacks = {next(iter(rig.profiles))}
-            for pid in profile_ids_with_stacks:
-                grid_configs[pid] = old_gc.model_copy()
 
-            plan = AcquisitionPlan(grid_configs=grid_configs, stacks=old_stacks)
+            profiles = [PlanProfile(profile_id=pid, grid=old_gc.model_copy()) for pid in profile_ids_with_stacks]
+            raw_tile_order = raw_data.get("tile_order", "row_wise")
+            tile_order = default_tile_order if raw_tile_order == "unset" else raw_tile_order
+
+            plan = AcquisitionPlan(
+                profiles=profiles,
+                tile_order=tile_order,
+                interleaving="position_first",
+                stacks=old_stacks,
+            )
 
         kwargs: dict[str, Any] = {
             "rig": rig,
@@ -132,7 +184,6 @@ class SessionConfig(BaseModel):
             "metadata_target": raw_data.get("metadata_target", BASE_METADATA_TARGET) or BASE_METADATA_TARGET,
             "metadata": raw_data.get("metadata", {}),
             "plan": plan,
-            "tile_order": raw_data.get("tile_order", "snake_row"),
         }
         if "workflow_steps" in raw_data:
             kwargs["workflow_steps"] = [WorkflowStepConfig.model_validate(ws) for ws in raw_data["workflow_steps"]]
@@ -163,14 +214,21 @@ class SessionConfig(BaseModel):
 
         rig = VoxelRigConfig.model_validate(rig_data)
 
-        config = cls(rig=rig, session_name=session_name, metadata_target=metadata_target, metadata=metadata or {})
+        plan = AcquisitionPlan(tile_order=rig.globals.default_tile_order)
+        config = cls(
+            rig=rig, session_name=session_name, metadata_target=metadata_target, metadata=metadata or {}, plan=plan
+        )
         config._raw_data = {
             "rig": rig_data,
             "session_name": config.session_name,
             "metadata_target": config.metadata_target,
             "metadata": config.metadata,
-            "plan": {"grid_configs": {}, "stacks": []},
-            "tile_order": config.tile_order,
+            "plan": {
+                "profiles": [],
+                "tile_order": config.plan.tile_order,
+                "interleaving": config.plan.interleaving,
+                "stacks": [],
+            },
             "workflow_steps": [ws.model_dump(mode="json") for ws in config.workflow_steps],
             "workflow_committed": config.workflow_committed,
         }
@@ -187,7 +245,9 @@ class SessionConfig(BaseModel):
         Cross-platform: uses Path.replace() which is atomic on POSIX, Linux, and Windows.
         """
         plan_data = {
-            "grid_configs": {k: v.model_dump() for k, v in self.plan.grid_configs.items()},
+            "profiles": [{"profile_id": pp.profile_id, "grid": pp.grid.model_dump()} for pp in self.plan.profiles],
+            "tile_order": self.plan.tile_order,
+            "interleaving": self.plan.interleaving,
             "stacks": [s.model_dump(mode="json") for s in self.plan.stacks],
         }
 
@@ -197,12 +257,15 @@ class SessionConfig(BaseModel):
             self._raw_data["metadata_target"] = self.metadata_target
             self._raw_data["metadata"] = self.metadata
             self._raw_data["plan"] = plan_data
-            self._raw_data["tile_order"] = self.tile_order
             self._raw_data["workflow_steps"] = [ws.model_dump(mode="json") for ws in self.workflow_steps]
             self._raw_data["workflow_committed"] = self.workflow_committed
             # Remove old flat keys on forward migration
             self._raw_data.pop("grid_config", None)
             self._raw_data.pop("stacks", None)
+            self._raw_data.pop("tile_order", None)
+            # Remove old dict-based grid_configs from plan if present
+            if isinstance(self._raw_data.get("plan"), dict):
+                self._raw_data["plan"].pop("grid_configs", None)
             # Sync props/setup changes into raw rig profiles
             if "profiles" in self._raw_data.get("rig", {}):
                 for profile_id, profile in self.rig.profiles.items():
@@ -230,7 +293,6 @@ class SessionConfig(BaseModel):
                 "metadata_target": self.metadata_target,
                 "metadata": self.metadata,
                 "plan": plan_data,
-                "tile_order": self.tile_order,
                 "workflow_steps": [ws.model_dump(mode="json") for ws in self.workflow_steps],
                 "workflow_committed": self.workflow_committed,
             }

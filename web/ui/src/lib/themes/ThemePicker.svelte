@@ -58,12 +58,7 @@
 	{@const items = variant === 'light' ? lightItems : darkItems}
 	{@const currentId = variant === 'light' ? themes.prefs.current.light : themes.prefs.current.dark}
 	{@const setTheme = variant === 'light' ? themes.setLight.bind(themes) : themes.setDark.bind(themes)}
-	<Select.Root
-		type="single"
-		value={currentId}
-		onValueChange={(v) => v && setTheme(v as ThemeId)}
-		{items}
-	>
+	<Select.Root type="single" value={currentId} onValueChange={(v) => v && setTheme(v as ThemeId)} {items}>
 		<Select.Trigger class={triggerClass}>
 			{@const t = getTheme(currentId)}
 			<span>{t?.name ?? 'Select...'}</span>

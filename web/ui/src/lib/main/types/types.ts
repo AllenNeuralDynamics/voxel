@@ -34,7 +34,7 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
  * Session status - included in AppStatus when a session is active
  * Topic: 'status' (within AppStatus.session)
  */
-import type { TileOrder } from './config.ts';
+import type { Interleaving, TileOrder } from './config.ts';
 
 /**
  * Workflow step state — derived from committed cursor position, not stored per step.
@@ -51,11 +51,20 @@ export interface WorkflowStepConfig {
 }
 
 /**
- * Acquisition plan - per-profile grid configs and flat stacks list.
- * The keys of grid_configs define which profiles are selected for acquisition.
+ * A profile entry in the acquisition plan with its per-profile grid config.
+ */
+export interface PlanProfile {
+	profile_id: string;
+	grid: GridConfig;
+}
+
+/**
+ * Acquisition plan - ordered list of profiles with grid configs, ordering, and stacks.
  */
 export interface AcquisitionPlan {
-	grid_configs: Record<string, GridConfig>;
+	profiles: PlanProfile[];
+	tile_order: TileOrder;
+	interleaving: Interleaving;
 	stacks: Stack[];
 }
 
@@ -87,7 +96,6 @@ export interface SessionStatus {
 
 	// Convenience fields (active profile's data)
 	grid_config: GridConfig | null;
-	tile_order: TileOrder;
 	tiles: Tile[];
 	stacks: Stack[];
 

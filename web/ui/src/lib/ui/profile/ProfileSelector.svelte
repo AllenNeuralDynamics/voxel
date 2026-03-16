@@ -52,7 +52,7 @@
 
 	function profileStatus(id: string): 'stacks' | 'in-plan' | null {
 		if (session.stacks.some((s) => s.profile_id === id)) return 'stacks';
-		if (id in session.plan.grid_configs) return 'in-plan';
+		if (session.plan.profiles.some((p) => p.profile_id === id)) return 'in-plan';
 		return null;
 	}
 

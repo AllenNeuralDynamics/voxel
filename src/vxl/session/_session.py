@@ -7,14 +7,14 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from vxl.config import TileOrder
+from vxl.config import Interleaving, TileOrder
 from vxl.daq.wave import validate_waveform
 from vxl.metadata import BASE_METADATA_TARGET, resolve_metadata_class
 from vxl.rig import RigMode, VoxelRig
 from vxl.sync import FrameTiming
 from vxl.tile import Stack, StackResult, StackStatus, Tile
 
-from ._config import AcquisitionPlan, GridConfig, SessionConfig
+from ._config import AcquisitionPlan, GridConfig, PlanProfile, SessionConfig
 from ._workflow import StepState, Workflow, WorkflowStepConfig
 
 
@@ -133,12 +133,12 @@ class Session:
         pid = self._rig.active_profile_id
         if pid is None:
             return None
-        return self._config.plan.grid_configs.get(pid)
+        return self._config.plan.get_grid(pid)
 
     @property
     def tile_order(self) -> TileOrder:
         """Get the current tile ordering."""
-        return self._config.tile_order
+        return self._config.plan.tile_order
 
     @property
     def workflow(self) -> Workflow:
@@ -302,17 +302,17 @@ class Session:
         """Add a profile to the acquisition plan with a default GridConfig."""
         if profile_id not in self._rig.config.profiles:
             raise ValueError(f"Profile '{profile_id}' does not exist in rig config")
-        if profile_id in self._config.plan.grid_configs:
+        if self._config.plan.has_profile(profile_id):
             return  # already added, idempotent
         gc = GridConfig(z_step_um=self._rig.config.globals.default_z_step_um)
-        self._config.plan.grid_configs[profile_id] = gc
+        self._config.plan.profiles.append(PlanProfile(profile_id=profile_id, grid=gc))
         self._save()
 
     def remove_acquisition_profile(self, profile_id: str) -> None:
         """Remove a profile from the acquisition plan and all its stacks."""
-        if profile_id not in self._config.plan.grid_configs:
+        if not self._config.plan.has_profile(profile_id):
             raise ValueError(f"Profile '{profile_id}' is not in the acquisition plan")
-        del self._config.plan.grid_configs[profile_id]
+        self._config.plan.profiles = [p for p in self._config.plan.profiles if p.profile_id != profile_id]
         self._config.plan.stacks = [s for s in self._config.plan.stacks if s.profile_id != profile_id]
         self._save()
 
@@ -626,24 +626,53 @@ class Session:
 
     def set_tile_order(self, order: TileOrder) -> None:
         """Set tile order. Re-sorts stack list."""
-        self._config.tile_order = order
+        self._config.plan.tile_order = order
+        self._sort_stacks()
+        self._save()
+
+    def set_interleaving(self, interleaving: Interleaving) -> None:
+        """Set interleaving mode. Re-sorts stack list."""
+        self._config.plan.interleaving = interleaving
+        self._sort_stacks()
+        self._save()
+
+    def reorder_profiles(self, profile_ids: list[str]) -> None:
+        """Reorder profiles in the plan. Re-sorts stack list."""
+        plan = self._config.plan
+        by_id = {p.profile_id: p for p in plan.profiles}
+        plan.profiles = [by_id[pid] for pid in profile_ids if pid in by_id]
         self._sort_stacks()
         self._save()
 
     def _sort_stacks(self) -> None:
-        """Sort stacks according to tile_order."""
-        order = self._config.tile_order
+        """Sort stacks according to tile_order and interleaving."""
+        plan = self._config.plan
+        order = plan.tile_order
 
-        if order in {"row_wise", "unset"}:
-            self._config.plan.stacks.sort(key=lambda s: (s.row, s.col))
-        elif order == "column_wise":
-            self._config.plan.stacks.sort(key=lambda s: (s.col, s.row))
-        elif order == "snake_row":
-            # Rows go left-to-right, right-to-left alternating
-            self._config.plan.stacks.sort(key=lambda s: (s.row, s.col if s.row % 2 == 0 else -s.col))
-        elif order == "snake_column":
-            # Columns go top-to-bottom, bottom-to-top alternating
-            self._config.plan.stacks.sort(key=lambda s: (s.col, s.row if s.col % 2 == 0 else -s.row))
+        if order == "custom":
+            return  # stack list order is authoritative
+
+        profile_rank = {p.profile_id: i for i, p in enumerate(plan.profiles)}
+
+        def spatial_key(s: Stack) -> tuple[int, ...]:
+            if order == "row_wise":
+                return (s.row, s.col)
+            if order == "column_wise":
+                return (s.col, s.row)
+            if order == "snake_row":
+                return (s.row, s.col if s.row % 2 == 0 else -s.col)
+            if order == "snake_column":
+                return (s.col, s.row if s.col % 2 == 0 else -s.row)
+            return (s.row, s.col)
+
+        def sort_key(s: Stack) -> tuple[int, ...]:
+            spatial = spatial_key(s)
+            p_rank = profile_rank.get(s.profile_id, len(plan.profiles))
+            if plan.interleaving == "profile_first":
+                return (p_rank, *spatial)
+            return (*spatial, p_rank)  # position_first
+
+        plan.stacks.sort(key=sort_key)
 
     # ==================== Acquisition ====================
 

@@ -30,24 +30,26 @@
 <script lang="ts">
 	import { ChevronLeft, ChevronRight } from '$lib/icons';
 	import { cn } from '$lib/utils';
-	import type { Workflow } from '$lib/main';
+	import type { Session } from '$lib/main';
 
 	interface Props {
-		workflow: Workflow;
+		session: Session;
 		viewId: string;
 		onViewChange?: (id: string) => void;
 		class?: string;
 	}
 
-	let { workflow, viewId, onViewChange, class: className }: Props = $props();
+	let { session, viewId, onViewChange, class: className }: Props = $props();
 
-	function handleBack() {
-		const stepId = workflow.back();
+	const workflow = $derived(session.workflow);
+
+	async function handleBack() {
+		const stepId = await session.workflowBack();
 		if (stepId) onViewChange?.(stepId);
 	}
 
-	function handleNext() {
-		const stepId = workflow.next();
+	async function handleNext() {
+		const stepId = await session.workflowNext();
 		onViewChange?.(stepId ?? 'acquisition');
 	}
 </script>

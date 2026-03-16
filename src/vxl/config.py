@@ -6,7 +6,8 @@ from rigup.device.base import CommandRequest
 from rigup import RigConfig
 from vxl.sync import SyncTaskData
 
-TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column", "unset"]
+TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column", "custom"]
+Interleaving = Literal["position_first", "profile_first"]
 
 
 class GlobalsConfig(BaseModel):

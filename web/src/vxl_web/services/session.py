@@ -1,10 +1,11 @@
 """Session-level service for Voxel acquisition control.
 
 This service owns the Session and RigService, handling:
-- Session state management (grid, stacks)
+- Session state management
 - Acquisition control
+- Session info/status/metadata endpoints
 
-It receives a broadcast callback from AppService for client communication.
+Plan, workflow, and rig endpoints are in their own modules.
 """
 
 import logging
@@ -16,17 +17,14 @@ from pydantic import BaseModel, Field
 
 from vxl import AcquisitionPlan, RigMode, Session
 from vxl.camera.preview import PreviewConfig
-from vxl.config import TileOrder
 from vxl.metadata import resolve_metadata_class
 from vxl.session import GridConfig, WorkflowStepConfig
 from vxl.tile import Stack, StackStatus, Tile
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
-from .rig import router as rig_router
 
-session_router = APIRouter(tags=["session"])
-session_router.include_router(rig_router)  # Include rig routes under session router
+info_router = APIRouter(prefix="/session", tags=["session"])
 log = logging.getLogger(__name__)
 
 
@@ -64,7 +62,6 @@ class SessionStatus(BaseModel):
 
     # Convenience fields (active profile's data)
     grid_config: GridConfig | None
-    tile_order: TileOrder
     tiles: list[Tile]
     stacks: list[Stack]
 
@@ -135,7 +132,6 @@ class SessionService:
             workflow_committed=self.session.workflow_committed,
             plan=self.session.plan,
             grid_config=self.session.grid_config,
-            tile_order=self.session.tile_order,
             tiles=tiles,
             stacks=self.session.stacks,
             fov_um=fov_um,
@@ -145,197 +141,25 @@ class SessionService:
 
     # ==================== Message Handling ====================
 
-    async def handle_message(self, client_id: str, topic: str, payload: dict[str, Any]) -> None:  # noqa: C901
+    async def handle_message(self, client_id: str, topic: str, payload: dict[str, Any]) -> None:
         """Handle incoming message from a client.
 
-        Args:
-            client_id: The client ID (for error context).
-            topic: The message topic.
-            payload: The message payload.
+        Only handles rig-level WS topics (preview/*, device/*, profile/update)
+        and acquisition topics (acq/start, acq/stop).
+        Plan, workflow, and profile-prop topics are now REST-only.
         """
-        # Try rig service first
+        # Try rig service first (preview/*, device/*, profile/update)
         if await self.rig_service.handle_message(topic, payload):
             return
 
-        # Handle session-level topics
+        # Handle acquisition topics
         match topic:
-            case "grid/set_offset":
-                await self._handle_grid_offset(payload)
-            case "grid/set_overlap":
-                await self._handle_grid_overlap(payload)
-            case "grid/set_tile_order":
-                await self._handle_tile_order(payload)
-            case "stacks/add":
-                await self._handle_stacks_add(payload)
-            case "stacks/edit":
-                await self._handle_stacks_edit(payload)
-            case "stacks/remove":
-                await self._handle_stacks_remove(payload)
-            case "plan/add_profile":
-                await self._handle_plan_add_profile(payload)
-            case "plan/remove_profile":
-                await self._handle_plan_remove_profile(payload)
-            case "workflow/next":
-                await self._handle_workflow_next()
-            case "workflow/reopen":
-                await self._handle_workflow_reopen(payload)
-            case "profile/save_props":
-                await self._handle_save_props(payload)
-            case "profile/update_waveforms":
-                await self._handle_update_waveforms(payload)
-            case "profile/apply_props":
-                await self._handle_apply_props(payload)
             case "acq/start":
                 await self.handle_acq_start(payload)
             case "acq/stop":
                 await self.handle_acq_stop()
             case _:
                 log.warning("Unknown topic from client %s: %s", client_id, topic)
-
-    # ==================== Acquisition Plan ====================
-
-    async def _handle_plan_add_profile(self, payload: dict[str, Any]) -> None:
-        """Handle adding a profile to the acquisition plan."""
-        profile_id = payload.get("profile_id")
-        if not profile_id:
-            raise ValueError("Missing profile_id")
-        self.session.add_acquisition_profile(profile_id)
-        self.broadcast({}, with_status=True)
-
-    async def _handle_plan_remove_profile(self, payload: dict[str, Any]) -> None:
-        """Handle removing a profile from the acquisition plan."""
-        profile_id = payload.get("profile_id")
-        if not profile_id:
-            raise ValueError("Missing profile_id")
-        self.session.remove_acquisition_profile(profile_id)
-        self.broadcast({}, with_status=True)
-
-    # ==================== Workflow ====================
-
-    async def _handle_workflow_next(self) -> None:
-        """Handle workflow next step request."""
-        self.session.workflow_next()
-        self.broadcast({}, with_status=True)
-
-    async def _handle_workflow_reopen(self, payload: dict[str, Any]) -> None:
-        """Handle workflow reopen step request."""
-        step_id = payload.get("step_id")
-        if not step_id:
-            raise ValueError("Missing step_id")
-        self.session.workflow_reopen(step_id)
-        self.broadcast({}, with_status=True)
-
-    # ==================== Device Props ====================
-
-    async def _handle_save_props(self, payload: dict[str, Any]) -> None:
-        """Handle saving device properties to the active profile."""
-        if payload.get("all", False):
-            saved = await self.session.save_all_device_props()
-            self.broadcast(
-                {"topic": "profile/props_saved", "payload": {"devices": saved}},
-                with_status=True,
-            )
-        else:
-            device_id = payload.get("device_id")
-            if not device_id:
-                raise ValueError("Missing 'device_id'")
-            await self.session.save_device_props(device_id)
-            self.broadcast(
-                {"topic": "profile/props_saved", "payload": {"device_id": device_id}},
-                with_status=True,
-            )
-
-    async def _handle_update_waveforms(self, payload: dict[str, Any]) -> None:
-        """Handle waveform update for the active profile."""
-        await self.session.update_profile_waveforms(
-            waveforms=payload.get("waveforms"),
-            timing=payload.get("timing"),
-        )
-        self.rig_service.broadcast_waveforms()
-        self.broadcast({}, with_status=True)
-
-    async def _handle_apply_props(self, _payload: dict[str, Any]) -> None:
-        """Handle applying saved profile properties to hardware."""
-        applied = await self.session.apply_profile_props()
-        self.broadcast(
-            {"topic": "profile/props_applied", "payload": {"devices": applied}},
-            with_status=True,
-        )
-
-    # ==================== Grid Management ====================
-
-    async def _handle_grid_offset(self, payload: dict[str, Any]) -> None:
-        """Handle grid offset update."""
-        x_offset = payload.get("x_offset_um")
-        y_offset = payload.get("y_offset_um")
-
-        if x_offset is None or y_offset is None:
-            raise ValueError("Missing x_offset_um or y_offset_um")
-
-        self.session.set_grid_offset(x_offset, y_offset)
-        # Status broadcast includes grid_config, tiles, and stacks
-        self.broadcast({}, with_status=True)
-
-    async def _handle_grid_overlap(self, payload: dict[str, Any]) -> None:
-        """Handle grid overlap update."""
-        overlap_x = payload.get("overlap_x")
-        overlap_y = payload.get("overlap_y")
-
-        if overlap_x is None or overlap_y is None:
-            raise ValueError("Missing overlap_x or overlap_y")
-
-        self.session.set_overlap(overlap_x, overlap_y)
-        # Status broadcast includes grid_config, tiles, and stacks
-        self.broadcast({}, with_status=True)
-
-    async def _handle_tile_order(self, payload: dict[str, Any]) -> None:
-        """Handle tile order update."""
-        tile_order = payload.get("tile_order")
-
-        if tile_order is None:
-            raise ValueError("Missing tile_order")
-
-        self.session.set_tile_order(tile_order)
-        # Status broadcast includes tile_order and stacks (re-sorted)
-        self.broadcast({}, with_status=True)
-
-    # ==================== Stack Management ====================
-
-    async def _handle_stacks_add(self, payload: dict[str, Any]) -> None:
-        """Handle bulk stack add request.
-
-        Payload: { "stacks": [{ row, col, z_start_um, z_end_um }, ...] }
-        """
-        stacks = payload.get("stacks")
-        if not stacks or not isinstance(stacks, list):
-            raise ValueError("Missing or invalid 'stacks' array")
-
-        self.session.add_stacks(stacks)
-        self.broadcast({}, with_status=True)
-
-    async def _handle_stacks_edit(self, payload: dict[str, Any]) -> None:
-        """Handle bulk stack edit request.
-
-        Payload: { "edits": [{ row, col, z_start_um?, z_end_um? }, ...] }
-        """
-        edits = payload.get("edits")
-        if not edits or not isinstance(edits, list):
-            raise ValueError("Missing or invalid 'edits' array")
-
-        self.session.edit_stacks(edits)
-        self.broadcast({}, with_status=True)
-
-    async def _handle_stacks_remove(self, payload: dict[str, Any]) -> None:
-        """Handle bulk stack remove request.
-
-        Payload: { "positions": [{ row, col }, ...] }
-        """
-        positions = payload.get("positions")
-        if not positions or not isinstance(positions, list):
-            raise ValueError("Missing or invalid 'positions' array")
-
-        self.session.remove_stacks(positions)
-        self.broadcast({}, with_status=True)
 
     # ==================== Acquisition ====================
 
@@ -427,28 +251,18 @@ class SessionService:
         )
 
 
-# ==================== REST Endpoints ====================
-# Note: These require an active session. AppService guards access.
+# ==================== Dependencies ====================
 
 
 def get_session_service(request: Request) -> SessionService:
-    """Dependency helper for HTTP routes."""
+    """Dependency helper for HTTP routes requiring an active session."""
     app_service = request.app.state.app_service
     if app_service.session_service is None:
         raise HTTPException(status_code=503, detail="No active session")
     return app_service.session_service
 
 
-@session_router.get("/session/info")
-async def get_session_info(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionInfo:
-    """Get static session information (fetched once at session start)."""
-    return service.get_info()
-
-
-@session_router.get("/session/status")
-async def get_session_status(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionStatus:
-    """Get current session status."""
-    return await service.get_status()
+# ==================== REST Endpoints ====================
 
 
 class MetadataUpdateRequest(BaseModel):
@@ -457,7 +271,19 @@ class MetadataUpdateRequest(BaseModel):
     metadata: dict[str, Any]
 
 
-@session_router.patch("/session/metadata")
+class AcquireRequest(BaseModel):
+    """Request model for starting acquisition."""
+
+    tile_id: str | None = Field(default=None, description="Specific tile to acquire, or None for all pending")
+
+
+@info_router.get("/info")
+async def get_session_info(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionInfo:
+    """Get static session information (fetched once at session start)."""
+    return service.get_info()
+
+
+@info_router.patch("/metadata")
 async def update_metadata(
     request: MetadataUpdateRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
@@ -469,180 +295,3 @@ async def update_metadata(
         return {"metadata": service.session.metadata}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@session_router.get("/session/grid")
-async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig | None:
-    """Get current grid configuration for the active profile."""
-    return service.session.grid_config
-
-
-class GridUpdateRequest(BaseModel):
-    """Request model for updating grid configuration."""
-
-    x_offset_um: float | None = None
-    y_offset_um: float | None = None
-    overlap_x: float | None = None
-    overlap_y: float | None = None
-
-
-@session_router.patch("/session/grid")
-async def update_grid(
-    request: GridUpdateRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> GridConfig | None:
-    """Update grid configuration for the active profile."""
-    try:
-        if request.x_offset_um is not None and request.y_offset_um is not None:
-            service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
-        if request.overlap_x is not None and request.overlap_y is not None:
-            service.session.set_overlap(request.overlap_x, request.overlap_y)
-
-        # Status broadcast includes grid_config, tiles, and stacks
-        service.broadcast({}, with_status=True)
-        return service.session.grid_config
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e  # Conflict - grid locked
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-class TileOrderRequest(BaseModel):
-    """Request model for setting tile order."""
-
-    tile_order: TileOrder
-
-
-@session_router.put("/session/tile-order")
-async def set_tile_order(
-    request: TileOrderRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict[str, TileOrder]:
-    """Set tile acquisition order."""
-    service.session.set_tile_order(request.tile_order)
-    service.broadcast({}, with_status=True)
-    return {"tile_order": service.session.tile_order}
-
-
-@session_router.get("/session/stacks")
-async def list_stacks(service: Annotated[SessionService, Depends(get_session_service)]) -> dict:
-    """Get all stacks."""
-    return {
-        "stacks": [s.model_dump() for s in service.session.stacks],
-        "count": len(service.session.stacks),
-    }
-
-
-class StackInput(BaseModel):
-    """Input model for a single stack."""
-
-    row: int
-    col: int
-    z_start_um: float
-    z_end_um: float
-
-
-class AddStacksRequest(BaseModel):
-    """Request model for adding stacks (bulk)."""
-
-    stacks: list[StackInput]
-
-
-@session_router.post("/session/stacks")
-async def add_stacks(
-    request: AddStacksRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict:
-    """Add stacks at the specified grid positions (bulk)."""
-    try:
-        stacks = service.session.add_stacks([s.model_dump() for s in request.stacks])
-        service.broadcast({}, with_status=True)
-        return {"added": len(stacks), "stacks": [s.model_dump() for s in stacks]}
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-class StackEditInput(BaseModel):
-    """Input model for editing a single stack."""
-
-    row: int
-    col: int
-    z_start_um: float | None = None
-    z_end_um: float | None = None
-
-
-class EditStacksRequest(BaseModel):
-    """Request model for editing stacks (bulk)."""
-
-    edits: list[StackEditInput]
-
-
-@session_router.patch("/session/stacks")
-async def edit_stacks(
-    request: EditStacksRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict:
-    """Edit stacks' z parameters (bulk)."""
-    try:
-        stacks = service.session.edit_stacks([e.model_dump(exclude_none=True) for e in request.edits])
-        service.broadcast({}, with_status=True)
-        return {"edited": len(stacks), "stacks": [s.model_dump() for s in stacks]}
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-class StackPosition(BaseModel):
-    """Position identifier for a stack."""
-
-    row: int
-    col: int
-
-
-class RemoveStacksRequest(BaseModel):
-    """Request model for removing stacks (bulk)."""
-
-    positions: list[StackPosition]
-
-
-@session_router.delete("/session/stacks")
-async def remove_stacks(
-    request: RemoveStacksRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict:
-    """Remove stacks (bulk)."""
-    try:
-        service.session.remove_stacks([p.model_dump() for p in request.positions])
-        service.broadcast({}, with_status=True)
-        return {"removed": len(request.positions)}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-class AcquireRequest(BaseModel):
-    """Request model for starting acquisition."""
-
-    tile_id: str | None = Field(default=None, description="Specific tile to acquire, or None for all pending")
-
-
-@session_router.post("/session/acquire")
-async def start_acquisition(
-    request: AcquireRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict:
-    """Start acquisition."""
-    if service.session.rig.mode == RigMode.ACQUIRING:
-        raise HTTPException(status_code=409, detail="Acquisition already in progress")
-
-    await service.handle_acq_start({"tile_id": request.tile_id})
-    return {"status": "started", "tile_id": request.tile_id}
-
-
-@session_router.post("/session/acquire/stop")
-async def stop_acquisition(service: Annotated[SessionService, Depends(get_session_service)]) -> dict:
-    """Stop acquisition."""
-    await service.handle_acq_stop()
-    return {"status": "stopping"}

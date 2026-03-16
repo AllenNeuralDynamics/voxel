@@ -295,7 +295,7 @@ export class App {
 
 	async #fetchConfig(): Promise<VoxelRigConfig | null> {
 		try {
-			const response = await fetch(`${this.#client.baseUrl}/api/config`);
+			const response = await fetch(`${this.#client.baseUrl}/api/rig/config`);
 			if (!response.ok) {
 				throw new Error(`Failed to fetch config: ${response.statusText}`);
 			}

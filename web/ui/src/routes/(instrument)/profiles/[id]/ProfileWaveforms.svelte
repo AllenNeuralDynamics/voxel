@@ -105,12 +105,22 @@
 		editingWaveform = null;
 	}
 
-	function commitEditing() {
+	async function commitEditing() {
 		if (!selectedDeviceId || !editingWaveform) return;
-		session.client.send({
-			topic: 'profile/update_waveforms',
-			payload: { waveforms: { [selectedDeviceId]: editingWaveform } }
-		});
+		try {
+			const res = await fetch(`${session.client.baseUrl}/api/rig/profile/waveforms`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ waveforms: { [selectedDeviceId]: editingWaveform } })
+			});
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({ detail: res.statusText }));
+				throw new Error(data.detail || res.statusText);
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to update waveform');
+			return;
+		}
 		selectedDeviceId = null;
 		editingWaveform = null;
 	}
@@ -154,13 +164,22 @@
 		timingDirty = true;
 	}
 
-	function commitTiming() {
+	async function commitTiming() {
 		if (!canEdit || !timingDirty) return;
-		session.client.send({
-			topic: 'profile/update_waveforms',
-			payload: { timing: localTiming }
-		});
-		timingDirty = false;
+		try {
+			const res = await fetch(`${session.client.baseUrl}/api/rig/profile/waveforms`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ timing: localTiming })
+			});
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({ detail: res.statusText }));
+				throw new Error(data.detail || res.statusText);
+			}
+			timingDirty = false;
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to update timing');
+		}
 	}
 
 	function cancelTiming() {
@@ -594,9 +613,7 @@
 									stroke-dasharray="6 3"
 									opacity="0.4"
 								/>
-								<text x={plotPadding.left + 4} y={y - 3} class="text-xs" fill="#ef4444" opacity="0.6">
-									DAQ min
-								</text>
+								<text x={plotPadding.left + 4} y={y - 3} class="text-xs" fill="#ef4444" opacity="0.6"> DAQ min </text>
 							{/if}
 							{#if daqRange.max >= plotVRange.min && daqRange.max <= plotVRange.max}
 								{@const y = toSvgY(daqRange.max)}
@@ -610,9 +627,7 @@
 									stroke-dasharray="6 3"
 									opacity="0.4"
 								/>
-								<text x={plotPadding.left + 4} y={y + 10} class="text-xs" fill="#ef4444" opacity="0.6">
-									DAQ max
-								</text>
+								<text x={plotPadding.left + 4} y={y + 10} class="text-xs" fill="#ef4444" opacity="0.6"> DAQ max </text>
 							{/if}
 						{/if}
 

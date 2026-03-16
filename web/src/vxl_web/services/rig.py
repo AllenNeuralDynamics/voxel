@@ -21,7 +21,7 @@ from vxl.camera.preview import PreviewCrop, PreviewLevels
 from vxl.config import VoxelRigConfig
 from vxlib import get_colormap_catalog
 
-router = APIRouter(tags=["rig"])
+rig_router = APIRouter(prefix="/rig", tags=["rig"])
 log = logging.getLogger(__name__)
 
 
@@ -284,7 +284,15 @@ class RigService:
         return self.rig.preview.is_active
 
 
-# ==================== REST Endpoints ====================
+# ==================== Dependencies ====================
+
+
+def _get_session_service(request: Request) -> Any:
+    """Get SessionService from app state (used for profile prop endpoints)."""
+    app_service = request.app.state.app_service
+    if app_service.session_service is None:
+        raise HTTPException(status_code=503, detail="No active session")
+    return app_service.session_service
 
 
 def get_rig(request: Request) -> VoxelRig:
@@ -303,22 +311,7 @@ def get_rig_service(request: Request) -> RigService:
     return app_service.session_service.rig_service
 
 
-@router.get("/config")
-async def get_config(rig: Annotated[VoxelRig, Depends(get_rig)]) -> VoxelRigConfig:
-    """Get the full rig configuration."""
-    return rig.config
-
-
-@router.get("/daq/waveforms")
-async def get_waveforms(service: Annotated[RigService, Depends(get_rig_service)]) -> dict:
-    """Get computed DAQ waveform traces for the active sync task."""
-    return service.get_waveform_traces()
-
-
-@router.get("/colormaps")
-async def get_colormaps() -> list:
-    """Return the colormap catalog for the UI."""
-    return [group.model_dump() for group in get_colormap_catalog()]
+# ==================== Request Models ====================
 
 
 class SetProfileRequest(BaseModel):
@@ -327,12 +320,42 @@ class SetProfileRequest(BaseModel):
     profile_id: str
 
 
-@router.post("/profiles/active")
+class SavePropsRequest(BaseModel):
+    """Request model for saving device properties to the active profile."""
+
+    device_id: str | None = None
+    all: bool = False
+
+
+class UpdateWaveformsRequest(BaseModel):
+    """Request model for updating waveform definitions."""
+
+    waveforms: dict[str, Any] | None = None
+    timing: dict[str, Any] | None = None
+
+
+class ExecuteCommandRequest(BaseModel):
+    """Request model for executing a device command."""
+
+    args: list[Any] = []
+    kwargs: dict[str, Any] = {}
+
+
+# ==================== REST Endpoints ====================
+
+
+@rig_router.get("/config")
+async def get_config(rig: Annotated[VoxelRig, Depends(get_rig)]) -> VoxelRigConfig:
+    """Get the full rig configuration."""
+    return rig.config
+
+
+@rig_router.post("/profile/active")
 async def set_active_profile(
     request: SetProfileRequest,
     service: Annotated[RigService, Depends(get_rig_service)],
 ) -> dict:
-    """Set the active profile via REST API.
+    """Set the active profile.
 
     This will configure devices (filter wheels, etc.) for the new profile.
     If preview is running, it will seamlessly transition to the new profile's cameras.
@@ -353,7 +376,88 @@ async def set_active_profile(
         raise HTTPException(status_code=500, detail=f"Failed to set active profile: {e!s}") from e
 
 
-@router.get("/devices")
+@rig_router.post("/profile/save-props")
+async def save_props(
+    request: SavePropsRequest,
+    service: Annotated[Any, Depends(_get_session_service)],
+) -> dict:
+    """Save device properties to the active profile.
+
+    Either save a single device (device_id) or all devices (all=True).
+    """
+    if not request.all and not request.device_id:
+        raise HTTPException(status_code=400, detail="Must provide either 'device_id' or 'all: true'")
+
+    try:
+        if request.all:
+            saved = await service.session.save_all_device_props()
+            service.broadcast(
+                {"topic": "profile/props_saved", "payload": {"devices": saved}},
+                with_status=True,
+            )
+            return {"devices": saved, "status": "saved"}
+
+        await service.session.save_device_props(request.device_id)
+        service.broadcast(
+            {"topic": "profile/props_saved", "payload": {"device_id": request.device_id}},
+            with_status=True,
+        )
+        return {"device_id": request.device_id, "status": "saved"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@rig_router.post("/profile/apply-props")
+async def apply_props(
+    service: Annotated[Any, Depends(_get_session_service)],
+) -> dict:
+    """Apply saved profile properties to hardware devices."""
+    try:
+        applied = await service.session.apply_profile_props()
+        service.broadcast(
+            {"topic": "profile/props_applied", "payload": {"devices": applied}},
+            with_status=True,
+        )
+        return {"devices": applied, "status": "applied"}
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@rig_router.patch("/profile/waveforms")
+async def update_waveforms(
+    request: UpdateWaveformsRequest,
+    service: Annotated[Any, Depends(_get_session_service)],
+) -> dict:
+    """Update waveform definitions for the active profile and recreate DAQ tasks."""
+    try:
+        await service.session.update_profile_waveforms(
+            waveforms=request.waveforms,
+            timing=request.timing,
+        )
+        service.rig_service.broadcast_waveforms()
+        service.broadcast({}, with_status=True)
+        return {"status": "updated"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@rig_router.get("/daq/waveforms")
+async def get_waveforms(service: Annotated[RigService, Depends(get_rig_service)]) -> dict:
+    """Get computed DAQ waveform traces for the active sync task."""
+    return service.get_waveform_traces()
+
+
+@rig_router.get("/colormaps")
+async def get_colormaps() -> list:
+    """Return the colormap catalog for the UI."""
+    return [group.model_dump() for group in get_colormap_catalog()]
+
+
+@rig_router.get("/devices")
 async def list_devices(rig: Annotated[VoxelRig, Depends(get_rig)]) -> dict:
     """Get list of all devices with their interfaces."""
     devices_info = {}
@@ -380,7 +484,7 @@ async def list_devices(rig: Annotated[VoxelRig, Depends(get_rig)]) -> dict:
     }
 
 
-@router.get("/devices/{device_id}/properties")
+@rig_router.get("/devices/{device_id}/properties")
 async def get_device_properties(
     device_id: str,
     rig: Annotated[VoxelRig, Depends(get_rig)],
@@ -409,7 +513,7 @@ async def get_device_properties(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.patch("/devices/{device_id}/properties")
+@rig_router.patch("/devices/{device_id}/properties")
 async def set_device_properties_endpoint(
     device_id: str,
     properties: dict[str, Any],
@@ -427,14 +531,7 @@ async def set_device_properties_endpoint(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-class ExecuteCommandRequest(BaseModel):
-    """Request model for executing a device command."""
-
-    args: list[Any] = []
-    kwargs: dict[str, Any] = {}
-
-
-@router.post("/devices/{device_id}/commands/{command_name}")
+@rig_router.post("/devices/{device_id}/commands/{command_name}")
 async def execute_device_command_endpoint(
     device_id: str,
     command_name: str,

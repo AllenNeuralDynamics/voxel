@@ -1,7 +1,12 @@
 /**
  * Tile ordering pattern (matches backend TileOrder from voxel.config)
  */
-export type TileOrder = 'row_wise' | 'column_wise' | 'snake_row' | 'snake_column';
+export type TileOrder = 'row_wise' | 'column_wise' | 'snake_row' | 'snake_column' | 'custom';
+
+/**
+ * Interleaving mode for multi-profile acquisition (matches backend Interleaving from voxel.config)
+ */
+export type Interleaving = 'position_first' | 'profile_first';
 
 /**
  * Global settings for acquisition planning (matches backend GlobalsConfig from voxel.config)

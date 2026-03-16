@@ -27,8 +27,8 @@
 				<Button
 					variant="outline"
 					size="sm"
-					onclick={() => {
-						const stepId = session.workflow.back();
+					onclick={async () => {
+						const stepId = await session.workflowBack();
 						if (stepId) goto(resolve(`/workflow/${stepId}`), { keepFocus: true, noScroll: true });
 					}}
 				>

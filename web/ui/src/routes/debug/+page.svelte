@@ -65,7 +65,7 @@
 		>
 			<!-- Typography -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Typography</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Typography</h3>
 				<div class="flex flex-col gap-1 text-base">
 					<span class="text-fg">fg — Primary text</span>
 					<span class="text-fg-muted">fg-muted — Secondary text</span>
@@ -76,11 +76,11 @@
 
 			<!-- Surfaces -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Surfaces</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Surfaces</h3>
 				<div class="flex gap-3">
 					{#each ['canvas', 'surface', 'panel', 'elevated', 'floating'] as surface (surface)}
 						<div
-							class="text-fg-muted text-xs flex h-20 w-28 items-end rounded-md border border-border p-2 bg-{surface}"
+							class="text-fg-muted flex h-20 w-28 items-end rounded-md border border-border p-2 text-xs bg-{surface}"
 						>
 							{surface}
 						</div>
@@ -90,10 +90,10 @@
 
 			<!-- Borders -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Borders</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Borders</h3>
 				<div class="flex gap-2">
 					{#each ['border', 'border-variant', 'border-focused', 'border-selected', 'border-disabled'] as b (b)}
-						<div class="flex h-12 w-24 items-end rounded-md border-2 border-{b} text-fg-muted text-xs p-2">
+						<div class="flex h-12 w-24 items-end rounded-md border-2 border-{b} text-fg-muted p-2 text-xs">
 							{b.replace('border-', '')}
 						</div>
 					{/each}
@@ -102,10 +102,10 @@
 
 			<!-- Elements -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Elements</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Elements</h3>
 				<div class="flex gap-2">
 					{#each ['element-bg', 'element-hover', 'element-active', 'element-selected'] as el (el)}
-						<div class="text-fg-muted text-xs flex h-12 w-24 items-end rounded-md border border-border p-2 bg-{el}">
+						<div class="text-fg-muted flex h-12 w-24 items-end rounded-md border border-border p-2 text-xs bg-{el}">
 							{el.replace('element-', '')}
 						</div>
 					{/each}
@@ -114,11 +114,11 @@
 
 			<!-- Buttons -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Buttons</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Buttons</h3>
 				<div class="flex flex-col gap-2">
 					{#each sizes as sz (sz)}
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="text-fg-faint text-xs w-6">{sz}</span>
+							<span class="text-fg-faint w-6 text-xs">{sz}</span>
 							<Button size={sz}>Default</Button>
 							<Button size={sz} variant="secondary">Secondary</Button>
 							<Button size={sz} variant="outline">Outline</Button>
@@ -132,11 +132,11 @@
 
 			<!-- Inputs -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Inputs</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Inputs</h3>
 				<div class="flex flex-col gap-3">
 					{#each sizes as sz (sz)}
 						<div class="flex flex-wrap items-end gap-3">
-							<span class="text-fg-faint text-xs w-6 self-center">{sz}</span>
+							<span class="text-fg-faint w-6 self-center text-xs">{sz}</span>
 							<TextInput size={sz} bind:value={textValue} placeholder="Type here…" />
 							<SpinBox size={sz} bind:value={spinValue} min={0} max={100} />
 							<Select size={sz} options={selectOptions} bind:value={selectValue} class="w-40" />
@@ -147,7 +147,7 @@
 
 			<!-- TextArea -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">TextArea</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">TextArea</h3>
 				<div class="max-w-xs">
 					<TextArea size="xs" value="Multi-line text content" />
 				</div>
@@ -155,7 +155,7 @@
 
 			<!-- TagInput -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">TagInput</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">TagInput</h3>
 				<div class="max-w-xs">
 					<TagInput size="xs" value={tags} />
 				</div>
@@ -163,7 +163,7 @@
 
 			<!-- Controls -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Controls</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Controls</h3>
 				<div class="flex flex-wrap items-center gap-6">
 					<div class="flex items-center gap-2">
 						<Checkbox bind:checked size="sm" />
@@ -201,7 +201,7 @@
 
 			<!-- ColorPicker -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">ColorPicker</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">ColorPicker</h3>
 				<div class="flex items-center gap-4">
 					<div class="flex items-center gap-2">
 						<ColorPicker
@@ -215,22 +215,20 @@
 						<ColorPicker color={pickerColor} onColorChange={(c) => (pickerColor = c)} />
 						<span class="text-fg-muted text-sm">No presets</span>
 					</div>
-					<span class="text-fg-muted text-xs font-mono">{pickerColor}</span>
+					<span class="text-fg-muted font-mono text-xs">{pickerColor}</span>
 				</div>
 			</div>
 
 			<!-- Semantic -->
 			<div>
-				<h3 class="text-fg-faint text-xs mb-2">Semantic</h3>
+				<h3 class="text-fg-faint mb-2 text-xs">Semantic</h3>
 				<div class="flex gap-3">
 					{#each ['danger', 'success', 'warning', 'info', 'active'] as s (s)}
 						<div class="flex flex-col gap-1">
-							<div
-								class="text-xs flex h-10 w-24 items-center justify-center rounded-md font-medium text-{s}-fg bg-{s}"
-							>
+							<div class="flex h-10 w-24 items-center justify-center rounded-md text-xs font-medium text-{s}-fg bg-{s}">
 								{s}
 							</div>
-							<div class="text-xs flex h-10 w-24 items-center justify-center rounded-md text-{s} bg-{s}-bg">
+							<div class="flex h-10 w-24 items-center justify-center rounded-md text-xs text-{s} bg-{s}-bg">
 								{s}-bg
 							</div>
 						</div>

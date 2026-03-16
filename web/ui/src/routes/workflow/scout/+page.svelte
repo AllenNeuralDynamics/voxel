@@ -59,7 +59,7 @@
 	const activeTabLabel = $derived(
 		activeTab ? (session.config.profiles[activeTab]?.label ?? sanitizeString(activeTab)) : ''
 	);
-	const isActiveInPlan = $derived(activeTab ? activeTab in session.plan.grid_configs : false);
+	const isActiveInPlan = $derived(activeTab ? session.plan.profiles.some((p) => p.profile_id === activeTab) : false);
 
 	let addDialogOpen = $state(false);
 	let removeDialogOpen = $state(false);

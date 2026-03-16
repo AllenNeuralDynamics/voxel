@@ -2,7 +2,7 @@
 	import { TrashCanOutline, Check, Close, PencilOutline } from '$lib/icons';
 	import { Select, SpinBox } from '$lib/ui/kit';
 	import type { Session } from '$lib/main';
-	import { getStackStatusColor, type TileOrder } from '$lib/main/types';
+	import { getStackStatusColor, type Interleaving, type TileOrder } from '$lib/main/types';
 
 	interface Props {
 		session: Session;
@@ -14,11 +14,21 @@
 		{ value: 'row_wise', label: 'Row-wise' },
 		{ value: 'column_wise', label: 'Column-wise' },
 		{ value: 'snake_row', label: 'Snake (Row)' },
-		{ value: 'snake_column', label: 'Snake (Column)' }
+		{ value: 'snake_column', label: 'Snake (Column)' },
+		{ value: 'custom', label: 'Custom' }
+	];
+
+	const INTERLEAVING_OPTIONS: { value: Interleaving; label: string }[] = [
+		{ value: 'position_first', label: 'Position first' },
+		{ value: 'profile_first', label: 'Profile first' }
 	];
 
 	function handleTileOrderChange(value: string) {
 		session.setTileOrder(value as TileOrder);
+	}
+
+	function handleInterleavingChange(value: string) {
+		session.setInterleaving(value as Interleaving);
 	}
 
 	let profileStacks = $derived(session.stacks.filter((s) => s.profile_id === session.activeProfileId));
@@ -105,9 +115,7 @@
 </script>
 
 {#snippet staticItem(label: string, value: string, unit: string = '')}
-	<div
-		class="flex h-6 cursor-default items-stretch rounded border border-muted bg-transparent font-mono text-xs"
-	>
+	<div class="flex h-6 cursor-default items-stretch rounded border border-muted bg-transparent font-mono text-xs">
 		<span class="text-fg-muted flex shrink-0 items-center ps-1.5 pe-2">{label}</span>
 		<span class="text-fg flex flex-1 items-center px-0.5">{value}</span>
 		<span class="text-fg-muted flex items-center pe-1.5">{unit}</span>
@@ -223,8 +231,10 @@
 	</div>
 {/if}
 
-<div class="flex items-center justify-between border-t border-border p-3 text-xs">
+<div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border p-3 text-xs">
 	<span class="text-fg-muted">Order</span>
 	<Select value={session.tileOrder} options={TILE_ORDER_OPTIONS} onchange={handleTileOrderChange} size="xs" />
+	<span class="text-fg-muted">Interleaving</span>
+	<Select value={session.interleaving} options={INTERLEAVING_OPTIONS} onchange={handleInterleavingChange} size="xs" />
 	{@render staticItem('Z Step', String(session.gridConfig?.z_step_um ?? '—'), 'µm')}
 </div>
