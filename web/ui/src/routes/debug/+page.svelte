@@ -46,7 +46,7 @@
 	<section class="bg-panel min-h-0 overflow-auto p-4">
 		<ThemePicker />
 	</section>
-	<section class="grid h-full min-h-0 grid-rows-[auto_1fr] gap-1 overflow-hidden p-4">
+	<section class="grid h-full min-h-0 grid-rows-[auto_1fr] gap-3 overflow-hidden p-4">
 		<div class="flex h-8 gap-1 rounded-md border border-border text-sm">
 			{#each surfaces as { name }, i (i)}
 				<button
@@ -59,7 +59,6 @@
 				</button>
 			{/each}
 		</div>
-		<div></div>
 		<div
 			class="min-h-0 overflow-auto rounded-lg border border-border {surfaces[activeSurface].bg} flex flex-col gap-6 p-4"
 		>

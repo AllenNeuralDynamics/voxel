@@ -16,6 +16,7 @@ export { default as TagInput, tagInputVariants, type TagInputVariants } from './
 export { default as TextArea, textAreaVariants, type TextAreaVariants } from './TextArea.svelte';
 export { default as TextInput, textInputVariants, type TextInputVariants } from './TextInput.svelte';
 
+export * as SortableList from './sortable-list';
 export * as Collapsible from './cn/collapsible';
 export * as ContextMenu from './cn/context-menu';
 export * as Dialog from './cn/dialog';

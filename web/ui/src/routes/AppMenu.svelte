@@ -19,23 +19,7 @@
 
 	let themePickerOpen = $state(false);
 
-	const connectionStatus = $derived.by(() => {
-		const state = app.client.connectionState ?? 'idle';
-		switch (state) {
-			case 'connected':
-				return { label: 'Connected', message: '' };
-			case 'connecting':
-			case 'reconnecting':
-				return {
-					label: state === 'connecting' ? 'Connecting' : 'Reconnecting',
-					message: app.client.connectionMessage ?? ''
-				};
-			case 'failed':
-				return { label: 'Connection Failed', message: app.client.connectionMessage ?? '' };
-			default:
-				return { label: 'Offline', message: '' };
-		}
-	});
+	const connectionMessage = $derived(app.client.connectionMessage ?? '');
 </script>
 
 {#snippet defaultTrigger()}
@@ -53,7 +37,6 @@
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger
 		class={cn('text-fg-muted hover:text-fg flex cursor-pointer items-center self-stretch transition-colors', className)}
-		title={connectionStatus.label}
 	>
 		{#if app.client.connectionState === 'failed'}
 			{@render (dangerTrigger ?? defaultDangerTrigger)()}
@@ -72,8 +55,17 @@
 						: 'bg-warning'}"
 				></span>
 				<span class="text-fg-muted">
-					{connectionStatus.label}{#if connectionStatus.message}
-						&mdash; {connectionStatus.message}{/if}
+					{#if connectionMessage}
+						{connectionMessage}
+					{:else if app.client.connectionState === 'connecting'}
+						Connecting…
+					{:else if app.client.connectionState === 'reconnecting'}
+						Reconnecting…
+					{:else if app.client.connectionState === 'failed'}
+						Connection Failed
+					{:else}
+						Offline
+					{/if}
 				</span>
 			</DropdownMenu.Label>
 			{#if app.client.connectionState === 'failed'}

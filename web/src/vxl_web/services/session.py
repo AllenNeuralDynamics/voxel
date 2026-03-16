@@ -149,7 +149,7 @@ class SessionService:
         Plan, workflow, and profile-prop topics are now REST-only.
         """
         # Try rig service first (preview/*, device/*, profile/update)
-        if await self.rig_service.handle_message(topic, payload):
+        if await self.rig_service.handle_message(client_id, topic, payload):
             return
 
         # Handle acquisition topics

@@ -126,17 +126,22 @@ class AppService:
 
     # ==================== Client Management ====================
 
-    def _broadcast(self, data: dict[str, Any] | bytes, with_status: bool = False) -> None:
+    def _broadcast(
+        self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None
+    ) -> None:
         """Broadcast to all clients. Dict = JSON message, bytes = binary.
 
         Args:
             data: The message to broadcast. Empty dict is skipped.
             with_status: If True, also schedule a full app status broadcast.
+            exclude: Optional client_id to exclude from this broadcast (e.g. the sender).
         """
         # Only broadcast if there's actual data (skip empty dicts)
         if data:
             msg_type = "bytes" if isinstance(data, bytes) else "json"
-            for queue in self.clients.values():
+            for client_id, queue in self.clients.items():
+                if client_id == exclude:
+                    continue
                 with suppress(asyncio.QueueFull):
                     queue.put_nowait((msg_type, data))
 

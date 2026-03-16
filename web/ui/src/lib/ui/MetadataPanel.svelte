@@ -8,9 +8,10 @@
 
 	interface Props {
 		session: Session;
+		class?: string;
 	}
 
-	const { session }: Props = $props();
+	const { session, class: className }: Props = $props();
 
 	const schema = $derived<JsonSchema | null>(session.info?.metadata_schema ?? null);
 	const metadata = $derived(session.metadata);
@@ -91,7 +92,7 @@
 </script>
 
 {#if schema}
-	<section>
+	<section class={className}>
 		<!-- Header -->
 		<div class="mb-2 flex items-center gap-2">
 			<h3 class="text-fg-muted/70 text-xs font-medium tracking-wide uppercase">Metadata</h3>
@@ -125,11 +126,11 @@
 			{/if}
 		</div>
 
-		<!-- Fields grid: auto label + 1fr value -->
-		<div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2">
+		<!-- Fields grid: fixed label + 1fr value -->
+		<div class="grid grid-cols-[10rem_1fr] items-start gap-x-3 gap-y-2">
 			<MetadataFields {schema} {values} onChange={setDraft} disabled={isFieldDisabled} size="sm">
 				{#snippet field(key, prop, input)}
-					<div class="text-fg-muted/70 max-w-48 pt-1 text-xs" title={sanitizeString(key)}>
+					<div class="text-fg-muted max-w-48 pt-1 text-xs" title={sanitizeString(key)}>
 						<span class="flex items-center gap-1">
 							<span class="truncate">{sanitizeString(key)}</span>
 							{#if isLocked(prop)}

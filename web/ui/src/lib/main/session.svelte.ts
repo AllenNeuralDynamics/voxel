@@ -52,6 +52,7 @@ export class Session {
 	gridConfig = $derived<GridConfig | null>(this.#appStatus?.session?.grid_config ?? null);
 	tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
 	stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
+	activeStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id === this.activeProfileId));
 	tileOrder = $derived<TileOrder>(this.plan.tile_order);
 	interleaving = $derived<Interleaving>(this.plan.interleaving);
 	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
@@ -413,21 +414,22 @@ export class Session {
 	}
 
 	selectWithStacks(): void {
-		const stackPositions = new SvelteSet(this.stacks.map((s) => `${s.row},${s.col}`));
+		const stackPositions = new SvelteSet(this.activeStacks.map((s) => `${s.row},${s.col}`));
 		this.selectTiles(this.tiles.filter((t) => stackPositions.has(`${t.row},${t.col}`)).map((t) => [t.row, t.col]));
 	}
 
 	selectWithoutStacks(): void {
-		const stackPositions = new SvelteSet(this.stacks.map((s) => `${s.row},${s.col}`));
+		const stackPositions = new SvelteSet(this.activeStacks.map((s) => `${s.row},${s.col}`));
 		this.selectTiles(this.tiles.filter((t) => !stackPositions.has(`${t.row},${t.col}`)).map((t) => [t.row, t.col]));
 	}
 
 	selectByStackStatus(status: StackStatus): void {
-		this.selectTiles(this.stacks.filter((s) => s.status === status).map((s) => [s.row, s.col]));
+		this.selectTiles(this.activeStacks.filter((s) => s.status === status).map((s) => [s.row, s.col]));
 	}
 
-	getStack(row: number, col: number): Stack | undefined {
-		return this.stacks.find((s) => s.row === row && s.col === col);
+	getStack(row: number, col: number, profileId?: string | null): Stack | undefined {
+		const pid = profileId ?? this.activeProfileId;
+		return this.stacks.find((s) => s.row === row && s.col === col && s.profile_id === pid);
 	}
 
 	moveToGridCell(row: number, col: number): void {

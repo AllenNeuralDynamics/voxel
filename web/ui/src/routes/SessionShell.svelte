@@ -14,6 +14,7 @@
 	import WorkflowTabs from './WorkflowTabs.svelte';
 	import AppMenu from './AppMenu.svelte';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
+	import StartButton from '$lib/ui/StartButton.svelte';
 	import { cn } from '$lib/utils';
 
 	interface Props {
@@ -142,16 +143,29 @@
 						</button>
 					</nav>
 
-					<!-- Right: Preview -->
-					<Button
-						class="min-w-26"
-						variant={session.preview.isPreviewing ? 'danger' : 'success'}
-						size="lg"
-						onclick={() =>
-							session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
-					>
-						{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-					</Button>
+					<!-- Right: actions -->
+					<StartButton {session} />
+					<!-- <div class={cn('grid gap-2', viewId === 'acquisition' ? 'grid-cols-2' : 'grid-cols-1')}>
+						<Button
+							class="w-full"
+							variant={session.preview.isPreviewing ? 'danger' : 'success'}
+							size="lg"
+							onclick={() =>
+								session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
+						>
+							{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
+						</Button>
+						{#if viewId === 'acquisition'}
+							<Button
+								class="w-full"
+								variant={session.mode === 'acquiring' ? 'danger' : 'default'}
+								size="lg"
+								disabled={session.mode !== 'acquiring' && !session.plan.stacks.some((s) => s.status === 'planned')}
+							>
+								{session.mode === 'acquiring' ? 'Stop Acquisition' : 'Start Acquisition'}
+							</Button>
+						{/if}
+					</div> -->
 				</header>
 				{@render children()}
 			</div>

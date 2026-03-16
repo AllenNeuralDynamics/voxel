@@ -29,7 +29,7 @@
 	// let isPlanning = $derived(session.workflow.stepStates['plan'] === 'active');
 	let isPlanning = true;
 
-	let profileStacks = $derived(session.stacks.filter((s) => s.profile_id === session.activeProfileId));
+	let profileStacks = $derived(session.activeStacks);
 
 	// FOV position relative to stage origin (lower limits)
 	let fovX = $derived(session.stage.x ? session.stage.x.position - session.stage.x.lowerLimit : 0);

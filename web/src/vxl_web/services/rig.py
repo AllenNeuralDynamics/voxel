@@ -28,7 +28,9 @@ log = logging.getLogger(__name__)
 class BroadcastCallback(Protocol):
     """Protocol for broadcast callback with optional status update."""
 
-    def __call__(self, data: dict[str, Any] | bytes, with_status: bool = False) -> None: ...
+    def __call__(
+        self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None
+    ) -> None: ...
 
 
 def _utc_timestamp() -> str:
@@ -53,7 +55,7 @@ class RigService:
             unsub = rig.subscribe(f"device/{device_id}/props", self._make_props_forwarder(device_id))
             self._unsub_device_props.append(unsub)
 
-    async def handle_message(self, topic: str, payload: dict[str, Any]) -> bool:
+    async def handle_message(self, sender_id: str, topic: str, payload: dict[str, Any]) -> bool:
         """Handle rig-related messages. Returns True if handled."""
         try:
             match topic:
@@ -64,11 +66,11 @@ class RigService:
                 case "preview/stop":
                     await self._handle_preview_stop()
                 case "preview/crop":
-                    await self._handle_preview_crop(payload)
+                    await self._handle_preview_crop(payload, sender_id=sender_id)
                 case "preview/levels":
-                    await self._handle_preview_levels(payload)
+                    await self._handle_preview_levels(payload, sender_id=sender_id)
                 case "preview/colormap":
-                    await self._handle_preview_colormap(payload)
+                    await self._handle_preview_colormap(payload, sender_id=sender_id)
                 case "device/set_property":
                     await self._handle_device_set_property(payload)
                 case "device/execute_command":
@@ -120,13 +122,15 @@ class RigService:
                 await self.rig.stop_preview()
         self._broadcast({}, with_status=True)
 
-    async def _handle_preview_crop(self, payload: dict[str, Any]):
+    async def _handle_preview_crop(self, payload: dict[str, Any], *, sender_id: str | None = None):
         """Handle preview crop update."""
         crop = PreviewCrop(x=payload.get("x", 0), y=payload.get("y", 0), k=payload.get("k", 0))
         await self.rig.update_preview_crop(crop)
-        self._broadcast({"topic": "preview/crop", "payload": {"x": crop.x, "y": crop.y, "k": crop.k}})
+        self._broadcast(
+            {"topic": "preview/crop", "payload": {"x": crop.x, "y": crop.y, "k": crop.k}}, exclude=sender_id
+        )
 
-    async def _handle_preview_levels(self, payload: dict[str, Any]):
+    async def _handle_preview_levels(self, payload: dict[str, Any], *, sender_id: str | None = None):
         """Handle preview levels update for a specific channel."""
         channel_id = payload.get("channel")
         if not channel_id:
@@ -139,9 +143,10 @@ class RigService:
                 "topic": "preview/levels",
                 "payload": {"channel": channel_id, "min": levels.min, "max": levels.max},
             },
+            exclude=sender_id,
         )
 
-    async def _handle_preview_colormap(self, payload: dict[str, Any]):
+    async def _handle_preview_colormap(self, payload: dict[str, Any], *, sender_id: str | None = None):
         """Handle preview colormap update for a specific channel."""
         channel_id = payload.get("channel")
         if not channel_id:
@@ -157,6 +162,7 @@ class RigService:
                 "topic": "preview/colormap",
                 "payload": {"channel": channel_id, "colormap": colormap},
             },
+            exclude=sender_id,
         )
 
     async def _distribute_frames(self, channel: str, packed_frame: bytes) -> None:

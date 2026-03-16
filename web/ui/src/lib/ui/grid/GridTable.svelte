@@ -29,7 +29,7 @@
 		return `${row},${col}`;
 	}
 
-	let profileStacks = $derived(session.stacks.filter((s) => s.profile_id === session.activeProfileId));
+	let profileStacks = $derived(session.activeStacks);
 
 	function getStack(tile: Tile): Stack | null {
 		return profileStacks.find((s) => s.row === tile.row && s.col === tile.col) ?? null;
