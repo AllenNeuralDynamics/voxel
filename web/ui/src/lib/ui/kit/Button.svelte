@@ -23,7 +23,7 @@
 				xs: 'h-ui-xs gap-1 px-1.5 text-xs',
 				sm: 'h-ui-sm gap-1.5 px-2 text-xs',
 				md: 'h-ui-md gap-1.5 px-3 text-xs',
-				lg: 'h-ui-lg gap-2 px-3 text-sm',
+				lg: 'h-ui-lg gap-2 px-3 text-base capitalize',
 				'icon-xs': 'size-ui-xs',
 				icon: 'size-ui-sm',
 				'icon-lg': 'size-ui-md'

@@ -47,7 +47,7 @@
 					item: 'min-h-ui-md px-2 py-1 text-sm'
 				},
 				lg: {
-					trigger: 'h-ui-lg px-2.5 text-base',
+					trigger: 'h-ui-lg px-2.5 text-base capitalize',
 					item: 'min-h-ui-lg px-2.5 py-1.5 text-base'
 				}
 			}

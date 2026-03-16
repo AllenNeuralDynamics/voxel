@@ -1,3 +1,7 @@
+<script lang="ts" module>
+	let lastWorkflowStep: string | null = null;
+</script>
+
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -10,11 +14,11 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button, Dialog, DropdownMenu } from '$lib/ui/kit';
-	import { ChevronDown, LayersOutline, Microscope, Power } from '$lib/icons';
-	import WorkflowTabs from './WorkflowTabs.svelte';
+	import { ChevronDown, ClipboardCheckOutline, LayersOutline, Microscope, Power } from '$lib/icons';
 	import AppMenu from './AppMenu.svelte';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 	import StartButton from '$lib/ui/StartButton.svelte';
+	import { ProfileSelector } from '$lib/ui/profile';
 	import { cn } from '$lib/utils';
 
 	interface Props {
@@ -45,14 +49,22 @@
 			: page.route.id === '/debug'
 				? 'debug'
 				: page.route.id?.startsWith('/workflow/')
-					? (page.params.step ?? page.route.id.split('/').pop() ?? 'instrument')
+					? 'setup'
 					: 'instrument'
 	);
+
+	// Remember which workflow step was last viewed
+	$effect(() => {
+		if (page.route.id?.startsWith('/workflow/')) {
+			lastWorkflowStep = page.params.step ?? page.route.id.split('/').pop() ?? null;
+		}
+	});
 
 	function viewPath(id: string): string {
 		if (id === 'acquisition') return '/acquisition';
 		if (id === 'debug') return '/debug';
 		if (id === 'instrument') return '/';
+		if (id === 'setup') return `/workflow/${lastWorkflowStep ?? workflow.activeStep?.id ?? workflow.steps[0]?.id ?? 'scout'}`;
 		return `/workflow/${id}`;
 	}
 
@@ -60,15 +72,15 @@
 		goto(resolve(viewPath(id) as '/'), { keepFocus: true, noScroll: true });
 	}
 
-	function toggleView(id: string) {
-		gotoView(viewId === id ? (workflow.steps[0]?.id ?? 'instrument') : id);
+	function selectView(id: string) {
+		if (viewId !== id) gotoView(id);
 	}
 
 	let closeDialogOpen = $state(false);
 
 	const tabClasses = cn(
-		'flex h-ui-lg min-w-24 gap-1 items-center justify-center rounded border border-border',
-		'px-3 text-xs uppercase tracking-wide transition-colors'
+		'flex h-ui-lg min-w-24 gap-1.5 items-center justify-center rounded border border-border',
+		'px-3 text-base capitalize transition-colors'
 	);
 </script>
 
@@ -78,7 +90,7 @@
 			<div class="grid h-full grid-rows-[auto_1fr]">
 				<header class="bg-elevated flex items-center justify-between border-b border-border px-4 py-4">
 					<!-- Left: app menu + instrument + workflow + acquisition -->
-					<nav class="flex items-stretch gap-4">
+					<div class="flex items-stretch gap-4">
 						<AppMenu {app}>
 							{#snippet trigger()}
 								<VoxelLogo class="size-ui-sm" />
@@ -109,63 +121,57 @@
 								</Dialog.Footer>
 							</Dialog.Content>
 						</Dialog.Root>
+						<nav class="grid grid-cols-3 gap-4">
+							<!-- Instrument -->
+							<button
+								onclick={() => selectView('instrument')}
+								class={cn(
+									tabClasses,
+									viewId === 'instrument' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg'
+								)}
+								title="Instrument"
+							>
+								<Microscope width="16" height="16" />
+								Instrument
+							</button>
 
-						<!-- Instrument -->
+							<!-- Setup (workflow) -->
+							<button
+								onclick={() => selectView('setup')}
+								class={cn(tabClasses, viewId === 'setup' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
+								title="Setup"
+							>
+								<ClipboardCheckOutline width="16" height="16" />
+								Setup
+							</button>
+
+							<!-- Acquire -->
+							<button
+								onclick={() => selectView('acquisition')}
+								class={cn(
+									tabClasses,
+									viewId === 'acquisition' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg'
+								)}
+								title="Acquisition"
+							>
+								<LayersOutline width="16" height="16" />
+								Acquisition
+							</button>
+						</nav>
+					</div>
+
+					<!-- Right: actions -->
+					<div class="flex items-center gap-4">
 						<button
-							onclick={() => toggleView('instrument')}
-							class={cn(tabClasses, viewId === 'instrument' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
-							title="Instrument"
-						>
-							<Microscope width="16" height="16" />
-							Instrument
-						</button>
-
-						<!-- Workflow steps -->
-						<WorkflowTabs {session} {viewId} onViewChange={gotoView} class="max-w-96" />
-
-						<!-- Acquire -->
-						<button
-							onclick={() => toggleView('acquisition')}
-							class={cn(tabClasses, viewId === 'acquisition' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
-							title="Acquisition"
-						>
-							<LayersOutline width="16" height="16" />
-							Acquisition
-						</button>
-
-						<!-- Debug -->
-						<button
-							onclick={() => toggleView('debug')}
+							onclick={() => selectView('debug')}
 							class={cn(tabClasses, viewId === 'debug' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
 							title="Debug"
 						>
 							Debug
 						</button>
-					</nav>
-
-					<!-- Right: actions -->
-					<StartButton {session} />
-					<!-- <div class={cn('grid gap-2', viewId === 'acquisition' ? 'grid-cols-2' : 'grid-cols-1')}>
-						<Button
-							class="w-full"
-							variant={session.preview.isPreviewing ? 'danger' : 'success'}
-							size="lg"
-							onclick={() =>
-								session.preview.isPreviewing ? session.preview.stopPreview() : session.preview.startPreview()}
-						>
-							{session.preview.isPreviewing ? 'Stop Preview' : 'Start Preview'}
-						</Button>
-						{#if viewId === 'acquisition'}
-							<Button
-								class="w-full"
-								variant={session.mode === 'acquiring' ? 'danger' : 'default'}
-								size="lg"
-								disabled={session.mode !== 'acquiring' && !session.plan.stacks.some((s) => s.status === 'planned')}
-							>
-								{session.mode === 'acquiring' ? 'Stop Acquisition' : 'Start Acquisition'}
-							</Button>
-						{/if}
-					</div> -->
+						<ProfileSelector {session} size="lg" class="min-w-48 max-w-60 flex-1" />
+						<StartButton {session} />
+					</div>
 				</header>
 				{@render children()}
 			</div>

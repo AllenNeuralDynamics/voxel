@@ -46,16 +46,16 @@
 </script>
 
 {#if isRunning}
-	<button class={buttonVariants({ variant: 'danger', size: 'lg', class: cn('w-36', className) })} onclick={handleStop}>
+	<button class={buttonVariants({ variant: 'danger', size: 'lg', class: cn('w-40', className) })} onclick={handleStop}>
 		{isAcquiring ? 'Stop Acquisition' : 'Stop Preview'}
 	</button>
 {:else}
 	<DropdownMenu.Root>
-		<DropdownMenu.Trigger class={cn(base, 'w-36 justify-between', className)}>
+		<DropdownMenu.Trigger class={cn(base, 'w-40 justify-between', className)}>
 			Start Imaging
 			<ChevronDown width="14" height="14" />
 		</DropdownMenu.Trigger>
-		<DropdownMenu.Content align="end" class="w-36">
+		<DropdownMenu.Content align="end" class="w-40">
 			<DropdownMenu.Item onclick={handleStartPreview}>Preview</DropdownMenu.Item>
 			<DropdownMenu.Item onclick={handleStartAcquisition} disabled={!canAcquire}>
 				Acquisition

@@ -11,6 +11,7 @@ export { default as ChevronRight } from '~icons/mdi/chevron-right';
 export { default as ChevronUp } from '~icons/mdi/chevron-up';
 export { default as ChevronUpDown } from '~icons/mdi/chevron-up-down';
 export { default as CircleSmall } from '~icons/mdi/circle-small';
+export { default as ClipboardCheckOutline } from '~icons/mdi/clipboard-check-outline';
 export { default as Close } from '~icons/mdi/close';
 export { default as Cog } from '~icons/mdi/cog';
 export { default as ContentSaveOutline } from '~icons/mdi/content-save-outline';

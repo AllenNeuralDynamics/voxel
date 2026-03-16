@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { App } from '$lib/main';
 	import type { SessionDirectory, JsonSchema } from '$lib/main';
-	import SessionForm from './SessionForm.svelte';
+	import SessionForm from '$lib/ui/SessionForm.svelte';
 	import AppMenu from './AppMenu.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import { Collapsible } from 'bits-ui';

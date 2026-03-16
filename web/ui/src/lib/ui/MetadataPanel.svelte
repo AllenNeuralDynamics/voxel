@@ -126,8 +126,8 @@
 			{/if}
 		</div>
 
-		<!-- Fields grid: fixed label + 1fr value -->
-		<div class="grid grid-cols-[10rem_1fr] items-start gap-x-3 gap-y-2">
+		<!-- Fields grid: stacked on narrow, side-by-side on wide -->
+		<div class="grid grid-cols-1 gap-2 @sm:grid-cols-[10rem_1fr] @sm:items-start @sm:gap-x-3">
 			<MetadataFields {schema} {values} onChange={setDraft} disabled={isFieldDisabled} size="sm">
 				{#snippet field(key, prop, input)}
 					<div class="text-fg-muted max-w-48 pt-1 text-xs" title={sanitizeString(key)}>
