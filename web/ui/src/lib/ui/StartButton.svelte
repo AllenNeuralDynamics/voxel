@@ -57,9 +57,7 @@
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content align="end" class="w-40">
 			<DropdownMenu.Item onclick={handleStartPreview}>Preview</DropdownMenu.Item>
-			<DropdownMenu.Item onclick={handleStartAcquisition} disabled={!canAcquire}>
-				Acquisition
-			</DropdownMenu.Item>
+			<DropdownMenu.Item onclick={handleStartAcquisition} disabled={!canAcquire}>Acquisition</DropdownMenu.Item>
 		</DropdownMenu.Content>
 	</DropdownMenu.Root>
 {/if}

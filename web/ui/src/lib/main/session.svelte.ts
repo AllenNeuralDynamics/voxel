@@ -280,6 +280,24 @@ export class Session {
 		}
 	}
 
+	// --- Metadata ---
+
+	async fetchMetadataTargets(): Promise<Record<string, string>> {
+		const res = await this.#rest('GET', '/session/metadata-targets');
+		const data = await res.json();
+		return data.targets ?? {};
+	}
+
+	async setMetadataTarget(target: string): Promise<void> {
+		try {
+			const res = await this.#rest('PATCH', '/session/metadata-target', { target });
+			this.info = await res.json();
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to change metadata schema');
+			throw error;
+		}
+	}
+
 	// --- Workflow ---
 
 	async workflowNext(): Promise<string | null> {

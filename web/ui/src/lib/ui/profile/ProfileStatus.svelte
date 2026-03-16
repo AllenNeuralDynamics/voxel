@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
-	import { Button } from '$lib/ui/kit';
 
 	type Size = 'sm' | 'md' | 'lg';
 
@@ -13,41 +12,23 @@
 
 	let { session, profileId, size = 'sm', class: className }: Props = $props();
 
-	// Match Button size classes exactly (h, px, text) + transparent border for identical box model
-	const badgeClasses: Record<Size, string> = {
-		sm: 'h-6 px-2 text-xs border border-transparent',
-		md: 'h-7 px-3 text-xs border border-transparent',
-		lg: 'h-8 px-3 text-sm border border-transparent'
-	};
-
-	const buttonSize: Record<Size, 'xs' | 'sm' | 'md'> = {
-		sm: 'xs',
-		md: 'sm',
-		lg: 'md'
+	const sizeClasses: Record<Size, string> = {
+		sm: 'h-ui-sm w-20 text-xs',
+		md: 'h-ui-md w-24 text-xs',
+		lg: 'h-ui-lg w-28 text-sm'
 	};
 
 	const isActive = $derived(profileId === session.activeProfileId);
 </script>
 
-<!-- Grid overlap: both states occupy the same cell so the container sizes to the larger one -->
-<div class="grid {className}">
-	<span
-		class="col-start-1 row-start-1 inline-flex items-center justify-center rounded-full bg-success/15 font-medium text-success {badgeClasses[
-			size
-		]}"
-		class:invisible={!isActive}
-	>
-		Active
-	</span>
-	<div class="col-start-1 row-start-1 flex items-center justify-center" class:invisible={isActive}>
-		<Button
-			size={buttonSize[size]}
-			variant="outline"
-			class="rounded-full"
-			onclick={() => session.activateProfile(profileId)}
-			disabled={session.isSwitchingProfile}
-		>
-			Activate
-		</Button>
-	</div>
-</div>
+<button
+	class="inline-flex items-center justify-center rounded-full border font-medium transition-colors {sizeClasses[
+		size
+	]} {isActive
+		? 'border-success bg-success/15 text-success'
+		: 'bg-warning-bg cursor-pointer border-warning text-warning hover:bg-warning/15'} {className}"
+	onclick={() => session.activateProfile(profileId)}
+	disabled={isActive || session.isSwitchingProfile}
+>
+	{isActive ? 'Active' : 'Activate'}
+</button>

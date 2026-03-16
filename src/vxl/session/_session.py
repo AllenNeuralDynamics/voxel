@@ -193,6 +193,21 @@ class Session:
         """True if any stack has moved past PLANNED status."""
         return any(s.status != StackStatus.PLANNED for s in self._config.plan.stacks)
 
+    def set_metadata_target(self, target: str) -> None:
+        """Change the metadata schema class and reset metadata to defaults.
+
+        Raises ValueError if acquisition has already started (provenance is locked).
+        """
+        if self.has_acquired:
+            raise ValueError("Cannot change metadata schema after acquisition has started")
+
+        cls = resolve_metadata_class(target)  # validates the import path
+        instance = cls()  # Pydantic model with all defaults
+        self._config.metadata_target = target
+        self._config.metadata = instance.model_dump()
+        self._save()
+        self._log.info("Changed metadata target to %s", target)
+
     def update_metadata(self, values: dict[str, Any]) -> None:
         """Update experiment metadata, respecting provenance locking.
 

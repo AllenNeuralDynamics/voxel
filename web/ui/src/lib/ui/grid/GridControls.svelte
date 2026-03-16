@@ -20,7 +20,7 @@
 </script>
 
 {#if gc}
-	<div class="flex items-end gap-3" class:opacity-70={disabled} class:pointer-events-none={disabled}>
+	<div class="flex items-end gap-8" class:opacity-90={disabled} class:pointer-events-none={disabled}>
 		<Field label="Offset">
 			<div class="flex items-center gap-1.5">
 				<SpinBox
@@ -30,7 +30,7 @@
 					step={0.1}
 					snapValue={0.0}
 					decimals={1}
-					numCharacters={6}
+					numCharacters={7}
 					size="md"
 					prefix="X"
 					suffix="mm"
@@ -63,7 +63,7 @@
 					snapValue={0.0}
 					step={0.1}
 					decimals={1}
-					numCharacters={6}
+					numCharacters={7}
 					size="md"
 					prefix="Y"
 					suffix="mm"
@@ -84,7 +84,7 @@
 					snapValue={0.1}
 					step={0.01}
 					decimals={2}
-					numCharacters={6}
+					numCharacters={8}
 					size="md"
 					prefix="X"
 					onChange={(value: number) => {
@@ -115,7 +115,7 @@
 					snapValue={0.1}
 					step={0.01}
 					decimals={2}
-					numCharacters={6}
+					numCharacters={8}
 					size="md"
 					prefix="Y"
 					onChange={(value: number) => {

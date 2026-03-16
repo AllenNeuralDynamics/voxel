@@ -10,7 +10,6 @@
 	import { cn } from '$lib/utils';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-	import { Button } from '$lib/ui/kit';
 	import { Check, LucideCircle } from '$lib/icons';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
 	import LasersPanel from './LasersPanel.svelte';
@@ -25,25 +24,17 @@
 
 	const workflow = $derived(session.workflow);
 
-	// Current viewed step from URL: /workflow/scout, /workflow/plan, /workflow/[step]
-	const viewedStepId = $derived(
-		page.params.step ?? page.route.id?.split('/').pop() ?? workflow.activeStep?.id
-	);
+	// Current viewed step from URL: /setup/scout, /setup/plan, /setup/[step]
+	const viewedStepId = $derived(page.params.step ?? page.route.id?.split('/').pop() ?? workflow.activeStep?.id);
 
-	const viewedIsCommitted = $derived(
-		viewedStepId != null && workflow.stepStates[viewedStepId] === 'committed'
-	);
+	const viewedIsCommitted = $derived(viewedStepId != null && workflow.stepStates[viewedStepId] === 'committed');
 
-	const canComplete = $derived(
-		viewedStepId != null && workflow.stepStates[viewedStepId] === 'active'
-	);
+	const canComplete = $derived(viewedStepId != null && workflow.stepStates[viewedStepId] === 'active');
 
-	const canRevert = $derived(
-		viewedStepId != null && workflow.steps[workflow.committedIndex]?.id === viewedStepId
-	);
+	const canRevert = $derived(viewedStepId != null && workflow.steps[workflow.committedIndex]?.id === viewedStepId);
 
 	function gotoStep(id: string) {
-		const path = id === 'acquisition' ? '/acquisition' : `/workflow/${id}`;
+		const path = id === 'acquisition' ? '/acquisition' : `/setup/${id}`;
 		goto(resolve(path as '/'), { keepFocus: true, noScroll: true });
 	}
 
@@ -97,7 +88,7 @@
 			</div>
 			<!-- Workflow step navigation bar -->
 			<nav class="mx-auto my-4 flex w-fit items-stretch overflow-hidden rounded-full border border-border">
-				<div class="grid auto-cols-fr grid-flow-col gap-1 bg-panel px-3 py-2">
+				<div class="bg-panel grid auto-cols-fr grid-flow-col gap-1 px-3 py-2">
 					{#each workflow.steps as step (step.id)}
 						{@const state = workflow.stepStates[step.id]}
 						<button class={stepTabClass(step.id)} onclick={() => gotoStep(step.id)}>
@@ -118,7 +109,7 @@
 						<button
 							disabled={!canRevert}
 							onclick={handleRevert}
-							class="w-28 text-center text-xs font-medium uppercase tracking-wide text-danger transition-colors hover:bg-danger-bg disabled:pointer-events-none disabled:opacity-50"
+							class="hover:bg-danger-bg w-28 text-center text-xs font-medium tracking-wide text-danger uppercase transition-colors disabled:pointer-events-none disabled:opacity-50"
 						>
 							Revert
 						</button>
@@ -126,7 +117,7 @@
 						<button
 							disabled={!canComplete}
 							onclick={handleComplete}
-							class="w-28 text-center text-xs font-medium uppercase tracking-wide text-success transition-colors hover:bg-success-bg disabled:pointer-events-none disabled:opacity-50"
+							class="hover:bg-success-bg w-28 text-center text-xs font-medium tracking-wide text-success uppercase transition-colors disabled:pointer-events-none disabled:opacity-50"
 						>
 							Complete
 						</button>

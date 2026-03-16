@@ -52,11 +52,11 @@
 	}
 
 	const STATUS_BAR_CLASSES: Record<string, string> = {
-		planned: 'bg-info/10',
-		acquiring: 'bg-success/10',
-		completed: 'bg-success/10',
-		failed: 'bg-danger/10',
-		skipped: 'bg-warning/10'
+		planned: 'bg-info/15',
+		acquiring: 'bg-success/15',
+		completed: 'bg-success/15',
+		failed: 'bg-danger/15',
+		skipped: 'bg-warning/15'
 	};
 
 	// ── Stack summary ──

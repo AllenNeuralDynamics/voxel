@@ -48,14 +48,14 @@
 			? 'acquisition'
 			: page.route.id === '/debug'
 				? 'debug'
-				: page.route.id?.startsWith('/workflow/')
+				: page.route.id?.startsWith('/setup/')
 					? 'setup'
 					: 'instrument'
 	);
 
 	// Remember which workflow step was last viewed
 	$effect(() => {
-		if (page.route.id?.startsWith('/workflow/')) {
+		if (page.route.id?.startsWith('/setup/')) {
 			lastWorkflowStep = page.params.step ?? page.route.id.split('/').pop() ?? null;
 		}
 	});
@@ -64,8 +64,9 @@
 		if (id === 'acquisition') return '/acquisition';
 		if (id === 'debug') return '/debug';
 		if (id === 'instrument') return '/';
-		if (id === 'setup') return `/workflow/${lastWorkflowStep ?? workflow.activeStep?.id ?? workflow.steps[0]?.id ?? 'scout'}`;
-		return `/workflow/${id}`;
+		if (id === 'setup')
+			return `/setup/${lastWorkflowStep ?? workflow.activeStep?.id ?? workflow.steps[0]?.id ?? 'scout'}`;
+		return `/setup/${id}`;
 	}
 
 	function gotoView(id: string) {
@@ -169,7 +170,7 @@
 						>
 							Debug
 						</button>
-						<ProfileSelector {session} size="lg" class="min-w-48 max-w-60 flex-1" />
+						<ProfileSelector {session} size="lg" class="min-w-72 flex-1" />
 						<StartButton {session} />
 					</div>
 				</header>

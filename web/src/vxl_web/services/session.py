@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from vxl import AcquisitionPlan, RigMode, Session
 from vxl.camera.preview import PreviewConfig
-from vxl.metadata import resolve_metadata_class
+from vxl.metadata import discover_metadata_targets, resolve_metadata_class
 from vxl.session import GridConfig, WorkflowStepConfig
 from vxl.tile import Stack, StackStatus, Tile
 from vxlib import fire_and_forget
@@ -295,3 +295,29 @@ async def update_metadata(
         return {"metadata": service.session.metadata}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class MetadataTargetRequest(BaseModel):
+    """Request model for changing the metadata schema class."""
+
+    target: str
+
+
+@info_router.patch("/metadata-target")
+async def update_metadata_target(
+    request: MetadataTargetRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> SessionInfo:
+    """Change the metadata schema class. Resets metadata to new schema defaults."""
+    try:
+        service.session.set_metadata_target(request.target)
+        service.broadcast({}, with_status=True)
+        return service.get_info()
+    except (ValueError, TypeError, ImportError, AttributeError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@info_router.get("/metadata-targets")
+async def get_metadata_targets() -> dict[str, Any]:
+    """Return available metadata targets for the session metadata schema selector."""
+    return {"targets": discover_metadata_targets()}

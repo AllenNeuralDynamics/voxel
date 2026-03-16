@@ -13,15 +13,7 @@
 		debounceMs?: number;
 	}
 
-	let {
-		items,
-		key,
-		onReorder,
-		item,
-		class: className = '',
-		flipDuration = 200,
-		debounceMs = 250
-	}: Props = $props();
+	let { items, key, onReorder, item, class: className = '', flipDuration = 200, debounceMs = 250 }: Props = $props();
 
 	const state = new SortableListState<T>();
 	setSortableListContext(state);

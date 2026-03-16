@@ -38,7 +38,7 @@ export class SortableListState<T> {
 		this.#lastReorderAt = now;
 	};
 
-	handleDrop = (_state: DragDropState<T>) => {
+	handleDrop = () => {
 		this.onReorder(this.items);
 	};
 }
