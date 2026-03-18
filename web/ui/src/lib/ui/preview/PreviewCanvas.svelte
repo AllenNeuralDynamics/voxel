@@ -27,7 +27,9 @@
 	// Watch for redraw signals from PreviewState
 	watch(
 		() => previewer.redrawGeneration,
-		() => { needsRedraw = true; }
+		() => {
+			needsRedraw = true;
+		}
 	);
 
 	// Resize canvas when preview dimensions change

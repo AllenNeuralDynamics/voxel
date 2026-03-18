@@ -3,7 +3,7 @@
 	import { GripVertical, LucideCircle, DotsSpinner, Check, AlertCircleOutline, Minus } from '$lib/icons';
 	import { PaneDivider, Select, SortableList } from '$lib/ui/kit';
 	import MetadataPanel from '$lib/ui/MetadataPanel.svelte';
-	import { sanitizeString, cn } from '$lib/utils';
+	import { sanitizeString } from '$lib/utils';
 	import { Pane, PaneGroup } from 'paneforge';
 	import { Progress } from 'bits-ui';
 	import { toast } from 'svelte-sonner';
@@ -50,14 +50,6 @@
 		if (status === 'failed') return 60;
 		return 0;
 	}
-
-	const STATUS_BAR_CLASSES: Record<string, string> = {
-		planned: 'bg-info/15',
-		acquiring: 'bg-success/15',
-		completed: 'bg-success/15',
-		failed: 'bg-danger/15',
-		skipped: 'bg-warning/15'
-	};
 
 	// ── Stack summary ──
 
@@ -140,22 +132,6 @@
 	function formatZ(um: number): string {
 		return um.toFixed(0);
 	}
-
-	const STATUS_ICON_CLASSES: Record<string, string> = {
-		planned: 'text-info',
-		acquiring: 'text-success',
-		completed: 'text-success',
-		failed: 'text-danger',
-		skipped: 'text-warning'
-	};
-
-	const STATUS_ROW_CLASSES: Record<string, string> = {
-		planned: '',
-		acquiring: '',
-		completed: '',
-		failed: '',
-		skipped: ''
-	};
 </script>
 
 <PaneGroup direction="horizontal" autoSaveId="acquisition-h" class="h-full overflow-hidden">
@@ -266,10 +242,8 @@
 								<div class="border-fg-muted/30 flex flex-col overflow-hidden rounded-tr-lg rounded-b-lg border">
 									{#each group.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
 										<div
-											class={cn(
-												'h-ui-md border-fg-muted/30 relative flex items-center gap-3 overflow-hidden border-b px-3 text-xs last:border-b-0',
-												STATUS_ROW_CLASSES[status(stack)] ?? ''
-											)}
+											data-stack-status={status(stack)}
+											class="h-ui-md border-fg-muted/30 relative flex items-center gap-3 overflow-hidden border-b px-3 text-xs last:border-b-0"
 										>
 											<span class="text-fg min-w-0 flex-1 truncate">
 												{sanitizeString(stack.profile_id)}
@@ -281,20 +255,20 @@
 											</span>
 											<span class="text-fg-muted shrink-0">{stack.num_frames} slices</span>
 											{#if status(stack) === 'acquiring'}
-												<DotsSpinner width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.acquiring)} />
+												<DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
 											{:else if status(stack) === 'completed'}
-												<Check width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.completed)} />
+												<Check width="14" height="14" class="shrink-0 text-(--stack-status)" />
 											{:else if status(stack) === 'failed'}
-												<AlertCircleOutline width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.failed)} />
+												<AlertCircleOutline width="14" height="14" class="shrink-0 text-(--stack-status)" />
 											{:else if status(stack) === 'skipped'}
-												<Minus width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.skipped)} />
+												<Minus width="14" height="14" class="shrink-0 text-(--stack-status)" />
 											{:else}
-												<LucideCircle width="12" height="12" class={cn('shrink-0', STATUS_ICON_CLASSES.planned)} />
+												<LucideCircle width="12" height="12" class="shrink-0 text-(--stack-status)" />
 											{/if}
 											<Progress.Root
 												value={fakeProgress(status(stack))}
 												max={100}
-												class={cn('absolute inset-0 -z-10', STATUS_BAR_CLASSES[status(stack)] ?? '')}
+												class="absolute inset-0 -z-10 bg-(--stack-status)/15"
 												style="transform: scaleX({fakeProgress(status(stack)) / 100}); transform-origin: left"
 											/>
 										</div>
@@ -307,10 +281,8 @@
 					<div class="border-fg-muted/30 flex flex-col overflow-hidden rounded-lg border">
 						{#each session.plan.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
 							<div
-								class={cn(
-									'h-ui-md border-fg-muted/30 relative flex items-center gap-3 overflow-hidden border-b px-3 text-xs last:border-b-0',
-									STATUS_ROW_CLASSES[status(stack)] ?? ''
-								)}
+								data-stack-status={status(stack)}
+								class="h-ui-md border-fg-muted/30 relative flex items-center gap-3 overflow-hidden border-b px-3 text-xs last:border-b-0"
 							>
 								<span class="text-fg min-w-0 flex-1 truncate">
 									{sanitizeString(stack.profile_id)}
@@ -322,20 +294,20 @@
 								</span>
 								<span class="text-fg-muted shrink-0">{stack.num_frames} slices</span>
 								{#if status(stack) === 'acquiring'}
-									<DotsSpinner width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.acquiring)} />
+									<DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
 								{:else if status(stack) === 'completed'}
-									<Check width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.completed)} />
+									<Check width="14" height="14" class="shrink-0 text-(--stack-status)" />
 								{:else if status(stack) === 'failed'}
-									<AlertCircleOutline width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.failed)} />
+									<AlertCircleOutline width="14" height="14" class="shrink-0 text-(--stack-status)" />
 								{:else if status(stack) === 'skipped'}
-									<Minus width="14" height="14" class={cn('shrink-0', STATUS_ICON_CLASSES.skipped)} />
+									<Minus width="14" height="14" class="shrink-0 text-(--stack-status)" />
 								{:else}
-									<LucideCircle width="12" height="12" class={cn('shrink-0', STATUS_ICON_CLASSES.planned)} />
+									<LucideCircle width="12" height="12" class="shrink-0 text-(--stack-status)" />
 								{/if}
 								<Progress.Root
 									value={fakeProgress(status(stack))}
 									max={100}
-									class={cn('absolute inset-0 -z-10', STATUS_BAR_CLASSES[status(stack)] ?? '')}
+									class="absolute inset-0 -z-10 bg-(--stack-status)/15"
 									style="transform: scaleX({fakeProgress(status(stack)) / 100}); transform-origin: left"
 								/>
 							</div>

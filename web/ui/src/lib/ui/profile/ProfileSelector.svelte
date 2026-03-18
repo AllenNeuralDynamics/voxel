@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { sanitizeString, cn } from '$lib/utils';
-	import { selectVariants, type SelectVariants } from '$lib/ui/kit/Select.svelte';
+	import { selectVariants } from '$lib/ui/kit/Select.svelte';
 	import { ChevronUpDown, DotsSpinner, Check } from '$lib/icons';
 	import { Select } from 'bits-ui';
 	import { watch } from 'runed';
@@ -10,7 +10,7 @@
 		session: Session;
 		selected?: string;
 		switchOnChange?: boolean;
-		size?: SelectVariants['size'];
+		size?: 'xs' | 'sm' | 'md' | 'lg';
 		class?: string;
 	}
 
@@ -39,22 +39,11 @@
 
 	const items = $derived(profiles.map((p) => ({ value: p.value, label: p.label })));
 	const selectedLabel = $derived(profiles.find((p) => p.value === selected)?.label ?? '');
-	const selectedStatus = $derived(profileStatus(selected));
+	const selectedHasStacks = $derived(session.stacks.some((s) => s.profile_id === selected));
 	const loading = $derived(switchOnChange ? session.isSwitchingProfile : false);
 	const styles = $derived(selectVariants({ variant: 'filled', size }));
 
-	const iconSizes: Record<NonNullable<SelectVariants['size']>, number> = {
-		xs: 10,
-		sm: 12,
-		md: 14,
-		lg: 16
-	};
-
-	function profileStatus(id: string): 'stacks' | 'in-plan' | null {
-		if (session.stacks.some((s) => s.profile_id === id)) return 'stacks';
-		if (session.plan.profile_order.includes(id)) return 'in-plan';
-		return null;
-	}
+	const iconSize = $derived({ xs: 10, sm: 12, md: 14, lg: 16 }[size]);
 
 	function handleChange(value: string | undefined) {
 		if (!value) return;
@@ -73,16 +62,14 @@
 			{:else}
 				<span class="text-fg-muted">Select profile...</span>
 			{/if}
-			{#if selectedStatus}
-				<span
-					class="inline-block size-1.5 shrink-0 rounded-full {selectedStatus === 'stacks' ? 'bg-info' : 'bg-warning'}"
-				></span>
+			{#if selectedHasStacks}
+				<span class="inline-block size-1.5 shrink-0 rounded-full bg-info"></span>
 			{/if}
 		</span>
 		{#if loading}
-			<DotsSpinner class="text-fg-muted shrink-0" width={iconSizes[size]} height={iconSizes[size]} />
+			<DotsSpinner class="text-fg-muted shrink-0" width={iconSize} height={iconSize} />
 		{:else}
-			<ChevronUpDown class="shrink-0 opacity-50" width={iconSizes[size]} height={iconSizes[size]} />
+			<ChevronUpDown class="shrink-0 opacity-50" width={iconSize} height={iconSize} />
 		{/if}
 	</Select.Trigger>
 
@@ -94,7 +81,7 @@
 				<Select.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
 					<Select.Group>
 						{#each profiles as profile (profile.value)}
-							{@const status = profileStatus(profile.value)}
+							{@const hasStacks = session.stacks.some((s) => s.profile_id === profile.value)}
 							<Select.Item
 								value={profile.value}
 								label={profile.label}
@@ -111,12 +98,8 @@
 										<span class="text-fg-muted text-xs">{profile.description}</span>
 									{/if}
 								</div>
-								{#if status}
-									<span
-										class="mt-0.5 inline-block size-1.5 shrink-0 rounded-full {status === 'stacks'
-											? 'bg-info'
-											: 'bg-warning'}"
-									></span>
+								{#if hasStacks}
+									<span class="mt-0.5 inline-block size-1.5 shrink-0 rounded-full bg-info"> </span>
 								{/if}
 							</Select.Item>
 						{/each}

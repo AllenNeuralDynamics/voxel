@@ -2,7 +2,7 @@
 	import { TrashCanOutline, Check, Close, PencilOutline } from '$lib/icons';
 	import { Select, SpinBox } from '$lib/ui/kit';
 	import type { Session } from '$lib/main';
-	import { getStackStatusColor, type Interleaving, type TileOrder } from '$lib/main/types';
+	import type { Interleaving, TileOrder } from '$lib/main/types';
 	import { watch } from 'runed';
 
 	interface Props {
@@ -157,11 +157,11 @@
 	<div class="bg-element-hover/30 flex flex-col border-y border-border">
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
-				<span class="flex items-center gap-3">
-					<span class="font-mono text-sm font-semibold {getStackStatusColor(stack?.status ?? null)}">
+				<span class="flex items-center gap-3" data-stack-status={stack?.status}>
+					<span class="font-mono text-sm font-semibold text-(--stack-status)">
 						R{selectedTile.row}, C{selectedTile.col}
 					</span>
-					{#if stack}<span class="text-xs {getStackStatusColor(stack.status)}">{stack.status}</span>{/if}
+					{#if stack}<span class="text-xs text-(--stack-status)">{stack.status}</span>{/if}
 				</span>
 				<div class="flex items-center gap-0.5">
 					{#if isEditing}

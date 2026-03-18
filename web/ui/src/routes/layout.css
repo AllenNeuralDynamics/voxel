@@ -122,6 +122,24 @@
 	--color-overlay: var(--overlay);
 }
 
+/* ── Stack status ─────────────────────────────────────────────────────── */
+
+[data-stack-status='planned'] {
+	--stack-status: var(--color-info);
+}
+[data-stack-status='acquiring'] {
+	--stack-status: var(--color-active);
+}
+[data-stack-status='completed'] {
+	--stack-status: var(--color-success);
+}
+[data-stack-status='failed'] {
+	--stack-status: var(--color-danger);
+}
+[data-stack-status='skipped'] {
+	--stack-status: var(--color-warning);
+}
+
 /* ── Keyframes ────────────────────────────────────────────────────────── */
 
 @keyframes collapsible-down {

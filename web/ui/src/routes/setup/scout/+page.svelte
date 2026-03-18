@@ -12,10 +12,6 @@
 	const profilePill = tv({
 		base: 'rounded-xl border border-fg-faint px-3 py-1.5 text-xs uppercase tracking-wide text-fg transition-colors',
 		variants: {
-			inPlan: {
-				true: '',
-				false: 'border-dashed'
-			},
 			selected: {
 				true: 'outline outline-1 outline-fg-muted',
 				false: 'hover:bg-element-hover'
@@ -33,10 +29,7 @@
 		}
 	);
 
-	const acqIds = $derived(session.acquisitionProfileIds);
 	const tabIds = $derived(Object.keys(session.config.profiles));
-	const planIds = $derived(tabIds.filter((id) => acqIds.includes(id)));
-	const availableIds = $derived(tabIds.filter((id) => !acqIds.includes(id)));
 
 	const activeTab = $derived.by(() => {
 		return tabIds.includes(selectedTab ?? '') ? selectedTab! : (tabIds[0] ?? null);
@@ -45,7 +38,6 @@
 	const activeTabLabel = $derived(
 		activeTab ? (session.config.profiles[activeTab]?.label ?? sanitizeString(activeTab)) : ''
 	);
-	const isActiveInPlan = $derived(activeTab ? acqIds.includes(activeTab) : false);
 	const activeTabStacks = $derived(activeTab ? session.stacks.filter((s) => s.profile_id === activeTab) : []);
 
 	let clearDialogOpen = $state(false);
@@ -58,44 +50,29 @@
 </script>
 
 <div class="flex h-full flex-col">
-	<!-- <div class="space-y-3"> -->
-	<!-- Profile pill tabs: in-plan | divider | available -->
+	<!-- Profile pill tabs -->
 	<div class="bg-elevated flex items-center gap-2 border-b border-border px-6 py-2.5">
 		<div class="flex flex-wrap items-center gap-2">
-			{#each planIds as pid (pid)}
+			{#each tabIds as pid (pid)}
 				{@const isHwActive = session.activeProfileId === pid}
+				{@const hasStacks = session.stacks.some((s) => s.profile_id === pid)}
 				<button
-					class="{profilePill({ inPlan: true, selected: pid === activeTab })} {isHwActive ? 'pill-pulse-info' : ''}"
+					class="{profilePill({ selected: pid === activeTab })} flex items-center gap-1.5 {isHwActive
+						? 'pill-pulse-info'
+						: ''}"
 					onclick={() => {
 						selectedTab = pid;
 					}}
 				>
 					{session.config.profiles[pid]?.label ?? sanitizeString(pid)}
+					{#if hasStacks}
+						<span class="inline-block size-1.5 shrink-0 rounded-full bg-info"></span>
+					{/if}
 				</button>
 			{:else}
-				<span class="text-xs text-fg-muted italic">No profiles added to plan</span>
+				<span class="text-xs text-fg-muted italic">No profiles configured</span>
 			{/each}
 		</div>
-
-		{#if availableIds.length > 0}
-			<div class="bg-fg-faint mx-3 h-5 w-px shrink-0"></div>
-
-			<div class="flex flex-wrap items-center gap-2">
-				{#each availableIds as pid (pid)}
-					{@const isHwActive = session.activeProfileId === pid}
-					<button
-						class="{profilePill({ inPlan: false, selected: pid === activeTab })} {isHwActive
-							? 'pill-pulse-neutral'
-							: ''}"
-						onclick={() => {
-							selectedTab = pid;
-						}}
-					>
-						{session.config.profiles[pid]?.label ?? sanitizeString(pid)}
-					</button>
-				{/each}
-			</div>
-		{/if}
 	</div>
 
 	<div class="flex-1 space-y-3 px-6 py-2">
@@ -120,7 +97,7 @@
 					{/if}
 				</div>
 				<div class="flex items-center gap-2">
-					{#if isActiveInPlan && activeTabStacks.length > 0}
+					{#if activeTabStacks.length > 0}
 						<Button
 							variant="ghost"
 							size="icon-xs"
@@ -139,7 +116,7 @@
 				<p class="text-fg-muted text-sm">
 					Offset: X {(gc.x_offset_um / 1000).toFixed(1)} mm, Y {(gc.y_offset_um / 1000).toFixed(1)} mm &middot; Overlap: X
 					{gc.overlap_x.toFixed(2)}, Y {gc.overlap_y.toFixed(2)}
-					{#if isActiveInPlan}
+					{#if activeTabStacks.length > 0}
 						&middot;
 						<span class="text-info">{activeTabStacks.length} stack{activeTabStacks.length !== 1 ? 's' : ''}</span>
 					{/if}
@@ -147,7 +124,6 @@
 			{/if}
 		{/if}
 	</div>
-	<!-- </div> -->
 </div>
 
 <!-- Clear all stacks confirmation -->
@@ -191,21 +167,7 @@
 		}
 	}
 
-	@keyframes pulse-neutral-bg {
-		0%,
-		100% {
-			box-shadow: inset 0 0 0 100px transparent;
-		}
-		50% {
-			box-shadow: inset 0 0 0 100px var(--element-hover);
-		}
-	}
-
 	:global(.pill-pulse-info) {
 		animation: pulse-info-bg 3s ease-in-out infinite;
-	}
-
-	:global(.pill-pulse-neutral) {
-		animation: pulse-neutral-bg 3s ease-in-out infinite;
 	}
 </style>

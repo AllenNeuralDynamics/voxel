@@ -88,7 +88,7 @@
 		lg: 14
 	};
 
-	let inputRefs: (HTMLInputElement | null)[] = [];
+	let inputRefs: (HTMLInputElement | null)[] = $state([]);
 
 	function update(next: string[]) {
 		value = next;

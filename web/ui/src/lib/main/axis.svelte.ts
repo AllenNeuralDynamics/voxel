@@ -73,7 +73,8 @@ export class Axis {
 	range = $derived(this.upperLimit - this.lowerLimit);
 
 	move(position: number): void {
-		this.#devices.fireCommand(this.#deviceId, 'move_abs', [position], { wait: false });
+		const clamped = Math.max(this.lowerLimit, Math.min(this.upperLimit, position));
+		this.#devices.fireCommand(this.#deviceId, 'move_abs', [clamped], { wait: false });
 	}
 
 	async halt(): Promise<void> {

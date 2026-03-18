@@ -2,7 +2,7 @@
 	import { Plus } from '$lib/icons';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { Session } from '$lib/main';
-	import { getStackStatusColor, type Tile, type Stack } from '$lib/main/types';
+	import type { Tile, Stack } from '$lib/main/types';
 	import { Select, Checkbox, SpinBox } from '$lib/ui/kit';
 
 	interface Props {
@@ -238,7 +238,7 @@
 						</td>
 						<td class="p-1.5 pr-4 text-right">
 							{#if stack}
-								<span class={getStackStatusColor(stack.status)}>{stack.status}</span>
+								<span data-stack-status={stack.status} class="text-(--stack-status)">{stack.status}</span>
 							{:else}
 								<button
 									class="text-fg-muted inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-xs transition-colors hover:border-success hover:text-success"
