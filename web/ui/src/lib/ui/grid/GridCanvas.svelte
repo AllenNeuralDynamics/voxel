@@ -66,7 +66,7 @@
 
 	let stageAspectRatio = $derived(viewBoxWidth / viewBoxHeight);
 	let scale = $derived(canvasWidth / viewBoxWidth);
-	let marginPixelsX = $derived(marginX * scale);
+	let marginPixelsX = $derived(marginX * scale + 0.5);
 	let marginPixelsY = $derived(marginY * scale);
 	let stagePixelsX = $derived(session.stage.width * scale);
 	let stagePixelsY = $derived(session.stage.height * scale);
@@ -125,10 +125,6 @@
 
 	function toMm(um: number): number {
 		return um / 1000;
-	}
-
-	function isSelected(tile: Tile): boolean {
-		return session.isTileSelected(tile.row, tile.col);
 	}
 
 	function moveToTilePosition(x_um: number, y_um: number) {
@@ -285,8 +281,12 @@
 
 {#snippet gridLayer()}
 	{#if layerVisibility.grid}
+		{@const sortedTiles = [...session.tiles].sort(
+			(a, b) => Number(session.isTileSelected(a.row, a.col)) - Number(session.isTileSelected(b.row, b.col))
+		)}
 		<g class="grid-layer">
-			{#each session.tiles as tile (`${tile.row}_${tile.col}`)}
+			{#each sortedTiles as tile (`${tile.row}_${tile.col}`)}
+				{@const selected = session.isTileSelected(tile.row, tile.col)}
 				{@const cx = toMm(tile.x_um)}
 				{@const cy = toMm(tile.y_um)}
 				{@const w = toMm(tile.w_um)}
@@ -297,7 +297,7 @@
 					width={w}
 					height={h}
 					class="nss tile outline-none"
-					class:selected={isSelected(tile)}
+					class:selected
 					class:cursor-pointer={!isXYMoving}
 					class:cursor-not-allowed={isXYMoving}
 					role="button"
@@ -462,20 +462,20 @@
 				<div
 					class="relative mb-24 grid"
 					style="grid-template-columns: {SLIDER_WIDTH / 2}px auto; grid-template-rows: {SLIDER_WIDTH / 2}px 1fr;"
-					style:--slider-width="{SLIDER_WIDTH}px"
 				>
 					<StageSlider
 						axis={session.stage.x}
 						orientation="horizontal"
 						bind:target={targetX}
-						style="grid-column: 2; width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {marginPixelsX +
-							0.5}px; transform: translateY(0.5px);"
+						thumbLengthPx={SLIDER_WIDTH}
+						style="grid-column: 2; width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {marginPixelsX}px; transform: translateY(0.5px);"
 					/>
 
 					<StageSlider
 						axis={session.stage.y}
 						orientation="vertical-ltr"
 						bind:target={targetY}
+						thumbLengthPx={SLIDER_WIDTH}
 						style="grid-column: 1; grid-row: 2; width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(0.5px);"
 					/>
 					<div class="h-ui-md absolute -bottom-8 flex w-full items-center justify-center gap-2 rounded-full px-2">
@@ -520,9 +520,9 @@
 					<StageSlider
 						axis={session.stage.z}
 						orientation="vertical-rtl"
+						thumbLengthPx={Z_AREA_WIDTH}
 						bind:target={targetZ}
 						class="absolute inset-0 z-10 h-full w-full"
-						style="--slider-width: {Z_AREA_WIDTH}px"
 					/>
 					<svg
 						viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"

@@ -5,12 +5,20 @@
 	interface Props {
 		axis: Axis;
 		orientation: 'horizontal' | 'vertical-ltr' | 'vertical-rtl';
+		thumbLengthPx: number;
 		target?: number | null;
 		class?: string;
 		style?: string;
 	}
 
-	let { axis, orientation, target = $bindable(null), class: className, style }: Props = $props();
+	let {
+		axis,
+		orientation,
+		thumbLengthPx: thumbLength,
+		target = $bindable(null),
+		class: className,
+		style
+	}: Props = $props();
 	let displayValue = $derived(axis.isMoving && target !== null ? target : axis.position);
 
 	function oninput(e: Event) {
@@ -26,6 +34,7 @@
 	class:horizontal={orientation === 'horizontal'}
 	class:vertical-ltr={orientation === 'vertical-ltr'}
 	class:vertical-rtl={orientation === 'vertical-rtl'}
+	style:--thumb-length="{thumbLength}px"
 	min={axis.lowerLimit}
 	max={axis.upperLimit}
 	step={0.1}
@@ -63,7 +72,7 @@
 			-webkit-appearance: none;
 			appearance: none;
 			inline-size: 1px;
-			block-size: var(--slider-width);
+			block-size: var(--thumb-length);
 			border-radius: 1px;
 			cursor: pointer;
 			background: transparent;
@@ -71,7 +80,7 @@
 		&::-moz-range-thumb {
 			appearance: none;
 			inline-size: 1px;
-			block-size: var(--slider-width);
+			block-size: var(--thumb-length);
 			border: none;
 			border-radius: 1px;
 			cursor: pointer;
