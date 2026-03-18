@@ -7,15 +7,15 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from vxl.config import Interleaving, TileOrder
+from vxl.config import GridConfig, Interleaving, TileOrder
 from vxl.daq.wave import validate_waveform
 from vxl.metadata import BASE_METADATA_TARGET, resolve_metadata_class
 from vxl.rig import RigMode, VoxelRig
 from vxl.sync import FrameTiming
 from vxl.tile import Stack, StackResult, StackStatus, Tile
 
-from ._config import AcquisitionPlan, GridConfig, PlanProfile, SessionConfig
-from ._workflow import StepState, Workflow, WorkflowStepConfig
+from ._config import AcquisitionPlan, SessionConfig
+from ._workflow import Workflow, WorkflowStepConfig
 
 
 class Session:
@@ -129,11 +129,11 @@ class Session:
 
     @property
     def grid_config(self) -> GridConfig | None:
-        """Get the active profile's grid configuration, or None if not in plan."""
+        """Get the active profile's grid configuration, or None if profile not found."""
         pid = self._rig.active_profile_id
-        if pid is None:
+        if pid is None or pid not in self._config.rig.profiles:
             return None
-        return self._config.plan.get_grid(pid)
+        return self._config.rig.profiles[pid].grid
 
     @property
     def tile_order(self) -> TileOrder:
@@ -170,11 +170,6 @@ class Session:
             self._save()
             return True
         return False
-
-    @property
-    def grid_locked(self) -> bool:
-        """Grid is locked when the Scout step is not active."""
-        return self._workflow.step_state("scout") != StepState.ACTIVE
 
     # ==================== Metadata ====================
 
@@ -313,22 +308,11 @@ class Session:
 
     # ==================== Acquisition Profile Management ====================
 
-    def add_acquisition_profile(self, profile_id: str) -> None:
-        """Add a profile to the acquisition plan with a default GridConfig."""
-        if profile_id not in self._rig.config.profiles:
-            raise ValueError(f"Profile '{profile_id}' does not exist in rig config")
-        if self._config.plan.has_profile(profile_id):
-            return  # already added, idempotent
-        gc = GridConfig(z_step_um=self._rig.config.globals.default_z_step_um)
-        self._config.plan.profiles.append(PlanProfile(profile_id=profile_id, grid=gc))
-        self._save()
-
-    def remove_acquisition_profile(self, profile_id: str) -> None:
-        """Remove a profile from the acquisition plan and all its stacks."""
-        if not self._config.plan.has_profile(profile_id):
-            raise ValueError(f"Profile '{profile_id}' is not in the acquisition plan")
-        self._config.plan.profiles = [p for p in self._config.plan.profiles if p.profile_id != profile_id]
+    def clear_profile_stacks(self, profile_id: str) -> None:
+        """Remove all stacks for the given profile. Auto-removes from profile_order."""
         self._config.plan.stacks = [s for s in self._config.plan.stacks if s.profile_id != profile_id]
+        if profile_id in self._config.plan.profile_order:
+            self._config.plan.profile_order.remove(profile_id)
         self._save()
 
     async def _on_fov_changed(self, fov: tuple[float, float]) -> None:
@@ -364,35 +348,37 @@ class Session:
                 stack.w_um = fov_w
                 stack.h_um = fov_h
 
-    def set_grid_offset(self, x_offset_um: float, y_offset_um: float) -> None:
+    def set_grid_offset(self, x_offset_um: float, y_offset_um: float, *, force: bool = False) -> None:
         """Set grid offset for the active profile. Recalculates PLANNED stack positions.
 
-        Raises RuntimeError if grid is locked (non-PLANNED stacks exist).
+        Raises RuntimeError if stacks exist for the active profile and force is False.
         """
-        if self.grid_locked:
-            raise RuntimeError("Cannot modify grid: acquisition has started")
         gc = self.grid_config
         if gc is None:
-            raise RuntimeError("Active profile is not in the acquisition plan")
+            raise RuntimeError("Active profile has no grid configuration")
+        active_pid = self._rig.active_profile_id
+        if not force and any(s.profile_id == active_pid for s in self._config.plan.stacks):
+            raise RuntimeError("Cannot modify grid: stacks exist for this profile (use force to override)")
         gc.x_offset_um = x_offset_um
         gc.y_offset_um = y_offset_um
         self._recalculate_planned_stack_positions()
         self._save()
 
-    def set_overlap(self, overlap_x: float, overlap_y: float) -> None:
+    def set_overlap(self, overlap_x: float, overlap_y: float, *, force: bool = False) -> None:
         """Set overlap for the active profile. Recalculates PLANNED stack positions.
 
-        Raises RuntimeError if grid is locked (non-PLANNED stacks exist).
+        Raises RuntimeError if stacks exist for the active profile and force is False.
         """
-        if self.grid_locked:
-            raise RuntimeError("Cannot modify grid: acquisition has started")
         if not 0.0 <= overlap_x < 1.0:
             raise ValueError(f"Overlap X must be in [0.0, 1.0), got {overlap_x}")
         if not 0.0 <= overlap_y < 1.0:
             raise ValueError(f"Overlap Y must be in [0.0, 1.0), got {overlap_y}")
         gc = self.grid_config
         if gc is None:
-            raise RuntimeError("Active profile is not in the acquisition plan")
+            raise RuntimeError("Active profile has no grid configuration")
+        active_pid = self._rig.active_profile_id
+        if not force and any(s.profile_id == active_pid for s in self._config.plan.stacks):
+            raise RuntimeError("Cannot modify grid: stacks exist for this profile (use force to override)")
         gc.overlap_x = overlap_x
         gc.overlap_y = overlap_y
         self._recalculate_planned_stack_positions()
@@ -510,7 +496,7 @@ class Session:
             stacks: List of {row, col, z_start_um, z_end_um}
 
         Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
-        The active profile must be in the acquisition plan.
+        Auto-adds the active profile to plan.profile_order if not already present.
         """
         if not stacks:
             return []
@@ -519,12 +505,13 @@ class Session:
         if active_pid is None:
             raise RuntimeError("No active profile - select a profile before adding stacks")
 
-        if self._workflow.step_state("plan") != StepState.ACTIVE:
-            raise RuntimeError("Cannot add stacks: plan step must be active")
-
         gc = self.grid_config
         if gc is None:
-            raise RuntimeError(f"Profile '{active_pid}' is not in the acquisition plan")
+            raise RuntimeError(f"Profile '{active_pid}' has no grid configuration")
+
+        # Implicit profile addition to plan
+        if active_pid not in self._config.plan.profile_order:
+            self._config.plan.profile_order.append(active_pid)
 
         fov_w, fov_h = self.get_fov_size()
         step_w, step_h = self.get_step_size()
@@ -575,13 +562,10 @@ class Session:
         Args:
             edits: List of {row, col, z_start_um?, z_end_um?}
 
-        Only PLANNED stacks can be edited. Plan step must be active.
+        Only PLANNED stacks can be edited.
         """
         if not edits:
             return []
-
-        if self._workflow.step_state("plan") != StepState.ACTIVE:
-            raise RuntimeError("Cannot edit stacks: plan step must be active")
 
         edited: list[Stack] = []
         for e in edits:
@@ -613,13 +597,10 @@ class Session:
         Args:
             positions: List of {row, col}
 
-        Plan step must be active.
+        Auto-removes the profile from plan.profile_order if no stacks remain.
         """
         if not positions:
             return
-
-        if self._workflow.step_state("plan") != StepState.ACTIVE:
-            raise RuntimeError("Cannot remove stacks: plan step must be active")
 
         active_pid = self._rig.active_profile_id
         for p in positions:
@@ -636,6 +617,14 @@ class Session:
                     break
             else:
                 raise ValueError(f"Stack {tile_id} not found for active profile")
+
+        # Implicit profile removal if no stacks remain
+        if (
+            active_pid
+            and not any(s.profile_id == active_pid for s in self._config.plan.stacks)
+            and active_pid in self._config.plan.profile_order
+        ):
+            self._config.plan.profile_order.remove(active_pid)
 
         self._save()
 
@@ -654,8 +643,7 @@ class Session:
     def reorder_profiles(self, profile_ids: list[str]) -> None:
         """Reorder profiles in the plan. Re-sorts stack list."""
         plan = self._config.plan
-        by_id = {p.profile_id: p for p in plan.profiles}
-        plan.profiles = [by_id[pid] for pid in profile_ids if pid in by_id]
+        plan.profile_order = [pid for pid in profile_ids if pid in plan.profile_order]
         self._sort_stacks()
         self._save()
 
@@ -667,7 +655,7 @@ class Session:
         if order == "custom":
             return  # stack list order is authoritative
 
-        profile_rank = {p.profile_id: i for i, p in enumerate(plan.profiles)}
+        profile_rank = {pid: i for i, pid in enumerate(plan.profile_order)}
 
         def spatial_key(s: Stack) -> tuple[int, ...]:
             if order == "row_wise":
@@ -682,7 +670,7 @@ class Session:
 
         def sort_key(s: Stack) -> tuple[int, ...]:
             spatial = spatial_key(s)
-            p_rank = profile_rank.get(s.profile_id, len(plan.profiles))
+            p_rank = profile_rank.get(s.profile_id, len(plan.profile_order))
             if plan.interleaving == "profile_first":
                 return (p_rank, *spatial)
             return (*spatial, p_rank)  # position_first

@@ -17,8 +17,9 @@ from pydantic import BaseModel, Field
 
 from vxl import AcquisitionPlan, RigMode, Session
 from vxl.camera.preview import PreviewConfig
+from vxl.config import GridConfig
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
-from vxl.session import GridConfig, WorkflowStepConfig
+from vxl.session import WorkflowStepConfig
 from vxl.tile import Stack, StackStatus, Tile
 from vxlib import fire_and_forget
 
@@ -54,7 +55,6 @@ class SessionStatus(BaseModel):
 
     # Session status
     metadata: dict[str, Any]
-    grid_locked: bool
     workflow_committed: str | None
 
     # Acquisition plan (per-profile grid configs + all stacks)
@@ -128,7 +128,6 @@ class SessionService:
             active_profile_id=self.session.rig.active_profile_id,
             mode=self.session.rig.mode,
             metadata=self.session.metadata,
-            grid_locked=self.session.grid_locked,
             workflow_committed=self.session.workflow_committed,
             plan=self.session.plan,
             grid_config=self.session.grid_config,

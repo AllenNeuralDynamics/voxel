@@ -184,11 +184,11 @@
 		<Pane defaultSize={45}>
 			<main class="flex h-full flex-col overflow-hidden">
 				<PaneGroup direction="vertical" autoSaveId="rightCol-v3">
-					<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center px-4">
+					<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
 						<PreviewCanvas previewer={session.preview} />
 					</Pane>
 					<PaneDivider direction="horizontal" />
-					<Pane defaultSize={50} minSize={30} class="h-full flex-1 px-4">
+					<Pane defaultSize={50} minSize={30} class="h-full flex-1">
 						<GridCanvas {session} />
 					</Pane>
 				</PaneGroup>

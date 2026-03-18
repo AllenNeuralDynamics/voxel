@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { watch } from 'runed';
 	import { Bargraph } from '$lib/icons';
 	import PreviewInfo from './PreviewInfo.svelte';
 	import PanZoomControls from './PanZoomControls.svelte';
@@ -24,10 +25,10 @@
 	let showHistograms = $state(true);
 
 	// Watch for redraw signals from PreviewState
-	$effect(() => {
-		void previewer.redrawGeneration;
-		needsRedraw = true;
-	});
+	watch(
+		() => previewer.redrawGeneration,
+		() => { needsRedraw = true; }
+	);
 
 	// Resize canvas when preview dimensions change
 	$effect(() => {
@@ -161,12 +162,10 @@
 	const namedChannels = $derived(previewer.channels.filter((c) => c.name));
 </script>
 
-<div class="bg-canvas grid h-full grid-rows-[auto_1fr_auto] gap-0" bind:this={containerEl}>
+<div class="bg-canvas grid h-full grid-rows-[auto_1fr_auto]" bind:this={containerEl}>
 	<!-- Top: Controls -->
 	<div class="flex items-center justify-between px-2 pt-5 pb-3">
-		<PreviewInfo {previewer} />
 		<div class="flex items-center gap-1">
-			<PanZoomControls {previewer} />
 			<button
 				onclick={() => (showHistograms = !showHistograms)}
 				class="hover:bg-element-hover flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors {showHistograms
@@ -177,11 +176,13 @@
 			>
 				<Bargraph width="14" height="14" />
 			</button>
+			<PreviewInfo {previewer} />
 		</div>
+		<PanZoomControls {previewer} />
 	</div>
 
 	<!-- Center: Canvas -->
-	<div class="flex items-center justify-center overflow-hidden p-2">
+	<div class="flex items-center justify-center overflow-hidden p-4">
 		<canvas
 			bind:this={canvasEl}
 			class="preview-canvas max-h-full max-w-full"
@@ -192,7 +193,7 @@
 	</div>
 
 	<!-- Bottom: Channel Histograms -->
-	<div class="flex justify-around gap-8 px-2 py-4">
+	<div class="flex justify-around gap-8 p-4">
 		{#if showHistograms}
 			{#each namedChannels as channel (channel.idx)}
 				<div class=" min-w-0 flex-1">

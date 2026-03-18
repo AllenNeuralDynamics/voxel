@@ -10,7 +10,6 @@ import type {
 	Tile,
 	Stack,
 	StackStatus,
-	LayerVisibility,
 	TileOrder,
 	RigMode,
 	VoxelRigConfig
@@ -42,20 +41,21 @@ export class Session {
 
 	plan = $derived<AcquisitionPlan>(
 		this.#appStatus?.session?.plan ?? {
-			profiles: [],
+			profile_order: [],
 			tile_order: 'row_wise',
 			interleaving: 'position_first',
 			stacks: []
 		}
 	);
-	acquisitionProfileIds = $derived<string[]>(this.plan.profiles.map((p) => p.profile_id));
-	gridConfig = $derived<GridConfig | null>(this.#appStatus?.session?.grid_config ?? null);
+	acquisitionProfileIds = $derived<string[]>(this.plan.profile_order);
+	gridConfig = $derived<GridConfig | null>(
+		this.config.profiles[this.#appStatus?.session?.active_profile_id ?? '']?.grid ?? null
+	);
 	tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
 	stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
 	activeStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id === this.activeProfileId));
 	tileOrder = $derived<TileOrder>(this.plan.tile_order);
 	interleaving = $derived<Interleaving>(this.plan.interleaving);
-	gridLocked = $derived(this.#appStatus?.session?.grid_locked ?? false);
 	mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
 	metadata = $derived<Record<string, unknown>>(this.#appStatus?.session?.metadata ?? {});
 
@@ -82,7 +82,6 @@ export class Session {
 	#unsubscribers: Array<() => void> = [];
 	#selection = new SvelteMap<number, SvelteSet<number>>([[0, new SvelteSet([0])]]);
 	selectedTiles = $derived<Tile[]>(this.#getSelectedTiles());
-	layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true, thumbnail: true });
 
 	constructor(init: SessionInit) {
 		this.client = init.client;
@@ -158,6 +157,13 @@ export class Session {
 
 	updateStatus(status: AppStatus): void {
 		this.#appStatus = status;
+
+		// Sync grid config from status into local rig config so it stays current
+		const pid = status.session?.active_profile_id;
+		const gc = status.session?.grid_config;
+		if (pid && gc && this.config.profiles[pid]) {
+			this.config.profiles[pid].grid = gc;
+		}
 	}
 
 	// ── REST helpers ────────────────────────────────────────
@@ -222,17 +228,17 @@ export class Session {
 
 	// --- Grid ---
 
-	async setGridOffset(xOffsetUm: number, yOffsetUm: number): Promise<void> {
+	async setGridOffset(xOffsetUm: number, yOffsetUm: number, force = false): Promise<void> {
 		try {
-			await this.#rest('PATCH', '/plan/grid', { x_offset_um: xOffsetUm, y_offset_um: yOffsetUm });
+			await this.#rest('PATCH', '/plan/grid', { x_offset_um: xOffsetUm, y_offset_um: yOffsetUm, force });
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to set grid offset');
 		}
 	}
 
-	async setGridOverlap(overlapX: number, overlapY: number): Promise<void> {
+	async setGridOverlap(overlapX: number, overlapY: number, force = false): Promise<void> {
 		try {
-			await this.#rest('PATCH', '/plan/grid', { overlap_x: overlapX, overlap_y: overlapY });
+			await this.#rest('PATCH', '/plan/grid', { overlap_x: overlapX, overlap_y: overlapY, force });
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to set grid overlap');
 		}
@@ -247,22 +253,6 @@ export class Session {
 	}
 
 	// --- Acquisition Plan ---
-
-	async addAcquisitionProfile(profileId: string): Promise<void> {
-		try {
-			await this.#rest('POST', '/plan/profiles', { profile_id: profileId });
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Failed to add profile');
-		}
-	}
-
-	async removeAcquisitionProfile(profileId: string): Promise<void> {
-		try {
-			await this.#rest('DELETE', '/plan/profiles', { profile_id: profileId });
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Failed to remove profile');
-		}
-	}
 
 	async setInterleaving(interleaving: Interleaving): Promise<void> {
 		try {

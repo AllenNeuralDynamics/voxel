@@ -1,3 +1,5 @@
+import type { GridConfig } from './types.ts';
+
 /**
  * Tile ordering pattern (matches backend TileOrder from voxel.config)
  */
@@ -231,6 +233,7 @@ export interface ProfileConfig {
 	desc: string;
 	channels: string[]; // list of channel IDs
 	daq: SyncTaskData; // DAQ sync task configuration
+	grid: GridConfig; // Grid configuration for tile planning
 	props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
 	setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
 }

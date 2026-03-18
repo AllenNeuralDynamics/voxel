@@ -11,6 +11,7 @@
 	--ui-sm: 2rem;
 	--ui-md: 2.25rem;
 	--ui-lg: 2.5rem;
+	--ui-xl: 3rem;
 }
 
 .density-compact {
@@ -18,6 +19,7 @@
 	--ui-sm: 1.75rem;
 	--ui-md: 2rem;
 	--ui-lg: 2.25rem;
+	--ui-xl: 3.5rem;
 }
 
 .density-comfortable {
@@ -25,6 +27,7 @@
 	--ui-sm: 2.25rem;
 	--ui-md: 2.5rem;
 	--ui-lg: 2.75rem;
+	--ui-xl: 3.75rem;
 }
 
 @theme inline {
@@ -33,6 +36,7 @@
 	--spacing-ui-sm: var(--ui-sm);
 	--spacing-ui-md: var(--ui-md);
 	--spacing-ui-lg: var(--ui-lg);
+	--spacing-ui-xl: var(--ui-xl);
 
 	/* ── Surfaces ──────────────────────────────────────────────────────── */
 	--color-canvas: var(--canvas);

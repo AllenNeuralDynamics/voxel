@@ -155,7 +155,7 @@
 {/snippet}
 
 {#snippet detailPanel(laser: Laser, cfg: ChannelConfig | null)}
-	<div class="bg-panel flex h-full w-80 flex-col justify-between gap-4">
+	<div class="bg-panel flex h-full w-96 flex-col justify-between gap-4">
 		<div class="flex flex-col gap-4 px-3 py-4">
 			<!-- Header -->
 			<div class="flex items-center justify-between">

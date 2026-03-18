@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
-from vxl.config import Interleaving, TileOrder, VoxelRigConfig
+from vxl.config import GridConfig, Interleaving, TileOrder, VoxelRigConfig
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
 from vxl.tile import Stack
 
@@ -17,62 +17,21 @@ yaml = YAML()
 yaml.preserve_quotes = True  # type: ignore[assignment]
 
 
-class GridConfig(BaseModel):
-    """Grid configuration for tile planning."""
-
-    x_offset_um: float = 0.0
-    y_offset_um: float = 0.0
-    overlap_x: float = Field(default=0.1, ge=0.0, lt=1.0)
-    overlap_y: float = Field(default=0.1, ge=0.0, lt=1.0)
-    z_step_um: float = -1.0  # sentinel: -1 means use rig default
-    default_z_start_um: float = 0.0
-    default_z_end_um: float = 100.0
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_overlap(cls, data: Any) -> Any:
-        """Migrate single 'overlap' field to overlap_x/overlap_y."""
-        if isinstance(data, dict) and "overlap" in data:
-            overlap = data.pop("overlap")
-            data.setdefault("overlap_x", overlap)
-            data.setdefault("overlap_y", overlap)
-        return data
-
-
-class PlanProfile(BaseModel):
-    """A profile entry in the acquisition plan with its per-profile grid config."""
-
-    profile_id: str
-    grid: GridConfig = Field(default_factory=GridConfig)
-
-
 class AcquisitionPlan(BaseModel):
-    """Ordered list of profiles with per-profile grid configs and a flat list of stacks.
+    """Acquisition plan with profile ordering and a flat list of stacks.
 
-    Profiles are stored as an ordered list so ordering is explicit and portable
-    across serialization boundaries (Python → msgpack → JS).
+    Profile plan membership is implicit: add_stacks auto-adds a profile to
+    profile_order, removing the last stack auto-removes it.
     """
 
-    profiles: list[PlanProfile] = Field(default_factory=list)
+    profile_order: list[str] = Field(default_factory=list)
     tile_order: TileOrder = "row_wise"
     interleaving: Interleaving = "position_first"
     stacks: list[Stack] = Field(default_factory=list)
 
-    @property
-    def profile_ids(self) -> list[str]:
-        """Get ordered list of profile IDs in the plan."""
-        return [p.profile_id for p in self.profiles]
-
-    def get_grid(self, profile_id: str) -> GridConfig | None:
-        """Get grid config for a profile, or None if not in plan."""
-        for p in self.profiles:
-            if p.profile_id == profile_id:
-                return p.grid
-        return None
-
     def has_profile(self, profile_id: str) -> bool:
         """Check if a profile is in the plan."""
-        return any(p.profile_id == profile_id for p in self.profiles)
+        return profile_id in self.profile_order
 
 
 class SessionConfig(BaseModel):
@@ -107,9 +66,9 @@ class SessionConfig(BaseModel):
     @model_validator(mode="after")
     def apply_rig_defaults(self) -> "SessionConfig":
         """Copy defaults from rig globals if not set."""
-        for pp in self.plan.profiles:
-            if pp.grid.z_step_um < 0:
-                pp.grid.z_step_um = self.rig.globals.default_z_step_um
+        for profile in self.rig.profiles.values():
+            if profile.grid.z_step_um < 0:
+                profile.grid.z_step_um = self.rig.globals.default_z_step_um
         return self
 
     def resolve_metadata(self) -> ExperimentMetadata:
@@ -121,45 +80,63 @@ class SessionConfig(BaseModel):
     def from_yaml(cls, path: Path) -> "SessionConfig":
         """Load from .voxel.yaml file, preserving anchors for round-tripping.
 
-        Handles three formats:
-        1. New: plan.profiles (list) + plan.tile_order + plan.interleaving
-        2. Current: plan.grid_configs (dict) + root tile_order → migrate
-        3. Legacy: no plan key → migrate from flat grid_config + stacks
+        Handles four formats:
+        1. Current: plan.profile_order (list of strings)
+        2. Old list-based: plan.profiles (list of {profile_id, grid})
+        3. Older dict-based: plan.grid_configs (dict) + root tile_order
+        4. Legacy: no plan key → flat grid_config + stacks
         """
         with path.open() as f:
             raw_data = yaml.load(f)
 
-        rig = VoxelRigConfig.model_validate(raw_data.get("rig", {}))
+        rig_data = raw_data.get("rig", {})
+        rig = VoxelRigConfig.model_validate(rig_data)
         default_tile_order = rig.globals.default_tile_order
+
+        def _merge_grid(pid: str, gc: GridConfig) -> None:
+            """Merge a grid config into rig.profiles[pid].grid."""
+            if pid in rig.profiles:
+                rig.profiles[pid].grid = gc
 
         if "plan" in raw_data:
             plan_data = raw_data["plan"]
 
-            if "profiles" in plan_data and isinstance(plan_data["profiles"], list):
-                # Format 1: New list-based profiles
-                profiles = [PlanProfile.model_validate(p) for p in plan_data["profiles"]]
+            if "profile_order" in plan_data:
+                # Format 1: Current format with profile_order
+                profile_order = list(plan_data["profile_order"])
+                tile_order = plan_data.get("tile_order", "row_wise")
+                interleaving = plan_data.get("interleaving", "position_first")
+            elif "profiles" in plan_data and isinstance(plan_data["profiles"], list):
+                # Format 2: Old list-based profiles → migrate grid into rig profiles
+                profile_order = []
+                for p in plan_data["profiles"]:
+                    pid = p["profile_id"]
+                    gc = GridConfig.model_validate(p.get("grid", {}))
+                    _merge_grid(pid, gc)
+                    profile_order.append(pid)
                 tile_order = plan_data.get("tile_order", "row_wise")
                 interleaving = plan_data.get("interleaving", "position_first")
             else:
-                # Format 2: Current dict-based grid_configs → migrate to list
+                # Format 3: Dict-based grid_configs → migrate
                 gc_dict = plan_data.get("grid_configs", {})
-                profiles = [
-                    PlanProfile(profile_id=pid, grid=GridConfig.model_validate(gc)) for pid, gc in gc_dict.items()
-                ]
-                # Move root tile_order into plan
+                profile_order = []
+                for pid, gc_data in gc_dict.items():
+                    gc = GridConfig.model_validate(gc_data)
+                    _merge_grid(pid, gc)
+                    profile_order.append(pid)
                 raw_tile_order = raw_data.get("tile_order", "row_wise")
                 tile_order = default_tile_order if raw_tile_order == "unset" else raw_tile_order
                 interleaving = "position_first"
 
             stacks = [Stack.model_validate(s) for s in plan_data.get("stacks", [])]
             plan = AcquisitionPlan(
-                profiles=profiles,
+                profile_order=profile_order,
                 tile_order=tile_order,
                 interleaving=interleaving,
                 stacks=stacks,
             )
         else:
-            # Format 3: Legacy flat grid_config + stacks
+            # Format 4: Legacy flat grid_config + stacks
             old_gc = GridConfig.model_validate(raw_data.get("grid_config", {}))
             old_stacks = [Stack.model_validate(s) for s in raw_data.get("stacks", [])]
 
@@ -167,12 +144,14 @@ class SessionConfig(BaseModel):
             if not profile_ids_with_stacks and rig.profiles:
                 profile_ids_with_stacks = {next(iter(rig.profiles))}
 
-            profiles = [PlanProfile(profile_id=pid, grid=old_gc.model_copy()) for pid in profile_ids_with_stacks]
+            for pid in profile_ids_with_stacks:
+                _merge_grid(pid, old_gc.model_copy())
+
             raw_tile_order = raw_data.get("tile_order", "row_wise")
             tile_order = default_tile_order if raw_tile_order == "unset" else raw_tile_order
 
             plan = AcquisitionPlan(
-                profiles=profiles,
+                profile_order=list(profile_ids_with_stacks),
                 tile_order=tile_order,
                 interleaving="position_first",
                 stacks=old_stacks,
@@ -224,7 +203,7 @@ class SessionConfig(BaseModel):
             "metadata_target": config.metadata_target,
             "metadata": config.metadata,
             "plan": {
-                "profiles": [],
+                "profile_order": [],
                 "tile_order": config.plan.tile_order,
                 "interleaving": config.plan.interleaving,
                 "stacks": [],
@@ -245,7 +224,7 @@ class SessionConfig(BaseModel):
         Cross-platform: uses Path.replace() which is atomic on POSIX, Linux, and Windows.
         """
         plan_data = {
-            "profiles": [{"profile_id": pp.profile_id, "grid": pp.grid.model_dump()} for pp in self.plan.profiles],
+            "profile_order": list(self.plan.profile_order),
             "tile_order": self.plan.tile_order,
             "interleaving": self.plan.interleaving,
             "stacks": [s.model_dump(mode="json") for s in self.plan.stacks],
@@ -263,14 +242,16 @@ class SessionConfig(BaseModel):
             self._raw_data.pop("grid_config", None)
             self._raw_data.pop("stacks", None)
             self._raw_data.pop("tile_order", None)
-            # Remove old dict-based grid_configs from plan if present
+            # Remove old plan keys on forward migration
             if isinstance(self._raw_data.get("plan"), dict):
                 self._raw_data["plan"].pop("grid_configs", None)
-            # Sync props/setup changes into raw rig profiles
+                self._raw_data["plan"].pop("profiles", None)
+            # Sync props/setup/grid changes into raw rig profiles
             if "profiles" in self._raw_data.get("rig", {}):
                 for profile_id, profile in self.rig.profiles.items():
                     raw_profile = self._raw_data["rig"]["profiles"].get(profile_id)
                     if raw_profile is not None:
+                        raw_profile["grid"] = profile.grid.model_dump()
                         if profile.props:
                             raw_profile["props"] = dict(profile.props)
                         elif "props" in raw_profile:

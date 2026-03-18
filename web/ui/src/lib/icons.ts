@@ -25,6 +25,7 @@ export { default as FolderOpenOutline } from '~icons/mdi/folder-open-outline';
 export { default as InformationOutline } from '~icons/mdi/information-outline';
 export { default as Link } from '~icons/mdi/link';
 export { default as LockOutline } from '~icons/mdi/lock-outline';
+export { default as LockOpenOutline } from '~icons/mdi/lock-open-outline';
 export { default as LinkOff } from '~icons/mdi/link-off';
 export { default as LayersOutline } from '~icons/mdi/layers-outline';
 export { default as Logout } from '~icons/mdi/logout';

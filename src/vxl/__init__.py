@@ -1,11 +1,9 @@
 from .camera.base import CameraBatchResult
-from .config import VoxelRigConfig
+from .config import GridConfig, VoxelRigConfig
 from .node import VoxelNode
 from .rig import RigMode, VoxelRig
 from .session import (
     AcquisitionPlan,
-    GridConfig,
-    PlanProfile,
     Session,
     SessionConfig,
     StepState,
@@ -18,7 +16,6 @@ __all__ = [
     "AcquisitionPlan",
     "CameraBatchResult",
     "GridConfig",
-    "PlanProfile",
     "RigMode",
     "Session",
     "SessionConfig",

@@ -214,7 +214,12 @@
 </section>
 
 <!-- Confirmation dialog -->
-<Dialog.Root bind:open={confirmOpen} onOpenChange={(open) => { if (!open) cancelSchemaChange(); }}>
+<Dialog.Root
+	bind:open={confirmOpen}
+	onOpenChange={(open) => {
+		if (!open) cancelSchemaChange();
+	}}
+>
 	<Dialog.Content size="sm">
 		<Dialog.Header>
 			<Dialog.Title>Change Metadata Schema</Dialog.Title>

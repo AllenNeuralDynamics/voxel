@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { getSessionContext } from '$lib/context';
 	import { ProfileStatus } from '$lib/ui/profile';
-	import { GridControls } from '$lib/ui/grid';
 	import { Button, Dialog } from '$lib/ui/kit';
 	import { sanitizeString } from '$lib/utils';
-	import { Plus, TrashCanOutline } from '$lib/icons';
+	import { TrashCanOutline } from '$lib/icons';
 	import { tv } from 'tailwind-variants';
 	import { watch } from 'runed';
 
@@ -35,7 +34,6 @@
 	);
 
 	const acqIds = $derived(session.acquisitionProfileIds);
-	const scoutLocked = $derived(session.workflow.stepStates['scout'] === 'committed');
 	const tabIds = $derived(Object.keys(session.config.profiles));
 	const planIds = $derived(tabIds.filter((id) => acqIds.includes(id)));
 	const availableIds = $derived(tabIds.filter((id) => !acqIds.includes(id)));
@@ -48,20 +46,14 @@
 		activeTab ? (session.config.profiles[activeTab]?.label ?? sanitizeString(activeTab)) : ''
 	);
 	const isActiveInPlan = $derived(activeTab ? acqIds.includes(activeTab) : false);
+	const activeTabStacks = $derived(activeTab ? session.stacks.filter((s) => s.profile_id === activeTab) : []);
 
-	let addDialogOpen = $state(false);
-	let removeDialogOpen = $state(false);
+	let clearDialogOpen = $state(false);
 
-	function confirmAddToPlan() {
-		if (!activeTab) return;
-		session.addAcquisitionProfile(activeTab);
-		addDialogOpen = false;
-	}
-
-	function confirmRemoveFromPlan() {
-		if (!activeTab) return;
-		session.removeAcquisitionProfile(activeTab);
-		removeDialogOpen = false;
+	function confirmClearStacks() {
+		if (!activeTab || activeTabStacks.length === 0) return;
+		session.removeStacks(activeTabStacks.map((s) => ({ row: s.row, col: s.col })));
+		clearDialogOpen = false;
 	}
 </script>
 
@@ -128,14 +120,13 @@
 					{/if}
 				</div>
 				<div class="flex items-center gap-2">
-					{#if isActiveInPlan}
+					{#if isActiveInPlan && activeTabStacks.length > 0}
 						<Button
 							variant="ghost"
 							size="icon-xs"
 							class="text-fg-muted shrink-0 hover:bg-danger/10 hover:text-danger"
-							title="Remove from plan"
-							disabled={scoutLocked}
-							onclick={() => (removeDialogOpen = true)}
+							title="Clear all stacks"
+							onclick={() => (clearDialogOpen = true)}
 						>
 							<TrashCanOutline width="16" height="16" />
 						</Button>
@@ -143,81 +134,46 @@
 					<ProfileStatus {session} profileId={activeTab} size="sm" />
 				</div>
 			</div>
-			<!-- Grid controls -->
-			{#if acqIds.includes(activeTab)}
-				<GridControls {session} profileId={activeTab} />
-			{:else}
-				<div class="grid h-full place-content-center">
-					<div class="text-fg-muted flex flex-col items-center justify-center gap-4 py-12 text-center text-sm">
-						<p>
-							Add <span class="text-fg">{activeTabLabel}</span> to the plan to configure its grid and stacks.
-						</p>
-						<Button variant="outline" size="sm" disabled={scoutLocked} onclick={() => (addDialogOpen = true)}>
-							<Plus width="14" height="14" />
-							Add to plan
-						</Button>
-					</div>
-				</div>
+			{@const gc = session.config.profiles[activeTab]?.grid}
+			{#if gc}
+				<p class="text-fg-muted text-sm">
+					Offset: X {(gc.x_offset_um / 1000).toFixed(1)} mm, Y {(gc.y_offset_um / 1000).toFixed(1)} mm &middot; Overlap: X
+					{gc.overlap_x.toFixed(2)}, Y {gc.overlap_y.toFixed(2)}
+					{#if isActiveInPlan}
+						&middot;
+						<span class="text-info">{activeTabStacks.length} stack{activeTabStacks.length !== 1 ? 's' : ''}</span>
+					{/if}
+				</p>
 			{/if}
 		{/if}
 	</div>
 	<!-- </div> -->
 </div>
 
-<!-- Add to plan confirmation -->
-<Dialog.Root bind:open={addDialogOpen}>
+<!-- Clear all stacks confirmation -->
+<Dialog.Root bind:open={clearDialogOpen}>
 	<Dialog.Portal>
 		<Dialog.Overlay />
 		<Dialog.Content>
 			<Dialog.Header>
-				<Dialog.Title>Add to plan</Dialog.Title>
+				<Dialog.Title>Clear all stacks</Dialog.Title>
 				<Dialog.Description>
-					Add <strong>{activeTabLabel}</strong> to the acquisition plan? A default grid configuration will be created for
-					this profile.
+					Remove all {activeTabStacks.length} stack{activeTabStacks.length !== 1 ? 's' : ''} for
+					<strong>{activeTabLabel}</strong>? The profile will be removed from the acquisition plan.
 				</Dialog.Description>
 			</Dialog.Header>
 			<Dialog.Footer>
 				<button
-					onclick={() => (addDialogOpen = false)}
+					onclick={() => (clearDialogOpen = false)}
 					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
 				>
 					Cancel
 				</button>
 				<button
-					onclick={confirmAddToPlan}
-					class="text-primary-fg rounded bg-primary px-3 py-1.5 text-sm transition-colors hover:bg-primary/90"
-				>
-					Add
-				</button>
-			</Dialog.Footer>
-		</Dialog.Content>
-	</Dialog.Portal>
-</Dialog.Root>
-
-<!-- Remove from plan confirmation -->
-<Dialog.Root bind:open={removeDialogOpen}>
-	<Dialog.Portal>
-		<Dialog.Overlay />
-		<Dialog.Content>
-			<Dialog.Header>
-				<Dialog.Title>Remove from plan</Dialog.Title>
-				<Dialog.Description>
-					Remove <strong>{activeTabLabel}</strong> from the acquisition plan? Grid configuration and stacks for this profile
-					will be discarded.
-				</Dialog.Description>
-			</Dialog.Header>
-			<Dialog.Footer>
-				<button
-					onclick={() => (removeDialogOpen = false)}
-					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
-				>
-					Cancel
-				</button>
-				<button
-					onclick={confirmRemoveFromPlan}
+					onclick={confirmClearStacks}
 					class="rounded bg-danger px-3 py-1.5 text-sm text-danger-fg transition-colors hover:bg-danger/90"
 				>
-					Remove
+					Clear
 				</button>
 			</Dialog.Footer>
 		</Dialog.Content>

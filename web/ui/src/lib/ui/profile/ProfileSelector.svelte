@@ -52,7 +52,7 @@
 
 	function profileStatus(id: string): 'stacks' | 'in-plan' | null {
 		if (session.stacks.some((s) => s.profile_id === id)) return 'stacks';
-		if (session.plan.profiles.some((p) => p.profile_id === id)) return 'in-plan';
+		if (session.plan.profile_order.includes(id)) return 'in-plan';
 		return null;
 	}
 

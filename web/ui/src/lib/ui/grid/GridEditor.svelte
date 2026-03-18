@@ -3,6 +3,7 @@
 	import { Select, SpinBox } from '$lib/ui/kit';
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type Interleaving, type TileOrder } from '$lib/main/types';
+	import { watch } from 'runed';
 
 	interface Props {
 		session: Session;
@@ -55,13 +56,15 @@
 		return { start: session.gridConfig?.default_z_start_um ?? 0, end: session.gridConfig?.default_z_end_um ?? 100 };
 	}
 
-	$effect(() => {
-		void selectedTile;
-		isEditing = false;
-		const defaults = getDefaultZ();
-		zStartInput = defaults.start;
-		zEndInput = defaults.end;
-	});
+	watch(
+		() => selectedTile,
+		() => {
+			isEditing = false;
+			const defaults = getDefaultZ();
+			zStartInput = defaults.start;
+			zEndInput = defaults.end;
+		}
+	);
 
 	let isDirty = $derived(stack ? zStartInput !== stack.z_start_um || zEndInput !== stack.z_end_um : true);
 	let numSlices = $derived(Math.ceil(Math.abs(zEndInput - zStartInput) / (session.gridConfig?.z_step_um ?? 1)));

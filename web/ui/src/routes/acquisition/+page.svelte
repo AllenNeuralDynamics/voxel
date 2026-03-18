@@ -121,7 +121,7 @@
 
 	// ── Profile reorder ──
 
-	const planProfiles = $derived(session.plan.profiles);
+	const planProfiles = $derived(session.plan.profile_order.map((id) => ({ profile_id: id })));
 
 	// ── Clipboard ──
 

@@ -261,7 +261,7 @@
 {/snippet}
 
 {#snippet editPanel(cameras: Camera[])}
-	<div class="bg-panel flex h-full w-80 shrink-0 flex-col px-3">
+	<div class="bg-panel flex h-full w-96 shrink-0 flex-col px-3">
 		<div class="flex-1 space-y-4 overflow-auto pt-4">
 			<!-- Exposure -->
 			<div>

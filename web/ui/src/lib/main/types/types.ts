@@ -51,18 +51,11 @@ export interface WorkflowStepConfig {
 }
 
 /**
- * A profile entry in the acquisition plan with its per-profile grid config.
- */
-export interface PlanProfile {
-	profile_id: string;
-	grid: GridConfig;
-}
-
-/**
- * Acquisition plan - ordered list of profiles with grid configs, ordering, and stacks.
+ * Acquisition plan - profile ordering and stacks.
+ * Profile plan membership is implicit via stacks.
  */
 export interface AcquisitionPlan {
-	profiles: PlanProfile[];
+	profile_order: string[];
 	tile_order: TileOrder;
 	interleaving: Interleaving;
 	stacks: Stack[];
@@ -87,7 +80,6 @@ export interface SessionStatus {
 	active_profile_id: string | null;
 	mode: RigMode;
 	metadata: Record<string, unknown>;
-	grid_locked: boolean;
 	workflow_committed: string | null;
 	timestamp: string;
 

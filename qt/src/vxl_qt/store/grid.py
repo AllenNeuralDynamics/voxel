@@ -10,8 +10,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
 
-from vxl.config import TileOrder
-from vxl.session import GridConfig
+from vxl.config import GridConfig, TileOrder
 from vxl.tile import Stack, StackStatus, Tile
 
 if TYPE_CHECKING:
@@ -147,10 +146,11 @@ class GridStore(QObject):
 
     @property
     def grid_locked(self) -> bool:
-        """Whether grid is locked (acquisition has started)."""
+        """Whether grid is locked (stacks exist for the active profile)."""
         if self._session is None:
             return False
-        return self._session.grid_locked
+        active_pid = self._session.rig.active_profile_id
+        return any(s.profile_id == active_pid for s in self._session.stacks)
 
     @property
     def fov_size(self) -> tuple[float, float]:

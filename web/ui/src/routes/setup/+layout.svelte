@@ -12,6 +12,7 @@
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Check, LucideCircle } from '$lib/icons';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
+	import StagePosition from '$lib/ui/StagePosition.svelte';
 	import LasersPanel from './LasersPanel.svelte';
 	import CamerasPanel from './CamerasPanel.svelte';
 
@@ -153,10 +154,8 @@
 		{/if}
 	</Pane>
 </PaneGroup>
-<footer class="flex items-center justify-between border-t border-border px-4 py-2">
-	<div class="flex divide-x divide-border rounded border border-border">
-		<button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
-	</div>
+<footer class="h-ui-xl flex items-center justify-between border-t border-border px-4 py-2">
+	<StagePosition {session} />
 	<div class="flex divide-x divide-border rounded border border-border">
 		<button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}>Cameras</button>
 		<button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
@@ -173,5 +172,6 @@
 				</div>
 			{/each}
 		</button>
+		<button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
 	</div>
 </footer>

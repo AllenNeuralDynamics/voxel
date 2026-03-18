@@ -1,11 +1,29 @@
+<script lang="ts" module>
+	import type { LayerVisibility } from '$lib/main/types';
+
+	let layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true, thumbnail: true });
+</script>
+
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { getStackStatusColor, type Tile, type StackStatus } from '$lib/main/types';
-	import { Button, ContextMenu, SpinBox } from '$lib/ui/kit';
+	import { ContextMenu, Dialog, SpinBox } from '$lib/ui/kit';
 	import { onMount } from 'svelte';
 	import { compositeFullFrames } from '$lib/main/preview.svelte.ts';
-	import { GridLines, StackLight, PathArrow, Plus, ImageLight } from '$lib/icons';
+	import {
+		GridLines,
+		StackLight,
+		PathArrow,
+		Plus,
+		ImageLight,
+		Link,
+		LinkOff,
+		LockOutline,
+		LockOpenOutline
+	} from '$lib/icons';
+	import { sanitizeString } from '$lib/utils';
 	import type { Component } from 'svelte';
+	import { watch } from 'runed';
 
 	interface Props {
 		session: Session;
@@ -16,10 +34,9 @@
 	// ── Geometry ─────────────────────────────────────────────────────────
 
 	const SLIDER_WIDTH = 16;
-	const Z_AREA_WIDTH = SLIDER_WIDTH * 2;
+	const Z_AREA_WIDTH = SLIDER_WIDTH * 4;
 	const STAGE_GAP = 16;
 	const STAGE_BORDER = 0.5;
-	const TOGGLES_HEIGHT = 30;
 
 	const ARROW_HEAD = 'M -0.15 -0.2 L 0.15 0 L -0.15 0.2';
 	const Z_SVG_WIDTH = 30;
@@ -63,7 +80,7 @@
 
 	function updateCanvasSize(containerWidth: number, containerHeight: number) {
 		const availableWidth = containerWidth - SLIDER_WIDTH / 2 - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 2;
-		const availableHeight = containerHeight - SLIDER_WIDTH / 2 - TOGGLES_HEIGHT;
+		const availableHeight = containerHeight - SLIDER_WIDTH / 2;
 		if (availableWidth <= 0 || availableHeight <= 0) return;
 
 		const containerAspect = availableWidth / availableHeight;
@@ -119,12 +136,12 @@
 		}
 	});
 
-	$effect(() => {
-		if (session.preview) {
-			void session.preview.redrawGeneration;
+	watch(
+		() => session.preview?.redrawGeneration,
+		() => {
 			fovNeedsRedraw = true;
 		}
-	});
+	);
 
 	function fovFrameLoop() {
 		if (fovNeedsRedraw && session.preview) {
@@ -208,16 +225,53 @@
 		}
 	}
 
-	function toggleLayer(key: keyof typeof session.layerVisibility) {
-		session.layerVisibility = { ...session.layerVisibility, [key]: !session.layerVisibility[key] };
+	function toggleLayer(key: keyof LayerVisibility) {
+		layerVisibility = { ...layerVisibility, [key]: !layerVisibility[key] };
 	}
 
-	type Layer = {
-		key: keyof typeof session.layerVisibility;
-		color: string;
-		Icon: Component;
-		title: string;
-	};
+	const layers: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
+		{ key: 'grid', color: 'text-info', Icon: GridLines, title: 'Toggle grid' },
+		{ key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
+		{ key: 'path', color: 'text-fg-muted', Icon: PathArrow, title: 'Toggle path' },
+		{ key: 'fov', color: 'text-success', Icon: Plus, title: 'Toggle FOV' },
+		{ key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' }
+	];
+
+	// ── Grid controls ───────────────────────────────────────────────────
+
+	let gc = $derived(session.config.profiles[session.activeProfileId ?? '']?.grid ?? null);
+	let hasStacks = $derived(session.activeStacks.length > 0);
+	let gridForceUnlocked = $state(false);
+	let gridEditable = $derived(!hasStacks || gridForceUnlocked);
+	let gridLimX = $derived(session.fov.width * (1 - (gc?.overlap_x ?? 0.1)));
+	let gridLimY = $derived(session.fov.height * (1 - (gc?.overlap_y ?? 0.1)));
+	let activeProfileLabel = $derived(
+		session.activeProfileId
+			? (session.config.profiles[session.activeProfileId]?.label ?? sanitizeString(session.activeProfileId))
+			: null
+	);
+
+	// Auto re-lock when profile changes or stacks increase
+	watch(
+		() => session.activeProfileId,
+		() => {
+			gridForceUnlocked = false;
+		}
+	);
+
+	let prevStackCount = $state(0);
+	watch(
+		() => session.activeStacks.length,
+		(count) => {
+			if (count > prevStackCount) gridForceUnlocked = false;
+			prevStackCount = count;
+		}
+	);
+
+	let lockDialogOpen = $state(false);
+
+	let offsetLinked = $state(false);
+	let overlapLinked = $state(true);
 
 	// ── Context menu ────────────────────────────────────────────────────
 
@@ -303,24 +357,167 @@
 	}
 </script>
 
-{#snippet layerToggle(
-	active: boolean,
-	activeColor: string,
-	Icon: Component,
-	title: string,
-	onclick: () => void,
-	disabled?: boolean
-)}
-	<button
-		{onclick}
-		{disabled}
-		class="rounded p-1 transition-colors {active
-			? `${activeColor} hover:bg-element-hover`
-			: 'text-fg-muted hover:text-fg hover:bg-element-hover'} disabled:cursor-not-allowed disabled:opacity-50"
-		{title}
-	>
-		<Icon width="14" height="14" />
-	</button>
+{#snippet layerToggles()}
+	<div class="flex gap-0.5">
+		{#each layers as { key, color, Icon, title } (key)}
+			{@const active = layerVisibility[key]}
+			<button
+				onclick={() => toggleLayer(key)}
+				class="rounded p-1 transition-colors {active
+					? `${color} hover:bg-element-hover`
+					: 'text-fg-muted hover:text-fg hover:bg-element-hover'}"
+				{title}
+			>
+				<Icon width="14" height="14" />
+			</button>
+		{/each}
+	</div>
+{/snippet}
+
+{#snippet gridControls()}
+	{#if gc}
+		{@const size = 'xs'}
+		{@const variant = 'ghost'}
+		<div class="flex w-full items-center justify-between gap-4">
+			<div class="flex items-center gap-1.5">
+				<SpinBox
+					{size}
+					{variant}
+					value={gc.x_offset_um / 1000}
+					min={-gridLimX}
+					max={gridLimX}
+					step={0.1}
+					snapValue={0.0}
+					decimals={1}
+					numCharacters={8}
+					prefix="Offset X"
+					suffix="mm"
+					disabled={!gridEditable}
+					onChange={(value) => {
+						if (!gridEditable) return;
+						const yMm = offsetLinked ? value : gc!.y_offset_um / 1000;
+						session.setGridOffset(value * 1000, yMm * 1000, gridForceUnlocked);
+					}}
+				/>
+				<button
+					class="text-fg-muted hover:bg-element-hover hover:text-fg flex h-5 w-5 items-center justify-center rounded transition-colors"
+					title={offsetLinked ? 'Unlink offset X/Y' : 'Link offset X/Y'}
+					onclick={() => {
+						offsetLinked = !offsetLinked;
+						if (offsetLinked && gc) {
+							session.setGridOffset(gc.x_offset_um, gc.x_offset_um, gridForceUnlocked);
+						}
+					}}
+				>
+					{#if offsetLinked}
+						<Link class="h-3 w-3" />
+					{:else}
+						<LinkOff class="h-3 w-3" />
+					{/if}
+				</button>
+				<SpinBox
+					{size}
+					{variant}
+					value={gc.y_offset_um / 1000}
+					min={-gridLimY}
+					max={gridLimY}
+					snapValue={0.0}
+					step={0.1}
+					decimals={1}
+					numCharacters={8}
+					prefix="Offset Y"
+					suffix="mm"
+					disabled={!gridEditable}
+					onChange={(value) => {
+						if (!gridEditable) return;
+						const xMm = offsetLinked ? value : gc!.x_offset_um / 1000;
+						session.setGridOffset(xMm * 1000, value * 1000, gridForceUnlocked);
+					}}
+				/>
+			</div>
+			{#if activeProfileLabel}
+				<div class="flex items-center gap-4 rounded-full bg-info/10 px-4 py-1">
+					<span class="rounded-full text-xs font-medium tracking-wide text-nowrap text-info uppercase">
+						{activeProfileLabel}
+					</span>
+					{#if hasStacks}
+						<button
+							class="transition-colors, flex cursor-pointer items-center justify-center rounded
+							{gridForceUnlocked ? 'hover:bg-element-hover text-danger' : 'hover:bg-element-hover hover:text-fg text-warning'}"
+							title={gridForceUnlocked ? 'Re-lock grid' : 'Unlock grid editing'}
+							onclick={() => {
+								if (gridForceUnlocked) {
+									gridForceUnlocked = false;
+								} else {
+									lockDialogOpen = true;
+								}
+							}}
+						>
+							{#if gridForceUnlocked}
+								<LockOpenOutline class="size-4" />
+							{:else}
+								<LockOutline class="size-4" />
+							{/if}
+						</button>
+					{/if}
+				</div>
+			{/if}
+			<div class="flex items-center gap-1.5">
+				<SpinBox
+					{size}
+					{variant}
+					value={gc.overlap_x}
+					min={0}
+					max={0.5}
+					snapValue={0.1}
+					step={0.01}
+					decimals={2}
+					numCharacters={8}
+					prefix="Overlap X"
+					suffix="%"
+					disabled={!gridEditable}
+					onChange={(value) => {
+						if (!gridEditable) return;
+						session.setGridOverlap(value, overlapLinked ? value : gc!.overlap_y, gridForceUnlocked);
+					}}
+				/>
+				<button
+					class="text-fg-muted hover:bg-element-hover hover:text-fg flex h-5 w-5 items-center justify-center rounded transition-colors"
+					title={overlapLinked ? 'Unlink overlap X/Y' : 'Link overlap X/Y'}
+					onclick={() => {
+						overlapLinked = !overlapLinked;
+						if (overlapLinked && gc) {
+							session.setGridOverlap(gc.overlap_x, gc.overlap_x, gridForceUnlocked);
+						}
+					}}
+				>
+					{#if overlapLinked}
+						<Link class="h-3 w-3" />
+					{:else}
+						<LinkOff class="h-3 w-3" />
+					{/if}
+				</button>
+				<SpinBox
+					{size}
+					{variant}
+					value={gc.overlap_y}
+					min={0}
+					max={0.5}
+					snapValue={0.1}
+					step={0.01}
+					decimals={2}
+					numCharacters={8}
+					prefix="Overlap Y"
+					suffix="%"
+					disabled={!gridEditable}
+					onChange={(value) => {
+						if (!gridEditable) return;
+						session.setGridOverlap(overlapLinked ? value : gc!.overlap_x, value, gridForceUnlocked);
+					}}
+				/>
+			</div>
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet stageSlider(
@@ -347,7 +544,7 @@
 <!-- ── SVG layer snippets ─────────────────────────────────────────────── -->
 
 {#snippet stacksLayer()}
-	{#if session.layerVisibility.stacks}
+	{#if layerVisibility.stacks}
 		<g class="stacks-layer">
 			{#each profileStacks as stack (`${stack.row}_${stack.col}`)}
 				{@const cx = toMm(stack.x_um)}
@@ -376,7 +573,7 @@
 {/snippet}
 
 {#snippet pathLayer()}
-	{#if session.layerVisibility.path && profileStacks.length > 1}
+	{#if layerVisibility.path && profileStacks.length > 1}
 		{@const points = profileStacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
 		<g class="pointer-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
 			<polyline
@@ -401,7 +598,7 @@
 {/snippet}
 
 {#snippet fovLayer()}
-	{#if session.layerVisibility.fov}
+	{#if layerVisibility.fov}
 		<g class="fov-layer pointer-events-none">
 			<line
 				class="nss"
@@ -450,7 +647,7 @@
 {/snippet}
 
 {#snippet gridLayer()}
-	{#if session.layerVisibility.grid}
+	{#if layerVisibility.grid}
 		<g class="grid-layer">
 			{#each session.tiles as tile (`${tile.row}_${tile.col}`)}
 				{#if !isSelected(tile)}
@@ -466,72 +663,79 @@
 	{/if}
 {/snippet}
 
+{#snippet zAxisPanel()}
+	<div
+		class="hover:bg-canvas bg-elevated/50 relative border border-border transition-colors duration-300 ease-in-out"
+		style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
+	>
+		{@render stageSlider(
+			'vertical-rtl',
+			session.stage.z.lowerLimit,
+			session.stage.z.upperLimit,
+			isZMoving && targetZ !== null ? targetZ : session.stage.z.position,
+			isZMoving,
+			handleZInput,
+			`position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: ${Z_AREA_WIDTH}px;`
+		)}
+		<svg
+			viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
+			class="z-svg pointer-none absolute inset-0 z-0"
+			preserveAspectRatio="none"
+			width="100%"
+			height="100%"
+		>
+			{#if session.stage.z}
+				{#each profileStacks as stack (`z_${stack.row}_${stack.col}`)}
+					{@const selected = session.isTileSelected(stack.row, stack.col)}
+					{@const z0Y =
+						(1 - (stack.z_start_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
+					{@const z1Y =
+						(1 - (stack.z_end_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
+					<g
+						class={getStackStatusColor(stack.status)}
+						stroke-width={selected ? '1.5' : '0.5'}
+						stroke="currentColor"
+						opacity={selected ? 1 : 0.3}
+					>
+						<line class="nss" x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
+						<line class="nss" x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
+					</g>
+				{/each}
+			{/if}
+			<text
+				x={Z_SVG_WIDTH / 2}
+				y="12"
+				text-anchor="middle"
+				class="text-fg-muted fill-current text-xs"
+				transform="scale({Z_SVG_WIDTH / Z_AREA_WIDTH}, 1)"
+			>
+				Z axis
+			</text>
+			<line
+				x1="0"
+				y1={zLineY}
+				x2={Z_SVG_WIDTH}
+				y2={zLineY}
+				class="nss z-line"
+				class:moving={isZMoving}
+				stroke-width="1"
+				stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+			>
+				<title>Z: {session.stage.z?.position.toFixed(1)} mm</title>
+			</line>
+		</svg>
+	</div>
+{/snippet}
+
 <!-- ── Layout ─────────────────────────────────────────────────────────── -->
 
-<div class="flex h-full w-full flex-col gap-2 p-2">
+<div class="grid h-full w-full grid-rows-[auto_1fr_auto] gap-8">
 	{#if session.stage.x && session.stage.y && session.stage.z}
-		{@const layers: Layer[] = [
-			{ key: 'grid', color: 'text-info', Icon: GridLines, title: 'Toggle grid' },
-			{ key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
-			{ key: 'path', color: 'text-fg-muted', Icon: PathArrow, title: 'Toggle path' },
-			{ key: 'fov', color: 'text-success', Icon: Plus, title: 'Toggle FOV' },
-			{ key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' },
-		]}
-
-		<div class="grid flex-1 grid-rows-[1fr_auto] overflow-hidden" bind:this={containerRef}>
+		<div class="flex w-full items-center justify-between px-4 pt-4">
+			{@render gridControls()}
+		</div>
+		<div class="grid flex-1 grid-rows-[1fr_auto] overflow-hidden px-4" bind:this={containerRef}>
 			<div class="flex place-self-center" style:gap="{STAGE_GAP}px">
-				<div
-					class="hover:bg-canvas relative border border-border transition-colors duration-300 ease-in-out"
-					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
-				>
-					{@render stageSlider(
-						'vertical-rtl',
-						session.stage.z.lowerLimit,
-						session.stage.z.upperLimit,
-						isZMoving && targetZ !== null ? targetZ : session.stage.z.position,
-						isZMoving,
-						handleZInput,
-						`position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; --slider-width: ${Z_AREA_WIDTH}px;`
-					)}
-					<svg
-						viewBox="0 0 {Z_SVG_WIDTH} {canvasHeight}"
-						class="z-svg pointer-none absolute inset-0 z-0"
-						preserveAspectRatio="none"
-						width="100%"
-						height="100%"
-					>
-						{#if session.stage.z}
-							{#each profileStacks as stack (`z_${stack.row}_${stack.col}`)}
-								{@const selected = session.isTileSelected(stack.row, stack.col)}
-								{@const z0Y =
-									(1 - (stack.z_start_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
-								{@const z1Y =
-									(1 - (stack.z_end_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * canvasHeight - 1}
-								<g
-									class={getStackStatusColor(stack.status)}
-									stroke-width={selected ? '1.5' : '0.5'}
-									stroke="currentColor"
-									opacity={selected ? 1 : 0.3}
-								>
-									<line class="nss" x1="0" y1={z0Y} x2={Z_SVG_WIDTH} y2={z0Y} />
-									<line class="nss" x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
-								</g>
-							{/each}
-						{/if}
-						<line
-							x1="0"
-							y1={zLineY}
-							x2={Z_SVG_WIDTH}
-							y2={zLineY}
-							class="nss z-line"
-							class:moving={isZMoving}
-							stroke-width="1"
-							stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
-						>
-							<title>Z: {session.stage.z?.position.toFixed(1)} mm</title>
-						</line>
-					</svg>
-				</div>
 				<div
 					class="grid"
 					style="grid-template-columns: {SLIDER_WIDTH / 2}px auto; grid-template-rows: {SLIDER_WIDTH / 2}px 1fr;"
@@ -568,7 +772,7 @@
 								role="img"
 								oncontextmenu={handleCanvasContext}
 							>
-								{#if session.layerVisibility.thumbnail && thumbnail}
+								{#if layerVisibility.thumbnail && thumbnail}
 									<image
 										href={thumbnail}
 										x={fovLeft}
@@ -668,66 +872,14 @@
 						</ContextMenu.Content>
 					</ContextMenu.Root>
 				</div>
+				{@render zAxisPanel()}
 			</div>
 		</div>
-		<div class="flex w-full flex-row-reverse items-center justify-between">
-			<div class="flex gap-0.5">
-				{#each layers as { key, color, Icon, title } (key)}
-					{@render layerToggle(session.layerVisibility[key], color, Icon, title, () => toggleLayer(key))}
-				{/each}
-			</div>
-			<div class="flex items-center gap-3">
-				<Button
-					variant={session.stage.isMoving ? 'danger' : 'outline'}
-					size="sm"
-					onclick={() => session.stage.halt()}
-					disabled={!session.stage.isMoving}
-					aria-label="Halt stage"
-				>
-					Halt
-				</Button>
-				<div class="flex items-center gap-2">
-					<SpinBox
-						value={session.stage.x.position}
-						min={session.stage.x.lowerLimit}
-						max={session.stage.x.upperLimit}
-						step={0.01}
-						decimals={2}
-						numCharacters={8}
-						size="xs"
-						prefix="X"
-						suffix="mm"
-						color={session.stage.x.isMoving ? 'var(--danger)' : undefined}
-						onChange={(v) => session.stage.x.move(v)}
-					/>
-					<SpinBox
-						value={session.stage.y.position}
-						min={session.stage.y.lowerLimit}
-						max={session.stage.y.upperLimit}
-						step={0.01}
-						decimals={2}
-						numCharacters={8}
-						size="xs"
-						prefix="Y"
-						suffix="mm"
-						color={session.stage.y.isMoving ? 'var(--danger)' : undefined}
-						onChange={(v) => session.stage.y.move(v)}
-					/>
-					<SpinBox
-						value={session.stage.z.position}
-						min={session.stage.z.lowerLimit}
-						max={session.stage.z.upperLimit}
-						step={0.001}
-						decimals={3}
-						numCharacters={8}
-						size="xs"
-						prefix="Z"
-						suffix="mm"
-						color={session.stage.z.isMoving ? 'var(--danger)' : undefined}
-						onChange={(v) => session.stage.z.move(v)}
-					/>
-				</div>
-			</div>
+		<div class="h-ui-xl flex w-full items-center justify-between border-t border-border px-4">
+			{@render layerToggles()}
+			{#if activeProfileLabel}
+				<span class="text-fg-muted text-xs tracking-wide uppercase">{activeProfileLabel}</span>
+			{/if}
 		</div>
 	{:else}
 		<div class="grid flex-1 place-content-center">
@@ -735,6 +887,38 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Grid unlock confirmation dialog -->
+<Dialog.Root bind:open={lockDialogOpen}>
+	<Dialog.Portal>
+		<Dialog.Overlay />
+		<Dialog.Content>
+			<Dialog.Header>
+				<Dialog.Title>Unlock grid editing</Dialog.Title>
+				<Dialog.Description>
+					Stacks exist for this profile. Changing grid offset or overlap will recalculate stack positions. Continue?
+				</Dialog.Description>
+			</Dialog.Header>
+			<Dialog.Footer>
+				<button
+					onclick={() => (lockDialogOpen = false)}
+					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={() => {
+						gridForceUnlocked = true;
+						lockDialogOpen = false;
+					}}
+					class="rounded bg-warning px-3 py-1.5 text-sm text-warning-fg transition-colors hover:bg-warning/90"
+				>
+					Unlock
+				</button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>
 
 <!-- ── Styles ─────────────────────────────────────────────────────────── -->
 

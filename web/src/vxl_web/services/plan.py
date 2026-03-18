@@ -10,8 +10,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from vxl.config import Interleaving, TileOrder
-from vxl.session import GridConfig
+from vxl.config import GridConfig, Interleaving, TileOrder
 
 from .session import SessionService, get_session_service
 
@@ -34,18 +33,6 @@ class InterleavingRequest(BaseModel):
     interleaving: Interleaving
 
 
-class AddProfileRequest(BaseModel):
-    """Request model for adding a profile to the plan."""
-
-    profile_id: str
-
-
-class RemoveProfileRequest(BaseModel):
-    """Request model for removing a profile from the plan."""
-
-    profile_id: str
-
-
 class ReorderProfilesRequest(BaseModel):
     """Request model for reordering profiles in the plan."""
 
@@ -59,6 +46,7 @@ class GridUpdateRequest(BaseModel):
     y_offset_um: float | None = None
     overlap_x: float | None = None
     overlap_y: float | None = None
+    force: bool = False
 
 
 class StackInput(BaseModel):
@@ -129,34 +117,6 @@ async def set_interleaving(
     return {"interleaving": request.interleaving}
 
 
-@plan_router.post("/profiles")
-async def add_profile(
-    request: AddProfileRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict[str, str]:
-    """Add a profile to the acquisition plan."""
-    try:
-        service.session.add_acquisition_profile(request.profile_id)
-        service.broadcast({}, with_status=True)
-        return {"profile_id": request.profile_id, "status": "added"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@plan_router.delete("/profiles")
-async def remove_profile(
-    request: RemoveProfileRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict[str, str]:
-    """Remove a profile from the acquisition plan."""
-    try:
-        service.session.remove_acquisition_profile(request.profile_id)
-        service.broadcast({}, with_status=True)
-        return {"profile_id": request.profile_id, "status": "removed"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
 @plan_router.put("/profiles/reorder")
 async def reorder_profiles(
     request: ReorderProfilesRequest,
@@ -185,9 +145,9 @@ async def update_grid(
     """Update grid configuration for the active profile."""
     try:
         if request.x_offset_um is not None and request.y_offset_um is not None:
-            service.session.set_grid_offset(request.x_offset_um, request.y_offset_um)
+            service.session.set_grid_offset(request.x_offset_um, request.y_offset_um, force=request.force)
         if request.overlap_x is not None and request.overlap_y is not None:
-            service.session.set_overlap(request.overlap_x, request.overlap_y)
+            service.session.set_overlap(request.overlap_x, request.overlap_y, force=request.force)
 
         service.broadcast({}, with_status=True)
         return service.session.grid_config
