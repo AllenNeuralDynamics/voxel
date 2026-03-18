@@ -53,12 +53,12 @@
 		padding: 0;
 		border: none;
 		background-color: transparent;
-		--_track-color: var(--color-zinc-700);
+		--_track-color: var(--color-border);
 		--_track-width: 1px;
 
-		&:hover {
+		/*&:hover {
 			--_track-color: var(--color-zinc-500);
-		}
+		}*/
 
 		&::-webkit-slider-runnable-track {
 			background: var(--_track-bg, transparent);

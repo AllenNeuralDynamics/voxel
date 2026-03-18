@@ -48,7 +48,7 @@
 
 {#if gc}
 	{@const size = 'xs'}
-	{@const variant = 'ghost'}
+	{@const variant = 'filled'}
 	<div class="flex w-full items-center justify-between gap-4">
 		<div class="flex items-center gap-1.5">
 			<SpinBox

@@ -38,7 +38,6 @@
 	const STAGE_GAP = 16;
 	const STAGE_BORDER = 0.5;
 
-	const ARROW_HEAD = 'M -0.15 -0.2 L 0.15 0 L -0.15 0.2';
 	const Z_SVG_WIDTH = 30;
 
 	let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
@@ -66,16 +65,22 @@
 
 	let stageAspectRatio = $derived(viewBoxWidth / viewBoxHeight);
 	let scale = $derived(canvasWidth / viewBoxWidth);
-	let marginPixelsX = $derived(marginX * scale + 0.5);
-	let marginPixelsY = $derived(marginY * scale);
 	let stagePixelsX = $derived(session.stage.width * scale);
 	let stagePixelsY = $derived(session.stage.height * scale);
+
+	let xSliderStyle = $derived(
+		`left: ${marginX * scale}px; top: ${-SLIDER_WIDTH / 2}px; width: ${stagePixelsX}px; height: ${SLIDER_WIDTH}px;`
+	);
+	let ySliderStyle = $derived(
+		`left: ${-SLIDER_WIDTH / 2}px; top: ${marginY * scale}px; width: ${SLIDER_WIDTH}px; height: ${stagePixelsY}px;`
+	);
+
 	let fovExtension = $derived(SLIDER_WIDTH / 2 / scale);
 	let zLineY = $derived((1 - fovZ / session.stage.depth) * canvasHeight - 1);
 
 	function updateCanvasSize(containerWidth: number, containerHeight: number) {
-		const availableWidth = containerWidth - SLIDER_WIDTH / 2 - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 2;
-		const availableHeight = containerHeight - SLIDER_WIDTH / 2;
+		const availableWidth = containerWidth - Z_AREA_WIDTH - STAGE_GAP - STAGE_BORDER * 2;
+		const availableHeight = containerHeight;
 		if (availableWidth <= 0 || availableHeight <= 0) return;
 
 		const containerAspect = availableWidth / availableHeight;
@@ -296,8 +301,12 @@
 					y={cy - h / 2}
 					width={w}
 					height={h}
-					class="nss tile outline-none"
-					class:selected
+					class="nss hover:fill-fg-muted/15 fill-transparent transition-colors outline-none {selected
+						? 'stroke-warning/50 '
+						: 'stroke-border'}"
+					stroke-width={1}
+					stroke-dasharray=""
+					stroke-linecap="round"
 					class:cursor-pointer={!isXYMoving}
 					class:cursor-not-allowed={isXYMoving}
 					role="button"
@@ -328,7 +337,7 @@
 					width={w}
 					height={h}
 					data-stack-status={stack.status}
-					class="nss stack text-(--stack-status) outline-none"
+					class="nss fill-current text-(--stack-status) transition-[fill-opacity] duration-300 outline-none [fill-opacity:0.2] hover:[fill-opacity:0.3]"
 					class:cursor-pointer={!isXYMoving}
 					class:cursor-not-allowed={isXYMoving}
 					role="button"
@@ -352,8 +361,9 @@
 				{@const midX = (p1.x + p2.x) / 2}
 				{@const midY = (p1.y + p2.y) / 2}
 				{@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
+				{@const arrowHead = 'M -0.15 -0.2 L 0.15 0 L -0.15 0.2'}
 				<path
-					d={ARROW_HEAD}
+					d={arrowHead}
 					stroke-width="1"
 					class="nss fill-none opacity-70"
 					transform="translate({midX}, {midY}) rotate({angle})"
@@ -453,22 +463,21 @@
 {/snippet}
 
 {#if session.stage.x && session.stage.y && session.stage.z}
-	<div class="grid h-full grid-rows-[auto_1fr]">
+	<div class="flex h-full flex-col-reverse">
 		<div class="flex w-full items-center justify-between px-4 py-4">
 			<GridControls {session} />
 		</div>
-		<div class="grid h-full w-full place-content-center overflow-hidden px-4" bind:this={containerRef}>
+		<div class="grid flex-1 place-content-center overflow-hidden px-4 py-8" bind:this={containerRef}>
 			<div class="flex" style:gap="{STAGE_GAP}px">
-				<div
-					class="relative mb-24 grid"
-					style="grid-template-columns: {SLIDER_WIDTH / 2}px auto; grid-template-rows: {SLIDER_WIDTH / 2}px 1fr;"
-				>
+				<div class="relative" style="width: {canvasWidth}px; height: {canvasHeight}px;">
+					<p class="text-fg-muted absolute -bottom-5 left-0 text-xs">X / Y</p>
 					<StageSlider
 						axis={session.stage.x}
 						orientation="horizontal"
 						bind:target={targetX}
 						thumbLengthPx={SLIDER_WIDTH}
-						style="grid-column: 2; width: {stagePixelsX}px; height: {SLIDER_WIDTH}px; margin-left: {marginPixelsX}px; transform: translateY(0.5px);"
+						class="absolute z-10"
+						style={xSliderStyle}
 					/>
 
 					<StageSlider
@@ -476,9 +485,10 @@
 						orientation="vertical-ltr"
 						bind:target={targetY}
 						thumbLengthPx={SLIDER_WIDTH}
-						style="grid-column: 1; grid-row: 2; width: {SLIDER_WIDTH}px; height: {stagePixelsY}px; margin-top: {marginPixelsY}px; transform: translateX(0.5px);"
+						class="absolute z-10"
+						style={ySliderStyle}
 					/>
-					<div class="h-ui-md absolute -bottom-8 flex w-full items-center justify-center gap-2 rounded-full px-2">
+					<div class="h-ui-md absolute -bottom-8 flex w-full items-center justify-center gap-0.5">
 						{#each layers as { key, color, Icon, title } (key)}
 							{@const active = layerVisibility[key]}
 							<button
@@ -491,7 +501,7 @@
 						{/each}
 					</div>
 					<ContextMenu.Root>
-						<ContextMenu.Trigger style="grid-column: 2; grid-row: 2;">
+						<ContextMenu.Trigger>
 							<svg
 								bind:this={svgRef}
 								viewBox={viewBoxStr}
@@ -515,8 +525,9 @@
 				<!-- Z axis panel -->
 				<div
 					class="hover:bg-elevated/75 bg-elevated/50 relative border border-border transition-colors duration-300 ease-in-out"
-					style="height: {canvasHeight}px; margin-top: {SLIDER_WIDTH / 2}px; width: {Z_AREA_WIDTH}px"
+					style="height: {canvasHeight}px; width: {Z_AREA_WIDTH}px"
 				>
+					<p class="text-fg-muted absolute right-0 -bottom-5 w-full text-center text-xs">Z</p>
 					<StageSlider
 						axis={session.stage.z}
 						orientation="vertical-rtl"
@@ -548,15 +559,6 @@
 								<line class="nss" x1="0" y1={z1Y} x2={Z_SVG_WIDTH} y2={z1Y} />
 							</g>
 						{/each}
-						<text
-							x={Z_SVG_WIDTH / 2}
-							y="12"
-							text-anchor="middle"
-							class="text-fg-muted fill-current text-xs"
-							transform="scale({Z_SVG_WIDTH / Z_AREA_WIDTH}, 1)"
-						>
-							Z axis
-						</text>
 						<line
 							x1="0"
 							y1={zLineY}
@@ -584,29 +586,5 @@
 
 	.nss {
 		vector-effect: non-scaling-stroke;
-	}
-
-	.tile {
-		fill: transparent;
-		stroke: var(--color-zinc-700);
-		stroke-width: 1;
-		transition:
-			fill 300ms ease,
-			stroke 150ms ease;
-		&:hover {
-			fill: color-mix(in srgb, var(--color-zinc-500) 25%, transparent);
-		}
-		&.selected {
-			stroke: var(--color-zinc-400);
-		}
-	}
-
-	.stack {
-		fill: currentColor;
-		fill-opacity: 0.2;
-		transition: fill-opacity 300ms ease;
-		&:hover {
-			fill-opacity: 0.3;
-		}
 	}
 </style>
