@@ -160,26 +160,6 @@ export interface GridConfig {
 export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'skipped';
 
 /**
- * Stack status to Tailwind color class mapping
- * Uses Tailwind's color classes - derive CSS vars/hex from these in components
- */
-export const STACK_STATUS_COLORS: Record<StackStatus | 'none', string> = {
-	none: 'text-muted-foreground',
-	planned: 'text-info',
-	acquiring: 'text-active',
-	completed: 'text-success',
-	failed: 'text-danger',
-	skipped: 'text-warning'
-};
-
-/**
- * Get Tailwind color class for a stack status
- */
-export function getStackStatusColor(status: StackStatus | null): string {
-	return STACK_STATUS_COLORS[status ?? 'none'];
-}
-
-/**
  * Tile - 2D position in the grid
  */
 export interface Tile {
