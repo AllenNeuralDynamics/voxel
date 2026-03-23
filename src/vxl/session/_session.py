@@ -364,6 +364,15 @@ class Session:
         self._recalculate_planned_stack_positions()
         self._save()
 
+    def set_default_z_range(self, default_z_start_um: float, default_z_end_um: float) -> None:
+        """Set default Z range for new stacks on the active profile."""
+        gc = self.grid_config
+        if gc is None:
+            raise RuntimeError("Active profile has no grid configuration")
+        gc.default_z_start_um = default_z_start_um
+        gc.default_z_end_um = default_z_end_um
+        self._save()
+
     def set_overlap(self, overlap_x: float, overlap_y: float, *, force: bool = False) -> None:
         """Set overlap for the active profile. Recalculates PLANNED stack positions.
 

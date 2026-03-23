@@ -46,6 +46,8 @@ class GridUpdateRequest(BaseModel):
     y_offset_um: float | None = None
     overlap_x: float | None = None
     overlap_y: float | None = None
+    default_z_start_um: float | None = None
+    default_z_end_um: float | None = None
     force: bool = False
 
 
@@ -148,6 +150,8 @@ async def update_grid(
             service.session.set_grid_offset(request.x_offset_um, request.y_offset_um, force=request.force)
         if request.overlap_x is not None and request.overlap_y is not None:
             service.session.set_overlap(request.overlap_x, request.overlap_y, force=request.force)
+        if request.default_z_start_um is not None and request.default_z_end_um is not None:
+            service.session.set_default_z_range(request.default_z_start_um, request.default_z_end_um)
 
         service.broadcast({}, with_status=True)
         return service.session.grid_config

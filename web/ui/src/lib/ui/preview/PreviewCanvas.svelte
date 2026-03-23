@@ -166,8 +166,8 @@
 
 <div class="bg-canvas grid h-full grid-rows-[auto_1fr_auto]" bind:this={containerEl}>
 	<!-- Top: Controls -->
-	<div class="flex items-center justify-between px-2 pt-5 pb-3">
-		<div class="flex items-center gap-1">
+	<div class="flex items-center justify-between p-4">
+		<div class="h-ui-lg flex items-center gap-1">
 			<button
 				onclick={() => (showHistograms = !showHistograms)}
 				class="hover:bg-element-hover flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors {showHistograms
@@ -184,7 +184,7 @@
 	</div>
 
 	<!-- Center: Canvas -->
-	<div class="flex items-center justify-center overflow-hidden p-4">
+	<div class="flex items-center justify-center overflow-hidden px-4">
 		<canvas
 			bind:this={canvasEl}
 			class="preview-canvas max-h-full max-w-full"

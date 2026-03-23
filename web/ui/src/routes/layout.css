@@ -30,6 +30,10 @@
 	--ui-xl: 3.75rem;
 }
 
+.nss {
+	vector-effect: non-scaling-stroke;
+}
+
 @theme inline {
 	/* ── Density ───────────────────────────────────────────────────────── */
 	--spacing-ui-xs: var(--ui-xs);

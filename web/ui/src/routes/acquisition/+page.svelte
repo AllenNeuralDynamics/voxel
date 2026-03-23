@@ -136,8 +136,8 @@
 
 <PaneGroup direction="horizontal" autoSaveId="acquisition-h" class="h-full overflow-hidden">
 	<!-- Left column: session info + plan config + metadata -->
-	<Pane defaultSize={30} minSize={30} maxSize={40} class="p-4">
-		<div class="bg-panel @container flex h-full flex-col justify-between overflow-hidden rounded-lg">
+	<Pane defaultSize={30} minSize={30} maxSize={40} class="p-0">
+		<div class="bg-canvas @container flex h-full flex-col justify-between overflow-hidden rounded-lg">
 			<div class="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
 				<!-- Plan settings -->
 				<section>
@@ -180,7 +180,7 @@
 				</section>
 
 				<!-- Metadata -->
-				<MetadataPanel {session} class="mt-3" />
+				<MetadataPanel {session} />
 			</div>
 
 			<!-- Session path (fixed footer) -->
@@ -321,15 +321,6 @@
 
 <style>
 	/* DnD animation overrides */
-	.profile-chip {
-		cursor: grab;
-		user-select: none;
-		transition:
-			transform 150ms ease,
-			box-shadow 150ms ease,
-			opacity 150ms ease;
-	}
-
 	:global(.profile-chip.svelte-dnd-dragging) {
 		opacity: 0.4;
 		transform: scale(0.95);
@@ -339,9 +330,5 @@
 		outline: none;
 		box-shadow: 0 0 0 2px var(--color-info);
 		transform: scale(1.05);
-	}
-
-	.profile-chip:active {
-		cursor: grabbing;
 	}
 </style>

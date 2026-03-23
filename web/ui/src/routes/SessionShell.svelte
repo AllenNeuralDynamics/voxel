@@ -1,9 +1,5 @@
-<script lang="ts" module>
-	let lastWorkflowStep: string | null = null;
-</script>
-
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import type { Component, Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
@@ -20,6 +16,7 @@
 	import StartButton from '$lib/ui/StartButton.svelte';
 	import { ProfileSelector } from '$lib/ui/profile';
 	import { cn } from '$lib/utils';
+	import type { Pathname } from '$app/types';
 
 	interface Props {
 		app: App;
@@ -41,63 +38,49 @@
 
 	// --- Shell state ---
 
-	const workflow = $derived(session.workflow);
+	const navTabs: { id: Pathname; label: string; icon: Component }[] = [
+		{ id: '/', label: 'Instrument', icon: Microscope },
+		{ id: '/setup', label: 'Setup', icon: ClipboardCheckOutline },
+		{ id: '/acquisition', label: 'Acquisition', icon: LayersOutline }
+	];
 
-	const viewId = $derived<string>(
-		page.route.id === '/acquisition'
-			? 'acquisition'
-			: page.route.id === '/debug'
-				? 'debug'
-				: page.route.id?.startsWith('/setup/')
-					? 'setup'
-					: 'instrument'
+	const viewId = $derived<Pathname>(
+		page.url.pathname.startsWith('/setup')
+			? '/setup'
+			: page.url.pathname === '/acquisition'
+				? '/acquisition'
+				: page.url.pathname === '/debug'
+					? '/debug'
+					: '/'
 	);
 
-	// Remember which workflow step was last viewed
-	$effect(() => {
-		if (page.route.id?.startsWith('/setup/')) {
-			lastWorkflowStep = page.params.step ?? page.route.id.split('/').pop() ?? null;
-		}
-	});
-
-	function viewPath(id: string): string {
-		if (id === 'acquisition') return '/acquisition';
-		if (id === 'debug') return '/debug';
-		if (id === 'instrument') return '/';
-		if (id === 'setup')
-			return `/setup/${lastWorkflowStep ?? workflow.activeStep?.id ?? workflow.steps[0]?.id ?? 'scout'}`;
-		return `/setup/${id}`;
+	function gotoView(id: Pathname) {
+		goto(resolve(id), { keepFocus: true, noScroll: true });
 	}
 
-	function gotoView(id: string) {
-		goto(resolve(viewPath(id) as '/'), { keepFocus: true, noScroll: true });
-	}
-
-	function selectView(id: string) {
+	function selectView(id: Pathname) {
 		if (viewId !== id) gotoView(id);
 	}
 
 	let closeDialogOpen = $state(false);
-
-	const tabClasses = cn(
-		'flex h-ui-lg min-w-24 gap-1.5 items-center justify-center rounded border border-border',
-		'px-3 text-base capitalize transition-colors'
-	);
 </script>
 
 <div class="text-fg h-screen w-full">
 	<PaneGroup direction="horizontal" autoSaveId="main-h">
 		<Pane defaultSize={60} minSize={50} maxSize={70}>
 			<div class="grid h-full grid-rows-[auto_1fr]">
-				<header class="bg-elevated flex items-center justify-between border-b border-border px-4 py-4">
-					<!-- Left: app menu + instrument + workflow + acquisition -->
-					<div class="flex items-stretch gap-4">
+				<header
+					class="bg-elevated @container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border px-4 py-4 @min-[800px]:grid-cols-[auto_auto_1fr]"
+				>
+					<!-- Logo + close-session dialog -->
+					<div class="flex items-center">
 						<AppMenu {app}>
 							{#snippet trigger()}
 								<VoxelLogo class="size-ui-sm" />
 								<ChevronDown width="14" height="14" class="text-fg-muted/60 ml-1" />
 							{/snippet}
 							{#snippet extraItems()}
+								<DropdownMenu.Item onclick={() => selectView('/debug')}>Debug</DropdownMenu.Item>
 								<DropdownMenu.Item variant="destructive" onclick={() => (closeDialogOpen = true)}>
 									<Power width="14" height="14" />
 									Close Session
@@ -105,7 +88,6 @@
 							{/snippet}
 						</AppMenu>
 
-						<!-- Close session confirmation dialog -->
 						<Dialog.Root bind:open={closeDialogOpen}>
 							<Dialog.Content size="sm" showCloseButton={false}>
 								<Dialog.Header>
@@ -122,57 +104,33 @@
 								</Dialog.Footer>
 							</Dialog.Content>
 						</Dialog.Root>
-						<nav class="grid grid-cols-3 gap-4">
-							<!-- Instrument -->
-							<button
-								onclick={() => selectView('instrument')}
-								class={cn(
-									tabClasses,
-									viewId === 'instrument' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg'
-								)}
-								title="Instrument"
-							>
-								<Microscope width="16" height="16" />
-								Instrument
-							</button>
-
-							<!-- Setup (workflow) -->
-							<button
-								onclick={() => selectView('setup')}
-								class={cn(tabClasses, viewId === 'setup' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
-								title="Setup"
-							>
-								<ClipboardCheckOutline width="16" height="16" />
-								Setup
-							</button>
-
-							<!-- Acquire -->
-							<button
-								onclick={() => selectView('acquisition')}
-								class={cn(
-									tabClasses,
-									viewId === 'acquisition' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg'
-								)}
-								title="Acquisition"
-							>
-								<LayersOutline width="16" height="16" />
-								Acquisition
-							</button>
-						</nav>
 					</div>
 
-					<!-- Right: actions -->
-					<div class="flex items-center gap-4">
-						<button
-							onclick={() => selectView('debug')}
-							class={cn(tabClasses, viewId === 'debug' ? 'text-fg bg-element-bg' : 'text-fg-muted hover:text-fg')}
-							title="Debug"
-						>
-							Debug
-						</button>
-						<ProfileSelector {session} size="lg" class="min-w-72 flex-1" />
+					<!-- Actions — explicitly pinned to row 1, last column -->
+					<div class="col-start-2 row-start-1 flex items-center justify-end gap-4 @min-[800px]:col-start-3">
+						<ProfileSelector {session} size="lg" class="min-w-64 flex-1" />
 						<StartButton {session} />
 					</div>
+
+					<!-- Nav tabs — full-width row 2 at narrow, inline col 2 at wide -->
+					<nav
+						class="col-span-full flex *:flex-1 @min-[800px]:col-span-1 @min-[800px]:col-start-2 @min-[800px]:row-start-1 @min-[800px]:w-fit"
+					>
+						{#each navTabs as tab (tab.id)}
+							{@const Icon = tab.icon}
+							<button
+								onclick={() => selectView(tab.id)}
+								class={cn(
+									'h-ui-lg border-fg-faint -ml-px flex min-w-28 items-center justify-center gap-1.5 border px-3 text-base capitalize first:ml-0 first:rounded-l last:rounded-r',
+									viewId === tab.id ? 'text-fg bg-element-bg' : 'text-fg-muted bg-elevated hover:bg-element-hover/50'
+								)}
+								title={tab.label}
+							>
+								<Icon width="18" height="18" />
+								{tab.label}
+							</button>
+						{/each}
+					</nav>
 				</header>
 				{@render children()}
 			</div>

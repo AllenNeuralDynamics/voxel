@@ -55,7 +55,7 @@
 </script>
 
 <Select.Root type="single" value={selected} onValueChange={handleChange} {items} disabled={loading}>
-	<Select.Trigger class={cn(styles.trigger(), className)}>
+	<Select.Trigger class={cn(styles.trigger(), 'border-fg-faint', className)}>
 		<span class="flex items-center gap-1.5 truncate">
 			{#if selectedLabel}
 				{selectedLabel}

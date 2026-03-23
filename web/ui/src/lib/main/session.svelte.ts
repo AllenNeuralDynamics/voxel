@@ -244,6 +244,17 @@ export class Session {
 		}
 	}
 
+	async setGridZRange(defaultZStartUm: number, defaultZEndUm: number): Promise<void> {
+		try {
+			await this.#rest('PATCH', '/plan/grid', {
+				default_z_start_um: defaultZStartUm,
+				default_z_end_um: defaultZEndUm
+			});
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to set Z range');
+		}
+	}
+
 	async setTileOrder(order: TileOrder): Promise<void> {
 		try {
 			await this.#rest('PUT', '/plan/tile-order', { tile_order: order });
