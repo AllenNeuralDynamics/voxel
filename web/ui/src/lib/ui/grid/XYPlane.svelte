@@ -2,91 +2,25 @@
 	import type { Component } from 'svelte';
 	import type { LayerVisibility } from '$lib/main/types';
 	import { GridLines, StackLight, ImageLight } from '$lib/icons';
-	import { compositeFullFrames } from '$lib/main/preview.svelte';
-	import { watch } from 'runed';
 
 	// ── Layer visibility (module-level singleton) ────────────────────
 
-	let _layerVisibility = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true, thumbnail: true });
-
-	const layerVisibility = {
-		get value() {
-			return _layerVisibility;
-		},
-		toggle(key: keyof LayerVisibility) {
-			_layerVisibility = { ..._layerVisibility, [key]: !_layerVisibility[key] };
-		}
-	};
+	let layers = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true, thumbnail: true });
 
 	const layerItems: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
 		{ key: 'grid', color: 'text-fg-muted', Icon: GridLines, title: 'Toggle grid' },
 		{ key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
 		{ key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' }
 	];
-
-	// ── FOV thumbnail (per-instance composable) ──────────────────────
-
-	const FOV_RESOLUTION = 256;
-
-	function createFovThumbnail(getSession: () => Session) {
-		let thumbnail = $state('');
-		let needsRedraw = false;
-		let animFrameId: number | null = null;
-
-		const offscreen = document.createElement('canvas');
-		offscreen.width = FOV_RESOLUTION;
-		const ctx = offscreen.getContext('2d')!;
-
-		$effect(() => {
-			const session = getSession();
-			const aspect = session.fov.width / session.fov.height;
-			if (aspect > 0 && Number.isFinite(aspect)) {
-				offscreen.height = Math.round(FOV_RESOLUTION / aspect);
-			}
-		});
-
-		watch(
-			() => getSession().preview?.redrawGeneration,
-			() => {
-				needsRedraw = true;
-			}
-		);
-
-		function frameLoop() {
-			const session = getSession();
-			if (needsRedraw && session.preview) {
-				needsRedraw = false;
-				const hasFrames = session.preview.channels.some((ch) => ch.visible && ch.frame);
-				if (hasFrames) {
-					compositeFullFrames(ctx, offscreen, session.preview.channels);
-					thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
-				} else {
-					thumbnail = '';
-				}
-			}
-			animFrameId = requestAnimationFrame(frameLoop);
-		}
-
-		$effect(() => {
-			frameLoop();
-			return () => {
-				if (animFrameId !== null) cancelAnimationFrame(animFrameId);
-			};
-		});
-
-		return {
-			get thumbnail() {
-				return thumbnail;
-			}
-		};
-	}
 </script>
 
 <script lang="ts">
 	import type { Session } from '$lib/main';
 	import { type Tile, type Stack, type StackStatus } from '$lib/main/types';
+	import { compositeFullFrames } from '$lib/main/preview.svelte';
 	import { ContextMenu } from '$lib/ui/kit';
 	import { onMount } from 'svelte';
+	import { watch } from 'runed';
 
 	interface Props {
 		session: Session;
@@ -162,7 +96,49 @@
 
 	// ── FOV thumbnail ────────────────────────────────────────────────────
 
-	const { thumbnail } = createFovThumbnail(() => session);
+	const FOV_RESOLUTION = 256;
+	let thumbnail = $state('');
+	let needsRedraw = false;
+	let animFrameId: number | null = null;
+
+	const offscreen = document.createElement('canvas');
+	offscreen.width = FOV_RESOLUTION;
+	const ctx = offscreen.getContext('2d')!;
+
+	$effect(() => {
+		const aspect = session.fov.width / session.fov.height;
+		if (aspect > 0 && Number.isFinite(aspect)) {
+			offscreen.height = Math.round(FOV_RESOLUTION / aspect);
+		}
+	});
+
+	watch(
+		() => session.preview?.redrawGeneration,
+		() => {
+			needsRedraw = true;
+		}
+	);
+
+	function fovFrameLoop() {
+		if (needsRedraw && session.preview) {
+			needsRedraw = false;
+			const hasFrames = session.preview.channels.some((ch) => ch.visible && ch.frame);
+			if (hasFrames) {
+				compositeFullFrames(ctx, offscreen, session.preview.channels);
+				thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
+			} else {
+				thumbnail = '';
+			}
+		}
+		animFrameId = requestAnimationFrame(fovFrameLoop);
+	}
+
+	$effect(() => {
+		fovFrameLoop();
+		return () => {
+			if (animFrameId !== null) cancelAnimationFrame(animFrameId);
+		};
+	});
 
 	// ── Slider targets ──────────────────────────────────────────────────
 
@@ -309,7 +285,7 @@
 </script>
 
 {#snippet fovLayer()}
-	{#if layerVisibility.value.thumbnail && thumbnail}
+	{#if layers.thumbnail && thumbnail}
 		<image
 			href={thumbnail}
 			x={fovX - session.fov.width / 2}
@@ -320,7 +296,7 @@
 			class="pointer-events-none"
 		/>
 	{/if}
-	<g class="fov-layer pointer-events-none">
+	<g class="pointer-events-none">
 		<line
 			class="nss"
 			x1={-marginX - fovExtension}
@@ -343,11 +319,11 @@
 {/snippet}
 
 {#snippet gridLayer()}
-	{#if layerVisibility.value.grid}
+	{#if layers.grid}
 		{@const sortedTiles = [...session.tiles].sort(
 			(a, b) => Number(session.isTileSelected(a.row, a.col)) - Number(session.isTileSelected(b.row, b.col))
 		)}
-		<g class="grid-layer">
+		<g>
 			{#each sortedTiles as tile (`${tile.row}_${tile.col}`)}
 				{@const selected = session.isTileSelected(tile.row, tile.col)}
 				{@const cx = toMm(tile.x_um)}
@@ -376,9 +352,9 @@
 {/snippet}
 
 {#snippet stacksLayer()}
-	{#if layerVisibility.value.stacks}
+	{#if layers.stacks}
 		{@const points = profileStacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
-		<g class="stacks-layer">
+		<g>
 			{#each profileStacks as stack (`${stack.row}_${stack.col}`)}
 				{@const cx = toMm(stack.x_um)}
 				{@const cy = toMm(stack.y_um)}
@@ -405,7 +381,7 @@
 				</rect>
 			{/each}
 		</g>
-		<g class="pointer-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
+		<g class="pointer-events-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
 			<polyline
 				class="nss fill-none opacity-35"
 				stroke-width="1.5"
@@ -545,10 +521,9 @@
 		/>
 		<div class="absolute right-1 bottom-1 z-10 flex items-center gap-1 rounded-full">
 			{#each layerItems as { key, color, Icon, title } (key)}
-				{@const active = layerVisibility.value[key]}
 				<button
-					onclick={() => layerVisibility.toggle(key)}
-					class="cursor-pointer rounded-full p-1.5 transition-colors {active ? `${color} ` : 'text-fg-faint'}"
+					onclick={() => (layers[key] = !layers[key])}
+					class="cursor-pointer rounded-full p-1.5 transition-colors {layers[key] ? `${color} ` : 'text-fg-faint'}"
 					{title}
 				>
 					<Icon width="14" height="14" />
@@ -626,11 +601,10 @@
 				background: var(--color-danger);
 			}
 		}
-	}
-
-	.vertical-ltr {
-		writing-mode: vertical-rl;
-		direction: ltr;
-		--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / var(--_track-width) 100% no-repeat;
+		&.vertical-ltr {
+			writing-mode: vertical-rl;
+			direction: ltr;
+			--_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / var(--_track-width) 100% no-repeat;
+		}
 	}
 </style>

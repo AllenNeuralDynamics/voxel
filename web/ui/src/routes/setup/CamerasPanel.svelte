@@ -128,75 +128,70 @@
 		? getChannelFor(session.config, session.activeProfileId, camera.deviceId)
 		: undefined}
 	{@const isSelected = selectedIds.has(camera.deviceId)}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div
-		role="button"
-		tabindex="0"
-		onclick={() => toggleCamera(camera.deviceId)}
-		class="bg-element-bg flex w-full cursor-pointer flex-col gap-3 rounded-md px-4 py-3 text-left"
-	>
-		<!-- Header: checkbox + device ID + mode -->
-		<div class="flex items-center justify-between">
-			<div class="flex items-center gap-2.5">
-				<Checkbox checked={isSelected} size="sm" />
-				<span class="text-base font-medium">{camera.deviceId}</span>
+	<div class="bg-element-bg/50 flex w-full flex-col gap-3 rounded-md px-4 py-3 text-left">
+		<button class="cursor-pointer flex-col gap-3" onclick={() => toggleCamera(camera.deviceId)}>
+			<!-- Header: checkbox + device ID + mode -->
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-2.5">
+					<Checkbox checked={isSelected} size="sm" class="border-fg-faint" />
+					<span class="text-base font-medium">{camera.deviceId}</span>
+				</div>
+				<div class="flex items-center gap-1.5">
+					<span class="text-fg-muted text-xs">{modeLabel(camera.mode)}</span>
+					<div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
+				</div>
 			</div>
-			<div class="flex items-center gap-1.5">
-				<span class="text-fg-muted text-xs">{modeLabel(camera.mode)}</span>
-				<div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
-			</div>
-		</div>
 
-		<!-- Properties -->
-		<div class="space-y-1 text-sm">
-			<div class="flex justify-between">
-				<span class="text-fg-muted">Exposure</span>
-				<span class="font-mono tabular-nums">
-					{camera.exposureTimeMs !== undefined ? `${camera.exposureTimeMs.toFixed(1)} ms` : '—'}
-				</span>
+			<!-- Properties -->
+			<div class="space-y-1 text-sm">
+				<div class="flex justify-between">
+					<span class="text-fg-muted">Exposure</span>
+					<span class="font-mono tabular-nums">
+						{camera.exposureTimeMs !== undefined ? `${camera.exposureTimeMs.toFixed(1)} ms` : '—'}
+					</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-fg-muted">Binning</span>
+					<span class="font-mono tabular-nums">
+						{camera.binning !== undefined ? `${camera.binning}x` : '—'}
+					</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-fg-muted">Format</span>
+					<span class="font-mono tabular-nums">{camera.pixelFormat ?? '—'}</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-fg-muted">Frame</span>
+					<span class="font-mono tabular-nums">
+						{#if camera.frameSizePx}
+							{camera.frameSizePx.x}&times;{camera.frameSizePx.y}
+						{:else}
+							—
+						{/if}
+					</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-fg-muted">Sensor</span>
+					<span class="font-mono tabular-nums">
+						{#if camera.sensorSizePx}
+							{camera.sensorSizePx.x}&times;{camera.sensorSizePx.y}
+						{:else}
+							—
+						{/if}
+					</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-fg-muted">Pixel</span>
+					<span class="font-mono tabular-nums">
+						{#if camera.pixelSizeUm}
+							{camera.pixelSizeUm.x.toFixed(2)} &mu;m
+						{:else}
+							—
+						{/if}
+					</span>
+				</div>
 			</div>
-			<div class="flex justify-between">
-				<span class="text-fg-muted">Binning</span>
-				<span class="font-mono tabular-nums">
-					{camera.binning !== undefined ? `${camera.binning}x` : '—'}
-				</span>
-			</div>
-			<div class="flex justify-between">
-				<span class="text-fg-muted">Format</span>
-				<span class="font-mono tabular-nums">{camera.pixelFormat ?? '—'}</span>
-			</div>
-			<div class="flex justify-between">
-				<span class="text-fg-muted">Frame</span>
-				<span class="font-mono tabular-nums">
-					{#if camera.frameSizePx}
-						{camera.frameSizePx.x}&times;{camera.frameSizePx.y}
-					{:else}
-						—
-					{/if}
-				</span>
-			</div>
-			<div class="flex justify-between">
-				<span class="text-fg-muted">Sensor</span>
-				<span class="font-mono tabular-nums">
-					{#if camera.sensorSizePx}
-						{camera.sensorSizePx.x}&times;{camera.sensorSizePx.y}
-					{:else}
-						—
-					{/if}
-				</span>
-			</div>
-			<div class="flex justify-between">
-				<span class="text-fg-muted">Pixel</span>
-				<span class="font-mono tabular-nums">
-					{#if camera.pixelSizeUm}
-						{camera.pixelSizeUm.x.toFixed(2)} &mu;m
-					{:else}
-						—
-					{/if}
-				</span>
-			</div>
-		</div>
-
+		</button>
 		<!-- Stream info (when streaming) -->
 		{#if camera.streamInfo}
 			{@const info = camera.streamInfo}
@@ -397,7 +392,7 @@
 		{#if selectedCameras.length > 0}
 			{@render editPanel(selectedCameras)}
 		{:else}
-			<div class="flex h-full w-96 shrink-0 flex-col items-center justify-center bg-card">
+			<div class="bg-panel flex h-full w-96 shrink-0 flex-col items-center justify-center">
 				<p class="text-fg-muted text-sm">Select cameras to edit</p>
 			</div>
 		{/if}
