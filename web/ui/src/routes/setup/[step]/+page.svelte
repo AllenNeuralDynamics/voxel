@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { getSessionContext } from '$lib/context';
 	import { sanitizeString } from '$lib/utils';
 
-	const session = getSessionContext();
 	const stepId = $derived(page.params.step!);
-	const stepLabel = $derived(session.workflow.steps.find((s) => s.id === stepId)?.label ?? sanitizeString(stepId));
+	const stepLabel = $derived(sanitizeString(stepId));
 </script>
 
 <div class="flex h-full items-center justify-center">

@@ -15,7 +15,6 @@ from vxl.sync import FrameTiming
 from vxl.tile import Stack, StackResult, StackStatus, Tile
 
 from ._config import AcquisitionPlan, SessionConfig
-from ._workflow import Workflow, WorkflowStepConfig
 
 
 class Session:
@@ -38,7 +37,6 @@ class Session:
         self._rig = rig
         self._session_dir = session_dir
         self._log = logging.getLogger(f"Session({session_dir.name})")
-        self._workflow = Workflow(self._config.workflow_steps, self._config.workflow_committed)
 
         # FOV from rig topic (set during rig.start(), updated via subscription)
         self._tile_size_um: tuple[float, float] | None = rig.get_topic_value("fov")
@@ -139,37 +137,6 @@ class Session:
     def tile_order(self) -> TileOrder:
         """Get the current tile ordering."""
         return self._config.plan.tile_order
-
-    @property
-    def workflow(self) -> Workflow:
-        """Get the workflow state machine."""
-        return self._workflow
-
-    @property
-    def workflow_steps(self) -> list[WorkflowStepConfig]:
-        """Get the workflow step configurations."""
-        return self._workflow.steps
-
-    @property
-    def workflow_committed(self) -> str | None:
-        """ID of the last committed workflow step."""
-        return self._workflow.committed
-
-    def workflow_next(self) -> bool:
-        """Advance the workflow to the next step."""
-        if self._workflow.next():
-            self._config.workflow_committed = self._workflow.committed
-            self._save()
-            return True
-        return False
-
-    def workflow_reopen(self, step_id: str) -> bool:
-        """Reopen a workflow step and its downstream steps."""
-        if self._workflow.reopen(step_id):
-            self._config.workflow_committed = self._workflow.committed
-            self._save()
-            return True
-        return False
 
     # ==================== Metadata ====================
 

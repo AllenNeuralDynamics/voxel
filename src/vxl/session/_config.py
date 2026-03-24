@@ -10,8 +10,6 @@ from vxl.config import GridConfig, Interleaving, TileOrder, VoxelRigConfig
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
 from vxl.tile import Stack
 
-from ._workflow import WorkflowStepConfig
-
 # Round-trip YAML preserves anchors, aliases, and comments
 yaml = YAML()
 yaml.preserve_quotes = True  # type: ignore[assignment]
@@ -50,13 +48,6 @@ class SessionConfig(BaseModel):
     metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
     plan: AcquisitionPlan = Field(default_factory=AcquisitionPlan)
-    workflow_steps: list[WorkflowStepConfig] = Field(
-        default_factory=lambda: [
-            WorkflowStepConfig(id="scout", label="Scout"),
-            WorkflowStepConfig(id="plan", label="Plan"),
-        ]
-    )
-    workflow_committed: str | None = Field(default=None, description="ID of the last committed workflow step")
 
     model_config = {"extra": "forbid"}
 
@@ -164,10 +155,6 @@ class SessionConfig(BaseModel):
             "metadata": raw_data.get("metadata", {}),
             "plan": plan,
         }
-        if "workflow_steps" in raw_data:
-            kwargs["workflow_steps"] = [WorkflowStepConfig.model_validate(ws) for ws in raw_data["workflow_steps"]]
-        if "workflow_committed" in raw_data:
-            kwargs["workflow_committed"] = raw_data["workflow_committed"]
         config = cls(**kwargs)
         config._raw_data = raw_data
         return config
@@ -208,8 +195,6 @@ class SessionConfig(BaseModel):
                 "interleaving": config.plan.interleaving,
                 "stacks": [],
             },
-            "workflow_steps": [ws.model_dump(mode="json") for ws in config.workflow_steps],
-            "workflow_committed": config.workflow_committed,
         }
         return config
 
@@ -236,8 +221,9 @@ class SessionConfig(BaseModel):
             self._raw_data["metadata_target"] = self.metadata_target
             self._raw_data["metadata"] = self.metadata
             self._raw_data["plan"] = plan_data
-            self._raw_data["workflow_steps"] = [ws.model_dump(mode="json") for ws in self.workflow_steps]
-            self._raw_data["workflow_committed"] = self.workflow_committed
+            # Remove old workflow keys on forward migration
+            self._raw_data.pop("workflow_steps", None)
+            self._raw_data.pop("workflow_committed", None)
             # Remove old flat keys on forward migration
             self._raw_data.pop("grid_config", None)
             self._raw_data.pop("stacks", None)
@@ -274,8 +260,6 @@ class SessionConfig(BaseModel):
                 "metadata_target": self.metadata_target,
                 "metadata": self.metadata,
                 "plan": plan_data,
-                "workflow_steps": [ws.model_dump(mode="json") for ws in self.workflow_steps],
-                "workflow_committed": self.workflow_committed,
             }
 
         # Atomic write: temp file -> backup existing -> replace target

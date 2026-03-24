@@ -11,7 +11,6 @@ export {
 } from './camera.svelte.ts';
 export { PreviewState, PreviewChannel, fetchColormapCatalog } from './preview.svelte.ts';
 export type { ColormapDef, ColormapGroup, ColormapCatalog } from './preview.svelte.ts';
-export { Workflow } from './workflow.svelte.ts';
 export { discoverProfileDevices, isFilterWheel, getChannelFor } from './profile.ts';
 
 export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';

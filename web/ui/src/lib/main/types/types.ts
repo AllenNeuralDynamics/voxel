@@ -37,20 +37,6 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
 import type { Interleaving, TileOrder } from './config.ts';
 
 /**
- * Workflow step state — derived from committed cursor position, not stored per step.
- */
-export type StepState = 'pending' | 'active' | 'committed';
-
-/**
- * Workflow step configuration matching backend WorkflowStepConfig.
- * State is NOT stored per step — it's derived from workflow_committed cursor.
- */
-export interface WorkflowStepConfig {
-	id: string;
-	label: string;
-}
-
-/**
  * Acquisition plan - profile ordering and stacks.
  * Profile plan membership is implicit via stacks.
  */
@@ -69,7 +55,6 @@ export interface SessionInfo {
 	session_name: string;
 	metadata_target: string;
 	metadata_schema: JsonSchema;
-	workflow_steps: WorkflowStepConfig[];
 	rig_name: string;
 }
 
@@ -80,7 +65,6 @@ export interface SessionStatus {
 	active_profile_id: string | null;
 	mode: RigMode;
 	metadata: Record<string, unknown>;
-	workflow_committed: string | null;
 	timestamp: string;
 
 	// Acquisition plan (per-profile grid configs + all stacks)

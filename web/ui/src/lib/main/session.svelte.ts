@@ -16,7 +16,6 @@ import type {
 } from './types';
 
 import { PreviewState } from './preview.svelte';
-import { Workflow } from './workflow.svelte';
 import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
@@ -33,7 +32,6 @@ export class Session {
 	config = $state<VoxelRigConfig>(null!);
 	readonly devices!: DevicesManager;
 	readonly preview!: PreviewState;
-	readonly workflow!: Workflow;
 	readonly stage!: Stage;
 
 	#appStatus = $state<AppStatus>();
@@ -89,7 +87,6 @@ export class Session {
 		this.#appStatus = init.status;
 
 		this.devices = new DevicesManager(init.client);
-		this.workflow = new Workflow(init.client);
 		this.preview = new PreviewState(init.client, {
 			channels: init.config.channels,
 			profiles: init.config.profiles
@@ -143,14 +140,12 @@ export class Session {
 	async initialize(): Promise<void> {
 		const [info] = await Promise.all([this.client.fetchSessionInfo(), this.devices.initialize()]);
 		this.info = info;
-		this.workflow.steps = info.workflow_steps;
 		this.appliedWaveforms = await this.client.fetchWaveforms();
 	}
 
 	destroy(): void {
 		this.#unsubscribers.forEach((unsub) => unsub());
 		this.#unsubscribers = [];
-		this.workflow.destroy();
 		this.preview.destroy();
 		this.devices.destroy();
 	}
@@ -296,32 +291,6 @@ export class Session {
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to change metadata schema');
 			throw error;
-		}
-	}
-
-	// --- Workflow ---
-
-	async workflowNext(): Promise<string | null> {
-		if (!this.workflow.canAdvance) return null;
-		try {
-			await this.#rest('POST', '/workflow/next');
-			const nextIdx = this.workflow.activeIndex + 1;
-			return nextIdx < this.workflow.steps.length ? this.workflow.steps[nextIdx].id : null;
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Failed to advance workflow');
-			return null;
-		}
-	}
-
-	async workflowBack(): Promise<string | null> {
-		if (!this.workflow.canGoBack) return null;
-		const stepId = this.workflow.steps[this.workflow.committedIndex].id;
-		try {
-			await this.#rest('POST', '/workflow/reopen', { step_id: stepId });
-			return stepId;
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Failed to reopen step');
-			return null;
 		}
 	}
 

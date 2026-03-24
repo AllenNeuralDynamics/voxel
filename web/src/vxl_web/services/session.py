@@ -5,7 +5,7 @@ This service owns the Session and RigService, handling:
 - Acquisition control
 - Session info/status/metadata endpoints
 
-Plan, workflow, and rig endpoints are in their own modules.
+Plan and rig endpoints are in their own modules.
 """
 
 import logging
@@ -19,7 +19,6 @@ from vxl import AcquisitionPlan, RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import GridConfig
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
-from vxl.session import WorkflowStepConfig
 from vxl.tile import Stack, StackStatus, Tile
 from vxlib import fire_and_forget
 
@@ -41,7 +40,6 @@ class SessionInfo(BaseModel):
     session_name: str
     metadata_target: str
     metadata_schema: dict[str, Any]
-    workflow_steps: list[WorkflowStepConfig]
     rig_name: str
 
 
@@ -55,7 +53,6 @@ class SessionStatus(BaseModel):
 
     # Session status
     metadata: dict[str, Any]
-    workflow_committed: str | None
 
     # Acquisition plan (per-profile grid configs + all stacks)
     plan: AcquisitionPlan
@@ -110,7 +107,6 @@ class SessionService:
             session_name=self.session.session_name,
             metadata_target=self.session.metadata_target,
             metadata_schema=schema,
-            workflow_steps=self.session.workflow_steps,
             rig_name=self.session.rig.config.info.name,
         )
 
@@ -128,7 +124,6 @@ class SessionService:
             active_profile_id=self.session.rig.active_profile_id,
             mode=self.session.rig.mode,
             metadata=self.session.metadata,
-            workflow_committed=self.session.workflow_committed,
             plan=self.session.plan,
             grid_config=self.session.grid_config,
             tiles=tiles,
@@ -145,7 +140,7 @@ class SessionService:
 
         Only handles rig-level WS topics (preview/*, device/*, profile/update)
         and acquisition topics (acq/start, acq/stop).
-        Plan, workflow, and profile-prop topics are now REST-only.
+        Plan and profile-prop topics are now REST-only.
         """
         # Try rig service first (preview/*, device/*, profile/update)
         if await self.rig_service.handle_message(client_id, topic, payload):
