@@ -7,5 +7,5 @@
 </script>
 
 <div class="flex h-full items-center justify-center">
-	<p class="text-fg-muted text-base">{stepLabel} — coming soon</p>
+	<p class="text-base text-fg-muted">{stepLabel} — coming soon</p>
 </div>

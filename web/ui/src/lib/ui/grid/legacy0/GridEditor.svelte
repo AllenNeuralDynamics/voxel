@@ -119,9 +119,9 @@
 
 {#snippet staticItem(label: string, value: string, unit: string = '')}
 	<div class="flex h-6 cursor-default items-stretch rounded border border-muted bg-transparent font-mono text-xs">
-		<span class="text-fg-muted flex shrink-0 items-center ps-1.5 pe-2">{label}</span>
-		<span class="text-fg flex flex-1 items-center px-0.5">{value}</span>
-		<span class="text-fg-muted flex items-center pe-1.5">{unit}</span>
+		<span class="flex shrink-0 items-center ps-1.5 pe-2 text-fg-muted">{label}</span>
+		<span class="flex flex-1 items-center px-0.5 text-fg">{value}</span>
+		<span class="flex items-center pe-1.5 text-fg-muted">{unit}</span>
 	</div>
 {/snippet}
 
@@ -154,7 +154,7 @@
 {/snippet}
 
 {#if session.stage.z && selectedTile}
-	<div class="bg-element-hover/30 flex flex-col border-y border-border">
+	<div class="flex flex-col border-y border-border bg-element-hover/30">
 		<div class="flex flex-col gap-2 p-4 pt-3">
 			<div class="flex items-center justify-between">
 				<span class="flex items-center gap-3" data-stack-status={stack?.status}>
@@ -168,7 +168,7 @@
 						{#if hasStack}
 							<button
 								onclick={handleDelete}
-								class="text-fg-muted hover:bg-element-hover rounded p-1 transition-colors hover:text-danger"
+								class="rounded p-1 text-fg-muted transition-colors hover:bg-element-hover hover:text-danger"
 								title="Delete stack"
 							>
 								<TrashCanOutline width="14" height="14" />
@@ -177,7 +177,7 @@
 						{#if isDirty}
 							<button
 								onclick={handleSubmit}
-								class="hover:bg-element-hover rounded p-1 text-success transition-colors hover:text-success"
+								class="rounded p-1 text-success transition-colors hover:bg-element-hover hover:text-success"
 								title={hasStack ? 'Save changes' : 'Add stack'}
 							>
 								<Check width="14" height="14" />
@@ -185,7 +185,7 @@
 						{/if}
 						<button
 							onclick={handleCancel}
-							class="text-fg-muted hover:bg-element-hover hover:text-fg rounded p-1 transition-colors"
+							class="rounded p-1 text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 							title="Cancel"
 						>
 							<Close width="14" height="14" />
@@ -193,7 +193,7 @@
 					{:else}
 						<button
 							onclick={handleEdit}
-							class="text-fg-muted hover:bg-element-hover hover:text-fg rounded p-1 transition-colors"
+							class="rounded p-1 text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 							title={hasStack ? 'Edit stack' : 'Add stack'}
 						>
 							<PencilOutline width="14" height="14" />

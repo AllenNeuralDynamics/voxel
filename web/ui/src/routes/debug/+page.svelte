@@ -43,7 +43,7 @@
 </script>
 
 <div class="grid h-full min-h-0 grid-cols-[auto_1fr]">
-	<section class="bg-panel min-h-0 overflow-auto p-4">
+	<section class="min-h-0 overflow-auto bg-panel p-4">
 		<ThemePicker />
 	</section>
 	<section class="grid h-full min-h-0 grid-rows-[auto_1fr] gap-3 overflow-hidden p-4">
@@ -64,7 +64,7 @@
 		>
 			<!-- Typography -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Typography</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Typography</h3>
 				<div class="flex flex-col gap-1 text-base">
 					<span class="text-fg">fg — Primary text</span>
 					<span class="text-fg-muted">fg-muted — Secondary text</span>
@@ -75,11 +75,11 @@
 
 			<!-- Surfaces -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Surfaces</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Surfaces</h3>
 				<div class="flex gap-3">
 					{#each ['canvas', 'surface', 'panel', 'elevated', 'floating'] as surface (surface)}
 						<div
-							class="text-fg-muted flex h-20 w-28 items-end rounded-md border border-border p-2 text-xs bg-{surface}"
+							class="flex h-20 w-28 items-end rounded-md border border-border p-2 text-xs text-fg-muted bg-{surface}"
 						>
 							{surface}
 						</div>
@@ -89,10 +89,10 @@
 
 			<!-- Borders -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Borders</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Borders</h3>
 				<div class="flex gap-2">
 					{#each ['border', 'border-variant', 'border-focused', 'border-selected', 'border-disabled'] as b (b)}
-						<div class="flex h-12 w-24 items-end rounded-md border-2 border-{b} text-fg-muted p-2 text-xs">
+						<div class="flex h-12 w-24 items-end rounded-md border-2 border-{b} p-2 text-xs text-fg-muted">
 							{b.replace('border-', '')}
 						</div>
 					{/each}
@@ -101,10 +101,10 @@
 
 			<!-- Elements -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Elements</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Elements</h3>
 				<div class="flex gap-2">
 					{#each ['element-bg', 'element-hover', 'element-active', 'element-selected'] as el (el)}
-						<div class="text-fg-muted flex h-12 w-24 items-end rounded-md border border-border p-2 text-xs bg-{el}">
+						<div class="flex h-12 w-24 items-end rounded-md border border-border p-2 text-xs text-fg-muted bg-{el}">
 							{el.replace('element-', '')}
 						</div>
 					{/each}
@@ -113,11 +113,11 @@
 
 			<!-- Buttons -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Buttons</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Buttons</h3>
 				<div class="flex flex-col gap-2">
 					{#each sizes as sz (sz)}
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="text-fg-faint w-6 text-xs">{sz}</span>
+							<span class="w-6 text-xs text-fg-faint">{sz}</span>
 							<Button size={sz}>Default</Button>
 							<Button size={sz} variant="secondary">Secondary</Button>
 							<Button size={sz} variant="outline">Outline</Button>
@@ -131,11 +131,11 @@
 
 			<!-- Inputs -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Inputs</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Inputs</h3>
 				<div class="flex flex-col gap-3">
 					{#each sizes as sz (sz)}
 						<div class="flex flex-wrap items-end gap-3">
-							<span class="text-fg-faint w-6 self-center text-xs">{sz}</span>
+							<span class="w-6 self-center text-xs text-fg-faint">{sz}</span>
 							<TextInput size={sz} bind:value={textValue} placeholder="Type here…" />
 							<SpinBox size={sz} bind:value={spinValue} min={0} max={100} />
 							<Select size={sz} options={selectOptions} bind:value={selectValue} class="w-40" />
@@ -146,7 +146,7 @@
 
 			<!-- TextArea -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">TextArea</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">TextArea</h3>
 				<div class="max-w-xs">
 					<TextArea size="xs" value="Multi-line text content" />
 				</div>
@@ -154,7 +154,7 @@
 
 			<!-- TagInput -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">TagInput</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">TagInput</h3>
 				<div class="max-w-xs">
 					<TagInput size="xs" value={tags} />
 				</div>
@@ -162,35 +162,35 @@
 
 			<!-- Controls -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Controls</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Controls</h3>
 				<div class="flex flex-wrap items-center gap-6">
 					<div class="flex items-center gap-2">
 						<Checkbox bind:checked size="sm" />
-						<span class="text-fg-muted text-sm">Checked</span>
+						<span class="text-sm text-fg-muted">Checked</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<Checkbox bind:checked={unchecked} size="sm" />
-						<span class="text-fg-muted text-sm">Unchecked</span>
+						<span class="text-sm text-fg-muted">Unchecked</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<Checkbox checked={false} {indeterminate} size="sm" />
-						<span class="text-fg-muted text-sm">Indeterminate</span>
+						<span class="text-sm text-fg-muted">Indeterminate</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<Checkbox disabled size="sm" />
-						<span class="text-fg-muted text-sm">Disabled</span>
+						<span class="text-sm text-fg-muted">Disabled</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<Switch bind:checked={switchOn} size="sm" />
-						<span class="text-fg-muted text-sm">On</span>
+						<span class="text-sm text-fg-muted">On</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<Switch bind:checked={switchOff} size="sm" />
-						<span class="text-fg-muted text-sm">Off</span>
+						<span class="text-sm text-fg-muted">Off</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<Switch checked={false} disabled size="sm" />
-						<span class="text-fg-muted text-sm">Disabled</span>
+						<span class="text-sm text-fg-muted">Disabled</span>
 					</div>
 					<div class="w-32">
 						<Slider value={sliderValue} target={50} min={0} max={100} />
@@ -200,7 +200,7 @@
 
 			<!-- ColorPicker -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">ColorPicker</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">ColorPicker</h3>
 				<div class="flex items-center gap-4">
 					<div class="flex items-center gap-2">
 						<ColorPicker
@@ -208,21 +208,21 @@
 							presetColors={['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6']}
 							onColorChange={(c) => (pickerColor = c)}
 						/>
-						<span class="text-fg-muted text-sm">With presets</span>
+						<span class="text-sm text-fg-muted">With presets</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<ColorPicker color={pickerColor} onColorChange={(c) => (pickerColor = c)} />
-						<span class="text-fg-muted text-sm">No presets</span>
+						<span class="text-sm text-fg-muted">No presets</span>
 					</div>
-					<span class="text-fg-muted font-mono text-xs">{pickerColor}</span>
+					<span class="font-mono text-xs text-fg-muted">{pickerColor}</span>
 				</div>
 			</div>
 
 			<!-- Semantic -->
 			<div>
-				<h3 class="text-fg-faint mb-2 text-xs">Semantic</h3>
+				<h3 class="mb-2 text-xs text-fg-faint">Semantic</h3>
 				<div class="flex gap-3">
-					{#each ['danger', 'success', 'warning', 'info', 'active'] as s (s)}
+					{#each ['danger', 'success', 'warning', 'info'] as s (s)}
 						<div class="flex flex-col gap-1">
 							<div class="flex h-10 w-24 items-center justify-center rounded-md text-xs font-medium text-{s}-fg bg-{s}">
 								{s}

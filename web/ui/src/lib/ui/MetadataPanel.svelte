@@ -146,7 +146,7 @@
 <section class={className}>
 	<!-- Header -->
 	<div class="mb-2 flex items-center gap-2">
-		<h3 class="text-fg-muted/70 text-xs font-medium tracking-wide uppercase">Metadata</h3>
+		<h3 class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Metadata</h3>
 		<div class="flex-1"></div>
 		{#if editing}
 			<button
@@ -161,7 +161,7 @@
 			<button
 				type="button"
 				onclick={cancelEditing}
-				class="text-fg-muted hover:bg-element-hover rounded p-0.5 transition-colors"
+				class="rounded p-0.5 text-fg-muted transition-colors hover:bg-element-hover"
 				title="Discard changes"
 			>
 				<Close width="14" height="14" />
@@ -170,7 +170,7 @@
 			<button
 				type="button"
 				onclick={startEditing}
-				class="text-fg-muted hover:bg-element-hover hover:text-fg rounded px-1.5 py-0.5 text-xs transition-colors"
+				class="rounded px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 			>
 				Edit
 			</button>
@@ -196,11 +196,11 @@
 		<div class="mt-2 grid grid-cols-1 gap-2 @sm:grid-cols-[10rem_1fr] @sm:items-start @sm:gap-x-3">
 			<MetadataFields {schema} {values} onChange={setDraft} disabled={isFieldDisabled} size="sm">
 				{#snippet field(key, prop, input)}
-					<div class="text-fg-muted max-w-48 pt-1 text-xs" title={sanitizeString(key)}>
+					<div class="max-w-48 pt-1 text-xs text-fg-muted" title={sanitizeString(key)}>
 						<span class="flex items-center gap-1">
 							<span class="truncate">{sanitizeString(key)}</span>
 							{#if isLocked(prop)}
-								<LockOutline width="10" height="10" class="text-fg-muted/30 shrink-0" />
+								<LockOutline width="10" height="10" class="shrink-0 text-fg-muted/30" />
 							{/if}
 						</span>
 					</div>

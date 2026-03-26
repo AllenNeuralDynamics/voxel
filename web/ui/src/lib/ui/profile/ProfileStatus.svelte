@@ -26,7 +26,7 @@
 		size
 	]} {isActive
 		? 'border-success bg-success/15 text-success'
-		: 'bg-warning-bg cursor-pointer border-warning text-warning hover:bg-warning/15'} {className}"
+		: 'cursor-pointer border-warning bg-warning-bg text-warning hover:bg-warning/15'} {className}"
 	onclick={() => session.activateProfile(profileId)}
 	disabled={isActive || session.isSwitchingProfile}
 >

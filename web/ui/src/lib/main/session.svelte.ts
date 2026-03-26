@@ -75,6 +75,10 @@ export class Session {
 	appliedWaveforms = $state<DaqWaveformsResponse | null>(null);
 	isSwitchingProfile = $state(false);
 
+	// ── Grid lock ────────────────────────────────────────────
+
+	gridForceUnlocked = $state(false);
+
 	// ── Internal ────────────────────────────────────────────
 
 	#unsubscribers: Array<() => void> = [];
@@ -125,11 +129,17 @@ export class Session {
 				}
 			}),
 			init.client.on('profile/props_saved', (payload) => {
-				if (payload.devices) {
-					toast.success(`Saved props for ${payload.devices.length} device(s)`);
-				} else if (payload.device_id) {
-					toast.success(`Saved props for ${payload.device_id}`);
+				let count = 0;
+				for (const [profileId, devices] of Object.entries(payload)) {
+					const profile = this.config.profiles[profileId];
+					if (!profile) continue;
+					if (!profile.props) profile.props = {};
+					for (const [deviceId, props] of Object.entries(devices)) {
+						profile.props[deviceId] = props;
+						count++;
+					}
 				}
+				toast.success(`Saved props for ${count} device(s)`);
 			}),
 			init.client.on('profile/props_applied', (payload) => {
 				toast.success(`Applied saved props to ${payload.devices.length} device(s)`);
@@ -183,6 +193,7 @@ export class Session {
 	async activateProfile(profileId: string): Promise<void> {
 		if (!profileId || profileId === this.activeProfileId) return;
 
+		this.gridForceUnlocked = false;
 		this.isSwitchingProfile = true;
 
 		try {
@@ -213,9 +224,9 @@ export class Session {
 		}
 	}
 
-	async applyProfileProps(): Promise<void> {
+	async applyProfileProps(deviceIds?: string[]): Promise<void> {
 		try {
-			await this.#rest('POST', '/rig/profile/apply-props');
+			await this.#rest('POST', '/rig/profile/apply-props', deviceIds ? { device_ids: deviceIds } : {});
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to apply props');
 		}
@@ -223,17 +234,25 @@ export class Session {
 
 	// --- Grid ---
 
-	async setGridOffset(xOffsetUm: number, yOffsetUm: number, force = false): Promise<void> {
+	async setGridOffset(xOffsetUm: number, yOffsetUm: number): Promise<void> {
 		try {
-			await this.#rest('PATCH', '/plan/grid', { x_offset_um: xOffsetUm, y_offset_um: yOffsetUm, force });
+			await this.#rest('PATCH', '/plan/grid', {
+				x_offset_um: xOffsetUm,
+				y_offset_um: yOffsetUm,
+				force: this.gridForceUnlocked
+			});
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to set grid offset');
 		}
 	}
 
-	async setGridOverlap(overlapX: number, overlapY: number, force = false): Promise<void> {
+	async setGridOverlap(overlapX: number, overlapY: number): Promise<void> {
 		try {
-			await this.#rest('PATCH', '/plan/grid', { overlap_x: overlapX, overlap_y: overlapY, force });
+			await this.#rest('PATCH', '/plan/grid', {
+				overlap_x: overlapX,
+				overlap_y: overlapY,
+				force: this.gridForceUnlocked
+			});
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to set grid overlap');
 		}
@@ -297,6 +316,7 @@ export class Session {
 	// --- Stacks ---
 
 	async addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): Promise<void> {
+		this.gridForceUnlocked = false;
 		try {
 			await this.#rest('POST', '/plan/stacks', {
 				stacks: stacks.map((s) => ({
@@ -327,6 +347,7 @@ export class Session {
 	}
 
 	async removeStacks(positions: Array<{ row: number; col: number }>): Promise<void> {
+		this.gridForceUnlocked = false;
 		try {
 			await this.#rest('DELETE', '/plan/stacks', { positions });
 		} catch (error) {

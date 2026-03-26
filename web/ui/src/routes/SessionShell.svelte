@@ -10,13 +10,14 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button, Dialog, DropdownMenu } from '$lib/ui/kit';
-	import { ChevronDown, ClipboardCheckOutline, LayersOutline, Microscope, Power } from '$lib/icons';
+	import { ChevronDown, Crosshair, Play, Microscope, Power } from '$lib/icons';
 	import AppMenu from './AppMenu.svelte';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 	import StartButton from '$lib/ui/StartButton.svelte';
 	import { ProfileSelector } from '$lib/ui/profile';
 	import { cn } from '$lib/utils';
 	import type { Pathname } from '$app/types';
+	import { lastInstrumentPath } from './(instrument)/+layout.svelte';
 
 	interface Props {
 		app: App;
@@ -40,8 +41,8 @@
 
 	const navTabs: { id: Pathname; label: string; icon: Component }[] = [
 		{ id: '/', label: 'Instrument', icon: Microscope },
-		{ id: '/setup', label: 'Setup', icon: ClipboardCheckOutline },
-		{ id: '/acquisition', label: 'Acquisition', icon: LayersOutline }
+		{ id: '/setup', label: 'Prepare', icon: Crosshair },
+		{ id: '/acquisition', label: 'Acquire', icon: Play }
 	];
 
 	const viewId = $derived<Pathname>(
@@ -59,25 +60,30 @@
 	}
 
 	function selectView(id: Pathname) {
-		if (viewId !== id) gotoView(id);
+		if (viewId === id) return;
+		if (id === '/' && lastInstrumentPath && lastInstrumentPath !== '/') {
+			goto(resolve(lastInstrumentPath as '/'), { keepFocus: true, noScroll: true });
+		} else {
+			gotoView(id);
+		}
 	}
 
 	let closeDialogOpen = $state(false);
 </script>
 
-<div class="text-fg h-screen w-full">
+<div class="h-screen w-full text-fg">
 	<PaneGroup direction="horizontal" autoSaveId="main-h">
 		<Pane defaultSize={60} minSize={50} maxSize={70}>
 			<div class="grid h-full grid-rows-[auto_1fr]">
 				<header
-					class="bg-elevated @container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border px-4 py-4 @min-[800px]:grid-cols-[auto_auto_1fr]"
+					class="@container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border bg-elevated px-4 py-4 @min-[800px]:grid-cols-[auto_auto_1fr]"
 				>
 					<!-- Logo + close-session dialog -->
 					<div class="flex items-center">
 						<AppMenu {app}>
 							{#snippet trigger()}
 								<VoxelLogo class="size-ui-sm" />
-								<ChevronDown width="14" height="14" class="text-fg-muted/60 ml-1" />
+								<ChevronDown width="14" height="14" class="ml-1 text-fg-muted/60" />
 							{/snippet}
 							{#snippet extraItems()}
 								<DropdownMenu.Item onclick={() => selectView('/debug')}>Debug</DropdownMenu.Item>
@@ -93,7 +99,7 @@
 								<Dialog.Header>
 									<Dialog.Title>Close Session</Dialog.Title>
 								</Dialog.Header>
-								<p class="text-fg-muted text-sm">
+								<p class="text-sm text-fg-muted">
 									Are you sure you want to close the current session? Any unsaved progress will be lost.
 								</p>
 								<Dialog.Footer>
@@ -114,19 +120,19 @@
 
 					<!-- Nav tabs — full-width row 2 at narrow, inline col 2 at wide -->
 					<nav
-						class="col-span-full flex *:flex-1 @min-[800px]:col-span-1 @min-[800px]:col-start-2 @min-[800px]:row-start-1 @min-[800px]:w-fit"
+						class="col-span-full flex gap-1 @min-[800px]:col-span-1 @min-[800px]:col-start-2 @min-[800px]:row-start-1 @min-[800px]:w-fit"
 					>
 						{#each navTabs as tab (tab.id)}
 							{@const Icon = tab.icon}
 							<button
 								onclick={() => selectView(tab.id)}
 								class={cn(
-									'h-ui-lg border-fg-faint -ml-px flex min-w-28 items-center justify-center gap-1.5 border px-3 text-base capitalize first:ml-0 first:rounded-l last:rounded-r',
-									viewId === tab.id ? 'text-fg bg-element-bg' : 'text-fg-muted bg-elevated hover:bg-element-hover/50'
+									'flex h-ui-md min-w-32 flex-1 items-center gap-2 rounded-md px-3 text-sm capitalize transition-colors',
+									viewId === tab.id ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
 								)}
 								title={tab.label}
 							>
-								<Icon width="18" height="18" />
+								<Icon width="14" height="14" class="shrink-0" />
 								{tab.label}
 							</button>
 						{/each}

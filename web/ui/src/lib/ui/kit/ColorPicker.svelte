@@ -48,13 +48,13 @@
 
 <Popover.Root>
 	<Popover.Trigger
-		class="hover:border-fg-muted h-2.5 w-2.5 rounded-full border border-border transition-all"
+		class="h-2.5 w-2.5 rounded-full border border-border transition-all hover:border-fg-muted"
 		style="background-color: {color}"
 		aria-label="Pick color"
 	/>
 
 	<Popover.Content
-		class="bg-floating z-50 rounded-md border border-border p-2 shadow-xl outline-none"
+		class="z-50 rounded-md border border-border bg-floating p-2 shadow-xl outline-none"
 		sideOffset={4}
 		{align}
 	>
@@ -69,7 +69,7 @@
 							class="h-5 w-5 rounded-full border transition-all hover:scale-110 {color.toLowerCase() ===
 							presetColor.toLowerCase()
 								? 'border-focused ring-focused ring-1'
-								: 'hover:border-fg-muted border-border'}"
+								: 'border-border hover:border-fg-muted'}"
 							style="background-color: {presetColor}"
 							aria-label="Select preset color"
 						></button>
@@ -86,7 +86,7 @@
 					type="color"
 					value={color}
 					oninput={handleCustomColorChange}
-					class="bg-element-bg h-6 w-8 cursor-pointer rounded border border-input"
+					class="h-6 w-8 cursor-pointer rounded border border-input bg-element-bg"
 				/>
 				<!-- Hex input -->
 				<input
@@ -96,7 +96,7 @@
 					onblur={handleCustomInputBlur}
 					placeholder="#ff00ff"
 					size="7"
-					class="bg-element-bg text-fg placeholder-fg-muted focus:border-focused h-6 min-w-0 rounded border border-input px-1.5 font-mono text-xs focus:outline-none"
+					class="focus:border-focused h-6 min-w-0 rounded border border-input bg-element-bg px-1.5 font-mono text-xs text-fg placeholder-fg-muted focus:outline-none"
 				/>
 			</div>
 		</div>

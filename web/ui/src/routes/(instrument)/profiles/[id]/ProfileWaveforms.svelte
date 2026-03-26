@@ -431,50 +431,52 @@
 {#if profile}
 	<div class="flex flex-col gap-0 rounded border bg-card shadow-sm">
 		<!-- ═══ HEADER: Timing controls ═══ -->
-		<div class="flex h-10 items-center gap-3 border-b px-3">
-			<SpinBox
-				value={sampleRate}
-				prefix="Sample Rate"
-				suffix=" Hz"
-				size="xs"
-				appearance="full"
-				numCharacters={8}
-				align="right"
-				step={1000}
-				min={1}
-				disabled={!canEdit}
-				onChange={(v) => updateTimingField('sample_rate', v)}
-			/>
-			<SpinBox
-				value={duration}
-				prefix="Duration"
-				suffix=" s"
-				size="xs"
-				appearance="full"
-				decimals={4}
-				numCharacters={8}
-				align="right"
-				step={0.001}
-				min={0.0001}
-				disabled={!canEdit}
-				onChange={(v) => updateTimingField('duration', v)}
-			/>
-			<SpinBox
-				value={restTime}
-				prefix="Rest Time"
-				suffix=" s"
-				size="xs"
-				appearance="full"
-				decimals={4}
-				numCharacters={8}
-				align="right"
-				step={0.001}
-				min={0}
-				disabled={!canEdit}
-				onChange={(v) => updateTimingField('rest_time', v)}
-			/>
+		<div class="flex flex-wrap items-center justify-between gap-3 gap-y-0 border-b px-3 py-1.5">
+			<div class="flex min-h-10 items-center gap-3">
+				<SpinBox
+					value={sampleRate}
+					prefix="Sample Rate"
+					suffix=" Hz"
+					size="xs"
+					appearance="full"
+					numCharacters={8}
+					align="right"
+					step={1000}
+					min={1}
+					disabled={!canEdit}
+					onChange={(v) => updateTimingField('sample_rate', v)}
+				/>
+				<SpinBox
+					value={duration}
+					prefix="Duration"
+					suffix=" s"
+					size="xs"
+					appearance="full"
+					decimals={4}
+					numCharacters={8}
+					align="right"
+					step={0.001}
+					min={0.0001}
+					disabled={!canEdit}
+					onChange={(v) => updateTimingField('duration', v)}
+				/>
+				<SpinBox
+					value={restTime}
+					prefix="Rest Time"
+					suffix=" s"
+					size="xs"
+					appearance="full"
+					decimals={4}
+					numCharacters={8}
+					align="right"
+					step={0.001}
+					min={0}
+					disabled={!canEdit}
+					onChange={(v) => updateTimingField('rest_time', v)}
+				/>
+			</div>
 			{#if timingDirty && canEdit}
-				<div class="flex gap-1">
+				<div class="flex min-h-10 gap-1">
 					<Button variant="ghost" size="sm" onclick={cancelTiming} title="Reset timing">
 						<Close width="12" height="12" />
 					</Button>
@@ -483,9 +485,9 @@
 					</Button>
 				</div>
 			{/if}
-			<div class="text-fg-muted ml-auto flex gap-4 text-xs">
-				<span>Freq <span class="text-fg font-mono">{formatFrequency(frequency)}</span></span>
-				<span>Samples <span class="text-fg font-mono">{samples.toLocaleString()}</span></span>
+			<div class="flex min-h-8 items-center gap-4 text-xs text-fg-muted">
+				<p>Freq <span class="font-mono text-nowrap text-fg">{formatFrequency(frequency)}</span></p>
+				<p>Samples <span class="font-mono text-nowrap text-fg">{samples.toLocaleString()}</span></p>
 			</div>
 		</div>
 
@@ -497,7 +499,7 @@
 					{@const isSelected = deviceId === selectedDeviceId}
 					{@const isHidden = hiddenDevices.has(deviceId)}
 					<div
-						class="text-fg-muted flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors
+						class="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-fg-muted transition-colors
 							{isSelected ? 'bg-element-selected text-fg' : ''}"
 					>
 						<button
@@ -513,7 +515,7 @@
 						<button
 							type="button"
 							class="truncate text-left transition-colors
-								{isSelected ? 'text-fg' : canEdit ? 'hover:text-fg cursor-pointer' : ''}"
+								{isSelected ? 'text-fg' : canEdit ? 'cursor-pointer hover:text-fg' : ''}"
 							onclick={() => {
 								if (canEdit) {
 									if (isSelected) cancelEditing();
@@ -761,7 +763,7 @@
 					</svg>
 				{:else}
 					<div class="flex items-center justify-center" style:height="{plotHeight}px">
-						<span class="text-fg-muted text-sm">No waveform data</span>
+						<span class="text-sm text-fg-muted">No waveform data</span>
 					</div>
 				{/if}
 			</div>
@@ -878,13 +880,13 @@
 					</div>
 				</div>
 			{:else if canEdit}
-				<span class="text-fg-muted text-xs">Select a device to edit its waveform</span>
+				<p class="text-xs leading-ui-sm text-fg-muted">Select a device to edit its waveform</p>
 			{:else}
-				<span class="text-xs text-warning/50">
+				<p class="text-xs leading-ui-sm text-warning/50">
 					{!isActiveProfile
 						? 'Activate profile to edit timing and waveforms'
 						: 'Stop preview to edit timing and waveforms'}
-				</span>
+				</p>
 			{/if}
 		</div>
 	</div>

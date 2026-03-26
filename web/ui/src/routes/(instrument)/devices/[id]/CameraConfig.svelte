@@ -92,7 +92,7 @@
 <section class="space-y-5">
 	<!-- Header -->
 	<div class="flex items-center justify-between">
-		<h2 class="text-fg text-base font-medium">{sanitizeString(deviceId)}</h2>
+		<h2 class="text-base font-medium text-fg">{sanitizeString(deviceId)}</h2>
 		<span
 			class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
 			title={device?.connected ? 'Connected' : 'Disconnected'}
@@ -119,7 +119,7 @@
 				<div class="grid grid-cols-2 gap-4">
 					{#if pixelFormatInfo && pixelFormatModel && pixelFormatModel.options && (typeof pixelFormatModel.value === 'string' || typeof pixelFormatModel.value === 'number')}
 						<div class="grid gap-1">
-							<span class="text-fg-muted text-xs font-medium">{pixelFormatInfo.label}</span>
+							<span class="text-xs font-medium text-fg-muted">{pixelFormatInfo.label}</span>
 							<Select
 								value={String(pixelFormatModel.value)}
 								options={pixelFormatModel.options.map((o) => ({ value: String(o), label: String(o) }))}
@@ -131,7 +131,7 @@
 
 					{#if binningInfo && binningModel && binningModel.options && (typeof binningModel.value === 'string' || typeof binningModel.value === 'number')}
 						<div class="grid gap-1">
-							<span class="text-fg-muted text-xs font-medium">{binningInfo.label}</span>
+							<span class="text-xs font-medium text-fg-muted">{binningInfo.label}</span>
 							<Select
 								value={String(binningModel.value)}
 								options={binningModel.options.map((o) => ({ value: String(o), label: `${o}x${o}` }))}
@@ -145,9 +145,9 @@
 				<!-- Frame Region -->
 				<div class="space-y-3">
 					<div class="flex items-baseline justify-between">
-						<h4 class="text-fg-muted text-xs font-medium tracking-wide uppercase">Frame Region</h4>
+						<h4 class="text-xs font-medium tracking-wide text-fg-muted uppercase">Frame Region</h4>
 						{#if frameSize}
-							<span class="text-fg-muted font-mono text-sm">
+							<span class="font-mono text-sm text-fg-muted">
 								{frameSize.x} &times; {frameSize.y} px{#if frameSizeMb != null}
 									&ensp;|&ensp;{frameSizeMb.toFixed(1)} MB{/if}
 							</span>
@@ -158,7 +158,7 @@
 					{#if sensorSize && frameRegion}
 						<svg
 							viewBox="0 0 {sensorW} {sensorH}"
-							class="bg-element-bg w-full rounded border border-border"
+							class="w-full rounded border border-border bg-element-bg"
 							style="max-height: 280px;"
 							preserveAspectRatio="xMidYMid meet"
 						>
@@ -186,8 +186,8 @@
 							/>
 						</svg>
 					{:else}
-						<div class="bg-element-bg flex aspect-4/3 items-center justify-center rounded border border-border">
-							<span class="text-fg-muted text-sm">No region data</span>
+						<div class="flex aspect-4/3 items-center justify-center rounded border border-border bg-element-bg">
+							<span class="text-sm text-fg-muted">No region data</span>
 						</div>
 					{/if}
 
@@ -250,42 +250,42 @@
 					{#if sensorSize}
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Sensor</span>
-							<span class="text-fg font-mono">{sensorSize.x} &times; {sensorSize.y} px</span>
+							<span class="font-mono text-fg">{sensorSize.x} &times; {sensorSize.y} px</span>
 						</div>
 					{/if}
 					{#if pixelSize}
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Pixel</span>
-							<span class="text-fg font-mono">{pixelSize.x} &times; {pixelSize.y} &micro;m</span>
+							<span class="font-mono text-fg">{pixelSize.x} &times; {pixelSize.y} &micro;m</span>
 						</div>
 					{/if}
 					{#if pixelType}
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Type</span>
-							<span class="text-fg font-mono">{pixelType}</span>
+							<span class="font-mono text-fg">{pixelType}</span>
 						</div>
 					{/if}
 					{#if frameAreaMm}
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Area</span>
-							<span class="text-fg font-mono">{frameAreaMm.x.toFixed(1)} &times; {frameAreaMm.y.toFixed(1)} mm</span>
+							<span class="font-mono text-fg">{frameAreaMm.x.toFixed(1)} &times; {frameAreaMm.y.toFixed(1)} mm</span>
 						</div>
 					{/if}
 				</div>
 
 				<!-- Stream info -->
 				<div class="space-y-1">
-					<h4 class="text-fg-muted text-xs font-medium tracking-wide uppercase">Stream</h4>
+					<h4 class="text-xs font-medium tracking-wide text-fg-muted uppercase">Stream</h4>
 					<div class="grid gap-1 text-sm">
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Frame Rate</span>
-							<span class="text-fg font-mono">
+							<span class="font-mono text-fg">
 								{typeof frameRateHz === 'number' ? `${frameRateHz.toFixed(1)} fps` : '\u2014'}
 							</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Data Rate</span>
-							<span class="text-fg font-mono">
+							<span class="font-mono text-fg">
 								{streamInfo?.data_rate_mbs != null ? `${streamInfo.data_rate_mbs.toFixed(1)} MB/s` : '\u2014'}
 							</span>
 						</div>
@@ -297,7 +297,7 @@
 						</div>
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Frame Index</span>
-							<span class="text-fg font-mono">
+							<span class="font-mono text-fg">
 								{streamInfo?.frame_index != null ? streamInfo.frame_index : '\u2014'}
 							</span>
 						</div>
@@ -307,7 +307,7 @@
 		</div>
 	{:else}
 		<div class="flex items-center justify-center py-12">
-			<p class="text-fg-muted text-base">Camera not available</p>
+			<p class="text-base text-fg-muted">Camera not available</p>
 		</div>
 	{/if}
 </section>

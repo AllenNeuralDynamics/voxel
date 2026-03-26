@@ -130,7 +130,7 @@
 			{/if}
 		</span>
 		{#if loading}
-			<DotsSpinner class="text-fg-muted shrink-0" width={iconSizes[size]} height={iconSizes[size]} />
+			<DotsSpinner class="shrink-0 text-fg-muted" width={iconSizes[size]} height={iconSizes[size]} />
 		{:else}
 			{@const IconComponent = icon}
 			<IconComponent class="shrink-0 opacity-50" width={iconSizes[size]} height={iconSizes[size]} />
@@ -140,7 +140,7 @@
 	<SelectPrimitive.Portal>
 		<SelectPrimitive.Content align="start" class={styles.content()}>
 			{#if options.length === 0 && emptyMessage}
-				<div class="text-fg-muted px-3 py-2 text-base">{emptyMessage}</div>
+				<div class="px-3 py-2 text-base text-fg-muted">{emptyMessage}</div>
 			{:else}
 				<SelectPrimitive.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
 					<SelectPrimitive.Group>
@@ -160,7 +160,7 @@
 								<div class="flex flex-col gap-0.5">
 									<span class="text-fg">{option.label}</span>
 									{#if option.description}
-										<span class="text-fg-muted text-xs">{option.description}</span>
+										<span class="text-xs text-fg-muted">{option.description}</span>
 									{/if}
 								</div>
 							</SelectPrimitive.Item>

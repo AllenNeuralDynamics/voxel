@@ -46,12 +46,15 @@
 </script>
 
 {#if isRunning}
-	<button class={buttonVariants({ variant: 'danger', size: 'lg', class: cn('w-40', className) })} onclick={handleStop}>
+	<button
+		class={buttonVariants({ variant: 'danger', size: 'lg', class: cn('w-40 rounded-md', className) })}
+		onclick={handleStop}
+	>
 		{isAcquiring ? 'Stop Acquisition' : 'Stop Preview'}
 	</button>
 {:else}
 	<DropdownMenu.Root>
-		<DropdownMenu.Trigger class={cn(base, 'w-40 justify-between', className)}>
+		<DropdownMenu.Trigger class={cn(base, 'w-40 justify-between rounded-md', className)}>
 			Start Imaging
 			<ChevronDown width="14" height="14" />
 		</DropdownMenu.Trigger>

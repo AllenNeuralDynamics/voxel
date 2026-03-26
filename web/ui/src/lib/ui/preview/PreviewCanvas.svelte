@@ -164,13 +164,13 @@
 	const namedChannels = $derived(previewer.channels.filter((c) => c.name));
 </script>
 
-<div class="bg-canvas grid h-full grid-rows-[auto_1fr_auto]" bind:this={containerEl}>
+<div class="grid h-full grid-rows-[auto_1fr_auto] bg-canvas" bind:this={containerEl}>
 	<!-- Top: Controls -->
 	<div class="flex items-center justify-between p-4">
-		<div class="h-ui-lg flex items-center gap-1">
+		<div class="flex h-ui-lg items-center gap-1">
 			<button
 				onclick={() => (showHistograms = !showHistograms)}
-				class="hover:bg-element-hover flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors {showHistograms
+				class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors hover:bg-element-hover {showHistograms
 					? 'text-fg-muted'
 					: 'text-fg-muted/40'}"
 				aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}

@@ -333,6 +333,12 @@ class SavePropsRequest(BaseModel):
     all: bool = False
 
 
+class ApplyPropsRequest(BaseModel):
+    """Request model for applying saved profile properties to hardware."""
+
+    device_ids: list[str] | None = None
+
+
 class UpdateWaveformsRequest(BaseModel):
     """Request model for updating waveform definitions."""
 
@@ -395,20 +401,24 @@ async def save_props(
         raise HTTPException(status_code=400, detail="Must provide either 'device_id' or 'all: true'")
 
     try:
+        rig = service.session.rig
+        profile_id = rig.active_profile_id
         if request.all:
             saved = await service.session.save_all_device_props()
-            service.broadcast(
-                {"topic": "profile/props_saved", "payload": {"devices": saved}},
-                with_status=True,
-            )
-            return {"devices": saved, "status": "saved"}
+        else:
+            await service.session.save_device_props(request.device_id)
+            saved = [request.device_id]
 
-        await service.session.save_device_props(request.device_id)
+        # Payload: {profile_id: {device_id: {prop_name: value}}}
+        saved_props = {
+            dev: rig.config.profiles[profile_id].props.get(dev, {})
+            for dev in saved
+        }
         service.broadcast(
-            {"topic": "profile/props_saved", "payload": {"device_id": request.device_id}},
+            {"topic": "profile/props_saved", "payload": {profile_id: saved_props}},
             with_status=True,
         )
-        return {"device_id": request.device_id, "status": "saved"}
+        return {"devices": saved, "status": "saved"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -417,11 +427,15 @@ async def save_props(
 
 @rig_router.post("/profile/apply-props")
 async def apply_props(
+    request: ApplyPropsRequest,
     service: Annotated[Any, Depends(_get_session_service)],
 ) -> dict:
-    """Apply saved profile properties to hardware devices."""
+    """Apply saved profile properties to hardware devices.
+
+    If *device_ids* is provided, only those devices are reverted; otherwise all.
+    """
     try:
-        applied = await service.session.apply_profile_props()
+        applied = await service.session.apply_profile_props(request.device_ids)
         service.broadcast(
             {"topic": "profile/props_applied", "payload": {"devices": applied}},
             with_status=True,

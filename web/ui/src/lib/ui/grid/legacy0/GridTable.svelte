@@ -136,11 +136,11 @@
 	}
 </script>
 
-<div class="text-fg flex h-full flex-col text-sm">
+<div class="flex h-full flex-col text-sm text-fg">
 	<!-- Table -->
 	<div class="flex-1 overflow-auto">
 		<table class="w-full border-collapse">
-			<thead class="text-fg sticky top-0 z-1000 bg-card uppercase">
+			<thead class="sticky top-0 z-1000 bg-card text-fg uppercase">
 				<tr class="text-xs font-medium">
 					<th class="w-8 border-b border-border px-5 py-1.5">
 						<div class="flex items-center justify-center">
@@ -164,7 +164,7 @@
 								appearance="inline"
 								align="right"
 							/>
-							<span class="text-fg-muted ml-1 text-xs lowercase">µm</span>
+							<span class="ml-1 text-xs text-fg-muted lowercase">µm</span>
 						</div>
 					</th>
 					<th class="w-16 border-b border-border p-2 text-right font-medium tracking-wider"> Slices </th>
@@ -177,7 +177,7 @@
 					{@const stack = getStack(tile)}
 					{@const focused = isFocused(tile)}
 					<tr
-						class="hover:bg-element-hover cursor-pointer border-b border-l-2 border-border border-l-transparent transition-[background-color]"
+						class="cursor-pointer border-b border-l-2 border-border border-l-transparent transition-[background-color] hover:bg-element-hover"
 						class:!border-l-warning={focused}
 						onclick={(e) => handleRowClick(e, tile)}
 					>
@@ -193,7 +193,7 @@
 						<td class="p-1.5 px-3 text-left font-mono" ondblclick={() => handleTileDoubleClick(tile)}>
 							R{tile.row}, C{tile.col}
 						</td>
-						<td class="text-fg-muted p-1.5 font-mono text-xs">
+						<td class="p-1.5 font-mono text-xs text-fg-muted">
 							{(tile.x_um / 1000).toFixed(2)}, {(tile.y_um / 1000).toFixed(2)} mm
 						</td>
 						<td class="p-1.5"></td>
@@ -216,20 +216,20 @@
 										onChange={(v) => handleZChange(tile, stack.z_start_um, v)}
 										align="right"
 									/>
-									<span class="text-fg-muted ml-1 text-xs">µm</span>
+									<span class="ml-1 text-xs text-fg-muted">µm</span>
 								</div>
 							{:else}
 								<span class="text-fg-muted/30">—</span>
 							{/if}
 						</td>
-						<td class="text-fg-muted p-1.5 text-right font-mono">
+						<td class="p-1.5 text-right font-mono text-fg-muted">
 							{#if stack}
 								{stack.num_frames}
 							{:else}
 								<span class="text-fg-muted/30">—</span>
 							{/if}
 						</td>
-						<td class="text-fg-muted p-1.5 text-right">
+						<td class="p-1.5 text-right text-fg-muted">
 							{#if stack}
 								<span class="font-mono text-xs">{stack.profile_id}</span>
 							{:else}
@@ -241,7 +241,7 @@
 								<span data-stack-status={stack.status} class="text-(--stack-status)">{stack.status}</span>
 							{:else}
 								<button
-									class="text-fg-muted inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-xs transition-colors hover:border-success hover:text-success"
+									class="inline-flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:border-success hover:text-success"
 									onclick={() => handleAddStack(tile)}
 								>
 									Add
@@ -255,7 +255,7 @@
 		</table>
 
 		{#if filteredTiles.length === 0}
-			<div class="text-fg-muted/50 flex items-center justify-center p-8">
+			<div class="flex items-center justify-center p-8 text-fg-muted/50">
 				{#if session.tiles.length === 0}
 					No tiles in grid
 				{:else}
@@ -267,8 +267,8 @@
 
 	<!-- Toolbar (only shown when items selected) -->
 	{#if checkedCount > 0}
-		<div class="bg-canvas flex items-center justify-end gap-3 border-t border-border p-2">
-			<span class="text-fg-muted text-xs">{checkedCount} selected</span>
+		<div class="flex items-center justify-end gap-3 border-t border-border bg-canvas p-2">
+			<span class="text-xs text-fg-muted">{checkedCount} selected</span>
 			<button
 				class="rounded border border-danger bg-transparent px-2 py-1 text-xs text-danger transition-colors hover:bg-danger hover:text-danger-fg"
 				onclick={handleDeleteSelected}

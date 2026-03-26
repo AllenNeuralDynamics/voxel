@@ -176,19 +176,6 @@
 	--info-fg: oklch(0.985 0 0);
 	/* Text on solid info backgrounds. — zinc-50 */
 
-	/* ── Semantic: Active ──────────────────────────────────────────── */
-
-	--active: oklch(0.702 0.183 55.934);
-	/* No Zed equivalent — orange-500
-	 * In-progress/acquiring status. */
-
-	--active-bg: oklch(0.98 0.036 73.684);
-	/* Derived — orange-50
-	 * Subtle fill. Active/in-progress containers. */
-
-	--active-fg: oklch(0.985 0 0);
-	/* Text on solid active backgrounds. — zinc-50 */
-
 	/* ── Scrollbar ─────────────────────────────────────────────────── */
 
 	--scrollbar-thumb: var(--border);
@@ -321,16 +308,6 @@
 	/* zed: info.background — ~blue-950/80 */
 
 	--info-fg: oklch(0.985 0 0);
-
-	/* ── Semantic: Active ────────────────────────────────────────────── */
-
-	--active: oklch(0.702 0.183 55.934);
-	/* orange-500 */
-
-	--active-bg: oklch(0.285 0.06 49.769);
-	/* ~orange-950/80 */
-
-	--active-fg: oklch(0.985 0 0);
 
 	/* ── Scrollbar ───────────────────────────────────────────────────── */
 

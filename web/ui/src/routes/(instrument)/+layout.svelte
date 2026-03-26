@@ -1,3 +1,8 @@
+<script lang="ts" module>
+	/** Last visited path within the instrument route group. */
+	export let lastInstrumentPath: string = '/';
+</script>
+
 <script lang="ts">
 	import { getSessionContext, getLogsContext } from '$lib/context';
 	import { cn, sanitizeString } from '$lib/utils';
@@ -9,6 +14,11 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
+
+	// Track the current instrument sub-path so we can restore it
+	$effect(() => {
+		lastInstrumentPath = page.url.pathname;
+	});
 
 	let { children } = $props();
 
@@ -72,7 +82,7 @@
 
 			<!-- Profiles -->
 			<nav class="mt-1 space-y-0.5 border-y border-border px-3 py-2">
-				<p class="text-fg-muted/60 px-2 py-1 text-xs font-semibold tracking-wide uppercase">Profiles</p>
+				<p class="px-2 py-1 text-xs font-semibold tracking-wide text-fg-muted/60 uppercase">Profiles</p>
 				{#each Object.entries(config.profiles) as [id, profile] (id)}
 					{@const isActiveProfile = id === session.activeProfileId}
 					{@const isViewed = activeProfileId === id}
@@ -80,7 +90,7 @@
 						<span class="truncate">{profile.label ?? sanitizeString(id)}</span>
 						{#if isActiveProfile}
 							<span
-								class="w-13 shrink-0 rounded-full bg-success/15 py-0.5 text-center text-xs font-medium text-success"
+								class="w-16 shrink-0 rounded-full border-success/40 bg-success/15 py-px text-center text-xs font-medium text-success"
 							>
 								Active
 							</span>
@@ -89,10 +99,10 @@
 								role="button"
 								tabindex="0"
 								class={cn(
-									'w-13 shrink-0 rounded-full border py-0.5 text-center text-xs font-medium transition-all',
+									'w-16 shrink-0 rounded-full border border-fg-faint px-1 py-px text-center text-xs font-medium text-fg-muted transition-all',
 									isViewed
-										? 'pointer-events-auto border-warning/40 bg-warning/10 text-warning opacity-100 hover:bg-warning/20'
-										: 'text-fg-muted hover:bg-element-hover hover:text-fg pointer-events-none border-border opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'
+										? 'pointer-events-auto opacity-100'
+										: 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-element-hover hover:text-fg'
 								)}
 								onclick={(e: MouseEvent) => {
 									e.stopPropagation();
@@ -116,12 +126,12 @@
 
 			<!-- Devices -->
 			<Collapsible.Root open>
-				<Collapsible.Trigger class="group flex w-full items-center justify-between px-5 py-1">
-					<p class="text-fg-muted/60 text-xs font-semibold tracking-wide uppercase">Devices</p>
+				<Collapsible.Trigger class="group flex w-full items-center justify-between py-1 pr-4 pl-5">
+					<p class="text-xs font-semibold tracking-wide text-fg-muted/60 uppercase">Devices</p>
 					<ChevronRight
 						width="12"
 						height="12"
-						class="text-fg-muted shrink-0 transition-transform group-data-[state=open]:rotate-90"
+						class="shrink-0 text-fg-muted transition-transform group-data-[state=open]:rotate-90"
 					/>
 				</Collapsible.Trigger>
 				<Collapsible.Content>
@@ -156,10 +166,10 @@
 
 	<!-- Main Content -->
 	<PaneGroup direction="vertical" autoSaveId="instrument-v" class="flex-1">
-		<Pane>
-			<div class="h-full overflow-auto px-4 py-2">
-				{@render children()}
-			</div>
+		<Pane class="h-full overflow-auto py-2">
+			<!-- <div class="h-full overflow-auto px-4 py-2"> -->
+			{@render children()}
+			<!-- </div> -->
 		</Pane>
 		<PaneDivider direction="horizontal" />
 		<Pane

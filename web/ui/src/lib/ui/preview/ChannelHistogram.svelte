@@ -241,7 +241,7 @@
 <div class="channel-histogram flex flex-col" bind:clientWidth={columnWidth}>
 	<!-- Window Range -->
 	{#if windowMode !== 'inline'}
-		<div class="text-fg-muted flex items-center justify-between" class:window-row-hover={windowMode === 'hover'}>
+		<div class="flex items-center justify-between text-fg-muted" class:window-row-hover={windowMode === 'hover'}>
 			<SpinBox
 				bind:value={windowMin}
 				min={0}
@@ -274,7 +274,7 @@
 				height={svgHeight}
 				role="img"
 				aria-label="Histogram for {label}"
-				class="bg-canvas cursor-crosshair"
+				class="cursor-crosshair bg-canvas"
 				onmousemove={onSvgMouseMove}
 				ondblclick={autoLevels}
 				oncontextmenu={(e) => {
@@ -369,13 +369,13 @@
 			</svg>
 		{:else}
 			<div class="flex items-center justify-center" style:height="{svgHeight}px">
-				<span class="text-fg-muted text-xs">No histogram data</span>
+				<span class="text-xs text-fg-muted">No histogram data</span>
 			</div>
 		{/if}
 	</div>
 
 	<!-- Levels + Label -->
-	<div class="text-fg-muted flex items-center justify-between">
+	<div class="flex items-center justify-between text-fg-muted">
 		<SpinBox
 			value={minIntensity}
 			min={0}

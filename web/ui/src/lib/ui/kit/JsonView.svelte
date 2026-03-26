@@ -48,7 +48,7 @@
 						class="flex cursor-pointer list-none items-center gap-1.5 px-1 py-0.5 select-none [&::-webkit-details-marker]:hidden"
 					>
 						<svg
-							class="text-fg-muted/60 h-3 w-3 shrink-0 transition-transform [[open]>&]:rotate-90"
+							class="h-3 w-3 shrink-0 text-fg-muted/60 transition-transform [[open]>&]:rotate-90"
 							viewBox="0 0 16 16"
 							fill="currentColor"
 						>
@@ -63,12 +63,12 @@
 				</details>
 			{:else}
 				<div class="flex items-baseline gap-2 px-1 py-0.5">
-					<span class="text-fg-muted shrink-0">{key}</span>
-					<span class="text-fg font-mono">{formatPrimitive(value)}</span>
+					<span class="shrink-0 text-fg-muted">{key}</span>
+					<span class="font-mono text-fg">{formatPrimitive(value)}</span>
 				</div>
 			{/if}
 		{/each}
 	</div>
 {:else if data != null && typeof data !== 'object'}
-	<span class="text-fg font-mono text-sm">{formatPrimitive(data)}</span>
+	<span class="font-mono text-sm text-fg">{formatPrimitive(data)}</span>
 {/if}

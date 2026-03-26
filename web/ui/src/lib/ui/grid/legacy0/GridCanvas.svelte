@@ -301,7 +301,7 @@
 					y={cy - h / 2}
 					width={w}
 					height={h}
-					class="nss hover:fill-fg-muted/15 fill-transparent transition-colors outline-none {selected
+					class="nss fill-transparent transition-colors outline-none hover:fill-fg-muted/15 {selected
 						? 'stroke-warning/50 '
 						: 'stroke-border'}"
 					stroke-width={1}
@@ -470,7 +470,7 @@
 		<div class="grid flex-1 place-content-center overflow-hidden px-4 py-8" bind:this={containerRef}>
 			<div class="flex" style:gap="{STAGE_GAP}px">
 				<div class="relative" style="width: {canvasWidth}px; height: {canvasHeight}px;">
-					<p class="text-fg-muted absolute -bottom-5 left-0 text-xs">X / Y</p>
+					<p class="absolute -bottom-5 left-0 text-xs text-fg-muted">X / Y</p>
 					<StageSlider
 						axis={session.stage.x}
 						orientation="horizontal"
@@ -488,7 +488,7 @@
 						class="absolute z-10"
 						style={ySliderStyle}
 					/>
-					<div class="h-ui-md absolute -bottom-8 flex w-full items-center justify-center gap-0.5">
+					<div class="absolute -bottom-8 flex h-ui-md w-full items-center justify-center gap-0.5">
 						{#each layers as { key, color, Icon, title } (key)}
 							{@const active = layerVisibility[key]}
 							<button
@@ -524,10 +524,10 @@
 				</div>
 				<!-- Z axis panel -->
 				<div
-					class="hover:bg-elevated/75 bg-elevated/50 relative border border-border transition-colors duration-300 ease-in-out"
+					class="relative border border-border bg-elevated/50 transition-colors duration-300 ease-in-out hover:bg-elevated/75"
 					style="height: {canvasHeight}px; width: {Z_AREA_WIDTH}px"
 				>
-					<p class="text-fg-muted absolute right-0 -bottom-5 w-full text-center text-xs">Z</p>
+					<p class="absolute right-0 -bottom-5 w-full text-center text-xs text-fg-muted">Z</p>
 					<StageSlider
 						axis={session.stage.z}
 						orientation="vertical-rtl"
@@ -577,7 +577,7 @@
 	</div>
 {:else}
 	<div class="grid h-full w-full place-content-center">
-		<p class="text-fg-muted text-base">Stage not available</p>
+		<p class="text-base text-fg-muted">Stage not available</p>
 	</div>
 {/if}
 

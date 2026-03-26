@@ -7,6 +7,8 @@
 	import { Collapsible } from 'bits-ui';
 	import { ChevronRight, FolderOpenOutline, ArrowRight } from '$lib/icons';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	const { app }: { app: App } = $props();
 
@@ -83,6 +85,7 @@
 		error = null;
 		try {
 			await app.resumeSession(session.path);
+			goto(resolve('/setup'));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to resume session';
 		}
@@ -105,18 +108,18 @@
 	}
 </script>
 
-<div class="bg-canvas flex h-screen w-full">
+<div class="flex h-screen w-full bg-canvas">
 	<div class="flex w-150 shrink-0 flex-col border-r border-border">
 		<div class="shrink-0 p-4 pb-0">
 			<div class="mb-6 flex flex-col gap-2">
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-2">
 						<VoxelLogo class="h-8 w-8" />
-						<h1 class="text-fg text-2xl font-light uppercase">Voxel</h1>
+						<h1 class="text-2xl font-light text-fg uppercase">Voxel</h1>
 					</div>
 					<AppMenu {app} class="w-4" />
 				</div>
-				<p class="text-fg-muted text-sm">Light sheet microscopy</p>
+				<p class="text-sm text-fg-muted">Light sheet microscopy</p>
 			</div>
 
 			{#if error}
@@ -131,7 +134,7 @@
 				<p class="text-base text-danger">{app.client.connectionMessage}</p>
 				<button
 					onclick={() => app.retryConnection()}
-					class="text-fg-muted hover:text-fg hover:bg-element-hover rounded border border-input bg-transparent px-4 py-1.5 text-sm transition-colors"
+					class="rounded border border-input bg-transparent px-4 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 				>
 					Retry
 				</button>
@@ -139,7 +142,7 @@
 		{:else if !isIdle || isLaunching}
 			<div class="flex flex-1 items-center justify-center gap-2">
 				<div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-				<p class="text-fg-muted text-sm">
+				<p class="text-sm text-fg-muted">
 					{isLaunching ? 'Starting session...' : app.client.connectionMessage}
 				</p>
 			</div>
@@ -147,7 +150,7 @@
 			<div class="shrink-0 px-4">
 				<Collapsible.Root class="mb-6">
 					<Collapsible.Trigger
-						class="text-fg-muted hover:text-fg/80 flex w-full items-center justify-between py-2 text-base font-medium transition-colors [&[data-state=open]>svg]:rotate-90"
+						class="flex w-full items-center justify-between py-2 text-base font-medium text-fg-muted transition-colors hover:text-fg/80 [&[data-state=open]>svg]:rotate-90"
 					>
 						New Session
 						<ChevronRight width="16" height="16" class="transition-transform duration-200" />
@@ -168,40 +171,40 @@
 			</div>
 
 			<div class="px-4">
-				<h2 class="text-fg-muted text-base font-medium">Recent Sessions</h2>
+				<h2 class="text-base font-medium text-fg-muted">Recent Sessions</h2>
 			</div>
 			<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-2">
 				{#if loadingSessions}
 					<div class="flex items-center justify-center rounded border border-border bg-card py-12">
-						<div class="border-t-fg-muted h-5 w-5 animate-spin rounded-full border-2 border-border"></div>
-						<span class="text-fg-muted ml-3 text-base">Loading sessions...</span>
+						<div class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-fg-muted"></div>
+						<span class="ml-3 text-base text-fg-muted">Loading sessions...</span>
 					</div>
 				{:else if sessions.length === 0}
 					<div
 						class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10"
 					>
 						<FolderOpenOutline width="32" height="32" class="text-fg-muted/50" />
-						<p class="text-fg-muted mt-2 text-base">No recent sessions</p>
-						<p class="text-fg-muted/60 text-sm">Create a new session to get started</p>
+						<p class="mt-2 text-base text-fg-muted">No recent sessions</p>
+						<p class="text-sm text-fg-muted/60">Create a new session to get started</p>
 					</div>
 				{:else}
 					<div class="space-y-2">
 						{#each sessions as session (session.path)}
 							<button
-								class="group hover:border-fg/20 hover:bg-element-hover flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors"
+								class="group flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-fg/20 hover:bg-element-hover"
 								onclick={() => handleResumeSession(session)}
 							>
-								<span class="text-fg min-w-0 flex-1 truncate text-sm">
+								<span class="min-w-0 flex-1 truncate text-sm text-fg">
 									<span class="text-fg-muted">{session.root_name} /</span>
 									{session.name}
 								</span>
-								<span class="text-fg-muted/60 shrink-0 text-xs">
+								<span class="shrink-0 text-xs text-fg-muted/60">
 									{formatRelativeTime(session.modified)}
 								</span>
 								<ArrowRight
 									width="14"
 									height="14"
-									class="text-fg-muted/30 group-hover:text-fg shrink-0 transition-colors"
+									class="shrink-0 text-fg-muted/30 transition-colors group-hover:text-fg"
 								/>
 							</button>
 						{/each}

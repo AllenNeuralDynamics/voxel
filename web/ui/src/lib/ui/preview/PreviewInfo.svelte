@@ -43,7 +43,7 @@
 <Tooltip.Provider>
 	<Tooltip.Root delayDuration={150}>
 		<Tooltip.Trigger
-			class="hover:bg-element-hover flex items-center gap-1.5 rounded p-1 font-mono text-xs transition-colors"
+			class="flex items-center gap-1.5 rounded p-1 font-mono text-xs transition-colors hover:bg-element-hover"
 			aria-label="Preview info"
 		>
 			{#if frameInfo}
@@ -57,7 +57,7 @@
 			{/if}
 		</Tooltip.Trigger>
 		<Tooltip.Content
-			class="bg-floating text-fg z-50 w-64 rounded-md border border-border p-3 text-left text-sm shadow-xl outline-none"
+			class="z-50 w-64 rounded-md border border-border bg-floating p-3 text-left text-sm text-fg shadow-xl outline-none"
 			sideOffset={4}
 			align="start"
 		>
@@ -90,7 +90,7 @@
 				</div>
 			{:else}
 				<div>
-					<p class="text-fg-muted text-sm">No frames available</p>
+					<p class="text-sm text-fg-muted">No frames available</p>
 				</div>
 			{/if}
 		</Tooltip.Content>

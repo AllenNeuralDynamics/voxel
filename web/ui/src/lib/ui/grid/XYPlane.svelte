@@ -494,7 +494,7 @@
 
 <div bind:this={containerRef} class="grid min-w-0 flex-1 place-content-center">
 	<div class="relative" style="width: {canvasWidth}px; height: {canvasHeight}px;">
-		<p class="text-fg-muted absolute top-1 right-1 z-10 text-xs">X / Y</p>
+		<p class="absolute top-1 right-1 z-10 text-xs text-fg-muted">X / Y</p>
 		<input
 			type="range"
 			class="stage-slider absolute z-10"
@@ -535,7 +535,7 @@
 				<svg
 					bind:this={svgRef}
 					viewBox={viewBoxStr}
-					class="border-fg-faint/70 border"
+					class="border border-fg-faint/70"
 					style="width: {canvasWidth}px; height: {canvasHeight}px;"
 					overflow="visible"
 					role="img"

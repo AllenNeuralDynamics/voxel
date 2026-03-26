@@ -36,75 +36,68 @@
 	}
 </script>
 
-<section class="space-y-6">
-	<!-- Header with enable switch -->
-	<div class="flex items-center justify-between">
-		<div class="flex items-center gap-2">
-			<span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
-			<h2 class="text-fg text-base font-medium">
-				{typeof wavelength === 'number' ? `${wavelength} nm Laser` : sanitizeString(deviceId)}
-			</h2>
-		</div>
-		<div class="flex items-center gap-3">
-			<span
-				class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
-				title={device?.connected ? 'Connected' : 'Disconnected'}
-			></span>
-			{#if device?.connected}
-				<Switch
-					checked={switchChecked}
-					onCheckedChange={handleToggle}
-					size="sm"
-					style="--switch-accent: {laserColor}"
-				/>
-			{/if}
-		</div>
+<!-- Header with enable switch -->
+<div class="mb-6 flex items-center justify-between">
+	<div class="flex items-center gap-2">
+		<span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
+		<h2 class="text-base font-medium text-fg">
+			{typeof wavelength === 'number' ? `${wavelength} nm Laser` : sanitizeString(deviceId)}
+		</h2>
 	</div>
+	<div class="flex items-center gap-3">
+		<span
+			class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
+			title={device?.connected ? 'Connected' : 'Disconnected'}
+		></span>
+		{#if device?.connected}
+			<Switch checked={switchChecked} onCheckedChange={handleToggle} size="sm" style="--switch-accent: {laserColor}" />
+		{/if}
+	</div>
+</div>
 
-	{#if device?.connected}
-		<div class="max-w-xl space-y-6">
-			<!-- Power Setpoint -->
-			{#if powerSetpointInfo && powerSetpointModel && typeof powerSetpointModel.value === 'number'}
-				<div>
-					<SliderInput
-						label={powerSetpointInfo.label}
-						bind:target={powerSetpointModel.value}
-						readback={typeof powerMw === 'number' ? powerMw : undefined}
-						min={powerSetpointModel.min_val ?? 0}
-						max={powerSetpointModel.max_val ?? 100}
-						step={powerSetpointModel.step ?? 1}
-						onChange={(v) => devicesManager.setProperty(deviceId, 'power_setpoint_mw', v)}
-					/>
+{#if device?.connected}
+	<div class="max-w-xl space-y-6">
+		<!-- Power Setpoint -->
+		{#if powerSetpointInfo && powerSetpointModel && typeof powerSetpointModel.value === 'number'}
+			<div>
+				<SliderInput
+					label={powerSetpointInfo.label}
+					bind:target={powerSetpointModel.value}
+					readback={typeof powerMw === 'number' ? powerMw : undefined}
+					min={powerSetpointModel.min_val ?? 0}
+					max={powerSetpointModel.max_val ?? 100}
+					step={powerSetpointModel.step ?? 1}
+					onChange={(v) => devicesManager.setProperty(deviceId, 'power_setpoint_mw', v)}
+				/>
+			</div>
+		{/if}
+
+		<!-- Status readback -->
+		{#if typeof powerMw === 'number' || typeof temperatureC === 'number'}
+			<div class="rounded border border-border bg-card p-3">
+				<h4 class="mb-2 text-xs font-medium tracking-wide text-fg-muted uppercase">Status</h4>
+				<div class="grid gap-1.5 text-sm">
+					{#if typeof powerMw === 'number'}
+						<div class="flex justify-between">
+							<span class="text-fg-muted">Power</span>
+							<span class="font-mono text-fg">{powerMw.toFixed(1)} mW</span>
+						</div>
+					{/if}
+					{#if typeof temperatureC === 'number'}
+						<div class="flex justify-between">
+							<span class="text-fg-muted">Temperature</span>
+							<span class="font-mono text-fg">{temperatureC.toFixed(1)} &deg;C</span>
+						</div>
+					{/if}
 				</div>
-			{/if}
+			</div>
+		{/if}
 
-			<!-- Status readback -->
-			{#if typeof powerMw === 'number' || typeof temperatureC === 'number'}
-				<div class="rounded border border-border bg-card p-3">
-					<h4 class="text-fg-muted mb-2 text-xs font-medium tracking-wide uppercase">Status</h4>
-					<div class="grid gap-1.5 text-sm">
-						{#if typeof powerMw === 'number'}
-							<div class="flex justify-between">
-								<span class="text-fg-muted">Power</span>
-								<span class="text-fg font-mono">{powerMw.toFixed(1)} mW</span>
-							</div>
-						{/if}
-						{#if typeof temperatureC === 'number'}
-							<div class="flex justify-between">
-								<span class="text-fg-muted">Temperature</span>
-								<span class="text-fg font-mono">{temperatureC.toFixed(1)} &deg;C</span>
-							</div>
-						{/if}
-					</div>
-				</div>
-			{/if}
-
-			<!-- Dynamic: remaining properties + commands -->
-			<DeviceBrowser {deviceId} {devicesManager} exclusions={laserExclusions} />
-		</div>
-	{:else}
-		<div class="flex items-center justify-center py-12">
-			<p class="text-fg-muted text-base">Laser not available</p>
-		</div>
-	{/if}
-</section>
+		<!-- Dynamic: remaining properties + commands -->
+		<DeviceBrowser {deviceId} {devicesManager} exclusions={laserExclusions} />
+	</div>
+{:else}
+	<div class="flex items-center justify-center py-12">
+		<p class="text-base text-fg-muted">Laser not available</p>
+	</div>
+{/if}

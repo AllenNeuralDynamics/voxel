@@ -62,10 +62,6 @@
 	--info-bg: #393b41; /* zed: info.background */
 	--info-fg: #dfe1e5;
 
-	--active: #e08855; /* derived: players[4].cursor */
-	--active-bg: #3d2e22;
-	--active-fg: #dfe1e5;
-
 	/* ── Scrollbar ─────────────────────────────────────────────────────── */
 
 	--scrollbar-thumb: #ffffff26; /* zed: scrollbar.thumb.background */

@@ -94,6 +94,38 @@ export function isErrorMsg(res: unknown): res is ErrorMsg {
 	return typeof res === 'object' && res !== null && 'msg' in res;
 }
 
+// ── Divergence utilities ───────────────────────────────────
+
+/** Compare two property values, treating floating-point near-equality as equal. */
+export function isPropDiverged(saved: unknown, current: unknown): boolean {
+	if (saved === undefined || saved === null) return false;
+	if (current === undefined || current === null) return false;
+	if (typeof saved === 'number' && typeof current === 'number') {
+		return Math.abs(saved - current) > 1e-6;
+	}
+	return saved !== current;
+}
+
+/** Format a property value for display, respecting step precision. */
+export function formatPropValue(value: unknown, step?: number | null): string {
+	if (value === undefined || value === null) return '\u2014';
+	if (typeof value === 'boolean') return value ? 'true' : 'false';
+	if (typeof value === 'number') {
+		if (step != null && step > 0) {
+			const decimals = Math.max(0, -Math.floor(Math.log10(step)));
+			return value.toFixed(decimals);
+		}
+		return Number.isInteger(value) ? value.toString() : value.toFixed(4);
+	}
+	return String(value);
+}
+
+/** Derive decimal places from a step size. */
+export function decimalsFromStep(step: number | null | undefined): number | undefined {
+	if (step == null || step <= 0) return undefined;
+	return Math.max(0, -Math.floor(Math.log10(step)));
+}
+
 export class DevicesManager {
 	devices = $state<SvelteMap<string, DeviceInfo>>(new SvelteMap());
 
@@ -195,6 +227,15 @@ export class DevicesManager {
 	getPropertyInfo(deviceId: string, propName: string): PropertyInfo | undefined {
 		const device = this.devices.get(deviceId);
 		return device?.interface?.properties[propName];
+	}
+
+	/** Check if any saved property for a device diverges from its live value. */
+	hasDivergence(deviceId: string, savedProps: Record<string, unknown> | undefined): boolean {
+		if (!savedProps) return false;
+		for (const [propName, savedValue] of Object.entries(savedProps)) {
+			if (isPropDiverged(savedValue, this.getPropertyModel(deviceId, propName)?.value)) return true;
+		}
+		return false;
 	}
 
 	async setProperties(deviceId: string, properties: Record<string, unknown>): Promise<void> {

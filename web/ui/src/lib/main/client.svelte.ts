@@ -107,7 +107,8 @@ export interface TopicHandlers {
 	'preview/colormap'?: (payload: { channel: string; colormap: string }) => void;
 	'daq/waveforms'?: (payload: DaqWaveformsResponse) => void;
 	device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
-	'profile/props_saved'?: (payload: { device_id?: string; devices?: string[] }) => void;
+	/** Payload: {[profile_id]: {[device_id]: {[prop_name]: value}}} */
+	'profile/props_saved'?: (payload: Record<string, Record<string, Record<string, unknown>>>) => void;
 	'profile/props_applied'?: (payload: { devices: string[] }) => void;
 }
 

@@ -15,7 +15,7 @@ export { discoverProfileDevices, isFilterWheel, getChannelFor } from './profile.
 
 export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';
 export { DevicesManager } from './devices.svelte.ts';
-export { isErrorMsg } from './devices.svelte.ts';
+export { isErrorMsg, isPropDiverged, formatPropValue, decimalsFromStep } from './devices.svelte.ts';
 export type {
 	DeviceInfo,
 	DevicePropertyPayload,

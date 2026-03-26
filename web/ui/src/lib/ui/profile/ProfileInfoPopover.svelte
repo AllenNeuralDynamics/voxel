@@ -27,13 +27,13 @@
 {#if profile && (profile.desc || profile.channels.length > 0)}
 	<Popover.Root>
 		<Popover.Trigger
-			class="text-fg-muted hover:bg-element-hover hover:text-fg rounded-lg px-1 py-0.5 transition-colors"
+			class="rounded-lg px-1 py-0.5 text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 		>
 			<InformationOutline width={iconSize[size]} height={iconSize[size]} />
 		</Popover.Trigger>
 		<Popover.Portal>
 			<Popover.Content
-				class="bg-floating text-fg z-50 w-72 rounded-xl border border-border p-4 shadow-md"
+				class="z-50 w-72 rounded-xl border border-border bg-floating p-4 text-fg shadow-md"
 				side="bottom"
 				align="end"
 				sideOffset={6}

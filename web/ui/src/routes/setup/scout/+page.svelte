@@ -51,7 +51,7 @@
 
 <div class="flex h-full flex-col">
 	<!-- Profile pill tabs -->
-	<div class="bg-elevated flex items-center gap-2 border-b border-border px-6 py-2.5">
+	<div class="flex items-center gap-2 border-b border-border bg-elevated px-6 py-2.5">
 		<div class="flex flex-wrap items-center gap-2">
 			{#each tabIds as pid (pid)}
 				{@const isHwActive = session.activeProfileId === pid}
@@ -85,7 +85,7 @@
 						<p class="text-fg">{profile.desc}</p>
 					{/if}
 					{#if profile?.channels.length}
-						<p class="text-fg-muted flex flex-wrap items-center gap-x-1.5">
+						<p class="flex flex-wrap items-center gap-x-1.5 text-fg-muted">
 							<span>Channels:</span>
 							{#each profile.channels as chId, i (chId)}
 								<span
@@ -101,7 +101,7 @@
 						<Button
 							variant="ghost"
 							size="icon-xs"
-							class="text-fg-muted shrink-0 hover:bg-danger/10 hover:text-danger"
+							class="shrink-0 text-fg-muted hover:bg-danger/10 hover:text-danger"
 							title="Clear all stacks"
 							onclick={() => (clearDialogOpen = true)}
 						>
@@ -113,7 +113,7 @@
 			</div>
 			{@const gc = session.config.profiles[activeTab]?.grid}
 			{#if gc}
-				<p class="text-fg-muted text-sm">
+				<p class="text-sm text-fg-muted">
 					Offset: X {(gc.x_offset_um / 1000).toFixed(1)} mm, Y {(gc.y_offset_um / 1000).toFixed(1)} mm &middot; Overlap: X
 					{gc.overlap_x.toFixed(2)}, Y {gc.overlap_y.toFixed(2)}
 					{#if activeTabStacks.length > 0}
@@ -141,7 +141,7 @@
 			<Dialog.Footer>
 				<button
 					onclick={() => (clearDialogOpen = false)}
-					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
+					class="rounded border border-border px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 				>
 					Cancel
 				</button>

@@ -62,10 +62,6 @@
 	--info-bg: #9399b233; /* zed: info.background */
 	--info-fg: #1e1e2e;
 
-	--active: #fab387; /* catppuccin peach */
-	--active-bg: #fab3871f;
-	--active-fg: #1e1e2e;
-
 	/* ── Scrollbar ─────────────────────────────────────────────────────── */
 
 	--scrollbar-thumb: #585b7080; /* zed: scrollbar.thumb.background */

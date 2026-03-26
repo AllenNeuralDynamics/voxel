@@ -8,9 +8,9 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import LogViewer from '$lib/ui/LogViewer.svelte';
-	import StagePosition from '$lib/ui/StagePosition.svelte';
-	import LasersPanel from './LasersPanel.svelte';
-	import CamerasPanel from './CamerasPanel.svelte';
+	import LasersPanel from '$lib/ui/LasersPanel.svelte';
+	import CamerasPanel from '$lib/ui/CamerasPanel.svelte';
+	import AuxDevicesPanel from '$lib/ui/AuxDevicesPanel.svelte';
 
 	let { children } = $props();
 
@@ -35,7 +35,7 @@
 
 	function tabClass(selected: boolean): string {
 		return cn(
-			'gap-2 flex items-center px-2 py-0.5 text-sm transition-colors hover:bg-element-hover',
+			'gap-2 flex items-center h-ui-xs px-2 text-sm transition-colors hover:bg-element-hover',
 			selected ? 'bg-element-bg text-fg' : 'text-fg-muted'
 		);
 	}
@@ -63,8 +63,10 @@
 		maxSize={50}
 		onCollapse={() => {}}
 	>
-		{#if bottomPanelTab === 'cameras'}
-			<CamerasPanel {session} />
+		{#if bottomPanelTab === 'devices'}
+			<AuxDevicesPanel {session} class="overflow-auto p-2" />
+		{:else if bottomPanelTab === 'cameras'}
+			<CamerasPanel {session} class="h-full" />
 		{:else if bottomPanelTab === 'lasers'}
 			<LasersPanel {session} />
 		{:else if bottomPanelTab === 'logs'}
@@ -74,9 +76,9 @@
 		{/if}
 	</Pane>
 </PaneGroup>
-<footer class="h-ui-xl flex items-center justify-between border-t border-border px-4 py-2">
-	<StagePosition {session} />
+<footer class="flex h-ui-xl items-center justify-between border-t border-border px-4 py-2">
 	<div class="flex divide-x divide-border rounded border border-border">
+		<button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}>Auxiliary</button>
 		<button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}>Cameras</button>
 		<button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
 			Lasers
@@ -92,6 +94,8 @@
 				</div>
 			{/each}
 		</button>
+	</div>
+	<div class="flex divide-x divide-border rounded border border-border">
 		<button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
 	</div>
 </footer>

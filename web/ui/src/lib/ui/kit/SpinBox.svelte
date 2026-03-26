@@ -8,7 +8,7 @@
 			stack: ['flex cursor-pointer self-stretch flex-col border-l border-input'],
 			stepButton: [
 				'flex flex-1 items-center justify-center',
-				'bg-transparent text-fg-muted',
+				'bg-transparent text-fg-faint',
 				'transition-colors hover:bg-element-hover hover:text-fg',
 				'disabled:cursor-not-allowed disabled:opacity-40'
 			],

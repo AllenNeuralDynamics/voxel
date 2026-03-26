@@ -250,17 +250,20 @@ class Session:
         self._save()
         await self._rig.update_active_waveforms()
 
-    async def apply_profile_props(self) -> list[str]:
+    async def apply_profile_props(self, device_ids: list[str] | None = None) -> list[str]:
         """Apply saved profile properties to hardware devices (inverse of save).
 
         Reads profile.props and pushes values to hardware via handle.set_props().
+        If *device_ids* is given, only those devices are reverted; otherwise all.
         """
         profile_id = self._rig.active_profile_id
         if not profile_id:
             raise RuntimeError("No active profile")
         profile = self._config.rig.profiles[profile_id]
+        targets = device_ids if device_ids is not None else list(profile.props.keys())
         applied: list[str] = []
-        for device_id, props in profile.props.items():
+        for device_id in targets:
+            props = profile.props.get(device_id)
             handle = self._rig.handles.get(device_id)
             if not handle or not props:
                 continue

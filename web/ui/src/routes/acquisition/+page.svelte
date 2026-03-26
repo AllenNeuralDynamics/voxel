@@ -136,12 +136,12 @@
 
 <PaneGroup direction="horizontal" autoSaveId="acquisition-h" class="h-full overflow-hidden">
 	<!-- Left column: session info + plan config + metadata -->
-	<Pane defaultSize={30} minSize={30} maxSize={40} class="p-0">
-		<div class="bg-canvas @container flex h-full flex-col justify-between overflow-hidden rounded-lg">
+	<Pane defaultSize={30} minSize={25} maxSize={50}>
+		<div class="@container flex h-full flex-col justify-between overflow-hidden rounded-lg bg-canvas">
 			<div class="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
 				<!-- Plan settings -->
 				<section>
-					<h3 class="text-fg-muted/70 mb-2 text-xs font-medium tracking-wide uppercase">Stack Ordering</h3>
+					<h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Stack Ordering</h3>
 					<div class="grid grid-cols-1 gap-2 text-xs @sm:grid-cols-[10rem_1fr] @sm:items-center @sm:gap-x-3">
 						<span class="text-fg-muted">Tile Order</span>
 						<Select
@@ -150,15 +150,15 @@
 							onchange={(v) => session.setTileOrder(v as TileOrder)}
 							size="xs"
 						/>
-						<span class="text-fg-muted">Interleaving</span>
-						<Select
-							value={session.interleaving}
-							options={INTERLEAVING_OPTIONS}
-							onchange={(v) => session.setInterleaving(v as Interleaving)}
-							size="xs"
-						/>
 						{#if planProfiles.length > 1}
-							<span class="text-fg-muted self-start pt-1">Profile Order</span>
+							<span class="text-fg-muted">Interleaving</span>
+							<Select
+								value={session.interleaving}
+								options={INTERLEAVING_OPTIONS}
+								onchange={(v) => session.setInterleaving(v as Interleaving)}
+								size="xs"
+							/>
+							<span class="self-start pt-1 text-fg-muted">Profile Order</span>
 							<SortableList.Root
 								items={planProfiles}
 								key={(p) => p.profile_id}
@@ -168,9 +168,9 @@
 								{#snippet item(profile)}
 									<SortableList.Item
 										item={profile}
-										class="profile-chip bg-element-bg text-fg flex items-center gap-1 rounded border border-border py-1 pr-2 pl-0.5 text-xs"
+										class="profile-chip flex items-center gap-1 rounded border border-border bg-element-bg py-1 pr-2 pl-0.5 text-xs text-fg"
 									>
-										<GripVertical width="14" height="14" class="text-fg-muted/50 shrink-0" />
+										<GripVertical width="14" height="14" class="shrink-0 text-fg-muted/50" />
 										{session.config.profiles[profile.profile_id]?.label ?? sanitizeString(profile.profile_id)}
 									</SortableList.Item>
 								{/snippet}
@@ -188,7 +188,7 @@
 				{#if session.info?.session_dir}
 					<button
 						onclick={copySessionDir}
-						class="text-fg-muted hover:text-fg shrink-0 cursor-pointer text-start text-xs break-all transition-colors"
+						class="shrink-0 cursor-pointer text-start text-xs break-all text-fg-muted transition-colors hover:text-fg"
 						title="Click to copy path"
 					>
 						{session.info.session_dir}
@@ -204,8 +204,8 @@
 	<Pane class="p-4">
 		<div class="flex h-full flex-col gap-4 overflow-hidden">
 			<div class="flex items-baseline justify-between gap-4">
-				<h3 class="text-fg-muted/70 text-xs font-medium tracking-wide uppercase">Stacks</h3>
-				<span class="text-fg-muted text-xs">
+				<h3 class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Stacks</h3>
+				<span class="text-xs text-fg-muted">
 					{#if stackCounts.completed > 0}
 						{stackCounts.completed} done
 					{/if}
@@ -225,7 +225,7 @@
 
 			<div class="flex-1 overflow-y-auto">
 				{#if stackGroups.length === 0}
-					<div class="text-fg-muted flex h-full items-center justify-center text-sm">
+					<div class="flex h-full items-center justify-center text-sm text-fg-muted">
 						No stacks configured. Add stacks in the scout step.
 					</div>
 				{:else if hasMultiItemGroups}
@@ -234,26 +234,26 @@
 							<div class="flex flex-col">
 								<!-- Tab header -->
 								<div
-									class="h-ui-md border-fg-muted/30 bg-panel flex w-fit items-center rounded-t-lg border-x border-t px-3"
+									class="flex h-ui-md w-fit items-center rounded-t-lg border-x border-t border-fg-muted/30 bg-panel px-3"
 								>
-									<span class="text-fg-muted truncate text-xs font-medium">{group.label}</span>
+									<span class="truncate text-xs font-medium text-fg-muted">{group.label}</span>
 								</div>
 								<!-- Stack rows -->
-								<div class="border-fg-muted/30 flex flex-col overflow-hidden rounded-tr-lg rounded-b-lg border">
+								<div class="flex flex-col overflow-hidden rounded-tr-lg rounded-b-lg border border-fg-muted/30">
 									{#each group.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
 										<div
 											data-stack-status={status(stack)}
-											class="h-ui-md border-fg-muted/30 relative flex items-center gap-3 overflow-hidden border-b px-3 text-xs last:border-b-0"
+											class="relative flex h-ui-md items-center gap-3 overflow-hidden border-b border-fg-muted/30 px-3 text-xs last:border-b-0"
 										>
-											<span class="text-fg min-w-0 flex-1 truncate">
+											<span class="min-w-0 flex-1 truncate text-fg">
 												{sanitizeString(stack.profile_id)}
-												<span class="text-fg-muted ml-4">R{stack.row}, C{stack.col}</span>
-												<span class="text-fg-muted/60 ml-4">{stack.x_um.toFixed(0)} × {stack.y_um.toFixed(0)} µm</span>
+												<span class="ml-4 text-fg-muted">R{stack.row}, C{stack.col}</span>
+												<span class="ml-4 text-fg-muted/60">{stack.x_um.toFixed(0)} × {stack.y_um.toFixed(0)} µm</span>
 											</span>
-											<span class="text-fg-muted shrink-0 font-mono">
+											<span class="shrink-0 font-mono text-fg-muted">
 												{formatZ(stack.z_start_um)} → {formatZ(stack.z_end_um)} µm
 											</span>
-											<span class="text-fg-muted shrink-0">{stack.num_frames} slices</span>
+											<span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
 											{#if status(stack) === 'acquiring'}
 												<DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
 											{:else if status(stack) === 'completed'}
@@ -278,21 +278,21 @@
 						{/each}
 					</div>
 				{:else}
-					<div class="border-fg-muted/30 flex flex-col overflow-hidden rounded-lg border">
+					<div class="flex flex-col overflow-hidden rounded-lg border border-fg-muted/30">
 						{#each session.plan.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
 							<div
 								data-stack-status={status(stack)}
-								class="h-ui-md border-fg-muted/30 relative flex items-center gap-3 overflow-hidden border-b px-3 text-xs last:border-b-0"
+								class="relative flex h-ui-md items-center gap-3 overflow-hidden border-b border-fg-muted/30 px-3 text-xs last:border-b-0"
 							>
-								<span class="text-fg min-w-0 flex-1 truncate">
+								<span class="min-w-0 flex-1 truncate text-fg">
 									{sanitizeString(stack.profile_id)}
-									<span class="text-fg-muted ml-4">R{stack.row}, C{stack.col}</span>
-									<span class="text-fg-muted/60 ml-4">{stack.x_um.toFixed(0)} × {stack.y_um.toFixed(0)} µm</span>
+									<span class="ml-4 text-fg-muted">R{stack.row}, C{stack.col}</span>
+									<span class="ml-4 text-fg-muted/60">{stack.x_um.toFixed(0)} × {stack.y_um.toFixed(0)} µm</span>
 								</span>
-								<span class="text-fg-muted shrink-0 font-mono">
+								<span class="shrink-0 font-mono text-fg-muted">
 									{formatZ(stack.z_start_um)} → {formatZ(stack.z_end_um)} µm
 								</span>
-								<span class="text-fg-muted shrink-0">{stack.num_frames} slices</span>
+								<span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
 								{#if status(stack) === 'acquiring'}
 									<DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
 								{:else if status(stack) === 'completed'}

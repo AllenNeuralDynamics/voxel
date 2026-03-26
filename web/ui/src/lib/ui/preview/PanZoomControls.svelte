@@ -42,7 +42,7 @@
 	<button
 		onclick={() => previewer.resetCrop()}
 		disabled={isDefaultCrop}
-		class="text-fg hover:bg-element-hover flex items-center rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-0"
+		class="flex items-center rounded p-1 text-fg transition-colors hover:bg-element-hover disabled:cursor-not-allowed disabled:opacity-0"
 		aria-label="Reset pan and zoom"
 	>
 		<Restore width="12" height="12" />

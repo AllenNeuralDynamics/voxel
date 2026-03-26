@@ -386,16 +386,16 @@
 		</svg>
 	{:else}
 		<div class="flex items-center justify-center" style:height="{svgHeight}px">
-			<span class="text-fg-muted text-xs">No histogram data</span>
+			<span class="text-xs text-fg-muted">No histogram data</span>
 		</div>
 	{/if}
 {/snippet}
 
 <div class="relative flex flex-col" bind:clientWidth={columnWidth} style:--label-width="{labelWidth}px">
 	{#if visible === false && onVisibilityChange}
-		<div class="bg-backdrop absolute inset-0 z-10 flex items-center justify-center">
+		<div class="absolute inset-0 z-10 flex items-center justify-center bg-backdrop">
 			<button
-				class="text-fg-muted hover:text-fg flex items-center justify-center rounded p-1 transition-colors"
+				class="flex items-center justify-center rounded p-1 text-fg-muted transition-colors hover:text-fg"
 				onclick={() => onVisibilityChange?.(true)}
 				aria-label="Show channel"
 			>

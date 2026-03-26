@@ -91,7 +91,7 @@
 <div class="flex flex-col gap-6">
 	<!-- Density -->
 	<div class="flex flex-col gap-1.5">
-		<span class="text-fg-muted text-xs font-medium uppercase">Density</span>
+		<span class="text-xs font-medium text-fg-muted uppercase">Density</span>
 		<div class="flex gap-1.5">
 			{#each densities as d (d.value)}
 				<button
@@ -108,7 +108,7 @@
 
 	<!-- Scale -->
 	<div class="flex flex-col gap-1.5">
-		<span class="text-fg-muted text-xs font-medium uppercase">Scale</span>
+		<span class="text-xs font-medium text-fg-muted uppercase">Scale</span>
 		<div class="flex gap-1.5">
 			{#each scales as s (s.value)}
 				<button
@@ -127,7 +127,7 @@
 
 	<!-- Theme -->
 	<div class="flex items-center justify-between">
-		<span class="text-fg text-sm font-medium">Theme</span>
+		<span class="text-sm font-medium text-fg">Theme</span>
 		<div class="flex gap-1">
 			{#each modes as m (m.value)}
 				<button
@@ -145,7 +145,7 @@
 	{#if themes.prefs.current.mode === 'light' || themes.prefs.current.mode === 'auto'}
 		<div class="flex flex-col gap-1.5">
 			{#if themes.prefs.current.mode === 'auto'}
-				<span class="text-fg-muted text-xs">Light</span>
+				<span class="text-xs text-fg-muted">Light</span>
 			{/if}
 			{@render themeSelect('light')}
 		</div>
@@ -154,7 +154,7 @@
 	{#if themes.prefs.current.mode === 'dark' || themes.prefs.current.mode === 'auto'}
 		<div class="flex flex-col gap-1.5">
 			{#if themes.prefs.current.mode === 'auto'}
-				<span class="text-fg-muted text-xs">Dark</span>
+				<span class="text-xs text-fg-muted">Dark</span>
 			{/if}
 			{@render themeSelect('dark')}
 		</div>

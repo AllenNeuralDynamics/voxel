@@ -47,7 +47,7 @@
 						<p class="text-fg">{activeProfile.desc}</p>
 					{/if}
 					{#if activeProfile?.channels.length}
-						<p class="text-fg-muted flex flex-wrap items-center gap-x-1.5">
+						<p class="flex flex-wrap items-center gap-x-1.5 text-fg-muted">
 							<span>Channels:</span>
 							{#each activeProfile.channels as chId, i (chId)}
 								<span>
@@ -62,7 +62,7 @@
 				<Button
 					variant="ghost"
 					size="xs"
-					class="text-fg-muted shrink-0 hover:bg-danger/10 hover:text-danger"
+					class="shrink-0 text-fg-muted hover:bg-danger/10 hover:text-danger"
 					title="Clear all stacks"
 					disabled={activeTabStacks.length < 1}
 					onclick={() => (clearDialogOpen = true)}
@@ -72,7 +72,7 @@
 			</div>
 			{@const gc = session.config.profiles[activeTab]?.grid}
 			{#if gc}
-				<p class="text-fg-muted text-sm">
+				<p class="text-sm text-fg-muted">
 					Offset: X {(gc.x_offset_um / 1000).toFixed(1)} mm, Y {(gc.y_offset_um / 1000).toFixed(1)} mm &middot; Overlap: X
 					{gc.overlap_x.toFixed(2)}, Y {gc.overlap_y.toFixed(2)}
 					{#if activeTabStacks.length > 0}
@@ -100,7 +100,7 @@
 			<Dialog.Footer>
 				<button
 					onclick={() => (clearDialogOpen = false)}
-					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
+					class="rounded border border-border px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 				>
 					Cancel
 				</button>
@@ -114,19 +114,3 @@
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>
-
-<style>
-	@keyframes pulse-info-bg {
-		0%,
-		100% {
-			box-shadow: inset 0 0 0 100px color-mix(in oklch, var(--info) 0%, transparent);
-		}
-		50% {
-			box-shadow: inset 0 0 0 100px color-mix(in oklch, var(--info) 12%, transparent);
-		}
-	}
-
-	:global(.pill-pulse-info) {
-		animation: pulse-info-bg 3s ease-in-out infinite;
-	}
-</style>

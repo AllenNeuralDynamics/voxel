@@ -36,7 +36,7 @@
 
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger
-		class={cn('text-fg-muted hover:text-fg flex cursor-pointer items-center self-stretch transition-colors', className)}
+		class={cn('flex cursor-pointer items-center self-stretch text-fg-muted transition-colors hover:text-fg', className)}
 	>
 		{#if app.client.connectionState === 'failed'}
 			{@render (dangerTrigger ?? defaultDangerTrigger)()}

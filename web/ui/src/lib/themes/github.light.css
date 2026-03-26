@@ -62,10 +62,6 @@
 	--info-bg: #ddf4ff; /* zed: drop_target.background (blue-tinted) */
 	--info-fg: #ffffff;
 
-	--active: #bc4c00; /* zed: conflict (orange) */
-	--active-bg: #fff1e5; /* zed: conflict.background */
-	--active-fg: #ffffff;
-
 	/* ── Scrollbar ─────────────────────────────────────────────────────── */
 
 	--scrollbar-thumb: #59636e1a; /* zed: scrollbar.thumb.background */

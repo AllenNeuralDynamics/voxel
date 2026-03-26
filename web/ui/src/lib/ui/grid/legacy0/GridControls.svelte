@@ -67,16 +67,16 @@
 				onChange={(value) => {
 					if (!gridEditable) return;
 					const yMm = offsetLinked ? value : gc!.y_offset_um / 1000;
-					session.setGridOffset(value * 1000, yMm * 1000, gridForceUnlocked);
+					session.setGridOffset(value * 1000, yMm * 1000);
 				}}
 			/>
 			<button
-				class="text-fg-muted hover:bg-element-hover hover:text-fg flex h-5 w-5 items-center justify-center rounded transition-colors"
+				class="flex h-5 w-5 items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 				title={offsetLinked ? 'Unlink offset X/Y' : 'Link offset X/Y'}
 				onclick={() => {
 					offsetLinked = !offsetLinked;
 					if (offsetLinked && gc) {
-						session.setGridOffset(gc.x_offset_um, gc.x_offset_um, gridForceUnlocked);
+						session.setGridOffset(gc.x_offset_um, gc.x_offset_um);
 					}
 				}}
 			>
@@ -102,7 +102,7 @@
 				onChange={(value) => {
 					if (!gridEditable) return;
 					const xMm = offsetLinked ? value : gc!.x_offset_um / 1000;
-					session.setGridOffset(xMm * 1000, value * 1000, gridForceUnlocked);
+					session.setGridOffset(xMm * 1000, value * 1000);
 				}}
 			/>
 		</div>
@@ -114,7 +114,7 @@
 				{#if hasStacks}
 					<button
 						class="transition-colors, flex cursor-pointer items-center justify-center rounded
-						{gridForceUnlocked ? 'hover:bg-element-hover text-danger' : 'hover:bg-element-hover hover:text-fg text-warning'}"
+						{gridForceUnlocked ? 'text-danger hover:bg-element-hover' : 'text-warning hover:bg-element-hover hover:text-fg'}"
 						title={gridForceUnlocked ? 'Re-lock grid' : 'Unlock grid editing'}
 						onclick={() => {
 							if (gridForceUnlocked) {
@@ -149,16 +149,16 @@
 				disabled={!gridEditable}
 				onChange={(value) => {
 					if (!gridEditable) return;
-					session.setGridOverlap(value, overlapLinked ? value : gc!.overlap_y, gridForceUnlocked);
+					session.setGridOverlap(value, overlapLinked ? value : gc!.overlap_y);
 				}}
 			/>
 			<button
-				class="text-fg-muted hover:bg-element-hover hover:text-fg flex h-5 w-5 items-center justify-center rounded transition-colors"
+				class="flex h-5 w-5 items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 				title={overlapLinked ? 'Unlink overlap X/Y' : 'Link overlap X/Y'}
 				onclick={() => {
 					overlapLinked = !overlapLinked;
 					if (overlapLinked && gc) {
-						session.setGridOverlap(gc.overlap_x, gc.overlap_x, gridForceUnlocked);
+						session.setGridOverlap(gc.overlap_x, gc.overlap_x);
 					}
 				}}
 			>
@@ -183,7 +183,7 @@
 				disabled={!gridEditable}
 				onChange={(value) => {
 					if (!gridEditable) return;
-					session.setGridOverlap(overlapLinked ? value : gc!.overlap_x, value, gridForceUnlocked);
+					session.setGridOverlap(overlapLinked ? value : gc!.overlap_x, value);
 				}}
 			/>
 		</div>
@@ -203,7 +203,7 @@
 			<Dialog.Footer>
 				<button
 					onclick={() => (lockDialogOpen = false)}
-					class="text-fg-muted hover:bg-element-hover hover:text-fg rounded border border-border px-3 py-1.5 text-sm transition-colors"
+					class="rounded border border-border px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
 				>
 					Cancel
 				</button>

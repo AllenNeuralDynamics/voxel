@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import '$lib/themes/index.css';
+@import '../lib/themes/index.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -90,10 +90,6 @@
 	--color-info: var(--info);
 	--color-info-bg: var(--info-bg);
 	--color-info-fg: var(--info-fg);
-	--color-active: var(--active);
-	--color-active-bg: var(--active-bg);
-	--color-active-fg: var(--active-fg);
-
 	/* ── Animations ────────────────────────────────────────────────────── */
 	--animate-collapsible-down: collapsible-down 0.2s ease-out;
 	--animate-collapsible-up: collapsible-up 0.2s ease-out;
@@ -117,13 +113,6 @@
 	--color-destructive: var(--destructive);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
-
-	/* ── voxel legacy (remove after migration) ─────────────────────────
-	 * These keep bg-surface, text-surface-foreground, etc. working
-	 * until all components are migrated to the new token names.
-	 * ──────────────────────────────────────────────────────────────────── */
-	--color-surface-foreground: var(--surface-foreground);
-	--color-overlay: var(--overlay);
 }
 
 /* ── Stack status ─────────────────────────────────────────────────────── */
@@ -132,7 +121,7 @@
 	--stack-status: var(--color-info);
 }
 [data-stack-status='acquiring'] {
-	--stack-status: var(--color-active);
+	--stack-status: var(--color-info);
 }
 [data-stack-status='completed'] {
 	--stack-status: var(--color-success);

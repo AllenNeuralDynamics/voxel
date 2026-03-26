@@ -7,8 +7,8 @@
 </script>
 
 <!-- Session info -->
-<section class="mb-6">
-	<h3 class="text-fg-muted mb-3 text-sm font-medium tracking-wide uppercase">Session</h3>
+<section class="mb-6 px-4">
+	<h3 class="mb-3 text-sm font-medium tracking-wide text-fg-muted uppercase">Session</h3>
 	<div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
 		<span class="text-fg-muted">Rig</span>
 		<span class="text-fg">{config.info.name}</span>
@@ -26,7 +26,7 @@
 
 		{#if session.info?.session_dir}
 			<span class="text-fg-muted">Directory</span>
-			<span class="text-fg truncate" title={session.info.session_dir}>
+			<span class="truncate text-fg" title={session.info.session_dir}>
 				{session.info.session_dir}
 			</span>
 		{/if}
@@ -34,11 +34,11 @@
 </section>
 
 <!-- Channel cards -->
-<section>
-	<h3 class="text-fg-muted mb-3 text-sm font-medium tracking-wide uppercase">Channels</h3>
+<section class="px-4">
+	<h3 class="mb-3 text-sm font-medium tracking-wide text-fg-muted uppercase">Channels</h3>
 	<div class="grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
 		{#each Object.entries(config.channels) as [channelId, channel] (channelId)}
-			<div class="text-fg rounded-lg border bg-card p-3 text-sm shadow-sm">
+			<div class="rounded-lg border bg-card p-3 text-sm text-fg shadow-sm">
 				<div class="mb-2 flex items-center gap-2">
 					{#if channel.emission}
 						<span
@@ -46,11 +46,11 @@
 							style="background-color: {wavelengthToColor(channel.emission)}"
 						></span>
 					{/if}
-					<span class="text-fg font-medium">
+					<span class="font-medium text-fg">
 						{channel.label ?? sanitizeString(channelId)}
 					</span>
 				</div>
-				<div class="text-fg-muted space-y-1">
+				<div class="space-y-1 text-fg-muted">
 					<div class="flex justify-between">
 						<span>Detection</span>
 						<span class="text-fg">{channel.detection}</span>
