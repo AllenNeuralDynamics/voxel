@@ -85,7 +85,7 @@
 		error = null;
 		try {
 			await app.resumeSession(session.path);
-			goto(resolve('/setup'));
+			goto(resolve('/scout'));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to resume session';
 		}

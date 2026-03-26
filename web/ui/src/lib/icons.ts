@@ -51,6 +51,7 @@ export { default as PathArrow } from '~icons/iconoir/path-arrow';
 export { default as GridLines } from '~icons/lucide-lab/grid-lines';
 
 // Lucide (for shadcn context-menu components)
+export { default as Layers } from '~icons/lucide/layers';
 export { default as LucideCheck } from '~icons/lucide/check';
 export { default as LucideCircle } from '~icons/lucide/circle';
 export { default as LucideChevronRight } from '~icons/lucide/chevron-right';

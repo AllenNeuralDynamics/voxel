@@ -180,7 +180,7 @@
 	{@const savedPower = savedProps?.['power_setpoint_mw']}
 	{@const powerDiverged = isPropDiverged(savedPower, laser.powerSetpoint)}
 	{@const hasUnsaved = cfg && (savedPower === undefined || savedPower === null)}
-	<div class="flex h-full w-96 flex-col justify-between gap-4 bg-panel">
+	<div class="flex h-full w-96 flex-col justify-between gap-4 border-r border-border bg-panel">
 		<div class="flex flex-col gap-4 px-4 py-2">
 			<!-- Header -->
 			<div class="flex items-center justify-between">
@@ -313,7 +313,7 @@
 	{@const groupLabelClasses = 'text-xs leading-ui-sm font-medium text-fg-muted/60 uppercase'}
 	<div class={cn('flex h-full flex-row-reverse', className)}>
 		<!-- Right: laser list -->
-		<div class="flex flex-1 flex-col overflow-auto border-l border-border px-4">
+		<div class="flex flex-1 flex-col overflow-auto px-4">
 			<div class="flex h-full flex-col gap-3">
 				{#if profileLasers.length > 0}
 					<div>

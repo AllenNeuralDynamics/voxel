@@ -10,7 +10,7 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { Button, Dialog, DropdownMenu } from '$lib/ui/kit';
-	import { ChevronDown, Crosshair, Play, Microscope, Power } from '$lib/icons';
+	import { ChevronDown, Crosshair, Layers, Play, Microscope, Power } from '$lib/icons';
 	import AppMenu from './AppMenu.svelte';
 	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
 	import StartButton from '$lib/ui/StartButton.svelte';
@@ -37,22 +37,26 @@
 		clearLogs: () => app.clearLogs()
 	});
 
+	// --- Layout breakpoint classes (change 850 here to adjust header collapse point) ---
+
+	const NAV_BP = {
+		header: '@min-[850px]:grid-cols-[auto_auto_1fr]',
+		actions: '@min-[850px]:col-start-3',
+		nav: '@min-[850px]:col-span-1 @min-[850px]:col-start-2 @min-[850px]:row-start-1 @min-[850px]:w-fit'
+	};
+
 	// --- Shell state ---
 
 	const navTabs: { id: Pathname; label: string; icon: Component }[] = [
 		{ id: '/', label: 'Instrument', icon: Microscope },
-		{ id: '/setup', label: 'Prepare', icon: Crosshair },
+		{ id: '/scout', label: 'Scout', icon: Crosshair },
+		{ id: '/plan', label: 'Plan', icon: Layers },
 		{ id: '/acquisition', label: 'Acquire', icon: Play }
 	];
 
 	const viewId = $derived<Pathname>(
-		page.url.pathname.startsWith('/setup')
-			? '/setup'
-			: page.url.pathname === '/acquisition'
-				? '/acquisition'
-				: page.url.pathname === '/debug'
-					? '/debug'
-					: '/'
+		navTabs.find((t) => t.id !== '/' && page.url.pathname.startsWith(t.id))?.id
+			?? (page.url.pathname === '/debug' ? '/debug' : '/')
 	);
 
 	function gotoView(id: Pathname) {
@@ -76,7 +80,7 @@
 		<Pane defaultSize={60} minSize={50} maxSize={70}>
 			<div class="grid h-full grid-rows-[auto_1fr]">
 				<header
-					class="@container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border bg-elevated px-4 py-4 @min-[800px]:grid-cols-[auto_auto_1fr]"
+					class={cn('@container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border bg-elevated px-4 py-4', NAV_BP.header)}
 				>
 					<!-- Logo + close-session dialog -->
 					<div class="flex items-center">
@@ -113,26 +117,28 @@
 					</div>
 
 					<!-- Actions — explicitly pinned to row 1, last column -->
-					<div class="col-start-2 row-start-1 flex items-center justify-end gap-4 @min-[800px]:col-start-3">
-						<ProfileSelector {session} size="lg" class="min-w-64 flex-1" />
+					<div class={cn('col-start-2 row-start-1 flex items-center gap-4', NAV_BP.actions)}>
+						<div class="min-w-64 flex-1">
+							<ProfileSelector {session} size="lg" />
+						</div>
 						<StartButton {session} />
 					</div>
 
 					<!-- Nav tabs — full-width row 2 at narrow, inline col 2 at wide -->
 					<nav
-						class="col-span-full flex gap-1 @min-[800px]:col-span-1 @min-[800px]:col-start-2 @min-[800px]:row-start-1 @min-[800px]:w-fit"
+						class={cn('col-span-full grid grid-cols-4 divide-x divide-border overflow-hidden rounded-lg border border-border', NAV_BP.nav)}
 					>
 						{#each navTabs as tab (tab.id)}
 							{@const Icon = tab.icon}
 							<button
 								onclick={() => selectView(tab.id)}
 								class={cn(
-									'flex h-ui-md min-w-32 flex-1 items-center gap-2 rounded-md px-3 text-sm capitalize transition-colors',
-									viewId === tab.id ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
+									'flex h-ui-md items-center justify-center gap-2 px-4 text-sm transition-colors',
+									viewId === tab.id ? 'bg-element-selected text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
 								)}
 								title={tab.label}
 							>
-								<Icon width="14" height="14" class="shrink-0" />
+								<Icon width="12" height="12" class="shrink-0" />
 								{tab.label}
 							</button>
 						{/each}
