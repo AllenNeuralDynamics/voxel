@@ -32,7 +32,7 @@
 
 	let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
 	let isAcquiring = $derived(session.mode === 'acquiring');
-	let gridEditable = $derived(session.activeStacks.length === 0 || session.gridForceUnlocked);
+	let gridEditable = $derived(session.gridEditable);
 
 	let profileStacks = $derived(session.activeStacks);
 
@@ -454,12 +454,12 @@
 		<ContextMenu.Sub>
 			<ContextMenu.SubTrigger disabled={!gridEditable}>Align grid to FOV</ContextMenu.SubTrigger>
 			<ContextMenu.SubContent>
-				<ContextMenu.Item onSelect={() => session.alignGridToFOV('top')}>Top</ContextMenu.Item>
-				<ContextMenu.Item onSelect={() => session.alignGridToFOV('bottom')}>Bottom</ContextMenu.Item>
-				<ContextMenu.Item onSelect={() => session.alignGridToFOV('left')}>Left</ContextMenu.Item>
-				<ContextMenu.Item onSelect={() => session.alignGridToFOV('right')}>Right</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGrid('top')}>Top</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGrid('bottom')}>Bottom</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGrid('left')}>Left</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGrid('right')}>Right</ContextMenu.Item>
 				<ContextMenu.Separator />
-				<ContextMenu.Item onSelect={() => session.alignGridToFOV('center')}>Center</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGrid('center')}>Center</ContextMenu.Item>
 			</ContextMenu.SubContent>
 		</ContextMenu.Sub>
 

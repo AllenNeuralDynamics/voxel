@@ -1,6 +1,7 @@
 import { toast } from 'svelte-sonner';
 import type { Client, DaqWaveformsResponse } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
+import { sanitizeString } from '$lib/utils';
 import type {
 	AppStatus,
 	AcquisitionPlan,
@@ -84,6 +85,7 @@ export class Session {
 	// ── Grid lock ────────────────────────────────────────────
 
 	gridForceUnlocked = $state(false);
+	gridEditable = $derived(this.activeStacks.length === 0 || this.gridForceUnlocked);
 
 	// ── Internal ────────────────────────────────────────────
 
@@ -284,7 +286,14 @@ export class Session {
 		const fovW_um = this.fov.width * 1000;
 		const fovH_um = this.fov.height * 1000;
 
+		// Active profile at capture time
+		const profileId = this.activeProfileId ?? '';
+		const profile = this.config.profiles[profileId];
+		const profileLabel = profile?.label ?? sanitizeString(profileId);
+
 		this.snaps.add({
+			profileId,
+			profileLabel,
 			stageX_um,
 			stageY_um,
 			stageZ_um,
@@ -310,11 +319,12 @@ export class Session {
 		}
 	}
 
-	alignGridToFOV(edge: AlignEdge): void {
+	alignGrid(edge: AlignEdge, position?: { x: number; y: number }): void {
 		if (!this.gridConfig || !this.stage.x || !this.stage.y) return;
+		const stagePos = position ?? { x: this.stage.x.position, y: this.stage.y.position };
 		const { xOffsetUm, yOffsetUm } = computeAlignedOffset(
 			edge,
-			{ x: this.stage.x.position, y: this.stage.y.position },
+			stagePos,
 			{ x: this.stage.x.lowerLimit, y: this.stage.y.lowerLimit },
 			{ x: this.gridOffsetX, y: this.gridOffsetY },
 			{ x: this.tileSpacingX, y: this.tileSpacingY }

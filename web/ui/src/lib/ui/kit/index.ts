@@ -14,6 +14,7 @@ export { default as SpinBox, spinBoxVariants, type SpinBoxVariants } from './Spi
 export { default as Switch, switchVariants, type SwitchVariants } from './Switch.svelte';
 export { default as TagInput, tagInputVariants, type TagInputVariants } from './TagInput.svelte';
 export { default as TextArea, textAreaVariants, type TextAreaVariants } from './TextArea.svelte';
+export { default as Rename, renameVariants, type RenameVariants } from './Rename.svelte';
 export { default as TextInput, textInputVariants, type TextInputVariants } from './TextInput.svelte';
 
 export * as SortableList from './sortable-list';

@@ -4,6 +4,8 @@ import { IDBKeyVal } from '$lib/utils/idb';
 export interface Snapshot {
 	id: string;
 	label: string;
+	profileId: string;
+	profileLabel: string;
 	stageX_um: number;
 	stageY_um: number;
 	stageZ_um: number;
@@ -26,7 +28,7 @@ export class SnapshotStore {
 	selected = $derived<Snapshot | null>(this.selectedId ? (this.items.get(this.selectedId) ?? null) : null);
 
 	/** Snapshots ordered newest-first. */
-	list = $derived<Snapshot[]>([...this.items.values()].reverse());
+	list = $derived<Snapshot[]>([...this.items.values()].sort((a, b) => b.timestamp - a.timestamp));
 
 	get size(): number {
 		return this.items.size;

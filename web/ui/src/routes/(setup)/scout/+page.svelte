@@ -1,15 +1,16 @@
 <script lang="ts">
 	import { getSessionContext } from '$lib/context';
-	import { Button } from '$lib/ui/kit';
+	import { Button, ContextMenu, Rename } from '$lib/ui/kit';
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { cn } from '$lib/utils';
-	import { Crosshair, TrashCanOutline, ImageLight, PencilOutline } from '$lib/icons';
+	import { Crosshair, TrashCanOutline, ImageLight } from '$lib/icons';
 	import { ElementSize } from 'runed';
-	import type { Snapshot } from '$lib/main';
 
 	const session = getSessionContext();
 	const snaps = $derived(session.snaps);
+
+	let renamingId = $state<string | null>(null);
 
 	// --- Selected snapshot preview URL ---
 
@@ -28,23 +29,6 @@
 			prevBlobRef = null;
 		}
 	});
-
-	// --- Inline rename ---
-
-	let editingId = $state<string | null>(null);
-	let editValue = $state('');
-
-	function startRename(snap: Snapshot) {
-		editingId = snap.id;
-		editValue = snap.label;
-	}
-
-	function commitRename() {
-		if (editingId && editValue.trim()) {
-			snaps.rename(editingId, editValue.trim());
-		}
-		editingId = null;
-	}
 
 	// --- Pane sizing ---
 
@@ -106,7 +90,7 @@
 			</div>
 
 			<!-- Snapshot list -->
-			<div class="flex-1 overflow-y-auto">
+			<div class="flex-1 overflow-y-auto" role="listbox" aria-label="Snapshots">
 				{#if snaps.size === 0}
 					<div class="flex h-full items-center justify-center p-4">
 						<p class="text-center text-sm text-fg-faint">No snapshots yet</p>
@@ -115,72 +99,109 @@
 					<div class="space-y-px">
 						{#each snaps.list as snap (snap.id)}
 							{@const isSelected = snaps.selectedId === snap.id}
-							<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<div
-								class={cn(
-									'flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left transition-colors',
-									isSelected ? 'bg-element-selected' : 'hover:bg-element-hover'
-								)}
-								onclick={() => snaps.select(snap.id)}
-							>
-								<!-- Thumbnail -->
-								<img
-									src={snap.thumbnail}
-									alt={snap.label}
-									class="h-12 w-16 shrink-0 rounded border border-border object-cover"
-								/>
-
-								<!-- Info -->
-								<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-									{#if editingId === snap.id}
-										<!-- Inline rename input -->
-										<!-- svelte-ignore a11y_autofocus -->
-										<input
-											type="text"
-											bind:value={editValue}
-											autofocus
-											class="w-full rounded border border-border bg-surface px-1 py-0.5 text-sm text-fg outline-none focus:border-fg-muted"
-											onblur={commitRename}
-											onkeydown={(e) => {
-												if (e.key === 'Enter') commitRename();
-												if (e.key === 'Escape') editingId = null;
-											}}
-											onclick={(e) => e.stopPropagation()}
+							{@const snapPos = { x: snap.stageX_um / 1000, y: snap.stageY_um / 1000 }}
+							<ContextMenu.Root>
+								<ContextMenu.Trigger>
+									<div
+										role="option"
+										tabindex="0"
+										aria-selected={isSelected}
+										class={cn(
+											'flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left transition-colors outline-none',
+											isSelected
+												? 'bg-element-selected'
+												: 'hover:bg-element-hover focus-visible:bg-element-hover'
+										)}
+										onclick={() => snaps.select(snap.id)}
+										onkeydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.preventDefault();
+												snaps.select(snap.id);
+											}
+										}}
+									>
+										<!-- Thumbnail -->
+										<img
+											src={snap.thumbnail}
+											alt={snap.label}
+											class="h-12 w-16 shrink-0 rounded border border-border object-cover"
 										/>
-									{:else}
-										<span class="truncate text-sm text-fg">{snap.label}</span>
-									{/if}
-									<span class="font-mono text-xs text-fg-muted tabular-nums">
-										{(snap.stageX_um / 1000).toFixed(3)}, {(snap.stageY_um / 1000).toFixed(3)}, {(
-											snap.stageZ_um / 1000
-										).toFixed(3)}
-									</span>
-								</div>
 
-								<!-- Actions -->
-								<div class="flex shrink-0 items-center gap-0.5">
-									<button
-										class="rounded p-0.5 text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-										title="Rename"
-										onclick={(e) => {
-											e.stopPropagation();
-											startRename(snap);
+										<!-- Info -->
+										<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+											<Rename
+												value={snap.label}
+												size="sm"
+												class="text-fg"
+												textClass="truncate"
+												mode={renamingId === snap.id ? 'edit' : 'view'}
+												onSave={(newLabel) => {
+													snaps.rename(snap.id, newLabel);
+													renamingId = null;
+												}}
+												onCancel={() => (renamingId = null)}
+											/>
+											<span class="font-mono text-xs text-fg-muted tabular-nums">
+												{snapPos.x.toFixed(3)}, {snapPos.y.toFixed(3)}, {(
+													snap.stageZ_um / 1000
+												).toFixed(3)}
+											</span>
+										</div>
+
+										<!-- Profile badge -->
+										{#if snap.profileLabel}
+											<span
+												class="shrink-0 rounded bg-element-bg px-1.5 py-0.5 text-xs text-fg-muted"
+												>{snap.profileLabel}</span
+											>
+										{/if}
+									</div>
+								</ContextMenu.Trigger>
+								<ContextMenu.Content>
+									<ContextMenu.Item
+										onSelect={() => {
+											session.stage.moveXY(snapPos.x, snapPos.y);
+											session.stage.moveZ(snap.stageZ_um / 1000);
 										}}
 									>
-										<PencilOutline width="12" height="12" />
-									</button>
-									<button
-										class="rounded p-0.5 text-fg-muted transition-colors hover:bg-danger/10 hover:text-danger"
-										title="Delete"
-										onclick={(e) => {
-											e.stopPropagation();
-											snaps.remove(snap.id);
-										}}
+										Go to position
+									</ContextMenu.Item>
+									<ContextMenu.Item onSelect={() => (renamingId = snap.id)}>
+										Rename
+									</ContextMenu.Item>
+									<ContextMenu.Separator />
+									<ContextMenu.Sub>
+										<ContextMenu.SubTrigger disabled={!session.gridEditable}>
+											Align grid
+										</ContextMenu.SubTrigger>
+										<ContextMenu.SubContent>
+											<ContextMenu.Item onSelect={() => session.alignGrid('top', snapPos)}>
+												Top
+											</ContextMenu.Item>
+											<ContextMenu.Item onSelect={() => session.alignGrid('bottom', snapPos)}>
+												Bottom
+											</ContextMenu.Item>
+											<ContextMenu.Item onSelect={() => session.alignGrid('left', snapPos)}>
+												Left
+											</ContextMenu.Item>
+											<ContextMenu.Item onSelect={() => session.alignGrid('right', snapPos)}>
+												Right
+											</ContextMenu.Item>
+											<ContextMenu.Separator />
+											<ContextMenu.Item onSelect={() => session.alignGrid('center', snapPos)}>
+												Center
+											</ContextMenu.Item>
+										</ContextMenu.SubContent>
+									</ContextMenu.Sub>
+									<ContextMenu.Separator />
+									<ContextMenu.Item
+										variant="destructive"
+										onSelect={() => snaps.remove(snap.id)}
 									>
-										<TrashCanOutline width="12" height="12" />
-									</button>
-								</div>
-							</div>
+										Delete
+									</ContextMenu.Item>
+								</ContextMenu.Content>
+							</ContextMenu.Root>
 						{/each}
 					</div>
 				{/if}
