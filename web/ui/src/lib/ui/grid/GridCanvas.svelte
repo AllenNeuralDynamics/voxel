@@ -26,7 +26,9 @@
 			<ZPlane {session} />
 		</div>
 		{#if gc}
-			<div class="flex h-ui-xl w-full flex-wrap items-center justify-between gap-4 border-t border-border px-4">
+			<div
+				class="flex min-h-ui-xl w-full flex-wrap items-center justify-between gap-4 border-t border-border px-4 pt-2"
+			>
 				<StagePosition stage={session.stage} />
 				{@render zDefaults(session, gc)}
 			</div>

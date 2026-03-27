@@ -20,6 +20,7 @@ import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { type AlignEdge, computeAlignedOffset } from './grid';
 
 export interface SessionInit {
 	client: Client;
@@ -244,6 +245,18 @@ export class Session {
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to set grid offset');
 		}
+	}
+
+	alignGridToFOV(edge: AlignEdge): void {
+		if (!this.gridConfig || !this.stage.x || !this.stage.y) return;
+		const { xOffsetUm, yOffsetUm } = computeAlignedOffset(
+			edge,
+			{ x: this.stage.x.position, y: this.stage.y.position },
+			{ x: this.stage.x.lowerLimit, y: this.stage.y.lowerLimit },
+			{ x: this.gridOffsetX, y: this.gridOffsetY },
+			{ x: this.tileSpacingX, y: this.tileSpacingY }
+		);
+		this.setGridOffset(xOffsetUm, yOffsetUm);
 	}
 
 	async setGridOverlap(overlapX: number, overlapY: number): Promise<void> {

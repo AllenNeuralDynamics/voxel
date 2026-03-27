@@ -413,18 +413,16 @@
 				{#if selectedStacks.length > 0}
 					<div class="border-y border-border px-4 pb-5">
 						<!-- Z Range -->
-						<div class="space-y-4">
+						<div class="space-y-3">
 							<div class="flex items-center justify-between py-3">
 								<span class="text-xs text-fg-muted">Z Range</span>
-								<div class="flex items-center gap-1 text-xs text-fg-muted tabular-nums">
-									{#if commonZStep !== undefined}
-										<span>{commonZStep.toFixed(2)} µm step</span> <span>·</span>
-									{/if}
-									<span>{totalFrames} frames</span> <span>·</span>
-									<span>{(totalRange / 1000).toFixed(2)} mm</span>
-								</div>
+								{#if commonZStep !== undefined}
+									<span class="text-xs text-fg-muted tabular-nums">
+										{commonZStep.toFixed(2)} µm per step
+									</span>
+								{/if}
 							</div>
-							<div class="grid grid-cols-[3.5rem_1fr_auto_auto] items-center gap-x-4 gap-y-4">
+							<div class="grid grid-cols-[3.5rem_1fr_auto] items-center gap-x-4 gap-y-4">
 								<span class="text-xs text-fg-muted">Start</span>
 								<SpinBox
 									value={commonZStart ?? 0}
@@ -435,25 +433,27 @@
 									decimals={1}
 									onChange={(v) => applyZRange('zStartUm', v)}
 								/>
-								<Button
-									variant="outline"
-									size="xs"
-									title="Set from current Z position"
-									onclick={() => applyZRange('zStartUm', session.stage.z.position * 1000)}
-								>
-									Match FOV
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon-xs"
-									title="Reset to profile default"
-									onclick={() => {
-										const gc = session.gridConfig;
-										if (gc) applyZRange('zStartUm', gc.default_z_start_um);
-									}}
-								>
-									<Restore width="14" height="14" />
-								</Button>
+								<div class="flex items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon-xs"
+										title="Reset to profile default"
+										onclick={() => {
+											const gc = session.gridConfig;
+											if (gc) applyZRange('zStartUm', gc.default_z_start_um);
+										}}
+									>
+										<Restore width="14" height="14" />
+									</Button>
+									<Button
+										variant="outline"
+										size="xs"
+										title="Set from current Z position"
+										onclick={() => applyZRange('zStartUm', session.stage.z.position * 1000)}
+									>
+										Match FOV
+									</Button>
+								</div>
 
 								<span class="text-xs text-fg-muted">End</span>
 								<SpinBox
@@ -465,25 +465,35 @@
 									decimals={1}
 									onChange={(v) => applyZRange('zEndUm', v)}
 								/>
-								<Button
-									variant="outline"
-									size="xs"
-									title="Set from current Z position"
-									onclick={() => applyZRange('zEndUm', session.stage.z.position * 1000)}
-								>
-									Match FOV
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon-xs"
-									title="Reset to profile default"
-									onclick={() => {
-										const gc = session.gridConfig;
-										if (gc) applyZRange('zEndUm', gc.default_z_end_um);
-									}}
-								>
-									<Restore width="14" height="14" />
-								</Button>
+								<div class="flex items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon-xs"
+										title="Reset to profile default"
+										onclick={() => {
+											const gc = session.gridConfig;
+											if (gc) applyZRange('zEndUm', gc.default_z_end_um);
+										}}
+									>
+										<Restore width="14" height="14" />
+									</Button>
+									<Button
+										variant="outline"
+										size="xs"
+										title="Set from current Z position"
+										onclick={() => applyZRange('zEndUm', session.stage.z.position * 1000)}
+									>
+										Match FOV
+									</Button>
+								</div>
+							</div>
+							<div class="flex items-center justify-between gap-4 text-xs text-fg-muted tabular-nums">
+								<span class="w-3.5rem text-xs text-fg-muted">Range</span>
+								<p>
+									<span>{(totalRange / 1000).toFixed(2)} mm</span>
+									<span class="mx-2">·</span>
+									<span>{totalFrames} frames</span>
+								</p>
 							</div>
 						</div>
 					</div>

@@ -55,8 +55,8 @@
 	];
 
 	const viewId = $derived<Pathname>(
-		navTabs.find((t) => t.id !== '/' && page.url.pathname.startsWith(t.id))?.id
-			?? (page.url.pathname === '/debug' ? '/debug' : '/')
+		navTabs.find((t) => t.id !== '/' && page.url.pathname.startsWith(t.id))?.id ??
+			(page.url.pathname === '/debug' ? '/debug' : '/')
 	);
 
 	function gotoView(id: Pathname) {
@@ -80,7 +80,10 @@
 		<Pane defaultSize={60} minSize={50} maxSize={70}>
 			<div class="grid h-full grid-rows-[auto_1fr]">
 				<header
-					class={cn('@container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border bg-elevated px-4 py-4', NAV_BP.header)}
+					class={cn(
+						'@container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border bg-elevated px-4 py-4',
+						NAV_BP.header
+					)}
 				>
 					<!-- Logo + close-session dialog -->
 					<div class="flex items-center">
@@ -126,7 +129,10 @@
 
 					<!-- Nav tabs — full-width row 2 at narrow, inline col 2 at wide -->
 					<nav
-						class={cn('col-span-full grid grid-cols-4 divide-x divide-border overflow-hidden rounded-lg border border-border', NAV_BP.nav)}
+						class={cn(
+							'col-span-full grid grid-cols-4 divide-x divide-border overflow-hidden rounded-lg border border-border',
+							NAV_BP.nav
+						)}
 					>
 						{#each navTabs as tab (tab.id)}
 							{@const Icon = tab.icon}
@@ -134,7 +140,9 @@
 								onclick={() => selectView(tab.id)}
 								class={cn(
 									'flex h-ui-md items-center justify-center gap-2 px-4 text-sm transition-colors',
-									viewId === tab.id ? 'bg-element-selected text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
+									viewId === tab.id
+										? 'bg-element-selected text-fg'
+										: 'text-fg-muted hover:bg-element-hover hover:text-fg'
 								)}
 								title={tab.label}
 							>

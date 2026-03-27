@@ -318,7 +318,7 @@
 		<p class="text-sm text-fg-muted">No cameras configured</p>
 	</div>
 {:else}
-	<div class={cn('flex', className)}>
+	<div class={cn('@container flex', className)}>
 		<!-- Cards column (header + cards) -->
 		<div class={cn('flex min-w-0 flex-1 flex-col gap-3 px-3 py-3', panelRight ? 'order-first' : 'order-last')}>
 			<!-- Header bar (only when active profile) -->
@@ -357,7 +357,7 @@
 			{/if}
 
 			<div class="flex-1 overflow-auto">
-				<div class="grid grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] gap-x-4 gap-y-2">
+				<div class="grid grid-cols-[repeat(auto-fit,minmax(16rem,1fr))] gap-x-4 gap-y-2">
 					{#each cameras as camera (camera.deviceId)}
 						{@render cameraCard(camera)}
 					{/each}
@@ -374,7 +374,7 @@
 		{#if isActiveProfile}
 			<div
 				class={cn(
-					'flex min-h-96 w-96 shrink-0 flex-col bg-panel px-3',
+					'flex min-h-72 w-72 shrink-0 flex-col bg-panel px-3 @[800px]:w-96',
 					panelRight ? 'order-last border-l border-border' : 'order-first border-r border-border'
 				)}
 				transition:slide={{ axis: 'x', duration: 200 }}
@@ -383,7 +383,7 @@
 					<div class="flex-1 space-y-4 overflow-auto pt-4">
 						<!-- Exposure -->
 						<div>
-							<h5 class="mb-1.5 text-xs font-medium text-fg-muted uppercase">Exposure</h5>
+							<h5 class="mb-1.5 text-xs font-medium text-fg-muted capitalize">Exposure</h5>
 							<SpinBox
 								value={formExposure ?? selectedCameras[0]?.exposureTimeMs ?? 0}
 								min={selectedCameras[0]?.exposureMin ?? 0}
@@ -402,7 +402,7 @@
 							<div class="grid grid-cols-2 gap-2">
 								{#if mergedBinningOptions.length > 0}
 									<div>
-										<h5 class="mb-1.5 text-xs font-medium text-fg-muted uppercase">Binning</h5>
+										<h5 class="mb-1.5 text-xs font-medium text-fg-muted capitalize">Binning</h5>
 										<Select
 											value={formBinning ?? String(selectedCameras[0]?.binning ?? '')}
 											options={mergedBinningOptions.map((b) => ({ value: String(b), label: `${b}x` }))}
@@ -413,7 +413,7 @@
 								{/if}
 								{#if mergedPixelFormatOptions.length > 0}
 									<div>
-										<h5 class="mb-1.5 text-xs font-medium text-fg-muted uppercase">Pixel Format</h5>
+										<h5 class="mb-1.5 text-xs font-medium text-fg-muted capitalize">Pixel Format</h5>
 										<Select
 											value={formPixelFormat ?? selectedCameras[0]?.pixelFormat ?? ''}
 											options={mergedPixelFormatOptions.map((f) => ({ value: f, label: f }))}
@@ -428,57 +428,55 @@
 						<!-- Frame Region -->
 						{#if selectedCameras[0]?.frameRegion}
 							{@const refRegion = selectedCameras[0].frameRegion}
+							{@const align = 'right'}
+							{@const size = 'xs'}
 							<div>
-								<h5 class="mb-1.5 text-xs text-fg-faint capitalize">Frame Region</h5>
+								<h5 class="mb-1.5 text-xs text-fg-muted capitalize">Frame Region</h5>
 								<div class="grid grid-cols-2 gap-2">
-									<div>
-										<span class="text-xs text-fg-muted">X</span>
-										<SpinBox
-											value={formRegionX ?? refRegion.x.value}
-											min={refRegion.x.min_val}
-											max={refRegion.x.max_val}
-											step={refRegion.x.step}
-											size="xs"
-											class="w-full"
-											onChange={(v) => (formRegionX = v)}
-										/>
-									</div>
-									<div>
-										<span class="text-xs text-fg-muted">Y</span>
-										<SpinBox
-											value={formRegionY ?? refRegion.y.value}
-											min={refRegion.y.min_val}
-											max={refRegion.y.max_val}
-											step={refRegion.y.step}
-											size="xs"
-											class="w-full"
-											onChange={(v) => (formRegionY = v)}
-										/>
-									</div>
-									<div>
-										<span class="text-xs text-fg-muted uppercase">Width</span>
-										<SpinBox
-											value={formRegionWidth ?? refRegion.width.value}
-											min={refRegion.width.min_val}
-											max={refRegion.width.max_val}
-											step={refRegion.width.step}
-											size="xs"
-											class="w-full"
-											onChange={(v) => (formRegionWidth = v)}
-										/>
-									</div>
-									<div>
-										<span class="text-xs text-fg-muted uppercase">Height</span>
-										<SpinBox
-											value={formRegionHeight ?? refRegion.height.value}
-											min={refRegion.height.min_val}
-											max={refRegion.height.max_val}
-											step={refRegion.height.step}
-											size="xs"
-											class="w-full"
-											onChange={(v) => (formRegionHeight = v)}
-										/>
-									</div>
+									<SpinBox
+										value={formRegionX ?? refRegion.x.value}
+										min={refRegion.x.min_val}
+										max={refRegion.x.max_val}
+										step={refRegion.x.step}
+										prefix="X"
+										{align}
+										{size}
+										class="w-full"
+										onChange={(v) => (formRegionX = v)}
+									/>
+									<SpinBox
+										value={formRegionY ?? refRegion.y.value}
+										min={refRegion.y.min_val}
+										max={refRegion.y.max_val}
+										step={refRegion.y.step}
+										prefix="Y"
+										{align}
+										{size}
+										class="w-full"
+										onChange={(v) => (formRegionY = v)}
+									/>
+									<SpinBox
+										value={formRegionWidth ?? refRegion.width.value}
+										min={refRegion.width.min_val}
+										max={refRegion.width.max_val}
+										step={refRegion.width.step}
+										prefix="Width"
+										{align}
+										{size}
+										class="w-full"
+										onChange={(v) => (formRegionWidth = v)}
+									/>
+									<SpinBox
+										value={formRegionHeight ?? refRegion.height.value}
+										min={refRegion.height.min_val}
+										max={refRegion.height.max_val}
+										step={refRegion.height.step}
+										prefix="Height"
+										{align}
+										{size}
+										class="w-full"
+										onChange={(v) => (formRegionHeight = v)}
+									/>
 								</div>
 							</div>
 						{/if}

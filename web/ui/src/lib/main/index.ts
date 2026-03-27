@@ -12,6 +12,7 @@ export {
 export { PreviewState, PreviewChannel, fetchColormapCatalog } from './preview.svelte.ts';
 export type { ColormapDef, ColormapGroup, ColormapCatalog } from './preview.svelte.ts';
 export { discoverProfileDevices, isFilterWheel, getChannelFor } from './profile.ts';
+export type { AlignEdge } from './grid.ts';
 
 export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';
 export { DevicesManager } from './devices.svelte.ts';

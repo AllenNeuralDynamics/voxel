@@ -15,7 +15,7 @@
 </script>
 
 <script lang="ts">
-	import type { Session } from '$lib/main';
+	import type { Session, AlignEdge } from '$lib/main';
 	import { type Tile, type Stack, type StackStatus } from '$lib/main/types';
 	import { compositeFullFrames } from '$lib/main/preview.svelte';
 	import { ContextMenu } from '$lib/ui/kit';
@@ -32,6 +32,7 @@
 
 	let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
 	let isAcquiring = $derived(session.mode === 'acquiring');
+	let gridEditable = $derived(session.activeStacks.length === 0 || session.gridForceUnlocked);
 
 	let profileStacks = $derived(session.activeStacks);
 
@@ -410,49 +411,57 @@
 		<!-- Navigation -->
 		<ContextMenu.Item disabled={isXYMoving} onSelect={contextMoveHere}>Move here</ContextMenu.Item>
 
-		<!-- Row/Column selection (tile contexts only) -->
-		{#if menuContext?.kind === 'single' || menuContext?.kind === 'multi'}
-			<ContextMenu.Separator />
-			<ContextMenu.Item onSelect={() => session.selectRow(menuContext.tile.row)}>
-				Select row {menuContext.tile.row}
-			</ContextMenu.Item>
-			<ContextMenu.Item onSelect={() => session.selectColumn(menuContext.tile.col)}>
-				Select column {menuContext.tile.col}
-			</ContextMenu.Item>
-		{/if}
-
-		<!-- Selection actions -->
-		<ContextMenu.Separator />
-		<ContextMenu.Item onSelect={() => session.selectAll()}>Select all</ContextMenu.Item>
-		{#if session.selectedTiles.length > 0}
-			<ContextMenu.Item onSelect={() => session.clearSelection()}>Deselect all</ContextMenu.Item>
-		{/if}
-		<ContextMenu.Item onSelect={() => session.invertSelection()}>Invert selection</ContextMenu.Item>
-
-		<!-- Bulk selection (empty canvas only) -->
-		{#if menuContext?.kind === 'empty'}
-			{#if profileStacks.length > 0 || session.tiles.length > 0}
+		<ContextMenu.Sub>
+			<ContextMenu.SubTrigger>Select</ContextMenu.SubTrigger>
+			<ContextMenu.SubContent>
+				{#if menuContext?.kind === 'single' || menuContext?.kind === 'multi'}
+					<ContextMenu.Item onSelect={() => session.selectRow(menuContext.tile.row)}>
+						Row {menuContext.tile.row}
+					</ContextMenu.Item>
+					<ContextMenu.Item onSelect={() => session.selectColumn(menuContext.tile.col)}>
+						Column {menuContext.tile.col}
+					</ContextMenu.Item>
+					<ContextMenu.Separator />
+				{/if}
+				<ContextMenu.Item onSelect={() => session.selectAll()}>All</ContextMenu.Item>
+				{#if session.selectedTiles.length > 0}
+					<ContextMenu.Item onSelect={() => session.clearSelection()}>Deselect all</ContextMenu.Item>
+				{/if}
+				<ContextMenu.Item onSelect={() => session.invertSelection()}>Invert</ContextMenu.Item>
+				{#if profileStacks.length > 0 || session.tiles.length > 0}
+					<ContextMenu.Separator />
+				{/if}
+				{#if profileStacks.length > 0}
+					<ContextMenu.Item onSelect={() => session.selectWithStacks()}>With stacks</ContextMenu.Item>
+				{/if}
+				{#if session.tiles.length > 0}
+					<ContextMenu.Item onSelect={() => session.selectWithoutStacks()}>Without stacks</ContextMenu.Item>
+				{/if}
+				{#if profileStacks.length > 0}
+					<ContextMenu.Sub>
+						<ContextMenu.SubTrigger>By status</ContextMenu.SubTrigger>
+						<ContextMenu.SubContent>
+							{#each STACK_STATUSES as status (status)}
+								<ContextMenu.Item onSelect={() => session.selectByStackStatus(status)}>
+									{status[0].toUpperCase() + status.slice(1)}
+								</ContextMenu.Item>
+							{/each}
+						</ContextMenu.SubContent>
+					</ContextMenu.Sub>
+				{/if}
+			</ContextMenu.SubContent>
+		</ContextMenu.Sub>
+		<ContextMenu.Sub>
+			<ContextMenu.SubTrigger disabled={!gridEditable}>Align grid to FOV</ContextMenu.SubTrigger>
+			<ContextMenu.SubContent>
+				<ContextMenu.Item onSelect={() => session.alignGridToFOV('top')}>Top</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGridToFOV('bottom')}>Bottom</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGridToFOV('left')}>Left</ContextMenu.Item>
+				<ContextMenu.Item onSelect={() => session.alignGridToFOV('right')}>Right</ContextMenu.Item>
 				<ContextMenu.Separator />
-			{/if}
-			{#if profileStacks.length > 0}
-				<ContextMenu.Item onSelect={() => session.selectWithStacks()}>Select with stacks</ContextMenu.Item>
-			{/if}
-			{#if session.tiles.length > 0}
-				<ContextMenu.Item onSelect={() => session.selectWithoutStacks()}>Select without stacks</ContextMenu.Item>
-			{/if}
-			{#if profileStacks.length > 0}
-				<ContextMenu.Sub>
-					<ContextMenu.SubTrigger>Select by status</ContextMenu.SubTrigger>
-					<ContextMenu.SubContent>
-						{#each STACK_STATUSES as status (status)}
-							<ContextMenu.Item onSelect={() => session.selectByStackStatus(status)}>
-								{status[0].toUpperCase() + status.slice(1)}
-							</ContextMenu.Item>
-						{/each}
-					</ContextMenu.SubContent>
-				</ContextMenu.Sub>
-			{/if}
-		{/if}
+				<ContextMenu.Item onSelect={() => session.alignGridToFOV('center')}>Center</ContextMenu.Item>
+			</ContextMenu.SubContent>
+		</ContextMenu.Sub>
 
 		<!-- Stack operations -->
 		{#if menuContext?.kind === 'single'}
