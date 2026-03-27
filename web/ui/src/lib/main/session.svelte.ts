@@ -15,10 +15,11 @@ import type {
 	VoxelRigConfig
 } from './types';
 
-import { PreviewState } from './preview.svelte';
+import { PreviewState, compositeFullFrames } from './preview.svelte';
 import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
+import { SnapshotStore } from './snapshots.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { type AlignEdge, computeAlignedOffset } from './grid';
 
@@ -75,6 +76,10 @@ export class Session {
 	activeProfileId = $derived<string | null>(this.#appStatus?.session?.active_profile_id ?? null);
 	appliedWaveforms = $state<DaqWaveformsResponse | null>(null);
 	isSwitchingProfile = $state(false);
+
+	// ── Snapshots ────────────────────────────────────────────
+
+	readonly snaps = new SnapshotStore();
 
 	// ── Grid lock ────────────────────────────────────────────
 
@@ -231,6 +236,64 @@ export class Session {
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to apply props');
 		}
+	}
+
+	// --- Snapshots ---
+
+	static readonly SNAPSHOT_THUMB_SIZE = 256;
+
+	async snap(): Promise<void> {
+		const channels = this.preview.channels;
+		const hasFrames = channels.some((ch) => ch.visible && ch.frame);
+		if (!hasFrames) {
+			toast.error('No preview frames available');
+			return;
+		}
+
+		const w = this.preview.previewWidth;
+		const h = this.preview.previewHeight;
+		if (!w || !h) return;
+
+		// Composite full-res frame
+		const canvas = document.createElement('canvas');
+		canvas.width = w;
+		canvas.height = h;
+		const ctx = canvas.getContext('2d')!;
+		compositeFullFrames(ctx, canvas, channels);
+
+		// Generate blob (full-res JPEG)
+		const blob = await new Promise<Blob>((resolve) => {
+			canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85);
+		});
+
+		// Generate thumbnail
+		const thumbW = Session.SNAPSHOT_THUMB_SIZE;
+		const thumbH = Math.round((h / w) * thumbW);
+		canvas.width = thumbW;
+		canvas.height = thumbH;
+		ctx.clearRect(0, 0, thumbW, thumbH);
+		compositeFullFrames(ctx, canvas, channels);
+		const thumbnail = canvas.toDataURL('image/jpeg', 0.6);
+
+		// Read stage position (mm → µm)
+		const stageX_um = (this.stage.x?.position ?? 0) * 1000;
+		const stageY_um = (this.stage.y?.position ?? 0) * 1000;
+		const stageZ_um = (this.stage.z?.position ?? 0) * 1000;
+
+		// FOV dimensions (mm → µm)
+		const fovW_um = this.fov.width * 1000;
+		const fovH_um = this.fov.height * 1000;
+
+		this.snaps.add({
+			stageX_um,
+			stageY_um,
+			stageZ_um,
+			fovW_um,
+			fovH_um,
+			timestamp: Date.now(),
+			blob,
+			thumbnail
+		});
 	}
 
 	// --- Grid ---

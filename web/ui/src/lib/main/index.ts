@@ -10,6 +10,7 @@ export {
 	type DeliminatedIntData
 } from './camera.svelte.ts';
 export { PreviewState, PreviewChannel, fetchColormapCatalog } from './preview.svelte.ts';
+export { SnapshotStore, type Snapshot } from './snapshots.svelte.ts';
 export type { ColormapDef, ColormapGroup, ColormapCatalog } from './preview.svelte.ts';
 export { discoverProfileDevices, isFilterWheel, getChannelFor } from './profile.ts';
 export type { AlignEdge } from './grid.ts';

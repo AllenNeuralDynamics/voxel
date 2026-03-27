@@ -13,7 +13,7 @@
 
 	// ── Pane sizing (pixel-based min for sidebar) ──
 
-	const SIDEBAR_MIN_PX = 280;
+	const SIDEBAR_MIN_PX = 300;
 	let paneGroupEl = $state<HTMLElement | null>(null);
 	const paneGroupSize = new ElementSize(() => paneGroupEl);
 
