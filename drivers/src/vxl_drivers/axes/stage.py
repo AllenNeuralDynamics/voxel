@@ -33,16 +33,16 @@ class XYZStage[A: ContinuousAxis]:
 
 @dataclass(frozen=True)
 class FastAxisConfig:
-    start_mm: float
-    stop_mm: float
-    pulse_interval_um: float
+    start: float  # um
+    stop: float  # um
+    pulse_interval: float  # um
     retrace_speed_percent: int | None = 67
 
 
 @dataclass(frozen=True)
 class SlowAxisConfig:
-    start_mm: float
-    stop_mm: float
+    start: float  # um
+    stop: float  # um
     line_count: int
     overshoot_time_ms: int | None = None
     overshoot_factor: float | None = None
@@ -80,9 +80,9 @@ class TigerScanSession(ScanSession):
     def configure_fast_axis(self, fast_cfg: FastAxisConfig):
         self.hub.box.configure_scan_r(
             ScanRConfig(
-                start_mm=fast_cfg.start_mm,
-                pulse_interval_um=fast_cfg.pulse_interval_um,
-                stop_mm=fast_cfg.stop_mm,
+                start_mm=fast_cfg.start / 1000,
+                pulse_interval_um=fast_cfg.pulse_interval,
+                stop_mm=fast_cfg.stop / 1000,
                 retrace_speed_percent=fast_cfg.retrace_speed_percent,
             ),
         )
@@ -90,8 +90,8 @@ class TigerScanSession(ScanSession):
     def configure_slow_axis(self, slow_cfg: SlowAxisConfig):
         self.hub.box.configure_scan_v(
             ScanVConfig(
-                start_mm=slow_cfg.start_mm,
-                stop_mm=slow_cfg.stop_mm,
+                start_mm=slow_cfg.start / 1000,
+                stop_mm=slow_cfg.stop / 1000,
                 line_count=slow_cfg.line_count,
                 overshoot_time_ms=slow_cfg.overshoot_time_ms,
                 overshoot_factor=slow_cfg.overshoot_factor,

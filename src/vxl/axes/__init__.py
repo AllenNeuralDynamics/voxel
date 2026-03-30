@@ -1,5 +1,6 @@
 from .base import Axis
 from .continuous.base import (
+    SUPPORTED_UNITS,
     ContinuousAxis,
     ContinuousAxisController,
     ScanMode,
@@ -12,13 +13,11 @@ from .continuous.handle import ContinuousAxisHandle
 from .discrete.base import DiscreteAxis
 
 __all__ = [
-    # Base class
+    "SUPPORTED_UNITS",
     "Axis",
-    # Continuous axis
     "ContinuousAxis",
     "ContinuousAxisController",
     "ContinuousAxisHandle",
-    # Discrete axis
     "DiscreteAxis",
     "ScanMode",
     "StepMode",

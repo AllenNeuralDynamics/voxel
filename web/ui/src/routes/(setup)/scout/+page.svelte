@@ -5,7 +5,7 @@
 	import { Pane, PaneGroup } from 'paneforge';
 	import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
 	import { cn } from '$lib/utils';
-	import { Crosshair, TrashCanOutline, ImageLight } from '$lib/icons';
+	import { Crosshair, TrashCanOutline, ImageLight, InformationOutline } from '$lib/icons';
 	import { ElementSize } from 'runed';
 
 	const session = getSessionContext();
@@ -14,6 +14,7 @@
 	let renamingId = $state<string | null>(null);
 
 	let canSnap = $derived(session.preview.isPreviewing || session.mode === 'acquiring');
+	let showDetails = $state(true);
 
 	let previewUrl = $state<string | null>(null);
 	let prevBlobRef: Blob | null = null;
@@ -55,7 +56,8 @@
 
 {#snippet snapItem(snap: Snapshot)}
 	{@const isSelected = snaps.sel.has(snap.id)}
-	{@const snapPos = { x: snap.stageX_um / 1000, y: snap.stageY_um / 1000 }}
+	{@const snapPos = { x: snap.stageX, y: snap.stageY }}
+	{@const snapPosMm = { x: snap.stageX / 1000, y: snap.stageY / 1000 }}
 	<ContextMenu.Root>
 		<ContextMenu.Trigger>
 			<div
@@ -95,7 +97,7 @@
 						onCancel={() => (renamingId = null)}
 					/>
 					<span class="font-mono text-xs text-fg-muted tabular-nums">
-						{snapPos.x.toFixed(3)}, {snapPos.y.toFixed(3)}, {(snap.stageZ_um / 1000).toFixed(3)}
+						{snapPosMm.x.toFixed(3)}, {snapPosMm.y.toFixed(3)}, {(snap.stageZ / 1000).toFixed(3)}
 					</span>
 				</div>
 
@@ -109,7 +111,7 @@
 			<ContextMenu.Item
 				onSelect={() => {
 					session.stage.moveXY(snapPos.x, snapPos.y);
-					session.stage.moveZ(snap.stageZ_um / 1000);
+					session.stage.moveZ(snap.stageZ);
 				}}
 			>
 				Go to position
@@ -133,11 +135,72 @@
 	</ContextMenu.Root>
 {/snippet}
 
-<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="scout-h" class="h-full">
-	<Pane minSize={40}>
-		<div class="flex h-full flex-col items-center justify-center overflow-hidden bg-canvas">
+<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="setup.scout" class="h-full">
+	<Pane defaultSize={70} minSize={40}>
+		<div class="relative flex h-full flex-col items-center justify-center overflow-hidden bg-canvas">
 			{#if snaps.focused && previewUrl}
 				<img src={previewUrl} alt={snaps.focused.label} class="max-h-full max-w-full object-contain" />
+
+				<!-- Detail toggle -->
+				<button
+					class="absolute top-2 right-2 rounded-full p-1.5 transition-colors {showDetails
+						? 'text-fg-muted'
+						: 'text-fg-faint'} hover:text-fg"
+					title={showDetails ? 'Hide details' : 'Show details'}
+					onclick={() => (showDetails = !showDetails)}
+				>
+					<InformationOutline width="16" height="16" />
+				</button>
+
+				<!-- Floating detail panel -->
+				{#if showDetails}
+					{@const snap = snaps.focused}
+					{@const channelEntries = Object.entries(snap.channels)}
+					<div
+						class="absolute bottom-3 left-3 max-w-[min(28rem,calc(100%-1.5rem))] rounded-lg border border-border/50 bg-surface/85 px-3 py-2.5 text-xs backdrop-blur-md"
+					>
+						<div class="mb-2 flex items-center justify-between gap-4">
+							<span class="font-medium text-fg">{snap.label}</span>
+							<span class="font-mono text-fg-muted tabular-nums">
+								{(snap.stageX / 1000).toFixed(3)}, {(snap.stageY / 1000).toFixed(3)}, {(snap.stageZ / 1000).toFixed(3)} mm
+							</span>
+						</div>
+						{#if channelEntries.length > 0}
+							<div class="flex gap-3">
+								{#each channelEntries as [name, ch] (name)}
+									{@const color = session.preview.resolveColor(ch.colormap) ?? 'var(--color-fg-muted)'}
+									<div class="min-w-0 flex-1 space-y-1">
+										<div class="flex items-center gap-1.5">
+											<span class="h-2 w-2 shrink-0 rounded-full" style:background-color={color}></span>
+											<span class="truncate font-medium text-fg">{ch.label}</span>
+										</div>
+										{#if ch.detection}
+											<div class="flex flex-wrap gap-x-2 text-fg-muted">
+												{#if ch.detection.exposureTime != null}
+													<span>{ch.detection.exposureTime} ms</span>
+												{/if}
+												{#if ch.detection.binning != null}
+													<span>{ch.detection.binning}x</span>
+												{/if}
+											</div>
+										{/if}
+										{#if ch.illumination}
+											<div class="flex flex-wrap gap-x-2 text-fg-muted">
+												{#if ch.illumination.powerSetpoint != null}
+													<span>{ch.illumination.powerSetpoint.toFixed(1)} mW</span>
+												{/if}
+											</div>
+										{/if}
+										<div
+											class="h-1 rounded-full"
+											style="background: linear-gradient(to right, transparent {ch.levelsMin * 100}%, {color} {ch.levelsMin * 100}%, {color} {ch.levelsMax * 100}%, transparent {ch.levelsMax * 100}%);"
+										></div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 			{:else}
 				<div class="flex flex-col items-center gap-3 text-fg-faint">
 					<Crosshair width="32" height="32" class="opacity-40" />

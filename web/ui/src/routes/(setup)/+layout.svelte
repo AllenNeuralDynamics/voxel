@@ -41,9 +41,9 @@
 	}
 </script>
 
-<PaneGroup direction="vertical" autoSaveId="workflow-v">
+<PaneGroup direction="vertical" autoSaveId="setup.layout">
 	<Pane>
-		<div class="overflow auto flex h-full flex-col">
+		<div class="flex h-full flex-col">
 			{@render children()}
 		</div>
 	</Pane>

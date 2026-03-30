@@ -16,7 +16,7 @@ export type Interleaving = 'position_first' | 'profile_first';
 export interface GlobalsConfig {
 	default_overlap: number;
 	default_tile_order: TileOrder;
-	default_z_step_um: number;
+	default_z_step: number;
 }
 
 /**

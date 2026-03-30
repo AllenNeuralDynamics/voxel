@@ -20,7 +20,7 @@ import { PreviewState, compositeFullFrames } from './preview.svelte';
 import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
-import { SnapshotStore } from './snapshots.svelte';
+import { SnapshotStore, type SnapshotChannel } from './snapshots.svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { type AlignEdge, computeAlignedOffset } from './grid';
 
@@ -61,12 +61,9 @@ export class Session {
 	metadata = $derived<Record<string, unknown>>(this.#appStatus?.session?.metadata ?? {});
 
 	fov = $derived.by(() => {
-		const fovUm = this.#appStatus?.session?.fov_um;
-		if (!fovUm) return { width: 5, height: 5 };
-		return {
-			width: fovUm[0] / 1000,
-			height: fovUm[1] / 1000
-		};
+		const fov = this.#appStatus?.session?.fov;
+		if (!fov) return { width: 5000, height: 5000 };
+		return { width: fov[0], height: fov[1] };
 	});
 
 	lasers: Record<string, Laser>;
@@ -277,28 +274,63 @@ export class Session {
 		compositeFullFrames(ctx, canvas, channels);
 		const thumbnail = canvas.toDataURL('image/jpeg', 0.6);
 
-		// Read stage position (mm → µm)
-		const stageX_um = (this.stage.x?.position ?? 0) * 1000;
-		const stageY_um = (this.stage.y?.position ?? 0) * 1000;
-		const stageZ_um = (this.stage.z?.position ?? 0) * 1000;
-
-		// FOV dimensions (mm → µm)
-		const fovW_um = this.fov.width * 1000;
-		const fovH_um = this.fov.height * 1000;
+		// Stage position and FOV are already in µm
+		const stageX = this.stage.x?.position ?? 0;
+		const stageY = this.stage.y?.position ?? 0;
+		const stageZ = this.stage.z?.position ?? 0;
+		const fovW = this.fov.width;
+		const fovH = this.fov.height;
 
 		// Active profile at capture time
 		const profileId = this.activeProfileId ?? '';
 		const profile = this.config.profiles[profileId];
 		const profileLabel = profile?.label ?? sanitizeString(profileId);
 
+		// Capture channel metadata
+		const snapChannels: Record<string, SnapshotChannel> = {};
+		for (const ch of channels) {
+			if (!ch.visible || !ch.name) continue;
+			const chConfig = this.config.channels[ch.name];
+			const entry: SnapshotChannel = {
+				label: ch.label ?? ch.name,
+				colormap: ch.colormap,
+				levelsMin: ch.levelsMin,
+				levelsMax: ch.levelsMax
+			};
+			if (chConfig?.detection) {
+				const cam = this.cameras[chConfig.detection];
+				if (cam) {
+					entry.detection = {
+						deviceId: chConfig.detection,
+						exposureTime: cam.exposureTimeMs ?? undefined,
+						resolution: cam.frameSizePx ?? undefined,
+						binning: cam.binning ?? undefined,
+						pixelFormat: cam.pixelFormat ?? undefined
+					};
+				}
+			}
+			if (chConfig?.illumination) {
+				const laser = this.lasers[chConfig.illumination];
+				if (laser) {
+					entry.illumination = {
+						deviceId: chConfig.illumination,
+						powerSetpoint: laser.powerSetpoint ?? undefined,
+						power: laser.powerMw ?? undefined
+					};
+				}
+			}
+			snapChannels[ch.name] = entry;
+		}
+
 		this.snaps.add({
 			profileId,
 			profileLabel,
-			stageX_um,
-			stageY_um,
-			stageZ_um,
-			fovW_um,
-			fovH_um,
+			stageX,
+			stageY,
+			stageZ,
+			fovW,
+			fovH,
+			channels: snapChannels,
 			timestamp: Date.now(),
 			blob,
 			thumbnail
@@ -310,8 +342,8 @@ export class Session {
 	async setGridOffset(xOffsetUm: number, yOffsetUm: number): Promise<void> {
 		try {
 			await this.#rest('PATCH', '/plan/grid', {
-				x_offset_um: xOffsetUm,
-				y_offset_um: yOffsetUm,
+				x_offset: xOffsetUm,
+				y_offset: yOffsetUm,
 				force: this.gridForceUnlocked
 			});
 		} catch (error) {
@@ -347,8 +379,8 @@ export class Session {
 	async setGridZRange(defaultZStartUm: number, defaultZEndUm: number): Promise<void> {
 		try {
 			await this.#rest('PATCH', '/plan/grid', {
-				default_z_start_um: defaultZStartUm,
-				default_z_end_um: defaultZEndUm
+				default_z_start: defaultZStartUm,
+				default_z_end: defaultZEndUm
 			});
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to set Z range');
@@ -408,8 +440,8 @@ export class Session {
 				stacks: stacks.map((s) => ({
 					row: s.row,
 					col: s.col,
-					z_start_um: s.zStartUm,
-					z_end_um: s.zEndUm
+					z_start: s.zStartUm,
+					z_end: s.zEndUm
 				}))
 			});
 		} catch (error) {
@@ -423,8 +455,8 @@ export class Session {
 				edits: edits.map((e) => ({
 					row: e.row,
 					col: e.col,
-					z_start_um: e.zStartUm,
-					z_end_um: e.zEndUm
+					z_start: e.zStartUm,
+					z_end: e.zEndUm
 				}))
 			});
 		} catch (error) {
@@ -545,18 +577,18 @@ export class Session {
 	}
 
 	get gridOffsetX(): number {
-		return (this.gridConfig?.x_offset_um ?? 0) / 1000;
+		return this.gridConfig?.x_offset ?? 0;
 	}
 
 	get gridOffsetY(): number {
-		return (this.gridConfig?.y_offset_um ?? 0) / 1000;
+		return this.gridConfig?.y_offset ?? 0;
 	}
 
-	positionToGridCell(positionMm: number, axis: 'x' | 'y'): number {
+	positionToGridCell(position: number, axis: 'x' | 'y'): number {
 		const offset = axis === 'x' ? this.gridOffsetX : this.gridOffsetY;
 		const spacing = axis === 'x' ? this.tileSpacingX : this.tileSpacingY;
 		const lowerLimit = axis === 'x' ? this.stage.x.lowerLimit : this.stage.y.lowerLimit;
-		return Math.floor((positionMm - lowerLimit - offset) / spacing);
+		return Math.floor((position - lowerLimit - offset) / spacing);
 	}
 
 	gridCellToPosition(gridCell: number, axis: 'x' | 'y'): number {

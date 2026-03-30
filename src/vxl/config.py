@@ -11,15 +11,15 @@ Interleaving = Literal["position_first", "profile_first"]
 
 
 class GridConfig(BaseModel):
-    """Grid configuration for tile planning."""
+    """Grid configuration for tile planning. All positions in micrometers (µm)."""
 
-    x_offset_um: float = 0.0
-    y_offset_um: float = 0.0
+    x_offset: float = 0.0
+    y_offset: float = 0.0
     overlap_x: float = Field(default=0.1, ge=0.0, lt=1.0)
     overlap_y: float = Field(default=0.1, ge=0.0, lt=1.0)
-    z_step_um: float = -1.0  # sentinel: -1 means use rig default
-    default_z_start_um: float = 0.0
-    default_z_end_um: float = 100.0
+    z_step: float = -1.0  # sentinel: -1 means use rig default
+    default_z_start: float = 0.0
+    default_z_end: float = 100.0
 
     @model_validator(mode="before")
     @classmethod
@@ -37,7 +37,7 @@ class GlobalsConfig(BaseModel):
 
     default_overlap: float = Field(default=0.1, ge=0.0, le=0.5, description="Default tile overlap (0.0-0.5)")
     default_tile_order: TileOrder = Field(default="snake_row", description="Default tile ordering pattern")
-    default_z_step_um: float = Field(default=1.0, gt=0.0, description="Default z-step in micrometers")
+    default_z_step: float = Field(default=1.0, gt=0.0, description="Default z-step in micrometers")
 
 
 class DaqConfig(BaseModel):

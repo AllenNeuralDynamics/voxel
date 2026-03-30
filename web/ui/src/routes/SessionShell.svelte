@@ -76,7 +76,7 @@
 </script>
 
 <div class="h-screen w-full text-fg">
-	<PaneGroup direction="horizontal" autoSaveId="main-h">
+	<PaneGroup direction="horizontal" autoSaveId="shell">
 		<Pane defaultSize={60} minSize={50} maxSize={70}>
 			<div class="grid h-full grid-rows-[auto_1fr]">
 				<header
@@ -161,7 +161,7 @@
 		<!-- Right column: Viewer (Preview + Grid Canvas) -->
 		<Pane defaultSize={45}>
 			<main class="flex h-full flex-col overflow-hidden">
-				<PaneGroup direction="vertical" autoSaveId="rightCol-v3">
+				<PaneGroup direction="vertical" autoSaveId="shell.right">
 					<Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
 						<PreviewCanvas previewer={session.preview} />
 					</Pane>

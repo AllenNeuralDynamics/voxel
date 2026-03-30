@@ -39,7 +39,7 @@ class Session:
         self._log = logging.getLogger(f"Session({session_dir.name})")
 
         # FOV from rig topic (set during rig.start(), updated via subscription)
-        self._tile_size_um: tuple[float, float] | None = rig.get_topic_value("fov")
+        self._tile_size: tuple[float, float] | None = rig.get_topic_value("fov")
         self._unsubscribe_fov = rig.subscribe("fov", self._on_fov_changed)
 
     def _save(self) -> None:
@@ -287,15 +287,15 @@ class Session:
 
     async def _on_fov_changed(self, fov: tuple[float, float]) -> None:
         """Handle FOV changes from rig topic."""
-        self._tile_size_um = fov
+        self._tile_size = fov
         self._recalculate_planned_stack_positions()
 
     # ==================== Grid Management ====================
 
     def _recalculate_planned_stack_positions(self) -> None:
-        """Recalculate (x_um, y_um) for PLANNED stacks of the active profile.
+        """Recalculate (x, y) for PLANNED stacks of the active profile.
 
-        Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
+        Stack positions are CENTER-ANCHORED: (x, y) represents the center of the stack.
         The (row, col) identity remains stable - only physical positions change.
         """
         gc = self.grid_config
@@ -308,17 +308,17 @@ class Session:
 
         fov_w, fov_h = self.get_fov_size()
         step_w, step_h = self.get_step_size()
-        offset_x = gc.x_offset_um
-        offset_y = gc.y_offset_um
+        offset_x = gc.x_offset
+        offset_y = gc.y_offset
 
         for stack in self._config.plan.stacks:
             if stack.status == StackStatus.PLANNED and stack.profile_id == active_pid:
-                stack.x_um = offset_x + stack.col * step_w
-                stack.y_um = offset_y + stack.row * step_h
-                stack.w_um = fov_w
-                stack.h_um = fov_h
+                stack.x = offset_x + stack.col * step_w
+                stack.y = offset_y + stack.row * step_h
+                stack.w = fov_w
+                stack.h = fov_h
 
-    def set_grid_offset(self, x_offset_um: float, y_offset_um: float, *, force: bool = False) -> None:
+    def set_grid_offset(self, x_offset: float, y_offset: float, *, force: bool = False) -> None:
         """Set grid offset for the active profile. Recalculates PLANNED stack positions.
 
         Raises RuntimeError if stacks exist for the active profile and force is False.
@@ -329,18 +329,18 @@ class Session:
         active_pid = self._rig.active_profile_id
         if not force and any(s.profile_id == active_pid for s in self._config.plan.stacks):
             raise RuntimeError("Cannot modify grid: stacks exist for this profile (use force to override)")
-        gc.x_offset_um = x_offset_um
-        gc.y_offset_um = y_offset_um
+        gc.x_offset = x_offset
+        gc.y_offset = y_offset
         self._recalculate_planned_stack_positions()
         self._save()
 
-    def set_default_z_range(self, default_z_start_um: float, default_z_end_um: float) -> None:
+    def set_default_z_range(self, default_z_start: float, default_z_end: float) -> None:
         """Set default Z range for new stacks on the active profile."""
         gc = self.grid_config
         if gc is None:
             raise RuntimeError("Active profile has no grid configuration")
-        gc.default_z_start_um = default_z_start_um
-        gc.default_z_end_um = default_z_end_um
+        gc.default_z_start = default_z_start
+        gc.default_z_end = default_z_end
         self._save()
 
     def set_overlap(self, overlap_x: float, overlap_y: float, *, force: bool = False) -> None:
@@ -369,9 +369,9 @@ class Session:
         Returns the actual field of view dimensions in micrometers.
         This is the physical size each tile covers, regardless of overlap.
         """
-        if self._tile_size_um is None:
+        if self._tile_size is None:
             raise ValueError("FOV not available (no active profile or cameras)")
-        return self._tile_size_um
+        return self._tile_size
 
     def get_step_size(self) -> tuple[float, float]:
         """Get step size between tile positions (FOV adjusted for overlap)."""
@@ -386,7 +386,7 @@ class Session:
 
         Computes all tile positions that fit within the stage travel range,
         starting from the grid offset. Tile positions are CENTER-ANCHORED:
-        (x_um, y_um) represents the center of each tile. Tiles are positioned
+        (x, y) represents the center of each tile. Tiles are positioned
         at intervals of step_size (FOV adjusted for overlap).
 
         Returns:
@@ -405,50 +405,50 @@ class Session:
             # No active profile or cameras - return empty grid
             return []
 
-        # Get stage dimensions from axis limits (in mm, convert to um)
+        # Get stage dimensions from axis limits (in µm)
         stage = self._rig.stage
         x_lower = await stage.x.get_lower_limit()
         x_upper = await stage.x.get_upper_limit()
         y_lower = await stage.y.get_lower_limit()
         y_upper = await stage.y.get_upper_limit()
 
-        stage_width_um = (x_upper - x_lower) * 1000
-        stage_height_um = (y_upper - y_lower) * 1000
+        stage_width = x_upper - x_lower
+        stage_height = y_upper - y_lower
 
-        # Grid offset (in um, relative to stage lower limit)
+        # Grid offset (in µm, relative to stage lower limit)
         # This represents where tile (0,0)'s center is positioned
-        offset_x = gc.x_offset_um
-        offset_y = gc.y_offset_um
+        offset_x = gc.x_offset
+        offset_y = gc.y_offset
 
         # Calculate tile indices for reachable tiles (center within stage bounds)
         # With center-anchored positions: center = offset + col * step
         # For center >= 0: col >= -offset / step
         # For center <= stage_width: col <= (stage_width - offset) / step
         col_min = math.ceil(-offset_x / step_w) if step_w > 0 else 0
-        col_max = math.floor((stage_width_um - offset_x) / step_w) + 1 if step_w > 0 else 1
+        col_max = math.floor((stage_width - offset_x) / step_w) + 1 if step_w > 0 else 1
         row_min = math.ceil(-offset_y / step_h) if step_h > 0 else 0
-        row_max = math.floor((stage_height_um - offset_y) / step_h) + 1 if step_h > 0 else 1
+        row_max = math.floor((stage_height - offset_y) / step_h) + 1 if step_h > 0 else 1
 
         # Generate tiles with CENTER-ANCHORED positions
         tiles: list[Tile] = []
         for row in range(row_min, row_max):
             for col in range(col_min, col_max):
                 # Center position = offset + grid_step
-                x_um = offset_x + col * step_w
-                y_um = offset_y + row * step_h
+                tx = offset_x + col * step_w
+                ty = offset_y + row * step_h
 
                 # Include tile if center is within stage bounds (reachable by stage)
-                if 0 <= x_um <= stage_width_um and 0 <= y_um <= stage_height_um:
+                if 0 <= tx <= stage_width and 0 <= ty <= stage_height:
                     tile_id = f"tile_r{row}_c{col}"
                     tiles.append(
                         Tile(
                             tile_id=tile_id,
                             row=row,
                             col=col,
-                            x_um=x_um,
-                            y_um=y_um,
-                            w_um=fov_w,
-                            h_um=fov_h,
+                            x=tx,
+                            y=ty,
+                            w=fov_w,
+                            h=fov_h,
                         ),
                     )
 
@@ -472,9 +472,9 @@ class Session:
         """Add multiple stacks at grid positions. Single save at end.
 
         Args:
-            stacks: List of {row, col, z_start_um, z_end_um}
+            stacks: List of {row, col, z_start, z_end}
 
-        Stack positions are CENTER-ANCHORED: (x_um, y_um) represents the center of the stack.
+        Stack positions are CENTER-ANCHORED: (x, y) represents the center of the stack.
         Auto-adds the active profile to plan.profile_order if not already present.
         """
         if not stacks:
@@ -499,12 +499,12 @@ class Session:
         for s in stacks:
             row = int(s["row"])
             col = int(s["col"])
-            z_start_um = float(s["z_start_um"])
-            z_end_um = float(s["z_end_um"])
+            z_start = float(s["z_start"])
+            z_end = float(s["z_end"])
 
             # Compute CENTER position from grid (offset + grid_step)
-            x_um = gc.x_offset_um + col * step_w
-            y_um = gc.y_offset_um + row * step_h
+            sx = gc.x_offset + col * step_w
+            sy = gc.y_offset + row * step_h
 
             tile_id = f"tile_r{row}_c{col}"
 
@@ -516,20 +516,20 @@ class Session:
                 tile_id=tile_id,
                 row=row,
                 col=col,
-                x_um=x_um,
-                y_um=y_um,
-                w_um=fov_w,
-                h_um=fov_h,
-                z_start_um=z_start_um,
-                z_end_um=z_end_um,
-                z_step_um=gc.z_step_um,
+                x=sx,
+                y=sy,
+                w=fov_w,
+                h=fov_h,
+                z_start=z_start,
+                z_end=z_end,
+                z_step=gc.z_step,
                 profile_id=active_pid,
                 status=StackStatus.PLANNED,
             )
 
             self._config.plan.stacks.append(stack)
             added.append(stack)
-            self._log.info(f"Added stack {tile_id} at ({x_um:.1f}, {y_um:.1f}) um [profile={active_pid}]")
+            self._log.info(f"Added stack {tile_id} at ({sx:.1f}, {sy:.1f}) um [profile={active_pid}]")
 
         self._sort_stacks()
         self._save()
@@ -539,7 +539,7 @@ class Session:
         """Edit multiple stacks' z parameters. Single save at end.
 
         Args:
-            edits: List of {row, col, z_start_um?, z_end_um?}
+            edits: List of {row, col, z_start?, z_end?}
 
         Only PLANNED stacks can be edited.
         """
@@ -559,10 +559,10 @@ class Session:
             if stack.status != StackStatus.PLANNED:
                 raise RuntimeError(f"Cannot edit stack {tile_id} with status {stack.status}")
 
-            if "z_start_um" in e:
-                stack.z_start_um = float(e["z_start_um"])
-            if "z_end_um" in e:
-                stack.z_end_um = float(e["z_end_um"])
+            if "z_start" in e:
+                stack.z_start = float(e["z_start"])
+            if "z_end" in e:
+                stack.z_end = float(e["z_end"])
 
             edited.append(stack)
             self._log.info(f"Edited stack {tile_id}")

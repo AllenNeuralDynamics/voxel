@@ -212,12 +212,12 @@ class Camera(Device):
         return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
 
     @property
-    @describe(label="Frame Area", units="mm", stream=True)
-    def frame_area_mm(self) -> Vec2D:
-        """Get the physical frame size in millimeters."""
+    @describe(label="Frame Area", units="µm", stream=True)
+    def frame_area_um(self) -> Vec2D:
+        """Get the physical frame size in micrometers."""
         return Vec2D(
-            x=self.frame_size_px.x * self.pixel_size_um.x / 1000.0,
-            y=self.frame_size_px.y * self.pixel_size_um.y / 1000.0,
+            x=self.frame_size_px.x * self.pixel_size_um.x,
+            y=self.frame_size_px.y * self.pixel_size_um.y,
         )
 
     @property

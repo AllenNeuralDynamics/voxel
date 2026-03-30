@@ -40,24 +40,24 @@ class ReorderProfilesRequest(BaseModel):
 
 
 class GridUpdateRequest(BaseModel):
-    """Request model for updating grid configuration."""
+    """Request model for updating grid configuration. All positions in µm."""
 
-    x_offset_um: float | None = None
-    y_offset_um: float | None = None
+    x_offset: float | None = None
+    y_offset: float | None = None
     overlap_x: float | None = None
     overlap_y: float | None = None
-    default_z_start_um: float | None = None
-    default_z_end_um: float | None = None
+    default_z_start: float | None = None
+    default_z_end: float | None = None
     force: bool = False
 
 
 class StackInput(BaseModel):
-    """Input model for a single stack."""
+    """Input model for a single stack. All positions in µm."""
 
     row: int
     col: int
-    z_start_um: float
-    z_end_um: float
+    z_start: float
+    z_end: float
 
 
 class AddStacksRequest(BaseModel):
@@ -67,12 +67,12 @@ class AddStacksRequest(BaseModel):
 
 
 class StackEditInput(BaseModel):
-    """Input model for editing a single stack."""
+    """Input model for editing a single stack. All positions in µm."""
 
     row: int
     col: int
-    z_start_um: float | None = None
-    z_end_um: float | None = None
+    z_start: float | None = None
+    z_end: float | None = None
 
 
 class EditStacksRequest(BaseModel):
@@ -146,12 +146,12 @@ async def update_grid(
 ) -> GridConfig | None:
     """Update grid configuration for the active profile."""
     try:
-        if request.x_offset_um is not None and request.y_offset_um is not None:
-            service.session.set_grid_offset(request.x_offset_um, request.y_offset_um, force=request.force)
+        if request.x_offset is not None and request.y_offset is not None:
+            service.session.set_grid_offset(request.x_offset, request.y_offset, force=request.force)
         if request.overlap_x is not None and request.overlap_y is not None:
             service.session.set_overlap(request.overlap_x, request.overlap_y, force=request.force)
-        if request.default_z_start_um is not None and request.default_z_end_um is not None:
-            service.session.set_default_z_range(request.default_z_start_um, request.default_z_end_um)
+        if request.default_z_start is not None and request.default_z_end is not None:
+            service.session.set_default_z_range(request.default_z_start, request.default_z_end)
 
         service.broadcast({}, with_status=True)
         return service.session.grid_config

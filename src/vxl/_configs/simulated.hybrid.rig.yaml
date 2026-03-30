@@ -78,13 +78,13 @@ devices:
       slots: { 0: "BP525", 1: "BP600" }
   x_axis:
     target: *linear_axis_target
-    init: { lower_limit: 0.0, upper_limit: 36.7 }
+    init: { lower_limit: 0, upper_limit: 36700 }
   y_axis:
     target: *linear_axis_target
-    init: { lower_limit: 0.0, upper_limit: 23.0 }
+    init: { lower_limit: 0, upper_limit: 23000 }
   z_axis:
     target: *linear_axis_target
-    init: { lower_limit: 0.0, upper_limit: 50.0 }
+    init: { lower_limit: 0, upper_limit: 50000 }
 
 # Remote devices - cameras on separate nodes (require ZMQ)
 nodes:

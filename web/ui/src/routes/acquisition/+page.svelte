@@ -141,7 +141,7 @@
 	}
 </script>
 
-<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="acquisition-h2" class="h-full overflow-hidden">
+<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="acquire.content" class="h-full overflow-hidden">
 	<!-- Left column: stack list -->
 	<Pane minSize={40} class="flex h-full flex-col gap-3 overflow-hidden py-4">
 		<!-- <div class="flex    "> -->
@@ -190,10 +190,10 @@
 										<span class="min-w-0 flex-1 truncate text-fg">
 											{sanitizeString(stack.profile_id)}
 											<span class="ml-4 text-fg-muted">R{stack.row}, C{stack.col}</span>
-											<span class="ml-4 text-fg-muted/60">{stack.x_um.toFixed(0)} × {stack.y_um.toFixed(0)} µm</span>
+											<span class="ml-4 text-fg-muted/60">{stack.x.toFixed(0)} × {stack.y.toFixed(0)} µm</span>
 										</span>
 										<span class="shrink-0 font-mono text-fg-muted">
-											{formatZ(stack.z_start_um)} → {formatZ(stack.z_end_um)} µm
+											{formatZ(stack.z_start)} → {formatZ(stack.z_end)} µm
 										</span>
 										<span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
 										{#if status(stack) === 'acquiring'}
@@ -229,10 +229,10 @@
 							<span class="min-w-0 flex-1 truncate text-fg">
 								{sanitizeString(stack.profile_id)}
 								<span class="ml-4 text-fg-muted">R{stack.row}, C{stack.col}</span>
-								<span class="ml-4 text-fg-muted/60">{stack.x_um.toFixed(0)} × {stack.y_um.toFixed(0)} µm</span>
+								<span class="ml-4 text-fg-muted/60">{stack.x.toFixed(0)} × {stack.y.toFixed(0)} µm</span>
 							</span>
 							<span class="shrink-0 font-mono text-fg-muted">
-								{formatZ(stack.z_start_um)} → {formatZ(stack.z_end_um)} µm
+								{formatZ(stack.z_start)} → {formatZ(stack.z_end)} µm
 							</span>
 							<span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
 							{#if status(stack) === 'acquiring'}

@@ -15,7 +15,7 @@
 			'pixel_type',
 			'frame_size_px',
 			'frame_size_mb',
-			'frame_area_mm',
+			'frame_area_um',
 			'frame_region',
 			'frame_rate_hz',
 			'stream_info'
@@ -46,7 +46,7 @@
 	let sensorSize = $derived(camera?.sensorSizePx);
 	let pixelSize = $derived(camera?.pixelSizeUm);
 	let pixelType = $derived(devicesManager.getPropertyValue(deviceId, 'pixel_type'));
-	let frameAreaMm = $derived(camera?.frameAreaMm);
+	let frameAreaUm = $derived(camera?.frameAreaUm);
 
 	// Frame region (for SVG diagram)
 	let frameRegion = $derived(camera?.frameRegion);
@@ -265,10 +265,12 @@
 							<span class="font-mono text-fg">{pixelType}</span>
 						</div>
 					{/if}
-					{#if frameAreaMm}
+					{#if frameAreaUm}
 						<div class="flex justify-between">
 							<span class="text-fg-muted">Area</span>
-							<span class="font-mono text-fg">{frameAreaMm.x.toFixed(1)} &times; {frameAreaMm.y.toFixed(1)} mm</span>
+							<span class="font-mono text-fg"
+								>{(frameAreaUm.x / 1000).toFixed(2)} &times; {(frameAreaUm.y / 1000).toFixed(2)} mm</span
+							>
 						</div>
 					{/if}
 				</div>

@@ -214,12 +214,13 @@ class CameraControl(QWidget):
             elif isinstance(size, (list, tuple)) and len(size) == 2:
                 self._pixel_size_value.setText(f"{size[0]:.2f} x {size[1]:.2f} µm")
 
-        if "frame_area_mm" in props:
-            area = props["frame_area_mm"]
+        if "frame_area_um" in props:
+            area = props["frame_area_um"]
             if isinstance(area, dict):
-                self._sensor_info_accordion.set_summary(f"{area.get('x', 0):.2f} x {area.get('y', 0):.2f} mm")
+                x_mm, y_mm = area.get("x", 0) / 1000, area.get("y", 0) / 1000
+                self._sensor_info_accordion.set_summary(f"{x_mm:.2f} x {y_mm:.2f} mm")
             elif isinstance(area, (list, tuple)) and len(area) == 2:
-                self._sensor_info_accordion.set_summary(f"{area[0]:.2f} x {area[1]:.2f} mm")
+                self._sensor_info_accordion.set_summary(f"{area[0] / 1000:.2f} x {area[1] / 1000:.2f} mm")
 
     def _update_frame_region(self, props: dict[str, Any]) -> None:
         """Update frame region spinboxes with constraints."""

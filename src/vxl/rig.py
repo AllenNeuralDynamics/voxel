@@ -23,7 +23,7 @@ from vxl.node import VoxelNode
 from vxl.sync import SyncTask
 from vxl.tile import Stack, StackResult, StackStatus
 
-_FOV_PROPERTIES = frozenset({"frame_area_mm"})
+_FOV_PROPERTIES = frozenset({"frame_area_um"})
 
 Unsubscribe = Callable[[], None]
 
@@ -125,9 +125,9 @@ class VoxelRig(Rig):
                 camera = self.cameras.get(channel.detection)
                 if not camera:
                     continue
-                frame_area_mm = await camera.get_frame_area_mm()
-                fov_w = frame_area_mm.x * 1000 / magnification
-                fov_h = frame_area_mm.y * 1000 / magnification
+                frame_area = await camera.get_frame_area_um()
+                fov_w = frame_area.x / magnification
+                fov_h = frame_area.y / magnification
                 fovs.append((fov_w, fov_h))
 
             if not fovs:
@@ -769,18 +769,17 @@ class VoxelRig(Rig):
         try:
             # 1. Move stage to tile XY position and z_start
             await asyncio.gather(
-                self.stage.x.move_abs(stack.x_um / 1000, wait=True),  # um -> mm
-                self.stage.y.move_abs(stack.y_um / 1000, wait=True),
-                self.stage.z.move_abs(stack.z_start_um / 1000, wait=True),
+                self.stage.x.move_abs(stack.x, wait=True),
+                self.stage.y.move_abs(stack.y, wait=True),
+                self.stage.z.move_abs(stack.z_start, wait=True),
             )
 
             # 2. Configure TTL stepper on scanning axis for relative stepping
             await self.scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
 
             # 3. Queue relative moves for each frame
-            step_mm = stack.z_step_um / 1000
             for _ in range(stack.num_frames):
-                await self.scanning_axis.queue_relative_move(step_mm)
+                await self.scanning_axis.queue_relative_move(stack.z_step)
 
             # 4. Create frame task with for_stack=True
             profile = self.active_profile

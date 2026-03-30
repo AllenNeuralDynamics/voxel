@@ -98,13 +98,13 @@ nodes:
           slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
       x_axis:
         target: *linear_axis_target
-        init: { lower_limit: 0.0, upper_limit: 36.7 }
+        init: { lower_limit: 0, upper_limit: 36700 }
       y_axis:
         target: *linear_axis_target
-        init: { lower_limit: 0.0, upper_limit: 23.0 }
+        init: { lower_limit: 0, upper_limit: 23000 }
       z_axis:
         target: *linear_axis_target
-        init: { lower_limit: 0.0, upper_limit: 50.0, has_ttl_stepper: true }
+        init: { lower_limit: 0, upper_limit: 50000, has_ttl_stepper: true }
   node_1:
     hostname: *camera_ip
     devices:

@@ -1,17 +1,37 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { IDBKeyVal } from '$lib/utils/idb';
-import { createMultiSelect, type MultiSelect } from '$lib/utils/multiselect.svelte';
+import { createMultiSelect } from '$lib/utils/multiselect.svelte';
+
+export interface SnapshotChannel {
+	label: string;
+	colormap: string | null;
+	levelsMin: number;
+	levelsMax: number;
+	detection?: {
+		deviceId: string;
+		exposureTime?: number;
+		resolution?: { x: number; y: number };
+		binning?: number;
+		pixelFormat?: string;
+	};
+	illumination?: {
+		deviceId: string;
+		powerSetpoint?: number;
+		power?: number;
+	};
+}
 
 export interface Snapshot {
 	id: string;
 	label: string;
 	profileId: string;
 	profileLabel: string;
-	stageX_um: number;
-	stageY_um: number;
-	stageZ_um: number;
-	fovW_um: number;
-	fovH_um: number;
+	stageX: number;
+	stageY: number;
+	stageZ: number;
+	fovW: number;
+	fovH: number;
+	channels: Record<string, SnapshotChannel>;
 	timestamp: number;
 	blob: Blob;
 	thumbnail: string;

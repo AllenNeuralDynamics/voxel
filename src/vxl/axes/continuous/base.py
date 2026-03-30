@@ -11,6 +11,8 @@ from rigup import describe
 from vxl.axes.base import Axis
 from vxl.device import DeviceType
 
+SUPPORTED_UNITS = ("um", "mm", "nm")
+
 
 class StepMode(StrEnum):
     """Standard stepping modes for TTL-triggered motion."""
@@ -77,12 +79,10 @@ class TTLStepper(ABC):
 class ContinuousAxis(Axis):
     """Base class for continuous motion axes (linear or rotational).
 
-    This abstraction unifies linear and rotational axes by using generic
-    property names with a `units` property to indicate the unit type
-    (e.g., "mm" for linear, "deg" for rotational).
+    All position values are expressed in the configured ``units`` (default "um").
+    Subclasses must handle internal conversion to/from hardware-native units.
 
     Implementations must provide:
-        - units: The unit string (e.g., "mm", "deg")
         - position: Current position in `units`
         - is_moving: Whether the axis is currently in motion
         - Motion commands: move_abs, move_rel, go_home, halt, await_movement
@@ -93,17 +93,20 @@ class ContinuousAxis(Axis):
 
     __DEVICE_TYPE__ = DeviceType.CONTINUOUS_AXIS
 
-    def __init__(self, uid: str) -> None:
+    def __init__(self, uid: str, units: str = "um") -> None:
         super().__init__(uid=uid)
+        if units not in SUPPORTED_UNITS:
+            msg = f"Unsupported unit '{units}' — expected one of {SUPPORTED_UNITS}"
+            raise ValueError(msg)
+        self._units = units
 
     # Unit specification _____________________________________________________________________________________________
 
     @property
-    @abstractmethod
-    @describe(label="Units", desc="Unit string for position values (e.g., 'mm', 'deg').")
+    @describe(label="Units")
     def units(self) -> str:
-        """Unit string for position values (e.g., 'mm', 'deg')."""
-        ...
+        """Unit string for position values (e.g., 'um', 'mm')."""
+        return self._units
 
     # Motion commands ________________________________________________________________________________________________
 

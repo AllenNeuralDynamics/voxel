@@ -76,7 +76,7 @@ export interface SessionStatus {
 	stacks: Stack[];
 
 	// Derived values
-	fov_um: [number, number] | null;
+	fov: [number, number] | null;
 
 	// Preview display config per channel (channel_id -> PreviewConfig)
 	preview: Record<string, PreviewConfig>;
@@ -129,13 +129,13 @@ export interface ErrorPayload {
  * Controls tile positioning for acquisition planning
  */
 export interface GridConfig {
-	x_offset_um: number;
-	y_offset_um: number;
+	x_offset: number;
+	y_offset: number;
 	overlap_x: number; // 0.0 to 1.0
 	overlap_y: number; // 0.0 to 1.0
-	z_step_um: number;
-	default_z_start_um: number;
-	default_z_end_um: number;
+	z_step: number;
+	default_z_start: number;
+	default_z_end: number;
 }
 
 /**
@@ -149,10 +149,10 @@ export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'sk
 export interface Tile {
 	row: number;
 	col: number;
-	x_um: number;
-	y_um: number;
-	w_um: number;
-	h_um: number;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
 }
 
 /**
@@ -160,9 +160,9 @@ export interface Tile {
  * Matches backend Stack model
  */
 export interface Stack extends Tile {
-	z_start_um: number;
-	z_end_um: number;
-	z_step_um: number;
+	z_start: number;
+	z_end: number;
+	z_step: number;
 	profile_id: string;
 	status: StackStatus;
 	output_path: string | null;

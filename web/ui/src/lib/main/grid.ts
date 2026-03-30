@@ -12,7 +12,7 @@ export type AlignEdge = 'top' | 'bottom' | 'left' | 'right' | 'center';
  * tile size = FOV size. The directional names exist to let users snap one axis
  * at a time (e.g. align the sample's left edge, then independently align the top).
  *
- * All positions are in millimeters.
+ * All positions are in micrometers (µm).
  */
 export function computeAlignedOffset(
 	edge: AlignEdge,
@@ -34,7 +34,7 @@ export function computeAlignedOffset(
 		y = snapAxis(fovY, y, spacing.y);
 	}
 
-	return { xOffsetUm: x * 1000, yOffsetUm: y * 1000 };
+	return { xOffsetUm: x, yOffsetUm: y };
 }
 
 /** Snap an offset so the nearest tile center lands on `fovCenter`. */

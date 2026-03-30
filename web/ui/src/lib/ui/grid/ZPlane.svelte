@@ -53,7 +53,7 @@
 			style:--thumb-length="{PANEL_WIDTH}px"
 			min={session.stage.z.lowerLimit}
 			max={session.stage.z.upperLimit}
-			step={0.1}
+			step={10}
 			value={displayValue}
 			disabled={session.stage.z.isMoving}
 			{oninput}
@@ -69,9 +69,8 @@
 	>
 		{#each profileStacks as stack (`z_${stack.row}_${stack.col}`)}
 			{@const selected = session.isTileSelected(stack.row, stack.col)}
-			{@const z0Y =
-				(1 - (stack.z_start_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
-			{@const z1Y = (1 - (stack.z_end_um / 1000 - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
+			{@const z0Y = (1 - (stack.z_start - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
+			{@const z1Y = (1 - (stack.z_end - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
 			<g
 				data-stack-status={stack.status}
 				class="text-(--stack-status)"
@@ -92,7 +91,7 @@
 			stroke-width="1"
 			stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
 		>
-			<title>Z: {session.stage.z?.position.toFixed(1)} mm</title>
+			<title>Z: {((session.stage.z?.position ?? 0) / 1000).toFixed(3)} mm</title>
 		</line>
 	</svg>
 </div>

@@ -51,15 +51,14 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def __init__(
         self,
         uid: str,
-        units: str = "mm",
+        units: str = "um",
         lower_limit: float = 0.0,
-        upper_limit: float = 25.0,
-        speed: float = 1.0,
-        acceleration: float = 100.0,
+        upper_limit: float = 25000.0,
+        speed: float = 1000.0,
+        acceleration: float = 100000.0,
         has_ttl_stepper: bool = False,
     ):
-        super().__init__(uid)
-        self._units = units
+        super().__init__(uid=uid, units=units)
         self._position = 0.0
         self._lower_limit = lower_limit
         self._upper_limit = upper_limit
@@ -76,10 +75,6 @@ class SimulatedContinuousAxis(ContinuousAxis):
             self._ttl_stepper = SimulatedTTLStepper(self)
 
     # Unit specification _____________________________________________________________________________________________
-
-    @property
-    def units(self) -> str:
-        return self._units
 
     # Motion commands ________________________________________________________________________________________________
 

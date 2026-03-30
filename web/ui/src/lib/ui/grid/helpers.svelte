@@ -83,8 +83,8 @@
 
 {#snippet offsetControl(session: Session, gc: GridConfig)}
 	{@const editable = session.activeStacks.length === 0 || session.gridForceUnlocked}
-	{@const gridLimX = session.fov.width * (1 - (gc?.overlap_x ?? 0.1))}
-	{@const gridLimY = session.fov.height * (1 - (gc?.overlap_y ?? 0.1))}
+	{@const gridLimX = (session.fov.width * (1 - (gc?.overlap_x ?? 0.1))) / 1000}
+	{@const gridLimY = (session.fov.height * (1 - (gc?.overlap_y ?? 0.1))) / 1000}
 	{@const snapValue = 0.0}
 	{@const step = 0.1}
 	{@const decimals = 2}
@@ -94,7 +94,7 @@
 	{@const disabled = !editable}
 	<div class="flex items-center gap-1.5">
 		<SpinBox
-			value={gc.x_offset_um / 1000}
+			value={gc.x_offset / 1000}
 			min={-gridLimX}
 			max={gridLimX}
 			prefix="Offset X"
@@ -109,7 +109,7 @@
 			{disabled}
 			onChange={(value) => {
 				if (!editable) return;
-				const yMm = offsetLinked ? value : gc!.y_offset_um / 1000;
+				const yMm = offsetLinked ? value : gc!.y_offset / 1000;
 				session.setGridOffset(value * 1000, yMm * 1000);
 			}}
 		/>
@@ -119,7 +119,7 @@
 			onclick={() => {
 				offsetLinked = !offsetLinked;
 				if (offsetLinked && gc) {
-					session.setGridOffset(gc.x_offset_um, gc.x_offset_um);
+					session.setGridOffset(gc.x_offset, gc.x_offset);
 				}
 			}}
 		>
@@ -130,7 +130,7 @@
 			{/if}
 		</button>
 		<SpinBox
-			value={gc.y_offset_um / 1000}
+			value={gc.y_offset / 1000}
 			min={-gridLimY}
 			max={gridLimY}
 			prefix="Offset Y"
@@ -145,7 +145,7 @@
 			{disabled}
 			onChange={(value) => {
 				if (!editable) return;
-				const xMm = offsetLinked ? value : gc!.x_offset_um / 1000;
+				const xMm = offsetLinked ? value : gc!.x_offset / 1000;
 				session.setGridOffset(xMm * 1000, value * 1000);
 			}}
 		/>
@@ -157,26 +157,26 @@
 		<SpinBox
 			{size}
 			{variant}
-			value={gc.default_z_start_um}
-			step={1}
-			decimals={0}
+			value={gc.default_z_start / 1000}
+			step={0.001}
+			decimals={3}
 			numCharacters={8}
 			prefix="Z start"
-			suffix="um"
+			suffix="mm"
 			align="right"
-			onChange={(value) => session.setGridZRange(value, gc!.default_z_end_um)}
+			onChange={(value) => session.setGridZRange(value * 1000, gc!.default_z_end)}
 		/>
 		<SpinBox
 			{size}
 			{variant}
-			value={gc.default_z_end_um}
-			step={1}
-			decimals={0}
+			value={gc.default_z_end / 1000}
+			step={0.001}
+			decimals={3}
 			numCharacters={8}
 			prefix="Z end"
-			suffix="um"
+			suffix="mm"
 			align="right"
-			onChange={(value) => session.setGridZRange(gc!.default_z_start_um, value)}
+			onChange={(value) => session.setGridZRange(gc!.default_z_start, value * 1000)}
 		/>
 	</div>
 {/snippet}

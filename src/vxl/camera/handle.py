@@ -69,12 +69,12 @@ class CameraHandle(DeviceHandle[Camera]):
         result = await self.call("capture_batch", num_frames, str(output_dir), trigger_mode, trigger_polarity)
         return CameraBatchResult.model_validate(result)
 
-    async def get_frame_area_mm(self) -> Vec2D:
-        """Get the physical frame area in millimeters.
+    async def get_frame_area_um(self) -> Vec2D:
+        """Get the physical frame area in micrometers.
 
         Handles deserialization of Vec2D which serializes as "y,x" string over ZMQ.
         """
-        value = await self.get_prop_value("frame_area_mm")
+        value = await self.get_prop_value("frame_area_um")
         if isinstance(value, Vec2D):
             return value
         if isinstance(value, str):

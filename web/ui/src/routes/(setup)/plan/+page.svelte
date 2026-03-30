@@ -74,11 +74,11 @@
 		return values.every((v) => v === first) ? first : undefined;
 	}
 
-	const commonZStart = $derived(commonValue(selectedStacks.map((s) => s.z_start_um)));
-	const commonZEnd = $derived(commonValue(selectedStacks.map((s) => s.z_end_um)));
-	const commonZStep = $derived(commonValue(selectedStacks.map((s) => s.z_step_um)));
+	const commonZStart = $derived(commonValue(selectedStacks.map((s) => s.z_start)));
+	const commonZEnd = $derived(commonValue(selectedStacks.map((s) => s.z_end)));
+	const commonZStep = $derived(commonValue(selectedStacks.map((s) => s.z_step)));
 	const totalFrames = $derived(selectedStacks.reduce((sum, s) => sum + s.num_frames, 0));
-	const totalRange = $derived(selectedStacks.reduce((sum, s) => sum + Math.abs(s.z_end_um - s.z_start_um), 0));
+	const totalRange = $derived(selectedStacks.reduce((sum, s) => sum + Math.abs(s.z_end - s.z_start), 0));
 
 	// --- Actions ---
 
@@ -88,8 +88,8 @@
 			selectedStacks.map((s) => ({
 				row: s.row,
 				col: s.col,
-				zStartUm: field === 'zStartUm' ? value : s.z_start_um,
-				zEndUm: field === 'zEndUm' ? value : s.z_end_um
+				zStartUm: field === 'zStartUm' ? value : s.z_start,
+				zEndUm: field === 'zEndUm' ? value : s.z_end
 			}))
 		);
 	}
@@ -103,8 +103,8 @@
 			emptySelected.map((t) => ({
 				row: t.row,
 				col: t.col,
-				zStartUm: gc.default_z_start_um,
-				zEndUm: gc.default_z_end_um
+				zStartUm: gc.default_z_start,
+				zEndUm: gc.default_z_end
 			}))
 		);
 	}
@@ -116,8 +116,8 @@
 			{
 				row: tile.row,
 				col: tile.col,
-				zStartUm: gc.default_z_start_um,
-				zEndUm: gc.default_z_end_um
+				zStartUm: gc.default_z_start,
+				zEndUm: gc.default_z_end
 			}
 		]);
 	}
@@ -237,15 +237,15 @@
 		<span class="pr-2 text-fg-muted tabular-nums">R{tile.row}, C{tile.col}</span>
 
 		<!-- Stage X -->
-		<span class="text-fg-muted tabular-nums">{(tile.x_um / 1000).toFixed(4)}</span>
+		<span class="text-fg-muted tabular-nums">{(tile.x / 1000).toFixed(4)}</span>
 		<!-- Stage Y -->
-		<span class="text-fg-muted tabular-nums">{(tile.y_um / 1000).toFixed(4)}</span>
+		<span class="text-fg-muted tabular-nums">{(tile.y / 1000).toFixed(4)}</span>
 
 		<!-- Z range -->
 		<div class="pr-1">
 			{#if stack}
 				<span class="text-fg tabular-nums">
-					{stack.z_start_um.toFixed(0)} → {stack.z_end_um.toFixed(0)} µm
+					{(stack.z_start / 1000).toFixed(3)} → {(stack.z_end / 1000).toFixed(3)} mm
 				</span>
 			{:else}
 				<span class="text-fg-faint">—</span>
@@ -289,10 +289,10 @@
 	</div>
 {/snippet}
 
-<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="setup-h" class="h-full">
+<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="setup.plan" class="h-full">
 	<!-- Tile list (main area) -->
 	<Pane minSize={40}>
-		<div class="flex h-full flex-col overflow-hidden">
+		<div class="flex h-full flex-col overflow-hidden pb-2">
 			<!-- List header -->
 			<div class="flex items-center gap-2 border-b border-border px-3 py-2">
 				<div class="flex min-w-0 flex-1 items-center gap-2">
@@ -418,20 +418,20 @@
 								<span class="text-xs text-fg-muted">Z Range</span>
 								{#if commonZStep !== undefined}
 									<span class="text-xs text-fg-muted tabular-nums">
-										{commonZStep.toFixed(2)} µm per step
+										{(commonZStep / 1000).toFixed(4)} mm per step
 									</span>
 								{/if}
 							</div>
 							<div class="grid grid-cols-[3.5rem_1fr_auto] items-center gap-x-4 gap-y-4">
 								<span class="text-xs text-fg-muted">Start</span>
 								<SpinBox
-									value={commonZStart ?? 0}
+									value={(commonZStart ?? 0) / 1000}
 									placeholder={commonZStart === undefined ? 'mixed' : ''}
-									suffix="µm"
+									suffix="mm"
 									size="xs"
-									step={1}
-									decimals={1}
-									onChange={(v) => applyZRange('zStartUm', v)}
+									step={0.001}
+									decimals={3}
+									onChange={(v) => applyZRange('zStartUm', v * 1000)}
 								/>
 								<div class="flex items-center gap-1">
 									<Button
@@ -440,7 +440,7 @@
 										title="Reset to profile default"
 										onclick={() => {
 											const gc = session.gridConfig;
-											if (gc) applyZRange('zStartUm', gc.default_z_start_um);
+											if (gc) applyZRange('zStartUm', gc.default_z_start);
 										}}
 									>
 										<Restore width="14" height="14" />
@@ -449,7 +449,7 @@
 										variant="outline"
 										size="xs"
 										title="Set from current Z position"
-										onclick={() => applyZRange('zStartUm', session.stage.z.position * 1000)}
+										onclick={() => applyZRange('zStartUm', session.stage.z.position)}
 									>
 										Match FOV
 									</Button>
@@ -457,13 +457,13 @@
 
 								<span class="text-xs text-fg-muted">End</span>
 								<SpinBox
-									value={commonZEnd ?? 0}
+									value={(commonZEnd ?? 0) / 1000}
 									placeholder={commonZEnd === undefined ? 'mixed' : ''}
-									suffix="µm"
+									suffix="mm"
 									size="xs"
-									step={1}
-									decimals={1}
-									onChange={(v) => applyZRange('zEndUm', v)}
+									step={0.001}
+									decimals={3}
+									onChange={(v) => applyZRange('zEndUm', v * 1000)}
 								/>
 								<div class="flex items-center gap-1">
 									<Button
@@ -472,7 +472,7 @@
 										title="Reset to profile default"
 										onclick={() => {
 											const gc = session.gridConfig;
-											if (gc) applyZRange('zEndUm', gc.default_z_end_um);
+											if (gc) applyZRange('zEndUm', gc.default_z_end);
 										}}
 									>
 										<Restore width="14" height="14" />
@@ -481,7 +481,7 @@
 										variant="outline"
 										size="xs"
 										title="Set from current Z position"
-										onclick={() => applyZRange('zEndUm', session.stage.z.position * 1000)}
+										onclick={() => applyZRange('zEndUm', session.stage.z.position)}
 									>
 										Match FOV
 									</Button>

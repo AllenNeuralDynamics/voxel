@@ -58,8 +58,8 @@ class SessionConfig(BaseModel):
     def apply_rig_defaults(self) -> "SessionConfig":
         """Copy defaults from rig globals if not set."""
         for profile in self.rig.profiles.values():
-            if profile.grid.z_step_um < 0:
-                profile.grid.z_step_um = self.rig.globals.default_z_step_um
+            if profile.grid.z_step < 0:
+                profile.grid.z_step = self.rig.globals.default_z_step
         return self
 
     def resolve_metadata(self) -> ExperimentMetadata:

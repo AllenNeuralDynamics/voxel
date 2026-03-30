@@ -63,7 +63,7 @@ class SessionStatus(BaseModel):
     stacks: list[Stack]
 
     # Derived values
-    fov_um: tuple[float, float] | None = None
+    fov: tuple[float, float] | None = None
 
     timestamp: str
 
@@ -116,9 +116,9 @@ class SessionService:
         preview = await self.session.rig.get_channel_preview_configs()
 
         try:
-            fov_um = self.session.get_fov_size()
+            fov = self.session.get_fov_size()
         except ValueError:
-            fov_um = None
+            fov = None
 
         return SessionStatus(
             active_profile_id=self.session.rig.active_profile_id,
@@ -128,7 +128,7 @@ class SessionService:
             grid_config=self.session.grid_config,
             tiles=tiles,
             stacks=self.session.stacks,
-            fov_um=fov_um,
+            fov=fov,
             preview=preview,
             timestamp=_utc_timestamp(),
         )

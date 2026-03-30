@@ -21,28 +21,30 @@ class StackStatus(StrEnum):
 class Tile(BaseModel):
     """2D tile position, auto-generated from grid planning.
 
-    Positions (x_um, y_um) represent the CENTER of the tile.
+    All positions and dimensions are in micrometers (µm).
+    Positions (x, y) represent the CENTER of the tile.
     Tile bounds extend from (x - w/2, y - h/2) to (x + w/2, y + h/2).
     """
 
     tile_id: str
     row: int
     col: int
-    x_um: float  # Center X position in micrometers
-    y_um: float  # Center Y position in micrometers
-    w_um: float  # Width in micrometers (full FOV width)
-    h_um: float  # Height in micrometers (full FOV height)
+    x: float
+    y: float
+    w: float  # Full FOV width
+    h: float  # Full FOV height
 
 
 class Stack(Tile):
     """3D acquisition unit = Tile + z-range.
 
     Inherits center-anchored positioning from Tile.
+    All positions in micrometers (µm).
     """
 
-    z_start_um: float
-    z_end_um: float
-    z_step_um: float
+    z_start: float
+    z_end: float
+    z_step: float
     profile_id: str
     status: StackStatus = StackStatus.PLANNED
     output_path: str | None = None
@@ -50,7 +52,7 @@ class Stack(Tile):
     @computed_field
     @property
     def num_frames(self) -> int:
-        return int((self.z_end_um - self.z_start_um) / self.z_step_um) + 1
+        return int((self.z_end - self.z_start) / self.z_step) + 1
 
 
 class StackResult(BaseModel):

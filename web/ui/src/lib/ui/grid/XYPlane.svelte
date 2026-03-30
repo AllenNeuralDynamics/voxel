@@ -15,7 +15,7 @@
 </script>
 
 <script lang="ts">
-	import type { Session, AlignEdge } from '$lib/main';
+	import type { Session } from '$lib/main';
 	import { type Tile, type Stack, type StackStatus } from '$lib/main/types';
 	import { compositeFullFrames } from '$lib/main/preview.svelte';
 	import { ContextMenu } from '$lib/ui/kit';
@@ -163,14 +163,10 @@
 
 	// ── Interaction handlers ─────────────────────────────────────────────
 
-	function toMm(um: number): number {
-		return um / 1000;
-	}
-
-	function moveToTilePosition(x_um: number, y_um: number) {
+	function moveToTilePosition(x: number, y: number) {
 		if (isXYMoving || !session.stage.x || !session.stage.y) return;
-		const tx = session.stage.x.lowerLimit + toMm(x_um);
-		const ty = session.stage.y.lowerLimit + toMm(y_um);
+		const tx = session.stage.x.lowerLimit + x;
+		const ty = session.stage.y.lowerLimit + y;
 		targetX = tx;
 		targetY = ty;
 		session.stage.moveXY(tx, ty);
@@ -246,7 +242,7 @@
 			targetY = menuContext.y;
 			session.stage.moveXY(menuContext.x, menuContext.y);
 		} else {
-			moveToTilePosition(menuContext.tile.x_um, menuContext.tile.y_um);
+			moveToTilePosition(menuContext.tile.x, menuContext.tile.y);
 		}
 	}
 
@@ -259,8 +255,8 @@
 			tiles.map((t) => ({
 				row: t.row,
 				col: t.col,
-				zStartUm: gc.default_z_start_um,
-				zEndUm: gc.default_z_end_um
+				zStartUm: gc.default_z_start,
+				zEndUm: gc.default_z_end
 			}))
 		);
 	}
@@ -273,7 +269,7 @@
 
 	function contextCopyZRange() {
 		if (menuContext?.kind !== 'single' || !menuContext.stack) return;
-		zRangeBuffer = { zStartUm: menuContext.stack.z_start_um, zEndUm: menuContext.stack.z_end_um };
+		zRangeBuffer = { zStartUm: menuContext.stack.z_start, zEndUm: menuContext.stack.z_end };
 	}
 
 	function contextPasteZRange() {
@@ -327,10 +323,10 @@
 		<g>
 			{#each sortedTiles as tile (`${tile.row}_${tile.col}`)}
 				{@const selected = session.isTileSelected(tile.row, tile.col)}
-				{@const cx = toMm(tile.x_um)}
-				{@const cy = toMm(tile.y_um)}
-				{@const w = toMm(tile.w_um)}
-				{@const h = toMm(tile.h_um)}
+				{@const cx = tile.x}
+				{@const cy = tile.y}
+				{@const w = tile.w}
+				{@const h = tile.h}
 				<rect
 					x={cx - w / 2}
 					y={cy - h / 2}
@@ -354,13 +350,13 @@
 
 {#snippet stacksLayer()}
 	{#if layers.stacks}
-		{@const points = profileStacks.map((s) => ({ x: toMm(s.x_um), y: toMm(s.y_um) }))}
+		{@const points = profileStacks.map((s) => ({ x: s.x, y: s.y }))}
 		<g>
 			{#each profileStacks as stack (`${stack.row}_${stack.col}`)}
-				{@const cx = toMm(stack.x_um)}
-				{@const cy = toMm(stack.y_um)}
-				{@const w = toMm(stack.w_um)}
-				{@const h = toMm(stack.h_um)}
+				{@const cx = stack.x}
+				{@const cy = stack.y}
+				{@const w = stack.w}
+				{@const h = stack.h}
 				<rect
 					x={cx - w / 2}
 					y={cy - h / 2}
@@ -511,7 +507,7 @@
 			style={xSliderStyle}
 			min={session.stage.x.lowerLimit}
 			max={session.stage.x.upperLimit}
-			step={0.1}
+			step={100}
 			value={displayX}
 			disabled={session.stage.x.isMoving}
 			oninput={onSliderInputX}
@@ -523,7 +519,7 @@
 			style={ySliderStyle}
 			min={session.stage.y.lowerLimit}
 			max={session.stage.y.upperLimit}
-			step={0.1}
+			step={100}
 			value={displayY}
 			disabled={session.stage.y.isMoving}
 			oninput={onSliderInputY}

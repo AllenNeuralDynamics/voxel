@@ -24,13 +24,13 @@ nodes:
         init: { blanking_mode: "external" }
       x_axis:
         target: &linear_axis_target vxl.axes.simulated.SimulatedContinuousAxis
-        init: { lower_limit: 0.0, upper_limit: 40.0 }
+        init: { lower_limit: 0, upper_limit: 40000 }
       y_axis:
         target: *linear_axis_target
-        init: { lower_limit: 0.0, upper_limit: 25.0 }
+        init: { lower_limit: 0, upper_limit: 25000 }
       z_axis:
         target: *linear_axis_target
-        init: { lower_limit: 0.0, upper_limit: 50.0, has_ttl_stepper: true }
+        init: { lower_limit: 0, upper_limit: 50000, has_ttl_stepper: true }
       laser_488:
         target: &laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
         init:

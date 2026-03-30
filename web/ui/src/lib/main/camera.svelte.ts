@@ -83,8 +83,8 @@ export class Camera {
 		return typeof val === 'number' ? val : undefined;
 	});
 
-	frameAreaMm = $derived.by(() => {
-		const val = this.#devices.getPropertyValue(this.#deviceId, 'frame_area_mm');
+	frameAreaUm = $derived.by(() => {
+		const val = this.#devices.getPropertyValue(this.#deviceId, 'frame_area_um');
 		return parseVec2D(val);
 	});
 

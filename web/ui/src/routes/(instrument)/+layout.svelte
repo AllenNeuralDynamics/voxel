@@ -88,13 +88,6 @@
 		);
 	}
 
-	function triggerClass(active: boolean): string {
-		return cn(
-			'flex items-center gap-1 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors',
-			active ? 'bg-element-selected text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
-		);
-	}
-
 	function segmentClass(active: boolean): string {
 		return cn(
 			'flex flex-1 items-center gap-1.5 px-3 text-sm transition-colors h-ui-md cursor-pointer',
@@ -226,7 +219,7 @@
 		</aside>
 
 		<!-- Main Content -->
-		<PaneGroup direction="vertical" autoSaveId="instrument-v" class="flex-1">
+		<PaneGroup direction="vertical" autoSaveId="instrument.layout" class="flex-1">
 			<Pane class="h-full overflow-auto py-2">
 				{@render children()}
 			</Pane>

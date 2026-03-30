@@ -69,10 +69,13 @@ class TigerTTLStepper(TTLStepper):
 
 
 class TigerLinearAxis(ContinuousAxis):
-    POS_MULT = 10000
+    # ASI Tiger uses 1/10000 mm steps internally.
+    # POS_MULT converts from our unit (µm) to hardware steps: 1 µm = 10 steps.
+    POS_MULT = 10
+    _MM_TO_UM = 1000.0
 
-    def __init__(self, *, hub: "TigerHub", axis_label: str, uid: str) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, *, hub: "TigerHub", axis_label: str, uid: str, units: str = "um") -> None:
+        super().__init__(uid=uid, units=units)
         self.hub = hub
         self._axis_label = axis_label.upper()
         self._info = self.hub.reserve_axis(axis_label)
@@ -109,18 +112,14 @@ class TigerLinearAxis(ContinuousAxis):
 
     # Unit specification _____________________________________________________________________________________________
 
-    @property
-    def units(self) -> str:
-        return "mm"
-
     # ---- motion ----
     def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.box.move_abs({self._axis_label: float(position * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
-        self.log.debug("Moving axis %s to absolute position %.3f mm", self._axis_label, position)
+        self.log.debug("Moving axis %s to absolute position %.1f um", self._axis_label, position)
 
     def move_rel(self, delta: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.box.move_rel({self._axis_label: float(delta * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
-        self.log.debug("Moving axis %s by relative distance %.3f mm", self._axis_label, delta)
+        self.log.debug("Moving axis %s by relative distance %.1f um", self._axis_label, delta)
 
     def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.box.home_axes([self._axis_label], wait=wait, timeout_s=timeout_s)
@@ -148,61 +147,67 @@ class TigerLinearAxis(ContinuousAxis):
 
     def set_logical_position(self, position: float) -> None:
         self.hub.box.set_logical_position({self._axis_label: float(position * self.POS_MULT)})
-        self.log.debug("Logical position set to %s mm", position)
+        self.log.debug("Logical position set to %s um", position)
 
     @property
     def upper_limit(self) -> float:
-        return self._get_cached_param("upper_limit", TigerParams.LIMIT_HIGH) or 0.0
+        mm = self._get_cached_param("upper_limit", TigerParams.LIMIT_HIGH) or 0.0
+        return mm * self._MM_TO_UM
 
     @upper_limit.setter
     def upper_limit(self, value: float) -> None:
-        self.log.debug("Setting upper limit to %s mm", value)
-        self.hub.box.set_param(TigerParams.LIMIT_HIGH, {self._axis_label: float(value)})
+        self.log.debug("Setting upper limit to %s um", value)
+        self.hub.box.set_param(TigerParams.LIMIT_HIGH, {self._axis_label: float(value / self._MM_TO_UM)})
 
     @property
     def lower_limit(self) -> float:
-        return self._get_cached_param("lower_limit", TigerParams.LIMIT_LOW) or 0.0
+        mm = self._get_cached_param("lower_limit", TigerParams.LIMIT_LOW) or 0.0
+        return mm * self._MM_TO_UM
 
     @lower_limit.setter
     def lower_limit(self, value: float) -> None:
-        self.log.debug("Setting lower limit to %s mm", value)
-        self.hub.box.set_param(TigerParams.LIMIT_LOW, {self._axis_label: float(value)})
+        self.log.debug("Setting lower limit to %s um", value)
+        self.hub.box.set_param(TigerParams.LIMIT_LOW, {self._axis_label: float(value / self._MM_TO_UM)})
 
     @property
     def speed(self) -> float | None:
-        return self._get_cached_param("speed", TigerParams.SPEED)
+        mm_s = self._get_cached_param("speed", TigerParams.SPEED)
+        return mm_s * self._MM_TO_UM if mm_s is not None else None
 
     @speed.setter
     def speed(self, value: float) -> None:
-        self.hub.box.set_param(TigerParams.SPEED, {self._axis_label: float(value)})
-        self.log.debug("Speed set to %s mm/s", value)
+        self.hub.box.set_param(TigerParams.SPEED, {self._axis_label: float(value / self._MM_TO_UM)})
+        self.log.debug("Speed set to %s um/s", value)
 
     @property
     def acceleration(self) -> float | None:
-        return self._get_cached_param("acceleration", TigerParams.ACCEL)
+        mm_s2 = self._get_cached_param("acceleration", TigerParams.ACCEL)
+        return mm_s2 * self._MM_TO_UM if mm_s2 is not None else None
 
     @acceleration.setter
     def acceleration(self, value: float) -> None:
-        self.hub.box.set_param(TigerParams.ACCEL, {self._axis_label: float(value)})
-        self.log.debug("Acceleration set to %s mm/s²", value)
+        self.hub.box.set_param(TigerParams.ACCEL, {self._axis_label: float(value / self._MM_TO_UM)})
+        self.log.debug("Acceleration set to %s um/s²", value)
 
     @property
     def backlash(self) -> float | None:
-        return self._get_cached_param("backlash", TigerParams.BACKLASH)
+        mm = self._get_cached_param("backlash", TigerParams.BACKLASH)
+        return mm * self._MM_TO_UM if mm is not None else None
 
     @backlash.setter
     def backlash(self, value: float) -> None:
-        self.hub.box.set_param(TigerParams.BACKLASH, {self._axis_label: float(value)})
-        self.log.debug("Backlash set to %s mm", value)
+        self.hub.box.set_param(TigerParams.BACKLASH, {self._axis_label: float(value / self._MM_TO_UM)})
+        self.log.debug("Backlash set to %s um", value)
 
     @property
     def home(self) -> float | None:
-        return self._get_cached_param("home", TigerParams.HOME_POS)
+        mm = self._get_cached_param("home", TigerParams.HOME_POS)
+        return mm * self._MM_TO_UM if mm is not None else None
 
     @home.setter
     def home(self, position: float) -> None:
-        self.hub.box.set_param(TigerParams.HOME_POS, {self._axis_label: float(position)})
-        self.log.debug("Home position set to %s mm", position)
+        self.hub.box.set_param(TigerParams.HOME_POS, {self._axis_label: float(position / self._MM_TO_UM)})
+        self.log.debug("Home position set to %s um", position)
 
     def close(self) -> None:
         # Cleanly give back the axis to the hub

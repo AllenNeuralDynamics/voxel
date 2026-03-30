@@ -11,7 +11,7 @@
 	let logPane: Pane | undefined = $state(undefined);
 </script>
 
-<PaneGroup direction="vertical" autoSaveId="acquisition-v">
+<PaneGroup direction="vertical" autoSaveId="acquire.layout">
 	<Pane class="flex flex-col">
 		<div class="flex-1 overflow-auto">
 			{@render children()}
