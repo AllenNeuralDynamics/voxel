@@ -1,5 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { IDBKeyVal } from '$lib/utils/idb';
+import { createMultiSelect, type MultiSelect } from '$lib/utils/multiselect.svelte';
 
 export interface Snapshot {
 	id: string;
@@ -23,12 +24,13 @@ let nextId = 1;
 export class SnapshotStore {
 	readonly items = new SvelteMap<string, Snapshot>();
 
-	selectedId = $state<string | null>(null);
-
-	selected = $derived<Snapshot | null>(this.selectedId ? (this.items.get(this.selectedId) ?? null) : null);
-
 	/** Snapshots ordered newest-first. */
 	list = $derived<Snapshot[]>([...this.items.values()].sort((a, b) => b.timestamp - a.timestamp));
+
+	readonly sel = createMultiSelect<string>(() => this.list.map((s) => s.id));
+
+	/** The focused snapshot shown in the preview pane. */
+	focused = $derived<Snapshot | null>(this.sel.focused ? (this.items.get(this.sel.focused) ?? null) : null);
 
 	get size(): number {
 		return this.items.size;
@@ -42,13 +44,12 @@ export class SnapshotStore {
 		const entries = await db.entries();
 		for (const [, snap] of entries) {
 			this.items.set(snap.id, snap);
-			// Keep nextId ahead of any persisted ids
 			const n = parseInt(snap.id.replace('snap-', ''), 10);
 			if (n >= nextId) nextId = n + 1;
 		}
-		// Select the most recent if nothing selected
-		if (!this.selectedId && this.items.size > 0) {
-			this.selectedId = this.list[0]?.id ?? null;
+		if (this.sel.focused === null && this.items.size > 0) {
+			const first = this.list[0]?.id;
+			if (first) this.sel.select(first);
 		}
 	}
 
@@ -56,17 +57,22 @@ export class SnapshotStore {
 		const id = `snap-${nextId++}`;
 		const full: Snapshot = { ...snapshot, id, label: id };
 		this.items.set(id, full);
-		this.selectedId = id;
+		this.sel.select(id);
 		db.put(id, full);
 		return full;
 	}
 
-	remove(id: string): void {
-		this.items.delete(id);
-		if (this.selectedId === id) {
-			this.selectedId = this.list[0]?.id ?? null;
+	remove(ids: string | Iterable<string>): void {
+		for (const id of typeof ids === 'string' ? [ids] : ids) {
+			this.items.delete(id);
+			this.sel.selection.delete(id);
+			db.delete(id);
 		}
-		db.delete(id);
+		if (this.sel.focused && !this.items.has(this.sel.focused)) {
+			const first = this.list[0]?.id;
+			if (first) this.sel.select(first);
+			else this.sel.clear();
+		}
 	}
 
 	rename(id: string, label: string): void {
@@ -80,11 +86,7 @@ export class SnapshotStore {
 
 	clear(): void {
 		this.items.clear();
-		this.selectedId = null;
+		this.sel.clear();
 		db.clear();
-	}
-
-	select(id: string | null): void {
-		this.selectedId = id;
 	}
 }

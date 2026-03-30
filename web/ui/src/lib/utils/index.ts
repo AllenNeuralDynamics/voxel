@@ -5,3 +5,4 @@ export { isValidHex, wavelengthToColor, desaturateColor } from './color';
 export { computeAutoLevels } from './image';
 export { getWebGPUDevice } from './wgpu';
 export { IDBKeyVal } from './idb';
+export { createMultiSelect, type MultiSelect } from './multiselect.svelte';
