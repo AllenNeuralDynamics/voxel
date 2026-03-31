@@ -15,32 +15,32 @@ export type AlignEdge = 'top' | 'bottom' | 'left' | 'right' | 'center';
  * All positions are in micrometers (µm).
  */
 export function computeAlignedOffset(
-	edge: AlignEdge,
-	stagePos: { x: number; y: number },
-	lowerLimit: { x: number; y: number },
-	currentOffset: { x: number; y: number },
-	spacing: { x: number; y: number }
+  edge: AlignEdge,
+  stagePos: { x: number; y: number },
+  lowerLimit: { x: number; y: number },
+  currentOffset: { x: number; y: number },
+  spacing: { x: number; y: number }
 ): { xOffsetUm: number; yOffsetUm: number } {
-	const fovX = stagePos.x - lowerLimit.x;
-	const fovY = stagePos.y - lowerLimit.y;
+  const fovX = stagePos.x - lowerLimit.x;
+  const fovY = stagePos.y - lowerLimit.y;
 
-	let x = currentOffset.x;
-	let y = currentOffset.y;
+  let x = currentOffset.x;
+  let y = currentOffset.y;
 
-	if (edge === 'left' || edge === 'right' || edge === 'center') {
-		x = snapAxis(fovX, x, spacing.x);
-	}
-	if (edge === 'top' || edge === 'bottom' || edge === 'center') {
-		y = snapAxis(fovY, y, spacing.y);
-	}
+  if (edge === 'left' || edge === 'right' || edge === 'center') {
+    x = snapAxis(fovX, x, spacing.x);
+  }
+  if (edge === 'top' || edge === 'bottom' || edge === 'center') {
+    y = snapAxis(fovY, y, spacing.y);
+  }
 
-	return { xOffsetUm: x, yOffsetUm: y };
+  return { xOffsetUm: x, yOffsetUm: y };
 }
 
 /** Snap an offset so the nearest tile center lands on `fovCenter`. */
 function snapAxis(fovCenter: number, offset: number, step: number): number {
-	const r = (((fovCenter - offset) % step) + step) % step;
-	const a = offset + r;
-	const b = offset + r - step;
-	return Math.abs(a - offset) <= Math.abs(b - offset) ? a : b;
+  const r = (((fovCenter - offset) % step) + step) % step;
+  const a = offset + r;
+  const b = offset + r - step;
+  return Math.abs(a - offset) <= Math.abs(b - offset) ? a : b;
 }

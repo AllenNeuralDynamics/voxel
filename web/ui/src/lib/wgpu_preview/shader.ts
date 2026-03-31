@@ -4,24 +4,24 @@
  */
 
 export function generateShaderCode(maxChannels: number): string {
-	// Generate texture and colormap bindings for each channel
-	const generateBindings = (): string => {
-		let bindings = '';
-		for (let i = 0; i < maxChannels; i++) {
-			const bindingStart = 2 + i * 2;
-			bindings += `@group(0) @binding(${bindingStart}) var frameTexture${i} : texture_2d<f32>;\n`;
-			bindings += `@group(0) @binding(${bindingStart + 1}) var colormapTexture${i} : texture_2d<f32>;\n`;
-			if (i < maxChannels - 1) bindings += '\n';
-		}
-		return bindings;
-	};
+  // Generate texture and colormap bindings for each channel
+  const generateBindings = (): string => {
+    let bindings = '';
+    for (let i = 0; i < maxChannels; i++) {
+      const bindingStart = 2 + i * 2;
+      bindings += `@group(0) @binding(${bindingStart}) var frameTexture${i} : texture_2d<f32>;\n`;
+      bindings += `@group(0) @binding(${bindingStart + 1}) var colormapTexture${i} : texture_2d<f32>;\n`;
+      if (i < maxChannels - 1) bindings += '\n';
+    }
+    return bindings;
+  };
 
-	// Generate the if-else chain for sampling textures in fragment shader
-	const generateFragmentSampling = (): string => {
-		let sampling = '';
-		for (let i = 0; i < maxChannels; i++) {
-			const ifKeyword = i === 0 ? 'if' : 'else if';
-			sampling += `        ${ifKeyword} (i == ${i}u) {
+  // Generate the if-else chain for sampling textures in fragment shader
+  const generateFragmentSampling = (): string => {
+    let sampling = '';
+    for (let i = 0; i < maxChannels; i++) {
+      const ifKeyword = i === 0 ? 'if' : 'else if';
+      sampling += `        ${ifKeyword} (i == ${i}u) {
             channelColor = textureSample(frameTexture${i}, frameSampler, input.fragUV);
             remapped = remap_levels(channelColor.r, ch.levels_min, ch.levels_max);
             if (ch.applyLUT == 1u) {
@@ -30,12 +30,12 @@ export function generateShaderCode(maxChannels: number): string {
                 channelColor = vec4<f32>(vec3(remapped), channelColor.a);
             }
         }`;
-			if (i < maxChannels - 1) sampling += ' ';
-		}
-		return sampling;
-	};
+      if (i < maxChannels - 1) sampling += ' ';
+    }
+    return sampling;
+  };
 
-	return `struct VertexOutput {
+  return `struct VertexOutput {
     @builtin(position) Position: vec4<f32>,
     @location(0) fragUV: vec2<f32>, // Transformed UV coordinates.
 };

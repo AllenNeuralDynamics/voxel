@@ -8,10 +8,10 @@
  * From ~/.voxel/system.yaml
  */
 export interface SessionRoot {
-	name: string;
-	path: string;
-	label: string | null;
-	description: string | null;
+  name: string;
+  path: string;
+  label: string | null;
+  description: string | null;
 }
 
 /**
@@ -19,10 +19,10 @@ export interface SessionRoot {
  * From scanning session roots
  */
 export interface SessionDirectory {
-	name: string;
-	path: string;
-	root_name: string;
-	modified: string; // ISO timestamp
+  name: string;
+  path: string;
+  root_name: string;
+  modified: string; // ISO timestamp
 }
 
 /**
@@ -41,45 +41,45 @@ import type { Interleaving, TileOrder } from './config.ts';
  * Profile plan membership is implicit via stacks.
  */
 export interface AcquisitionPlan {
-	profile_order: string[];
-	tile_order: TileOrder;
-	interleaving: Interleaving;
-	stacks: Stack[];
+  profile_order: string[];
+  tile_order: TileOrder;
+  interleaving: Interleaving;
+  stacks: Stack[];
 }
 
 /**
  * Static session information fetched once at session start.
  */
 export interface SessionInfo {
-	session_dir: string;
-	session_name: string;
-	metadata_target: string;
-	metadata_schema: JsonSchema;
-	rig_name: string;
+  session_dir: string;
+  session_name: string;
+  metadata_target: string;
+  metadata_schema: JsonSchema;
+  rig_name: string;
 }
 
 /**
  * Dynamic session state broadcast via WebSocket.
  */
 export interface SessionStatus {
-	active_profile_id: string | null;
-	mode: RigMode;
-	metadata: Record<string, unknown>;
-	timestamp: string;
+  active_profile_id: string | null;
+  mode: RigMode;
+  metadata: Record<string, unknown>;
+  timestamp: string;
 
-	// Acquisition plan (per-profile grid configs + all stacks)
-	plan: AcquisitionPlan;
+  // Acquisition plan (per-profile grid configs + all stacks)
+  plan: AcquisitionPlan;
 
-	// Convenience fields (active profile's data)
-	grid_config: GridConfig | null;
-	tiles: Tile[];
-	stacks: Stack[];
+  // Convenience fields (active profile's data)
+  grid_config: GridConfig | null;
+  tiles: Tile[];
+  stacks: Stack[];
 
-	// Derived values
-	fov: [number, number] | null;
+  // Derived values
+  fov: [number, number] | null;
 
-	// Preview display config per channel (channel_id -> PreviewConfig)
-	preview: Record<string, PreviewConfig>;
+  // Preview display config per channel (channel_id -> PreviewConfig)
+  preview: Record<string, PreviewConfig>;
 }
 
 /**
@@ -92,11 +92,11 @@ export type AppPhase = 'idle' | 'launching' | 'ready';
  * Topic: 'status'
  */
 export interface AppStatus {
-	phase: AppPhase;
-	roots: SessionRoot[];
-	rigs: string[];
-	session: SessionStatus | null; // null if no active session
-	timestamp: string;
+  phase: AppPhase;
+  roots: SessionRoot[];
+  rigs: string[];
+  session: SessionStatus | null; // null if no active session
+  timestamp: string;
 }
 
 /**
@@ -104,10 +104,10 @@ export interface AppStatus {
  * Topic: 'log/message'
  */
 export interface LogMessage {
-	level: 'debug' | 'info' | 'warning' | 'error';
-	message: string;
-	logger: string;
-	timestamp: string;
+  level: 'debug' | 'info' | 'warning' | 'error';
+  message: string;
+  logger: string;
+  timestamp: string;
 }
 
 /**
@@ -115,8 +115,8 @@ export interface LogMessage {
  * Topic: 'error'
  */
 export interface ErrorPayload {
-	error: string;
-	topic?: string;
+  error: string;
+  topic?: string;
 }
 
 // ============================================================================
@@ -129,13 +129,13 @@ export interface ErrorPayload {
  * Controls tile positioning for acquisition planning
  */
 export interface GridConfig {
-	x_offset: number;
-	y_offset: number;
-	overlap_x: number; // 0.0 to 1.0
-	overlap_y: number; // 0.0 to 1.0
-	z_step: number;
-	default_z_start: number;
-	default_z_end: number;
+  x_offset: number;
+  y_offset: number;
+  overlap_x: number; // 0.0 to 1.0
+  overlap_y: number; // 0.0 to 1.0
+  z_step: number;
+  default_z_start: number;
+  default_z_end: number;
 }
 
 /**
@@ -147,12 +147,12 @@ export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'sk
  * Tile - 2D position in the grid
  */
 export interface Tile {
-	row: number;
-	col: number;
-	x: number;
-	y: number;
-	w: number;
-	h: number;
+  row: number;
+  col: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /**
@@ -160,13 +160,13 @@ export interface Tile {
  * Matches backend Stack model
  */
 export interface Stack extends Tile {
-	z_start: number;
-	z_end: number;
-	z_step: number;
-	profile_id: string;
-	status: StackStatus;
-	output_path: string | null;
-	num_frames: number;
+  z_start: number;
+  z_end: number;
+  z_step: number;
+  profile_id: string;
+  status: StackStatus;
+  output_path: string | null;
+  num_frames: number;
 }
 
 /**
@@ -174,11 +174,11 @@ export interface Stack extends Tile {
  * Topic: 'acq/progress'
  */
 export interface AcquisitionProgress {
-	status: 'started' | 'in_progress' | 'completed' | 'failed';
-	tile_id?: string;
-	total?: number;
-	completed?: number;
-	error?: string;
+  status: 'started' | 'in_progress' | 'completed' | 'failed';
+  tile_id?: string;
+  total?: number;
+  completed?: number;
+  error?: string;
 }
 
 /**
@@ -186,11 +186,11 @@ export interface AcquisitionProgress {
  * Controls which layers are rendered in the stage view
  */
 export interface LayerVisibility {
-	grid: boolean;
-	stacks: boolean;
-	path: boolean;
-	fov: boolean;
-	thumbnail: boolean;
+  grid: boolean;
+  stacks: boolean;
+  path: boolean;
+  fov: boolean;
+  thumbnail: boolean;
 }
 
 // ============================================================================
@@ -202,9 +202,9 @@ export interface LayerVisibility {
  * Preview display configuration per channel (matches backend PreviewConfig)
  */
 export interface PreviewConfig {
-	crop: { x: number; y: number; k: number };
-	levels: { min: number; max: number };
-	colormap: string | null;
+  crop: { x: number; y: number; k: number };
+  levels: { min: number; max: number };
+  colormap: string | null;
 }
 
 // ============================================================================
@@ -214,21 +214,21 @@ export interface PreviewConfig {
 
 /** JSON Schema property definition (subset used by metadata forms) */
 export interface JsonSchemaProperty {
-	type?: string;
-	default?: unknown;
-	description?: string;
-	enum?: string[];
-	items?: { type: string };
-	title?: string;
-	isAnnotation?: boolean;
+  type?: string;
+  default?: unknown;
+  description?: string;
+  enum?: string[];
+  items?: { type: string };
+  title?: string;
+  isAnnotation?: boolean;
 }
 
 /** JSON Schema from pydantic model_json_schema() */
 export interface JsonSchema {
-	title: string;
-	type: string;
-	properties: Record<string, JsonSchemaProperty>;
-	required?: string[];
+  title: string;
+  type: string;
+  properties: Record<string, JsonSchemaProperty>;
+  required?: string[];
 }
 
 // ============================================================================
@@ -240,53 +240,53 @@ export interface JsonSchema {
  * 2D vector with y, x components (matches backend Vec2D/IVec2D)
  */
 export interface Vec2D {
-	y: number;
-	x: number;
+  y: number;
+  x: number;
 }
 
 /**
  * 3D vector with z, y, x components (matches backend Vec3D/IVec3D)
  */
 export interface Vec3D {
-	z: number;
-	y: number;
-	x: number;
+  z: number;
+  y: number;
+  x: number;
 }
 
 /**
  * Parse a Vec2D from backend serialization format ("y,x" string)
  */
 export function parseVec2D(val: unknown): Vec2D | null {
-	if (typeof val === 'string') {
-		const parts = val.split(',').map(Number);
-		if (parts.length === 2 && parts.every(Number.isFinite)) {
-			return { y: parts[0], x: parts[1] };
-		}
-	}
-	if (Array.isArray(val) && val.length === 2) {
-		return { y: Number(val[0]), x: Number(val[1]) };
-	}
-	if (val && typeof val === 'object' && 'y' in val && 'x' in val) {
-		return { y: Number((val as Vec2D).y), x: Number((val as Vec2D).x) };
-	}
-	return null;
+  if (typeof val === 'string') {
+    const parts = val.split(',').map(Number);
+    if (parts.length === 2 && parts.every(Number.isFinite)) {
+      return { y: parts[0], x: parts[1] };
+    }
+  }
+  if (Array.isArray(val) && val.length === 2) {
+    return { y: Number(val[0]), x: Number(val[1]) };
+  }
+  if (val && typeof val === 'object' && 'y' in val && 'x' in val) {
+    return { y: Number((val as Vec2D).y), x: Number((val as Vec2D).x) };
+  }
+  return null;
 }
 
 /**
  * Parse a Vec3D from backend serialization format ("z,y,x" string)
  */
 export function parseVec3D(val: unknown): Vec3D | null {
-	if (typeof val === 'string') {
-		const parts = val.split(',').map(Number);
-		if (parts.length === 3 && parts.every(Number.isFinite)) {
-			return { z: parts[0], y: parts[1], x: parts[2] };
-		}
-	}
-	if (Array.isArray(val) && val.length === 3) {
-		return { z: Number(val[0]), y: Number(val[1]), x: Number(val[2]) };
-	}
-	if (val && typeof val === 'object' && 'z' in val && 'y' in val && 'x' in val) {
-		return { z: Number((val as Vec3D).z), y: Number((val as Vec3D).y), x: Number((val as Vec3D).x) };
-	}
-	return null;
+  if (typeof val === 'string') {
+    const parts = val.split(',').map(Number);
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      return { z: parts[0], y: parts[1], x: parts[2] };
+    }
+  }
+  if (Array.isArray(val) && val.length === 3) {
+    return { z: Number(val[0]), y: Number(val[1]), x: Number(val[2]) };
+  }
+  if (val && typeof val === 'object' && 'z' in val && 'y' in val && 'x' in val) {
+    return { z: Number((val as Vec3D).z), y: Number((val as Vec3D).y), x: Number((val as Vec3D).x) };
+  }
+  return null;
 }

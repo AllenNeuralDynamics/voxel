@@ -14,75 +14,75 @@ export type Interleaving = 'position_first' | 'profile_first';
  * Global settings for acquisition planning (matches backend GlobalsConfig from voxel.config)
  */
 export interface GlobalsConfig {
-	default_overlap: number;
-	default_tile_order: TileOrder;
-	default_z_step: number;
+  default_overlap: number;
+  default_tile_order: TileOrder;
+  default_z_step: number;
 }
 
 /**
  * Device configuration (matches backend DeviceConfig from rigup.config)
  */
 export interface DeviceConfig {
-	target: string;
-	kwargs: Record<string, unknown>;
+  target: string;
+  kwargs: Record<string, unknown>;
 }
 
 /**
  * Node configuration (matches backend NodeConfig from rigup.config)
  */
 export interface NodeConfig {
-	hostname: string;
-	devices: Record<string, DeviceConfig>;
+  hostname: string;
+  devices: Record<string, DeviceConfig>;
 }
 
 /**
  * Rig info (matches backend RigInfo from rigup.rig)
  */
 export interface RigInfo {
-	name: string;
+  name: string;
 }
 
 /**
  * Cluster configuration (matches backend ClusterConfig from rigup.rig)
  */
 export interface ClusterConfig {
-	control_port: number;
-	log_port: number;
+  control_port: number;
+  log_port: number;
 }
 
 /**
  * DAQ configuration (matches backend DaqConfig from voxel.config)
  */
 export interface DaqConfig {
-	device: string;
-	acq_ports: Record<string, string>;
+  device: string;
+  acq_ports: Record<string, string>;
 }
 
 /**
  * Stage configuration (matches backend StageConfig from voxel.config)
  */
 export interface StageConfig {
-	x: string;
-	y: string;
-	z: string;
-	roll?: string;
-	pitch?: string;
-	yaw?: string;
+  x: string;
+  y: string;
+  z: string;
+  roll?: string;
+  pitch?: string;
+  yaw?: string;
 }
 
 /**
  * Optical path configuration base (matches backend from voxel.config)
  */
 export interface OpticalPathConfig {
-	aux_devices: string[];
+  aux_devices: string[];
 }
 
 /**
  * Detection path configuration (matches backend from voxel.config)
  */
 export interface DetectionPathConfig extends OpticalPathConfig {
-	filter_wheels: string[];
-	magnification: number;
+  filter_wheels: string[];
+  magnification: number;
 }
 
 /**
@@ -94,21 +94,21 @@ export type IlluminationPathConfig = OpticalPathConfig;
  * Channel configuration - backend model (matches backend ChannelConfig from voxel.config)
  */
 export interface ChannelConfig {
-	label?: string | null;
-	desc?: string;
-	detection: string; // camera device ID
-	illumination: string; // laser device ID
-	filters: Record<string, string>; // filter_wheel_id -> position_label
-	emission?: number | null; // Peak emission wavelength in nm
+  label?: string | null;
+  desc?: string;
+  detection: string; // camera device ID
+  illumination: string; // laser device ID
+  filters: Record<string, string>; // filter_wheel_id -> position_label
+  emission?: number | null; // Peak emission wavelength in nm
 }
 
 /**
  * Trigger configuration for DAQ timing (matches backend TriggerConfig from voxel.daq.acq_task)
  */
 export interface TriggerConfig {
-	pin: string;
-	counter: string;
-	duty_cycle: number; // 0.0 to 1.0
+  pin: string;
+  counter: string;
+  duty_cycle: number; // 0.0 to 1.0
 }
 
 /**
@@ -119,138 +119,138 @@ export interface TriggerConfig {
  * but Pydantic's Quantity(float) subclass parses them to SI floats on load.
  */
 export interface FrameTiming {
-	sample_rate: number; // Hz (SI)
-	duration: number; // seconds (SI)
-	rest_time: number; // seconds (SI)
-	clock?: TriggerConfig | null;
+  sample_rate: number; // Hz (SI)
+  duration: number; // seconds (SI)
+  rest_time: number; // seconds (SI)
+  clock?: TriggerConfig | null;
 }
 
 /**
  * Waveform base interface
  */
 export interface BaseWaveform {
-	voltage: { min: number; max: number };
-	window: { min: number; max: number };
-	rest_voltage?: number;
+  voltage: { min: number; max: number };
+  window: { min: number; max: number };
+  rest_voltage?: number;
 }
 
 /**
  * Pulse waveform (matches backend PulseWaveform from voxel.daq.wave)
  */
 export interface PulseWaveform extends BaseWaveform {
-	type: 'pulse';
+  type: 'pulse';
 }
 
 /**
  * Square wave (matches backend SquareWave from voxel.daq.wave)
  */
 export interface SquareWaveform extends BaseWaveform {
-	type: 'square';
-	duty_cycle: number;
-	cycles?: number | null;
-	frequency?: number | null; // Hz (SI)
+  type: 'square';
+  duty_cycle: number;
+  cycles?: number | null;
+  frequency?: number | null; // Hz (SI)
 }
 
 /**
  * Sine wave (matches backend SineWave from voxel.daq.wave)
  */
 export interface SineWaveform extends BaseWaveform {
-	type: 'sine';
-	frequency: number; // Hz (SI)
-	phase?: number; // Radians
+  type: 'sine';
+  frequency: number; // Hz (SI)
+  phase?: number; // Radians
 }
 
 /**
  * Triangle wave (matches backend TriangleWave from voxel.daq.wave)
  */
 export interface TriangleWaveform extends BaseWaveform {
-	type: 'triangle';
-	frequency: number; // Hz (SI)
-	symmetry?: number; // 0.0 to 1.0
+  type: 'triangle';
+  frequency: number; // Hz (SI)
+  symmetry?: number; // 0.0 to 1.0
 }
 
 /**
  * Sawtooth wave (matches backend SawtoothWave from voxel.daq.wave)
  */
 export interface SawtoothWaveform extends BaseWaveform {
-	type: 'sawtooth';
-	frequency: number; // Hz (SI)
-	width?: number;
+  type: 'sawtooth';
+  frequency: number; // Hz (SI)
+  width?: number;
 }
 
 /**
  * Multi-point waveform (matches backend MultiPointWaveform from voxel.daq.wave)
  */
 export interface MultiPointWaveform extends BaseWaveform {
-	type: 'multi_point';
-	points: number[][]; // Array of [time, voltage] pairs, normalized 0.0-1.0
+  type: 'multi_point';
+  points: number[][]; // Array of [time, voltage] pairs, normalized 0.0-1.0
 }
 
 /**
  * CSV waveform (matches backend CSVWaveform from voxel.daq.wave)
  */
 export interface CSVWaveform extends BaseWaveform {
-	type: 'csv';
-	csv_file: string;
-	directory?: string | null;
+  type: 'csv';
+  csv_file: string;
+  directory?: string | null;
 }
 
 /**
  * Union type for all waveform types (matches backend Waveform from voxel.daq.wave)
  */
 export type Waveform =
-	| PulseWaveform
-	| SquareWaveform
-	| SineWaveform
-	| TriangleWaveform
-	| SawtoothWaveform
-	| MultiPointWaveform
-	| CSVWaveform;
+  | PulseWaveform
+  | SquareWaveform
+  | SineWaveform
+  | TriangleWaveform
+  | SawtoothWaveform
+  | MultiPointWaveform
+  | CSVWaveform;
 
 /**
  * Sync task configuration (matches backend SyncTaskData from voxel.sync_task)
  */
 export interface SyncTaskData {
-	timing: FrameTiming;
-	waveforms: Record<string, Waveform>; // device_id -> waveform
-	stack_only?: string[]; // Waveforms excluded from frame streaming (included only during stack acquisition)
+  timing: FrameTiming;
+  waveforms: Record<string, Waveform>; // device_id -> waveform
+  stack_only?: string[]; // Waveforms excluded from frame streaming (included only during stack acquisition)
 }
 
 /**
  * Setup command entry (matches backend CommandRequest from rigup.device.base)
  */
 export interface SetupCommand {
-	attr: string;
-	args?: unknown[];
-	kwargs?: Record<string, unknown>;
+  attr: string;
+  args?: unknown[];
+  kwargs?: Record<string, unknown>;
 }
 
 /**
  * Profile configuration - backend model (matches backend ProfileConfig from voxel.config)
  */
 export interface ProfileConfig {
-	label?: string | null;
-	desc: string;
-	channels: string[]; // list of channel IDs
-	daq: SyncTaskData; // DAQ sync task configuration
-	grid: GridConfig; // Grid configuration for tile planning
-	props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
-	setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
+  label?: string | null;
+  desc: string;
+  channels: string[]; // list of channel IDs
+  daq: SyncTaskData; // DAQ sync task configuration
+  grid: GridConfig; // Grid configuration for tile planning
+  props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
+  setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
 }
 
 /**
  * Complete Voxel rig configuration (matches backend VoxelRigConfig from voxel.config)
  */
 export interface VoxelRigConfig {
-	info: RigInfo;
-	cluster: ClusterConfig;
-	devices: Record<string, DeviceConfig>;
-	nodes: Record<string, NodeConfig>;
-	globals: GlobalsConfig;
-	daq: DaqConfig;
-	stage: StageConfig;
-	detection: Record<string, DetectionPathConfig>;
-	illumination: Record<string, IlluminationPathConfig>;
-	channels: Record<string, ChannelConfig>;
-	profiles: Record<string, ProfileConfig>;
+  info: RigInfo;
+  cluster: ClusterConfig;
+  devices: Record<string, DeviceConfig>;
+  nodes: Record<string, NodeConfig>;
+  globals: GlobalsConfig;
+  daq: DaqConfig;
+  stage: StageConfig;
+  detection: Record<string, DetectionPathConfig>;
+  illumination: Record<string, IlluminationPathConfig>;
+  channels: Record<string, ChannelConfig>;
+  profiles: Record<string, ProfileConfig>;
 }

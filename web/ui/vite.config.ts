@@ -4,15 +4,15 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
-	const env = loadEnv(mode, process.cwd(), '');
-	const apiTarget = env.VITE_API_URL || 'http://localhost:8000';
+  const env = loadEnv(mode, process.cwd(), '');
+  const apiTarget = env.VITE_API_URL || 'http://localhost:8000';
 
-	const proxy: Record<string, object> = {
-		'/api': { target: apiTarget, changeOrigin: true }
-	};
+  const proxy: Record<string, object> = {
+    '/api': { target: apiTarget, changeOrigin: true }
+  };
 
-	return {
-		plugins: [tailwindcss(), Icons({ compiler: 'svelte', autoInstall: true }), sveltekit()],
-		server: { proxy }
-	};
+  return {
+    plugins: [tailwindcss(), Icons({ compiler: 'svelte', autoInstall: true }), sveltekit()],
+    server: { proxy }
+  };
 });

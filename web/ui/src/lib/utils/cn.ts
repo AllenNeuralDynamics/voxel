@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]) {
-	return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,5 +13,5 @@ export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>;
 export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & { ref?: U | null };
 
 export function clampTopLeft(value: number, viewSize: number): number {
-	return Math.max(0, Math.min(value, 1 - viewSize));
+  return Math.max(0, Math.min(value, 1 - viewSize));
 }

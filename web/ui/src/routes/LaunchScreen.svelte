@@ -1,220 +1,220 @@
 <script lang="ts">
-	import type { App } from '$lib/main';
-	import type { SessionDirectory, JsonSchema } from '$lib/main';
-	import SessionForm from '$lib/ui/SessionForm.svelte';
-	import AppMenu from './AppMenu.svelte';
-	import LogViewer from '$lib/ui/LogViewer.svelte';
-	import { Collapsible } from 'bits-ui';
-	import { ChevronRight, FolderOpenOutline, ArrowRight } from '$lib/icons';
-	import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
+  import type { App } from '$lib/main';
+  import type { SessionDirectory, JsonSchema } from '$lib/main';
+  import SessionForm from '$lib/ui/SessionForm.svelte';
+  import AppMenu from './AppMenu.svelte';
+  import LogViewer from '$lib/ui/LogViewer.svelte';
+  import { Collapsible } from 'bits-ui';
+  import { ChevronRight, FolderOpenOutline, ArrowRight } from '$lib/icons';
+  import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
 
-	const { app }: { app: App } = $props();
+  const { app }: { app: App } = $props();
 
-	let sessions = $state<SessionDirectory[]>([]);
-	let loadingSessions = $state(false);
-	let error = $state<string | null>(null);
-	let metadataTargets = $state<Record<string, string>>({});
-	let metadataSchema = $state<JsonSchema | null>(null);
+  let sessions = $state<SessionDirectory[]>([]);
+  let loadingSessions = $state(false);
+  let error = $state<string | null>(null);
+  let metadataTargets = $state<Record<string, string>>({});
+  let metadataSchema = $state<JsonSchema | null>(null);
 
-	const roots = $derived(app.status?.roots ?? []);
-	const rigs = $derived(app.status?.rigs ?? []);
-	const phase = $derived(app.status?.phase);
-	const isIdle = $derived(phase === 'idle');
-	const isLaunching = $derived(phase === 'launching');
-	const connectionState = $derived(app.client.connectionState);
-	const logs = $derived(app.logs);
+  const roots = $derived(app.status?.roots ?? []);
+  const rigs = $derived(app.status?.rigs ?? []);
+  const phase = $derived(app.status?.phase);
+  const isIdle = $derived(phase === 'idle');
+  const isLaunching = $derived(phase === 'launching');
+  const connectionState = $derived(app.client.connectionState);
+  const logs = $derived(app.logs);
 
-	$effect(() => {
-		if (roots.length > 0) {
-			loadAllSessions();
-		}
-	});
+  $effect(() => {
+    if (roots.length > 0) {
+      loadAllSessions();
+    }
+  });
 
-	$effect(() => {
-		app
-			.fetchMetadataTargets()
-			.then((targets) => {
-				metadataTargets = targets;
-			})
-			.catch((e) => {
-				console.warn('[LaunchScreen] Failed to fetch metadata targets:', e);
-			});
-	});
+  $effect(() => {
+    app
+      .fetchMetadataTargets()
+      .then((targets) => {
+        metadataTargets = targets;
+      })
+      .catch((e) => {
+        console.warn('[LaunchScreen] Failed to fetch metadata targets:', e);
+      });
+  });
 
-	async function loadAllSessions() {
-		loadingSessions = true;
-		error = null;
-		try {
-			const allSessions = await Promise.all(roots.map((root) => app.fetchSessions(root.name)));
-			sessions = allSessions.flat().sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load sessions';
-			sessions = [];
-		} finally {
-			loadingSessions = false;
-		}
-	}
+  async function loadAllSessions() {
+    loadingSessions = true;
+    error = null;
+    try {
+      const allSessions = await Promise.all(roots.map((root) => app.fetchSessions(root.name)));
+      sessions = allSessions.flat().sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to load sessions';
+      sessions = [];
+    } finally {
+      loadingSessions = false;
+    }
+  }
 
-	async function handleMetadataTargetChanged(target: string) {
-		try {
-			metadataSchema = await app.fetchMetadataSchema(target);
-		} catch (e) {
-			console.warn('[LaunchScreen] Failed to fetch metadata schema:', e);
-			metadataSchema = null;
-		}
-	}
+  async function handleMetadataTargetChanged(target: string) {
+    try {
+      metadataSchema = await app.fetchMetadataSchema(target);
+    } catch (e) {
+      console.warn('[LaunchScreen] Failed to fetch metadata schema:', e);
+      metadataSchema = null;
+    }
+  }
 
-	async function handleLaunchSession(
-		rootName: string,
-		rigConfig: string,
-		sessionName: string,
-		metadataTarget: string,
-		metadata: Record<string, unknown>
-	) {
-		error = null;
-		try {
-			await app.createSession(rootName, rigConfig, sessionName, metadataTarget, metadata);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to create session';
-		}
-	}
+  async function handleLaunchSession(
+    rootName: string,
+    rigConfig: string,
+    sessionName: string,
+    metadataTarget: string,
+    metadata: Record<string, unknown>
+  ) {
+    error = null;
+    try {
+      await app.createSession(rootName, rigConfig, sessionName, metadataTarget, metadata);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to create session';
+    }
+  }
 
-	async function handleResumeSession(session: SessionDirectory) {
-		error = null;
-		try {
-			await app.resumeSession(session.path);
-			goto(resolve('/scout'));
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to resume session';
-		}
-	}
+  async function handleResumeSession(session: SessionDirectory) {
+    error = null;
+    try {
+      await app.resumeSession(session.path);
+      goto(resolve('/scout'));
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to resume session';
+    }
+  }
 
-	function formatRelativeTime(isoString: string): string {
-		const date = new Date(isoString);
-		const now = new Date();
-		const diffMs = now.getTime() - date.getTime();
-		const diffMins = Math.floor(diffMs / 60000);
-		const diffHours = Math.floor(diffMs / 3600000);
-		const diffDays = Math.floor(diffMs / 86400000);
+  function formatRelativeTime(isoString: string): string {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
-		if (diffMins < 1) return 'Just now';
-		if (diffMins < 60) return `${diffMins}m ago`;
-		if (diffHours < 24) return `${diffHours}h ago`;
-		if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
 
-		return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-	}
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
 </script>
 
 <div class="flex h-screen w-full bg-canvas">
-	<div class="flex w-150 shrink-0 flex-col border-r border-border">
-		<div class="shrink-0 p-4 pb-0">
-			<div class="mb-6 flex flex-col gap-2">
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-2">
-						<VoxelLogo class="h-8 w-8" />
-						<h1 class="text-2xl font-light text-fg uppercase">Voxel</h1>
-					</div>
-					<AppMenu {app} class="w-4" />
-				</div>
-				<p class="text-sm text-fg-muted">Light sheet microscopy</p>
-			</div>
+  <div class="flex w-150 shrink-0 flex-col border-r border-border">
+    <div class="shrink-0 p-4 pb-0">
+      <div class="mb-6 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <VoxelLogo class="h-8 w-8" />
+            <h1 class="text-2xl font-light text-fg uppercase">Voxel</h1>
+          </div>
+          <AppMenu {app} class="w-4" />
+        </div>
+        <p class="text-sm text-fg-muted">Light sheet microscopy</p>
+      </div>
 
-			{#if error}
-				<div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-base text-danger">
-					{error}
-				</div>
-			{/if}
-		</div>
+      {#if error}
+        <div class="mb-6 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-base text-danger">
+          {error}
+        </div>
+      {/if}
+    </div>
 
-		{#if connectionState === 'failed'}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3">
-				<p class="text-base text-danger">{app.client.connectionMessage}</p>
-				<button
-					onclick={() => app.retryConnection()}
-					class="rounded border border-input bg-transparent px-4 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-				>
-					Retry
-				</button>
-			</div>
-		{:else if !isIdle || isLaunching}
-			<div class="flex flex-1 items-center justify-center gap-2">
-				<div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-				<p class="text-sm text-fg-muted">
-					{isLaunching ? 'Starting session...' : app.client.connectionMessage}
-				</p>
-			</div>
-		{:else}
-			<div class="shrink-0 px-4">
-				<Collapsible.Root class="mb-6">
-					<Collapsible.Trigger
-						class="flex w-full items-center justify-between py-2 text-base font-medium text-fg-muted transition-colors hover:text-fg/80 [&[data-state=open]>svg]:rotate-90"
-					>
-						New Session
-						<ChevronRight width="16" height="16" class="transition-transform duration-200" />
-					</Collapsible.Trigger>
-					<Collapsible.Content
-						class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"
-					>
-						<SessionForm
-							{roots}
-							{rigs}
-							{metadataTargets}
-							{metadataSchema}
-							onMetadataTargetChanged={handleMetadataTargetChanged}
-							onSubmit={handleLaunchSession}
-						/>
-					</Collapsible.Content>
-				</Collapsible.Root>
-			</div>
+    {#if connectionState === 'failed'}
+      <div class="flex flex-1 flex-col items-center justify-center gap-3">
+        <p class="text-base text-danger">{app.client.connectionMessage}</p>
+        <button
+          onclick={() => app.retryConnection()}
+          class="rounded border border-input bg-transparent px-4 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+        >
+          Retry
+        </button>
+      </div>
+    {:else if !isIdle || isLaunching}
+      <div class="flex flex-1 items-center justify-center gap-2">
+        <div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
+        <p class="text-sm text-fg-muted">
+          {isLaunching ? 'Starting session...' : app.client.connectionMessage}
+        </p>
+      </div>
+    {:else}
+      <div class="shrink-0 px-4">
+        <Collapsible.Root class="mb-6">
+          <Collapsible.Trigger
+            class="flex w-full items-center justify-between py-2 text-base font-medium text-fg-muted transition-colors hover:text-fg/80 [&[data-state=open]>svg]:rotate-90"
+          >
+            New Session
+            <ChevronRight width="16" height="16" class="transition-transform duration-200" />
+          </Collapsible.Trigger>
+          <Collapsible.Content
+            class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"
+          >
+            <SessionForm
+              {roots}
+              {rigs}
+              {metadataTargets}
+              {metadataSchema}
+              onMetadataTargetChanged={handleMetadataTargetChanged}
+              onSubmit={handleLaunchSession}
+            />
+          </Collapsible.Content>
+        </Collapsible.Root>
+      </div>
 
-			<div class="px-4">
-				<h2 class="text-base font-medium text-fg-muted">Recent Sessions</h2>
-			</div>
-			<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-2">
-				{#if loadingSessions}
-					<div class="flex items-center justify-center rounded border border-border bg-card py-12">
-						<div class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-fg-muted"></div>
-						<span class="ml-3 text-base text-fg-muted">Loading sessions...</span>
-					</div>
-				{:else if sessions.length === 0}
-					<div
-						class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10"
-					>
-						<FolderOpenOutline width="32" height="32" class="text-fg-muted/50" />
-						<p class="mt-2 text-base text-fg-muted">No recent sessions</p>
-						<p class="text-sm text-fg-muted/60">Create a new session to get started</p>
-					</div>
-				{:else}
-					<div class="space-y-2">
-						{#each sessions as session (session.path)}
-							<button
-								class="group flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-fg/20 hover:bg-element-hover"
-								onclick={() => handleResumeSession(session)}
-							>
-								<span class="min-w-0 flex-1 truncate text-sm text-fg">
-									<span class="text-fg-muted">{session.root_name} /</span>
-									{session.name}
-								</span>
-								<span class="shrink-0 text-xs text-fg-muted/60">
-									{formatRelativeTime(session.modified)}
-								</span>
-								<ArrowRight
-									width="14"
-									height="14"
-									class="shrink-0 text-fg-muted/30 transition-colors group-hover:text-fg"
-								/>
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		{/if}
-	</div>
+      <div class="px-4">
+        <h2 class="text-base font-medium text-fg-muted">Recent Sessions</h2>
+      </div>
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 pt-2">
+        {#if loadingSessions}
+          <div class="flex items-center justify-center rounded border border-border bg-card py-12">
+            <div class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-fg-muted"></div>
+            <span class="ml-3 text-base text-fg-muted">Loading sessions...</span>
+          </div>
+        {:else if sessions.length === 0}
+          <div
+            class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10"
+          >
+            <FolderOpenOutline width="32" height="32" class="text-fg-muted/50" />
+            <p class="mt-2 text-base text-fg-muted">No recent sessions</p>
+            <p class="text-sm text-fg-muted/60">Create a new session to get started</p>
+          </div>
+        {:else}
+          <div class="space-y-2">
+            {#each sessions as session (session.path)}
+              <button
+                class="group flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-fg/20 hover:bg-element-hover"
+                onclick={() => handleResumeSession(session)}
+              >
+                <span class="min-w-0 flex-1 truncate text-sm text-fg">
+                  <span class="text-fg-muted">{session.root_name} /</span>
+                  {session.name}
+                </span>
+                <span class="shrink-0 text-xs text-fg-muted/60">
+                  {formatRelativeTime(session.modified)}
+                </span>
+                <ArrowRight
+                  width="14"
+                  height="14"
+                  class="shrink-0 text-fg-muted/30 transition-colors group-hover:text-fg"
+                />
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
 
-	<div class="flex flex-1 flex-col bg-card p-4">
-		<LogViewer {logs} onClear={() => app.clearLogs()} />
-	</div>
+  <div class="flex flex-1 flex-col bg-card p-4">
+    <LogViewer {logs} onClear={() => app.clearLogs()} />
+  </div>
 </div>

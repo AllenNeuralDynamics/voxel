@@ -7,26 +7,26 @@ import type { LogMessage } from './main/types/types';
 const SESSION_KEY = Symbol('session');
 
 export function setSessionContext(getter: () => Session) {
-	setContext(SESSION_KEY, getter);
+  setContext(SESSION_KEY, getter);
 }
 
 export function getSessionContext(): Session {
-	return getContext<() => Session>(SESSION_KEY)();
+  return getContext<() => Session>(SESSION_KEY)();
 }
 
 // --- Logs context (set alongside session) ---
 
 export interface LogsContext {
-	readonly logs: LogMessage[];
-	clearLogs(): void;
+  readonly logs: LogMessage[];
+  clearLogs(): void;
 }
 
 const LOGS_KEY = Symbol('logs');
 
 export function setLogsContext(ctx: LogsContext) {
-	setContext(LOGS_KEY, ctx);
+  setContext(LOGS_KEY, ctx);
 }
 
 export function getLogsContext(): LogsContext {
-	return getContext<LogsContext>(LOGS_KEY);
+  return getContext<LogsContext>(LOGS_KEY);
 }
