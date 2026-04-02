@@ -21,14 +21,18 @@ Note on S3 Authentication:
     - AWS_SESSION_TOKEN (optional, for temporary credentials)
 """
 
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import numpy as np
 
+
 from ome_zarr_writer.backends.base import Backend
 from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.types import Compression, ScaleLevel
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ome_zarr_writer.s3_utils import S3Config
@@ -215,9 +219,6 @@ class AcquireZarrBackend(Backend):
             stream_settings.arrays = [array_settings]
             stream_settings.s3 = s3_settings_from_config(level_config)
 
-            print(
-                f"  Initialized acquire-zarr S3 stream for level {level} at s3://{level_config.bucket}/{level_config.path}"
-            )
         else:
             # Local filesystem storage
             level_path = level.get_path(str(self.storage_root))
@@ -229,7 +230,6 @@ class AcquireZarrBackend(Backend):
             )
             stream_settings.arrays = [array_settings]
 
-            print(f"  Initialized acquire-zarr stream for level {level}")
 
         # Create the stream
         stream = aqz.ZarrStream(stream_settings)
@@ -312,8 +312,8 @@ class AcquireZarrBackend(Backend):
             stream.append(batch_data)
 
             return True
-        except Exception as e:
-            print(f"Error writing {level.name} for batch {buffer.batch_idx}: {e}")
+        except Exception:
+            log.exception("error writing %s for batch %s", level.name, buffer.batch_idx)
             return False
 
     def _finalize(self) -> None:
@@ -322,9 +322,8 @@ class AcquireZarrBackend(Backend):
         for level, stream in self._streams.items():
             try:
                 stream.close()
-                print(f"  Closed stream for level {level}")
-            except Exception as e:
-                print(f"Error closing stream for {level}: {e}")
+            except Exception:
+                log.exception("error closing stream for %s", level)
 
         self._streams.clear()
         self._executor.shutdown(wait=True)

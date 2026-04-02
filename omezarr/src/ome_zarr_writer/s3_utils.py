@@ -5,10 +5,13 @@ Provides helper functions for reading/writing files to S3 storage
 using the S3Config configuration.
 """
 
+import logging
 from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+log = logging.getLogger(__name__)
 
 
 class S3AuthType(StrEnum):
@@ -197,7 +200,7 @@ def write_file_to_s3(s3_config: "S3Config", content: str | bytes, key: str | Non
     try:
         from botocore.exceptions import ClientError, NoCredentialsError
     except ImportError as e:
-        print(f"Warning: boto3 not available for S3 operations: {e}")
+        log.warning("boto3 not available for S3 operations: %s", e)
         return False
 
     # Build S3 key (path within bucket)
@@ -224,8 +227,8 @@ def write_file_to_s3(s3_config: "S3Config", content: str | bytes, key: str | Non
         )
         return True
 
-    except (NoCredentialsError, ClientError) as e:
-        print(f"Error writing to S3: {e}")
+    except (NoCredentialsError, ClientError):
+        log.exception("error writing to S3")
         return False
 
 
@@ -255,7 +258,7 @@ def read_file_from_s3(s3_config: "S3Config", key: str | None = None) -> bytes | 
     try:
         from botocore.exceptions import ClientError, NoCredentialsError
     except ImportError as e:
-        print(f"Warning: boto3 not available for S3 operations: {e}")
+        log.warning("boto3 not available for S3 operations: %s", e)
         return None
 
     # Build S3 key (path within bucket)
@@ -274,8 +277,8 @@ def read_file_from_s3(s3_config: "S3Config", key: str | None = None) -> bytes | 
         )
         return response["Body"].read()
 
-    except (NoCredentialsError, ClientError) as e:
-        print(f"Error reading from S3: {e}")
+    except (NoCredentialsError, ClientError):
+        log.exception("error reading from S3")
         return None
 
 
@@ -344,7 +347,7 @@ def list_s3_objects(s3_config: "S3Config", prefix: str | None = None, max_keys: 
     try:
         from botocore.exceptions import ClientError, NoCredentialsError
     except ImportError as e:
-        print(f"Warning: boto3 not available for S3 operations: {e}")
+        log.warning("boto3 not available for S3 operations: %s", e)
         return []
 
     # Use provided prefix, or fall back to s3_config.path
@@ -364,6 +367,6 @@ def list_s3_objects(s3_config: "S3Config", prefix: str | None = None, max_keys: 
 
         return [obj["Key"] for obj in response["Contents"]]
 
-    except (NoCredentialsError, ClientError) as e:
-        print(f"Error listing S3 objects: {e}")
+    except (NoCredentialsError, ClientError):
+        log.exception("error listing S3 objects")
         return []

@@ -11,6 +11,7 @@ import zmq.asyncio
 from pydantic import BaseModel, Field
 
 from rigup._utils import get_local_ip
+from rigup.cluster.node import ZmqTopicHandler
 from rigup.device import DeviceHandle
 
 from .node import (
@@ -354,17 +355,10 @@ class ClusterManager:
             while True:
                 parts = await self._log_socket.recv_multipart()
                 if len(parts) >= 2:
-                    topic = parts[0].decode("utf-8", errors="replace")
-                    message = parts[1].decode("utf-8", errors="replace")
-                    message = message.rstrip("\r\n")
-
-                    tokens = topic.split(".")
-                    level_name = tokens[-1].upper() if tokens else "INFO"
-                    level = getattr(logging, level_name, logging.INFO)
-                    logger_name = ".".join(tokens[:-1]) if len(tokens) > 1 else "rigup.nodes"
-                    target_logger = logging.getLogger(logger_name)
-
-                    target_logger.log(level, message)
+                    record = ZmqTopicHandler.parse(parts[0], parts[1])
+                    logger = logging.getLogger(record.name)
+                    if logger.isEnabledFor(record.levelno):
+                        logger.handle(record)
         except asyncio.CancelledError:
             pass
         except Exception:

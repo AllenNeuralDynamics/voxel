@@ -88,6 +88,7 @@ class DeviceController[D: Device]:
             return Result(ErrorMsg(msg=f"Unknown command: {command}"))
 
         cmd = self._commands[command]
+        self.log.info("", extra={"action": "cmd.execute", "target": command})
         try:
             if cmd.is_async:
                 result = await cmd(*args, **kwargs)
@@ -95,7 +96,7 @@ class DeviceController[D: Device]:
                 result = await self._run_sync(cmd, *args, **kwargs)
             return Result(result)
         except Exception as e:
-            self.log.exception(f"Command '{command}' failed")
+            self.log.exception("", extra={"action": "cmd.fail", "target": command})
             return Result(ErrorMsg(msg=str(e)))
 
     async def execute_commands(self, commands: list[CommandRequest]) -> Results:
@@ -115,6 +116,7 @@ class DeviceController[D: Device]:
                 results[key] = Result(ErrorMsg(msg=f"Unknown command: {cmd_req.attr}"))
                 continue
             cmd = self._commands[cmd_req.attr]
+            self.log.info("", extra={"action": "cmd.execute", "target": cmd_req.attr})
             try:
                 if cmd.is_async:
                     result = await cmd(*cmd_req.args, **cmd_req.kwargs)
@@ -122,7 +124,7 @@ class DeviceController[D: Device]:
                     result = await self._run_sync(cmd, *cmd_req.args, **cmd_req.kwargs)
                 results[key] = Result(result)
             except Exception as e:
-                self.log.exception(f"Command '{cmd_req.attr}' failed")
+                self.log.exception("", extra={"action": "cmd.fail", "target": cmd_req.attr})
                 results[key] = Result(ErrorMsg(msg=str(e)))
         return Results(results=results)
 
@@ -141,6 +143,9 @@ class DeviceController[D: Device]:
         return await self._run_sync(_get)
 
     async def set_props(self, **props: Any) -> PropResults:
+        summary = ", ".join(f"{k}={v}" for k, v in props.items())
+        self.log.info(summary, extra={"action": "prop.set"})
+
         def _set() -> PropResults:
             results: dict[str, Result] = {}
             for name, value in props.items():

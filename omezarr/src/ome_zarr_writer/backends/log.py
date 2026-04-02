@@ -1,8 +1,12 @@
+import logging
 from pathlib import Path
 
 from ome_zarr_writer.buffer import PyramidBuffer
 
 from .base import Backend
+
+log = logging.getLogger(__name__)
+
 
 
 class LogBackend(Backend):
@@ -76,8 +80,8 @@ class LogBackend(Backend):
             self._batch_count += 1
             return True
 
-        except Exception as e:
-            print(f"Error writing batch {buffer.batch_idx} to log: {e}")
+        except Exception:
+            log.exception("error writing batch %s", buffer.batch_idx)
             return False
 
     def _finalize(self) -> None:
@@ -87,5 +91,5 @@ class LogBackend(Backend):
                 f.write("\n" + "#" * 70 + "\n")
                 f.write(f"# Summary: {self._batch_count} batches written\n")
                 f.write(f"# Log file: {self.log_path}\n")
-        except Exception as e:
-            print(f"Error closing LogBackend: {e}")
+        except Exception:
+            log.exception("error closing LogBackend")

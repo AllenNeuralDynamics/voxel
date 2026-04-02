@@ -1,15 +1,18 @@
+import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import Future
 
 import numpy as np
 from pydantic import BaseModel, Field, computed_field
-from rich import print
 from vxlib.vec import UIVec3D
+
 
 from ome_zarr_writer.backends.base import Backend
 from ome_zarr_writer.buffer import BufferMode, BufferStage, BufferStatus, PyramidBuffer, create_ring_buffer
 from ome_zarr_writer.types import ScaleLevel
+
+log = logging.getLogger(__name__)
 
 
 class StreamStatus(BaseModel):
@@ -136,7 +139,7 @@ class OMEZarrWriter:
         slots: int = 3,
         buffer_mode: BufferMode = "threaded",
         status_callback: Callable[[StreamStatus], None] | None = None,
-        status_interval: float = 1.0,
+        status_interval: float = 5.0,
     ) -> None:
         """Initialize the streaming writer.
 
@@ -197,7 +200,7 @@ class OMEZarrWriter:
         return self.backend.cfg
 
     def _default_status_callback(self, status: StreamStatus) -> None:
-        print(f"  [cyan]{status.summary()}[/cyan]")
+        log.info(status.summary())
 
     def _flush_slot(self, slot_idx: int) -> None:
         """Wait for a slot's processing to complete and flush to backend."""
@@ -208,7 +211,7 @@ class OMEZarrWriter:
         buf = self.buffers[slot_idx]
         success = self.backend.write_batch(buf, channel_index=self.channel_index)
         if not success:
-            print(f"[red]Warning: backend.write_batch failed for batch {buf.batch_idx}[/red]")
+            log.warning("batch %d write failed", buf.batch_idx)
 
     @property
     def current_buffer(self) -> PyramidBuffer:
@@ -259,7 +262,6 @@ class OMEZarrWriter:
 
         # If next slot has a pending future, flush it first
         if next_slot in self._pending:
-            print(f"[bold yellow]Waiting for buffer slot {next_slot}[/bold yellow]")
             self._flush_slot(next_slot)
 
         self._current_slot = next_slot

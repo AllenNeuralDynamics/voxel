@@ -5,6 +5,7 @@ This implementation wraps FastAPI to conform to the ZarrServer interface,
 allowing it to work with the common ng_quick_view function.
 """
 
+import logging
 import threading
 from pathlib import Path
 
@@ -12,9 +13,11 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from rich import print
+
 
 from .base import ZarrServer, get_host_ip
+
+log = logging.getLogger(__name__)
 
 
 class FastAPIZarrServer(ZarrServer):
@@ -62,17 +65,17 @@ class FastAPIZarrServer(ZarrServer):
                 f"/{mount_name}", StaticFiles(directory=str(parent_dir), html=False), name=f"zarr_{mount_name}"
             )
             self._mounted_paths[mount_name] = parent_dir
-            print(f"[green]Mounted {parent_dir} → /{mount_name}/[/green]")
+            log.info("mounted %s → /%s/", parent_dir, mount_name)
 
         host = "localhost" if use_localhost else get_host_ip()
         url = f"http://{host}:{self._port}/{mount_name}/{zarr_path.name}/"
-        print(f"[cyan]Zarr URL: {url}[/cyan]")
+        log.info("zarr URL: %s", url)
         return url
 
     def start(self) -> None:
         """Start the FastAPI server in a background thread."""
         if self.server_thread is not None:
-            print("[yellow]Server already running[/yellow]")
+            log.warning("server already running")
             return
 
         # Ensure CORS is configured
@@ -84,13 +87,12 @@ class FastAPIZarrServer(ZarrServer):
 
         self.server_thread = threading.Thread(target=run_server, daemon=True)
         self.server_thread.start()
-        print(f"[green]FastAPI server started on {self.host}:{self._port}[/green]")
+        log.info("FastAPI server started on %s:%d", self.host, self._port)
 
     def stop(self) -> None:
         """Stop the FastAPI server."""
         # Note: uvicorn doesn't provide a clean shutdown mechanism when run in a thread
         # For production use, consider running uvicorn in a subprocess instead
         if self.server_thread:
-            print("[yellow]Note: FastAPI server running in background thread[/yellow]")
-            print("[yellow]Server will stop when main program exits[/yellow]")
+            log.info("server running in background thread, will stop when main program exits")
             self.server_thread = None

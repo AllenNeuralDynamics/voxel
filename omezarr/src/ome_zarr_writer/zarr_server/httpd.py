@@ -6,15 +6,18 @@ The native Python server has better support for partial content requests than so
 ASGI implementations.
 """
 
+import logging
 import os
 import threading
+
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
 
-from rich import print
 
 from .base import ZarrServer, get_host_ip
+
+log = logging.getLogger(__name__)
 
 
 class CORSRequestHandler(SimpleHTTPRequestHandler):
@@ -193,12 +196,12 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         if "404" in msg and "/c/" in msg:
             return
         # Log all other requests
-        if "200" in msg or "206" in msg:  # Successful requests
-            print(f"[green]{self.address_string()} - {msg}[/green]")
-        elif "404" in msg:  # Other 404s (not chunks) - worth logging
-            print(f"[red]{self.address_string()} - {msg}[/red]")
-        else:  # Other status codes
-            print(f"[yellow]{self.address_string()} - {msg}[/yellow]")
+        if "200" in msg or "206" in msg:
+            log.debug("%s - %s", self.address_string(), msg)
+        elif "404" in msg:
+            log.warning("%s - %s", self.address_string(), msg)
+        else:
+            log.info("%s - %s", self.address_string(), msg)
 
 
 class HTTPDZarrServer(ZarrServer):
@@ -222,7 +225,7 @@ class HTTPDZarrServer(ZarrServer):
         self.mount_points[mount_name] = directory
         # Update class variable that handler uses
         CORSRequestHandler.mount_points = self.mount_points
-        print(f"[green]Mounted {directory} → /{mount_name}/[/green]")
+        log.info("mounted %s → /%s/", directory, mount_name)
 
     def get_url_for_zarr(self, zarr_path: Path, use_localhost: bool = True) -> str:
         zarr_path = zarr_path.expanduser().resolve()
@@ -235,19 +238,19 @@ class HTTPDZarrServer(ZarrServer):
 
         host = "localhost" if use_localhost else get_host_ip()
         url = f"http://{host}:{self.port}/{mount_name}/{zarr_path.name}/"
-        print(f"[cyan]Zarr URL: {url}[/cyan]")
+        log.info("zarr URL: %s", url)
         return url
 
     def start(self) -> None:
         """Start the HTTP server in a background thread."""
         if self.server is not None:
-            print("[yellow]Server already running[/yellow]")
+            log.warning("server already running")
             return
 
         self.server = HTTPServer((self.host, self.port), CORSRequestHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
-        print(f"[green]HTTP server started on {self.host}:{self.port}[/green]")
+        log.info("HTTP server started on %s:%d", self.host, self.port)
 
     def stop(self) -> None:
         """Stop the HTTP server."""

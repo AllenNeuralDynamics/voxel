@@ -41,6 +41,6 @@ try:
 
     pyramids_2d = _pyramids_2d_numba
     pyramids_3d = _pyramids_3d_numba
-    log.info("Using numba (TBB) for pyramid downscaling")
+    log.warning("Using numba (TBB) for pyramid downscaling")
 except Exception:
-    log.info("Using numpy for pyramid downscaling (numba TBB not available)")
+    log.warning("Using numpy for pyramid downscaling (numba TBB not available)")

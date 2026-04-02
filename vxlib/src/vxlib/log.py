@@ -1,4 +1,4 @@
-"""Shared utilities for voxel packages."""
+"""Shared logging utilities for voxel packages."""
 
 import logging
 from collections.abc import Sequence
@@ -10,6 +10,10 @@ except ImportError:
     RichHandler = None  # type: ignore[assignment]
 
 _log = logging.getLogger(__name__)
+
+# Extra fields that the VxlRichHandler renders inline.
+# Only explicitly known fields are shown — prevents uvicorn/third-party internals from leaking.
+_EXTRA_FIELDS = ("action", "target", "tags", "node_id")
 
 
 def configure_logging(
@@ -37,7 +41,7 @@ def configure_logging(
     resolved_handlers: list[logging.Handler] = []
     if handlers is None:
         if RichHandler is not None:
-            resolved_handlers.append(RichHandler(rich_tracebacks=rich_tracebacks, markup=rich_markup))
+            resolved_handlers.append(VxlRichHandler(rich_tracebacks=rich_tracebacks, markup=rich_markup))
             fmt = "%(name)s: %(message)s"
     else:
         resolved_handlers.extend(handlers)
@@ -52,22 +56,31 @@ def configure_logging(
 
 if RichHandler:
 
-    class UvicornRichHandler(RichHandler):
-        """RichHandler subclass that handles uvicorn's levelprefix format."""
+    class VxlRichHandler(RichHandler):
+        """RichHandler that renders extra fields inline and handles uvicorn's levelprefix."""
 
         def format(self, record: logging.LogRecord) -> str:
-            """Format the record, handling uvicorn's levelprefix."""
-            # Remove levelprefix if present (uvicorn adds this)
+            # Handle uvicorn's levelprefix format
             if hasattr(record, "levelprefix"):
-                # Already has color prefix from uvicorn, just use the message
                 return record.getMessage()
-            return super().format(record)
+
+            base = super().format(record)
+
+            # Render known extra fields
+            extras = {k: getattr(record, k) for k in _EXTRA_FIELDS if getattr(record, k, None) is not None}
+            if extras:
+                parts = " ".join(f"{k}={v}" for k, v in extras.items())
+                if record.getMessage():
+                    return f"{base} :: {parts}"
+                # Empty message — replace it with the extras
+                return base.rstrip() + " " + parts
+            return base
 
 
 def get_uvicorn_log_config(datefmt: str = "[%X]", access_log_level: str = "WARNING") -> dict[str, Any]:
-    """Get uvicorn log configuration that works with RichHandler.
+    """Get uvicorn log configuration that works with VxlRichHandler.
 
-    When Rich is available, this configures uvicorn to use UvicornRichHandler
+    When Rich is available, this configures uvicorn to use VxlRichHandler
     which strips ANSI color codes from uvicorn's formatters to prevent double
     formatting (uvicorn's ANSI + Rich's formatting).
 
@@ -91,24 +104,24 @@ def get_uvicorn_log_config(datefmt: str = "[%X]", access_log_level: str = "WARNI
                 "()": "uvicorn.logging.DefaultFormatter",
                 "fmt": "%(levelname)s:     %(message)s",
                 "datefmt": datefmt,
-                "use_colors": False,  # Disable ANSI codes to prevent double-formatting
+                "use_colors": False,
             },
             "access": {
                 "()": "uvicorn.logging.AccessFormatter",
                 "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
                 "datefmt": datefmt,
-                "use_colors": False,  # Disable ANSI codes
+                "use_colors": False,
             },
         },
         "handlers": {
             "default": {
-                "class": f"{__name__}.UvicornRichHandler",
+                "class": f"{__name__}.VxlRichHandler",
                 "rich_tracebacks": True,
                 "markup": False,
                 "formatter": "default",
             },
             "access": {
-                "class": f"{__name__}.UvicornRichHandler",
+                "class": f"{__name__}.VxlRichHandler",
                 "rich_tracebacks": True,
                 "markup": False,
                 "formatter": "access",

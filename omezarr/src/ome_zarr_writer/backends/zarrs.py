@@ -1,5 +1,7 @@
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
 
 import numcodecs
 import numpy as np
@@ -10,6 +12,8 @@ from zarr.storage import LocalStore
 from ome_zarr_writer.backends.base import Backend
 from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.types import Compression, ScaleLevel
+
+log = logging.getLogger(__name__)
 
 # Enable Zarrs pipeline globally
 zarr.config.set(
@@ -132,8 +136,8 @@ class ZarrsBackend(Backend):
 
             arr[channel_index, z_start_scaled:z_end_scaled, :, :] = data[:slice_shape, :, :]
             return True
-        except Exception as e:
-            print(f"[ZarrsBackend] Error writing {level.name}: {e}")
+        except Exception:
+            log.exception("error writing %s", level.name)
             return False
 
     def _finalize(self) -> None:

@@ -1,13 +1,14 @@
 """Node service for managing devices on local and remote hosts."""
 
 import asyncio
+import json
 import logging
 import sys
 import time
 import traceback
 from collections.abc import Callable
 from contextlib import suppress
-from typing import Literal
+from typing import Any, Literal
 
 import zmq
 import zmq.asyncio
@@ -279,10 +280,15 @@ class RigNode:
 
 
 class ZmqTopicHandler(logging.Handler):
-    """Publish log records via ZMQ using `<logger>.<LEVEL>` topics."""
+    """Publish log records as JSON via ZMQ using `<logger>.<LEVEL>` topics.
 
-    def __init__(self, address: str):
+    The JSON payload includes the formatted message, source location, timestamp,
+    and any custom metadata (action, target, tags) passed via the `extra` parameter.
+    """
+
+    def __init__(self, address: str, node_id: str = ""):
         super().__init__()
+        self._node_id = node_id
         self._ctx = zmq.Context()
         self._socket = self._ctx.socket(zmq.PUB)
         self._socket.connect(address)
@@ -290,18 +296,74 @@ class ZmqTopicHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         if self._socket is None:
             return
-        logger_name = record.name or "root"
-        topic = f"{logger_name}.{record.levelname}"
+        topic = f"{record.name or 'root'}.{record.levelname}"
         try:
-            message = self.format(record)
-            self._socket.send_multipart(
-                [
-                    topic.encode("utf-8", errors="replace"),
-                    message.encode("utf-8", errors="replace"),
-                ],
-            )
+            payload: dict[str, Any] = {
+                "message": self.format(record),
+                "filename": record.filename,
+                "lineno": record.lineno,
+                "funcName": record.funcName,
+                "created": record.created,
+                "node_id": self._node_id,
+            }
+            # Include custom metadata fields if present
+            for field in ("action", "target", "tags"):
+                value = getattr(record, field, None)
+                if value is not None:
+                    payload[field] = value
+
+            self._socket.send_multipart([
+                topic.encode("utf-8", errors="replace"),
+                json.dumps(payload).encode("utf-8"),
+            ])
         except Exception:
             self.handleError(record)
+
+    @staticmethod
+    def parse(topic_bytes: bytes, payload_bytes: bytes) -> logging.LogRecord:
+        """Parse a ZMQ multipart message back into a LogRecord.
+
+        Handles both JSON payloads (current format) and plain text (legacy fallback).
+        """
+        topic = topic_bytes.decode("utf-8", errors="replace")
+        raw = payload_bytes.decode("utf-8", errors="replace")
+
+        # Parse topic: logger_name.LEVEL
+        tokens = topic.rsplit(".", 1)
+        logger_name = tokens[0] if len(tokens) > 1 else "rigup.nodes"
+        level_name = tokens[-1].upper() if tokens else "INFO"
+        level = getattr(logging, level_name, logging.INFO)
+
+        try:
+            payload = json.loads(raw)
+            record = logging.LogRecord(
+                name=logger_name,
+                level=level,
+                pathname=payload.get("filename", ""),
+                lineno=payload.get("lineno", 0),
+                msg=payload.get("message", raw),
+                args=(),
+                exc_info=None,
+            )
+            record.funcName = payload.get("funcName")
+            if "created" in payload:
+                record.created = payload["created"]
+            for field in ("node_id", "action", "target", "tags"):
+                if field in payload:
+                    setattr(record, field, payload[field])
+        except (json.JSONDecodeError, KeyError):
+            # Plain text fallback for legacy messages
+            record = logging.LogRecord(
+                name=logger_name,
+                level=level,
+                pathname="",
+                lineno=0,
+                msg=raw.rstrip("\r\n"),
+                args=(),
+                exc_info=None,
+            )
+
+        return record
 
     def close(self) -> None:
         try:
@@ -328,7 +390,7 @@ async def run_node_async(
     """Async implementation of node service runner."""
     # Setup logging infrastructure
     zctx = zmq.asyncio.Context()
-    log_handler = ZmqTopicHandler(f"tcp://{ctrl_host}:{log_port}")
+    log_handler = ZmqTopicHandler(f"tcp://{ctrl_host}:{log_port}", node_id=node_id)
     log_handler.setLevel(logging.DEBUG)
 
     if remove_console_handlers:
@@ -339,6 +401,7 @@ async def run_node_async(
 
     # Add to root logger so all loggers in this process publish to rig
     logging.root.addHandler(log_handler)
+    logging.root.setLevel(logging.DEBUG)
 
     logger = logging.getLogger(f"node.{node_id}")
 

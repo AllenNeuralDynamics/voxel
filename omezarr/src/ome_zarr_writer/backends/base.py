@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -5,6 +6,9 @@ from pathlib import Path
 from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.config import WriterConfig
 from ome_zarr_writer.s3_utils import S3Config
+
+log = logging.getLogger(__name__)
+
 
 
 class Backend(ABC):
@@ -144,7 +148,7 @@ class MultiBackend(Backend):
         for i, (writer, success) in enumerate(zip(self.backends, results)):
             if not success:
                 writer_name = type(writer).__name__
-                print(f"Warning: Writer {i} ({writer_name}) failed for batch {buffer.batch_idx}")
+                log.warning("writer %d (%s) failed for batch %s", i, writer_name, buffer.batch_idx)
 
         # Determine success based on policy
         if self.require_all:
@@ -163,9 +167,9 @@ class MultiBackend(Backend):
         for i, backend in enumerate(self.backends):
             try:
                 backend._finalize()
-            except Exception as e:
+            except Exception:
                 backend_name = type(backend).__name__
-                print(f"Error closing backend {i} ({backend_name}): {e}")
+                log.exception("error closing backend %d (%s)", i, backend_name)
 
         # Shutdown executor if using parallel mode
         if self.parallel:

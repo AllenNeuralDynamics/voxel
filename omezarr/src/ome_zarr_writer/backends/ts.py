@@ -1,6 +1,8 @@
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+
 
 import numpy as np
 import pydantic_tensorstore as pts
@@ -10,6 +12,8 @@ from ome_zarr_writer.backends.base import Backend
 from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.s3_utils import S3Config
 from ome_zarr_writer.types import Compression, ScaleLevel
+
+log = logging.getLogger(__name__)
 
 _BLOSC_LZ4 = [
     pts.Zarr3CodecBlosc(
@@ -99,7 +103,6 @@ class TensorStoreBackend(Backend):
         )
         ts_spec = pts_spec.to_tensorstore()
         self._stores[level] = ts.open(ts_spec, create=True, delete_existing=self.overwrite).result()  # pyright: ignore reportAttributeAccessIssue
-        print(f"  Initialized store for level {level}")
 
     def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
         """
@@ -164,8 +167,8 @@ class TensorStoreBackend(Backend):
             store[channel_index, z_start_scaled:z_end_scaled, :, :].write(data[:data_z, :, :]).result()
 
             return True
-        except Exception as e:
-            print(f"Error writing {level.name} for batch {buffer.batch_idx}: {e}")
+        except Exception:
+            log.exception("error writing %s for batch %s", level.name, buffer.batch_idx)
             return False
 
     def _finalize(self) -> None:

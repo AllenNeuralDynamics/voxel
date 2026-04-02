@@ -3,7 +3,6 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Literal
 
-from rich import print
 from vxlib.vec import UIVec3D
 
 from ome_zarr_writer.types import Dtype, ScaleLevel
@@ -63,6 +62,5 @@ def create_ring_buffer(
         for future in as_completed(futures):
             slot_idx, buf = future.result()
             buffers_dict[slot_idx] = buf
-            print(f"Buffer {slot_idx + 1}/{slots} initialized")
 
     return [buffers_dict[i] for i in range(slots)]
