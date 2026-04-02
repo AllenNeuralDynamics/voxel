@@ -40,22 +40,24 @@ class DeviceController[D: Device]:
 
         # Collect device commands/properties
         device_commands = collect_commands(device)
-        device_properties = collect_properties(device)
+        self._device_props = collect_properties(device)
 
-        # Collect controller's own commands and merge
-        ctrl_commands = collect_commands(self)
+        # Collect controller's own commands and properties (strict: only @describe-decorated)
+        ctrl_commands = collect_commands(self, strict=True)
+        self._ctrl_props = collect_properties(self, strict=True)
         self._commands: dict[str, Command] = {**device_commands, **ctrl_commands}
+        all_properties = {**self._device_props, **self._ctrl_props}
 
         # Build interface
         self._interface = DeviceInterface(
             uid=device.uid,
             type=device.__DEVICE_TYPE__,
             commands={name: cmd.info for name, cmd in self._commands.items()},
-            properties=device_properties,
+            properties=all_properties,
         )
 
         # Property streaming state
-        self._stream_props: set[str] = {name for name, info in device_properties.items() if info.stream}
+        self._stream_props: set[str] = {name for name, info in all_properties.items() if info.stream}
         self._stream_task: asyncio.Task | None = None
 
     @property
@@ -135,7 +137,8 @@ class DeviceController[D: Device]:
             results: dict[str, Result] = {}
             for name in props_to_get:
                 try:
-                    results[name] = Result(PropertyModel.from_value(getattr(self._device, name)))
+                    target = self._device if name in self._device_props else self
+                    results[name] = Result(PropertyModel.from_value(getattr(target, name)))
                 except Exception as e:
                     results[name] = Result(ErrorMsg(msg=str(e)))
             return PropResults(results=results)
@@ -150,8 +153,9 @@ class DeviceController[D: Device]:
             results: dict[str, Result] = {}
             for name, value in props.items():
                 try:
-                    setattr(self._device, name, value)
-                    results[name] = Result(PropertyModel.from_value(getattr(self._device, name)))
+                    target = self._device if name in self._device_props else self
+                    setattr(target, name, value)
+                    results[name] = Result(PropertyModel.from_value(getattr(target, name)))
                 except Exception as e:
                     results[name] = Result(ErrorMsg(msg=str(e)))
             return PropResults(results=results)

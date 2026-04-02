@@ -56,7 +56,7 @@ class AOTF(Device):
 
         self._channel_registrations[channel] = device_id
         self.set_channel_input_mode(channel, input_mode)
-        self.log.info(f"Channel {channel} registered to '{device_id}' (input_mode={input_mode})")
+        self.log.debug("channel %d registered to '%s' (input_mode=%s)", channel, device_id, input_mode)
 
     def deregister_channel(self, device_id: str) -> None:
         """Remove a device's channel registration.
@@ -71,7 +71,7 @@ class AOTF(Device):
 
         if channel_to_remove is not None:
             del self._channel_registrations[channel_to_remove]
-            self.log.info(f"Channel {channel_to_remove} deregistered from '{device_id}'")
+            self.log.debug("channel %d deregistered from '%s'", channel_to_remove, device_id)
 
     @property
     def registered_channels(self) -> dict[int, str]:

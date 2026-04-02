@@ -193,7 +193,7 @@ class RigNode:
         response = msg.decode_payload(ProvisionResponse)
         node_cfg = response.config
 
-        self.log.info(f"Received provision with {len(node_cfg.devices)} devices")
+        self.log.debug("received provision with %d devices", len(node_cfg.devices))
 
         try:
             devices, build_errors = build_objects(node_cfg.devices, base_cls=Device)
@@ -219,7 +219,7 @@ class RigNode:
             response = NodeMessage.create(NodeAction.PROVISION_COMPLETE, payload=complete)
             await self._control_socket.send_multipart(response.to_parts())
 
-            self.log.info(f"Provisioned {len(devices)} devices successfully")
+            self.log.debug("provisioned %d devices", len(devices))
 
             # Start heartbeat loop
             if self._heartbeat_task is None or self._heartbeat_task.done():

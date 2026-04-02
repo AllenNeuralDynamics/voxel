@@ -326,8 +326,6 @@ export class Previewer {
 
     // Subscribe to RigClient topics
     this.#subscribeToRigClient();
-
-    this.#client.requestStatus();
   }
 
   #subscribeToRigClient(): void {

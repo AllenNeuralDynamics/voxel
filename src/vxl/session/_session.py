@@ -171,7 +171,7 @@ class Session:
         self._config.metadata_target = target
         self._config.metadata = instance.model_dump()
         self.save()
-        self._log.info("Changed metadata target to %s", target)
+        self._log.debug("changed metadata target to %s", target)
 
     def update_metadata(self, values: dict[str, Any]) -> None:
         """Update experiment metadata, respecting provenance locking.
@@ -193,7 +193,7 @@ class Session:
         cls(**merged)  # validate against schema
         self._config.metadata = merged
         self.save()
-        self._log.info("Updated metadata: %s", list(values.keys()))
+        self._log.debug("updated metadata: %s", list(values.keys()))
 
     # ==================== Device Props (Save to Profile) ====================
 
@@ -205,7 +205,7 @@ class Session:
         captured = await self._rig.capture_device_props(device_id)
         self._config.rig.profiles[profile_id].props[device_id] = captured
         self.save()
-        self._log.info(f"Saved props for '{device_id}' in profile '{profile_id}'")
+        self._log.debug("saved props for '%s' in profile '%s'", device_id, profile_id)
 
     async def save_all_device_props(self) -> list[str]:
         """Capture and persist properties for all settable devices in the active profile."""
@@ -532,7 +532,7 @@ class Session:
 
             self._config.stacks.append(stack)
             added.append(stack)
-            self._log.info(f"Added stack {tile_id} at ({sx:.1f}, {sy:.1f}) um [profile={active_pid}]")
+            self._log.debug("added stack %s at (%.1f, %.1f) um [profile=%s]", tile_id, sx, sy, active_pid)
 
         self._sort_stacks()
         self.save()
@@ -568,7 +568,7 @@ class Session:
                 stack.z_end = float(e["z_end"])
 
             edited.append(stack)
-            self._log.info(f"Edited stack {tile_id}")
+            self._log.debug("edited stack %s", tile_id)
 
         self.save()
         return edited
@@ -595,7 +595,7 @@ class Session:
                     if stack.status == StackStatus.COMPLETED:
                         self._log.warning(f"Removing completed stack {tile_id}")
                     self._config.stacks.pop(i)
-                    self._log.info(f"Removed stack {tile_id}")
+                    self._log.debug("removed stack %s", tile_id)
                     break
             else:
                 raise ValueError(f"Stack {tile_id} not found for active profile")

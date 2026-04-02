@@ -327,13 +327,19 @@ class CameraController(DeviceController[Camera]):
     async def update_preview_colormap(self, colormap: str | None) -> None:
         self._previewer.colormap = colormap
 
-    @describe(label="Get Preview Config")
-    async def get_preview_config(self) -> PreviewConfig:
+    @property
+    @describe(label="Preview Config", stream=True)
+    def preview_config(self) -> PreviewConfig:
         return PreviewConfig(
             crop=self._previewer.crop,
             levels=self._previewer.levels,
             colormap=self._previewer.colormap,
         )
+
+    @describe(label="Get Preview Config")
+    async def get_preview_config(self) -> PreviewConfig:
+        """Deprecated — use preview_config property instead."""
+        return self.preview_config
 
     @describe(label="Start Preview")
     async def start_preview(

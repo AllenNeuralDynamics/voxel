@@ -362,7 +362,7 @@ class PropResults(Results[PropertyModel]):
 PropsCallback = Callable[["PropResults"], Awaitable[None]]
 
 
-def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
+def collect_properties(obj: Any, strict: bool = False) -> dict[str, PropertyInfo]:
     """Collect all properties from an object (device or service).
 
     Searches through the Method Resolution Order (MRO) to find @describe decorators
@@ -370,6 +370,9 @@ def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
 
     Args:
         obj: The object to collect properties from
+        strict: If True, only collect properties with @describe decorator.
+                Useful for controllers where internal properties (device, uid, etc.)
+                should not be exposed.
 
     Returns:
         Dictionary mapping property names to PropertyInfo
@@ -398,20 +401,25 @@ def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
                         break  # Found decorated version, stop searching
 
             if prop_with_describe is not None:
+                # In strict mode, only include properties with @describe
+                if strict and not hasattr(prop_with_describe.fget, LABEL_ATTR):
+                    continue
                 properties[attr_name] = PropertyInfo.from_attr(prop_with_describe)
 
     return properties
 
 
-def collect_commands(obj: Any) -> dict[str, Command]:
+def collect_commands(obj: Any, strict: bool = False) -> dict[str, Command]:
     """Collect commands from an object (device or service).
 
     Collects:
-    1. Methods listed in obj.__COMMANDS__ (if attribute exists)
+    1. Methods listed in obj.__COMMANDS__ (if attribute exists and strict=False)
     2. Methods decorated with @describe
 
     Args:
         obj: The object to collect commands from
+        strict: If True, only collect methods with @describe decorator.
+                Useful for controllers to avoid exposing internal methods.
 
     Returns:
         Dictionary mapping command names to Command instances
@@ -428,8 +436,8 @@ def collect_commands(obj: Any) -> dict[str, Command]:
     """
     commands: dict[str, Command] = {}
 
-    # Collect from __COMMANDS__ if it exists
-    if hasattr(obj, "__COMMANDS__"):
+    # Collect from __COMMANDS__ if it exists (skip in strict mode)
+    if not strict and hasattr(obj, "__COMMANDS__"):
         for attr_name in obj.__COMMANDS__:
             if hasattr(obj, attr_name):
                 attr = getattr(obj, attr_name)

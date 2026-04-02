@@ -34,7 +34,7 @@ class SimulatedLaser(Laser):
     @power_setpoint_mw.setter
     def power_setpoint_mw(self, value: float) -> None:
         self._power_setpoint_mw = value
-        self.log.info(f"Power setpoint changed to {value} mW")
+        self.log.debug("power setpoint changed to %s mW", value)
 
     @property
     def power_mw(self) -> float:

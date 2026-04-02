@@ -389,7 +389,7 @@ class VoxelRig(Rig):
             except Exception:
                 self.log.exception(f"Failed to run setup for '{device_id}'")
 
-        self.log.info(f"Configured devices for profile '{profile_id}'")
+        self.log.debug("configured devices for profile '%s'", profile_id)
 
     async def set_active_profile(self, profile_id: str) -> None:
         """Set the active profile and configure devices accordingly.
@@ -407,7 +407,7 @@ class VoxelRig(Rig):
         frame_callback = self._frame_callback
 
         if restart_preview:
-            self.log.info("Stopping preview before switching profile")
+            self.log.debug("stopping preview before switching profile")
             await self.stop_preview()
             # Preserve callback reference for restart
             self._frame_callback = frame_callback
@@ -442,7 +442,7 @@ class VoxelRig(Rig):
         # 8. Restart preview if it was running
         if restart_preview:
             if frame_callback:
-                self.log.info("Restarting preview after profile change")
+                self.log.debug("restarting preview after profile change")
                 await self.start_preview(frame_callback)
             else:
                 self.log.warning("Preview was running but no callback found; not restarting automatically")
@@ -490,7 +490,7 @@ class VoxelRig(Rig):
         if self._mode != RigMode.IDLE:
             raise RuntimeError(f"Cannot update waveforms while {self._mode}")
         await self._create_sync_task()
-        self.log.info("Recreated acquisition task with updated waveforms")
+        self.log.debug("recreated sync task with updated waveforms")
 
     async def capture_device_props(self, device_id: str) -> dict[str, Any]:
         """Capture current writable property values for a device.
@@ -536,7 +536,8 @@ class VoxelRig(Rig):
         for chan_id, channel in self.active_channels.items():
             camera = self.cameras.get(channel.detection)
             if camera:
-                configs[chan_id] = await camera.get_preview_config()
+                result = await camera.get_prop_value("preview_config")
+                configs[chan_id] = PreviewConfig.model_validate(result) if isinstance(result, dict) else result
         return configs
 
     # ===================== Preview Management =====================
@@ -573,7 +574,7 @@ class VoxelRig(Rig):
             raise ValueError("frame_callback must be provided when starting preview")
 
         cameras_to_stream = self._get_profile_cameras()
-        self.log.info(f"Starting preview for profile '{self._active_profile_id}' on cameras: {cameras_to_stream}")
+        self.log.debug("starting preview on cameras: %s", cameras_to_stream)
 
         # Start cameras for the active profile's channels
         for cam_id in cameras_to_stream:
@@ -599,7 +600,7 @@ class VoxelRig(Rig):
 
         self._mode = RigMode.PREVIEWING
         self._frame_callback = frame_callback
-        self.log.info(f"Preview started for {len(self._streaming_cameras)} cameras")
+        self.log.info("Preview started (%d cameras)", len(self._streaming_cameras))
 
         # Enable lasers for active channels if cameras started successfully
         if self._streaming_cameras:
@@ -608,11 +609,11 @@ class VoxelRig(Rig):
         # Create and start DAQ sync task for preview
         self.sync_task = await self._create_sync_task()
         await self.sync_task.start()
-        self.log.info("Sync task started for preview")
+        self.log.debug("sync task started for preview")
 
     async def _enable_channel_lasers(self) -> None:
         """Enable lasers for all active channels."""
-        self.log.info(f"_enable_channel_lasers called. Active channels: {list(self.active_channels.keys())}")
+        self.log.debug("enabling lasers for channels: %s", list(self.active_channels.keys()))
         tasks = []
         for chan_name, channel in self.active_channels.items():
             if channel.illumination not in self.lasers:
@@ -635,7 +636,7 @@ class VoxelRig(Rig):
             if channel.illumination not in self.lasers:
                 continue
             laser = self.lasers[channel.illumination]
-            self.log.info(f"Disabling laser {channel.illumination}")
+            self.log.debug("disabling laser %s", channel.illumination)
             tasks.append(laser.call("disable"))
 
         if tasks:
@@ -690,7 +691,7 @@ class VoxelRig(Rig):
             self.log.warning("Preview not running")
             return
 
-        self.log.info("Stopping preview...")
+        self.log.debug("stopping preview...")
 
         # Stop cameras first (while DAQ is still triggering)
         # This allows cameras to exit their preview loops cleanly without
@@ -704,7 +705,6 @@ class VoxelRig(Rig):
         # Stop DAQ acquisition task (no longer needed since cameras stopped)
         if self.sync_task:
             await self.sync_task.stop()
-            self.log.info("Acquisition task stopped")
 
         # Disable lasers
         await self._disable_channel_lasers()
@@ -883,7 +883,7 @@ class RigPreviewHub:
             callback = self._make_callback(camera_id)
             await handle.subscribe("preview", callback)
             self._subscriptions[camera_id] = (handle, callback)
-            self.log.info(f"Subscribed to camera {camera_id} preview stream")
+            self.log.debug("subscribed to camera %s preview stream", camera_id)
 
     def _make_callback(self, camera_id: str) -> Callable[[bytes], Awaitable[None]]:
         """Create callback that looks up channel dynamically from mapping."""
@@ -911,16 +911,16 @@ class RigPreviewHub:
     def start(self, callback: Callable[[str, bytes], Awaitable[None]]) -> None:
         """Start forwarding frames to callback."""
         self._frame_callback = callback
-        self.log.info("Preview manager started")
+        self.log.debug("preview manager started")
 
     def stop(self) -> None:
         """Stop forwarding frames."""
         self._frame_callback = None
-        self.log.info("Preview manager stopped")
+        self.log.debug("preview manager stopped")
 
     async def shutdown(self) -> None:
         """Unsubscribe all callbacks. Call on rig stop."""
-        self.log.info("Shutting down preview manager...")
+        self.log.debug("shutting down preview manager")
         for camera_id, (handle, callback) in self._subscriptions.items():
             try:
                 await handle.unsubscribe("preview", callback)
@@ -930,4 +930,4 @@ class RigPreviewHub:
         self._subscriptions.clear()
         self._camera_to_channel.clear()
         self._frame_callback = None
-        self.log.info("Preview manager shutdown complete")
+        self.log.debug("preview manager shutdown complete")

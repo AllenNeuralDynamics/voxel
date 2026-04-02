@@ -163,7 +163,7 @@ export class PreviewState {
     this.channels = Array.from({ length: this.MAX_CHANNELS }, (_, idx) => new PreviewChannel(idx));
 
     this.#subscribeToClient();
-    this.#client.requestStatus();
+    this.#client.requestStatus(); // ensure initial state after subscribing
 
     fetchColormapCatalog(client.baseUrl)
       .then((catalog) => {

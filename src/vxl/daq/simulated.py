@@ -214,7 +214,7 @@ class SimulatedDaq(VoxelDaq):
 
             task = MockAOTask(task_name, pins, self._device_name)
             self._active_tasks[task_name] = task
-            self.log.info(f"Created mock AO task '{task_name}' with {len(pins)} channels")
+            self.log.debug("created AO task '%s' with %d channels", task_name, len(pins))
             return task
 
         except Exception:
@@ -247,7 +247,7 @@ class SimulatedDaq(VoxelDaq):
 
             task = MockCOTask(task_name, frequency_hz, duty_cycle, output_terminal)
             self._active_tasks[task_name] = task
-            self.log.info(f"Created mock CO task '{task_name}' at {frequency_hz}Hz")
+            self.log.debug("created CO task '%s' at %sHz", task_name, frequency_hz)
             return task
 
         except Exception:
@@ -265,4 +265,4 @@ class SimulatedDaq(VoxelDaq):
             task.close()
         finally:
             self.release_pins_for_task(task_name)
-        self.log.info(f"Closed mock task '{task_name}'")
+        self.log.debug("closed task '%s'", task_name)

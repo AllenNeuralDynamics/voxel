@@ -140,10 +140,14 @@ class ClusterManager:
             process.start()
             start_port += 1000
 
-        while not all(process.ready_event.is_set() for process in self._local_node_processes.values()):
-            self.log.warning("Waiting for local nodes to report as alive...")
-            time.sleep(0.5)  # noqa: ASYNC251 - allow sleep in async
-        self.log.info("All local nodes started successfully.")
+        if self._local_node_processes:
+            wait_duration = 1.0
+            time.sleep(wait_duration)  # noqa: ASYNC251 - allow sleep in async
+
+            while not all(process.ready_event.is_set() for process in self._local_node_processes.values()):
+                self.log.warning("Waiting for local nodes startup...")
+                time.sleep(wait_duration)  # noqa: ASYNC251 - allow sleep in async
+            self.log.info("All local nodes started successfully.")
 
         result = await self._provision_nodes(timeout_s=provision_timeout)
         self.provisions = result.devices
@@ -215,12 +219,11 @@ class ClusterManager:
         self.log.info("Checking node availability...")
         await self._ping_all_nodes(timeout_s=5.0)
 
-        self.log.info("Sending provision commands to all nodes...")
+        self.log.info("Provisioning %d nodes...", len(self.nodes))
         for node_id, node_config in self.nodes.items():
             response = ProvisionResponse(config=node_config)
             msg = RigMessage.create(RigAction.PROVISION, identity=node_id.encode(), payload=response)
             await self._control_socket.send_multipart(msg.to_parts())
-            self.log.info(f"Sent provision to node '{node_id}'")
 
         try:
             async with asyncio.timeout(timeout_s):
@@ -234,7 +237,7 @@ class ClusterManager:
                         all_devices.update(complete.devices)
                         all_errors.update(complete.errors)
                         provisioned_nodes.add(node_id)
-                        self.log.info(f"Node '{node_id}' provisioned successfully")
+                        self.log.debug("node '%s' provisioned", node_id)
                     elif msg.action == NodeAction.PONG:
                         continue
 
@@ -308,7 +311,7 @@ class ClusterManager:
 
                         if node_id not in heartbeat_received:
                             heartbeat_received.add(node_id)
-                            self.log.info(f"Received heartbeat from node '{node_id}'")
+                            self.log.debug(f"Received heartbeat from node '{node_id}'")
 
         except TimeoutError as e:
             missing = expected_nodes - heartbeat_received

@@ -195,7 +195,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def upper_limit(self, value: float) -> None:
         """Set the upper position limit."""
         self._upper_limit = value
-        self.log.info(f"Upper limit set to {value} {self._units}")
+        self.log.debug("upper limit set to %s %s", value, self._units)
 
     @property
     def lower_limit(self) -> float:
@@ -206,7 +206,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def lower_limit(self, value: float) -> None:
         """Set the lower position limit."""
         self._lower_limit = value
-        self.log.info(f"Lower limit set to {value} {self._units}")
+        self.log.debug("lower limit set to %s %s", value, self._units)
 
     # Kinematic parameters ___________________________________________________________________________________________
 
@@ -219,7 +219,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def speed(self, value: float) -> None:
         """Set the speed."""
         self._speed = value
-        self.log.info(f"Speed set to {value} {self._units}/s")
+        self.log.debug("speed set to %s %s/s", value, self._units)
 
     @property
     def acceleration(self) -> float:
@@ -230,7 +230,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def acceleration(self, value: float) -> None:
         """Set the acceleration."""
         self._acceleration = value
-        self.log.info(f"Acceleration set to {value} {self._units}/s²")
+        self.log.debug("acceleration set to %s %s/s²", value, self._units)
 
     @property
     def backlash(self) -> float:
@@ -241,7 +241,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def backlash(self, value: float) -> None:
         """Set backlash."""
         self._backlash = value
-        self.log.info(f"Backlash set to {value} {self._units}")
+        self.log.debug("backlash set to %s %s", value, self._units)
 
     @property
     def home(self) -> float:
@@ -252,7 +252,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def home(self, position: float) -> None:
         """Set the home position."""
         self._home = position
-        self.log.info(f"Home position set to {position} {self._units}")
+        self.log.debug("home position set to %s %s", position, self._units)
 
     # Capabilities ___________________________________________________________________________________________________
 

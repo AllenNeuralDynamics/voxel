@@ -181,13 +181,13 @@ class SimulatedCamera(Camera):
         )
 
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:
-        self.log.info("Configuring simulated camera trigger mode to %s", mode)
+        self.log.debug("trigger mode set to %s", mode)
 
     def _configure_trigger_polarity(self, polarity: TriggerPolarity) -> None:
-        self.log.info("Configuring simulated camera trigger polarity to %s", polarity)
+        self.log.debug("trigger polarity set to %s", polarity)
 
     def _arm(self) -> None:
-        self.log.info("Preparing simulated camera. Generating reference image")
+        self.log.debug("generating reference frame")
 
         # Generate single reference frame based on current frame region and binning
         region = self.frame_region
@@ -203,7 +203,7 @@ class SimulatedCamera(Camera):
 
         # Generate and cache single frame
         reference_frame = generator.generate(nframes=1)[0]
-        self.log.info(f"Generated reference frame: {reference_frame.shape}, dtype={reference_frame.dtype}")
+        self.log.debug("reference frame: %s, dtype=%s", reference_frame.shape, reference_frame.dtype)
         self._reference_frame = reference_frame
 
     def start(self, frame_count: int | None = None) -> None:
@@ -214,7 +214,7 @@ class SimulatedCamera(Camera):
         self._requested_frame_count = frame_count if frame_count is not None else -1
         self._last_grab_frame_time = 0
         frame_msg = f"{frame_count}" if frame_count else "infinite"
-        self.log.info("Simulated camera started. Ready to acquire %s frames.", frame_msg)
+        self.log.debug("started, acquiring %s frames", frame_msg)
 
     def grab_frame(self) -> np.ndarray:
         """Grab a frame from the simulated camera.
@@ -267,7 +267,7 @@ class SimulatedCamera(Camera):
             self.log.warning("Camera is not running. Ignoring stop command.")
             return
 
-        self.log.info(f"Simulated camera stopped after {self._frame_count} frames.")
+        self.log.debug("stopped after %d frames", self._frame_count)
         self._frame_count = -1
 
     def disarm(self) -> None:

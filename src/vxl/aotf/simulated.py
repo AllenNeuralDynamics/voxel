@@ -56,7 +56,7 @@ class SimulatedAotf(AOTF):
     def blanking_mode(self, value: str) -> None:
         """Set the blanking mode."""
         self._blanking_mode = value
-        self.log.info(f"Blanking mode set to {value}")
+        self.log.debug("blanking mode set to %s", value)
 
     @property
     def min_power_dbm(self) -> float:

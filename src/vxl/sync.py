@@ -182,13 +182,10 @@ class SyncTask:
             trigger_pfi = await self._daq.get_pfi_path(self._timing.clock.pin)
             await self._daq.configure_ao_trigger(self._uid, trigger_pfi, retriggerable=True)
 
-        self._log.info(f"Created AO task '{self._uid}' with pins: {pins}")
-
         # Create clock task if configured
         await self._setup_clock_task()
 
         self._is_setup = True
-        self._log.info(f"Task '{self._uid}' setup complete")
 
     async def _setup_clock_task(self) -> None:
         """Create clock task if configured."""
@@ -204,14 +201,13 @@ class SyncTask:
             output_pin=self._timing.clock.pin,
         )
         self._clock_task_name = clock_task_name
-        self._log.info(f"Created clock task '{clock_task_name}' at {self._timing.frequency}Hz")
+        self._log.debug("created clock task '%s' at %sHz", clock_task_name, self._timing.frequency)
 
     async def _write(self) -> None:
         """Generate and write waveform data."""
         if self._ao_task_name is None:
             raise RuntimeError("AO task not created")
 
-        self._log.info("Writing waveforms to task...")
 
         # Get channel names from the task via handle
         channel_names = self._ao_channel_names
@@ -230,7 +226,7 @@ class SyncTask:
                 raise ValueError(f"Channel '{channel_name}' not found in local channels")
 
         data = np.vstack(data_arrays) if len(data_arrays) > 1 else data_arrays[0]
-        self._log.info(f"Writing {len(data_arrays)} channels x {self._timing.num_samples} samples")
+        self._log.debug("writing %d channels x %d samples", len(data_arrays), self._timing.num_samples)
 
         written_samples = await self._daq.write_ao_task(self._ao_task_name, data.tolist())
         if written_samples != self._timing.num_samples:
@@ -245,32 +241,32 @@ class SyncTask:
 
         await self._write()
         await self._daq.start_task(self._ao_task_name)
-        self._log.info(f"Started task '{self._uid}'")
+        self._log.debug("started task '%s'", self._uid)
 
         if self._clock_task_name:
             await self._daq.start_task(self._clock_task_name)
-            self._log.info(f"Started clock task '{self._clock_task_name}'")
+            self._log.debug("started clock task '%s'", self._clock_task_name)
 
     async def stop(self) -> None:
         """Stop the task."""
         if self._clock_task_name:
             await self._daq.stop_task(self._clock_task_name)
-            self._log.info(f"Stopped clock task '{self._clock_task_name}'")
+            self._log.debug("stopped clock task '%s'", self._clock_task_name)
 
         if self._ao_task_name:
             await self._daq.stop_task(self._ao_task_name)
-            self._log.info(f"Stopped task '{self._uid}'")
+            self._log.debug("stopped task '%s'", self._uid)
 
     async def close(self) -> None:
         """Close the task and release resources."""
         if self._clock_task_name:
             await self._daq.close_task(self._clock_task_name)
-            self._log.info(f"Closed clock task '{self._clock_task_name}'")
+            self._log.debug("closed clock task '%s'", self._clock_task_name)
             self._clock_task_name = None
 
         if self._ao_task_name:
             await self._daq.close_task(self._ao_task_name)
-            self._log.info(f"Closed task '{self._uid}'")
+            self._log.debug("closed task '%s'", self._uid)
             self._ao_task_name = None
 
         self._is_setup = False
