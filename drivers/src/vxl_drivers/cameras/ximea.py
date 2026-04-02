@@ -287,7 +287,7 @@ class XimeaCamera(Camera):
 
     # ==================== Acquisition ====================
 
-    def _prepare_for_capture(self) -> None:
+    def _arm(self) -> None:
         """Prepare the camera to acquire images."""
         self._buffer_size_frames = round(BUFFER_SIZE_MB / self.frame_size_mb)
         self._camera.set_acq_buffer_size_unit(1024**2)  # Buffer size in MB

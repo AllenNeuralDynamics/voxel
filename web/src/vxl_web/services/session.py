@@ -15,11 +15,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from vxl import AcquisitionPlan, RigMode, Session
+from vxl import AcquisitionConfig, RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import GridConfig
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
-from vxl.tile import Stack, StackStatus, Tile
+from vxl.tile import Stack, StackStatus, StorageConfig, Tile
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
@@ -54,8 +54,11 @@ class SessionStatus(BaseModel):
     # Session status
     metadata: dict[str, Any]
 
-    # Acquisition plan (per-profile grid configs + all stacks)
-    plan: AcquisitionPlan
+    # Acquisition config (profile ordering)
+    acq: AcquisitionConfig
+
+    # Storage config
+    storage: StorageConfig
 
     # Convenience fields (active profile's data)
     grid_config: GridConfig | None
@@ -124,7 +127,8 @@ class SessionService:
             active_profile_id=self.session.rig.active_profile_id,
             mode=self.session.rig.mode,
             metadata=self.session.metadata,
-            plan=self.session.plan,
+            acq=self.session.acq,
+            storage=self.session.storage,
             grid_config=self.session.grid_config,
             tiles=tiles,
             stacks=self.session.stacks,
@@ -138,40 +142,23 @@ class SessionService:
     async def handle_message(self, client_id: str, topic: str, payload: dict[str, Any]) -> None:
         """Handle incoming message from a client.
 
-        Only handles rig-level WS topics (preview/*, device/*, profile/update)
-        and acquisition topics (acq/start, acq/stop).
-        Plan and profile-prop topics are now REST-only.
+        Only handles rig-level WS topics (preview/*, device/*, profile/update).
+        Acquisition control and plan topics are REST-only.
         """
         # Try rig service first (preview/*, device/*, profile/update)
         if await self.rig_service.handle_message(client_id, topic, payload):
             return
 
-        # Handle acquisition topics
-        match topic:
-            case "acq/start":
-                await self.handle_acq_start(payload)
-            case "acq/stop":
-                await self.handle_acq_stop()
-            case _:
-                log.warning("Unknown topic from client %s: %s", client_id, topic)
+        log.warning("Unknown topic from client %s: %s", client_id, topic)
 
     # ==================== Acquisition ====================
 
-    async def handle_acq_start(self, payload: dict[str, Any]) -> None:
-        """Handle acquisition start request."""
-        tile_id = payload.get("tile_id")  # Optional - if None, acquire all
-
+    def start_acquisition(self, tile_id: str | None = None) -> None:
+        """Launch acquisition as a background task."""
         if tile_id:
-            # Acquire single stack
             fire_and_forget(self._run_single_acquisition(tile_id), log=log)
         else:
-            # Acquire all pending stacks
             fire_and_forget(self._run_full_acquisition(), log=log)
-
-    async def handle_acq_stop(self) -> None:
-        """Handle acquisition stop request."""
-        # TODO: Implement acquisition cancellation
-        log.warning("Acquisition stop not yet implemented")
 
     async def _run_single_acquisition(self, tile_id: str) -> None:
         """Run acquisition for a single stack."""

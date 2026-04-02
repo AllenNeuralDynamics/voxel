@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ome_zarr_writer.buffer import MultiScaleBuffer
+from ome_zarr_writer.buffer import PyramidBuffer
 
 from .base import Backend
 
@@ -25,7 +25,7 @@ class LogBackend(Backend):
 
     def _initialize(self):
         assert isinstance(self.storage_root, Path), "LogBackend requires a local path"
-        log_path = self.storage_root / "write_log.txt"
+        log_path = self.storage_root / f"ch_{self.channel_index}.txt"
         self.log_path = log_path.expanduser().resolve()
         self._batch_count = 0
 
@@ -34,7 +34,7 @@ class LogBackend(Backend):
 
         # Initialize log file with header
         with open(self.log_path, "w") as f:
-            f.write("# LogBackend - Streaming Acquisition Log\n")
+            f.write(f"# LogBackend - Channel {self.channel_index}\n")
             f.write(f"# Volume shape: {self.cfg.volume_shape}\n")
             f.write(f"# Root path: {self.storage_root}\n")
             f.write(f"# Max level: {self.cfg.max_level.name} (factor={self.cfg.max_level.factor})\n")
@@ -42,12 +42,12 @@ class LogBackend(Backend):
             f.write(f"# Total batches: {self.cfg.num_batches}\n")
             f.write("#" + "=" * 70 + "\n")
 
-    def write_batch(self, buffer: MultiScaleBuffer) -> bool:
+    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
         """
         'Write' a batch by logging its metadata to the text file.
 
         Args:
-            buffer: MultiScaleBuffer with computed pyramid (called during FLUSHING)
+            buffer: PyramidBuffer with computed pyramid (called during FLUSHING)
 
         Returns:
             True on success, False on failure

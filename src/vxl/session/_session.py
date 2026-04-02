@@ -14,7 +14,7 @@ from vxl.rig import RigMode, VoxelRig
 from vxl.sync import FrameTiming
 from vxl.tile import Stack, StackResult, StackStatus, Tile
 
-from ._config import AcquisitionPlan, SessionConfig
+from ._config import AcquisitionConfig, SessionConfig, StorageConfig
 
 
 class Session:
@@ -42,7 +42,7 @@ class Session:
         self._tile_size: tuple[float, float] | None = rig.get_topic_value("fov")
         self._unsubscribe_fov = rig.subscribe("fov", self._on_fov_changed)
 
-    def _save(self) -> None:
+    def save(self) -> None:
         """Save session to disk, preserving YAML anchors."""
         session_file = self._session_dir / self.SESSION_FILENAME
         self._config.to_yaml(session_file)
@@ -58,20 +58,18 @@ class Session:
     ) -> "Session":
         """Create a new session.
 
-        Builds SessionConfig, derives folder name from metadata, creates the
-        session directory under root_path, and starts the rig.
+        Derives session directory, builds SessionConfig with storage path,
+        creates the directory under root_path, and starts the rig.
         """
-        config = SessionConfig.create_new(config_path, session_name, metadata_target, metadata)
-
-        # Derive folder name: {rig}-{date}-{session_name or short_id}
+        # Derive session directory before config creation
         date = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
-        suffix = config.session_name or secrets.token_hex(2)
-        folder = f"{config.rig.info.name}-{date}-{suffix}"
-        session_dir = root_path / folder
+        suffix = session_name or secrets.token_hex(2)
+        session_dir = root_path / f"{config_path.stem}-{date}-{suffix}"
 
         session_dir.mkdir(parents=True, exist_ok=True)
         (session_dir / cls.DATA_DIRNAME).mkdir(exist_ok=True)
 
+        config = SessionConfig.create_new(config_path, session_dir, session_name, metadata_target, metadata)
         config.to_yaml(session_dir / cls.SESSION_FILENAME)
 
         rig = VoxelRig(config=config.rig)
@@ -95,7 +93,7 @@ class Session:
         await rig.start()
 
         session = cls(config=config, rig=rig, session_dir=session_dir)
-        session._log.info(f"Resumed session with {len(config.plan.stacks)} stacks")
+        session._log.info(f"Resumed session with {len(config.stacks)} stacks")
         return session
 
     # ==================== Properties ====================
@@ -116,14 +114,19 @@ class Session:
         return self._session_dir
 
     @property
-    def plan(self) -> AcquisitionPlan:
-        """Get the acquisition plan."""
-        return self._config.plan
+    def acq(self) -> AcquisitionConfig:
+        """Get the acquisition config."""
+        return self._config.acq
+
+    @property
+    def storage(self) -> "StorageConfig":
+        """Get the storage config."""
+        return self._config.storage
 
     @property
     def stacks(self) -> list[Stack]:
         """Get the list of all stacks (flat, unfiltered)."""
-        return self._config.plan.stacks
+        return self._config.stacks
 
     @property
     def grid_config(self) -> GridConfig | None:
@@ -136,7 +139,7 @@ class Session:
     @property
     def tile_order(self) -> TileOrder:
         """Get the current tile ordering."""
-        return self._config.plan.tile_order
+        return self._config.acq.tile_order
 
     # ==================== Metadata ====================
 
@@ -153,7 +156,7 @@ class Session:
     @property
     def has_acquired(self) -> bool:
         """True if any stack has moved past PLANNED status."""
-        return any(s.status != StackStatus.PLANNED for s in self._config.plan.stacks)
+        return any(s.status != StackStatus.PLANNED for s in self._config.stacks)
 
     def set_metadata_target(self, target: str) -> None:
         """Change the metadata schema class and reset metadata to defaults.
@@ -167,7 +170,7 @@ class Session:
         instance = cls()  # Pydantic model with all defaults
         self._config.metadata_target = target
         self._config.metadata = instance.model_dump()
-        self._save()
+        self.save()
         self._log.info("Changed metadata target to %s", target)
 
     def update_metadata(self, values: dict[str, Any]) -> None:
@@ -189,7 +192,7 @@ class Session:
         merged = {**self._config.metadata, **values}
         cls(**merged)  # validate against schema
         self._config.metadata = merged
-        self._save()
+        self.save()
         self._log.info("Updated metadata: %s", list(values.keys()))
 
     # ==================== Device Props (Save to Profile) ====================
@@ -201,7 +204,7 @@ class Session:
         profile_id = self._rig.active_profile_id
         captured = await self._rig.capture_device_props(device_id)
         self._config.rig.profiles[profile_id].props[device_id] = captured
-        self._save()
+        self.save()
         self._log.info(f"Saved props for '{device_id}' in profile '{profile_id}'")
 
     async def save_all_device_props(self) -> list[str]:
@@ -247,7 +250,7 @@ class Session:
                         f"exceeds DAQ range [{ao_range.min}, {ao_range.max}]V"
                     )
 
-        self._save()
+        self.save()
         await self._rig.update_active_waveforms()
 
     async def apply_profile_props(self, device_ids: list[str] | None = None) -> list[str]:
@@ -280,10 +283,10 @@ class Session:
 
     def clear_profile_stacks(self, profile_id: str) -> None:
         """Remove all stacks for the given profile. Auto-removes from profile_order."""
-        self._config.plan.stacks = [s for s in self._config.plan.stacks if s.profile_id != profile_id]
-        if profile_id in self._config.plan.profile_order:
-            self._config.plan.profile_order.remove(profile_id)
-        self._save()
+        self._config.stacks = [s for s in self._config.stacks if s.profile_id != profile_id]
+        if profile_id in self._config.acq.profile_order:
+            self._config.acq.profile_order.remove(profile_id)
+        self.save()
 
     async def _on_fov_changed(self, fov: tuple[float, float]) -> None:
         """Handle FOV changes from rig topic."""
@@ -303,7 +306,7 @@ class Session:
             return
 
         active_pid = self._rig.active_profile_id
-        if not any(s.status == StackStatus.PLANNED and s.profile_id == active_pid for s in self._config.plan.stacks):
+        if not any(s.status == StackStatus.PLANNED and s.profile_id == active_pid for s in self._config.stacks):
             return
 
         fov_w, fov_h = self.get_fov_size()
@@ -311,7 +314,7 @@ class Session:
         offset_x = gc.x_offset
         offset_y = gc.y_offset
 
-        for stack in self._config.plan.stacks:
+        for stack in self._config.stacks:
             if stack.status == StackStatus.PLANNED and stack.profile_id == active_pid:
                 stack.x = offset_x + stack.col * step_w
                 stack.y = offset_y + stack.row * step_h
@@ -327,12 +330,12 @@ class Session:
         if gc is None:
             raise RuntimeError("Active profile has no grid configuration")
         active_pid = self._rig.active_profile_id
-        if not force and any(s.profile_id == active_pid for s in self._config.plan.stacks):
+        if not force and any(s.profile_id == active_pid for s in self._config.stacks):
             raise RuntimeError("Cannot modify grid: stacks exist for this profile (use force to override)")
         gc.x_offset = x_offset
         gc.y_offset = y_offset
         self._recalculate_planned_stack_positions()
-        self._save()
+        self.save()
 
     def set_default_z_range(self, default_z_start: float, default_z_end: float) -> None:
         """Set default Z range for new stacks on the active profile."""
@@ -341,7 +344,7 @@ class Session:
             raise RuntimeError("Active profile has no grid configuration")
         gc.default_z_start = default_z_start
         gc.default_z_end = default_z_end
-        self._save()
+        self.save()
 
     def set_overlap(self, overlap_x: float, overlap_y: float, *, force: bool = False) -> None:
         """Set overlap for the active profile. Recalculates PLANNED stack positions.
@@ -356,12 +359,12 @@ class Session:
         if gc is None:
             raise RuntimeError("Active profile has no grid configuration")
         active_pid = self._rig.active_profile_id
-        if not force and any(s.profile_id == active_pid for s in self._config.plan.stacks):
+        if not force and any(s.profile_id == active_pid for s in self._config.stacks):
             raise RuntimeError("Cannot modify grid: stacks exist for this profile (use force to override)")
         gc.overlap_x = overlap_x
         gc.overlap_y = overlap_y
         self._recalculate_planned_stack_positions()
-        self._save()
+        self.save()
 
     def get_fov_size(self) -> tuple[float, float]:
         """Get FOV size in micrometers from rig-published topic.
@@ -489,8 +492,8 @@ class Session:
             raise RuntimeError(f"Profile '{active_pid}' has no grid configuration")
 
         # Implicit profile addition to plan
-        if active_pid not in self._config.plan.profile_order:
-            self._config.plan.profile_order.append(active_pid)
+        if active_pid not in self._config.acq.profile_order:
+            self._config.acq.profile_order.append(active_pid)
 
         fov_w, fov_h = self.get_fov_size()
         step_w, step_h = self.get_step_size()
@@ -509,7 +512,7 @@ class Session:
             tile_id = f"tile_r{row}_c{col}"
 
             # Check for duplicate scoped to active profile
-            if any(st.tile_id == tile_id and st.profile_id == active_pid for st in self._config.plan.stacks):
+            if any(st.tile_id == tile_id and st.profile_id == active_pid for st in self._config.stacks):
                 raise ValueError(f"Stack {tile_id} already exists for profile '{active_pid}'")
 
             stack = Stack(
@@ -527,12 +530,12 @@ class Session:
                 status=StackStatus.PLANNED,
             )
 
-            self._config.plan.stacks.append(stack)
+            self._config.stacks.append(stack)
             added.append(stack)
             self._log.info(f"Added stack {tile_id} at ({sx:.1f}, {sy:.1f}) um [profile={active_pid}]")
 
         self._sort_stacks()
-        self._save()
+        self.save()
         return added
 
     def edit_stacks(self, edits: list[dict[str, int | float]]) -> list[Stack]:
@@ -552,7 +555,7 @@ class Session:
             col = int(e["col"])
             tile_id = f"tile_r{row}_c{col}"
 
-            stack = next((s for s in self._config.plan.stacks if s.tile_id == tile_id), None)
+            stack = next((s for s in self._config.stacks if s.tile_id == tile_id), None)
             if stack is None:
                 raise ValueError(f"Stack {tile_id} not found")
 
@@ -567,7 +570,7 @@ class Session:
             edited.append(stack)
             self._log.info(f"Edited stack {tile_id}")
 
-        self._save()
+        self.save()
         return edited
 
     def remove_stacks(self, positions: list[dict[str, int]]) -> None:
@@ -587,11 +590,11 @@ class Session:
             col = int(p["col"])
             tile_id = f"tile_r{row}_c{col}"
 
-            for i, stack in enumerate(self._config.plan.stacks):
+            for i, stack in enumerate(self._config.stacks):
                 if stack.tile_id == tile_id and stack.profile_id == active_pid:
                     if stack.status == StackStatus.COMPLETED:
                         self._log.warning(f"Removing completed stack {tile_id}")
-                    self._config.plan.stacks.pop(i)
+                    self._config.stacks.pop(i)
                     self._log.info(f"Removed stack {tile_id}")
                     break
             else:
@@ -600,41 +603,41 @@ class Session:
         # Implicit profile removal if no stacks remain
         if (
             active_pid
-            and not any(s.profile_id == active_pid for s in self._config.plan.stacks)
-            and active_pid in self._config.plan.profile_order
+            and not any(s.profile_id == active_pid for s in self._config.stacks)
+            and active_pid in self._config.acq.profile_order
         ):
-            self._config.plan.profile_order.remove(active_pid)
+            self._config.acq.profile_order.remove(active_pid)
 
-        self._save()
+        self.save()
 
     def set_tile_order(self, order: TileOrder) -> None:
         """Set tile order. Re-sorts stack list."""
-        self._config.plan.tile_order = order
+        self._config.acq.tile_order = order
         self._sort_stacks()
-        self._save()
+        self.save()
 
     def set_interleaving(self, interleaving: Interleaving) -> None:
         """Set interleaving mode. Re-sorts stack list."""
-        self._config.plan.interleaving = interleaving
+        self._config.acq.interleaving = interleaving
         self._sort_stacks()
-        self._save()
+        self.save()
 
     def reorder_profiles(self, profile_ids: list[str]) -> None:
         """Reorder profiles in the plan. Re-sorts stack list."""
-        plan = self._config.plan
-        plan.profile_order = [pid for pid in profile_ids if pid in plan.profile_order]
+        acq = self._config.acq
+        acq.profile_order = [pid for pid in profile_ids if pid in acq.profile_order]
         self._sort_stacks()
-        self._save()
+        self.save()
 
     def _sort_stacks(self) -> None:
         """Sort stacks according to tile_order and interleaving."""
-        plan = self._config.plan
-        order = plan.tile_order
+        acq = self._config.acq
+        order = acq.tile_order
 
         if order == "custom":
             return  # stack list order is authoritative
 
-        profile_rank = {pid: i for i, pid in enumerate(plan.profile_order)}
+        profile_rank = {pid: i for i, pid in enumerate(acq.profile_order)}
 
         def spatial_key(s: Stack) -> tuple[int, ...]:
             if order == "row_wise":
@@ -649,18 +652,18 @@ class Session:
 
         def sort_key(s: Stack) -> tuple[int, ...]:
             spatial = spatial_key(s)
-            p_rank = profile_rank.get(s.profile_id, len(plan.profile_order))
-            if plan.interleaving == "profile_first":
+            p_rank = profile_rank.get(s.profile_id, len(acq.profile_order))
+            if acq.interleaving == "profile_first":
                 return (p_rank, *spatial)
             return (*spatial, p_rank)  # position_first
 
-        plan.stacks.sort(key=sort_key)
+        self._config.stacks.sort(key=sort_key)
 
     # ==================== Acquisition ====================
 
     async def acquire_stack(self, tile_id: str) -> StackResult:
         """Acquire a single stack by ID. Uses the profile captured when stack was planned."""
-        stack = next((s for s in self._config.plan.stacks if s.tile_id == tile_id), None)
+        stack = next((s for s in self._config.stacks if s.tile_id == tile_id), None)
         if stack is None:
             raise ValueError(f"Stack {tile_id} not found")
 
@@ -670,20 +673,13 @@ class Session:
         if self._rig.mode == RigMode.ACQUIRING:
             raise RuntimeError("Another stack is currently being acquired")
 
-        data_dir = self._session_dir / self.DATA_DIRNAME
-        output_dir = data_dir / tile_id
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Set the profile that was captured when this stack was planned
-        await self._rig.set_active_profile(stack.profile_id)
-
         self._log.info(f"Acquiring stack {tile_id} with profile '{stack.profile_id}'...")
-        result = await self._rig.acquire_stack(stack, output_dir)
+        result = await self._rig.acquire_stack(stack, self._config.storage)
 
         # Update stack status and output path
         stack.status = result.status
-        stack.output_path = str(output_dir.relative_to(self._session_dir))
-        self._save()
+        stack.output_path = str(result.output_dir)
+        self.save()
 
         if result.status == StackStatus.COMPLETED:
             self._log.info(f"Completed stack {tile_id}")
@@ -696,7 +692,7 @@ class Session:
         """Acquire all PLANNED stacks in order. Saves state after each."""
         results: list[StackResult] = []
 
-        pending_stacks = [s for s in self._config.plan.stacks if s.status == StackStatus.PLANNED]
+        pending_stacks = [s for s in self._config.stacks if s.status == StackStatus.PLANNED]
         self._log.info(f"Starting acquisition of {len(pending_stacks)} stacks")
 
         for stack in pending_stacks:
@@ -706,11 +702,15 @@ class Session:
         self._log.info(f"Acquisition complete: {len(results)} stacks processed")
         return results
 
+    def stop_acquisition(self) -> None:
+        """Stop the current acquisition. TODO: implement cancellation."""
+        self._log.warning("Acquisition stop not yet implemented")
+
     # ==================== Lifecycle ====================
 
     async def close(self) -> None:
         """Save final state and stop rig."""
         self._unsubscribe_fov()
-        self._save()
+        self.save()
         await self._rig.stop()
         self._log.info("Session closed")

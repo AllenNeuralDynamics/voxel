@@ -293,7 +293,7 @@ class VieworksCamera(Camera):
             case TriggerPolarity.FALLING_EDGE:
                 self._dev.remote.set("TriggerActivation", "FallingEdge")
 
-    def _prepare_for_capture(self) -> None:
+    def _arm(self) -> None:
         """Prepare the camera to acquire images.
 
         This method sets up the camera buffer for Vieworks cameras.
@@ -360,6 +360,14 @@ class VieworksCamera(Camera):
             self.log.warning("EGrabber error when attempting to stop camera. Error: %s", e)
         except Exception:
             self.log.exception("Failed to stop camera")
+
+    def disarm(self) -> None:
+        """Release camera capture buffers."""
+        try:
+            self._dev.grabber.realloc_buffers(0)
+            self.log.info("Camera buffers released.")
+        except Exception:
+            self.log.exception("Failed to release camera buffers")
 
     def _refresh_binning_info(self) -> None:
         if not self._dev.remote:

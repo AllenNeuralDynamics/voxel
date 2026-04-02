@@ -37,14 +37,24 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
 import type { Interleaving, TileOrder } from './config.ts';
 
 /**
- * Acquisition plan - profile ordering and stacks.
- * Profile plan membership is implicit via stacks.
+ * Acquisition config - profile ordering and tile ordering.
+ * Profile membership is implicit via stacks.
  */
-export interface AcquisitionPlan {
+export interface AcquisitionConfig {
   profile_order: string[];
   tile_order: TileOrder;
   interleaving: Interleaving;
-  stacks: Stack[];
+}
+
+/**
+ * Storage config - how acquired data is stored.
+ */
+export interface StorageConfig {
+  store_path?: string;
+  max_level: number;
+  compression: string;
+  batch_z_shards: number;
+  target_shard_gb: number;
 }
 
 /**
@@ -67,8 +77,11 @@ export interface SessionStatus {
   metadata: Record<string, unknown>;
   timestamp: string;
 
-  // Acquisition plan (per-profile grid configs + all stacks)
-  plan: AcquisitionPlan;
+  // Acquisition config (profile ordering)
+  acq: AcquisitionConfig;
+
+  // Storage config
+  storage: StorageConfig;
 
   // Convenience fields (active profile's data)
   grid_config: GridConfig | null;

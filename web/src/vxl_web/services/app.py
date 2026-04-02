@@ -25,13 +25,13 @@ from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets, resolv
 from vxl.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxlib import fire_and_forget
 
-from .plan import plan_router
+from .acq import acq_router
 from .rig import rig_router
 from .session import SessionService, SessionStatus, info_router
 
 router = APIRouter(tags=["app"])
 router.include_router(info_router)  # Session info/status/metadata endpoints
-router.include_router(plan_router)  # Acquisition plan endpoints
+router.include_router(acq_router)  # Acquisition config endpoints
 router.include_router(rig_router)  # Rig/device/profile endpoints
 log = logging.getLogger(__name__)
 

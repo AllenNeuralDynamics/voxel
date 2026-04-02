@@ -415,6 +415,16 @@ def collect_commands(obj: Any) -> dict[str, Command]:
 
     Returns:
         Dictionary mapping command names to Command instances
+
+    TODO: Currently @describe serves double duty — it registers methods for remote invocation
+    AND marks them as user-facing (UI-visible) commands. Internal methods like arm/disarm,
+    initialize_stack/finalize_stack need remote invocation but shouldn't appear in the UI.
+    Consider one of:
+      A. A lightweight @command decorator for remote-only (no UI metadata), alongside @describe
+         for user-facing commands.
+      B. Auto-discover all public methods as remotely callable; @describe only adds UI metadata.
+         Simplest, but risks accidental exposure.
+      C. Add an `internal=True` flag to @describe to hide from UI while keeping remote access.
     """
     commands: dict[str, Command] = {}
 

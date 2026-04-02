@@ -59,7 +59,7 @@ This document describes the detailed execution flow when the rig calls `camera.s
 │   │   │   ├─ self.trigger_polarity = trigger_polarity
 │   │   │   ├─ self._configure_trigger_mode(self.trigger_mode)  # SDK call - BLOCKS
 │   │   │   ├─ self._configure_trigger_polarity(self.trigger_polarity)  # SDK call - BLOCKS
-│   │   │   └─ self._prepare_for_capture()  # SDK call - BLOCKS (buffer allocation, etc.)
+│   │   │   └─ self._arm()  # SDK call - BLOCKS (buffer allocation, etc.)
 │   │   └─ Returns from executor thread
 │   │
 │   └─ await completes, execution continues in event loop thread

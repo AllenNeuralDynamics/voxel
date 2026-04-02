@@ -1,12 +1,16 @@
 import asyncio
+import logging
 from abc import abstractmethod
 from contextlib import suppress
 from datetime import datetime
 from enum import StrEnum
-from pathlib import Path
 from typing import Literal, cast
 
 import numpy as np
+from ome_zarr_writer import OMEZarrWriter, WriterConfig
+from ome_zarr_writer.backends.log import LogBackend
+
+# from ome_zarr_writer.backends.ts import TensorStoreBackend
 from pydantic import BaseModel
 from rigup.device import DeviceController
 from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
@@ -15,7 +19,10 @@ from vxlib.vec import IVec2D, Vec2D
 from rigup import Device, describe
 from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
 from vxl.device import DeviceType
+from vxl.tile import BatchResult, Stack, StorageConfig
 from vxlib import Dtype, SchemaModel, fire_and_forget
+
+log = logging.getLogger(__name__)
 
 
 class FrameRegion(BaseModel):
@@ -85,18 +92,6 @@ PIXEL_FMT_TO_DTYPE: dict[PixelFormat, Dtype] = {
 }
 
 BINNING_OPTIONS = [1, 2, 4, 8]
-
-
-class CameraBatchResult(BaseModel):
-    """Result of a batch capture operation."""
-
-    camera_id: str
-    num_frames: int
-    output_path: Path
-    started_at: datetime
-    completed_at: datetime
-    duration_s: float
-    dropped_frames: int = 0
 
 
 class Camera(Device):
@@ -243,15 +238,23 @@ class Camera(Device):
         """Configure the trigger polarity of the camera."""
 
     @abstractmethod
-    def _prepare_for_capture(self) -> None:
-        """Prepare the camera to acquire images. Initializes the camera buffer."""
+    def _arm(self) -> None:
+        """Allocate capture buffers. Called by arm()."""
 
-    def prepare(self, trigger_mode: TriggerMode | None = None, trigger_polarity: TriggerPolarity | None = None):
+    def disarm(self) -> None:
+        """Release capture buffers. Override if driver needs explicit cleanup."""
+
+    def arm(self, trigger_mode: TriggerMode | None = None, trigger_polarity: TriggerPolarity | None = None):
+        """Configure trigger and allocate capture buffers.
+
+        Safe to call multiple times — releases existing buffers before re-allocating.
+        """
+        self.disarm()
         self.trigger_mode = trigger_mode if trigger_mode is not None else self.trigger_mode
         self.trigger_polarity = trigger_polarity if trigger_polarity is not None else self.trigger_polarity
         self._configure_trigger_mode(self.trigger_mode)
         self._configure_trigger_polarity(self.trigger_polarity)
-        self._prepare_for_capture()
+        self._arm()
 
     @abstractmethod
     def start(self, frame_count: int | None = None) -> None:
@@ -299,6 +302,7 @@ class CameraController(DeviceController[Camera]):
         self._preview_task: asyncio.Task | None = None
         self._frame_idx = 0
         self._previewer = PreviewGenerator(sink=self._on_preview_frame, uid=device.uid)
+        self._writer: OMEZarrWriter | None = None
 
     @property
     @describe(label="Camera Mode", stream=True)
@@ -341,91 +345,17 @@ class CameraController(DeviceController[Camera]):
         if self._mode != CameraMode.IDLE:
             raise RuntimeError(f"Cannot start preview: camera in {self._mode} mode")
 
-        def _prepare_and_start():
-            self.device.prepare(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
+        def _arm_and_start():
+            self.device.arm(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
             self.device.start(frame_count=None)
 
-        await self._run_sync(_prepare_and_start)
+        await self._run_sync(_arm_and_start)
 
         self._mode = CameraMode.PREVIEW
         self._frame_idx = 0
         self._preview_task = asyncio.create_task(self._preview_loop())
 
         return "preview"
-
-    @describe(label="Stop Preview")
-    async def stop_preview(self):
-        if self._mode != CameraMode.PREVIEW:
-            return
-
-        self._mode = CameraMode.IDLE
-        if self._preview_task:
-            await self._preview_task
-            self._preview_task = None
-        await self._run_sync(self.device.stop)
-
-    @describe(label="Capture Batch")
-    async def capture_batch(
-        self,
-        num_frames: int,
-        output_dir: str,
-        trigger_mode: TriggerMode = TriggerMode.ON,
-        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
-    ) -> CameraBatchResult:
-        """Capture a batch of frames in triggered mode and write to output_dir."""
-        if self._mode != CameraMode.IDLE:
-            raise RuntimeError(f"Cannot capture batch: camera in {self._mode} mode")
-
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        log_file = output_path / "frames.txt"
-
-        started_at = datetime.now()
-        self._mode = CameraMode.ACQUISITION
-
-        try:
-
-            def _prepare_and_start():
-                self.device.prepare(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
-                self.device.start(frame_count=num_frames)
-
-            await self._run_sync(_prepare_and_start)
-
-            frames_captured = 0
-            dropped = 0
-
-            with log_file.open("w") as f:
-                f.write(f"camera_id: {self.device.uid}\n")
-                f.write(f"started_at: {started_at.isoformat()}\n")
-                f.write("---\n")
-
-                for i in range(num_frames):
-                    frame = await self._run_sync(self.device.grab_frame)
-                    frame_time = datetime.now()
-                    f.write(f"frame {i}: shape={frame.shape}, mean={frame.mean():.2f}, ts={frame_time.isoformat()}\n")
-                    frames_captured += 1
-
-                    stream_info = self.device.stream_info
-                    if stream_info:
-                        dropped = stream_info.dropped_frames
-
-            await self._run_sync(self.device.stop)
-
-        finally:
-            self._mode = CameraMode.IDLE
-
-        completed_at = datetime.now()
-        duration = (completed_at - started_at).total_seconds()
-
-        return CameraBatchResult(
-            camera_id=self.device.uid,
-            num_frames=frames_captured,
-            output_path=output_path,
-            started_at=started_at,
-            completed_at=completed_at,
-            duration_s=duration,
-            dropped_frames=dropped,
-        )
 
     async def _preview_loop(self):
         try:
@@ -438,3 +368,111 @@ class CameraController(DeviceController[Camera]):
         except Exception:
             self.log.exception("Preview loop error")
             self._mode = CameraMode.IDLE
+
+    @describe(label="Stop Preview")
+    async def stop_preview(self):
+        if self._mode != CameraMode.PREVIEW:
+            return
+
+        self._mode = CameraMode.IDLE
+        if self._preview_task:
+            await self._preview_task
+            self._preview_task = None
+        await self._run_sync(self.device.stop)
+        await self._run_sync(self.device.disarm)
+
+    @describe(label="Initialize Stack")
+    async def initialize_stack(
+        self,
+        stack: Stack,
+        storage: StorageConfig,
+        channel_index: int = 0,
+        num_channels: int = 1,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> None:
+        """Prepare camera and writer for a stack acquisition.
+
+        Arms the camera (allocates buffers, configures trigger) and creates
+        an OMEZarrWriter for writing frames to disk.
+        """
+        if self._writer is not None:
+            raise RuntimeError("Stack already initialized. Call finalize_stack() first.")
+        if self._mode != CameraMode.IDLE:
+            raise RuntimeError(f"Cannot initialize stack: camera in {self._mode} mode")
+
+        self._mode = CameraMode.ACQUISITION
+
+        # Arm camera (allocates buffers, configures trigger)
+        await self._run_sync(lambda: self.device.arm(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity))
+
+        # Build WriterConfig from device properties + stack + storage
+        region = self.device.frame_region
+        cfg = WriterConfig.create(
+            name=stack.tile_id,
+            num_frames=stack.num_frames,
+            frame_height=int(region.height),
+            frame_width=int(region.width),
+            z_step=stack.z_step,
+            pixel_size=self.device.pixel_size_um,
+            dtype=self.device.pixel_type,
+            max_level=storage.max_level,
+            compression=storage.compression,
+            batch_z_shards=storage.batch_z_shards,
+            target_shard_gb=storage.target_shard_gb,
+        )
+
+        # Create backend + writer
+        store_path = str(storage.store_path) if storage.store_path else "."
+        backend_cls = LogBackend  # TensorStoreBackend
+        backend = backend_cls(cfg, storage_root=store_path, channel_index=channel_index, num_channels=num_channels)
+        self._writer = OMEZarrWriter(backend, channel_index=channel_index)
+        log.info("Stack initialized for %s: %s ch=%d", self.device.uid, stack.tile_id, channel_index)
+
+    @describe(label="Finalize Stack")
+    async def finalize_stack(self) -> None:
+        """Complete stack acquisition. Closes writer and disarms camera."""
+        if self._writer is not None:
+            self._writer.close()
+            self._writer = None
+        await self._run_sync(self.device.disarm)
+        self._mode = CameraMode.IDLE
+        log.info("Stack finalized for %s", self.device.uid)
+
+    @describe(label="Capture Batch")
+    async def capture_batch(self, num_frames: int) -> BatchResult:
+        """Capture a batch of frames. Must call initialize_stack first.
+
+        Starts the camera, grabs num_frames frames (feeding them to the writer),
+        then stops the camera. Can be called multiple times per stack.
+        """
+        if self._writer is None:
+            raise RuntimeError("No stack initialized. Call initialize_stack() first.")
+        if self._mode != CameraMode.ACQUISITION:
+            raise RuntimeError(f"Cannot capture batch: camera in {self._mode} mode")
+
+        started_at = datetime.now()
+        await self._run_sync(lambda: self.device.start(frame_count=num_frames))
+
+        frames_captured = 0
+        dropped = 0
+
+        for _ in range(num_frames):
+            frame = await self._run_sync(self.device.grab_frame)
+            self._writer.add_frame(frame)
+            frames_captured += 1
+
+            stream_info = self.device.stream_info
+            if stream_info:
+                dropped = stream_info.dropped_frames
+
+        await self._run_sync(self.device.stop)
+
+        completed_at = datetime.now()
+        return BatchResult(
+            num_frames=frames_captured,
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_s=(completed_at - started_at).total_seconds(),
+            dropped_frames=dropped,
+        )

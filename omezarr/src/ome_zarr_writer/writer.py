@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from concurrent.futures import Future
 
 import numpy as np
 from pydantic import BaseModel, Field, computed_field
@@ -7,10 +8,8 @@ from rich import print
 from vxlib.vec import UIVec3D
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.types import Dtype, ScaleLevel
-
-from .buffer import BufferStage, BufferStatus, MultiScaleBuffer, create_ring_buffer
-from .config import WriterConfig
+from ome_zarr_writer.buffer import BufferMode, BufferStage, BufferStatus, PyramidBuffer, create_ring_buffer
+from ome_zarr_writer.types import ScaleLevel
 
 
 class StreamStatus(BaseModel):
@@ -82,37 +81,13 @@ class StreamStatus(BaseModel):
 
 
 class StreamMetrics:
-    """
-    Performance tracker for streaming acquisition.
-
-    Tracks FPS and throughput with both cumulative and instantaneous metrics.
-    Designed for use within StreamingWriter but can also be used standalone
-    for custom acquisition loops.
-
-    Example standalone usage:
-        >>> metrics = StreamMetrics(frame_bytes=512*512*2)
-        >>> for frame in camera:
-        ...     process(frame)
-        ...     metrics.tick()
-        ...     print(f"FPS: {metrics.fps:.1f}, Throughput: {metrics.throughput_gbs:.2f} GB/s")
-
-    Args:
-        frame_bytes: Size of each frame in bytes
-    """
+    """Performance tracker for streaming acquisition."""
 
     def __init__(self, frame_bytes: int):
-        """
-        Initialize performance tracker.
-
-        Args:
-            frame_bytes: Size of each frame in bytes
-        """
         self.frame_bytes = frame_bytes
         self.start_time = time.perf_counter()
         self.frame_count = 0
         self.total_bytes = 0
-
-        # For instantaneous metrics (window-based)
         self._window_start = self.start_time
         self._window_frames = 0
         self._window_bytes = 0
@@ -132,51 +107,44 @@ class StreamMetrics:
 
     @property
     def elapsed(self) -> float:
-        """Total elapsed time since start (seconds)."""
         return time.perf_counter() - self.start_time
 
     @property
     def fps(self) -> float:
-        """Cumulative frames per second since start."""
         return self.frame_count / self.elapsed if self.elapsed > 0 else 0.0
 
     @property
     def fps_inst(self) -> float:
-        """Instantaneous FPS since last window reset."""
         elapsed = time.perf_counter() - self._window_start
         return self._window_frames / elapsed if elapsed > 0 else 0.0
 
     @property
     def throughput_gbs(self) -> float:
-        """Cumulative throughput in GB/s since start."""
         return (self.total_bytes / 1e9) / self.elapsed if self.elapsed > 0 else 0.0
 
     @property
     def throughput_gbs_inst(self) -> float:
-        """Instantaneous throughput in GB/s since last window reset."""
         elapsed = time.perf_counter() - self._window_start
         return (self._window_bytes / 1e9) / elapsed if elapsed > 0 else 0.0
-
-    def __repr__(self) -> str:
-        return (
-            f"StreamMetrics(frames={self.frame_count}, fps={self.fps:.1f}, throughput={self.throughput_gbs:.2f} GB/s)"
-        )
 
 
 class OMEZarrWriter:
     def __init__(
         self,
         backend: Backend,
+        channel_index: int = 0,
         slots: int = 3,
+        buffer_mode: BufferMode = "threaded",
         status_callback: Callable[[StreamStatus], None] | None = None,
         status_interval: float = 1.0,
     ) -> None:
-        """
-        Initialize the streaming writer.
+        """Initialize the streaming writer.
 
         Args:
             backend: Backend instance (contains cfg)
+            channel_index: Channel index this writer writes to in the (C, Z, Y, X) array
             slots: Number of buffer slots in the ring (minimum 2)
+            buffer_mode: Buffer implementation — "threaded" or "process"
             status_callback: Called periodically with status updates.
                            Default: prints to console with rich formatting.
                            None: silent (no auto-reporting).
@@ -186,7 +154,7 @@ class OMEZarrWriter:
             raise ValueError("Ring buffer requires at least 2 slots")
 
         self.backend = backend
-        # self.cfg = backend.cfg  # Extract config from writer
+        self.channel_index = channel_index
         self.slots = slots
 
         # Create buffer shape for each batch
@@ -196,30 +164,31 @@ class OMEZarrWriter:
             x=self.cfg.volume_shape.x,
         )
 
-        # Initialize ring of buffers with callback
+        # Initialize ring of buffers
         self.buffers = create_ring_buffer(
             slots=slots,
             prefix="ring",
             shape_l0=self.batch_shape,
             max_level=self.cfg.max_level,
             dtype=self.cfg.dtype,
-            flush_callback=self._batch_flush_callback,  # Async callback
+            mode=buffer_mode,
         )
 
         # Track state
-        self._global_z = 0  # Absolute z position in full volume
-        self._current_slot = 0  # Active buffer index
-        self._batch_number = 0  # Current batch index
+        self._global_z = 0
+        self._current_slot = 0
+        self._batch_number = 0
+        self._pending: dict[int, Future] = {}  # slot_idx → processing future
 
         # Assign first buffer to batch 0
-        self.buffers[self._current_slot].assign_batch_index(0)
+        self.buffers[self._current_slot].assign_batch(0)
 
-        # Status reporting configuration
+        # Status reporting
         self._status_callback = status_callback or self._default_status_callback
         self._status_interval = status_interval
         self._last_status_time = time.perf_counter()
 
-        # Create performance tracker
+        # Performance tracker
         frame_bytes = backend.cfg.volume_shape.y * backend.cfg.volume_shape.x * backend.cfg.dtype.dtype.itemsize
         self._perf = StreamMetrics(frame_bytes)
 
@@ -228,283 +197,135 @@ class OMEZarrWriter:
         return self.backend.cfg
 
     def _default_status_callback(self, status: StreamStatus) -> None:
-        """Default callback: print formatted status to console."""
-        from rich import print
-
         print(f"  [cyan]{status.summary()}[/cyan]")
 
-    def _batch_flush_callback(self, buffer: MultiScaleBuffer) -> bool:
-        """
-        Callback when buffer downsampling completes (called from processing thread).
-        Called synchronously from the buffer's processing task.
-
-        The buffer is in FLUSHING state when this is called.
-
-        Returns:
-            True on success, False on failure
-        """
-        if buffer.batch_idx is None:
-            return False
-
-        try:
-            # Write batch synchronously (buffer is already in async task)
-            success = self.backend.write_batch(buffer)
-            return success
-        except Exception as e:
-            print(f"Error writing batch {buffer.batch_idx}: {e}")
-            return False
+    def _flush_slot(self, slot_idx: int) -> None:
+        """Wait for a slot's processing to complete and flush to backend."""
+        if slot_idx not in self._pending:
+            return
+        future = self._pending.pop(slot_idx)
+        future.result()  # wait for downsampling
+        buf = self.buffers[slot_idx]
+        success = self.backend.write_batch(buf, channel_index=self.channel_index)
+        if not success:
+            print(f"[red]Warning: backend.write_batch failed for batch {buf.batch_idx}[/red]")
 
     @property
-    def current_buffer(self) -> MultiScaleBuffer:
-        """Get the currently active buffer."""
+    def current_buffer(self) -> PyramidBuffer:
         return self.buffers[self._current_slot]
 
     @property
     def latest_frame(self) -> np.ndarray:
-        """Get the most recently added frame."""
         if self._global_z == 0:
             raise RuntimeError("No frames have been added yet")
-
-        # The last frame is in the current buffer at (filled_l0 - 1)
         buf = self.current_buffer
         z_in_buffer = buf.filled_l0 - 1
         return buf.get_volume(ScaleLevel.L0)[z_in_buffer, :, :]
 
     def add_frame(self, frame: np.ndarray) -> None:
-        """
-        Add a frame to the pipeline.
+        """Add a frame to the pipeline.
 
-        Automatically:
-        - Tracks performance metrics
-        - Reports status at configured interval
-        - Rotates buffers when needed
-        - Triggers async downsampling and writing
-
-        Args:
-            frame: 2D numpy array (Y, X) to add
+        Automatically tracks performance, reports status, rotates buffers,
+        and triggers async downsampling.
         """
         if self._global_z >= self.cfg.volume_shape.z:
             raise RuntimeError(f"Volume complete: cannot add more frames ({self._global_z}/{self.cfg.volume_shape.z})")
 
-        # Get current buffer and local z index
         buf = self.current_buffer
         z_in_buffer = self._global_z % self.cfg.batch_z
 
-        # Add frame to current buffer (triggers async processing when full)
         buf.add_frame(frame, z_in_buffer)
-
-        # Increment global counter
         self._global_z += 1
-
-        # Auto-tick performance tracker
         self._perf.tick()
 
-        # Auto-report status if interval elapsed
+        # Auto-report status
         now = time.perf_counter()
         if now - self._last_status_time >= self._status_interval:
             if self._status_callback:
                 self._status_callback(self.get_status())
             self._last_status_time = now
-            self._perf.reset_window()  # Reset instantaneous window
+            self._perf.reset_window()
 
-        # Check if we need to rotate to next buffer
+        # Buffer full — start processing and rotate
         if self._global_z % self.cfg.batch_z == 0 and self._global_z < self.cfg.volume_shape.z:
+            future = buf.start_processing()
+            self._pending[self._current_slot] = future
             self._rotate_buffer()
 
     def _rotate_buffer(self) -> None:
-        """
-        Rotate to the next buffer slot.
-
-        This is non-blocking - we only check if the next buffer is available.
-        If it's still being processed/written, we wait (this indicates insufficient slots).
-        """
-        # Move to next slot
-        self._current_slot = (self._current_slot + 1) % self.slots
+        """Rotate to the next buffer slot, flushing if necessary."""
+        next_slot = (self._current_slot + 1) % self.slots
         self._batch_number += 1
 
-        next_buf = self.buffers[self._current_slot]
+        # If next slot has a pending future, flush it first
+        if next_slot in self._pending:
+            print(f"[bold yellow]Waiting for buffer slot {next_slot}[/bold yellow]")
+            self._flush_slot(next_slot)
 
-        # Check if next buffer is available
-        if next_buf.stage != BufferStage.IDLE:
-            # Buffer is still busy - wait for it to complete
-            # This indicates we need more slots for this acquisition rate
-            print(
-                f"[bold yellow]Waiting for buffer slot {self._current_slot} (stage={next_buf.stage.name})[/bold yellow]"
-            )
-            next_buf.wait_ready()
+        self._current_slot = next_slot
+        self.buffers[self._current_slot].assign_batch(self._batch_number)
 
-        # Assign the new batch index and prepare for collection
-        next_buf.assign_batch_index(self._batch_number)
-
-    def get_buffer_for_batch(self, batch_idx: int) -> MultiScaleBuffer | None:
-        """Get the buffer containing a specific batch, if available and downsampled."""
+    def get_buffer_for_batch(self, batch_idx: int) -> PyramidBuffer | None:
+        """Get the buffer containing a specific batch, if available."""
         for buf in self.buffers:
-            # Buffer must have completed downsampling (FLUSHING or IDLE, not COLLECTING/DOWNSAMPLING)
-            if buf.batch_idx == batch_idx and buf.stage not in (BufferStage.COLLECTING, BufferStage.DOWNSAMPLING):
+            if buf.batch_idx == batch_idx and buf.stage == BufferStage.IDLE:
                 return buf
         return None
 
-    def wait_all(self) -> None:
-        """Wait for all buffers to complete processing (downsampling + flushing)."""
-        for buf in self.buffers:
-            buf.wait_ready()
-
-    def _flush_partials(self):
-        for buf in self.buffers:
-            if buf.stage == BufferStage.COLLECTING and buf.filled_l0 > 0:
-                buf.flush_all()
-
-    # def abort(self):
-    #     self._flush_partials()
-    #     self.wait_all()
-    #     for buf in self.buffers:
-    #         buf.close()
-    #     self.writer.close()
-
     def close(self) -> None:
-        """Close all buffers, writer, and clean up resources."""
-        # First, finish processing any partial buffers
-        for buf in self.buffers:
-            if buf.stage == BufferStage.COLLECTING and buf.filled_l0 > 0:
-                buf.flush_all()
+        """Close all buffers, flush pending, and clean up resources."""
+        # Start processing the current partial buffer if it has data
+        buf = self.current_buffer
+        if buf.filled_l0 > 0 and buf.stage == BufferStage.COLLECTING:
+            future = buf.start_processing()
+            self._pending[self._current_slot] = future
 
-        # Wait for all processing and writing to complete
-        self.wait_all()
+        # Flush all pending slots
+        for slot_idx in list(self._pending):
+            self._flush_slot(slot_idx)
 
-        # Clean up buffers
+        # Clean up
         for buf in self.buffers:
             buf.close()
-
-        # Close writer
         self.backend._finalize()
 
     def __enter__(self):
-        """Context manager entry."""
         return self
 
     def __exit__(self, *args):
-        """Context manager exit."""
         self.close()
 
     def get_status(self) -> StreamStatus:
-        """
-        Get current unified status snapshot.
-
-        Returns:
-            StreamStatus with complete pipeline state including performance metrics
-        """
         buffer_statuses = {
-            i: BufferStatus(
-                batch_idx=buf.batch_idx,
-                stage=buf.stage,
-                filled=buf.filled_l0,
-                capacity=buf.shape_l0.z,
-            )
+            i: buf.get_status()
             for i, buf in enumerate(self.buffers)
         }
 
-        # Estimate remaining time
         estimated_remaining = None
         if self._perf.fps > 0:
             frames_left = self.cfg.volume_shape.z - self._global_z
             estimated_remaining = frames_left / self._perf.fps
 
         return StreamStatus(
-            # Performance metrics
             fps=self._perf.fps,
             fps_inst=self._perf.fps_inst,
             throughput_gbs=self._perf.throughput_gbs,
             throughput_gbs_inst=self._perf.throughput_gbs_inst,
             frames_acquired=self._perf.frame_count,
-            # Progress
             global_z=self._global_z,
             total_frames=self.cfg.volume_shape.z,
             frames_remaining=self.cfg.volume_shape.z - self._global_z,
-            # Batches
             current_batch=self._batch_number,
             total_batches=self.cfg.num_batches,
-            # Buffers
             current_slot=self._current_slot,
             buffers=buffer_statuses,
-            # Timing
             elapsed_time=self._perf.elapsed,
             estimated_remaining=estimated_remaining,
         )
 
     def __repr__(self) -> str:
         return (
-            f"StreamingWriter(slots={self.slots}, "
+            f"OMEZarrWriter(slots={self.slots}, "
             f"batch_shape={self.batch_shape}, "
             f"progress={self._global_z}/{self.cfg.volume_shape.z})"
         )
-
-
-# Example usage:
-if __name__ == "__main__":
-    from rich import print
-
-    from ome_zarr_writer.backends.log import LogBackend
-
-    # Create configuration
-    print("\n[bold cyan]Testing StreamingWriter with LogBackend[/bold cyan]")
-    v_shape = UIVec3D(z=2048, y=2048, x=2048)
-    max_level = ScaleLevel.L5
-    c_shape = max_level.chunk_shape
-    s_shape = WriterConfig.compute_shard_shape_from_target(
-        v_shape=v_shape,
-        c_shape=c_shape,
-        dtype=Dtype.UINT16,
-        target_shard_gb=0.05,
-    )
-
-    cfg = WriterConfig(
-        name="test_acq5",
-        volume_shape=v_shape,
-        shard_shape=s_shape,
-        chunk_shape=c_shape,
-        dtype=Dtype.UINT16,
-        max_level=max_level,
-        batch_z_shards=1,
-    )
-
-    print(f"Config: batch_z={cfg.batch_z}, num_batches={cfg.num_batches}")
-    print(f"Volume shape: {cfg.volume_shape}")
-    print(f"Dataset name: {cfg.name}")
-
-    # Create LogBackend for testing (lightweight, no actual I/O)
-    backend = LogBackend(cfg, storage_root="./tmp")
-    print(f"\n[green]Created LogBackend at {backend.log_path}[/green]")
-
-    # Use context manager for automatic cleanup
-    with OMEZarrWriter(backend, slots=3) as writer:
-        print("\n[yellow]Adding frames...[/yellow]")
-
-        # Add frames
-        for z in range(min(50, cfg.volume_shape.z)):
-            frame = np.random.randint(0, 1000, (cfg.volume_shape.y, cfg.volume_shape.x), dtype=np.uint16)
-            writer.add_frame(frame)
-
-            if (z + 1) % cfg.batch_z == 0:
-                print(f"  Completed batch {(z + 1) // cfg.batch_z}, current slot: {writer._current_slot}")
-
-        print(f"\n[green]Added {writer._global_z} frames[/green]")
-
-        # Get status
-        status = writer.get_status()
-        print("\n[yellow]Acquisition Status:[/yellow]")
-        print(f"  Progress: {status.progress_percent:.1f}% ({status.global_z}/{status.total_frames} frames)")
-        print(f"  Batches written: {backend._batch_count}/{status.total_batches}")
-        print(f"  Frames remaining: {status.frames_remaining}")
-
-        print("\n[yellow]Buffer Slots:[/yellow]")
-        for slot_id, slot_status in status.buffers.items():
-            active_marker = " [ACTIVE]" if slot_status.is_active else ""
-            batch_info = f"batch_{slot_status.batch_idx}" if slot_status.batch_idx is not None else "unassigned"
-            print(
-                f"  Slot {slot_id} ({batch_info}): {slot_status.stage} - "
-                f"{slot_status.filled}/{slot_status.capacity} "
-                f"({slot_status.fill_percent:.1f}%){active_marker}"
-            )
-
-    print("\n[green]Test complete! All resources cleaned up.[/green]")
-    print(f"[cyan]Written {backend._batch_count} batches to {backend.storage_root}[/cyan]")

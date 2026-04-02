@@ -111,9 +111,6 @@ class Zarr3GroupMeta(SchemaModel):
     def to_json(self, **kwargs) -> str:
         return self.model_dump_json(indent=2, exclude_none=True)
 
-    @classmethod
-    def from_ome(cls, ome: OmeMeta) -> "Zarr3GroupMeta":
-        return cls(attributes=ZarrGroupAttributes(ome=ome))
 
 
 __all__ = [

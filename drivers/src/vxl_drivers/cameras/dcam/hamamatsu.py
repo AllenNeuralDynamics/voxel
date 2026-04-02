@@ -380,7 +380,7 @@ class HamamatsuCamera(Camera):
 
     # ==================== Acquisition ====================
 
-    def _prepare_for_capture(self) -> None:
+    def _arm(self) -> None:
         """Prepare the camera to acquire images."""
         bit_to_byte = 1 if self.pixel_format == "MONO8" else 2
         frame_size_mb = self.frame_size_px.x * self.frame_size_px.y * bit_to_byte / (1024**2)
@@ -420,10 +420,14 @@ class HamamatsuCamera(Camera):
 
     @describe(label="Stop", desc="Stop the camera acquisition.")
     def stop(self) -> None:
-        """Stop the camera."""
+        """Stop the camera acquisition."""
         self.log.info("Stopping camera acquisition")
-        self._cam.buf_release()
         self._cam.cap_stop()
+
+    def disarm(self) -> None:
+        """Release camera capture buffers."""
+        self._cam.buf_release()
+        self.log.info("Camera buffers released")
 
     # ==================== Temperature ====================
 

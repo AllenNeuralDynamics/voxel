@@ -49,7 +49,8 @@ class ZMQAdapter[D: Device](Adapter[D]):
         self._sub_socket = set_tcp_keepalive(zctx.socket(zmq.SUB))
 
         # Set timeouts
-        self._req_socket.setsockopt(zmq.RCVTIMEO, 5000)  # 5s timeout
+        # TODO: Restore RCVTIMEO once Action system is implemented for long-running commands
+        # self._req_socket.setsockopt(zmq.RCVTIMEO, 5000)  # 5s timeout
         self._req_socket.setsockopt(zmq.SNDTIMEO, 5000)
 
         self._req_socket.connect(conn.rpc_addr)

@@ -6,26 +6,25 @@ from typing import Any
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
-from vxl.config import GridConfig, Interleaving, TileOrder, VoxelRigConfig
+from vxl.config import Interleaving, TileOrder, VoxelRigConfig
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
-from vxl.tile import Stack
+from vxl.tile import Stack, StorageConfig
 
 # Round-trip YAML preserves anchors, aliases, and comments
 yaml = YAML()
 yaml.preserve_quotes = True  # type: ignore[assignment]
 
 
-class AcquisitionPlan(BaseModel):
-    """Acquisition plan with profile ordering and a flat list of stacks.
+class AcquisitionConfig(BaseModel):
+    """Acquisition configuration: profile ordering and tile ordering.
 
-    Profile plan membership is implicit: add_stacks auto-adds a profile to
+    Profile membership is implicit: add_stacks auto-adds a profile to
     profile_order, removing the last stack auto-removes it.
     """
 
     profile_order: list[str] = Field(default_factory=list)
     tile_order: TileOrder = "row_wise"
     interleaving: Interleaving = "position_first"
-    stacks: list[Stack] = Field(default_factory=list)
 
     def has_profile(self, profile_id: str) -> bool:
         """Check if a profile is in the plan."""
@@ -37,8 +36,9 @@ class SessionConfig(BaseModel):
 
     This model represents the complete session file (.voxel.yaml) with:
     - rig: The full VoxelRigConfig
-    - plan: AcquisitionPlan with per-profile grid configs and stacks
-    - tile_order: Order for acquiring tiles
+    - acq: Acquisition ordering config (profile order, tile order, interleaving)
+    - storage: Storage config (store path, compression, pyramid levels)
+    - stacks: Flat list of acquisition stacks (tiles + z-ranges)
 
     YAML anchors and aliases are preserved when loading and saving via raw_data.
     """
@@ -47,7 +47,9 @@ class SessionConfig(BaseModel):
     session_name: str = Field(default="", description="Optional session name suffix")
     metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
-    plan: AcquisitionPlan = Field(default_factory=AcquisitionPlan)
+    acq: AcquisitionConfig = Field(default_factory=AcquisitionConfig)
+    storage: StorageConfig
+    stacks: list[Stack] = Field(default_factory=list)
 
     model_config = {"extra": "forbid"}
 
@@ -69,105 +71,31 @@ class SessionConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: Path) -> "SessionConfig":
-        """Load from .voxel.yaml file, preserving anchors for round-tripping.
-
-        Handles four formats:
-        1. Current: plan.profile_order (list of strings)
-        2. Old list-based: plan.profiles (list of {profile_id, grid})
-        3. Older dict-based: plan.grid_configs (dict) + root tile_order
-        4. Legacy: no plan key → flat grid_config + stacks
-        """
+        """Load from .voxel.yaml file. Expects current format (run vxl-migrate for legacy files)."""
         with path.open() as f:
             raw_data = yaml.load(f)
 
-        rig_data = raw_data.get("rig", {})
-        rig = VoxelRigConfig.model_validate(rig_data)
-        default_tile_order = rig.globals.default_tile_order
-
-        def _merge_grid(pid: str, gc: GridConfig) -> None:
-            """Merge a grid config into rig.profiles[pid].grid."""
-            if pid in rig.profiles:
-                rig.profiles[pid].grid = gc
-
-        if "plan" in raw_data:
-            plan_data = raw_data["plan"]
-
-            if "profile_order" in plan_data:
-                # Format 1: Current format with profile_order
-                profile_order = list(plan_data["profile_order"])
-                tile_order = plan_data.get("tile_order", "row_wise")
-                interleaving = plan_data.get("interleaving", "position_first")
-            elif "profiles" in plan_data and isinstance(plan_data["profiles"], list):
-                # Format 2: Old list-based profiles → migrate grid into rig profiles
-                profile_order = []
-                for p in plan_data["profiles"]:
-                    pid = p["profile_id"]
-                    gc = GridConfig.model_validate(p.get("grid", {}))
-                    _merge_grid(pid, gc)
-                    profile_order.append(pid)
-                tile_order = plan_data.get("tile_order", "row_wise")
-                interleaving = plan_data.get("interleaving", "position_first")
-            else:
-                # Format 3: Dict-based grid_configs → migrate
-                gc_dict = plan_data.get("grid_configs", {})
-                profile_order = []
-                for pid, gc_data in gc_dict.items():
-                    gc = GridConfig.model_validate(gc_data)
-                    _merge_grid(pid, gc)
-                    profile_order.append(pid)
-                raw_tile_order = raw_data.get("tile_order", "row_wise")
-                tile_order = default_tile_order if raw_tile_order == "unset" else raw_tile_order
-                interleaving = "position_first"
-
-            stacks = [Stack.model_validate(s) for s in plan_data.get("stacks", [])]
-            plan = AcquisitionPlan(
-                profile_order=profile_order,
-                tile_order=tile_order,
-                interleaving=interleaving,
-                stacks=stacks,
-            )
-        else:
-            # Format 4: Legacy flat grid_config + stacks
-            old_gc = GridConfig.model_validate(raw_data.get("grid_config", {}))
-            old_stacks = [Stack.model_validate(s) for s in raw_data.get("stacks", [])]
-
-            profile_ids_with_stacks = {s.profile_id for s in old_stacks}
-            if not profile_ids_with_stacks and rig.profiles:
-                profile_ids_with_stacks = {next(iter(rig.profiles))}
-
-            for pid in profile_ids_with_stacks:
-                _merge_grid(pid, old_gc.model_copy())
-
-            raw_tile_order = raw_data.get("tile_order", "row_wise")
-            tile_order = default_tile_order if raw_tile_order == "unset" else raw_tile_order
-
-            plan = AcquisitionPlan(
-                profile_order=list(profile_ids_with_stacks),
-                tile_order=tile_order,
-                interleaving="position_first",
-                stacks=old_stacks,
-            )
-
-        kwargs: dict[str, Any] = {
-            "rig": rig,
-            "session_name": raw_data.get("session_name", ""),
-            "metadata_target": raw_data.get("metadata_target", BASE_METADATA_TARGET) or BASE_METADATA_TARGET,
-            "metadata": raw_data.get("metadata", {}),
-            "plan": plan,
-        }
-        config = cls(**kwargs)
-        config._raw_data = raw_data
+        config = cls.model_validate(raw_data)
+        config._raw_data = raw_data  # noqa: SLF001
         return config
 
     @classmethod
     def create_new(
         cls,
         rig_config_path: Path,
+        session_dir: Path,
         session_name: str = "",
         metadata_target: str = BASE_METADATA_TARGET,
         metadata: dict[str, Any] | None = None,
     ) -> "SessionConfig":
         """Create new session config from a rig config file.
+
+        Args:
+            rig_config_path: Path to the rig YAML config file.
+            session_dir: Session directory (used to default store_path).
+            session_name: Optional session name suffix.
+            metadata_target: Import path for metadata class.
+            metadata: Experiment metadata values.
 
         Preserves YAML anchors from the original config file.
         """
@@ -180,21 +108,24 @@ class SessionConfig(BaseModel):
 
         rig = VoxelRigConfig.model_validate(rig_data)
 
-        plan = AcquisitionPlan(tile_order=rig.globals.default_tile_order)
+        acq = AcquisitionConfig(tile_order=rig.globals.default_tile_order)
+        storage = StorageConfig(store_path=session_dir / "data")
         config = cls(
-            rig=rig, session_name=session_name, metadata_target=metadata_target, metadata=metadata or {}, plan=plan
+            rig=rig,
+            session_name=session_name,
+            metadata_target=metadata_target,
+            metadata=metadata or {},
+            acq=acq,
+            storage=storage,
         )
         config._raw_data = {
             "rig": rig_data,
             "session_name": config.session_name,
             "metadata_target": config.metadata_target,
             "metadata": config.metadata,
-            "plan": {
-                "profile_order": [],
-                "tile_order": config.plan.tile_order,
-                "interleaving": config.plan.interleaving,
-                "stacks": [],
-            },
+            "acq": config.acq.model_dump(mode="json"),
+            "storage": config.storage.model_dump(mode="json"),
+            "stacks": [],
         }
         return config
 
@@ -208,31 +139,18 @@ class SessionConfig(BaseModel):
 
         Cross-platform: uses Path.replace() which is atomic on POSIX, Linux, and Windows.
         """
-        plan_data = {
-            "profile_order": list(self.plan.profile_order),
-            "tile_order": self.plan.tile_order,
-            "interleaving": self.plan.interleaving,
-            "stacks": [s.model_dump(mode="json") for s in self.plan.stacks],
-        }
+        acq_data = self.acq.model_dump(mode="json")
+        storage_data = self.storage.model_dump(mode="json")
+        stacks_data = [s.model_dump(mode="json") for s in self.stacks]
 
         if self._raw_data is not None:
-            # Update session fields in raw data to preserve anchors in rig section
             self._raw_data["session_name"] = self.session_name
             self._raw_data["metadata_target"] = self.metadata_target
             self._raw_data["metadata"] = self.metadata
-            self._raw_data["plan"] = plan_data
-            # Remove old workflow keys on forward migration
-            self._raw_data.pop("workflow_steps", None)
-            self._raw_data.pop("workflow_committed", None)
-            # Remove old flat keys on forward migration
-            self._raw_data.pop("grid_config", None)
-            self._raw_data.pop("stacks", None)
-            self._raw_data.pop("tile_order", None)
-            # Remove old plan keys on forward migration
-            if isinstance(self._raw_data.get("plan"), dict):
-                self._raw_data["plan"].pop("grid_configs", None)
-                self._raw_data["plan"].pop("profiles", None)
-            # Sync props/setup/grid changes into raw rig profiles
+            self._raw_data["acq"] = acq_data
+            self._raw_data["storage"] = storage_data
+            self._raw_data["stacks"] = stacks_data
+            # Sync rig profile changes
             if "profiles" in self._raw_data.get("rig", {}):
                 for profile_id, profile in self.rig.profiles.items():
                     raw_profile = self._raw_data["rig"]["profiles"].get(profile_id)
@@ -249,31 +167,26 @@ class SessionConfig(BaseModel):
                             }
                         elif "setup" in raw_profile:
                             del raw_profile["setup"]
-                        # Remove old field on forward migration
-                        raw_profile.pop("device_settings", None)
             data = self._raw_data
         else:
-            # Fresh config without raw_data, just dump normally
             data = {
                 "rig": self.rig.model_dump(),
                 "session_name": self.session_name,
                 "metadata_target": self.metadata_target,
                 "metadata": self.metadata,
-                "plan": plan_data,
+                "acq": acq_data,
+                "storage": storage_data,
+                "stacks": stacks_data,
             }
 
         # Atomic write: temp file -> backup existing -> replace target
         temp_path = path.with_suffix(".yaml.tmp")
         backup_path = path.with_suffix(".yaml.bak")
 
-        # Write to temp file first (if this fails, original is untouched)
         with temp_path.open("w") as f:
             yaml.dump(data, f)
 
-        # Backup existing file if present
         if path.exists():
-            # replace() is atomic and works cross-platform
             path.replace(backup_path)
 
-        # Atomically move temp to target
         temp_path.replace(path)

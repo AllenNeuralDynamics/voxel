@@ -68,7 +68,7 @@ class ZMQService:
         """Listens for, decodes, executes, and replies to commands."""
 
         async def _reply(res: Results) -> None:
-            await self._rep_socket.send_json(res.model_dump())
+            await self._rep_socket.send_json(res.model_dump(mode="json"))
 
         while True:
             try:

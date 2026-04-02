@@ -2,10 +2,10 @@ import math
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
-from vxlib.vec import UIVec3D, UVec3D
+from vxlib.vec import UIVec3D, UVec3D, Vec2D
 
-from .metadata import Dataset, Multiscale, OmeMeta, OmeMeta5, Zarr3GroupMeta
-from .metadata.axis import SpaceAxis, SpaceUnit
+from .metadata import Dataset, Multiscale, OmeMeta, OmeMeta5, Zarr3GroupMeta, ZarrGroupAttributes
+from .metadata.axis import ChannelAxis, SpaceAxis, SpaceUnit
 from .metadata.transforms import DownscaleType, ScaleTransform
 from .types import Compression, Dtype, ScaleLevel
 
@@ -52,21 +52,79 @@ class WriterConfig(BaseModel):
             raise ValueError(", ".join(errs))
         return self
 
-    @computed_field
-    @property
-    def ome(self) -> OmeMeta:
+    def ome(self, num_channels: int = 1) -> OmeMeta:
+        """Build OME metadata with channel axis.
+
+        Args:
+            num_channels: Number of channels. Used to validate scale transforms
+                         but does not embed channel names (not part of v0.5 spec).
+        """
         multiscale = Multiscale(
-            axes=[*SpaceAxis.axes(unit=self.voxel_unit)],
+            axes=[ChannelAxis(), *SpaceAxis.axes(unit=self.voxel_unit)],
             datasets=[
                 Dataset(
                     path=str(level.value),
-                    coordinateTransformations=(ScaleTransform(scale=[*self.voxel_size * level.factor]),),
+                    coordinateTransformations=(ScaleTransform(scale=[1, *self.voxel_size * level.factor]),),
                 )
                 for level in self.max_level.levels
             ],
             type=self.downscale_type,
         )
         return OmeMeta5(multiscales=[multiscale])
+
+    def to_zarr_meta(self, num_channels: int = 1) -> Zarr3GroupMeta:
+        """Build complete Zarr v3 group metadata with OME attributes."""
+        return Zarr3GroupMeta(attributes=ZarrGroupAttributes(ome=self.ome(num_channels)))
+
+    @classmethod
+    def create(
+        cls,
+        name: str,
+        num_frames: int,
+        frame_height: int,
+        frame_width: int,
+        z_step: float,
+        pixel_size: Vec2D,
+        dtype: Dtype,
+        max_level: ScaleLevel = ScaleLevel.L3,
+        compression: Compression = Compression.BLOSC_LZ4,
+        batch_z_shards: int = 1,
+        target_shard_gb: float = 1.0,
+    ) -> "WriterConfig":
+        """Create a WriterConfig from acquisition and camera parameters.
+
+        Args:
+            name: Dataset name (typically tile_id)
+            num_frames: Number of Z frames in the stack
+            frame_height: Frame height in pixels (post-binning)
+            frame_width: Frame width in pixels (post-binning)
+            z_step: Z step size in µm
+            pixel_size: Pixel size as Vec2D(y, x) in µm
+            dtype: Data type (e.g. UINT16)
+            max_level: Maximum pyramid downscale level
+            compression: Compression codec
+            batch_z_shards: Number of Z shards per batch
+            target_shard_gb: Target shard size in GB for auto-computed shard shape
+        """
+        volume_shape = UIVec3D(z=num_frames, y=frame_height, x=frame_width)
+        chunk_shape = max_level.chunk_shape
+        shard_shape = cls.compute_shard_shape_from_target(
+            v_shape=volume_shape,
+            c_shape=chunk_shape,
+            dtype=dtype,
+            target_shard_gb=target_shard_gb,
+        )
+        return cls(
+            name=name,
+            volume_shape=volume_shape,
+            shard_shape=shard_shape,
+            chunk_shape=chunk_shape,
+            max_level=max_level,
+            batch_z_shards=batch_z_shards,
+            compression=compression,
+            dtype=dtype,
+            voxel_size=UVec3D(z_step, pixel_size.y, pixel_size.x),
+        )
 
     @staticmethod
     def ome_zarr_filename(name: str) -> str:
@@ -185,10 +243,6 @@ if __name__ == "__main__":
     )
     print(cfg.model_dump(mode="json"))
 
-    zarr_group_meta = Zarr3GroupMeta(
-        zarr_format=3,
-        node_type="group",
-        attributes=ZarrGroupAttributes(ome=cfg.ome),
-    )
+    zarr_group_meta = cfg.to_zarr_meta()
 
     print(zarr_group_meta.model_dump(mode="json"))

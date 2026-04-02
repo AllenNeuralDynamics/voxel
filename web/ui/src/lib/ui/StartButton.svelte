@@ -13,10 +13,8 @@
   let { session, class: className }: Props = $props();
 
   const isPreviewing = $derived(session.preview.isPreviewing);
-  // TODO: replace with real session.mode === 'acquiring' once wired to WS
-  let fakeAcquiring = $state(false);
-  const isAcquiring = $derived(fakeAcquiring);
-  const canAcquire = $derived(session.plan.stacks.some((s) => s.status === 'planned'));
+  const isAcquiring = $derived(session.mode === 'acquiring');
+  const canAcquire = $derived(session.stacks.some((s) => s.status === 'planned'));
   const isRunning = $derived(isPreviewing || isAcquiring);
 
   function handleStartPreview() {
@@ -28,13 +26,11 @@
   }
 
   function handleStartAcquisition() {
-    // TODO: wire to acq/start WS topic
-    fakeAcquiring = true;
+    session.startAcquisition();
   }
 
   function handleStopAcquisition() {
-    // TODO: wire to acq/stop WS topic
-    fakeAcquiring = false;
+    session.stopAcquisition();
   }
 
   function handleStop() {

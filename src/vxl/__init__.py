@@ -1,17 +1,17 @@
-from .camera.base import CameraBatchResult
 from .config import GridConfig, VoxelRigConfig
 from .node import VoxelNode
 from .rig import RigMode, VoxelRig
 from .session import (
-    AcquisitionPlan,
+    AcquisitionConfig,
     Session,
     SessionConfig,
 )
-from .tile import Stack, StackResult, StackStatus, Tile
+from .tile import BatchResult, ChannelResult, Stack, StackResult, StackStatus, StorageConfig, Tile
 
 __all__ = [
-    "AcquisitionPlan",
-    "CameraBatchResult",
+    "AcquisitionConfig",
+    "BatchResult",
+    "ChannelResult",
     "GridConfig",
     "RigMode",
     "Session",
@@ -19,6 +19,7 @@ __all__ = [
     "Stack",
     "StackResult",
     "StackStatus",
+    "StorageConfig",
     "Tile",
     "VoxelNode",
     "VoxelRig",

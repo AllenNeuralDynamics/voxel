@@ -33,7 +33,7 @@ from .backends.base import Backend, MultiBackend
 from .buffer import (
     BufferStage,
     BufferStatus,
-    MultiScaleBuffer,
+    PyramidBuffer,
 )
 
 # Configuration
@@ -69,7 +69,7 @@ __all__ = [
     # Buffer (advanced)
     "BufferStage",
     "BufferStatus",
-    "MultiScaleBuffer",
+    "PyramidBuffer",
     # Backend base (for custom backends)
     "Backend",
     "MultiBackend",

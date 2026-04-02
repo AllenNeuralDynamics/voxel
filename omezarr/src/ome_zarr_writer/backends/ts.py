@@ -7,7 +7,7 @@ import pydantic_tensorstore as pts
 import tensorstore as ts
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import MultiScaleBuffer
+from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.s3_utils import S3Config
 from ome_zarr_writer.types import Compression, ScaleLevel
 
@@ -74,19 +74,22 @@ class TensorStoreBackend(Backend):
     def _initialize_store(self, level):
         """Create a TensorStore array for a given level."""
         store = self.storage_root / str(level.value)
+        scaled_volume = level.scale(self.cfg.volume_shape)
+        scaled_shard = level.scale(self.cfg.shard_shape)
+        scaled_chunk = level.scale(self.cfg.chunk_shape)
         pts_spec = pts.Zarr3Spec(
             kvstore=make_kvstore(store),
             metadata=pts.Zarr3Metadata(
                 data_type=pts.DataType.UINT16,
-                shape=[*level.scale(self.cfg.volume_shape)],
-                dimension_names=["z", "y", "x"],
+                shape=[self.num_channels, *scaled_volume],
+                dimension_names=["c", "z", "y", "x"],
                 chunk_grid=pts.Zarr3ChunkGrid(
-                    configuration=pts.Zarr3ChunkConfiguration(chunk_shape=[*level.scale(self.cfg.shard_shape)])
+                    configuration=pts.Zarr3ChunkConfiguration(chunk_shape=[1, *scaled_shard])
                 ),
                 codecs=[
                     pts.Zarr3CodecShardingIndexed(
                         configuration=pts.Zarr3CodecShardingIndexed.ShardingIndexedConfig(
-                            chunk_shape=[*level.scale(self.cfg.chunk_shape)],
+                            chunk_shape=[1, *scaled_chunk],
                             codecs=_COMPRESSION_CODECS_MAP[self.cfg.compression],
                             index_codecs=[pts.Zarr3CodecCRC32C()],
                         )
@@ -98,12 +101,13 @@ class TensorStoreBackend(Backend):
         self._stores[level] = ts.open(ts_spec, create=True, delete_existing=self.overwrite).result()  # pyright: ignore reportAttributeAccessIssue
         print(f"  Initialized store for level {level}")
 
-    def write_batch(self, buffer: MultiScaleBuffer) -> bool:
+    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
         """
         Write all scale levels of a batch to TensorStore in parallel.
 
         Args:
-            buffer: MultiScaleBuffer with computed pyramid (called during FLUSHING)
+            buffer: PyramidBuffer with computed pyramid (called during FLUSHING)
+            channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:
             True on success, False on failure
@@ -118,7 +122,9 @@ class TensorStoreBackend(Backend):
         # Submit all scale writes in parallel
         futures = []
         for level in buffer.max_level.levels:
-            future = self._write_executor.submit(self._write_single_scale, level, buffer, z_start, z_end)
+            future = self._write_executor.submit(
+                self._write_single_scale, level, buffer, z_start, z_end, channel_index
+            )
             futures.append(future)
 
         # Wait for all to complete
@@ -130,7 +136,9 @@ class TensorStoreBackend(Backend):
 
         return success
 
-    def _write_single_scale(self, level: ScaleLevel, buffer: MultiScaleBuffer, z_start: int, z_end: int) -> bool:
+    def _write_single_scale(
+        self, level: ScaleLevel, buffer: PyramidBuffer, z_start: int, z_end: int, channel_index: int
+    ) -> bool:
         """
         Write a single scale level to TensorStore.
 
@@ -139,6 +147,7 @@ class TensorStoreBackend(Backend):
             buffer: Buffer containing data
             z_start: Start z-coordinate (L0 coordinates)
             z_end: End z-coordinate (L0 coordinates, exclusive)
+            channel_index: Channel index to write to
 
         Returns:
             True on success, False on failure
@@ -152,12 +161,10 @@ class TensorStoreBackend(Backend):
             z_end_scaled = z_end // level.factor
             data_z = z_end_scaled - z_start_scaled
 
-            # TensorStore write is async, we wait for result
-            store[z_start_scaled:z_end_scaled, :, :].write(data[:data_z, :, :]).result()
+            store[channel_index, z_start_scaled:z_end_scaled, :, :].write(data[:data_z, :, :]).result()
 
             return True
         except Exception as e:
-            # Log error for debugging
             print(f"Error writing {level.name} for batch {buffer.batch_idx}: {e}")
             return False
 

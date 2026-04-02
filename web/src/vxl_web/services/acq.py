@@ -1,20 +1,22 @@
-"""Plan service for acquisition plan management.
+"""Acquisition service for acquisition config and stack management.
 
 Handles grid configuration, stack management, tile ordering,
-interleaving mode, and profile plan membership.
+interleaving mode, profile ordering, and storage settings.
 """
 
 import logging
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel
 
 from vxl.config import GridConfig, Interleaving, TileOrder
 
 from .session import SessionService, get_session_service
 
-plan_router = APIRouter(prefix="/plan", tags=["plan"])
+acq_router = APIRouter(prefix="/acq", tags=["acq"])
 log = logging.getLogger(__name__)
 
 
@@ -34,7 +36,7 @@ class InterleavingRequest(BaseModel):
 
 
 class ReorderProfilesRequest(BaseModel):
-    """Request model for reordering profiles in the plan."""
+    """Request model for reordering profiles."""
 
     profile_ids: list[str]
 
@@ -94,10 +96,105 @@ class RemoveStacksRequest(BaseModel):
     positions: list[StackPosition]
 
 
-# ==================== Plan Endpoints ====================
+class StorageSettingsRequest(BaseModel):
+    """Request model for updating storage settings."""
+
+    store_path: str | None = None
+    max_level: int | None = None
+    compression: str | None = None
+    batch_z_shards: int | None = None
+    target_shard_gb: float | None = None
 
 
-@plan_router.put("/tile-order")
+# ==================== Settings Endpoints ====================
+
+
+@acq_router.get("/storage")
+async def get_storage(
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
+    """Get current storage settings."""
+    s = service.session.storage
+    return {
+        "store_path": str(s.store_path) if s.store_path else None,
+        "max_level": s.max_level,
+        "compression": s.compression,
+        "batch_z_shards": s.batch_z_shards,
+        "target_shard_gb": s.target_shard_gb,
+    }
+
+
+@acq_router.patch("/storage")
+async def update_storage(
+    request: StorageSettingsRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
+    """Update storage settings."""
+    s = service.session.storage
+    if request.store_path is not None:
+        s.store_path = Path(request.store_path)
+    if request.max_level is not None:
+        s.max_level = ScaleLevel(request.max_level)
+    if request.compression is not None:
+        s.compression = Compression(request.compression)
+    if request.batch_z_shards is not None:
+        s.batch_z_shards = request.batch_z_shards
+    if request.target_shard_gb is not None:
+        s.target_shard_gb = request.target_shard_gb
+    service.session.save()
+    service.broadcast({}, with_status=True)
+    return {
+        "store_path": str(s.store_path) if s.store_path else None,
+        "max_level": s.max_level,
+        "compression": s.compression,
+        "batch_z_shards": s.batch_z_shards,
+        "target_shard_gb": s.target_shard_gb,
+    }
+
+
+# ==================== Acquisition Control ====================
+
+
+@acq_router.post("/start")
+async def start_acquisition(
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
+    """Start acquisition for all pending stacks."""
+    pending = [s for s in service.session.stacks if s.status == "planned"]
+    if not pending:
+        raise HTTPException(status_code=400, detail="No planned stacks to acquire")
+    service.start_acquisition()
+    return {"status": "started", "pending": len(pending)}
+
+
+@acq_router.post("/start/{tile_id}")
+async def start_stack_acquisition(
+    tile_id: str,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
+    """Start acquisition for a single stack."""
+    stack = next((s for s in service.session.stacks if s.tile_id == tile_id), None)
+    if stack is None:
+        raise HTTPException(status_code=404, detail=f"Stack {tile_id} not found")
+    if stack.status != "planned":
+        raise HTTPException(status_code=400, detail=f"Stack {tile_id} has status {stack.status}, expected planned")
+    service.start_acquisition(tile_id)
+    return {"status": "started", "tile_id": tile_id}
+
+
+@acq_router.post("/stop")
+async def stop_acquisition(
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict:
+    """Stop the current acquisition."""
+    service.session.stop_acquisition()
+    return {"status": "stopped"}
+
+
+# ==================== Ordering Endpoints ====================
+
+
+@acq_router.put("/tile-order")
 async def set_tile_order(
     request: TileOrderRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
@@ -108,7 +205,7 @@ async def set_tile_order(
     return {"tile_order": service.session.tile_order}
 
 
-@plan_router.put("/interleaving")
+@acq_router.put("/interleaving")
 async def set_interleaving(
     request: InterleavingRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
@@ -119,12 +216,12 @@ async def set_interleaving(
     return {"interleaving": request.interleaving}
 
 
-@plan_router.put("/profiles/reorder")
+@acq_router.put("/profiles/reorder")
 async def reorder_profiles(
     request: ReorderProfilesRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict[str, Any]:
-    """Reorder profiles in the acquisition plan."""
+    """Reorder profiles in the acquisition config."""
     try:
         service.session.reorder_profiles(request.profile_ids)
         service.broadcast({}, with_status=True)
@@ -133,13 +230,16 @@ async def reorder_profiles(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@plan_router.get("/grid")
+# ==================== Grid Endpoints ====================
+
+
+@acq_router.get("/grid")
 async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig | None:
     """Get current grid configuration for the active profile."""
     return service.session.grid_config
 
 
-@plan_router.patch("/grid")
+@acq_router.patch("/grid")
 async def update_grid(
     request: GridUpdateRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
@@ -161,7 +261,10 @@ async def update_grid(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@plan_router.get("/stacks")
+# ==================== Stack Endpoints ====================
+
+
+@acq_router.get("/stacks")
 async def list_stacks(service: Annotated[SessionService, Depends(get_session_service)]) -> dict:
     """Get all stacks."""
     return {
@@ -170,7 +273,7 @@ async def list_stacks(service: Annotated[SessionService, Depends(get_session_ser
     }
 
 
-@plan_router.post("/stacks")
+@acq_router.post("/stacks")
 async def add_stacks(
     request: AddStacksRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
@@ -186,7 +289,7 @@ async def add_stacks(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@plan_router.patch("/stacks")
+@acq_router.patch("/stacks")
 async def edit_stacks(
     request: EditStacksRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
@@ -202,7 +305,7 @@ async def edit_stacks(
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
-@plan_router.delete("/stacks")
+@acq_router.delete("/stacks")
 async def remove_stacks(
     request: RemoveStacksRequest,
     service: Annotated[SessionService, Depends(get_session_service)],

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
   import { GripVertical, LucideCircle, DotsSpinner, Check, AlertCircleOutline, Minus } from '$lib/icons';
-  import { PaneDivider, Select, SortableList } from '$lib/ui/kit';
+  import { PaneDivider, Select, SortableList, SpinBox, TextInput } from '$lib/ui/kit';
   import MetadataPanel from '$lib/ui/MetadataPanel.svelte';
   import { sanitizeString } from '$lib/utils';
   import { Pane, PaneGroup } from 'paneforge';
@@ -9,7 +9,6 @@
   import { toast } from 'svelte-sonner';
   import { ElementSize } from 'runed';
   import { type Interleaving, type Stack, type TileOrder } from '$lib/main/types';
-  import { SvelteMap } from 'svelte/reactivity';
 
   // ── Pane sizing (pixel-based min for sidebar) ──
 
@@ -34,58 +33,28 @@
     { value: 'profile_first', label: 'Profile first' }
   ];
 
-  // ── Fake acquisition simulation (prototyping) ──
-
-  const FAKE_ACQ = true;
-
-  function fakeStatus(index: number, total: number): string {
-    const mid = Math.floor(total / 2);
-    if (index < mid - 2) return 'completed';
-    if (index === mid - 2) return 'failed';
-    if (index === mid - 1) return 'skipped';
-    if (index === mid) return 'acquiring';
-    return 'planned';
-  }
-
-  function getStackStatus(stack: Stack, index: number, total: number): string {
-    return FAKE_ACQ ? fakeStatus(index, total) : stack.status;
-  }
-
-  function fakeProgress(status: string): number {
-    if (status === 'completed') return 100;
-    if (status === 'acquiring') return 45;
-    if (status === 'failed') return 60;
-    return 0;
-  }
+  const COMPRESSION_OPTIONS = [
+    { value: 'blosc.lz4', label: 'blosc.lz4' },
+    { value: 'blosc.zstd', label: 'blosc.zstd' },
+    { value: 'zstd', label: 'zstd' },
+    { value: 'lz4', label: 'lz4' },
+    { value: 'gzip', label: 'gzip' },
+    { value: 'none', label: 'none' }
+  ];
 
   // ── Stack summary ──
 
   const stackCounts = $derived.by(() => {
-    const stacks = session.plan.stacks;
     let planned = 0;
     let completed = 0;
     let failed = 0;
-    for (let i = 0; i < stacks.length; i++) {
-      const status = getStackStatus(stacks[i], i, stacks.length);
-      if (status === 'planned') planned++;
-      else if (status === 'completed') completed++;
-      else if (status === 'failed') failed++;
+    for (const s of session.stacks) {
+      if (s.status === 'planned') planned++;
+      else if (s.status === 'completed') completed++;
+      else if (s.status === 'failed') failed++;
     }
-    return { planned, completed, failed, total: stacks.length };
+    return { planned, completed, failed, total: session.stacks.length };
   });
-
-  const statusMap = $derived.by(() => {
-    const stacks = session.plan.stacks;
-    const map = new SvelteMap<Stack, string>();
-    for (let i = 0; i < stacks.length; i++) {
-      map.set(stacks[i], getStackStatus(stacks[i], i, stacks.length));
-    }
-    return map;
-  });
-
-  function status(stack: Stack): string {
-    return statusMap.get(stack) ?? stack.status;
-  }
 
   // ── Grouped stack list ──
 
@@ -95,7 +64,7 @@
   }
 
   const stackGroups = $derived.by<StackGroup[]>(() => {
-    const stacks = session.plan.stacks;
+    const stacks = session.stacks;
     if (stacks.length === 0) return [];
 
     const groups: StackGroup[] = [];
@@ -120,7 +89,7 @@
 
   // ── Profile reorder ──
 
-  const planProfiles = $derived(session.plan.profile_order.map((id) => ({ profile_id: id })));
+  const planProfiles = $derived(session.acq.profile_order.map((id) => ({ profile_id: id })));
 
   // ── Clipboard ──
 
@@ -143,29 +112,8 @@
 
 <PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="acquire.content" class="h-full overflow-hidden">
   <!-- Left column: stack list -->
-  <Pane minSize={40} class="flex h-full flex-col gap-3 overflow-hidden py-4">
-    <!-- <div class="flex    "> -->
-    <div class="flex items-baseline justify-between gap-4 px-4">
-      <h3 class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Stacks</h3>
-      <span class="text-xs text-fg-muted">
-        {#if stackCounts.completed > 0}
-          {stackCounts.completed} done
-        {/if}
-        {#if stackCounts.planned > 0}
-          {#if stackCounts.completed > 0}<span class="mx-0.5 text-border">·</span>{/if}
-          {stackCounts.planned} planned
-        {/if}
-        {#if stackCounts.failed > 0}
-          <span class="mx-0.5 text-border">·</span>
-          <span class="text-danger">{stackCounts.failed} failed</span>
-        {/if}
-        {#if stackCounts.total === 0}
-          No stacks
-        {/if}
-      </span>
-    </div>
-
-    <div class="flex-1 overflow-y-auto px-4">
+  <Pane minSize={40} class="flex h-full flex-col overflow-hidden">
+    <div class="flex-1 overflow-y-auto px-4 py-4">
       {#if stackGroups.length === 0}
         <div class="flex h-full items-center justify-center text-sm text-fg-muted">
           No stacks configured. Add stacks in the scout step.
@@ -184,7 +132,7 @@
               <div class="flex flex-col overflow-hidden rounded-tr-lg rounded-b-lg border border-fg-muted/30">
                 {#each group.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
                   <div
-                    data-stack-status={status(stack)}
+                    data-stack-status={stack.status}
                     class="relative flex h-ui-md items-center gap-3 overflow-hidden border-b border-fg-muted/30 px-3 text-xs last:border-b-0"
                   >
                     <span class="min-w-0 flex-1 truncate text-fg">
@@ -196,22 +144,22 @@
                       {formatZ(stack.z_start)} → {formatZ(stack.z_end)} µm
                     </span>
                     <span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
-                    {#if status(stack) === 'acquiring'}
+                    {#if stack.status === 'acquiring'}
                       <DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
-                    {:else if status(stack) === 'completed'}
+                    {:else if stack.status === 'completed'}
                       <Check width="14" height="14" class="shrink-0 text-(--stack-status)" />
-                    {:else if status(stack) === 'failed'}
+                    {:else if stack.status === 'failed'}
                       <AlertCircleOutline width="14" height="14" class="shrink-0 text-(--stack-status)" />
-                    {:else if status(stack) === 'skipped'}
+                    {:else if stack.status === 'skipped'}
                       <Minus width="14" height="14" class="shrink-0 text-(--stack-status)" />
                     {:else}
                       <LucideCircle width="12" height="12" class="shrink-0 text-(--stack-status)" />
                     {/if}
                     <Progress.Root
-                      value={fakeProgress(status(stack))}
+                      value={stack.status === 'completed' ? 100 : 0}
                       max={100}
                       class="absolute inset-0 -z-10 bg-(--stack-status)/15"
-                      style="transform: scaleX({fakeProgress(status(stack)) / 100}); transform-origin: left"
+                      style="transform: scaleX({stack.status === 'completed' ? 100 : 0 / 100}); transform-origin: left"
                     />
                   </div>
                 {/each}
@@ -221,9 +169,9 @@
         </div>
       {:else}
         <div class="flex flex-col overflow-hidden rounded-lg border border-fg-muted/30">
-          {#each session.plan.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
+          {#each session.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
             <div
-              data-stack-status={status(stack)}
+              data-stack-status={stack.status}
               class="relative flex h-ui-md items-center gap-3 overflow-hidden border-b border-fg-muted/30 px-3 text-xs last:border-b-0"
             >
               <span class="min-w-0 flex-1 truncate text-fg">
@@ -235,29 +183,48 @@
                 {formatZ(stack.z_start)} → {formatZ(stack.z_end)} µm
               </span>
               <span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
-              {#if status(stack) === 'acquiring'}
+              {#if stack.status === 'acquiring'}
                 <DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
-              {:else if status(stack) === 'completed'}
+              {:else if stack.status === 'completed'}
                 <Check width="14" height="14" class="shrink-0 text-(--stack-status)" />
-              {:else if status(stack) === 'failed'}
+              {:else if stack.status === 'failed'}
                 <AlertCircleOutline width="14" height="14" class="shrink-0 text-(--stack-status)" />
-              {:else if status(stack) === 'skipped'}
+              {:else if stack.status === 'skipped'}
                 <Minus width="14" height="14" class="shrink-0 text-(--stack-status)" />
               {:else}
                 <LucideCircle width="12" height="12" class="shrink-0 text-(--stack-status)" />
               {/if}
               <Progress.Root
-                value={fakeProgress(status(stack))}
+                value={stack.status === 'completed' ? 100 : 0}
                 max={100}
                 class="absolute inset-0 -z-10 bg-(--stack-status)/15"
-                style="transform: scaleX({fakeProgress(status(stack)) / 100}); transform-origin: left"
+                style="transform: scaleX({stack.status === 'completed' ? 100 : 0 / 100}); transform-origin: left"
               />
             </div>
           {/each}
         </div>
       {/if}
     </div>
-    <!-- </div> -->
+
+    <!-- Footer: stack counts -->
+    <div class="flex h-ui-xl items-center border-t border-border px-4">
+      <span class="text-xs text-fg-muted">
+        {#if stackCounts.completed > 0}
+          {stackCounts.completed} done
+        {/if}
+        {#if stackCounts.planned > 0}
+          {#if stackCounts.completed > 0}<span class="mx-0.5 text-border">·</span>{/if}
+          {stackCounts.planned} planned
+        {/if}
+        {#if stackCounts.failed > 0}
+          <span class="mx-0.5 text-border">·</span>
+          <span class="text-danger">{stackCounts.failed} failed</span>
+        {/if}
+        {#if stackCounts.total === 0}
+          No stacks
+        {/if}
+      </span>
+    </div>
   </Pane>
 
   <PaneDivider direction="vertical" />
@@ -309,6 +276,70 @@
             {/if}
           </div>
         </section>
+
+        <hr class="-mx-4 border-border" />
+
+        <!-- Storage -->
+        <section>
+          <h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Storage</h3>
+          <div class="grid grid-cols-1 gap-2 text-xs @sm:grid-cols-[10rem_1fr] @sm:items-center @sm:gap-x-3">
+            <span class="text-fg-muted">Store Path</span>
+            <TextInput
+              value={session.storage.store_path ?? ''}
+              placeholder="/path/to/zarr"
+              align="left"
+              onChange={(v) => session.updateStorage({ store_path: v || null })}
+              size="xs"
+            />
+            <span class="text-fg-muted">Compression</span>
+            <Select
+              value={session.storage.compression ?? 'blosc.lz4'}
+              options={COMPRESSION_OPTIONS}
+              onchange={(v) => session.updateStorage({ compression: v })}
+              size="xs"
+            />
+            <span class="text-fg-muted">Pyramid Level</span>
+            <SpinBox
+              value={session.storage.max_level ?? 3}
+              min={0}
+              max={7}
+              step={1}
+              numCharacters={2}
+              draggable={false}
+              onChange={(v) => session.updateStorage({ max_level: v })}
+              size="xs"
+            />
+            <span class="text-fg-muted">Shard Size</span>
+            <SpinBox
+              value={session.storage.target_shard_gb ?? 1}
+              min={0.1}
+              max={10}
+              step={0.5}
+              decimals={1}
+              suffix="GB"
+              onChange={(v) => session.updateStorage({ target_shard_gb: v })}
+              size="xs"
+            />
+            <span class="text-fg-muted">Batch Z Shards</span>
+            <div class="flex items-center gap-1.5">
+              <SpinBox
+                value={session.storage.batch_z_shards ?? 1}
+                min={1}
+                max={16}
+                step={1}
+                numCharacters={3}
+                draggable={false}
+                onChange={(v) => session.updateStorage({ batch_z_shards: v })}
+                size="xs"
+              />
+              <span class="text-fg-faint">
+                = {(session.storage.batch_z_shards ?? 1) * (1 << (session.storage.max_level ?? 3))} frames
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <hr class="-mx-4 border-border" />
 
         <!-- Metadata -->
         <MetadataPanel {session} />

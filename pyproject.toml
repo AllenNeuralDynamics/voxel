@@ -32,6 +32,9 @@ dependencies = [
 Repository = "https://github.com/AllenNeuralDynamics/voxel"
 Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
+[project.scripts]
+vxl-migrate = "vxl.session.migrate:main"
+
 [project.entry-points."vxl.metadata"]
 exaspim = "vxl.metadata.ExaspimMetadata"
 

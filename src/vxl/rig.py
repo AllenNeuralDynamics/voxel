@@ -5,7 +5,6 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from pathlib import Path
 from typing import Any
 
 import zmq.asyncio
@@ -21,7 +20,7 @@ from vxl.daq import DaqHandle
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
 from vxl.sync import SyncTask
-from vxl.tile import Stack, StackResult, StackStatus
+from vxl.tile import ChannelResult, Stack, StackResult, StackStatus, StorageConfig
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
 
@@ -413,37 +412,15 @@ class VoxelRig(Rig):
             # Preserve callback reference for restart
             self._frame_callback = frame_callback
 
-        # 1. Close old acquisition task if exists
+        # 1. Close existing sync task if any (will be recreated by preview/acquisition)
         if self.sync_task:
             await self.sync_task.close()
             self.sync_task = None
-            self.log.debug("Closed previous acquisition task")
 
         # 2. Configure devices (filter wheels, etc.)
         await self._configure_profile_devices(profile_id)
 
-        # 3. Create new acquisition task for this profile
-        profile = self.config.profiles[profile_id]
-        if self.daq is None:
-            raise RuntimeError("DAQ client not initialized")
-
-        # Filter acq_ports to only include devices used by this profile
-        profile_device_ids = self.config.get_profile_device_ids(profile_id)
-        filtered_ports = {
-            device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
-        }
-
-        self.sync_task = SyncTask(
-            uid=f"acq_{profile_id}",
-            daq=self.daq,
-            timing=profile.daq.timing,
-            waveforms=profile.daq.waveforms,
-            ports=filtered_ports,
-        )
-        await self.sync_task.setup()
-        self.log.info(f"Created and configured acquisition task for profile '{profile_id}'")
-
-        # 4. Update active profile state
+        # 3. Update active profile state
         self._active_profile_id = profile_id
 
         # 5. Update camera→channel mapping for preview
@@ -472,6 +449,35 @@ class VoxelRig(Rig):
 
         self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_channels)})")
 
+    async def _create_sync_task(self, for_stack: bool = False) -> SyncTask:
+        """Create a SyncTask for the active profile, closing any existing one first."""
+        if self.sync_task:
+            await self.sync_task.close()
+            self.sync_task = None
+
+        if not self._active_profile_id:
+            raise RuntimeError("No active profile")
+        if self.daq is None:
+            raise RuntimeError("DAQ not initialized")
+
+        profile = self.config.profiles[self._active_profile_id]
+        profile_device_ids = self.config.get_profile_device_ids(self._active_profile_id)
+        filtered_ports = {
+            device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
+        }
+
+        self.sync_task = SyncTask(
+            uid=f"{'stack' if for_stack else 'acq'}_{self._active_profile_id}",
+            daq=self.daq,
+            timing=profile.daq.timing,
+            waveforms=profile.daq.waveforms,
+            ports=filtered_ports,
+            for_stack=for_stack,
+            stack_only=profile.daq.stack_only if for_stack else [],
+        )
+        await self.sync_task.setup()
+        return self.sync_task
+
     async def update_active_waveforms(self) -> None:
         """Recreate SyncTask with current profile's waveform/timing config.
 
@@ -483,32 +489,7 @@ class VoxelRig(Rig):
         """
         if self._mode != RigMode.IDLE:
             raise RuntimeError(f"Cannot update waveforms while {self._mode}")
-        if not self._active_profile_id:
-            raise RuntimeError("No active profile")
-
-        # Close old SyncTask
-        if self.sync_task:
-            await self.sync_task.close()
-            self.sync_task = None
-
-        # Recreate from current profile config
-        profile = self.config.profiles[self._active_profile_id]
-        if self.daq is None:
-            raise RuntimeError("DAQ client not initialized")
-
-        profile_device_ids = self.config.get_profile_device_ids(self._active_profile_id)
-        filtered_ports = {
-            device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
-        }
-
-        self.sync_task = SyncTask(
-            uid=f"acq_{self._active_profile_id}",
-            daq=self.daq,
-            timing=profile.daq.timing,
-            waveforms=profile.daq.waveforms,
-            ports=filtered_ports,
-        )
-        await self.sync_task.setup()
+        await self._create_sync_task()
         self.log.info("Recreated acquisition task with updated waveforms")
 
     async def capture_device_props(self, device_id: str) -> dict[str, Any]:
@@ -624,10 +605,10 @@ class VoxelRig(Rig):
         if self._streaming_cameras:
             await self._enable_channel_lasers()
 
-        # Start DAQ acquisition task after all devices are configured
-        if self.sync_task:
-            await self.sync_task.start()
-            self.log.info("Acquisition task started")
+        # Create and start DAQ sync task for preview
+        self.sync_task = await self._create_sync_task()
+        await self.sync_task.start()
+        self.log.info("Sync task started for preview")
 
     async def _enable_channel_lasers(self) -> None:
         """Enable lasers for all active channels."""
@@ -742,7 +723,7 @@ class VoxelRig(Rig):
     def scanning_axis(self) -> ContinuousAxisHandle:
         return self.stage.scanning_axis
 
-    async def acquire_stack(self, stack: Stack, output_dir: Path, profile_id: str | None = None) -> StackResult:
+    async def acquire_stack(self, stack: Stack, storage: StorageConfig) -> StackResult:
         """Acquire a z-stack at one tile position."""
         if self._mode == RigMode.ACQUIRING:
             raise RuntimeError("Cannot acquire stack while another acquisition is in progress")
@@ -753,9 +734,7 @@ class VoxelRig(Rig):
         started_at = datetime.now()
         stack.status = StackStatus.ACQUIRING
 
-        # Set profile if specified
-        if profile_id and profile_id != self._active_profile_id:
-            await self.set_active_profile(profile_id)
+        await self.set_active_profile(stack.profile_id)
 
         if not self.active_profile:
             raise ValueError("No active profile set")
@@ -765,6 +744,13 @@ class VoxelRig(Rig):
 
         if self.daq is None:
             raise RuntimeError("DAQ not initialized")
+
+        # Map channel_id → cam_id for active channels
+        channel_cam_map: dict[str, str] = {}
+        for ch_id, channel in self.active_channels.items():
+            if channel.detection in self.cameras:
+                channel_cam_map[ch_id] = channel.detection
+        num_channels = len(channel_cam_map)
 
         try:
             # 1. Move stage to tile XY position and z_start
@@ -781,53 +767,48 @@ class VoxelRig(Rig):
             for _ in range(stack.num_frames):
                 await self.scanning_axis.queue_relative_move(stack.z_step)
 
-            # 4. Create frame task with for_stack=True
-            profile = self.active_profile
-            profile_device_ids = self.config.get_profile_device_ids(self._active_profile_id)
-            filtered_ports = {
-                device_id: port
-                for device_id, port in self.config.daq.acq_ports.items()
-                if device_id in profile_device_ids
-            }
+            # 4. Create stack sync task (closes any existing one)
+            self.sync_task = await self._create_sync_task(for_stack=True)
 
-            sync_task = SyncTask(
-                uid=f"stack_{stack.tile_id}",
-                daq=self.daq,
-                timing=profile.daq.timing,
-                waveforms=profile.daq.waveforms,
-                ports=filtered_ports,
-                for_stack=True,
-                stack_only=profile.daq.stack_only,
-            )
-            await sync_task.setup()
-
-            # 5. Start cameras via capture_batch (in parallel)
-            camera_tasks = {}
-            for channel in self.active_channels.values():
-                cam_id = channel.detection
-                if cam_id not in self.cameras:
-                    continue
-                camera_output = output_dir / cam_id
-                camera_tasks[cam_id] = self.cameras[cam_id].capture_batch(
-                    num_frames=stack.num_frames,
-                    output_dir=camera_output,
+            # 5. Initialize all cameras in parallel (arm + create writers)
+            await asyncio.gather(
+                *(
+                    self.cameras[cam_id].initialize_stack(
+                        stack=stack,
+                        storage=storage,
+                        channel_index=i,
+                        num_channels=num_channels,
+                    )
+                    for i, cam_id in enumerate(channel_cam_map.values())
                 )
+            )
 
             # 6. Enable lasers
             await self._enable_channel_lasers()
 
-            # 7. Start frame task and wait for cameras
-            await sync_task.start()
-            camera_results = await asyncio.gather(*camera_tasks.values())
+            # 7. Start sync task and capture frames (all cameras in parallel)
+            await self.sync_task.start()
+            batch_results = await asyncio.gather(
+                *(
+                    self.cameras[cam_id].capture_batch(num_frames=stack.num_frames)
+                    for cam_id in channel_cam_map.values()
+                )
+            )
 
             # 8. Stop and cleanup
-            await sync_task.stop()
-            await sync_task.close()
+            await self.sync_task.stop()
+            await self.sync_task.close()
+            self.sync_task = None
             await self._disable_channel_lasers()
             await self.scanning_axis.reset_ttl_stepper()
 
-            # Build results dict
-            cameras_dict = dict(zip(camera_tasks.keys(), camera_results, strict=True))
+            # 9. Finalize all cameras in parallel (close writers, disarm)
+            await asyncio.gather(*(self.cameras[cam_id].finalize_stack() for cam_id in channel_cam_map.values()))
+
+            # Build channel results
+            channels: dict[str, ChannelResult] = {}
+            for (ch_id, cam_id), batch_result in zip(channel_cam_map.items(), batch_results, strict=True):
+                channels[ch_id] = ChannelResult(camera_id=cam_id, batches=[batch_result])
 
             stack.status = StackStatus.COMPLETED
             completed_at = datetime.now()
@@ -836,8 +817,8 @@ class VoxelRig(Rig):
             return StackResult(
                 tile_id=stack.tile_id,
                 status=StackStatus.COMPLETED,
-                output_dir=output_dir,
-                cameras=cameras_dict,
+                output_dir=storage.store_path,
+                channels=channels,
                 num_frames=stack.num_frames,
                 started_at=started_at,
                 completed_at=completed_at,
@@ -850,12 +831,14 @@ class VoxelRig(Rig):
             self._mode = RigMode.IDLE
             # Attempt cleanup on failure
             with suppress(Exception):
+                await asyncio.gather(*(self.cameras[cam_id].finalize_stack() for cam_id in channel_cam_map.values()))
+            with suppress(Exception):
                 await self.scanning_axis.reset_ttl_stepper()
             return StackResult(
                 tile_id=stack.tile_id,
                 status=StackStatus.FAILED,
-                output_dir=output_dir,
-                cameras={},
+                output_dir=storage.store_path,
+                channels={},
                 num_frames=0,
                 started_at=started_at,
                 completed_at=completed_at,

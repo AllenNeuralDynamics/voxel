@@ -4,10 +4,11 @@ import { DevicesManager } from './devices.svelte';
 import { sanitizeString } from '$lib/utils';
 import type {
   AppStatus,
-  AcquisitionPlan,
+  AcquisitionConfig,
   GridConfig,
   Interleaving,
   SessionInfo,
+  StorageConfig,
   Tile,
   Stack,
   StackStatus,
@@ -40,23 +41,30 @@ export class Session {
   #appStatus = $state<AppStatus>();
   info = $state<SessionInfo>(null!);
 
-  plan = $derived<AcquisitionPlan>(
-    this.#appStatus?.session?.plan ?? {
+  acq = $derived<AcquisitionConfig>(
+    this.#appStatus?.session?.acq ?? {
       profile_order: [],
       tile_order: 'row_wise',
-      interleaving: 'position_first',
-      stacks: []
+      interleaving: 'position_first'
     }
   );
-  acquisitionProfileIds = $derived<string[]>(this.plan.profile_order);
+  storage = $derived<StorageConfig>(
+    this.#appStatus?.session?.storage ?? {
+      max_level: 3,
+      compression: 'blosc.lz4',
+      batch_z_shards: 1,
+      target_shard_gb: 1.0
+    }
+  );
+  acquisitionProfileIds = $derived<string[]>(this.acq.profile_order);
   gridConfig = $derived<GridConfig | null>(
     this.config.profiles[this.#appStatus?.session?.active_profile_id ?? '']?.grid ?? null
   );
   tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
   stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
   activeStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id === this.activeProfileId));
-  tileOrder = $derived<TileOrder>(this.plan.tile_order);
-  interleaving = $derived<Interleaving>(this.plan.interleaving);
+  tileOrder = $derived<TileOrder>(this.acq.tile_order);
+  interleaving = $derived<Interleaving>(this.acq.interleaving);
   mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
   metadata = $derived<Record<string, unknown>>(this.#appStatus?.session?.metadata ?? {});
 
@@ -341,7 +349,7 @@ export class Session {
 
   async setGridOffset(xOffsetUm: number, yOffsetUm: number): Promise<void> {
     try {
-      await this.#rest('PATCH', '/plan/grid', {
+      await this.#rest('PATCH', '/acq/grid', {
         x_offset: xOffsetUm,
         y_offset: yOffsetUm,
         force: this.gridForceUnlocked
@@ -366,7 +374,7 @@ export class Session {
 
   async setGridOverlap(overlapX: number, overlapY: number): Promise<void> {
     try {
-      await this.#rest('PATCH', '/plan/grid', {
+      await this.#rest('PATCH', '/acq/grid', {
         overlap_x: overlapX,
         overlap_y: overlapY,
         force: this.gridForceUnlocked
@@ -378,7 +386,7 @@ export class Session {
 
   async setGridZRange(defaultZStartUm: number, defaultZEndUm: number): Promise<void> {
     try {
-      await this.#rest('PATCH', '/plan/grid', {
+      await this.#rest('PATCH', '/acq/grid', {
         default_z_start: defaultZStartUm,
         default_z_end: defaultZEndUm
       });
@@ -389,7 +397,7 @@ export class Session {
 
   async setTileOrder(order: TileOrder): Promise<void> {
     try {
-      await this.#rest('PUT', '/plan/tile-order', { tile_order: order });
+      await this.#rest('PUT', '/acq/tile-order', { tile_order: order });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to set tile order');
     }
@@ -399,15 +407,40 @@ export class Session {
 
   async setInterleaving(interleaving: Interleaving): Promise<void> {
     try {
-      await this.#rest('PUT', '/plan/interleaving', { interleaving });
+      await this.#rest('PUT', '/acq/interleaving', { interleaving });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to set interleaving');
     }
   }
 
+  async updateStorage(settings: Record<string, unknown>): Promise<void> {
+    try {
+      await this.#rest('PATCH', '/acq/storage', settings);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update storage settings');
+    }
+  }
+
+  async startAcquisition(tileId?: string): Promise<void> {
+    try {
+      const path = tileId ? `/acq/start/${tileId}` : '/acq/start';
+      await this.#rest('POST', path);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to start acquisition');
+    }
+  }
+
+  async stopAcquisition(): Promise<void> {
+    try {
+      await this.#rest('POST', '/acq/stop');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to stop acquisition');
+    }
+  }
+
   async reorderProfiles(profileIds: string[]): Promise<void> {
     try {
-      await this.#rest('PUT', '/plan/profiles/reorder', { profile_ids: profileIds });
+      await this.#rest('PUT', '/acq/profiles/reorder', { profile_ids: profileIds });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to reorder profiles');
     }
@@ -436,7 +469,7 @@ export class Session {
   async addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): Promise<void> {
     this.gridForceUnlocked = false;
     try {
-      await this.#rest('POST', '/plan/stacks', {
+      await this.#rest('POST', '/acq/stacks', {
         stacks: stacks.map((s) => ({
           row: s.row,
           col: s.col,
@@ -451,7 +484,7 @@ export class Session {
 
   async editStacks(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): Promise<void> {
     try {
-      await this.#rest('PATCH', '/plan/stacks', {
+      await this.#rest('PATCH', '/acq/stacks', {
         edits: edits.map((e) => ({
           row: e.row,
           col: e.col,
@@ -467,7 +500,7 @@ export class Session {
   async removeStacks(positions: Array<{ row: number; col: number }>): Promise<void> {
     this.gridForceUnlocked = false;
     try {
-      await this.#rest('DELETE', '/plan/stacks', { positions });
+      await this.#rest('DELETE', '/acq/stacks', { positions });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove stacks');
     }

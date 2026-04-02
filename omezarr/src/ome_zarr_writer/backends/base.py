@@ -2,9 +2,8 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from ome_zarr_writer.buffer import MultiScaleBuffer
+from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.config import WriterConfig
-from ome_zarr_writer.metadata import Zarr3GroupMeta
 from ome_zarr_writer.s3_utils import S3Config
 
 
@@ -18,13 +17,27 @@ class Backend(ABC):
     The storage_root can be:
     - str or Path: Local filesystem path
     - S3Config: S3 storage configuration (for S3-compatible backends)
+
+    For multi-channel support:
+    - num_channels: Total number of channels in the output array (default: 1)
+    - channel_index: Which channel this backend instance writes to (default: 0)
+    - Arrays are always created with shape (C, Z, Y, X)
+    - Multiple backends can write to the same zarr at different channel indices
     """
 
-    def __init__(self, cfg: WriterConfig, storage_root: str | Path | S3Config):
+    def __init__(
+        self,
+        cfg: WriterConfig,
+        storage_root: str | Path | S3Config,
+        channel_index: int = 0,
+        num_channels: int = 1,
+    ):
         self.cfg = cfg
+        self.channel_index = channel_index
+        self.num_channels = max(num_channels, channel_index + 1)
         self.overwrite = True
 
-        metadata_json = Zarr3GroupMeta.from_ome(self.cfg.ome).to_json()
+        metadata_json = self.cfg.to_zarr_meta(self.num_channels).to_json()
         if isinstance(storage_root, S3Config):
             from ome_zarr_writer.s3_utils import write_file_to_s3
 
@@ -38,8 +51,9 @@ class Backend(ABC):
             self.storage_root = Path(storage_root) / self.ome_zarr_filename(cfg.name)
             self.storage_root.mkdir(parents=True, exist_ok=True)
             zarr_json_path = self.storage_root / "zarr.json"
-            with zarr_json_path.open("w") as f:
-                f.write(metadata_json)
+            if not zarr_json_path.exists():
+                with zarr_json_path.open("w") as f:
+                    f.write(metadata_json)
 
         self._initialize()
 
@@ -54,25 +68,19 @@ class Backend(ABC):
             # Append .ome.zarr
             return f"{name}.ome.zarr"
 
-    # def _write_zarr_group_metadata(self) -> None:
-    #     """Write zarr.json metadata file to root path."""
-    #     self.root_path.mkdir(parents=True, exist_ok=True)
-    #     zarr_json_path = self.root_path / "zarr.json"
-    #     with zarr_json_path.open("w") as f:
-    #         f.write(Zarr3GroupMeta.from_ome(self.cfg.ome).to_json())
-
     @abstractmethod
     def _initialize(self) -> None:
         """Open writer for writing."""
         ...
 
     @abstractmethod
-    def write_batch(self, buffer: MultiScaleBuffer) -> bool:
+    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
         """
         Write a completed buffer batch to storage.
 
         Args:
-            buffer: MultiScaleBuffer with all scale levels computed (stage=READY)
+            buffer: PyramidBuffer with all scale levels computed (stage=READY)
+            channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:
             True on success, False on failure
@@ -98,9 +106,9 @@ class MultiBackend(Backend):
         if not all(backend.cfg == config for backend in backends):
             raise ValueError("All backends must have the same config.")
 
-        # Use the storage_root from the first backend
-        storage_root = backends[0].storage_root
-        super().__init__(config, storage_root)
+        # Use the storage_root and channel info from the first backend
+        first = backends[0]
+        super().__init__(config, first.storage_root, first.channel_index, first.num_channels)
         self.backends = backends
         self.parallel = parallel
         self.require_all = require_all
@@ -113,12 +121,13 @@ class MultiBackend(Backend):
     def _initialize(self) -> None:
         pass
 
-    def write_batch(self, buffer: MultiScaleBuffer) -> bool:
+    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
         """
         Write batch to all child backends.
 
         Args:
-            buffer: MultiScaleBuffer with computed pyramid
+            buffer: PyramidBuffer with computed pyramid
+            channel_index: Channel index to write to
 
         Returns:
             True if write succeeds according to require_all policy:
@@ -126,12 +135,10 @@ class MultiBackend(Backend):
             - require_all=False: At least ONE backend must succeed
         """
         if self.parallel:
-            # Write to all backends in parallel
-            futures = [self._executor.submit(writer.write_batch, buffer) for writer in self.backends]
+            futures = [self._executor.submit(writer.write_batch, buffer, channel_index) for writer in self.backends]
             results = [f.result() for f in futures]
         else:
-            # Write sequentially
-            results = [writer.write_batch(buffer) for writer in self.backends]
+            results = [writer.write_batch(buffer, channel_index) for writer in self.backends]
 
         # Log any failures for debugging
         for i, (writer, success) in enumerate(zip(self.backends, results)):

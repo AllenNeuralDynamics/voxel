@@ -1,12 +1,12 @@
 """Camera device handle with typed methods."""
 
-from pathlib import Path
 
 from rigup.device import DeviceHandle
 from vxlib.vec import Vec2D
 
-from vxl.camera.base import Camera, CameraBatchResult, TriggerMode, TriggerPolarity
+from vxl.camera.base import Camera, TriggerMode, TriggerPolarity
 from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
+from vxl.tile import BatchResult, Stack, StorageConfig
 
 
 class CameraHandle(DeviceHandle[Camera]):
@@ -58,16 +58,28 @@ class CameraHandle(DeviceHandle[Camera]):
         result = await self.call("get_preview_config")
         return PreviewConfig.model_validate(result)
 
-    async def capture_batch(
+    async def initialize_stack(
         self,
-        num_frames: int,
-        output_dir: Path,
+        stack: Stack,
+        storage: StorageConfig,
+        channel_index: int = 0,
+        num_channels: int = 1,
         trigger_mode: TriggerMode = TriggerMode.ON,
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
-    ) -> CameraBatchResult:
-        """Capture a batch of frames in triggered mode."""
-        result = await self.call("capture_batch", num_frames, str(output_dir), trigger_mode, trigger_polarity)
-        return CameraBatchResult.model_validate(result)
+    ) -> None:
+        """Prepare camera and writer for a stack acquisition."""
+        await self.call(
+            "initialize_stack", stack, storage, channel_index, num_channels, trigger_mode, trigger_polarity
+        )
+
+    async def finalize_stack(self) -> None:
+        """Complete stack acquisition. Closes writer and disarms camera."""
+        await self.call("finalize_stack")
+
+    async def capture_batch(self, num_frames: int) -> BatchResult:
+        """Capture a batch of frames. Must call initialize_stack first."""
+        result = await self.call("capture_batch", num_frames)
+        return BatchResult.model_validate(result)
 
     async def get_frame_area_um(self) -> Vec2D:
         """Get the physical frame area in micrometers.

@@ -8,7 +8,7 @@ import zarrs  # noqa: F401
 from zarr.storage import LocalStore
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import MultiScaleBuffer
+from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.types import Compression, ScaleLevel
 
 # Enable Zarrs pipeline globally
@@ -84,20 +84,21 @@ class ZarrsBackend(Backend):
             store = LocalStore(str(path))
             arr = zarr.create(
                 store=store,
-                shape=(scaled_shape.z, scaled_shape.y, scaled_shape.x),
-                chunks=(scaled_shard.z, scaled_shard.y, scaled_shard.x),
+                shape=(self.num_channels, scaled_shape.z, scaled_shape.y, scaled_shape.x),
+                chunks=(1, scaled_shard.z, scaled_shard.y, scaled_shard.x),
                 dtype=np.uint16,
                 compressor=compressor,
                 overwrite=True,
             )
             self._arrays[level] = arr
 
-    def write_batch(self, buffer: MultiScaleBuffer) -> bool:
+    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
         """
-        Write a complete MultiScaleBuffer batch to Zarrs arrays.
+        Write a complete PyramidBuffer batch to Zarrs arrays.
 
         Args:
-            buffer: MultiScaleBuffer ready for storage (all scales computed)
+            buffer: PyramidBuffer ready for storage (all scales computed)
+            channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:
             True if all scale writes succeed, False otherwise
@@ -110,7 +111,9 @@ class ZarrsBackend(Backend):
         futures = []
         for level, arr in self._arrays.items():
             data = buffer.get_volume(level)
-            futures.append(self._executor.submit(self._write_scale_block, arr, level, data, z_start, z_end))
+            futures.append(
+                self._executor.submit(self._write_scale_block, arr, level, data, z_start, z_end, channel_index)
+            )
 
         results = [f.result() for f in futures]
         ok = all(results)
@@ -118,14 +121,16 @@ class ZarrsBackend(Backend):
             self._batch_count += 1
         return ok
 
-    def _write_scale_block(self, arr: zarr.Array, level: ScaleLevel, data: np.ndarray, z0: int, z1: int) -> bool:
+    def _write_scale_block(
+        self, arr: zarr.Array, level: ScaleLevel, data: np.ndarray, z0: int, z1: int, channel_index: int
+    ) -> bool:
         """Write one scale level’s z-slice block into its Zarr array."""
         try:
             z_start_scaled = z0 // level.factor
             z_end_scaled = z1 // level.factor
             slice_shape = z_end_scaled - z_start_scaled
 
-            arr[z_start_scaled:z_end_scaled, :, :] = data[:slice_shape, :, :]
+            arr[channel_index, z_start_scaled:z_end_scaled, :, :] = data[:slice_shape, :, :]
             return True
         except Exception as e:
             print(f"[ZarrsBackend] Error writing {level.name}: {e}")

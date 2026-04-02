@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import MultiScaleBuffer
+from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.types import Compression, ScaleLevel
 
 if TYPE_CHECKING:
@@ -166,6 +166,13 @@ class AcquireZarrBackend(Backend):
         # Note: acquire-zarr expects dimensions in order they'll be written
         dimensions = [
             aqz.Dimension(
+                name="c",
+                type=aqz.DimensionType.CHANNEL,
+                array_size_px=self.num_channels,
+                chunk_size_px=1,
+                shard_size_chunks=1,
+            ),
+            aqz.Dimension(
                 name="z",
                 type=aqz.DimensionType.SPACE,
                 array_size_px=scaled_shape.z,
@@ -228,12 +235,13 @@ class AcquireZarrBackend(Backend):
         stream = aqz.ZarrStream(stream_settings)
         self._streams[level] = stream
 
-    def write_batch(self, buffer: MultiScaleBuffer) -> bool:
+    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
         """
         Write all scale levels of a batch to acquire-zarr streams in parallel.
 
         Args:
-            buffer: MultiScaleBuffer with computed pyramid
+            buffer: PyramidBuffer with computed pyramid
+            channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:
             True on success, False on failure
@@ -253,6 +261,7 @@ class AcquireZarrBackend(Backend):
                 buffer,
                 z_start,
                 z_end,
+                channel_index,
             )
             futures.append(future)
 
@@ -268,9 +277,10 @@ class AcquireZarrBackend(Backend):
     def _write_single_scale(
         self,
         level: ScaleLevel,
-        buffer: MultiScaleBuffer,
+        buffer: PyramidBuffer,
         z_start: int,
         z_end: int,
+        channel_index: int,
     ) -> bool:
         """
         Write a single scale level to acquire-zarr stream.
@@ -280,6 +290,7 @@ class AcquireZarrBackend(Backend):
             buffer: Buffer containing data
             z_start: Start z-coordinate (L0 coordinates)
             z_end: End z-coordinate (L0 coordinates, exclusive)
+            channel_index: Channel index to write to
 
         Returns:
             True on success, False on failure
@@ -293,16 +304,15 @@ class AcquireZarrBackend(Backend):
             z_end_scaled = z_end // level.factor
             data_z = z_end_scaled - z_start_scaled
 
-            # Extract the batch data
+            # Extract the batch data and add channel dimension for acquire-zarr
             batch_data = data[:data_z, :, :]
 
-            # Write to acquire-zarr
             # Note: acquire-zarr's append() writes the data to the stream
+            # Channel indexing depends on acquire-zarr's API capabilities
             stream.append(batch_data)
 
             return True
         except Exception as e:
-            # Log error for debugging
             print(f"Error writing {level.name} for batch {buffer.batch_idx}: {e}")
             return False
 

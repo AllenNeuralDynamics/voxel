@@ -186,7 +186,7 @@ class SimulatedCamera(Camera):
     def _configure_trigger_polarity(self, polarity: TriggerPolarity) -> None:
         self.log.info("Configuring simulated camera trigger polarity to %s", polarity)
 
-    def _prepare_for_capture(self) -> None:
+    def _arm(self) -> None:
         self.log.info("Preparing simulated camera. Generating reference image")
 
         # Generate single reference frame based on current frame region and binning
@@ -229,7 +229,7 @@ class SimulatedCamera(Camera):
             raise RuntimeError("Camera not started. Call start() first.")
 
         if self._reference_frame is None:
-            raise RuntimeError("Reference frame not generated. Call prepare() first.")
+            raise RuntimeError("Reference frame not generated. Call arm() first.")
 
         # Check if we've reached requested frame count
         if self._requested_frame_count > 0 and self._frame_count >= self._requested_frame_count:
@@ -269,4 +269,7 @@ class SimulatedCamera(Camera):
 
         self.log.info(f"Simulated camera stopped after {self._frame_count} frames.")
         self._frame_count = -1
+
+    def disarm(self) -> None:
+        """Release simulated camera resources."""
         self._reference_frame = None

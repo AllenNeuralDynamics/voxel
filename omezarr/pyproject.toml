@@ -8,6 +8,7 @@ dependencies = [
     "vxlib",
     "pydantic>=2.11.9",
     "numba>=0.62.1",
+    "tbb>=2021.0.0; sys_platform == 'linux'",
 ]
 
 [dependency-groups]

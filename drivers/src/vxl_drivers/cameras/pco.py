@@ -282,7 +282,7 @@ class PCOCamera(Camera):
 
     # ==================== Acquisition ====================
 
-    def _prepare_for_capture(self) -> None:
+    def _arm(self) -> None:
         """Prepare the camera to acquire images."""
         # PCO uses 16-bit (2 bytes per pixel)
         frame_size_mb = self.frame_size_px.x * self.frame_size_px.y * 2 / (1024**2)
@@ -294,7 +294,7 @@ class PCOCamera(Camera):
     def start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames.
 
-        Note: PCO cameras start recording when record() is called in _prepare_for_capture().
+        Note: PCO cameras start recording when record() is called in _arm().
         This method is a no-op since acquisition is already running.
         """
         del frame_count  # unused - continuous acquisition
