@@ -3,13 +3,12 @@
 import time
 
 import numpy as np
-from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import describe
 from vxl.camera.base import (
     Camera,
-    FrameRegion,
     IntRange,
     PixelFormat,
     ROIGrid,
@@ -232,80 +231,13 @@ class HamamatsuCamera(Camera):
     def _get_frame_time_ms(self) -> float:
         """Calculate frame time based on sensor mode."""
         line_interval_us = _unwrap(self._cam.prop_getvalue(_PROPS["line_interval"]), 0.0) * 1e6
-        region = self.frame_region
+        frame_size = self.frame_size_px
         exposure_ms = self.exposure_time_ms
 
         sensor_mode = self._get_sensor_mode_name()
         if sensor_mode and "light sheet" in sensor_mode.lower():
-            return (line_interval_us * int(region.height)) / 1000 + exposure_ms
-        return (line_interval_us * int(region.height) / 2) / 1000 + exposure_ms
-
-    # ==================== Frame Region ====================
-
-    @property
-    def frame_region(self) -> FrameRegion:
-        """Get current frame region with embedded constraints."""
-        w_attr = _unwrap(self._cam.prop_getattr(_PROPS["image_width"]), _DEFAULT_ATTR)
-        h_attr = _unwrap(self._cam.prop_getattr(_PROPS["image_height"]), _DEFAULT_ATTR)
-
-        step_x = int(w_attr.valuestep) if w_attr.valuestep > 0 else 4
-        step_y = int(h_attr.valuestep) if h_attr.valuestep > 0 else 4
-        min_w = int(w_attr.valuemin)
-        min_h = int(h_attr.valuemin)
-
-        return FrameRegion(
-            x=DeliminatedInt(
-                int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_hpos"]), 0.0)),
-                min_value=0,
-                max_value=self._sensor_width - min_w,
-                step=step_x,
-            ),
-            y=DeliminatedInt(
-                int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_vpos"]), 0.0)),
-                min_value=0,
-                max_value=self._sensor_height - min_h,
-                step=step_y,
-            ),
-            width=DeliminatedInt(
-                int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_hsize"]), float(self._sensor_width))),
-                min_value=min_w,
-                max_value=self._sensor_width,
-                step=step_x,
-            ),
-            height=DeliminatedInt(
-                int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_vsize"]), float(self._sensor_height))),
-                min_value=min_h,
-                max_value=self._sensor_height,
-                step=step_y,
-            ),
-        )
-
-    def update_frame_region(
-        self,
-        x: int | None = None,
-        y: int | None = None,
-        width: int | None = None,
-        height: int | None = None,
-    ) -> None:
-        """Update frame region. Only provided values are changed."""
-        # Reset offsets first if changing dimensions
-        if width is not None or height is not None:
-            self._cam.prop_setvalue(_PROPS["subarray_hpos"], 0)
-            self._cam.prop_setvalue(_PROPS["subarray_vpos"], 0)
-
-        # Set dimensions
-        if width is not None:
-            self._cam.prop_setvalue(_PROPS["subarray_hsize"], width)
-        if height is not None:
-            self._cam.prop_setvalue(_PROPS["subarray_vsize"], height)
-
-        # Set offsets
-        if x is not None:
-            self._cam.prop_setvalue(_PROPS["subarray_hpos"], x)
-        if y is not None:
-            self._cam.prop_setvalue(_PROPS["subarray_vpos"], y)
-
-        self.log.debug(f"Frame region updated: x={x}, y={y}, w={width}, h={height}")
+            return (line_interval_us * frame_size.y) / 1000 + exposure_ms
+        return (line_interval_us * frame_size.y / 2) / 1000 + exposure_ms
 
     # ==================== Sensor ROI ====================
 

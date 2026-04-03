@@ -4,13 +4,12 @@ from enum import StrEnum
 
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
-from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import describe
 from vxl.camera.base import (
     Camera,
-    FrameRegion,
     IntRange,
     PixelFormat,
     ROIGrid,
@@ -165,64 +164,13 @@ class PCOCamera(Camera):
     def _get_frame_time_ms(self) -> float:
         """Calculate frame time based on readout mode."""
         line_interval_us = self._pco.sdk.get_cmos_line_timing()["line time"] * 1e6
-        region = self.frame_region
+        frame_size = self.frame_size_px
         exposure_ms = self.exposure_time_ms
 
         readout_mode = self._get_readout_mode()
         if "light sheet" in readout_mode:
-            return (line_interval_us * int(region.height)) / 1000 + exposure_ms
-        return (line_interval_us * int(region.height) / 2) / 1000 + exposure_ms
-
-    # ==================== Frame Region ====================
-
-    @property
-    def frame_region(self) -> FrameRegion:
-        """Get current frame region with embedded constraints."""
-        roi_dict = self._pco.sdk.get_roi()
-        desc = self._pco.sdk.get_camera_description()
-
-        # PCO uses 1-based indexing
-        x = roi_dict["x0"] - 1
-        y = roi_dict["y0"] - 1
-        width = roi_dict["x1"] - roi_dict["x0"] + 1
-        height = roi_dict["y1"] - roi_dict["y0"] + 1
-
-        step_x = desc.get("roi hor steps", 1)
-        step_y = desc.get("roi vert steps", 1)
-        min_w = desc.get("min size horz", 32)
-        min_h = desc.get("min size vert", 32)
-
-        return FrameRegion(
-            x=DeliminatedInt(x, min_value=0, max_value=self._sensor_width - min_w, step=step_x),
-            y=DeliminatedInt(y, min_value=0, max_value=self._sensor_height - min_h, step=step_y),
-            width=DeliminatedInt(width, min_value=min_w, max_value=self._sensor_width, step=step_x),
-            height=DeliminatedInt(height, min_value=min_h, max_value=self._sensor_height, step=step_y),
-        )
-
-    def update_frame_region(
-        self,
-        x: int | None = None,
-        y: int | None = None,
-        width: int | None = None,
-        height: int | None = None,
-    ) -> None:
-        """Update frame region. Only provided values are changed."""
-        # Get current values for any not being updated
-        current = self.frame_region
-
-        new_x = x if x is not None else int(current.x)
-        new_y = y if y is not None else int(current.y)
-        new_w = width if width is not None else int(current.width)
-        new_h = height if height is not None else int(current.height)
-
-        # PCO uses 1-based indexing: x0, y0, x1, y1
-        x0 = new_x + 1
-        y0 = new_y + 1
-        x1 = new_x + new_w
-        y1 = new_y + new_h
-
-        self._pco.sdk.set_roi(x0, y0, x1, y1)
-        self.log.debug(f"Frame region updated: x={new_x}, y={new_y}, w={new_w}, h={new_h}")
+            return (line_interval_us * frame_size.y) / 1000 + exposure_ms
+        return (line_interval_us * frame_size.y / 2) / 1000 + exposure_ms
 
     # ==================== Sensor ROI ====================
 

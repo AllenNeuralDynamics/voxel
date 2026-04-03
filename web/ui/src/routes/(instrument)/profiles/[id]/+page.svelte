@@ -44,7 +44,7 @@
       </section>
       <section>
         <h3 class={sectionHeader}>Cameras</h3>
-        <CamerasPanel {session} {profileId} panelSide="left" class="rounded border border-border" />
+        <CamerasPanel {session} {profileId} />
       </section>
       <section>
         <h3 class={sectionHeader}>Auxilliary Devices</h3>

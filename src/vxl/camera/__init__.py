@@ -1,4 +1,4 @@
-from .base import Camera, CameraController, CameraMode, FrameRegion
+from .base import Camera, CameraController, CameraMode
 from .handle import CameraHandle
 from .preview import PreviewCrop, PreviewFrame, PreviewLevels
 
@@ -7,7 +7,6 @@ __all__ = [
     "CameraController",
     "CameraHandle",
     "CameraMode",
-    "FrameRegion",
     "PreviewCrop",
     "PreviewFrame",
     "PreviewLevels",

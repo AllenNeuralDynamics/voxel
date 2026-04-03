@@ -5,7 +5,7 @@ from contextlib import suppress
 from typing import Any
 
 import numpy as np
-from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
@@ -13,7 +13,6 @@ from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
 from rigup import describe
 from vxl.camera.base import (
     Camera,
-    FrameRegion,
     IntRange,
     PixelFormat,
     ROIGrid,
@@ -183,65 +182,6 @@ class XimeaCamera(Camera):
         """Set the frame rate of the camera in Hz."""
         del value  # unused - frame rate controlled via exposure time
         self.log.warning("Frame rate is controlled via exposure time on Ximea cameras")
-
-    # ==================== Frame Region ====================
-
-    @property
-    def frame_region(self) -> FrameRegion:
-        """Get current frame region with embedded constraints."""
-        return FrameRegion(
-            x=DeliminatedInt(
-                _to_int(self._camera.get_offsetX()),
-                min_value=0,
-                max_value=self._sensor_width - _to_int(self._camera.get_width_minimum()),
-                step=_to_int(self._camera.get_width_increment()),
-            ),
-            y=DeliminatedInt(
-                _to_int(self._camera.get_offsetY()),
-                min_value=0,
-                max_value=self._sensor_height - _to_int(self._camera.get_height_minimum()),
-                step=_to_int(self._camera.get_height_increment()),
-            ),
-            width=DeliminatedInt(
-                _to_int(self._camera.get_width()),
-                min_value=_to_int(self._camera.get_width_minimum()),
-                max_value=self._sensor_width,
-                step=_to_int(self._camera.get_width_increment()),
-            ),
-            height=DeliminatedInt(
-                _to_int(self._camera.get_height()),
-                min_value=_to_int(self._camera.get_height_minimum()),
-                max_value=self._sensor_height,
-                step=_to_int(self._camera.get_height_increment()),
-            ),
-        )
-
-    def update_frame_region(
-        self,
-        x: int | None = None,
-        y: int | None = None,
-        width: int | None = None,
-        height: int | None = None,
-    ) -> None:
-        """Update frame region. Only provided values are changed."""
-        # Reset offsets first to allow full width/height adjustment
-        if width is not None or height is not None:
-            self._camera.set_offsetX(0)
-            self._camera.set_offsetY(0)
-
-        # Set dimensions
-        if width is not None:
-            self._camera.set_width(width)
-        if height is not None:
-            self._camera.set_height(height)
-
-        # Set offsets
-        if x is not None:
-            self._camera.set_offsetX(x)
-        if y is not None:
-            self._camera.set_offsetY(y)
-
-        self.log.debug(f"Frame region updated: x={x}, y={y}, w={width}, h={height}")
 
     # ==================== Sensor ROI ====================
 

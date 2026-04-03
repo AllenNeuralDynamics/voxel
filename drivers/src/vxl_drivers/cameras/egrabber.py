@@ -18,12 +18,11 @@ from egrabber import (
     StreamModule,
     ct,
 )
-from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
 from vxl.camera.base import (
     Camera,
-    FrameRegion,
     IntRange,
     PixelFormat,
     ROIGrid,
@@ -228,54 +227,6 @@ class VieworksCamera(Camera):
             data_rate_mbs=-1,
             frame_rate_fps=-1,
         )
-
-    @property
-    def frame_region(self) -> FrameRegion:
-        """Get current frame region with embedded constraints."""
-        return FrameRegion(
-            x=DeliminatedInt(
-                self._dev.fetch_remote("OffsetX", int),
-                min_value=0,
-                max_value=self._dev.fetch_remote("OffsetX.Max", int),
-                step=self._dev.fetch_remote("OffsetX.Inc", int),
-            ),
-            y=DeliminatedInt(
-                self._dev.fetch_remote("OffsetY", int),
-                min_value=0,
-                max_value=self._dev.fetch_remote("OffsetY.Max", int),
-                step=self._dev.fetch_remote("OffsetY.Inc", int),
-            ),
-            width=DeliminatedInt(
-                self._dev.fetch_remote("Width", int),
-                min_value=self._dev.fetch_remote("Width.Min", int),
-                max_value=self._dev.fetch_remote("Width.Max", int),
-                step=self._dev.fetch_remote("Width.Inc", int),
-            ),
-            height=DeliminatedInt(
-                self._dev.fetch_remote("Height", int),
-                min_value=self._dev.fetch_remote("Height.Min", int),
-                max_value=self._dev.fetch_remote("Height.Max", int),
-                step=self._dev.fetch_remote("Height.Inc", int),
-            ),
-        )
-
-    def update_frame_region(
-        self,
-        x: int | None = None,
-        y: int | None = None,
-        width: int | None = None,
-        height: int | None = None,
-    ) -> None:
-        """Update frame region. Only provided values are changed."""
-        # Set dimensions first (may need to reduce size before changing offset)
-        if width is not None:
-            self._dev.remote.set("Width", width)
-        if height is not None:
-            self._dev.remote.set("Height", height)
-        if x is not None:
-            self._dev.remote.set("OffsetX", x)
-        if y is not None:
-            self._dev.remote.set("OffsetY", y)
 
     # ==================== Sensor ROI ====================
 

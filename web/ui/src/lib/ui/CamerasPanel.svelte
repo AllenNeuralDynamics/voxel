@@ -1,31 +1,29 @@
 <script lang="ts">
-  import { getChannelFor, isPropDiverged, formatPropValue, type Session, type Camera } from '$lib/main';
-  import SpinBox from '$lib/ui/kit/SpinBox.svelte';
-  import Select from '$lib/ui/kit/Select.svelte';
-  import { Button, Checkbox } from '$lib/ui/kit';
-  import { Restore } from '$lib/icons';
+  import { getChannelFor, isPropDiverged, type Session, type Camera, type ROIGrid } from '$lib/main';
+  import { Link, LinkOff, Restore, ChevronDown, ChevronRight } from '$lib/icons';
+  import { Button, Select, SpinBox } from '$lib/ui/kit';
+  import { Slider } from '$lib/ui/kit';
   import { SvelteSet } from 'svelte/reactivity';
   import { watch } from 'runed';
-  import { slide } from 'svelte/transition';
   import { cn } from '$lib/utils';
 
   interface Props {
     session: Session;
     profileId?: string;
-    panelSide?: 'left' | 'right';
     class?: string;
   }
 
-  let { session, profileId, panelSide = 'left', class: className }: Props = $props();
+  let { session, profileId, class: className }: Props = $props();
 
-  const panelRight = $derived(panelSide === 'right');
+  let roiExpanded = $state(true);
 
   // ── Profile context ──
+
   const effectiveProfileId = $derived(profileId ?? session.activeProfileId);
   const profile = $derived(effectiveProfileId ? session.config.profiles[effectiveProfileId] : undefined);
-  const isActiveProfile = $derived(!!effectiveProfileId && effectiveProfileId === session.activeProfileId);
 
-  // ── Profile cameras ──
+  // ── Camera lists ──
+
   const allCameras = $derived(Object.values(session.cameras));
   const profileCameraIds = $derived.by(() => {
     if (!profile) return new Set<string>();
@@ -34,105 +32,130 @@
   const cameras = $derived(allCameras.filter((c) => profileCameraIds.has(c.deviceId)));
   const otherCameras = $derived(allCameras.filter((c) => !profileCameraIds.has(c.deviceId)));
 
-  // ── Selection (reset to all on profile switch) ──
-  let selectedIds = new SvelteSet<string>();
+  // ── Linking state ──
+
+  let linkedIds = new SvelteSet<string>();
 
   watch(
     () => effectiveProfileId,
     () => {
-      selectedIds.clear();
-      for (const c of cameras) selectedIds.add(c.deviceId);
+      linkedIds.clear();
+      for (const c of cameras) linkedIds.add(c.deviceId);
     }
   );
 
-  function toggleCamera(deviceId: string) {
-    if (selectedIds.has(deviceId)) selectedIds.delete(deviceId);
-    else selectedIds.add(deviceId);
+  function toggleLink(deviceId: string) {
+    if (linkedIds.has(deviceId)) linkedIds.delete(deviceId);
+    else linkedIds.add(deviceId);
   }
 
-  function toggleAll() {
-    if (selectedIds.size === cameras.length) selectedIds.clear();
-    else for (const c of cameras) selectedIds.add(c.deviceId);
+  const linkedCameras = $derived(cameras.filter((c) => linkedIds.has(c.deviceId)));
+
+  // ── Merged constraints for linked cameras ──
+
+  interface CardConstraints {
+    exposureMin: number;
+    exposureMax: number;
+    exposureStep: number;
+    binningOptions: number[];
+    pixelFormatOptions: string[];
+    roiGrid: ROIGrid | undefined;
   }
 
-  const allSelected = $derived(cameras.length > 0 && selectedIds.size === cameras.length);
-  const someSelected = $derived(selectedIds.size > 0 && selectedIds.size < cameras.length);
-  const selectedCameras = $derived(cameras.filter((c) => selectedIds.has(c.deviceId)));
-  const selectedHasDivergence = $derived(
-    selectedCameras.some((c) => session.devices.hasDivergence(c.deviceId, profile?.props?.[c.deviceId]))
-  );
+  const mergedConstraints = $derived.by<CardConstraints>(() => {
+    const cams = linkedCameras.length > 0 ? linkedCameras : [];
+    if (cams.length === 0)
+      return {
+        exposureMin: 0,
+        exposureMax: 1000,
+        exposureStep: 0.1,
+        binningOptions: [],
+        pixelFormatOptions: [],
+        roiGrid: undefined
+      };
 
-  // Form state — undefined means "no change"
-  let formExposure = $state<number | undefined>(undefined);
-  let formBinning = $state<string | undefined>(undefined);
-  let formPixelFormat = $state<string | undefined>(undefined);
-  let formRoiX = $state<number | undefined>(undefined);
-  let formRoiY = $state<number | undefined>(undefined);
-  let formRoiW = $state<number | undefined>(undefined);
-  let formRoiH = $state<number | undefined>(undefined);
+    let expMin = -Infinity,
+      expMax = Infinity,
+      expStep = 0;
+    const binSets = cams.map((c) => new Set(c.binningOptions));
+    const fmtSets = cams.map((c) => new Set(c.pixelFormatOptions));
 
-  const hasFormChanges = $derived(
-    formExposure !== undefined ||
-      formBinning !== undefined ||
-      formPixelFormat !== undefined ||
-      formRoiX !== undefined ||
-      formRoiY !== undefined ||
-      formRoiW !== undefined ||
-      formRoiH !== undefined
-  );
-
-  function applyChanges() {
-    for (const cam of selectedCameras) {
-      if (formExposure !== undefined) cam.setExposure(formExposure);
-      if (formBinning !== undefined) cam.setBinning(Number(formBinning));
-      if (formPixelFormat !== undefined) cam.setPixelFormat(formPixelFormat);
-
-      const currentRoi = cam.roi;
-      if (
-        currentRoi &&
-        (formRoiX !== undefined || formRoiY !== undefined || formRoiW !== undefined || formRoiH !== undefined)
-      ) {
-        cam.updateRoi({
-          x: formRoiX ?? currentRoi.x,
-          y: formRoiY ?? currentRoi.y,
-          w: formRoiW ?? currentRoi.w,
-          h: formRoiH ?? currentRoi.h
-        });
-      }
+    for (const c of cams) {
+      expMin = Math.max(expMin, c.exposureMin);
+      expMax = Math.min(expMax, c.exposureMax);
+      expStep = Math.max(expStep, c.exposureStep);
     }
-    resetForm();
-  }
 
-  function resetForm() {
-    formExposure = undefined;
-    formBinning = undefined;
-    formPixelFormat = undefined;
-    formRoiX = undefined;
-    formRoiY = undefined;
-    formRoiW = undefined;
-    formRoiH = undefined;
-  }
-
-  // Merged options from selected cameras
-  const mergedBinningOptions = $derived.by(() => {
-    const sets = selectedCameras.map((c) => new Set(c.binningOptions));
-    if (sets.length === 0) return [];
-    let common = sets[0];
-    for (let i = 1; i < sets.length; i++) {
-      common = new Set([...common].filter((v) => sets[i].has(v)));
+    let binCommon = binSets[0];
+    for (let i = 1; i < binSets.length; i++) {
+      binCommon = new Set([...binCommon].filter((v) => binSets[i].has(v)));
     }
-    return [...common].sort((a, b) => a - b);
+
+    let fmtCommon = fmtSets[0];
+    for (let i = 1; i < fmtSets.length; i++) {
+      fmtCommon = new Set([...fmtCommon].filter((v) => fmtSets[i].has(v)));
+    }
+
+    let roiGrid: ROIGrid | undefined;
+    const grids = cams.map((c) => c.roiGrid).filter((g): g is ROIGrid => !!g);
+    if (grids.length > 0) {
+      roiGrid = {
+        h: {
+          min: Math.max(...grids.map((g) => g.h.min)),
+          max: Math.min(...grids.map((g) => g.h.max)),
+          step: Math.max(...grids.map((g) => g.h.step))
+        },
+        v: {
+          min: Math.max(...grids.map((g) => g.v.min)),
+          max: Math.min(...grids.map((g) => g.v.max)),
+          step: Math.max(...grids.map((g) => g.v.step))
+        }
+      };
+    }
+
+    return {
+      exposureMin: expMin === -Infinity ? 0 : expMin,
+      exposureMax: expMax === Infinity ? 1000 : expMax,
+      exposureStep: expStep || 0.1,
+      binningOptions: [...binCommon].sort((a, b) => a - b),
+      pixelFormatOptions: [...fmtCommon].sort(),
+      roiGrid
+    };
   });
 
-  const mergedPixelFormatOptions = $derived.by(() => {
-    const sets = selectedCameras.map((c) => new Set(c.pixelFormatOptions));
-    if (sets.length === 0) return [];
-    let common = sets[0];
-    for (let i = 1; i < sets.length; i++) {
-      common = new Set([...common].filter((v) => sets[i].has(v)));
+  function getConstraints(camera: Camera): CardConstraints {
+    if (linkedIds.has(camera.deviceId) && linkedCameras.length > 1) {
+      return mergedConstraints;
     }
-    return [...common].sort();
-  });
+    return {
+      exposureMin: camera.exposureMin,
+      exposureMax: camera.exposureMax,
+      exposureStep: camera.exposureStep,
+      binningOptions: camera.binningOptions,
+      pixelFormatOptions: camera.pixelFormatOptions,
+      roiGrid: camera.roiGrid
+    };
+  }
+
+  // ── Linked action helpers ──
+
+  function forLinked(source: Camera, fn: (c: Camera) => void) {
+    if (linkedIds.has(source.deviceId) && linkedCameras.length > 1) {
+      for (const cam of linkedCameras) fn(cam);
+    } else {
+      fn(source);
+    }
+  }
+
+  function forLinkedAsync(source: Camera, fn: (id: string) => Promise<void> | void) {
+    if (linkedIds.has(source.deviceId) && linkedCameras.length > 1) {
+      for (const cam of linkedCameras) fn(cam.deviceId);
+    } else {
+      fn(source.deviceId);
+    }
+  }
+
+  // ── Helpers ──
 
   function modeDotColor(mode: string | undefined): string {
     if (mode === 'PREVIEW') return 'bg-success';
@@ -145,171 +168,346 @@
     if (mode === 'ACQUISITION') return 'Acquiring';
     return 'Idle';
   }
+
+  function exposureDecimals(step: number): number {
+    if (step >= 1) return 0;
+    if (step >= 0.1) return 1;
+    if (step >= 0.01) return 2;
+    return 3;
+  }
 </script>
 
-{#snippet unsavedDot(saved: unknown)}
-  {#if saved === undefined || saved === null}
+{#snippet unsavedDot(saved: unknown, isDisabled: boolean)}
+  {#if !isDisabled && (saved === undefined || saved === null)}
     <span class="inline-block size-1 rounded-full bg-warning opacity-70"></span>
   {/if}
 {/snippet}
 
-{#snippet cameraCard(camera: Camera)}
-  {@const ch = effectiveProfileId ? getChannelFor(session.config, effectiveProfileId, camera.deviceId) : undefined}
-  {@const isSelected = selectedIds.has(camera.deviceId)}
-  {@const savedProps = profile?.props?.[camera.deviceId]}
-  {@const savedExp = savedProps?.['exposure_time_ms']}
-  {@const savedBin = savedProps?.['binning']}
-  {@const savedFmt = savedProps?.['pixel_format']}
-  {@const expDiverged = isPropDiverged(savedExp, camera.exposureTimeMs)}
-  {@const binDiverged = isPropDiverged(savedBin, camera.binning)}
-  {@const fmtDiverged = isPropDiverged(savedFmt, camera.pixelFormat)}
+{#snippet cameraCard(camera: Camera, isOther: boolean)}
+  {@const isLinked = linkedIds.has(camera.deviceId)}
+  {@const constraints = isOther
+    ? {
+        exposureMin: camera.exposureMin,
+        exposureMax: camera.exposureMax,
+        exposureStep: camera.exposureStep,
+        binningOptions: camera.binningOptions,
+        pixelFormatOptions: camera.pixelFormatOptions,
+        roiGrid: camera.roiGrid
+      }
+    : getConstraints(camera)}
+  {@const channelLabel =
+    !isOther && effectiveProfileId
+      ? (getChannelFor(session.config, effectiveProfileId, camera.deviceId)?.config?.label ??
+        getChannelFor(session.config, effectiveProfileId, camera.deviceId)?.id)
+      : undefined}
+  {@const savedProps = isOther ? undefined : profile?.props?.[camera.deviceId]}
+  {@const savedRoi = isOther ? undefined : profile?.rois?.[camera.deviceId]}
+  {@const expDiverged = isPropDiverged(savedProps?.exposure_time_ms, camera.exposureTimeMs)}
+  {@const binDiverged = isPropDiverged(savedProps?.binning, camera.binning)}
+  {@const fmtDiverged = isPropDiverged(savedProps?.pixel_format, camera.pixelFormat)}
+  {@const anyPropDiverged = expDiverged || binDiverged || fmtDiverged}
+  {@const anyRoiDiverged =
+    savedRoi != null &&
+    camera.roi != null &&
+    (savedRoi.x !== camera.roi.x ||
+      savedRoi.y !== camera.roi.y ||
+      savedRoi.w !== camera.roi.w ||
+      savedRoi.h !== camera.roi.h)}
+  {@const sensorW = camera.sensorSizePx?.x ?? 1}
+  {@const sensorH = camera.sensorSizePx?.y ?? 1}
+  {@const strokeWidth = Math.max(sensorW, sensorH) * 0.004}
+  {@const frameSizePx = camera.frameSizePx}
+  {@const frameSizeMb = camera.frameSizeMb}
 
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class={cn(
-      'flex w-full flex-col gap-3 rounded border px-3 py-2 text-left transition-colors',
-      isActiveProfile && 'cursor-pointer',
-      isSelected && isActiveProfile
-        ? 'border-fg-faint/60 bg-element-bg/70 hover:bg-element-bg'
-        : 'border-border hover:bg-element-hover/50'
-    )}
-    onclick={() => isActiveProfile && toggleCamera(camera.deviceId)}
-  >
-    <!-- Header: name + channel badge + mode badge + checkbox -->
-    <div class="flex items-center gap-2.5">
-      <span class="text-base font-medium">{camera.deviceId}</span>
-      {#if ch}
-        <span class="rounded-full bg-element-bg px-1.5 py-px text-xs text-fg-muted">{ch.config.label ?? ch.id}</span>
+  <div class={cn('flex flex-col gap-3 rounded border border-border bg-panel p-3', isOther && 'opacity-60')}>
+    <!-- ═══ Header ═══ -->
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-medium">{camera.deviceId}</span>
+      {#if channelLabel}
+        <span class="rounded-full bg-element-bg px-1.5 py-px text-xs text-fg-muted">{channelLabel}</span>
       {/if}
-      <div class="ml-auto flex items-center gap-2.5">
-        <div class="flex items-center gap-1.5">
-          <div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
-          <span class="text-xs text-fg-muted">{modeLabel(camera.mode)}</span>
+      {#if isOther}
+        <span class="ml-auto rounded-full bg-fg-muted/10 px-1.5 py-px text-xs text-fg-muted">Not in profile</span>
+      {:else}
+        <button
+          class={cn(
+            'ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors',
+            isLinked ? 'bg-primary/15 text-primary' : 'text-fg-muted hover:text-fg'
+          )}
+          onclick={() => toggleLink(camera.deviceId)}
+          title={isLinked ? 'Unlink camera' : 'Link camera'}
+        >
+          {#if isLinked}
+            <Link width="14" height="14" />
+            <span>Linked</span>
+          {:else}
+            <LinkOff width="14" height="14" />
+          {/if}
+        </button>
+      {/if}
+    </div>
+
+    <hr class="-mx-3 border-border" />
+
+    <!-- ═══ Properties Section ═══ -->
+    <div class="flex flex-col gap-2">
+      <div class="flex h-ui-xs items-center justify-between">
+        <span class="text-xs font-medium tracking-wide text-fg-muted uppercase">Properties</span>
+        {#if !isOther && (!savedProps || anyPropDiverged)}
+          <div class="flex items-center gap-1">
+            {#if anyPropDiverged}
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onclick={() => forLinkedAsync(camera, (id) => session.applyProfileProps([id]))}
+                title="Revert properties"
+              >
+                <Restore width="14" height="14" />
+              </Button>
+            {/if}
+            <Button
+              variant="ghost"
+              size="xs"
+              class="text-warning/80"
+              onclick={() => forLinkedAsync(camera, (id) => session.saveProfileProps(id))}
+            >
+              Save
+            </Button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Exposure -->
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1">
+            <span class="text-xs text-fg-muted">Exposure</span>
+            {@render unsavedDot(savedProps?.exposure_time_ms, isOther)}
+            {#if expDiverged}
+              <span class="text-xs text-warning opacity-90">*</span>
+            {/if}
+          </div>
+          <SpinBox
+            value={camera.exposureTimeMs ?? 0}
+            min={constraints.exposureMin}
+            max={constraints.exposureMax}
+            step={constraints.exposureStep}
+            decimals={exposureDecimals(constraints.exposureStep)}
+            suffix="ms"
+            numCharacters={7}
+            appearance="full"
+            align="left"
+            size="xs"
+            onChange={(v) => forLinked(camera, (c) => c.setExposure(v))}
+          />
         </div>
-        {#if isActiveProfile}
-          <Checkbox checked={isSelected} size="sm" class="pointer-events-none border-fg-faint" />
+        <Slider
+          target={camera.exposureTimeMs ?? 0}
+          min={constraints.exposureMin}
+          max={constraints.exposureMax}
+          step={constraints.exposureStep}
+          onChange={(v) => forLinked(camera, (c) => c.setExposure(v))}
+        />
+      </div>
+
+      <!-- Binning & Pixel Format -->
+      <div class="grid grid-cols-2 gap-2">
+        {#if constraints.binningOptions.length > 0}
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-1">
+              <span class="text-xs text-fg-muted">Binning</span>
+              {@render unsavedDot(savedProps?.binning, isOther)}
+              {#if binDiverged}
+                <span class="text-xs text-warning opacity-90">*</span>
+              {/if}
+            </div>
+            <Select
+              value={String(camera.binning ?? '')}
+              options={constraints.binningOptions.map((b) => ({ value: String(b), label: `${b}x` }))}
+              size="xs"
+              onchange={(v) => forLinked(camera, (c) => c.setBinning(Number(v)))}
+            />
+          </div>
+        {/if}
+        {#if constraints.pixelFormatOptions.length > 0}
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-1">
+              <span class="text-xs text-fg-muted">Format</span>
+              {@render unsavedDot(savedProps?.pixel_format, isOther)}
+              {#if fmtDiverged}
+                <span class="text-xs text-warning opacity-90">*</span>
+              {/if}
+            </div>
+            <Select
+              value={camera.pixelFormat ?? ''}
+              options={constraints.pixelFormatOptions.map((f) => ({ value: f, label: f }))}
+              size="xs"
+              onchange={(v) => forLinked(camera, (c) => c.setPixelFormat(v))}
+            />
+          </div>
         {/if}
       </div>
     </div>
 
-    <!-- Properties -->
-    <div class="space-y-1 text-sm">
-      <div class="flex justify-between">
-        <div class="flex items-center gap-1">
-          <span class="text-fg-muted">Exposure</span>
-          {@render unsavedDot(savedExp)}
+    <!-- ═══ ROI Section ═══ -->
+    {#if camera.roi && camera.sensorSizePx}
+      <hr class="-mx-3 border-border" />
+
+      <div class="flex flex-col gap-2">
+        <div class="flex h-ui-xs items-center justify-between">
+          <span class="text-xs font-medium tracking-wide text-fg-muted uppercase">ROI</span>
+          <div class="flex items-center gap-1">
+            {#if !isOther && (!savedRoi || anyRoiDiverged)}
+              {#if anyRoiDiverged}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onclick={() => forLinkedAsync(camera, (id) => session.applyProfileRoi(id))}
+                  title="Revert ROI"
+                >
+                  <Restore width="14" height="14" />
+                </Button>
+              {/if}
+              <Button
+                variant="ghost"
+                size="xs"
+                class="text-warning/80"
+                onclick={() => forLinkedAsync(camera, (id) => session.saveProfileRoi(id))}
+              >
+                Save
+              </Button>
+            {/if}
+            <button class="flex items-center text-fg-muted hover:text-fg" onclick={() => (roiExpanded = !roiExpanded)}>
+              {#if roiExpanded}
+                <ChevronDown width="16" height="16" />
+              {:else}
+                <ChevronRight width="16" height="16" />
+              {/if}
+            </button>
+          </div>
         </div>
-        <div class="flex items-center gap-1 font-mono tabular-nums">
-          {camera.exposureTimeMs !== undefined ? `${camera.exposureTimeMs.toFixed(1)} ms` : '—'}
-          {#if expDiverged}
-            <span class="text-warning opacity-90">({formatPropValue(savedExp, 0.1)})</span>
-          {/if}
-        </div>
-      </div>
-      <div class="flex justify-between">
-        <div class="flex items-center gap-1">
-          <span class="text-fg-muted">Binning</span>
-          {@render unsavedDot(savedBin)}
-        </div>
-        <div class="flex items-center gap-1 font-mono tabular-nums">
-          {camera.binning !== undefined ? `${camera.binning}x` : '—'}
-          {#if binDiverged}
-            <span class="text-warning opacity-90">({formatPropValue(savedBin)})</span>
-          {/if}
-        </div>
-      </div>
-      <div class="flex justify-between">
-        <div class="flex items-center gap-1">
-          <span class="text-fg-muted">Format</span>
-          {@render unsavedDot(savedFmt)}
-        </div>
-        <div class="flex items-center gap-1 font-mono tabular-nums">
-          {camera.pixelFormat ?? '—'}
-          {#if fmtDiverged}
-            <span class="text-warning opacity-90">({formatPropValue(savedFmt)})</span>
-          {/if}
-        </div>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-fg-muted">Frame</span>
-        <span class="font-mono tabular-nums">
-          {#if camera.frameSizePx}
-            {camera.frameSizePx.x}&times;{camera.frameSizePx.y}
-          {:else}
-            —
-          {/if}
-        </span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-fg-muted">Sensor</span>
-        <span class="font-mono tabular-nums">
-          {#if camera.sensorSizePx}
-            {camera.sensorSizePx.x}&times;{camera.sensorSizePx.y}
-          {:else}
-            —
-          {/if}
-        </span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-fg-muted">Pixel</span>
-        <span class="font-mono tabular-nums">
-          {#if camera.pixelSizeUm}
-            {camera.pixelSizeUm.x.toFixed(2)} &mu;m
-          {:else}
-            —
-          {/if}
-        </span>
-      </div>
-    </div>
-    <!-- Stream info (when streaming) -->
-    {#if camera.streamInfo}
-      {@const info = camera.streamInfo}
-      <div class="flex items-center gap-4 border-t border-border/50 pt-2 text-sm text-fg-muted">
-        <span class="font-mono tabular-nums">{info.frame_rate_fps.toFixed(1)} fps</span>
-        <span class="font-mono tabular-nums">{info.data_rate_mbs.toFixed(1)} MB/s</span>
-        {#if info.dropped_frames > 0}
-          <span class="font-mono text-danger tabular-nums">{info.dropped_frames} dropped</span>
+
+        {#if roiExpanded}
+          <div class="grid grid-cols-[minmax(60px,120px)_1fr] gap-3">
+            <!-- SVG sensor diagram -->
+            <svg
+              viewBox="0 0 {sensorW} {sensorH}"
+              class="w-full border border-border"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <rect x="0" y="0" width={sensorW} height={sensorH} class="fill-fg-faint/10" />
+              <rect
+                x={camera.roi.x}
+                y={camera.roi.y}
+                width={camera.roi.w}
+                height={camera.roi.h}
+                class="fill-fg/10 stroke-fg/30"
+                stroke-width={strokeWidth}
+              />
+            </svg>
+
+            <!-- Spinboxes + spatial actions (2×3 grid) -->
+            <div class="flex flex-col gap-2">
+              <div class="grid grid-cols-2 gap-2">
+                <SpinBox
+                  value={camera.roi.x}
+                  min={0}
+                  max={(constraints.roiGrid?.h.max ?? 0) - (camera.roi.w ?? 0)}
+                  step={constraints.roiGrid?.h.step ?? 1}
+                  prefix="x"
+                  appearance="full"
+                  size="xs"
+                  onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, x: v }))}
+                />
+                <SpinBox
+                  value={camera.roi.y}
+                  min={0}
+                  max={(constraints.roiGrid?.v.max ?? 0) - (camera.roi.h ?? 0)}
+                  step={constraints.roiGrid?.v.step ?? 1}
+                  prefix="y"
+                  appearance="full"
+                  size="xs"
+                  onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, y: v }))}
+                />
+                <SpinBox
+                  value={camera.roi.w}
+                  min={constraints.roiGrid?.h.min ?? 1}
+                  max={constraints.roiGrid?.h.max ?? 99999}
+                  step={constraints.roiGrid?.h.step ?? 1}
+                  prefix="w"
+                  appearance="full"
+                  size="xs"
+                  onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, w: v }))}
+                />
+                <SpinBox
+                  value={camera.roi.h}
+                  min={constraints.roiGrid?.v.min ?? 1}
+                  max={constraints.roiGrid?.v.max ?? 99999}
+                  step={constraints.roiGrid?.v.step ?? 1}
+                  prefix="h"
+                  appearance="full"
+                  size="xs"
+                  onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, h: v }))}
+                />
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  onclick={() =>
+                    forLinked(camera, (c) => {
+                      const sz = c.sensorSizePx;
+                      if (sz)
+                        c.updateRoi({
+                          ...c.roi!,
+                          x: Math.floor((sz.x - (c.roi?.w ?? sz.x)) / 2),
+                          y: Math.floor((sz.y - (c.roi?.h ?? sz.y)) / 2)
+                        });
+                    })}>Center</Button
+                >
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  onclick={() =>
+                    forLinked(camera, (c) => {
+                      const sz = c.sensorSizePx;
+                      if (sz) c.updateRoi({ x: 0, y: 0, w: sz.x, h: sz.y });
+                    })}>Reset</Button
+                >
+              </div>
+            </div>
+          </div>
         {/if}
       </div>
     {/if}
-  </div>
-{/snippet}
 
-{#snippet otherCameraCard(camera: Camera)}
-  <div
-    class="flex w-full cursor-not-allowed flex-col gap-3 rounded border border-border px-3 py-2 text-left opacity-80"
-  >
-    <!-- Header: name + mode badge -->
-    <div class="flex items-center gap-2.5">
-      <span class="text-base font-medium">{camera.deviceId}</span>
-      <div class="ml-auto flex items-center gap-1.5">
+    <!-- ═══ Footer ═══ -->
+    <hr class="-mx-3 border-border" />
+
+    <div class="flex items-center justify-between font-mono text-xs text-fg-muted tabular-nums">
+      <div class="flex items-center">
+        {#if frameSizePx}
+          <span>{frameSizePx.x}&times;{frameSizePx.y}</span>
+          {#if frameSizeMb != null}
+            <span>&ensp;&middot;&ensp;{frameSizeMb.toFixed(1)} MB</span>
+          {/if}
+        {/if}
+      </div>
+      {#if camera.streamInfo}
+        {@const info = camera.streamInfo}
+        <div class="flex items-center">
+          <span>{info.frame_rate_fps.toFixed(1)} fps</span>
+          <span>&ensp;&middot;&ensp;</span>
+          <span>{info.data_rate_mbs.toFixed(1)} MB/s</span>
+          {#if info.dropped_frames > 0}
+            <span>&ensp;&middot;&ensp;</span>
+            <span class="text-danger">{info.dropped_frames} dropped</span>
+          {/if}
+        </div>
+      {:else}
+        <div></div>
+      {/if}
+      <div class="flex items-center gap-1.5">
         <div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
         <span class="text-xs text-fg-muted">{modeLabel(camera.mode)}</span>
-      </div>
-    </div>
-
-    <!-- Properties -->
-    <div class="space-y-1 text-sm">
-      <div class="flex justify-between">
-        <span class="text-fg-muted">Exposure</span>
-        <span class="font-mono tabular-nums">
-          {camera.exposureTimeMs !== undefined ? `${camera.exposureTimeMs.toFixed(1)} ms` : '—'}
-        </span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-fg-muted">Binning</span>
-        <span class="font-mono tabular-nums">{camera.binning !== undefined ? `${camera.binning}x` : '—'}</span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-fg-muted">Frame</span>
-        <span class="font-mono tabular-nums">
-          {#if camera.frameSizePx}
-            {camera.frameSizePx.x}&times;{camera.frameSizePx.y}
-          {:else}
-            —
-          {/if}
-        </span>
       </div>
     </div>
   </div>
@@ -324,181 +522,9 @@
     <p class="text-sm text-fg-muted">No cameras configured</p>
   </div>
 {:else}
-  <div class={cn('@container flex', className)}>
-    <!-- Cards column (header + cards) -->
-    <div class={cn('flex min-w-0 flex-1 flex-col gap-3 px-3 py-3', panelRight ? 'order-first' : 'order-last')}>
-      <!-- Header bar (only when active profile) -->
-      {#if isActiveProfile}
-        <div class="-mt-1.5 flex h-ui-sm items-center justify-between">
-          <div class="flex items-center gap-2.5">
-            <Checkbox checked={allSelected} indeterminate={someSelected} onchange={toggleAll} size="sm" />
-            <span class="text-sm text-fg-muted">
-              {selectedIds.size} of {cameras.length} camera{cameras.length !== 1 ? 's' : ''} selected
-            </span>
-          </div>
-          {#if selectedCameras.length > 0}
-            <div class="flex items-center gap-1">
-              {#if selectedHasDivergence}
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onclick={() => session.applyProfileProps([...selectedIds])}
-                  title="Revert selected to saved"
-                >
-                  <Restore width="14" height="14" />
-                </Button>
-              {/if}
-              <Button
-                variant="outline"
-                size="xs"
-                onclick={() => {
-                  for (const id of selectedIds) session.saveProfileProps(id);
-                }}
-              >
-                Save
-              </Button>
-            </div>
-          {/if}
-        </div>
-      {/if}
-
-      <div class="flex-1 overflow-auto">
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(16rem,1fr))] gap-x-4 gap-y-2">
-          {#each cameras as camera (camera.deviceId)}
-            {@render cameraCard(camera)}
-          {/each}
-          {#if otherCameras.length > 0}
-            {#each otherCameras as camera (camera.deviceId)}
-              {@render otherCameraCard(camera)}
-            {/each}
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <!-- Sidebar (visible when active profile) -->
-    {#if isActiveProfile}
-      <div
-        class={cn(
-          'flex min-h-72 w-72 shrink-0 flex-col bg-panel px-3 @[800px]:w-96',
-          panelRight ? 'order-last border-l border-border' : 'order-first border-r border-border'
-        )}
-        transition:slide={{ axis: 'x', duration: 200 }}
-      >
-        {#if selectedCameras.length > 0}
-          <div class="flex-1 space-y-4 overflow-auto pt-4">
-            <!-- Exposure -->
-            <div>
-              <h5 class="mb-1.5 text-xs font-medium text-fg-muted capitalize">Exposure</h5>
-              <SpinBox
-                value={formExposure ?? selectedCameras[0]?.exposureTimeMs ?? 0}
-                min={selectedCameras[0]?.exposureMin ?? 0}
-                max={selectedCameras[0]?.exposureMax ?? 1000}
-                step={selectedCameras[0]?.exposureStep ?? 0.1}
-                decimals={1}
-                suffix="ms"
-                size="xs"
-                class="w-full"
-                onChange={(v) => (formExposure = v)}
-              />
-            </div>
-
-            <!-- Binning & Pixel Format -->
-            {#if mergedBinningOptions.length > 0 || mergedPixelFormatOptions.length > 0}
-              <div class="grid grid-cols-2 gap-2">
-                {#if mergedBinningOptions.length > 0}
-                  <div>
-                    <h5 class="mb-1.5 text-xs font-medium text-fg-muted capitalize">Binning</h5>
-                    <Select
-                      value={formBinning ?? String(selectedCameras[0]?.binning ?? '')}
-                      options={mergedBinningOptions.map((b) => ({ value: String(b), label: `${b}x` }))}
-                      size="xs"
-                      onchange={(v) => (formBinning = v)}
-                    />
-                  </div>
-                {/if}
-                {#if mergedPixelFormatOptions.length > 0}
-                  <div>
-                    <h5 class="mb-1.5 text-xs font-medium text-fg-muted capitalize">Pixel Format</h5>
-                    <Select
-                      value={formPixelFormat ?? selectedCameras[0]?.pixelFormat ?? ''}
-                      options={mergedPixelFormatOptions.map((f) => ({ value: f, label: f }))}
-                      size="xs"
-                      onchange={(v) => (formPixelFormat = v)}
-                    />
-                  </div>
-                {/if}
-              </div>
-            {/if}
-
-            <!-- Sensor ROI -->
-            {#if selectedCameras[0]?.roi && selectedCameras[0]?.roiGrid}
-              {@const refRoi = selectedCameras[0].roi}
-              {@const refGrid = selectedCameras[0].roiGrid}
-              {@const align = 'right'}
-              {@const size = 'xs'}
-              <div>
-                <h5 class="mb-1.5 text-xs text-fg-muted capitalize">Sensor ROI</h5>
-                <div class="grid grid-cols-2 gap-2">
-                  <SpinBox
-                    value={formRoiX ?? refRoi.x}
-                    min={0}
-                    max={refGrid.h.max - (formRoiW ?? refRoi.w)}
-                    step={refGrid.h.step}
-                    prefix="X"
-                    {align}
-                    {size}
-                    class="w-full"
-                    onChange={(v) => (formRoiX = v)}
-                  />
-                  <SpinBox
-                    value={formRoiY ?? refRoi.y}
-                    min={0}
-                    max={refGrid.v.max - (formRoiH ?? refRoi.h)}
-                    step={refGrid.v.step}
-                    prefix="Y"
-                    {align}
-                    {size}
-                    class="w-full"
-                    onChange={(v) => (formRoiY = v)}
-                  />
-                  <SpinBox
-                    value={formRoiW ?? refRoi.w}
-                    min={refGrid.h.min}
-                    max={refGrid.h.max}
-                    step={refGrid.h.step}
-                    prefix="W"
-                    {align}
-                    {size}
-                    class="w-full"
-                    onChange={(v) => (formRoiW = v)}
-                  />
-                  <SpinBox
-                    value={formRoiH ?? refRoi.h}
-                    min={refGrid.v.min}
-                    max={refGrid.v.max}
-                    step={refGrid.v.step}
-                    prefix="H"
-                    {align}
-                    {size}
-                    class="w-full"
-                    onChange={(v) => (formRoiH = v)}
-                  />
-                </div>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Apply button -->
-          <Button variant="secondary" class="my-3 w-full" disabled={!hasFormChanges} onclick={applyChanges}>
-            Apply to {selectedCameras.length} camera{selectedCameras.length !== 1 ? 's' : ''}
-          </Button>
-        {:else}
-          <div class="flex flex-1 items-center justify-center">
-            <p class="text-sm text-fg-muted">Select cameras to edit</p>
-          </div>
-        {/if}
-      </div>
-    {/if}
+  <div class={cn('grid grid-cols-[repeat(auto-fit,minmax(22rem,1fr))] items-start gap-4', className)}>
+    {#each [...cameras, ...otherCameras] as camera (camera.deviceId)}
+      {@render cameraCard(camera, !profileCameraIds.has(camera.deviceId))}
+    {/each}
   </div>
 {/if}

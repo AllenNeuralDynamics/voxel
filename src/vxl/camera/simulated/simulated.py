@@ -2,14 +2,13 @@ import time
 from typing import ClassVar, cast, final
 
 import numpy as np
-from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
 from vxl.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
     Camera,
-    FrameRegion,
     IntRange,
     PixelFormat,
     ROIGrid,
@@ -113,58 +112,6 @@ class SimulatedCamera(Camera):
     def frame_rate_hz(self, value: float) -> None:
         self._frame_rate_hz = value
 
-    @property
-    def frame_region(self) -> FrameRegion:
-        """Get the current frame region with embedded constraints."""
-        return FrameRegion(
-            x=DeliminatedInt(
-                self._roi_width_offset_px,
-                min_value=0,
-                max_value=self._sensor_size_px.x - self._min_width,
-                step=self._roi_step_width_px,
-            ),
-            y=DeliminatedInt(
-                self._roi_height_offset_px,
-                min_value=0,
-                max_value=self._sensor_size_px.y - self._min_height,
-                step=self._roi_step_height_px,
-            ),
-            width=DeliminatedInt(
-                self._roi_width_px,
-                min_value=self._min_width,
-                max_value=self._sensor_size_px.x,
-                step=self._roi_step_width_px,
-            ),
-            height=DeliminatedInt(
-                self._roi_height_px,
-                min_value=self._min_height,
-                max_value=self._sensor_size_px.y,
-                step=self._roi_step_height_px,
-            ),
-        )
-
-    def update_frame_region(
-        self,
-        x: int | None = None,
-        y: int | None = None,
-        width: int | None = None,
-        height: int | None = None,
-    ) -> None:
-        """Update one or more frame region dimensions."""
-        if x is not None:
-            # Clamp and align to step
-            clamped_x = max(0, min(x, self._sensor_size_px.x - self._min_width))
-            self._roi_width_offset_px = (clamped_x // self._roi_step_width_px) * self._roi_step_width_px
-        if y is not None:
-            clamped_y = max(0, min(y, self._sensor_size_px.y - self._min_height))
-            self._roi_height_offset_px = (clamped_y // self._roi_step_height_px) * self._roi_step_height_px
-        if width is not None:
-            clamped_w = max(self._min_width, min(width, self._sensor_size_px.x))
-            self._roi_width_px = (clamped_w // self._roi_step_width_px) * self._roi_step_width_px
-        if height is not None:
-            clamped_h = max(self._min_height, min(height, self._sensor_size_px.y))
-            self._roi_height_px = (clamped_h // self._roi_step_height_px) * self._roi_step_height_px
-
     def _get_roi(self) -> SensorROI:
         return SensorROI(
             x=self._roi_width_offset_px,
@@ -213,14 +160,12 @@ class SimulatedCamera(Camera):
     def _arm(self) -> None:
         self.log.debug("generating reference frame")
 
-        # Generate single reference frame based on current frame region and binning
-        region = self.frame_region
-        binned_height = int(region.height) // self._binning
-        binned_width = int(region.width) // self._binning
+        # Generate reference frame at output dimensions (post-binning)
+        frame_size = self.frame_size_px
 
         generator = ReferenceFrameGenerator(
-            height_px=binned_height,
-            width_px=binned_width,
+            height_px=frame_size.y,
+            width_px=frame_size.x,
             data_type=self.pixel_type.dtype,
             apply_noise=True,
         )

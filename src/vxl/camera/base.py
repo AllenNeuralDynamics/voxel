@@ -13,7 +13,7 @@ from ome_zarr_writer.backends.log import LogBackend
 # from ome_zarr_writer.backends.ts import TensorStoreBackend
 from pydantic import BaseModel
 from rigup.device import DeviceController
-from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, describe
@@ -74,42 +74,6 @@ class SensorROI(BaseModel):
         x = _snap(self.x, IntRange(min=0, max=grid.h.max - w, step=grid.h.step))
         y = _snap(self.y, IntRange(min=0, max=grid.v.max - h, step=grid.v.step))
         return SensorROI(x=x, y=y, w=w, h=h)
-
-
-class FrameRegion(BaseModel):
-    """Frame region with constraints embedded in each dimension.
-
-    Each dimension (x, y, width, height) is a DeliminatedInt that carries
-    its current value along with min/max/step constraints.
-
-    Values are in frame coordinates (post-binning), not sensor coordinates.
-    The camera's Width/Height already reflects hardware binning.
-
-    Example:
-        region = FrameRegion(
-            x=DeliminatedInt(0, min_value=0, max_value=14000, step=16),
-            y=DeliminatedInt(0, min_value=0, max_value=10000, step=16),
-            width=DeliminatedInt(1024, min_value=64, max_value=14192, step=16),
-            height=DeliminatedInt(1024, min_value=64, max_value=10640, step=16),
-        )
-    """
-
-    x: DeliminatedInt
-    y: DeliminatedInt
-    width: DeliminatedInt
-    height: DeliminatedInt
-
-    model_config = {"arbitrary_types_allowed": True}
-
-    @property
-    def size(self) -> tuple[int, int]:
-        """Get the frame size as (width, height)."""
-        return (int(self.width), int(self.height))
-
-    @property
-    def offset(self) -> tuple[int, int]:
-        """Get the frame offset as (x, y)."""
-        return (int(self.x), int(self.y))
 
 
 class TriggerMode(StrEnum):
@@ -211,39 +175,6 @@ class Camera(Device):
     @abstractmethod
     def frame_rate_hz(self, value: float) -> None:
         """Set the frame rate of the camera in Hz."""
-
-    @property
-    @describe(label="Frame Region", stream=True)
-    @abstractmethod
-    def frame_region(self) -> FrameRegion:
-        """Get the current frame region with embedded constraints.
-
-        The FrameRegion contains x, y, width, height as DeliminatedInt values,
-        each carrying its own min/max/step constraints from the hardware.
-        Values are in frame coordinates (post-binning), not sensor coordinates.
-        """
-
-    @abstractmethod
-    @describe(label="Update Frame Region")
-    def update_frame_region(
-        self,
-        x: int | None = None,
-        y: int | None = None,
-        width: int | None = None,
-        height: int | None = None,
-    ) -> None:
-        """Update one or more frame region dimensions.
-
-        Only specified parameters are changed; others remain unchanged.
-        Values are automatically clamped and aligned to hardware constraints.
-        Values must be in frame coordinates (post-binning).
-
-        Args:
-            x: New X offset (or None to keep current)
-            y: New Y offset (or None to keep current)
-            width: New width (or None to keep current)
-            height: New height (or None to keep current)
-        """
 
     # ==================== Sensor ROI ====================
 

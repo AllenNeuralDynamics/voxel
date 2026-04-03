@@ -66,7 +66,7 @@
     {#if bottomPanelTab === 'devices'}
       <AuxDevicesPanel {session} class="overflow-auto p-2" />
     {:else if bottomPanelTab === 'cameras'}
-      <CamerasPanel {session} class="h-full" />
+      <CamerasPanel {session} class="h-full overflow-auto p-4" />
     {:else if bottomPanelTab === 'lasers'}
       <LasersPanel {session} />
     {:else if bottomPanelTab === 'logs'}

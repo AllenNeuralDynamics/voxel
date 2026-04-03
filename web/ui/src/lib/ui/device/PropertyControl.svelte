@@ -34,10 +34,10 @@
     }
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
     if (typeof value !== 'object' || value === null) return String(value);
-    // FrameRegion: { x, y, width, height } — check before Vec2D since it also has x,y
-    if ('width' in value && 'height' in value) {
-      const r = value as { x: number; y: number; width: number; height: number };
-      return `${r.width}\u00d7${r.height} @ (${r.x}, ${r.y})`;
+    // SensorROI: { x, y, w, h } — check before Vec2D since it also has x,y
+    if ('w' in value && 'h' in value) {
+      const r = value as { x: number; y: number; w: number; h: number };
+      return `${r.w}\u00d7${r.h} @ (${r.x}, ${r.y})`;
     }
     // Vec2D / IVec2D: { y, x }
     if ('y' in value && 'x' in value) {
