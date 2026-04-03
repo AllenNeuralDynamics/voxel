@@ -22,7 +22,7 @@ import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
 import { SnapshotStore, type SnapshotChannel } from './snapshots.svelte';
-import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { SvelteSet } from 'svelte/reactivity';
 import { type AlignEdge, computeAlignedOffset } from './grid';
 
 export interface SessionInit {
@@ -95,8 +95,10 @@ export class Session {
   // ── Internal ────────────────────────────────────────────
 
   #unsubscribers: Array<() => void> = [];
-  #selection = new SvelteMap<number, SvelteSet<number>>([[0, new SvelteSet([0])]]);
-  selectedTiles = $derived<Tile[]>(this.#getSelectedTiles());
+  #selectedStackKeys = new SvelteSet<string>();
+  selectedStacks = $derived<Stack[]>(
+    this.activeStacks.filter((s) => this.#selectedStackKeys.has(`${s.row},${s.col}`))
+  );
 
   constructor(init: SessionInit) {
     this.client = init.client;
@@ -535,97 +537,46 @@ export class Session {
     }
   }
 
-  // --- Selection ---
+  // --- Stack Selection ---
 
-  #getSelectedTiles(): Tile[] {
-    const result: Tile[] = [];
-    for (const [row, cols] of this.#selection) {
-      for (const col of cols) {
-        const tile = this.tiles.find((t) => t.row === row && t.col === col);
-        if (tile) result.push(tile);
-      }
-    }
-    return result;
+  isStackSelected(row: number, col: number): boolean {
+    return this.#selectedStackKeys.has(`${row},${col}`);
   }
 
-  isTileSelected(row: number, col: number): boolean {
-    return this.#selection.get(row)?.has(col) ?? false;
-  }
-
-  selectTiles(positions: [number, number][]): void {
-    this.#selection.clear();
-    for (const [row, col] of positions) {
-      const cols = this.#selection.get(row);
-      if (cols) cols.add(col);
-      else this.#selection.set(row, new SvelteSet([col]));
+  selectStacks(positions: Array<{ row: number; col: number }>): void {
+    this.#selectedStackKeys.clear();
+    for (const { row, col } of positions) {
+      this.#selectedStackKeys.add(`${row},${col}`);
     }
   }
 
-  addToSelection(positions: [number, number][]): void {
-    for (const [row, col] of positions) {
-      const cols = this.#selection.get(row);
-      if (cols) cols.add(col);
-      else this.#selection.set(row, new SvelteSet([col]));
+  addStacksToSelection(positions: Array<{ row: number; col: number }>): void {
+    for (const { row, col } of positions) {
+      this.#selectedStackKeys.add(`${row},${col}`);
     }
   }
 
-  removeFromSelection(positions: [number, number][]): void {
-    for (const [row, col] of positions) {
-      const cols = this.#selection.get(row);
-      if (!cols) continue;
-      cols.delete(col);
-      if (cols.size === 0) this.#selection.delete(row);
+  removeStacksFromSelection(positions: Array<{ row: number; col: number }>): void {
+    for (const { row, col } of positions) {
+      this.#selectedStackKeys.delete(`${row},${col}`);
     }
   }
 
-  clearSelection(): void {
-    this.#selection.clear();
+  clearStackSelection(): void {
+    this.#selectedStackKeys.clear();
   }
 
-  selectAll(): void {
-    this.selectTiles(this.tiles.map((t) => [t.row, t.col]));
+  selectAllStacks(): void {
+    this.selectStacks(this.activeStacks);
   }
 
-  invertSelection(): void {
-    const inverted: [number, number][] = [];
-    for (const t of this.tiles) {
-      if (!this.isTileSelected(t.row, t.col)) inverted.push([t.row, t.col]);
-    }
-    this.selectTiles(inverted);
-  }
-
-  selectRow(row: number): void {
-    this.selectTiles(this.tiles.filter((t) => t.row === row).map((t) => [t.row, t.col]));
-  }
-
-  selectColumn(col: number): void {
-    this.selectTiles(this.tiles.filter((t) => t.col === col).map((t) => [t.row, t.col]));
-  }
-
-  selectWithStacks(): void {
-    const stackPositions = new SvelteSet(this.activeStacks.map((s) => `${s.row},${s.col}`));
-    this.selectTiles(this.tiles.filter((t) => stackPositions.has(`${t.row},${t.col}`)).map((t) => [t.row, t.col]));
-  }
-
-  selectWithoutStacks(): void {
-    const stackPositions = new SvelteSet(this.activeStacks.map((s) => `${s.row},${s.col}`));
-    this.selectTiles(this.tiles.filter((t) => !stackPositions.has(`${t.row},${t.col}`)).map((t) => [t.row, t.col]));
-  }
-
-  selectByStackStatus(status: StackStatus): void {
-    this.selectTiles(this.activeStacks.filter((s) => s.status === status).map((s) => [s.row, s.col]));
+  selectStacksByStatus(status: StackStatus): void {
+    this.selectStacks(this.activeStacks.filter((s) => s.status === status));
   }
 
   getStack(row: number, col: number, profileId?: string | null): Stack | undefined {
     const pid = profileId ?? this.activeProfileId;
     return this.stacks.find((s) => s.row === row && s.col === col && s.profile_id === pid);
-  }
-
-  moveToGridCell(row: number, col: number): void {
-    if (this.stage.isMoving) return;
-    const targetX = this.gridCellToPosition(col, 'x');
-    const targetY = this.gridCellToPosition(row, 'y');
-    this.stage.moveXY(targetX, targetY);
   }
 
   // --- Geometry ---
