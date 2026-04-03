@@ -24,7 +24,10 @@ from vxlib.vec import IVec2D, Vec2D
 from vxl.camera.base import (
     Camera,
     FrameRegion,
+    IntRange,
     PixelFormat,
+    ROIGrid,
+    SensorROI,
     StreamInfo,
     TriggerMode,
     TriggerPolarity,
@@ -273,6 +276,44 @@ class VieworksCamera(Camera):
             self._dev.remote.set("OffsetX", x)
         if y is not None:
             self._dev.remote.set("OffsetY", y)
+
+    # ==================== Sensor ROI ====================
+
+    def _get_roi(self) -> SensorROI:
+        # GenICam Width/Height/Offset are post-binning; convert to sensor pixels
+        b = self._binning.value
+        return SensorROI(
+            x=self._dev.fetch_remote("OffsetX", int) * b,
+            y=self._dev.fetch_remote("OffsetY", int) * b,
+            w=self._dev.fetch_remote("Width", int) * b,
+            h=self._dev.fetch_remote("Height", int) * b,
+        )
+
+    def _set_roi(self, roi: SensorROI) -> None:
+        # Convert sensor pixels to post-binning coordinates for GenICam
+        b = self._binning.value
+        # Set dimensions first (may need to reduce size before changing offset)
+        self._dev.remote.set("Width", roi.w // b)
+        self._dev.remote.set("Height", roi.h // b)
+        self._dev.remote.set("OffsetX", roi.x // b)
+        self._dev.remote.set("OffsetY", roi.y // b)
+
+    @property
+    def roi_grid(self) -> ROIGrid:
+        # GenICam reports constraints in post-binning space; scale to sensor pixels
+        b = self._binning.value
+        return ROIGrid(
+            h=IntRange(
+                min=self._dev.fetch_remote("Width.Min", int) * b,
+                max=self._sensor_size_px.x,
+                step=self._dev.fetch_remote("Width.Inc", int) * b,
+            ),
+            v=IntRange(
+                min=self._dev.fetch_remote("Height.Min", int) * b,
+                max=self._sensor_size_px.y,
+                step=self._dev.fetch_remote("Height.Inc", int) * b,
+            ),
+        )
 
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:
         curr_on_off = self._dev.fetch_remote("TriggerMode", str)

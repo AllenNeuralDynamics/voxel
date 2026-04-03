@@ -14,7 +14,10 @@ from rigup import describe
 from vxl.camera.base import (
     Camera,
     FrameRegion,
+    IntRange,
     PixelFormat,
+    ROIGrid,
+    SensorROI,
     StreamInfo,
     TriggerMode,
     TriggerPolarity,
@@ -239,6 +242,45 @@ class XimeaCamera(Camera):
             self._camera.set_offsetY(y)
 
         self.log.debug(f"Frame region updated: x={x}, y={y}, w={width}, h={height}")
+
+    # ==================== Sensor ROI ====================
+
+    def _get_roi(self) -> SensorROI:
+        # Ximea width/height/offset are post-downsampling; convert to sensor pixels
+        b = self.binning
+        return SensorROI(
+            x=_to_int(self._camera.get_offsetX()) * b,
+            y=_to_int(self._camera.get_offsetY()) * b,
+            w=_to_int(self._camera.get_width()) * b,
+            h=_to_int(self._camera.get_height()) * b,
+        )
+
+    def _set_roi(self, roi: SensorROI) -> None:
+        # Convert sensor pixels to post-downsampling coordinates
+        b = self.binning
+        # Reset offsets first to allow full size adjustment
+        self._camera.set_offsetX(0)
+        self._camera.set_offsetY(0)
+        self._camera.set_width(roi.w // b)
+        self._camera.set_height(roi.h // b)
+        self._camera.set_offsetX(roi.x // b)
+        self._camera.set_offsetY(roi.y // b)
+
+    @property
+    def roi_grid(self) -> ROIGrid:
+        b = self.binning
+        return ROIGrid(
+            h=IntRange(
+                min=_to_int(self._camera.get_width_minimum()) * b,
+                max=self._sensor_width,
+                step=_to_int(self._camera.get_width_increment()) * b,
+            ),
+            v=IntRange(
+                min=_to_int(self._camera.get_height_minimum()) * b,
+                max=self._sensor_height,
+                step=_to_int(self._camera.get_height_increment()) * b,
+            ),
+        )
 
     # ==================== Stream Info ====================
 

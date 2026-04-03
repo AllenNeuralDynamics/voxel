@@ -167,6 +167,12 @@ class SessionConfig(BaseModel):
                             }
                         elif "setup" in raw_profile:
                             del raw_profile["setup"]
+                        if profile.rois:
+                            raw_profile["rois"] = {
+                                dev_id: roi.model_dump() for dev_id, roi in profile.rois.items()
+                            }
+                        elif "rois" in raw_profile:
+                            del raw_profile["rois"]
             data = self._raw_data
         else:
             data = {

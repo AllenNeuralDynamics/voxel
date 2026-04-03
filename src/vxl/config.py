@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from rigup.device.base import CommandRequest
 
 from rigup import RigConfig
+from vxl.camera.base import SensorROI
 from vxl.sync import SyncTaskData
 
 TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column", "custom"]
@@ -106,6 +107,7 @@ class ProfileConfig(BaseModel):
     grid: GridConfig = Field(default_factory=GridConfig)
     props: dict[str, dict[str, Any]] = Field(default_factory=dict)
     setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)
+    rois: dict[str, SensorROI] = Field(default_factory=dict)
     desc: str = ""
     label: str | None = None
 

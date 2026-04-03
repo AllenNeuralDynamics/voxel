@@ -5,9 +5,10 @@ export { Laser, POWER_HISTORY_MAX } from './laser.svelte.ts';
 export {
   Camera,
   type CameraMode,
-  type FrameRegionData,
-  type StreamInfoData,
-  type DeliminatedIntData
+  type SensorROI,
+  type ROIGrid,
+  type IntRange,
+  type StreamInfoData
 } from './camera.svelte.ts';
 export { PreviewState, PreviewChannel, fetchColormapCatalog } from './preview.svelte.ts';
 export { SnapshotStore, type Snapshot, type SnapshotChannel } from './snapshots.svelte.ts';

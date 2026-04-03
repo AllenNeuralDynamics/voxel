@@ -8,7 +8,17 @@ from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import describe
-from vxl.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.camera.base import (
+    Camera,
+    FrameRegion,
+    IntRange,
+    PixelFormat,
+    ROIGrid,
+    SensorROI,
+    StreamInfo,
+    TriggerMode,
+    TriggerPolarity,
+)
 
 # Buffer size in MB for frame storage
 BUFFER_SIZE_MB = 2400
@@ -213,6 +223,38 @@ class PCOCamera(Camera):
 
         self._pco.sdk.set_roi(x0, y0, x1, y1)
         self.log.debug(f"Frame region updated: x={new_x}, y={new_y}, w={new_w}, h={new_h}")
+
+    # ==================== Sensor ROI ====================
+
+    def _get_roi(self) -> SensorROI:
+        # PCO ROI is in sensor coordinates with 1-based indexing
+        roi_dict = self._pco.sdk.get_roi()
+        return SensorROI(
+            x=roi_dict["x0"] - 1,
+            y=roi_dict["y0"] - 1,
+            w=roi_dict["x1"] - roi_dict["x0"] + 1,
+            h=roi_dict["y1"] - roi_dict["y0"] + 1,
+        )
+
+    def _set_roi(self, roi: SensorROI) -> None:
+        # PCO uses 1-based indexing: x0, y0, x1, y1
+        self._pco.sdk.set_roi(roi.x + 1, roi.y + 1, roi.x + roi.w, roi.y + roi.h)
+
+    @property
+    def roi_grid(self) -> ROIGrid:
+        desc = self._pco.sdk.get_camera_description()
+        return ROIGrid(
+            h=IntRange(
+                min=desc.get("min size horz", 32),
+                max=self._sensor_width,
+                step=desc.get("roi hor steps", 1),
+            ),
+            v=IntRange(
+                min=desc.get("min size vert", 32),
+                max=self._sensor_height,
+                step=desc.get("roi vert steps", 1),
+            ),
+        )
 
     # ==================== Readout Mode ====================
 

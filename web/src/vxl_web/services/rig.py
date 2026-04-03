@@ -445,6 +445,63 @@ async def apply_props(
         raise HTTPException(status_code=409, detail=str(e)) from e
 
 
+class SaveRoiRequest(BaseModel):
+    """Request model for saving camera ROI to the active profile."""
+
+    camera_id: str
+
+
+class ApplyRoiRequest(BaseModel):
+    """Request model for applying saved ROI to a camera."""
+
+    camera_id: str
+
+
+@rig_router.post("/profile/save-roi")
+async def save_roi(
+    request: SaveRoiRequest,
+    service: Annotated[Any, Depends(_get_session_service)],
+) -> dict:
+    """Save current camera ROI to the active profile."""
+    try:
+        profile_id = service.session.rig.active_profile_id
+        roi = await service.session.save_camera_roi(request.camera_id)
+        service.broadcast(
+            {"topic": "profile/roi_saved", "payload": {
+                "profile_id": profile_id,
+                "camera_id": request.camera_id,
+                "roi": roi.model_dump(),
+            }},
+            with_status=True,
+        )
+        return {"camera_id": request.camera_id, "roi": roi.model_dump(), "status": "saved"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@rig_router.post("/profile/apply-roi")
+async def apply_roi(
+    request: ApplyRoiRequest,
+    service: Annotated[Any, Depends(_get_session_service)],
+) -> dict:
+    """Apply saved profile ROI to a camera."""
+    try:
+        applied = await service.session.revert_camera_roi(request.camera_id)
+        if applied:
+            service.broadcast(
+                {"topic": "profile/roi_applied", "payload": {"camera_id": request.camera_id}},
+                with_status=True,
+            )
+            return {"camera_id": request.camera_id, "status": "applied"}
+        return {"camera_id": request.camera_id, "status": "no_saved_roi"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
 @rig_router.patch("/profile/waveforms")
 async def update_waveforms(
     request: UpdateWaveformsRequest,

@@ -10,7 +10,10 @@ from vxl.camera.base import (
     PIXEL_FMT_TO_DTYPE,
     Camera,
     FrameRegion,
+    IntRange,
     PixelFormat,
+    ROIGrid,
+    SensorROI,
     StreamInfo,
     TriggerMode,
     TriggerPolarity,
@@ -161,6 +164,27 @@ class SimulatedCamera(Camera):
         if height is not None:
             clamped_h = max(self._min_height, min(height, self._sensor_size_px.y))
             self._roi_height_px = (clamped_h // self._roi_step_height_px) * self._roi_step_height_px
+
+    def _get_roi(self) -> SensorROI:
+        return SensorROI(
+            x=self._roi_width_offset_px,
+            y=self._roi_height_offset_px,
+            w=self._roi_width_px,
+            h=self._roi_height_px,
+        )
+
+    def _set_roi(self, roi: SensorROI) -> None:
+        self._roi_width_offset_px = roi.x
+        self._roi_height_offset_px = roi.y
+        self._roi_width_px = roi.w
+        self._roi_height_px = roi.h
+
+    @property
+    def roi_grid(self) -> ROIGrid:
+        return ROIGrid(
+            h=IntRange(min=self._min_width, max=self._sensor_size_px.x, step=self._roi_step_width_px),
+            v=IntRange(min=self._min_height, max=self._sensor_size_px.y, step=self._roi_step_height_px),
+        )
 
     @property
     def stream_info(self) -> StreamInfo | None:

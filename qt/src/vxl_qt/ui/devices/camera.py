@@ -130,11 +130,11 @@ class CameraControl(QWidget):
         self._format_select.value_changed.connect(self._on_format_changed)
         self._binning_select.value_changed.connect(self._on_binning_changed)
 
-        # Frame region spinboxes
-        self._offset_x.valueChanged.connect(self._on_frame_region_changed)
-        self._offset_y.valueChanged.connect(self._on_frame_region_changed)
-        self._size_w.valueChanged.connect(self._on_frame_region_changed)
-        self._size_h.valueChanged.connect(self._on_frame_region_changed)
+        # ROI spinboxes
+        self._offset_x.valueChanged.connect(self._on_roi_changed)
+        self._offset_y.valueChanged.connect(self._on_roi_changed)
+        self._size_w.valueChanged.connect(self._on_roi_changed)
+        self._size_h.valueChanged.connect(self._on_roi_changed)
 
         # Request initial property values
         self._adapter.request_initial_properties()
@@ -145,7 +145,7 @@ class CameraControl(QWidget):
         self._update_format_binning(props)
         self._update_frame_info(props)
         self._update_sensor_info(props)
-        self._update_frame_region(props)
+        self._update_roi(props)
         self._update_stream_info(props)
 
     def _update_exposure(self, props: dict[str, Any]) -> None:
@@ -222,35 +222,45 @@ class CameraControl(QWidget):
             elif isinstance(area, (list, tuple)) and len(area) == 2:
                 self._sensor_info_accordion.set_summary(f"{area[0] / 1000:.2f} x {area[1] / 1000:.2f} mm")
 
-    def _update_frame_region(self, props: dict[str, Any]) -> None:
-        """Update frame region spinboxes with constraints."""
-        if "frame_region" not in props:
-            return
+    def _update_roi(self, props: dict[str, Any]) -> None:
+        """Update ROI spinboxes from roi values and roi_grid constraints."""
+        # Update constraints from roi_grid
+        if "roi_grid" in props:
+            grid = props["roi_grid"]
+            if isinstance(grid, dict):
+                h = grid.get("h", {})
+                v = grid.get("v", {})
+                if h:
+                    self._size_w.blockSignals(True)
+                    self._size_w.setRange(h.get("min", 1), h.get("max", 99999))
+                    self._size_w.setSingleStep(h.get("step", 1))
+                    self._size_w.blockSignals(False)
+                    self._offset_x.blockSignals(True)
+                    self._offset_x.setSingleStep(h.get("step", 1))
+                    self._offset_x.blockSignals(False)
+                if v:
+                    self._size_h.blockSignals(True)
+                    self._size_h.setRange(v.get("min", 1), v.get("max", 99999))
+                    self._size_h.setSingleStep(v.get("step", 1))
+                    self._size_h.blockSignals(False)
+                    self._offset_y.blockSignals(True)
+                    self._offset_y.setSingleStep(v.get("step", 1))
+                    self._offset_y.blockSignals(False)
 
-        region = props["frame_region"]
-        if not isinstance(region, dict):
-            return
-
-        # Update offset spinboxes
-        self._update_spinbox(self._offset_x, region.get("x", {}))
-        self._update_spinbox(self._offset_y, region.get("y", {}))
-
-        # Update size spinboxes
-        self._update_spinbox(self._size_w, region.get("width", {}))
-        self._update_spinbox(self._size_h, region.get("height", {}))
-
-    def _update_spinbox(self, spinbox: SpinBox, dim: dict) -> None:
-        """Update spinbox constraints and value without triggering signals."""
-        if not dim:
-            return
-        spinbox.blockSignals(True)
-        if "min_val" in dim and "max_val" in dim:
-            spinbox.setRange(dim["min_val"], dim["max_val"])
-        if "step" in dim:
-            spinbox.setSingleStep(dim["step"])
-        if "value" in dim:
-            spinbox.setValue(dim["value"])
-        spinbox.blockSignals(False)
+        # Update values from roi
+        if "roi" in props:
+            roi = props["roi"]
+            if isinstance(roi, dict):
+                for spinbox, key in [
+                    (self._offset_x, "x"),
+                    (self._offset_y, "y"),
+                    (self._size_w, "w"),
+                    (self._size_h, "h"),
+                ]:
+                    if key in roi:
+                        spinbox.blockSignals(True)
+                        spinbox.setValue(roi[key])
+                        spinbox.blockSignals(False)
 
     def _update_stream_info(self, props: dict[str, Any]) -> None:
         """Update stream info accordion."""
@@ -268,15 +278,13 @@ class CameraControl(QWidget):
         self._dropped_value.setText(str(info.get("dropped_frames", 0)))
         self._frame_idx_value.setText(str(info.get("frame_index", "--")))
 
-    def _on_frame_region_changed(self) -> None:
-        """Called when any frame region spinbox changes."""
+    def _on_roi_changed(self) -> None:
+        """Called when any ROI spinbox changes."""
         fire_and_forget(
             self._adapter.call(
-                "update_frame_region",
-                x=self._offset_x.value(),
-                y=self._offset_y.value(),
-                width=self._size_w.value(),
-                height=self._size_h.value(),
+                "update_roi",
+                roi={"x": self._offset_x.value(), "y": self._offset_y.value(),
+                     "w": self._size_w.value(), "h": self._size_h.value()},
             ),
             log=log,
         )

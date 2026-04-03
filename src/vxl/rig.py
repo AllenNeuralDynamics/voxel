@@ -13,6 +13,7 @@ from vxlib.color import Color
 
 from rigup import DeviceHandle, Rig
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
+from vxl.camera.base import SensorROI
 from vxl.camera.handle import CameraHandle
 from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
 from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
@@ -333,46 +334,38 @@ class VoxelRig(Rig):
                 cameras.add(channel.detection)
         return cameras
 
-    async def _configure_profile_devices(self, profile_id: str) -> None:
-        """Configure all devices for the given profile's channels.
-
-        Sets filter wheels to required positions for all channels in the profile.
-
-        Args:
-            profile_id: Profile ID to configure devices for.
-        """
+    async def _set_filter_wheels(self, profile_id: str) -> None:
+        """Set filter wheels to required positions for all channels in the profile."""
         profile = self.config.profiles[profile_id]
-
-        # Collect all filter wheel positions needed across all channels
         filter_positions: dict[str, str] = {}
         for ch_id in profile.channels:
             if ch_id in self.config.channels:
-                channel = self.config.channels[ch_id]
-                filter_positions.update(channel.filters)
+                filter_positions.update(self.config.channels[ch_id].filters)
 
-        # Set filter wheels to required positions
         tasks = []
         for fw_id, position_label in filter_positions.items():
             if fw_id in self.fws:
-                fw_device = self.fws[fw_id]
-                task = fw_device.call("select", position_label, wait=True)
-                tasks.append(task)
+                tasks.append(self.fws[fw_id].call("select", position_label, wait=True))
                 self.log.debug(f"Filter wheel '{fw_id}' moving to '{position_label}'")
 
-        # Wait for all filter wheels to finish moving
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    async def _configure_profile_devices(self, profile_id: str) -> None:
+        """Configure all devices for the given profile.
+
+        Sets filter wheels, applies saved props, runs setup commands, and applies saved ROIs.
+        """
+        profile = self.config.profiles[profile_id]
+
+        await self._set_filter_wheels(profile_id)
+
         # Apply props (declarative property values per device)
         for device_id, device_props in profile.props.items():
-            handle = self.handles.get(device_id)
-            if not handle:
-                self.log.warning(f"props: device '{device_id}' not found, skipping")
-                continue
             try:
-                result = await handle.set_props(**device_props)
-                if not result.is_ok:
-                    self.log.warning(f"Some properties failed for '{device_id}'")
+                await self.apply_device_props(device_id, device_props)
+            except ValueError:
+                self.log.warning(f"props: device '{device_id}' not found, skipping")
             except Exception:
                 self.log.exception(f"Failed to apply props to '{device_id}'")
 
@@ -388,6 +381,15 @@ class VoxelRig(Rig):
                     self.log.warning(f"Some setup commands failed for '{device_id}'")
             except Exception:
                 self.log.exception(f"Failed to run setup for '{device_id}'")
+
+        # Apply saved ROIs to cameras
+        for camera_id, roi in profile.rois.items():
+            try:
+                await self.apply_camera_roi(camera_id, roi)
+            except ValueError:
+                self.log.warning(f"rois: camera '{camera_id}' not found, skipping")
+            except Exception:
+                self.log.exception(f"Failed to apply ROI for '{camera_id}'")
 
         self.log.debug("configured devices for profile '%s'", profile_id)
 
@@ -525,6 +527,31 @@ class VoxelRig(Rig):
                     captured[name] = results[name].unwrap().value
 
         return captured
+
+    async def apply_device_props(self, device_id: str, props: dict[str, Any]) -> None:
+        """Apply property values to a device."""
+        handle = self.handles.get(device_id)
+        if not handle:
+            raise ValueError(f"Device '{device_id}' not found")
+        result = await handle.set_props(**props)
+        if not result.is_ok:
+            self.log.warning(f"Some properties failed for '{device_id}'")
+
+    async def capture_camera_roi(self, camera_id: str) -> SensorROI:
+        """Read current ROI from a camera."""
+        camera = self.cameras.get(camera_id)
+        if not camera:
+            raise ValueError(f"Camera '{camera_id}' not found")
+        roi_value = await camera.get_prop_value("roi")
+        return SensorROI.model_validate(roi_value) if isinstance(roi_value, dict) else roi_value
+
+    async def apply_camera_roi(self, camera_id: str, roi: SensorROI) -> SensorROI:
+        """Apply an ROI to a camera. Returns the actual applied ROI."""
+        camera = self.cameras.get(camera_id)
+        if not camera:
+            raise ValueError(f"Camera '{camera_id}' not found")
+        result = await camera.update_roi(roi)
+        return SensorROI.model_validate(result) if isinstance(result, dict) else result
 
     async def get_channel_preview_configs(self) -> dict[str, PreviewConfig]:
         """Query cameras for current preview configs of active channels.

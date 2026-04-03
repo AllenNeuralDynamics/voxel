@@ -16,11 +16,12 @@
       'frame_size_px',
       'frame_size_mb',
       'frame_area_um',
-      'frame_region',
+      'roi',
+      'roi_grid',
       'frame_rate_hz',
       'stream_info'
     ],
-    cmds: ['update_frame_region']
+    cmds: ['update_roi']
   };
 
   interface Props {
@@ -48,8 +49,9 @@
   let pixelType = $derived(devicesManager.getPropertyValue(deviceId, 'pixel_type'));
   let frameAreaUm = $derived(camera?.frameAreaUm);
 
-  // Frame region (for SVG diagram)
-  let frameRegion = $derived(camera?.frameRegion);
+  // ROI (for SVG diagram)
+  let roi = $derived(camera?.roi);
+  let roiGrid = $derived(camera?.roiGrid);
   let frameSize = $derived(camera?.frameSizePx);
   let frameSizeMb = $derived(camera?.frameSizeMb);
 
@@ -61,28 +63,30 @@
   let sensorW = $derived(sensorSize?.x ?? 1);
   let sensorH = $derived(sensorSize?.y ?? 1);
 
-  // Local spinbox values — synced from frameRegion, sent on change
+  // Local spinbox values — mutable local state synced from backend roi.
+  // Intentionally $state + $effect (not $derived) so spinboxes are editable.
   let roiX = $state(0);
   let roiY = $state(0);
   let roiW = $state(0);
   let roiH = $state(0);
 
-  // Sync local state when frameRegion updates from backend
+  // Sync local state when roi updates from backend
   $effect(() => {
-    if (frameRegion) {
-      roiX = frameRegion.x.value;
-      roiY = frameRegion.y.value;
-      roiW = frameRegion.width.value;
-      roiH = frameRegion.height.value;
+    if (roi) {
+      roiX = roi.x;
+      roiY = roi.y;
+      roiW = roi.w;
+      roiH = roi.h;
     }
   });
 
-  function updateRegion(patch: { x?: number; y?: number; width?: number; height?: number }) {
-    camera?.updateFrameRegion(patch);
+  function updateRoi(patch: Partial<{ x: number; y: number; w: number; h: number }>) {
+    if (!roi) return;
+    camera?.updateRoi({ ...roi, ...patch });
   }
 
   function resetRegion() {
-    camera?.updateFrameRegion({ x: 0, y: 0, width: sensorW, height: sensorH });
+    camera?.updateRoi({ x: 0, y: 0, w: sensorW, h: sensorH });
   }
 
   // SVG stroke width scales with sensor size so it's visible but not fat
@@ -101,7 +105,7 @@
 
   {#if device?.connected}
     <div class="grid gap-6 lg:grid-cols-[3fr_2fr]">
-      <!-- LEFT COLUMN: controls, frame region, dynamic rw, commands -->
+      <!-- LEFT COLUMN: controls, sensor ROI, dynamic rw, commands -->
       <div class="space-y-5">
         <!-- Exposure Time -->
         {#if exposureTimeInfo && exposureTimeModel && typeof exposureTimeModel.value === 'number'}
@@ -142,10 +146,10 @@
           {/if}
         </div>
 
-        <!-- Frame Region -->
+        <!-- Sensor ROI -->
         <div class="space-y-3">
           <div class="flex items-baseline justify-between">
-            <h4 class="text-xs font-medium tracking-wide text-fg-muted uppercase">Frame Region</h4>
+            <h4 class="text-xs font-medium tracking-wide text-fg-muted uppercase">Sensor ROI</h4>
             {#if frameSize}
               <span class="font-mono text-sm text-fg-muted">
                 {frameSize.x} &times; {frameSize.y} px{#if frameSizeMb != null}
@@ -155,7 +159,7 @@
           </div>
 
           <!-- SVG sensor diagram -->
-          {#if sensorSize && frameRegion}
+          {#if sensorSize && roi}
             <svg
               viewBox="0 0 {sensorW} {sensorH}"
               class="w-full rounded border border-border bg-element-bg"
@@ -175,12 +179,12 @@
               <!-- Inactive sensor area overlay -->
               <rect x="0" y="0" width={sensorW} height={sensorH} class="fill-element-bg" />
 
-              <!-- Active frame region -->
+              <!-- Active ROI -->
               <rect
-                x={frameRegion.x.value}
-                y={frameRegion.y.value}
-                width={frameRegion.width.value}
-                height={frameRegion.height.value}
+                x={roi.x}
+                y={roi.y}
+                width={roi.w}
+                height={roi.h}
                 class="fill-primary/15 stroke-primary"
                 stroke-width={strokeWidth}
               />
@@ -192,50 +196,50 @@
           {/if}
 
           <!-- ROI spinbox inputs -->
-          {#if frameRegion}
+          {#if roi && roiGrid}
             <div class="grid grid-cols-4 gap-2">
               <SpinBox
                 value={roiX}
                 prefix="x"
-                min={frameRegion.x.min_val}
-                max={frameRegion.x.max_val}
-                step={frameRegion.x.step}
-                onChange={(v) => updateRegion({ x: v })}
+                min={0}
+                max={roiGrid.h.max - roiW}
+                step={roiGrid.h.step}
+                onChange={(v) => updateRoi({ x: v })}
                 appearance="bordered"
                 size="xs"
               />
               <SpinBox
                 value={roiY}
                 prefix="y"
-                min={frameRegion.y.min_val}
-                max={frameRegion.y.max_val}
-                step={frameRegion.y.step}
-                onChange={(v) => updateRegion({ y: v })}
+                min={0}
+                max={roiGrid.v.max - roiH}
+                step={roiGrid.v.step}
+                onChange={(v) => updateRoi({ y: v })}
                 appearance="bordered"
                 size="xs"
               />
               <SpinBox
                 value={roiW}
                 prefix="w"
-                min={frameRegion.width.min_val}
-                max={frameRegion.width.max_val}
-                step={frameRegion.width.step}
-                onChange={(v) => updateRegion({ width: v })}
+                min={roiGrid.h.min}
+                max={roiGrid.h.max}
+                step={roiGrid.h.step}
+                onChange={(v) => updateRoi({ w: v })}
                 appearance="bordered"
                 size="xs"
               />
               <SpinBox
                 value={roiH}
                 prefix="h"
-                min={frameRegion.height.min_val}
-                max={frameRegion.height.max_val}
-                step={frameRegion.height.step}
-                onChange={(v) => updateRegion({ height: v })}
+                min={roiGrid.v.min}
+                max={roiGrid.v.max}
+                step={roiGrid.v.step}
+                onChange={(v) => updateRoi({ h: v })}
                 appearance="bordered"
                 size="xs"
               />
             </div>
-            <Button variant="outline" size="sm" onclick={resetRegion} class="w-full">Reset Region</Button>
+            <Button variant="outline" size="sm" onclick={resetRegion} class="w-full">Reset ROI</Button>
           {/if}
         </div>
 

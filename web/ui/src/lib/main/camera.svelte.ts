@@ -3,18 +3,22 @@ import { parseVec2D } from './types';
 
 export type CameraMode = 'IDLE' | 'PREVIEW' | 'ACQUISITION';
 
-export interface DeliminatedIntData {
-  value: number;
-  min_val: number;
-  max_val: number;
+export interface SensorROI {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface IntRange {
+  min: number;
+  max: number;
   step: number;
 }
 
-export interface FrameRegionData {
-  x: DeliminatedIntData;
-  y: DeliminatedIntData;
-  width: DeliminatedIntData;
-  height: DeliminatedIntData;
+export interface ROIGrid {
+  h: IntRange;
+  v: IntRange;
 }
 
 export interface StreamInfoData {
@@ -57,9 +61,15 @@ export class Camera {
     return typeof val === 'number' ? val : undefined;
   });
 
-  frameRegion = $derived.by(() => {
-    const val = this.#devices.getPropertyValue(this.#deviceId, 'frame_region');
-    if (val && typeof val === 'object') return val as FrameRegionData;
+  roi = $derived.by(() => {
+    const val = this.#devices.getPropertyValue(this.#deviceId, 'roi');
+    if (val && typeof val === 'object') return val as SensorROI;
+    return undefined;
+  });
+
+  roiGrid = $derived.by(() => {
+    const val = this.#devices.getPropertyValue(this.#deviceId, 'roi_grid');
+    if (val && typeof val === 'object') return val as ROIGrid;
     return undefined;
   });
 
@@ -140,7 +150,7 @@ export class Camera {
     this.#devices.setProperty(this.#deviceId, 'binning', n);
   }
 
-  updateFrameRegion(region: { x?: number; y?: number; width?: number; height?: number }): void {
-    this.#devices.fireCommand(this.#deviceId, 'update_frame_region', [], region);
+  updateRoi(roi: SensorROI): void {
+    this.#devices.fireCommand(this.#deviceId, 'update_roi', [], { roi });
   }
 }

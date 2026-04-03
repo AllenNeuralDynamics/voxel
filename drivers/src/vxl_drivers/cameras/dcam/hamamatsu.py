@@ -7,7 +7,17 @@ from rigup.device.props import DeliminatedInt, deliminated_float, enumerated_int
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import describe
-from vxl.camera.base import Camera, FrameRegion, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.camera.base import (
+    Camera,
+    FrameRegion,
+    IntRange,
+    PixelFormat,
+    ROIGrid,
+    SensorROI,
+    StreamInfo,
+    TriggerMode,
+    TriggerPolarity,
+)
 from vxlib import thread_safe_singleton
 
 from .sdk.dcam import DCAM_IDSTR, DCAMERR, DCAMPROP_ATTR, Dcam, Dcamapi
@@ -296,6 +306,43 @@ class HamamatsuCamera(Camera):
             self._cam.prop_setvalue(_PROPS["subarray_vpos"], y)
 
         self.log.debug(f"Frame region updated: x={x}, y={y}, w={width}, h={height}")
+
+    # ==================== Sensor ROI ====================
+
+    def _get_roi(self) -> SensorROI:
+        # DCAM subarray properties are in sensor pixel coordinates
+        return SensorROI(
+            x=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_hpos"]), 0.0)),
+            y=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_vpos"]), 0.0)),
+            w=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_hsize"]), float(self._sensor_width))),
+            h=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_vsize"]), float(self._sensor_height))),
+        )
+
+    def _set_roi(self, roi: SensorROI) -> None:
+        # Reset offsets first to allow full size adjustment
+        self._cam.prop_setvalue(_PROPS["subarray_hpos"], 0)
+        self._cam.prop_setvalue(_PROPS["subarray_vpos"], 0)
+        self._cam.prop_setvalue(_PROPS["subarray_hsize"], roi.w)
+        self._cam.prop_setvalue(_PROPS["subarray_vsize"], roi.h)
+        self._cam.prop_setvalue(_PROPS["subarray_hpos"], roi.x)
+        self._cam.prop_setvalue(_PROPS["subarray_vpos"], roi.y)
+
+    @property
+    def roi_grid(self) -> ROIGrid:
+        w_attr = _unwrap(self._cam.prop_getattr(_PROPS["image_width"]), _DEFAULT_ATTR)
+        h_attr = _unwrap(self._cam.prop_getattr(_PROPS["image_height"]), _DEFAULT_ATTR)
+        return ROIGrid(
+            h=IntRange(
+                min=int(w_attr.valuemin),
+                max=self._sensor_width,
+                step=int(w_attr.valuestep) if w_attr.valuestep > 0 else 4,
+            ),
+            v=IntRange(
+                min=int(h_attr.valuemin),
+                max=self._sensor_height,
+                step=int(h_attr.valuestep) if h_attr.valuestep > 0 else 4,
+            ),
+        )
 
     # ==================== Sensor Mode ====================
 

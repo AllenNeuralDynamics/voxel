@@ -4,7 +4,7 @@
 from rigup.device import DeviceHandle
 from vxlib.vec import Vec2D
 
-from vxl.camera.base import Camera, TriggerMode, TriggerPolarity
+from vxl.camera.base import Camera, SensorROI, TriggerMode, TriggerPolarity
 from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
 from vxl.tile import BatchResult, Stack, StorageConfig
 
@@ -80,6 +80,11 @@ class CameraHandle(DeviceHandle[Camera]):
         """Capture a batch of frames. Must call initialize_stack first."""
         result = await self.call("capture_batch", num_frames)
         return BatchResult.model_validate(result)
+
+    async def update_roi(self, roi: SensorROI) -> SensorROI:
+        """Set sensor ROI. Returns the actual applied ROI (may differ due to alignment)."""
+        result = await self.call("update_roi", roi)
+        return SensorROI.model_validate(result)
 
     async def get_frame_area_um(self) -> Vec2D:
         """Get the physical frame area in micrometers.

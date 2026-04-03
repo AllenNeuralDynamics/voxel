@@ -7,6 +7,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
+from vxl.camera.base import SensorROI
 from vxl.config import GridConfig, Interleaving, TileOrder
 from vxl.daq.wave import validate_waveform
 from vxl.metadata import BASE_METADATA_TARGET, resolve_metadata_class
@@ -222,6 +223,27 @@ class Session:
             saved.append(device_id)
         return saved
 
+    # ==================== Camera ROI (Save to Profile) ====================
+
+    async def save_camera_roi(self, camera_id: str) -> SensorROI:
+        """Capture current camera ROI and persist to the active profile."""
+        if not self._rig.active_profile_id:
+            raise RuntimeError("No active profile")
+        roi = await self._rig.capture_camera_roi(camera_id)
+        self._config.rig.profiles[self._rig.active_profile_id].rois[camera_id] = roi
+        self.save()
+        self._log.debug("saved ROI for '%s' in profile '%s'", camera_id, self._rig.active_profile_id)
+        return roi
+
+    async def revert_camera_roi(self, camera_id: str) -> SensorROI | None:
+        """Apply saved profile ROI back to camera hardware."""
+        if not self._rig.active_profile_id:
+            raise RuntimeError("No active profile")
+        roi = self._config.rig.profiles[self._rig.active_profile_id].rois.get(camera_id)
+        if not roi:
+            return None
+        return await self._rig.apply_camera_roi(camera_id, roi)
+
     # ==================== Waveform Updates ====================
 
     async def update_profile_waveforms(self, waveforms: dict | None = None, timing: dict | None = None) -> None:
@@ -256,7 +278,6 @@ class Session:
     async def apply_profile_props(self, device_ids: list[str] | None = None) -> list[str]:
         """Apply saved profile properties to hardware devices (inverse of save).
 
-        Reads profile.props and pushes values to hardware via handle.set_props().
         If *device_ids* is given, only those devices are reverted; otherwise all.
         """
         profile_id = self._rig.active_profile_id
@@ -267,13 +288,10 @@ class Session:
         applied: list[str] = []
         for device_id in targets:
             props = profile.props.get(device_id)
-            handle = self._rig.handles.get(device_id)
-            if not handle or not props:
+            if not props:
                 continue
             try:
-                result = await handle.set_props(**props)
-                if not result.is_ok:
-                    self._log.warning(f"Some properties failed for '{device_id}'")
+                await self._rig.apply_device_props(device_id, props)
                 applied.append(device_id)
             except Exception:
                 self._log.exception(f"Failed to apply props for '{device_id}'")

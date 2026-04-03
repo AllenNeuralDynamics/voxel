@@ -110,6 +110,12 @@ export interface TopicHandlers {
   /** Payload: {[profile_id]: {[device_id]: {[prop_name]: value}}} */
   'profile/props_saved'?: (payload: Record<string, Record<string, Record<string, unknown>>>) => void;
   'profile/props_applied'?: (payload: { devices: string[] }) => void;
+  'profile/roi_saved'?: (payload: {
+    profile_id: string;
+    camera_id: string;
+    roi: { x: number; y: number; w: number; h: number };
+  }) => void;
+  'profile/roi_applied'?: (payload: { camera_id: string }) => void;
 }
 
 // --- Backend resolution ---

@@ -236,6 +236,7 @@ export interface ProfileConfig {
   grid: GridConfig; // Grid configuration for tile planning
   props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
   setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
+  rois?: Record<string, { x: number; y: number; w: number; h: number }>; // camera_id -> sensor ROI
 }
 
 /**

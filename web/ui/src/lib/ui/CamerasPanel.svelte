@@ -66,19 +66,19 @@
   let formExposure = $state<number | undefined>(undefined);
   let formBinning = $state<string | undefined>(undefined);
   let formPixelFormat = $state<string | undefined>(undefined);
-  let formRegionX = $state<number | undefined>(undefined);
-  let formRegionY = $state<number | undefined>(undefined);
-  let formRegionWidth = $state<number | undefined>(undefined);
-  let formRegionHeight = $state<number | undefined>(undefined);
+  let formRoiX = $state<number | undefined>(undefined);
+  let formRoiY = $state<number | undefined>(undefined);
+  let formRoiW = $state<number | undefined>(undefined);
+  let formRoiH = $state<number | undefined>(undefined);
 
   const hasFormChanges = $derived(
     formExposure !== undefined ||
       formBinning !== undefined ||
       formPixelFormat !== undefined ||
-      formRegionX !== undefined ||
-      formRegionY !== undefined ||
-      formRegionWidth !== undefined ||
-      formRegionHeight !== undefined
+      formRoiX !== undefined ||
+      formRoiY !== undefined ||
+      formRoiW !== undefined ||
+      formRoiH !== undefined
   );
 
   function applyChanges() {
@@ -87,12 +87,18 @@
       if (formBinning !== undefined) cam.setBinning(Number(formBinning));
       if (formPixelFormat !== undefined) cam.setPixelFormat(formPixelFormat);
 
-      const regionUpdate: { x?: number; y?: number; width?: number; height?: number } = {};
-      if (formRegionX !== undefined) regionUpdate.x = formRegionX;
-      if (formRegionY !== undefined) regionUpdate.y = formRegionY;
-      if (formRegionWidth !== undefined) regionUpdate.width = formRegionWidth;
-      if (formRegionHeight !== undefined) regionUpdate.height = formRegionHeight;
-      if (Object.keys(regionUpdate).length > 0) cam.updateFrameRegion(regionUpdate);
+      const currentRoi = cam.roi;
+      if (
+        currentRoi &&
+        (formRoiX !== undefined || formRoiY !== undefined || formRoiW !== undefined || formRoiH !== undefined)
+      ) {
+        cam.updateRoi({
+          x: formRoiX ?? currentRoi.x,
+          y: formRoiY ?? currentRoi.y,
+          w: formRoiW ?? currentRoi.w,
+          h: formRoiH ?? currentRoi.h
+        });
+      }
     }
     resetForm();
   }
@@ -101,10 +107,10 @@
     formExposure = undefined;
     formBinning = undefined;
     formPixelFormat = undefined;
-    formRegionX = undefined;
-    formRegionY = undefined;
-    formRegionWidth = undefined;
-    formRegionHeight = undefined;
+    formRoiX = undefined;
+    formRoiY = undefined;
+    formRoiW = undefined;
+    formRoiH = undefined;
   }
 
   // Merged options from selected cameras
@@ -425,57 +431,58 @@
               </div>
             {/if}
 
-            <!-- Frame Region -->
-            {#if selectedCameras[0]?.frameRegion}
-              {@const refRegion = selectedCameras[0].frameRegion}
+            <!-- Sensor ROI -->
+            {#if selectedCameras[0]?.roi && selectedCameras[0]?.roiGrid}
+              {@const refRoi = selectedCameras[0].roi}
+              {@const refGrid = selectedCameras[0].roiGrid}
               {@const align = 'right'}
               {@const size = 'xs'}
               <div>
-                <h5 class="mb-1.5 text-xs text-fg-muted capitalize">Frame Region</h5>
+                <h5 class="mb-1.5 text-xs text-fg-muted capitalize">Sensor ROI</h5>
                 <div class="grid grid-cols-2 gap-2">
                   <SpinBox
-                    value={formRegionX ?? refRegion.x.value}
-                    min={refRegion.x.min_val}
-                    max={refRegion.x.max_val}
-                    step={refRegion.x.step}
+                    value={formRoiX ?? refRoi.x}
+                    min={0}
+                    max={refGrid.h.max - (formRoiW ?? refRoi.w)}
+                    step={refGrid.h.step}
                     prefix="X"
                     {align}
                     {size}
                     class="w-full"
-                    onChange={(v) => (formRegionX = v)}
+                    onChange={(v) => (formRoiX = v)}
                   />
                   <SpinBox
-                    value={formRegionY ?? refRegion.y.value}
-                    min={refRegion.y.min_val}
-                    max={refRegion.y.max_val}
-                    step={refRegion.y.step}
+                    value={formRoiY ?? refRoi.y}
+                    min={0}
+                    max={refGrid.v.max - (formRoiH ?? refRoi.h)}
+                    step={refGrid.v.step}
                     prefix="Y"
                     {align}
                     {size}
                     class="w-full"
-                    onChange={(v) => (formRegionY = v)}
+                    onChange={(v) => (formRoiY = v)}
                   />
                   <SpinBox
-                    value={formRegionWidth ?? refRegion.width.value}
-                    min={refRegion.width.min_val}
-                    max={refRegion.width.max_val}
-                    step={refRegion.width.step}
-                    prefix="Width"
+                    value={formRoiW ?? refRoi.w}
+                    min={refGrid.h.min}
+                    max={refGrid.h.max}
+                    step={refGrid.h.step}
+                    prefix="W"
                     {align}
                     {size}
                     class="w-full"
-                    onChange={(v) => (formRegionWidth = v)}
+                    onChange={(v) => (formRoiW = v)}
                   />
                   <SpinBox
-                    value={formRegionHeight ?? refRegion.height.value}
-                    min={refRegion.height.min_val}
-                    max={refRegion.height.max_val}
-                    step={refRegion.height.step}
-                    prefix="Height"
+                    value={formRoiH ?? refRoi.h}
+                    min={refGrid.v.min}
+                    max={refGrid.v.max}
+                    step={refGrid.v.step}
+                    prefix="H"
                     {align}
                     {size}
                     class="w-full"
-                    onChange={(v) => (formRegionHeight = v)}
+                    onChange={(v) => (formRoiH = v)}
                   />
                 </div>
               </div>

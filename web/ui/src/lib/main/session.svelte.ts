@@ -156,6 +156,17 @@ export class Session {
       }),
       init.client.on('profile/props_applied', (payload) => {
         toast.success(`Applied saved props to ${payload.devices.length} device(s)`);
+      }),
+      init.client.on('profile/roi_saved', (payload) => {
+        const profile = this.config.profiles[payload.profile_id];
+        if (profile) {
+          if (!profile.rois) profile.rois = {};
+          profile.rois[payload.camera_id] = payload.roi;
+          toast.success(`Saved ROI for ${payload.camera_id}`);
+        }
+      }),
+      init.client.on('profile/roi_applied', (payload) => {
+        toast.success(`Applied saved ROI to ${payload.camera_id}`);
       })
     );
   }
@@ -242,6 +253,24 @@ export class Session {
       await this.#rest('POST', '/rig/profile/apply-props', deviceIds ? { device_ids: deviceIds } : {});
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to apply props');
+    }
+  }
+
+  // --- Camera ROI ---
+
+  async saveProfileRoi(cameraId: string): Promise<void> {
+    try {
+      await this.#rest('POST', '/rig/profile/save-roi', { camera_id: cameraId });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save ROI');
+    }
+  }
+
+  async applyProfileRoi(cameraId: string): Promise<void> {
+    try {
+      await this.#rest('POST', '/rig/profile/apply-roi', { camera_id: cameraId });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to apply ROI');
     }
   }
 
