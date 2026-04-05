@@ -56,7 +56,7 @@
 
 <Select.Root type="single" value={selected} onValueChange={handleChange} {items} disabled={loading}>
   <div class="relative">
-    <Select.Trigger class={cn(styles.trigger(), 'rounded-md pr-8', className)}>
+    <Select.Trigger class={cn(styles.trigger(), 'rounded-md px-3 pr-8', className)}>
       <span class="flex items-center gap-1.5 truncate">
         <span class="inline-block size-1.5 shrink-0 rounded-full {selectedHasStacks ? 'bg-info' : 'bg-fg-faint/50'}"></span>
         {#if selectedLabel}
@@ -76,7 +76,7 @@
   </div>
 
   <Select.Portal>
-    <Select.Content align="start" class={styles.content()}>
+    <Select.Content align="start" sideOffset={4} class={styles.content()}>
       {#if profiles.length === 0}
         <div class="px-3 py-2 text-base text-fg-muted">No profiles available</div>
       {:else}
@@ -89,20 +89,18 @@
                 label={profile.label}
                 class={cn(styles.item(), profile.description ? 'items-start' : 'items-center')}
               >
-                <span class="inline-flex h-3 w-3 shrink-0 items-center justify-center text-primary">
-                  {#if selected === profile.value}
-                    <Check class="h-3 w-3" />
-                  {/if}
-                </span>
+                <span class="mt-1.5 inline-block size-1.5 shrink-0 self-start rounded-full {hasStacks ? 'bg-info' : 'bg-fg-faint/50'}"></span>
                 <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span class="text-fg">{profile.label}</span>
                   {#if profile.description}
                     <span class="text-xs text-fg-muted">{profile.description}</span>
                   {/if}
                 </div>
-                {#if hasStacks}
-                  <span class="mt-0.5 inline-block size-1.5 shrink-0 rounded-full bg-info"> </span>
-                {/if}
+                <span class="inline-flex h-3 w-3 shrink-0 items-center justify-center text-primary">
+                  {#if selected === profile.value}
+                    <Check class="h-3 w-3" />
+                  {/if}
+                </span>
               </Select.Item>
             {/each}
           </Select.Group>

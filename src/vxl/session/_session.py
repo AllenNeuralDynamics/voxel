@@ -590,14 +590,11 @@ class Session:
             else:
                 raise ValueError(f"Stack {stack_id} not found")
 
-        # Implicit profile removal if no stacks remain for any profile
-        active_pid = self._rig.active_profile_id
-        if (
-            active_pid
-            and not any(s.profile_id == active_pid for s in self._config.stacks)
-            and active_pid in self._config.acq.profile_order
-        ):
-            self._config.acq.profile_order.remove(active_pid)
+        # Remove profiles from profile_order if they have no remaining stacks
+        profiles_with_stacks = {s.profile_id for s in self._config.stacks}
+        self._config.acq.profile_order = [
+            pid for pid in self._config.acq.profile_order if pid in profiles_with_stacks
+        ]
 
         self.save()
 

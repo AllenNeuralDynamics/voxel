@@ -11,6 +11,7 @@
   import LasersPanel from '$lib/ui/LasersPanel.svelte';
   import CamerasPanel from '$lib/ui/CamerasPanel.svelte';
   import AuxDevicesPanel from '$lib/ui/AuxDevicesPanel.svelte';
+  import { ProfileSelector } from '$lib/ui/profile';
 
   let { children } = $props();
 
@@ -76,8 +77,9 @@
     {/if}
   </Pane>
 </PaneGroup>
-<footer class="flex h-ui-xl items-center justify-between border-t border-border px-4 py-2">
+<footer class="flex h-ui-xl items-center gap-80 border-t border-border px-4 py-2">
   <div class="flex divide-x divide-border rounded border border-border">
+    <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
     <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}>Auxiliary</button>
     <button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}>Cameras</button>
     <button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
@@ -95,7 +97,7 @@
       {/each}
     </button>
   </div>
-  <div class="flex divide-x divide-border rounded border border-border">
-    <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
+  <div class="min-w-40 flex-1">
+    <ProfileSelector {session} size="xs" class="w-full" />
   </div>
 </footer>

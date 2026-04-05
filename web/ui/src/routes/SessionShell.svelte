@@ -14,10 +14,15 @@
   import AppMenu from './AppMenu.svelte';
   import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
   import StartButton from '$lib/ui/StartButton.svelte';
-  import { ProfileSelector } from '$lib/ui/profile';
+
   import { cn } from '$lib/utils';
+  import { ElementSize } from 'runed';
   import type { Pathname } from '$app/types';
   import { lastInstrumentPath } from './(instrument)/+layout.svelte';
+
+  const LEFT_PANE_MIN_W_PX = 750;
+  let shellRef = $state<HTMLElement | null>(null);
+  const shellSize = new ElementSize(() => shellRef);
 
   interface Props {
     app: App;
@@ -37,13 +42,7 @@
     clearLogs: () => app.clearLogs()
   });
 
-  // --- Layout breakpoint classes (change 850 here to adjust header collapse point) ---
-
-  const NAV_BP = {
-    header: '@min-[850px]:grid-cols-[auto_auto_1fr]',
-    actions: '@min-[850px]:col-start-3',
-    nav: '@min-[850px]:col-span-1 @min-[850px]:col-start-2 @min-[850px]:row-start-1 @min-[850px]:w-fit'
-  };
+  // --- Header layout (single row, guaranteed by LEFT_PANE_MIN_W_PX) ---
 
   // --- Shell state ---
 
@@ -75,15 +74,16 @@
   let closeDialogOpen = $state(false);
 </script>
 
-<div class="h-screen w-full text-fg">
+<div bind:this={shellRef} class="h-screen w-full text-fg">
   <PaneGroup direction="horizontal" autoSaveId="shell">
-    <Pane defaultSize={60} minSize={50} maxSize={70}>
+    <Pane
+      defaultSize={60}
+      minSize={shellSize.width > 0 ? (LEFT_PANE_MIN_W_PX / shellSize.width) * 100 : 50}
+      maxSize={70}
+    >
       <div class="grid h-full grid-rows-[auto_1fr]">
         <header
-          class={cn(
-            '@container grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 border-b border-border bg-elevated px-4 py-4',
-            NAV_BP.header
-          )}
+          class="grid grid-cols-[auto_auto_1fr] items-center gap-x-4 border-b border-border bg-elevated px-4 py-4"
         >
           <!-- Logo + close-session dialog -->
           <div class="flex items-center">
@@ -119,20 +119,14 @@
             </Dialog.Root>
           </div>
 
-          <!-- Actions — explicitly pinned to row 1, last column -->
-          <div class={cn('col-start-2 row-start-1 flex items-center gap-4', NAV_BP.actions)}>
-            <div class="min-w-64 flex-1">
-              <ProfileSelector {session} size="lg" />
-            </div>
+          <!-- Actions -->
+          <div class="col-start-3 flex items-center justify-end gap-4">
             <StartButton {session} />
           </div>
 
-          <!-- Nav tabs — full-width row 2 at narrow, inline col 2 at wide -->
+          <!-- Nav tabs -->
           <nav
-            class={cn(
-              'col-span-full grid grid-cols-4 divide-x divide-fg-faint/60 overflow-hidden rounded-lg border border-fg-faint/60',
-              NAV_BP.nav
-            )}
+            class="col-start-2 row-start-1 grid w-fit grid-cols-4 divide-x divide-fg-faint/60 overflow-hidden rounded-lg border border-fg-faint/60"
           >
             {#each navTabs as tab (tab.id)}
               {@const Icon = tab.icon}

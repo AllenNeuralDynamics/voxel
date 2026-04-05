@@ -90,7 +90,7 @@ export class Session {
 
   #unsubscribers: Array<() => void> = [];
   #selectedStackIds = new SvelteSet<string>();
-  selectedStacks = $derived<Stack[]>(this.activeStacks.filter((s) => this.#selectedStackIds.has(s.stack_id)));
+  selectedStacks = $derived<Stack[]>(this.stacks.filter((s) => this.#selectedStackIds.has(s.stack_id)));
 
   constructor(init: SessionInit) {
     this.client = init.client;
@@ -556,12 +556,11 @@ export class Session {
     this.#selectedStackIds.clear();
   }
 
-  selectAllStacks(): void {
-    this.selectStacks(this.activeStacks);
-  }
-
-  selectStacksByStatus(status: StackStatus): void {
-    this.selectStacks(this.activeStacks.filter((s) => s.status === status));
+  selectMultipleStacks({ profileIds, status }: { profileIds?: string[]; status?: StackStatus[] } = {}): void {
+    let stacks: Stack[] = this.stacks;
+    if (profileIds) stacks = stacks.filter((s) => profileIds.includes(s.profile_id));
+    if (status) stacks = stacks.filter((s) => status.includes(s.status));
+    this.selectStacks(stacks);
   }
 
   /** Find a stack near the given position (within 0.1 µm tolerance). */

@@ -594,14 +594,14 @@
   <ContextMenu.Sub>
     <ContextMenu.SubTrigger>Select stacks</ContextMenu.SubTrigger>
     <ContextMenu.SubContent>
-      <ContextMenu.Item onSelect={() => session.selectAllStacks()}>All</ContextMenu.Item>
+      <ContextMenu.Item onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!] })}>All</ContextMenu.Item>
       {#if session.selectedStacks.length > 0}
         <ContextMenu.Item onSelect={() => session.clearStackSelection()}>Deselect all</ContextMenu.Item>
       {/if}
       {#if profileStacks.length > 0}
         <ContextMenu.Separator />
         {#each STACK_STATUSES as status (status)}
-          <ContextMenu.Item onSelect={() => session.selectStacksByStatus(status)}>
+          <ContextMenu.Item onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!], status: [status] })}>
             {status[0].toUpperCase() + status.slice(1)}
           </ContextMenu.Item>
         {/each}
