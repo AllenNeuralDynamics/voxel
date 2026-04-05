@@ -1,4 +1,4 @@
-from typing import Any, Literal, Self
+from typing import Any, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from rigup.device.base import CommandRequest
@@ -6,9 +6,6 @@ from rigup.device.base import CommandRequest
 from rigup import RigConfig
 from vxl.camera.base import SensorROI
 from vxl.sync import SyncTaskData
-
-TileOrder = Literal["row_wise", "column_wise", "snake_row", "snake_column", "custom"]
-Interleaving = Literal["position_first", "profile_first"]
 
 
 class GridConfig(BaseModel):
@@ -37,7 +34,7 @@ class GlobalsConfig(BaseModel):
     """Global settings for acquisition planning."""
 
     default_overlap: float = Field(default=0.1, ge=0.0, le=0.5, description="Default tile overlap (0.0-0.5)")
-    default_tile_order: TileOrder = Field(default="snake_row", description="Default tile ordering pattern")
+    default_stack_order: str = Field(default="snake_row", description="Default stack ordering strategy")
     default_z_step: float = Field(default=1.0, gt=0.0, description="Default z-step in micrometers")
 
 

@@ -34,16 +34,16 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
  * Session status - included in AppStatus when a session is active
  * Topic: 'status' (within AppStatus.session)
  */
-import type { Interleaving, TileOrder } from './config.ts';
+import type { StackOrder } from './config.ts';
 
 /**
- * Acquisition config - profile ordering and tile ordering.
+ * Acquisition config - stack ordering and profile management.
  * Profile membership is implicit via stacks.
  */
 export interface AcquisitionConfig {
   profile_order: string[];
-  tile_order: TileOrder;
-  interleaving: Interleaving;
+  stack_order: StackOrder;
+  sort_by_profile: boolean;
 }
 
 /**
@@ -157,7 +157,7 @@ export interface GridConfig {
 export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'skipped';
 
 /**
- * Tile - 2D position in the grid
+ * Tile - 2D position in the grid (ephemeral, for grid preview)
  */
 export interface Tile {
   row: number;
@@ -169,10 +169,15 @@ export interface Tile {
 }
 
 /**
- * Stack - 3D acquisition unit (Tile + z-range)
+ * Stack - 3D acquisition unit (self-contained spatial volume)
  * Matches backend Stack model
  */
-export interface Stack extends Tile {
+export interface Stack {
+  stack_id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
   z_start: number;
   z_end: number;
   z_step: number;

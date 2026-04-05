@@ -27,7 +27,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-
 from ome_zarr_writer.backends.base import Backend
 from ome_zarr_writer.buffer import PyramidBuffer
 from ome_zarr_writer.types import Compression, ScaleLevel

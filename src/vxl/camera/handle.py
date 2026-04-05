@@ -6,7 +6,7 @@ from vxlib.vec import Vec2D
 
 from vxl.camera.base import Camera, SensorROI, TriggerMode, TriggerPolarity
 from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
-from vxl.tile import BatchResult, Stack, StorageConfig
+from vxl.stack import BatchResult, Stack, StorageConfig
 
 
 class CameraHandle(DeviceHandle[Camera]):

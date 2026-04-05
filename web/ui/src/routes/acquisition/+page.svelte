@@ -1,14 +1,14 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
-  import { GripVertical, LucideCircle, DotsSpinner, Check, AlertCircleOutline, Minus } from '$lib/icons';
-  import { PaneDivider, Select, SortableList, SpinBox, TextInput } from '$lib/ui/kit';
+  import { Crosshair } from '$lib/icons';
+  import { Button, PaneDivider, SpinBox, TextInput, Select } from '$lib/ui/kit';
   import MetadataPanel from '$lib/ui/MetadataPanel.svelte';
+  import StackSelector from '$lib/ui/StackSelector.svelte';
   import { sanitizeString } from '$lib/utils';
   import { Pane, PaneGroup } from 'paneforge';
-  import { Progress } from 'bits-ui';
   import { toast } from 'svelte-sonner';
   import { ElementSize } from 'runed';
-  import { type Interleaving, type Stack, type TileOrder } from '$lib/main/types';
+  import { type Stack } from '$lib/main/types';
 
   // ── Pane sizing (pixel-based min for sidebar) ──
 
@@ -17,21 +17,6 @@
   const paneGroupSize = new ElementSize(() => paneGroupEl);
 
   const session = getSessionContext();
-
-  // ── Plan settings options ──
-
-  const TILE_ORDER_OPTIONS: { value: TileOrder; label: string }[] = [
-    { value: 'row_wise', label: 'Row-wise' },
-    { value: 'column_wise', label: 'Column-wise' },
-    { value: 'snake_row', label: 'Snake (Row)' },
-    { value: 'snake_column', label: 'Snake (Column)' },
-    { value: 'custom', label: 'Custom' }
-  ];
-
-  const INTERLEAVING_OPTIONS: { value: Interleaving; label: string }[] = [
-    { value: 'position_first', label: 'Position first' },
-    { value: 'profile_first', label: 'Profile first' }
-  ];
 
   const COMPRESSION_OPTIONS = [
     { value: 'blosc.lz4', label: 'blosc.lz4' },
@@ -42,54 +27,56 @@
     { value: 'none', label: 'none' }
   ];
 
-  // ── Stack summary ──
+  // ── Stack inspector ──
+
+  const isAcquiring = $derived(session.mode === 'acquiring');
+  const acquiringStack = $derived(session.stacks.find((s) => s.status === 'acquiring'));
+  let followLive = $state(true);
+
+  // Auto-select first stack if nothing is selected
+  $effect(() => {
+    if (session.selectedStacks.length === 0 && session.stacks.length > 0) {
+      session.selectStacks([session.stacks[0]]);
+    }
+  });
+
+  // Auto-follow: select the acquiring stack when followLive is on
+  $effect(() => {
+    if (followLive && acquiringStack) {
+      session.selectStacks([acquiringStack]);
+    }
+  });
+
+  const inspectedStack = $derived(session.selectedStacks[0] ?? null);
+
+  // Break out of follow mode when user manually selects
+  function onManualSelect() {
+    if (isAcquiring) followLive = false;
+  }
+
+  function jumpToLive() {
+    followLive = true;
+  }
+
+  // ── Acquisition progress ──
 
   const stackCounts = $derived.by(() => {
     let planned = 0;
     let completed = 0;
     let failed = 0;
+    let acquiring = 0;
     for (const s of session.stacks) {
       if (s.status === 'planned') planned++;
       else if (s.status === 'completed') completed++;
       else if (s.status === 'failed') failed++;
+      else if (s.status === 'acquiring') acquiring++;
     }
-    return { planned, completed, failed, total: session.stacks.length };
+    return { planned, completed, failed, acquiring, total: session.stacks.length };
   });
 
-  // ── Grouped stack list ──
-
-  interface StackGroup {
-    label: string;
-    stacks: Stack[];
-  }
-
-  const stackGroups = $derived.by<StackGroup[]>(() => {
-    const stacks = session.stacks;
-    if (stacks.length === 0) return [];
-
-    const groups: StackGroup[] = [];
-    let currentKey = '';
-    let currentGroup: StackGroup | null = null;
-
-    for (const s of stacks) {
-      const key = session.interleaving === 'profile_first' ? s.profile_id : `${s.row},${s.col}`;
-
-      if (key !== currentKey) {
-        currentKey = key;
-        const label = session.interleaving === 'profile_first' ? sanitizeString(s.profile_id) : `R${s.row}, C${s.col}`;
-        currentGroup = { label, stacks: [] };
-        groups.push(currentGroup);
-      }
-      currentGroup!.stacks.push(s);
-    }
-    return groups;
-  });
-
-  const hasMultiItemGroups = $derived(stackGroups.some((g) => g.stacks.length > 1));
-
-  // ── Profile reorder ──
-
-  const planProfiles = $derived(session.acq.profile_order.map((id) => ({ profile_id: id })));
+  const progressFraction = $derived(
+    stackCounts.total > 0 ? (stackCounts.completed + stackCounts.failed) / stackCounts.total : 0
+  );
 
   // ── Clipboard ──
 
@@ -103,176 +90,27 @@
     }
   }
 
-  // ── Stack display helpers ──
-
-  function formatZ(um: number): string {
-    return um.toFixed(0);
-  }
 </script>
 
 <PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="acquire.content" class="h-full overflow-hidden">
-  <!-- Left column: stack list -->
-  <Pane minSize={40} class="flex h-full flex-col overflow-hidden">
-    <div class="flex-1 overflow-y-auto px-4 py-4">
-      {#if stackGroups.length === 0}
-        <div class="flex h-full items-center justify-center text-sm text-fg-muted">
-          No stacks configured. Add stacks in the scout step.
-        </div>
-      {:else if hasMultiItemGroups}
-        <div class="flex flex-col gap-3">
-          {#each stackGroups as group (group.label)}
-            <div class="flex flex-col">
-              <!-- Tab header -->
-              <div
-                class="flex h-ui-md w-fit items-center rounded-t-lg border-x border-t border-fg-muted/30 bg-panel px-3"
-              >
-                <span class="truncate text-xs font-medium text-fg-muted">{group.label}</span>
-              </div>
-              <!-- Stack rows -->
-              <div class="flex flex-col overflow-hidden rounded-tr-lg rounded-b-lg border border-fg-muted/30">
-                {#each group.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
-                  <div
-                    data-stack-status={stack.status}
-                    class="relative flex h-ui-md items-center gap-3 overflow-hidden border-b border-fg-muted/30 px-3 text-xs last:border-b-0"
-                  >
-                    <span class="min-w-0 flex-1 truncate text-fg">
-                      {sanitizeString(stack.profile_id)}
-                      <span class="ml-4 text-fg-muted">R{stack.row}, C{stack.col}</span>
-                      <span class="ml-4 text-fg-muted/60">{stack.x.toFixed(0)} × {stack.y.toFixed(0)} µm</span>
-                    </span>
-                    <span class="shrink-0 font-mono text-fg-muted">
-                      {formatZ(stack.z_start)} → {formatZ(stack.z_end)} µm
-                    </span>
-                    <span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
-                    {#if stack.status === 'acquiring'}
-                      <DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
-                    {:else if stack.status === 'completed'}
-                      <Check width="14" height="14" class="shrink-0 text-(--stack-status)" />
-                    {:else if stack.status === 'failed'}
-                      <AlertCircleOutline width="14" height="14" class="shrink-0 text-(--stack-status)" />
-                    {:else if stack.status === 'skipped'}
-                      <Minus width="14" height="14" class="shrink-0 text-(--stack-status)" />
-                    {:else}
-                      <LucideCircle width="12" height="12" class="shrink-0 text-(--stack-status)" />
-                    {/if}
-                    <Progress.Root
-                      value={stack.status === 'completed' ? 100 : 0}
-                      max={100}
-                      class="absolute inset-0 -z-10 bg-(--stack-status)/15"
-                      style="transform: scaleX({stack.status === 'completed' ? 100 : 0 / 100}); transform-origin: left"
-                    />
-                  </div>
-                {/each}
-              </div>
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <div class="flex flex-col overflow-hidden rounded-lg border border-fg-muted/30">
-          {#each session.stacks as stack (`${stack.profile_id}:${stack.row},${stack.col}`)}
-            <div
-              data-stack-status={stack.status}
-              class="relative flex h-ui-md items-center gap-3 overflow-hidden border-b border-fg-muted/30 px-3 text-xs last:border-b-0"
-            >
-              <span class="min-w-0 flex-1 truncate text-fg">
-                {sanitizeString(stack.profile_id)}
-                <span class="ml-4 text-fg-muted">R{stack.row}, C{stack.col}</span>
-                <span class="ml-4 text-fg-muted/60">{stack.x.toFixed(0)} × {stack.y.toFixed(0)} µm</span>
-              </span>
-              <span class="shrink-0 font-mono text-fg-muted">
-                {formatZ(stack.z_start)} → {formatZ(stack.z_end)} µm
-              </span>
-              <span class="shrink-0 text-fg-muted">{stack.num_frames} slices</span>
-              {#if stack.status === 'acquiring'}
-                <DotsSpinner width="14" height="14" class="shrink-0 text-(--stack-status)" />
-              {:else if stack.status === 'completed'}
-                <Check width="14" height="14" class="shrink-0 text-(--stack-status)" />
-              {:else if stack.status === 'failed'}
-                <AlertCircleOutline width="14" height="14" class="shrink-0 text-(--stack-status)" />
-              {:else if stack.status === 'skipped'}
-                <Minus width="14" height="14" class="shrink-0 text-(--stack-status)" />
-              {:else}
-                <LucideCircle width="12" height="12" class="shrink-0 text-(--stack-status)" />
-              {/if}
-              <Progress.Root
-                value={stack.status === 'completed' ? 100 : 0}
-                max={100}
-                class="absolute inset-0 -z-10 bg-(--stack-status)/15"
-                style="transform: scaleX({stack.status === 'completed' ? 100 : 0 / 100}); transform-origin: left"
-              />
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
-
-    <!-- Footer: stack counts -->
-    <div class="flex h-ui-xl items-center border-t border-border px-4">
-      <span class="text-xs text-fg-muted">
-        {#if stackCounts.completed > 0}
-          {stackCounts.completed} done
-        {/if}
-        {#if stackCounts.planned > 0}
-          {#if stackCounts.completed > 0}<span class="mx-0.5 text-border">·</span>{/if}
-          {stackCounts.planned} planned
-        {/if}
-        {#if stackCounts.failed > 0}
-          <span class="mx-0.5 text-border">·</span>
-          <span class="text-danger">{stackCounts.failed} failed</span>
-        {/if}
-        {#if stackCounts.total === 0}
-          No stacks
-        {/if}
-      </span>
-    </div>
-  </Pane>
-
-  <PaneDivider direction="vertical" />
-
-  <!-- Right column: session info + plan config + metadata -->
-  <Pane
-    defaultSize={30}
-    minSize={paneGroupSize.width > 0 ? (SIDEBAR_MIN_PX / paneGroupSize.width) * 100 : 25}
-    maxSize={45}
-  >
-    <div class="@container flex h-full flex-col justify-between overflow-hidden bg-canvas">
+  <!-- Left column: storage + metadata -->
+  <Pane defaultSize={50} minSize={40} maxSize={60}>
+    <div class="@container flex h-full flex-col overflow-hidden bg-canvas">
       <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-        <!-- Plan settings -->
+        <!-- Session info -->
         <section>
-          <h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Stack Ordering</h3>
           <div class="grid grid-cols-1 gap-2 text-xs @sm:grid-cols-[10rem_1fr] @sm:items-center @sm:gap-x-3">
-            <span class="text-fg-muted">Tile Order</span>
-            <Select
-              value={session.tileOrder}
-              options={TILE_ORDER_OPTIONS}
-              onchange={(v) => session.setTileOrder(v as TileOrder)}
-              size="xs"
-            />
-            {#if planProfiles.length > 1}
-              <span class="text-fg-muted">Interleaving</span>
-              <Select
-                value={session.interleaving}
-                options={INTERLEAVING_OPTIONS}
-                onchange={(v) => session.setInterleaving(v as Interleaving)}
-                size="xs"
-              />
-              <span class="self-start pt-1 text-fg-muted">Profile Order</span>
-              <SortableList.Root
-                items={planProfiles}
-                key={(p) => p.profile_id}
-                onReorder={(reordered) => session.reorderProfiles(reordered.map((p) => p.profile_id))}
-                class="flex flex-col gap-1"
+            <span class="text-fg-muted">Directory</span>
+            {#if session.info?.session_dir}
+              <button
+                onclick={copySessionDir}
+                class="cursor-pointer truncate text-start text-xs text-fg-muted transition-colors hover:text-fg"
+                title="Click to copy: {session.info.session_dir}"
               >
-                {#snippet item(profile)}
-                  <SortableList.Item
-                    item={profile}
-                    class="profile-chip flex items-center gap-1 rounded border border-border bg-element-bg py-1 pr-2 pl-0.5 text-xs text-fg"
-                  >
-                    <GripVertical width="14" height="14" class="shrink-0 text-fg-muted/50" />
-                    {session.config.profiles[profile.profile_id]?.label ?? sanitizeString(profile.profile_id)}
-                  </SortableList.Item>
-                {/snippet}
-              </SortableList.Root>
+                {session.info.session_dir}
+              </button>
+            {:else}
+              <span class="text-fg-faint">—</span>
             {/if}
           </div>
         </section>
@@ -283,14 +121,15 @@
         <section>
           <h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Storage</h3>
           <div class="grid grid-cols-1 gap-2 text-xs @sm:grid-cols-[10rem_1fr] @sm:items-center @sm:gap-x-3">
-            <span class="text-fg-muted">Store Path</span>
+            <!-- TODO: Store path editing — needs multiline or path picker for long paths -->
+            <!-- <span class="text-fg-muted">Store Path</span>
             <TextInput
               value={session.storage.store_path ?? ''}
               placeholder="/path/to/zarr"
               align="left"
               onChange={(v) => session.updateStorage({ store_path: v || null })}
               size="xs"
-            />
+            /> -->
             <span class="text-fg-muted">Compression</span>
             <Select
               value={session.storage.compression ?? 'blosc.lz4'}
@@ -344,19 +183,104 @@
         <!-- Metadata -->
         <MetadataPanel {session} />
       </div>
+    </div>
+  </Pane>
 
-      <!-- Session path (fixed footer) -->
-      <div class="h-ui-xl border-t border-border px-4 py-2">
-        {#if session.info?.session_dir}
-          <button
-            onclick={copySessionDir}
-            class="shrink-0 cursor-pointer text-start text-xs break-all text-fg-muted transition-colors hover:text-fg"
-            title="Click to copy path"
-          >
-            {session.info.session_dir}
-          </button>
-        {/if}
+  <PaneDivider direction="vertical" />
+
+  <!-- Right column: stack inspector -->
+  <Pane class="flex h-full flex-col overflow-hidden">
+    <!-- Stack selector -->
+    <div class="flex items-center gap-2 px-4 pt-3 pb-2">
+      <div class="min-w-0 flex-1" onclick={onManualSelect} onkeydown={onManualSelect} role="presentation">
+        <StackSelector {session} size="sm" class="w-full" />
       </div>
+      <button
+        class="cursor-pointer rounded bg-transparent p-1 transition-colors
+          {isAcquiring && !followLive ? 'text-info hover:text-info/80' : 'text-fg-faint'}"
+        title="Follow active stack"
+        disabled={!isAcquiring || followLive}
+        onclick={jumpToLive}
+      >
+        <Crosshair width="14" height="14" />
+      </button>
+    </div>
+
+    <!-- Stack details -->
+    <div class="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pt-1 pb-4">
+      {#if inspectedStack}
+        <div class="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1.5 text-xs">
+          <span class="text-fg-muted">Profile</span>
+          <span class="text-fg">{sanitizeString(inspectedStack.profile_id)}</span>
+
+          <span class="text-fg-muted">Position</span>
+          <span class="tabular-nums text-fg">
+            ({(inspectedStack.x / 1000).toFixed(4)}, {(inspectedStack.y / 1000).toFixed(4)}) mm
+          </span>
+
+          <span class="text-fg-muted">Z Range</span>
+          <span class="tabular-nums text-fg">
+            {(inspectedStack.z_start / 1000).toFixed(3)} → {(inspectedStack.z_end / 1000).toFixed(3)} mm
+          </span>
+
+          <span class="text-fg-muted">Frames</span>
+          <span class="tabular-nums text-fg">{inspectedStack.num_frames}</span>
+
+          <span class="text-fg-muted">Status</span>
+          <span class="text-fg" data-stack-status={inspectedStack.status}>
+            <span class="text-(--stack-status)">{inspectedStack.status}</span>
+          </span>
+        </div>
+
+        <!-- Per-channel details (placeholder — will be populated from acquisition progress events) -->
+        {#if inspectedStack.status === 'acquiring' || inspectedStack.status === 'completed'}
+          <hr class="border-border" />
+          <div class="space-y-2">
+            <h4 class="text-xs font-medium text-fg-muted">Channels</h4>
+            <p class="text-xs text-fg-faint">Channel details will appear here during acquisition.</p>
+          </div>
+        {/if}
+      {:else}
+        <div class="flex flex-1 items-center justify-center">
+          <p class="text-sm text-fg-faint">No stacks configured</p>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Acquisition progress + start -->
+    <div class="flex flex-col gap-3 border-t border-border px-4 py-3">
+      {#if stackCounts.total > 0}
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-xs text-fg-muted">
+            <span>
+              {stackCounts.completed + stackCounts.failed}/{stackCounts.total} stacks
+            </span>
+            {#if stackCounts.failed > 0}
+              <span class="text-danger">{stackCounts.failed} failed</span>
+            {/if}
+          </div>
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
+            <div
+              class="h-full rounded-full bg-info transition-[width]"
+              style="width: {progressFraction * 100}%"
+            ></div>
+          </div>
+        </div>
+      {/if}
+      {#if stackCounts.planned === 0 && !isAcquiring}
+        <Button size="sm" variant="outline" disabled class="w-full">
+          Add new stacks to start acquisition
+        </Button>
+      {:else}
+        <Button
+          size="sm"
+          variant={isAcquiring ? 'outline' : 'default'}
+          onclick={() => (isAcquiring ? session.stopAcquisition() : session.startAcquisition())}
+          class="w-full {isAcquiring ? 'border-danger text-danger hover:bg-danger/10' : ''}"
+        >
+          {isAcquiring ? 'Stop Acquisition' : 'Start Acquisition'}
+        </Button>
+      {/if}
     </div>
   </Pane>
 </PaneGroup>

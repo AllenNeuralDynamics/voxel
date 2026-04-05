@@ -130,7 +130,7 @@
           <!-- Nav tabs — full-width row 2 at narrow, inline col 2 at wide -->
           <nav
             class={cn(
-              'col-span-full grid grid-cols-4 divide-x divide-border overflow-hidden rounded-lg border border-border',
+              'col-span-full grid grid-cols-4 divide-x divide-fg-faint/60 overflow-hidden rounded-lg border border-fg-faint/60',
               NAV_BP.nav
             )}
           >

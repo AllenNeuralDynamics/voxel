@@ -2,7 +2,6 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-
 import numcodecs
 import numpy as np
 import zarr

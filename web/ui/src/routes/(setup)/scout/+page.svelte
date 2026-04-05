@@ -122,7 +122,7 @@
       <ContextMenu.Item onSelect={() => (renamingId = snap.id)}>Rename</ContextMenu.Item>
       <ContextMenu.Separator />
       <ContextMenu.Sub>
-        <ContextMenu.SubTrigger disabled={!session.gridEditable}>Align grid</ContextMenu.SubTrigger>
+        <ContextMenu.SubTrigger disabled={!session.gridConfig}>Align grid</ContextMenu.SubTrigger>
         <ContextMenu.SubContent>
           <ContextMenu.Item onSelect={() => session.alignGrid('top', snapPos)}>Top</ContextMenu.Item>
           <ContextMenu.Item onSelect={() => session.alignGrid('bottom', snapPos)}>Bottom</ContextMenu.Item>

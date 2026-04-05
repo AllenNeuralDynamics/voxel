@@ -134,11 +134,13 @@
         <h3 class="mb-2 text-xs text-fg-faint">Inputs</h3>
         <div class="flex flex-col gap-3">
           {#each sizes as sz (sz)}
-            <div class="flex flex-wrap items-end gap-3">
-              <span class="w-6 self-center text-xs text-fg-faint">{sz}</span>
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="w-6 text-xs text-fg-faint">{sz}</span>
               <TextInput size={sz} bind:value={textValue} placeholder="Type here…" />
               <SpinBox size={sz} bind:value={spinValue} min={0} max={100} />
               <Select size={sz} options={selectOptions} bind:value={selectValue} class="w-40" />
+              <Switch bind:checked={switchOn} size={sz} />
+              <Switch bind:checked={switchOff} size={sz} />
             </div>
           {/each}
         </div>
@@ -179,14 +181,6 @@
           <div class="flex items-center gap-2">
             <Checkbox disabled size="sm" />
             <span class="text-sm text-fg-muted">Disabled</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <Switch bind:checked={switchOn} size="sm" />
-            <span class="text-sm text-fg-muted">On</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <Switch bind:checked={switchOff} size="sm" />
-            <span class="text-sm text-fg-muted">Off</span>
           </div>
           <div class="flex items-center gap-2">
             <Switch checked={false} disabled size="sm" />

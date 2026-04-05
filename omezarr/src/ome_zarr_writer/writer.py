@@ -7,7 +7,6 @@ import numpy as np
 from pydantic import BaseModel, Field, computed_field
 from vxlib.vec import UIVec3D
 
-
 from ome_zarr_writer.backends.base import Backend
 from ome_zarr_writer.buffer import BufferMode, BufferStage, BufferStatus, PyramidBuffer, create_ring_buffer
 from ome_zarr_writer.types import ScaleLevel

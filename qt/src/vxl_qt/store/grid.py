@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
 
-from vxl.config import GridConfig, TileOrder
-from vxl.tile import Stack, StackStatus, Tile
+from vxl.config import GridConfig
+from vxl.stack import Stack, StackOrder, StackStatus, Tile
 
 if TYPE_CHECKING:
     from vxl import Session
@@ -138,11 +138,11 @@ class GridStore(QObject):
         return self._session.grid_config or GridConfig()
 
     @property
-    def tile_order(self) -> TileOrder:
-        """Current tile ordering."""
+    def stack_order(self) -> StackOrder:
+        """Current stack ordering strategy."""
         if self._session is None:
-            return "snake_row"
-        return self._session.tile_order
+            return StackOrder.SNAKE_ROW
+        return self._session.stack_order
 
     @property
     def grid_locked(self) -> bool:
@@ -194,15 +194,15 @@ class GridStore(QObject):
 
     def get_selected_stack(self) -> Stack | None:
         """Get the stack at the selected tile, or None if no stack."""
-        for stack in self.stacks:
-            if stack.row == self._selected_row and stack.col == self._selected_col:
-                return stack
-        return None
+        tile = self.get_selected_tile()
+        if tile is None:
+            return None
+        return self.get_stack_at_position(tile.x, tile.y)
 
-    def get_stack_at(self, row: int, col: int) -> Stack | None:
-        """Get the stack at a specific tile position."""
+    def get_stack_at_position(self, x: float, y: float) -> Stack | None:
+        """Get the stack near a specific position (within 0.1 µm tolerance)."""
         for stack in self.stacks:
-            if stack.row == row and stack.col == col:
+            if abs(stack.x - x) < 0.1 and abs(stack.y - y) < 0.1:
                 return stack
         return None
 
@@ -251,20 +251,20 @@ class GridStore(QObject):
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
 
-    def set_tile_order(self, order: TileOrder) -> None:
-        """Set tile acquisition order."""
+    def set_stack_order(self, order: StackOrder) -> None:
+        """Set stack ordering strategy."""
         if self._session is None:
             return
-        self._session.set_tile_order(order)
+        self._session.set_stack_order(order)
         self.stacks_changed.emit()  # Stack order changed
 
     # ==================== Stack Management ====================
 
     async def add_stacks(self, stacks: list[dict]) -> list[Stack]:
-        """Add stacks at grid positions.
+        """Add stacks at positions.
 
         Args:
-            stacks: List of {row, col, z_start_um, z_end_um}
+            stacks: List of {x, y, z_start, z_end}
 
         Returns:
             List of added Stack objects
@@ -274,15 +274,13 @@ class GridStore(QObject):
 
         added = self._session.add_stacks(stacks)
         self.stacks_changed.emit()
-        if added:
-            self.grid_locked_changed.emit(self.grid_locked)
         return added
 
     def edit_stacks(self, edits: list[dict]) -> list[Stack]:
-        """Edit stacks' z parameters.
+        """Edit stacks' position and/or z parameters.
 
         Args:
-            edits: List of {row, col, z_start_um?, z_end_um?}
+            edits: List of {stack_id, x?, y?, z_start?, z_end?}
 
         Returns:
             List of edited Stack objects
@@ -294,20 +292,13 @@ class GridStore(QObject):
         self.stacks_changed.emit()
         return edited
 
-    def remove_stacks(self, positions: list[dict]) -> None:
-        """Remove stacks by position.
-
-        Args:
-            positions: List of {row, col}
-        """
+    def remove_stacks(self, stack_ids: list[str]) -> None:
+        """Remove stacks by ID."""
         if self._session is None:
             return
 
-        was_locked = self.grid_locked
-        self._session.remove_stacks(positions)
+        self._session.remove_stacks(stack_ids)
         self.stacks_changed.emit()
-        if was_locked != self.grid_locked:
-            self.grid_locked_changed.emit(self.grid_locked)
 
     # ==================== Layer Visibility ====================
 

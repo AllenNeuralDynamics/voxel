@@ -67,8 +67,8 @@
     width="100%"
     height="100%"
   >
-    {#each profileStacks as stack (`z_${stack.row}_${stack.col}`)}
-      {@const selected = session.isStackSelected(stack.row, stack.col)}
+    {#each profileStacks as stack (stack.stack_id)}
+      {@const selected = session.isStackSelected(stack.stack_id)}
       {@const z0Y = (1 - (stack.z_start - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
       {@const z1Y = (1 - (stack.z_end - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
       <g

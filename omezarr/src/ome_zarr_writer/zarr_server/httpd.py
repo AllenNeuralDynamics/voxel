@@ -9,11 +9,9 @@ ASGI implementations.
 import logging
 import os
 import threading
-
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
-
 
 from .base import ZarrServer, get_host_ip
 

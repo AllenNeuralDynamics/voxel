@@ -33,9 +33,8 @@
 
   let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
   let isAcquiring = $derived(session.mode === 'acquiring');
-  let gridEditable = $derived(session.gridEditable);
-
   let profileStacks = $derived(session.activeStacks);
+  let arrowSize = $derived(Math.min(session.fov.width, session.fov.height) * 0.15);
 
   // ── Local tile selection ────────────────────────────────────────────
 
@@ -223,7 +222,7 @@
   function handleStackSelect(e: MouseEvent, stack: Stack) {
     clearTileSelection();
     if (e.ctrlKey || e.metaKey) {
-      if (session.isStackSelected(stack.row, stack.col)) {
+      if (session.isStackSelected(stack.stack_id)) {
         session.removeStacksFromSelection([stack]);
       } else {
         session.addStacksToSelection([stack]);
@@ -276,9 +275,9 @@
     const tile = contextTarget.tile;
     const selected = selectedTilesList;
     if (selected.length <= 1) {
-      return { kind: 'single-tile', tile, stack: session.getStack(tile.row, tile.col) ?? null };
+      return { kind: 'single-tile', tile, stack: session.getStackAtPosition(tile.x, tile.y) ?? null };
     }
-    const withStacks = selected.filter((t) => session.getStack(t.row, t.col)).length;
+    const withStacks = selected.filter((t) => session.getStackAtPosition(t.x, t.y)).length;
     return { kind: 'multi-tile', tile, withStacks, withoutStacks: selected.length - withStacks };
   });
 
@@ -291,7 +290,7 @@
   }
 
   function handleStackContext(e: MouseEvent, stack: Stack) {
-    if (!session.isStackSelected(stack.row, stack.col)) {
+    if (!session.isStackSelected(stack.stack_id)) {
       session.selectStacks([stack]);
     }
     clearTileSelection();
@@ -344,12 +343,12 @@
   function contextAddStack() {
     const gc = session.gridConfig;
     if (!gc) return;
-    const tiles = selectedTilesList.filter((t) => !session.getStack(t.row, t.col));
+    const tiles = selectedTilesList.filter((t) => !session.getStackAtPosition(t.x, t.y));
     if (tiles.length === 0) return;
     session.addStacks(
       tiles.map((t) => ({
-        row: t.row,
-        col: t.col,
+        x: t.x,
+        y: t.y,
         zStartUm: gc.default_z_start,
         zEndUm: gc.default_z_end
       }))
@@ -359,10 +358,13 @@
   function contextDeleteStack() {
     if (menuContext?.kind === 'single-stack' || menuContext?.kind === 'multi-stack') {
       const stacks = session.selectedStacks;
-      if (stacks.length > 0) session.removeStacks(stacks.map((s) => ({ row: s.row, col: s.col })));
+      if (stacks.length > 0) session.removeStacks(stacks.map((s) => s.stack_id));
     } else {
-      const tiles = selectedTilesList.filter((t) => session.getStack(t.row, t.col));
-      if (tiles.length > 0) session.removeStacks(tiles.map((t) => ({ row: t.row, col: t.col })));
+      const stackIds = selectedTilesList
+        .map((t) => session.getStackAtPosition(t.x, t.y))
+        .filter((s): s is Stack => s !== undefined)
+        .map((s) => s.stack_id);
+      if (stackIds.length > 0) session.removeStacks(stackIds);
     }
   }
 
@@ -373,20 +375,19 @@
 
   function contextPasteZRange() {
     if (!zRangeBuffer) return;
-    let edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>;
+    let edits: Array<{ stackId: string; zStartUm: number; zEndUm: number }>;
     if (menuContext?.kind === 'single-stack' || menuContext?.kind === 'multi-stack') {
       edits = session.selectedStacks.map((s) => ({
-        row: s.row,
-        col: s.col,
+        stackId: s.stack_id,
         zStartUm: zRangeBuffer!.zStartUm,
         zEndUm: zRangeBuffer!.zEndUm
       }));
     } else {
       edits = selectedTilesList
-        .filter((t) => session.getStack(t.row, t.col))
-        .map((t) => ({
-          row: t.row,
-          col: t.col,
+        .map((t) => session.getStackAtPosition(t.x, t.y))
+        .filter((s): s is Stack => s !== undefined)
+        .map((s) => ({
+          stackId: s.stack_id,
           zStartUm: zRangeBuffer!.zStartUm,
           zEndUm: zRangeBuffer!.zEndUm
         }));
@@ -466,8 +467,8 @@
   {#if layers.stacks}
     {@const points = profileStacks.map((s) => ({ x: s.x, y: s.y }))}
     <g>
-      {#each profileStacks as stack (`${stack.row}_${stack.col}`)}
-        {@const selected = session.isStackSelected(stack.row, stack.col)}
+      {#each profileStacks as stack (stack.stack_id)}
+        {@const selected = session.isStackSelected(stack.stack_id)}
         {@const cx = stack.x}
         {@const cy = stack.y}
         {@const w = stack.w}
@@ -491,7 +492,7 @@
           oncontextmenu={(e) => handleStackContext(e, stack)}
           onkeydown={(e) => handleKeydown(e, () => session.selectStacks([stack]))}
         >
-          <title>Stack [{stack.row}, {stack.col}] - {stack.status} ({stack.num_frames} frames)</title>
+          <title>Stack {stack.stack_id} - {stack.status} ({stack.num_frames} frames)</title>
         </rect>
       {/each}
     </g>
@@ -507,9 +508,9 @@
         {@const midY = (p1.y + p2.y) / 2}
         {@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
         <path
-          d="M -0.15 -0.2 L 0.15 0 L -0.15 0.2"
-          stroke-width="1"
-          class="nss fill-none opacity-70"
+          d="M {-arrowSize * 0.5} {-arrowSize * 0.6} L {arrowSize * 0.5} 0 L {-arrowSize * 0.5} {arrowSize * 0.6}"
+          stroke-width={arrowSize * 0.15}
+          class="fill-none opacity-70"
           transform="translate({midX}, {midY}) rotate({angle})"
         />
       {/each}
@@ -520,7 +521,7 @@
 {#snippet alignGridItems()}
   {@const pos = contextPosition()}
   <ContextMenu.Sub>
-    <ContextMenu.SubTrigger disabled={!gridEditable}>Align grid</ContextMenu.SubTrigger>
+    <ContextMenu.SubTrigger disabled={!session.gridConfig}>Align grid</ContextMenu.SubTrigger>
     <ContextMenu.SubContent>
       <ContextMenu.Item onSelect={() => session.alignGrid('top', pos)}>Top</ContextMenu.Item>
       <ContextMenu.Item onSelect={() => session.alignGrid('bottom', pos)}>Bottom</ContextMenu.Item>
@@ -537,14 +538,10 @@
     <ContextMenu.SubTrigger>Select tiles</ContextMenu.SubTrigger>
     <ContextMenu.SubContent>
       {#if menuContext?.kind === 'single-tile' || menuContext?.kind === 'multi-tile'}
-        <ContextMenu.Item
-          onSelect={() => selectTiles(session.tiles.filter((t) => t.row === menuContext.tile.row))}
-        >
+        <ContextMenu.Item onSelect={() => selectTiles(session.tiles.filter((t) => t.row === menuContext.tile.row))}>
           Row {menuContext.tile.row}
         </ContextMenu.Item>
-        <ContextMenu.Item
-          onSelect={() => selectTiles(session.tiles.filter((t) => t.col === menuContext.tile.col))}
-        >
+        <ContextMenu.Item onSelect={() => selectTiles(session.tiles.filter((t) => t.col === menuContext.tile.col))}>
           Column {menuContext.tile.col}
         </ContextMenu.Item>
         <ContextMenu.Separator />
@@ -553,9 +550,7 @@
       {#if selectedTilesList.length > 0}
         <ContextMenu.Item onSelect={() => clearTileSelection()}>Deselect all</ContextMenu.Item>
       {/if}
-      <ContextMenu.Item
-        onSelect={() => selectTiles(session.tiles.filter((t) => !isTileSelected(t.row, t.col)))}
-      >
+      <ContextMenu.Item onSelect={() => selectTiles(session.tiles.filter((t) => !isTileSelected(t.row, t.col)))}>
         Invert
       </ContextMenu.Item>
       {#if profileStacks.length > 0 || session.tiles.length > 0}
@@ -563,14 +558,14 @@
       {/if}
       {#if profileStacks.length > 0}
         <ContextMenu.Item
-          onSelect={() => selectTiles(session.tiles.filter((t) => session.getStack(t.row, t.col)))}
+          onSelect={() => selectTiles(session.tiles.filter((t) => session.getStackAtPosition(t.x, t.y)))}
         >
           With stacks
         </ContextMenu.Item>
       {/if}
       {#if session.tiles.length > 0}
         <ContextMenu.Item
-          onSelect={() => selectTiles(session.tiles.filter((t) => !session.getStack(t.row, t.col)))}
+          onSelect={() => selectTiles(session.tiles.filter((t) => !session.getStackAtPosition(t.x, t.y)))}
         >
           Without stacks
         </ContextMenu.Item>

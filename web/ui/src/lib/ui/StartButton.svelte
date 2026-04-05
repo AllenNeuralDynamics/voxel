@@ -1,8 +1,6 @@
 <script lang="ts">
   import type { Session } from '$lib/main';
   import { buttonVariants } from '$lib/ui/kit/Button.svelte';
-  import { DropdownMenu } from '$lib/ui/kit';
-  import { ChevronDown } from '$lib/icons';
   import { cn } from '$lib/utils';
 
   interface Props {
@@ -14,49 +12,28 @@
 
   const isPreviewing = $derived(session.preview.isPreviewing);
   const isAcquiring = $derived(session.mode === 'acquiring');
-  const canAcquire = $derived(session.stacks.some((s) => s.status === 'planned'));
   const isRunning = $derived(isPreviewing || isAcquiring);
 
-  function handleStartPreview() {
-    session.preview.startPreview();
+  function handleClick() {
+    if (isAcquiring) session.stopAcquisition();
+    else if (isPreviewing) session.preview.stopPreview();
+    else session.preview.startPreview();
   }
-
-  function handleStopPreview() {
-    session.preview.stopPreview();
-  }
-
-  function handleStartAcquisition() {
-    session.startAcquisition();
-  }
-
-  function handleStopAcquisition() {
-    session.stopAcquisition();
-  }
-
-  function handleStop() {
-    if (isAcquiring) handleStopAcquisition();
-    else if (isPreviewing) handleStopPreview();
-  }
-
-  const base = buttonVariants({ variant: 'success', size: 'lg' });
 </script>
 
-{#if isRunning}
-  <button
-    class={buttonVariants({ variant: 'danger', size: 'lg', class: cn('w-40 rounded-md', className) })}
-    onclick={handleStop}
-  >
-    {isAcquiring ? 'Stop Acquisition' : 'Stop Preview'}
-  </button>
-{:else}
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger class={cn(base, 'w-40 justify-between rounded-md', className)}>
-      Start Imaging
-      <ChevronDown width="14" height="14" />
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-40">
-      <DropdownMenu.Item onclick={handleStartPreview}>Preview</DropdownMenu.Item>
-      <DropdownMenu.Item onclick={handleStartAcquisition} disabled={!canAcquire}>Acquisition</DropdownMenu.Item>
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
-{/if}
+<button
+  class={cn(
+    buttonVariants({ variant: isRunning ? 'danger' : 'success', size: 'lg' }),
+    'min-w-44 rounded-md',
+    className
+  )}
+  onclick={handleClick}
+>
+  {#if isAcquiring}
+    Stop Acquisition
+  {:else if isPreviewing}
+    Stop Preview
+  {:else}
+    Start Preview
+  {/if}
+</button>

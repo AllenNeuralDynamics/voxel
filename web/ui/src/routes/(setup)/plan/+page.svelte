@@ -1,21 +1,15 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
-  import { Button, Checkbox, Dialog, Select, SpinBox } from '$lib/ui/kit';
+  import { Button, Dialog, Select, SpinBox } from '$lib/ui/kit';
   import { Pane, PaneGroup } from 'paneforge';
   import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-  import { sanitizeString } from '$lib/utils';
-  import { cn } from '$lib/utils';
-  import {
-    TrashCanOutline,
-    Restore,
-    LucideCircle,
-    Check,
-    AlertCircleOutline,
-    Minus,
-    DotsSpinner
-  } from '$lib/icons';
+  import { sanitizeString, cn } from '$lib/utils';
+  import { Restore, ChevronDown, ChevronRight } from '$lib/icons';
+  import StackStatusIcon from '$lib/ui/StackStatusIcon.svelte';
   import { watch, ElementSize } from 'runed';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { Stack, StackStatus } from '$lib/main/types';
+  import StackOrdering from '$lib/ui/StackOrdering.svelte';
 
   const session = getSessionContext();
 
@@ -32,19 +26,59 @@
     { value: 'skipped', label: 'Skipped' }
   ];
 
-  // --- Derived data ---
+  // --- Profile groups ---
 
-  const filteredStacks = $derived.by(() => {
-    if (filter === 'all') return session.activeStacks;
-    return session.activeStacks.filter((s) => s.status === filter);
+  interface ProfileGroup {
+    profileId: string;
+    label: string;
+    stacks: Stack[];
+    isActive: boolean;
+  }
+
+  let collapsedProfiles = new SvelteSet<string>();
+
+  const profileGroups = $derived.by<ProfileGroup[]>(() => {
+    const allStacks = filter === 'all' ? session.stacks : session.stacks.filter((s) => s.status === filter);
+
+    const groupMap = new SvelteMap<string, Stack[]>();
+    for (const s of allStacks) {
+      const group = groupMap.get(s.profile_id);
+      if (group) group.push(s);
+      else groupMap.set(s.profile_id, [s]);
+    }
+
+    const activeId = session.activeProfileId;
+    const profileOrder = session.acq.profile_order;
+
+    const groups: ProfileGroup[] = [];
+    for (const [profileId, stacks] of groupMap) {
+      groups.push({
+        profileId,
+        label: session.config.profiles[profileId]?.label ?? sanitizeString(profileId),
+        stacks,
+        isActive: profileId === activeId
+      });
+    }
+
+    groups.sort((a, b) => {
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return profileOrder.indexOf(a.profileId) - profileOrder.indexOf(b.profileId);
+    });
+
+    return groups;
   });
+
+  // Flat list of visible stacks (for shift-click range selection)
+  const flatStacks = $derived(profileGroups.flatMap((g) => (collapsedProfiles.has(g.profileId) ? [] : g.stacks)));
+
+  const totalCount = $derived(
+    filter === 'all' ? session.stacks.length : session.stacks.filter((s) => s.status === filter).length
+  );
 
   const hasSelection = $derived(session.selectedStacks.length > 0);
 
   // Acquisition order: index of each stack in the plan's ordered stacks list
-  const acquisitionOrder = $derived(
-    new Map(session.stacks.map((s, i) => [`${s.profile_id}:${s.row},${s.col}`, i + 1]))
-  );
+  const acquisitionOrder = $derived(new Map(session.stacks.map((s, i) => [s.stack_id, i + 1])));
 
   // --- Merged Z values for batch editing ---
 
@@ -68,8 +102,7 @@
     if (selectedStacks.length === 0) return;
     session.editStacks(
       selectedStacks.map((s) => ({
-        row: s.row,
-        col: s.col,
+        stackId: s.stack_id,
         zStartUm: field === 'zStartUm' ? value : s.z_start,
         zEndUm: field === 'zEndUm' ? value : s.z_end
       }))
@@ -79,39 +112,44 @@
   function removeSelectedStacks() {
     const stacks = session.selectedStacks;
     if (stacks.length === 0) return;
-    session.removeStacks(stacks.map((s) => ({ row: s.row, col: s.col })));
+    session.removeStacks(stacks.map((s) => s.stack_id));
     clearDialogOpen = false;
   }
 
   // --- Selection ---
 
-  let lastClickedIndex = $state<number>(-1);
-
-  function handleRowClick(stack: Stack, index: number, e: MouseEvent) {
-    const pos = { row: stack.row, col: stack.col };
+  function handleRowClick(stack: Stack, e: MouseEvent) {
     if (e.metaKey || e.ctrlKey) {
-      if (session.isStackSelected(stack.row, stack.col)) {
-        session.removeStacksFromSelection([pos]);
+      if (session.isStackSelected(stack.stack_id)) {
+        session.removeStacksFromSelection([stack]);
       } else {
-        session.addStacksToSelection([pos]);
+        session.addStacksToSelection([stack]);
       }
-    } else if (e.shiftKey && lastClickedIndex >= 0) {
-      const from = Math.min(lastClickedIndex, index);
-      const to = Math.max(lastClickedIndex, index);
-      const range = filteredStacks.slice(from, to + 1);
-      session.selectStacks(range);
+    } else if (e.shiftKey && lastClickedId) {
+      const lastIdx = flatStacks.findIndex((s) => s.stack_id === lastClickedId);
+      const curIdx = flatStacks.findIndex((s) => s.stack_id === stack.stack_id);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        const from = Math.min(lastIdx, curIdx);
+        const to = Math.max(lastIdx, curIdx);
+        session.selectStacks(flatStacks.slice(from, to + 1));
+      } else {
+        session.selectStacks([stack]);
+      }
+    } else if (session.isStackSelected(stack.stack_id) && session.selectedStacks.length === 1) {
+      session.clearStackSelection();
     } else {
-      session.selectStacks([pos]);
+      session.selectStacks([stack]);
     }
-    lastClickedIndex = index;
+    lastClickedId = stack.stack_id;
   }
 
-  function toggleStack(stack: Stack) {
-    const pos = { row: stack.row, col: stack.col };
-    if (session.isStackSelected(stack.row, stack.col)) {
-      session.removeStacksFromSelection([pos]);
+  let lastClickedId = $state<string | null>(null);
+
+  function toggleGroup(profileId: string) {
+    if (collapsedProfiles.has(profileId)) {
+      collapsedProfiles.delete(profileId);
     } else {
-      session.addStacksToSelection([pos]);
+      collapsedProfiles.add(profileId);
     }
   }
 
@@ -121,7 +159,7 @@
     () => session.selectedStacks[0],
     (first) => {
       if (!first) return;
-      const el = document.getElementById(`stack-${first.row}-${first.col}`);
+      const el = document.getElementById(`stack-${first.stack_id}`);
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   );
@@ -129,17 +167,9 @@
   // --- Clear dialog ---
 
   let clearDialogOpen = $state(false);
-  let clearMode = $state<'selected' | 'all'>('selected');
-
-  // --- Profile info ---
-
-  const activeProfile = $derived(session.config.profiles[session.activeProfileId ?? '']);
-
-  const activeProfileLabel = $derived(
-    session.activeProfileId ? (activeProfile?.label ?? sanitizeString(session.activeProfileId)) : ''
-  );
-
-  const stackCount = $derived(session.activeStacks.length);
+  let clearMode = $state<'selected' | 'profile'>('selected');
+  let clearProfileId = $state<string>('');
+  let clearProfileLabel = $derived(session.config.profiles[clearProfileId]?.label ?? sanitizeString(clearProfileId));
 
   // --- Pane sizing (pixel-based min for sidebar) ---
 
@@ -148,44 +178,27 @@
   const paneGroupSize = new ElementSize(() => paneGroupEl);
 </script>
 
-{#snippet statusIcon(status: StackStatus)}
-  {#if status === 'acquiring'}
-    <DotsSpinner width="12" height="12" class="text-(--stack-status)" />
-  {:else if status === 'completed'}
-    <Check width="12" height="12" class="text-(--stack-status)" />
-  {:else if status === 'failed'}
-    <AlertCircleOutline width="12" height="12" class="text-(--stack-status)" />
-  {:else if status === 'skipped'}
-    <Minus width="12" height="12" class="text-(--stack-status)" />
-  {:else}
-    <LucideCircle width="12" height="12" class="text-(--stack-status)" />
-  {/if}
-{/snippet}
-
-{#snippet stackRow(stack: Stack, selected: boolean, index: number)}
+{#snippet stackRow(stack: Stack, selected: boolean)}
   <div
-    id="stack-{stack.row}-{stack.col}"
+    id="stack-{stack.stack_id}"
     role="row"
     tabindex="0"
     aria-selected={selected}
     aria-label="Stack at ({(stack.x / 1000).toFixed(2)}, {(stack.y / 1000).toFixed(2)}) mm, {stack.status}"
     data-stack-status={stack.status}
     class={cn(
-      'col-span-full grid cursor-default grid-cols-subgrid items-center gap-x-3 px-3 py-1.5 text-left text-xs transition-colors',
-      'border-b border-border/50 last:border-b-0',
-      selected ? 'bg-element-selected' : 'hover:bg-element-hover'
+      'col-span-full grid cursor-default grid-cols-subgrid items-center gap-x-3 px-3 py-1.5 text-left text-xs transition-colors select-none',
+      'border-b border-border/50',
+      selected ? 'bg-element-selected/50' : 'hover:bg-element-hover/30'
     )}
-    onclick={(e) => handleRowClick(stack, index, e)}
+    onclick={(e) => handleRowClick(stack, e)}
     onkeydown={(e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        handleRowClick(stack, index, e as unknown as MouseEvent);
+        handleRowClick(stack, e as unknown as MouseEvent);
       }
     }}
   >
-    <!-- Checkbox -->
-    <Checkbox checked={selected} size="sm" onchange={() => toggleStack(stack)} />
-
     <!-- X position (mm) -->
     <span class="text-fg-muted tabular-nums">{(stack.x / 1000).toFixed(4)}</span>
     <!-- Y position (mm) -->
@@ -205,14 +218,12 @@
 
     <!-- Acquisition order -->
     {#if true}
-      {@const order = acquisitionOrder.get(`${stack.profile_id}:${stack.row},${stack.col}`)}
-      <span class="justify-self-end text-fg-faint tabular-nums">#{order ?? '?'}</span>
+      {@const order = acquisitionOrder.get(stack.stack_id)}
+      <span class="min-w-[5ch] justify-self-end text-right text-fg-faint tabular-nums">#{order ?? '?'}</span>
     {/if}
 
     <!-- Status -->
-    <span class="flex items-center justify-self-end">
-      {@render statusIcon(stack.status)}
-    </span>
+    <StackStatusIcon status={stack.status} class="justify-self-end" />
   </div>
 {/snippet}
 
@@ -222,50 +233,30 @@
     <div class="flex h-full flex-col overflow-hidden pb-2">
       <!-- List header -->
       <div class="flex items-center gap-2 border-b border-border px-3 py-2">
-        <div class="flex min-w-0 flex-1 items-center gap-2">
-          {#if activeProfile}
-            <span class="truncate text-sm text-fg">{activeProfileLabel}</span>
-            <span class="text-xs text-fg-muted">
-              {filteredStacks.length} stack{filteredStacks.length !== 1 ? 's' : ''}
-            </span>
-          {:else}
-            <span class="text-sm text-fg-muted">No active profile</span>
-          {/if}
-        </div>
-        <Button
-          variant="ghost"
-          size="xs"
-          class="shrink-0 text-fg-muted hover:bg-danger/10 hover:text-danger"
-          title="Clear all stacks for this profile"
-          disabled={stackCount < 1}
-          onclick={() => {
-            clearMode = 'all';
-            clearDialogOpen = true;
-          }}
-        >
-          <TrashCanOutline width="14" height="14" />
-          <span class="text-nowrap">Clear Stacks</span>
-        </Button>
+        <span class="text-xs text-fg-muted">
+          {totalCount} stack{totalCount !== 1 ? 's' : ''}
+        </span>
+        <div class="flex-1"></div>
         <Select
           value={filter}
           options={filterOptions}
           onchange={(v) => (filter = v as StackFilter)}
           size="xs"
           variant="ghost"
-          class="w-40 shrink-0"
+          class="w-36 shrink-0"
         />
       </div>
 
-      <!-- Scrollable stack rows -->
+      <!-- Scrollable grouped stack rows -->
       <div
         role="grid"
         aria-label="Stack list"
-        class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_1fr_auto_auto_auto] content-start overflow-y-auto"
+        class="grid flex-1 auto-rows-min grid-cols-[auto_auto_1fr_auto_auto_auto] content-start overflow-y-auto"
       >
-        {#if filteredStacks.length === 0}
+        {#if profileGroups.length === 0}
           <div class="col-span-full flex min-h-32 items-center justify-center p-4">
             <p class="text-sm text-fg-faint">
-              {#if session.activeStacks.length === 0}
+              {#if session.stacks.length === 0}
                 No stacks — add stacks from the grid
               {:else}
                 No stacks match filter
@@ -273,9 +264,41 @@
             </p>
           </div>
         {:else}
-          {#each filteredStacks as stack, i (`${stack.row},${stack.col}`)}
-            {@const selected = session.isStackSelected(stack.row, stack.col)}
-            {@render stackRow(stack, selected, i)}
+          {#each profileGroups as group (group.profileId)}
+            {@const collapsed = collapsedProfiles.has(group.profileId)}
+            <!-- Profile group header -->
+            <div class="col-span-full flex items-center gap-2 px-3 py-1.5">
+              <button
+                class="flex cursor-pointer items-center gap-1.5 bg-transparent p-0 text-xs text-fg-muted transition-colors hover:text-fg"
+                onclick={() => toggleGroup(group.profileId)}
+              >
+                {#if collapsed}
+                  <ChevronRight width="12" height="12" />
+                {:else}
+                  <ChevronDown width="12" height="12" />
+                {/if}
+                <span class={cn('font-semibold', group.isActive ? 'text-info' : 'text-fg')}>{group.label}</span>
+                <span class="text-fg-faint">({group.stacks.length})</span>
+              </button>
+              <div class="flex-1"></div>
+              <button
+                class="cursor-pointer bg-transparent p-0 text-xs text-fg-muted transition-colors hover:text-danger"
+                onclick={() => {
+                  clearMode = 'profile';
+                  clearProfileId = group.profileId;
+                  clearDialogOpen = true;
+                }}
+              >
+                Clear
+              </button>
+            </div>
+            <!-- Stack rows -->
+            {#if !collapsed}
+              {#each group.stacks as stack (stack.stack_id)}
+                {@const selected = session.isStackSelected(stack.stack_id)}
+                {@render stackRow(stack, selected)}
+              {/each}
+            {/if}
           {/each}
         {/if}
       </div>
@@ -410,6 +433,13 @@
           </div>
         {/if}
       {/if}
+
+      <!-- Stack ordering (always visible) -->
+      {#if session.stacks.length > 0}
+        <div class="@container mt-auto border-t border-border px-4 py-3">
+          <StackOrdering {session} />
+        </div>
+      {/if}
     </div>
   </Pane>
 </PaneGroup>
@@ -421,15 +451,15 @@
     <Dialog.Content>
       <Dialog.Header>
         <Dialog.Title>
-          {clearMode === 'selected' ? 'Remove selected stacks' : 'Clear all stacks'}
+          {clearMode === 'selected' ? 'Remove selected stacks' : `Clear stacks for ${clearProfileLabel}`}
         </Dialog.Title>
         <Dialog.Description>
           {#if clearMode === 'selected'}
-            Remove {selectedStacks.length} selected stack{selectedStacks.length !== 1 ? 's' : ''} for
-            <strong>{activeProfileLabel}</strong>?
+            Remove {selectedStacks.length} selected stack{selectedStacks.length !== 1 ? 's' : ''}?
           {:else}
-            Remove all {stackCount} stack{stackCount !== 1 ? 's' : ''} for
-            <strong>{activeProfileLabel}</strong>? The profile will be removed from the acquisition plan.
+            {@const count = session.stacks.filter((s) => s.profile_id === clearProfileId).length}
+            Remove all {count} stack{count !== 1 ? 's' : ''} for
+            <strong>{clearProfileLabel}</strong>?
           {/if}
         </Dialog.Description>
       </Dialog.Header>
@@ -445,7 +475,9 @@
             if (clearMode === 'selected') {
               removeSelectedStacks();
             } else {
-              session.removeStacks(session.activeStacks.map((s) => ({ row: s.row, col: s.col })));
+              session.removeStacks(
+                session.stacks.filter((s) => s.profile_id === clearProfileId).map((s) => s.stack_id)
+              );
               clearDialogOpen = false;
             }
           }}

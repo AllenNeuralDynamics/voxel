@@ -1,21 +1,23 @@
 import type { GridConfig } from './types.ts';
 
 /**
- * Tile ordering pattern (matches backend TileOrder from voxel.config)
+ * Stack ordering strategy (matches backend StackOrder from voxel.stack)
  */
-export type TileOrder = 'row_wise' | 'column_wise' | 'snake_row' | 'snake_column' | 'custom';
-
-/**
- * Interleaving mode for multi-profile acquisition (matches backend Interleaving from voxel.config)
- */
-export type Interleaving = 'position_first' | 'profile_first';
+export type StackOrder =
+  | 'sweep_row'
+  | 'sweep_column'
+  | 'snake_row'
+  | 'snake_column'
+  | 'nearest_neighbor'
+  | 'optimized'
+  | 'custom';
 
 /**
  * Global settings for acquisition planning (matches backend GlobalsConfig from voxel.config)
  */
 export interface GlobalsConfig {
   default_overlap: number;
-  default_tile_order: TileOrder;
+  default_stack_order: StackOrder;
   default_z_step: number;
 }
 

@@ -13,7 +13,6 @@
 </script>
 
 {#snippet overlapControl(session: Session, gc: GridConfig)}
-  {@const editable = session.activeStacks.length === 0 || session.gridForceUnlocked}
   {@const min = 0}
   {@const max = 0.5}
   {@const snapValue = 0.1}
@@ -37,9 +36,7 @@
       {align}
       value={gc.overlap_x}
       prefix="Overlap X"
-      disabled={!editable}
       onChange={(value) => {
-        if (!editable) return;
         session.setGridOverlap(value, overlapLinked ? value : gc!.overlap_y);
       }}
     />
@@ -72,9 +69,7 @@
       {align}
       value={gc.overlap_y}
       prefix="Overlap Y"
-      disabled={!editable}
       onChange={(value) => {
-        if (!editable) return;
         session.setGridOverlap(overlapLinked ? value : gc!.overlap_x, value);
       }}
     />
@@ -82,7 +77,6 @@
 {/snippet}
 
 {#snippet offsetControl(session: Session, gc: GridConfig)}
-  {@const editable = session.activeStacks.length === 0 || session.gridForceUnlocked}
   {@const gridLimX = (session.fov.width * (1 - (gc?.overlap_x ?? 0.1))) / 1000}
   {@const gridLimY = (session.fov.height * (1 - (gc?.overlap_y ?? 0.1))) / 1000}
   {@const snapValue = 0.0}
@@ -91,7 +85,6 @@
   {@const numCharacters = 6}
   {@const suffix = 'mm'}
   {@const align = 'right'}
-  {@const disabled = !editable}
   <div class="flex items-center gap-1.5">
     <SpinBox
       value={gc.x_offset / 1000}
@@ -106,9 +99,7 @@
       {numCharacters}
       {suffix}
       {align}
-      {disabled}
       onChange={(value) => {
-        if (!editable) return;
         const yMm = offsetLinked ? value : gc!.y_offset / 1000;
         session.setGridOffset(value * 1000, yMm * 1000);
       }}
@@ -142,9 +133,7 @@
       {numCharacters}
       {suffix}
       {align}
-      {disabled}
       onChange={(value) => {
-        if (!editable) return;
         const xMm = offsetLinked ? value : gc!.x_offset / 1000;
         session.setGridOffset(xMm * 1000, value * 1000);
       }}

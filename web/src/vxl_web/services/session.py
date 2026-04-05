@@ -19,7 +19,7 @@ from vxl import AcquisitionConfig, RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import GridConfig
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
-from vxl.tile import Stack, StackStatus, StorageConfig, Tile
+from vxl.stack import Stack, StackStatus, StorageConfig, Tile
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
@@ -153,36 +153,36 @@ class SessionService:
 
     # ==================== Acquisition ====================
 
-    def start_acquisition(self, tile_id: str | None = None) -> None:
+    def start_acquisition(self, stack_id: str | None = None) -> None:
         """Launch acquisition as a background task."""
-        if tile_id:
-            fire_and_forget(self._run_single_acquisition(tile_id), log=log)
+        if stack_id:
+            fire_and_forget(self._run_single_acquisition(stack_id), log=log)
         else:
             fire_and_forget(self._run_full_acquisition(), log=log)
 
-    async def _run_single_acquisition(self, tile_id: str) -> None:
+    async def _run_single_acquisition(self, stack_id: str) -> None:
         """Run acquisition for a single stack."""
         try:
             self.broadcast(
-                {"topic": "acq/progress", "payload": {"status": "started", "tile_id": tile_id}},
+                {"topic": "acq/progress", "payload": {"status": "started", "stack_id": stack_id}},
                 with_status=True,
             )
-            result = await self.session.acquire_stack(tile_id)
+            result = await self.session.acquire_stack(stack_id)
             self.broadcast(
                 {
                     "topic": "acq/progress",
                     "payload": {
                         "status": "completed" if result.status == StackStatus.COMPLETED else "failed",
-                        "tile_id": tile_id,
+                        "stack_id": stack_id,
                         "error": result.error_message,
                     },
                 },
                 with_status=True,
             )
         except Exception as e:
-            log.exception(f"Acquisition failed for {tile_id}")
+            log.exception(f"Acquisition failed for {stack_id}")
             self.broadcast(
-                {"topic": "acq/progress", "payload": {"status": "failed", "tile_id": tile_id, "error": str(e)}},
+                {"topic": "acq/progress", "payload": {"status": "failed", "stack_id": stack_id, "error": str(e)}},
                 with_status=True,
             )
         # Status broadcast (with_status=True) already includes stacks
@@ -200,7 +200,7 @@ class SessionService:
         completed = 0
         for stack in pending:
             try:
-                result = await self.session.acquire_stack(stack.tile_id)
+                result = await self.session.acquire_stack(stack.stack_id)
                 if result.status == StackStatus.COMPLETED:
                     completed += 1
                 self.broadcast(
@@ -208,7 +208,7 @@ class SessionService:
                         "topic": "acq/progress",
                         "payload": {
                             "status": "in_progress",
-                            "tile_id": stack.tile_id,
+                            "tile_id": stack.stack_id,
                             "total": total,
                             "completed": completed,
                         },
@@ -216,11 +216,11 @@ class SessionService:
                     with_status=True,
                 )
             except Exception as e:
-                log.exception(f"Acquisition failed for {stack.tile_id}")
+                log.exception(f"Acquisition failed for {stack.stack_id}")
                 self.broadcast(
                     {
                         "topic": "acq/progress",
-                        "payload": {"status": "failed", "tile_id": stack.tile_id, "error": str(e)},
+                        "payload": {"status": "failed", "tile_id": stack.stack_id, "error": str(e)},
                     },
                     with_status=True,
                 )

@@ -10,7 +10,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QWidget
 
-from vxl.tile import Stack, Tile
+from vxl.stack import Stack, StackOrder, Tile
 from vxl_qt.store import (
     STACK_STATUS_COLORS,
     GridStore,
@@ -46,8 +46,6 @@ from vxlib import fire_and_forget
 if TYPE_CHECKING:
     from PySide6.QtGui import QPaintEvent, QResizeEvent
 
-    from vxl.config import TileOrder
-
 log = logging.getLogger(__name__)
 
 
@@ -55,11 +53,14 @@ log = logging.getLogger(__name__)
 _STATUS_COLORS_STR = {status.value: color for status, color in STACK_STATUS_COLORS.items() if status is not None}
 
 # Tile order options for the Select widget
-TILE_ORDER_OPTIONS: list[tuple[TileOrder, str]] = [
-    ("row_wise", "Row-wise"),
-    ("column_wise", "Column-wise"),
-    ("snake_row", "Snake (Row)"),
-    ("snake_column", "Snake (Column)"),
+STACK_ORDER_OPTIONS: list[tuple[StackOrder, str]] = [
+    (StackOrder.SWEEP_ROW, "Sweep (Row)"),
+    (StackOrder.SWEEP_COLUMN, "Sweep (Column)"),
+    (StackOrder.SNAKE_ROW, "Snake (Row)"),
+    (StackOrder.SNAKE_COLUMN, "Snake (Column)"),
+    (StackOrder.NEAREST_NEIGHBOR, "Nearest Neighbor"),
+    (StackOrder.OPTIMIZED, "Optimized (NN + 2-opt)"),
+    (StackOrder.CUSTOM, "Custom"),
 ]
 
 # Filter options for the grid table
@@ -82,15 +83,15 @@ GRID_TABLE_COLUMNS: list[TableColumn] = [
         header="Position",
         width=None,  # Stretch to fill available space
         min_width=100,
-        getter=lambda t, _s: f"{t.x_um / 1000:.2f}, {t.y_um / 1000:.2f}",
+        getter=lambda t, _s: f"{t.x / 1000:.2f}, {t.y / 1000:.2f}",
     ),
     TableColumn(
         key="z_start",
         header="Z Start",
         column_type=ColumnType.SPINBOX,
         width=90,
-        getter=lambda _t, s: int(s.z_start_um) if s else 0,
-        setter=lambda t, _s, v: {"row": t.row, "col": t.col, "z_start_um": v},
+        getter=lambda _t, s: int(s.z_start) if s else 0,
+        setter=lambda _t, s, v: {"stack_id": s.stack_id, "z_start": v} if s else {},
         editable=lambda _t, s: s is not None,
         suffix=" µm",
         min_val=-100000,
@@ -102,8 +103,8 @@ GRID_TABLE_COLUMNS: list[TableColumn] = [
         header="Z End",
         column_type=ColumnType.SPINBOX,
         width=90,
-        getter=lambda _t, s: int(s.z_end_um) if s else 0,
-        setter=lambda t, _s, v: {"row": t.row, "col": t.col, "z_end_um": v},
+        getter=lambda _t, s: int(s.z_end) if s else 0,
+        setter=lambda _t, s, v: {"stack_id": s.stack_id, "z_end": v} if s else {},
         editable=lambda _t, s: s is not None,
         suffix=" µm",
         min_val=-100000,
@@ -150,14 +151,14 @@ class GridTableModel(TableModel[Tile, Stack | None]):
         """Get tiles, optionally filtered."""
         tiles = self._store.tiles
         if self._filter_mode == "with_stack":
-            return [t for t in tiles if self._store.get_stack_at(t.row, t.col)]
+            return [t for t in tiles if self._store.get_stack_at_position(t.x, t.y)]
         if self._filter_mode == "without_stack":
-            return [t for t in tiles if not self._store.get_stack_at(t.row, t.col)]
+            return [t for t in tiles if not self._store.get_stack_at_position(t.x, t.y)]
         return tiles
 
     def _get_aux_data(self, row_data: Tile) -> Stack | None:
         """Get stack for a tile."""
-        return self._store.get_stack_at(row_data.row, row_data.col)
+        return self._store.get_stack_at_position(row_data.x, row_data.y)
 
     def _on_edit(self, row_data: Tile, aux_data: Stack | None, column: TableColumn, value: Any) -> None:
         """Handle inline editing."""
@@ -218,9 +219,11 @@ class GridTable(QWidget):
     def delete_selected(self) -> None:
         """Delete stacks for all selected tiles."""
         tiles = self.get_selected_tiles()
-        positions = [{"row": t.row, "col": t.col} for t in tiles]
-        if positions:
-            self._store.remove_stacks(positions)
+        stack_ids = [
+            s.stack_id for t in tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None
+        ]
+        if stack_ids:
+            self._store.remove_stacks(stack_ids)
             self._table.clear_selection()
 
     def clear_selection(self) -> None:
@@ -320,7 +323,7 @@ class ZRangeEditor(PropertyEditor):
 
     def _update_slices_display(self) -> None:
         """Update the slices count based on current Z values."""
-        z_step = self._store.grid_config.z_step_um
+        z_step = self._store.grid_config.z_step
         if z_step > 0:
             z_range = abs(self._z_end_spin.value() - self._z_start_spin.value())
             slices = int(z_range / z_step) + 1
@@ -330,8 +333,8 @@ class ZRangeEditor(PropertyEditor):
         """Load Z range from tile's stack."""
         self._updating = True
         if _stack:
-            self._z_start_spin.setValue(int(_stack.z_start_um))
-            self._z_end_spin.setValue(int(_stack.z_end_um))
+            self._z_start_spin.setValue(int(_stack.z_start))
+            self._z_end_spin.setValue(int(_stack.z_end))
             self._slices_label.setText(str(_stack.num_frames))
         else:
             self.load_defaults()
@@ -341,8 +344,8 @@ class ZRangeEditor(PropertyEditor):
         """Load default Z range from grid config."""
         self._updating = True
         config = self._store.grid_config
-        self._z_start_spin.setValue(int(config.default_z_start_um))
-        self._z_end_spin.setValue(int(config.default_z_end_um))
+        self._z_start_spin.setValue(int(config.default_z_start))
+        self._z_end_spin.setValue(int(config.default_z_end))
         self._update_slices_display()
         self._updating = False
 
@@ -354,18 +357,20 @@ class ZRangeEditor(PropertyEditor):
         """Apply Z range to all given tiles."""
         z_start, z_end = self.get_values()
 
-        tiles_with_stacks = [t for t in _tiles if self._store.get_stack_at(t.row, t.col)]
-        tiles_without_stacks = [t for t in _tiles if not self._store.get_stack_at(t.row, t.col)]
+        tiles_with_stacks = [
+            (t, s) for t in _tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None
+        ]
+        tiles_without_stacks = [t for t in _tiles if self._store.get_stack_at_position(t.x, t.y) is None]
 
         if tiles_with_stacks:
             edit_dicts = [
-                {"row": t.row, "col": t.col, "z_start_um": z_start, "z_end_um": z_end} for t in tiles_with_stacks
+                {"stack_id": s.stack_id, "z_start": z_start, "z_end": z_end} for _t, s in tiles_with_stacks
             ]
             self._store.edit_stacks(edit_dicts)
 
         if tiles_without_stacks:
             add_dicts = [
-                {"row": t.row, "col": t.col, "z_start_um": z_start, "z_end_um": z_end} for t in tiles_without_stacks
+                {"x": t.x, "y": t.y, "z_start": z_start, "z_end": z_end} for t in tiles_without_stacks
             ]
             fire_and_forget(self._store.add_stacks(add_dicts), log=log)
 
@@ -566,7 +571,7 @@ class SelectionEditor(QWidget):
             row, col = self._store.selected_row, self._store.selected_col
             tile = self._store.get_selected_tile()
 
-        stack = self._store.get_stack_at(row, col) if tile else None
+        stack = self._store.get_stack_at_position(tile.x, tile.y) if tile else None
 
         # Update header
         self._header_label.setText(f"R{row}, C{col}")
@@ -592,7 +597,7 @@ class SelectionEditor(QWidget):
 
         # Update position
         if tile:
-            self._pos_label.setText(f"Position: {tile.x_um / 1000:.2f}, {tile.y_um / 1000:.2f} mm")
+            self._pos_label.setText(f"Position: {tile.x / 1000:.2f}, {tile.y / 1000:.2f} mm")
         else:
             self._pos_label.setText("Position: —")
 
@@ -671,12 +676,11 @@ class SelectionEditor(QWidget):
             self.delete_requested.emit(self._tiles)
         else:
             # Single tile delete
-            if self._tiles:
-                tile = self._tiles[0]
-                row, col = tile.row, tile.col
-            else:
-                row, col = self._store.selected_row, self._store.selected_col
-            self._store.remove_stacks([{"row": row, "col": col}])
+            tile = self._tiles[0] if self._tiles else self._store.get_selected_tile()
+            if tile:
+                stack = self._store.get_stack_at_position(tile.x, tile.y)
+                if stack:
+                    self._store.remove_stacks([stack.stack_id])
 
 
 class GridSettingsSection(QWidget):
@@ -735,7 +739,7 @@ class GridSettingsSection(QWidget):
 
         self._z_step_label = Text.muted("1.0 µm")
 
-        self._order_select = Select(options=TILE_ORDER_OPTIONS, value="snake_row", size=ControlSize.SM)
+        self._order_select = Select(options=STACK_ORDER_OPTIONS, value=StackOrder.SNAKE_ROW, size=ControlSize.SM)
 
         form = (
             GridFormBuilder(columns=2, spacing=Spacing.SM)
@@ -768,12 +772,12 @@ class GridSettingsSection(QWidget):
         self._overlap_y_spin.blockSignals(True)
         self._order_select.blockSignals(True)
 
-        self._offset_x_spin.setValue(config.x_offset_um / 1000)
-        self._offset_y_spin.setValue(config.y_offset_um / 1000)
+        self._offset_x_spin.setValue(config.x_offset / 1000)
+        self._offset_y_spin.setValue(config.y_offset / 1000)
         self._overlap_x_spin.setValue(config.overlap_x)
         self._overlap_y_spin.setValue(config.overlap_y)
-        self._z_step_label.setText(f"{config.z_step_um:.1f} µm")
-        self._order_select.set_value(self._store.tile_order)
+        self._z_step_label.setText(f"{config.z_step:.1f} µm")
+        self._order_select.set_value(self._store.stack_order)
 
         self._offset_x_spin.blockSignals(False)
         self._offset_y_spin.blockSignals(False)
@@ -842,9 +846,9 @@ class GridSettingsSection(QWidget):
             self._overlap_y_spin.blockSignals(False)
             fire_and_forget(self._store.set_overlap(x, x), log=log)
 
-    def _on_order_changed(self, order: TileOrder) -> None:
-        """Handle tile order change."""
-        self._store.set_tile_order(order)
+    def _on_order_changed(self, order: StackOrder) -> None:
+        """Handle stack order change."""
+        self._store.set_stack_order(order)
 
 
 # =============================================================================
@@ -1140,10 +1144,10 @@ class _StageCanvas(QWidget):
 
     def _paint_stacks(self, painter: QPainter, stacks: list[Stack]) -> None:
         for stack in stacks:
-            cx = self._to_mm(stack.x_um)
-            cy = self._to_mm(stack.y_um)
-            w = self._to_mm(stack.w_um)
-            h = self._to_mm(stack.h_um)
+            cx = self._to_mm(stack.x)
+            cy = self._to_mm(stack.y)
+            w = self._to_mm(stack.w)
+            h = self._to_mm(stack.h)
             x = cx - w / 2
             y = cy - h / 2
             rect = QRectF(x, y, w, h)
@@ -1151,8 +1155,14 @@ class _StageCanvas(QWidget):
             color_hex = get_stack_status_color(stack.status)
             color = QColor(color_hex)
 
-            # Check hover
-            is_hovered = self._hovered_tile == (stack.row, stack.col)
+            # Check hover — match by position
+            is_hovered = False
+            if self._hovered_tile is not None:
+                hr, hc = self._hovered_tile
+                for tile in self._grid.tiles:
+                    if tile.row == hr and tile.col == hc:
+                        is_hovered = abs(tile.x - stack.x) < 0.1 and abs(tile.y - stack.y) < 0.1
+                        break
 
             # Fill with alpha
             fill_color = QColor(color)
@@ -1168,7 +1178,7 @@ class _StageCanvas(QWidget):
             painter.drawRect(rect)
 
     def _paint_path(self, painter: QPainter, stacks: list[Stack]) -> None:
-        points = [QPointF(self._to_mm(s.x_um), self._to_mm(s.y_um)) for s in stacks]
+        points = [QPointF(self._to_mm(s.x), self._to_mm(s.y)) for s in stacks]
 
         # Polyline
         pen = QPen(QColor(_FUCHSIA))
@@ -1269,10 +1279,10 @@ class _StageCanvas(QWidget):
             self._paint_tile(painter, selected_tile, selected=True)
 
     def _paint_tile(self, painter: QPainter, tile: Tile, *, selected: bool) -> None:
-        cx = self._to_mm(tile.x_um)
-        cy = self._to_mm(tile.y_um)
-        w = self._to_mm(tile.w_um)
-        h = self._to_mm(tile.h_um)
+        cx = self._to_mm(tile.x)
+        cy = self._to_mm(tile.y)
+        w = self._to_mm(tile.w)
+        h = self._to_mm(tile.h)
         x = cx - w / 2
         y = cy - h / 2
         rect = QRectF(x, y, w, h)
@@ -1303,10 +1313,10 @@ class _StageCanvas(QWidget):
         wx, wy = world.x(), world.y()
 
         for tile in self._grid.tiles:
-            cx = self._to_mm(tile.x_um)
-            cy = self._to_mm(tile.y_um)
-            w = self._to_mm(tile.w_um)
-            h = self._to_mm(tile.h_um)
+            cx = self._to_mm(tile.x)
+            cy = self._to_mm(tile.y)
+            w = self._to_mm(tile.w)
+            h = self._to_mm(tile.h)
             if cx - w / 2 <= wx <= cx + w / 2 and cy - h / 2 <= wy <= cy + h / 2:
                 return (tile.row, tile.col)
         return None
@@ -1371,8 +1381,8 @@ class _ZVisualization(QWidget):
             pen.setWidthF(2)
             painter.setPen(pen)
 
-            z0_mm = selected_stack.z_start_um / 1000.0
-            z1_mm = selected_stack.z_end_um / 1000.0
+            z0_mm = selected_stack.z_start / 1000.0
+            z1_mm = selected_stack.z_end / 1000.0
             y0 = self._z_to_y(z0_mm)
             y1 = self._z_to_y(z1_mm)
             painter.drawLine(QPointF(0, y0), QPointF(w, y0))
@@ -1730,8 +1740,8 @@ class GridCanvas(QWidget):
             return
         for tile in self._grid.tiles:
             if tile.row == row and tile.col == col:
-                target_x = self._stage.x.lower_limit + tile.x_um / 1000.0
-                target_y = self._stage.y.lower_limit + tile.y_um / 1000.0
+                target_x = self._stage.x.lower_limit + tile.x / 1000.0
+                target_y = self._stage.y.lower_limit + tile.y / 1000.0
                 target_x = max(self._stage.x.lower_limit, min(self._stage.x.upper_limit, target_x))
                 target_y = max(self._stage.y.lower_limit, min(self._stage.y.upper_limit, target_y))
                 if self._stage.x_adapter:
@@ -1813,7 +1823,9 @@ class GridPanel(QWidget):
 
     def _on_delete_requested(self, tiles: list[Tile]) -> None:
         """Handle delete request from editor."""
-        positions = [{"row": t.row, "col": t.col} for t in tiles]
-        if positions:
-            self._store.remove_stacks(positions)
+        stack_ids = [
+            s.stack_id for t in tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None
+        ]
+        if stack_ids:
+            self._store.remove_stacks(stack_ids)
             self._grid_table.clear_selection()

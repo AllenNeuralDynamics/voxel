@@ -6,7 +6,7 @@ from .session import (
     Session,
     SessionConfig,
 )
-from .tile import BatchResult, ChannelResult, Stack, StackResult, StackStatus, StorageConfig, Tile
+from .stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus, StorageConfig, Tile
 
 __all__ = [
     "AcquisitionConfig",

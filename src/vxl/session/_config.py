@@ -6,9 +6,9 @@ from typing import Any
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
-from vxl.config import Interleaving, TileOrder, VoxelRigConfig
+from vxl.config import VoxelRigConfig
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
-from vxl.tile import Stack, StorageConfig
+from vxl.stack import Stack, StackOrder, StorageConfig
 
 # Round-trip YAML preserves anchors, aliases, and comments
 yaml = YAML()
@@ -16,15 +16,15 @@ yaml.preserve_quotes = True  # type: ignore[assignment]
 
 
 class AcquisitionConfig(BaseModel):
-    """Acquisition configuration: profile ordering and tile ordering.
+    """Acquisition configuration: stack ordering and profile management.
 
     Profile membership is implicit: add_stacks auto-adds a profile to
     profile_order, removing the last stack auto-removes it.
     """
 
     profile_order: list[str] = Field(default_factory=list)
-    tile_order: TileOrder = "row_wise"
-    interleaving: Interleaving = "position_first"
+    stack_order: StackOrder = StackOrder.SNAKE_ROW
+    sort_by_profile: bool = False
 
     def has_profile(self, profile_id: str) -> bool:
         """Check if a profile is in the plan."""
@@ -108,7 +108,7 @@ class SessionConfig(BaseModel):
 
         rig = VoxelRigConfig.model_validate(rig_data)
 
-        acq = AcquisitionConfig(tile_order=rig.globals.default_tile_order)
+        acq = AcquisitionConfig(stack_order=StackOrder(rig.globals.default_stack_order))
         storage = StorageConfig(store_path=session_dir / "data")
         config = cls(
             rig=rig,

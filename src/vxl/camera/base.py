@@ -19,7 +19,7 @@ from vxlib.vec import IVec2D, Vec2D
 from rigup import Device, describe
 from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
 from vxl.device import DeviceType
-from vxl.tile import BatchResult, Stack, StorageConfig
+from vxl.stack import BatchResult, Stack, StorageConfig
 from vxlib import Dtype, SchemaModel, fire_and_forget
 
 log = logging.getLogger(__name__)
@@ -449,7 +449,7 @@ class CameraController(DeviceController[Camera]):
         # Build WriterConfig from device properties + stack + storage
         frame_size = self.device.frame_size_px
         cfg = WriterConfig.create(
-            name=stack.tile_id,
+            name=stack.stack_id,
             num_frames=stack.num_frames,
             frame_height=frame_size.y,
             frame_width=frame_size.x,
@@ -467,7 +467,7 @@ class CameraController(DeviceController[Camera]):
         backend_cls = LogBackend  # TensorStoreBackend
         backend = backend_cls(cfg, storage_root=store_path, channel_index=channel_index, num_channels=num_channels)
         self._writer = OMEZarrWriter(backend, channel_index=channel_index)
-        log.info("Stack initialized for %s: %s ch=%d", self.device.uid, stack.tile_id, channel_index)
+        log.info("Stack initialized for %s: %s ch=%d", self.device.uid, stack.stack_id, channel_index)
 
     @describe(label="Finalize Stack")
     async def finalize_stack(self) -> None:

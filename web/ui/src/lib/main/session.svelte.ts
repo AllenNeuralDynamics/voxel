@@ -6,13 +6,12 @@ import type {
   AppStatus,
   AcquisitionConfig,
   GridConfig,
-  Interleaving,
   SessionInfo,
   StorageConfig,
   Tile,
   Stack,
   StackStatus,
-  TileOrder,
+  StackOrder,
   RigMode,
   VoxelRigConfig
 } from './types';
@@ -44,8 +43,8 @@ export class Session {
   acq = $derived<AcquisitionConfig>(
     this.#appStatus?.session?.acq ?? {
       profile_order: [],
-      tile_order: 'row_wise',
-      interleaving: 'position_first'
+      stack_order: 'snake_row',
+      sort_by_profile: false
     }
   );
   storage = $derived<StorageConfig>(
@@ -63,8 +62,8 @@ export class Session {
   tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
   stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
   activeStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id === this.activeProfileId));
-  tileOrder = $derived<TileOrder>(this.acq.tile_order);
-  interleaving = $derived<Interleaving>(this.acq.interleaving);
+  stackOrder = $derived<StackOrder>(this.acq.stack_order);
+  sortByProfile = $derived<boolean>(this.acq.sort_by_profile);
   mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
   metadata = $derived<Record<string, unknown>>(this.#appStatus?.session?.metadata ?? {});
 
@@ -87,18 +86,11 @@ export class Session {
 
   readonly snaps = new SnapshotStore();
 
-  // ── Grid lock ────────────────────────────────────────────
-
-  gridForceUnlocked = $state(false);
-  gridEditable = $derived(this.activeStacks.length === 0 || this.gridForceUnlocked);
-
   // ── Internal ────────────────────────────────────────────
 
   #unsubscribers: Array<() => void> = [];
-  #selectedStackKeys = new SvelteSet<string>();
-  selectedStacks = $derived<Stack[]>(
-    this.activeStacks.filter((s) => this.#selectedStackKeys.has(`${s.row},${s.col}`))
-  );
+  #selectedStackIds = new SvelteSet<string>();
+  selectedStacks = $derived<Stack[]>(this.activeStacks.filter((s) => this.#selectedStackIds.has(s.stack_id)));
 
   constructor(init: SessionInit) {
     this.client = init.client;
@@ -219,7 +211,6 @@ export class Session {
   async activateProfile(profileId: string): Promise<void> {
     if (!profileId || profileId === this.activeProfileId) return;
 
-    this.gridForceUnlocked = false;
     this.isSwitchingProfile = true;
 
     try {
@@ -382,8 +373,7 @@ export class Session {
     try {
       await this.#rest('PATCH', '/acq/grid', {
         x_offset: xOffsetUm,
-        y_offset: yOffsetUm,
-        force: this.gridForceUnlocked
+        y_offset: yOffsetUm
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to set grid offset');
@@ -407,8 +397,7 @@ export class Session {
     try {
       await this.#rest('PATCH', '/acq/grid', {
         overlap_x: overlapX,
-        overlap_y: overlapY,
-        force: this.gridForceUnlocked
+        overlap_y: overlapY
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to set grid overlap');
@@ -426,21 +415,21 @@ export class Session {
     }
   }
 
-  async setTileOrder(order: TileOrder): Promise<void> {
+  async setStackOrder(order: StackOrder): Promise<void> {
     try {
-      await this.#rest('PUT', '/acq/tile-order', { tile_order: order });
+      await this.#rest('PUT', '/acq/stack-order', { stack_order: order });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to set tile order');
+      toast.error(error instanceof Error ? error.message : 'Failed to set stack order');
     }
   }
 
   // --- Acquisition Plan ---
 
-  async setInterleaving(interleaving: Interleaving): Promise<void> {
+  async setSortByProfile(sortByProfile: boolean): Promise<void> {
     try {
-      await this.#rest('PUT', '/acq/interleaving', { interleaving });
+      await this.#rest('PUT', '/acq/sort-by-profile', { sort_by_profile: sortByProfile });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to set interleaving');
+      toast.error(error instanceof Error ? error.message : 'Failed to set sort by profile');
     }
   }
 
@@ -452,9 +441,9 @@ export class Session {
     }
   }
 
-  async startAcquisition(tileId?: string): Promise<void> {
+  async startAcquisition(stackId?: string): Promise<void> {
     try {
-      const path = tileId ? `/acq/start/${tileId}` : '/acq/start';
+      const path = stackId ? `/acq/start/${stackId}` : '/acq/start';
       await this.#rest('POST', path);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to start acquisition');
@@ -497,13 +486,12 @@ export class Session {
 
   // --- Stacks ---
 
-  async addStacks(stacks: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): Promise<void> {
-    this.gridForceUnlocked = false;
+  async addStacks(stacks: Array<{ x: number; y: number; zStartUm: number; zEndUm: number }>): Promise<void> {
     try {
       await this.#rest('POST', '/acq/stacks', {
         stacks: stacks.map((s) => ({
-          row: s.row,
-          col: s.col,
+          x: s.x,
+          y: s.y,
           z_start: s.zStartUm,
           z_end: s.zEndUm
         }))
@@ -513,14 +501,17 @@ export class Session {
     }
   }
 
-  async editStacks(edits: Array<{ row: number; col: number; zStartUm: number; zEndUm: number }>): Promise<void> {
+  async editStacks(
+    edits: Array<{ stackId: string; x?: number; y?: number; zStartUm?: number; zEndUm?: number }>
+  ): Promise<void> {
     try {
       await this.#rest('PATCH', '/acq/stacks', {
         edits: edits.map((e) => ({
-          row: e.row,
-          col: e.col,
-          z_start: e.zStartUm,
-          z_end: e.zEndUm
+          stack_id: e.stackId,
+          ...(e.x !== undefined && { x: e.x }),
+          ...(e.y !== undefined && { y: e.y }),
+          ...(e.zStartUm !== undefined && { z_start: e.zStartUm }),
+          ...(e.zEndUm !== undefined && { z_end: e.zEndUm })
         }))
       });
     } catch (error) {
@@ -528,10 +519,9 @@ export class Session {
     }
   }
 
-  async removeStacks(positions: Array<{ row: number; col: number }>): Promise<void> {
-    this.gridForceUnlocked = false;
+  async removeStacks(stackIds: string[]): Promise<void> {
     try {
-      await this.#rest('DELETE', '/acq/stacks', { positions });
+      await this.#rest('DELETE', '/acq/stacks', { stack_ids: stackIds });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove stacks');
     }
@@ -539,31 +529,31 @@ export class Session {
 
   // --- Stack Selection ---
 
-  isStackSelected(row: number, col: number): boolean {
-    return this.#selectedStackKeys.has(`${row},${col}`);
+  isStackSelected(stackId: string): boolean {
+    return this.#selectedStackIds.has(stackId);
   }
 
-  selectStacks(positions: Array<{ row: number; col: number }>): void {
-    this.#selectedStackKeys.clear();
-    for (const { row, col } of positions) {
-      this.#selectedStackKeys.add(`${row},${col}`);
+  selectStacks(stacks: Array<{ stack_id: string }>): void {
+    this.#selectedStackIds.clear();
+    for (const s of stacks) {
+      this.#selectedStackIds.add(s.stack_id);
     }
   }
 
-  addStacksToSelection(positions: Array<{ row: number; col: number }>): void {
-    for (const { row, col } of positions) {
-      this.#selectedStackKeys.add(`${row},${col}`);
+  addStacksToSelection(stacks: Array<{ stack_id: string }>): void {
+    for (const s of stacks) {
+      this.#selectedStackIds.add(s.stack_id);
     }
   }
 
-  removeStacksFromSelection(positions: Array<{ row: number; col: number }>): void {
-    for (const { row, col } of positions) {
-      this.#selectedStackKeys.delete(`${row},${col}`);
+  removeStacksFromSelection(stacks: Array<{ stack_id: string }>): void {
+    for (const s of stacks) {
+      this.#selectedStackIds.delete(s.stack_id);
     }
   }
 
   clearStackSelection(): void {
-    this.#selectedStackKeys.clear();
+    this.#selectedStackIds.clear();
   }
 
   selectAllStacks(): void {
@@ -574,9 +564,10 @@ export class Session {
     this.selectStacks(this.activeStacks.filter((s) => s.status === status));
   }
 
-  getStack(row: number, col: number, profileId?: string | null): Stack | undefined {
+  /** Find a stack near the given position (within 0.1 µm tolerance). */
+  getStackAtPosition(x: number, y: number, profileId?: string | null): Stack | undefined {
     const pid = profileId ?? this.activeProfileId;
-    return this.stacks.find((s) => s.row === row && s.col === col && s.profile_id === pid);
+    return this.stacks.find((s) => s.profile_id === pid && Math.abs(s.x - x) < 0.1 && Math.abs(s.y - y) < 0.1);
   }
 
   // --- Geometry ---

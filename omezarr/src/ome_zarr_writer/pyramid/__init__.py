@@ -22,13 +22,13 @@ pyramids_3d: Callable[[np.ndarray, ScaleLevel], dict[ScaleLevel, np.ndarray]] = 
 # On macOS, TBB can be installed via brew but numba needs the Python tbb package.
 try:
     os.environ.setdefault("NUMBA_THREADING_LAYER", "tbb")
-    from ._numba import pyramids_2d as _pyramids_2d_numba
-    from ._numba import pyramids_3d as _pyramids_3d_numba
-
     # Verify numba can actually launch its threading layer.
     # This triggers JIT compilation of a trivial parallel function, which will
     # raise ValueError if no thread-safe backend (TBB) is available.
     from numba import jit, prange
+
+    from ._numba import pyramids_2d as _pyramids_2d_numba
+    from ._numba import pyramids_3d as _pyramids_3d_numba
 
     @jit(nopython=True, parallel=True, cache=False)
     def _test_threading():

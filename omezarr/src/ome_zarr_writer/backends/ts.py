@@ -3,7 +3,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-
 import numpy as np
 import pydantic_tensorstore as pts
 import tensorstore as ts

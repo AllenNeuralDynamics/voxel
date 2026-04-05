@@ -20,8 +20,8 @@ from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
+from vxl.stack import ChannelResult, Stack, StackResult, StackStatus, StorageConfig
 from vxl.sync import SyncTask
-from vxl.tile import ChannelResult, Stack, StackResult, StackStatus, StorageConfig
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
 
@@ -842,7 +842,7 @@ class VoxelRig(Rig):
             self._mode = RigMode.IDLE
 
             return StackResult(
-                tile_id=stack.tile_id,
+                stack_id=stack.stack_id,
                 status=StackStatus.COMPLETED,
                 output_dir=storage.store_path,
                 channels=channels,
@@ -862,7 +862,7 @@ class VoxelRig(Rig):
             with suppress(Exception):
                 await self.scanning_axis.reset_ttl_stepper()
             return StackResult(
-                tile_id=stack.tile_id,
+                stack_id=stack.stack_id,
                 status=StackStatus.FAILED,
                 output_dir=storage.store_path,
                 channels={},

@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel
 
-from vxl.config import GridConfig, Interleaving, TileOrder
+from vxl.config import GridConfig
+from vxl.stack import StackOrder
 
 from .session import SessionService, get_session_service
 
@@ -23,16 +24,16 @@ log = logging.getLogger(__name__)
 # ==================== Request Models ====================
 
 
-class TileOrderRequest(BaseModel):
-    """Request model for setting tile order."""
+class StackOrderRequest(BaseModel):
+    """Request model for setting stack order."""
 
-    tile_order: TileOrder
+    stack_order: StackOrder
 
 
-class InterleavingRequest(BaseModel):
-    """Request model for setting interleaving mode."""
+class SortByProfileRequest(BaseModel):
+    """Request model for setting sort-by-profile mode."""
 
-    interleaving: Interleaving
+    sort_by_profile: bool
 
 
 class ReorderProfilesRequest(BaseModel):
@@ -50,14 +51,13 @@ class GridUpdateRequest(BaseModel):
     overlap_y: float | None = None
     default_z_start: float | None = None
     default_z_end: float | None = None
-    force: bool = False
 
 
 class StackInput(BaseModel):
     """Input model for a single stack. All positions in µm."""
 
-    row: int
-    col: int
+    x: float
+    y: float
     z_start: float
     z_end: float
 
@@ -71,8 +71,9 @@ class AddStacksRequest(BaseModel):
 class StackEditInput(BaseModel):
     """Input model for editing a single stack. All positions in µm."""
 
-    row: int
-    col: int
+    stack_id: str
+    x: float | None = None
+    y: float | None = None
     z_start: float | None = None
     z_end: float | None = None
 
@@ -83,17 +84,10 @@ class EditStacksRequest(BaseModel):
     edits: list[StackEditInput]
 
 
-class StackPosition(BaseModel):
-    """Position identifier for a stack."""
-
-    row: int
-    col: int
-
-
 class RemoveStacksRequest(BaseModel):
     """Request model for removing stacks (bulk)."""
 
-    positions: list[StackPosition]
+    stack_ids: list[str]
 
 
 class StorageSettingsRequest(BaseModel):
@@ -167,19 +161,19 @@ async def start_acquisition(
     return {"status": "started", "pending": len(pending)}
 
 
-@acq_router.post("/start/{tile_id}")
+@acq_router.post("/start/{stack_id}")
 async def start_stack_acquisition(
-    tile_id: str,
+    stack_id: str,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Start acquisition for a single stack."""
-    stack = next((s for s in service.session.stacks if s.tile_id == tile_id), None)
+    stack = next((s for s in service.session.stacks if s.stack_id == stack_id), None)
     if stack is None:
-        raise HTTPException(status_code=404, detail=f"Stack {tile_id} not found")
+        raise HTTPException(status_code=404, detail=f"Stack {stack_id} not found")
     if stack.status != "planned":
-        raise HTTPException(status_code=400, detail=f"Stack {tile_id} has status {stack.status}, expected planned")
-    service.start_acquisition(tile_id)
-    return {"status": "started", "tile_id": tile_id}
+        raise HTTPException(status_code=400, detail=f"Stack {stack_id} has status {stack.status}, expected planned")
+    service.start_acquisition(stack_id)
+    return {"status": "started", "stack_id": stack_id}
 
 
 @acq_router.post("/stop")
@@ -194,26 +188,26 @@ async def stop_acquisition(
 # ==================== Ordering Endpoints ====================
 
 
-@acq_router.put("/tile-order")
-async def set_tile_order(
-    request: TileOrderRequest,
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict[str, TileOrder]:
-    """Set tile acquisition order."""
-    service.session.set_tile_order(request.tile_order)
-    service.broadcast({}, with_status=True)
-    return {"tile_order": service.session.tile_order}
-
-
-@acq_router.put("/interleaving")
-async def set_interleaving(
-    request: InterleavingRequest,
+@acq_router.put("/stack-order")
+async def set_stack_order(
+    request: StackOrderRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict[str, str]:
-    """Set interleaving mode."""
-    service.session.set_interleaving(request.interleaving)
+    """Set stack ordering strategy."""
+    service.session.set_stack_order(request.stack_order)
     service.broadcast({}, with_status=True)
-    return {"interleaving": request.interleaving}
+    return {"stack_order": service.session.stack_order}
+
+
+@acq_router.put("/sort-by-profile")
+async def set_sort_by_profile(
+    request: SortByProfileRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict[str, bool]:
+    """Set sort-by-profile mode."""
+    service.session.set_sort_by_profile(request.sort_by_profile)
+    service.broadcast({}, with_status=True)
+    return {"sort_by_profile": request.sort_by_profile}
 
 
 @acq_router.put("/profiles/reorder")
@@ -247,9 +241,9 @@ async def update_grid(
     """Update grid configuration for the active profile."""
     try:
         if request.x_offset is not None and request.y_offset is not None:
-            service.session.set_grid_offset(request.x_offset, request.y_offset, force=request.force)
+            service.session.set_grid_offset(request.x_offset, request.y_offset)
         if request.overlap_x is not None and request.overlap_y is not None:
-            service.session.set_overlap(request.overlap_x, request.overlap_y, force=request.force)
+            service.session.set_overlap(request.overlap_x, request.overlap_y)
         if request.default_z_start is not None and request.default_z_end is not None:
             service.session.set_default_z_range(request.default_z_start, request.default_z_end)
 
@@ -312,8 +306,8 @@ async def remove_stacks(
 ) -> dict:
     """Remove stacks (bulk)."""
     try:
-        service.session.remove_stacks([p.model_dump() for p in request.positions])
+        service.session.remove_stacks(request.stack_ids)
         service.broadcast({}, with_status=True)
-        return {"removed": len(request.positions)}
+        return {"removed": len(request.stack_ids)}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

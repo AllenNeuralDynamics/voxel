@@ -107,7 +107,7 @@ nodes:
 
 globals:
   default_overlap: 0.1
-  default_tile_order: snake_row
+  default_stack_order: snake_row
 
 stage:
   x: x_axis

@@ -118,7 +118,7 @@
     </div>
 
     <!-- Toggle -->
-    <Switch class="shrink-0" checked={laser.isEnabled} onCheckedChange={() => laser.toggle()} />
+    <Switch class="shrink-0" checked={laser.isEnabled} onCheckedChange={() => laser.toggle()} size="xs" />
   </button>
 {/snippet}
 
