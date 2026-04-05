@@ -76,11 +76,15 @@
   // FOV position relative to stage origin (lower limits)
   let fovX = $derived(session.stage.x ? session.stage.x.position - session.stage.x.lowerLimit : 0);
   let fovY = $derived(session.stage.y ? session.stage.y.position - session.stage.y.lowerLimit : 0);
-  // ViewBox: stage bounds + one FOV of margin on each side
-  let marginX = $derived(session.fov.width / 2);
-  let marginY = $derived(session.fov.height / 2);
-  let viewBoxWidth = $derived(session.stage.width + session.fov.width);
-  let viewBoxHeight = $derived(session.stage.height + session.fov.height);
+  // ViewBox: stage bounds + margin to fit current FOV and any existing stacks
+  let marginX = $derived(
+    Math.max(session.fov.width / 2, ...session.stacks.map((s) => s.w / 2))
+  );
+  let marginY = $derived(
+    Math.max(session.fov.height / 2, ...session.stacks.map((s) => s.h / 2))
+  );
+  let viewBoxWidth = $derived(session.stage.width + marginX * 2);
+  let viewBoxHeight = $derived(session.stage.height + marginY * 2);
   let viewBoxStr = $derived(`${-marginX} ${-marginY} ${viewBoxWidth} ${viewBoxHeight}`);
 
   // ── Canvas sizing ────────────────────────────────────────────────────
