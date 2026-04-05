@@ -39,7 +39,7 @@
     <p class="text-sm text-fg-muted">No auxiliary devices in profile</p>
   </div>
 {:else}
-  <div class={cn('grid grid-cols-[repeat(auto-fill,minmax(24rem,1fr))] items-start gap-3', className)}>
+  <div class={cn('grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] items-start gap-3', className)}>
     {#each devices as { id: deviceId } (deviceId)}
       {@const device = session.devices.getDevice(deviceId)}
       {@const savedProps = profile.props?.[deviceId]}
@@ -56,7 +56,7 @@
       {@const hasContent = rwProperties.length > 0 || (savedProps != null && Object.keys(savedProps).length > 0)}
 
       {#if hasContent}
-        <div class="rounded-lg border border-border p-3">
+        <div class="rounded-lg border border-border bg-panel p-3">
           <!-- Card header -->
           <div class="mb-2.5 flex items-center justify-between">
             <span class="text-sm font-medium text-fg">{sanitizeString(deviceId)}</span>

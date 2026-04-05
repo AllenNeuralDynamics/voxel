@@ -213,15 +213,17 @@
       savedRoi.y !== camera.roi.y ||
       savedRoi.w !== camera.roi.w ||
       savedRoi.h !== camera.roi.h)}
+  {@const anyDiverged = anyPropDiverged || anyRoiDiverged}
+  {@const hasUnsaved = !savedProps || !savedRoi}
   {@const sensorW = camera.sensorSizePx?.x ?? 1}
   {@const sensorH = camera.sensorSizePx?.y ?? 1}
   {@const strokeWidth = Math.max(sensorW, sensorH) * 0.004}
   {@const frameSizePx = camera.frameSizePx}
   {@const frameSizeMb = camera.frameSizeMb}
 
-  <div class={cn('flex flex-col gap-3 rounded border border-border bg-panel p-3', isOther && 'opacity-60')}>
+  <div class={cn('flex flex-col rounded border border-border bg-panel px-3', isOther && 'opacity-60')}>
     <!-- ═══ Header ═══ -->
-    <div class="flex items-center gap-2">
+    <div class="flex h-ui-md items-center gap-2">
       <span class="text-sm font-medium">{camera.deviceId}</span>
       {#if channelLabel}
         <span class="rounded-full bg-element-bg px-1.5 py-px text-xs text-fg-muted">{channelLabel}</span>
@@ -229,38 +231,17 @@
       {#if isOther}
         <span class="ml-auto rounded-full bg-fg-muted/10 px-1.5 py-px text-xs text-fg-muted">Not in profile</span>
       {:else}
-        <button
-          class={cn(
-            'ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors',
-            isLinked ? 'bg-primary/15 text-primary' : 'text-fg-muted hover:text-fg'
-          )}
-          onclick={() => toggleLink(camera.deviceId)}
-          title={isLinked ? 'Unlink camera' : 'Link camera'}
-        >
-          {#if isLinked}
-            <Link width="14" height="14" />
-            <span>Linked</span>
-          {:else}
-            <LinkOff width="14" height="14" />
-          {/if}
-        </button>
-      {/if}
-    </div>
-
-    <hr class="-mx-3 border-border" />
-
-    <!-- ═══ Properties Section ═══ -->
-    <div class="flex flex-col gap-2">
-      <div class="flex h-ui-xs items-center justify-between">
-        <span class="text-xs font-medium tracking-wide text-fg-muted uppercase">Properties</span>
-        {#if !isOther && (!savedProps || anyPropDiverged)}
-          <div class="flex items-center gap-1">
-            {#if anyPropDiverged}
+        <div class="ml-auto flex items-center gap-1.5">
+          {#if anyDiverged || hasUnsaved}
+            {#if anyDiverged}
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onclick={() => forLinkedAsync(camera, (id) => session.applyProfileProps([id]))}
-                title="Revert properties"
+                onclick={() => {
+                  if (anyPropDiverged) forLinkedAsync(camera, (id) => session.applyProfileProps([id]));
+                  if (anyRoiDiverged) forLinkedAsync(camera, (id) => session.applyProfileRoi(id));
+                }}
+                title="Revert to saved"
               >
                 <Restore width="14" height="14" />
               </Button>
@@ -269,22 +250,45 @@
               variant="ghost"
               size="xs"
               class="text-warning/80"
-              onclick={() => forLinkedAsync(camera, (id) => session.saveProfileProps(id))}
+              onclick={() => {
+                forLinkedAsync(camera, (id) => session.saveProfileProps(id));
+                forLinkedAsync(camera, (id) => session.saveProfileRoi(id));
+              }}
             >
               Save
             </Button>
-          </div>
-        {/if}
-      </div>
+          {/if}
+          <button
+            class={cn(
+              'flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors',
+              isLinked ? 'bg-primary/15 text-primary' : 'text-fg-muted hover:text-fg'
+            )}
+            onclick={() => toggleLink(camera.deviceId)}
+            title={isLinked ? 'Unlink camera' : 'Link camera'}
+          >
+            {#if isLinked}
+              <Link width="14" height="14" />
+              <span>Linked</span>
+            {:else}
+              <LinkOff width="14" height="14" />
+            {/if}
+          </button>
+        </div>
+      {/if}
+    </div>
 
+    <hr class="-mx-3 mb-2 border-border" />
+
+    <!-- ═══ Properties Section ═══ -->
+    <div class="flex flex-col gap-3 pb-1">
       <!-- Exposure -->
       <div class="flex flex-col gap-1">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1">
+        <div class="flex items-start justify-between">
+          <div class="flex h-ui-xs items-center gap-1">
             <span class="text-xs text-fg-muted">Exposure</span>
             {@render unsavedDot(savedProps?.exposure_time_ms, isOther)}
             {#if expDiverged}
-              <span class="text-xs text-warning opacity-90">*</span>
+              <span class="text-xs text-warning/70">· {savedProps?.exposure_time_ms} ms</span>
             {/if}
           </div>
           <SpinBox
@@ -295,6 +299,7 @@
             decimals={exposureDecimals(constraints.exposureStep)}
             suffix="ms"
             numCharacters={7}
+            variant="ghost"
             appearance="full"
             align="left"
             size="xs"
@@ -318,7 +323,7 @@
               <span class="text-xs text-fg-muted">Binning</span>
               {@render unsavedDot(savedProps?.binning, isOther)}
               {#if binDiverged}
-                <span class="text-xs text-warning opacity-90">*</span>
+                <span class="text-xs text-warning/70">· {savedProps?.binning}x</span>
               {/if}
             </div>
             <Select
@@ -335,7 +340,7 @@
               <span class="text-xs text-fg-muted">Format</span>
               {@render unsavedDot(savedProps?.pixel_format, isOther)}
               {#if fmtDiverged}
-                <span class="text-xs text-warning opacity-90">*</span>
+                <span class="text-xs text-warning/70">· {savedProps?.pixel_format}</span>
               {/if}
             </div>
             <Select
@@ -351,51 +356,37 @@
 
     <!-- ═══ ROI Section ═══ -->
     {#if camera.roi && camera.sensorSizePx}
-      <hr class="-mx-3 border-border" />
+      <button
+        class="-mx-3 my-2 flex cursor-pointer items-center gap-2 px-3 text-fg-muted transition-colors hover:text-fg"
+        onclick={() => (roiExpanded = !roiExpanded)}
+      >
+        <hr class="flex-1 border-border" />
+        <span class="text-xs font-medium tracking-wide uppercase">ROI</span>
+        {#if !isOther && !savedRoi}
+          {@render unsavedDot(savedRoi, isOther)}
+        {:else if anyRoiDiverged}
+          <span class="text-xs text-warning/70">*</span>
+        {:else}
+          <span class="invisible text-xs">*</span>
+        {/if}
+        {#if roiExpanded}
+          <ChevronDown width="12" height="12" />
+        {:else}
+          <ChevronRight width="12" height="12" />
+        {/if}
+      </button>
 
       <div class="flex flex-col gap-2">
-        <div class="flex h-ui-xs items-center justify-between">
-          <span class="text-xs font-medium tracking-wide text-fg-muted uppercase">ROI</span>
-          <div class="flex items-center gap-1">
-            {#if !isOther && (!savedRoi || anyRoiDiverged)}
-              {#if anyRoiDiverged}
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onclick={() => forLinkedAsync(camera, (id) => session.applyProfileRoi(id))}
-                  title="Revert ROI"
-                >
-                  <Restore width="14" height="14" />
-                </Button>
-              {/if}
-              <Button
-                variant="ghost"
-                size="xs"
-                class="text-warning/80"
-                onclick={() => forLinkedAsync(camera, (id) => session.saveProfileRoi(id))}
-              >
-                Save
-              </Button>
-            {/if}
-            <button class="flex items-center text-fg-muted hover:text-fg" onclick={() => (roiExpanded = !roiExpanded)}>
-              {#if roiExpanded}
-                <ChevronDown width="16" height="16" />
-              {:else}
-                <ChevronRight width="16" height="16" />
-              {/if}
-            </button>
-          </div>
-        </div>
 
         {#if roiExpanded}
-          <div class="grid grid-cols-[minmax(60px,120px)_1fr] gap-3">
+          <div class="grid grid-cols-[auto_1fr] gap-3">
             <!-- SVG sensor diagram -->
             <svg
               viewBox="0 0 {sensorW} {sensorH}"
-              class="w-full border border-border"
-              preserveAspectRatio="xMidYMid meet"
+              class="h-22 self-center"
+              style="aspect-ratio: {sensorW} / {sensorH};"
             >
-              <rect x="0" y="0" width={sensorW} height={sensorH} class="fill-fg-faint/10" />
+              <rect x="0" y="0" width={sensorW} height={sensorH} class="fill-fg-faint/10 stroke-border" stroke-width={strokeWidth} />
               <rect
                 x={camera.roi.x}
                 y={camera.roi.y}
@@ -407,14 +398,15 @@
             </svg>
 
             <!-- Spinboxes + spatial actions (2×3 grid) -->
-            <div class="flex flex-col gap-2">
-              <div class="grid grid-cols-2 gap-2">
+            <div class="flex min-w-0 flex-1 flex-col justify-between gap-1">
+              <div class="grid grid-cols-2 gap-x-2 gap-y-1">
                 <SpinBox
                   value={camera.roi.x}
                   min={0}
                   max={(constraints.roiGrid?.h.max ?? 0) - (camera.roi.w ?? 0)}
                   step={constraints.roiGrid?.h.step ?? 1}
                   prefix="x"
+                  numCharacters={7}
                   appearance="full"
                   size="xs"
                   onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, x: v }))}
@@ -425,6 +417,7 @@
                   max={(constraints.roiGrid?.v.max ?? 0) - (camera.roi.h ?? 0)}
                   step={constraints.roiGrid?.v.step ?? 1}
                   prefix="y"
+                  numCharacters={7}
                   appearance="full"
                   size="xs"
                   onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, y: v }))}
@@ -435,6 +428,7 @@
                   max={constraints.roiGrid?.h.max ?? 99999}
                   step={constraints.roiGrid?.h.step ?? 1}
                   prefix="w"
+                  numCharacters={7}
                   appearance="full"
                   size="xs"
                   onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, w: v }))}
@@ -445,10 +439,13 @@
                   max={constraints.roiGrid?.v.max ?? 99999}
                   step={constraints.roiGrid?.v.step ?? 1}
                   prefix="h"
+                  numCharacters={7}
                   appearance="full"
                   size="xs"
                   onChange={(v) => forLinked(camera, (c) => c.updateRoi({ ...c.roi!, h: v }))}
                 />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
                 <Button
                   variant="secondary"
                   size="xs"
@@ -480,16 +477,12 @@
     {/if}
 
     <!-- ═══ Footer ═══ -->
-    <hr class="-mx-3 border-border" />
+    <hr class="-mx-3 my-2 border-border" />
 
-    <div class="flex items-center justify-between font-mono text-xs text-fg-muted tabular-nums">
-      <div class="flex items-center">
-        {#if frameSizePx}
-          <span>{frameSizePx.x}&times;{frameSizePx.y}</span>
-          {#if frameSizeMb != null}
-            <span>&ensp;&middot;&ensp;{frameSizeMb.toFixed(1)} MB</span>
-          {/if}
-        {/if}
+    <div class="flex items-center justify-between pb-2 font-mono text-xs text-fg-muted tabular-nums">
+      <div class="flex items-center gap-1.5">
+        <div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
+        <span class="text-xs text-fg-muted">{modeLabel(camera.mode)}</span>
       </div>
       {#if camera.streamInfo}
         {@const info = camera.streamInfo}
@@ -505,9 +498,13 @@
       {:else}
         <div></div>
       {/if}
-      <div class="flex items-center gap-1.5">
-        <div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
-        <span class="text-xs text-fg-muted">{modeLabel(camera.mode)}</span>
+      <div class="flex items-center">
+        {#if frameSizePx}
+          <span>{frameSizePx.x}&times;{frameSizePx.y}</span>
+          {#if frameSizeMb != null}
+            <span>&ensp;&middot;&ensp;{frameSizeMb.toFixed(1)} MB</span>
+          {/if}
+        {/if}
       </div>
     </div>
   </div>
@@ -522,7 +519,7 @@
     <p class="text-sm text-fg-muted">No cameras configured</p>
   </div>
 {:else}
-  <div class={cn('grid grid-cols-[repeat(auto-fit,minmax(22rem,1fr))] items-start gap-4', className)}>
+  <div class={cn('grid grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] items-start gap-4', className)}>
     {#each [...cameras, ...otherCameras] as camera (camera.deviceId)}
       {@render cameraCard(camera, !profileCameraIds.has(camera.deviceId))}
     {/each}

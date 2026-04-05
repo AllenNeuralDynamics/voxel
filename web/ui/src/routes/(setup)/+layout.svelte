@@ -1,7 +1,3 @@
-<script lang="ts" module>
-  let savedTab = 'lasers';
-</script>
-
 <script lang="ts">
   import { getSessionContext, getLogsContext } from '$lib/context';
   import { cn } from '$lib/utils';
@@ -12,16 +8,19 @@
   import CamerasPanel from '$lib/ui/CamerasPanel.svelte';
   import AuxDevicesPanel from '$lib/ui/AuxDevicesPanel.svelte';
   import { ProfileSelector } from '$lib/ui/profile';
+  import { PersistedState } from 'runed';
 
   let { children } = $props();
 
   const session = getSessionContext();
   const { logs, clearLogs } = $derived(getLogsContext());
 
-  let bottomPanelTab = $state(savedTab);
-  $effect(() => {
-    savedTab = bottomPanelTab;
-  });
+  const panelTab = new PersistedState('setup.panel.tab', 'lasers');
+  let bottomPanelTab = $derived(panelTab.current);
+
+  function setTab(tab: string) {
+    panelTab.current = tab;
+  }
   let bottomPane: Pane | undefined = $state(undefined);
 
   function selectTab(id: string) {
@@ -29,7 +28,7 @@
       if (bottomPane?.isCollapsed()) bottomPane.expand();
       else bottomPane?.collapse();
     } else {
-      bottomPanelTab = id;
+      setTab(id);
       if (bottomPane?.isCollapsed()) bottomPane.expand();
     }
   }
@@ -65,7 +64,7 @@
     onCollapse={() => {}}
   >
     {#if bottomPanelTab === 'devices'}
-      <AuxDevicesPanel {session} class="overflow-auto p-2" />
+      <AuxDevicesPanel {session} class="h-full overflow-auto p-2" />
     {:else if bottomPanelTab === 'cameras'}
       <CamerasPanel {session} class="h-full overflow-auto p-4" />
     {:else if bottomPanelTab === 'lasers'}
@@ -77,7 +76,7 @@
     {/if}
   </Pane>
 </PaneGroup>
-<footer class="flex h-ui-xl items-center gap-80 border-t border-border px-4 py-2">
+<footer class="flex h-ui-xl items-center justify-between gap-20 border-t border-border px-4 py-2">
   <div class="flex divide-x divide-border rounded border border-border">
     <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
     <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}>Auxiliary</button>
@@ -97,7 +96,7 @@
       {/each}
     </button>
   </div>
-  <div class="min-w-40 flex-1">
+  <div class="max-w-100 min-w-40 flex-1">
     <ProfileSelector {session} size="xs" class="w-full" />
   </div>
 </footer>

@@ -163,7 +163,7 @@
 <div class="@container flex h-full flex-col">
   <!-- ═══ Wide: sidebar + content row ═══ -->
   <div class="flex min-h-0 flex-1">
-    <aside class="hidden w-56 shrink-0 flex-col border-r border-border bg-card py-3 @[960px]:flex">
+    <aside class="hidden w-56 shrink-0 flex-col border-r border-border bg-card py-3 @[850px]:flex">
       <div class="flex-1 space-y-2 overflow-auto">
         <!-- Channels -->
         <nav class="px-3">
@@ -241,7 +241,7 @@
   </div>
 
   <!-- ═══ Narrow: segmented footer nav with dropdowns ═══ -->
-  <nav class="flex h-ui-xl items-center gap-2 border-t border-border bg-card px-4 py-2 @[960px]:hidden">
+  <nav class="flex h-ui-xl items-center gap-2 border-t border-border bg-card px-4 py-2 @[850px]:hidden">
     <div class="flex flex-1 divide-x divide-border overflow-hidden rounded-lg border border-border">
       <button onclick={() => nav('/')} class={segmentClass(isChannelsActive)}>Channels</button>
 
