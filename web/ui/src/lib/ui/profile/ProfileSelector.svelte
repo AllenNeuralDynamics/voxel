@@ -58,7 +58,8 @@
   <div class="relative">
     <Select.Trigger class={cn(styles.trigger(), 'rounded-md px-3 pr-8', className)}>
       <span class="flex items-center gap-1.5 truncate">
-        <span class="inline-block size-1.5 shrink-0 rounded-full {selectedHasStacks ? 'bg-info' : 'bg-fg-faint/50'}"></span>
+        <span class="inline-block size-1.5 shrink-0 rounded-full {selectedHasStacks ? 'bg-info' : 'bg-fg-faint/50'}"
+        ></span>
         {#if selectedLabel}
           {selectedLabel}
         {:else}
@@ -89,7 +90,11 @@
                 label={profile.label}
                 class={cn(styles.item(), profile.description ? 'items-start' : 'items-center')}
               >
-                <span class="mt-1.5 inline-block size-1.5 shrink-0 self-start rounded-full {hasStacks ? 'bg-info' : 'bg-fg-faint/50'}"></span>
+                <span
+                  class="mt-1.5 inline-block size-1.5 shrink-0 self-start rounded-full {hasStacks
+                    ? 'bg-info'
+                    : 'bg-fg-faint/50'}"
+                ></span>
                 <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span class="text-fg">{profile.label}</span>
                   {#if profile.description}

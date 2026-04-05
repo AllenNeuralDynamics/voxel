@@ -63,15 +63,11 @@
               <Select.Item
                 value={stack.stack_id}
                 label="#{i + 1} {sanitizeString(stack.profile_id)}"
-                class={cn(
-                  styles.item(),
-                  'items-center gap-2',
-                  value === stack.stack_id && 'bg-element-selected/50'
-                )}
+                class={cn(styles.item(), 'items-center gap-2', value === stack.stack_id && 'bg-element-selected/50')}
               >
-                  <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
                   <span class="text-fg">#{i + 1} {sanitizeString(stack.profile_id)}</span>
-                  <span class="text-xs tabular-nums text-fg-muted">
+                  <span class="text-xs text-fg-muted tabular-nums">
                     X {(stack.x / 1000).toFixed(2)} Y {(stack.y / 1000).toFixed(2)} mm
                   </span>
                 </div>

@@ -258,21 +258,23 @@
               Save
             </Button>
           {/if}
-          <button
-            class={cn(
-              'flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors',
-              isLinked ? 'bg-primary/15 text-primary' : 'text-fg-muted hover:text-fg'
-            )}
-            onclick={() => toggleLink(camera.deviceId)}
-            title={isLinked ? 'Unlink camera' : 'Link camera'}
-          >
-            {#if isLinked}
-              <Link width="14" height="14" />
-              <span>Linked</span>
-            {:else}
-              <LinkOff width="14" height="14" />
-            {/if}
-          </button>
+          {#if cameras.length > 1}
+            <button
+              class={cn(
+                'flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors',
+                isLinked ? 'bg-primary/15 text-primary' : 'text-fg-muted hover:text-fg'
+              )}
+              onclick={() => toggleLink(camera.deviceId)}
+              title={isLinked ? 'Unlink camera' : 'Link camera'}
+            >
+              {#if isLinked}
+                <Link width="14" height="14" />
+                <span>Linked</span>
+              {:else}
+                <LinkOff width="14" height="14" />
+              {/if}
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -377,7 +379,6 @@
       </button>
 
       <div class="flex flex-col gap-2">
-
         {#if roiExpanded}
           <div class="grid grid-cols-[auto_1fr] gap-3">
             <!-- SVG sensor diagram -->
@@ -386,7 +387,14 @@
               class="h-22 self-center"
               style="aspect-ratio: {sensorW} / {sensorH};"
             >
-              <rect x="0" y="0" width={sensorW} height={sensorH} class="fill-fg-faint/10 stroke-border" stroke-width={strokeWidth} />
+              <rect
+                x="0"
+                y="0"
+                width={sensorW}
+                height={sensorH}
+                class="fill-fg-faint/10 stroke-border"
+                stroke-width={strokeWidth}
+              />
               <rect
                 x={camera.roi.x}
                 y={camera.roi.y}

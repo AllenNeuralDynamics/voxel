@@ -5,7 +5,7 @@
 </script>
 
 {#if stage && stage.x && stage.y && stage.z}
-  {@const numCharacters = 10}
+  {@const numCharacters = 8}
   {@const decimals = 3}
   {@const suffix = 'mm'}
   {@const size = 'xs'}

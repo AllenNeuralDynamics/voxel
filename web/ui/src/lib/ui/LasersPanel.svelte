@@ -50,6 +50,12 @@
   );
 
   const anyLaserEnabled = $derived(allLasers.some((l) => l.isEnabled));
+  const anyLaserDiverged = $derived(
+    profileLasers.some((l) => {
+      const saved = profile?.props?.[l.deviceId]?.['power_setpoint_mw'];
+      return saved === undefined || saved === null || isPropDiverged(saved, l.powerSetpoint);
+    })
+  );
   const anyHistory = $derived(allLasers.some((l) => l.hasHistory));
   const globalMaxPower = $derived(Math.max(...allLasers.map((l) => l.maxPower)));
   const currentMaxPower = $derived(Math.max(0, ...allLasers.map((l) => l.powerMw ?? 0)));
@@ -75,28 +81,25 @@
   {@const savedPower = savedProps?.['power_setpoint_mw']}
   {@const powerDiverged = isPropDiverged(savedPower, laser.powerSetpoint)}
   {@const hasUnsaved = cfg && (savedPower === undefined || savedPower === null)}
+  {@const showIndicator = hasUnsaved || powerDiverged}
   <button
     onclick={() => selectRow(laser.deviceId)}
-    class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors
+    class="flex w-full min-w-90 items-center gap-3 rounded-md px-3 py-2 text-left transition-colors
 			{selectedDeviceId === laser.deviceId ? 'bg-element-selected' : 'bg-surface hover:bg-element-hover'}"
   >
     <!-- Wavelength dot + label + divergence dot -->
-    <div class="flex w-26 shrink-0 items-center gap-1">
+    <div class="flex min-w-20 shrink-0 items-center gap-1">
       <div class="mr-1">
         {@render channelDot(laser, cfg)}
       </div>
-      <span class="text-sm font-medium tabular-nums">
+      <span class="w-[6ch] text-sm font-medium tabular-nums">
         {laser.wavelength ? `${laser.wavelength} nm` : 'Laser'}
       </span>
-      {#if hasUnsaved}
-        <span class="inline-block size-1 rounded-full bg-warning opacity-70"></span>
-      {:else if powerDiverged}
-        <span class="inline-block size-1 rounded-full bg-warning"></span>
-      {/if}
+      <span class="inline-block size-1 rounded-full bg-warning {showIndicator ? 'opacity-70' : 'opacity-0 '}"> </span>
     </div>
 
     <!-- Power slider -->
-    <div class="flex min-w-32 flex-1 items-center">
+    <div class="flex min-w-24 flex-1 items-center">
       {#if typeof laser.powerSetpoint === 'number'}
         <Slider
           target={laser.powerSetpoint}
@@ -180,8 +183,8 @@
   {@const savedPower = savedProps?.['power_setpoint_mw']}
   {@const powerDiverged = isPropDiverged(savedPower, laser.powerSetpoint)}
   {@const hasUnsaved = cfg && (savedPower === undefined || savedPower === null)}
-  <div class="flex h-full w-72 flex-col justify-between gap-4 border-r border-border bg-panel @[800px]:w-96">
-    <div class="flex flex-col gap-4 px-4 py-2">
+  <div class="flex h-full flex-col justify-between gap-4 border-border bg-panel">
+    <div class="flex flex-col gap-2 px-4 py-2">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div class="flex h-ui-sm items-center gap-2 text-xs text-fg-muted">
@@ -191,21 +194,6 @@
           </span>
           <span>·</span>
           <span>{laser.deviceId}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          {#if isActiveProfile && cfg}
-            {#if powerDiverged || hasUnsaved}
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onclick={() => session.applyProfileProps([laser.deviceId])}
-                title="Revert to saved"
-              >
-                <Restore width="14" height="14" />
-              </Button>
-            {/if}
-            <Button variant="outline" size="xs" onclick={() => session.saveProfileProps(laser.deviceId)}>Save</Button>
-          {/if}
         </div>
       </div>
 
@@ -311,23 +299,53 @@
   </div>
 {:else if selectedLaser}
   {@const groupLabelClasses = 'text-xs leading-ui-sm font-medium text-fg-muted/60 uppercase'}
-  <div class={cn('@container flex h-full flex-row-reverse', className)}>
+  <div class={cn('grid h-full grid-cols-[minmax(280px,2fr)_minmax(300px,3fr)]', className)}>
+    <!-- Left: detail panel -->
+    {@render detailPanel(
+      selectedLaser,
+      session.activeProfileId
+        ? (getChannelFor(session.config, session.activeProfileId, selectedLaser.deviceId)?.config ?? null)
+        : null
+    )}
+
     <!-- Right: laser list -->
-    <div class="flex flex-1 flex-col overflow-auto px-4">
+    <div class="flex flex-col overflow-auto px-4">
       <div class="flex h-full flex-col gap-3">
         {#if profileLasers.length > 0}
           <div>
             <div class="flex items-center justify-between py-2">
               <h4 class={groupLabelClasses}>This Profile</h4>
-              <button
-                onclick={stopAllLasers}
-                class="flex items-center gap-1.5 rounded bg-danger/20 px-2 py-1 text-sm text-danger transition-all hover:bg-danger/30 {anyLaserEnabled
-                  ? ''
-                  : 'pointer-events-none opacity-0'}"
-              >
-                <Power width="14" height="14" />
-                <span>Stop All</span>
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  onclick={stopAllLasers}
+                  class="flex items-center gap-1.5 rounded bg-danger/20 px-2 py-1 text-sm text-danger transition-all hover:bg-danger/30 {anyLaserEnabled
+                    ? ''
+                    : 'pointer-events-none opacity-0'}"
+                >
+                  <Power width="14" height="14" />
+                  <span>Stop All</span>
+                </button>
+                {#if anyLaserDiverged && isActiveProfile}
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onclick={() => session.applyProfileProps(profileLasers.map((l) => l.deviceId))}
+                    title="Revert all to saved"
+                  >
+                    <Restore width="14" height="14" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    class="text-warning/80"
+                    onclick={() => {
+                      for (const l of profileLasers) session.saveProfileProps(l.deviceId);
+                    }}
+                  >
+                    Save
+                  </Button>
+                {/if}
+              </div>
             </div>
             <div class="space-y-2">
               {#each profileLasers as laser (laser.deviceId)}
@@ -356,13 +374,5 @@
         {/if}
       </div>
     </div>
-
-    <!-- Left: detail panel -->
-    {@render detailPanel(
-      selectedLaser,
-      session.activeProfileId
-        ? (getChannelFor(session.config, session.activeProfileId, selectedLaser.deviceId)?.config ?? null)
-        : null
-    )}
   </div>
 {/if}

@@ -5,7 +5,7 @@
 
   // ── Layer visibility (module-level singleton) ────────────────────
 
-  let layers = $state<LayerVisibility>({ grid: true, stacks: true, path: true, fov: true, thumbnail: true });
+  let layers = $state<LayerVisibility>({ grid: false, stacks: true, path: true, fov: true, thumbnail: true });
 
   const layerItems: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
     { key: 'grid', color: 'text-fg-muted', Icon: GridLines, title: 'Toggle grid' },
@@ -77,12 +77,8 @@
   let fovX = $derived(session.stage.x ? session.stage.x.position - session.stage.x.lowerLimit : 0);
   let fovY = $derived(session.stage.y ? session.stage.y.position - session.stage.y.lowerLimit : 0);
   // ViewBox: stage bounds + margin to fit current FOV and any existing stacks
-  let marginX = $derived(
-    Math.max(session.fov.width / 2, ...session.stacks.map((s) => s.w / 2))
-  );
-  let marginY = $derived(
-    Math.max(session.fov.height / 2, ...session.stacks.map((s) => s.h / 2))
-  );
+  let marginX = $derived(Math.max(session.fov.width / 2, ...session.stacks.map((s) => s.w / 2)));
+  let marginY = $derived(Math.max(session.fov.height / 2, ...session.stacks.map((s) => s.h / 2)));
   let viewBoxWidth = $derived(session.stage.width + marginX * 2);
   let viewBoxHeight = $derived(session.stage.height + marginY * 2);
   let viewBoxStr = $derived(`${-marginX} ${-marginY} ${viewBoxWidth} ${viewBoxHeight}`);
@@ -466,7 +462,6 @@
     </g>
   {/if}
 {/snippet}
-
 {#snippet stacksLayer()}
   {#if layers.stacks}
     {@const points = profileStacks.map((s) => ({ x: s.x, y: s.y }))}
@@ -485,9 +480,10 @@
           data-stack-status={stack.status}
           class="nss text-(--stack-status) outline-none"
           fill="currentColor"
-          fill-opacity={selected ? '0.35' : '0.15'}
-          stroke={selected ? 'currentColor' : 'none'}
-          stroke-width={selected ? '1' : '0'}
+          fill-opacity={selected ? '0.5' : '0.15'}
+          stroke="currentColor"
+          stroke-opacity={selected ? '0.9' : '0.25'}
+          stroke-width="1"
           class:cursor-pointer={!isXYMoving}
           class:cursor-not-allowed={isXYMoving}
           role="button"
@@ -598,14 +594,18 @@
   <ContextMenu.Sub>
     <ContextMenu.SubTrigger>Select stacks</ContextMenu.SubTrigger>
     <ContextMenu.SubContent>
-      <ContextMenu.Item onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!] })}>All</ContextMenu.Item>
+      <ContextMenu.Item onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!] })}
+        >All</ContextMenu.Item
+      >
       {#if session.selectedStacks.length > 0}
         <ContextMenu.Item onSelect={() => session.clearStackSelection()}>Deselect all</ContextMenu.Item>
       {/if}
       {#if profileStacks.length > 0}
         <ContextMenu.Separator />
         {#each STACK_STATUSES as status (status)}
-          <ContextMenu.Item onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!], status: [status] })}>
+          <ContextMenu.Item
+            onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!], status: [status] })}
+          >
             {status[0].toUpperCase() + status.slice(1)}
           </ContextMenu.Item>
         {/each}

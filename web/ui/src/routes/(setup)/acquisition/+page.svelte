@@ -1,20 +1,12 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
   import { Crosshair } from '$lib/icons';
-  import { Button, PaneDivider, SpinBox, TextInput, Select } from '$lib/ui/kit';
+  import { Button, PaneDivider, SpinBox, Select } from '$lib/ui/kit';
   import MetadataPanel from '$lib/ui/MetadataPanel.svelte';
   import StackSelector from '$lib/ui/StackSelector.svelte';
   import { sanitizeString } from '$lib/utils';
   import { Pane, PaneGroup } from 'paneforge';
   import { toast } from 'svelte-sonner';
-  import { ElementSize } from 'runed';
-  import { type Stack } from '$lib/main/types';
-
-  // ── Pane sizing (pixel-based min for sidebar) ──
-
-  const SIDEBAR_MIN_PX = 300;
-  let paneGroupEl = $state<HTMLElement | null>(null);
-  const paneGroupSize = new ElementSize(() => paneGroupEl);
 
   const session = getSessionContext();
 
@@ -89,10 +81,9 @@
       toast.error('Failed to copy');
     }
   }
-
 </script>
 
-<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="acquire.content" class="h-full overflow-hidden">
+<PaneGroup direction="horizontal" autoSaveId="acquire.content" class="h-full overflow-hidden">
   <!-- Left column: storage + metadata -->
   <Pane defaultSize={50} minSize={40} maxSize={60}>
     <div class="@container flex h-full flex-col overflow-hidden bg-canvas">
@@ -214,17 +205,17 @@
           <span class="text-fg">{sanitizeString(inspectedStack.profile_id)}</span>
 
           <span class="text-fg-muted">Position</span>
-          <span class="tabular-nums text-fg">
+          <span class="text-fg tabular-nums">
             ({(inspectedStack.x / 1000).toFixed(4)}, {(inspectedStack.y / 1000).toFixed(4)}) mm
           </span>
 
           <span class="text-fg-muted">Z Range</span>
-          <span class="tabular-nums text-fg">
+          <span class="text-fg tabular-nums">
             {(inspectedStack.z_start / 1000).toFixed(3)} → {(inspectedStack.z_end / 1000).toFixed(3)} mm
           </span>
 
           <span class="text-fg-muted">Frames</span>
-          <span class="tabular-nums text-fg">{inspectedStack.num_frames}</span>
+          <span class="text-fg tabular-nums">{inspectedStack.num_frames}</span>
 
           <span class="text-fg-muted">Status</span>
           <span class="text-fg" data-stack-status={inspectedStack.status}>
@@ -260,17 +251,12 @@
             {/if}
           </div>
           <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
-            <div
-              class="h-full rounded-full bg-info transition-[width]"
-              style="width: {progressFraction * 100}%"
-            ></div>
+            <div class="h-full rounded-full bg-info transition-[width]" style="width: {progressFraction * 100}%"></div>
           </div>
         </div>
       {/if}
       {#if stackCounts.planned === 0 && !isAcquiring}
-        <Button size="sm" variant="outline" disabled class="w-full">
-          Add new stacks to start acquisition
-        </Button>
+        <Button size="sm" variant="outline" disabled class="w-full">Add new stacks to start acquisition</Button>
       {:else}
         <Button
           size="sm"
