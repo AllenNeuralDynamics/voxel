@@ -59,16 +59,47 @@ export class Session {
     }
   );
   acquisitionProfileIds = $derived<string[]>(this.acq.profile_order);
-  gridConfig = $derived<GridConfig | null>(
-    this.config.profiles[this.#appStatus?.session?.active_profile_id ?? '']?.grid ?? null
+  gridConfig = $derived<GridConfig>(
+    this.#appStatus?.session?.grid ?? { x_offset: 0, y_offset: 0, overlap_x: 0.1, overlap_y: 0.1 }
   );
-  tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
   stacks = $derived.by<Stack[]>(() => {
     const dict = this.#appStatus?.session?.stacks ?? {};
     const order = this.#appStatus?.session?.stack_order ?? [];
     return order.map((id) => dict[id]).filter((s): s is Stack => s !== undefined);
   });
   activeStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id === this.activeProfileId));
+
+  tiles = $derived.by<Tile[]>(() => {
+    const gc = this.gridConfig;
+    const fov = this.fov;
+    const sx = this.stage.x;
+    const sy = this.stage.y;
+    if (!sx || !sy) return [];
+
+    const stepW = fov.width * (1 - gc.overlap_x);
+    const stepH = fov.height * (1 - gc.overlap_y);
+    if (stepW <= 0 || stepH <= 0) return [];
+
+    const stageW = sx.upperLimit - sx.lowerLimit;
+    const stageH = sy.upperLimit - sy.lowerLimit;
+
+    const colMin = Math.ceil(-gc.x_offset / stepW);
+    const colMax = Math.floor((stageW - gc.x_offset) / stepW) + 1;
+    const rowMin = Math.ceil(-gc.y_offset / stepH);
+    const rowMax = Math.floor((stageH - gc.y_offset) / stepH) + 1;
+
+    const tiles: Tile[] = [];
+    for (let row = rowMin; row < rowMax; row++) {
+      for (let col = colMin; col < colMax; col++) {
+        const tx = gc.x_offset + col * stepW;
+        const ty = gc.y_offset + row * stepH;
+        if (tx >= 0 && tx <= stageW && ty >= 0 && ty <= stageH) {
+          tiles.push({ tile_id: `tile_r${row}_c${col}`, row, col, x: tx, y: ty, w: fov.width, h: fov.height });
+        }
+      }
+    }
+    return tiles;
+  });
   stackOrderAlgorithm = $derived<StackOrder>(this.acq.stack_order);
   sortByProfile = $derived<boolean>(this.acq.sort_by_profile);
   mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
@@ -187,13 +218,6 @@ export class Session {
 
   updateStatus(status: AppStatus): void {
     this.#appStatus = status;
-
-    // Sync grid config from status into local rig config so it stays current
-    const pid = status.session?.active_profile_id;
-    const gc = status.session?.grid_config;
-    if (pid && gc && this.config.profiles[pid]) {
-      this.config.profiles[pid].grid = gc;
-    }
   }
 
   // ── REST helpers ────────────────────────────────────────
@@ -579,19 +603,19 @@ export class Session {
   // --- Geometry ---
 
   get tileSpacingX(): number {
-    return this.fov.width * (1 - (this.gridConfig?.overlap_x ?? 0.1));
+    return this.fov.width * (1 - this.gridConfig.overlap_x);
   }
 
   get tileSpacingY(): number {
-    return this.fov.height * (1 - (this.gridConfig?.overlap_y ?? 0.1));
+    return this.fov.height * (1 - this.gridConfig.overlap_y);
   }
 
   get gridOffsetX(): number {
-    return this.gridConfig?.x_offset ?? 0;
+    return this.gridConfig.x_offset;
   }
 
   get gridOffsetY(): number {
-    return this.gridConfig?.y_offset ?? 0;
+    return this.gridConfig.y_offset;
   }
 
   positionToGridCell(position: number, axis: 'x' | 'y'): number {

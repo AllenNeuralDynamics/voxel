@@ -86,9 +86,8 @@ export interface SessionStatus {
   // Storage config
   storage: StorageConfig;
 
-  // Convenience fields (active profile's data)
-  grid_config: GridConfig | null;
-  tiles: Tile[];
+  // Session-level config
+  grid: GridConfig;
   stacks: Record<string, Stack>;
   stack_order: string[];
 
@@ -161,6 +160,7 @@ export type StackStatus = 'planned' | 'acquiring' | 'completed' | 'failed' | 'sk
  * Tile - 2D position in the grid (ephemeral, for grid preview)
  */
 export interface Tile {
+  tile_id: string;
   row: number;
   col: number;
   x: number;

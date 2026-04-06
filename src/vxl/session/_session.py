@@ -4,18 +4,19 @@ import datetime
 import logging
 import secrets
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vxl.camera.base import SensorROI
-from vxl.config import GridConfig
 from vxl.daq.wave import validate_waveform
 from vxl.metadata import BASE_METADATA_TARGET, resolve_metadata_class
 from vxl.rig import RigMode, VoxelRig
-from vxl.stack import Stack, StackOrder, StackResult, StackStatus, Tile
+from vxl.stack import Stack, StackOrder, StackResult, StackStatus
+
+if TYPE_CHECKING:
+    from vxl.config import GridConfig
 from vxl.sync import FrameTiming
 
 from ._config import AcquisitionConfig, SessionConfig, StorageConfig
-from ._grid import compute_tiles as _compute_tiles
 
 
 class Session:
@@ -165,12 +166,9 @@ class Session:
         return [s.stack_id for s in completed + planned + skipped]
 
     @property
-    def grid_config(self) -> GridConfig | None:
-        """Get the active profile's grid configuration, or None if profile not found."""
-        pid = self._rig.active_profile_id
-        if pid is None or pid not in self._config.rig.profiles:
-            return None
-        return self._config.rig.profiles[pid].grid
+    def grid(self) -> "GridConfig":
+        """Get the session-level grid configuration."""
+        return self._config.grid
 
     @property
     def stack_order(self) -> StackOrder:
@@ -359,45 +357,28 @@ class Session:
 
     # ==================== Grid Management ====================
 
-    def set_grid_offset(self, x_offset: float, y_offset: float) -> None:
-        """Set grid offset for the active profile."""
-        gc = self.grid_config
-        if gc is None:
-            raise RuntimeError("Active profile has no grid configuration")
-        gc.x_offset = x_offset
-        gc.y_offset = y_offset
+    def update_grid(
+        self,
+        x_offset: float | None = None,
+        y_offset: float | None = None,
+        overlap_x: float | None = None,
+        overlap_y: float | None = None,
+    ) -> None:
+        """Update grid configuration."""
+        gc = self._config.grid
+        if x_offset is not None:
+            gc.x_offset = x_offset
+        if y_offset is not None:
+            gc.y_offset = y_offset
+        if overlap_x is not None:
+            if not 0.0 <= overlap_x < 1.0:
+                raise ValueError(f"Overlap X must be in [0.0, 1.0), got {overlap_x}")
+            gc.overlap_x = overlap_x
+        if overlap_y is not None:
+            if not 0.0 <= overlap_y < 1.0:
+                raise ValueError(f"Overlap Y must be in [0.0, 1.0), got {overlap_y}")
+            gc.overlap_y = overlap_y
         self.save()
-
-    def set_overlap(self, overlap_x: float, overlap_y: float) -> None:
-        """Set overlap for the active profile."""
-        if not 0.0 <= overlap_x < 1.0:
-            raise ValueError(f"Overlap X must be in [0.0, 1.0), got {overlap_x}")
-        if not 0.0 <= overlap_y < 1.0:
-            raise ValueError(f"Overlap Y must be in [0.0, 1.0), got {overlap_y}")
-        gc = self.grid_config
-        if gc is None:
-            raise RuntimeError("Active profile has no grid configuration")
-        gc.overlap_x = overlap_x
-        gc.overlap_y = overlap_y
-        self.save()
-
-    async def get_tiles(self) -> list[Tile]:
-        """Generate the tile grid for the active profile."""
-        gc = self.grid_config
-        if gc is None:
-            return []
-        try:
-            fov = self.get_fov_size()
-        except (ValueError, KeyError):
-            return []
-        stage = self._rig.stage
-        stage_bounds = (
-            await stage.x.get_lower_limit(),
-            await stage.x.get_upper_limit(),
-            await stage.y.get_lower_limit(),
-            await stage.y.get_upper_limit(),
-        )
-        return _compute_tiles(gc, fov, stage_bounds)
 
     # ==================== Stack Management ====================
 
@@ -430,10 +411,6 @@ class Session:
         active_pid = self._rig.active_profile_id
         if active_pid is None:
             raise RuntimeError("No active profile - select a profile before adding stacks")
-
-        gc = self.grid_config
-        if gc is None:
-            raise RuntimeError(f"Profile '{active_pid}' has no grid configuration")
 
         # Implicit profile addition to plan
         if active_pid not in self._config.acq.profile_order:

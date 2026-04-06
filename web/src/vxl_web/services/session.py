@@ -19,7 +19,7 @@ from vxl import AcquisitionConfig, RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import GridConfig
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
-from vxl.stack import Stack, StackStatus, StorageConfig, Tile
+from vxl.stack import Stack, StackStatus, StorageConfig
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
@@ -60,9 +60,8 @@ class SessionStatus(BaseModel):
     # Storage config
     storage: StorageConfig
 
-    # Convenience fields (active profile's data)
-    grid_config: GridConfig | None
-    tiles: list[Tile]
+    # Session-level config
+    grid: GridConfig
     stacks: dict[str, Stack]
     stack_order: list[str]
 
@@ -116,7 +115,6 @@ class SessionService:
 
     async def get_status(self) -> SessionStatus:
         """Get current dynamic session status."""
-        tiles = await self.session.get_tiles()
         preview = await self.session.rig.get_channel_preview_configs()
 
         try:
@@ -129,9 +127,8 @@ class SessionService:
             mode=self.session.rig.mode,
             metadata=self.session.metadata,
             acq=self.session.acq,
+            grid=self.session.grid,
             storage=self.session.storage,
-            grid_config=self.session.grid_config,
-            tiles=tiles,
             stacks=self.session.stacks,
             stack_order=self.session.compute_stack_order(),
             fov=fov,

@@ -10,7 +10,6 @@
 
   const PANEL_WIDTH = 64;
 
-
   let containerRef = $state<HTMLDivElement | null>(null);
   let panelHeight = $state(250);
 

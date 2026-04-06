@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
 
-from vxl.config import VoxelRigConfig
+from vxl.config import GridConfig, VoxelRigConfig
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
 from vxl.stack import Stack, StackOrder, StorageConfig
 
@@ -51,6 +51,7 @@ class SessionConfig(BaseModel):
     metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
     acq: AcquisitionConfig = Field(default_factory=AcquisitionConfig)
+    grid: GridConfig = Field(default_factory=GridConfig)
     storage: StorageConfig
     stacks: dict[str, Stack] = Field(default_factory=dict)
 
@@ -126,6 +127,7 @@ class SessionConfig(BaseModel):
             "metadata_target": config.metadata_target,
             "metadata": config.metadata,
             "acq": config.acq.model_dump(mode="json"),
+            "grid": config.grid.model_dump(mode="json"),
             "storage": config.storage.model_dump(mode="json"),
             "stacks": {},
         }
@@ -142,6 +144,7 @@ class SessionConfig(BaseModel):
         Cross-platform: uses Path.replace() which is atomic on POSIX, Linux, and Windows.
         """
         acq_data = self.acq.model_dump(mode="json")
+        grid_data = self.grid.model_dump(mode="json")
         storage_data = self.storage.model_dump(mode="json")
         stacks_data = {sid: s.model_dump(mode="json") for sid, s in self.stacks.items()}
 
@@ -150,6 +153,7 @@ class SessionConfig(BaseModel):
             self._raw_data["metadata_target"] = self.metadata_target
             self._raw_data["metadata"] = self.metadata
             self._raw_data["acq"] = acq_data
+            self._raw_data["grid"] = grid_data
             self._raw_data["storage"] = storage_data
             self._raw_data["stacks"] = stacks_data
             # Sync rig profile changes

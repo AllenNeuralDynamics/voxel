@@ -331,11 +331,23 @@
         type: 'submenu',
         label: 'Select tiles',
         items: [
-          { type: 'action', label: `Row ${tile.row}`, action: () => selectTiles(session.tiles.filter((t) => t.row === tile.row)) },
-          { type: 'action', label: `Column ${tile.col}`, action: () => selectTiles(session.tiles.filter((t) => t.col === tile.col)) },
+          {
+            type: 'action',
+            label: `Row ${tile.row}`,
+            action: () => selectTiles(session.tiles.filter((t) => t.row === tile.row))
+          },
+          {
+            type: 'action',
+            label: `Column ${tile.col}`,
+            action: () => selectTiles(session.tiles.filter((t) => t.col === tile.col))
+          },
           { type: 'separator' },
           { type: 'action', label: 'All', action: () => selectTiles(session.tiles) },
-          { type: 'action', label: 'Invert', action: () => selectTiles(session.tiles.filter((t) => !isTileSelected(t.row, t.col))) }
+          {
+            type: 'action',
+            label: 'Invert',
+            action: () => selectTiles(session.tiles.filter((t) => !isTileSelected(t.row, t.col)))
+          }
         ]
       });
     }
@@ -349,7 +361,11 @@
         label: 'Select stacks',
         items: [
           { type: 'action', label: 'All', action: () => session.selectMultipleStacks() },
-          { type: 'action', label: profileLabel, action: () => session.selectMultipleStacks({ profileIds: [stack.profile_id] }) }
+          {
+            type: 'action',
+            label: profileLabel,
+            action: () => session.selectMultipleStacks({ profileIds: [stack.profile_id] })
+          }
         ]
       });
     }
@@ -357,9 +373,7 @@
     // ── Align grid (empty canvas and stacks only — tiles ARE the grid) ──
     if (target.kind !== 'tile') {
       const pos =
-        target.kind === 'empty'
-          ? { x: target.x, y: target.y }
-          : { x: lx + target.stack.x, y: ly + target.stack.y };
+        target.kind === 'empty' ? { x: target.x, y: target.y } : { x: lx + target.stack.x, y: ly + target.stack.y };
       items.push({
         type: 'submenu',
         label: 'Align grid',
@@ -370,9 +384,9 @@
           { type: 'action', label: 'Left', action: () => session.alignGrid('left', pos) },
           { type: 'action', label: 'Right', action: () => session.alignGrid('right', pos) },
           { type: 'separator' },
-        { type: 'action', label: 'Center', action: () => session.alignGrid('center', pos) }
-      ]
-    });
+          { type: 'action', label: 'Center', action: () => session.alignGrid('center', pos) }
+        ]
+      });
     }
 
     // ── Add stack ──
@@ -383,7 +397,14 @@
         type: 'action',
         label: 'Add stack',
         action: () => {
-          session.addStacks([{ x: target.x - lx, y: target.y - ly, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end }]);
+          session.addStacks([
+            {
+              x: target.x - lx,
+              y: target.y - ly,
+              zStartUm: session.acq.default_z_start,
+              zEndUm: session.acq.default_z_end
+            }
+          ]);
         }
       });
     } else if (target.kind === 'tile') {
@@ -395,7 +416,14 @@
           label: emptyCount === 1 ? 'Add stack' : `Add stacks (${emptyCount})`,
           action: () => {
             const tiles = selectedTilesList.filter((t) => !session.getStackAtPosition(t.x, t.y));
-            session.addStacks(tiles.map((t) => ({ x: t.x, y: t.y, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end })));
+            session.addStacks(
+              tiles.map((t) => ({
+                x: t.x,
+                y: t.y,
+                zStartUm: session.acq.default_z_start,
+                zEndUm: session.acq.default_z_end
+              }))
+            );
           }
         });
       }
@@ -407,7 +435,9 @@
       const selectedCount = session.selectedStacks.length;
       const isSingle = selectedCount <= 1;
       const isOtherProfile = stack.profile_id !== session.activeProfileId;
-      const canPaste = zRangeBuffer && (isSingle ? stack.status === 'planned' : session.selectedStacks.some((s) => s.status === 'planned'));
+      const canPaste =
+        zRangeBuffer &&
+        (isSingle ? stack.status === 'planned' : session.selectedStacks.some((s) => s.status === 'planned'));
       const canDelete = isSingle
         ? stack.status === 'planned' || stack.status === 'skipped'
         : session.selectedStacks.some((s) => s.status === 'planned' || s.status === 'skipped');
@@ -419,7 +449,9 @@
         items.push({
           type: 'action',
           label: 'Copy Z range',
-          action: () => { zRangeBuffer = { zStartUm: stack.z_start, zEndUm: stack.z_end }; }
+          action: () => {
+            zRangeBuffer = { zStartUm: stack.z_start, zEndUm: stack.z_end };
+          }
         });
       }
 
@@ -430,7 +462,11 @@
           label: isSingle ? 'Paste Z range' : `Paste Z range (${selectedCount})`,
           action: () => {
             const targets = isSingle ? [stack] : session.selectedStacks.filter((s) => s.status === 'planned');
-            const edits = targets.map((s) => ({ stackId: s.stack_id, zStartUm: zRangeBuffer!.zStartUm, zEndUm: zRangeBuffer!.zEndUm }));
+            const edits = targets.map((s) => ({
+              stackId: s.stack_id,
+              zStartUm: zRangeBuffer!.zStartUm,
+              zEndUm: zRangeBuffer!.zEndUm
+            }));
             if (edits.length > 0) session.editStacks(edits);
           }
         });
@@ -444,7 +480,9 @@
             type: 'action',
             label: 'Add stack',
             action: () => {
-              session.addStacks([{ x: stack.x, y: stack.y, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end }]);
+              session.addStacks([
+                { x: stack.x, y: stack.y, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end }
+              ]);
             }
           });
         }
@@ -590,13 +628,7 @@
           />
         {:else if dist < 1}
           <!-- Overlapping stacks: show dot marker -->
-          <circle
-            cx={p1.x}
-            cy={p1.y}
-            r={arrowSize * 0.25}
-            class="fill-current opacity-50"
-            stroke="none"
-          />
+          <circle cx={p1.x} cy={p1.y} r={arrowSize * 0.25} class="fill-current opacity-50" stroke="none" />
         {/if}
       {/each}
     </g>

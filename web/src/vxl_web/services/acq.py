@@ -228,29 +228,29 @@ async def reorder_profiles(
 
 
 @acq_router.get("/grid")
-async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig | None:
-    """Get current grid configuration for the active profile."""
-    return service.session.grid_config
+async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig:
+    """Get current grid configuration."""
+    return service.session.grid
 
 
 @acq_router.patch("/grid")
 async def update_grid(
     request: GridUpdateRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
-) -> GridConfig | None:
-    """Update grid configuration for the active profile."""
+) -> GridConfig:
+    """Update grid configuration."""
     try:
-        if request.x_offset is not None and request.y_offset is not None:
-            service.session.set_grid_offset(request.x_offset, request.y_offset)
-        if request.overlap_x is not None and request.overlap_y is not None:
-            service.session.set_overlap(request.overlap_x, request.overlap_y)
+        service.session.update_grid(
+            x_offset=request.x_offset,
+            y_offset=request.y_offset,
+            overlap_x=request.overlap_x,
+            overlap_y=request.overlap_y,
+        )
         if request.default_z_start is not None and request.default_z_end is not None:
             service.session.set_default_z_range(request.default_z_start, request.default_z_end)
 
         service.broadcast({}, with_status=True)
-        return service.session.grid_config
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
+        return service.session.grid
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
