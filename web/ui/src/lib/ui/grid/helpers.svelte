@@ -141,31 +141,31 @@
   </div>
 {/snippet}
 
-{#snippet zDefaults(session: Session, gc: GridConfig)}
+{#snippet zDefaults(session: Session)}
   <div class="flex items-center gap-1.5">
     <SpinBox
       {size}
       {variant}
-      value={gc.default_z_start / 1000}
+      value={session.acq.default_z_start / 1000}
       step={0.001}
       decimals={3}
       numCharacters={8}
       prefix="Z start"
       suffix="mm"
       align="right"
-      onChange={(value) => session.setGridZRange(value * 1000, gc!.default_z_end)}
+      onChange={(value) => session.setGridZRange(value * 1000, session.acq.default_z_end)}
     />
     <SpinBox
       {size}
       {variant}
-      value={gc.default_z_end / 1000}
+      value={session.acq.default_z_end / 1000}
       step={0.001}
       decimals={3}
       numCharacters={8}
       prefix="Z end"
       suffix="mm"
       align="right"
-      onChange={(value) => session.setGridZRange(gc!.default_z_start, value * 1000)}
+      onChange={(value) => session.setGridZRange(session.acq.default_z_start, value * 1000)}
     />
   </div>
 {/snippet}

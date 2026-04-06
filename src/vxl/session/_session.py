@@ -2,7 +2,6 @@
 
 import datetime
 import logging
-import math
 import secrets
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from vxl.stack import Stack, StackOrder, StackResult, StackStatus, Tile
 from vxl.sync import FrameTiming
 
 from ._config import AcquisitionConfig, SessionConfig, StorageConfig
+from ._grid import compute_tiles as _compute_tiles
 
 
 class Session:
@@ -40,7 +40,7 @@ class Session:
         self._log = logging.getLogger(f"Session({session_dir.name})")
 
         # FOV from rig topic (set during rig.start(), updated via subscription)
-        self._tile_size: tuple[float, float] | None = rig.get_topic_value("fov")
+        self._fov_size: tuple[float, float] | None = rig.get_topic_value("fov")
         self._unsubscribe_fov = rig.subscribe("fov", self._on_fov_changed)
 
     def save(self) -> None:
@@ -125,9 +125,44 @@ class Session:
         return self._config.storage
 
     @property
-    def stacks(self) -> list[Stack]:
-        """Get the list of all stacks (flat, unfiltered)."""
+    def stacks(self) -> dict[str, Stack]:
+        """Get all stacks as a dict (stack_id -> Stack)."""
         return self._config.stacks
+
+    def compute_stack_order(self) -> list[str]:
+        """Compute optimal traversal order for all stacks.
+
+        Returns stack_ids ordered: completed/failed (chronological) → planned (spatial) → skipped.
+        """
+        all_stacks = self._config.stacks.values()
+        acq = self._config.acq
+
+        completed = sorted(
+            [s for s in all_stacks if s.status in (StackStatus.COMPLETED, StackStatus.FAILED)],
+            key=lambda s: s.completed_at or datetime.datetime.min.replace(tzinfo=datetime.UTC),
+        )
+
+        planned = [s for s in all_stacks if s.status == StackStatus.PLANNED]
+        if acq.sort_by_profile:
+            ordered_planned: list[Stack] = []
+            by_profile: dict[str, list[Stack]] = {}
+            for s in planned:
+                by_profile.setdefault(s.profile_id, []).append(s)
+            for pid in acq.profile_order:
+                if pid in by_profile:
+                    ordered_planned.extend(acq.stack_order(by_profile.pop(pid)))
+            for remaining in by_profile.values():
+                ordered_planned.extend(acq.stack_order(remaining))
+            planned = ordered_planned
+        else:
+            planned = acq.stack_order(planned)
+
+        skipped = sorted(
+            [s for s in all_stacks if s.status == StackStatus.SKIPPED],
+            key=lambda s: s.skipped_at or datetime.datetime.min.replace(tzinfo=datetime.UTC),
+        )
+
+        return [s.stack_id for s in completed + planned + skipped]
 
     @property
     def grid_config(self) -> GridConfig | None:
@@ -156,8 +191,8 @@ class Session:
 
     @property
     def has_acquired(self) -> bool:
-        """True if any stack has moved past PLANNED status."""
-        return any(s.status != StackStatus.PLANNED for s in self._config.stacks)
+        """True if any stack has been acquired (completed or failed)."""
+        return any(s.status in (StackStatus.COMPLETED, StackStatus.FAILED) for s in self._config.stacks.values())
 
     def set_metadata_target(self, target: str) -> None:
         """Change the metadata schema class and reset metadata to defaults.
@@ -235,16 +270,7 @@ class Session:
         self._log.debug("saved ROI for '%s' in profile '%s'", camera_id, self._rig.active_profile_id)
         return roi
 
-    async def revert_camera_roi(self, camera_id: str) -> SensorROI | None:
-        """Apply saved profile ROI back to camera hardware."""
-        if not self._rig.active_profile_id:
-            raise RuntimeError("No active profile")
-        roi = self._config.rig.profiles[self._rig.active_profile_id].rois.get(camera_id)
-        if not roi:
-            return None
-        return await self._rig.apply_camera_roi(camera_id, roi)
-
-    # ==================== Waveform Updates ====================
+    # ==================== Profile Settings ====================
 
     async def update_profile_waveforms(self, waveforms: dict | None = None, timing: dict | None = None) -> None:
         """Update waveform definitions for the active profile and recreate DAQ tasks.
@@ -297,43 +323,44 @@ class Session:
                 self._log.exception(f"Failed to apply props for '{device_id}'")
         return applied
 
-    # ==================== Acquisition Profile Management ====================
+    async def revert_camera_roi(self, camera_id: str) -> SensorROI | None:
+        """Apply saved profile ROI back to camera hardware."""
+        if not self._rig.active_profile_id:
+            raise RuntimeError("No active profile")
+        roi = self._config.rig.profiles[self._rig.active_profile_id].rois.get(camera_id)
+        if not roi:
+            return None
+        return await self._rig.apply_camera_roi(camera_id, roi)
 
-    def clear_profile_stacks(self, profile_id: str) -> None:
-        """Remove all stacks for the given profile. Auto-removes from profile_order."""
-        self._config.stacks = [s for s in self._config.stacks if s.profile_id != profile_id]
-        if profile_id in self._config.acq.profile_order:
-            self._config.acq.profile_order.remove(profile_id)
-        self.save()
+    # ==================== Acquisition config Management ====================
+
+    def get_fov_size(self) -> tuple[float, float]:
+        """Get FOV size in micrometers from rig-published topic."""
+        if self._fov_size is None:
+            raise ValueError("FOV not available (no active profile or cameras)")
+        return self._fov_size
 
     async def _on_fov_changed(self, fov: tuple[float, float]) -> None:
         """Handle FOV changes from rig topic."""
-        self._tile_size = fov
-        self._update_planned_stack_fov()
-
-    # ==================== Grid Management ====================
-
-    def _update_planned_stack_fov(self) -> None:
-        """Update (w, h) for PLANNED stacks to reflect current FOV.
-
-        Positions (x, y) are NOT changed — stacks own their position.
-        Only the FOV footprint is updated so the UI shows the correct extent.
-        """
+        self._fov_size = fov
+        # Update planned stack footprints
         active_pid = self._rig.active_profile_id
-        if not any(s.status == StackStatus.PLANNED and s.profile_id == active_pid for s in self._config.stacks):
-            return
-
-        fov_w, fov_h = self.get_fov_size()
-        for stack in self._config.stacks:
+        fov_w, fov_h = fov
+        for stack in self._config.stacks.values():
             if stack.status == StackStatus.PLANNED and stack.profile_id == active_pid:
                 stack.w = fov_w
                 stack.h = fov_h
 
-    def set_grid_offset(self, x_offset: float, y_offset: float) -> None:
-        """Set grid offset for the active profile.
+    def set_default_z_range(self, default_z_start: float, default_z_end: float) -> None:
+        """Set default Z range for new stacks."""
+        self._config.acq.default_z_start = default_z_start
+        self._config.acq.default_z_end = default_z_end
+        self.save()
 
-        Grid changes only affect future stack placements, not existing stacks.
-        """
+    # ==================== Grid Management ====================
+
+    def set_grid_offset(self, x_offset: float, y_offset: float) -> None:
+        """Set grid offset for the active profile."""
         gc = self.grid_config
         if gc is None:
             raise RuntimeError("Active profile has no grid configuration")
@@ -341,20 +368,8 @@ class Session:
         gc.y_offset = y_offset
         self.save()
 
-    def set_default_z_range(self, default_z_start: float, default_z_end: float) -> None:
-        """Set default Z range for new stacks on the active profile."""
-        gc = self.grid_config
-        if gc is None:
-            raise RuntimeError("Active profile has no grid configuration")
-        gc.default_z_start = default_z_start
-        gc.default_z_end = default_z_end
-        self.save()
-
     def set_overlap(self, overlap_x: float, overlap_y: float) -> None:
-        """Set overlap for the active profile.
-
-        Grid changes only affect future stack placements, not existing stacks.
-        """
+        """Set overlap for the active profile."""
         if not 0.0 <= overlap_x < 1.0:
             raise ValueError(f"Overlap X must be in [0.0, 1.0), got {overlap_x}")
         if not 0.0 <= overlap_y < 1.0:
@@ -366,116 +381,38 @@ class Session:
         gc.overlap_y = overlap_y
         self.save()
 
-    def get_fov_size(self) -> tuple[float, float]:
-        """Get FOV size in micrometers from rig-published topic.
-
-        Returns the actual field of view dimensions in micrometers.
-        This is the physical size each tile covers, regardless of overlap.
-        """
-        if self._tile_size is None:
-            raise ValueError("FOV not available (no active profile or cameras)")
-        return self._tile_size
-
-    def get_step_size(self) -> tuple[float, float]:
-        """Get step size between tile positions (FOV adjusted for overlap)."""
-        fov_w, fov_h = self.get_fov_size()
-        gc = self.grid_config
-        overlap_x = gc.overlap_x if gc is not None else 0.1
-        overlap_y = gc.overlap_y if gc is not None else 0.1
-        return (fov_w * (1 - overlap_x), fov_h * (1 - overlap_y))
-
     async def get_tiles(self) -> list[Tile]:
-        """Generate the tile grid based on grid config and stage dimensions.
-
-        Computes all tile positions that fit within the stage travel range,
-        starting from the grid offset. Tile positions are CENTER-ANCHORED:
-        (x, y) represents the center of each tile. Tiles are positioned
-        at intervals of step_size (FOV adjusted for overlap).
-
-        Returns:
-            List of Tile objects covering the stage area from the grid offset.
-            Returns empty list if active profile is not in plan or FOV unavailable.
-        """
+        """Generate the tile grid for the active profile."""
         gc = self.grid_config
         if gc is None:
             return []
-
-        # Get FOV and step size (requires active profile with cameras)
         try:
-            fov_w, fov_h = self.get_fov_size()
-            step_w, step_h = self.get_step_size()
+            fov = self.get_fov_size()
         except (ValueError, KeyError):
-            # No active profile or cameras - return empty grid
             return []
-
-        # Get stage dimensions from axis limits (in µm)
         stage = self._rig.stage
-        x_lower = await stage.x.get_lower_limit()
-        x_upper = await stage.x.get_upper_limit()
-        y_lower = await stage.y.get_lower_limit()
-        y_upper = await stage.y.get_upper_limit()
-
-        stage_width = x_upper - x_lower
-        stage_height = y_upper - y_lower
-
-        # Grid offset (in µm, relative to stage lower limit)
-        # This represents where tile (0,0)'s center is positioned
-        offset_x = gc.x_offset
-        offset_y = gc.y_offset
-
-        # Calculate tile indices for reachable tiles (center within stage bounds)
-        # With center-anchored positions: center = offset + col * step
-        # For center >= 0: col >= -offset / step
-        # For center <= stage_width: col <= (stage_width - offset) / step
-        col_min = math.ceil(-offset_x / step_w) if step_w > 0 else 0
-        col_max = math.floor((stage_width - offset_x) / step_w) + 1 if step_w > 0 else 1
-        row_min = math.ceil(-offset_y / step_h) if step_h > 0 else 0
-        row_max = math.floor((stage_height - offset_y) / step_h) + 1 if step_h > 0 else 1
-
-        # Generate tiles with CENTER-ANCHORED positions
-        tiles: list[Tile] = []
-        for row in range(row_min, row_max):
-            for col in range(col_min, col_max):
-                # Center position = offset + grid_step
-                tx = offset_x + col * step_w
-                ty = offset_y + row * step_h
-
-                # Include tile if center is within stage bounds (reachable by stage)
-                if 0 <= tx <= stage_width and 0 <= ty <= stage_height:
-                    tile_id = f"tile_r{row}_c{col}"
-                    tiles.append(
-                        Tile(
-                            tile_id=tile_id,
-                            row=row,
-                            col=col,
-                            x=tx,
-                            y=ty,
-                            w=fov_w,
-                            h=fov_h,
-                        ),
-                    )
-
-        num_cols = col_max - col_min
-        num_rows = row_max - row_min
-        self._log.debug(
-            "Generated %d tiles (%dx%d) with FOV %.0fx%.0f um, step %.0fx%.0f um",
-            len(tiles),
-            num_cols,
-            num_rows,
-            fov_w,
-            fov_h,
-            step_w,
-            step_h,
+        stage_bounds = (
+            await stage.x.get_lower_limit(),
+            await stage.x.get_upper_limit(),
+            await stage.y.get_lower_limit(),
+            await stage.y.get_upper_limit(),
         )
-        return tiles
+        return _compute_tiles(gc, fov, stage_bounds)
 
     # ==================== Stack Management ====================
+
+    def clear_profile_stacks(self, profile_id: str) -> None:
+        """Remove all stacks for the given profile. Auto-removes from profile_order."""
+        self._config.stacks = {sid: s for sid, s in self._config.stacks.items() if s.profile_id != profile_id}
+        if profile_id in self._config.acq.profile_order:
+            self._config.acq.profile_order.remove(profile_id)
+        self.save()
 
     def _has_stack_near(self, x: float, y: float, profile_id: str, tolerance: float = 0.1) -> bool:
         """Check if a stack already exists near (x, y) for the given profile."""
         return any(
             s.profile_id == profile_id and abs(s.x - x) < tolerance and abs(s.y - y) < tolerance
-            for s in self._config.stacks
+            for s in self._config.stacks.values()
         )
 
     def add_stacks(self, stacks: list[dict[str, float]]) -> list[Stack]:
@@ -522,12 +459,12 @@ class Session:
                 h=fov_h,
                 z_start=z_start,
                 z_end=z_end,
-                z_step=gc.z_step,
+                z_step=self._config.acq.z_step,
                 profile_id=active_pid,
                 status=StackStatus.PLANNED,
             )
 
-            self._config.stacks.append(stack)
+            self._config.stacks[stack.stack_id] = stack
             added.append(stack)
             self._log.debug("added stack %s at (%.1f, %.1f) um [profile=%s]", stack.stack_id, sx, sy, active_pid)
 
@@ -549,7 +486,7 @@ class Session:
         for e in edits:
             stack_id = str(e["stack_id"])
 
-            stack = next((s for s in self._config.stacks if s.stack_id == stack_id), None)
+            stack = self._config.stacks.get(stack_id)
             if stack is None:
                 raise ValueError(f"Stack {stack_id} not found")
 
@@ -565,6 +502,7 @@ class Session:
             if "z_end" in e:
                 stack.z_end = float(e["z_end"])
 
+            stack.edited_at = datetime.datetime.now(tz=datetime.UTC)
             edited.append(stack)
             self._log.debug("edited stack %s", stack_id)
 
@@ -580,70 +518,41 @@ class Session:
             return
 
         for stack_id in stack_ids:
-            for i, stack in enumerate(self._config.stacks):
-                if stack.stack_id == stack_id:
-                    if stack.status == StackStatus.COMPLETED:
-                        self._log.warning(f"Removing completed stack {stack_id}")
-                    self._config.stacks.pop(i)
-                    self._log.debug("removed stack %s", stack_id)
-                    break
-            else:
+            stack = self._config.stacks.get(stack_id)
+            if stack is None:
                 raise ValueError(f"Stack {stack_id} not found")
+            if stack.status == StackStatus.COMPLETED:
+                raise RuntimeError(f"Cannot remove completed stack {stack_id}")
+            del self._config.stacks[stack_id]
+            self._log.debug("removed stack %s", stack_id)
 
         # Remove profiles from profile_order if they have no remaining stacks
-        profiles_with_stacks = {s.profile_id for s in self._config.stacks}
-        self._config.acq.profile_order = [
-            pid for pid in self._config.acq.profile_order if pid in profiles_with_stacks
-        ]
+        profiles_with_stacks = {s.profile_id for s in self._config.stacks.values()}
+        self._config.acq.profile_order = [pid for pid in self._config.acq.profile_order if pid in profiles_with_stacks]
 
         self.save()
 
     def set_stack_order(self, order: StackOrder) -> None:
-        """Set stack ordering strategy and re-sort."""
+        """Set stack ordering strategy."""
         self._config.acq.stack_order = order
-        self._sort_stacks()
         self.save()
 
     def set_sort_by_profile(self, sort_by_profile: bool) -> None:
-        """Set whether to sort per-profile or all stacks together. Re-sorts."""
+        """Set whether to sort per-profile or all stacks together."""
         self._config.acq.sort_by_profile = sort_by_profile
-        self._sort_stacks()
         self.save()
 
     def reorder_profiles(self, profile_ids: list[str]) -> None:
-        """Reorder profiles in the plan and re-sort."""
+        """Reorder profiles in the plan."""
         acq = self._config.acq
         acq.profile_order = [pid for pid in profile_ids if pid in acq.profile_order]
-        self._sort_stacks()
         self.save()
-
-    def _sort_stacks(self) -> None:
-        """Sort stacks using the configured StackOrder and sort_by_profile setting."""
-        acq = self._config.acq
-        order = acq.stack_order
-
-        if acq.sort_by_profile:
-            # Sort each profile's stacks independently, concatenate in profile_order
-            by_profile: dict[str, list[Stack]] = {}
-            for s in self._config.stacks:
-                by_profile.setdefault(s.profile_id, []).append(s)
-            result: list[Stack] = []
-            for pid in acq.profile_order:
-                if pid in by_profile:
-                    result.extend(order(by_profile.pop(pid)))
-            for remaining in by_profile.values():
-                result.extend(order(remaining))
-            self._config.stacks = result
-        else:
-            # Sort all stacks together — stacks at same (x,y) naturally
-            # cluster since NN/sweep group by proximity
-            self._config.stacks = order(self._config.stacks)
 
     # ==================== Acquisition ====================
 
     async def acquire_stack(self, stack_id: str) -> StackResult:
         """Acquire a single stack by ID. Uses the profile captured when stack was planned."""
-        stack = next((s for s in self._config.stacks if s.stack_id == stack_id), None)
+        stack = self._config.stacks.get(stack_id)
         if stack is None:
             raise ValueError(f"Stack {stack_id} not found")
 
@@ -654,11 +563,13 @@ class Session:
             raise RuntimeError("Another stack is currently being acquired")
 
         self._log.info(f"Acquiring stack {stack_id} with profile '{stack.profile_id}'...")
+        stack.started_at = datetime.datetime.now(tz=datetime.UTC)
         result = await self._rig.acquire_stack(stack, self._config.storage)
 
         # Update stack status and output path
         stack.status = result.status
         stack.output_path = str(result.output_dir)
+        stack.completed_at = datetime.datetime.now(tz=datetime.UTC)
         self.save()
 
         if result.status == StackStatus.COMPLETED:
@@ -668,14 +579,22 @@ class Session:
 
         return result
 
+    def _pick_next_stack(self) -> Stack | None:
+        """Pick the next planned stack using the current ordering algorithm."""
+        order = self.compute_stack_order()
+        for stack_id in order:
+            stack = self._config.stacks.get(stack_id)
+            if stack and stack.status == StackStatus.PLANNED:
+                return stack
+        return None
+
     async def acquire_all(self) -> list[StackResult]:
-        """Acquire all PLANNED stacks in order. Saves state after each."""
+        """Acquire all PLANNED stacks, picking the next dynamically after each."""
         results: list[StackResult] = []
+        total = sum(1 for s in self._config.stacks.values() if s.status == StackStatus.PLANNED)
+        self._log.info(f"Starting acquisition of {total} stacks")
 
-        pending_stacks = [s for s in self._config.stacks if s.status == StackStatus.PLANNED]
-        self._log.info(f"Starting acquisition of {len(pending_stacks)} stacks")
-
-        for stack in pending_stacks:
+        while (stack := self._pick_next_stack()) is not None:
             result = await self.acquire_stack(stack.stack_id)
             results.append(result)
 

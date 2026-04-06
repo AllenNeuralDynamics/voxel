@@ -10,7 +10,6 @@
 
   const PANEL_WIDTH = 64;
 
-  let profileStacks = $derived(session.activeStacks);
 
   let containerRef = $state<HTMLDivElement | null>(null);
   let panelHeight = $state(250);
@@ -67,8 +66,9 @@
     width="100%"
     height="100%"
   >
-    {#each profileStacks as stack (stack.stack_id)}
+    {#each session.stacks as stack (stack.stack_id)}
       {@const selected = session.isStackSelected(stack.stack_id)}
+      {@const isActive = stack.profile_id === session.activeProfileId}
       {@const z0Y = (1 - (stack.z_start - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
       {@const z1Y = (1 - (stack.z_end - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
       <g
@@ -76,7 +76,7 @@
         class="text-(--stack-status)"
         stroke-width={selected ? '1.5' : '0.5'}
         stroke="currentColor"
-        opacity={selected ? 1 : 0.3}
+        opacity={selected ? 1 : isActive ? 0.3 : 0.15}
       >
         <line class="nss" x1="0" y1={z0Y} x2={PANEL_WIDTH} y2={z0Y} />
         <line class="nss" x1="0" y1={z1Y} x2={PANEL_WIDTH} y2={z1Y} />

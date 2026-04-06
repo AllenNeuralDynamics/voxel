@@ -63,7 +63,8 @@ class SessionStatus(BaseModel):
     # Convenience fields (active profile's data)
     grid_config: GridConfig | None
     tiles: list[Tile]
-    stacks: list[Stack]
+    stacks: dict[str, Stack]
+    stack_order: list[str]
 
     # Derived values
     fov: tuple[float, float] | None = None
@@ -132,6 +133,7 @@ class SessionService:
             grid_config=self.session.grid_config,
             tiles=tiles,
             stacks=self.session.stacks,
+            stack_order=self.session.compute_stack_order(),
             fov=fov,
             preview=preview,
             timestamp=_utc_timestamp(),

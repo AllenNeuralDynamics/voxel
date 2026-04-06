@@ -44,7 +44,10 @@ export class Session {
     this.#appStatus?.session?.acq ?? {
       profile_order: [],
       stack_order: 'snake_row',
-      sort_by_profile: false
+      sort_by_profile: false,
+      z_step: 1.0,
+      default_z_start: 0.0,
+      default_z_end: 511.0
     }
   );
   storage = $derived<StorageConfig>(
@@ -60,9 +63,13 @@ export class Session {
     this.config.profiles[this.#appStatus?.session?.active_profile_id ?? '']?.grid ?? null
   );
   tiles = $derived<Tile[]>(this.#appStatus?.session?.tiles ?? []);
-  stacks = $derived<Stack[]>(this.#appStatus?.session?.stacks ?? []);
+  stacks = $derived.by<Stack[]>(() => {
+    const dict = this.#appStatus?.session?.stacks ?? {};
+    const order = this.#appStatus?.session?.stack_order ?? [];
+    return order.map((id) => dict[id]).filter((s): s is Stack => s !== undefined);
+  });
   activeStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id === this.activeProfileId));
-  stackOrder = $derived<StackOrder>(this.acq.stack_order);
+  stackOrderAlgorithm = $derived<StackOrder>(this.acq.stack_order);
   sortByProfile = $derived<boolean>(this.acq.sort_by_profile);
   mode = $derived<RigMode>(this.#appStatus?.session?.mode ?? 'idle');
   metadata = $derived<Record<string, unknown>>(this.#appStatus?.session?.metadata ?? {});

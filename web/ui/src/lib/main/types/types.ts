@@ -44,6 +44,9 @@ export interface AcquisitionConfig {
   profile_order: string[];
   stack_order: StackOrder;
   sort_by_profile: boolean;
+  z_step: number;
+  default_z_start: number;
+  default_z_end: number;
 }
 
 /**
@@ -86,7 +89,8 @@ export interface SessionStatus {
   // Convenience fields (active profile's data)
   grid_config: GridConfig | null;
   tiles: Tile[];
-  stacks: Stack[];
+  stacks: Record<string, Stack>;
+  stack_order: string[];
 
   // Derived values
   fov: [number, number] | null;
@@ -146,9 +150,6 @@ export interface GridConfig {
   y_offset: number;
   overlap_x: number; // 0.0 to 1.0
   overlap_y: number; // 0.0 to 1.0
-  z_step: number;
-  default_z_start: number;
-  default_z_end: number;
 }
 
 /**

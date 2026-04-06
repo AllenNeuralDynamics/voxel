@@ -9,15 +9,12 @@ from vxl.sync import SyncTaskData
 
 
 class GridConfig(BaseModel):
-    """Grid configuration for tile planning. All positions in micrometers (µm)."""
+    """Grid configuration for 2D tile planning. All positions in micrometers (µm)."""
 
     x_offset: float = 0.0
     y_offset: float = 0.0
     overlap_x: float = Field(default=0.1, ge=0.0, lt=1.0)
     overlap_y: float = Field(default=0.1, ge=0.0, lt=1.0)
-    z_step: float = -1.0  # sentinel: -1 means use rig default
-    default_z_start: float = 0.0
-    default_z_end: float = 100.0
 
     @model_validator(mode="before")
     @classmethod

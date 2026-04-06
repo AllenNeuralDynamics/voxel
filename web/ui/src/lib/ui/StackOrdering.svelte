@@ -27,7 +27,7 @@
 <div class="grid grid-cols-[6rem_1fr] items-center gap-x-3 gap-y-2 text-xs">
   <span class="text-fg-muted">Stack Order</span>
   <Select
-    value={session.stackOrder}
+    value={session.stackOrderAlgorithm}
     options={STACK_ORDER_OPTIONS}
     onchange={(v) => session.setStackOrder(v as StackOrder)}
     size="xs"

@@ -3,6 +3,11 @@
   import type { LayerVisibility } from '$lib/main/types';
   import { GridLines, StackLight, ImageLight } from '$lib/icons';
 
+  export type MenuItem =
+    | { type: 'action'; label: string; action: () => void; disabled?: boolean; variant?: 'destructive' }
+    | { type: 'submenu'; label: string; items: MenuItem[]; disabled?: boolean }
+    | { type: 'separator' };
+
   // ── Layer visibility (module-level singleton) ────────────────────
 
   let layers = $state<LayerVisibility>({ grid: false, stacks: true, path: true, fov: true, thumbnail: true });
@@ -16,8 +21,9 @@
 
 <script lang="ts">
   import type { Session } from '$lib/main';
-  import { type Tile, type Stack, type StackStatus } from '$lib/main/types';
+  import { type Tile, type Stack } from '$lib/main/types';
   import { compositeFullFrames } from '$lib/main/preview.svelte';
+  import { sanitizeString } from '$lib/utils';
   import { ContextMenu } from '$lib/ui/kit';
   import { SvelteSet } from 'svelte/reactivity';
   import { onMount } from 'svelte';
@@ -33,8 +39,8 @@
 
   let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
   let isAcquiring = $derived(session.mode === 'acquiring');
-  let profileStacks = $derived(session.activeStacks);
-  let arrowSize = $derived(Math.min(session.fov.width, session.fov.height) * 0.15);
+
+  let arrowSize = $derived(Math.min(session.fov.width, session.fov.height) * 0.08);
 
   // ── Local tile selection ────────────────────────────────────────────
 
@@ -157,6 +163,15 @@
     }
   );
 
+  // Clear stale thumbnail when stage moves without preview running
+  let shouldClearThumbnail = $derived(!session.preview?.isPreviewing && isXYMoving);
+  watch(
+    () => shouldClearThumbnail,
+    (clear) => {
+      if (clear) thumbnail = '';
+    }
+  );
+
   function fovFrameLoop() {
     if (needsRedraw && session.preview) {
       needsRedraw = false;
@@ -242,67 +257,42 @@
   // ── Context menu ────────────────────────────────────────────────────
 
   type ContextTarget =
-    | { kind: 'tile'; tile: Tile }
-    | { kind: 'stack'; stack: Stack }
+    | { kind: 'tile'; tile: Tile; x: number; y: number }
+    | { kind: 'stack'; stack: Stack; x: number; y: number }
     | { kind: 'empty'; x: number; y: number }
     | null;
-
-  type MenuContext =
-    | { kind: 'empty'; x: number; y: number }
-    | { kind: 'single-tile'; tile: Tile; stack: Stack | null }
-    | { kind: 'multi-tile'; tile: Tile; withStacks: number; withoutStacks: number }
-    | { kind: 'single-stack'; stack: Stack }
-    | { kind: 'multi-stack'; stack: Stack; count: number };
 
   let contextTarget = $state<ContextTarget>(null);
   let zRangeBuffer = $state<{ zStartUm: number; zEndUm: number } | null>(null);
   let svgRef = $state<SVGSVGElement | null>(null);
 
-  const STACK_STATUSES: StackStatus[] = ['planned', 'completed', 'failed', 'skipped'];
-
-  let menuContext = $derived.by((): MenuContext | null => {
-    if (!contextTarget) return null;
-    if (contextTarget.kind === 'empty') return contextTarget;
-
-    if (contextTarget.kind === 'stack') {
-      const stack = contextTarget.stack;
-      const selected = session.selectedStacks;
-      if (selected.length <= 1) return { kind: 'single-stack', stack };
-      return { kind: 'multi-stack', stack, count: selected.length };
-    }
-
-    // kind === 'tile'
-    const tile = contextTarget.tile;
-    const selected = selectedTilesList;
-    if (selected.length <= 1) {
-      return { kind: 'single-tile', tile, stack: session.getStackAtPosition(tile.x, tile.y) ?? null };
-    }
-    const withStacks = selected.filter((t) => session.getStackAtPosition(t.x, t.y)).length;
-    return { kind: 'multi-tile', tile, withStacks, withoutStacks: selected.length - withStacks };
-  });
+  /** Convert mouse event to SVG viewBox coordinates (stage-relative). */
+  function svgPoint(e: MouseEvent): { x: number; y: number } | null {
+    if (!svgRef) return null;
+    const ctm = svgRef.getScreenCTM()?.inverse();
+    if (!ctm) return null;
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm);
+    return { x: pt.x, y: pt.y };
+  }
 
   function handleTileContext(e: MouseEvent, tile: Tile) {
-    if (!isTileSelected(tile.row, tile.col)) {
-      selectTiles([tile]);
-    }
+    if (!isTileSelected(tile.row, tile.col)) selectTiles([tile]);
     session.clearStackSelection();
-    contextTarget = { kind: 'tile', tile };
+    const pt = svgPoint(e);
+    contextTarget = { kind: 'tile', tile, x: pt?.x ?? tile.x, y: pt?.y ?? tile.y };
   }
 
   function handleStackContext(e: MouseEvent, stack: Stack) {
-    if (!session.isStackSelected(stack.stack_id)) {
-      session.selectStacks([stack]);
-    }
+    if (!session.isStackSelected(stack.stack_id)) session.selectStacks([stack]);
     clearTileSelection();
-    contextTarget = { kind: 'stack', stack };
+    const pt = svgPoint(e);
+    contextTarget = { kind: 'stack', stack, x: pt?.x ?? stack.x, y: pt?.y ?? stack.y };
   }
 
   function handleCanvasContext(e: MouseEvent) {
     if (e.target !== svgRef) return;
-    if (!svgRef || !session.stage.x || !session.stage.y) return;
-    const ctm = svgRef.getScreenCTM()?.inverse();
-    if (!ctm) return;
-    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm);
+    const pt = svgPoint(e);
+    if (!pt || !session.stage.x || !session.stage.y) return;
     contextTarget = {
       kind: 'empty',
       x: session.stage.x.lowerLimit + pt.x,
@@ -310,90 +300,172 @@
     };
   }
 
-  /** Stage-absolute position of the right-clicked item (for grid alignment). */
-  function contextPosition(): { x: number; y: number } | undefined {
-    if (!menuContext || !session.stage.x || !session.stage.y) return undefined;
-    const lx = session.stage.x.lowerLimit;
-    const ly = session.stage.y.lowerLimit;
-    if (menuContext.kind === 'single-tile' || menuContext.kind === 'multi-tile') {
-      return { x: lx + menuContext.tile.x, y: ly + menuContext.tile.y };
-    }
-    if (menuContext.kind === 'single-stack' || menuContext.kind === 'multi-stack') {
-      return { x: lx + menuContext.stack.x, y: ly + menuContext.stack.y };
-    }
-    if (menuContext.kind === 'empty') {
-      return { x: menuContext.x, y: menuContext.y };
-    }
-    return undefined;
-  }
+  /** Build the context menu items based on what was right-clicked. */
+  const menuItems = $derived.by<MenuItem[]>(() => {
+    const target = contextTarget;
+    if (!target) return [];
+    if (isAcquiring) return [{ type: 'action', label: 'Acquisition in progress', action: () => {}, disabled: true }];
 
-  function contextMoveHere() {
-    if (isXYMoving || !menuContext) return;
-    if (menuContext.kind === 'empty') {
-      targetX = menuContext.x;
-      targetY = menuContext.y;
-      session.stage.moveXY(menuContext.x, menuContext.y);
-    } else if (menuContext.kind === 'single-tile' || menuContext.kind === 'multi-tile') {
-      moveToTilePosition(menuContext.tile.x, menuContext.tile.y);
-    } else {
-      moveToTilePosition(menuContext.stack.x, menuContext.stack.y);
+    const items: MenuItem[] = [];
+    const lx = session.stage.x?.lowerLimit ?? 0;
+    const ly = session.stage.y?.lowerLimit ?? 0;
+
+    // ── Move here (all targets) ──
+    const moveAction = () => {
+      if (target.kind === 'empty') {
+        targetX = target.x;
+        targetY = target.y;
+        session.stage.moveXY(target.x, target.y);
+      } else if (target.kind === 'tile') {
+        moveToTilePosition(target.tile.x, target.tile.y);
+      } else {
+        moveToTilePosition(target.stack.x, target.stack.y);
+      }
+    };
+    items.push({ type: 'action', label: 'Move here', action: moveAction, disabled: isXYMoving });
+
+    // ── Select tiles (tile targets only) ──
+    if (target.kind === 'tile') {
+      const tile = target.tile;
+      items.push({
+        type: 'submenu',
+        label: 'Select tiles',
+        items: [
+          { type: 'action', label: `Row ${tile.row}`, action: () => selectTiles(session.tiles.filter((t) => t.row === tile.row)) },
+          { type: 'action', label: `Column ${tile.col}`, action: () => selectTiles(session.tiles.filter((t) => t.col === tile.col)) },
+          { type: 'separator' },
+          { type: 'action', label: 'All', action: () => selectTiles(session.tiles) },
+          { type: 'action', label: 'Invert', action: () => selectTiles(session.tiles.filter((t) => !isTileSelected(t.row, t.col))) }
+        ]
+      });
     }
-  }
 
-  function contextAddStack() {
-    const gc = session.gridConfig;
-    if (!gc) return;
-    const tiles = selectedTilesList.filter((t) => !session.getStackAtPosition(t.x, t.y));
-    if (tiles.length === 0) return;
-    session.addStacks(
-      tiles.map((t) => ({
-        x: t.x,
-        y: t.y,
-        zStartUm: gc.default_z_start,
-        zEndUm: gc.default_z_end
-      }))
-    );
-  }
-
-  function contextDeleteStack() {
-    if (menuContext?.kind === 'single-stack' || menuContext?.kind === 'multi-stack') {
-      const stacks = session.selectedStacks;
-      if (stacks.length > 0) session.removeStacks(stacks.map((s) => s.stack_id));
-    } else {
-      const stackIds = selectedTilesList
-        .map((t) => session.getStackAtPosition(t.x, t.y))
-        .filter((s): s is Stack => s !== undefined)
-        .map((s) => s.stack_id);
-      if (stackIds.length > 0) session.removeStacks(stackIds);
+    // ── Select stacks (stack targets only) ──
+    if (target.kind === 'stack') {
+      const stack = target.stack;
+      const profileLabel = sanitizeString(stack.profile_id);
+      items.push({
+        type: 'submenu',
+        label: 'Select stacks',
+        items: [
+          { type: 'action', label: 'All', action: () => session.selectMultipleStacks() },
+          { type: 'action', label: profileLabel, action: () => session.selectMultipleStacks({ profileIds: [stack.profile_id] }) }
+        ]
+      });
     }
-  }
 
-  function contextCopyZRange() {
-    if (menuContext?.kind !== 'single-stack') return;
-    zRangeBuffer = { zStartUm: menuContext.stack.z_start, zEndUm: menuContext.stack.z_end };
-  }
-
-  function contextPasteZRange() {
-    if (!zRangeBuffer) return;
-    let edits: Array<{ stackId: string; zStartUm: number; zEndUm: number }>;
-    if (menuContext?.kind === 'single-stack' || menuContext?.kind === 'multi-stack') {
-      edits = session.selectedStacks.map((s) => ({
-        stackId: s.stack_id,
-        zStartUm: zRangeBuffer!.zStartUm,
-        zEndUm: zRangeBuffer!.zEndUm
-      }));
-    } else {
-      edits = selectedTilesList
-        .map((t) => session.getStackAtPosition(t.x, t.y))
-        .filter((s): s is Stack => s !== undefined)
-        .map((s) => ({
-          stackId: s.stack_id,
-          zStartUm: zRangeBuffer!.zStartUm,
-          zEndUm: zRangeBuffer!.zEndUm
-        }));
+    // ── Align grid (empty canvas and stacks only — tiles ARE the grid) ──
+    if (target.kind !== 'tile') {
+      const pos =
+        target.kind === 'empty'
+          ? { x: target.x, y: target.y }
+          : { x: lx + target.stack.x, y: ly + target.stack.y };
+      items.push({
+        type: 'submenu',
+        label: 'Align grid',
+        disabled: !session.gridConfig,
+        items: [
+          { type: 'action', label: 'Top', action: () => session.alignGrid('top', pos) },
+          { type: 'action', label: 'Bottom', action: () => session.alignGrid('bottom', pos) },
+          { type: 'action', label: 'Left', action: () => session.alignGrid('left', pos) },
+          { type: 'action', label: 'Right', action: () => session.alignGrid('right', pos) },
+          { type: 'separator' },
+        { type: 'action', label: 'Center', action: () => session.alignGrid('center', pos) }
+      ]
+    });
     }
-    if (edits.length > 0) session.editStacks(edits);
-  }
+
+    // ── Add stack ──
+    if (target.kind === 'empty') {
+      // Add stack at clicked position for active profile
+      items.push({ type: 'separator' });
+      items.push({
+        type: 'action',
+        label: 'Add stack',
+        action: () => {
+          session.addStacks([{ x: target.x - lx, y: target.y - ly, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end }]);
+        }
+      });
+    } else if (target.kind === 'tile') {
+      const emptyCount = selectedTilesList.filter((t) => !session.getStackAtPosition(t.x, t.y)).length;
+      if (emptyCount > 0) {
+        items.push({ type: 'separator' });
+        items.push({
+          type: 'action',
+          label: emptyCount === 1 ? 'Add stack' : `Add stacks (${emptyCount})`,
+          action: () => {
+            const tiles = selectedTilesList.filter((t) => !session.getStackAtPosition(t.x, t.y));
+            session.addStacks(tiles.map((t) => ({ x: t.x, y: t.y, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end })));
+          }
+        });
+      }
+    }
+
+    // ── Z range, Add for active profile, Delete (stack targets only) ──
+    if (target.kind === 'stack') {
+      const stack = target.stack;
+      const selectedCount = session.selectedStacks.length;
+      const isSingle = selectedCount <= 1;
+      const isOtherProfile = stack.profile_id !== session.activeProfileId;
+      const canPaste = zRangeBuffer && (isSingle ? stack.status === 'planned' : session.selectedStacks.some((s) => s.status === 'planned'));
+      const canDelete = isSingle
+        ? stack.status === 'planned' || stack.status === 'skipped'
+        : session.selectedStacks.some((s) => s.status === 'planned' || s.status === 'skipped');
+
+      items.push({ type: 'separator' });
+
+      // Copy Z range (single stack only)
+      if (isSingle) {
+        items.push({
+          type: 'action',
+          label: 'Copy Z range',
+          action: () => { zRangeBuffer = { zStartUm: stack.z_start, zEndUm: stack.z_end }; }
+        });
+      }
+
+      // Paste Z range
+      if (canPaste) {
+        items.push({
+          type: 'action',
+          label: isSingle ? 'Paste Z range' : `Paste Z range (${selectedCount})`,
+          action: () => {
+            const targets = isSingle ? [stack] : session.selectedStacks.filter((s) => s.status === 'planned');
+            const edits = targets.map((s) => ({ stackId: s.stack_id, zStartUm: zRangeBuffer!.zStartUm, zEndUm: zRangeBuffer!.zEndUm }));
+            if (edits.length > 0) session.editStacks(edits);
+          }
+        });
+      }
+
+      // Add stack for active profile (other-profile stacks only)
+      if (isOtherProfile) {
+        const hasActiveStack = session.getStackAtPosition(stack.x, stack.y);
+        if (!hasActiveStack) {
+          items.push({
+            type: 'action',
+            label: 'Add stack',
+            action: () => {
+              session.addStacks([{ x: stack.x, y: stack.y, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end }]);
+            }
+          });
+        }
+      }
+
+      // Delete
+      if (canDelete) {
+        const deletable = isSingle
+          ? [stack]
+          : session.selectedStacks.filter((s) => s.status === 'planned' || s.status === 'skipped');
+        items.push({
+          type: 'action',
+          label: isSingle ? 'Delete stack' : `Delete stacks (${deletable.length})`,
+          variant: 'destructive',
+          action: () => session.removeStacks(deletable.map((s) => s.stack_id))
+        });
+      }
+    }
+
+    return items;
+  });
 </script>
 
 {#snippet fovLayer()}
@@ -464,10 +536,11 @@
 {/snippet}
 {#snippet stacksLayer()}
   {#if layers.stacks}
-    {@const points = profileStacks.map((s) => ({ x: s.x, y: s.y }))}
+    {@const points = session.stacks.map((s) => ({ x: s.x, y: s.y }))}
     <g>
-      {#each profileStacks as stack (stack.stack_id)}
+      {#each session.stacks as stack (stack.stack_id)}
         {@const selected = session.isStackSelected(stack.stack_id)}
+        {@const isActive = stack.profile_id === session.activeProfileId}
         {@const cx = stack.x}
         {@const cy = stack.y}
         {@const w = stack.w}
@@ -479,10 +552,10 @@
           height={h}
           data-stack-status={stack.status}
           class="nss text-(--stack-status) outline-none"
-          fill="currentColor"
-          fill-opacity={selected ? '0.5' : '0.15'}
+          fill={isActive ? 'currentColor' : 'transparent'}
+          fill-opacity={isActive ? (selected ? '0.5' : '0.15') : '0'}
           stroke="currentColor"
-          stroke-opacity={selected ? '0.9' : '0.25'}
+          stroke-opacity={selected ? '0.9' : isActive ? '0.25' : '0.4'}
           stroke-width="1"
           class:cursor-pointer={!isXYMoving}
           class:cursor-not-allowed={isXYMoving}
@@ -504,153 +577,49 @@
       />
       {#each points.slice(0, -1) as p1, i (i)}
         {@const p2 = points[i + 1]}
-        {@const midX = (p1.x + p2.x) / 2}
-        {@const midY = (p1.y + p2.y) / 2}
-        {@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
-        <path
-          d="M {-arrowSize * 0.5} {-arrowSize * 0.6} L {arrowSize * 0.5} 0 L {-arrowSize * 0.5} {arrowSize * 0.6}"
-          stroke-width={arrowSize * 0.15}
-          class="fill-none opacity-70"
-          transform="translate({midX}, {midY}) rotate({angle})"
-        />
+        {@const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y)}
+        {#if dist > arrowSize}
+          {@const midX = (p1.x + p2.x) / 2}
+          {@const midY = (p1.y + p2.y) / 2}
+          {@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
+          <path
+            d="M {-arrowSize * 0.5} {-arrowSize * 0.6} L {arrowSize * 0.5} 0 L {-arrowSize * 0.5} {arrowSize * 0.6}"
+            stroke-width={arrowSize * 0.15}
+            class="fill-none opacity-70"
+            transform="translate({midX}, {midY}) rotate({angle})"
+          />
+        {:else if dist < 1}
+          <!-- Overlapping stacks: show dot marker -->
+          <circle
+            cx={p1.x}
+            cy={p1.y}
+            r={arrowSize * 0.25}
+            class="fill-current opacity-50"
+            stroke="none"
+          />
+        {/if}
       {/each}
     </g>
   {/if}
 {/snippet}
 
-{#snippet alignGridItems()}
-  {@const pos = contextPosition()}
-  <ContextMenu.Sub>
-    <ContextMenu.SubTrigger disabled={!session.gridConfig}>Align grid</ContextMenu.SubTrigger>
-    <ContextMenu.SubContent>
-      <ContextMenu.Item onSelect={() => session.alignGrid('top', pos)}>Top</ContextMenu.Item>
-      <ContextMenu.Item onSelect={() => session.alignGrid('bottom', pos)}>Bottom</ContextMenu.Item>
-      <ContextMenu.Item onSelect={() => session.alignGrid('left', pos)}>Left</ContextMenu.Item>
-      <ContextMenu.Item onSelect={() => session.alignGrid('right', pos)}>Right</ContextMenu.Item>
+{#snippet renderMenuItems(items: MenuItem[])}
+  {#each items as item, i (i)}
+    {#if item.type === 'separator'}
       <ContextMenu.Separator />
-      <ContextMenu.Item onSelect={() => session.alignGrid('center', pos)}>Center</ContextMenu.Item>
-    </ContextMenu.SubContent>
-  </ContextMenu.Sub>
-{/snippet}
-
-{#snippet tileContextItems()}
-  <ContextMenu.Sub>
-    <ContextMenu.SubTrigger>Select tiles</ContextMenu.SubTrigger>
-    <ContextMenu.SubContent>
-      {#if menuContext?.kind === 'single-tile' || menuContext?.kind === 'multi-tile'}
-        <ContextMenu.Item onSelect={() => selectTiles(session.tiles.filter((t) => t.row === menuContext.tile.row))}>
-          Row {menuContext.tile.row}
-        </ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => selectTiles(session.tiles.filter((t) => t.col === menuContext.tile.col))}>
-          Column {menuContext.tile.col}
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-      {/if}
-      <ContextMenu.Item onSelect={() => selectTiles(session.tiles)}>All</ContextMenu.Item>
-      {#if selectedTilesList.length > 0}
-        <ContextMenu.Item onSelect={() => clearTileSelection()}>Deselect all</ContextMenu.Item>
-      {/if}
-      <ContextMenu.Item onSelect={() => selectTiles(session.tiles.filter((t) => !isTileSelected(t.row, t.col)))}>
-        Invert
-      </ContextMenu.Item>
-      {#if profileStacks.length > 0 || session.tiles.length > 0}
-        <ContextMenu.Separator />
-      {/if}
-      {#if profileStacks.length > 0}
-        <ContextMenu.Item
-          onSelect={() => selectTiles(session.tiles.filter((t) => session.getStackAtPosition(t.x, t.y)))}
-        >
-          With stacks
-        </ContextMenu.Item>
-      {/if}
-      {#if session.tiles.length > 0}
-        <ContextMenu.Item
-          onSelect={() => selectTiles(session.tiles.filter((t) => !session.getStackAtPosition(t.x, t.y)))}
-        >
-          Without stacks
-        </ContextMenu.Item>
-      {/if}
-    </ContextMenu.SubContent>
-  </ContextMenu.Sub>
-
-  {@render alignGridItems()}
-
-  {#if menuContext?.kind === 'single-tile'}
-    {#if !menuContext.stack}
-      <ContextMenu.Separator />
-      <ContextMenu.Item onSelect={contextAddStack}>Add stack</ContextMenu.Item>
-    {/if}
-  {:else if menuContext?.kind === 'multi-tile'}
-    {#if menuContext.withoutStacks > 0}
-      <ContextMenu.Separator />
-      <ContextMenu.Item onSelect={contextAddStack}>
-        Add stacks ({menuContext.withoutStacks})
+    {:else if item.type === 'submenu'}
+      <ContextMenu.Sub>
+        <ContextMenu.SubTrigger disabled={item.disabled}>{item.label}</ContextMenu.SubTrigger>
+        <ContextMenu.SubContent>
+          {@render renderMenuItems(item.items ?? [])}
+        </ContextMenu.SubContent>
+      </ContextMenu.Sub>
+    {:else}
+      <ContextMenu.Item onSelect={item.action} disabled={item.disabled} variant={item.variant}>
+        {item.label}
       </ContextMenu.Item>
     {/if}
-  {/if}
-{/snippet}
-
-{#snippet stackContextItems()}
-  <ContextMenu.Sub>
-    <ContextMenu.SubTrigger>Select stacks</ContextMenu.SubTrigger>
-    <ContextMenu.SubContent>
-      <ContextMenu.Item onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!] })}
-        >All</ContextMenu.Item
-      >
-      {#if session.selectedStacks.length > 0}
-        <ContextMenu.Item onSelect={() => session.clearStackSelection()}>Deselect all</ContextMenu.Item>
-      {/if}
-      {#if profileStacks.length > 0}
-        <ContextMenu.Separator />
-        {#each STACK_STATUSES as status (status)}
-          <ContextMenu.Item
-            onSelect={() => session.selectMultipleStacks({ profileIds: [session.activeProfileId!], status: [status] })}
-          >
-            {status[0].toUpperCase() + status.slice(1)}
-          </ContextMenu.Item>
-        {/each}
-      {/if}
-    </ContextMenu.SubContent>
-  </ContextMenu.Sub>
-
-  {@render alignGridItems()}
-
-  <ContextMenu.Separator />
-  {#if menuContext?.kind === 'single-stack'}
-    <ContextMenu.Sub>
-      <ContextMenu.SubTrigger>Z range</ContextMenu.SubTrigger>
-      <ContextMenu.SubContent>
-        <ContextMenu.Item onSelect={contextCopyZRange}>Copy</ContextMenu.Item>
-        {#if zRangeBuffer}
-          <ContextMenu.Item onSelect={contextPasteZRange}>Paste</ContextMenu.Item>
-        {/if}
-      </ContextMenu.SubContent>
-    </ContextMenu.Sub>
-    <ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>Delete stack</ContextMenu.Item>
-  {:else if menuContext?.kind === 'multi-stack'}
-    {#if zRangeBuffer}
-      <ContextMenu.Item onSelect={contextPasteZRange}>
-        Paste Z range ({menuContext.count})
-      </ContextMenu.Item>
-    {/if}
-    <ContextMenu.Item variant="destructive" onSelect={contextDeleteStack}>
-      Delete stacks ({menuContext.count})
-    </ContextMenu.Item>
-  {/if}
-{/snippet}
-
-{#snippet contextMenuItems()}
-  {#if isAcquiring}
-    <ContextMenu.Item disabled>Acquisition in progress</ContextMenu.Item>
-  {:else}
-    <ContextMenu.Item disabled={isXYMoving} onSelect={contextMoveHere}>Move here</ContextMenu.Item>
-
-    {#if menuContext?.kind === 'single-tile' || menuContext?.kind === 'multi-tile'}
-      {@render tileContextItems()}
-    {:else if menuContext?.kind === 'single-stack' || menuContext?.kind === 'multi-stack'}
-      {@render stackContextItems()}
-    {/if}
-  {/if}
+  {/each}
 {/snippet}
 
 <div bind:this={containerRef} class="grid min-w-0 flex-1 place-content-center">
@@ -708,7 +677,7 @@
         </svg>
       </ContextMenu.Trigger>
       <ContextMenu.Content class="min-w-44">
-        {@render contextMenuItems()}
+        {@render renderMenuItems(menuItems)}
       </ContextMenu.Content>
     </ContextMenu.Root>
   </div>

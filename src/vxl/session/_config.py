@@ -25,6 +25,9 @@ class AcquisitionConfig(BaseModel):
     profile_order: list[str] = Field(default_factory=list)
     stack_order: StackOrder = StackOrder.SNAKE_ROW
     sort_by_profile: bool = False
+    z_step: float = 1.0  # default Z step in µm
+    default_z_start: float = 0.0  # default Z start for new stacks (µm)
+    default_z_end: float = 511.0  # default Z end for new stacks (µm) — 512 frames at 1µm step
 
     def has_profile(self, profile_id: str) -> bool:
         """Check if a profile is in the plan."""
@@ -49,7 +52,7 @@ class SessionConfig(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
     acq: AcquisitionConfig = Field(default_factory=AcquisitionConfig)
     storage: StorageConfig
-    stacks: list[Stack] = Field(default_factory=list)
+    stacks: dict[str, Stack] = Field(default_factory=dict)
 
     model_config = {"extra": "forbid"}
 
@@ -59,9 +62,8 @@ class SessionConfig(BaseModel):
     @model_validator(mode="after")
     def apply_rig_defaults(self) -> "SessionConfig":
         """Copy defaults from rig globals if not set."""
-        for profile in self.rig.profiles.values():
-            if profile.grid.z_step < 0:
-                profile.grid.z_step = self.rig.globals.default_z_step
+        if self.acq.z_step <= 0:
+            self.acq.z_step = self.rig.globals.default_z_step
         return self
 
     def resolve_metadata(self) -> ExperimentMetadata:
@@ -125,7 +127,7 @@ class SessionConfig(BaseModel):
             "metadata": config.metadata,
             "acq": config.acq.model_dump(mode="json"),
             "storage": config.storage.model_dump(mode="json"),
-            "stacks": [],
+            "stacks": {},
         }
         return config
 
@@ -141,7 +143,7 @@ class SessionConfig(BaseModel):
         """
         acq_data = self.acq.model_dump(mode="json")
         storage_data = self.storage.model_dump(mode="json")
-        stacks_data = [s.model_dump(mode="json") for s in self.stacks]
+        stacks_data = {sid: s.model_dump(mode="json") for sid, s in self.stacks.items()}
 
         if self._raw_data is not None:
             self._raw_data["session_name"] = self.session_name

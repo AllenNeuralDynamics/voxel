@@ -2,7 +2,7 @@
 
 import math
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
@@ -139,7 +139,6 @@ class StorageConfig(BaseModel):
 
 class StackStatus(StrEnum):
     PLANNED = "planned"
-    COMMITTED = "committed"
     ACQUIRING = "acquiring"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -182,6 +181,13 @@ class Stack(BaseModel):
     profile_id: str
     status: StackStatus = StackStatus.PLANNED
     output_path: str | None = None
+
+    # Timestamps (UTC)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+    edited_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None  # completed or failed only
+    skipped_at: datetime | None = None
 
     @computed_field
     @property

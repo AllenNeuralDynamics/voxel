@@ -372,10 +372,7 @@
                     variant="outline"
                     size="icon-xs"
                     title="Reset to profile default"
-                    onclick={() => {
-                      const gc = session.gridConfig;
-                      if (gc) applyZRange('zStartUm', gc.default_z_start);
-                    }}
+                    onclick={() => applyZRange('zStartUm', session.acq.default_z_start)}
                   >
                     <Restore width="14" height="14" />
                   </Button>
@@ -404,10 +401,7 @@
                     variant="outline"
                     size="icon-xs"
                     title="Reset to profile default"
-                    onclick={() => {
-                      const gc = session.gridConfig;
-                      if (gc) applyZRange('zEndUm', gc.default_z_end);
-                    }}
+                    onclick={() => applyZRange('zEndUm', session.acq.default_z_end)}
                   >
                     <Restore width="14" height="14" />
                   </Button>

@@ -299,7 +299,7 @@
   </div>
 {:else if selectedLaser}
   {@const groupLabelClasses = 'text-xs leading-ui-sm font-medium text-fg-muted/60 uppercase'}
-  <div class={cn('grid h-full grid-cols-[minmax(280px,2fr)_minmax(300px,3fr)]', className)}>
+  <div class={cn('grid h-full grid-cols-[minmax(300px,2fr)_minmax(300px,5fr)]', className)}>
     <!-- Left: detail panel -->
     {@render detailPanel(
       selectedLaser,

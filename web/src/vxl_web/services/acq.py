@@ -262,7 +262,7 @@ async def update_grid(
 async def list_stacks(service: Annotated[SessionService, Depends(get_session_service)]) -> dict:
     """Get all stacks."""
     return {
-        "stacks": [s.model_dump() for s in service.session.stacks],
+        "stacks": {sid: s.model_dump() for sid, s in service.session.stacks.items()},
         "count": len(service.session.stacks),
     }
 

@@ -29,7 +29,7 @@
       <div
         class="flex min-h-ui-xl w-full flex-wrap items-center justify-between gap-4 border-t border-border px-4 pt-2"
       >
-        {@render zDefaults(session, gc)}
+        {@render zDefaults(session)}
         <StagePosition stage={session.stage} />
       </div>
     {/if}
