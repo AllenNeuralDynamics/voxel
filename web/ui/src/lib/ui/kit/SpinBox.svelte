@@ -87,7 +87,7 @@
 
 <script lang="ts">
   import { cn } from '$lib/utils';
-  import { useEventListener, useThrottle, useDebounce } from 'runed';
+  import { useEventListener, useThrottle } from 'runed';
 
   interface Props extends SpinBoxVariants {
     value?: number;
@@ -106,7 +106,6 @@
     disabled?: boolean;
     class?: string;
     throttle?: number;
-    debounce?: number;
     onChange?: (newValue: number) => void;
   }
 
@@ -130,7 +129,6 @@
     size = 'md',
     class: className = '',
     throttle = 100,
-    debounce = 400,
     onChange: onValueChange
   }: Props = $props();
 
@@ -145,11 +143,6 @@
 
   let isEditing = $state(false);
   let editingText = $state('');
-  const debouncedCommit = useDebounce(
-    () => commitEdit(),
-    () => debounce
-  );
-
   function snapToStep(v: number): number {
     if (step <= 0 || !isFinite(step)) return v;
     if (!isFinite(min)) return Math.round(v / step) * step;
@@ -242,36 +235,21 @@
 
   function handleInput(e: Event) {
     const target = e.target as HTMLInputElement;
-
-    if (debounce > 0) {
-      isEditing = true;
-      editingText = target.value;
-      debouncedCommit();
-      return;
-    }
-
-    let newValue = parseFloat(target.value);
-    if (isNaN(newValue)) return;
-
-    newValue = Math.max(min, Math.min(max, snapToStep(newValue)));
-    value = newValue;
-
-    if (onValueChange) {
-      onValueChange(newValue);
-    }
+    isEditing = true;
+    editingText = target.value;
   }
 
   function handleBlur() {
-    if (debounce > 0) {
-      debouncedCommit.cancel();
-      commitEdit();
-    }
+    commitEdit();
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && debounce > 0) {
-      debouncedCommit.cancel();
+    if (e.key === 'Enter') {
       commitEdit();
+      (e.target as HTMLInputElement)?.blur();
+    } else if (e.key === 'Escape') {
+      isEditing = false;
+      (e.target as HTMLInputElement)?.blur();
     }
   }
 
