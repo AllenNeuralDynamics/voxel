@@ -4,16 +4,16 @@
   export const switchVariants = tv({
     slots: {
       root: [
-        'flex cursor-pointer items-center rounded-full border',
-        'border-border bg-element-bg',
-        'transition-colors hover:bg-element-hover',
+        'group flex cursor-pointer items-center rounded-full transition-colors',
+        'border border-border data-[state=checked]:border-primary',
+        'bg-element-bg/30 hover:bg-element-hover/60',
+        'data-[state=checked]:bg-primary/90 data-[state=checked]:hover:bg-primary',
         'data-disabled:cursor-not-allowed data-disabled:opacity-40',
-        'data-[state=checked]:border-primary data-[state=checked]:bg-primary/90',
-        'data-[state=checked]:hover:bg-primary',
         'h-[var(--switch-h)] w-[calc(var(--switch-h)*1.8)] px-[calc(var(--switch-h)*0.1)]'
       ],
       thumb: [
-        'block rounded-full bg-foreground transition-[margin-left]',
+        'block rounded-full transition-[margin-left,colors]',
+        'bg-fg-faint/50 group-hover:bg-fg-faint data-[state=checked]:bg-fg-muted',
         'h-[calc(var(--switch-h)*0.7)] w-[calc(var(--switch-h)*0.7)]',
         'ml-0 data-[state=checked]:ml-[calc(var(--switch-h)*0.8)]'
       ]

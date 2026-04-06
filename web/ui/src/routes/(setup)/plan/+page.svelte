@@ -1,12 +1,13 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
-  import { Button, Dialog, Select, SpinBox } from '$lib/ui/kit';
+  import { Button, Dialog, DropdownMenu, Select, SpinBox } from '$lib/ui/kit';
+  import { buttonVariants } from '$lib/ui/kit/Button.svelte';
   import { Pane, PaneGroup } from 'paneforge';
   import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-  import { sanitizeString, cn } from '$lib/utils';
-  import { Restore, ChevronDown, ChevronRight } from '$lib/icons';
+  import { sanitizeString, cn, createPaneMinSize } from '$lib/utils';
+  import { Check, ChevronDown, ChevronRight, DotsHorizontal } from '$lib/icons';
   import StackStatusIcon from '$lib/ui/StackStatusIcon.svelte';
-  import { watch, ElementSize } from 'runed';
+  import { watch } from 'runed';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { Stack, StackStatus } from '$lib/main/types';
   import StackOrdering from '$lib/ui/StackOrdering.svelte';
@@ -90,13 +91,55 @@
 
   const selectedStacks = $derived(session.selectedStacks);
 
-  const commonZStart = $derived(commonValue(selectedStacks.map((s) => s.z_start)));
-  const commonZEnd = $derived(commonValue(selectedStacks.map((s) => s.z_end)));
-  const commonZStep = $derived(commonValue(selectedStacks.map((s) => s.z_step)));
-  const totalFrames = $derived(selectedStacks.reduce((sum, s) => sum + s.num_frames, 0));
-  const totalRange = $derived(selectedStacks.reduce((sum, s) => sum + Math.abs(s.z_end - s.z_start), 0));
+  // Common values in mm (undefined = mixed)
+  function toMm(v: number | undefined): number {
+    return v !== undefined ? v / 1000 : NaN;
+  }
+  const commonX = $derived(toMm(commonValue(selectedStacks.map((s) => s.x))));
+  const commonY = $derived(toMm(commonValue(selectedStacks.map((s) => s.y))));
+  const commonZStart = $derived(toMm(commonValue(selectedStacks.map((s) => s.z_start))));
+  const commonZEnd = $derived(toMm(commonValue(selectedStacks.map((s) => s.z_end))));
+  const commonFrames = $derived(commonValue(selectedStacks.map((s) => s.num_frames)) ?? NaN);
+  const commonRange = $derived(!Number.isNaN(commonZStart) && !Number.isNaN(commonZEnd) ? Math.abs(commonZEnd - commonZStart) : NaN);
+
 
   // --- Actions ---
+
+  function applyPosition(axis: 'x' | 'y', value: number) {
+    if (selectedStacks.length === 0) return;
+    session.editStacks(
+      selectedStacks.map((s) => ({
+        stackId: s.stack_id,
+        ...(axis === 'x' ? { x: value } : { y: value })
+      }))
+    );
+  }
+
+  let nudgeDx = $state(0);
+  let nudgeDy = $state(0);
+
+  function applyNudge() {
+    if (selectedStacks.length === 0 || (nudgeDx === 0 && nudgeDy === 0)) return;
+    session.editStacks(
+      selectedStacks.map((s) => ({
+        stackId: s.stack_id,
+        x: s.x + nudgeDx,
+        y: s.y + nudgeDy
+      }))
+    );
+    nudgeDx = 0;
+    nudgeDy = 0;
+  }
+
+  function applyFrameCount(frames: number) {
+    if (selectedStacks.length === 0 || frames < 1) return;
+    session.editStacks(
+      selectedStacks.map((s) => ({
+        stackId: s.stack_id,
+        zEndUm: s.z_start + (frames - 1) * s.z_step
+      }))
+    );
+  }
 
   function applyZRange(field: 'zStartUm' | 'zEndUm', value: number) {
     if (selectedStacks.length === 0) return;
@@ -173,9 +216,8 @@
 
   // --- Pane sizing (pixel-based min for sidebar) ---
 
-  const SIDEBAR_MIN_PX = 300;
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const paneGroupSize = new ElementSize(() => paneGroupEl);
+  const sidebarMin = createPaneMinSize(() => paneGroupEl, 350);
 </script>
 
 {#snippet stackRow(stack: Stack, selected: boolean)}
@@ -251,7 +293,7 @@
       <div
         role="grid"
         aria-label="Stack list"
-        class="grid flex-1 auto-rows-min grid-cols-[auto_auto_1fr_auto_auto_auto] content-start overflow-y-auto"
+        class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_1fr_auto_auto] content-start overflow-y-auto"
       >
         {#if profileGroups.length === 0}
           <div class="col-span-full flex min-h-32 items-center justify-center p-4">
@@ -310,7 +352,7 @@
   <!-- Sidebar (right) -->
   <Pane
     defaultSize={30}
-    minSize={paneGroupSize.width > 0 ? (SIDEBAR_MIN_PX / paneGroupSize.width) * 100 : 25}
+    minSize={sidebarMin.value}
     maxSize={45}
   >
     <div class="flex h-full flex-col overflow-y-auto bg-canvas">
@@ -329,7 +371,7 @@
               <Button
                 variant="ghost"
                 size="xs"
-                class="text-danger/80 hover:bg-danger/10 hover:text-danger"
+                class="-mx-2 text-danger/80 hover:bg-danger/10 hover:text-danger"
                 onclick={() => {
                   clearMode = 'selected';
                   clearDialogOpen = true;
@@ -345,84 +387,154 @@
 
         <!-- Stack properties -->
         {#if selectedStacks.length > 0}
-          <div class="border-y border-border px-4 pb-5">
-            <!-- Z Range -->
-            <div class="space-y-3">
-              <div class="flex items-center justify-between py-3">
-                <span class="text-xs text-fg-muted">Z Range</span>
-                {#if commonZStep !== undefined}
-                  <span class="text-xs text-fg-muted tabular-nums">
-                    {(commonZStep / 1000).toFixed(4)} mm per step
-                  </span>
-                {/if}
-              </div>
-              <div class="grid grid-cols-[3.5rem_1fr_auto] items-center gap-x-4 gap-y-4">
-                <span class="text-xs text-fg-muted">Start</span>
-                <SpinBox
-                  value={(commonZStart ?? 0) / 1000}
-                  placeholder={commonZStart === undefined ? 'mixed' : ''}
-                  suffix="mm"
-                  size="xs"
-                  step={0.001}
-                  decimals={3}
-                  onChange={(v) => applyZRange('zStartUm', v * 1000)}
-                />
-                <div class="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon-xs"
-                    title="Reset to profile default"
-                    onclick={() => applyZRange('zStartUm', session.acq.default_z_start)}
+          {@const actionBtnCn = cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }), '-mx-2')}
+          <div class="border-y border-border px-4 py-3">
+            <div class="grid grid-cols-[minmax(4rem,auto)_1fr_auto] items-center gap-x-3 gap-y-3">
+              <!-- X -->
+              <span class="text-xs text-fg-muted">X</span>
+              <SpinBox
+                value={commonX}
+                suffix="mm"
+                size="xs"
+                step={0.1}
+                decimals={4}
+                onChange={(v) => applyPosition('x', v * 1000)}
+              />
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger class={actionBtnCn}>
+                  <DotsHorizontal width="14" height="14" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  <DropdownMenu.Item
+                    onclick={() => applyPosition('x', session.stage.x.position - session.stage.x.lowerLimit)}
                   >
-                    <Restore width="14" height="14" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    title="Set from current Z position"
-                    onclick={() => applyZRange('zStartUm', session.stage.z.position)}
-                  >
-                    Match FOV
-                  </Button>
-                </div>
+                    Match stage X
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
 
-                <span class="text-xs text-fg-muted">End</span>
+              <!-- Y -->
+              <span class="text-xs text-fg-muted">Y</span>
+              <SpinBox
+                value={commonY}
+                suffix="mm"
+                size="xs"
+                step={0.1}
+                decimals={4}
+                onChange={(v) => applyPosition('y', v * 1000)}
+              />
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger class={actionBtnCn}>
+                  <DotsHorizontal width="14" height="14" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  <DropdownMenu.Item
+                    onclick={() => applyPosition('y', session.stage.y.position - session.stage.y.lowerLimit)}
+                  >
+                    Match stage Y
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+
+              <!-- Nudge -->
+              <span class="text-xs text-fg-muted">Nudge</span>
+              <div class="flex items-center gap-2">
                 <SpinBox
-                  value={(commonZEnd ?? 0) / 1000}
-                  placeholder={commonZEnd === undefined ? 'mixed' : ''}
+                  value={nudgeDx / 1000}
+                  prefix="dX"
                   suffix="mm"
                   size="xs"
-                  step={0.001}
-                  decimals={3}
-                  onChange={(v) => applyZRange('zEndUm', v * 1000)}
+                  step={0.1}
+                  snapValue={0}
+                  decimals={4}
+                  align="right"
+                  class="flex-1"
+                  onChange={(v) => (nudgeDx = v * 1000)}
                 />
-                <div class="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon-xs"
-                    title="Reset to profile default"
-                    onclick={() => applyZRange('zEndUm', session.acq.default_z_end)}
-                  >
-                    <Restore width="14" height="14" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    title="Set from current Z position"
-                    onclick={() => applyZRange('zEndUm', session.stage.z.position)}
-                  >
-                    Match FOV
-                  </Button>
-                </div>
+                <SpinBox
+                  value={nudgeDy / 1000}
+                  prefix="dY"
+                  suffix="mm"
+                  size="xs"
+                  step={0.1}
+                  snapValue={0}
+                  decimals={4}
+                  align="right"
+                  class="flex-1"
+                  onChange={(v) => (nudgeDy = v * 1000)}
+                />
               </div>
-              <div class="flex items-center justify-between gap-4 text-xs text-fg-muted tabular-nums">
-                <span class="w-3.5rem text-xs text-fg-muted">Range</span>
-                <p>
-                  <span>{(totalRange / 1000).toFixed(2)} mm</span>
-                  <span class="mx-2">·</span>
-                  <span>{totalFrames} frames</span>
-                </p>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                title="Apply nudge"
+                disabled={nudgeDx === 0 && nudgeDy === 0}
+                onclick={applyNudge}
+                class="-mx-2"
+              >
+                <Check width="14" height="14" />
+              </Button>
+
+              <!-- Z Start -->
+              <span class="text-xs text-fg-muted">Z Start</span>
+              <SpinBox
+                value={commonZStart}
+                suffix="mm"
+                size="xs"
+                step={0.001}
+                decimals={3}
+                onChange={(v) => applyZRange('zStartUm', v * 1000)}
+              />
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger class={actionBtnCn}>
+                  <DotsHorizontal width="14" height="14" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.stage.z.position)}>
+                    Match stage Z
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.acq.default_z_start)}>
+                    Reset to default
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+
+              <!-- Z End -->
+              <span class="text-xs text-fg-muted">Z End</span>
+              <SpinBox
+                value={commonZEnd}
+                suffix="mm"
+                size="xs"
+                step={0.001}
+                decimals={3}
+                onChange={(v) => applyZRange('zEndUm', v * 1000)}
+              />
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger class={actionBtnCn}>
+                  <DotsHorizontal width="14" height="14" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.stage.z.position)}>
+                    Match stage Z
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.acq.default_z_end)}>
+                    Reset to default
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+
+              <!-- Range -->
+              <span class="text-xs text-fg-muted">Range</span>
+              <SpinBox
+                value={commonFrames}
+                min={1}
+                step={1}
+                decimals={0}
+                suffix={!Number.isNaN(commonRange) ? `frames · ${commonRange.toFixed(3)} mm` : 'frames'}
+                size="xs"
+                onChange={(v) => applyFrameCount(v)}
+              />
+              <span></span>
             </div>
           </div>
         {/if}

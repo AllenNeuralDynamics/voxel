@@ -73,12 +73,12 @@
     --thumb-width: 0.2rem;
     --thumb-height: 0.75rem;
     --thumb-radius: 2px;
-    --thumb-color: var(--color-fg);
+    --thumb-color: var(--color-primary);
     --track-filled: var(--color-primary);
     --track-unfilled: var(--color-element-bg);
     --track-height: 0.5rem;
     --track-radius: 0.25rem;
-    --track-border: 1px solid var(--color-fg-faint);
+    --track-border: 1px solid color-mix(in srgb, var(--color-fg-faint) 60%, transparent);
   }
 
   .slider:hover {
@@ -113,7 +113,7 @@
     height: var(--thumb-height);
     background: var(--thumb-color);
     border-radius: var(--thumb-radius);
-    margin-block: calc((var(--thumb-height) - var(--track-height)) * -0.5);
+    margin-block: calc((var(--thumb-height) - var(--track-height)) * -0.7);
   }
 
   .slider::-moz-range-track {

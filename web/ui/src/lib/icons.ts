@@ -16,6 +16,7 @@ export { default as Close } from '~icons/mdi/close';
 export { default as Cog } from '~icons/mdi/cog';
 export { default as ContentSaveOutline } from '~icons/mdi/content-save-outline';
 export { default as DeleteOutline } from '~icons/mdi/delete-outline';
+export { default as DotsHorizontal } from '~icons/mdi/dots-horizontal';
 export { default as DotsVertical } from '~icons/mdi/dots-vertical';
 export { default as GripVertical } from '~icons/lucide/grip-vertical';
 export { default as Eye } from '~icons/mdi/eye';

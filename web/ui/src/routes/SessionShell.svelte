@@ -16,13 +16,12 @@
   import StartButton from '$lib/ui/StartButton.svelte';
 
   import { cn } from '$lib/utils';
-  import { ElementSize } from 'runed';
+  import { createPaneMinSize } from '$lib/utils';
   import type { Pathname } from '$app/types';
   import { lastInstrumentPath } from './(instrument)/+layout.svelte';
 
-  const LEFT_PANE_MIN_W_PX = 750;
   let shellRef = $state<HTMLElement | null>(null);
-  const shellSize = new ElementSize(() => shellRef);
+  const leftPaneMin = createPaneMinSize(() => shellRef, 750, 50);
 
   interface Props {
     app: App;
@@ -42,7 +41,7 @@
     clearLogs: () => app.clearLogs()
   });
 
-  // --- Header layout (single row, guaranteed by LEFT_PANE_MIN_W_PX) ---
+  // --- Header layout (single row, guaranteed by left pane min width) ---
 
   // --- Shell state ---
 
@@ -78,7 +77,7 @@
   <PaneGroup direction="horizontal" autoSaveId="shell">
     <Pane
       defaultSize={60}
-      minSize={shellSize.width > 0 ? (LEFT_PANE_MIN_W_PX / shellSize.width) * 100 : 50}
+      minSize={leftPaneMin.value}
       maxSize={70}
     >
       <div class="grid h-full grid-rows-[auto_1fr]">

@@ -6,3 +6,4 @@ export { computeAutoLevels } from './image';
 export { getWebGPUDevice } from './wgpu';
 export { IDBKeyVal } from './idb';
 export { createMultiSelect, type MultiSelect } from './multiselect.svelte';
+export { createPaneMinSize } from './pane.svelte';

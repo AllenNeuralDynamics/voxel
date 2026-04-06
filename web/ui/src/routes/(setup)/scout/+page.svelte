@@ -4,9 +4,8 @@
   import { Button, ContextMenu, Rename } from '$lib/ui/kit';
   import { Pane, PaneGroup } from 'paneforge';
   import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-  import { cn } from '$lib/utils';
+  import { cn, createPaneMinSize } from '$lib/utils';
   import { Crosshair, TrashCanOutline, ImageLight } from '$lib/icons';
-  import { ElementSize } from 'runed';
 
   const session = getSessionContext();
   const snaps = $derived(session.snaps);
@@ -52,9 +51,8 @@
     }
   }
 
-  const SIDEBAR_MIN_PX = 300;
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const paneGroupSize = new ElementSize(() => paneGroupEl);
+  const sidebarMin = createPaneMinSize(() => paneGroupEl, 350);
 </script>
 
 {#snippet snapItem(snap: Snapshot)}
@@ -224,7 +222,7 @@
 
   <Pane
     defaultSize={30}
-    minSize={paneGroupSize.width > 0 ? (SIDEBAR_MIN_PX / paneGroupSize.width) * 100 : 25}
+    minSize={sidebarMin.value}
     maxSize={45}
   >
     <div class="flex h-full flex-col overflow-hidden">

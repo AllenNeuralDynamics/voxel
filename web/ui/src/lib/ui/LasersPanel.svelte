@@ -84,8 +84,8 @@
   {@const showIndicator = hasUnsaved || powerDiverged}
   <button
     onclick={() => selectRow(laser.deviceId)}
-    class="flex w-full min-w-90 items-center gap-3 rounded-md px-3 py-2 text-left transition-colors
-			{selectedDeviceId === laser.deviceId ? 'bg-element-selected' : 'bg-surface hover:bg-element-hover'}"
+    class="flex w-full min-w-90 items-center gap-3 rounded-xs border px-3 py-2 text-left transition-colors
+			{selectedDeviceId === laser.deviceId ? 'border-border bg-panel' : 'hover:bg-panel/50'}"
   >
     <!-- Wavelength dot + label + divergence dot -->
     <div class="flex min-w-20 shrink-0 items-center gap-1">

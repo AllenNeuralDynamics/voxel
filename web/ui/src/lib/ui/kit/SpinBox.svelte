@@ -115,7 +115,7 @@
     max = Infinity,
     step = 1,
     decimals,
-    placeholder = '',
+    placeholder = '–',
     numCharacters = 4,
     color = 'inherit',
     align = 'left',
@@ -166,6 +166,7 @@
 
   let inputValue = $derived(() => {
     if (isEditing) return editingText;
+    if (value === undefined || Number.isNaN(value)) return '';
     if (decimals !== undefined) return value.toFixed(decimals);
     return value.toString();
   });
