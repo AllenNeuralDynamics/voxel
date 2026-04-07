@@ -1,5 +1,5 @@
 import type { ChannelConfig, PreviewConfig, ProfileConfig } from './types';
-import type { PreviewCrop, PreviewFrameInfo, PreviewLevels, Client } from './client.svelte';
+import type { PreviewViewport, PreviewFrameInfo, PreviewLevels, Client } from './client.svelte';
 import type { AppStatus } from './types';
 
 import { computeAutoLevels, sanitizeString } from '$lib/utils';
@@ -28,11 +28,11 @@ export async function fetchColormapCatalog(baseUrl: string): Promise<ColormapCat
   return response.json();
 }
 
-export function isCropEqual(a: PreviewCrop, b: PreviewCrop): boolean {
+export function isCropEqual(a: PreviewViewport, b: PreviewViewport): boolean {
   return a.k === b.k && a.x === b.x && a.y === b.y;
 }
 
-export function computeLocalCrop(frameCrop: PreviewCrop, targetCrop: PreviewCrop): PreviewCrop {
+export function computeLocalCrop(frameCrop: PreviewViewport, targetCrop: PreviewViewport): PreviewViewport {
   if (targetCrop.k <= 0) return { x: 0, y: 0, k: 0 };
 
   const frameView = 1 - frameCrop.k;
@@ -51,9 +51,9 @@ export function computeLocalCrop(frameCrop: PreviewCrop, targetCrop: PreviewCrop
 
 function selectFrame(
   ch: PreviewChannel,
-  crop: PreviewCrop,
+  crop: PreviewViewport,
   isPanZoomActive: boolean
-): [ImageBitmap | null, PreviewCrop] {
+): [ImageBitmap | null, PreviewViewport] {
   const isZoomed = crop.k > 0;
 
   if (isZoomed && !isPanZoomActive && ch.detail) {
@@ -69,7 +69,7 @@ export function compositeCroppedFrames(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   channels: PreviewChannel[],
-  crop: PreviewCrop,
+  crop: PreviewViewport,
   isPanZoomActive: boolean
 ): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -130,7 +130,7 @@ export class PreviewChannel {
   initAutoLevelDone = false;
 
   frame: ImageBitmap | null = $state<ImageBitmap | null>(null);
-  detail: { bitmap: ImageBitmap; crop: PreviewCrop } | null = $state(null);
+  detail: { bitmap: ImageBitmap; crop: PreviewViewport } | null = $state(null);
 
   constructor(public readonly idx: number) {}
 }
@@ -140,7 +140,7 @@ export class PreviewState {
 
   isPreviewing = $state(false);
   isPanZoomActive = $state(false);
-  crop = $state<PreviewCrop>({ x: 0, y: 0, k: 0 });
+  crop = $state<PreviewViewport>({ x: 0, y: 0, k: 0 });
   channels = $state<PreviewChannel[]>([]);
   catalog = $state<ColormapCatalog>([]);
   redrawGeneration = $state(0);
@@ -241,7 +241,7 @@ export class PreviewState {
     this.#queueCropUpdate(this.crop);
   }
 
-  setCrop(value: PreviewCrop): void {
+  setCrop(value: PreviewViewport): void {
     this.crop = value;
     for (const ch of this.channels) {
       ch.detail = null;
@@ -249,7 +249,7 @@ export class PreviewState {
     this.redrawGeneration++;
   }
 
-  queueCropUpdate(crop: PreviewCrop): void {
+  queueCropUpdate(crop: PreviewViewport): void {
     this.#queueCropUpdate(crop);
   }
 
@@ -370,7 +370,7 @@ export class PreviewState {
     }
   };
 
-  #handleCropUpdate = (crop: PreviewCrop): void => {
+  #handleCropUpdate = (crop: PreviewViewport): void => {
     if (!isCropEqual(this.crop, crop)) {
       this.setCrop(crop);
     }
@@ -391,7 +391,7 @@ export class PreviewState {
     channel.colormap = colormap;
   };
 
-  #queueCropUpdate(crop: PreviewCrop): void {
+  #queueCropUpdate(crop: PreviewViewport): void {
     if (this.#cropUpdateTimer !== null) clearTimeout(this.#cropUpdateTimer);
     const now = Date.now();
     if (now - this.#cropLastSent >= this.#THROTTLE_MS) {

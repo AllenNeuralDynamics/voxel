@@ -17,7 +17,7 @@ from rigup.device.props import deliminated_float, enumerated_int, enumerated_str
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, describe
-from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewFrame, PreviewGenerator, PreviewLevels
+from vxl.camera.preview import PreviewConfig, PreviewFrame, PreviewGenerator, PreviewLevels, PreviewViewport
 from vxl.device import DeviceType
 from vxl.stack import BatchResult, Stack, StorageConfig
 from vxlib import Dtype, SchemaModel, fire_and_forget
@@ -351,7 +351,7 @@ class CameraController(DeviceController[Camera]):
             fire_and_forget(self.publish("preview", frame.pack()), log=self.log)
 
     @describe(label="Update Preview Crop")
-    async def update_preview_crop(self, crop: PreviewCrop):
+    async def update_preview_crop(self, crop: PreviewViewport):
         self._previewer.crop = crop
 
     @describe(label="Update Preview Levels")

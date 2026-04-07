@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QFrame, QScrollArea, QWidget
 
-from vxl.camera.preview import PreviewCrop, PreviewFrame, PreviewLevels
+from vxl.camera.preview import PreviewFrame, PreviewLevels, PreviewViewport
 from vxl.config import ChannelConfig
 from vxl_qt.store import DevicesStore
 from vxl_qt.ui.devices.camera import CameraControl
@@ -261,7 +261,7 @@ class ControlPanel(QWidget):
         """Handle crop changes from preview store - notify rig."""
         rig = self._app.rig
         if rig:
-            crop = PreviewCrop(x=x, y=y, k=k)
+            crop = PreviewViewport(x=x, y=y, k=k)
             fire_and_forget(rig.update_preview_crop(crop), log=log)
 
     def _on_preview_clicked(self) -> None:

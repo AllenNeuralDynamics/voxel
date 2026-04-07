@@ -36,7 +36,7 @@ class PreviewFmt(StrEnum):
                 return compress_uint16_frame_zlib(frame)
 
 
-class PreviewCrop(SchemaModel):
+class PreviewViewport(SchemaModel):
     x: float = Field(default=0.0, ge=0.0, le=1.0, description="normalized X coordinate of the preview.")
     y: float = Field(default=0.0, ge=0.0, le=1.0, description="normalized Y coordinate of the preview.")
     k: float = Field(default=0.0, ge=0.0, le=1.0, description="zoom factor - 0.0 no zoom, 1.0 full zoom.")
@@ -105,7 +105,7 @@ class PreviewLevels(SchemaModel):
 class PreviewConfig(SchemaModel):
     """Current preview display configuration for a camera."""
 
-    crop: PreviewCrop = Field(default_factory=PreviewCrop)
+    crop: PreviewViewport = Field(default_factory=PreviewViewport)
     levels: PreviewLevels = Field(default_factory=PreviewLevels)
     colormap: str | None = None
 
@@ -118,7 +118,7 @@ class PreviewFrameInfo(SchemaModel):
     preview_height: int = Field(..., gt=0, description="Target preview height in pixels.")
     full_width: int = Field(..., gt=0, description="Full image width in pixels (from captured frame).")
     full_height: int = Field(..., gt=0, description="Full image height in pixels (from captured frame).")
-    crop: PreviewCrop = Field(default_factory=PreviewCrop)
+    crop: PreviewViewport = Field(default_factory=PreviewViewport)
     levels: PreviewLevels = Field(default_factory=PreviewLevels)
     fmt: PreviewFmt = Field(default=PreviewFmt.JPEG)
     histogram: list[int] | None = Field(
@@ -187,14 +187,14 @@ class PreviewGenerator:
         *,
         target_width: int = 1024,
         fmt: PreviewFmt = PreviewFmt.JPEG,
-        crop: PreviewCrop | None = None,
+        crop: PreviewViewport | None = None,
         levels: PreviewLevels | None = None,
     ) -> None:
         self._uid = uid
         self._sink = sink
         self._target_width: int = target_width
         self._fmt: PreviewFmt = fmt or PreviewFmt.JPEG
-        self.crop = crop or PreviewCrop()
+        self.crop = crop or PreviewViewport()
         self.levels = levels or PreviewLevels()
         self._idx: int = 0
         self._current_frame: np.ndarray | None = None
@@ -325,7 +325,7 @@ class PreviewGenerator:
             preview_out = preview_uint8
 
         # Use actual crop values based on whether adjustment was applied
-        actual_crop = self.crop if adjust else PreviewCrop(x=0.0, y=0.0, k=0.0)
+        actual_crop = self.crop if adjust else PreviewViewport(x=0.0, y=0.0, k=0.0)
 
         metadata = PreviewFrameInfo(
             frame_idx=frame_idx,

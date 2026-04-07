@@ -1,11 +1,10 @@
 """Camera device handle with typed methods."""
 
-
 from rigup.device import DeviceHandle
 from vxlib.vec import Vec2D
 
 from vxl.camera.base import Camera, SensorROI, TriggerMode, TriggerPolarity
-from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
+from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
 from vxl.stack import BatchResult, Stack, StorageConfig
 
 
@@ -41,7 +40,7 @@ class CameraHandle(DeviceHandle[Camera]):
         """Stop camera preview mode."""
         await self.call("stop_preview")
 
-    async def update_preview_crop(self, crop: PreviewCrop) -> None:
+    async def update_preview_crop(self, crop: PreviewViewport) -> None:
         """Update preview crop settings."""
         await self.call("update_preview_crop", crop)
 
@@ -68,9 +67,7 @@ class CameraHandle(DeviceHandle[Camera]):
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
     ) -> None:
         """Prepare camera and writer for a stack acquisition."""
-        await self.call(
-            "initialize_stack", stack, storage, channel_index, num_channels, trigger_mode, trigger_polarity
-        )
+        await self.call("initialize_stack", stack, storage, channel_index, num_channels, trigger_mode, trigger_polarity)
 
     async def finalize_stack(self) -> None:
         """Complete stack acquisition. Closes writer and disarms camera."""
