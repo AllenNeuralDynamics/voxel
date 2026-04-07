@@ -226,7 +226,7 @@ export interface LayerVisibility {
  * Preview display configuration per channel (matches backend PreviewConfig)
  */
 export interface PreviewConfig {
-  crop: { x: number; y: number; k: number };
+  viewport: { x: number; y: number; w: number; h: number };
   levels: { min: number; max: number };
   colormap: string | null;
 }

@@ -2,6 +2,8 @@
   import { Restore } from '$lib/icons';
   import { SpinBox } from '$lib/ui/kit';
   import type { PreviewState } from '$lib/main';
+  import { isDefaultViewport } from '$lib/main/preview.svelte.ts';
+  import { clampTopLeft } from '$lib/utils';
 
   interface Props {
     previewer: PreviewState;
@@ -9,39 +11,47 @@
 
   let { previewer }: Props = $props();
 
-  // Check if crop is at default (no pan/zoom)
-  let isDefaultCrop = $derived(previewer.crop.x === 0 && previewer.crop.y === 0 && previewer.crop.k === 0);
+  let isDefault = $derived(isDefaultViewport(previewer.viewport));
 
-  // Local state for crop values (for draggable inputs)
-  let cropX = $state(0);
-  let cropY = $state(0);
+  // Local state for inputs (synced from previewer)
+  let panX = $state(0);
+  let panY = $state(0);
   let magnification = $state(1);
 
-  // Sync local state with previewer (runs before DOM update)
+  // Sync local state with previewer
   $effect.pre(() => {
-    cropX = previewer.crop.x;
-    cropY = previewer.crop.y;
-    magnification = 1 / (1 - previewer.crop.k);
+    panX = previewer.viewport.x;
+    panY = previewer.viewport.y;
+    magnification = 1 / previewer.viewport.w;
   });
 
-  function handleCropXChange(value: number) {
-    previewer.setCrop({ ...previewer.crop, x: value });
+  function handlePanXChange(value: number) {
+    previewer.setViewport({ ...previewer.viewport, x: value });
+    previewer.queueViewportUpdate(previewer.viewport);
   }
 
-  function handleCropYChange(value: number) {
-    previewer.setCrop({ ...previewer.crop, y: value });
+  function handlePanYChange(value: number) {
+    previewer.setViewport({ ...previewer.viewport, y: value });
+    previewer.queueViewportUpdate(previewer.viewport);
   }
 
   function handleZoomChange(value: number) {
-    const k = 1 - 1 / value;
-    previewer.setCrop({ ...previewer.crop, k: Math.max(0, Math.min(0.99, k)) });
+    const newW = Math.max(0.01, Math.min(1.0, 1 / value));
+    const newH = newW;
+    // Zoom toward center of current viewport
+    const centerX = previewer.viewport.x + previewer.viewport.w / 2;
+    const centerY = previewer.viewport.y + previewer.viewport.h / 2;
+    const newX = clampTopLeft(centerX - newW / 2, newW);
+    const newY = clampTopLeft(centerY - newH / 2, newH);
+    previewer.setViewport({ x: newX, y: newY, w: newW, h: newH });
+    previewer.queueViewportUpdate(previewer.viewport);
   }
 </script>
 
 <div class="flex items-center gap-1 font-mono text-xs">
   <button
-    onclick={() => previewer.resetCrop()}
-    disabled={isDefaultCrop}
+    onclick={() => previewer.resetViewport()}
+    disabled={isDefault}
     class="flex items-center rounded p-1 text-fg transition-colors hover:bg-element-hover disabled:cursor-not-allowed disabled:opacity-0"
     aria-label="Reset pan and zoom"
   >
@@ -62,7 +72,7 @@
       onChange={handleZoomChange}
     />
     <SpinBox
-      bind:value={cropY}
+      bind:value={panY}
       min={0}
       max={1}
       step={0.01}
@@ -71,10 +81,10 @@
       numCharacters={5}
       size="xs"
       prefix="Pan X"
-      onChange={handleCropYChange}
+      onChange={handlePanYChange}
     />
     <SpinBox
-      bind:value={cropX}
+      bind:value={panX}
       min={0}
       max={1}
       step={0.01}
@@ -83,7 +93,7 @@
       numCharacters={5}
       size="xs"
       prefix="Pan Y"
-      onChange={handleCropXChange}
+      onChange={handlePanXChange}
     />
   </div>
 </div>

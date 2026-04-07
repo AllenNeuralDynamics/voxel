@@ -165,7 +165,7 @@ class ControlPanel(QWidget):
         self._app.devices_ready.connect(self._on_devices_ready)
 
         # Connect to preview store crop changes to notify rig
-        self._app.preview.crop_changed.connect(self._on_crop_changed)
+        self._app.preview.viewport_changed.connect(self._on_viewport_changed)
 
     def _build_profile_options(self) -> list[SelectOption]:
         """Build select options from rig profiles."""
@@ -257,12 +257,12 @@ class ControlPanel(QWidget):
             self._profile_select.set_value(rig.active_profile_id)
             self._profile_select.blockSignals(False)
 
-    def _on_crop_changed(self, x: float, y: float, k: float) -> None:
-        """Handle crop changes from preview store - notify rig."""
+    def _on_viewport_changed(self, x: float, y: float, w: float, h: float) -> None:
+        """Handle viewport changes from preview store - notify rig."""
         rig = self._app.rig
         if rig:
-            crop = PreviewViewport(x=x, y=y, k=k)
-            fire_and_forget(rig.update_preview_crop(crop), log=log)
+            viewport = PreviewViewport(x=x, y=y, w=w, h=h)
+            fire_and_forget(rig.update_preview_viewport(viewport), log=log)
 
     def _on_preview_clicked(self) -> None:
         """Toggle preview state."""
@@ -285,8 +285,8 @@ class ControlPanel(QWidget):
         self._app.preview.clear_frames()
         rig = self._app.rig
         if rig:
-            crop = self._app.preview.crop
-            await rig.start_preview(self._on_frame, crop=crop)
+            viewport = self._app.preview.viewport
+            await rig.start_preview(self._on_frame, crop=viewport)
 
     async def _stop_preview(self) -> None:
         """Stop preview streaming."""
@@ -294,8 +294,14 @@ class ControlPanel(QWidget):
         if rig:
             await rig.stop_preview()
 
-    async def _on_frame(self, channel: str, data: bytes) -> None:
-        """Frame callback - decode and send to preview store."""
+    async def _on_frame(self, topic: str, channel: str, data: bytes) -> None:
+        """Frame callback - decode overview frames and send to preview store.
+
+        Tiles (topic="preview_tile") are ignored for now — Qt uses overview-only rendering.
+        """
+        if topic != "preview":
+            return
+
         frame = PreviewFrame.from_packed(data)
         image_data = self._decode_frame(frame.data)
         if image_data is None:
@@ -305,7 +311,6 @@ class ControlPanel(QWidget):
         self._app.preview.set_frame(
             channel=channel,
             data=image_data,
-            crop=info.crop,
             colormap=info.colormap,
             histogram=info.histogram,
         )

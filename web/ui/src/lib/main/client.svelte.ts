@@ -21,9 +21,10 @@ export interface DaqWaveformsResponse {
 }
 
 export interface PreviewViewport {
-  x: number;
-  y: number;
-  k: number; // Zoom level: 0 = no zoom, 1 = max zoom
+  x: number; // Top-left X in normalized sensor coords [0, 1]
+  y: number; // Top-left Y in normalized sensor coords [0, 1]
+  w: number; // Viewport width in normalized sensor coords (0, 1]
+  h: number; // Viewport height in normalized sensor coords (0, 1]
 }
 
 export interface PreviewLevels {
@@ -36,17 +37,33 @@ export type PreviewLevelsInfo = PreviewLevels & { channel: string };
 /**
  * Frame metadata from backend
  */
+/** Overview frame metadata from backend. */
 export interface PreviewFrameInfo {
   frame_idx: number;
-  preview_width: number;
-  preview_height: number;
+  width: number;
+  height: number;
   full_width: number;
   full_height: number;
-  crop: PreviewViewport;
   levels: PreviewLevels;
-  fmt: 'jpeg' | 'png' | 'uint16'; // Frame format
-  histogram?: number[]; // 256-bin histogram (0-255), only present in full frames
-  colormap?: string; // Colormap name applied by backend (e.g. "green", "magenta")
+  fmt: 'jpeg' | 'png' | 'uint16';
+  histogram?: number[];
+  colormap?: string;
+}
+
+/** Tile metadata from backend. */
+export interface PreviewTileInfo {
+  frame_idx: number;
+  width: number;
+  height: number;
+  full_width: number;
+  full_height: number;
+  levels: PreviewLevels;
+  fmt: 'jpeg' | 'png' | 'uint16';
+  colormap?: string;
+  scale: number;
+  col: number;
+  row: number;
+  viewport: PreviewViewport;
 }
 
 /**
@@ -67,7 +84,7 @@ type ClientMessage =
   // Preview (high-frequency streaming, stays on WS)
   | { topic: 'preview/start'; payload?: Record<string, never> }
   | { topic: 'preview/stop'; payload?: Record<string, never> }
-  | { topic: 'preview/crop'; payload: PreviewViewport }
+  | { topic: 'preview/viewport'; payload: PreviewViewport }
   | { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
   | { topic: 'preview/colormap'; payload: { channel: string; colormap: string } }
   // Device control (stays on WS for real-time property updates)
@@ -102,7 +119,8 @@ export interface TopicHandlers {
   error?: (payload: ErrorPayload) => void;
   'log/message'?: (payload: LogMessage) => void;
   'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
-  'preview/crop'?: (payload: PreviewViewport) => void;
+  'preview/viewport'?: (payload: PreviewViewport) => void;
+  'preview/tile'?: (channel: string, info: PreviewTileInfo, bitmap: ImageBitmap) => void;
   'preview/levels'?: (payload: PreviewLevelsInfo) => void;
   'preview/colormap'?: (payload: { channel: string; colormap: string }) => void;
   'daq/waveforms'?: (payload: DaqWaveformsResponse) => void;
@@ -417,8 +435,8 @@ export class Client {
     this.send({ topic: 'preview/stop' });
   }
 
-  updateCrop(x: number, y: number, k: number): void {
-    this.send({ topic: 'preview/crop', payload: { x, y, k } });
+  updateViewport(x: number, y: number, w: number, h: number): void {
+    this.send({ topic: 'preview/viewport', payload: { x, y, w, h } });
   }
 
   updateLevels(channel: string, min: number, max: number): void {

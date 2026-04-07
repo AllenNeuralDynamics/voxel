@@ -312,9 +312,11 @@ export class Session {
       return;
     }
 
-    const w = this.preview.previewWidth;
-    const h = this.preview.previewHeight;
-    if (!w || !h) return;
+    // Get dimensions from first visible channel's overview frame
+    const firstFrame = channels.find((ch) => ch.visible && ch.frame)?.frame;
+    if (!firstFrame) return;
+    const w = firstFrame.width;
+    const h = firstFrame.height;
 
     // Composite full-res frame
     const canvas = document.createElement('canvas');

@@ -10,11 +10,9 @@ from vxl_qt.store import (
     PreviewStore,
     blur_image,
     composite_rgb,
-    compute_local_crop,
     crop_image,
     resize_image,
 )
-from vxl_qt.store.preview import ChannelData
 from vxl_qt.ui.assets import VOXEL_LOGO
 from vxl_qt.ui.kit import Colors
 
@@ -31,11 +29,11 @@ class PreviewPanel(QWidget):
     Handles mouse events for pan/zoom and updates store state.
     """
 
-    crop_changed = Signal(float, float, float)  # x, y, k
+    viewport_changed = Signal(float, float, float, float)  # x, y, w, h
 
-    MAX_ZOOM = 0.95
+    MIN_VIEWPORT = 0.01
     ZOOM_SENSITIVITY = 0.001
-    CROP_DEBOUNCE_MS = 100
+    VIEWPORT_DEBOUNCE_MS = 100
 
     def __init__(self, store: PreviewStore, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -66,12 +64,12 @@ class PreviewPanel(QWidget):
         self._is_panning = False
         self._pan_start_x = 0.0
         self._pan_start_y = 0.0
-        self._pan_start_crop = PreviewViewport()
+        self._pan_start_viewport = PreviewViewport()
 
         # Debounce timer
-        self._crop_debounce_timer = QTimer(self)
-        self._crop_debounce_timer.setSingleShot(True)
-        self._crop_debounce_timer.timeout.connect(self._emit_crop_changed)
+        self._viewport_debounce_timer = QTimer(self)
+        self._viewport_debounce_timer.setSingleShot(True)
+        self._viewport_debounce_timer.timeout.connect(self._emit_viewport_changed)
 
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
@@ -82,19 +80,19 @@ class PreviewPanel(QWidget):
         self._load_default_image()
 
     @property
-    def crop(self) -> PreviewViewport:
-        """Current crop/viewport state."""
-        return self._store.crop
+    def viewport(self) -> PreviewViewport:
+        """Current viewport state."""
+        return self._store.viewport
 
     def reset(self) -> None:
         """Reset preview state."""
         self._store.reset()
         self._load_default_image()
 
-    def reset_crop(self) -> None:
+    def reset_viewport(self) -> None:
         """Reset pan/zoom to show full image."""
-        self._store.set_crop(PreviewViewport())
-        self._schedule_crop_changed()
+        self._store.set_viewport(PreviewViewport())
+        self._schedule_viewport_changed()
 
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
@@ -104,7 +102,7 @@ class PreviewPanel(QWidget):
             self._store.set_interacting(True)
             self._pan_start_x = event.position().x()
             self._pan_start_y = event.position().y()
-            self._pan_start_crop = self._store.crop.model_copy()
+            self._pan_start_viewport = self._store.viewport.model_copy()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
@@ -116,15 +114,13 @@ class PreviewPanel(QWidget):
         if width <= 0 or height <= 0:
             return
 
-        dx = (event.position().x() - self._pan_start_x) / width
-        dy = (event.position().y() - self._pan_start_y) / height
+        vp = self._store.viewport
+        dx = ((event.position().x() - self._pan_start_x) / width) * vp.w
+        dy = ((event.position().y() - self._pan_start_y) / height) * vp.h
+        new_x = clamp_top_left(self._pan_start_viewport.x - dx, vp.w)
+        new_y = clamp_top_left(self._pan_start_viewport.y - dy, vp.h)
 
-        crop = self._store.crop
-        view_size = 1.0 - crop.k
-        new_x = clamp_top_left(self._pan_start_crop.x - dx, view_size)
-        new_y = clamp_top_left(self._pan_start_crop.y - dy, view_size)
-
-        self._store.set_crop(PreviewViewport(x=new_x, y=new_y, k=crop.k))
+        self._store.set_viewport(PreviewViewport(x=new_x, y=new_y, w=vp.w, h=vp.h))
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
@@ -133,7 +129,7 @@ class PreviewPanel(QWidget):
             self._is_panning = False
             self._store.set_interacting(False)
             self.setCursor(Qt.CursorShape.OpenHandCursor)
-            self._schedule_crop_changed()
+            self._schedule_viewport_changed()
 
     def wheelEvent(self, event: QWheelEvent | None) -> None:
         if event is None:
@@ -149,74 +145,48 @@ class PreviewPanel(QWidget):
         mouse_y = pos.y() / widget_height
 
         delta = event.angleDelta().y() * self.ZOOM_SENSITIVITY
-        crop = self._store.crop
-        old_zoom = crop.k
-        new_zoom = max(0.0, min(old_zoom + delta, self.MAX_ZOOM))
+        vp = self._store.viewport
 
-        if new_zoom == old_zoom:
+        new_w = max(self.MIN_VIEWPORT, min(1.0, vp.w - delta))
+        new_h = max(self.MIN_VIEWPORT, min(1.0, vp.h - delta))
+
+        if new_w == vp.w and new_h == vp.h:
             return
 
-        old_view_size = 1.0 - old_zoom
-        new_view_size = 1.0 - new_zoom
+        # Point on sensor under cursor
+        sensor_x = vp.x + mouse_x * vp.w
+        sensor_y = vp.y + mouse_y * vp.h
 
-        offset_x = mouse_x - crop.x
-        offset_y = mouse_y - crop.y
-
-        new_x = mouse_x - offset_x * (new_view_size / old_view_size)
-        new_y = mouse_y - offset_y * (new_view_size / old_view_size)
-
-        new_x = clamp_top_left(new_x, new_view_size)
-        new_y = clamp_top_left(new_y, new_view_size)
+        # Recompute top-left so sensor point stays under cursor
+        new_x = clamp_top_left(sensor_x - mouse_x * new_w, new_w)
+        new_y = clamp_top_left(sensor_y - mouse_y * new_h, new_h)
 
         self._store.set_interacting(True)
-        self._store.set_crop(PreviewViewport(x=new_x, y=new_y, k=new_zoom))
+        self._store.set_viewport(PreviewViewport(x=new_x, y=new_y, w=new_w, h=new_h))
         self._store.set_interacting(False)
 
-        self._schedule_crop_changed()
+        self._schedule_viewport_changed()
         event.accept()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
         if event.button() == Qt.MouseButton.LeftButton:
-            self.reset_crop()
-
-    def _select_frame(self, ch: ChannelData) -> tuple[np.ndarray, PreviewViewport]:
-        """Pick the right frame slot for a channel.
-
-        - Not zoomed: full frame
-        - Zoomed + interacting: full frame (local crop applied by caller)
-        - Zoomed + not interacting: detail if its crop matches the target, else full frame
-        """
-        target_crop = self._store.crop
-        is_zoomed = target_crop.k > 0
-
-        if is_zoomed and not self._store.is_interacting and ch.detail is not None:
-            _, detail_crop = ch.detail
-            if detail_crop == target_crop:
-                return ch.detail
-
-        return ch.frame, PreviewViewport()
+            self.reset_viewport()
 
     def _update_display(self) -> None:
         """Composite and display frames from store.
 
-        Each channel independently selects its best frame slot (full or detail),
-        then applies its own local crop before compositing.
+        Applies viewport crop to each channel's overview frame, then composites.
         """
         channels = self._store.channels
         if not channels:
             return
 
-        target_crop = self._store.crop
-        is_zoomed = target_crop.k > 0
+        vp = self._store.viewport
+        is_zoomed = vp.w < 1.0 or vp.h < 1.0
 
-        # Select best frame per channel and apply per-channel local crop
-        cropped_frames = []
-        for ch in channels.values():
-            data, frame_crop = self._select_frame(ch)
-            local_crop = compute_local_crop(frame_crop, target_crop)
-            cropped_frames.append(crop_image(data, local_crop))
+        cropped_frames = [crop_image(ch.frame, vp) for ch in channels.values()]
 
         rgb = composite_rgb(cropped_frames)
         if rgb is None:
@@ -228,12 +198,12 @@ class PreviewPanel(QWidget):
         pixmap = self._numpy_to_pixmap(rgb)
         self._set_pixmap(pixmap)
 
-    def _emit_crop_changed(self) -> None:
-        crop = self._store.crop
-        self.crop_changed.emit(crop.x, crop.y, crop.k)
+    def _emit_viewport_changed(self) -> None:
+        vp = self._store.viewport
+        self.viewport_changed.emit(vp.x, vp.y, vp.w, vp.h)
 
-    def _schedule_crop_changed(self) -> None:
-        self._crop_debounce_timer.start(self.CROP_DEBOUNCE_MS)
+    def _schedule_viewport_changed(self) -> None:
+        self._viewport_debounce_timer.start(self.VIEWPORT_DEBOUNCE_MS)
 
     def _load_default_image(self) -> None:
         pixmap = QPixmap(str(VOXEL_LOGO))

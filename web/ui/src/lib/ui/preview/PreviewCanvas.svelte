@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { watch } from 'runed';
+  import { watch, ElementSize } from 'runed';
   import { Bargraph } from '$lib/icons';
   import PreviewInfo from './PreviewInfo.svelte';
   import PanZoomControls from './PanZoomControls.svelte';
   import Histogram from './Histogram.svelte';
   import type { PreviewState } from '$lib/main';
-  import { compositeCroppedFrames } from '$lib/main/preview.svelte.ts';
+  import { compositeTiledFrames } from '$lib/main/preview.svelte.ts';
   import { clampTopLeft } from '$lib/utils';
 
   let canvasEl: HTMLCanvasElement;
@@ -24,6 +24,11 @@
   let animFrameId: number | null = null;
   let showHistograms = $state(true);
 
+  let canvasContainerEl: HTMLDivElement;
+
+  // Track canvas container size reactively (the middle grid cell, not the whole component)
+  const containerSize = new ElementSize(() => canvasContainerEl);
+
   // Watch for redraw signals from PreviewState
   watch(
     () => previewer.redrawGeneration,
@@ -32,24 +37,28 @@
     }
   );
 
-  // Resize canvas when preview dimensions change
-  $effect(() => {
-    if (canvasEl && previewer.previewWidth > 0 && previewer.previewHeight > 0) {
-      if (canvasEl.width !== previewer.previewWidth || canvasEl.height !== previewer.previewHeight) {
-        canvasEl.width = previewer.previewWidth;
-        canvasEl.height = previewer.previewHeight;
-        canvasEl.style.aspectRatio = `${previewer.previewWidth} / ${previewer.previewHeight}`;
+  // Resize canvas pixel dimensions to match container at device pixel ratio
+  watch(
+    () => [containerSize.width, containerSize.height] as const,
+    ([w, h]) => {
+      if (!canvasEl || w <= 0 || h <= 0) return;
+      const dpr = devicePixelRatio;
+      const newW = Math.round(w * dpr);
+      const newH = Math.round(h * dpr);
+      if (canvasEl.width !== newW || canvasEl.height !== newH) {
+        canvasEl.width = newW;
+        canvasEl.height = newH;
         needsRedraw = true;
       }
     }
-  });
+  );
 
   function frameLoop() {
     if (!isRendering) return;
 
     if (needsRedraw && ctx && canvasEl) {
       needsRedraw = false;
-      compositeCroppedFrames(ctx, canvasEl, previewer.channels, previewer.crop, previewer.isPanZoomActive);
+      compositeTiledFrames(ctx, canvasEl, previewer.channels, previewer.viewport, previewer.sensorAspect);
     }
 
     animFrameId = requestAnimationFrame(frameLoop);
@@ -59,7 +68,7 @@
     let isPanning = false;
     let panStartX = 0;
     let panStartY = 0;
-    let startCrop = { ...previewer.crop };
+    let startViewport = { ...previewer.viewport };
     let wheelIdleTimer: number | null = null;
     const WHEEL_IDLE_DELAY_MS = 250;
 
@@ -77,19 +86,18 @@
       isPanning = true;
       panStartX = e.clientX;
       panStartY = e.clientY;
-      startCrop = { ...previewer.crop };
+      startViewport = { ...previewer.viewport };
       previewer.isPanZoomActive = true;
     };
 
     const pointerMove = (e: PointerEvent) => {
       if (!isPanning) return;
       const rect = canvas.getBoundingClientRect();
-      const dx = (e.clientX - panStartX) / rect.width;
-      const dy = (e.clientY - panStartY) / rect.height;
-      const viewSize = 1 - previewer.crop.k;
-      const newX = clampTopLeft(startCrop.x - dx, viewSize);
-      const newY = clampTopLeft(startCrop.y - dy, viewSize);
-      previewer.setCrop({ x: newX, y: newY, k: previewer.crop.k });
+      const dx = ((e.clientX - panStartX) / rect.width) * previewer.viewport.w;
+      const dy = ((e.clientY - panStartY) / rect.height) * previewer.viewport.h;
+      const newX = clampTopLeft(startViewport.x - dx, previewer.viewport.w);
+      const newY = clampTopLeft(startViewport.y - dy, previewer.viewport.h);
+      previewer.setViewport({ x: newX, y: newY, w: previewer.viewport.w, h: previewer.viewport.h });
     };
 
     const pointerUp = (e: PointerEvent) => {
@@ -97,7 +105,7 @@
       canvas.releasePointerCapture(e.pointerId);
       isPanning = false;
       previewer.isPanZoomActive = false;
-      previewer.queueCropUpdate({ ...previewer.crop });
+      previewer.queueViewportUpdate({ ...previewer.viewport });
     };
 
     const wheel = (e: WheelEvent) => {
@@ -107,24 +115,24 @@
 
       const zoomSensitivity = 0.001;
       const delta = -e.deltaY * zoomSensitivity;
-      let newZoom = previewer.crop.k + delta;
-      newZoom = Math.max(0, Math.min(newZoom, 0.95));
+      const vp = previewer.viewport;
+      let newW = Math.max(0.01, Math.min(1.0, vp.w - delta));
+      let newH = Math.max(0.01, Math.min(1.0, vp.h - delta));
 
-      const oldViewSize = 1 - previewer.crop.k;
-      const newViewSize = 1 - newZoom;
-
+      // Point on sensor under cursor
       const mouseX = (e.clientX - rect.left) / rect.width;
       const mouseY = (e.clientY - rect.top) / rect.height;
-      const offsetX = mouseX - previewer.crop.x;
-      const offsetY = mouseY - previewer.crop.y;
+      const sensorX = vp.x + mouseX * vp.w;
+      const sensorY = vp.y + mouseY * vp.h;
 
-      let newTopLeftX = mouseX - offsetX * (newViewSize / oldViewSize);
-      let newTopLeftY = mouseY - offsetY * (newViewSize / oldViewSize);
-      newTopLeftX = clampTopLeft(newTopLeftX, newViewSize);
-      newTopLeftY = clampTopLeft(newTopLeftY, newViewSize);
+      // Recompute top-left so sensorX/Y stays under cursor
+      let newX = sensorX - mouseX * newW;
+      let newY = sensorY - mouseY * newH;
+      newX = clampTopLeft(newX, newW);
+      newY = clampTopLeft(newY, newH);
 
-      previewer.setCrop({ x: newTopLeftX, y: newTopLeftY, k: newZoom });
-      previewer.queueCropUpdate({ ...previewer.crop });
+      previewer.setViewport({ x: newX, y: newY, w: newW, h: newH });
+      previewer.queueViewportUpdate({ ...previewer.viewport });
       scheduleWheelIdleReset();
     };
 
@@ -143,9 +151,15 @@
   }
 
   onMount(() => {
-    // Reasonable default size
-    canvasEl.height = containerEl.clientWidth;
-    canvasEl.width = (containerEl.clientWidth * 4) / 3;
+    // Seed canvas size immediately from container layout (before ResizeObserver fires)
+    const dpr = devicePixelRatio;
+    const initW = canvasContainerEl.clientWidth;
+    const initH = canvasContainerEl.clientHeight;
+    if (initW > 0 && initH > 0) {
+      canvasEl.width = Math.round(initW * dpr);
+      canvasEl.height = Math.round(initH * dpr);
+    }
+
     ctx = canvasEl.getContext('2d');
 
     isRendering = true;
@@ -184,13 +198,8 @@
   </div>
 
   <!-- Center: Canvas -->
-  <div class="flex items-center justify-center overflow-hidden px-4">
-    <canvas
-      bind:this={canvasEl}
-      class="preview-canvas max-h-full max-w-full"
-      class:panning={previewer.isPanZoomActive}
-      class:is-idle={!previewer.isPreviewing}
-    >
+  <div class="flex items-center justify-center overflow-hidden px-4" bind:this={canvasContainerEl}>
+    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}>
     </canvas>
   </div>
 
@@ -220,14 +229,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .preview-canvas {
-    filter: blur(0px);
-    transition: filter 0.15s ease-in-out;
-  }
-
-  .preview-canvas.panning {
-    filter: blur(5px);
-  }
-</style>
