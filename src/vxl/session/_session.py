@@ -143,7 +143,7 @@ class Session:
             key=lambda s: s.completed_at or datetime.datetime.min.replace(tzinfo=datetime.UTC),
         )
 
-        planned = [s for s in all_stacks if s.status == StackStatus.PLANNED]
+        planned = [s for s in all_stacks if s.status in (StackStatus.PLANNED, StackStatus.ACQUIRING)]
         if acq.sort_by_profile:
             ordered_planned: list[Stack] = []
             by_profile: dict[str, list[Stack]] = {}

@@ -191,6 +191,10 @@
     return 'Idle';
   }
 
+  function formatSaved(value: unknown, decimals: number): string {
+    return typeof value === 'number' ? value.toFixed(decimals) : String(value ?? '');
+  }
+
   function exposureDecimals(step: number): number {
     if (step >= 1) return 0;
     if (step >= 0.1) return 1;
@@ -312,7 +316,7 @@
             <span class="text-xs text-fg-muted">Exposure</span>
             {@render unsavedDot(savedProps?.exposure_time_ms, isOther)}
             {#if expDiverged}
-              <span class="text-xs text-warning/70">· {savedProps?.exposure_time_ms} ms</span>
+              <span class="text-xs text-warning/70">· {formatSaved(savedProps?.exposure_time_ms, exposureDecimals(constraints.exposure.step))} ms</span>
             {/if}
           </div>
           <SpinBox
@@ -346,7 +350,9 @@
             <span class="text-xs text-fg-muted">Exposure</span>
             {@render unsavedDot(savedProps?.exposure_time_ms, isOther)}
             {#if expDiverged}
-              <span class="text-xs text-warning/70">· {savedProps?.exposure_time_ms} ms</span>
+              <span class="text-xs text-warning/70"
+                >· {formatSaved(savedProps?.exposure_time_ms, exposureDecimals(constraints.exposure.step))} ms</span
+              >
             {/if}
           </div>
           <SpinBox
@@ -367,7 +373,7 @@
             <span class="text-xs text-fg-muted">Frame Rate</span>
             {@render unsavedDot(savedProps?.frame_rate_hz, isOther)}
             {#if frDiverged}
-              <span class="text-xs text-warning/70">· {savedProps?.frame_rate_hz} Hz</span>
+              <span class="text-xs text-warning/70">· {formatSaved(savedProps?.frame_rate_hz, 2)} Hz</span>
             {/if}
           </div>
           <SpinBox

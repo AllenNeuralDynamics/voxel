@@ -188,7 +188,7 @@ class SessionService:
 
     async def _run_full_acquisition(self) -> None:
         """Run acquisition for all pending stacks."""
-        pending = [s for s in self.session.stacks if s.status == StackStatus.PLANNED]
+        pending = [s for s in self.session.stacks.values() if s.status == StackStatus.PLANNED]
         total = len(pending)
 
         self.broadcast(

@@ -673,7 +673,7 @@
 
 {#snippet activeStacksLayer()}
   {#if layers.stacks}
-    {@const points = session.stacks.map((s) => ({ x: s.x, y: s.y }))}
+    {@const points = session.stacks.filter((s) => s.status !== 'completed').map((s) => ({ x: s.x, y: s.y }))}
     <g>
       {#each session.activeStacks as stack (stack.stack_id)}
         {@render stackRect(stack, true)}

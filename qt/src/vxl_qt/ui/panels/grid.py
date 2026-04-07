@@ -323,7 +323,7 @@ class ZRangeEditor(PropertyEditor):
 
     def _update_slices_display(self) -> None:
         """Update the slices count based on current Z values."""
-        z_step = self._store.grid_config.z_step
+        z_step = self._store.acq_config.z_step
         if z_step > 0:
             z_range = abs(self._z_end_spin.value() - self._z_start_spin.value())
             slices = int(z_range / z_step) + 1
@@ -343,9 +343,9 @@ class ZRangeEditor(PropertyEditor):
     def load_defaults(self) -> None:
         """Load default Z range from grid config."""
         self._updating = True
-        config = self._store.grid_config
-        self._z_start_spin.setValue(int(config.default_z_start))
-        self._z_end_spin.setValue(int(config.default_z_end))
+        acq = self._store.acq_config
+        self._z_start_spin.setValue(int(acq.default_z_start))
+        self._z_end_spin.setValue(int(acq.default_z_end))
         self._update_slices_display()
         self._updating = False
 
@@ -776,7 +776,7 @@ class GridSettingsSection(QWidget):
         self._offset_y_spin.setValue(config.y_offset / 1000)
         self._overlap_x_spin.setValue(config.overlap_x)
         self._overlap_y_spin.setValue(config.overlap_y)
-        self._z_step_label.setText(f"{config.z_step:.1f} µm")
+        self._z_step_label.setText(f"{self._store.acq_config.z_step:.1f} µm")
         self._order_select.set_value(self._store.stack_order)
 
         self._offset_x_spin.blockSignals(False)

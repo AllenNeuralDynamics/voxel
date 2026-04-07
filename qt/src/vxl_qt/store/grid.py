@@ -5,12 +5,14 @@ enabling reactive UI updates when grid configuration or selection changes.
 """
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
 
 from vxl.config import GridConfig
+from vxl.session._config import AcquisitionConfig
 from vxl.stack import Stack, StackOrder, StackStatus, Tile
 
 if TYPE_CHECKING:
@@ -36,9 +38,31 @@ STACK_STATUS_COLORS: dict[StackStatus | None, str] = {
     StackStatus.COMPLETED: "#4ec9b0",  # teal (SUCCESS)
     StackStatus.FAILED: "#f44336",  # red (ERROR)
     StackStatus.SKIPPED: "#ffb74d",  # orange (WARNING)
-    StackStatus.COMMITTED: "#3a6ea5",  # blue (same as planned)
     None: "#71717a",  # zinc-500 (no stack)
 }
+
+
+def _generate_tiles(gc: GridConfig, fov_size: tuple[float, float], stage_w: float, stage_h: float) -> list[Tile]:
+    """Generate tile grid from grid config, FOV size, and stage dimensions."""
+    fov_w, fov_h = fov_size
+    step_w = fov_w * (1 - gc.overlap_x)
+    step_h = fov_h * (1 - gc.overlap_y)
+    if step_w <= 0 or step_h <= 0 or stage_w <= 0 or stage_h <= 0:
+        return []
+
+    col_min = math.ceil(-gc.x_offset / step_w)
+    col_max = math.floor((stage_w - gc.x_offset) / step_w) + 1
+    row_min = math.ceil(-gc.y_offset / step_h)
+    row_max = math.floor((stage_h - gc.y_offset) / step_h) + 1
+
+    tiles: list[Tile] = []
+    for row in range(row_min, row_max):
+        for col in range(col_min, col_max):
+            tx = gc.x_offset + col * step_w
+            ty = gc.y_offset + row * step_h
+            if 0 <= tx <= stage_w and 0 <= ty <= stage_h:
+                tiles.append(Tile(tile_id=f"tile_r{row}_c{col}", row=row, col=col, x=tx, y=ty, w=fov_w, h=fov_h))
+    return tiles
 
 
 def get_stack_status_color(status: StackStatus | None) -> str:
@@ -128,14 +152,21 @@ class GridStore(QObject):
         """List of stacks from session."""
         if self._session is None:
             return []
-        return self._session.stacks
+        return list(self._session.stacks.values())
 
     @property
     def grid_config(self) -> GridConfig:
         """Current grid configuration."""
         if self._session is None:
             return GridConfig()
-        return self._session.grid_config or GridConfig()
+        return self._session.grid or GridConfig()
+
+    @property
+    def acq_config(self) -> AcquisitionConfig:
+        """Current acquisition configuration (z_step, default Z range, etc.)."""
+        if self._session is None:
+            return AcquisitionConfig()
+        return self._session.acq
 
     @property
     def stack_order(self) -> StackOrder:
@@ -150,7 +181,7 @@ class GridStore(QObject):
         if self._session is None:
             return False
         active_pid = self._session.rig.active_profile_id
-        return any(s.profile_id == active_pid for s in self._session.stacks)
+        return any(s.profile_id == active_pid for s in self._session.stacks.values())
 
     @property
     def fov_size(self) -> tuple[float, float]:
@@ -209,14 +240,24 @@ class GridStore(QObject):
     # ==================== Grid Config Methods ====================
 
     async def refresh_tiles(self) -> None:
-        """Refresh the tile grid from session."""
+        """Refresh the tile grid from session.
+
+        Generates tiles locally from grid config + FOV size (same algorithm as the web frontend).
+        """
         if self._session is None:
             self._tiles = []
             self._fov_size = None
         else:
             try:
-                self._tiles = await self._session.get_tiles()
                 self._fov_size = self._session.get_fov_size()
+                stage = self._session.rig.stage
+                x_lo = await stage.x.get_lower_limit()
+                x_hi = await stage.x.get_upper_limit()
+                y_lo = await stage.y.get_lower_limit()
+                y_hi = await stage.y.get_upper_limit()
+                self._tiles = _generate_tiles(
+                    self._session.grid, self._fov_size, stage_w=x_hi - x_lo, stage_h=y_hi - y_lo
+                )
             except (ValueError, KeyError):
                 # No active profile or cameras
                 self._tiles = []
@@ -233,7 +274,7 @@ class GridStore(QObject):
             log.warning("Cannot modify grid: acquisition has started")
             return
 
-        self._session.set_grid_offset(x_um, y_um)
+        self._session.update_grid(x_offset=x_um, y_offset=y_um)
         await self.refresh_tiles()
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
@@ -246,7 +287,7 @@ class GridStore(QObject):
             log.warning("Cannot modify grid: acquisition has started")
             return
 
-        self._session.set_overlap(overlap_x, overlap_y)
+        self._session.update_grid(overlap_x=overlap_x, overlap_y=overlap_y)
         await self.refresh_tiles()
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
