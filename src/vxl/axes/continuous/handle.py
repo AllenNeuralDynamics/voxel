@@ -1,8 +1,13 @@
 """Continuous axis device handle with typed methods."""
 
+import asyncio
+import time
+
 from rigup.device import DeviceHandle
 
 from vxl.axes.continuous.base import ContinuousAxis, TTLStepperConfig
+
+_POLL_INTERVAL = 0.05  # 50 ms – matches the 20 Hz stream rate
 
 
 class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
@@ -30,20 +35,35 @@ class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
 
     # Motion commands
 
+    async def _poll_until_idle(self, timeout_s: float | None = None) -> None:
+        """Async-cooperative wait for motion to complete by polling is_moving."""
+        deadline = time.monotonic() + timeout_s if timeout_s is not None else None
+        while await self.is_moving():
+            if deadline is not None and time.monotonic() > deadline:
+                msg = f"Motion did not complete within {timeout_s}s"
+                raise TimeoutError(msg)
+            await asyncio.sleep(_POLL_INTERVAL)
+
     async def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        await self.call("move_abs", position, wait=wait, timeout_s=timeout_s)
+        await self.call("move_abs", position, wait=False)
+        if wait:
+            await self._poll_until_idle(timeout_s)
 
     async def move_rel(self, delta: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        await self.call("move_rel", delta, wait=wait, timeout_s=timeout_s)
+        await self.call("move_rel", delta, wait=False)
+        if wait:
+            await self._poll_until_idle(timeout_s)
 
     async def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        await self.call("go_home", wait=wait, timeout_s=timeout_s)
+        await self.call("go_home", wait=False)
+        if wait:
+            await self._poll_until_idle(timeout_s)
 
     async def halt(self) -> None:
         await self.call("halt")
 
     async def await_movement(self, timeout_s: float | None = None) -> None:
-        await self.call("await_movement", timeout_s=timeout_s)
+        await self._poll_until_idle(timeout_s)
 
     # TTL stepping
 
