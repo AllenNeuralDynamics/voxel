@@ -168,6 +168,7 @@ class Camera(Device):
 
     @deliminated_float()
     @abstractmethod
+    @describe(label="Frame Rate", units="Hz", stream=True)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
 

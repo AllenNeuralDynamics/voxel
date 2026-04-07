@@ -223,33 +223,36 @@
           </span>
 
           <span class="text-fg-muted">Created</span>
-          <span class="tabular-nums text-fg-faint">{new Date(inspectedStack.created_at).toLocaleString()}</span>
+          <span class="text-fg-faint tabular-nums">{new Date(inspectedStack.created_at).toLocaleString()}</span>
 
           {#if inspectedStack.edited_at}
             <span class="text-fg-muted">Edited</span>
-            <span class="tabular-nums text-fg-faint">{new Date(inspectedStack.edited_at).toLocaleString()}</span>
+            <span class="text-fg-faint tabular-nums">{new Date(inspectedStack.edited_at).toLocaleString()}</span>
           {/if}
 
           {#if inspectedStack.started_at}
             <span class="text-fg-muted">Started</span>
-            <span class="tabular-nums text-fg-faint">{new Date(inspectedStack.started_at).toLocaleString()}</span>
+            <span class="text-fg-faint tabular-nums">{new Date(inspectedStack.started_at).toLocaleString()}</span>
           {/if}
 
           {#if inspectedStack.completed_at}
             <span class="text-fg-muted">Completed</span>
-            <span class="tabular-nums text-fg-faint">{new Date(inspectedStack.completed_at).toLocaleString()}</span>
+            <span class="text-fg-faint tabular-nums">{new Date(inspectedStack.completed_at).toLocaleString()}</span>
           {/if}
 
           {#if inspectedStack.skipped_at}
             <span class="text-fg-muted">Skipped</span>
-            <span class="tabular-nums text-fg-faint">{new Date(inspectedStack.skipped_at).toLocaleString()}</span>
+            <span class="text-fg-faint tabular-nums">{new Date(inspectedStack.skipped_at).toLocaleString()}</span>
           {/if}
 
           {#if inspectedStack.started_at && inspectedStack.completed_at}
-            {@const durationMs = new Date(inspectedStack.completed_at).getTime() - new Date(inspectedStack.started_at).getTime()}
+            {@const durationMs =
+              new Date(inspectedStack.completed_at).getTime() - new Date(inspectedStack.started_at).getTime()}
             <span class="text-fg-muted">Duration</span>
-            <span class="tabular-nums text-fg-faint">
-              {durationMs >= 60000 ? `${Math.floor(durationMs / 60000)}m ${Math.round((durationMs % 60000) / 1000)}s` : `${(durationMs / 1000).toFixed(1)}s`}
+            <span class="text-fg-faint tabular-nums">
+              {durationMs >= 60000
+                ? `${Math.floor(durationMs / 60000)}m ${Math.round((durationMs % 60000) / 1000)}s`
+                : `${(durationMs / 1000).toFixed(1)}s`}
             </span>
           {/if}
 

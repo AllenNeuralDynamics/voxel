@@ -248,10 +248,17 @@
     <input
       bind:this={inputEl}
       type="text"
-      class={cn(styles.value(), 'w-full bg-transparent outline-none', metaHeld ? 'cursor-ew-resize' : 'cursor-default', gestureActive && gestureValue !== 0 ? 'text-info' : '')}
+      class={cn(
+        styles.value(),
+        'w-full bg-transparent outline-none',
+        metaHeld ? 'cursor-ew-resize' : 'cursor-default',
+        gestureActive && gestureValue !== 0 ? 'text-info' : ''
+      )}
       value={displayValue}
       onfocus={handleFocus}
-      oninput={(e) => { editText = e.currentTarget.value; }}
+      oninput={(e) => {
+        editText = e.currentTarget.value;
+      }}
       onblur={handleBlur}
       placeholder={(0).toFixed(decimals)}
     />

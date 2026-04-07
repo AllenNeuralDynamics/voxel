@@ -2,10 +2,10 @@
   import { getChannelFor, isPropDiverged, type Session, type Camera, type ROIGrid } from '$lib/main';
   import { Link, LinkOff, Restore, ChevronDown, ChevronRight } from '$lib/icons';
   import { Button, Select, SpinBox } from '$lib/ui/kit';
-  import { Slider } from '$lib/ui/kit';
   import { SvelteSet } from 'svelte/reactivity';
   import { watch } from 'runed';
   import { cn } from '$lib/utils';
+  // import { Slider } from '$lib/ui/kit';
 
   interface Props {
     session: Session;
@@ -57,6 +57,9 @@
     exposureMin: number;
     exposureMax: number;
     exposureStep: number;
+    frameRateMin: number;
+    frameRateMax: number;
+    frameRateStep: number;
     binningOptions: number[];
     pixelFormatOptions: string[];
     roiGrid: ROIGrid | undefined;
@@ -69,6 +72,9 @@
         exposureMin: 0,
         exposureMax: 1000,
         exposureStep: 0.1,
+        frameRateMin: 0,
+        frameRateMax: 100,
+        frameRateStep: 0.1,
         binningOptions: [],
         pixelFormatOptions: [],
         roiGrid: undefined
@@ -77,6 +83,9 @@
     let expMin = -Infinity,
       expMax = Infinity,
       expStep = 0;
+    let frMin = -Infinity,
+      frMax = Infinity,
+      frStep = 0;
     const binSets = cams.map((c) => new Set(c.binningOptions));
     const fmtSets = cams.map((c) => new Set(c.pixelFormatOptions));
 
@@ -84,6 +93,9 @@
       expMin = Math.max(expMin, c.exposureMin);
       expMax = Math.min(expMax, c.exposureMax);
       expStep = Math.max(expStep, c.exposureStep);
+      frMin = Math.max(frMin, c.frameRateMin);
+      frMax = Math.min(frMax, c.frameRateMax);
+      frStep = Math.max(frStep, c.frameRateStep);
     }
 
     let binCommon = binSets[0];
@@ -117,6 +129,9 @@
       exposureMin: expMin === -Infinity ? 0 : expMin,
       exposureMax: expMax === Infinity ? 1000 : expMax,
       exposureStep: expStep || 0.1,
+      frameRateMin: frMin === -Infinity ? 0 : frMin,
+      frameRateMax: frMax === Infinity ? 100 : frMax,
+      frameRateStep: frStep || 0.1,
       binningOptions: [...binCommon].sort((a, b) => a - b),
       pixelFormatOptions: [...fmtCommon].sort(),
       roiGrid
@@ -131,6 +146,9 @@
       exposureMin: camera.exposureMin,
       exposureMax: camera.exposureMax,
       exposureStep: camera.exposureStep,
+      frameRateMin: camera.frameRateMin,
+      frameRateMax: camera.frameRateMax,
+      frameRateStep: camera.frameRateStep,
       binningOptions: camera.binningOptions,
       pixelFormatOptions: camera.pixelFormatOptions,
       roiGrid: camera.roiGrid
@@ -203,9 +221,10 @@
   {@const savedProps = isOther ? undefined : profile?.props?.[camera.deviceId]}
   {@const savedRoi = isOther ? undefined : profile?.rois?.[camera.deviceId]}
   {@const expDiverged = isPropDiverged(savedProps?.exposure_time_ms, camera.exposureTimeMs)}
+  {@const frDiverged = isPropDiverged(savedProps?.frame_rate_hz, camera.frameRateHz)}
   {@const binDiverged = isPropDiverged(savedProps?.binning, camera.binning)}
   {@const fmtDiverged = isPropDiverged(savedProps?.pixel_format, camera.pixelFormat)}
-  {@const anyPropDiverged = expDiverged || binDiverged || fmtDiverged}
+  {@const anyPropDiverged = expDiverged || frDiverged || binDiverged || fmtDiverged}
   {@const anyRoiDiverged =
     savedRoi != null &&
     camera.roi != null &&
@@ -283,7 +302,7 @@
 
     <!-- ═══ Properties Section ═══ -->
     <div class="flex flex-col gap-3 pb-1">
-      <!-- Exposure -->
+      <!-- Exposure (old layout, commented out for potential reuse)
       <div class="flex flex-col gap-1">
         <div class="flex items-start justify-between">
           <div class="flex h-ui-xs items-center gap-1">
@@ -316,9 +335,51 @@
           onChange={(v) => forLinked(camera, (c) => c.setExposure(v))}
         />
       </div>
+      -->
 
-      <!-- Binning & Pixel Format -->
-      <div class="grid grid-cols-2 gap-2">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-x-3 gap-y-2">
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-1">
+            <span class="text-xs text-fg-muted">Exposure</span>
+            {@render unsavedDot(savedProps?.exposure_time_ms, isOther)}
+            {#if expDiverged}
+              <span class="text-xs text-warning/70">· {savedProps?.exposure_time_ms} ms</span>
+            {/if}
+          </div>
+          <SpinBox
+            value={camera.exposureTimeMs ?? 0}
+            min={constraints.exposureMin}
+            max={constraints.exposureMax}
+            step={constraints.exposureStep}
+            decimals={exposureDecimals(constraints.exposureStep)}
+            suffix="ms"
+            appearance="full"
+            align="left"
+            size="xs"
+            onChange={(v) => forLinked(camera, (c) => c.setExposure(v))}
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-1">
+            <span class="text-xs text-fg-muted">Frame Rate</span>
+            {@render unsavedDot(savedProps?.frame_rate_hz, isOther)}
+            {#if frDiverged}
+              <span class="text-xs text-warning/70">· {savedProps?.frame_rate_hz} Hz</span>
+            {/if}
+          </div>
+          <SpinBox
+            value={camera.frameRateHz ?? 0}
+            min={constraints.frameRateMin}
+            max={constraints.frameRateMax}
+            step={constraints.frameRateStep}
+            decimals={2}
+            suffix="Hz"
+            appearance="full"
+            align="left"
+            size="xs"
+            onChange={(v) => forLinked(camera, (c) => c.setFrameRate(v))}
+          />
+        </div>
         {#if constraints.binningOptions.length > 0}
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-1">

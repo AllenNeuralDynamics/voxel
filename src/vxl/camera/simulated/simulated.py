@@ -36,9 +36,17 @@ class SimulatedCamera(Camera):
     _roi_step_height_px: int = 16
     _min_exposure_ms: ClassVar[float] = 0.001
     _max_exposure_ms: ClassVar[float] = 1e2
-    # Simulated readout time for large format sensor (ms)
-    # This accounts for time to read data from sensor after exposure
-    _readout_time_ms: ClassVar[float] = 140.0
+    # Per-line readout interval in µs (base value for MONO16).
+    # VP-151MX: ~140 ms full-frame readout at 10 640 rows → 13.16 µs/line.
+    _base_line_interval_us: ClassVar[float] = 13.16
+    # Pixel format scaling factors for line readout time (bits relative to 16-bit).
+    _FORMAT_READOUT_FACTOR: ClassVar[dict[str, float]] = {
+        "MONO8": 0.5,
+        "MONO10": 0.625,
+        "MONO12": 0.75,
+        "MONO14": 0.875,
+        "MONO16": 1.0,
+    }
 
     def __init__(
         self,
@@ -53,18 +61,24 @@ class SimulatedCamera(Camera):
         self._roi_height_px = self._sensor_size_px.y
         self._roi_width_offset_px = 0
         self._roi_height_offset_px = 0
-        self._exposure_time_ms: float = 10.0
-        # Frame period = exposure + readout time
-        # With 10ms exposure + 140ms readout = 150ms period = ~6.67 fps
-        self._frame_rate_hz: float = 1000.0 / (self._exposure_time_ms + self._readout_time_ms)
         self._pixel_format: PixelFormat = "MONO16"
         self._binning: int = 1
+        self._exposure_time_ms: float = 10.0
+        self._frame_rate_hz: float = 1000.0 / (self._exposure_time_ms + self.readout_time_ms)
         self._frame_count = -1
         self._reference_frame: np.ndarray | None = None
 
         # Track actual frame timing for diagnostics
         self._last_grab_frame_time: float = 0
         self._actual_frame_rate_fps: float = 0
+
+    @property
+    def readout_time_ms(self) -> float:
+        """Estimated sensor readout time based on ROI height, binning, and pixel format."""
+        fmt_factor = self._FORMAT_READOUT_FACTOR.get(self._pixel_format, 1.0)
+        line_interval_us = self._base_line_interval_us * fmt_factor
+        effective_rows = self._roi_height_px / self._binning
+        return line_interval_us * effective_rows / 1000
 
     @property
     def sensor_size_px(self) -> IVec2D:
@@ -97,13 +111,12 @@ class SimulatedCamera(Camera):
     @exposure_time_ms.setter
     def exposure_time_ms(self, exposure_time_ms: float) -> None:
         self._exposure_time_ms = exposure_time_ms
-        # Update frame rate based on new exposure + readout time
-        max_frame_rate = 1000.0 / (self._exposure_time_ms + self._readout_time_ms)
+        max_frame_rate = 1000.0 / (self._exposure_time_ms + self.readout_time_ms)
         self._frame_rate_hz = min(max_frame_rate, self._frame_rate_hz)
 
     @deliminated_float(
-        min_value=lambda self: 1000.0 / (self._max_exposure_ms + self._readout_time_ms),
-        max_value=lambda self: 1000.0 / (self._exposure_time_ms + self._readout_time_ms),
+        min_value=lambda self: 1000.0 / (self._max_exposure_ms + self.readout_time_ms),
+        max_value=lambda self: 1000.0 / (self._exposure_time_ms + self.readout_time_ms),
     )
     def frame_rate_hz(self) -> float:
         return self._frame_rate_hz

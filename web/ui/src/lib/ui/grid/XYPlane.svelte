@@ -528,8 +528,9 @@
 
       // Add stack(s) for active profile (other-profile stacks only)
       if (isOtherProfile) {
-        const otherStacks = (isSingle ? [stack] : session.selectedStacks)
-          .filter((s) => s.profile_id !== session.activeProfileId && !session.getStackAtPosition(s.x, s.y));
+        const otherStacks = (isSingle ? [stack] : session.selectedStacks).filter(
+          (s) => s.profile_id !== session.activeProfileId && !session.getStackAtPosition(s.x, s.y)
+        );
         if (otherStacks.length > 0) {
           items.push({
             type: 'action',

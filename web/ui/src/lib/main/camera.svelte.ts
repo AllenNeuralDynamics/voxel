@@ -61,6 +61,11 @@ export class Camera {
     return typeof val === 'number' ? val : undefined;
   });
 
+  frameRateHz = $derived.by(() => {
+    const val = this.#devices.getPropertyValue(this.#deviceId, 'frame_rate_hz');
+    return typeof val === 'number' ? val : undefined;
+  });
+
   roi = $derived.by(() => {
     const val = this.#devices.getPropertyValue(this.#deviceId, 'roi');
     if (val && typeof val === 'object') return val as SensorROI;
@@ -124,6 +129,18 @@ export class Camera {
     return (this.#devices.getPropertyModel(this.#deviceId, 'exposure_time_ms')?.step as number) ?? 0.1;
   }
 
+  get frameRateMin(): number {
+    return (this.#devices.getPropertyModel(this.#deviceId, 'frame_rate_hz')?.min_val as number) ?? 0;
+  }
+
+  get frameRateMax(): number {
+    return (this.#devices.getPropertyModel(this.#deviceId, 'frame_rate_hz')?.max_val as number) ?? 100;
+  }
+
+  get frameRateStep(): number {
+    return (this.#devices.getPropertyModel(this.#deviceId, 'frame_rate_hz')?.step as number) ?? 0.1;
+  }
+
   get pixelFormatOptions(): string[] {
     const opts = this.#devices.getPropertyModel(this.#deviceId, 'pixel_format')?.options;
     if (Array.isArray(opts)) return opts.filter((o): o is string => typeof o === 'string');
@@ -137,6 +154,10 @@ export class Camera {
   }
 
   // --- Setter methods ---
+
+  setFrameRate(hz: number): void {
+    this.#devices.setProperty(this.#deviceId, 'frame_rate_hz', hz);
+  }
 
   setExposure(ms: number): void {
     this.#devices.setProperty(this.#deviceId, 'exposure_time_ms', ms);
