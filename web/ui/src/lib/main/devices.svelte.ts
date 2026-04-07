@@ -43,28 +43,97 @@ export interface DeviceInterface {
   properties: Record<string, PropertyInfo>;
 }
 
-class ReactivePropertyModel {
-  value = $state<unknown>(undefined);
-  min_val = $state<number | null>(null);
-  max_val = $state<number | null>(null);
+// ── Reactive property types (mirror backend deliminated/enumerated/plain) ──
+
+export class DeliminatedValue {
+  value = $state<number>(0);
+  min = $state<number | null>(null);
+  max = $state<number | null>(null);
   step = $state<number | null>(null);
-  options = $state<(string | number)[] | null>(null);
 
   constructor(model: PropertyModel) {
-    this.value = model.value;
-    this.min_val = model.min_val ?? null;
-    this.max_val = model.max_val ?? null;
-    this.step = model.step ?? null;
-    this.options = model.options ?? null;
+    this.update(model);
+  }
+
+  /** @deprecated Use `.min` / `.max` directly. */
+  get min_val(): number | null {
+    return this.min;
+  }
+  /** @deprecated Use `.min` / `.max` directly. */
+  get max_val(): number | null {
+    return this.max;
+  }
+  get options(): null {
+    return null;
+  }
+
+  update(model: PropertyModel): void {
+    this.value = (model.value as number) ?? 0;
+    this.min = (model.min_val as number) ?? null;
+    this.max = (model.max_val as number) ?? null;
+    this.step = (model.step as number) ?? null;
+  }
+}
+
+export class EnumeratedValue {
+  value = $state<string | number | undefined>(undefined);
+  options = $state<(string | number)[]>([]);
+
+  constructor(model: PropertyModel) {
+    this.update(model);
+  }
+
+  get min_val(): null {
+    return null;
+  }
+  get max_val(): null {
+    return null;
+  }
+  get step(): null {
+    return null;
+  }
+
+  update(model: PropertyModel): void {
+    this.value = model.value as string | number;
+    this.options = (model.options as (string | number)[]) ?? [];
+  }
+}
+
+export class PlainValue {
+  value = $state<unknown>(undefined);
+
+  constructor(model: PropertyModel) {
+    this.update(model);
+  }
+
+  get min_val(): null {
+    return null;
+  }
+  get max_val(): null {
+    return null;
+  }
+  get step(): null {
+    return null;
+  }
+  get options(): null {
+    return null;
   }
 
   update(model: PropertyModel): void {
     this.value = model.value;
-    this.min_val = model.min_val ?? null;
-    this.max_val = model.max_val ?? null;
-    this.step = model.step ?? null;
-    this.options = model.options ?? null;
   }
+}
+
+export type ReactiveProperty = DeliminatedValue | EnumeratedValue | PlainValue;
+
+function createReactiveProperty(model: PropertyModel): ReactiveProperty {
+  if (model.options != null && Array.isArray(model.options) && model.options.length > 0) {
+    return new EnumeratedValue(model);
+  }
+  if (model.min_val != null || model.max_val != null || model.step != null) {
+    return new DeliminatedValue(model);
+  }
+  return new PlainValue(model);
 }
 
 export interface DeviceInfo {
@@ -72,7 +141,7 @@ export interface DeviceInfo {
   connected: boolean;
   interface?: DeviceInterface;
   error?: string;
-  propertyValues?: Record<string, ReactivePropertyModel>;
+  propertyValues?: Record<string, ReactiveProperty>;
 }
 
 export interface DevicesResponse {
@@ -204,7 +273,7 @@ export class DevicesManager {
         if (device.propertyValues[propName]) {
           device.propertyValues[propName].update(result);
         } else {
-          device.propertyValues[propName] = new ReactivePropertyModel(result);
+          device.propertyValues[propName] = createReactiveProperty(result);
         }
       }
     }
@@ -219,9 +288,24 @@ export class DevicesManager {
     return device?.propertyValues?.[propName]?.value;
   }
 
-  getPropertyModel(deviceId: string, propName: string): ReactivePropertyModel | undefined {
+  getProperty(deviceId: string, propName: string): ReactiveProperty | undefined {
     const device = this.devices.get(deviceId);
     return device?.propertyValues?.[propName];
+  }
+
+  getDeliminated(deviceId: string, propName: string): DeliminatedValue | undefined {
+    const prop = this.getProperty(deviceId, propName);
+    return prop instanceof DeliminatedValue ? prop : undefined;
+  }
+
+  getEnumerated(deviceId: string, propName: string): EnumeratedValue | undefined {
+    const prop = this.getProperty(deviceId, propName);
+    return prop instanceof EnumeratedValue ? prop : undefined;
+  }
+
+  /** @deprecated Use getProperty / getDeliminated / getEnumerated instead. */
+  getPropertyModel(deviceId: string, propName: string): ReactiveProperty | undefined {
+    return this.getProperty(deviceId, propName);
   }
 
   getPropertyInfo(deviceId: string, propName: string): PropertyInfo | undefined {
@@ -233,7 +317,7 @@ export class DevicesManager {
   hasDivergence(deviceId: string, savedProps: Record<string, unknown> | undefined): boolean {
     if (!savedProps) return false;
     for (const [propName, savedValue] of Object.entries(savedProps)) {
-      if (isPropDiverged(savedValue, this.getPropertyModel(deviceId, propName)?.value)) return true;
+      if (isPropDiverged(savedValue, this.getProperty(deviceId, propName)?.value)) return true;
     }
     return false;
   }
@@ -310,7 +394,7 @@ export class DevicesManager {
         } else if (device.propertyValues[propName]) {
           device.propertyValues[propName].update(result);
         } else {
-          device.propertyValues[propName] = new ReactivePropertyModel(result);
+          device.propertyValues[propName] = createReactiveProperty(result);
         }
       }
     }

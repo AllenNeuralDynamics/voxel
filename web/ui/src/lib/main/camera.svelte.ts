@@ -44,27 +44,12 @@ export class Camera {
     return this.#deviceId;
   }
 
-  // --- Derived properties ---
+  // --- Constrained properties (typed) ---
 
-  exposureTimeMs = $derived.by(() => {
-    const val = this.#devices.getPropertyValue(this.#deviceId, 'exposure_time_ms');
-    return typeof val === 'number' ? val : undefined;
-  });
-
-  pixelFormat = $derived.by(() => {
-    const val = this.#devices.getPropertyValue(this.#deviceId, 'pixel_format');
-    return typeof val === 'string' ? val : undefined;
-  });
-
-  binning = $derived.by(() => {
-    const val = this.#devices.getPropertyValue(this.#deviceId, 'binning');
-    return typeof val === 'number' ? val : undefined;
-  });
-
-  frameRateHz = $derived.by(() => {
-    const val = this.#devices.getPropertyValue(this.#deviceId, 'frame_rate_hz');
-    return typeof val === 'number' ? val : undefined;
-  });
+  exposure = $derived.by(() => this.#devices.getDeliminated(this.#deviceId, 'exposure_time_ms'));
+  frameRate = $derived.by(() => this.#devices.getDeliminated(this.#deviceId, 'frame_rate_hz'));
+  pixelFormat = $derived.by(() => this.#devices.getEnumerated(this.#deviceId, 'pixel_format'));
+  binning = $derived.by(() => this.#devices.getEnumerated(this.#deviceId, 'binning'));
 
   roi = $derived.by(() => {
     const val = this.#devices.getPropertyValue(this.#deviceId, 'roi');
@@ -114,44 +99,6 @@ export class Camera {
     if (val === 'IDLE' || val === 'PREVIEW' || val === 'ACQUISITION') return val as CameraMode;
     return undefined;
   });
-
-  // --- Property model bounds ---
-
-  get exposureMin(): number {
-    return (this.#devices.getPropertyModel(this.#deviceId, 'exposure_time_ms')?.min_val as number) ?? 0;
-  }
-
-  get exposureMax(): number {
-    return (this.#devices.getPropertyModel(this.#deviceId, 'exposure_time_ms')?.max_val as number) ?? 1000;
-  }
-
-  get exposureStep(): number {
-    return (this.#devices.getPropertyModel(this.#deviceId, 'exposure_time_ms')?.step as number) ?? 0.1;
-  }
-
-  get frameRateMin(): number {
-    return (this.#devices.getPropertyModel(this.#deviceId, 'frame_rate_hz')?.min_val as number) ?? 0;
-  }
-
-  get frameRateMax(): number {
-    return (this.#devices.getPropertyModel(this.#deviceId, 'frame_rate_hz')?.max_val as number) ?? 100;
-  }
-
-  get frameRateStep(): number {
-    return (this.#devices.getPropertyModel(this.#deviceId, 'frame_rate_hz')?.step as number) ?? 0.1;
-  }
-
-  get pixelFormatOptions(): string[] {
-    const opts = this.#devices.getPropertyModel(this.#deviceId, 'pixel_format')?.options;
-    if (Array.isArray(opts)) return opts.filter((o): o is string => typeof o === 'string');
-    return [];
-  }
-
-  get binningOptions(): number[] {
-    const opts = this.#devices.getPropertyModel(this.#deviceId, 'binning')?.options;
-    if (Array.isArray(opts)) return opts.filter((o): o is number => typeof o === 'number');
-    return [];
-  }
 
   // --- Setter methods ---
 

@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { getChannelFor, isPropDiverged, type Session, type Camera, type ROIGrid } from '$lib/main';
+  import {
+    getChannelFor,
+    isPropDiverged,
+    type Session,
+    type Camera,
+    type ROIGrid,
+    type DeliminatedValue,
+    type EnumeratedValue
+  } from '$lib/main';
   import { Link, LinkOff, Restore, ChevronDown, ChevronRight } from '$lib/icons';
   import { Button, Select, SpinBox } from '$lib/ui/kit';
   import { SvelteSet } from 'svelte/reactivity';
@@ -53,87 +61,87 @@
 
   // ── Merged constraints for linked cameras ──
 
+  interface Bounds {
+    min: number;
+    max: number;
+    step: number;
+  }
+
   interface CardConstraints {
-    exposureMin: number;
-    exposureMax: number;
-    exposureStep: number;
-    frameRateMin: number;
-    frameRateMax: number;
-    frameRateStep: number;
+    exposure: Bounds;
+    frameRate: Bounds;
     binningOptions: number[];
     pixelFormatOptions: string[];
     roiGrid: ROIGrid | undefined;
   }
 
+  function delimBounds(d: DeliminatedValue | undefined, fallback: Bounds): Bounds {
+    return { min: d?.min ?? fallback.min, max: d?.max ?? fallback.max, step: d?.step ?? fallback.step };
+  }
+
+  const EXPOSURE_FALLBACK: Bounds = { min: 0, max: 1000, step: 0.1 };
+  const FRAME_RATE_FALLBACK: Bounds = { min: 0, max: 100, step: 0.1 };
+
+  function mergeBounds(cameras: Camera[], get: (c: Camera) => DeliminatedValue | undefined, fallback: Bounds): Bounds {
+    let min = -Infinity,
+      max = Infinity,
+      step = 0;
+    for (const c of cameras) {
+      const d = get(c);
+      min = Math.max(min, d?.min ?? fallback.min);
+      max = Math.min(max, d?.max ?? fallback.max);
+      step = Math.max(step, d?.step ?? fallback.step);
+    }
+    return {
+      min: min === -Infinity ? fallback.min : min,
+      max: max === Infinity ? fallback.max : max,
+      step: step || fallback.step
+    };
+  }
+
+  function intersectOptions<T>(cameras: Camera[], get: (c: Camera) => EnumeratedValue | undefined): T[] {
+    const sets = cameras.map((c) => new Set(get(c)?.options ?? []));
+    if (sets.length === 0) return [];
+    let common = sets[0];
+    for (let i = 1; i < sets.length; i++) {
+      common = new Set([...common].filter((v) => sets[i].has(v)));
+    }
+    return [...common] as T[];
+  }
+
   const mergedConstraints = $derived.by<CardConstraints>(() => {
-    const cams = linkedCameras.length > 0 ? linkedCameras : [];
+    const cams = linkedCameras;
     if (cams.length === 0)
       return {
-        exposureMin: 0,
-        exposureMax: 1000,
-        exposureStep: 0.1,
-        frameRateMin: 0,
-        frameRateMax: 100,
-        frameRateStep: 0.1,
+        exposure: EXPOSURE_FALLBACK,
+        frameRate: FRAME_RATE_FALLBACK,
         binningOptions: [],
         pixelFormatOptions: [],
         roiGrid: undefined
       };
 
-    let expMin = -Infinity,
-      expMax = Infinity,
-      expStep = 0;
-    let frMin = -Infinity,
-      frMax = Infinity,
-      frStep = 0;
-    const binSets = cams.map((c) => new Set(c.binningOptions));
-    const fmtSets = cams.map((c) => new Set(c.pixelFormatOptions));
-
-    for (const c of cams) {
-      expMin = Math.max(expMin, c.exposureMin);
-      expMax = Math.min(expMax, c.exposureMax);
-      expStep = Math.max(expStep, c.exposureStep);
-      frMin = Math.max(frMin, c.frameRateMin);
-      frMax = Math.min(frMax, c.frameRateMax);
-      frStep = Math.max(frStep, c.frameRateStep);
-    }
-
-    let binCommon = binSets[0];
-    for (let i = 1; i < binSets.length; i++) {
-      binCommon = new Set([...binCommon].filter((v) => binSets[i].has(v)));
-    }
-
-    let fmtCommon = fmtSets[0];
-    for (let i = 1; i < fmtSets.length; i++) {
-      fmtCommon = new Set([...fmtCommon].filter((v) => fmtSets[i].has(v)));
-    }
-
-    let roiGrid: ROIGrid | undefined;
     const grids = cams.map((c) => c.roiGrid).filter((g): g is ROIGrid => !!g);
-    if (grids.length > 0) {
-      roiGrid = {
-        h: {
-          min: Math.max(...grids.map((g) => g.h.min)),
-          max: Math.min(...grids.map((g) => g.h.max)),
-          step: Math.max(...grids.map((g) => g.h.step))
-        },
-        v: {
-          min: Math.max(...grids.map((g) => g.v.min)),
-          max: Math.min(...grids.map((g) => g.v.max)),
-          step: Math.max(...grids.map((g) => g.v.step))
-        }
-      };
-    }
+    const roiGrid: ROIGrid | undefined =
+      grids.length > 0
+        ? {
+            h: {
+              min: Math.max(...grids.map((g) => g.h.min)),
+              max: Math.min(...grids.map((g) => g.h.max)),
+              step: Math.max(...grids.map((g) => g.h.step))
+            },
+            v: {
+              min: Math.max(...grids.map((g) => g.v.min)),
+              max: Math.min(...grids.map((g) => g.v.max)),
+              step: Math.max(...grids.map((g) => g.v.step))
+            }
+          }
+        : undefined;
 
     return {
-      exposureMin: expMin === -Infinity ? 0 : expMin,
-      exposureMax: expMax === Infinity ? 1000 : expMax,
-      exposureStep: expStep || 0.1,
-      frameRateMin: frMin === -Infinity ? 0 : frMin,
-      frameRateMax: frMax === Infinity ? 100 : frMax,
-      frameRateStep: frStep || 0.1,
-      binningOptions: [...binCommon].sort((a, b) => a - b),
-      pixelFormatOptions: [...fmtCommon].sort(),
+      exposure: mergeBounds(cams, (c) => c.exposure, EXPOSURE_FALLBACK),
+      frameRate: mergeBounds(cams, (c) => c.frameRate, FRAME_RATE_FALLBACK),
+      binningOptions: intersectOptions<number>(cams, (c) => c.binning).sort((a, b) => a - b),
+      pixelFormatOptions: intersectOptions<string>(cams, (c) => c.pixelFormat).sort(),
       roiGrid
     };
   });
@@ -143,14 +151,10 @@
       return mergedConstraints;
     }
     return {
-      exposureMin: camera.exposureMin,
-      exposureMax: camera.exposureMax,
-      exposureStep: camera.exposureStep,
-      frameRateMin: camera.frameRateMin,
-      frameRateMax: camera.frameRateMax,
-      frameRateStep: camera.frameRateStep,
-      binningOptions: camera.binningOptions,
-      pixelFormatOptions: camera.pixelFormatOptions,
+      exposure: delimBounds(camera.exposure, EXPOSURE_FALLBACK),
+      frameRate: delimBounds(camera.frameRate, FRAME_RATE_FALLBACK),
+      binningOptions: camera.binning?.options?.filter((o): o is number => typeof o === 'number') ?? [],
+      pixelFormatOptions: camera.pixelFormat?.options?.filter((o): o is string => typeof o === 'string') ?? [],
       roiGrid: camera.roiGrid
     };
   }
@@ -205,11 +209,10 @@
   {@const isLinked = linkedIds.has(camera.deviceId)}
   {@const constraints = isOther
     ? {
-        exposureMin: camera.exposureMin,
-        exposureMax: camera.exposureMax,
-        exposureStep: camera.exposureStep,
-        binningOptions: camera.binningOptions,
-        pixelFormatOptions: camera.pixelFormatOptions,
+        exposure: delimBounds(camera.exposure, EXPOSURE_FALLBACK),
+        frameRate: delimBounds(camera.frameRate, FRAME_RATE_FALLBACK),
+        binningOptions: camera.binning?.options?.filter((o): o is number => typeof o === 'number') ?? [],
+        pixelFormatOptions: camera.pixelFormat?.options?.filter((o): o is string => typeof o === 'string') ?? [],
         roiGrid: camera.roiGrid
       }
     : getConstraints(camera)}
@@ -220,10 +223,10 @@
       : undefined}
   {@const savedProps = isOther ? undefined : profile?.props?.[camera.deviceId]}
   {@const savedRoi = isOther ? undefined : profile?.rois?.[camera.deviceId]}
-  {@const expDiverged = isPropDiverged(savedProps?.exposure_time_ms, camera.exposureTimeMs)}
-  {@const frDiverged = isPropDiverged(savedProps?.frame_rate_hz, camera.frameRateHz)}
-  {@const binDiverged = isPropDiverged(savedProps?.binning, camera.binning)}
-  {@const fmtDiverged = isPropDiverged(savedProps?.pixel_format, camera.pixelFormat)}
+  {@const expDiverged = isPropDiverged(savedProps?.exposure_time_ms, camera.exposure?.value)}
+  {@const frDiverged = isPropDiverged(savedProps?.frame_rate_hz, camera.frameRate?.value)}
+  {@const binDiverged = isPropDiverged(savedProps?.binning, camera.binning?.value)}
+  {@const fmtDiverged = isPropDiverged(savedProps?.pixel_format, camera.pixelFormat?.value)}
   {@const anyPropDiverged = expDiverged || frDiverged || binDiverged || fmtDiverged}
   {@const anyRoiDiverged =
     savedRoi != null &&
@@ -313,11 +316,11 @@
             {/if}
           </div>
           <SpinBox
-            value={camera.exposureTimeMs ?? 0}
-            min={constraints.exposureMin}
-            max={constraints.exposureMax}
-            step={constraints.exposureStep}
-            decimals={exposureDecimals(constraints.exposureStep)}
+            value={camera.exposure?.value ?? 0}
+            min={constraints.exposure.min}
+            max={constraints.exposure.max}
+            step={constraints.exposure.step}
+            decimals={exposureDecimals(constraints.exposure.step)}
             suffix="ms"
             numCharacters={7}
             variant="ghost"
@@ -328,10 +331,10 @@
           />
         </div>
         <Slider
-          target={camera.exposureTimeMs ?? 0}
-          min={constraints.exposureMin}
-          max={constraints.exposureMax}
-          step={constraints.exposureStep}
+          target={camera.exposure?.value ?? 0}
+          min={constraints.exposure.min}
+          max={constraints.exposure.max}
+          step={constraints.exposure.step}
           onChange={(v) => forLinked(camera, (c) => c.setExposure(v))}
         />
       </div>
@@ -347,11 +350,11 @@
             {/if}
           </div>
           <SpinBox
-            value={camera.exposureTimeMs ?? 0}
-            min={constraints.exposureMin}
-            max={constraints.exposureMax}
-            step={constraints.exposureStep}
-            decimals={exposureDecimals(constraints.exposureStep)}
+            value={camera.exposure?.value ?? 0}
+            min={constraints.exposure.min}
+            max={constraints.exposure.max}
+            step={constraints.exposure.step}
+            decimals={exposureDecimals(constraints.exposure.step)}
             suffix="ms"
             appearance="full"
             align="left"
@@ -368,10 +371,10 @@
             {/if}
           </div>
           <SpinBox
-            value={camera.frameRateHz ?? 0}
-            min={constraints.frameRateMin}
-            max={constraints.frameRateMax}
-            step={constraints.frameRateStep}
+            value={camera.frameRate?.value ?? 0}
+            min={constraints.frameRate.min}
+            max={constraints.frameRate.max}
+            step={constraints.frameRate.step}
             decimals={2}
             suffix="Hz"
             appearance="full"
@@ -390,7 +393,7 @@
               {/if}
             </div>
             <Select
-              value={String(camera.binning ?? '')}
+              value={String(camera.binning?.value ?? '')}
               options={constraints.binningOptions.map((b) => ({ value: String(b), label: `${b}x` }))}
               size="xs"
               onchange={(v) => forLinked(camera, (c) => c.setBinning(Number(v)))}
@@ -407,7 +410,7 @@
               {/if}
             </div>
             <Select
-              value={camera.pixelFormat ?? ''}
+              value={String(camera.pixelFormat?.value ?? '')}
               options={constraints.pixelFormatOptions.map((f) => ({ value: f, label: f }))}
               size="xs"
               onchange={(v) => forLinked(camera, (c) => c.setPixelFormat(v))}

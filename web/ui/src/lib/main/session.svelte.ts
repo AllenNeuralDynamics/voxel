@@ -365,10 +365,10 @@ export class Session {
         if (cam) {
           entry.detection = {
             deviceId: chConfig.detection,
-            exposureTime: cam.exposureTimeMs ?? undefined,
+            exposureTime: cam.exposure?.value ?? undefined,
             resolution: cam.frameSizePx ?? undefined,
-            binning: cam.binning ?? undefined,
-            pixelFormat: cam.pixelFormat ?? undefined
+            binning: (cam.binning?.value as number) ?? undefined,
+            pixelFormat: (cam.pixelFormat?.value as string) ?? undefined
           };
         }
       }

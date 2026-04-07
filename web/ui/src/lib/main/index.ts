@@ -17,7 +17,8 @@ export { discoverProfileDevices, isFilterWheel, getChannelFor } from './profile.
 export type { AlignEdge } from './grid.ts';
 
 export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';
-export { DevicesManager } from './devices.svelte.ts';
+export { DevicesManager, DeliminatedValue, EnumeratedValue, PlainValue } from './devices.svelte.ts';
+export type { ReactiveProperty } from './devices.svelte.ts';
 export { isErrorMsg, isPropDiverged, formatPropValue, decimalsFromStep } from './devices.svelte.ts';
 export type {
   DeviceInfo,

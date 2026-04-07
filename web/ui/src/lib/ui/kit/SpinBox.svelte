@@ -86,7 +86,7 @@
 </script>
 
 <script lang="ts">
-  import { cn } from '$lib/utils';
+  import { cn, useModifierHeld } from '$lib/utils';
   import { useEventListener, useThrottle } from 'runed';
 
   interface Props extends SpinBoxVariants {
@@ -103,6 +103,8 @@
     prefix?: string;
     suffix?: string;
     snapValue?: number | (() => number);
+    /** Fine step size (Shift modifier). Defaults to step / 10. */
+    fineStep?: number;
     disabled?: boolean;
     class?: string;
     throttle?: number;
@@ -125,6 +127,7 @@
     prefix,
     suffix,
     snapValue,
+    fineStep,
     disabled = false,
     size = 'md',
     class: className = '',
@@ -133,6 +136,12 @@
   }: Props = $props();
 
   const styles = $derived(spinBoxVariants({ variant, size, appearance }));
+  const meta = useModifierHeld('meta');
+  const metaHeld = $derived(meta.current);
+
+  function activeStep(e?: { shiftKey?: boolean }): number {
+    return e?.shiftKey ? (fineStep ?? step / 10) : step;
+  }
 
   const throttledDragCallback = useThrottle(
     (newValue: number) => {
@@ -205,7 +214,7 @@
     if (!isDragging) return;
 
     const sensitivity = 1;
-    const deltaValue = Math.round(deltaX / sensitivity) * step;
+    const deltaValue = Math.round(deltaX / sensitivity) * activeStep(e);
     let newValue = dragStartValue + deltaValue;
     newValue = Math.max(min, Math.min(max, newValue));
     value = newValue;
@@ -255,11 +264,11 @@
   }
 
   function handleWheel(e: WheelEvent) {
-    if (!e.ctrlKey || !draggable) return;
+    if (!e.metaKey || !draggable) return;
     e.preventDefault();
 
     const direction = e.deltaY < 0 ? 1 : -1;
-    let newValue = value + direction * step;
+    let newValue = value + direction * activeStep(e);
     newValue = Math.max(min, Math.min(max, newValue));
     value = newValue;
 
@@ -321,7 +330,7 @@
     style:width="{numCharacters + 1}ch"
     style:color
     style:text-align={align}
-    class={styles.input()}
+    class={cn(styles.input(), draggable && metaHeld && 'cursor-ew-resize')}
   />
   {#if suffix}
     <span class={styles.suffix()}>{suffix}</span>
