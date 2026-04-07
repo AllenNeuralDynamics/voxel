@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from rigup.device import PropResults
 
 from vxl import VoxelRig
-from vxl.camera.preview import PreviewCrop, PreviewLevels
+from vxl.camera.preview import PreviewLevels, PreviewViewport
 from vxl.config import VoxelRigConfig
 from vxlib import get_colormap_catalog
 
@@ -28,9 +28,7 @@ log = logging.getLogger(__name__)
 class BroadcastCallback(Protocol):
     """Protocol for broadcast callback with optional status update."""
 
-    def __call__(
-        self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None
-    ) -> None: ...
+    def __call__(self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None) -> None: ...
 
 
 def _utc_timestamp() -> str:
@@ -124,7 +122,7 @@ class RigService:
 
     async def _handle_preview_crop(self, payload: dict[str, Any], *, sender_id: str | None = None):
         """Handle preview crop update."""
-        crop = PreviewCrop(x=payload.get("x", 0), y=payload.get("y", 0), k=payload.get("k", 0))
+        crop = PreviewViewport(x=payload.get("x", 0), y=payload.get("y", 0), k=payload.get("k", 0))
         await self.rig.update_preview_crop(crop)
         self._broadcast(
             {"topic": "preview/crop", "payload": {"x": crop.x, "y": crop.y, "k": crop.k}}, exclude=sender_id
@@ -410,10 +408,7 @@ async def save_props(
             saved = [request.device_id]
 
         # Payload: {profile_id: {device_id: {prop_name: value}}}
-        saved_props = {
-            dev: rig.config.profiles[profile_id].props.get(dev, {})
-            for dev in saved
-        }
+        saved_props = {dev: rig.config.profiles[profile_id].props.get(dev, {}) for dev in saved}
         service.broadcast(
             {"topic": "profile/props_saved", "payload": {profile_id: saved_props}},
             with_status=True,
@@ -467,11 +462,14 @@ async def save_roi(
         profile_id = service.session.rig.active_profile_id
         roi = await service.session.save_camera_roi(request.camera_id)
         service.broadcast(
-            {"topic": "profile/roi_saved", "payload": {
-                "profile_id": profile_id,
-                "camera_id": request.camera_id,
-                "roi": roi.model_dump(),
-            }},
+            {
+                "topic": "profile/roi_saved",
+                "payload": {
+                    "profile_id": profile_id,
+                    "camera_id": request.camera_id,
+                    "roi": roi.model_dump(),
+                },
+            },
             with_status=True,
         )
         return {"camera_id": request.camera_id, "roi": roi.model_dump(), "status": "saved"}

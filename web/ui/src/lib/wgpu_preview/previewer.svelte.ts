@@ -4,7 +4,7 @@
 
 import type {
   ChannelConfig,
-  PreviewCrop,
+  PreviewViewport,
   PreviewFrameInfo,
   PreviewLevels,
   AppStatus,
@@ -35,7 +35,7 @@ interface ChannelUniformState {
   enabled: boolean;
 }
 
-function isCropEqual(a: PreviewCrop, b: PreviewCrop): boolean {
+function isCropEqual(a: PreviewViewport, b: PreviewViewport): boolean {
   return a.k === b.k && a.x === b.x && a.y === b.y;
 }
 
@@ -46,7 +46,7 @@ interface FrameData {
 
 interface FrameSet {
   frameIdx?: number; // The frame_idx these frames represent
-  crop: PreviewCrop; // The crop these frames have
+  crop: PreviewViewport; // The crop these frames have
   frames: (FrameData | null)[]; // Array indexed by channel idx
 }
 
@@ -92,8 +92,8 @@ export class FramesCollector {
     }
   }
 
-  get #currentCrop(): PreviewCrop | null {
-    let crop: PreviewCrop | null = null;
+  get #currentCrop(): PreviewViewport | null {
+    let crop: PreviewViewport | null = null;
     for (let i = 0; i < this.#croppedFrames.length; i++) {
       const frame = this.#croppedFrames[i];
       if (frame) {
@@ -113,7 +113,7 @@ export class FramesCollector {
    * Get latest frames for desired crop and required channels
    * Returns frames even if they don't have matching frame_idx
    */
-  getLatestFrames(desiredCrop: PreviewCrop, requiredChannels: number[]): FrameSet | null {
+  getLatestFrames(desiredCrop: PreviewViewport, requiredChannels: number[]): FrameSet | null {
     const desiresOriginal = desiredCrop.k === 0 && desiredCrop.x === 0 && desiredCrop.y === 0;
     if (!desiresOriginal && this.#currentCrop && isCropEqual(desiredCrop, this.#currentCrop)) {
       if (this.#croppedFrames && requiredChannels.every((idx) => this.#croppedFrames[idx] !== null)) {
@@ -418,7 +418,7 @@ export class Previewer {
 
   // ===================== PRIVATE: Networking Events =====================
 
-  #handleCropUpdate = (crop: PreviewCrop): void => {
+  #handleCropUpdate = (crop: PreviewViewport): void => {
     if (this.crop.x !== crop.x || this.crop.y !== crop.y || this.crop.k !== crop.k) {
       console.log('Received crop update from server:', crop);
       this.crop = crop;
@@ -626,7 +626,7 @@ export class Previewer {
         });
       }
 
-      const delta: PreviewCrop = {
+      const delta: PreviewViewport = {
         x: this.crop.x - frameSet.crop.x,
         y: this.crop.y - frameSet.crop.y,
         k: this.crop.k - frameSet.crop.k
@@ -678,7 +678,7 @@ export class Previewer {
     this.#bindGroup = this.#gpuDevice.createBindGroup({ layout: this.#pipeline.getBindGroupLayout(0), entries });
   }
 
-  #updateGlobalSettingsBuffer(channelStates: Map<number, ChannelUniformState>, globalDelta: PreviewCrop): void {
+  #updateGlobalSettingsBuffer(channelStates: Map<number, ChannelUniformState>, globalDelta: PreviewViewport): void {
     const globalSettingsSize = 32 + this.MAX_CHANNELS * 16;
     const buffer = new ArrayBuffer(globalSettingsSize);
     const floatView = new Float32Array(buffer);
@@ -760,7 +760,7 @@ export class Previewer {
 
   // ===================== PRIVATE: Helpers =====================
 
-  #queueCropUpdate(crop: PreviewCrop): void {
+  #queueCropUpdate(crop: PreviewViewport): void {
     if (this.#cropUpdateTimer !== null) clearTimeout(this.#cropUpdateTimer);
     this.#cropUpdateTimer = window.setTimeout(() => {
       this.#client.updateCrop(crop.x, crop.y, crop.k);

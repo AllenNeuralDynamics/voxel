@@ -20,7 +20,7 @@ export interface DaqWaveformsResponse {
   timing?: FrameTiming;
 }
 
-export interface PreviewCrop {
+export interface PreviewViewport {
   x: number;
   y: number;
   k: number; // Zoom level: 0 = no zoom, 1 = max zoom
@@ -42,7 +42,7 @@ export interface PreviewFrameInfo {
   preview_height: number;
   full_width: number;
   full_height: number;
-  crop: PreviewCrop;
+  crop: PreviewViewport;
   levels: PreviewLevels;
   fmt: 'jpeg' | 'png' | 'uint16'; // Frame format
   histogram?: number[]; // 256-bin histogram (0-255), only present in full frames
@@ -67,7 +67,7 @@ type ClientMessage =
   // Preview (high-frequency streaming, stays on WS)
   | { topic: 'preview/start'; payload?: Record<string, never> }
   | { topic: 'preview/stop'; payload?: Record<string, never> }
-  | { topic: 'preview/crop'; payload: PreviewCrop }
+  | { topic: 'preview/crop'; payload: PreviewViewport }
   | { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
   | { topic: 'preview/colormap'; payload: { channel: string; colormap: string } }
   // Device control (stays on WS for real-time property updates)
@@ -102,7 +102,7 @@ export interface TopicHandlers {
   error?: (payload: ErrorPayload) => void;
   'log/message'?: (payload: LogMessage) => void;
   'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
-  'preview/crop'?: (payload: PreviewCrop) => void;
+  'preview/crop'?: (payload: PreviewViewport) => void;
   'preview/levels'?: (payload: PreviewLevelsInfo) => void;
   'preview/colormap'?: (payload: { channel: string; colormap: string }) => void;
   'daq/waveforms'?: (payload: DaqWaveformsResponse) => void;

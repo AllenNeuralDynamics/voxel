@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QMouseEvent, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
-from vxl.camera.preview import PreviewCrop
+from vxl.camera.preview import PreviewViewport
 from vxl_qt.store import (
     PreviewStore,
     blur_image,
@@ -66,7 +66,7 @@ class PreviewPanel(QWidget):
         self._is_panning = False
         self._pan_start_x = 0.0
         self._pan_start_y = 0.0
-        self._pan_start_crop = PreviewCrop()
+        self._pan_start_crop = PreviewViewport()
 
         # Debounce timer
         self._crop_debounce_timer = QTimer(self)
@@ -82,7 +82,7 @@ class PreviewPanel(QWidget):
         self._load_default_image()
 
     @property
-    def crop(self) -> PreviewCrop:
+    def crop(self) -> PreviewViewport:
         """Current crop/viewport state."""
         return self._store.crop
 
@@ -93,7 +93,7 @@ class PreviewPanel(QWidget):
 
     def reset_crop(self) -> None:
         """Reset pan/zoom to show full image."""
-        self._store.set_crop(PreviewCrop())
+        self._store.set_crop(PreviewViewport())
         self._schedule_crop_changed()
 
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
@@ -124,7 +124,7 @@ class PreviewPanel(QWidget):
         new_x = clamp_top_left(self._pan_start_crop.x - dx, view_size)
         new_y = clamp_top_left(self._pan_start_crop.y - dy, view_size)
 
-        self._store.set_crop(PreviewCrop(x=new_x, y=new_y, k=crop.k))
+        self._store.set_crop(PreviewViewport(x=new_x, y=new_y, k=crop.k))
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
@@ -169,7 +169,7 @@ class PreviewPanel(QWidget):
         new_y = clamp_top_left(new_y, new_view_size)
 
         self._store.set_interacting(True)
-        self._store.set_crop(PreviewCrop(x=new_x, y=new_y, k=new_zoom))
+        self._store.set_crop(PreviewViewport(x=new_x, y=new_y, k=new_zoom))
         self._store.set_interacting(False)
 
         self._schedule_crop_changed()
@@ -181,7 +181,7 @@ class PreviewPanel(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.reset_crop()
 
-    def _select_frame(self, ch: ChannelData) -> tuple[np.ndarray, PreviewCrop]:
+    def _select_frame(self, ch: ChannelData) -> tuple[np.ndarray, PreviewViewport]:
         """Pick the right frame slot for a channel.
 
         - Not zoomed: full frame
@@ -196,7 +196,7 @@ class PreviewPanel(QWidget):
             if detail_crop == target_crop:
                 return ch.detail
 
-        return ch.frame, PreviewCrop()
+        return ch.frame, PreviewViewport()
 
     def _update_display(self) -> None:
         """Composite and display frames from store.

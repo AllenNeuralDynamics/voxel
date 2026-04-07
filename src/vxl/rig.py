@@ -15,7 +15,7 @@ from rigup import DeviceHandle, Rig
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.camera.base import SensorROI
 from vxl.camera.handle import CameraHandle
-from vxl.camera.preview import PreviewConfig, PreviewCrop, PreviewLevels
+from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
 from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
 from vxl.device import DeviceType
@@ -76,7 +76,7 @@ class VoxelRig(Rig):
         self._mode: RigMode = RigMode.IDLE
         self._streaming_cameras: set[str] = set()
         self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-        self._preview_crop: PreviewCrop = PreviewCrop()
+        self._preview_crop: PreviewViewport = PreviewViewport()
         self.sync_task: SyncTask | None = None
 
         # Topic registry for derived values (e.g. FOV)
@@ -578,7 +578,7 @@ class VoxelRig(Rig):
         return mapping
 
     async def start_preview(
-        self, frame_callback: Callable[[str, bytes], Awaitable[None]], crop: PreviewCrop | None = None
+        self, frame_callback: Callable[[str, bytes], Awaitable[None]], crop: PreviewViewport | None = None
     ) -> None:
         """Start preview mode for active profile channels and begin frame streaming.
 
@@ -673,7 +673,7 @@ class VoxelRig(Rig):
                 if isinstance(result, BaseException):
                     self.log.error(f"Failed to disable laser {laser_id}: {result}")
 
-    async def update_preview_crop(self, crop: PreviewCrop) -> None:
+    async def update_preview_crop(self, crop: PreviewViewport) -> None:
         """Update preview crop for streaming cameras.
 
         The crop is cached so it persists across preview restarts and profile switches.

@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 from PySide6.QtCore import QObject, Signal
 
-from vxl.camera.preview import PreviewCrop, PreviewLevels
+from vxl.camera.preview import PreviewViewport
 
 
 def composite_rgb(frames: list[np.ndarray]) -> np.ndarray | None:
@@ -45,7 +45,7 @@ def composite_rgb(frames: list[np.ndarray]) -> np.ndarray | None:
     return np.clip(result, 0, 255).astype(np.uint8)
 
 
-def crop_image(image: np.ndarray, crop: PreviewCrop) -> np.ndarray:
+def crop_image(image: np.ndarray, crop: PreviewViewport) -> np.ndarray:
     """Crop an image using normalized coordinates.
 
     Args:
@@ -75,7 +75,7 @@ def crop_image(image: np.ndarray, crop: PreviewCrop) -> np.ndarray:
     return image[y0:y1, x0:x1]
 
 
-def compute_local_crop(frame_crop: PreviewCrop, target_crop: PreviewCrop) -> PreviewCrop:
+def compute_local_crop(frame_crop: PreviewViewport, target_crop: PreviewViewport) -> PreviewViewport:
     """Compute local crop to apply to a frame.
 
     When the frame has a different crop than the target view, we need to
@@ -89,13 +89,13 @@ def compute_local_crop(frame_crop: PreviewCrop, target_crop: PreviewCrop) -> Pre
         Local crop to apply to the frame image
     """
     if target_crop.k <= 0:
-        return PreviewCrop()
+        return PreviewViewport()
 
     frame_view = 1.0 - frame_crop.k
     target_view = 1.0 - target_crop.k
 
     if frame_view <= 0:
-        return PreviewCrop()
+        return PreviewViewport()
 
     # Calculate where target falls within frame (relative coords)
     rel_x = (target_crop.x - frame_crop.x) / frame_view
@@ -107,7 +107,7 @@ def compute_local_crop(frame_crop: PreviewCrop, target_crop: PreviewCrop) -> Pre
     rel_x = max(0.0, min(rel_x, 1.0 - rel_size))
     rel_y = max(0.0, min(rel_y, 1.0 - rel_size))
 
-    return PreviewCrop(x=rel_x, y=rel_y, k=1.0 - rel_size)
+    return PreviewViewport(x=rel_x, y=rel_y, k=1.0 - rel_size)
 
 
 def blur_image(image: np.ndarray, radius: float = 1.0) -> np.ndarray:
@@ -141,7 +141,7 @@ class ChannelData:
     """
 
     frame: np.ndarray  # Full preview (H, W, 3), always present
-    detail: tuple[np.ndarray, PreviewCrop] | None = None  # (cropped_image, applied_crop) or None
+    detail: tuple[np.ndarray, PreviewViewport] | None = None  # (cropped_image, applied_crop) or None
     colormap: str | None = None
     histogram: list[int] | None = None
 
@@ -162,11 +162,11 @@ class PreviewStore(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._channels: dict[str, ChannelData] = {}
-        self._crop = PreviewCrop()
+        self._crop = PreviewViewport()
         self._is_interacting = False
 
     @property
-    def crop(self) -> PreviewCrop:
+    def crop(self) -> PreviewViewport:
         """Current target crop/zoom state."""
         return self._crop
 
@@ -184,7 +184,7 @@ class PreviewStore(QObject):
         self,
         channel: str,
         data: np.ndarray,
-        crop: PreviewCrop,
+        crop: PreviewViewport,
         colormap: str | None = None,
         histogram: list[int] | None = None,
     ) -> None:
@@ -213,7 +213,7 @@ class PreviewStore(QObject):
         self.frame_received.emit(channel)
         self.composite_updated.emit()
 
-    def set_crop(self, crop: PreviewCrop) -> None:
+    def set_crop(self, crop: PreviewViewport) -> None:
         """Update the target crop/zoom state.
 
         Clears stale detail frames so consumers fall back to full frame
@@ -245,7 +245,7 @@ class PreviewStore(QObject):
     def reset(self) -> None:
         """Clear all state including crop/zoom viewport."""
         self._channels.clear()
-        self._crop = PreviewCrop()
+        self._crop = PreviewViewport()
         self._is_interacting = False
         self.composite_updated.emit()
 
