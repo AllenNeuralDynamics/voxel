@@ -1,5 +1,5 @@
 import type { ChannelConfig, PreviewConfig, ProfileConfig } from './types';
-import type { PreviewViewport, PreviewFrameInfo, PreviewLevels, Client } from './client.svelte';
+import type { PreviewViewport, PreviewFrameInfo, PreviewTileInfo, PreviewLevels, Client } from './client.svelte';
 import type { AppStatus } from './types';
 
 import { computeAutoLevels, sanitizeString } from '$lib/utils';
@@ -28,72 +28,107 @@ export async function fetchColormapCatalog(baseUrl: string): Promise<ColormapCat
   return response.json();
 }
 
-export function isCropEqual(a: PreviewViewport, b: PreviewViewport): boolean {
-  return a.k === b.k && a.x === b.x && a.y === b.y;
+// ── Viewport Helpers ────────────────────────────────────────────────
+
+export function isViewportEqual(a: PreviewViewport, b: PreviewViewport): boolean {
+  return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
 
-export function computeLocalCrop(frameCrop: PreviewViewport, targetCrop: PreviewViewport): PreviewViewport {
-  if (targetCrop.k <= 0) return { x: 0, y: 0, k: 0 };
+export const DEFAULT_VIEWPORT: PreviewViewport = { x: 0, y: 0, w: 1, h: 1 };
 
-  const frameView = 1 - frameCrop.k;
-  const targetView = 1 - targetCrop.k;
-  if (frameView <= 0) return { x: 0, y: 0, k: 0 };
-
-  const relSize = Math.min(targetView / frameView, 1.0);
-  let relX = (targetCrop.x - frameCrop.x) / frameView;
-  let relY = (targetCrop.y - frameCrop.y) / frameView;
-
-  relX = Math.max(0, Math.min(relX, 1 - relSize));
-  relY = Math.max(0, Math.min(relY, 1 - relSize));
-
-  return { x: relX, y: relY, k: 1 - relSize };
+export function isDefaultViewport(vp: PreviewViewport): boolean {
+  return vp.x === 0 && vp.y === 0 && vp.w === 1 && vp.h === 1;
 }
 
-function selectFrame(
-  ch: PreviewChannel,
-  crop: PreviewViewport,
-  isPanZoomActive: boolean
-): [ImageBitmap | null, PreviewViewport] {
-  const isZoomed = crop.k > 0;
+// ── Tile Cache ──────────────────────────────────────────────────────
 
-  if (isZoomed && !isPanZoomActive && ch.detail) {
-    if (isCropEqual(ch.detail.crop, crop)) {
-      return [ch.detail.bitmap, ch.detail.crop];
-    }
-  }
-
-  return [ch.frame, { x: 0, y: 0, k: 0 }];
+interface TileCacheEntry {
+  bitmap: ImageBitmap;
+  info: PreviewTileInfo;
 }
 
-export function compositeCroppedFrames(
+function tileKey(scale: number, col: number, row: number): string {
+  return `${scale}:${col}:${row}`;
+}
+
+// ── Compositing ─────────────────────────────────────────────────────
+
+/**
+ * Composite tiles (or overview fallback) for all visible channels.
+ *
+ * For each channel, tiles are drawn at their correct position on the canvas.
+ * If no tiles are available, the overview frame is cropped to the viewport
+ * and stretched to fill the canvas as a fallback.
+ *
+ * The canvas is assumed to fill its container. The sensor image is centered
+ * on the canvas (contain-fitted), with black bars for aspect mismatch.
+ */
+export function compositeTiledFrames(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   channels: PreviewChannel[],
-  crop: PreviewViewport,
-  isPanZoomActive: boolean
+  viewport: PreviewViewport,
+  sensorAspect: number
 ): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Compute where the sensor image sits on the canvas (contain-fit)
+  const canvasAspect = canvas.width / canvas.height;
+  const vpAspect = (viewport.w * sensorAspect) / viewport.h;
+
+  let drawW: number, drawH: number;
+  if (canvasAspect > vpAspect) {
+    drawH = canvas.height;
+    drawW = drawH * vpAspect;
+  } else {
+    drawW = canvas.width;
+    drawH = drawW / vpAspect;
+  }
+  const drawX = (canvas.width - drawW) / 2;
+  const drawY = (canvas.height - drawH) / 2;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.globalCompositeOperation = 'lighter';
 
   for (const ch of channels) {
     if (!ch.visible) continue;
-    const [bitmap, frameCrop] = selectFrame(ch, crop, isPanZoomActive);
-    if (!bitmap) continue;
 
-    const localCrop = computeLocalCrop(frameCrop, crop);
-    const viewSize = 1 - localCrop.k;
+    if (ch.tiles.size > 0) {
+      // Draw tiles
+      for (const { bitmap, info } of ch.tiles.values()) {
+        const gridSize = 2 ** info.scale;
+        const tileNormX = info.col / gridSize;
+        const tileNormY = info.row / gridSize;
+        const tileNormW = 1 / gridSize;
+        const tileNormH = 1 / gridSize;
 
-    const sx = localCrop.x * bitmap.width;
-    const sy = localCrop.y * bitmap.height;
-    const sw = viewSize * bitmap.width;
-    const sh = viewSize * bitmap.height;
+        // Map tile's sensor position to canvas coordinates via viewport.
+        // Use Math.round on all edges so adjacent tiles share the same pixel
+        // boundary — no gap (sub-pixel seam) and no overlap (bright seam with additive blend).
+        const fx = drawX + ((tileNormX - viewport.x) / viewport.w) * drawW;
+        const fy = drawY + ((tileNormY - viewport.y) / viewport.h) * drawH;
+        const fx2 = fx + (tileNormW / viewport.w) * drawW;
+        const fy2 = fy + (tileNormH / viewport.h) * drawH;
+        const dx = Math.round(fx);
+        const dy = Math.round(fy);
 
-    ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, Math.round(fx2) - dx, Math.round(fy2) - dy);
+      }
+    } else if (ch.frame) {
+      // Fallback: draw overview frame cropped to viewport
+      const sx = viewport.x * ch.frame.width;
+      const sy = viewport.y * ch.frame.height;
+      const sw = viewport.w * ch.frame.width;
+      const sh = viewport.h * ch.frame.height;
+      ctx.drawImage(ch.frame, sx, sy, sw, sh, drawX, drawY, drawW, drawH);
+    }
   }
 
   ctx.globalCompositeOperation = 'source-over';
 }
 
+/** Composite full frames without viewport cropping (for snapshots etc). */
 export function compositeFullFrames(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -110,10 +145,14 @@ export function compositeFullFrames(
   ctx.globalCompositeOperation = 'source-over';
 }
 
+// ── Layout Config ───────────────────────────────────────────────────
+
 export interface RigLayout {
   channels: Record<string, ChannelConfig>;
   profiles: Record<string, ProfileConfig>;
 }
+
+// ── PreviewChannel ──────────────────────────────────────────────────
 
 export class PreviewChannel {
   name: string | undefined = $state<string | undefined>(undefined);
@@ -129,29 +168,45 @@ export class PreviewChannel {
   colormap: string | null = $state<string | null>(null);
   initAutoLevelDone = false;
 
+  /** Overview frame (full sensor, downsampled). */
   frame: ImageBitmap | null = $state<ImageBitmap | null>(null);
-  detail: { bitmap: ImageBitmap; crop: PreviewViewport } | null = $state(null);
+
+  /** Tile cache: key is "scale:col:row". */
+  tiles = $state<SvelteMap<string, TileCacheEntry>>(new SvelteMap());
+  tileScale = $state<number>(-1);
 
   constructor(public readonly idx: number) {}
+
+  clearTiles(): void {
+    for (const entry of this.tiles.values()) {
+      entry.bitmap.close();
+    }
+    this.tiles = new SvelteMap();
+    this.tileScale = -1;
+  }
 }
+
+// ── PreviewState ────────────────────────────────────────────────────
 
 export class PreviewState {
   readonly MAX_CHANNELS = 4;
 
   isPreviewing = $state(false);
   isPanZoomActive = $state(false);
-  crop = $state<PreviewViewport>({ x: 0, y: 0, k: 0 });
+  viewport = $state<PreviewViewport>({ ...DEFAULT_VIEWPORT });
   channels = $state<PreviewChannel[]>([]);
   catalog = $state<ColormapCatalog>([]);
   redrawGeneration = $state(0);
-  previewWidth = $state(0);
-  previewHeight = $state(0);
+
+  /** Sensor dimensions from latest overview frame. */
+  sensorWidth = $state(0);
+  sensorHeight = $state(0);
 
   #client: Client;
   #config: RigLayout;
   #unsubscribers: Array<() => void> = [];
-  #cropUpdateTimer: number | null = null;
-  #cropLastSent = 0;
+  #viewportUpdateTimer: number | null = null;
+  #viewportLastSent = 0;
   #levelsUpdateTimers = new SvelteMap<string, number>();
   #levelsLastSent = new SvelteMap<string, number>();
   readonly #THROTTLE_MS = 100;
@@ -163,7 +218,7 @@ export class PreviewState {
     this.channels = Array.from({ length: this.MAX_CHANNELS }, (_, idx) => new PreviewChannel(idx));
 
     this.#subscribeToClient();
-    this.#client.requestStatus(); // ensure initial state after subscribing
+    this.#client.requestStatus();
 
     fetchColormapCatalog(client.baseUrl)
       .then((catalog) => {
@@ -174,6 +229,10 @@ export class PreviewState {
 
   get client(): Client {
     return this.#client;
+  }
+
+  get sensorAspect(): number {
+    return this.sensorWidth > 0 && this.sensorHeight > 0 ? this.sensorWidth / this.sensorHeight : 4 / 3;
   }
 
   /** Resolve a colormap name or hex string to a hex color. */
@@ -195,9 +254,9 @@ export class PreviewState {
     this.#unsubscribers.forEach((unsub) => unsub());
     this.#unsubscribers = [];
 
-    if (this.#cropUpdateTimer !== null) {
-      clearTimeout(this.#cropUpdateTimer);
-      this.#cropUpdateTimer = null;
+    if (this.#viewportUpdateTimer !== null) {
+      clearTimeout(this.#viewportUpdateTimer);
+      this.#viewportUpdateTimer = null;
     }
     for (const timer of this.#levelsUpdateTimers.values()) {
       clearTimeout(timer);
@@ -236,22 +295,21 @@ export class PreviewState {
     this.#client.updateColormap(name, colormap);
   }
 
-  resetCrop(): void {
-    this.setCrop({ x: 0, y: 0, k: 0 });
-    this.#queueCropUpdate(this.crop);
+  resetViewport(): void {
+    this.setViewport({ ...DEFAULT_VIEWPORT });
+    this.#queueViewportUpdate(this.viewport);
   }
 
-  setCrop(value: PreviewViewport): void {
-    this.crop = value;
-    for (const ch of this.channels) {
-      ch.detail = null;
-    }
+  setViewport(value: PreviewViewport): void {
+    this.viewport = value;
     this.redrawGeneration++;
   }
 
-  queueCropUpdate(crop: PreviewViewport): void {
-    this.#queueCropUpdate(crop);
+  queueViewportUpdate(viewport: PreviewViewport): void {
+    this.#queueViewportUpdate(viewport);
   }
+
+  // ── Client Subscriptions ────────────────────────────────────────
 
   #subscribeToClient(): void {
     const unsubStatus = this.#client.on('status', (status) => {
@@ -263,8 +321,13 @@ export class PreviewState {
       this.#handleFrame(data.channel, data.info, data.bitmap);
     });
 
-    const unsubCrop = this.#client.on('preview/crop', (crop) => {
-      this.#handleCropUpdate(crop);
+    const unsubTile = this.#client.subscribe('preview/tile', (_topic, payload) => {
+      const data = payload as { channel: string; info: PreviewTileInfo; bitmap: ImageBitmap };
+      this.#handleTile(data.channel, data.info, data.bitmap);
+    });
+
+    const unsubViewport = this.#client.on('preview/viewport', (vp) => {
+      this.#handleViewportUpdate(vp);
     });
 
     const unsubLevels = this.#client.on('preview/levels', (levels) => {
@@ -275,8 +338,10 @@ export class PreviewState {
       this.#handleColormapUpdate(payload.channel, payload.colormap);
     });
 
-    this.#unsubscribers.push(unsubStatus, unsubFrame, unsubCrop, unsubLevels, unsubColormap);
+    this.#unsubscribers.push(unsubStatus, unsubFrame, unsubTile, unsubViewport, unsubLevels, unsubColormap);
   }
+
+  // ── Handlers ────────────────────────────────────────────────────
 
   #handleAppStatus = (status: AppStatus): void => {
     const session = status.session;
@@ -305,7 +370,7 @@ export class PreviewState {
 
     for (const ch of this.channels) {
       ch.frame = null;
-      ch.detail = null;
+      ch.clearTiles();
     }
 
     for (let i = 0; i < this.MAX_CHANNELS; i++) {
@@ -323,7 +388,7 @@ export class PreviewState {
 
     this.#applyPreviewConfigs(preview);
 
-    this.#queueCropUpdate(this.crop);
+    this.#queueViewportUpdate(this.viewport);
     this.redrawGeneration++;
   };
 
@@ -340,23 +405,16 @@ export class PreviewState {
     const channel = this.channels.find((c) => c.name === channelName);
     if (!channel) return;
 
-    if (this.previewWidth !== info.preview_width || this.previewHeight !== info.preview_height) {
-      this.previewWidth = info.preview_width;
-      this.previewHeight = info.preview_height;
+    // Track sensor dimensions from overview
+    if (this.sensorWidth !== info.full_width || this.sensorHeight !== info.full_height) {
+      this.sensorWidth = info.full_width;
+      this.sensorHeight = info.full_height;
     }
 
     channel.latestFrameInfo = info;
+    channel.frame = bitmap;
 
-    const isFullFrame = info.crop.k === 0 && info.crop.x === 0 && info.crop.y === 0;
-
-    if (isFullFrame) {
-      channel.frame = bitmap;
-      if (info.histogram) channel.latestHistogram = info.histogram;
-    } else {
-      if (!channel.frame) return;
-      channel.detail = { bitmap, crop: info.crop };
-    }
-
+    if (info.histogram) channel.latestHistogram = info.histogram;
     if (info.colormap) channel.colormap = info.colormap;
 
     this.redrawGeneration++;
@@ -370,9 +428,30 @@ export class PreviewState {
     }
   };
 
-  #handleCropUpdate = (crop: PreviewViewport): void => {
-    if (!isCropEqual(this.crop, crop)) {
-      this.setCrop(crop);
+  #handleTile = (channelName: string, info: PreviewTileInfo, bitmap: ImageBitmap): void => {
+    const channel = this.channels.find((c) => c.name === channelName);
+    if (!channel) return;
+
+    // If scale changed, clear old tiles
+    if (channel.tileScale !== info.scale) {
+      channel.clearTiles();
+      channel.tileScale = info.scale;
+    }
+
+    const key = tileKey(info.scale, info.col, info.row);
+
+    // Close old bitmap if replacing
+    const existing = channel.tiles.get(key);
+    if (existing) existing.bitmap.close();
+
+    channel.tiles.set(key, { bitmap, info });
+
+    this.redrawGeneration++;
+  };
+
+  #handleViewportUpdate = (vp: PreviewViewport): void => {
+    if (!isViewportEqual(this.viewport, vp)) {
+      this.setViewport(vp);
     }
   };
 
@@ -391,20 +470,22 @@ export class PreviewState {
     channel.colormap = colormap;
   };
 
-  #queueCropUpdate(crop: PreviewViewport): void {
-    if (this.#cropUpdateTimer !== null) clearTimeout(this.#cropUpdateTimer);
+  // ── Throttled Updates ───────────────────────────────────────────
+
+  #queueViewportUpdate(viewport: PreviewViewport): void {
+    if (this.#viewportUpdateTimer !== null) clearTimeout(this.#viewportUpdateTimer);
     const now = Date.now();
-    if (now - this.#cropLastSent >= this.#THROTTLE_MS) {
-      this.#cropLastSent = now;
-      this.#client.updateCrop(crop.x, crop.y, crop.k);
+    if (now - this.#viewportLastSent >= this.#THROTTLE_MS) {
+      this.#viewportLastSent = now;
+      this.#client.updateViewport(viewport.x, viewport.y, viewport.w, viewport.h);
     } else {
-      this.#cropUpdateTimer = window.setTimeout(
+      this.#viewportUpdateTimer = window.setTimeout(
         () => {
-          this.#cropLastSent = Date.now();
-          this.#client.updateCrop(crop.x, crop.y, crop.k);
-          this.#cropUpdateTimer = null;
+          this.#viewportLastSent = Date.now();
+          this.#client.updateViewport(viewport.x, viewport.y, viewport.w, viewport.h);
+          this.#viewportUpdateTimer = null;
         },
-        this.#THROTTLE_MS - (now - this.#cropLastSent)
+        this.#THROTTLE_MS - (now - this.#viewportLastSent)
       );
     }
   }

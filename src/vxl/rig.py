@@ -75,8 +75,8 @@ class VoxelRig(Rig):
 
         self._mode: RigMode = RigMode.IDLE
         self._streaming_cameras: set[str] = set()
-        self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-        self._preview_crop: PreviewViewport = PreviewViewport()
+        self._frame_callback: Callable[[str, str, bytes], Awaitable[None]] | None = None
+        self._preview_viewport: PreviewViewport = PreviewViewport()
         self.sync_task: SyncTask | None = None
 
         # Topic registry for derived values (e.g. FOV)
@@ -578,14 +578,15 @@ class VoxelRig(Rig):
         return mapping
 
     async def start_preview(
-        self, frame_callback: Callable[[str, bytes], Awaitable[None]], crop: PreviewViewport | None = None
+        self, frame_callback: Callable[[str, str, bytes], Awaitable[None]], crop: PreviewViewport | None = None
     ) -> None:
         """Start preview mode for active profile channels and begin frame streaming.
 
         Args:
-            frame_callback: Async callable that receives (channel, packed_frame) for each preview frame.
-            crop: Optional crop to apply. If provided, updates the cached crop and forwards to cameras.
-                  If None, the previously cached crop is re-applied (persists across restarts).
+            frame_callback: Async callable that receives (topic, channel, packed_data) for each
+                            preview frame or tile. Topic is "preview" or "preview_tile".
+            crop: Optional viewport to apply. If provided, updates the cached viewport and forwards
+                  to cameras. If None, the previously cached viewport is re-applied.
 
         Raises:
             ValueError: If no active profile is set.
@@ -618,9 +619,9 @@ class VoxelRig(Rig):
 
         # Apply crop to new cameras
         if crop is not None:
-            await self.update_preview_crop(crop)
-        elif self._preview_crop.needs_adjustment:
-            await self.update_preview_crop(self._preview_crop)
+            await self.update_preview_viewport(crop)
+        elif self._preview_viewport.needs_adjustment:
+            await self.update_preview_viewport(self._preview_viewport)
 
         # Start preview manager (subscriptions already exist, just enable forwarding)
         self.preview.start(frame_callback)
@@ -673,17 +674,17 @@ class VoxelRig(Rig):
                 if isinstance(result, BaseException):
                     self.log.error(f"Failed to disable laser {laser_id}: {result}")
 
-    async def update_preview_crop(self, crop: PreviewViewport) -> None:
-        """Update preview crop for streaming cameras.
+    async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
+        """Update preview viewport for streaming cameras.
 
-        The crop is cached so it persists across preview restarts and profile switches.
+        The viewport is cached so it persists across preview restarts and profile switches.
 
         Args:
-            crop: The crop settings (x, y normalized top-left, k zoom factor).
+            viewport: Visible region in normalized sensor coords {x, y, w, h}.
         """
-        self._preview_crop = crop
+        self._preview_viewport = viewport
         if self._streaming_cameras:
-            tasks = [self.cameras[cam_id].update_preview_crop(crop) for cam_id in self._streaming_cameras]
+            tasks = [self.cameras[cam_id].update_preview_viewport(viewport) for cam_id in self._streaming_cameras]
             await asyncio.gather(*tasks)
 
     async def update_preview_levels(self, levels: dict[str, PreviewLevels]) -> None:
@@ -880,9 +881,10 @@ class VoxelRig(Rig):
 
 
 class RigPreviewHub:
-    """Manages preview frame streaming via handle subscriptions.
+    """Manages preview frame and tile streaming via handle subscriptions.
 
-    Subscribes to all cameras once at rig start. Maintains a camera→channel
+    Subscribes to both "preview" (overview frames) and "preview_tile" (tiles)
+    topics for all cameras once at rig start. Maintains a camera->channel
     mapping that's updated when the active profile changes. This avoids
     subscription churn on profile switches and preview start/stop cycles.
     """
@@ -890,11 +892,14 @@ class RigPreviewHub:
     def __init__(self, name: str = "PreviewManager"):
         """Initialize the preview manager."""
         self.log = logging.getLogger(name)
-        self._frame_callback: Callable[[str, bytes], Awaitable[None]] | None = None
-        # Camera ID → channel name mapping (from active profile)
+        self._frame_callback: Callable[[str, str, bytes], Awaitable[None]] | None = None
+        # Camera ID -> channel name mapping (from active profile)
         self._camera_to_channel: dict[str, str] = {}
-        # Track subscriptions for cleanup: camera_id -> (handle, callback)
-        self._subscriptions: dict[str, tuple[CameraHandle, Callable[[bytes], Awaitable[None]]]] = {}
+        # Track subscriptions for cleanup: camera_id -> (handle, frame_cb, tile_cb)
+        self._subscriptions: dict[
+            str,
+            tuple[CameraHandle, Callable[[bytes], Awaitable[None]], Callable[[bytes], Awaitable[None]]],
+        ] = {}
 
     @property
     def is_active(self) -> bool:
@@ -902,32 +907,34 @@ class RigPreviewHub:
         return self._frame_callback is not None
 
     async def subscribe_cameras(self, cameras: dict[str, CameraHandle]) -> None:
-        """Subscribe to all cameras. Call once at rig start."""
+        """Subscribe to all cameras (overview frames + tiles). Call once at rig start."""
         for camera_id, handle in cameras.items():
             if camera_id in self._subscriptions:
                 self.log.debug(f"Camera {camera_id} already subscribed")
                 continue
-            callback = self._make_callback(camera_id)
-            await handle.subscribe("preview", callback)
-            self._subscriptions[camera_id] = (handle, callback)
-            self.log.debug("subscribed to camera %s preview stream", camera_id)
+            frame_cb = self._make_callback(camera_id, "preview")
+            tile_cb = self._make_callback(camera_id, "preview_tile")
+            await handle.subscribe("preview", frame_cb)
+            await handle.subscribe("preview_tile", tile_cb)
+            self._subscriptions[camera_id] = (handle, frame_cb, tile_cb)
+            self.log.debug("subscribed to camera %s preview + tile streams", camera_id)
 
-    def _make_callback(self, camera_id: str) -> Callable[[bytes], Awaitable[None]]:
-        """Create callback that looks up channel dynamically from mapping."""
+    def _make_callback(self, camera_id: str, topic: str) -> Callable[[bytes], Awaitable[None]]:
+        """Create callback that looks up channel dynamically and includes topic."""
 
         async def callback(data: bytes) -> None:
             if self._frame_callback:
                 channel = self._camera_to_channel.get(camera_id)
                 if channel:
                     try:
-                        await self._frame_callback(channel, data)
+                        await self._frame_callback(topic, channel, data)
                     except Exception:
-                        self.log.exception(f"Error in frame callback for {channel}")
+                        self.log.exception(f"Error in {topic} callback for {channel}")
 
         return callback
 
     def set_channel_mapping(self, mapping: dict[str, str]) -> None:
-        """Update camera→channel mapping. Call on profile switch.
+        """Update camera->channel mapping. Call on profile switch.
 
         Args:
             mapping: Dict mapping camera_id -> channel_name
@@ -935,22 +942,23 @@ class RigPreviewHub:
         self._camera_to_channel = mapping
         self.log.debug(f"Updated channel mapping: {mapping}")
 
-    def start(self, callback: Callable[[str, bytes], Awaitable[None]]) -> None:
-        """Start forwarding frames to callback."""
+    def start(self, callback: Callable[[str, str, bytes], Awaitable[None]]) -> None:
+        """Start forwarding frames and tiles to callback."""
         self._frame_callback = callback
         self.log.debug("preview manager started")
 
     def stop(self) -> None:
-        """Stop forwarding frames."""
+        """Stop forwarding frames and tiles."""
         self._frame_callback = None
         self.log.debug("preview manager stopped")
 
     async def shutdown(self) -> None:
         """Unsubscribe all callbacks. Call on rig stop."""
         self.log.debug("shutting down preview manager")
-        for camera_id, (handle, callback) in self._subscriptions.items():
+        for camera_id, (handle, frame_cb, tile_cb) in self._subscriptions.items():
             try:
-                await handle.unsubscribe("preview", callback)
+                await handle.unsubscribe("preview", frame_cb)
+                await handle.unsubscribe("preview_tile", tile_cb)
                 self.log.debug(f"Unsubscribed {camera_id}")
             except Exception:
                 self.log.exception(f"Error unsubscribing {camera_id}")

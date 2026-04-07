@@ -17,7 +17,14 @@ from rigup.device.props import deliminated_float, enumerated_int, enumerated_str
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, describe
-from vxl.camera.preview import PreviewConfig, PreviewFrame, PreviewGenerator, PreviewLevels, PreviewViewport
+from vxl.camera.preview import (
+    PreviewConfig,
+    PreviewFrame,
+    PreviewGenerator,
+    PreviewLevels,
+    PreviewTile,
+    PreviewViewport,
+)
 from vxl.device import DeviceType
 from vxl.stack import BatchResult, Stack, StorageConfig
 from vxlib import Dtype, SchemaModel, fire_and_forget
@@ -336,7 +343,11 @@ class CameraController(DeviceController[Camera]):
         self._mode = CameraMode.IDLE
         self._preview_task: asyncio.Task | None = None
         self._frame_idx = 0
-        self._previewer = PreviewGenerator(sink=self._on_preview_frame, uid=device.uid)
+        self._previewer = PreviewGenerator(
+            frame_sink=self._on_preview_frame,
+            tile_sink=self._on_preview_tile,
+            uid=device.uid,
+        )
         self._writer: OMEZarrWriter | None = None
 
     @property
@@ -350,9 +361,15 @@ class CameraController(DeviceController[Camera]):
         with suppress(RuntimeError):
             fire_and_forget(self.publish("preview", frame.pack()), log=self.log)
 
-    @describe(label="Update Preview Crop")
-    async def update_preview_crop(self, crop: PreviewViewport):
-        self._previewer.crop = crop
+    def _on_preview_tile(self, tile: PreviewTile) -> None:
+        if self._preview_task is None or self._mode != CameraMode.PREVIEW:
+            return
+        with suppress(RuntimeError):
+            fire_and_forget(self.publish("preview_tile", tile.pack()), log=self.log)
+
+    @describe(label="Update Preview Viewport")
+    async def update_preview_viewport(self, viewport: PreviewViewport):
+        await self._previewer.reprocess_viewport(viewport)
 
     @describe(label="Update Preview Levels")
     async def update_preview_levels(self, levels: PreviewLevels):
@@ -366,7 +383,7 @@ class CameraController(DeviceController[Camera]):
     @describe(label="Preview Config", stream=True)
     def preview_config(self) -> PreviewConfig:
         return PreviewConfig(
-            crop=self._previewer.crop,
+            viewport=self._previewer.viewport,
             levels=self._previewer.levels,
             colormap=self._previewer.colormap,
         )

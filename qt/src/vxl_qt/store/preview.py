@@ -2,7 +2,7 @@
 
 This module provides:
 - Pure functions for frame compositing (blend, crop, resize, blur)
-- PreviewStore for managing preview state (frames, crop, interaction)
+- PreviewStore for managing preview state (frames, viewport, interaction)
 """
 
 from dataclasses import dataclass
@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 from PySide6.QtCore import QObject, Signal
 
-from vxl.camera.preview import PreviewViewport
+from vxl.camera.preview import PreviewLevels, PreviewViewport
 
 
 def composite_rgb(frames: list[np.ndarray]) -> np.ndarray | None:
@@ -45,26 +45,25 @@ def composite_rgb(frames: list[np.ndarray]) -> np.ndarray | None:
     return np.clip(result, 0, 255).astype(np.uint8)
 
 
-def crop_image(image: np.ndarray, crop: PreviewViewport) -> np.ndarray:
-    """Crop an image using normalized coordinates.
+def crop_image(image: np.ndarray, viewport: PreviewViewport) -> np.ndarray:
+    """Crop an image using a viewport in normalized coordinates.
 
     Args:
         image: Input image (H, W) or (H, W, C)
-        crop: Crop with x, y (top-left) and k (zoom factor, 0=none, 1=max)
+        viewport: Viewport with x, y (top-left) and w, h (size), all in [0, 1]
 
     Returns:
         Cropped image
     """
-    if crop.k <= 0:
+    if viewport.w >= 1.0 and viewport.h >= 1.0:
         return image
 
-    view_size = 1.0 - crop.k
     height, width = image.shape[:2]
 
-    x0 = int(crop.x * width)
-    y0 = int(crop.y * height)
-    x1 = int((crop.x + view_size) * width)
-    y1 = int((crop.y + view_size) * height)
+    x0 = int(viewport.x * width)
+    y0 = int(viewport.y * height)
+    x1 = int((viewport.x + viewport.w) * width)
+    y1 = int((viewport.y + viewport.h) * height)
 
     # Clamp to valid bounds
     x0 = max(0, min(x0, width - 1))
@@ -73,41 +72,6 @@ def crop_image(image: np.ndarray, crop: PreviewViewport) -> np.ndarray:
     y1 = max(y0 + 1, min(y1, height))
 
     return image[y0:y1, x0:x1]
-
-
-def compute_local_crop(frame_crop: PreviewViewport, target_crop: PreviewViewport) -> PreviewViewport:
-    """Compute local crop to apply to a frame.
-
-    When the frame has a different crop than the target view, we need to
-    compute a local crop that extracts the target region from the frame.
-
-    Args:
-        frame_crop: The crop that was applied server-side to produce this frame
-        target_crop: The crop we want to display
-
-    Returns:
-        Local crop to apply to the frame image
-    """
-    if target_crop.k <= 0:
-        return PreviewViewport()
-
-    frame_view = 1.0 - frame_crop.k
-    target_view = 1.0 - target_crop.k
-
-    if frame_view <= 0:
-        return PreviewViewport()
-
-    # Calculate where target falls within frame (relative coords)
-    rel_x = (target_crop.x - frame_crop.x) / frame_view
-    rel_y = (target_crop.y - frame_crop.y) / frame_view
-    rel_size = target_view / frame_view
-
-    # Clamp
-    rel_size = min(rel_size, 1.0)
-    rel_x = max(0.0, min(rel_x, 1.0 - rel_size))
-    rel_y = max(0.0, min(rel_y, 1.0 - rel_size))
-
-    return PreviewViewport(x=rel_x, y=rel_y, k=1.0 - rel_size)
 
 
 def blur_image(image: np.ndarray, radius: float = 1.0) -> np.ndarray:
@@ -132,16 +96,11 @@ def resize_image(image: np.ndarray, target_width: int) -> np.ndarray:
 class ChannelData:
     """Frame data for a single channel.
 
-    Stores two frame slots:
-    - frame: Latest full preview (always arrives, whole sensor view)
-    - detail: Latest server-cropped preview + its crop metadata, or None when not zoomed
-
-    Consumers pick which slot to read based on zoom/interaction state.
-    Histogram is only present on full frames.
+    Stores the latest overview frame (full sensor, downsampled).
+    Histogram is only present on overview frames.
     """
 
-    frame: np.ndarray  # Full preview (H, W, 3), always present
-    detail: tuple[np.ndarray, PreviewViewport] | None = None  # (cropped_image, applied_crop) or None
+    frame: np.ndarray  # Overview frame (H, W, 3), always present
     colormap: str | None = None
     histogram: list[int] | None = None
 
@@ -153,22 +112,22 @@ class ChannelData:
 
 
 class PreviewStore(QObject):
-    """Manages preview state: frames, crop, and interaction."""
+    """Manages preview state: frames, viewport, and interaction."""
 
     frame_received = Signal(str)  # channel_id
-    crop_changed = Signal(float, float, float)  # x, y, k
+    viewport_changed = Signal(float, float, float, float)  # x, y, w, h
     composite_updated = Signal()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._channels: dict[str, ChannelData] = {}
-        self._crop = PreviewViewport()
+        self._viewport = PreviewViewport()
         self._is_interacting = False
 
     @property
-    def crop(self) -> PreviewViewport:
-        """Current target crop/zoom state."""
-        return self._crop
+    def viewport(self) -> PreviewViewport:
+        """Current target viewport state."""
+        return self._viewport
 
     @property
     def is_interacting(self) -> bool:
@@ -184,45 +143,22 @@ class PreviewStore(QObject):
         self,
         channel: str,
         data: np.ndarray,
-        crop: PreviewViewport,
         colormap: str | None = None,
         histogram: list[int] | None = None,
     ) -> None:
-        """Store a frame for a channel.
-
-        Routes to the correct slot based on crop:
-        - Full frames (crop.k == 0): update frame, histogram, colormap
-        - Cropped frames (crop.k > 0): update detail tuple
-        """
-        existing = self._channels.get(channel)
-        is_full_frame = crop.k == 0
-
-        if is_full_frame:
-            self._channels[channel] = ChannelData(
-                frame=data,
-                detail=existing.detail if existing else None,
-                colormap=colormap,
-                histogram=histogram,
-            )
-        else:
-            if existing is None:
-                return  # no full frame yet, ignore detail
-            existing.detail = (data, crop)
-            existing.colormap = colormap
-
+        """Store an overview frame for a channel."""
+        self._channels[channel] = ChannelData(
+            frame=data,
+            colormap=colormap,
+            histogram=histogram,
+        )
         self.frame_received.emit(channel)
         self.composite_updated.emit()
 
-    def set_crop(self, crop: PreviewViewport) -> None:
-        """Update the target crop/zoom state.
-
-        Clears stale detail frames so consumers fall back to full frame
-        with client-side local crop until fresh detail arrives.
-        """
-        self._crop = crop
-        for ch in self._channels.values():
-            ch.detail = None
-        self.crop_changed.emit(crop.x, crop.y, crop.k)
+    def set_viewport(self, viewport: PreviewViewport) -> None:
+        """Update the target viewport state."""
+        self._viewport = viewport
+        self.viewport_changed.emit(viewport.x, viewport.y, viewport.w, viewport.h)
         self.composite_updated.emit()
 
     def set_interacting(self, value: bool) -> None:
@@ -237,15 +173,15 @@ class PreviewStore(QObject):
             self.composite_updated.emit()
 
     def clear_frames(self) -> None:
-        """Clear channel frame data, preserving crop/zoom viewport."""
+        """Clear channel frame data, preserving viewport."""
         self._channels.clear()
         self._is_interacting = False
         self.composite_updated.emit()
 
     def reset(self) -> None:
-        """Clear all state including crop/zoom viewport."""
+        """Clear all state including viewport."""
         self._channels.clear()
-        self._crop = PreviewViewport()
+        self._viewport = PreviewViewport()
         self._is_interacting = False
         self.composite_updated.emit()
 

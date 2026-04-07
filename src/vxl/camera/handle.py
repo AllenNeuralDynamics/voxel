@@ -40,9 +40,9 @@ class CameraHandle(DeviceHandle[Camera]):
         """Stop camera preview mode."""
         await self.call("stop_preview")
 
-    async def update_preview_crop(self, crop: PreviewViewport) -> None:
-        """Update preview crop settings."""
-        await self.call("update_preview_crop", crop)
+    async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
+        """Update preview viewport (triggers tile regeneration from cached frame)."""
+        await self.call("update_preview_viewport", viewport)
 
     async def update_preview_levels(self, levels: PreviewLevels) -> None:
         """Update preview levels range."""

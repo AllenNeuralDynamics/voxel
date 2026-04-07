@@ -63,8 +63,8 @@ class RigService:
                     await self._handle_preview_start()
                 case "preview/stop":
                     await self._handle_preview_stop()
-                case "preview/crop":
-                    await self._handle_preview_crop(payload, sender_id=sender_id)
+                case "preview/viewport":
+                    await self._handle_preview_viewport(payload, sender_id=sender_id)
                 case "preview/levels":
                     await self._handle_preview_levels(payload, sender_id=sender_id)
                 case "preview/colormap":
@@ -120,12 +120,21 @@ class RigService:
                 await self.rig.stop_preview()
         self._broadcast({}, with_status=True)
 
-    async def _handle_preview_crop(self, payload: dict[str, Any], *, sender_id: str | None = None):
-        """Handle preview crop update."""
-        crop = PreviewViewport(x=payload.get("x", 0), y=payload.get("y", 0), k=payload.get("k", 0))
-        await self.rig.update_preview_crop(crop)
+    async def _handle_preview_viewport(self, payload: dict[str, Any], *, sender_id: str | None = None):
+        """Handle preview viewport update."""
+        viewport = PreviewViewport(
+            x=payload.get("x", 0.0),
+            y=payload.get("y", 0.0),
+            w=payload.get("w", 1.0),
+            h=payload.get("h", 1.0),
+        )
+        await self.rig.update_preview_viewport(viewport)
         self._broadcast(
-            {"topic": "preview/crop", "payload": {"x": crop.x, "y": crop.y, "k": crop.k}}, exclude=sender_id
+            {
+                "topic": "preview/viewport",
+                "payload": {"x": viewport.x, "y": viewport.y, "w": viewport.w, "h": viewport.h},
+            },
+            exclude=sender_id,
         )
 
     async def _handle_preview_levels(self, payload: dict[str, Any], *, sender_id: str | None = None):
@@ -163,13 +172,15 @@ class RigService:
             exclude=sender_id,
         )
 
-    async def _distribute_frames(self, channel: str, packed_frame: bytes) -> None:
-        """Callback that distributes preview frames to all clients.
+    async def _distribute_frames(self, topic: str, channel: str, packed_data: bytes) -> None:
+        """Callback that distributes preview frames and tiles to all clients.
 
-        Frames use hybrid format: JSON envelope + newline + msgpack data.
+        Uses hybrid format: JSON envelope + newline + msgpack data.
+        Topic is "preview" for overview frames or "preview_tile" for tiles.
         """
-        envelope = json.dumps({"topic": "preview/frame", "channel": channel}).encode("utf-8")
-        self._broadcast(envelope + b"\n" + packed_frame)
+        wire_topic = "preview/frame" if topic == "preview" else "preview/tile"
+        envelope = json.dumps({"topic": wire_topic, "channel": channel}).encode("utf-8")
+        self._broadcast(envelope + b"\n" + packed_data)
 
     # ==================== Devices ====================
 

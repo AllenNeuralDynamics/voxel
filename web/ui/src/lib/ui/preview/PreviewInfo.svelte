@@ -31,8 +31,8 @@
       const info = c.frameInfo;
       if (!info) return true;
       return (
-        info.preview_width !== first.preview_width ||
-        info.preview_height !== first.preview_height ||
+        info.width !== first.width ||
+        info.height !== first.height ||
         info.full_width !== first.full_width ||
         info.full_height !== first.full_height
       );
@@ -66,7 +66,7 @@
           <div class="space-y-1 text-sm">
             <div class="flex justify-between gap-2">
               <span class="text-fg-muted">Preview Size</span>
-              <span class="text-right">{frameInfo.preview_width} × {frameInfo.preview_height}</span>
+              <span class="text-right">{frameInfo.width} x {frameInfo.height}</span>
             </div>
           </div>
           {#if channelFrameInfos.length > 0}
