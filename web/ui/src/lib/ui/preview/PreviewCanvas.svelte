@@ -199,8 +199,7 @@
 
   <!-- Center: Canvas -->
   <div class="flex items-center justify-center overflow-hidden px-4" bind:this={canvasContainerEl}>
-    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}>
-    </canvas>
+    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}> </canvas>
   </div>
 
   <!-- Bottom: Channel Histograms -->

@@ -350,19 +350,23 @@ class CameraController(DeviceController[Camera]):
         )
         self._writer: OMEZarrWriter | None = None
 
+    def close(self) -> None:
+        self._previewer.shutdown()
+        super().close()
+
     @property
     @describe(label="Camera Mode", stream=True)
     def mode(self) -> CameraMode:
         return self._mode
 
     def _on_preview_frame(self, frame: PreviewFrame) -> None:
-        if self._preview_task is None or self._mode != CameraMode.PREVIEW:
+        if self._mode == CameraMode.ACQUISITION:
             return
         with suppress(RuntimeError):
             fire_and_forget(self.publish("preview", frame.pack()), log=self.log)
 
     def _on_preview_tile(self, tile: PreviewTile) -> None:
-        if self._preview_task is None or self._mode != CameraMode.PREVIEW:
+        if self._mode == CameraMode.ACQUISITION:
             return
         with suppress(RuntimeError):
             fire_and_forget(self.publish("preview_tile", tile.pack()), log=self.log)
@@ -374,10 +378,13 @@ class CameraController(DeviceController[Camera]):
     @describe(label="Update Preview Levels")
     async def update_preview_levels(self, levels: PreviewLevels):
         self._previewer.levels = levels
+        if self._mode != CameraMode.PREVIEW:
+            await self._previewer.reprocess()
 
     @describe(label="Update Preview Colormap")
     async def update_preview_colormap(self, colormap: str | None) -> None:
         self._previewer.colormap = colormap
+        await self._previewer.reprocess()
 
     @property
     @describe(label="Preview Config", stream=True)

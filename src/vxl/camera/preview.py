@@ -367,6 +367,20 @@ class PreviewGenerator:
                 tile = self._generate_tile(frame, idx, self.viewport, scale, col, row)
                 self._tile_sink(tile)
 
+    async def reprocess(self) -> None:
+        """Regenerate overview + tiles from cached raw frame with current settings.
+
+        Useful for applying levels/colormap changes without waiting for the next camera grab,
+        including when preview is stopped.
+        """
+        if self._current_frame is not None:
+            loop = asyncio.get_event_loop()
+            frame, idx = self._current_frame, self._idx
+            overview = await loop.run_in_executor(self._executor, self._generate_overview, frame, idx)
+            self._frame_sink(overview)
+            if self._tile_sink is not None:
+                await self._generate_and_send_tiles(self._current_frame, self._idx, self.viewport)
+
     async def reprocess_viewport(self, viewport: PreviewViewport) -> None:
         """Regenerate tiles from cached raw frame for a new viewport.
 

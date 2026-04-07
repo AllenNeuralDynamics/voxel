@@ -675,16 +675,21 @@ class VoxelRig(Rig):
                     self.log.error(f"Failed to disable laser {laser_id}: {result}")
 
     async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
-        """Update preview viewport for streaming cameras.
+        """Update preview viewport for cameras in the active profile.
 
         The viewport is cached so it persists across preview restarts and profile switches.
+        Works both during preview (immediate tile regen) and when stopped (reprocesses cached frame).
 
         Args:
             viewport: Visible region in normalized sensor coords {x, y, w, h}.
         """
         self._preview_viewport = viewport
-        if self._streaming_cameras:
-            tasks = [self.cameras[cam_id].update_preview_viewport(viewport) for cam_id in self._streaming_cameras]
+        # Send to streaming cameras during preview, or to active profile cameras when stopped
+        camera_ids = self._streaming_cameras or {
+            ch.detection for ch in self.active_channels.values() if ch.detection in self.cameras
+        }
+        if camera_ids:
+            tasks = [self.cameras[cam_id].update_preview_viewport(viewport) for cam_id in camera_ids]
             await asyncio.gather(*tasks)
 
     async def update_preview_levels(self, levels: dict[str, PreviewLevels]) -> None:
@@ -737,9 +742,8 @@ class VoxelRig(Rig):
         # Disable lasers
         await self._disable_channel_lasers()
 
-        # Stop preview manager (just stops forwarding, subscriptions remain)
-        self.preview.stop()
-        self._frame_callback = None
+        # Keep preview hub callback alive so viewport/levels/colormap changes
+        # can still reprocess and distribute the cached frame while not previewing.
 
         self._mode = RigMode.IDLE
 
