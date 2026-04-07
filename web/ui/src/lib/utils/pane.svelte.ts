@@ -8,11 +8,7 @@ import { ElementSize } from 'runed';
  * @param minPx - Minimum width in pixels
  * @param fallback - Fallback percentage when container hasn't been measured yet
  */
-export function createPaneMinSize(
-  containerEl: () => HTMLElement | null,
-  minPx: number,
-  fallback = 25
-) {
+export function createPaneMinSize(containerEl: () => HTMLElement | null, minPx: number, fallback = 25) {
   const size = new ElementSize(containerEl);
   return {
     get value() {

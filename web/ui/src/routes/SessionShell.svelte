@@ -15,8 +15,7 @@
   import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
   import StartButton from '$lib/ui/StartButton.svelte';
 
-  import { cn } from '$lib/utils';
-  import { createPaneMinSize } from '$lib/utils';
+  import { cn, createPaneMinSize, createHotkey } from '$lib/utils';
   import type { Pathname } from '$app/types';
   import { lastInstrumentPath } from './(instrument)/+layout.svelte';
 
@@ -40,6 +39,11 @@
     },
     clearLogs: () => app.clearLogs()
   });
+
+  // --- Keyboard shortcuts ---
+
+  createHotkey('Mod+Z', () => session.undo.undo());
+  createHotkey('Mod+Shift+Z', () => session.undo.redo());
 
   // --- Header layout (single row, guaranteed by left pane min width) ---
 
@@ -75,11 +79,7 @@
 
 <div bind:this={shellRef} class="h-screen w-full text-fg">
   <PaneGroup direction="horizontal" autoSaveId="shell">
-    <Pane
-      defaultSize={60}
-      minSize={leftPaneMin.value}
-      maxSize={70}
-    >
+    <Pane defaultSize={60} minSize={leftPaneMin.value} maxSize={70}>
       <div class="grid h-full grid-rows-[auto_1fr]">
         <header
           class="grid grid-cols-[auto_auto_1fr] items-center gap-x-4 border-b border-border bg-elevated px-4 py-4"

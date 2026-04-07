@@ -1,27 +1,16 @@
 <script lang="ts" module>
-  import type { Component } from 'svelte';
-  import type { LayerVisibility } from '$lib/main/types';
-  import { GridLines, StackLight, ImageLight } from '$lib/icons';
-
   export type MenuItem =
     | { type: 'action'; label: string; action: () => void; disabled?: boolean; variant?: 'destructive' }
     | { type: 'submenu'; label: string; items: MenuItem[]; disabled?: boolean }
     | { type: 'separator' };
-
-  // ── Layer visibility (module-level singleton) ────────────────────
-
-  let layers = $state<LayerVisibility>({ grid: false, stacks: true, path: true, fov: true, thumbnail: true });
-
-  const layerItems: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
-    { key: 'grid', color: 'text-fg-muted', Icon: GridLines, title: 'Toggle grid' },
-    { key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
-    { key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' }
-  ];
 </script>
 
 <script lang="ts">
+  import type { Component } from 'svelte';
   import type { Session } from '$lib/main';
+  import type { LayerVisibility } from '$lib/main/types';
   import { type Tile, type Stack } from '$lib/main/types';
+  import { GridLines, StackLight, ImageLight } from '$lib/icons';
   import { compositeFullFrames } from '$lib/main/preview.svelte';
   import { sanitizeString } from '$lib/utils';
   import { ContextMenu } from '$lib/ui/kit';
@@ -31,9 +20,17 @@
 
   interface Props {
     session: Session;
+    layers?: LayerVisibility;
   }
 
-  let { session }: Props = $props();
+  let { session, layers = $bindable({ grid: false, stacks: true, path: true, fov: true, thumbnail: true }) }: Props =
+    $props();
+
+  const layerItems: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
+    { key: 'grid', color: 'text-fg-muted', Icon: GridLines, title: 'Toggle grid' },
+    { key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
+    { key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' }
+  ];
 
   // ── Geometry ─────────────────────────────────────────────────────────
 
@@ -263,7 +260,7 @@
     | null;
 
   let contextTarget = $state<ContextTarget>(null);
-  let zRangeBuffer = $state<{ zStartUm: number; zEndUm: number } | null>(null);
+  let clipboard = $state<{ x?: number; y?: number; zStartUm?: number; zEndUm?: number }>({});
   let svgRef = $state<SVGSVGElement | null>(null);
 
   /** Convert mouse event to SVG viewBox coordinates (stage-relative). */
@@ -350,6 +347,20 @@
           }
         ]
       });
+      items.push({
+        type: 'action',
+        label: 'Copy X',
+        action: () => {
+          clipboard = { ...clipboard, x: tile.x };
+        }
+      });
+      items.push({
+        type: 'action',
+        label: 'Copy Y',
+        action: () => {
+          clipboard = { ...clipboard, y: tile.y };
+        }
+      });
     }
 
     // ── Select stacks (stack targets only) ──
@@ -391,6 +402,23 @@
 
     // ── Add stack ──
     if (target.kind === 'empty') {
+      // Copy position from clicked point (stage-relative)
+      const clickX = target.x - lx;
+      const clickY = target.y - ly;
+      items.push({
+        type: 'action',
+        label: 'Copy X',
+        action: () => {
+          clipboard = { ...clipboard, x: clickX };
+        }
+      });
+      items.push({
+        type: 'action',
+        label: 'Copy Y',
+        action: () => {
+          clipboard = { ...clipboard, y: clickY };
+        }
+      });
       // Add stack at clicked position for active profile
       items.push({ type: 'separator' });
       items.push({
@@ -435,54 +463,86 @@
       const selectedCount = session.selectedStacks.length;
       const isSingle = selectedCount <= 1;
       const isOtherProfile = stack.profile_id !== session.activeProfileId;
-      const canPaste =
-        zRangeBuffer &&
-        (isSingle ? stack.status === 'planned' : session.selectedStacks.some((s) => s.status === 'planned'));
+      const isPlanned = session.selectedStacks.some((s) => s.status === 'planned');
       const canDelete = isSingle
         ? stack.status === 'planned' || stack.status === 'skipped'
         : session.selectedStacks.some((s) => s.status === 'planned' || s.status === 'skipped');
+      const plannedTargets = () => (isSingle ? [stack] : session.selectedStacks.filter((s) => s.status === 'planned'));
 
       items.push({ type: 'separator' });
 
-      // Copy Z range (single stack only)
+      // Copy (single stack only)
       if (isSingle) {
+        items.push({
+          type: 'action',
+          label: 'Copy X',
+          action: () => {
+            clipboard = { ...clipboard, x: stack.x };
+          }
+        });
+        items.push({
+          type: 'action',
+          label: 'Copy Y',
+          action: () => {
+            clipboard = { ...clipboard, y: stack.y };
+          }
+        });
         items.push({
           type: 'action',
           label: 'Copy Z range',
           action: () => {
-            zRangeBuffer = { zStartUm: stack.z_start, zEndUm: stack.z_end };
+            clipboard = { ...clipboard, zStartUm: stack.z_start, zEndUm: stack.z_end };
           }
         });
       }
 
-      // Paste Z range
-      if (canPaste) {
+      // Paste
+      if (clipboard.x !== undefined && isPlanned) {
+        items.push({
+          type: 'action',
+          label: isSingle ? 'Paste X' : `Paste X (${selectedCount})`,
+          action: () => session.editStacks(plannedTargets().map((s) => ({ stackId: s.stack_id, x: clipboard.x })))
+        });
+      }
+      if (clipboard.y !== undefined && isPlanned) {
+        items.push({
+          type: 'action',
+          label: isSingle ? 'Paste Y' : `Paste Y (${selectedCount})`,
+          action: () => session.editStacks(plannedTargets().map((s) => ({ stackId: s.stack_id, y: clipboard.y })))
+        });
+      }
+      if (clipboard.zStartUm !== undefined && clipboard.zEndUm !== undefined && isPlanned) {
         items.push({
           type: 'action',
           label: isSingle ? 'Paste Z range' : `Paste Z range (${selectedCount})`,
-          action: () => {
-            const targets = isSingle ? [stack] : session.selectedStacks.filter((s) => s.status === 'planned');
-            const edits = targets.map((s) => ({
-              stackId: s.stack_id,
-              zStartUm: zRangeBuffer!.zStartUm,
-              zEndUm: zRangeBuffer!.zEndUm
-            }));
-            if (edits.length > 0) session.editStacks(edits);
-          }
+          action: () =>
+            session.editStacks(
+              plannedTargets().map((s) => ({
+                stackId: s.stack_id,
+                zStartUm: clipboard.zStartUm,
+                zEndUm: clipboard.zEndUm
+              }))
+            )
         });
       }
 
-      // Add stack for active profile (other-profile stacks only)
+      // Add stack(s) for active profile (other-profile stacks only)
       if (isOtherProfile) {
-        const hasActiveStack = session.getStackAtPosition(stack.x, stack.y);
-        if (!hasActiveStack) {
+        const otherStacks = (isSingle ? [stack] : session.selectedStacks)
+          .filter((s) => s.profile_id !== session.activeProfileId && !session.getStackAtPosition(s.x, s.y));
+        if (otherStacks.length > 0) {
           items.push({
             type: 'action',
-            label: 'Add stack',
+            label: otherStacks.length === 1 ? 'Add stack' : `Add stacks (${otherStacks.length})`,
             action: () => {
-              session.addStacks([
-                { x: stack.x, y: stack.y, zStartUm: session.acq.default_z_start, zEndUm: session.acq.default_z_end }
-              ]);
+              session.addStacks(
+                otherStacks.map((s) => ({
+                  x: s.x,
+                  y: s.y,
+                  zStartUm: session.acq.default_z_start,
+                  zEndUm: session.acq.default_z_end
+                }))
+              );
             }
           });
         }
@@ -518,7 +578,7 @@
       class="pointer-events-none"
     />
   {/if}
-  <g class="pointer-events-none">
+  <g class="pointer-events-none opacity-75">
     <line
       class="nss"
       x1={-marginX - fovExtension}
@@ -572,39 +632,50 @@
     </g>
   {/if}
 {/snippet}
-{#snippet stacksLayer()}
+{#snippet stackRect(stack: Stack, isActive: boolean)}
+  {@const selected = session.isStackSelected(stack.stack_id)}
+  {@const w = stack.w}
+  {@const h = stack.h}
+  <rect
+    x={stack.x - w / 2}
+    y={stack.y - h / 2}
+    width={w}
+    height={h}
+    data-stack-status={stack.status}
+    class="nss text-(--stack-status) outline-none"
+    fill={isActive ? 'currentColor' : 'transparent'}
+    fill-opacity={isActive ? (selected ? '0.5' : '0.15') : '0'}
+    stroke="currentColor"
+    stroke-opacity={selected ? '0.9' : isActive ? '0.25' : '0.4'}
+    stroke-width="1"
+    class:cursor-pointer={!isXYMoving}
+    class:cursor-not-allowed={isXYMoving}
+    role="button"
+    tabindex={isXYMoving ? -1 : 0}
+    onclick={(e) => handleStackSelect(e, stack)}
+    oncontextmenu={(e) => handleStackContext(e, stack)}
+    onkeydown={(e) => handleKeydown(e, () => session.selectStacks([stack]))}
+  >
+    <title>Stack {stack.stack_id} - {stack.status} ({stack.num_frames} frames)</title>
+  </rect>
+{/snippet}
+
+{#snippet inactiveStacksLayer()}
+  {#if layers.stacks}
+    <g>
+      {#each session.inactiveStacks as stack (stack.stack_id)}
+        {@render stackRect(stack, false)}
+      {/each}
+    </g>
+  {/if}
+{/snippet}
+
+{#snippet activeStacksLayer()}
   {#if layers.stacks}
     {@const points = session.stacks.map((s) => ({ x: s.x, y: s.y }))}
     <g>
-      {#each session.stacks as stack (stack.stack_id)}
-        {@const selected = session.isStackSelected(stack.stack_id)}
-        {@const isActive = stack.profile_id === session.activeProfileId}
-        {@const cx = stack.x}
-        {@const cy = stack.y}
-        {@const w = stack.w}
-        {@const h = stack.h}
-        <rect
-          x={cx - w / 2}
-          y={cy - h / 2}
-          width={w}
-          height={h}
-          data-stack-status={stack.status}
-          class="nss text-(--stack-status) outline-none"
-          fill={isActive ? 'currentColor' : 'transparent'}
-          fill-opacity={isActive ? (selected ? '0.5' : '0.15') : '0'}
-          stroke="currentColor"
-          stroke-opacity={selected ? '0.9' : isActive ? '0.25' : '0.4'}
-          stroke-width="1"
-          class:cursor-pointer={!isXYMoving}
-          class:cursor-not-allowed={isXYMoving}
-          role="button"
-          tabindex={isXYMoving ? -1 : 0}
-          onclick={(e) => handleStackSelect(e, stack)}
-          oncontextmenu={(e) => handleStackContext(e, stack)}
-          onkeydown={(e) => handleKeydown(e, () => session.selectStacks([stack]))}
-        >
-          <title>Stack {stack.stack_id} - {stack.status} ({stack.num_frames} frames)</title>
-        </rect>
+      {#each session.activeStacks as stack (stack.stack_id)}
+        {@render stackRect(stack, true)}
       {/each}
     </g>
     <g class="pointer-events-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
@@ -705,7 +776,8 @@
         >
           {@render fovLayer()}
           {@render gridLayer()}
-          {@render stacksLayer()}
+          {@render inactiveStacksLayer()}
+          {@render activeStacksLayer()}
         </svg>
       </ContextMenu.Trigger>
       <ContextMenu.Content class="min-w-44">

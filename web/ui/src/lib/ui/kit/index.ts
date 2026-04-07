@@ -11,6 +11,7 @@ export { default as PaneDivider } from './PaneDivider.svelte';
 export { default as Select, selectVariants, type SelectVariants } from './Select.svelte';
 export { default as Slider } from './Slider.svelte';
 export { default as SpinBox, spinBoxVariants, type SpinBoxVariants } from './SpinBox.svelte';
+export { default as NudgeInput } from './NudgeInput.svelte';
 export { default as Switch, switchVariants, type SwitchVariants } from './Switch.svelte';
 export { default as TagInput, tagInputVariants, type TagInputVariants } from './TagInput.svelte';
 export { default as TextArea, textAreaVariants, type TextAreaVariants } from './TextArea.svelte';

@@ -186,6 +186,11 @@ export interface Stack {
   status: StackStatus;
   output_path: string | null;
   num_frames: number;
+  created_at: string;
+  edited_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  skipped_at: string | null;
 }
 
 /**

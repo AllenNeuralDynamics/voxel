@@ -1,7 +1,7 @@
 import { toast } from 'svelte-sonner';
 import type { Client, DaqWaveformsResponse } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
-import { sanitizeString } from '$lib/utils';
+import { sanitizeString, UndoStack } from '$lib/utils';
 import type {
   AppStatus,
   AcquisitionConfig,
@@ -68,6 +68,7 @@ export class Session {
     return order.map((id) => dict[id]).filter((s): s is Stack => s !== undefined);
   });
   activeStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id === this.activeProfileId));
+  inactiveStacks = $derived<Stack[]>(this.stacks.filter((s) => s.profile_id !== this.activeProfileId));
 
   tiles = $derived.by<Tile[]>(() => {
     const gc = this.gridConfig;
@@ -123,6 +124,7 @@ export class Session {
   // ── Snapshots ────────────────────────────────────────────
 
   readonly snaps = new SnapshotStore();
+  readonly undo = new UndoStack();
 
   // ── Internal ────────────────────────────────────────────
 
@@ -517,24 +519,47 @@ export class Session {
 
   // --- Stacks ---
 
-  async addStacks(stacks: Array<{ x: number; y: number; zStartUm: number; zEndUm: number }>): Promise<void> {
+  async addStacks(
+    stacks: Array<{ x: number; y: number; zStartUm: number; zEndUm: number }>,
+    undoTag?: string
+  ): Promise<void> {
     try {
-      await this.#rest('POST', '/acq/stacks', {
-        stacks: stacks.map((s) => ({
-          x: s.x,
-          y: s.y,
-          z_start: s.zStartUm,
-          z_end: s.zEndUm
-        }))
+      const res = await this.#rest('POST', '/acq/stacks', {
+        stacks: stacks.map((s) => ({ x: s.x, y: s.y, z_start: s.zStartUm, z_end: s.zEndUm }))
       });
+      const { stacks: added } = await res.json();
+      if (added?.length > 0) {
+        const addedIds = added.map((s: { stack_id: string }) => s.stack_id);
+        this.undo.push(
+          `Add ${addedIds.length} stack${addedIds.length > 1 ? 's' : ''}`,
+          () => this.removeStacks(addedIds),
+          undoTag
+        );
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to add stacks');
     }
   }
 
   async editStacks(
-    edits: Array<{ stackId: string; x?: number; y?: number; zStartUm?: number; zEndUm?: number }>
+    edits: Array<{ stackId: string; x?: number; y?: number; zStartUm?: number; zEndUm?: number }>,
+    undoTag?: string
   ): Promise<void> {
+    // Capture old values before the API call (before WebSocket update)
+    const oldValues = edits
+      .map((e) => {
+        const stack = this.stacks.find((s) => s.stack_id === e.stackId);
+        if (!stack) return null;
+        return {
+          stackId: stack.stack_id,
+          ...(e.x !== undefined && { x: stack.x }),
+          ...(e.y !== undefined && { y: stack.y }),
+          ...(e.zStartUm !== undefined && { zStartUm: stack.z_start }),
+          ...(e.zEndUm !== undefined && { zEndUm: stack.z_end })
+        };
+      })
+      .filter((v): v is NonNullable<typeof v> => v !== null);
+
     try {
       await this.#rest('PATCH', '/acq/stacks', {
         edits: edits.map((e) => ({
@@ -545,14 +570,35 @@ export class Session {
           ...(e.zEndUm !== undefined && { z_end: e.zEndUm })
         }))
       });
+      if (oldValues.length > 0) {
+        this.undo.push(
+          `Edit ${oldValues.length} stack${oldValues.length > 1 ? 's' : ''}`,
+          () => this.editStacks(oldValues),
+          undoTag
+        );
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to edit stacks');
     }
   }
 
-  async removeStacks(stackIds: string[]): Promise<void> {
+  async removeStacks(stackIds: string[], undoTag?: string): Promise<void> {
     try {
-      await this.#rest('DELETE', '/acq/stacks', { stack_ids: stackIds });
+      const res = await this.#rest('DELETE', '/acq/stacks', { stack_ids: stackIds });
+      const { stacks: removed } = await res.json();
+      if (removed?.length > 0) {
+        const readdData = removed.map((s: Stack) => ({
+          x: s.x,
+          y: s.y,
+          zStartUm: s.z_start,
+          zEndUm: s.z_end
+        }));
+        this.undo.push(
+          `Remove ${removed.length} stack${removed.length > 1 ? 's' : ''}`,
+          () => this.addStacks(readdData),
+          undoTag
+        );
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove stacks');
     }

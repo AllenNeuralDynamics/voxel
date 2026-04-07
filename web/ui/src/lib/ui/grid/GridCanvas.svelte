@@ -1,38 +1,38 @@
 <script lang="ts">
   import type { Session } from '$lib/main';
+  import type { LayerVisibility } from '$lib/main/types';
   import StagePosition from './StagePosition.svelte';
   import { offsetControl, overlapControl, zDefaults } from './helpers.svelte';
   import XYPlane from './XYPlane.svelte';
   import ZPlane from './ZPlane.svelte';
+  import { slide } from 'svelte/transition';
 
   interface Props {
     session: Session;
   }
 
   let { session }: Props = $props();
+
+  let layers = $state<LayerVisibility>({ grid: false, stacks: true, path: true, fov: true, thumbnail: true });
 </script>
 
 {#if session.stage && session.stage.x && session.stage.y && session.stage.z}
   {@const gc = session.config.profiles[session.activeProfileId ?? '']?.grid ?? null}
-  <div class="grid h-full grid-rows-[auto_1fr_auto] gap-6">
-    {#if gc}
-      <div class="flex w-full flex-wrap items-center justify-between gap-4 p-4">
+  <div class="flex h-full flex-col">
+    {#if gc && layers.grid}
+      <div transition:slide={{ duration: 200 }} class="flex w-full flex-wrap items-center justify-between gap-4 p-4">
         {@render offsetControl(session, gc)}
         {@render overlapControl(session, gc)}
       </div>
     {/if}
-    <div class="flex min-h-0 min-w-0 items-stretch gap-4 px-4">
-      <XYPlane {session} />
+    <div class="flex min-h-0 min-w-0 flex-1 items-stretch gap-4 px-4 py-4">
+      <XYPlane {session} bind:layers />
       <ZPlane {session} />
     </div>
-    {#if gc}
-      <div
-        class="flex min-h-ui-xl w-full flex-wrap items-center justify-between gap-4 border-t border-border px-4 pt-2"
-      >
-        {@render zDefaults(session)}
-        <StagePosition stage={session.stage} />
-      </div>
-    {/if}
+    <div class="flex w-full flex-wrap items-center justify-between gap-4 border-t border-border px-4 py-2">
+      {@render zDefaults(session)}
+      <StagePosition stage={session.stage} />
+    </div>
   </div>
 {:else}
   <div class="grid h-full w-full place-content-center">

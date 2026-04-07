@@ -7,3 +7,5 @@ export { getWebGPUDevice } from './wgpu';
 export { IDBKeyVal } from './idb';
 export { createMultiSelect, type MultiSelect } from './multiselect.svelte';
 export { createPaneMinSize } from './pane.svelte';
+export { UndoStack } from './undo.svelte';
+export { createHotkey, createHotkeyAttachment, useModifierHeld } from './hotkeys.svelte';

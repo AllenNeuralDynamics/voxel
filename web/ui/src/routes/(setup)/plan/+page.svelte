@@ -1,11 +1,10 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
-  import { Button, Dialog, DropdownMenu, Select, SpinBox } from '$lib/ui/kit';
-  import { buttonVariants } from '$lib/ui/kit/Button.svelte';
+  import { Button, Dialog, DropdownMenu, NudgeInput, Select, SpinBox } from '$lib/ui/kit';
   import { Pane, PaneGroup } from 'paneforge';
   import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
   import { sanitizeString, cn, createPaneMinSize } from '$lib/utils';
-  import { Check, ChevronDown, ChevronRight, DotsHorizontal } from '$lib/icons';
+  import { ChevronDown, ChevronRight, EllipsisVertical } from '$lib/icons';
   import StackStatusIcon from '$lib/ui/StackStatusIcon.svelte';
   import { watch } from 'runed';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -100,8 +99,35 @@
   const commonZStart = $derived(toMm(commonValue(selectedStacks.map((s) => s.z_start))));
   const commonZEnd = $derived(toMm(commonValue(selectedStacks.map((s) => s.z_end))));
   const commonFrames = $derived(commonValue(selectedStacks.map((s) => s.num_frames)) ?? NaN);
-  const commonRange = $derived(!Number.isNaN(commonZStart) && !Number.isNaN(commonZEnd) ? Math.abs(commonZEnd - commonZStart) : NaN);
+  const commonRange = $derived(
+    !Number.isNaN(commonZStart) && !Number.isNaN(commonZEnd) ? Math.abs(commonZEnd - commonZStart) : NaN
+  );
 
+  // FOV — show "Mixed" when stacks have different FOVs
+  const commonFovW = $derived(commonValue(selectedStacks.map((s) => s.w)));
+  const commonFovH = $derived(commonValue(selectedStacks.map((s) => s.h)));
+
+  // Profile breakdown for header badges
+  const profileBreakdown = $derived.by(() => {
+    const counts = new SvelteMap<string, number>();
+    for (const s of selectedStacks) {
+      counts.set(s.profile_id, (counts.get(s.profile_id) ?? 0) + 1);
+    }
+    return [...counts.entries()].map(([id, count]) => ({
+      id,
+      label: session.config.profiles[id]?.label ?? sanitizeString(id),
+      count
+    }));
+  });
+
+  // Status breakdown for header
+  const statusBreakdown = $derived.by(() => {
+    const counts = new SvelteMap<string, number>();
+    for (const s of selectedStacks) {
+      counts.set(s.status, (counts.get(s.status) ?? 0) + 1);
+    }
+    return [...counts.entries()] as [StackStatus, number][];
+  });
 
   // --- Actions ---
 
@@ -115,20 +141,16 @@
     );
   }
 
-  let nudgeDx = $state(0);
-  let nudgeDy = $state(0);
-
-  function applyNudge() {
-    if (selectedStacks.length === 0 || (nudgeDx === 0 && nudgeDy === 0)) return;
+  function applyNudge(dx: number, dy: number) {
+    if (selectedStacks.length === 0 || (dx === 0 && dy === 0)) return;
     session.editStacks(
       selectedStacks.map((s) => ({
         stackId: s.stack_id,
-        x: s.x + nudgeDx,
-        y: s.y + nudgeDy
-      }))
+        x: s.x + dx,
+        y: s.y + dy
+      })),
+      'nudge'
     );
-    nudgeDx = 0;
-    nudgeDy = 0;
   }
 
   function applyFrameCount(frames: number) {
@@ -350,48 +372,64 @@
   <PaneDivider direction="vertical" />
 
   <!-- Sidebar (right) -->
-  <Pane
-    defaultSize={30}
-    minSize={sidebarMin.value}
-    maxSize={45}
-  >
+  <Pane defaultSize={30} minSize={sidebarMin.value} maxSize={45}>
     <div class="flex h-full flex-col overflow-y-auto bg-canvas">
       {#if !hasSelection}
         <div class="flex flex-1 items-center justify-center p-3">
           <p class="text-sm text-fg-faint">Select stacks to edit</p>
         </div>
       {:else}
-        <!-- Sidebar header -->
-        <div class="space-y-2 px-4 py-2">
-          {#if selectedStacks.length > 0}
-            <div class="flex items-center justify-between">
-              <span class="text-xs text-fg-muted">
-                {selectedStacks.length} Stack{selectedStacks.length !== 1 ? 's' : ''}
-              </span>
-              <Button
-                variant="ghost"
-                size="xs"
-                class="-mx-2 text-danger/80 hover:bg-danger/10 hover:text-danger"
-                onclick={() => {
-                  clearMode = 'selected';
-                  clearDialogOpen = true;
-                }}
-              >
-                Remove
-              </Button>
-            </div>
-          {:else}
-            <span class="text-xs text-fg-faint">No stacks at selected positions</span>
-          {/if}
-        </div>
-
-        <!-- Stack properties -->
+        <!-- Sidebar header + properties -->
         {#if selectedStacks.length > 0}
-          {@const actionBtnCn = cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }), '-mx-2')}
-          <div class="border-y border-border px-4 py-3">
-            <div class="grid grid-cols-[minmax(4rem,auto)_1fr_auto] items-center gap-x-3 gap-y-3">
-              <!-- X -->
-              <span class="text-xs text-fg-muted">X</span>
+          {@const actionBtnCn =
+            'inline-flex w-3 items-center justify-center cursor-pointer text-fg-faint hover:text-fg transition-colors'}
+          <div class="flex items-center justify-between px-4 py-2">
+            <span class="text-xs text-fg-muted">
+              {selectedStacks.length} Stack{selectedStacks.length !== 1 ? 's' : ''}
+            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              class="-mx-2 text-danger/80 hover:bg-danger/10 hover:text-danger"
+              onclick={() => {
+                clearMode = 'selected';
+                clearDialogOpen = true;
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+
+          <hr class="border-border" />
+          <div class="px-4 py-2">
+            <div class="-mr-1 grid grid-cols-[minmax(7rem,auto)_1fr_auto] items-center gap-x-1 gap-y-1.5">
+              <!-- Profile -->
+              <span class="flex h-ui-xs items-center text-[10px] text-fg-faint"
+                >Profile{profileBreakdown.length > 1 ? 's' : ''}</span
+              >
+              <span class="col-span-2 text-[10px] text-fg-muted">
+                {#each profileBreakdown as p, i (i)}
+                  {#if i > 0},{/if}
+                  {p.label}{profileBreakdown.length > 1 ? ` (${p.count})` : ''}
+                {/each}
+              </span>
+
+              <!-- Status -->
+              <span class="flex h-ui-xs items-center text-[10px] text-fg-faint">Status</span>
+              <span class="col-span-2 text-[10px] text-fg-muted">
+                {#each statusBreakdown as [status, count], i (i)}
+                  {#if i > 0}
+                    ·
+                  {/if}
+                  {count}
+                  {status}
+                {/each}
+              </span>
+
+              <hr class="col-span-full -mx-4 mb-2 border-border" />
+
+              <!-- X Position -->
+              <span class="text-xs text-fg-muted">X Position</span>
               <SpinBox
                 value={commonX}
                 suffix="mm"
@@ -402,7 +440,7 @@
               />
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger class={actionBtnCn}>
-                  <DotsHorizontal width="14" height="14" />
+                  <EllipsisVertical width="14" height="14" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item
@@ -413,8 +451,8 @@
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
 
-              <!-- Y -->
-              <span class="text-xs text-fg-muted">Y</span>
+              <!-- Y Position -->
+              <span class="text-xs text-fg-muted">Y Position</span>
               <SpinBox
                 value={commonY}
                 suffix="mm"
@@ -425,7 +463,7 @@
               />
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger class={actionBtnCn}>
-                  <DotsHorizontal width="14" height="14" />
+                  <EllipsisVertical width="14" height="14" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item
@@ -436,44 +474,31 @@
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
 
-              <!-- Nudge -->
-              <span class="text-xs text-fg-muted">Nudge</span>
-              <div class="flex items-center gap-2">
-                <SpinBox
-                  value={nudgeDx / 1000}
-                  prefix="dX"
-                  suffix="mm"
-                  size="xs"
-                  step={0.1}
-                  snapValue={0}
-                  decimals={4}
-                  align="right"
-                  class="flex-1"
-                  onChange={(v) => (nudgeDx = v * 1000)}
-                />
-                <SpinBox
-                  value={nudgeDy / 1000}
-                  prefix="dY"
-                  suffix="mm"
-                  size="xs"
-                  step={0.1}
-                  snapValue={0}
-                  decimals={4}
-                  align="right"
-                  class="flex-1"
-                  onChange={(v) => (nudgeDy = v * 1000)}
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                title="Apply nudge"
-                disabled={nudgeDx === 0 && nudgeDy === 0}
-                onclick={applyNudge}
-                class="-mx-2"
-              >
-                <Check width="14" height="14" />
-              </Button>
+              <!-- Nudge X -->
+              <span class="text-xs text-fg-muted">Nudge X</span>
+              <NudgeInput
+                prefix="dX"
+                suffix="mm"
+                size="xs"
+                step={0.1}
+                fineStep={0.01}
+                decimals={4}
+                onNudge={(v) => applyNudge(v * 1000, 0)}
+              />
+              <span></span>
+
+              <!-- Nudge Y -->
+              <span class="text-xs text-fg-muted">Nudge Y</span>
+              <NudgeInput
+                prefix="dY"
+                suffix="mm"
+                size="xs"
+                step={0.1}
+                fineStep={0.01}
+                decimals={4}
+                onNudge={(v) => applyNudge(0, v * 1000)}
+              />
+              <span></span>
 
               <!-- Z Start -->
               <span class="text-xs text-fg-muted">Z Start</span>
@@ -487,7 +512,7 @@
               />
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger class={actionBtnCn}>
-                  <DotsHorizontal width="14" height="14" />
+                  <EllipsisVertical width="14" height="14" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.stage.z.position)}>
@@ -511,7 +536,7 @@
               />
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger class={actionBtnCn}>
-                  <DotsHorizontal width="14" height="14" />
+                  <EllipsisVertical width="14" height="14" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.stage.z.position)}>
@@ -523,8 +548,8 @@
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
 
-              <!-- Range -->
-              <span class="text-xs text-fg-muted">Range</span>
+              <!-- Z Range -->
+              <span class="text-xs text-fg-muted">Z Range</span>
               <SpinBox
                 value={commonFrames}
                 min={1}
@@ -535,8 +560,35 @@
                 onChange={(v) => applyFrameCount(v)}
               />
               <span></span>
+
+              <!-- FOV -->
+              <span class="text-xs text-fg-muted">FOV</span>
+              <div class="flex items-center gap-1">
+                <SpinBox
+                  value={commonFovW ?? NaN}
+                  variant="ghost"
+                  appearance="bordered"
+                  size="xs"
+                  disabled
+                  decimals={0}
+                  suffix="µm"
+                  class="flex-1"
+                />
+                <span class="text-xs text-fg-faint">×</span>
+                <SpinBox
+                  value={commonFovH ?? NaN}
+                  variant="ghost"
+                  appearance="bordered"
+                  size="xs"
+                  disabled
+                  decimals={0}
+                  suffix="µm"
+                  class="flex-1"
+                />
+              </div>
             </div>
           </div>
+          <hr class="my-2 border-border" />
         {/if}
       {/if}
 

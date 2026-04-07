@@ -18,6 +18,7 @@ export { default as ContentSaveOutline } from '~icons/mdi/content-save-outline';
 export { default as DeleteOutline } from '~icons/mdi/delete-outline';
 export { default as DotsHorizontal } from '~icons/mdi/dots-horizontal';
 export { default as DotsVertical } from '~icons/mdi/dots-vertical';
+export { default as EllipsisVertical } from '~icons/lucide/ellipsis-vertical';
 export { default as GripVertical } from '~icons/lucide/grip-vertical';
 export { default as Eye } from '~icons/mdi/eye';
 export { default as EyeOff } from '~icons/mdi/eye-off';

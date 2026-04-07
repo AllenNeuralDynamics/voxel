@@ -380,11 +380,11 @@
 
       <div class="flex flex-col gap-2">
         {#if roiExpanded}
-          <div class="grid grid-cols-[auto_1fr] gap-3">
+          <div class="grid grid-cols-[minmax(0,200px)_3fr] gap-3">
             <!-- SVG sensor diagram -->
             <svg
               viewBox="0 0 {sensorW} {sensorH}"
-              class="h-22 self-center"
+              class="w-full self-center"
               style="aspect-ratio: {sensorW} / {sensorH};"
             >
               <rect
@@ -406,8 +406,8 @@
             </svg>
 
             <!-- Spinboxes + spatial actions (2×3 grid) -->
-            <div class="flex min-w-0 flex-1 flex-col justify-between gap-1">
-              <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+            <div class="flex min-w-0 flex-1 flex-col justify-between gap-2">
+              <div class="grid grid-cols-2 gap-2">
                 <SpinBox
                   value={camera.roi.x}
                   min={0}

@@ -154,7 +154,7 @@ async def start_acquisition(
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Start acquisition for all pending stacks."""
-    pending = [s for s in service.session.stacks if s.status == "planned"]
+    pending = [s for s in service.session.stacks.values() if s.status == "planned"]
     if not pending:
         raise HTTPException(status_code=400, detail="No planned stacks to acquire")
     service.start_acquisition()
@@ -167,7 +167,7 @@ async def start_stack_acquisition(
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Start acquisition for a single stack."""
-    stack = next((s for s in service.session.stacks if s.stack_id == stack_id), None)
+    stack = service.session.stacks.get(stack_id)
     if stack is None:
         raise HTTPException(status_code=404, detail=f"Stack {stack_id} not found")
     if stack.status != "planned":
@@ -276,7 +276,7 @@ async def add_stacks(
     try:
         stacks = service.session.add_stacks([s.model_dump() for s in request.stacks])
         service.broadcast({}, with_status=True)
-        return {"added": len(stacks), "stacks": [s.model_dump() for s in stacks]}
+        return {"stacks": [s.model_dump() for s in stacks]}
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
@@ -292,7 +292,7 @@ async def edit_stacks(
     try:
         stacks = service.session.edit_stacks([e.model_dump(exclude_none=True) for e in request.edits])
         service.broadcast({}, with_status=True)
-        return {"edited": len(stacks), "stacks": [s.model_dump() for s in stacks]}
+        return {"stacks": [s.model_dump() for s in stacks]}
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
@@ -304,10 +304,11 @@ async def remove_stacks(
     request: RemoveStacksRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
-    """Remove stacks (bulk)."""
+    """Remove stacks (bulk). Returns the removed stacks for undo support."""
     try:
+        removed = [s.model_dump() for sid in request.stack_ids if (s := service.session.stacks.get(sid))]
         service.session.remove_stacks(request.stack_ids)
         service.broadcast({}, with_status=True)
-        return {"removed": len(request.stack_ids)}
+        return {"stacks": removed}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

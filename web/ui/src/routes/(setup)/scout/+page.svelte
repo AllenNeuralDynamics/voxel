@@ -220,11 +220,7 @@
 
   <PaneDivider direction="vertical" />
 
-  <Pane
-    defaultSize={30}
-    minSize={sidebarMin.value}
-    maxSize={45}
-  >
+  <Pane defaultSize={30} minSize={sidebarMin.value} maxSize={45}>
     <div class="flex h-full flex-col overflow-hidden">
       <!-- Header with capture button -->
       <div class="flex items-center justify-between border-b border-border px-3 py-2">

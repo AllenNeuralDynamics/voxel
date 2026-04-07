@@ -255,7 +255,7 @@
   }
 
   function handleWheel(e: WheelEvent) {
-    if (!e.ctrlKey) return;
+    if (!e.ctrlKey || !draggable) return;
     e.preventDefault();
 
     const direction = e.deltaY < 0 ? 1 : -1;
