@@ -368,11 +368,11 @@ class CameraController(DeviceController[Camera]):
         with suppress(RuntimeError):
             fire_and_forget(self.publish("preview", frame.pack()), log=self.log)
 
-    def _on_preview_tile(self, tile: PreviewTile) -> None:
+    async def _on_preview_tile(self, tile: PreviewTile) -> None:
         if not self._preview_publishing:
             return
         with suppress(RuntimeError):
-            fire_and_forget(self.publish("preview_tile", tile.pack()), log=self.log)
+            await self.publish("preview_tile", tile.pack())
 
     @describe(label="Update Preview Viewport")
     async def update_preview_viewport(self, viewport: PreviewViewport):

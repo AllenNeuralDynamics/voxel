@@ -3,7 +3,7 @@ import logging
 import math
 import time
 import zlib
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
@@ -219,46 +219,43 @@ class PreviewTile:
 # ── Sink Types ─────────────────────────────────────────────────────────
 
 type PreviewFrameSink = Callable[[PreviewFrame], None]
-type PreviewTileSink = Callable[[PreviewTile], None]
+type PreviewTileSink = Callable[[PreviewTile], Awaitable[None]]
 
 
 # ── Tile Scale Selection ──────────────────────────────────────────────
 
 
 MAX_SCALE = 6  # 64x64 grid max
+DEFAULT_TILE_SIZE = 1024  # output pixels per tile
 
 
 def select_scale(
     viewport: PreviewViewport,
     sensor_w: int,
     sensor_h: int,
-    tile_size: int = 512,
+    tile_size: int = DEFAULT_TILE_SIZE,
 ) -> int:
     """Pick pyramid scale for current viewport.
 
     Scale S means a 2^S x 2^S grid of tiles covering the full sensor.
     At scale S, each tile covers (sensor / 2^S) raw pixels per axis.
 
-    The algorithm picks the scale where each tile covers roughly `tile_size`
-    raw pixels — no upsampling, but enough detail for the zoom level.
-
-    Returns 0 when the overview frame alone provides sufficient resolution.
+    The scale is chosen based on zoom level (viewport), capped by the finest
+    scale where tiles still have enough raw data (determined by tile_size).
     """
     sensor_max = max(sensor_w, sensor_h)
     if sensor_max <= tile_size:
         return 0
 
-    # Max scale: allow one level beyond strict no-upsample threshold.
-    # Tiles at that level output at native resolution (smaller than tile_size)
-    # because _generate_tile caps output to min(tile_size, region_pixels).
+    # Max scale: one level beyond strict no-upsample threshold.
     max_scale = min(MAX_SCALE, int(math.log2(sensor_max / tile_size)) + 1)
 
-    # At full viewport (no zoom), scale 1 gives 2x2 tiles at ~overview quality
+    # At full viewport (no zoom), scale 1 gives 2x2 tiles
     viewport_max = max(viewport.w, viewport.h)
     if viewport_max >= 1.0:
         return 1
 
-    # Ideal scale: prefer finer resolution (ceil) for crisper zoom
+    # Ideal scale from zoom level, prefer finer resolution (ceil)
     ideal = max(1, math.ceil(math.log2(1.0 / viewport_max)))
     return min(ideal, max_scale)
 
@@ -301,7 +298,7 @@ class PreviewGenerator:
         uid: str = "camera",
         *,
         target_width: int = 1024,
-        tile_size: int = 512,
+        tile_size: int = DEFAULT_TILE_SIZE,
         fmt: PreviewFmt = PreviewFmt.JPEG,
         viewport: PreviewViewport | None = None,
         levels: PreviewLevels | None = None,
@@ -321,8 +318,10 @@ class PreviewGenerator:
         self._tile_task: asyncio.Task | None = None  # background tile generation
         self.log = logging.getLogger(f"{self._uid}.PreviewGenerator")
 
-        # Parallel executor for tile generation (4 workers for concurrent tile processing)
-        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="PreviewGen")
+        # Dedicated executor for overview (never competes with tiles)
+        self._overview_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewOverview")
+        # Parallel executor for tile generation
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="PreviewTile")
 
     @property
     def colormap(self) -> str | None:
@@ -345,30 +344,14 @@ class PreviewGenerator:
         self._current_frame = frame
         loop = asyncio.get_event_loop()
 
-        # 1) Always generate overview (histogram, fallback) — blocks
-        overview = await loop.run_in_executor(self._executor, self._generate_overview, frame, idx)
-        self._frame_sink(overview)
-
-        # 2) Fire-and-forget tiles — cancel stale in-flight tiles from previous frame
+        # Cancel stale tiles and start new ones concurrently with overview
         if self._tile_sink is not None:
             self.cancel_tile_task()
             self._tile_task = asyncio.create_task(self._generate_and_send_tiles(frame, idx, self.viewport))
 
-    def new_frame_sync(self, frame: np.ndarray, idx: int) -> None:
-        """Synchronous version — blocks until complete. Use in non-async contexts."""
-        self._idx = idx
-        self._current_frame = frame
-
-        overview = self._generate_overview(frame, idx)
+        # Overview blocks (runs on dedicated executor, concurrent with tile threads)
+        overview = await loop.run_in_executor(self._overview_executor, self._generate_overview, frame, idx)
         self._frame_sink(overview)
-
-        if self._tile_sink is not None:
-            h, w = frame.shape[:2]
-            scale = select_scale(self.viewport, w, h, self._tile_size)
-            visible = compute_visible_tiles(self.viewport, scale)
-            for col, row in visible:
-                tile = self._generate_tile(frame, idx, self.viewport, scale, col, row)
-                self._tile_sink(tile)
 
     async def reprocess(self) -> None:
         """Regenerate overview + tiles from cached raw frame with current settings.
@@ -379,7 +362,7 @@ class PreviewGenerator:
         if self._current_frame is not None:
             loop = asyncio.get_event_loop()
             frame, idx = self._current_frame, self._idx
-            overview = await loop.run_in_executor(self._executor, self._generate_overview, frame, idx)
+            overview = await loop.run_in_executor(self._overview_executor, self._generate_overview, frame, idx)
             self._frame_sink(overview)
             if self._tile_sink is not None:
                 await self._generate_and_send_tiles(self._current_frame, self._idx, self.viewport)
@@ -403,7 +386,24 @@ class PreviewGenerator:
     def shutdown(self) -> None:
         """Shutdown the preview generator and cleanup resources."""
         self.cancel_tile_task()
+        self._overview_executor.shutdown(wait=False, cancel_futures=True)
         self._executor.shutdown(wait=False, cancel_futures=True)
+
+    # ── Internal: Downsampling ─────────────────────────────────────────
+
+    @staticmethod
+    def _downsample(frame: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
+        """Downsample a frame to target dimensions.
+
+        For large downsample factors (>2x), pre-decimates via numpy stride
+        skipping to reduce data volume before cv2.resize. This avoids reading
+        the entire source array through DRAM — the strided view fits in cache.
+        """
+        h, w = frame.shape[:2]
+        step = max(1, min(w // (target_w * 2), h // (target_h * 2)))
+        if step > 1:
+            frame = frame[::step, ::step]
+        return cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
 
     # ── Internal: Overview ─────────────────────────────────────────────
 
@@ -415,7 +415,7 @@ class PreviewGenerator:
         preview_width = self._target_width
         preview_height = int(full_height * (preview_width / full_width))
 
-        resized = cv2.resize(raw_frame, (preview_width, preview_height), interpolation=cv2.INTER_AREA)
+        resized = self._downsample(raw_frame, preview_width, preview_height)
 
         # Compute histogram on resized data BEFORE level adjustment
         max_val = np.iinfo(raw_frame.dtype).max
@@ -475,7 +475,7 @@ class PreviewGenerator:
         try:
             for coro in asyncio.as_completed(tile_futures):
                 tile = await coro
-                self._tile_sink(tile)  # type: ignore[misc]
+                await self._tile_sink(tile)  # type: ignore[misc]
         except asyncio.CancelledError:
             return  # new frame arrived, abandon remaining tiles
 
@@ -510,7 +510,7 @@ class PreviewGenerator:
             out_h = min(self._tile_size, region_h)
             out_w = max(1, int(out_h * region_w / region_h))
 
-        resized = cv2.resize(tile_region, (out_w, out_h), interpolation=cv2.INTER_AREA)
+        resized = self._downsample(tile_region, out_w, out_h)
         processed = self._apply_processing(resized, raw_frame.dtype)
 
         info = PreviewTileInfo(

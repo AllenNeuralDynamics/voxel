@@ -361,7 +361,7 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
     """Unified WebSocket endpoint for all app, session, and rig communication."""
     await websocket.accept()
     client_id = str(uuid.uuid4())
-    message_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue(maxsize=100)
+    message_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue(maxsize=500)
 
     await service.add_client(client_id, message_queue)
 
