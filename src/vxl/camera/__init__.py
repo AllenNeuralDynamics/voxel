@@ -1,6 +1,6 @@
 from .base import Camera, CameraController, CameraMode
 from .handle import CameraHandle
-from .preview import PreviewFrame, PreviewLevels, PreviewTile, PreviewTileInfo, PreviewViewport
+from .preview import PreviewFrame, PreviewLevels, PreviewTileInfo, PreviewTiles, PreviewViewport
 
 __all__ = [
     "Camera",
@@ -9,7 +9,7 @@ __all__ = [
     "CameraMode",
     "PreviewFrame",
     "PreviewLevels",
-    "PreviewTile",
     "PreviewTileInfo",
+    "PreviewTiles",
     "PreviewViewport",
 ]

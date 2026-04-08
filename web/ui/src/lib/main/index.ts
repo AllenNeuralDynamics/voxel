@@ -32,6 +32,12 @@ export type {
   DeviceInterface,
   DevicesResponse
 } from './devices.svelte.ts';
-export type { PreviewViewport, PreviewFrameInfo, PreviewTileInfo, PreviewLevels } from './client.svelte.ts';
+export type {
+  PreviewViewport,
+  PreviewFrameInfo,
+  PreviewTileInfo,
+  PreviewTile,
+  PreviewLevels
+} from './client.svelte.ts';
 
 export * from './types';

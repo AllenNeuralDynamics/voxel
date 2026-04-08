@@ -44,7 +44,9 @@ export function isDefaultViewport(vp: PreviewViewport): boolean {
 
 interface TileCacheEntry {
   bitmap: ImageBitmap;
-  info: PreviewTileInfo;
+  scale: number;
+  col: number;
+  row: number;
 }
 
 function tileKey(scale: number, col: number, row: number): string {
@@ -96,10 +98,10 @@ export function compositeTiledFrames(
 
     if (ch.tiles.size > 0) {
       // Draw tiles
-      for (const { bitmap, info } of ch.tiles.values()) {
-        const gridSize = 2 ** info.scale;
-        const tileNormX = info.col / gridSize;
-        const tileNormY = info.row / gridSize;
+      for (const { bitmap, scale, col, row } of ch.tiles.values()) {
+        const gridSize = 2 ** scale;
+        const tileNormX = col / gridSize;
+        const tileNormY = row / gridSize;
         const tileNormW = 1 / gridSize;
         const tileNormH = 1 / gridSize;
 
@@ -209,7 +211,7 @@ export class PreviewState {
   #viewportLastSent = 0;
   #levelsUpdateTimers = new SvelteMap<string, number>();
   #levelsLastSent = new SvelteMap<string, number>();
-  readonly #THROTTLE_MS = 100;
+  readonly #THROTTLE_MS = 500;
 
   constructor(client: Client, config: RigLayout) {
     this.#client = client;
@@ -322,8 +324,12 @@ export class PreviewState {
     });
 
     const unsubTile = this.#client.subscribe('preview/tile', (_topic, payload) => {
-      const data = payload as { channel: string; info: PreviewTileInfo; bitmap: ImageBitmap };
-      this.#handleTile(data.channel, data.info, data.bitmap);
+      const data = payload as {
+        channel: string;
+        info: PreviewTileInfo;
+        tiles: { col: number; row: number; width: number; height: number; bitmap: ImageBitmap }[];
+      };
+      this.#handleTileBatch(data.channel, data.info, data.tiles);
     });
 
     const unsubViewport = this.#client.on('preview/viewport', (vp) => {
@@ -387,8 +393,6 @@ export class PreviewState {
     }
 
     this.#applyPreviewConfigs(preview);
-
-    this.#queueViewportUpdate(this.viewport);
     this.redrawGeneration++;
   };
 
@@ -398,6 +402,7 @@ export class PreviewState {
       const cfg = preview[channel.name];
       if (!cfg) continue;
       if (cfg.colormap) channel.colormap = cfg.colormap;
+      if (cfg.viewport) this.viewport = cfg.viewport;
     }
   }
 
@@ -428,23 +433,25 @@ export class PreviewState {
     }
   };
 
-  #handleTile = (channelName: string, info: PreviewTileInfo, bitmap: ImageBitmap): void => {
+  #handleTileBatch = (
+    channelName: string,
+    info: PreviewTileInfo,
+    tiles: { col: number; row: number; width: number; height: number; bitmap: ImageBitmap }[]
+  ): void => {
     const channel = this.channels.find((c) => c.name === channelName);
     if (!channel) return;
 
-    // If scale changed, clear old tiles
     if (channel.tileScale !== info.scale) {
       channel.clearTiles();
       channel.tileScale = info.scale;
     }
 
-    const key = tileKey(info.scale, info.col, info.row);
-
-    // Close old bitmap if replacing
-    const existing = channel.tiles.get(key);
-    if (existing) existing.bitmap.close();
-
-    channel.tiles.set(key, { bitmap, info });
+    for (const tile of tiles) {
+      const key = tileKey(info.scale, tile.col, tile.row);
+      const existing = channel.tiles.get(key);
+      if (existing) existing.bitmap.close();
+      channel.tiles.set(key, { bitmap: tile.bitmap, scale: info.scale, col: tile.col, row: tile.row });
+    }
 
     this.redrawGeneration++;
   };

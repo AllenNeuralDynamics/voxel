@@ -295,6 +295,18 @@ class AppService:
                 self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
                 return
 
+            if topic == "preview/pause":
+                queue = self.clients.get(client_id)
+                if queue:
+                    queue.paused = True
+                return
+
+            if topic == "preview/resume":
+                queue = self.clients.get(client_id)
+                if queue:
+                    queue.paused = False
+                return
+
             # Session-level topics - delegate to session service
             if self.session_service is None:
                 log.warning("No active session for topic %s from client %s", topic, client_id)

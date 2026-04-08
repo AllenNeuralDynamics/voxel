@@ -40,6 +40,10 @@ class CameraHandle(DeviceHandle[Camera]):
         """Stop camera preview mode."""
         await self.call("stop_preview")
 
+    async def clear_preview_cache(self) -> None:
+        """Clear cached frame on camera. Called on profile change."""
+        await self.call("clear_preview_cache")
+
     async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
         """Update preview viewport (triggers tile regeneration from cached frame)."""
         await self.call("update_preview_viewport", viewport)

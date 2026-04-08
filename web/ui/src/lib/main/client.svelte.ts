@@ -50,7 +50,7 @@ export interface PreviewFrameInfo {
   colormap?: string;
 }
 
-/** Tile metadata from backend. */
+/** Shared metadata for a tile batch. */
 export interface PreviewTileInfo {
   frame_idx: number;
   width: number;
@@ -61,9 +61,16 @@ export interface PreviewTileInfo {
   fmt: 'jpeg' | 'png' | 'uint16';
   colormap?: string;
   scale: number;
+  viewport: PreviewViewport;
+}
+
+/** Single tile entry within a batch. */
+export interface PreviewTile {
   col: number;
   row: number;
-  viewport: PreviewViewport;
+  width: number;
+  height: number;
+  data: ArrayBuffer;
 }
 
 /**
@@ -84,6 +91,8 @@ type ClientMessage =
   // Preview (high-frequency streaming, stays on WS)
   | { topic: 'preview/start'; payload?: Record<string, never> }
   | { topic: 'preview/stop'; payload?: Record<string, never> }
+  | { topic: 'preview/pause'; payload?: Record<string, never> }
+  | { topic: 'preview/resume'; payload?: Record<string, never> }
   | { topic: 'preview/viewport'; payload: PreviewViewport }
   | { topic: 'preview/levels'; payload: { channel: string; min: number; max: number } }
   | { topic: 'preview/colormap'; payload: { channel: string; colormap: string } }
@@ -120,7 +129,11 @@ export interface TopicHandlers {
   'log/message'?: (payload: LogMessage) => void;
   'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;
   'preview/viewport'?: (payload: PreviewViewport) => void;
-  'preview/tile'?: (channel: string, info: PreviewTileInfo, bitmap: ImageBitmap) => void;
+  'preview/tile'?: (payload: {
+    channel: string;
+    info: PreviewTileInfo;
+    tiles: { col: number; row: number; width: number; height: number; bitmap: ImageBitmap }[];
+  }) => void;
   'preview/levels'?: (payload: PreviewLevelsInfo) => void;
   'preview/colormap'?: (payload: { channel: string; colormap: string }) => void;
   'daq/waveforms'?: (payload: DaqWaveformsResponse) => void;
@@ -248,6 +261,13 @@ export class Client {
           this.reconnectAttempts = 0;
           this.reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
           this.notifyConnectionChange(true);
+
+          // Pause preview streaming when tab is backgrounded
+          this._visibilityHandler = () => {
+            this.send({ topic: document.hidden ? 'preview/pause' : 'preview/resume' });
+          };
+          document.addEventListener('visibilitychange', this._visibilityHandler);
+
           resolve();
         };
 
@@ -296,7 +316,13 @@ export class Client {
     this.cleanupSocket();
     this.connectionState = 'idle';
     this.notifyConnectionChange(false);
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
   }
+
+  private _visibilityHandler: (() => void) | null = null;
 
   /**
    * Subscribe to messages matching a topic pattern.
@@ -473,23 +499,33 @@ export class Client {
     const envelopeText = new TextDecoder().decode(envelopeBytes);
     const envelope = JSON.parse(envelopeText) as { topic: string; channel: string };
 
-    // Unpack msgpack frame
-    const frameBytes = bytes.slice(newlineIndex + 1);
-    const frame = unpack(frameBytes) as {
-      info: PreviewFrameInfo;
-      data: ArrayBuffer;
-    };
+    const payloadBytes = bytes.slice(newlineIndex + 1);
 
-    if (!frame.info || !frame.data) {
-      console.error('[Client] Invalid frame structure:', frame);
-      return;
-    }
+    if (envelope.topic === 'preview/tile') {
+      // Tile batch: {info: PreviewTileInfo, tiles: PreviewTile[]}
+      const batch = unpack(payloadBytes) as { info: PreviewTileInfo; tiles: PreviewTile[] };
+      if (!batch.info || !batch.tiles) return;
 
-    // Decode frame to ImageBitmap
-    const bitmap = await this.decodeFrame(frame.info.fmt, frame.data);
-    if (bitmap) {
-      // Dispatch with channel, info, and bitmap
-      this.dispatchFrame(envelope.topic, envelope.channel, frame.info, bitmap);
+      const decoded = await Promise.all(
+        batch.tiles.map(async (tile) => {
+          const bitmap = await this.decodeFrame(batch.info.fmt, tile.data);
+          return bitmap ? { col: tile.col, row: tile.row, width: tile.width, height: tile.height, bitmap } : null;
+        })
+      );
+
+      const tiles = decoded.filter((t): t is NonNullable<typeof t> => t !== null);
+      if (tiles.length > 0) {
+        this.dispatch(envelope.topic, { channel: envelope.channel, info: batch.info, tiles });
+      }
+    } else {
+      // Overview frame: {info: PreviewFrameInfo, data: ArrayBuffer}
+      const frame = unpack(payloadBytes) as { info: PreviewFrameInfo; data: ArrayBuffer };
+      if (!frame.info || !frame.data) return;
+
+      const bitmap = await this.decodeFrame(frame.info.fmt, frame.data);
+      if (bitmap) {
+        this.dispatchFrame(envelope.topic, envelope.channel, frame.info, bitmap);
+      }
     }
   }
 

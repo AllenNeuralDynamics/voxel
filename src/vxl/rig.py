@@ -409,6 +409,10 @@ class VoxelRig(Rig):
             self.log.debug("stopping preview before switching profile")
             await self.stop_preview()
 
+        # Clear cached frames so stale data isn't reprocessed with new profile's colormaps
+        tasks = [cam.clear_preview_cache() for cam in self.cameras.values()]
+        await asyncio.gather(*tasks, return_exceptions=True)
+
         # 1. Close existing sync task if any (will be recreated by preview/acquisition)
         if self.sync_task:
             await self.sync_task.close()

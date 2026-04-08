@@ -68,6 +68,8 @@ def main() -> None:
         host="0.0.0.0",  # noqa: S104 :: allow bind all
         port=args.port,
         log_config=get_uvicorn_log_config(),
+        loop="uvloop",
+        ws_ping_interval=None,  # disable keepalive pings — prevents race with send_bytes
     )
 
 

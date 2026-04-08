@@ -143,12 +143,10 @@ class PreviewFrameInfo(PreviewInfoBase):
 
 
 class PreviewTileInfo(PreviewInfoBase):
-    """Single tile from the pyramid."""
+    """Shared metadata for a batch of tiles."""
 
     scale: int = Field(..., ge=0, description="Pyramid scale (0 = coarsest).")
-    col: int = Field(..., ge=0, description="Tile column index at this scale.")
-    row: int = Field(..., ge=0, description="Tile row index at this scale.")
-    viewport: PreviewViewport = Field(..., description="Viewport that triggered this tile set.")
+    viewport: PreviewViewport = Field(..., description="Viewport that triggered tiles.")
 
 
 # ── Data Containers ────────────────────────────────────────────────────
@@ -189,44 +187,56 @@ class PreviewFrame:
 
 @dataclass(frozen=True)
 class PreviewTile:
-    info: PreviewTileInfo
+    """Single tile entry within a batch."""
+
+    col: int
+    row: int
+    width: int
+    height: int
     data: bytes
 
-    @classmethod
-    def from_array(cls, frame_array: np.ndarray, info: PreviewTileInfo) -> Self:
-        """Create a PreviewTile from a NumPy array and metadata."""
-        compressed_data = info.fmt(frame_array)
-        return cls(info=info, data=compressed_data)
+
+@dataclass(frozen=True)
+class PreviewTiles:
+    """Batch of tiles from one frame. Sent as a single message."""
+
+    info: PreviewTileInfo
+    tiles: list[PreviewTile]
 
     @classmethod
-    def from_packed(cls, packed_tile: bytes) -> Self:
-        """Unpack a packed PreviewTile from bytes."""
-        unpacked = msgpack.unpackb(packed_tile, object_hook=mpack_numpy.decode)
+    def from_packed(cls, packed: bytes) -> Self:
+        unpacked = msgpack.unpackb(packed, object_hook=mpack_numpy.decode)
         info = PreviewTileInfo(**unpacked["info"])
-        return cls(info=info, data=unpacked["data"])
+        tiles = [PreviewTile(**t) for t in unpacked["tiles"]]
+        return cls(info=info, tiles=tiles)
 
     def pack(self) -> bytes:
-        """Pack for transmission via msgpack."""
         packed = msgpack.packb(
-            {"info": self.info.model_dump(), "data": self.data},
+            {
+                "info": self.info.model_dump(),
+                "tiles": [
+                    {"col": t.col, "row": t.row, "width": t.width, "height": t.height, "data": t.data}
+                    for t in self.tiles
+                ],
+            },
             default=mpack_numpy.encode,
         )
         if packed is None:
-            raise ValueError("Packing PreviewTile failed: msgpack.packb returned None")
+            raise ValueError("Packing PreviewTiles failed")
         return packed
 
 
 # ── Sink Types ─────────────────────────────────────────────────────────
 
 type PreviewFrameSink = Callable[[PreviewFrame], None]
-type PreviewTileSink = Callable[[PreviewTile], Awaitable[None]]
+type PreviewTileSink = Callable[[PreviewTiles], Awaitable[None]]
 
 
 # ── Tile Scale Selection ──────────────────────────────────────────────
 
 
 MAX_SCALE = 6  # 64x64 grid max
-TILES_PER_VIEWPORT = 3  # target tiles visible per viewport axis
+TILES_PER_VIEWPORT = 4  # target tiles visible per viewport axis
 DEFAULT_PREVIEW_WIDTH = 1500  # aggregate output resolution across viewport
 
 
@@ -301,6 +311,7 @@ class PreviewGenerator:
         self._colormap: str | None = None
         self._lut: np.ndarray | None = None  # (256, 3) uint8, cached
         self._tile_task: asyncio.Task | None = None  # background tile generation
+        self._tile_futures: list[asyncio.Future] = []  # tracked for cancellation
         self.log = logging.getLogger(f"{self._uid}.PreviewGenerator")
 
         # Dedicated executor for overview (never competes with tiles)
@@ -362,11 +373,18 @@ class PreviewGenerator:
         if self._tile_sink is not None and self._current_frame is not None:
             await self._generate_and_send_tiles(self._current_frame, self._idx, viewport)
 
+    def clear_cache(self) -> None:
+        """Clear cached raw frame. Called on profile change to prevent stale reprocessing."""
+        self._current_frame = None
+
     def cancel_tile_task(self) -> None:
-        """Cancel in-flight background tile generation."""
+        """Cancel in-flight background tile generation and pending executor futures."""
         if self._tile_task is not None and not self._tile_task.done():
             self._tile_task.cancel()
             self._tile_task = None
+        for f in self._tile_futures:
+            f.cancel()
+        self._tile_futures.clear()
 
     def shutdown(self) -> None:
         """Shutdown the preview generator and cleanup resources."""
@@ -378,17 +396,28 @@ class PreviewGenerator:
 
     @staticmethod
     def _downsample(frame: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
-        """Downsample a frame to target dimensions.
+        """Downsample a frame to approximately target dimensions.
 
-        For large downsample factors (>2x), pre-decimates via numpy stride
-        skipping to reduce data volume before cv2.resize. This avoids reading
-        the entire source array through DRAM — the strided view fits in cache.
+        TEST: stride-only downsampling (no cv2.resize). Skips directly to ~target
+        size via numpy stride view (O(1), no memory read). Output dimensions are
+        approximate (nearest integer stride). The frontend's drawImage scales to
+        canvas anyway so exact dimensions don't matter.
+
+        This eliminates the cv2.resize bottleneck entirely. Quality is nearest-
+        neighbor (no anti-aliasing) but acceptable for live preview.
         """
         h, w = frame.shape[:2]
-        step = max(1, min(w // (target_w * 2), h // (target_h * 2)))
-        if step > 1:
-            frame = frame[::step, ::step]
-        return cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        step_w = max(1, w // target_w)
+        step_h = max(1, h // target_h)
+        step = max(step_w, step_h)  # uniform step preserves aspect ratio
+        return np.ascontiguousarray(frame[::step, ::step])
+
+        # ORIGINAL: two-step with cv2.resize for final anti-aliased downsample
+        # h, w = frame.shape[:2]
+        # step = max(1, min(w // (target_w * 2), h // (target_h * 2)))
+        # if step > 1:
+        #     frame = frame[::step, ::step]
+        # return cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
 
     # ── Internal: Overview ─────────────────────────────────────────────
 
@@ -442,46 +471,51 @@ class PreviewGenerator:
             return
 
         loop = asyncio.get_event_loop()
-        tile_futures = [
-            loop.run_in_executor(
-                self._executor,
-                self._generate_tile,
-                raw_frame,
-                frame_idx,
-                viewport,
-                scale,
-                col,
-                row,
-            )
+        self._tile_futures = [
+            loop.run_in_executor(self._executor, self._generate_tile, raw_frame, viewport, scale, col, row)
             for col, row in visible
         ]
 
         try:
-            for coro in asyncio.as_completed(tile_futures):
-                tile = await coro
-                await self._tile_sink(tile)  # type: ignore[misc]
+            tiles: list[PreviewTile] = []
+            for coro in asyncio.as_completed(self._tile_futures):
+                tiles.append(await coro)
         except asyncio.CancelledError:
             return  # new frame arrived, abandon remaining tiles
+        finally:
+            self._tile_futures = []
+
+        if tiles:
+            full_height, full_width = raw_frame.shape[:2]
+            batch = PreviewTiles(
+                info=PreviewTileInfo(
+                    frame_idx=frame_idx,
+                    width=self._target_width,
+                    height=self._target_width,
+                    full_width=full_width,
+                    full_height=full_height,
+                    levels=self.levels,
+                    fmt=self._fmt,
+                    colormap=self._colormap,
+                    scale=scale,
+                    viewport=viewport,
+                ),
+                tiles=tiles,
+            )
+            await self._tile_sink(batch)  # type: ignore[misc]
 
     def _generate_tile(
         self,
         raw_frame: np.ndarray,
-        frame_idx: int,
         viewport: PreviewViewport,
         scale: int,
         col: int,
         row: int,
     ) -> PreviewTile:
-        """Generate a single tile with viewport-proportional output size.
-
-        Each tile's output resolution is computed so that the total output across
-        all visible tiles ≈ target_width. This gives continuous quality improvement
-        as you zoom in, with no discrete jumps between scale levels.
-        """
+        """Generate a single tile with viewport-proportional output size."""
         full_height, full_width = raw_frame.shape[:2]
         grid = 2**scale
 
-        # Tile bounds in sensor pixels
         x0 = int(full_width * col / grid)
         y0 = int(full_height * row / grid)
         x1 = int(full_width * (col + 1) / grid)
@@ -492,7 +526,6 @@ class PreviewGenerator:
         region_h = y1 - y0
 
         # Variable output: target_width * (tile_coverage / viewport_coverage)
-        # This maintains constant aggregate resolution across the viewport.
         vp_w = max(1, int(viewport.w * full_width))
         vp_h = max(1, int(viewport.h * full_height))
         out_w = min(region_w, max(1, int(self._target_width * region_w / vp_w)))
@@ -501,22 +534,7 @@ class PreviewGenerator:
         resized = self._downsample(tile_region, out_w, out_h)
         processed = self._apply_processing(resized, raw_frame.dtype)
 
-        info = PreviewTileInfo(
-            frame_idx=frame_idx,
-            width=out_w,
-            height=out_h,
-            full_width=full_width,
-            full_height=full_height,
-            levels=self.levels,
-            fmt=self._fmt,
-            colormap=self._colormap,
-            scale=scale,
-            col=col,
-            row=row,
-            viewport=viewport,
-        )
-
-        return PreviewTile.from_array(processed, info)
+        return PreviewTile(col=col, row=row, width=out_w, height=out_h, data=self._fmt(processed))
 
     # ── Internal: Shared Processing ────────────────────────────────────
 
@@ -542,7 +560,7 @@ class PreviewGenerator:
 # ── Encoding Functions ─────────────────────────────────────────────────
 
 
-def convert_to_jpeg(frame: np.ndarray, quality: int = 100) -> bytes:
+def convert_to_jpeg(frame: np.ndarray, quality: int = 85) -> bytes:
     """Convert a NumPy array (BGR image) to JPEG-encoded bytes using OpenCV."""
     encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
     success, encoded_image = cv2.imencode(".jpg", cast("cv2.UMat", frame), encode_params)

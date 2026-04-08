@@ -22,7 +22,7 @@ from vxl.camera.preview import (
     PreviewFrame,
     PreviewGenerator,
     PreviewLevels,
-    PreviewTile,
+    PreviewTiles,
     PreviewViewport,
 )
 from vxl.device import DeviceType
@@ -345,7 +345,7 @@ class CameraController(DeviceController[Camera]):
         self._frame_idx = 0
         self._previewer = PreviewGenerator(
             frame_sink=self._on_preview_frame,
-            tile_sink=self._on_preview_tile,
+            tile_sink=self._on_preview_tiles,
             uid=device.uid,
         )
         self._writer: OMEZarrWriter | None = None
@@ -368,11 +368,11 @@ class CameraController(DeviceController[Camera]):
         with suppress(RuntimeError):
             fire_and_forget(self.publish("preview", frame.pack()), log=self.log)
 
-    async def _on_preview_tile(self, tile: PreviewTile) -> None:
+    async def _on_preview_tiles(self, batch: PreviewTiles) -> None:
         if not self._preview_publishing:
             return
         with suppress(RuntimeError):
-            await self.publish("preview_tile", tile.pack())
+            await self.publish("preview_tile", batch.pack())
 
     @describe(label="Update Preview Viewport")
     async def update_preview_viewport(self, viewport: PreviewViewport):
@@ -390,6 +390,11 @@ class CameraController(DeviceController[Camera]):
             self._preview_publishing = True
             await self._previewer.reprocess()
             self._preview_publishing = False
+
+    @describe(label="Clear Preview Cache")
+    async def clear_preview_cache(self) -> None:
+        """Clear cached frame. Called on profile change."""
+        self._previewer.clear_cache()
 
     @describe(label="Update Preview Colormap")
     async def update_preview_colormap(self, colormap: str | None) -> None:
