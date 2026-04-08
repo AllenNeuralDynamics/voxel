@@ -1990,7 +1990,7 @@ source = { editable = "web" }
 dependencies = [
     { name = "fastapi" },
     { name = "uvicorn" },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
     { name = "vxl" },
     { name = "websockets" },
 ]
@@ -1999,7 +1999,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.121.1" },
     { name = "uvicorn", specifier = ">=0.38.0" },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
     { name = "vxl", editable = "." },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
