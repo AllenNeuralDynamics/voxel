@@ -35,7 +35,7 @@
 
   // ── Colormap Colors ────────────────────────────────────────────────
 
-  const gradientId = `ch-grad-${crypto.randomUUID().slice(0, 8)}`;
+  const gradientId = `ch-grad-${Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('')}`;
 
   const colors = $derived.by(() => {
     if (!colormap) return ['#06b6d4'];
