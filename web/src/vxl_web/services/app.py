@@ -12,7 +12,6 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -23,6 +22,7 @@ from pydantic import BaseModel
 from vxl import Session
 from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets, resolve_metadata_class
 from vxl.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
+from vxl_web.services.msg_queue import MsgQueue
 from vxlib import fire_and_forget
 
 from .acq import acq_router
@@ -88,7 +88,7 @@ class AppService:
     def __init__(self, system_config: SystemConfig):
         self.system_config = system_config
         self.session_service: SessionService | None = None
-        self.clients: dict[str, asyncio.Queue[tuple[str, Any]]] = {}
+        self.clients: dict[str, MsgQueue] = {}
         self._log_handler: _WebSocketLogHandler | None = None
         self._phase: AppPhase = "idle"
         self._status_lock = asyncio.Lock()  # Serialize status fetching (ZMQ calls)
@@ -124,38 +124,29 @@ class AppService:
 
     # ==================== Client Management ====================
 
-    def _broadcast(
-        self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None
-    ) -> None:
-        """Broadcast to all clients. Dict = JSON message, bytes = binary.
+    def _broadcast(self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None) -> None:
+        """Broadcast to all clients. Dict = JSON control, bytes = binary preview.
 
-        Args:
-            data: The message to broadcast. Empty dict is skipped.
-            with_status: If True, also schedule a full app status broadcast.
-            exclude: Optional client_id to exclude from this broadcast (e.g. the sender).
+        Control messages (JSON) get priority=0, preview data (bytes) gets priority=1.
         """
-        # Only broadcast if there's actual data (skip empty dicts)
         if data:
             msg_type = "bytes" if isinstance(data, bytes) else "json"
+            priority = 1 if msg_type == "bytes" else 0
             for client_id, queue in self.clients.items():
                 if client_id == exclude:
                     continue
-                with suppress(asyncio.QueueFull):
-                    queue.put_nowait((msg_type, data))
+                queue.put(msg_type, data, priority=priority)
 
         if with_status:
             self._schedule_status_broadcast()
 
-    async def _send_to_client(self, client_id: str, data: dict[str, Any]) -> None:
+    def _send_to_client(self, client_id: str, data: dict[str, Any]) -> None:
         """Send a message to a specific client."""
         queue = self.clients.get(client_id)
         if queue:
-            try:
-                await queue.put(("json", data))
-            except asyncio.QueueFull:
-                log.warning("Client %s queue full, dropping message", client_id)
+            queue.put("json", data)
 
-    async def add_client(self, client_id: str, queue: asyncio.Queue[tuple[str, Any]]) -> None:
+    async def add_client(self, client_id: str, queue: MsgQueue) -> None:
         """Register a new client and send initial status snapshot."""
         self.clients[client_id] = queue
         log.info("Client %s connected. Total: %d", client_id, len(self.clients))
@@ -163,7 +154,7 @@ class AppService:
         # Send initial app status (use lock to prevent ZMQ conflicts)
         async with self._status_lock:
             status = await self.get_app_status()
-            await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
+            self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
 
     def remove_client(self, client_id: str) -> None:
         """Remove a client from the distribution list."""
@@ -301,13 +292,13 @@ class AppService:
             # App-level topics
             if topic == "request_status":
                 status = await self.get_app_status()
-                await self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
+                self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
                 return
 
             # Session-level topics - delegate to session service
             if self.session_service is None:
                 log.warning("No active session for topic %s from client %s", topic, client_id)
-                await self._send_to_client(
+                self._send_to_client(
                     client_id,
                     {"topic": "error", "payload": {"error": "No active session", "topic": topic}},
                 )
@@ -317,13 +308,13 @@ class AppService:
 
         except (ValueError, RuntimeError) as e:
             log.warning("Client %s message '%s' rejected: %s", client_id, topic, e)
-            await self._send_to_client(
+            self._send_to_client(
                 client_id,
                 {"topic": "error", "payload": {"error": str(e), "topic": topic}},
             )
         except Exception as e:
             log.exception("Unexpected error handling message '%s' from client %s", topic, client_id)
-            await self._send_to_client(
+            self._send_to_client(
                 client_id,
                 {"topic": "error", "payload": {"error": str(e), "topic": topic}},
             )
@@ -361,18 +352,21 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
     """Unified WebSocket endpoint for all app, session, and rig communication."""
     await websocket.accept()
     client_id = str(uuid.uuid4())
-    message_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue(maxsize=500)
+    queue = MsgQueue()
 
-    await service.add_client(client_id, message_queue)
+    await service.add_client(client_id, queue)
 
     shutdown = asyncio.Event()
 
     async def sender():
-        """Send messages from queue to client."""
+        """Send messages from priority queue to client. Overviews before tiles."""
         try:
             while not shutdown.is_set():
                 try:
-                    msg_type, data = await asyncio.wait_for(message_queue.get(), timeout=0.1)
+                    result = await asyncio.wait_for(queue.drain(), timeout=0.1)
+                    if result is None:
+                        continue
+                    msg_type, data = result
                     if msg_type == "json":
                         await websocket.send_json(data)
                     elif msg_type == "bytes":
