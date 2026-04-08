@@ -22,7 +22,6 @@ from vxl.device import DeviceType
 from vxl.node import VoxelNode
 from vxl.stack import ChannelResult, Stack, StackResult, StackStatus, StorageConfig
 from vxl.sync import SyncTask
-from vxlib import fire_and_forget
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
 
@@ -76,7 +75,6 @@ class VoxelRig(Rig):
 
         self._mode: RigMode = RigMode.IDLE
         self._streaming_cameras: set[str] = set()
-        self._preview_viewport: PreviewViewport = PreviewViewport()
         self.sync_task: SyncTask | None = None
 
         # Topic registry for derived values (e.g. FOV)
@@ -615,11 +613,15 @@ class VoxelRig(Rig):
             except Exception:
                 self.log.exception(f"Camera {cam_id} failed to start preview")
 
-        # Apply crop to new cameras
+        # Apply viewport to cameras and start the coalescing flush loop
         if crop is not None:
-            await self.update_preview_viewport(crop)
-        elif self._preview_viewport.needs_adjustment:
-            await self.update_preview_viewport(self._preview_viewport)
+            self.preview.viewport = crop
+        if self.preview.viewport.needs_adjustment:
+            # Send initial viewport synchronously before streaming starts
+            vp = self.preview.viewport
+            tasks = [self.cameras[cam_id].update_preview_viewport(vp) for cam_id in self._streaming_cameras]
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.preview.start_viewport_flush(self._streaming_cameras)
 
         self._mode = RigMode.PREVIEWING
         self.log.info("Preview started (%d cameras)", len(self._streaming_cameras))
@@ -671,19 +673,12 @@ class VoxelRig(Rig):
     async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
         """Update preview viewport for cameras in the active profile.
 
-        The viewport is cached so it persists across preview restarts and profile switches.
-
-        During preview: fire-and-forget to cameras (don't block the event loop on RPC
-        roundtrips — the camera just sets an attribute, next frame picks it up).
-        When stopped: await so reprocess_viewport completes before returning.
+        During preview: coalesced via hub (instant, non-blocking).
+        When stopped: direct RPC for reprocessing cached frame.
         """
-        self._preview_viewport = viewport
+        self.preview.viewport = viewport
         if self._streaming_cameras:
-            # Fire-and-forget during preview: don't block event loop on RPC roundtrips.
-            # Safe because _preview_publishing flag on cameras gates the sinks — no orphaned
-            # publish tasks after stop_preview() sets the flag to False.
-            for cam_id in self._streaming_cameras:
-                fire_and_forget(self.cameras[cam_id].update_preview_viewport(viewport), log=self.log)
+            self.preview.update_viewport(viewport)
         else:
             camera_ids = {ch.detection for ch in self.active_channels.values() if ch.detection in self.cameras}
             if camera_ids:
@@ -732,6 +727,7 @@ class VoxelRig(Rig):
         # Disable lasers
         await self._disable_channel_lasers()
 
+        self.preview.stop_viewport_flush()
         self._mode = RigMode.IDLE
 
         self.log.info("Preview stopped")
@@ -872,18 +868,24 @@ class VoxelRig(Rig):
 
 
 class RigPreviewHub:
-    """Manages preview frame and tile streaming via handle subscriptions.
+    """Manages preview streaming: frame forwarding (camera->client) and viewport delivery (client->camera).
 
     Subscribes to both "preview" (overview frames) and "preview_tile" (tiles)
     topics for all cameras once at rig start. Maintains a camera->channel
     mapping that's updated when the active profile changes. This avoids
     subscription churn on profile switches and preview start/stop cycles.
+
+    Viewport updates are coalesced via an asyncio.Event — rapid pan events
+    collapse into a single RPC carrying the latest value, preventing adapter
+    lock contention with other commands (e.g., stop_preview).
     """
 
     def __init__(self, name: str = "PreviewManager"):
         """Initialize the preview manager."""
         self.log = logging.getLogger(name)
         self._frame_callback: Callable[[str, str, bytes], Awaitable[None]] | None = None
+        self.viewport: PreviewViewport = PreviewViewport()
+
         # Camera ID -> channel name mapping (from active profile)
         self._camera_to_channel: dict[str, str] = {}
         # Track subscriptions for cleanup: camera_id -> (handle, frame_cb, tile_cb)
@@ -891,9 +893,16 @@ class RigPreviewHub:
             str,
             tuple[CameraHandle, Callable[[bytes], Awaitable[None]], Callable[[bytes], Awaitable[None]]],
         ] = {}
+        # Camera handles for viewport delivery
+        self._cameras: dict[str, CameraHandle] = {}
+
+        # Viewport coalescing
+        self._viewport_event = asyncio.Event()
+        self._viewport_flush_task: asyncio.Task | None = None
 
     async def subscribe_cameras(self, cameras: dict[str, CameraHandle]) -> None:
         """Subscribe to all cameras (overview frames + tiles). Call once at rig start."""
+        self._cameras = cameras
         for camera_id, handle in cameras.items():
             if camera_id in self._subscriptions:
                 self.log.debug(f"Camera {camera_id} already subscribed")
@@ -920,11 +929,7 @@ class RigPreviewHub:
         return callback
 
     def set_channel_mapping(self, mapping: dict[str, str]) -> None:
-        """Update camera->channel mapping. Call on profile switch.
-
-        Args:
-            mapping: Dict mapping camera_id -> channel_name
-        """
+        """Update camera->channel mapping. Call on profile switch."""
         self._camera_to_channel = mapping
         self.log.debug(f"Updated channel mapping: {mapping}")
 
@@ -932,10 +937,49 @@ class RigPreviewHub:
         """Set the frame/tile distribution callback. Called once at service init."""
         self._frame_callback = callback
 
+    # ── Viewport Coalescing ────────────────────────────────────────
+
+    def update_viewport(self, viewport: PreviewViewport) -> None:
+        """Update viewport and signal the flush loop. Instant, non-blocking."""
+        self.viewport = viewport
+        self._viewport_event.set()
+
+    def start_viewport_flush(self, camera_ids: set[str]) -> None:
+        """Start the background viewport flush loop for given cameras."""
+        self._active_camera_ids = camera_ids
+        if self._viewport_flush_task is None or self._viewport_flush_task.done():
+            self._viewport_flush_task = asyncio.create_task(self._viewport_flush_loop())
+
+    def stop_viewport_flush(self) -> None:
+        """Stop the viewport flush loop."""
+        if self._viewport_flush_task is not None and not self._viewport_flush_task.done():
+            self._viewport_flush_task.cancel()
+            self._viewport_flush_task = None
+        self._viewport_event.clear()
+
+    async def _viewport_flush_loop(self) -> None:
+        """Coalesces rapid viewport updates into single RPCs."""
+        try:
+            while True:
+                await self._viewport_event.wait()
+                self._viewport_event.clear()
+                vp = self.viewport
+                tasks = [
+                    self._cameras[cam_id].update_preview_viewport(vp)
+                    for cam_id in self._active_camera_ids
+                    if cam_id in self._cameras
+                ]
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+        except asyncio.CancelledError:
+            return
+
+    # ── Lifecycle ──────────────────────────────────────────────────
+
     async def shutdown(self) -> None:
         """Unsubscribe all callbacks. Call on rig stop."""
         self.log.debug("shutting down preview manager")
-        # Clear callback first to prevent forwarding during unsubscribe teardown
+        self.stop_viewport_flush()
         self._frame_callback = None
         for camera_id, (handle, frame_cb, tile_cb) in self._subscriptions.items():
             try:
