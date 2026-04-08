@@ -199,6 +199,9 @@ class ControlPanel(QWidget):
 
     def _on_devices_ready(self) -> None:
         """Initialize controls when devices are ready."""
+        rig = self._app.rig
+        if rig:
+            rig.set_frame_callback(self._on_frame)
         self._refresh_profile_select()
         self.rebuild_channel_sections()
 
@@ -286,7 +289,7 @@ class ControlPanel(QWidget):
         rig = self._app.rig
         if rig:
             viewport = self._app.preview.viewport
-            await rig.start_preview(self._on_frame, crop=viewport)
+            await rig.start_preview(crop=viewport)
 
     async def _stop_preview(self) -> None:
         """Stop preview streaming."""

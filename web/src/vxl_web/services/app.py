@@ -198,7 +198,7 @@ class AppService:
 
     def _schedule_status_broadcast(self) -> None:
         """Schedule an async status broadcast. Use this from sync contexts."""
-        fire_and_forget(self._broadcast_status(), log=log)
+        fire_and_forget(self._broadcast_status(), log=log, timeout=5.0)
 
     # ==================== Session Lifecycle ====================
 
@@ -269,9 +269,8 @@ class AppService:
             raise RuntimeError("No active session to close")
 
         try:
-            # Stop preview if running
-            if self.session_service.rig_service.is_previewing:
-                await self.session_service.rig_service.rig.stop_preview()
+            # Stop preview if running (stop_preview is a no-op if not previewing)
+            await self.session_service.rig_service.rig.stop_preview()
 
             # Stop the rig
             await self.session_service.session.rig.stop()
@@ -283,7 +282,9 @@ class AppService:
         finally:
             self.session_service = None
             self._phase = "idle"
-            await self._broadcast_status()
+            if self.clients:
+                await self._broadcast_status()
+            log.debug("Session cleanup complete")
 
     # ==================== Message Handling ====================
 
@@ -407,7 +408,7 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
         shutdown.set()
         service.remove_client(client_id)
         # Auto-stop preview only if this was the last client
-        if len(service.clients) == 0 and service.session_service and service.session_service.rig_service.is_previewing:
+        if len(service.clients) == 0 and service.session_service:
             try:
                 log.info("Last client disconnected, stopping preview")
                 await service.session_service.rig_service.stop_preview()

@@ -369,6 +369,8 @@ class ClusterManager:
 
     async def stop(self):
         """Stop all nodes and cleanup."""
+        self.log.info("Stopping cluster...")
+
         if self._heartbeat_monitor_task:
             self._heartbeat_monitor_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -380,11 +382,12 @@ class ClusterManager:
                 await self._log_watch_task
 
         for device_id, client in self.handles.items():
-            self.log.debug(f"Closing device {device_id}")
+            self.log.debug(f"Closing device handle {device_id}")
             await client.close()
 
         all_nodes = set(self.nodes.keys())
         await self._shutdown_nodes(all_nodes, timeout_s=2.0)
 
-        self._control_socket.close()
-        self._log_socket.close()
+        self._control_socket.close(linger=0)
+        self._log_socket.close(linger=0)
+        self.log.info("Cluster stopped")

@@ -349,8 +349,11 @@ class CameraController(DeviceController[Camera]):
             uid=device.uid,
         )
         self._writer: OMEZarrWriter | None = None
+        self._preview_publishing = False  # gate for fire_and_forget publishes
 
     def close(self) -> None:
+        self._preview_publishing = False
+        self._publish_fn = None
         self._previewer.shutdown()
         super().close()
 
@@ -360,31 +363,40 @@ class CameraController(DeviceController[Camera]):
         return self._mode
 
     def _on_preview_frame(self, frame: PreviewFrame) -> None:
-        if self._mode == CameraMode.ACQUISITION:
+        if not self._preview_publishing:
             return
         with suppress(RuntimeError):
             fire_and_forget(self.publish("preview", frame.pack()), log=self.log)
 
     def _on_preview_tile(self, tile: PreviewTile) -> None:
-        if self._mode == CameraMode.ACQUISITION:
+        if not self._preview_publishing:
             return
         with suppress(RuntimeError):
             fire_and_forget(self.publish("preview_tile", tile.pack()), log=self.log)
 
     @describe(label="Update Preview Viewport")
     async def update_preview_viewport(self, viewport: PreviewViewport):
-        await self._previewer.reprocess_viewport(viewport)
+        if self._mode == CameraMode.PREVIEW:
+            self._previewer.viewport = viewport
+        else:
+            self._preview_publishing = True
+            await self._previewer.reprocess_viewport(viewport)
+            self._preview_publishing = False
 
     @describe(label="Update Preview Levels")
     async def update_preview_levels(self, levels: PreviewLevels):
         self._previewer.levels = levels
         if self._mode != CameraMode.PREVIEW:
+            self._preview_publishing = True
             await self._previewer.reprocess()
+            self._preview_publishing = False
 
     @describe(label="Update Preview Colormap")
     async def update_preview_colormap(self, colormap: str | None) -> None:
         self._previewer.colormap = colormap
+        self._preview_publishing = True
         await self._previewer.reprocess()
+        self._preview_publishing = False
 
     @property
     @describe(label="Preview Config", stream=True)
@@ -417,6 +429,7 @@ class CameraController(DeviceController[Camera]):
         await self._run_sync(_arm_and_start)
 
         self._mode = CameraMode.PREVIEW
+        self._preview_publishing = True
         self._frame_idx = 0
         self._preview_task = asyncio.create_task(self._preview_loop())
 
@@ -440,6 +453,8 @@ class CameraController(DeviceController[Camera]):
             return
 
         self._mode = CameraMode.IDLE
+        self._preview_publishing = False  # immediately blocks all fire_and_forget publishes
+        self._previewer.cancel_tile_task()
         if self._preview_task:
             await self._preview_task
             self._preview_task = None

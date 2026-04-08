@@ -47,6 +47,9 @@ class RigService:
         self._broadcast = broadcast
         self._preview_lock = asyncio.Lock()
 
+        # Wire frame/tile distribution once at init
+        rig.set_frame_callback(self._distribute_frames)
+
         # Subscribe to device property topics from rig
         self._unsub_device_props: list[Callable[[], None]] = []
         for device_id in rig.handles:
@@ -97,27 +100,19 @@ class RigService:
     async def _handle_preview_start(self):
         """Start preview streaming."""
         async with self._preview_lock:
-            if not self.is_previewing:
-                log.info("Starting rig preview")
-                await self.rig.start_preview(frame_callback=self._distribute_frames)
-
+            await self.rig.start_preview()
         self._broadcast({}, with_status=True)
 
     async def _handle_preview_stop(self):
         """Stop preview streaming."""
         async with self._preview_lock:
-            if self.is_previewing:
-                log.info("Stopping rig preview")
-                await self.rig.stop_preview()
-
+            await self.rig.stop_preview()
         self._broadcast({}, with_status=True)
 
     async def stop_preview(self):
         """Stop preview (used during last client disconnect)."""
         async with self._preview_lock:
-            if self.is_previewing:
-                log.info("Last client disconnected. Stopping rig preview.")
-                await self.rig.stop_preview()
+            await self.rig.stop_preview()
         self._broadcast({}, with_status=True)
 
     async def _handle_preview_viewport(self, payload: dict[str, Any], *, sender_id: str | None = None):
@@ -293,10 +288,6 @@ class RigService:
         except Exception:
             log.exception("Failed to broadcast waveforms")
 
-    @property
-    def is_previewing(self) -> bool:
-        """Check if preview is active."""
-        return self.rig.preview.is_active
 
 
 # ==================== Dependencies ====================

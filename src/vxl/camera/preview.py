@@ -318,6 +318,7 @@ class PreviewGenerator:
         self._current_frame: np.ndarray | None = None
         self._colormap: str | None = None
         self._lut: np.ndarray | None = None  # (256, 3) uint8, cached
+        self._tile_task: asyncio.Task | None = None  # background tile generation
         self.log = logging.getLogger(f"{self._uid}.PreviewGenerator")
 
         # Parallel executor for tile generation (4 workers for concurrent tile processing)
@@ -336,20 +337,22 @@ class PreviewGenerator:
     async def new_frame(self, frame: np.ndarray, idx: int) -> None:
         """Process a new raw frame: generate overview + tiles.
 
-        Overview is always generated first. Then tiles are generated in parallel
-        and sent as they complete for progressive loading on the frontend.
+        Overview blocks (quick, carries histogram). Tiles are fired off as a
+        background task so the preview loop can immediately grab the next frame.
+        If tiles from the previous frame are still generating, they're cancelled.
         """
         self._idx = idx
         self._current_frame = frame
         loop = asyncio.get_event_loop()
 
-        # 1) Always generate overview (histogram, fallback)
+        # 1) Always generate overview (histogram, fallback) — blocks
         overview = await loop.run_in_executor(self._executor, self._generate_overview, frame, idx)
         self._frame_sink(overview)
 
-        # 2) Generate tiles in parallel
+        # 2) Fire-and-forget tiles — cancel stale in-flight tiles from previous frame
         if self._tile_sink is not None:
-            await self._generate_and_send_tiles(frame, idx, self.viewport)
+            self.cancel_tile_task()
+            self._tile_task = asyncio.create_task(self._generate_and_send_tiles(frame, idx, self.viewport))
 
     def new_frame_sync(self, frame: np.ndarray, idx: int) -> None:
         """Synchronous version — blocks until complete. Use in non-async contexts."""
@@ -391,9 +394,16 @@ class PreviewGenerator:
         if self._tile_sink is not None and self._current_frame is not None:
             await self._generate_and_send_tiles(self._current_frame, self._idx, viewport)
 
+    def cancel_tile_task(self) -> None:
+        """Cancel in-flight background tile generation."""
+        if self._tile_task is not None and not self._tile_task.done():
+            self._tile_task.cancel()
+            self._tile_task = None
+
     def shutdown(self) -> None:
         """Shutdown the preview generator and cleanup resources."""
-        self._executor.shutdown(wait=True, cancel_futures=True)
+        self.cancel_tile_task()
+        self._executor.shutdown(wait=False, cancel_futures=True)
 
     # ── Internal: Overview ─────────────────────────────────────────────
 
@@ -462,9 +472,12 @@ class PreviewGenerator:
             for col, row in visible
         ]
 
-        for coro in asyncio.as_completed(tile_futures):
-            tile = await coro
-            self._tile_sink(tile)  # type: ignore[misc]
+        try:
+            for coro in asyncio.as_completed(tile_futures):
+                tile = await coro
+                self._tile_sink(tile)  # type: ignore[misc]
+        except asyncio.CancelledError:
+            return  # new frame arrived, abandon remaining tiles
 
     def _generate_tile(
         self,

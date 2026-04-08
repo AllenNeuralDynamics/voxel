@@ -270,8 +270,7 @@ class VoxelApp(QObject):
             self.grid.unbind_session()
             self.stage.unbind()
 
-            if self._session.rig.preview.is_active:
-                await self._session.rig.stop_preview()
+            await self._session.rig.stop_preview()
 
             await self._session.rig.stop()
             log.info("Session closed: %s", self._session.session_dir)
