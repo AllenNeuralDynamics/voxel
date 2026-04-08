@@ -226,38 +226,25 @@ type PreviewTileSink = Callable[[PreviewTile], Awaitable[None]]
 
 
 MAX_SCALE = 6  # 64x64 grid max
-DEFAULT_TILE_SIZE = 1024  # output pixels per tile
+TILES_PER_VIEWPORT = 3  # target tiles visible per viewport axis
+DEFAULT_PREVIEW_WIDTH = 1500  # aggregate output resolution across viewport
 
 
-def select_scale(
-    viewport: PreviewViewport,
-    sensor_w: int,
-    sensor_h: int,
-    tile_size: int = DEFAULT_TILE_SIZE,
-) -> int:
-    """Pick pyramid scale for current viewport.
+def select_scale(viewport: PreviewViewport) -> int:
+    """Pick pyramid scale for spatial partitioning.
 
-    Scale S means a 2^S x 2^S grid of tiles covering the full sensor.
-    At scale S, each tile covers (sensor / 2^S) raw pixels per axis.
-
-    The scale is chosen based on zoom level (viewport), capped by the finest
-    scale where tiles still have enough raw data (determined by tile_size).
+    Scale determines grid density (2^S x 2^S), NOT tile quality. Quality is
+    handled by variable tile output size in _generate_tile. Scale is chosen
+    so that ~TILES_PER_VIEWPORT tiles span each viewport axis, giving good
+    spatial cache granularity for panning.
     """
-    sensor_max = max(sensor_w, sensor_h)
-    if sensor_max <= tile_size:
-        return 0
-
-    # Max scale: one level beyond strict no-upsample threshold.
-    max_scale = min(MAX_SCALE, int(math.log2(sensor_max / tile_size)) + 1)
-
-    # At full viewport (no zoom), scale 1 gives 2x2 tiles
     viewport_max = max(viewport.w, viewport.h)
     if viewport_max >= 1.0:
         return 1
 
-    # Ideal scale from zoom level, prefer finer resolution (ceil)
-    ideal = max(1, math.ceil(math.log2(1.0 / viewport_max)))
-    return min(ideal, max_scale)
+    # ~TILES_PER_VIEWPORT tiles visible per axis
+    ideal = max(1, round(math.log2(TILES_PER_VIEWPORT / viewport_max)))
+    return min(ideal, MAX_SCALE)
 
 
 def compute_visible_tiles(
@@ -297,8 +284,7 @@ class PreviewGenerator:
         tile_sink: PreviewTileSink | None = None,
         uid: str = "camera",
         *,
-        target_width: int = 1024,
-        tile_size: int = DEFAULT_TILE_SIZE,
+        target_width: int = DEFAULT_PREVIEW_WIDTH,
         fmt: PreviewFmt = PreviewFmt.JPEG,
         viewport: PreviewViewport | None = None,
         levels: PreviewLevels | None = None,
@@ -307,7 +293,6 @@ class PreviewGenerator:
         self._frame_sink = frame_sink
         self._tile_sink = tile_sink
         self._target_width: int = target_width
-        self._tile_size: int = tile_size
         self._fmt: PreviewFmt = fmt or PreviewFmt.JPEG
         self.viewport = viewport or PreviewViewport()
         self.levels = levels or PreviewLevels()
@@ -450,8 +435,7 @@ class PreviewGenerator:
 
     async def _generate_and_send_tiles(self, raw_frame: np.ndarray, frame_idx: int, viewport: PreviewViewport) -> None:
         """Generate visible tiles in parallel and send each as it completes."""
-        full_height, full_width = raw_frame.shape[:2]
-        scale = select_scale(viewport, full_width, full_height, self._tile_size)
+        scale = select_scale(viewport)
 
         visible = compute_visible_tiles(viewport, scale)
         if not visible:
@@ -488,7 +472,12 @@ class PreviewGenerator:
         col: int,
         row: int,
     ) -> PreviewTile:
-        """Generate a single tile (runs in thread pool)."""
+        """Generate a single tile with viewport-proportional output size.
+
+        Each tile's output resolution is computed so that the total output across
+        all visible tiles ≈ target_width. This gives continuous quality improvement
+        as you zoom in, with no discrete jumps between scale levels.
+        """
         full_height, full_width = raw_frame.shape[:2]
         grid = 2**scale
 
@@ -502,13 +491,12 @@ class PreviewGenerator:
         region_w = x1 - x0
         region_h = y1 - y0
 
-        # Resize: cap the wider dimension to tile_size, preserve aspect
-        if region_w >= region_h:
-            out_w = min(self._tile_size, region_w)
-            out_h = max(1, int(out_w * region_h / region_w))
-        else:
-            out_h = min(self._tile_size, region_h)
-            out_w = max(1, int(out_h * region_w / region_h))
+        # Variable output: target_width * (tile_coverage / viewport_coverage)
+        # This maintains constant aggregate resolution across the viewport.
+        vp_w = max(1, int(viewport.w * full_width))
+        vp_h = max(1, int(viewport.h * full_height))
+        out_w = min(region_w, max(1, int(self._target_width * region_w / vp_w)))
+        out_h = min(region_h, max(1, int(self._target_width * region_h / vp_h)))
 
         resized = self._downsample(tile_region, out_w, out_h)
         processed = self._apply_processing(resized, raw_frame.dtype)
