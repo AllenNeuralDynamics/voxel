@@ -186,7 +186,7 @@ class RigNode:
             self.log.info("Interrupted, cleaning up...")
             await self._cleanup()
         finally:
-            self._control_socket.close()
+            self._control_socket.close(linger=0)
 
     async def _handle_provision(self, msg: NodeMessage):
         """Build devices from rig-provided config."""
@@ -256,7 +256,7 @@ class RigNode:
 
         for device_id, service in self._device_servers.items():
             try:
-                service.close()
+                await service.close()
             except Exception:
                 self.log.exception(f"Error closing {device_id}")
 
@@ -270,9 +270,16 @@ class RigNode:
 
     async def _cleanup(self):
         """Cleanup all devices (for terminate or interrupt)."""
+        # Stop heartbeat loop
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._heartbeat_task
+
         for device_id, server in self._device_servers.items():
+            self.log.debug(f"Closing device service {device_id}")
             try:
-                server.close()
+                await server.close()
             except Exception:
                 self.log.exception(f"Error closing {device_id}")
 

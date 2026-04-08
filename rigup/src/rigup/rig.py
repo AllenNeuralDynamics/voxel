@@ -190,6 +190,8 @@ class Rig:
 
     async def stop(self):
         """Stop all devices and cleanup."""
+        self.log.info("Stopping rig...")
+
         # Close local handles
         for uid, handle in self.handles.items():
             if handle.device is not None:
@@ -203,4 +205,4 @@ class Rig:
         # Cleanup auto-created ZMQ context
         if self._owns_zctx and self.zctx is not None:
             self.zctx.term()
-            self.log.debug("Terminated auto-created ZMQ context")
+            self.log.debug("ZMQ context terminated")

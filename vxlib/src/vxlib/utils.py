@@ -76,6 +76,7 @@ def fire_and_forget(
     *,
     name: str | None = None,
     log: logging.Logger | None = None,
+    timeout: float | None = None,
 ) -> asyncio.Task:
     """Create a fire-and-forget task with automatic exception logging.
 
@@ -87,19 +88,29 @@ def fire_and_forget(
         coro: The coroutine to run.
         name: Optional name for the task (for debugging).
         log: Optional logger to use. Defaults to vxlib.utils logger.
+        timeout: Maximum seconds the task may run before being cancelled.
+            Defaults to 10s. Pass None to disable.
 
     Returns:
         The created task (stored reference prevents garbage collection).
     """
     logger = log or _log
 
+    async def _with_timeout() -> None:
+        async with asyncio.timeout(timeout):
+            await coro
+
     def handle_exception(task: asyncio.Task) -> None:
         if task.cancelled():
             return
         if exc := task.exception():
-            logger.error("Background task %s failed", task.get_name(), exc_info=exc)
+            if isinstance(exc, TimeoutError):
+                logger.warning("Background task %s timed out after %ss", task.get_name(), timeout)
+            else:
+                logger.error("Background task %s failed", task.get_name(), exc_info=exc)
 
-    task = asyncio.create_task(coro, name=name)
+    wrapped = _with_timeout() if timeout is not None else coro
+    task = asyncio.create_task(wrapped, name=name)
     task.add_done_callback(handle_exception)
     return task
 

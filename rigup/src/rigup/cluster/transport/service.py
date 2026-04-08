@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from contextlib import suppress
 
 import zmq
 import zmq.asyncio
@@ -100,17 +101,19 @@ class ZMQService:
                 self.log.exception("Command loop error")
                 await _reply(Results(results={"_error": Result(ErrorMsg(msg=str(e)))}))
 
-    def close(self):
-        """Close sockets and cleanup."""
-        self._cleanup()
-
-    def _cleanup(self):
+    async def close(self):
+        """Close sockets and cleanup. Awaits task cancellation before closing sockets."""
         if hasattr(self, "_cmd_task"):
             self._cmd_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._cmd_task
 
-        self._rep_socket.close()
-        self._pub_socket.close()
+        self._rep_socket.close(linger=0)
+        self._pub_socket.close(linger=0)
         self._controller.close()
 
     def __del__(self):
-        self._cleanup()
+        if hasattr(self, "_rep_socket") and not self._rep_socket.closed:
+            self._rep_socket.close(linger=0)
+        if hasattr(self, "_pub_socket") and not self._pub_socket.closed:
+            self._pub_socket.close(linger=0)

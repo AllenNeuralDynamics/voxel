@@ -61,6 +61,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
         self._listen_task = asyncio.create_task(self._listen_loop())
         self._props_callbacks: list[PropsCallback] = []
         self._stream_callbacks: dict[str, list[StreamCallback]] = defaultdict(list)
+        self._pending_recv: asyncio.Future | None = None
 
     @property
     def uid(self) -> str:
@@ -102,14 +103,23 @@ class ZMQAdapter[D: Device](Adapter[D]):
         results = await self.run_commands([CommandRequest(attr=command, args=list(args), kwargs=kwargs)])
         return results[f"0:{command}"]
 
+    async def _recv_reply(self) -> Any:
+        """Receive a JSON reply, tracking the future so close() can cancel it."""
+        f = self._req_socket.recv_json()
+        # pyzmq async sockets return Futures, store reference so close() can cancel
+        self._pending_recv = f if isinstance(f, asyncio.Future) else None
+        try:
+            return await f
+        finally:
+            self._pending_recv = None
+
     async def run_commands(self, commands: list[CommandRequest]) -> Results:
         """Execute multiple commands in a single round-trip."""
         req = CommandRequests(device=self.uid, commands=commands)
         payload = req.model_dump_json().encode()
         async with self._lock:
             await self._req_socket.send_multipart([_RUN_CMDS_, payload])
-            response_json = await self._req_socket.recv_json()
-            return Results.model_validate(response_json)
+            return Results.model_validate(await self._recv_reply())
 
     async def get_props(self, *props: str) -> PropResults:
         """Get property values from the device."""
@@ -117,8 +127,7 @@ class ZMQAdapter[D: Device](Adapter[D]):
         payload = req.model_dump_json().encode()
         async with self._lock:
             await self._req_socket.send_multipart([_GET_PROPS_, payload])
-            response_json = await self._req_socket.recv_json()
-            return PropResults.model_validate(response_json)
+            return PropResults.model_validate(await self._recv_reply())
 
     async def set_props(self, **props: Any) -> PropResults:
         """Set property values on the device."""
@@ -126,15 +135,13 @@ class ZMQAdapter[D: Device](Adapter[D]):
         payload = req.model_dump_json().encode()
         async with self._lock:
             await self._req_socket.send_multipart([_SET_PROPS_, payload])
-            response_json = await self._req_socket.recv_json()
-            return PropResults.model_validate(response_json)
+            return PropResults.model_validate(await self._recv_reply())
 
     async def interface(self) -> DeviceInterface:
         """Get the device interface information."""
         async with self._lock:
             await self._req_socket.send_multipart([_INTERFACE_, b""])
-            response_json = await self._req_socket.recv_json()
-            results = Results.model_validate(response_json)
+            results = Results.model_validate(await self._recv_reply())
             return DeviceInterface.model_validate(results["interface"].unwrap())
 
     async def close(self) -> None:
@@ -144,11 +151,16 @@ class ZMQAdapter[D: Device](Adapter[D]):
             with suppress(asyncio.CancelledError):
                 await self._listen_task
 
+        # Cancel any pending REQ recv so pyzmq's _chain callback sees f.done()=True
+        # and returns early instead of raising CancelledError on the internal future.
+        if self._pending_recv and not self._pending_recv.done():
+            self._pending_recv.cancel()
+
         if self._sub_socket:
-            self._sub_socket.close()
+            self._sub_socket.close(linger=0)
 
         if self._req_socket:
-            self._req_socket.close()
+            self._req_socket.close(linger=0)
 
     async def _listen_loop(self):
         """Background loop that receives and dispatches updates."""
