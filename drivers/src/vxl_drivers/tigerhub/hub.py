@@ -1,12 +1,12 @@
 from collections.abc import Iterable
 from threading import RLock
 
+from rigup import Device
+from vxlib import Poller
+
 from vxl_drivers.tigerhub.box import TigerBox
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
 from vxl_drivers.tigerhub.ops.params import TigerParams
-
-from rigup import Device
-from vxlib import Poller
 
 
 class UnknownAxisError(ValueError):
@@ -24,24 +24,30 @@ class AxisAlreadyReservedError(ValueError):
 class TigerHub(Device):
     """Hub wrapper around a single TigerBox. Manages axis reservations."""
 
-    def __init__(self, box: TigerBox | str) -> None:
-        super().__init__(uid="TigerHub")
+    def __init__(self, box: TigerBox | str, uid: str = "tiger_controller") -> None:
+        super().__init__(uid=uid)
         if isinstance(box, str):
             box = TigerBox(box)
         self._box = box
         self._lock = RLock()  # for reserving/releasing axes
-        self._reserved: set[str] = set()  # UIDs like 'X', 'Y', 'T' based on TigerBox axis names
+        self._reserved: set[str] = (
+            set()
+        )  # UIDs like 'X', 'Y', 'T' based on TigerBox axis names
 
         # Polling state
         self._state_cache: dict[str, dict] = {}
         self._cache_lock = RLock()
 
         # Fast poller for real-time state (position, moving)
-        self._fast_poller = Poller(callback=self._update_fast_state, poll_interval_s=0.05)
+        self._fast_poller = Poller(
+            callback=self._update_fast_state, poll_interval_s=0.05
+        )
         self._fast_poller.start()
 
         # Slow poller for configuration properties (speed, limits, etc.)
-        self._slow_poller = Poller(callback=self._update_slow_state, poll_interval_s=1.0)
+        self._slow_poller = Poller(
+            callback=self._update_slow_state, poll_interval_s=1.0
+        )
         self._slow_poller.start()
 
     def _update_fast_state(self) -> None:
@@ -50,8 +56,8 @@ class TigerHub(Device):
             reserved_axes = list(self._reserved)
 
         if reserved_axes:
-            positions = self.box.get_position(reserved_axes)
-            moving = self.box.is_axis_moving(reserved_axes)
+            positions = self._box.get_position(reserved_axes)
+            moving = self._box.is_axis_moving(reserved_axes)
 
             with self._cache_lock:
                 for axis in reserved_axes:
@@ -71,12 +77,12 @@ class TigerHub(Device):
 
         # Query configuration parameters
         try:
-            speeds = self.box.get_param(TigerParams.SPEED, reserved_axes)
-            accels = self.box.get_param(TigerParams.ACCEL, reserved_axes)
-            backlashes = self.box.get_param(TigerParams.BACKLASH, reserved_axes)
-            upper_limits = self.box.get_param(TigerParams.LIMIT_HIGH, reserved_axes)
-            lower_limits = self.box.get_param(TigerParams.LIMIT_LOW, reserved_axes)
-            homes = self.box.get_param(TigerParams.HOME_POS, reserved_axes)
+            speeds = self._box.get_param(TigerParams.SPEED, reserved_axes)
+            accels = self._box.get_param(TigerParams.ACCEL, reserved_axes)
+            backlashes = self._box.get_param(TigerParams.BACKLASH, reserved_axes)
+            upper_limits = self._box.get_param(TigerParams.LIMIT_HIGH, reserved_axes)
+            lower_limits = self._box.get_param(TigerParams.LIMIT_LOW, reserved_axes)
+            homes = self._box.get_param(TigerParams.HOME_POS, reserved_axes)
 
             with self._cache_lock:
                 for axis in reserved_axes:

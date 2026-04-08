@@ -17,6 +17,8 @@
     "@eslint/compat": "^1.4.1",
     "@eslint/js": "^9.39.2",
     "@iconify-json/et": "^1.2.1",
+    "@iconify-json/iconoir": "^1.2.10",
+    "@iconify-json/lucide": "^1.2.101",
     "@iconify-json/lucide-lab": "^1.2.3",
     "@iconify-json/mdi": "^1.2.3",
     "@iconify-json/ph": "^1.2.2",

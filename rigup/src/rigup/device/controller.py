@@ -35,12 +35,14 @@ class DeviceController[D: Device]:
         self._device = device
         self._publish_fn: PublishFn | None = None
         self._stream_interval = stream_interval
-        self._thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"Ctrl-{device.uid}")
+        self._thread_pool = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix=f"Ctrl-{device.uid}"
+        )
         self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
 
         # Collect device commands/properties
         device_commands = collect_commands(device)
-        self._device_props = collect_properties(device)
+        self._device_props = collect_properties(device, strict=True)
 
         # Collect controller's own commands and properties (strict: only @describe-decorated)
         ctrl_commands = collect_commands(self, strict=True)
@@ -57,7 +59,9 @@ class DeviceController[D: Device]:
         )
 
         # Property streaming state
-        self._stream_props: set[str] = {name for name, info in all_properties.items() if info.stream}
+        self._stream_props: set[str] = {
+            name for name, info in all_properties.items() if info.stream
+        }
         self._stream_task: asyncio.Task | None = None
 
     @property
@@ -83,7 +87,9 @@ class DeviceController[D: Device]:
     async def _run_sync[R](self, fn: Callable[..., R], *args: Any, **kwargs: Any) -> R:
         """Run a sync function in the thread pool."""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._thread_pool, lambda: fn(*args, **kwargs))
+        return await loop.run_in_executor(
+            self._thread_pool, lambda: fn(*args, **kwargs)
+        )
 
     async def execute_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         if command not in self._commands:
@@ -126,7 +132,9 @@ class DeviceController[D: Device]:
                     result = await self._run_sync(cmd, *cmd_req.args, **cmd_req.kwargs)
                 results[key] = Result(result)
             except Exception as e:
-                self.log.exception("", extra={"action": "cmd.fail", "target": cmd_req.attr})
+                self.log.exception(
+                    "", extra={"action": "cmd.fail", "target": cmd_req.attr}
+                )
                 results[key] = Result(ErrorMsg(msg=str(e)))
         return Results(results=results)
 
@@ -138,7 +146,9 @@ class DeviceController[D: Device]:
             for name in props_to_get:
                 try:
                     target = self._device if name in self._device_props else self
-                    results[name] = Result(PropertyModel.from_value(getattr(target, name)))
+                    results[name] = Result(
+                        PropertyModel.from_value(getattr(target, name))
+                    )
                 except Exception as e:
                     results[name] = Result(ErrorMsg(msg=str(e)))
             return PropResults(results=results)
@@ -155,7 +165,9 @@ class DeviceController[D: Device]:
                 try:
                     target = self._device if name in self._device_props else self
                     setattr(target, name, value)
-                    results[name] = Result(PropertyModel.from_value(getattr(target, name)))
+                    results[name] = Result(
+                        PropertyModel.from_value(getattr(target, name))
+                    )
                 except Exception as e:
                     results[name] = Result(ErrorMsg(msg=str(e)))
             return PropResults(results=results)
