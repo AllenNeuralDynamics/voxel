@@ -2,11 +2,10 @@ from collections.abc import Iterable
 from threading import RLock
 
 from rigup import Device
-from vxlib import Poller
-
 from vxl_drivers.tigerhub.box import TigerBox
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
 from vxl_drivers.tigerhub.ops.params import TigerParams
+from vxlib import Poller
 
 
 class UnknownAxisError(ValueError):
@@ -30,24 +29,18 @@ class TigerHub(Device):
             box = TigerBox(box)
         self._box = box
         self._lock = RLock()  # for reserving/releasing axes
-        self._reserved: set[str] = (
-            set()
-        )  # UIDs like 'X', 'Y', 'T' based on TigerBox axis names
+        self._reserved: set[str] = set()  # UIDs like 'X', 'Y', 'T' based on TigerBox axis names
 
         # Polling state
         self._state_cache: dict[str, dict] = {}
         self._cache_lock = RLock()
 
         # Fast poller for real-time state (position, moving)
-        self._fast_poller = Poller(
-            callback=self._update_fast_state, poll_interval_s=0.05
-        )
+        self._fast_poller = Poller(callback=self._update_fast_state, poll_interval_s=0.05)
         self._fast_poller.start()
 
         # Slow poller for configuration properties (speed, limits, etc.)
-        self._slow_poller = Poller(
-            callback=self._update_slow_state, poll_interval_s=1.0
-        )
+        self._slow_poller = Poller(callback=self._update_slow_state, poll_interval_s=1.0)
         self._slow_poller.start()
 
     def _update_fast_state(self) -> None:

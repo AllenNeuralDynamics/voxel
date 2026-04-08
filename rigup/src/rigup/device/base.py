@@ -362,7 +362,7 @@ class PropResults(Results[PropertyModel]):
 PropsCallback = Callable[["PropResults"], Awaitable[None]]
 
 
-def collect_properties(obj: Any, strict: bool = False) -> dict[str, PropertyInfo]:
+def collect_properties(obj: Any, strict: bool = True) -> dict[str, PropertyInfo]:
     """Collect all properties from an object (device or service).
 
     Searches through the Method Resolution Order (MRO) to find @describe decorators

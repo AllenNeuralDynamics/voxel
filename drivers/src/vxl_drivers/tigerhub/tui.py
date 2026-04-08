@@ -31,6 +31,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+
 from vxl_drivers.tigerhub.box import TigerBox
 from vxl_drivers.tigerhub.model.box_info import BoxInfo
 from vxl_drivers.tigerhub.ops.joystick import JoystickInput
