@@ -165,9 +165,9 @@
   <div class="flex min-h-0 flex-1">
     <aside class="hidden w-56 shrink-0 flex-col border-r border-border bg-card py-3 @[850px]:flex">
       <div class="flex-1 space-y-2 overflow-auto">
-        <!-- Channels -->
+        <!-- Overview -->
         <nav class="px-3">
-          <button onclick={() => nav('/')} class={navClass(isChannelsActive)}>Channels</button>
+          <button onclick={() => nav('/')} class={navClass(isChannelsActive)}>Overview</button>
         </nav>
 
         <!-- Profiles -->
@@ -219,9 +219,11 @@
     </aside>
 
     <!-- Main Content -->
-    <PaneGroup direction="vertical" autoSaveId="instrument.layout" class="flex-1">
-      <Pane class="h-full overflow-auto py-2">
-        {@render children()}
+    <PaneGroup direction="vertical" autoSaveId="instrument.layout" class="min-h-0 flex-1">
+      <Pane>
+        <div class="h-full overflow-auto py-2">
+          {@render children()}
+        </div>
       </Pane>
       <PaneDivider direction="horizontal" />
       <Pane
@@ -243,7 +245,7 @@
   <!-- ═══ Narrow: segmented footer nav with dropdowns ═══ -->
   <nav class="flex h-ui-xl items-center gap-2 border-t border-border bg-card px-4 py-2 @[850px]:hidden">
     <div class="flex flex-1 divide-x divide-border overflow-hidden rounded-lg border border-border">
-      <button onclick={() => nav('/')} class={segmentClass(isChannelsActive)}>Channels</button>
+      <button onclick={() => nav('/')} class={segmentClass(isChannelsActive)}>Overview</button>
 
       <DropdownMenu.Root>
         {@const activeProfile = profileItems.find((p) => p.active)}
