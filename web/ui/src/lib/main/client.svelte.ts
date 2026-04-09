@@ -6,7 +6,7 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type { AppStatus, ErrorPayload, FrameTiming, LogMessage, SessionInfo, Waveform } from './types';
+import type { AppStatus, ErrorPayload, FrameTiming, LogMessage, SessionDetails, Waveform } from './types';
 
 /**
  * DAQ waveforms response from REST endpoint and WS broadcast.
@@ -419,11 +419,11 @@ export class Client {
   }
 
   /**
-   * Fetch static session info (called once at session start).
+   * Fetch session details (called once at session start).
    */
-  async fetchSessionInfo(): Promise<SessionInfo> {
-    const res = await fetch(`${this.baseUrl}/api/session/info`);
-    if (!res.ok) throw new Error(`Failed to fetch session info: ${res.statusText}`);
+  async fetchSessionDetails(): Promise<SessionDetails> {
+    const res = await fetch(`${this.baseUrl}/api/session/details`);
+    if (!res.ok) throw new Error(`Failed to fetch session details: ${res.statusText}`);
     return res.json();
   }
 

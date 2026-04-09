@@ -15,14 +15,22 @@ export interface SessionRoot {
 }
 
 /**
- * Discovered session directory
- * From scanning session roots
+ * Filesystem facts about a session directory.
  */
 export interface SessionDirectory {
   name: string;
   path: string;
   root_name: string;
-  modified: string; // ISO timestamp
+  modified: string;
+}
+
+/**
+ * Session directory with parsed config or errors, for listing.
+ */
+export interface SessionListing {
+  directory: SessionDirectory;
+  config: SessionConfig | null;
+  errors: string[];
 }
 
 /**
@@ -34,7 +42,7 @@ export type RigMode = 'idle' | 'previewing' | 'acquiring';
  * Session status - included in AppStatus when a session is active
  * Topic: 'status' (within AppStatus.session)
  */
-import type { StackOrder } from './config.ts';
+import type { StackOrder, VoxelRigConfig } from './config.ts';
 
 /**
  * Acquisition config - stack ordering and profile management.
@@ -61,20 +69,39 @@ export interface StorageConfig {
 }
 
 /**
- * Static session information fetched once at session start.
+ * Active session details — config is guaranteed valid.
  */
-export interface SessionInfo {
-  session_dir: string;
-  session_name: string;
-  metadata_target: string;
+export interface SessionDetails {
+  directory: SessionDirectory;
+  config: SessionConfig;
   metadata_schema: JsonSchema;
-  rig_name: string;
+}
+
+export interface SessionConfig {
+  rig: VoxelRigConfig;
+  info: SessionInfoMeta;
+  metadata_target: string;
+  metadata: Record<string, unknown>;
+  acq: Record<string, unknown>;
+  grid: Record<string, unknown>;
+  storage: Record<string, unknown>;
+  stacks: Record<string, unknown>;
+}
+
+export interface SessionInfoMeta {
+  name: string;
+  created_at: string;
+  last_opened: string;
+  source: { type: 'rig' | 'fork'; name: string };
+  description: string;
+  open_count: number;
+  status: 'active' | 'archived' | 'starred';
 }
 
 /**
  * Dynamic session state broadcast via WebSocket.
  */
-export interface SessionStatus {
+export interface SessionState {
   active_profile_id: string | null;
   mode: RigMode;
   metadata: Record<string, unknown>;
@@ -111,7 +138,7 @@ export interface AppStatus {
   phase: AppPhase;
   roots: SessionRoot[];
   rigs: string[];
-  session: SessionStatus | null; // null if no active session
+  session: SessionState | null; // null if no active session
   timestamp: string;
 }
 

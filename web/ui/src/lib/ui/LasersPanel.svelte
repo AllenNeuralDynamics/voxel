@@ -26,7 +26,7 @@
   let { session, profileId, class: className }: Props = $props();
 
   const effectiveProfileId = $derived(profileId ?? session.activeProfileId);
-  const profile = $derived(effectiveProfileId ? session.config.profiles[effectiveProfileId] : undefined);
+  const profile = $derived(effectiveProfileId ? session.rig_cfg.profiles[effectiveProfileId] : undefined);
   const isActiveProfile = $derived(!!effectiveProfileId && effectiveProfileId === session.activeProfileId);
 
   const allLasers = $derived(Object.values(session.lasers));
@@ -41,11 +41,11 @@
   });
 
   const profileLasers = $derived(
-    effectiveProfileId ? allLasers.filter((l) => getChannelFor(session.config, effectiveProfileId, l.deviceId)) : []
+    effectiveProfileId ? allLasers.filter((l) => getChannelFor(session.rig_cfg, effectiveProfileId, l.deviceId)) : []
   );
   const otherLasers = $derived(
     effectiveProfileId
-      ? allLasers.filter((l) => !getChannelFor(session.config, effectiveProfileId, l.deviceId))
+      ? allLasers.filter((l) => !getChannelFor(session.rig_cfg, effectiveProfileId, l.deviceId))
       : allLasers
   );
 
@@ -304,7 +304,7 @@
     {@render detailPanel(
       selectedLaser,
       session.activeProfileId
-        ? (getChannelFor(session.config, session.activeProfileId, selectedLaser.deviceId)?.config ?? null)
+        ? (getChannelFor(session.rig_cfg, session.activeProfileId, selectedLaser.deviceId)?.config ?? null)
         : null
     )}
 
@@ -352,7 +352,7 @@
                 {@render laserRow(
                   laser,
                   effectiveProfileId
-                    ? (getChannelFor(session.config, effectiveProfileId, laser.deviceId)?.config ?? null)
+                    ? (getChannelFor(session.rig_cfg, effectiveProfileId, laser.deviceId)?.config ?? null)
                     : null
                 )}
               {/each}

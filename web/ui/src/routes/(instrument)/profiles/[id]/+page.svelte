@@ -9,7 +9,7 @@
 
   const session = getSessionContext();
   const profileId = $derived(page.params.id!);
-  const profile = $derived(session.config.profiles[profileId]);
+  const profile = $derived(session.rig_cfg.profiles[profileId]);
 </script>
 
 {#if profile}
@@ -24,7 +24,7 @@
         <div class="ml-auto flex items-center gap-1.5">
           {#each profile.channels as chId (chId)}
             <span class="rounded-full bg-element-bg px-1.5 py-px text-xs text-fg">
-              {session.config.channels[chId]?.label ?? sanitizeString(chId)}
+              {session.rig_cfg.channels[chId]?.label ?? sanitizeString(chId)}
             </span>
           {/each}
         </div>

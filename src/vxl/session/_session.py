@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from vxl.config import GridConfig
 from vxl.sync import FrameTiming
 
-from ._config import AcquisitionConfig, SessionConfig, StorageConfig
+from ._config import AcquisitionConfig, SessionConfig, SessionInfo, SessionSource, StorageConfig
 
 
 class Session:
@@ -88,17 +88,94 @@ class Session:
         if not session_file.exists():
             raise FileNotFoundError(f"No session file found at {session_file}")
 
-        session_file.touch()  # Update mtime so it sorts as recently accessed
         config = SessionConfig.from_yaml(session_file)
+        config.info.last_opened = datetime.datetime.now(tz=datetime.UTC)
+        config.info.open_count += 1
 
         rig = VoxelRig(config=config.rig)
         await rig.start()
 
         session = cls(config=config, rig=rig, session_dir=session_dir)
+        session.save()  # Persist updated info
         session._log.info(f"Resumed session with {len(config.stacks)} stacks")
         return session
 
+    @classmethod
+    async def fork(
+        cls,
+        source_session_dir: Path,
+        root_path: Path,
+        name: str = "",
+        description: str = "",
+        clear_stacks: bool = False,
+    ) -> "Session":
+        """Fork a new session from an existing one.
+
+        Copies the source session's config (rig, profiles, channels, etc.)
+        into a new session. Stacks are either reset to PLANNED or cleared.
+
+        Args:
+            source_session_dir: Path to the source session directory.
+            root_path: Root path for the new session directory.
+            name: Name for the forked session.
+            description: Description for the forked session.
+            clear_stacks: If True, remove all stacks. If False, reset to PLANNED.
+        """
+        source_file = source_session_dir / cls.SESSION_FILENAME
+        if not source_file.exists():
+            raise FileNotFoundError(f"No session file found at {source_file}")
+
+        config = SessionConfig.from_yaml(source_file)
+
+        # Build new session info
+        now = datetime.datetime.now(tz=datetime.UTC)
+        config.info = SessionInfo(
+            name=name,
+            created_at=now,
+            last_opened=now,
+            source=SessionSource(type="fork", name=source_session_dir.name),
+            description=description,
+            open_count=1,
+        )
+
+        # Handle stacks
+        if clear_stacks:
+            config.stacks = {}
+            config.acq.profile_order = []
+        else:
+            for stack in config.stacks.values():
+                stack.status = StackStatus.PLANNED
+                stack.started_at = None
+                stack.completed_at = None
+                stack.skipped_at = None
+                stack.output_path = None
+
+        # Create new session directory
+        date = now.date().isoformat()
+        rig_stem = config.rig.info.name.lower().replace(" ", "-")
+        suffix = name or secrets.token_hex(2)
+        session_dir = root_path / f"{rig_stem}-{date}-{suffix}"
+
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / cls.DATA_DIRNAME).mkdir(exist_ok=True)
+
+        # Update storage path and save
+        config.storage = StorageConfig(store_path=session_dir / "data")
+        config.to_yaml(session_dir / cls.SESSION_FILENAME)
+
+        rig = VoxelRig(config=config.rig)
+        await rig.start()
+
+        session = cls(config=config, rig=rig, session_dir=session_dir)
+        session._log.info(f"Forked from {source_session_dir.name}")
+        return session
+
     # ==================== Properties ====================
+
+    @property
+    def config(self) -> SessionConfig:
+        """Get the session config."""
+        return self._config
 
     @property
     def rig(self) -> VoxelRig:
@@ -106,9 +183,9 @@ class Session:
         return self._rig
 
     @property
-    def session_name(self) -> str:
-        """Get the session name."""
-        return self._config.session_name
+    def info(self) -> SessionInfo:
+        """Get the session info."""
+        return self._config.info
 
     @property
     def session_dir(self) -> Path:

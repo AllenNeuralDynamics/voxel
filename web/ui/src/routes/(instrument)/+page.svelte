@@ -3,7 +3,7 @@
   import { sanitizeString, wavelengthToColor } from '$lib/utils';
 
   const session = getSessionContext();
-  const config = $derived(session.config);
+  const config = $derived(session.rig_cfg);
 </script>
 
 <!-- Session info -->
@@ -24,10 +24,10 @@
     <span class="text-fg-muted">Stacks</span>
     <span class="text-fg">{session.stacks.length}</span>
 
-    {#if session.info?.session_dir}
+    {#if session.details?.directory}
       <span class="text-fg-muted">Directory</span>
-      <span class="truncate text-fg" title={session.info.session_dir}>
-        {session.info.session_dir}
+      <span class="truncate text-fg" title={session.details.directory.path}>
+        {session.details.directory.path}
       </span>
     {/if}
   </div>

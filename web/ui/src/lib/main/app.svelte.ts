@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { toast } from 'svelte-sonner';
 import { Client, type ClientOptions } from './client.svelte';
-import type { AppStatus, SessionDirectory, LogMessage, JsonSchema, VoxelRigConfig } from './types';
+import type { AppStatus, SessionListing, LogMessage, JsonSchema } from './types';
 import { Session } from './session.svelte';
 import { SvelteDate } from 'svelte/reactivity';
 
@@ -140,6 +140,67 @@ export class App {
     }
   }
 
+  async forkSession(
+    sourceSessionDir: string,
+    rootName: string,
+    name: string = '',
+    description: string = '',
+    clearStacks: boolean = false
+  ): Promise<void> {
+    if (!browser) return;
+    if (this.hasSession) {
+      throw new Error('A session is already active. Close it first.');
+    }
+
+    this.error = null;
+
+    try {
+      const response = await fetch(`${this.#client.baseUrl}/api/session/fork`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_session_dir: sourceSessionDir,
+          root_name: rootName,
+          name,
+          description,
+          clear_stacks: clearStacks
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || response.statusText);
+      }
+
+      console.debug('[App] Session fork request sent');
+    } catch (error) {
+      console.error('[App] Failed to fork session:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to fork session';
+      this.error = msg;
+      toast.error(msg);
+      throw error;
+    }
+  }
+
+  async updateSessionStatus(sessionDir: string, status: 'active' | 'archived' | 'starred'): Promise<void> {
+    try {
+      const response = await fetch(`${this.#client.baseUrl}/api/session/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_dir: sessionDir, status })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || response.statusText);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to update session status';
+      toast.error(msg);
+      throw error;
+    }
+  }
+
   async closeSession(): Promise<void> {
     if (!browser) return;
     if (!this.hasSession) {
@@ -171,7 +232,7 @@ export class App {
 
   // --- Read-only queries (work from idle) ---
 
-  async fetchSessions(rootName: string): Promise<SessionDirectory[]> {
+  async fetchSessions(rootName: string): Promise<SessionListing[]> {
     try {
       const response = await fetch(`${this.#client.baseUrl}/api/roots/${encodeURIComponent(rootName)}/sessions`);
       if (!response.ok) {
@@ -280,31 +341,13 @@ export class App {
   }
 
   async #initializeSession(status: AppStatus): Promise<void> {
-    const config = await this.#fetchConfig();
-    if (!config) return;
-
     const session = new Session({
       client: this.#client,
-      config,
       status
     });
 
     await session.initialize();
     this.session = session;
-  }
-
-  async #fetchConfig(): Promise<VoxelRigConfig | null> {
-    try {
-      const response = await fetch(`${this.#client.baseUrl}/api/rig/config`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch config: ${response.statusText}`);
-      }
-      return await response.json();
-    } catch (e) {
-      console.error('[App] Failed to fetch config:', e);
-      this.error = e instanceof Error ? e.message : 'Failed to fetch config';
-      return null;
-    }
   }
 
   #handleReconnection(): void {

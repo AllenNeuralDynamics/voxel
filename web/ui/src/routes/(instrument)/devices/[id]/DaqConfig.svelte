@@ -12,7 +12,7 @@
 
   let devicesManager = $derived(session.devices);
   let device = $derived(devicesManager.getDevice(deviceId));
-  const acqPorts = $derived(Object.entries(session.config.daq.acq_ports));
+  const acqPorts = $derived(Object.entries(session.rig_cfg.daq.acq_ports));
 </script>
 
 <!-- Header -->

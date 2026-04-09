@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets
-from vxl.system import SessionDirectory
+from vxl.system import SessionListing
 from vxl_qt.app import VoxelApp
 from vxl_qt.ui.control_page import ControlPage
 from vxl_qt.ui.kit import Colors
@@ -127,10 +127,10 @@ class MainWindow(QMainWindow):
         fire_and_forget(self._create_session(root_name, rig_config, session_name, metadata_target, metadata), log=log)
 
     @Slot(object)
-    def _on_session_resumed(self, session: SessionDirectory) -> None:
+    def _on_session_resumed(self, session: SessionListing) -> None:
         """Handle session resume request from LaunchPage."""
-        log.info("Resuming session: %s", session.path)
-        fire_and_forget(self._resume_session(session.path), log=log)
+        log.info("Resuming session: %s", session.directory.path)
+        fire_and_forget(self._resume_session(session.directory.path), log=log)
 
     async def _create_session(
         self,

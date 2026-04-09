@@ -15,14 +15,14 @@
   let { session, profileId, class: className }: Props = $props();
 
   const effectiveProfileId = $derived(profileId ?? session.activeProfileId);
-  const profile = $derived(effectiveProfileId ? session.config.profiles[effectiveProfileId] : undefined);
+  const profile = $derived(effectiveProfileId ? session.rig_cfg.profiles[effectiveProfileId] : undefined);
   const isActiveProfile = $derived(!!effectiveProfileId && effectiveProfileId === session.activeProfileId);
 
   /** Aux devices: everything except cameras, lasers, and filter wheels. */
   const devices = $derived.by(() => {
     if (!effectiveProfileId) return [];
-    return discoverProfileDevices(session.config, effectiveProfileId).filter(
-      (d) => d.role !== 'camera' && d.role !== 'laser' && !isFilterWheel(session.config, d.id)
+    return discoverProfileDevices(session.rig_cfg, effectiveProfileId).filter(
+      (d) => d.role !== 'camera' && d.role !== 'laser' && !isFilterWheel(session.rig_cfg, d.id)
     );
   });
 

@@ -52,7 +52,7 @@
           class="profile-chip flex items-center gap-1 rounded border border-border bg-element-bg py-1 pr-2 pl-0.5 text-xs text-fg"
         >
           <GripVertical width="14" height="14" class="shrink-0 text-fg-muted/50" />
-          {session.config.profiles[profile.profile_id]?.label ?? sanitizeString(profile.profile_id)}
+          {session.rig_cfg.profiles[profile.profile_id]?.label ?? sanitizeString(profile.profile_id)}
         </SortableList.Item>
       {/snippet}
     </SortableList.Root>

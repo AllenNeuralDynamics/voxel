@@ -13,11 +13,11 @@
 
   let { session, profileId }: Props = $props();
 
-  const profile = $derived(session.config.profiles[profileId]);
+  const profile = $derived(session.rig_cfg.profiles[profileId]);
 
   /** All profile devices excluding filter wheels, sorted by role. */
   const devices = $derived(
-    discoverProfileDevices(session.config, profileId).filter((d) => !isFilterWheel(session.config, d.id))
+    discoverProfileDevices(session.rig_cfg, profileId).filter((d) => !isFilterWheel(session.rig_cfg, d.id))
   );
 
   const groups = $derived(

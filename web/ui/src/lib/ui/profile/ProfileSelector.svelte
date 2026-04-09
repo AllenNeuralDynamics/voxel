@@ -30,7 +30,7 @@
   );
 
   const profiles = $derived(
-    Object.entries(session.config.profiles).map(([id, cfg]) => ({
+    Object.entries(session.rig_cfg.profiles).map(([id, cfg]) => ({
       value: id,
       label: cfg.label ?? sanitizeString(id),
       description: cfg.desc

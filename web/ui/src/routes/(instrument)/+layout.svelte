@@ -25,7 +25,7 @@
 
   const session = getSessionContext();
   const { logs, clearLogs } = $derived(getLogsContext());
-  const config = $derived(session.config);
+  const config = $derived(session.rig_cfg);
 
   // --- Route-derived state ---
 
@@ -115,7 +115,7 @@
   $effect(() => {
     if (activeDeviceId && !session.devices.devices.has(activeDeviceId)) {
       nav('/');
-    } else if (activeProfileId && !(activeProfileId in session.config.profiles)) {
+    } else if (activeProfileId && !(activeProfileId in session.rig_cfg.profiles)) {
       nav('/');
     }
   });

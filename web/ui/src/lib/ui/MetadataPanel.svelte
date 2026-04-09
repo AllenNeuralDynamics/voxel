@@ -14,7 +14,7 @@
 
   const { session, class: className }: Props = $props();
 
-  const schema = $derived<JsonSchema | null>(session.info?.metadata_schema ?? null);
+  const schema = $derived<JsonSchema | null>(session.details?.metadata_schema ?? null);
   const metadata = $derived(session.metadata);
   const hasAcquired = $derived(
     session.stacks.some((s) => s.profile_id === session.activeProfileId && s.status !== 'planned')
@@ -25,7 +25,7 @@
   let targets = $state<Record<string, string>>({});
   let loadingTargets = $state(false);
 
-  const currentTarget = $derived(session.info?.metadata_target ?? '');
+  const currentTarget = $derived(session.details?.config.metadata_target ?? '');
   const targetOptions = $derived(Object.entries(targets).map(([name, value]) => ({ value, label: name })));
   const hasMultipleTargets = $derived(targetOptions.length > 1);
 

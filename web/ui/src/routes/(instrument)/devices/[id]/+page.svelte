@@ -9,7 +9,7 @@
 
   const session = getSessionContext();
   const deviceId = $derived(page.params.id!);
-  const daqDeviceId = $derived(session.config.daq.device);
+  const daqDeviceId = $derived(session.rig_cfg.daq.device);
   const devicesManager = $derived(session.devices);
   const device = $derived(devicesManager.getDevice(deviceId));
 </script>

@@ -1,7 +1,9 @@
 """Session management for Voxel acquisition."""
 
+import datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from ruyaml import YAML
@@ -34,11 +36,37 @@ class AcquisitionConfig(BaseModel):
         return profile_id in self.profile_order
 
 
+class SessionStatus(StrEnum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+    STARRED = "starred"
+
+
+class SessionSource(BaseModel):
+    """Where a session originated from."""
+
+    type: Literal["rig", "fork"] = "rig"
+    name: str = ""
+
+
+class SessionInfo(BaseModel):
+    """Session identity and lifecycle metadata."""
+
+    name: str = Field(default="", description="Session name")
+    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
+    last_opened: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
+    source: SessionSource = Field(default_factory=SessionSource)
+    description: str = ""
+    open_count: int = 0
+    status: SessionStatus = SessionStatus.ACTIVE
+
+
 class SessionConfig(BaseModel):
     """Combined rig configuration and session state.
 
     This model represents the complete session file (.voxel.yaml) with:
     - rig: The full VoxelRigConfig
+    - info: Session identity and lifecycle metadata
     - acq: Acquisition ordering config (profile order, tile order, interleaving)
     - storage: Storage config (store path, compression, pyramid levels)
     - stacks: Flat list of acquisition stacks (tiles + z-ranges)
@@ -47,7 +75,7 @@ class SessionConfig(BaseModel):
     """
 
     rig: VoxelRigConfig
-    session_name: str = Field(default="", description="Optional session name suffix")
+    info: SessionInfo = Field(default_factory=SessionInfo)
     metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
     acq: AcquisitionConfig = Field(default_factory=AcquisitionConfig)
@@ -66,6 +94,18 @@ class SessionConfig(BaseModel):
         if self.acq.z_step <= 0:
             self.acq.z_step = self.rig.globals.default_z_step
         return self
+
+    @property
+    def session_name(self) -> str:
+        """Convenience accessor for info.name."""
+        return self.info.name
+
+    @staticmethod
+    def update_status(path: Path, status: SessionStatus) -> None:
+        """Update the info.status field in a session YAML file."""
+        config = SessionConfig.from_yaml(path)
+        config.info.status = status
+        config.to_yaml(path)
 
     def resolve_metadata(self) -> ExperimentMetadata:
         """Resolve metadata_target and validate metadata dict against it."""
@@ -111,11 +151,20 @@ class SessionConfig(BaseModel):
 
         rig = VoxelRigConfig.model_validate(rig_data)
 
+        now = datetime.datetime.now(tz=datetime.UTC)
+        info = SessionInfo(
+            name=session_name,
+            created_at=now,
+            last_opened=now,
+            source=SessionSource(type="rig", name=rig_config_path.stem),
+            open_count=1,
+        )
+
         acq = AcquisitionConfig(stack_order=StackOrder(rig.globals.default_stack_order))
         storage = StorageConfig(store_path=session_dir / "data")
         config = cls(
             rig=rig,
-            session_name=session_name,
+            info=info,
             metadata_target=metadata_target,
             metadata=metadata or {},
             acq=acq,
@@ -123,7 +172,7 @@ class SessionConfig(BaseModel):
         )
         config._raw_data = {
             "rig": rig_data,
-            "session_name": config.session_name,
+            "info": config.info.model_dump(mode="json"),
             "metadata_target": config.metadata_target,
             "metadata": config.metadata,
             "acq": config.acq.model_dump(mode="json"),
@@ -149,7 +198,7 @@ class SessionConfig(BaseModel):
         stacks_data = {sid: s.model_dump(mode="json") for sid, s in self.stacks.items()}
 
         if self._raw_data is not None:
-            self._raw_data["session_name"] = self.session_name
+            self._raw_data["info"] = self.info.model_dump(mode="json")
             self._raw_data["metadata_target"] = self.metadata_target
             self._raw_data["metadata"] = self.metadata
             self._raw_data["acq"] = acq_data
@@ -181,7 +230,7 @@ class SessionConfig(BaseModel):
         else:
             data = {
                 "rig": self.rig.model_dump(),
-                "session_name": self.session_name,
+                "info": self.info.model_dump(mode="json"),
                 "metadata_target": self.metadata_target,
                 "metadata": self.metadata,
                 "acq": acq_data,

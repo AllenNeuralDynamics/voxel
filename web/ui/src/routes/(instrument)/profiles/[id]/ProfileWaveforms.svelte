@@ -46,14 +46,14 @@
 
   let { session, profileId }: Props = $props();
 
-  const profile = $derived(session.config.profiles[profileId]);
+  const profile = $derived(session.rig_cfg.profiles[profileId]);
   const isActiveProfile = $derived(profileId === session.activeProfileId);
   const isIdle = $derived(session.mode === 'idle');
   const canEdit = $derived(isActiveProfile && isIdle);
 
   // ── DAQ hardware voltage range ──
 
-  const daqDeviceId = $derived(session.config.daq.device);
+  const daqDeviceId = $derived(session.rig_cfg.daq.device);
   const daqRange = $derived.by(() => {
     const val = session.devices.getPropertyValue(daqDeviceId, 'ao_voltage_range') as
       | { min: number; max: number }
@@ -70,7 +70,7 @@
 
   // ── Waveform devices (role-sorted, with trace colors) ──
 
-  const profileDevices = $derived(discoverProfileDevices(session.config, profileId));
+  const profileDevices = $derived(discoverProfileDevices(session.rig_cfg, profileId));
   const waveformDevices = $derived(
     profileDevices.filter((d) => {
       const wf = profile?.daq.waveforms[d.id];

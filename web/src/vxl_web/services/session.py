@@ -20,6 +20,7 @@ from vxl.camera.preview import PreviewConfig
 from vxl.config import GridConfig
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
 from vxl.stack import Stack, StackStatus, StorageConfig
+from vxl.system import SessionDirectory
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
@@ -33,17 +34,15 @@ def _utc_timestamp() -> str:
     return datetime.now(UTC).isoformat()
 
 
-class SessionInfo(BaseModel):
-    """Static session information fetched once at session start."""
+class SessionDetails(BaseModel):
+    """Active session details — config is guaranteed valid."""
 
-    session_dir: str
-    session_name: str
-    metadata_target: str
+    directory: SessionDirectory
+    config: dict[str, Any]
     metadata_schema: dict[str, Any]
-    rig_name: str
 
 
-class SessionStatus(BaseModel):
+class SessionState(BaseModel):
     """Dynamic session state broadcast via WebSocket."""
 
     # Rig status
@@ -100,20 +99,26 @@ class SessionService:
 
     # ==================== Info & Status ====================
 
-    def get_info(self) -> SessionInfo:
-        """Get static session information (fetched once at session start)."""
+    def get_session_details(self) -> SessionDetails:
+        """Get session details (fetched once at session start)."""
+        session_file = self.session.session_dir / Session.SESSION_FILENAME
+        mtime = datetime.fromtimestamp(session_file.stat().st_mtime, tz=UTC)
         cls = resolve_metadata_class(self.session.metadata_target)
-        schema = cls.model_json_schema()
 
-        return SessionInfo(
-            session_dir=str(self.session.session_dir),
-            session_name=self.session.session_name,
-            metadata_target=self.session.metadata_target,
-            metadata_schema=schema,
-            rig_name=self.session.rig.config.info.name,
+        directory = SessionDirectory(
+            name=self.session.session_dir.name,
+            path=self.session.session_dir,
+            root_name=self.session.session_dir.parent.name,
+            modified=mtime,
         )
 
-    async def get_status(self) -> SessionStatus:
+        return SessionDetails(
+            directory=directory,
+            config=self.session.config.model_dump(mode="json"),
+            metadata_schema=cls.model_json_schema(),
+        )
+
+    async def get_status(self) -> SessionState:
         """Get current dynamic session status."""
         preview = await self.session.rig.get_channel_preview_configs()
 
@@ -122,7 +127,7 @@ class SessionService:
         except ValueError:
             fov = None
 
-        return SessionStatus(
+        return SessionState(
             active_profile_id=self.session.rig.active_profile_id,
             mode=self.session.rig.mode,
             metadata=self.session.metadata,
@@ -257,10 +262,10 @@ class AcquireRequest(BaseModel):
     tile_id: str | None = Field(default=None, description="Specific tile to acquire, or None for all pending")
 
 
-@info_router.get("/info")
-async def get_session_info(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionInfo:
-    """Get static session information (fetched once at session start)."""
-    return service.get_info()
+@info_router.get("/details")
+async def get_session_details(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionDetails:
+    """Get session details (fetched once at session start)."""
+    return service.get_session_details()
 
 
 @info_router.patch("/metadata")
@@ -287,12 +292,12 @@ class MetadataTargetRequest(BaseModel):
 async def update_metadata_target(
     request: MetadataTargetRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
-) -> SessionInfo:
+) -> SessionDetails:
     """Change the metadata schema class. Resets metadata to new schema defaults."""
     try:
         service.session.set_metadata_target(request.target)
         service.broadcast({}, with_status=True)
-        return service.get_info()
+        return service.get_session_details()
     except (ValueError, TypeError, ImportError, AttributeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

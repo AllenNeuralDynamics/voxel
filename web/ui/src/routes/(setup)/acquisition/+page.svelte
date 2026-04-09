@@ -73,9 +73,9 @@
   // ── Clipboard ──
 
   async function copySessionDir() {
-    if (!session.info?.session_dir) return;
+    if (!session.details?.directory) return;
     try {
-      await navigator.clipboard.writeText(session.info.session_dir);
+      await navigator.clipboard.writeText(session.details.directory.path);
       toast.success('Copied to clipboard');
     } catch {
       toast.error('Failed to copy');
@@ -92,13 +92,13 @@
         <section>
           <div class="grid grid-cols-1 gap-2 text-xs @sm:grid-cols-[10rem_1fr] @sm:items-center @sm:gap-x-3">
             <span class="text-fg-muted">Directory</span>
-            {#if session.info?.session_dir}
+            {#if session.details?.directory}
               <button
                 onclick={copySessionDir}
                 class="cursor-pointer truncate text-start text-xs text-fg-muted transition-colors hover:text-fg"
-                title="Click to copy: {session.info.session_dir}"
+                title="Click to copy: {session.details.directory.path}"
               >
-                {session.info.session_dir}
+                {session.details.directory.path}
               </button>
             {:else}
               <span class="text-fg-faint">—</span>

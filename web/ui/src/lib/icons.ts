@@ -59,6 +59,13 @@ export { default as LucideCircle } from '~icons/lucide/circle';
 export { default as LucideChevronRight } from '~icons/lucide/chevron-right';
 export { default as LucideX } from '~icons/lucide/x';
 
+// Session management
+export { default as Archive } from '~icons/lucide/archive';
+export { default as Clipboard } from '~icons/lucide/clipboard';
+export { default as GitFork } from '~icons/lucide/git-fork';
+export { default as Star } from '~icons/lucide/star';
+export { default as StarOff } from '~icons/lucide/star-off';
+
 // Theme mode
 export { default as Sun } from '~icons/lucide/sun';
 export { default as Moon } from '~icons/lucide/moon';

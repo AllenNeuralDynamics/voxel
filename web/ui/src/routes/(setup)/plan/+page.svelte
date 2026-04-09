@@ -54,7 +54,7 @@
     for (const [profileId, stacks] of groupMap) {
       groups.push({
         profileId,
-        label: session.config.profiles[profileId]?.label ?? sanitizeString(profileId),
+        label: session.rig_cfg.profiles[profileId]?.label ?? sanitizeString(profileId),
         stacks,
         isActive: profileId === activeId
       });
@@ -115,7 +115,7 @@
     }
     return [...counts.entries()].map(([id, count]) => ({
       id,
-      label: session.config.profiles[id]?.label ?? sanitizeString(id),
+      label: session.rig_cfg.profiles[id]?.label ?? sanitizeString(id),
       count
     }));
   });
@@ -234,7 +234,7 @@
   let clearDialogOpen = $state(false);
   let clearMode = $state<'selected' | 'profile'>('selected');
   let clearProfileId = $state<string>('');
-  let clearProfileLabel = $derived(session.config.profiles[clearProfileId]?.label ?? sanitizeString(clearProfileId));
+  let clearProfileLabel = $derived(session.rig_cfg.profiles[clearProfileId]?.label ?? sanitizeString(clearProfileId));
 
   // --- Pane sizing (pixel-based min for sidebar) ---
 

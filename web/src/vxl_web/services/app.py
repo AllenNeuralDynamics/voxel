@@ -21,13 +21,14 @@ from pydantic import BaseModel
 
 from vxl import Session
 from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets, resolve_metadata_class
+from vxl.session import SessionConfig, SessionStatus
 from vxl.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxl_web.services.msg_queue import MsgQueue
 from vxlib import fire_and_forget
 
 from .acq import acq_router
 from .rig import rig_router
-from .session import SessionService, SessionStatus, info_router
+from .session import SessionService, SessionState, info_router
 
 router = APIRouter(tags=["app"])
 router.include_router(info_router)  # Session info/status/metadata endpoints
@@ -50,7 +51,7 @@ class AppStatus(BaseModel):
     phase: AppPhase
     roots: list[SessionRoot]
     rigs: list[str]
-    session: SessionStatus | None = None
+    session: SessionState | None = None
     timestamp: str
 
 
@@ -77,6 +78,23 @@ class ResumeSessionRequest(BaseModel):
     """Request to resume an existing session."""
 
     session_dir: str
+
+
+class UpdateSessionStatusRequest(BaseModel):
+    """Request to update a session's status (star/archive)."""
+
+    session_dir: str
+    status: str  # "active", "archived", "starred"
+
+
+class ForkSessionRequest(BaseModel):
+    """Request to fork a new session from an existing one."""
+
+    source_session_dir: str
+    root_name: str
+    name: str = ""
+    description: str = ""
+    clear_stacks: bool = False
 
 
 class AppService:
@@ -254,6 +272,40 @@ class AppService:
             await self._broadcast_status()
             raise
 
+    async def fork_session(
+        self,
+        source_session_dir: Path,
+        root_name: str,
+        name: str = "",
+        description: str = "",
+        clear_stacks: bool = False,
+    ) -> None:
+        """Fork a new session from an existing one."""
+        if self.session_service is not None:
+            raise RuntimeError("A session is already active. Close it first.")
+
+        root = self.system_config.get_root(root_name)
+        if root is None:
+            raise ValueError(f"Session root '{root_name}' not found")
+
+        self._phase = "launching"
+        await self._broadcast_status()
+
+        try:
+            session = await Session.fork(source_session_dir, root.path, name, description, clear_stacks)
+            self.session_service = SessionService(session=session, broadcast=self._broadcast)
+
+            log.info(f"Session forked from {source_session_dir.name}: {session.session_dir}")
+            self._phase = "ready"
+            await self._broadcast_status()
+
+        except Exception:
+            log.exception("Failed to fork session")
+            self.session_service = None
+            self._phase = "idle"
+            await self._broadcast_status()
+            raise
+
     async def close_session(self) -> None:
         """Close the current session."""
         if self.session_service is None:
@@ -263,8 +315,8 @@ class AppService:
             # Stop preview if running (stop_preview is a no-op if not previewing)
             await self.session_service.rig_service.rig.stop_preview()
 
-            # Stop the rig
-            await self.session_service.session.rig.stop()
+            # Save session state and stop the rig
+            await self.session_service.session.close()
 
             log.info(f"Session closed: {self.session_service.session.session_dir}")
 
@@ -432,13 +484,19 @@ async def get_status(service: Annotated[AppService, Depends(get_app_service)]) -
 
 
 @router.get("/roots/{root_name}/sessions")
-async def list_sessions(root_name: str, service: Annotated[AppService, Depends(get_app_service)]) -> dict:
-    """List sessions in a root."""
+async def list_sessions(
+    root_name: str,
+    service: Annotated[AppService, Depends(get_app_service)],
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """List sessions in a root with pagination."""
     try:
-        sessions = service.system_config.list_sessions(root_name)
+        sessions = service.system_config.list_sessions(root_name, limit=limit, offset=offset)
+        total = service.system_config.count_sessions(root_name)
         return {
             "sessions": [s.model_dump(mode="json") for s in sessions],
-            "count": len(sessions),
+            "total": total,
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -482,6 +540,45 @@ async def resume_session(
     except Exception as e:
         log.exception("Failed to resume session")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/session/fork")
+async def fork_session(
+    request: ForkSessionRequest, service: Annotated[AppService, Depends(get_app_service)]
+) -> AppStatus:
+    """Fork a new session from an existing one."""
+    try:
+        await service.fork_session(
+            source_session_dir=Path(request.source_session_dir),
+            root_name=request.root_name,
+            name=request.name,
+            description=request.description,
+            clear_stacks=request.clear_stacks,
+        )
+        return await service.get_app_status()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        log.exception("Failed to fork session")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.patch("/session/status")
+async def update_session_status(request: UpdateSessionStatusRequest) -> dict[str, str]:
+    """Update a session's status (star, archive, restore)."""
+    session_file = Path(request.session_dir) / "session.voxel.yaml"
+    try:
+        status = SessionStatus(request.status)
+        SessionConfig.update_status(session_file, status)
+        return {"status": status.value}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.delete("/session")

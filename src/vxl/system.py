@@ -8,12 +8,15 @@ Manages the ~/.voxel/ directory structure:
 import logging
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, Field
 from ruyaml import YAML
+
+from vxl.session import SessionConfig
 
 log = logging.getLogger(__name__)
 
@@ -52,12 +55,20 @@ class SessionRoot(BaseModel):
 
 
 class SessionDirectory(BaseModel):
-    """A session discovered by scanning a root."""
+    """Filesystem facts about a session directory."""
 
-    name: str  # Folder name
-    path: Path  # Full path to session dir
-    root_name: str  # Which root it's in
-    modified: datetime  # Last modified time of session.voxel.yaml
+    name: str
+    path: Path
+    root_name: str
+    modified: datetime
+
+
+class SessionListing(BaseModel):
+    """Session directory with parsed config or errors, for listing."""
+
+    directory: SessionDirectory
+    config: dict[str, Any] | None = None
+    errors: list[str] = Field(default_factory=list)
 
 
 class SystemConfig(BaseModel):
@@ -144,10 +155,11 @@ class SystemConfig(BaseModel):
                 return root
         return None
 
-    def list_sessions(self, root_name: str) -> list[SessionDirectory]:
-        """Scan root for existing sessions.
+    def list_sessions(self, root_name: str, limit: int = 50, offset: int = 0) -> list[SessionListing]:
+        """Scan root for existing sessions with pagination.
 
-        Scans immediate children of the root for directories containing session.voxel.yaml.
+        Scans all directories for mtime (fast stat-only), sorts, then parses
+        YAML configs for the requested page in parallel.
         """
         root = self.get_root(root_name)
         if root is None:
@@ -157,7 +169,8 @@ class SystemConfig(BaseModel):
             log.warning(f"Session root path does not exist: {root.path}")
             return []
 
-        sessions: list[SessionDirectory] = []
+        # Phase 1: fast scan — stat only, no YAML parsing
+        directories: list[SessionDirectory] = []
         for child in root.path.iterdir():
             if not child.is_dir():
                 continue
@@ -168,7 +181,7 @@ class SystemConfig(BaseModel):
 
             try:
                 modified = datetime.fromtimestamp(session_file.stat().st_mtime)
-                sessions.append(
+                directories.append(
                     SessionDirectory(
                         name=child.name,
                         path=child,
@@ -177,11 +190,45 @@ class SystemConfig(BaseModel):
                     ),
                 )
             except Exception as e:
-                log.warning(f"Failed to read session {child}: {e}")
+                log.warning(f"Failed to stat session {child}: {e}")
 
         # Sort by modified time, most recent first
-        sessions.sort(key=lambda s: s.modified, reverse=True)
-        return sessions
+        directories.sort(key=lambda s: s.modified, reverse=True)
+
+        # Phase 2: parse configs for the requested page in parallel
+        page = directories[offset : offset + limit]
+        if not page:
+            return []
+
+        files = [d.path / SESSION_FILENAME for d in page]
+        with ThreadPoolExecutor(max_workers=min(len(files), 8)) as pool:
+            results = list(pool.map(_read_session_config, files))
+
+        listings: list[SessionListing] = []
+        for directory, result in zip(page, results, strict=True):
+            config, errors = result
+            listings.append(SessionListing(directory=directory, config=config, errors=errors))
+
+        return listings
+
+    def count_sessions(self, root_name: str) -> int:
+        """Count sessions in a root without parsing YAML."""
+        root = self.get_root(root_name)
+        if root is None:
+            raise ValueError(f"Session root '{root_name}' not found")
+        if not root.path.exists():
+            return 0
+        return sum(1 for child in root.path.iterdir() if child.is_dir() and (child / SESSION_FILENAME).exists())
+
+
+def _read_session_config(session_file: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    """Read and validate a session config from YAML. Returns (config_dict, errors)."""
+    try:
+        config = SessionConfig.from_yaml(session_file)
+        return config.model_dump(mode="json"), []
+    except Exception as e:
+        log.warning(f"Failed to parse session config from {session_file}: {e}")
+        return None, [str(e)]
 
 
 def list_rigs() -> list[str]:

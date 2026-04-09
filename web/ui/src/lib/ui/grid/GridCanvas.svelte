@@ -17,7 +17,7 @@
 </script>
 
 {#if session.stage && session.stage.x && session.stage.y && session.stage.z}
-  {@const gc = session.config.profiles[session.activeProfileId ?? '']?.grid ?? null}
+  {@const gc = session.rig_cfg.profiles[session.activeProfileId ?? '']?.grid ?? null}
   <div class="flex h-full flex-col">
     {#if gc && layers.grid}
       <div transition:slide={{ duration: 200 }} class="flex w-full flex-wrap items-center justify-between gap-4 p-4">

@@ -19,7 +19,7 @@ from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import QBoxLayout, QLabel, QScrollArea, QWidget
 
 from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
-from vxl.system import SessionDirectory, SessionRoot
+from vxl.system import SessionListing, SessionRoot
 from vxl_qt.ui.assets import VOXEL_LOGO
 from vxl_qt.ui.kit import (
     Button,
@@ -401,13 +401,15 @@ class NewSessionForm(QWidget):
 class SessionCard(Flex):
     """Clickable card displaying a session with resume/folder actions."""
 
-    clicked = Signal(object)  # SessionDirectory
+    clicked = Signal(object)  # SessionListing
 
-    def __init__(self, session: SessionDirectory, parent: QWidget | None = None) -> None:
+    def __init__(self, session: SessionListing, parent: QWidget | None = None) -> None:
+        d = session.directory
+
         # Folder button
         folder_btn = Button.icon_btn("mdi.folder-outline")
-        folder_btn.setToolTip(str(session.path))
-        folder_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(session.path))))
+        folder_btn.setToolTip(str(d.path))
+        folder_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(d.path))))
 
         # Resume button
         resume_btn = Button.ghost("Resume")
@@ -423,10 +425,10 @@ class SessionCard(Flex):
         )
 
         super().__init__(
-            Text(display_name(session.name)),
-            Text.muted(session.root_name),
+            Text(display_name(d.name)),
+            Text.muted(d.root_name),
             Stretch(),
-            Text.muted(format_relative_time(session.modified)),
+            Text.muted(format_relative_time(d.modified)),
             folder_btn,
             resume_btn,
             flow=Flow.HORIZONTAL,
@@ -447,7 +449,7 @@ class SessionCard(Flex):
 class SessionsList(QScrollArea):
     """Scrollable list of session cards."""
 
-    session_selected = Signal(object)  # SessionDirectory
+    session_selected = Signal(object)  # SessionListing
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -459,7 +461,7 @@ class SessionsList(QScrollArea):
         self.setWidget(self._container)
         self._cards: list[SessionCard] = []
 
-    def set_sessions(self, sessions: list[SessionDirectory]) -> None:
+    def set_sessions(self, sessions: list[SessionListing]) -> None:
         """Update the list with new sessions."""
         container_layout = cast("QBoxLayout", self._container.layout())
 
@@ -586,7 +588,7 @@ class LaunchPage(QWidget):
         """Set available metadata targets in the form."""
         self._new_session_form.set_metadata_targets(targets)
 
-    def set_sessions(self, sessions: list[SessionDirectory]) -> None:
+    def set_sessions(self, sessions: list[SessionListing]) -> None:
         """Set the list of recent sessions."""
         self._sessions_list.set_sessions(sessions)
 

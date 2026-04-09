@@ -6,7 +6,7 @@ import type {
   AppStatus,
   AcquisitionConfig,
   GridConfig,
-  SessionInfo,
+  SessionDetails,
   StorageConfig,
   Tile,
   Stack,
@@ -26,19 +26,18 @@ import { type AlignEdge, computeAlignedOffset } from './grid';
 
 export interface SessionInit {
   client: Client;
-  config: VoxelRigConfig;
   status: AppStatus;
 }
 
 export class Session {
   readonly client!: Client;
-  config = $state<VoxelRigConfig>(null!);
   readonly devices!: DevicesManager;
-  readonly preview!: PreviewState;
-  readonly stage!: Stage;
+  preview = $state<PreviewState>(null!);
+  stage = $state<Stage>(null!);
 
   #appStatus = $state<AppStatus>();
-  info = $state<SessionInfo>(null!);
+  details = $state<SessionDetails>(null!);
+  rig_cfg = $derived<VoxelRigConfig>(this.details.config.rig!);
 
   acq = $derived<AcquisitionConfig>(
     this.#appStatus?.session?.acq ?? {
@@ -112,8 +111,8 @@ export class Session {
     return { width: fov[0], height: fov[1] };
   });
 
-  lasers: Record<string, Laser>;
-  cameras: Record<string, Camera>;
+  lasers = $state<Record<string, Laser>>({});
+  cameras = $state<Record<string, Camera>>({});
 
   // ── Profile state ───────────────────────────────────────
 
@@ -134,19 +133,23 @@ export class Session {
 
   constructor(init: SessionInit) {
     this.client = init.client;
-    this.config = init.config;
     this.#appStatus = init.status;
-
     this.devices = new DevicesManager(init.client);
-    this.preview = new PreviewState(init.client, {
-      channels: init.config.channels,
-      profiles: init.config.profiles
+  }
+
+  async initialize(): Promise<void> {
+    const [details] = await Promise.all([this.client.fetchSessionDetails(), this.devices.initialize()]);
+    this.details = details;
+
+    this.preview = new PreviewState(this.client, {
+      channels: this.rig_cfg.channels,
+      profiles: this.rig_cfg.profiles
     });
-    this.stage = new Stage(this.devices, init.config.stage);
+    this.stage = new Stage(this.devices, this.rig_cfg.stage);
 
     const lasers: Record<string, Laser> = {};
-    if (init.config.channels) {
-      for (const channel of Object.values(init.config.channels)) {
+    if (this.rig_cfg.channels) {
+      for (const channel of Object.values(this.rig_cfg.channels)) {
         if (channel.illumination && !lasers[channel.illumination]) {
           lasers[channel.illumination] = new Laser(this.devices, channel.illumination);
         }
@@ -155,8 +158,8 @@ export class Session {
     this.lasers = lasers;
 
     const cameras: Record<string, Camera> = {};
-    if (init.config.channels) {
-      for (const channel of Object.values(init.config.channels)) {
+    if (this.rig_cfg.channels) {
+      for (const channel of Object.values(this.rig_cfg.channels)) {
         if (channel.detection && !cameras[channel.detection]) {
           cameras[channel.detection] = new Camera(this.devices, channel.detection);
         }
@@ -166,19 +169,19 @@ export class Session {
 
     // Profile WebSocket subscriptions
     this.#unsubscribers.push(
-      init.client.on('daq/waveforms', (data) => {
+      this.client.on('daq/waveforms', (data) => {
         this.appliedWaveforms = data;
         // Update config with broadcasted waveform descriptors + timing
-        if (data.profile_id && this.config.profiles[data.profile_id]) {
-          const profile = this.config.profiles[data.profile_id];
+        if (data.profile_id && this.rig_cfg.profiles[data.profile_id]) {
+          const profile = this.rig_cfg.profiles[data.profile_id];
           if (data.waveforms) profile.daq.waveforms = data.waveforms;
           if (data.timing) profile.daq.timing = data.timing;
         }
       }),
-      init.client.on('profile/props_saved', (payload) => {
+      this.client.on('profile/props_saved', (payload) => {
         let count = 0;
         for (const [profileId, devices] of Object.entries(payload)) {
-          const profile = this.config.profiles[profileId];
+          const profile = this.rig_cfg.profiles[profileId];
           if (!profile) continue;
           if (!profile.props) profile.props = {};
           for (const [deviceId, props] of Object.entries(devices)) {
@@ -188,26 +191,22 @@ export class Session {
         }
         toast.success(`Saved props for ${count} device(s)`);
       }),
-      init.client.on('profile/props_applied', (payload) => {
+      this.client.on('profile/props_applied', (payload) => {
         toast.success(`Applied saved props to ${payload.devices.length} device(s)`);
       }),
-      init.client.on('profile/roi_saved', (payload) => {
-        const profile = this.config.profiles[payload.profile_id];
+      this.client.on('profile/roi_saved', (payload) => {
+        const profile = this.rig_cfg.profiles[payload.profile_id];
         if (profile) {
           if (!profile.rois) profile.rois = {};
           profile.rois[payload.camera_id] = payload.roi;
           toast.success(`Saved ROI for ${payload.camera_id}`);
         }
       }),
-      init.client.on('profile/roi_applied', (payload) => {
+      this.client.on('profile/roi_applied', (payload) => {
         toast.success(`Applied saved ROI to ${payload.camera_id}`);
       })
     );
-  }
 
-  async initialize(): Promise<void> {
-    const [info] = await Promise.all([this.client.fetchSessionInfo(), this.devices.initialize()]);
-    this.info = info;
     this.appliedWaveforms = await this.client.fetchWaveforms();
   }
 
@@ -348,14 +347,14 @@ export class Session {
 
     // Active profile at capture time
     const profileId = this.activeProfileId ?? '';
-    const profile = this.config.profiles[profileId];
+    const profile = this.rig_cfg.profiles[profileId];
     const profileLabel = profile?.label ?? sanitizeString(profileId);
 
     // Capture channel metadata
     const snapChannels: Record<string, SnapshotChannel> = {};
     for (const ch of channels) {
       if (!ch.visible || !ch.name) continue;
-      const chConfig = this.config.channels[ch.name];
+      const chConfig = this.rig_cfg.channels[ch.name];
       const entry: SnapshotChannel = {
         label: ch.label ?? ch.name,
         colormap: ch.colormap,
@@ -512,7 +511,7 @@ export class Session {
   async setMetadataTarget(target: string): Promise<void> {
     try {
       const res = await this.#rest('PATCH', '/session/metadata-target', { target });
-      this.info = await res.json();
+      this.details = await res.json();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to change metadata schema');
       throw error;

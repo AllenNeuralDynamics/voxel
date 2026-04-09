@@ -17,7 +17,7 @@ from PySide6.QtCore import QObject, Signal
 
 from vxl import Session
 from vxl.metadata import BASE_METADATA_TARGET
-from vxl.system import SessionDirectory, SessionRoot, SystemConfig, get_rig_path, list_rigs
+from vxl.system import SessionListing, SessionRoot, SystemConfig, get_rig_path, list_rigs
 from vxl_qt.store import DevicesStore, GridStore, PreviewStore, StageStore
 
 if TYPE_CHECKING:
@@ -136,14 +136,14 @@ class VoxelApp(QObject):
         """Available rig configurations from ~/.voxel/rigs/."""
         return list_rigs()
 
-    def list_sessions(self, root_name: str) -> list[SessionDirectory]:
+    def list_sessions(self, root_name: str) -> list[SessionListing]:
         """List sessions in a specific root.
 
         Args:
             root_name: Name of the session root
 
         Returns:
-            List of SessionDirectory objects, sorted by modified time (newest first)
+            List of SessionListing objects, sorted by modified time (newest first)
         """
         if self._system_config is None:
             return []
@@ -153,16 +153,16 @@ class VoxelApp(QObject):
             log.exception("Failed to list sessions for root '%s'", root_name)
             return []
 
-    def list_all_sessions(self) -> list[SessionDirectory]:
+    def list_all_sessions(self) -> list[SessionListing]:
         """List sessions from all roots, sorted by modified time.
 
         Returns:
-            List of SessionDirectory objects from all roots
+            List of SessionListing objects from all roots
         """
-        all_sessions: list[SessionDirectory] = []
+        all_sessions: list[SessionListing] = []
         for root in self.session_roots:
             all_sessions.extend(self.list_sessions(root.name))
-        all_sessions.sort(key=lambda s: s.modified, reverse=True)
+        all_sessions.sort(key=lambda s: s.directory.modified, reverse=True)
         return all_sessions
 
     async def create_session(

@@ -20,7 +20,7 @@
     lg: '20'
   };
 
-  const config = $derived(session.config);
+  const config = $derived(session.rig_cfg);
   const profile = $derived(config.profiles[profileId]);
 </script>
 

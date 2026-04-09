@@ -28,14 +28,14 @@
   // ── Profile context ──
 
   const effectiveProfileId = $derived(profileId ?? session.activeProfileId);
-  const profile = $derived(effectiveProfileId ? session.config.profiles[effectiveProfileId] : undefined);
+  const profile = $derived(effectiveProfileId ? session.rig_cfg.profiles[effectiveProfileId] : undefined);
 
   // ── Camera lists ──
 
   const allCameras = $derived(Object.values(session.cameras));
   const profileCameraIds = $derived.by(() => {
     if (!profile) return new Set<string>();
-    return new Set(profile.channels.map((chId) => session.config.channels[chId]?.detection).filter(Boolean));
+    return new Set(profile.channels.map((chId) => session.rig_cfg.channels[chId]?.detection).filter(Boolean));
   });
   const cameras = $derived(allCameras.filter((c) => profileCameraIds.has(c.deviceId)));
   const otherCameras = $derived(allCameras.filter((c) => !profileCameraIds.has(c.deviceId)));
@@ -222,8 +222,8 @@
     : getConstraints(camera)}
   {@const channelLabel =
     !isOther && effectiveProfileId
-      ? (getChannelFor(session.config, effectiveProfileId, camera.deviceId)?.config?.label ??
-        getChannelFor(session.config, effectiveProfileId, camera.deviceId)?.id)
+      ? (getChannelFor(session.rig_cfg, effectiveProfileId, camera.deviceId)?.config?.label ??
+        getChannelFor(session.rig_cfg, effectiveProfileId, camera.deviceId)?.id)
       : undefined}
   {@const savedProps = isOther ? undefined : profile?.props?.[camera.deviceId]}
   {@const savedRoi = isOther ? undefined : profile?.rois?.[camera.deviceId]}
