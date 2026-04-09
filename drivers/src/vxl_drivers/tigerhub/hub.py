@@ -50,7 +50,7 @@ class TigerHub(Device):
 
         if reserved_axes:
             positions = self._box.get_position(reserved_axes)
-            moving = self._box.is_axis_moving(reserved_axes)
+            moving = {ax: self._box.is_axis_moving([ax])[ax] for ax in reserved_axes}
 
             with self._cache_lock:
                 for axis in reserved_axes:
