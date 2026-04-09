@@ -82,8 +82,8 @@
   }: Props = $props();
 
   const styles = $derived(nudgeVariants({ size }));
-  const meta = useModifierHeld('meta');
-  const metaHeld = $derived(meta.current);
+  const alt = useModifierHeld('alt');
+  const altHeld = $derived(alt.current);
 
   function activeStep(e?: { shiftKey?: boolean }): number {
     return fineStep !== undefined && e?.shiftKey ? fineStep : step;
@@ -161,14 +161,14 @@
     }
   }
 
-  // --- Drag (Meta + pointer) ---
+  // --- Drag (Alt + pointer) ---
   const DRAG_THRESHOLD = 3;
   let isDragging = false;
   let dragStartX = 0;
   let pixelAccum = 0;
 
   function handlePointerDown(e: PointerEvent) {
-    if (disabled || isEditing || !e.metaKey) return;
+    if (disabled || isEditing || !e.altKey) return;
     dragStartX = e.clientX;
     pixelAccum = 0;
     gestureValue = 0;
@@ -205,9 +205,9 @@
     resetGesture();
   }
 
-  // --- Scroll (Meta + wheel) ---
+  // --- Scroll (Alt + wheel) ---
   function handleWheel(e: WheelEvent) {
-    if (disabled || !e.metaKey) return;
+    if (disabled || !e.altKey) return;
     e.preventDefault();
     gestureActive = true;
     const direction = e.deltaY < 0 ? 1 : -1;
@@ -237,7 +237,7 @@
   </button>
 
   <div
-    class={cn(styles.body(), metaHeld ? 'cursor-ew-resize' : 'cursor-default')}
+    class={cn(styles.body(), altHeld ? 'cursor-ew-resize' : 'cursor-default')}
     onpointerdown={handlePointerDown}
     role="group"
   >
@@ -251,7 +251,7 @@
       class={cn(
         styles.value(),
         'w-full bg-transparent outline-none',
-        metaHeld ? 'cursor-ew-resize' : 'cursor-default',
+        altHeld ? 'cursor-ew-resize' : 'cursor-default',
         gestureActive && gestureValue !== 0 ? 'text-info' : ''
       )}
       value={displayValue}

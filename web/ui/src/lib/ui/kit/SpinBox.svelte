@@ -86,7 +86,7 @@
 </script>
 
 <script lang="ts">
-  import { cn, useModifierHeld } from '$lib/utils';
+  import { cn } from '$lib/utils';
   import { useEventListener, useThrottle } from 'runed';
 
   interface Props extends SpinBoxVariants {
@@ -136,8 +136,6 @@
   }: Props = $props();
 
   const styles = $derived(spinBoxVariants({ variant, size, appearance }));
-  const meta = useModifierHeld('meta');
-  const metaHeld = $derived(meta.current);
 
   function activeStep(e?: { shiftKey?: boolean }): number {
     return e?.shiftKey ? (fineStep ?? step / 10) : step;
@@ -264,7 +262,7 @@
   }
 
   function handleWheel(e: WheelEvent) {
-    if (!e.metaKey || !draggable) return;
+    if (!e.altKey || !draggable) return;
     e.preventDefault();
 
     const direction = e.deltaY < 0 ? 1 : -1;
@@ -330,7 +328,7 @@
     style:width="{numCharacters + 1}ch"
     style:color
     style:text-align={align}
-    class={cn(styles.input(), draggable && metaHeld && 'cursor-ew-resize')}
+    class={styles.input()}
   />
   {#if suffix}
     <span class={styles.suffix()}>{suffix}</span>

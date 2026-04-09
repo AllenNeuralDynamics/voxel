@@ -32,10 +32,8 @@
     throttledChange(parseFloat((e.currentTarget as HTMLInputElement).value));
   }
 
-  let isFocused = $state(false);
-
   function handleWheel(e: WheelEvent) {
-    if (!isFocused || !e.ctrlKey) return;
+    if (!e.altKey) return;
     e.preventDefault();
     const direction = e.deltaY < 0 ? 1 : -1;
     const newValue = Math.max(min, Math.min(max, target + direction * step));
@@ -48,8 +46,6 @@
 <input
   bind:this={inputElement}
   type="range"
-  onfocus={() => (isFocused = true)}
-  onblur={() => (isFocused = false)}
   {min}
   {max}
   {step}
