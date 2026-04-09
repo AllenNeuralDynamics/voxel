@@ -124,9 +124,7 @@ class TensorStoreBackend(Backend):
         # Submit all scale writes in parallel
         futures = []
         for level in buffer.max_level.levels:
-            future = self._write_executor.submit(
-                self._write_single_scale, level, buffer, z_start, z_end, channel_index
-            )
+            future = self._write_executor.submit(self._write_single_scale, level, buffer, z_start, z_end, channel_index)
             futures.append(future)
 
         # Wait for all to complete

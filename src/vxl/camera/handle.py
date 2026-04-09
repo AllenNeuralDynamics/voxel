@@ -71,7 +71,15 @@ class CameraHandle(DeviceHandle[Camera]):
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
     ) -> None:
         """Prepare camera and writer for a stack acquisition."""
-        await self.call("initialize_stack", stack, storage, channel_index, num_channels, trigger_mode, trigger_polarity)
+        await self.call(
+            "initialize_stack",
+            stack,
+            storage,
+            channel_index,
+            num_channels,
+            trigger_mode,
+            trigger_polarity,
+        )
 
     async def finalize_stack(self) -> None:
         """Complete stack acquisition. Closes writer and disarms camera."""

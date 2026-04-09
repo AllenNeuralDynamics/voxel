@@ -208,7 +208,6 @@ class SyncTask:
         if self._ao_task_name is None:
             raise RuntimeError("AO task not created")
 
-
         # Get channel names from the task via handle
         channel_names = self._ao_channel_names
         data_arrays: list[np.ndarray] = []

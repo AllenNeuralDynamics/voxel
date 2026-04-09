@@ -283,8 +283,12 @@ class CameraControl(QWidget):
         fire_and_forget(
             self._adapter.call(
                 "update_roi",
-                roi={"x": self._offset_x.value(), "y": self._offset_y.value(),
-                     "w": self._size_w.value(), "h": self._size_h.value()},
+                roi={
+                    "x": self._offset_x.value(),
+                    "y": self._offset_y.value(),
+                    "w": self._size_w.value(),
+                    "h": self._size_h.value(),
+                },
             ),
             log=log,
         )

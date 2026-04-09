@@ -112,7 +112,6 @@ class Zarr3GroupMeta(SchemaModel):
         return self.model_dump_json(indent=2, exclude_none=True)
 
 
-
 __all__ = [
     "Dataset",
     "Multiscale",

@@ -229,7 +229,6 @@ class AcquireZarrBackend(Backend):
             )
             stream_settings.arrays = [array_settings]
 
-
         # Create the stream
         stream = aqz.ZarrStream(stream_settings)
         self._streams[level] = stream

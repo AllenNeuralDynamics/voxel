@@ -170,7 +170,11 @@ class VieworksCamera(Camera):
     @pixel_format.setter
     def pixel_format(self, pixel_format: str) -> None:
         if self.pixel_format != pixel_format.upper():
-            self.log.info("pixel_format updated: %s -> %s", self.pixel_format, pixel_format.upper())
+            self.log.info(
+                "pixel_format updated: %s -> %s",
+                self.pixel_format,
+                pixel_format.upper(),
+            )
             self._dev.remote.set("PixelFormat", pixel_format.capitalize())
             self._refresh_binning_info()
             self._refresh_exposure_ms()
@@ -191,7 +195,10 @@ class VieworksCamera(Camera):
             self._refresh_binning_info()
             self._refresh_exposure_ms()
 
-    @deliminated_float(min_value=lambda self: self._exposure_ms.min, max_value=lambda self: self._exposure_ms.max)
+    @deliminated_float(
+        min_value=lambda self: self._exposure_ms.min,
+        max_value=lambda self: self._exposure_ms.max,
+    )
     def exposure_time_ms(self) -> int:
         if exp_time := self._dev.remote.get(feature="ExposureTime", dtype=float):
             return int(exp_time / 1000)
@@ -203,7 +210,10 @@ class VieworksCamera(Camera):
         self.log.info("Set exposure time to %s ms", self._exposure_ms.val)
         self._refresh_exposure_ms()
 
-    @deliminated_float(min_value=lambda self: self._frame_rate_hz.min, max_value=lambda self: self._frame_rate_hz.max)
+    @deliminated_float(
+        min_value=lambda self: self._frame_rate_hz.min,
+        max_value=lambda self: self._frame_rate_hz.max,
+    )
     def frame_rate_hz(self) -> float:
         if frame_rate := self._dev.remote.get(feature="AcquisitionFrameRate", dtype=float):
             return frame_rate
@@ -267,6 +277,7 @@ class VieworksCamera(Camera):
         )
 
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:
+        mode = TriggerMode.OFF  # #TODO! remove line:set to off for testing purposes
         curr_on_off = self._dev.fetch_remote("TriggerMode", str)
         if mode == TriggerMode.OFF and curr_on_off != "Off":
             self._dev.remote.set("TriggerMode", "Off")
@@ -337,7 +348,7 @@ class VieworksCamera(Camera):
             buffer_size = column_count * row_count * bytes_per_pixel
             data = ct.cast(ptr, ct.POINTER(ct.c_ubyte * buffer_size)).contents
             frame = np.frombuffer(data, count=column_count * row_count, dtype=self.pixel_type.dtype)
-            return frame.reshape((row_count, column_count))
+            return frame.reshape((row_count, column_count)).copy()
 
     def stop(self) -> None:
         """Stop the camera from acquiring frames."""
@@ -438,7 +449,11 @@ class VieworksCamera(Camera):
                     self._dev.remote.set("PixelFormat", option)
                     options.append(option.upper())
                 except Exception as e:
-                    self.log.debug("Unexpected error processing pixel format: %s. Error: %s", option, e)
+                    self.log.debug(
+                        "Unexpected error processing pixel format: %s. Error: %s",
+                        option,
+                        e,
+                    )
         finally:
             if initial:
                 try:

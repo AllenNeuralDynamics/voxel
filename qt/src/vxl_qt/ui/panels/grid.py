@@ -219,9 +219,7 @@ class GridTable(QWidget):
     def delete_selected(self) -> None:
         """Delete stacks for all selected tiles."""
         tiles = self.get_selected_tiles()
-        stack_ids = [
-            s.stack_id for t in tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None
-        ]
+        stack_ids = [s.stack_id for t in tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None]
         if stack_ids:
             self._store.remove_stacks(stack_ids)
             self._table.clear_selection()
@@ -357,21 +355,15 @@ class ZRangeEditor(PropertyEditor):
         """Apply Z range to all given tiles."""
         z_start, z_end = self.get_values()
 
-        tiles_with_stacks = [
-            (t, s) for t in _tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None
-        ]
+        tiles_with_stacks = [(t, s) for t in _tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None]
         tiles_without_stacks = [t for t in _tiles if self._store.get_stack_at_position(t.x, t.y) is None]
 
         if tiles_with_stacks:
-            edit_dicts = [
-                {"stack_id": s.stack_id, "z_start": z_start, "z_end": z_end} for _t, s in tiles_with_stacks
-            ]
+            edit_dicts = [{"stack_id": s.stack_id, "z_start": z_start, "z_end": z_end} for _t, s in tiles_with_stacks]
             self._store.edit_stacks(edit_dicts)
 
         if tiles_without_stacks:
-            add_dicts = [
-                {"x": t.x, "y": t.y, "z_start": z_start, "z_end": z_end} for t in tiles_without_stacks
-            ]
+            add_dicts = [{"x": t.x, "y": t.y, "z_start": z_start, "z_end": z_end} for t in tiles_without_stacks]
             fire_and_forget(self._store.add_stacks(add_dicts), log=log)
 
 
@@ -1823,9 +1815,7 @@ class GridPanel(QWidget):
 
     def _on_delete_requested(self, tiles: list[Tile]) -> None:
         """Handle delete request from editor."""
-        stack_ids = [
-            s.stack_id for t in tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None
-        ]
+        stack_ids = [s.stack_id for t in tiles if (s := self._store.get_stack_at_position(t.x, t.y)) is not None]
         if stack_ids:
             self._store.remove_stacks(stack_ids)
             self._grid_table.clear_selection()

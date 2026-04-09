@@ -297,10 +297,7 @@ class OMEZarrWriter:
         self.close()
 
     def get_status(self) -> StreamStatus:
-        buffer_statuses = {
-            i: buf.get_status()
-            for i, buf in enumerate(self.buffers)
-        }
+        buffer_statuses = {i: buf.get_status() for i, buf in enumerate(self.buffers)}
 
         estimated_remaining = None
         if self._perf.fps > 0:

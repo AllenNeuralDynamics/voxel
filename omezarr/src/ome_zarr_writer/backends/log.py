@@ -8,7 +8,6 @@ from .base import Backend
 log = logging.getLogger(__name__)
 
 
-
 class LogBackend(Backend):
     """
     Log-based backend for testing that writes batch info to a text file.

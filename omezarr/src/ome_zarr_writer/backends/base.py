@@ -10,7 +10,6 @@ from ome_zarr_writer.s3_utils import S3Config
 log = logging.getLogger(__name__)
 
 
-
 class Backend(ABC):
     """
     Abstract base class for OME-Zarr storage backends.

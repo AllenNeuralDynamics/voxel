@@ -319,10 +319,12 @@ class ZmqTopicHandler(logging.Handler):
                 if value is not None:
                     payload[field] = value
 
-            self._socket.send_multipart([
-                topic.encode("utf-8", errors="replace"),
-                json.dumps(payload).encode("utf-8"),
-            ])
+            self._socket.send_multipart(
+                [
+                    topic.encode("utf-8", errors="replace"),
+                    json.dumps(payload).encode("utf-8"),
+                ]
+            )
         except Exception:
             self.handleError(record)
 
