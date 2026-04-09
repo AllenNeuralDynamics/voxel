@@ -85,6 +85,7 @@ export interface OpticalPathConfig {
 export interface DetectionPathConfig extends OpticalPathConfig {
   filter_wheels: string[];
   magnification: number;
+  rotation_deg: number;
 }
 
 /**

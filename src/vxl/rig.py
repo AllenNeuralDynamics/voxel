@@ -126,6 +126,9 @@ class VoxelRig(Rig):
                 frame_area = await camera.get_frame_area_um()
                 fov_w = frame_area.x / magnification
                 fov_h = frame_area.y / magnification
+                # Apply camera-to-stage rotation: 90°/270° swaps width and height
+                if detection_path.rotation_deg % 180 != 0:
+                    fov_w, fov_h = fov_h, fov_w
                 fovs.append((fov_w, fov_h))
 
             if not fovs:

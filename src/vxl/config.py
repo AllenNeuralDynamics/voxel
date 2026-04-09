@@ -65,6 +65,14 @@ class OpticalPathConfig(BaseModel):
 class DetectionPathConfig(OpticalPathConfig):
     filter_wheels: list[str]
     magnification: float = Field(..., gt=0, description="Optical magnification of the detection path")
+    rotation_deg: int = Field(0, description="Camera rotation relative to stage axes (multiple of 90)")
+
+    @field_validator("rotation_deg")
+    @classmethod
+    def _validate_rotation(cls, v: int) -> int:
+        if v % 90 != 0:
+            raise ValueError(f"rotation_deg must be a multiple of 90, got {v}")
+        return v
 
 
 class IlluminationPathConfig(OpticalPathConfig): ...
