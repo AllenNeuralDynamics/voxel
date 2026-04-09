@@ -10,14 +10,28 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException
+from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from vxl.system import SystemConfig
 
 from .services import AppService, app_router
 
 log = logging.getLogger(__name__)
+
+
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles with SPA fallback — serves index.html for unknown paths."""
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as e:
+            if e.status_code == 404:
+                return await super().get_response(".", scope)
+            raise
 
 
 def _create_lifespan(system_config: SystemConfig) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
@@ -96,7 +110,7 @@ def create_app(system_config: SystemConfig | None = None, serve_static: bool = T
     if serve_static:
         static_dir = Path(__file__).parent / "static"
         if static_dir.is_dir():
-            app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+            app.mount("/", SPAStaticFiles(directory=static_dir, html=True), name="static")
 
     return app
 
