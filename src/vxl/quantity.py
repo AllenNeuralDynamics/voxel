@@ -1,9 +1,10 @@
 import math
 import re
-from collections.abc import Callable, Generator
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, GetCoreSchemaHandler, GetJsonSchemaHandler, model_validator
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema, core_schema
 
 _TIME_UNITS = {
     "s": 1.0,
@@ -50,15 +51,22 @@ class Quantity(float):
 
     def __new__(cls, v: float | str) -> Self:
         # Direct instantiation also parses unit strings
-        parsed = cls._validate(v)
+        parsed = cls.parse(v)
         return super().__new__(cls, parsed)
 
     @classmethod
-    def __get_validators__(cls) -> Generator[Callable[..., float], Any]:
-        yield cls._validate
+    def __get_pydantic_core_schema__(cls, source_type: type[Any], _handler: GetCoreSchemaHandler) -> CoreSchema:
+        return core_schema.no_info_plain_validator_function(
+            source_type.parse,
+            serialization=core_schema.simple_ser_schema("float"),
+        )
 
     @classmethod
-    def _validate(cls, v: float | str, *_args: Any, **_kwargs: Any) -> float:
+    def __get_pydantic_json_schema__(cls, _schema: CoreSchema, _handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        return {"anyOf": [{"type": "number"}, {"type": "string"}]}
+
+    @classmethod
+    def parse(cls, v: float | str, *_args: Any, **_kwargs: Any) -> float:
         if isinstance(v, (int, float)):
             return float(v)
         m = re.fullmatch(r"\s*([+-]?[0-9]*\.?[0-9]+)\s*([a-zA-Z°]+)\s*", str(v))
