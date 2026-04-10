@@ -175,7 +175,7 @@
       const hasFrames = session.preview.channels.some((ch) => ch.visible && ch.frame);
       if (hasFrames) {
         compositeFullFrames(ctx, offscreen, session.preview.channels);
-        thumbnail = offscreen.toDataURL('image/jpeg', 0.6);
+        thumbnail = offscreen.toDataURL('image/png');
       } else {
         thumbnail = '';
       }

@@ -1,4 +1,4 @@
-import type { ChannelConfig, PreviewConfig, ProfileConfig } from './types';
+import type { ChannelConfig, PreviewConfig, VoxelRigConfig } from './types';
 import type { PreviewViewport, PreviewFrameInfo, PreviewTileInfo, PreviewLevels, Client } from './client.svelte';
 import type { AppStatusUpdate } from './types';
 
@@ -55,29 +55,76 @@ function tileKey(scale: number, col: number, row: number): string {
 
 // ── Compositing ─────────────────────────────────────────────────────
 
+/** Compute the bounding-box extents across all visible channels (stage space, accounts for rotation). */
+export function channelBoundingBox(channels: PreviewChannel[]): { maxW: number; maxH: number } {
+  let maxW = 0;
+  let maxH = 0;
+  for (const ch of channels) {
+    if (!ch.visible || ch.sensorWidth <= 0 || ch.sensorHeight <= 0) continue;
+    const swapped = ch.rotationDeg % 180 !== 0;
+    maxW = Math.max(maxW, swapped ? ch.sensorHeight : ch.sensorWidth);
+    maxH = Math.max(maxH, swapped ? ch.sensorWidth : ch.sensorHeight);
+  }
+  return { maxW, maxH };
+}
+
+/** Transform a sensor-normalized rect to stage-normalized within the channel's footprint. */
+function sensorToStage(tx: number, ty: number, tw: number, th: number, rot: number) {
+  if (rot === 90) return { x: 1 - ty - th, y: tx, w: th, h: tw };
+  if (rot === 180) return { x: 1 - tx - tw, y: 1 - ty - th, w: tw, h: th };
+  if (rot === 270) return { x: ty, y: 1 - tx - tw, w: th, h: tw };
+  return { x: tx, y: ty, w: tw, h: th };
+}
+
+/** Draw a bitmap rotated at a pixel position. For 0° draws directly; otherwise saves/restores context. */
+function drawRotated(
+  ctx: CanvasRenderingContext2D,
+  bitmap: ImageBitmap,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+  rad: number,
+  swapped: boolean
+): void {
+  if (rad === 0) {
+    ctx.drawImage(bitmap, sx, sy, sw, sh, dx, dy, dw, dh);
+    return;
+  }
+  ctx.save();
+  ctx.translate(dx + dw / 2, dy + dh / 2);
+  ctx.rotate(rad);
+  const prW = swapped ? dh : dw;
+  const prH = swapped ? dw : dh;
+  ctx.drawImage(bitmap, sx, sy, sw, sh, -prW / 2, -prH / 2, prW, prH);
+  ctx.restore();
+}
+
 /**
  * Composite tiles (or overview fallback) for all visible channels.
  *
- * For each channel, tiles are drawn at their correct position on the canvas.
- * If no tiles are available, the overview frame is cropped to the viewport
- * and stretched to fill the canvas as a fallback.
- *
- * The canvas is assumed to fill its container. The sensor image is centered
- * on the canvas (contain-fitted), with black bars for aspect mismatch.
+ * All channels share a single viewport→pixel mapping in bounding-box (stage)
+ * space. Each tile's sensor position is transformed to stage space, then to
+ * pixel coords. Rotated bitmaps are drawn with per-tile canvas transforms.
  */
 export function compositeTiledFrames(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   channels: PreviewChannel[],
-  viewport: PreviewViewport,
-  sensorAspect: number
+  viewport: PreviewViewport
 ): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Compute where the sensor image sits on the canvas (contain-fit)
-  const canvasAspect = canvas.width / canvas.height;
-  const vpAspect = (viewport.w * sensorAspect) / viewport.h;
+  const { maxW, maxH } = channelBoundingBox(channels);
+  if (maxW <= 0 || maxH <= 0) return;
 
+  // Contain-fit bounding box into canvas
+  const vpAspect = (viewport.w * maxW) / (viewport.h * maxH);
+  const canvasAspect = canvas.width / canvas.height;
   let drawW: number, drawH: number;
   if (canvasAspect > vpAspect) {
     drawH = canvas.height;
@@ -89,69 +136,101 @@ export function compositeTiledFrames(
   const drawX = (canvas.width - drawW) / 2;
   const drawY = (canvas.height - drawH) / 2;
 
+  // Shared bounding-box → pixel mapping
+  const toPixelX = (bb: number) => drawX + ((bb - viewport.x) / viewport.w) * drawW;
+  const toPixelY = (bb: number) => drawY + ((bb - viewport.y) / viewport.h) * drawH;
+  const toPixelW = (bb: number) => (bb / viewport.w) * drawW;
+  const toPixelH = (bb: number) => (bb / viewport.h) * drawH;
+
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.globalCompositeOperation = 'lighter';
 
   for (const ch of channels) {
-    if (!ch.visible) continue;
+    if (!ch.visible || ch.sensorWidth <= 0 || ch.sensorHeight <= 0) continue;
+
+    const rot = ((ch.rotationDeg % 360) + 360) % 360;
+    const rad = (rot * Math.PI) / 180;
+    const swapped = rot % 180 !== 0;
+    const scaleX = (swapped ? ch.sensorHeight : ch.sensorWidth) / maxW;
+    const scaleY = (swapped ? ch.sensorWidth : ch.sensorHeight) / maxH;
+    const offsetX = (1 - scaleX) / 2;
+    const offsetY = (1 - scaleY) / 2;
 
     if (ch.tiles.size > 0) {
-      // Draw tiles
       for (const { bitmap, scale, col, row } of ch.tiles.values()) {
         const gridSize = 2 ** scale;
-        const tileNormX = col / gridSize;
-        const tileNormY = row / gridSize;
-        const tileNormW = 1 / gridSize;
-        const tileNormH = 1 / gridSize;
+        const st = sensorToStage(col / gridSize, row / gridSize, 1 / gridSize, 1 / gridSize, rot);
 
-        // Map tile's sensor position to canvas coordinates via viewport.
-        // Use Math.round on all edges so adjacent tiles share the same pixel
-        // boundary — no gap (sub-pixel seam) and no overlap (bright seam with additive blend).
-        const fx = drawX + ((tileNormX - viewport.x) / viewport.w) * drawW;
-        const fy = drawY + ((tileNormY - viewport.y) / viewport.h) * drawH;
-        const fx2 = fx + (tileNormW / viewport.w) * drawW;
-        const fy2 = fy + (tileNormH / viewport.h) * drawH;
-        const dx = Math.round(fx);
-        const dy = Math.round(fy);
+        const px = toPixelX(offsetX + st.x * scaleX);
+        const py = toPixelY(offsetY + st.y * scaleY);
+        const pw = toPixelW(st.w * scaleX);
+        const ph = toPixelH(st.h * scaleY);
 
-        ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, Math.round(fx2) - dx, Math.round(fy2) - dy);
+        // Skip tiles entirely outside canvas
+        if (px + pw < 0 || py + ph < 0 || px > canvas.width || py > canvas.height) continue;
+
+        const dx = Math.round(px);
+        const dy = Math.round(py);
+        drawRotated(ctx, bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, Math.round(px + pw) - dx, Math.round(py + ph) - dy, rad, swapped);
       }
     } else if (ch.frame) {
-      // Fallback: draw overview frame cropped to viewport
-      const sx = viewport.x * ch.frame.width;
-      const sy = viewport.y * ch.frame.height;
-      const sw = viewport.w * ch.frame.width;
-      const sh = viewport.h * ch.frame.height;
-      ctx.drawImage(ch.frame, sx, sy, sw, sh, drawX, drawY, drawW, drawH);
+      drawRotated(
+        ctx, ch.frame, 0, 0, ch.frame.width, ch.frame.height,
+        Math.round(toPixelX(offsetX)), Math.round(toPixelY(offsetY)),
+        Math.round(toPixelW(scaleX)), Math.round(toPixelH(scaleY)),
+        rad, swapped
+      );
     }
   }
 
   ctx.globalCompositeOperation = 'source-over';
 }
 
-/** Composite full frames without viewport cropping (for snapshots etc). */
+/** Composite full frames with per-channel rotation and bounding-box layout. */
 export function compositeFullFrames(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   channels: PreviewChannel[]
 ): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const { maxW, maxH } = channelBoundingBox(channels);
+  if (maxW <= 0 || maxH <= 0) return;
+
+  // Contain-fit bounding box into canvas
+  const bbAspect = maxW / maxH;
+  const canvasAspect = canvas.width / canvas.height;
+  let drawW: number, drawH: number;
+  if (canvasAspect > bbAspect) {
+    drawH = canvas.height;
+    drawW = drawH * bbAspect;
+  } else {
+    drawW = canvas.width;
+    drawH = drawW / bbAspect;
+  }
+  const drawX = (canvas.width - drawW) / 2;
+  const drawY = (canvas.height - drawH) / 2;
+
   ctx.globalCompositeOperation = 'lighter';
 
   for (const ch of channels) {
-    if (!ch.visible || !ch.frame) continue;
-    ctx.drawImage(ch.frame, 0, 0, canvas.width, canvas.height);
+    if (!ch.visible || !ch.frame || ch.sensorWidth <= 0 || ch.sensorHeight <= 0) continue;
+
+    const rot = ((ch.rotationDeg % 360) + 360) % 360;
+    const rad = (rot * Math.PI) / 180;
+    const swapped = rot % 180 !== 0;
+    const scaleX = (swapped ? ch.sensorHeight : ch.sensorWidth) / maxW;
+    const scaleY = (swapped ? ch.sensorWidth : ch.sensorHeight) / maxH;
+    const dx = Math.round(drawX + ((1 - scaleX) / 2) * drawW);
+    const dy = Math.round(drawY + ((1 - scaleY) / 2) * drawH);
+    const dw = Math.round(scaleX * drawW);
+    const dh = Math.round(scaleY * drawH);
+
+    drawRotated(ctx, ch.frame, 0, 0, ch.frame.width, ch.frame.height, dx, dy, dw, dh, rad, swapped);
   }
 
   ctx.globalCompositeOperation = 'source-over';
-}
-
-// ── Layout Config ───────────────────────────────────────────────────
-
-export interface RigLayout {
-  channels: Record<string, ChannelConfig>;
-  profiles: Record<string, ProfileConfig>;
 }
 
 // ── PreviewChannel ──────────────────────────────────────────────────
@@ -169,6 +248,13 @@ export class PreviewChannel {
   latestHistogram: number[] | null = $state<number[] | null>(null);
   colormap: string | null = $state<string | null>(null);
   initAutoLevelDone = false;
+
+  /** Camera rotation relative to stage axes (from DetectionPathConfig). */
+  rotationDeg: number = $state<number>(0);
+
+  /** Full sensor dimensions in pixels (set from frame info). */
+  sensorWidth: number = $state<number>(0);
+  sensorHeight: number = $state<number>(0);
 
   /** Overview frame (full sensor, downsampled). */
   frame: ImageBitmap | null = $state<ImageBitmap | null>(null);
@@ -200,20 +286,16 @@ export class PreviewState {
   catalog = $state<ColormapCatalog>([]);
   redrawGeneration = $state(0);
 
-  /** Sensor dimensions from latest overview frame. */
-  sensorWidth = $state(0);
-  sensorHeight = $state(0);
-
   #client: Client;
-  #config: RigLayout;
+  #config: VoxelRigConfig;
   #unsubscribers: Array<() => void> = [];
   #viewportUpdateTimer: number | null = null;
   #viewportLastSent = 0;
   #levelsUpdateTimers = new SvelteMap<string, number>();
   #levelsLastSent = new SvelteMap<string, number>();
-  readonly #THROTTLE_MS = 500;
+  readonly #THROTTLE_MS = 200;
 
-  constructor(client: Client, config: RigLayout) {
+  constructor(client: Client, config: VoxelRigConfig) {
     this.#client = client;
     this.#config = config;
 
@@ -233,8 +315,10 @@ export class PreviewState {
     return this.#client;
   }
 
-  get sensorAspect(): number {
-    return this.sensorWidth > 0 && this.sensorHeight > 0 ? this.sensorWidth / this.sensorHeight : 4 / 3;
+  /** Bounding-box aspect ratio across all visible channels (accounts for rotation). */
+  get boundingBoxAspect(): number {
+    const { maxW, maxH } = channelBoundingBox(this.channels);
+    return maxW > 0 && maxH > 0 ? maxW / maxH : 4 / 3;
   }
 
   /** Resolve a colormap name or hex string to a hex color. */
@@ -389,6 +473,7 @@ export class PreviewState {
       if (!slot.name) continue;
 
       slot.config = this.#config.channels[slot.name];
+      slot.rotationDeg = this.#config.detection[slot.config?.detection ?? '']?.rotation_deg ?? 0;
       slot.visible = true;
     }
 
@@ -410,11 +495,9 @@ export class PreviewState {
     const channel = this.channels.find((c) => c.name === channelName);
     if (!channel) return;
 
-    // Track sensor dimensions from overview
-    if (this.sensorWidth !== info.full_width || this.sensorHeight !== info.full_height) {
-      this.sensorWidth = info.full_width;
-      this.sensorHeight = info.full_height;
-    }
+    // Track sensor dimensions per channel
+    channel.sensorWidth = info.full_width;
+    channel.sensorHeight = info.full_height;
 
     channel.latestFrameInfo = info;
     channel.frame = bitmap;

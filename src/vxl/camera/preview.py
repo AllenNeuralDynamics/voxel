@@ -41,16 +41,37 @@ class PreviewFmt(StrEnum):
 
 
 class PreviewViewport(SchemaModel):
-    """Visible region of the sensor in normalized coordinates [0, 1]."""
+    """Visible region in normalized coordinates [0, 1].
 
-    x: float = Field(default=0.0, ge=0.0, le=1.0, description="Top-left X in normalized sensor coords.")
-    y: float = Field(default=0.0, ge=0.0, le=1.0, description="Top-left Y in normalized sensor coords.")
-    w: float = Field(default=1.0, gt=0.0, le=1.0, description="Viewport width in normalized sensor coords.")
-    h: float = Field(default=1.0, gt=0.0, le=1.0, description="Viewport height in normalized sensor coords.")
+    When sent from the frontend, coordinates are stage-normalized.
+    The rig inverse-rotates per camera to produce sensor-normalized viewports.
+    """
+
+    x: float = Field(default=0.0, ge=0.0, le=1.0, description="Top-left X in normalized coords.")
+    y: float = Field(default=0.0, ge=0.0, le=1.0, description="Top-left Y in normalized coords.")
+    w: float = Field(default=1.0, gt=0.0, le=1.0, description="Viewport width in normalized coords.")
+    h: float = Field(default=1.0, gt=0.0, le=1.0, description="Viewport height in normalized coords.")
 
     @property
     def needs_adjustment(self) -> bool:
         return self.w < 1.0 or self.h < 1.0
+
+    def to_sensor_space(self, rotation_deg: int) -> "PreviewViewport":
+        """Inverse-rotate a stage-normalized viewport into sensor-normalized coords.
+
+        For 0°/180° the footprint shape is unchanged (only origin flips).
+        For 90°/270° width and height swap, and origin re-anchors.
+        """
+        r = rotation_deg % 360
+        if r == 0:
+            return self
+        if r == 90:
+            return PreviewViewport(x=self.y, y=1 - self.x - self.w, w=self.h, h=self.w)
+        if r == 180:
+            return PreviewViewport(x=1 - self.x - self.w, y=1 - self.y - self.h, w=self.w, h=self.h)
+        if r == 270:
+            return PreviewViewport(x=1 - self.y - self.h, y=self.x, w=self.h, h=self.w)
+        return self
 
 
 class PreviewLevels(SchemaModel):

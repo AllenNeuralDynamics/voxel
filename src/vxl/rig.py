@@ -16,7 +16,7 @@ from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.camera.base import SensorROI
 from vxl.camera.handle import CameraHandle
 from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
-from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
+from vxl.config import ChannelConfig, DetectionPathConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
@@ -24,6 +24,16 @@ from vxl.stack import ChannelResult, Stack, StackResult, StackStatus, StorageCon
 from vxl.sync import SyncTask
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
+
+
+def _sensor_viewport(
+    camera_id: str, viewport: PreviewViewport, detection_paths: dict[str, DetectionPathConfig]
+) -> PreviewViewport:
+    """Convert a stage-normalized viewport to sensor-normalized for a camera."""
+    detection_path = detection_paths.get(camera_id)
+    if not detection_path or detection_path.rotation_deg == 0:
+        return viewport
+    return viewport.to_sensor_space(detection_path.rotation_deg)
 
 Unsubscribe = Callable[[], None]
 
@@ -135,10 +145,13 @@ class VoxelRig(Rig):
                 return
 
             if not all(f == fovs[0] for f in fovs):
-                self.log.warning("Cameras disagree on FOV; using first camera's value")
+                self.log.warning("Cameras disagree on FOV; using bounding box")
 
-            if fovs[0] != self._topic_values.get("fov"):
-                await self._publish("fov", fovs[0])
+            # Bounding box across all channels (max stage-space extent)
+            fov = (max(w for w, _ in fovs), max(h for _, h in fovs))
+
+            if fov != self._topic_values.get("fov"):
+                await self._publish("fov", fov)
 
     def _make_camera_props_callback(self, camera_id: str) -> PropsCallback:
         """Create a property-change callback that triggers FOV recomputation."""
@@ -202,7 +215,7 @@ class VoxelRig(Rig):
         self._validate_device_types()
 
         # Subscribe to all camera preview streams (subscriptions are stable for rig lifetime)
-        await self.preview.subscribe_cameras(self.cameras)
+        await self.preview.subscribe_cameras(self.cameras, self.config.detection)
 
         await self._subscribe_device_props()
 
@@ -626,7 +639,12 @@ class VoxelRig(Rig):
         if self.preview.viewport.needs_adjustment:
             # Send initial viewport synchronously before streaming starts
             vp = self.preview.viewport
-            tasks = [self.cameras[cam_id].update_preview_viewport(vp) for cam_id in self._streaming_cameras]
+            tasks = [
+                self.cameras[cam_id].update_preview_viewport(
+                    _sensor_viewport(cam_id, vp, self.config.detection)
+                )
+                for cam_id in self._streaming_cameras
+            ]
             await asyncio.gather(*tasks, return_exceptions=True)
         self.preview.start_viewport_flush(self._streaming_cameras)
 
@@ -680,6 +698,10 @@ class VoxelRig(Rig):
     async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
         """Update preview viewport for cameras in the active profile.
 
+        The incoming viewport is stage-normalized. Each camera receives a
+        sensor-normalized viewport after inverse-rotating by its detection
+        path rotation.
+
         During preview: coalesced via hub (instant, non-blocking).
         When stopped: direct RPC for reprocessing cached frame.
         """
@@ -689,7 +711,12 @@ class VoxelRig(Rig):
         else:
             camera_ids = {ch.detection for ch in self.active_channels.values() if ch.detection in self.cameras}
             if camera_ids:
-                tasks = [self.cameras[cam_id].update_preview_viewport(viewport) for cam_id in camera_ids]
+                tasks = [
+                    self.cameras[cam_id].update_preview_viewport(
+                        _sensor_viewport(cam_id, viewport, self.config.detection)
+                    )
+                    for cam_id in camera_ids
+                ]
                 await asyncio.gather(*tasks, return_exceptions=True)
 
     async def update_preview_levels(self, levels: dict[str, PreviewLevels]) -> None:
@@ -902,14 +929,19 @@ class RigPreviewHub:
         ] = {}
         # Camera handles for viewport delivery
         self._cameras: dict[str, CameraHandle] = {}
+        # Detection path configs per camera (for stage→sensor viewport transform)
+        self._detection_paths: dict[str, DetectionPathConfig] = {}
 
         # Viewport coalescing
         self._viewport_event = asyncio.Event()
         self._viewport_flush_task: asyncio.Task | None = None
 
-    async def subscribe_cameras(self, cameras: dict[str, CameraHandle]) -> None:
+    async def subscribe_cameras(
+        self, cameras: dict[str, CameraHandle], detection_paths: dict[str, DetectionPathConfig]
+    ) -> None:
         """Subscribe to all cameras (overview frames + tiles). Call once at rig start."""
         self._cameras = cameras
+        self._detection_paths = detection_paths
         for camera_id, handle in cameras.items():
             if camera_id in self._subscriptions:
                 self.log.debug(f"Camera {camera_id} already subscribed")
@@ -965,14 +997,20 @@ class RigPreviewHub:
         self._viewport_event.clear()
 
     async def _viewport_flush_loop(self) -> None:
-        """Coalesces rapid viewport updates into single RPCs."""
+        """Coalesces rapid viewport updates into single RPCs.
+
+        The stored viewport is stage-normalized. Each camera receives a
+        sensor-normalized viewport after inverse-rotating by its rotation.
+        """
         try:
             while True:
                 await self._viewport_event.wait()
                 self._viewport_event.clear()
                 vp = self.viewport
                 tasks = [
-                    self._cameras[cam_id].update_preview_viewport(vp)
+                    self._cameras[cam_id].update_preview_viewport(
+                        _sensor_viewport(cam_id, vp, self._detection_paths)
+                    )
                     for cam_id in self._active_camera_ids
                     if cam_id in self._cameras
                 ]

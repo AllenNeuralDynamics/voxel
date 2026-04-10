@@ -137,10 +137,7 @@ export class Session {
     const [details] = await Promise.all([this.client.fetchSessionDetails(), this.devices.initialize()]);
     this.details = details;
 
-    this.preview = new PreviewState(this.client, {
-      channels: this.rig_cfg.channels,
-      profiles: this.rig_cfg.profiles
-    });
+    this.preview = new PreviewState(this.client, this.rig_cfg);
     this.stage = new Stage(this.devices, this.rig_cfg.stage);
 
     const lasers: Record<string, Laser> = {};

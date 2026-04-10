@@ -58,7 +58,7 @@
 
     if (needsRedraw && ctx && canvasEl) {
       needsRedraw = false;
-      compositeTiledFrames(ctx, canvasEl, previewer.channels, previewer.viewport, previewer.sensorAspect);
+      compositeTiledFrames(ctx, canvasEl, previewer.channels, previewer.viewport);
     }
 
     animFrameId = requestAnimationFrame(frameLoop);
@@ -116,8 +116,21 @@
       const zoomSensitivity = 0.001;
       const delta = -e.deltaY * zoomSensitivity;
       const vp = previewer.viewport;
-      let newW = Math.max(0.01, Math.min(1.0, vp.w - delta));
-      let newH = Math.max(0.01, Math.min(1.0, vp.h - delta));
+
+      // Derive w from h (or vice versa) to fill the canvas as you zoom in.
+      // At full zoom-out (w=h=1) contain-fit may show bars; zooming in
+      // increases w/h ratio until the image fills the canvas, then both
+      // shrink together maintaining the fill.
+      const bbAspect = previewer.boundingBoxAspect;
+      const canvasAspect = rect.width / rect.height;
+      let newW: number, newH: number;
+      if (canvasAspect >= bbAspect) {
+        newH = Math.max(0.01, Math.min(1.0, vp.h - delta));
+        newW = Math.max(0.01, Math.min(1.0, newH * canvasAspect / bbAspect));
+      } else {
+        newW = Math.max(0.01, Math.min(1.0, vp.w - delta));
+        newH = Math.max(0.01, Math.min(1.0, newW * bbAspect / canvasAspect));
+      }
 
       // Point on sensor under cursor
       const mouseX = (e.clientX - rect.left) / rect.width;
