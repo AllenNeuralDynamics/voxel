@@ -667,7 +667,7 @@
 
             <!-- ═══ Handle visible lines (behind traces) ═══ -->
             {#if editingWaveform && selectedDeviceId}
-              <g stroke={HANDLE_LINE_COLOR} stroke-width="1" stroke-dasharray="4 2" pointer-events="none">
+              <g stroke={HANDLE_LINE_COLOR} stroke-width="1" stroke-dasharray="4 2" opacity="0.3" pointer-events="none">
                 <line x1={plotPadding.left} y1={vminY} x2={plotPadding.left + plotW} y2={vminY} />
                 <line x1={plotPadding.left} y1={vmaxY} x2={plotPadding.left + plotW} y2={vmaxY} />
                 <line x1={wminX} y1={plotPadding.top} x2={wminX} y2={plotPadding.top + plotH} />
@@ -692,7 +692,7 @@
                         stroke={waveformColors[deviceId] ?? '#888'}
                         stroke-width={isEditing ? 1.5 : 1}
                         stroke-linejoin="round"
-                        opacity={selectedDeviceId ? (isSelected ? 0.6 : 0.3) : 0.75}
+                        opacity={selectedDeviceId ? (isSelected ? 0.85 : 0.4) : 0.75}
                       />
                     {/if}
                   {:else}
@@ -702,7 +702,7 @@
                       stroke={waveformColors[deviceId] ?? '#888'}
                       stroke-width="1"
                       stroke-linejoin="round"
-                      opacity={selectedDeviceId ? 0.25 : 0.75}
+                      opacity={selectedDeviceId ? 0.4 : 0.75}
                     />
                   {/if}
                 {/if}

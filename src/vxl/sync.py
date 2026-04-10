@@ -294,18 +294,18 @@ class SyncTask:
 
     @staticmethod
     def _downsample_minmax(data: np.ndarray, target_points: int) -> list[float]:
-        """Downsample using min-max to preserve peaks."""
+        """Downsample using min-max to preserve peaks with uniform bucket sizes."""
         if len(data) <= target_points:
             return data.tolist()
 
         n_buckets = target_points // 2
-        bucket_size = len(data) // n_buckets
+        # Use linspace for uniform bucket boundaries (avoids oversized last bucket)
+        boundaries = np.linspace(0, len(data), n_buckets + 1, dtype=int)
 
         downsampled = []
         for i in range(n_buckets):
-            start = i * bucket_size
-            end = start + bucket_size if i < n_buckets - 1 else len(data)
-            bucket = data[start:end]
-            downsampled.extend([float(bucket.min()), float(bucket.max())])
+            bucket = data[boundaries[i] : boundaries[i + 1]]
+            if len(bucket) > 0:
+                downsampled.extend([float(bucket.min()), float(bucket.max())])
 
         return downsampled[:target_points]

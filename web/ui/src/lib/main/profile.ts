@@ -31,7 +31,20 @@ const ROLE_ORDER: Record<DeviceRole, number> = {
   other: 6
 };
 
-const AUX_COLORS = ['#a78bfa', '#818cf8', '#c084fc', '#a855f7', '#7c3aed', '#6d28d9'];
+const AUX_COLORS = [
+  '#a78bfa',
+  '#c084fc',
+  '#a855f7',
+  '#8b5cf6',
+  '#7c3aed',
+  '#6d28d9',
+  '#9333ea',
+  '#a21caf',
+  '#c026d3',
+  '#d946ef',
+  '#e879f9',
+  '#d8b4fe'
+];
 
 const TYPE_LABELS: Record<string, string> = {
   cameras: 'Cameras',

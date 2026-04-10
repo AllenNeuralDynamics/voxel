@@ -193,10 +193,9 @@ class VoxelRigConfig(RigConfig):
         if self.daq.device not in devices:
             errors.append(f"DAQ device '{self.daq.device}' not found in devices")
 
-        # Validate DAQ acq_ports reference valid devices
-        for device_id in self.daq.acq_ports:
-            if device_id not in devices:
-                errors.append(f"DAQ acq_port device '{device_id}' not found in devices")
+        # acq_ports may contain virtual ports (e.g. tunable lenses, galvos)
+        # that are just DAQ output channels without a corresponding device.
+        # No validation needed for those.
 
         return errors
 
