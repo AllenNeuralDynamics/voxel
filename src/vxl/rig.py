@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -10,13 +9,14 @@ from typing import Any
 import zmq.asyncio
 from rigup.device import PropResults, PropsCallback
 from vxlib.color import Color
+from vxlib.utils import CoalescedFlush, merge_dicts
 
 from rigup import DeviceHandle, Rig
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.camera.base import SensorROI
 from vxl.camera.handle import CameraHandle
 from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
-from vxl.config import ChannelConfig, DetectionPathConfig, ProfileConfig, VoxelRigConfig
+from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
@@ -24,16 +24,6 @@ from vxl.stack import ChannelResult, Stack, StackResult, StackStatus, StorageCon
 from vxl.sync import SyncTask
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
-
-
-def _sensor_viewport(
-    camera_id: str, viewport: PreviewViewport, detection_paths: dict[str, DetectionPathConfig]
-) -> PreviewViewport:
-    """Convert a stage-normalized viewport to sensor-normalized for a camera."""
-    detection_path = detection_paths.get(camera_id)
-    if not detection_path or detection_path.rotation_deg == 0:
-        return viewport
-    return viewport.to_sensor_space(detection_path.rotation_deg)
 
 Unsubscribe = Callable[[], None]
 
@@ -75,8 +65,13 @@ class VoxelRig(Rig):
         self.daq: DaqHandle | None = None
         self.stage: VoxelStage
 
-        # Preview management (works with both local and remote cameras)
-        self.preview = RigPreviewHub(name=f"{self.__class__.__name__}.PreviewManager")
+        # Preview
+        self._preview_unsubs: list[Callable[[], Awaitable[None]]] = []  # frame/tile subscription cleanup
+        self._frame_callback: Callable[[str, str, bytes], Awaitable[None]] | None = None
+        self._preview_viewport: PreviewViewport = PreviewViewport()
+        self._vp_flusher: CoalescedFlush[PreviewViewport] = CoalescedFlush()
+        self._levels_flusher: CoalescedFlush[dict[str, PreviewLevels]] = CoalescedFlush(reducer=merge_dicts)
+        self._colormaps_flusher: CoalescedFlush[dict[str, str]] = CoalescedFlush(reducer=merge_dicts)
 
         # Profile management
         if not self.config.profiles:
@@ -84,7 +79,6 @@ class VoxelRig(Rig):
         self._active_profile_id: str = next(iter(self.config.profiles.keys()))
 
         self._mode: RigMode = RigMode.IDLE
-        self._streaming_cameras: set[str] = set()
         self.sync_task: SyncTask | None = None
 
         # Topic registry for derived values (e.g. FOV)
@@ -214,8 +208,8 @@ class VoxelRig(Rig):
 
         self._validate_device_types()
 
-        # Subscribe to all camera preview streams (subscriptions are stable for rig lifetime)
-        await self.preview.subscribe_cameras(self.cameras, self.config.detection)
+        # Subscribe to all camera preview streams (stable for rig lifetime)
+        await self._subscribe_preview_streams()
 
         await self._subscribe_device_props()
 
@@ -440,10 +434,7 @@ class VoxelRig(Rig):
         # 3. Update active profile state
         self._active_profile_id = profile_id
 
-        # 5. Update camera→channel mapping for preview
-        self.preview.set_channel_mapping(self._build_camera_channel_mapping())
-
-        # 6. Apply default colormaps to cameras based on emission wavelengths
+        # 5. Apply default colormaps to cameras based on emission wavelengths
         default_colormaps: dict[str, str] = {}
         for chan_id, channel in self.active_channels.items():
             if channel.emission:
@@ -581,84 +572,131 @@ class VoxelRig(Rig):
 
     # ===================== Preview Management =====================
 
-    def _build_camera_channel_mapping(self) -> dict[str, str]:
-        """Build camera_id → channel_name mapping from active profile."""
-        mapping: dict[str, str] = {}
-        for chan_name, channel in self.active_channels.items():
-            if channel.detection in self.cameras:
-                mapping[channel.detection] = chan_name
-        return mapping
+    @property
+    def camera_channels(self) -> dict[str, str]:
+        """Camera_id → channel_name mapping for the active profile's detection paths."""
+        return {ch.detection: name for name, ch in self.active_channels.items() if ch.detection in self.cameras}
+
+    async def _subscribe_preview_streams(self) -> None:
+        """Subscribe to all cameras for frame/tile forwarding. Called once at rig start."""
+        for camera_id, handle in self.cameras.items():
+
+            async def _make_unsub(h: CameraHandle, cid: str) -> Callable[[], Awaitable[None]]:
+                frame_cb = self._make_preview_forward(cid, "preview")
+                tile_cb = self._make_preview_forward(cid, "preview_tile")
+                await h.subscribe("preview", frame_cb)
+                await h.subscribe("preview_tile", tile_cb)
+
+                async def unsub() -> None:
+                    with suppress(Exception):
+                        await h.unsubscribe("preview", frame_cb)
+                    with suppress(Exception):
+                        await h.unsubscribe("preview_tile", tile_cb)
+
+                return unsub
+
+            self._preview_unsubs.append(await _make_unsub(handle, camera_id))
+
+    def _make_preview_forward(self, camera_id: str, topic: str) -> Callable[[bytes], Awaitable[None]]:
+        """Create callback that forwards frame/tile data to the web client."""
+
+        async def callback(data: bytes) -> None:
+            if self._frame_callback:
+                channel = self.camera_channels.get(camera_id)
+                if channel:
+                    try:
+                        await self._frame_callback(topic, channel, data)
+                    except Exception:
+                        self.log.exception("Error in %s callback for %s", topic, channel)
+
+        return callback
+
+    def _to_sensor_viewport(self, camera_id: str, viewport: PreviewViewport) -> PreviewViewport:
+        """Convert a stage-normalized viewport to sensor-normalized for a camera."""
+        dp = self.config.detection.get(camera_id)
+        if not dp or dp.rotation_deg == 0:
+            return viewport
+        return viewport.to_sensor_space(dp.rotation_deg)
+
+    async def _send_preview_viewport(self, viewport: PreviewViewport) -> None:
+        """Send rotation-transformed viewport to all preview cameras (direct, non-coalesced)."""
+        tasks = [
+            self.cameras[cam_id].update_preview_viewport(self._to_sensor_viewport(cam_id, viewport))
+            for cam_id in self.camera_channels
+            if cam_id in self.cameras
+        ]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _flush_viewport(self, viewport: PreviewViewport) -> None:
+        """CoalescedFlush callback: send viewport to all streaming cameras."""
+        await self._send_preview_viewport(viewport)
+
+    async def _flush_levels(self, levels: dict[str, PreviewLevels]) -> None:
+        """CoalescedFlush callback: send levels to cameras."""
+        tasks = []
+        for ch_id, lvl in levels.items():
+            if (ch := self.active_channels.get(ch_id)) and ch.detection in self.cameras:
+                tasks.append(self.cameras[ch.detection].update_preview_levels(lvl))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _flush_colormaps(self, colormaps: dict[str, str]) -> None:
+        """CoalescedFlush callback: send colormaps to cameras."""
+        tasks = []
+        for ch_id, cmap in colormaps.items():
+            if (ch := self.active_channels.get(ch_id)) and ch.detection in self.cameras:
+                tasks.append(self.cameras[ch.detection].update_preview_colormap(cmap))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def set_frame_callback(self, callback: Callable[[str, str, bytes], Awaitable[None]]) -> None:
-        """Set the frame/tile distribution callback. Called once during service init.
-
-        Args:
-            callback: Async callable receiving (topic, channel, packed_data).
-                      Topic is "preview" or "preview_tile".
-        """
-        self.preview.set_callback(callback)
+        """Set the frame/tile distribution callback. Called once during service init."""
+        self._frame_callback = callback
 
     async def start_preview(self, crop: PreviewViewport | None = None) -> None:
-        """Start preview mode for active profile channels and begin frame streaming.
-
-        Requires set_frame_callback() to have been called first.
+        """Start preview mode for active profile channels.
 
         Args:
-            crop: Optional viewport to apply. If provided, updates the cached viewport and forwards
-                  to cameras. If None, the previously cached viewport is re-applied.
-
-        Raises:
-            ValueError: If no active profile is set.
+            crop: Optional viewport to apply before streaming starts.
         """
         if not self.active_profile:
             raise ValueError("No active profile set - use set_active_profile() first")
-
         if self._mode == RigMode.PREVIEWING:
             self.log.warning("Preview already running")
             return
 
-        cameras_to_stream = self._get_profile_cameras()
-        self.log.debug("starting preview on cameras: %s", cameras_to_stream)
-
-        # Start cameras for the active profile's channels
-        for cam_id in cameras_to_stream:
-            if cam_id not in self.cameras:
-                self.log.warning(f"Camera '{cam_id}' not found")
-                continue
-
-            handle = self.cameras[cam_id]
-            try:
-                await handle.start_preview()
-                self._streaming_cameras.add(cam_id)
-            except Exception:
-                self.log.exception(f"Camera {cam_id} failed to start preview")
-
-        # Apply viewport to cameras and start the coalescing flush loop
         if crop is not None:
-            self.preview.viewport = crop
-        if self.preview.viewport.needs_adjustment:
-            # Send initial viewport synchronously before streaming starts
-            vp = self.preview.viewport
-            tasks = [
-                self.cameras[cam_id].update_preview_viewport(
-                    _sensor_viewport(cam_id, vp, self.config.detection)
-                )
-                for cam_id in self._streaming_cameras
-            ]
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self.preview.start_viewport_flush(self._streaming_cameras)
+            self._preview_viewport = crop
+
+        # Start cameras
+        started = 0
+        for cam_id in self.camera_channels:
+            if cam_id not in self.cameras:
+                continue
+            try:
+                await self.cameras[cam_id].start_preview()
+                started += 1
+            except Exception:
+                self.log.exception("Camera %s failed to start preview", cam_id)
+
+        # Send initial viewport if zoomed/panned
+        if self._preview_viewport.needs_adjustment:
+            await self._send_preview_viewport(self._preview_viewport)
+
+        # Start coalesced flush loops
+        self._vp_flusher.start(self._flush_viewport)
+        self._levels_flusher.start(self._flush_levels)
+        self._colormaps_flusher.start(self._flush_colormaps)
 
         self._mode = RigMode.PREVIEWING
-        self.log.info("Preview started (%d cameras)", len(self._streaming_cameras))
+        self.log.info("Preview started (%d cameras)", started)
 
-        # Enable lasers for active channels if cameras started successfully
-        if self._streaming_cameras:
+        if started:
             await self._enable_channel_lasers()
 
-        # Create and start DAQ sync task for preview
         self.sync_task = await self._create_sync_task()
         await self.sync_task.start()
-        self.log.debug("sync task started for preview")
 
     async def _enable_channel_lasers(self) -> None:
         """Enable lasers for all active channels."""
@@ -696,74 +734,56 @@ class VoxelRig(Rig):
                     self.log.error(f"Failed to disable laser {laser_id}: {result}")
 
     async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
-        """Update preview viewport for cameras in the active profile.
-
-        The incoming viewport is stage-normalized. Each camera receives a
-        sensor-normalized viewport after inverse-rotating by its detection
-        path rotation.
-
-        During preview: coalesced via hub (instant, non-blocking).
-        When stopped: direct RPC for reprocessing cached frame.
-        """
-        self.preview.viewport = viewport
-        if self._streaming_cameras:
-            self.preview.update_viewport(viewport)
+        """Update preview viewport. Coalesced when streaming, direct when stopped."""
+        self._preview_viewport = viewport
+        if self._mode == RigMode.PREVIEWING:
+            self._vp_flusher.put(viewport)
         else:
-            camera_ids = {ch.detection for ch in self.active_channels.values() if ch.detection in self.cameras}
-            if camera_ids:
-                tasks = [
-                    self.cameras[cam_id].update_preview_viewport(
-                        _sensor_viewport(cam_id, viewport, self.config.detection)
-                    )
-                    for cam_id in camera_ids
-                ]
-                await asyncio.gather(*tasks, return_exceptions=True)
+            await self._send_preview_viewport(viewport)
 
     async def update_preview_levels(self, levels: dict[str, PreviewLevels]) -> None:
-        """Update preview levels for specified channels."""
-        tasks = []
-        for channel_id, channel_levels in levels.items():
-            if (channel := self.active_channels.get(channel_id)) and (camera := self.cameras.get(channel.detection)):
-                tasks.append(camera.update_preview_levels(channel_levels))
-        if tasks:
-            await asyncio.gather(*tasks)
+        """Update preview levels. Coalesced when streaming, direct when stopped."""
+        if self._mode == RigMode.PREVIEWING:
+            self._levels_flusher.put(levels)
+        else:
+            tasks = []
+            for ch_id, lvl in levels.items():
+                if (ch := self.active_channels.get(ch_id)) and ch.detection in self.cameras:
+                    tasks.append(self.cameras[ch.detection].update_preview_levels(lvl))
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     async def update_preview_colormaps(self, colormaps: dict[str, str]) -> None:
-        """Update preview colormaps for specified channels."""
-        tasks = []
-        for channel_id, colormap in colormaps.items():
-            if (channel := self.active_channels.get(channel_id)) and (camera := self.cameras.get(channel.detection)):
-                tasks.append(camera.update_preview_colormap(colormap))
-        if tasks:
-            await asyncio.gather(*tasks)
+        """Update preview colormaps. Coalesced when streaming, direct when stopped."""
+        if self._mode == RigMode.PREVIEWING:
+            self._colormaps_flusher.put(colormaps)
+        else:
+            tasks = []
+            for ch_id, cmap in colormaps.items():
+                if (ch := self.active_channels.get(ch_id)) and ch.detection in self.cameras:
+                    tasks.append(self.cameras[ch.detection].update_preview_colormap(cmap))
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     async def stop_preview(self) -> None:
-        """Stop preview mode on all streaming cameras and cleanup manager."""
+        """Stop preview mode. Cameras stopped first (while DAQ still triggers)."""
         if self._mode != RigMode.PREVIEWING:
             self.log.warning("Preview not running")
             return
 
         self.log.debug("stopping preview...")
+        self._vp_flusher.stop()
+        self._levels_flusher.stop()
+        self._colormaps_flusher.stop()
 
-        # Stop cameras first (while DAQ is still triggering)
-        # This allows cameras to exit their preview loops cleanly without
-        # blocking on grab_frame waiting for triggers that will never come.
-        tasks = [
-            self.cameras[cam_id].stop_preview() for cam_id in list(self._streaming_cameras) if cam_id in self.cameras
-        ]
+        tasks = [self.cameras[cam_id].stop_preview() for cam_id in self.camera_channels if cam_id in self.cameras]
         await asyncio.gather(*tasks, return_exceptions=True)
-        self._streaming_cameras.clear()
 
-        # Stop DAQ acquisition task (no longer needed since cameras stopped)
         if self.sync_task:
             await self.sync_task.stop()
 
-        # Disable lasers
         await self._disable_channel_lasers()
-
-        self.preview.stop_viewport_flush()
         self._mode = RigMode.IDLE
-
         self.log.info("Preview stopped")
 
     # ===================== Stack Acquisition =====================
@@ -897,142 +917,12 @@ class VoxelRig(Rig):
 
     async def stop(self) -> None:
         """Stop the rig and cleanup preview subscriptions."""
-        await self.preview.shutdown()
-        await super().stop()
-
-
-class RigPreviewHub:
-    """Manages preview streaming: frame forwarding (camera->client) and viewport delivery (client->camera).
-
-    Subscribes to both "preview" (overview frames) and "preview_tile" (tiles)
-    topics for all cameras once at rig start. Maintains a camera->channel
-    mapping that's updated when the active profile changes. This avoids
-    subscription churn on profile switches and preview start/stop cycles.
-
-    Viewport updates are coalesced via an asyncio.Event — rapid pan events
-    collapse into a single RPC carrying the latest value, preventing adapter
-    lock contention with other commands (e.g., stop_preview).
-    """
-
-    def __init__(self, name: str = "PreviewManager"):
-        """Initialize the preview manager."""
-        self.log = logging.getLogger(name)
-        self._frame_callback: Callable[[str, str, bytes], Awaitable[None]] | None = None
-        self.viewport: PreviewViewport = PreviewViewport()
-
-        # Camera ID -> channel name mapping (from active profile)
-        self._camera_to_channel: dict[str, str] = {}
-        # Track subscriptions for cleanup: camera_id -> (handle, frame_cb, tile_cb)
-        self._subscriptions: dict[
-            str,
-            tuple[CameraHandle, Callable[[bytes], Awaitable[None]], Callable[[bytes], Awaitable[None]]],
-        ] = {}
-        # Camera handles for viewport delivery
-        self._cameras: dict[str, CameraHandle] = {}
-        # Detection path configs per camera (for stage→sensor viewport transform)
-        self._detection_paths: dict[str, DetectionPathConfig] = {}
-
-        # Viewport coalescing
-        self._viewport_event = asyncio.Event()
-        self._viewport_flush_task: asyncio.Task | None = None
-
-    async def subscribe_cameras(
-        self, cameras: dict[str, CameraHandle], detection_paths: dict[str, DetectionPathConfig]
-    ) -> None:
-        """Subscribe to all cameras (overview frames + tiles). Call once at rig start."""
-        self._cameras = cameras
-        self._detection_paths = detection_paths
-        for camera_id, handle in cameras.items():
-            if camera_id in self._subscriptions:
-                self.log.debug(f"Camera {camera_id} already subscribed")
-                continue
-            frame_cb = self._make_callback(camera_id, "preview")
-            tile_cb = self._make_callback(camera_id, "preview_tile")
-            await handle.subscribe("preview", frame_cb)
-            await handle.subscribe("preview_tile", tile_cb)
-            self._subscriptions[camera_id] = (handle, frame_cb, tile_cb)
-            self.log.debug("subscribed to camera %s preview + tile streams", camera_id)
-
-    def _make_callback(self, camera_id: str, topic: str) -> Callable[[bytes], Awaitable[None]]:
-        """Create callback that looks up channel dynamically and includes topic."""
-
-        async def callback(data: bytes) -> None:
-            if self._frame_callback:
-                channel = self._camera_to_channel.get(camera_id)
-                if channel:
-                    try:
-                        await self._frame_callback(topic, channel, data)
-                    except Exception:
-                        self.log.exception(f"Error in {topic} callback for {channel}")
-
-        return callback
-
-    def set_channel_mapping(self, mapping: dict[str, str]) -> None:
-        """Update camera->channel mapping. Call on profile switch."""
-        self._camera_to_channel = mapping
-        self.log.debug(f"Updated channel mapping: {mapping}")
-
-    def set_callback(self, callback: Callable[[str, str, bytes], Awaitable[None]]) -> None:
-        """Set the frame/tile distribution callback. Called once at service init."""
-        self._frame_callback = callback
-
-    # ── Viewport Coalescing ────────────────────────────────────────
-
-    def update_viewport(self, viewport: PreviewViewport) -> None:
-        """Update viewport and signal the flush loop. Instant, non-blocking."""
-        self.viewport = viewport
-        self._viewport_event.set()
-
-    def start_viewport_flush(self, camera_ids: set[str]) -> None:
-        """Start the background viewport flush loop for given cameras."""
-        self._active_camera_ids = camera_ids
-        if self._viewport_flush_task is None or self._viewport_flush_task.done():
-            self._viewport_flush_task = asyncio.create_task(self._viewport_flush_loop())
-
-    def stop_viewport_flush(self) -> None:
-        """Stop the viewport flush loop."""
-        if self._viewport_flush_task is not None and not self._viewport_flush_task.done():
-            self._viewport_flush_task.cancel()
-            self._viewport_flush_task = None
-        self._viewport_event.clear()
-
-    async def _viewport_flush_loop(self) -> None:
-        """Coalesces rapid viewport updates into single RPCs.
-
-        The stored viewport is stage-normalized. Each camera receives a
-        sensor-normalized viewport after inverse-rotating by its rotation.
-        """
-        try:
-            while True:
-                await self._viewport_event.wait()
-                self._viewport_event.clear()
-                vp = self.viewport
-                tasks = [
-                    self._cameras[cam_id].update_preview_viewport(
-                        _sensor_viewport(cam_id, vp, self._detection_paths)
-                    )
-                    for cam_id in self._active_camera_ids
-                    if cam_id in self._cameras
-                ]
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
-        except asyncio.CancelledError:
-            return
-
-    # ── Lifecycle ──────────────────────────────────────────────────
-
-    async def shutdown(self) -> None:
-        """Unsubscribe all callbacks. Call on rig stop."""
-        self.log.debug("shutting down preview manager")
-        self.stop_viewport_flush()
+        self._vp_flusher.stop()
+        self._levels_flusher.stop()
+        self._colormaps_flusher.stop()
         self._frame_callback = None
-        for camera_id, (handle, frame_cb, tile_cb) in self._subscriptions.items():
-            try:
-                await handle.unsubscribe("preview", frame_cb)
-                await handle.unsubscribe("preview_tile", tile_cb)
-                self.log.debug(f"Unsubscribed {camera_id}")
-            except (Exception, asyncio.CancelledError):
-                self.log.debug(f"Error unsubscribing {camera_id} (expected during shutdown)")
-        self._subscriptions.clear()
-        self._camera_to_channel.clear()
-        self.log.debug("preview manager shutdown complete")
+        for unsub in self._preview_unsubs:
+            with suppress(Exception, asyncio.CancelledError):
+                await unsub()
+        self._preview_unsubs.clear()
+        await super().stop()

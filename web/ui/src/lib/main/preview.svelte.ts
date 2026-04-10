@@ -172,14 +172,35 @@ export function compositeTiledFrames(
 
         const dx = Math.round(px);
         const dy = Math.round(py);
-        drawRotated(ctx, bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, Math.round(px + pw) - dx, Math.round(py + ph) - dy, rad, swapped);
+        drawRotated(
+          ctx,
+          bitmap,
+          0,
+          0,
+          bitmap.width,
+          bitmap.height,
+          dx,
+          dy,
+          Math.round(px + pw) - dx,
+          Math.round(py + ph) - dy,
+          rad,
+          swapped
+        );
       }
     } else if (ch.frame) {
       drawRotated(
-        ctx, ch.frame, 0, 0, ch.frame.width, ch.frame.height,
-        Math.round(toPixelX(offsetX)), Math.round(toPixelY(offsetY)),
-        Math.round(toPixelW(scaleX)), Math.round(toPixelH(scaleY)),
-        rad, swapped
+        ctx,
+        ch.frame,
+        0,
+        0,
+        ch.frame.width,
+        ch.frame.height,
+        Math.round(toPixelX(offsetX)),
+        Math.round(toPixelY(offsetY)),
+        Math.round(toPixelW(scaleX)),
+        Math.round(toPixelH(scaleY)),
+        rad,
+        swapped
       );
     }
   }

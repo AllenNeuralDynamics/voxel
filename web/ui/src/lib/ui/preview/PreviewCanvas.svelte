@@ -126,10 +126,10 @@
       let newW: number, newH: number;
       if (canvasAspect >= bbAspect) {
         newH = Math.max(0.01, Math.min(1.0, vp.h - delta));
-        newW = Math.max(0.01, Math.min(1.0, newH * canvasAspect / bbAspect));
+        newW = Math.max(0.01, Math.min(1.0, (newH * canvasAspect) / bbAspect));
       } else {
         newW = Math.max(0.01, Math.min(1.0, vp.w - delta));
-        newH = Math.max(0.01, Math.min(1.0, newW * bbAspect / canvasAspect));
+        newH = Math.max(0.01, Math.min(1.0, (newW * bbAspect) / canvasAspect));
       }
 
       // Point on sensor under cursor

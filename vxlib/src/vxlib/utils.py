@@ -115,6 +115,79 @@ def fire_and_forget(
     return task
 
 
+class CoalescedFlush[T]:
+    """Background task that coalesces rapid updates of type T into batched flushes.
+
+    Each ``put()`` stores a pending value and signals the flush loop. Rapid
+    calls between flushes are coalesced — the flush callback receives only
+    the latest (or merged) value.
+
+    An optional *reducer* controls how successive puts combine:
+    - Without reducer (default): latest value wins.
+    - With reducer: ``value = reducer(old, new)`` on each put.
+
+    Usage::
+
+        # Scalar — latest wins
+        vp_flush = CoalescedFlush[Viewport]()
+        vp_flush.start(send_viewport)
+        vp_flush.put(vp1)  # queued
+        vp_flush.put(vp2)  # replaces vp1
+
+        # Dict — merge across puts
+        lvl_flush = CoalescedFlush[dict[str, Levels]](reducer=lambda o, n: {**o, **n})
+        lvl_flush.start(send_levels)
+        lvl_flush.put({"ch1": l1})  # queued
+        lvl_flush.put({"ch2": l2})  # merged → {"ch1": l1, "ch2": l2}
+    """
+
+    def __init__(self, *, reducer: Callable[[T, T], T] | None = None) -> None:
+        self._reducer = reducer
+        self._event = asyncio.Event()
+        self._task: asyncio.Task[None] | None = None
+        self._flush: Callable[[T], Coroutine[Any, Any, None]] | None = None
+        self._value: T | None = None
+
+    def start(self, flush: Callable[[T], Coroutine[Any, Any, None]]) -> None:
+        """Start the background flush loop with the given callback."""
+        self._flush = flush
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._loop())
+
+    def stop(self) -> None:
+        """Stop the flush loop and discard pending value."""
+        if self._task and not self._task.done():
+            self._task.cancel()
+            self._task = None
+        self._value = None
+        self._event.clear()
+
+    def put(self, value: T) -> None:
+        """Store a pending value and signal flush. Applies reducer if set."""
+        if self._reducer is not None and self._value is not None:
+            self._value = self._reducer(self._value, value)
+        else:
+            self._value = value
+        self._event.set()
+
+    async def _loop(self) -> None:
+        try:
+            while True:
+                await self._event.wait()
+                self._event.clear()
+                if self._flush and self._value is not None:
+                    value = self._value
+                    self._value = None
+                    await self._flush(value)
+        except asyncio.CancelledError:
+            return
+
+
+def merge_dicts[K, V](old: dict[K, V], new: dict[K, V]) -> dict[K, V]:
+    """Reducer for CoalescedFlush that merges dicts (new entries override old)."""
+    return {**old, **new}
+
+
 def get_local_ip() -> str:
     """Get local IP address."""
     try:
