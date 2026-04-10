@@ -198,7 +198,7 @@
 
   let scaleBar = $derived.by(() => {
     const { maxW, maxH } = channelBoundingBox(previewer.channels);
-    if (maxW <= 0 || maxH <= 0 || fov.width <= 0) return null;
+    if (maxW <= 0 || maxH <= 0 || fov.width <= 0 || fov.height <= 0) return null;
 
     const cw = containerSize.width;
     const ch = containerSize.height;
@@ -224,10 +224,41 @@
   });
 </script>
 
-<div class="grid h-full grid-rows-[auto_1fr_auto] bg-canvas" bind:this={containerEl}>
-  <!-- Top: Controls -->
-  <div class="flex items-center justify-between p-4">
-    <div class="flex h-ui-lg items-center gap-1">
+<div class="grid h-full grid-rows-[auto_1fr] bg-canvas" bind:this={containerEl}>
+  <!-- Top: Channel Histograms -->
+  <div class="flex items-start gap-4 px-4 py-4">
+    {#if showHistograms}
+      <div class="flex min-w-0 flex-1 justify-around gap-8">
+        {#each namedChannels as channel (channel.idx)}
+          <div class=" min-w-0 flex-1">
+            <Histogram
+              label={channel.label ?? channel.config?.label ?? channel.name ?? ''}
+              histData={channel.latestHistogram}
+              levelsMin={channel.levelsMin}
+              levelsMax={channel.levelsMax}
+              onLevelsChange={(min, max) => {
+                if (channel.name) previewer.setChannelLevels(channel.name, min, max);
+              }}
+              colormap={channel.colormap}
+              catalog={previewer.catalog}
+              onColormapChange={(cmap) => {
+                if (channel.name) previewer.setChannelColormap(channel.name, cmap);
+              }}
+              visible={channel.visible}
+              onVisibilityChange={(v) => (channel.visible = v)}
+            />
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <!-- Center: Canvas -->
+  <div class="relative flex items-center justify-center overflow-hidden" bind:this={canvasContainerEl}>
+    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}></canvas>
+    <!-- Overlay: frame counter (left) + histogram toggle (right) -->
+    <div class="pointer-events-auto absolute top-4 right-4 left-4 flex items-center justify-between">
+      <PreviewInfo {previewer} />
       <button
         onclick={() => (showHistograms = !showHistograms)}
         class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors hover:bg-element-hover {showHistograms
@@ -238,48 +269,21 @@
       >
         <Bargraph width="14" height="14" />
       </button>
-      <PreviewInfo {previewer} />
     </div>
-    <PanZoomControls {previewer} />
-  </div>
-
-  <!-- Center: Canvas -->
-  <div class="relative flex items-center justify-center overflow-hidden px-4" bind:this={canvasContainerEl}>
-    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}></canvas>
-    {#if scaleBar}
-      <div class="pointer-events-none absolute bottom-6 right-6 flex flex-col items-end gap-0.5">
-        <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{scaleBar.label}</span>
-        <div
-          class="h-1 rounded-full bg-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-          style:width="{scaleBar.barPx}px"
-        ></div>
+    <!-- Overlay: pan/zoom controls (bottom-left) + scale bar (bottom-right) -->
+    <div class="pointer-events-none absolute right-4 bottom-4 left-4 flex items-end justify-between">
+      <div class="pointer-events-auto flex items-center gap-1">
+        <PanZoomControls {previewer} />
       </div>
-    {/if}
-  </div>
-
-  <!-- Bottom: Channel Histograms -->
-  <div class="flex justify-around gap-8 p-4">
-    {#if showHistograms}
-      {#each namedChannels as channel (channel.idx)}
-        <div class=" min-w-0 flex-1">
-          <Histogram
-            label={channel.label ?? channel.config?.label ?? channel.name ?? ''}
-            histData={channel.latestHistogram}
-            levelsMin={channel.levelsMin}
-            levelsMax={channel.levelsMax}
-            onLevelsChange={(min, max) => {
-              if (channel.name) previewer.setChannelLevels(channel.name, min, max);
-            }}
-            colormap={channel.colormap}
-            catalog={previewer.catalog}
-            onColormapChange={(cmap) => {
-              if (channel.name) previewer.setChannelColormap(channel.name, cmap);
-            }}
-            visible={channel.visible}
-            onVisibilityChange={(v) => (channel.visible = v)}
-          />
+      {#if scaleBar}
+        <div class="flex flex-col items-end gap-0.5">
+          <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{scaleBar.label}</span>
+          <div
+            class="h-1 rounded-full bg-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+            style:width="{scaleBar.barPx}px"
+          ></div>
         </div>
-      {/each}
-    {/if}
+      {/if}
+    </div>
   </div>
 </div>

@@ -79,7 +79,7 @@
   // ── Histogram SVG ─────────────────────────────────────────────────
 
   let svgWidth = $state(256);
-  const svgHeight = 24;
+  const svgHeight = 20;
 
   const displayHist = $derived.by(() => {
     if (!hasValidData || !histogram) return [];

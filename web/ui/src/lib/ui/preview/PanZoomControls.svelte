@@ -12,6 +12,7 @@
   let { previewer }: Props = $props();
 
   let isDefault = $derived(isDefaultViewport(previewer.viewport));
+  let hover = $state(false);
 
   // Local state for inputs (synced from previewer)
   let panX = $state(0);
@@ -48,14 +49,23 @@
   }
 </script>
 
-<div class="flex items-center gap-1 font-mono text-xs">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="flex items-center gap-1 font-mono text-xs"
+  onmouseenter={() => (hover = true)}
+  onmouseleave={() => (hover = false)}
+  onfocusin={() => (hover = true)}
+  onfocusout={(e) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) hover = false;
+  }}
+>
   <button
     onclick={() => previewer.resetViewport()}
     disabled={isDefault}
-    class="flex items-center rounded p-1 text-fg transition-colors hover:bg-element-hover disabled:cursor-not-allowed disabled:opacity-0"
+    class="flex cursor-pointer items-center rounded p-1 text-fg transition-colors hover:bg-element-hover disabled:opacity-60"
     aria-label="Reset pan and zoom"
   >
-    <Restore width="12" height="12" />
+    <Restore width="14" height="14" />
   </button>
   <div class="flex items-center gap-4">
     <SpinBox
@@ -67,21 +77,11 @@
       decimals={1}
       numCharacters={5}
       size="xs"
+      variant="filled"
+      appearance={hover ? 'full' : 'bordered'}
       prefix="Zoom"
       suffix="x"
       onChange={handleZoomChange}
-    />
-    <SpinBox
-      bind:value={panY}
-      min={0}
-      max={1}
-      step={0.01}
-      snapValue={0}
-      decimals={2}
-      numCharacters={5}
-      size="xs"
-      prefix="Pan X"
-      onChange={handlePanYChange}
     />
     <SpinBox
       bind:value={panX}
@@ -92,8 +92,24 @@
       decimals={2}
       numCharacters={5}
       size="xs"
-      prefix="Pan Y"
+      variant="filled"
+      appearance={hover ? 'full' : 'bordered'}
+      prefix="Pan X"
       onChange={handlePanXChange}
+    />
+    <SpinBox
+      bind:value={panY}
+      min={0}
+      max={1}
+      step={0.01}
+      snapValue={0}
+      decimals={2}
+      numCharacters={5}
+      size="xs"
+      variant="filled"
+      appearance={hover ? 'full' : 'bordered'}
+      prefix="Pan Y"
+      onChange={handlePanYChange}
     />
   </div>
 </div>

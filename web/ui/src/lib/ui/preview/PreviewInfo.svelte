@@ -47,7 +47,6 @@
       aria-label="Preview info"
     >
       {#if frameInfo}
-        <span class="text-fg-muted">Frame</span>
         <span class="text-fg">#{maxFrameIdx}</span>
       {:else}
         <span class="text-fg-muted">No frames</span>

@@ -297,10 +297,6 @@
     <div class="flex h-full flex-col overflow-hidden pb-2">
       <!-- List header -->
       <div class="flex items-center gap-2 border-b border-border px-3 py-2">
-        <span class="text-xs text-fg-muted">
-          {totalCount} stack{totalCount !== 1 ? 's' : ''}
-        </span>
-        <div class="flex-1"></div>
         <Select
           value={filter}
           options={filterOptions}
@@ -309,6 +305,40 @@
           variant="ghost"
           class="w-36 shrink-0"
         />
+        <span class="text-xs text-fg-muted">
+          {#if filter === 'all'}
+            {totalCount} stack{totalCount !== 1 ? 's' : ''}
+          {:else}
+            {totalCount} of {session.stacks.length} stacks
+          {/if}
+        </span>
+        <div class="flex-1"></div>
+        <div class="flex items-center gap-1.5">
+          <SpinBox
+            size="xs"
+            variant="ghost"
+            value={session.acq.default_z_start / 1000}
+            step={0.001}
+            decimals={3}
+            numCharacters={8}
+            prefix="Default Z Start"
+            suffix="mm"
+            align="right"
+            onChange={(value) => session.setGridZRange(value * 1000, session.acq.default_z_end)}
+          />
+          <SpinBox
+            size="xs"
+            variant="ghost"
+            value={session.acq.default_z_end / 1000}
+            step={0.001}
+            decimals={3}
+            numCharacters={8}
+            prefix="Default Z End"
+            suffix="mm"
+            align="right"
+            onChange={(value) => session.setGridZRange(session.acq.default_z_start, value * 1000)}
+          />
+        </div>
       </div>
 
       <!-- Scrollable grouped stack rows -->
