@@ -156,8 +156,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
 
     # State properties _______________________________________________________________________________________________
 
-    @property
-    def position(self) -> float:
+    def _get_position(self) -> float:
         """Get the current position."""
         return self._position
 
@@ -307,7 +306,10 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         if wait:
             time.sleep(self._settle)
             self._is_moving = False
-            self.log.debug("SimulatedDiscreteAxis %s: Move completed (blocking), is_moving=False", self.uid)
+            self.log.debug(
+                "SimulatedDiscreteAxis %s: Move completed (blocking), is_moving=False",
+                self.uid,
+            )
         else:
             # non-blocking path: schedule reset
             self.log.debug(
@@ -318,7 +320,10 @@ class SimulatedDiscreteAxis(DiscreteAxis):
             threading.Timer(self._settle, self._finish_move).start()
 
     def _finish_move(self) -> None:
-        self.log.debug("SimulatedDiscreteAxis %s: Move completed (non-blocking), is_moving=False", self.uid)
+        self.log.debug(
+            "SimulatedDiscreteAxis %s: Move completed (non-blocking), is_moving=False",
+            self.uid,
+        )
         self._is_moving = False
 
     def home(self, *, wait: bool = False, timeout: float | None = None) -> None:

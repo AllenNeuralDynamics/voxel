@@ -114,11 +114,19 @@ class TigerLinearAxis(ContinuousAxis):
 
     # ---- motion ----
     def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        self.hub.box.move_abs({self._axis_label: float(position * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
+        self.hub.box.move_abs(
+            {self._axis_label: float(position * self.POS_MULT)},
+            wait=wait,
+            timeout_s=timeout_s,
+        )
         self.log.debug("Moving axis %s to absolute position %.1f um", self._axis_label, position)
 
     def move_rel(self, delta: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        self.hub.box.move_rel({self._axis_label: float(delta * self.POS_MULT)}, wait=wait, timeout_s=timeout_s)
+        self.hub.box.move_rel(
+            {self._axis_label: float(delta * self.POS_MULT)},
+            wait=wait,
+            timeout_s=timeout_s,
+        )
         self.log.debug("Moving axis %s by relative distance %.1f um", self._axis_label, delta)
 
     def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
@@ -132,8 +140,7 @@ class TigerLinearAxis(ContinuousAxis):
     def await_movement(self, timeout_s: float | None = None) -> None:
         return self.hub.box.wait_until_idle(axes=self._axis_label, timeout_s=timeout_s)
 
-    @property
-    def position(self) -> float:
+    def _get_position(self) -> float:
         cached_steps = self.hub.get_axis_state_cached(self._axis_label).get("position_steps", 0.0)
         return cached_steps / self.POS_MULT
 
@@ -217,7 +224,12 @@ class TigerLinearAxis(ContinuousAxis):
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_tp: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
+    def __exit__(
+        self,
+        exc_tp: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     # -- Capabilities --

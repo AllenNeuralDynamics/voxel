@@ -160,10 +160,19 @@ class ContinuousAxis(Axis):
     # State properties _______________________________________________________________________________________________
 
     @property
-    @abstractmethod
     @describe(label="Position", desc="The current position.", stream=True)
     def position(self) -> float:
         """The current position in axis units."""
+        return self._get_position()
+
+    @position.setter
+    def position(self, value: float) -> None:
+        """Set the current position in axis units."""
+        self.move_abs(value)
+
+    @abstractmethod
+    def _get_position(self) -> float:
+        """Get the current position in axis units (internal use only)."""
         ...
 
     @property
