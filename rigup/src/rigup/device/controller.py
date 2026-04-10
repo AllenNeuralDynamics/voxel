@@ -205,3 +205,4 @@ class DeviceController[D: Device]:
     def close(self) -> None:
         self.stop_streaming()
         self._thread_pool.shutdown(wait=False, cancel_futures=True)
+        self._device.close()

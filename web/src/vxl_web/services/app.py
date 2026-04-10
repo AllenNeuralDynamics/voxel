@@ -15,8 +15,15 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from pydantic import BaseModel
 
 from vxl.app import VoxelApp
 from vxl.config import DataRoot
@@ -27,7 +34,7 @@ from vxlib import fire_and_forget
 
 from .acq import acq_router
 from .rig import rig_router
-from .session import SessionDetails, SessionService, SessionStateUpdate, info_router
+from .session import SessionService, SessionStateUpdate, info_router
 
 router = APIRouter(tags=["app"])
 router.include_router(info_router)
@@ -115,7 +122,12 @@ class AppService:
 
     # ==================== Client Management ====================
 
-    def _broadcast(self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None) -> None:
+    def _broadcast(
+        self,
+        data: dict[str, Any] | bytes,
+        with_status: bool = False,
+        exclude: str | None = None,
+    ) -> None:
         if data:
             msg_type = "bytes" if isinstance(data, bytes) else "json"
             priority = 1 if msg_type == "bytes" else 0
@@ -137,7 +149,10 @@ class AppService:
         log.info("Client %s connected. Total: %d", client_id, len(self.clients))
         async with self._status_lock:
             status = await self.get_app_status()
-            self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
+            self._send_to_client(
+                client_id,
+                {"topic": "status", "payload": status.model_dump(mode="json")},
+            )
 
     def remove_client(self, client_id: str) -> None:
         self.clients.pop(client_id, None)
@@ -229,7 +244,10 @@ class AppService:
         try:
             if topic == "request_status":
                 status = await self.get_app_status()
-                self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
+                self._send_to_client(
+                    client_id,
+                    {"topic": "status", "payload": status.model_dump(mode="json")},
+                )
                 return
 
             if topic == "preview/pause":
@@ -247,7 +265,10 @@ class AppService:
             if self.session_service is None:
                 self._send_to_client(
                     client_id,
-                    {"topic": "error", "payload": {"error": "No active session", "topic": topic}},
+                    {
+                        "topic": "error",
+                        "payload": {"error": "No active session", "topic": topic},
+                    },
                 )
                 return
 
@@ -255,10 +276,20 @@ class AppService:
 
         except (ValueError, RuntimeError) as e:
             log.warning("Client %s message '%s' rejected: %s", client_id, topic, e)
-            self._send_to_client(client_id, {"topic": "error", "payload": {"error": str(e), "topic": topic}})
+            self._send_to_client(
+                client_id,
+                {"topic": "error", "payload": {"error": str(e), "topic": topic}},
+            )
         except Exception as e:
-            log.exception("Unexpected error handling message '%s' from client %s", topic, client_id)
-            self._send_to_client(client_id, {"topic": "error", "payload": {"error": str(e), "topic": topic}})
+            log.exception(
+                "Unexpected error handling message '%s' from client %s",
+                topic,
+                client_id,
+            )
+            self._send_to_client(
+                client_id,
+                {"topic": "error", "payload": {"error": str(e), "topic": topic}},
+            )
 
 
 class _WebSocketLogHandler(logging.Handler):
@@ -350,17 +381,23 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
 
 
 @router.get("/status")
-async def get_status(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatusUpdate:
+async def get_status(
+    service: Annotated[AppService, Depends(get_app_service)],
+) -> AppStatusUpdate:
     return await service.get_app_status()
 
 
 @router.get("/templates")
-async def list_templates(service: Annotated[AppService, Depends(get_app_service)]) -> list[TemplateInfo]:
+async def list_templates(
+    service: Annotated[AppService, Depends(get_app_service)],
+) -> list[TemplateInfo]:
     return service.voxel_app.catalog.list_templates()
 
 
 @router.get("/data-roots")
-async def list_data_roots(service: Annotated[AppService, Depends(get_app_service)]) -> list[DataRoot]:
+async def list_data_roots(
+    service: Annotated[AppService, Depends(get_app_service)],
+) -> list[DataRoot]:
     return service.voxel_app.data_roots
 
 
@@ -377,7 +414,8 @@ async def list_sessions(
 
 @router.post("/session")
 async def create_session(
-    request: CreateSessionRequest, service: Annotated[AppService, Depends(get_app_service)]
+    request: CreateSessionRequest,
+    service: Annotated[AppService, Depends(get_app_service)],
 ) -> AppStatusUpdate:
     try:
         await service.create_session(request)
@@ -394,7 +432,9 @@ async def create_session(
 
 
 @router.post("/session/close")
-async def close_session(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatusUpdate:
+async def close_session(
+    service: Annotated[AppService, Depends(get_app_service)],
+) -> AppStatusUpdate:
     try:
         await service.close_session()
         return await service.get_app_status()

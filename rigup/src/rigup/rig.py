@@ -196,7 +196,10 @@ class Rig:
         for uid, handle in self.handles.items():
             if handle.device is not None:
                 self.log.debug(f"Closing local handle {uid}")
-                await handle.close()
+                try:
+                    await handle.close()
+                except Exception:
+                    self.log.exception(f"Error closing handle {uid}")
 
         # Stop cluster if running
         if self._cluster:

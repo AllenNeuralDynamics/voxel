@@ -289,7 +289,11 @@ class NewSessionForm(QWidget):
         name_field = Flex.vstack(Text.muted("Session Name (optional)"), self._name_input, spacing=Spacing.SM)
         metadata_field = Flex.vstack(Text.muted("Metadata Schema"), self._metadata_select, spacing=Spacing.SM)
         row1 = Flex.hstack(
-            (template_field, 1), (root_field, 1), (name_field, 1), (metadata_field, 1), spacing=Spacing.XL,
+            (template_field, 1),
+            (root_field, 1),
+            (name_field, 1),
+            (metadata_field, 1),
+            spacing=Spacing.XL,
         )
 
         # Row 2: MetadataForm (full width)

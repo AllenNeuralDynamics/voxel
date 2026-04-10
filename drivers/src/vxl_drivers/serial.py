@@ -1,6 +1,9 @@
+import logging
 import threading
 
 import serial
+
+logger = logging.getLogger("serial transport")
 
 
 class SerialTransport:
@@ -26,3 +29,4 @@ class SerialTransport:
     def close(self) -> None:
         if self.ser.is_open:
             self.ser.close()
+            logger.debug("Serial port closed. port: %s", self.ser.port)

@@ -16,8 +16,21 @@ from vxl_drivers.tigerhub.ops.joystick import (
     JoystickPolarityOp,
     JoystickSetMappingOp,
 )
-from vxl_drivers.tigerhub.ops.motion import HaltOp, HereOp, HomeOp, IsAxisBusyOp, MoveAbsOp, MoveRelOp, WhereOp
-from vxl_drivers.tigerhub.ops.params import GetParamOp, SetParamOp, TigerParam, TigerParams
+from vxl_drivers.tigerhub.ops.motion import (
+    HaltOp,
+    HereOp,
+    HomeOp,
+    IsAxisBusyOp,
+    MoveAbsOp,
+    MoveRelOp,
+    WhereOp,
+)
+from vxl_drivers.tigerhub.ops.params import (
+    GetParamOp,
+    SetParamOp,
+    TigerParam,
+    TigerParams,
+)
 from vxl_drivers.tigerhub.ops.scan import (
     ArrayOp,
     ArrayScanConfig,
@@ -229,13 +242,23 @@ class TigerBox:
         )
         return WhereOp.decode(r, axes_u)
 
-    def move_abs(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
+    def move_abs(
+        self,
+        mapping: Mapping[str, float],
+        wait: bool = False,
+        timeout_s: float | None = None,
+    ) -> None:
         r = self._transact(MoveAbsOp.encode(mapping))
         MoveAbsOp.decode(r)
         if wait:
             self.wait_until_idle(list(mapping.keys()), timeout_s=timeout_s)
 
-    def move_rel(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
+    def move_rel(
+        self,
+        mapping: Mapping[str, float],
+        wait: bool = False,
+        timeout_s: float | None = None,
+    ) -> None:
         r = self._transact(MoveRelOp.encode(mapping))
         MoveRelOp.decode(r)
         if wait:
@@ -251,7 +274,12 @@ class TigerBox:
         kv = {a.upper(): 0.0 for a in axes}
         self.set_logical_position(kv)
 
-    def home_axes(self, axes: Iterable[str] | None = None, wait: bool = False, timeout_s: float | None = None) -> None:
+    def home_axes(
+        self,
+        axes: Iterable[str] | None = None,
+        wait: bool = False,
+        timeout_s: float | None = None,
+    ) -> None:
         if axes is None:
             axes = list(self.info().axes.keys())
         r = self._transact(HomeOp.encode([a.upper() for a in axes]))
@@ -480,7 +508,13 @@ class TigerBox:
         self._step_shoot_session = None
 
     # --------------------------------------------------- Scan ------------------------------------------------------- #
-    def setup_scanrv(self, *, fast_axis: str, slow_axis: str, pattern: ScanPattern = ScanPattern.RASTER) -> None:
+    def setup_scanrv(
+        self,
+        *,
+        fast_axis: str,
+        slow_axis: str,
+        pattern: ScanPattern = ScanPattern.RASTER,
+    ) -> None:
         axes = self.info().axes
         fa = axes.get(fast_axis.upper())
         sa = axes.get(slow_axis.upper())
@@ -736,7 +770,13 @@ if __name__ == "__main__":
 
     if (first_axis_card := drv.info().axes[flat_axes[0]].card_hex) is not None:
         # TTL
-        print(f"TTL modes for card {first_axis_card}:", drv.get_ttl_config(card_addr=first_axis_card))
-        print(f"TTL out state for card {first_axis_card}:", drv.ttl_out_state(card_addr=first_axis_card))
+        print(
+            f"TTL modes for card {first_axis_card}:",
+            drv.get_ttl_config(card_addr=first_axis_card),
+        )
+        print(
+            f"TTL out state for card {first_axis_card}:",
+            drv.ttl_out_state(card_addr=first_axis_card),
+        )
 
     drv.close()

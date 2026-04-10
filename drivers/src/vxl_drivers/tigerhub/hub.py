@@ -48,7 +48,10 @@ class TigerHub(Device):
         with self._lock:
             reserved_axes = list(self._reserved)
 
-        if reserved_axes:
+        if not reserved_axes:
+            return
+
+        try:
             positions = self._box.get_position(reserved_axes)
             moving = {ax: self._box.is_axis_moving([ax])[ax] for ax in reserved_axes}
 
@@ -59,6 +62,8 @@ class TigerHub(Device):
                         self._state_cache[axis]["position_steps"] = positions[axis]
                     if axis in moving:
                         self._state_cache[axis]["is_moving"] = moving[axis]
+        except Exception:
+            self.log.exception("Error polling fast state")
 
     def _update_slow_state(self) -> None:
         """Slow polling callback for configuration properties (speed, limits, home, etc.)."""
@@ -105,9 +110,11 @@ class TigerHub(Device):
         return self._box
 
     def close(self) -> None:
-        self._fast_poller.stop()
-        self._slow_poller.stop()
-        self._box.close()
+        for cleanup in (self._fast_poller.stop, self._slow_poller.stop, self._box.close):
+            try:
+                cleanup()
+            except Exception:
+                self.log.exception("Error during %s", cleanup.__qualname__)
 
     def available_axes(self) -> list[str]:
         """All lettered axes discovered on this box that are not reserved."""

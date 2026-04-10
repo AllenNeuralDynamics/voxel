@@ -63,6 +63,9 @@ class Device[T: StrEnum]:
         self.uid = uid
         self.log = logging.getLogger(self.uid)
 
+    def close(self) -> None:
+        pass
+
 
 class AttributeInfo(BaseModel):
     name: str
@@ -225,7 +228,10 @@ class Command[R]:
 
         for param_name, param in sig.parameters.items():
             # Skip *args and **kwargs - they can't be validated by Pydantic models
-            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
                 continue
 
             annotation = Any if param.annotation == inspect.Parameter.empty else param.annotation
