@@ -1,10 +1,15 @@
+import datetime
+from pathlib import Path
 from typing import Any, Self
 
+from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel, Field, field_validator, model_validator
 from rigup.device.base import CommandRequest
 
 from rigup import RigConfig
 from vxl.camera.base import SensorROI
+from vxl.metadata import BASE_METADATA_TARGET
+from vxl.stack import Stack, StackOrder
 from vxl.sync import SyncTaskData
 
 
@@ -25,14 +30,6 @@ class GridConfig(BaseModel):
             data.setdefault("overlap_x", overlap)
             data.setdefault("overlap_y", overlap)
         return data
-
-
-class GlobalsConfig(BaseModel):
-    """Global settings for acquisition planning."""
-
-    default_overlap: float = Field(default=0.1, ge=0.0, le=0.5, description="Default tile overlap (0.0-0.5)")
-    default_stack_order: str = Field(default="snake_row", description="Default stack ordering strategy")
-    default_z_step: float = Field(default=1.0, gt=0.0, description="Default z-step in micrometers")
 
 
 class DaqConfig(BaseModel):
@@ -115,7 +112,6 @@ class ProfileConfig(BaseModel):
 
 
 class VoxelRigConfig(RigConfig):
-    globals: GlobalsConfig = Field(default_factory=GlobalsConfig)
     daq: DaqConfig
     stage: StageConfig
     detection: dict[str, DetectionPathConfig]
@@ -384,3 +380,97 @@ class VoxelRigConfig(RigConfig):
                     errors.append(f"Stage axis '{axis_name}' device '{axis_device}' not found in devices")
 
         return errors
+
+
+# ==================== Session Config ====================
+
+
+class AcquisitionConfig(BaseModel):
+    """Acquisition configuration: stack ordering, profile management, and storage settings.
+
+    Profile membership is implicit: add_stacks auto-adds a profile to
+    profile_order, removing the last stack auto-removes it.
+    """
+
+    profile_order: list[str] = Field(default_factory=list)
+    stack_order: StackOrder = StackOrder.SNAKE_ROW
+    sort_by_profile: bool = False
+    z_step: float = 1.0  # default Z step in µm
+    default_z_start: float = 0.0  # default Z start for new stacks (µm)
+    default_z_end: float = 511.0  # default Z end for new stacks (µm) — 512 frames at 1µm step
+
+    # Storage settings (resolved to StorageConfig at runtime by Session)
+    store_path: Path = Field(
+        default=Path("./data"), description="Path for acquired data (relative to session dir or absolute)"
+    )
+    max_level: ScaleLevel = Field(default=ScaleLevel.L3, description="Maximum pyramid downscale level")
+    compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
+    batch_z_shards: int = Field(default=1, gt=0, description="Number of Z shards per batch")
+    target_shard_gb: float = Field(default=1.0, gt=0, description="Target shard size in GB")
+
+    def has_profile(self, profile_id: str) -> bool:
+        """Check if a profile is in the plan."""
+        return profile_id in self.profile_order
+
+
+class SessionInfo(BaseModel):
+    """Session identity, provenance, and lifecycle metadata."""
+
+    # Identity
+    uid: str = ""
+    name: str = ""
+    description: str = ""
+
+    # Provenance
+    source: str = ""  # template name or source session UID
+    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
+    created_by: str = ""  # operator / username
+    hostname: str = ""  # machine name
+
+    # Data location
+    data_root: str = ""  # DataRoot.name chosen at creation
+    data_path: str = ""  # resolved absolute path at creation time
+
+    # Organization
+    collection: str = ""  # user-defined grouping
+
+    # Lifecycle
+    last_opened: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
+    open_count: int = 0
+
+
+class SessionConfig(BaseModel):
+    """Combined rig configuration and session state.
+
+    This model represents the complete session file (.voxel.yaml) with:
+    - rig: The full VoxelRigConfig
+    - info: Session identity and lifecycle metadata
+    - acq: Acquisition config (profile order, storage settings, z defaults)
+    - stacks: Acquisition stacks (tiles + z-ranges)
+    """
+
+    rig: VoxelRigConfig
+    info: SessionInfo
+    metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
+    acq: AcquisitionConfig = Field(default_factory=AcquisitionConfig)
+    grid: GridConfig = Field(default_factory=GridConfig)
+    stacks: dict[str, Stack] = Field(default_factory=dict)
+
+
+# ==================== System Config ====================
+
+
+class DataRoot(BaseModel):
+    """A storage location for acquired session data."""
+
+    name: str
+    label: str | None = None
+    path: Path
+    default: bool = False
+
+
+class SystemConfig(BaseModel):
+    """Global system configuration."""
+
+    data_roots: list[DataRoot] = Field(default_factory=list)

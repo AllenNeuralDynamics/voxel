@@ -1,27 +1,23 @@
-"""Voxel application coordinator.
+"""Voxel Qt application coordinator.
 
-This module provides the central application object for Voxel, managing:
-- System configuration (from ~/.voxel/system.yaml)
-- Session lifecycle (launch/close)
-- Rig state access
-- Child stores (devices, preview)
-
-Uses Qt signals for state change notifications, enabling reactive UI updates.
+Wraps the core VoxelApp with Qt signals and store management.
+Manages child stores (devices, preview, grid, stage) that need
+Qt-specific lifecycle handling.
 """
 
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QObject, Signal
 
-from vxl import Session
-from vxl.metadata import BASE_METADATA_TARGET
-from vxl.system import SessionListing, SessionRoot, SystemConfig, get_rig_path, list_rigs
+from vxl.app import VOXEL_DIR
+from vxl.app import VoxelApp as CoreVoxelApp
+from vxl.config import DataRoot
+from vxl.store import SessionListing, TemplateInfo, YamlSessionCatalog
 from vxl_qt.store import DevicesStore, GridStore, PreviewStore, StageStore
 
 if TYPE_CHECKING:
-    from vxl import VoxelRig
+    from vxl import Session, VoxelRig
 
 log = logging.getLogger(__name__)
 
@@ -29,44 +25,31 @@ AppPhase = Literal["idle", "launching", "ready"]
 
 
 class VoxelApp(QObject):
-    """Central application coordinator with Qt signals.
+    """Qt wrapper around the core VoxelApp.
 
-    This class manages:
-    - System configuration (session roots, available rigs)
-    - Session lifecycle (launch, close)
+    Adds:
+    - Qt signals for state change notifications
+    - Child stores (devices, preview, grid, stage)
     - Phase transitions (idle -> launching -> ready)
-    - Child stores (devices, preview)
-
-    Signals are emitted on state changes, allowing UI components to react.
-
-    Usage:
-        app = VoxelApp()
-
-        # Connect to signals
-        app.phase_changed.connect(on_phase_changed)
-        app.session_changed.connect(on_session_ready)
-
-        # Launch a session
-        await app.create_session("playground", "simulated.local")
-
-        # Access devices
-        laser = app.devices.get_adapter("laser_488")
-
-        # Access preview state
-        histogram = app.preview.get_histogram("488")
     """
 
-    phase_changed = Signal(str)  # AppPhase: 'idle' | 'launching' | 'ready'
-    session_changed = Signal(object)  # Session instance or None
-    error_changed = Signal(str)  # Error message
-    devices_ready = Signal()  # Emitted when DevicesStore is started
+    phase_changed = Signal(str)
+    session_changed = Signal(object)
+    error_changed = Signal(str)
+    devices_ready = Signal()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._phase: AppPhase = "idle"
-        self._session: Session | None = None
         self._error: str = ""
-        self._system_config: SystemConfig | None = None
+
+        # Core app with YAML catalog
+        catalog = YamlSessionCatalog(
+            sessions_dir=VOXEL_DIR / "sessions",
+            templates_dir=VOXEL_DIR / "templates",
+        )
+        catalog.seed_templates()
+        self._core = CoreVoxelApp(catalog)
 
         # Child stores
         self.devices = DevicesStore(parent=self)
@@ -74,172 +57,149 @@ class VoxelApp(QObject):
         self.grid = GridStore(parent=self)
         self.stage = StageStore(parent=self)
 
-        self._load_system_config()
-
-    def _load_system_config(self) -> None:
-        """Load system configuration from ~/.voxel/system.yaml."""
-        try:
-            self._system_config = SystemConfig.load()
-            log.info("Loaded system config with %d session roots", len(self._system_config.session_roots))
-        except Exception as e:
-            log.exception("Failed to load system config")
-            self._set_error(f"Failed to load system config: {e}")
+        log.info("VoxelApp initialized with %d data roots", len(self._core.data_roots))
 
     def _set_phase(self, phase: AppPhase) -> None:
-        """Set the application phase and emit signal."""
         if self._phase != phase:
             self._phase = phase
             log.debug("Phase changed: %s", phase)
             self.phase_changed.emit(phase)
 
     def _set_error(self, error: str) -> None:
-        """Set the error message and emit signal."""
         self._error = error
         self.error_changed.emit(error)
 
+    # ==================== Properties ====================
+
     @property
     def phase(self) -> AppPhase:
-        """Current application phase."""
         return self._phase
 
     @property
-    def session(self) -> Session | None:
-        """Active session, or None if no session is active."""
-        return self._session
+    def session(self) -> "Session | None":
+        return self._core.session
 
     @property
     def rig(self) -> "VoxelRig | None":
-        """Active rig (via session.rig), or None if no session."""
-        if self._session is None:
-            return None
-        return self._session.rig
+        s = self._core.session
+        return s.rig if s else None
 
     @property
     def error(self) -> str:
-        """Current error message, or empty string if no error."""
         return self._error
 
     @property
-    def system_config(self) -> SystemConfig | None:
-        """System configuration from ~/.voxel/system.yaml."""
-        return self._system_config
+    def data_roots(self) -> list[DataRoot]:
+        return self._core.data_roots
 
     @property
-    def session_roots(self) -> list[SessionRoot]:
-        """Available session roots."""
-        if self._system_config is None:
-            return []
-        return self._system_config.session_roots
+    def templates(self) -> list[TemplateInfo]:
+        return self._core.catalog.list_templates()
 
-    @property
-    def available_rigs(self) -> list[str]:
-        """Available rig configurations from ~/.voxel/rigs/."""
-        return list_rigs()
+    # ==================== Discovery ====================
 
-    def list_sessions(self, root_name: str) -> list[SessionListing]:
-        """List sessions in a specific root.
-
-        Args:
-            root_name: Name of the session root
-
-        Returns:
-            List of SessionListing objects, sorted by modified time (newest first)
-        """
-        if self._system_config is None:
-            return []
+    def list_sessions(self) -> list[SessionListing]:
+        """List all sessions from the catalog."""
         try:
-            return self._system_config.list_sessions(root_name)
+            return self._core.catalog.list_sessions()
         except Exception:
-            log.exception("Failed to list sessions for root '%s'", root_name)
+            log.exception("Failed to list sessions")
             return []
 
-    def list_all_sessions(self) -> list[SessionListing]:
-        """List sessions from all roots, sorted by modified time.
-
-        Returns:
-            List of SessionListing objects from all roots
-        """
-        all_sessions: list[SessionListing] = []
-        for root in self.session_roots:
-            all_sessions.extend(self.list_sessions(root.name))
-        all_sessions.sort(key=lambda s: s.directory.modified, reverse=True)
-        return all_sessions
+    # ==================== Session Lifecycle ====================
 
     async def create_session(
         self,
-        root_name: str,
-        rig_config: str,
-        session_name: str = "",
-        metadata_target: str = BASE_METADATA_TARGET,
-        metadata: dict[str, Any] | None = None,
+        template: str,
+        *,
+        data_root_name: str | None = None,
+        name: str = "",
+        description: str = "",
+        collection: str = "",
     ) -> None:
-        """Create a new session.
-
-        Args:
-            root_name: Name of the session root
-            rig_config: Rig config name
-            session_name: Optional session name suffix
-            metadata_target: Import path for metadata class
-            metadata: Experiment metadata values
-        """
-        if self._session is not None:
+        """Create a new session from a template."""
+        if self._core.has_session:
             raise RuntimeError("A session is already active. Close it first.")
-        if self._system_config is None:
-            raise RuntimeError("System config not loaded")
-
-        root = self._system_config.get_root(root_name)
-        if root is None:
-            raise ValueError(f"Session root '{root_name}' not found")
-
-        config_path = get_rig_path(rig_config)
-        if config_path is None:
-            raise ValueError(f"Rig config '{rig_config}' not found in ~/.voxel/rigs/")
 
         self._set_phase("launching")
 
         try:
-            self._session = await Session.create(root.path, config_path, session_name, metadata_target, metadata)
-            log.info("Session created: %s", self._session.session_dir)
+            await self._core.create_session(
+                template=template,
+                data_root_name=data_root_name,
+                name=name,
+                description=description,
+                collection=collection,
+            )
+            log.info("Session created: %s", self._core.session.config.info.uid)  # type: ignore[union-attr]
             await self._wire_session()
         except Exception as e:
             log.exception("Failed to create session")
-            self._session = None
             self._set_phase("idle")
             self._set_error(f"Failed to create session: {e}")
             raise
 
-    async def resume_session(self, session_dir: Path) -> None:
-        """Resume an existing session.
-
-        Args:
-            session_dir: Path to the session directory
-        """
-        if self._session is not None:
+    async def fork_session(
+        self,
+        source_session: str,
+        *,
+        data_root_name: str | None = None,
+        name: str = "",
+        description: str = "",
+        collection: str = "",
+        clear_stacks: bool = False,
+    ) -> None:
+        """Fork a new session from an existing one."""
+        if self._core.has_session:
             raise RuntimeError("A session is already active. Close it first.")
 
         self._set_phase("launching")
 
         try:
-            self._session = await Session.resume(session_dir)
-            log.info("Session resumed: %s", session_dir)
+            await self._core.create_session(
+                source_session=source_session,
+                data_root_name=data_root_name,
+                name=name,
+                description=description,
+                collection=collection,
+                clear_stacks=clear_stacks,
+            )
+            log.info("Session forked: %s", self._core.session.config.info.uid)  # type: ignore[union-attr]
+            await self._wire_session()
+        except Exception as e:
+            log.exception("Failed to fork session")
+            self._set_phase("idle")
+            self._set_error(f"Failed to fork session: {e}")
+            raise
+
+    async def resume_session(self, uid: str) -> None:
+        """Resume an existing session by UID."""
+        if self._core.has_session:
+            raise RuntimeError("A session is already active. Close it first.")
+
+        self._set_phase("launching")
+
+        try:
+            await self._core.resume_session(uid)
+            log.info("Session resumed: %s", uid)
             await self._wire_session()
         except Exception as e:
             log.exception("Failed to resume session")
-            self._session = None
             self._set_phase("idle")
             self._set_error(f"Failed to resume session: {e}")
             raise
 
     async def _wire_session(self) -> None:
         """Wire up stores and signals after session create/resume."""
-        if self._session is None:
+        session = self._core.session
+        if session is None:
             raise RuntimeError("No session to wire")
 
-        await self.devices.start(self._session)
+        await self.devices.start(session)
         log.info("DevicesStore started")
 
         # Bind stage store to axis adapters
-        stage_cfg = self._session.rig.config.stage
+        stage_cfg = session.rig.config.stage
         x_adapter = self.devices.get_adapter(stage_cfg.x)
         y_adapter = self.devices.get_adapter(stage_cfg.y)
         z_adapter = self.devices.get_adapter(stage_cfg.z)
@@ -249,19 +209,15 @@ class VoxelApp(QObject):
 
         self.devices_ready.emit()
 
-        await self.grid.bind_session(self._session)
+        await self.grid.bind_session(session)
         log.info("GridStore bound to session")
 
         self._set_phase("ready")
-        self.session_changed.emit(self._session)
+        self.session_changed.emit(session)
 
     async def close_session(self) -> None:
-        """Close the current session.
-
-        Raises:
-            RuntimeError: If no session is active
-        """
-        if self._session is None:
+        """Close the current session."""
+        if not self._core.has_session:
             raise RuntimeError("No active session to close")
 
         try:
@@ -270,15 +226,12 @@ class VoxelApp(QObject):
             self.grid.unbind_session()
             self.stage.unbind()
 
-            await self._session.rig.stop_preview()
-
-            await self._session.rig.stop()
-            log.info("Session closed: %s", self._session.session_dir)
+            await self._core.close_session()
+            log.info("Session closed")
 
         except Exception as e:
             log.exception("Error during session close")
             self._set_error(f"Error closing session: {e}")
         finally:
-            self._session = None
             self._set_phase("idle")
             self.session_changed.emit(None)

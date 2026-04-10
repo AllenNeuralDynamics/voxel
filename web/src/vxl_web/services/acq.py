@@ -13,7 +13,7 @@ from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel
 
 from vxl.config import GridConfig
-from vxl.stack import StackOrder
+from vxl.stack import StackOrder, StackStatus
 
 from .session import SessionService, get_session_service
 
@@ -124,25 +124,26 @@ async def update_storage(
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Update storage settings."""
-    s = service.session.storage
+    acq = service.session.acq
     if request.store_path is not None:
-        s.store_path = Path(request.store_path)
+        acq.store_path = Path(request.store_path)
     if request.max_level is not None:
-        s.max_level = ScaleLevel(request.max_level)
+        acq.max_level = ScaleLevel(request.max_level)
     if request.compression is not None:
-        s.compression = Compression(request.compression)
+        acq.compression = Compression(request.compression)
     if request.batch_z_shards is not None:
-        s.batch_z_shards = request.batch_z_shards
+        acq.batch_z_shards = request.batch_z_shards
     if request.target_shard_gb is not None:
-        s.target_shard_gb = request.target_shard_gb
+        acq.target_shard_gb = request.target_shard_gb
     service.session.save()
     service.broadcast({}, with_status=True)
+    updated = service.session.storage
     return {
-        "store_path": str(s.store_path) if s.store_path else None,
-        "max_level": s.max_level,
-        "compression": s.compression,
-        "batch_z_shards": s.batch_z_shards,
-        "target_shard_gb": s.target_shard_gb,
+        "store_path": str(updated.store_path) if updated.store_path else None,
+        "max_level": updated.max_level,
+        "compression": updated.compression,
+        "batch_z_shards": updated.batch_z_shards,
+        "target_shard_gb": updated.target_shard_gb,
     }
 
 
@@ -154,7 +155,7 @@ async def start_acquisition(
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict:
     """Start acquisition for all pending stacks."""
-    pending = [s for s in service.session.stacks.values() if s.status == "planned"]
+    pending = [s for s in service.session.stacks.values() if s.status == StackStatus.PLANNED]
     if not pending:
         raise HTTPException(status_code=400, detail="No planned stacks to acquire")
     service.start_acquisition()
@@ -170,18 +171,16 @@ async def start_stack_acquisition(
     stack = service.session.stacks.get(stack_id)
     if stack is None:
         raise HTTPException(status_code=404, detail=f"Stack {stack_id} not found")
-    if stack.status != "planned":
+    if stack.status != StackStatus.PLANNED:
         raise HTTPException(status_code=400, detail=f"Stack {stack_id} has status {stack.status}, expected planned")
     service.start_acquisition(stack_id)
     return {"status": "started", "stack_id": stack_id}
 
 
 @acq_router.post("/stop")
-async def stop_acquisition(
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict:
+async def stop_acquisition(service: Annotated[SessionService, Depends(get_session_service)]) -> dict:
     """Stop the current acquisition."""
-    service.session.stop_acquisition()
+    await service.session.stop_acquisition()
     return {"status": "stopped"}
 
 

@@ -6,7 +6,7 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type { AppStatus, ErrorPayload, FrameTiming, LogMessage, SessionDetails, Waveform } from './types';
+import type { AppStatusUpdate, ErrorPayload, FrameTiming, LogMessage, SessionDetails, Waveform } from './types';
 
 /**
  * DAQ waveforms response from REST endpoint and WS broadcast.
@@ -124,7 +124,7 @@ export type ErrorHandler = (error: Error) => void;
  * Topic-specific handler types for type safety
  */
 export interface TopicHandlers {
-  status?: (payload: AppStatus) => void;
+  status?: (payload: AppStatusUpdate) => void;
   error?: (payload: ErrorPayload) => void;
   'log/message'?: (payload: LogMessage) => void;
   'preview/frame'?: (channel: string, info: PreviewFrameInfo, bitmap: ImageBitmap) => void;

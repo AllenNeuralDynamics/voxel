@@ -1,11 +1,8 @@
-from .config import GridConfig, VoxelRigConfig
+from .app import VoxelApp
+from .config import AcquisitionConfig, GridConfig, SessionConfig, VoxelRigConfig
 from .node import VoxelNode
 from .rig import RigMode, VoxelRig
-from .session import (
-    AcquisitionConfig,
-    Session,
-    SessionConfig,
-)
+from .session import Session
 from .stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus, StorageConfig, Tile
 
 __all__ = [
@@ -21,6 +18,7 @@ __all__ = [
     "StackStatus",
     "StorageConfig",
     "Tile",
+    "VoxelApp",
     "VoxelNode",
     "VoxelRig",
     "VoxelRigConfig",

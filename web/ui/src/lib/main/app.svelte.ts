@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { toast } from 'svelte-sonner';
 import { Client, type ClientOptions } from './client.svelte';
-import type { AppStatus, SessionListing, LogMessage, JsonSchema } from './types';
+import type { AppStatusUpdate, DataRoot, LogMessage, JsonSchema, SessionListing, TemplateInfo } from './types';
 import { Session } from './session.svelte';
 import { SvelteDate } from 'svelte/reactivity';
 
@@ -15,7 +15,7 @@ export class App {
   readonly #client: Client;
 
   logs = $state<LogMessage[]>([]);
-  status = $state<AppStatus | null>(null);
+  status = $state<AppStatusUpdate | null>(null);
   error = $state<string | null>(null);
   session = $state<Session | null>(null);
 
@@ -61,168 +61,62 @@ export class App {
     this.logs = [];
   }
 
-  // --- Session management (HTTP) ---
+  // --- Session lifecycle (unified POST /session) ---
 
   async createSession(
-    rootName: string,
-    rigConfig: string,
-    sessionName: string = '',
-    metadataTarget?: string,
-    metadata?: Record<string, unknown>
+    template: string,
+    opts: {
+      dataRoot?: string;
+      name?: string;
+      description?: string;
+      collection?: string;
+    } = {}
   ): Promise<void> {
-    if (!browser) return;
-    if (this.hasSession) {
-      throw new Error('A session is already active. Close it first.');
-    }
-    if (!this.status) {
-      throw new Error('Cannot create session: not connected');
-    }
-
-    this.error = null;
-
-    try {
-      const body: Record<string, unknown> = {
-        root_name: rootName,
-        rig_config: rigConfig,
-        session_name: sessionName
-      };
-      if (metadataTarget) body.metadata_target = metadataTarget;
-      if (metadata) body.metadata = metadata;
-
-      const response = await fetch(`${this.#client.baseUrl}/api/session/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || response.statusText);
-      }
-
-      console.debug('[App] Session create request sent');
-    } catch (error) {
-      console.error('[App] Failed to create session:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to create session';
-      this.error = msg;
-      toast.error(msg);
-      throw error;
-    }
+    await this.#sessionRequest({
+      template,
+      data_root: opts.dataRoot,
+      name: opts.name ?? '',
+      description: opts.description ?? '',
+      collection: opts.collection ?? ''
+    });
   }
 
-  async resumeSession(sessionDir: string): Promise<void> {
-    if (!browser) return;
-    if (this.hasSession) {
-      throw new Error('A session is already active. Close it first.');
-    }
-
-    this.error = null;
-
-    try {
-      const response = await fetch(`${this.#client.baseUrl}/api/session/resume`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_dir: sessionDir })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || response.statusText);
-      }
-
-      console.debug('[App] Session resume request sent');
-    } catch (error) {
-      console.error('[App] Failed to resume session:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to resume session';
-      this.error = msg;
-      toast.error(msg);
-      throw error;
-    }
+  async resumeSession(uid: string): Promise<void> {
+    await this.#sessionRequest({ resume: uid });
   }
 
   async forkSession(
-    sourceSessionDir: string,
-    rootName: string,
-    name: string = '',
-    description: string = '',
-    clearStacks: boolean = false
+    sourceUid: string,
+    opts: {
+      dataRoot?: string;
+      name?: string;
+      description?: string;
+      collection?: string;
+      clearStacks?: boolean;
+    } = {}
   ): Promise<void> {
-    if (!browser) return;
-    if (this.hasSession) {
-      throw new Error('A session is already active. Close it first.');
-    }
-
-    this.error = null;
-
-    try {
-      const response = await fetch(`${this.#client.baseUrl}/api/session/fork`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_session_dir: sourceSessionDir,
-          root_name: rootName,
-          name,
-          description,
-          clear_stacks: clearStacks
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || response.statusText);
-      }
-
-      console.debug('[App] Session fork request sent');
-    } catch (error) {
-      console.error('[App] Failed to fork session:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to fork session';
-      this.error = msg;
-      toast.error(msg);
-      throw error;
-    }
-  }
-
-  async updateSessionStatus(sessionDir: string, status: 'active' | 'archived' | 'starred'): Promise<void> {
-    try {
-      const response = await fetch(`${this.#client.baseUrl}/api/session/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_dir: sessionDir, status })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || response.statusText);
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to update session status';
-      toast.error(msg);
-      throw error;
-    }
+    await this.#sessionRequest({
+      source_session: sourceUid,
+      data_root: opts.dataRoot,
+      name: opts.name ?? '',
+      description: opts.description ?? '',
+      collection: opts.collection ?? '',
+      clear_stacks: opts.clearStacks ?? false
+    });
   }
 
   async closeSession(): Promise<void> {
     if (!browser) return;
-    if (!this.hasSession) {
-      console.warn('[App] No active session to close');
-      return;
-    }
+    if (!this.hasSession) return;
 
     this.error = null;
-
     try {
-      const response = await fetch(`${this.#client.baseUrl}/api/session`, {
-        method: 'DELETE'
-      });
-
+      const response = await fetch(`${this.#client.baseUrl}/api/session/close`, { method: 'POST' });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
         throw new Error(errorData.detail || response.statusText);
       }
-
-      console.debug('[App] Session close request sent');
     } catch (error) {
-      console.error('[App] Failed to close session:', error);
       const msg = error instanceof Error ? error.message : 'Failed to close session';
       this.error = msg;
       toast.error(msg);
@@ -230,18 +124,40 @@ export class App {
     }
   }
 
-  // --- Read-only queries (work from idle) ---
+  // --- Discovery (REST) ---
 
-  async fetchSessions(rootName: string): Promise<SessionListing[]> {
+  async fetchSessions(collection?: string): Promise<SessionListing[]> {
     try {
-      const response = await fetch(`${this.#client.baseUrl}/api/roots/${encodeURIComponent(rootName)}/sessions`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch sessions: ${response.statusText}`);
-      }
-      const data = await response.json();
-      return data.sessions ?? [];
+      const url = collection
+        ? `${this.#client.baseUrl}/api/sessions?collection=${encodeURIComponent(collection)}`
+        : `${this.#client.baseUrl}/api/sessions`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch sessions: ${response.statusText}`);
+      return await response.json();
     } catch (error) {
       console.error('[App] Failed to fetch sessions:', error);
+      throw error;
+    }
+  }
+
+  async fetchTemplates(): Promise<TemplateInfo[]> {
+    try {
+      const response = await fetch(`${this.#client.baseUrl}/api/templates`);
+      if (!response.ok) throw new Error(`Failed to fetch templates: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error('[App] Failed to fetch templates:', error);
+      throw error;
+    }
+  }
+
+  async fetchDataRoots(): Promise<DataRoot[]> {
+    try {
+      const response = await fetch(`${this.#client.baseUrl}/api/data-roots`);
+      if (!response.ok) throw new Error(`Failed to fetch data roots: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error('[App] Failed to fetch data roots:', error);
       throw error;
     }
   }
@@ -249,9 +165,7 @@ export class App {
   async fetchMetadataTargets(): Promise<Record<string, string>> {
     try {
       const response = await fetch(`${this.#client.baseUrl}/api/metadata/targets`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch metadata targets: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`Failed to fetch metadata targets: ${response.statusText}`);
       const data = await response.json();
       return data.targets ?? {};
     } catch (error) {
@@ -263,9 +177,7 @@ export class App {
   async fetchMetadataSchema(target: string): Promise<JsonSchema> {
     try {
       const response = await fetch(`${this.#client.baseUrl}/api/metadata/schema?target=${encodeURIComponent(target)}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch metadata schema: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`Failed to fetch metadata schema: ${response.statusText}`);
       return await response.json();
     } catch (error) {
       console.error('[App] Failed to fetch metadata schema:', error);
@@ -273,7 +185,31 @@ export class App {
     }
   }
 
-  // --- Private: topic subscriptions ---
+  // --- Private ---
+
+  async #sessionRequest(body: Record<string, unknown>): Promise<void> {
+    if (!browser) return;
+    if (this.hasSession) throw new Error('A session is already active. Close it first.');
+
+    this.error = null;
+    try {
+      const response = await fetch(`${this.#client.baseUrl}/api/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || response.statusText);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Session request failed';
+      this.error = msg;
+      toast.error(msg);
+      throw error;
+    }
+  }
 
   #subscribeToTopics(): void {
     const unsubStatus = this.#client.on('status', (status) => {
@@ -307,10 +243,10 @@ export class App {
     this.unsubscribers.push(unsubStatus, unsubLogs, unsubError, unsubConnection);
   }
 
-  async #handleStatusUpdate(status: AppStatus): Promise<void> {
+  async #handleStatusUpdate(status: AppStatusUpdate): Promise<void> {
     this.status = status;
 
-    switch (status.phase) {
+    switch (status.status) {
       case 'idle':
       case 'launching': {
         if (this.session) {
@@ -340,7 +276,7 @@ export class App {
     }
   }
 
-  async #initializeSession(status: AppStatus): Promise<void> {
+  async #initializeSession(status: AppStatusUpdate): Promise<void> {
     const session = new Session({
       client: this.#client,
       status

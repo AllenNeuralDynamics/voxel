@@ -11,8 +11,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
 
-from vxl.config import GridConfig
-from vxl.session._config import AcquisitionConfig
+from vxl.config import AcquisitionConfig, GridConfig
 from vxl.stack import Stack, StackOrder, StackStatus, Tile
 
 if TYPE_CHECKING:

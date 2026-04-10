@@ -18,8 +18,9 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import QBoxLayout, QLabel, QScrollArea, QWidget
 
-from vxl.metadata import BASE_METADATA_TARGET, ExperimentMetadata, resolve_metadata_class
-from vxl.system import SessionListing, SessionRoot
+from vxl.config import DataRoot
+from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.store import SessionListing, TemplateInfo
 from vxl_qt.ui.assets import VOXEL_LOGO
 from vxl_qt.ui.kit import (
     Button,
@@ -265,29 +266,31 @@ class LaunchHeader(Flex):
 class NewSessionForm(QWidget):
     """Form for creating a new session."""
 
-    session_requested = Signal(str, str, str, str, object)  # root, rig, name, target, metadata
+    session_requested = Signal(str, str, str)  # template, name, data_root
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._roots: list[SessionRoot] = []
-        self._rigs: list[str] = []
+        self._roots: list[DataRoot] = []
+        self._templates: list[TemplateInfo] = []
 
         # Create widgets
+        self._template_select = Select(size=ControlSize.LG)
         self._root_select = Select(size=ControlSize.LG)
-        self._rig_select = Select(size=ControlSize.LG)
         self._name_input = TextInput(placeholder="optional", size=ControlSize.LG)
         self._metadata_select = Select(size=ControlSize.LG)
         self._metadata_form = MetadataForm()
         self._create_btn = Button.primary("Create Session", size=ControlSize.LG)
         self._path_preview = Text.muted("")
 
-        # Row 1: Root selector + Rig selector + Session name + Metadata schema (equal width)
-        root_field = Flex.vstack(Text.muted("Session Root"), self._root_select, spacing=Spacing.SM)
-        rig_field = Flex.vstack(Text.muted("Rig Configuration"), self._rig_select, spacing=Spacing.SM)
+        # Row 1: Template + Data root + Session name + Metadata schema (equal width)
+        template_field = Flex.vstack(Text.muted("Template"), self._template_select, spacing=Spacing.SM)
+        root_field = Flex.vstack(Text.muted("Data Root"), self._root_select, spacing=Spacing.SM)
         name_field = Flex.vstack(Text.muted("Session Name (optional)"), self._name_input, spacing=Spacing.SM)
         metadata_field = Flex.vstack(Text.muted("Metadata Schema"), self._metadata_select, spacing=Spacing.SM)
-        row1 = Flex.hstack((root_field, 1), (rig_field, 1), (name_field, 1), (metadata_field, 1), spacing=Spacing.XL)
+        row1 = Flex.hstack(
+            (template_field, 1), (root_field, 1), (name_field, 1), (metadata_field, 1), spacing=Spacing.XL,
+        )
 
         # Row 2: MetadataForm (full width)
         row2 = self._metadata_form
@@ -320,24 +323,25 @@ class NewSessionForm(QWidget):
 
     def _connect_signals(self) -> None:
         self._create_btn.clicked.connect(self._on_create_clicked)
+        self._template_select.value_changed.connect(lambda _: self._on_form_changed())
         self._root_select.value_changed.connect(lambda _: self._on_form_changed())
-        self._rig_select.value_changed.connect(lambda _: self._on_form_changed())
         self._name_input.textChanged.connect(self._update_path_preview)
         self._metadata_select.value_changed.connect(self._on_metadata_target_changed)
         self._metadata_form.changed.connect(self._update_path_preview)
 
-    def set_roots(self, roots: list[SessionRoot]) -> None:
+    def set_roots(self, roots: list[DataRoot]) -> None:
         self._roots = roots
         self._root_select.clear()
         for root in roots:
             self._root_select.addItem(root.label or root.name, root.name)
         self._on_form_changed()
 
-    def set_rigs(self, rigs: list[str]) -> None:
-        self._rigs = rigs
-        self._rig_select.clear()
-        for rig in rigs:
-            self._rig_select.addItem(rig, rig)
+    def set_templates(self, templates: list[TemplateInfo]) -> None:
+        self._templates = templates
+        self._template_select.clear()
+        for t in templates:
+            label = f"{t.name} ({t.rig_name})" if t.rig_name else t.name
+            self._template_select.addItem(label, t.name)
         self._on_form_changed()
 
     def set_metadata_targets(self, targets: dict[str, str]) -> None:
@@ -357,41 +361,31 @@ class NewSessionForm(QWidget):
         self._update_path_preview()
 
     def _update_button_state(self) -> None:
-        has_root = self._root_select.count() > 0
-        has_rig = self._rig_select.count() > 0
-        self._create_btn.setEnabled(has_root and has_rig)
+        has_template = self._template_select.count() > 0
+        self._create_btn.setEnabled(has_template)
 
     def _update_path_preview(self) -> None:
-        root_name = self._root_select.currentData()
-        rig_name = self._rig_select.currentData()
+        template_name = self._template_select.currentData()
         session_name = self._name_input.text().strip()
 
-        if not root_name or not rig_name:
-            self._path_preview.setText("")
-            return
-
-        root = next((r for r in self._roots if r.name == root_name), None)
-        if root is None:
+        if not template_name:
             self._path_preview.setText("")
             return
 
         try:
             date = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
             suffix = session_name or "auto"
-            folder = f"{rig_name}-{date}-{suffix}"
-            self._path_preview.setText(str(root.path / folder))
+            self._path_preview.setText(f"{template_name}-{date}-{suffix}")
         except Exception:
             self._path_preview.setText("")
 
     def _on_create_clicked(self) -> None:
-        root_name = self._root_select.currentData()
-        rig_config = self._rig_select.currentData()
+        template = self._template_select.currentData()
         session_name = self._name_input.text().strip()
-        metadata_target = self._metadata_select.get_value() or BASE_METADATA_TARGET
-        metadata = self._metadata_form.get_values()
+        data_root = self._root_select.currentData() or ""
 
-        if root_name and rig_config:
-            self.session_requested.emit(root_name, rig_config, session_name, metadata_target, metadata)
+        if template:
+            self.session_requested.emit(template, session_name, data_root)
 
     def clear(self) -> None:
         self._name_input.clear()
@@ -404,12 +398,18 @@ class SessionCard(Flex):
     clicked = Signal(object)  # SessionListing
 
     def __init__(self, session: SessionListing, parent: QWidget | None = None) -> None:
-        d = session.directory
+        info = session.config.get("info", {}) if session.config else {}
+        name = info.get("name", "") or session.uid
+        rig_name = session.config.get("rig", {}).get("info", {}).get("name", "") if session.config else ""
+        last_opened = info.get("last_opened", "")
 
-        # Folder button
+        # Folder button (only if location available)
         folder_btn = Button.icon_btn("mdi.folder-outline")
-        folder_btn.setToolTip(str(d.path))
-        folder_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(d.path))))
+        if session.location:
+            folder_btn.setToolTip(session.location)
+            folder_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(session.location or "")))
+        else:
+            folder_btn.setEnabled(False)
 
         # Resume button
         resume_btn = Button.ghost("Resume")
@@ -425,10 +425,10 @@ class SessionCard(Flex):
         )
 
         super().__init__(
-            Text(display_name(d.name)),
-            Text.muted(d.root_name),
+            Text(display_name(name)),
+            Text.muted(rig_name) if rig_name else Text.muted(""),
             Stretch(),
-            Text.muted(format_relative_time(d.modified)),
+            Text.muted(format_relative_time(last_opened) if last_opened else ""),
             folder_btn,
             resume_btn,
             flow=Flow.HORIZONTAL,
@@ -510,7 +510,7 @@ class LaunchPage(QWidget):
     """
 
     # User intent signals
-    new_session_requested = Signal(str, str, str, str, object)  # root, rig, name, target, metadata
+    new_session_requested = Signal(str, str, str)  # template, name, data_root
     session_resumed = Signal(object)  # SessionDirectory
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -576,13 +576,13 @@ class LaunchPage(QWidget):
         self._new_session_form.session_requested.connect(self.new_session_requested.emit)
         self._sessions_list.session_selected.connect(self.session_resumed.emit)
 
-    def set_roots(self, roots: list[SessionRoot]) -> None:
-        """Set available session roots in the form."""
+    def set_roots(self, roots: list[DataRoot]) -> None:
+        """Set available data roots in the form."""
         self._new_session_form.set_roots(roots)
 
-    def set_rigs(self, rigs: list[str]) -> None:
-        """Set available rig configurations in the form."""
-        self._new_session_form.set_rigs(rigs)
+    def set_templates(self, templates: list[TemplateInfo]) -> None:
+        """Set available templates in the form."""
+        self._new_session_form.set_templates(templates)
 
     def set_metadata_targets(self, targets: dict[str, str]) -> None:
         """Set available metadata targets in the form."""

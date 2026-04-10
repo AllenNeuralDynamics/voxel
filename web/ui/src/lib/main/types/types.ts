@@ -3,34 +3,35 @@
 // Status models matching backend API
 // ============================================================================
 
+import type { StackOrder, VoxelRigConfig } from './config.ts';
+
 /**
- * Session root - a predefined directory where sessions can be created
- * From ~/.voxel/system.yaml
+ * Data root - a storage location for acquired session data.
  */
-export interface SessionRoot {
+export interface DataRoot {
   name: string;
   path: string;
   label: string | null;
-  description: string | null;
+  default: boolean;
 }
 
 /**
- * Filesystem facts about a session directory.
+ * Template info - available session template.
  */
-export interface SessionDirectory {
+export interface TemplateInfo {
   name: string;
   path: string;
-  root_name: string;
-  modified: string;
+  rig_name: string;
 }
 
 /**
- * Session directory with parsed config or errors, for listing.
+ * Session with parsed config or errors, for listing.
  */
 export interface SessionListing {
-  directory: SessionDirectory;
+  uid: string;
   config: SessionConfig | null;
   errors: string[];
+  location: string | null;
 }
 
 /**
@@ -39,14 +40,7 @@ export interface SessionListing {
 export type RigMode = 'idle' | 'previewing' | 'acquiring';
 
 /**
- * Session status - included in AppStatus when a session is active
- * Topic: 'status' (within AppStatus.session)
- */
-import type { StackOrder, VoxelRigConfig } from './config.ts';
-
-/**
- * Acquisition config - stack ordering and profile management.
- * Profile membership is implicit via stacks.
+ * Acquisition config - stack ordering, profile management, and storage settings.
  */
 export interface AcquisitionConfig {
   profile_order: string[];
@@ -55,13 +49,7 @@ export interface AcquisitionConfig {
   z_step: number;
   default_z_start: number;
   default_z_end: number;
-}
-
-/**
- * Storage config - how acquired data is stored.
- */
-export interface StorageConfig {
-  store_path?: string;
+  store_path: string;
   max_level: number;
   compression: string;
   batch_z_shards: number;
@@ -69,76 +57,66 @@ export interface StorageConfig {
 }
 
 /**
- * Active session details — config is guaranteed valid.
+ * Active session details — config + metadata schema.
  */
 export interface SessionDetails {
-  directory: SessionDirectory;
   config: SessionConfig;
   metadata_schema: JsonSchema;
 }
 
 export interface SessionConfig {
   rig: VoxelRigConfig;
-  info: SessionInfoMeta;
+  info: SessionInfo;
   metadata_target: string;
   metadata: Record<string, unknown>;
   acq: Record<string, unknown>;
   grid: Record<string, unknown>;
-  storage: Record<string, unknown>;
   stacks: Record<string, unknown>;
 }
 
-export interface SessionInfoMeta {
+export interface SessionInfo {
+  uid: string;
   name: string;
-  created_at: string;
-  last_opened: string;
-  source: { type: 'rig' | 'fork'; name: string };
   description: string;
+  source: string;
+  created_at: string;
+  created_by: string;
+  hostname: string;
+  data_root: string;
+  data_path: string;
+  collection: string;
+  last_opened: string;
   open_count: number;
-  status: 'active' | 'archived' | 'starred';
 }
 
 /**
  * Dynamic session state broadcast via WebSocket.
  */
-export interface SessionState {
+export interface SessionStateUpdate {
   active_profile_id: string | null;
   mode: RigMode;
   metadata: Record<string, unknown>;
   timestamp: string;
-
-  // Acquisition config (profile ordering)
   acq: AcquisitionConfig;
-
-  // Storage config
-  storage: StorageConfig;
-
-  // Session-level config
   grid: GridConfig;
   stacks: Record<string, Stack>;
   stack_order: string[];
-
-  // Derived values
   fov: [number, number] | null;
-
-  // Preview display config per channel (channel_id -> PreviewConfig)
   preview: Record<string, PreviewConfig>;
 }
 
 /**
- * App phase - lifecycle phase of the application
+ * App status enum - lifecycle phase of the application.
  */
-export type AppPhase = 'idle' | 'launching' | 'ready';
+export type AppStatus = 'idle' | 'launching' | 'ready';
 
 /**
- * App status - consolidated status from AppService
+ * App status update - consolidated status broadcast.
  * Topic: 'status'
  */
-export interface AppStatus {
-  phase: AppPhase;
-  roots: SessionRoot[];
-  rigs: string[];
-  session: SessionState | null; // null if no active session
+export interface AppStatusUpdate {
+  status: AppStatus;
+  session: SessionStateUpdate | null;
   timestamp: string;
 }
 

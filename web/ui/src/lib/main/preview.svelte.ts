@@ -1,6 +1,6 @@
 import type { ChannelConfig, PreviewConfig, ProfileConfig } from './types';
 import type { PreviewViewport, PreviewFrameInfo, PreviewTileInfo, PreviewLevels, Client } from './client.svelte';
-import type { AppStatus } from './types';
+import type { AppStatusUpdate } from './types';
 
 import { computeAutoLevels, sanitizeString } from '$lib/utils';
 import { SvelteMap } from 'svelte/reactivity';
@@ -349,7 +349,7 @@ export class PreviewState {
 
   // ── Handlers ────────────────────────────────────────────────────
 
-  #handleAppStatus = (status: AppStatus): void => {
+  #handleAppStatus = (status: AppStatusUpdate): void => {
     const session = status.session;
     this.isPreviewing = session?.mode === 'previewing';
 

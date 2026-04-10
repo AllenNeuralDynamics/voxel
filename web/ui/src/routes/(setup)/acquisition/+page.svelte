@@ -72,10 +72,11 @@
 
   // ── Clipboard ──
 
-  async function copySessionDir() {
-    if (!session.details?.directory) return;
+  async function copyDataPath() {
+    const dataPath = session.details?.config?.info?.data_path;
+    if (!dataPath) return;
     try {
-      await navigator.clipboard.writeText(session.details.directory.path);
+      await navigator.clipboard.writeText(dataPath);
       toast.success('Copied to clipboard');
     } catch {
       toast.error('Failed to copy');
@@ -91,14 +92,14 @@
         <!-- Session info -->
         <section>
           <div class="grid grid-cols-1 gap-2 text-xs @sm:grid-cols-[10rem_1fr] @sm:items-center @sm:gap-x-3">
-            <span class="text-fg-muted">Directory</span>
-            {#if session.details?.directory}
+            <span class="text-fg-muted">Data Path</span>
+            {#if session.details?.config?.info?.data_path}
               <button
-                onclick={copySessionDir}
+                onclick={copyDataPath}
                 class="cursor-pointer truncate text-start text-xs text-fg-muted transition-colors hover:text-fg"
-                title="Click to copy: {session.details.directory.path}"
+                title="Click to copy: {session.details.config.info.data_path}"
               >
-                {session.details.directory.path}
+                {session.details.config.info.data_path}
               </button>
             {:else}
               <span class="text-fg-faint">—</span>
@@ -115,7 +116,7 @@
             <!-- TODO: Store path editing — needs multiline or path picker for long paths -->
             <!-- <span class="text-fg-muted">Store Path</span>
             <TextInput
-              value={session.storage.store_path ?? ''}
+              value={session.acq.store_path ?? ''}
               placeholder="/path/to/zarr"
               align="left"
               onChange={(v) => session.updateStorage({ store_path: v || null })}
@@ -123,14 +124,14 @@
             /> -->
             <span class="text-fg-muted">Compression</span>
             <Select
-              value={session.storage.compression ?? 'blosc.lz4'}
+              value={session.acq.compression ?? 'blosc.lz4'}
               options={COMPRESSION_OPTIONS}
               onchange={(v) => session.updateStorage({ compression: v })}
               size="xs"
             />
             <span class="text-fg-muted">Pyramid Level</span>
             <SpinBox
-              value={session.storage.max_level ?? 3}
+              value={session.acq.max_level ?? 3}
               min={0}
               max={7}
               step={1}
@@ -141,7 +142,7 @@
             />
             <span class="text-fg-muted">Shard Size</span>
             <SpinBox
-              value={session.storage.target_shard_gb ?? 1}
+              value={session.acq.target_shard_gb ?? 1}
               min={0.1}
               max={10}
               step={0.5}
@@ -153,7 +154,7 @@
             <span class="text-fg-muted">Batch Z Shards</span>
             <div class="flex items-center gap-1.5">
               <SpinBox
-                value={session.storage.batch_z_shards ?? 1}
+                value={session.acq.batch_z_shards ?? 1}
                 min={1}
                 max={16}
                 step={1}
@@ -163,7 +164,7 @@
                 size="xs"
               />
               <span class="text-fg-faint">
-                = {(session.storage.batch_z_shards ?? 1) * (1 << (session.storage.max_level ?? 3))} frames
+                = {(session.acq.batch_z_shards ?? 1) * (1 << (session.acq.max_level ?? 3))} frames
               </span>
             </div>
           </div>

@@ -19,8 +19,7 @@ from vxl import AcquisitionConfig, RigMode, Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import GridConfig
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
-from vxl.stack import Stack, StackStatus, StorageConfig
-from vxl.system import SessionDirectory
+from vxl.stack import Stack, StackStatus
 from vxlib import fire_and_forget
 
 from .rig import BroadcastCallback, RigService
@@ -35,38 +34,24 @@ def _utc_timestamp() -> str:
 
 
 class SessionDetails(BaseModel):
-    """Active session details — config is guaranteed valid."""
+    """Active session details — config + metadata schema."""
 
-    directory: SessionDirectory
     config: dict[str, Any]
     metadata_schema: dict[str, Any]
 
 
-class SessionState(BaseModel):
+class SessionStateUpdate(BaseModel):
     """Dynamic session state broadcast via WebSocket."""
 
-    # Rig status
     active_profile_id: str | None
     mode: RigMode
     preview: dict[str, PreviewConfig] = Field(default_factory=dict)
-
-    # Session status
     metadata: dict[str, Any]
-
-    # Acquisition config (profile ordering)
     acq: AcquisitionConfig
-
-    # Storage config
-    storage: StorageConfig
-
-    # Session-level config
     grid: GridConfig
     stacks: dict[str, Stack]
     stack_order: list[str]
-
-    # Derived values
     fov: tuple[float, float] | None = None
-
     timestamp: str
 
 
@@ -101,24 +86,13 @@ class SessionService:
 
     def get_session_details(self) -> SessionDetails:
         """Get session details (fetched once at session start)."""
-        session_file = self.session.session_dir / Session.SESSION_FILENAME
-        mtime = datetime.fromtimestamp(session_file.stat().st_mtime, tz=UTC)
         cls = resolve_metadata_class(self.session.metadata_target)
-
-        directory = SessionDirectory(
-            name=self.session.session_dir.name,
-            path=self.session.session_dir,
-            root_name=self.session.session_dir.parent.name,
-            modified=mtime,
-        )
-
         return SessionDetails(
-            directory=directory,
             config=self.session.config.model_dump(mode="json"),
             metadata_schema=cls.model_json_schema(),
         )
 
-    async def get_status(self) -> SessionState:
+    async def get_status(self) -> SessionStateUpdate:
         """Get current dynamic session status."""
         preview = await self.session.rig.get_channel_preview_configs()
 
@@ -127,13 +101,12 @@ class SessionService:
         except ValueError:
             fov = None
 
-        return SessionState(
+        return SessionStateUpdate(
             active_profile_id=self.session.rig.active_profile_id,
             mode=self.session.rig.mode,
             metadata=self.session.metadata,
             acq=self.session.acq,
             grid=self.session.grid,
-            storage=self.session.storage,
             stacks=self.session.stacks,
             stack_order=self.session.compute_stack_order(),
             fov=fov,

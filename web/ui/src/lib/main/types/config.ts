@@ -13,15 +13,6 @@ export type StackOrder =
   | 'custom';
 
 /**
- * Global settings for acquisition planning (matches backend GlobalsConfig from voxel.config)
- */
-export interface GlobalsConfig {
-  default_overlap: number;
-  default_stack_order: StackOrder;
-  default_z_step: number;
-}
-
-/**
  * Device configuration (matches backend DeviceConfig from rigup.config)
  */
 export interface DeviceConfig {
@@ -250,7 +241,6 @@ export interface VoxelRigConfig {
   cluster: ClusterConfig;
   devices: Record<string, DeviceConfig>;
   nodes: Record<string, NodeConfig>;
-  globals: GlobalsConfig;
   daq: DaqConfig;
   stage: StageConfig;
   detection: Record<string, DetectionPathConfig>;

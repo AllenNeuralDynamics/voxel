@@ -10,7 +10,6 @@ and VoxelApp (application logic).
 """
 
 import logging
-from pathlib import Path
 
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
@@ -20,8 +19,8 @@ from PySide6.QtWidgets import (
     QStackedWidget,
 )
 
-from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets
-from vxl.system import SessionListing
+from vxl.metadata import discover_metadata_targets
+from vxl.store import SessionListing
 from vxl_qt.app import VoxelApp
 from vxl_qt.ui.control_page import ControlPage
 from vxl_qt.ui.kit import Colors
@@ -96,10 +95,10 @@ class MainWindow(QMainWindow):
 
     def _refresh_launch_page(self) -> None:
         """Refresh launch page data from app."""
-        self._launch_page.set_roots(self._app.session_roots)
-        self._launch_page.set_rigs(self._app.available_rigs)
+        self._launch_page.set_roots(self._app.data_roots)
+        self._launch_page.set_templates(self._app.templates)
         self._launch_page.set_metadata_targets(discover_metadata_targets())
-        self._launch_page.set_sessions(self._app.list_all_sessions())
+        self._launch_page.set_sessions(self._app.list_sessions())
 
     @Slot(str)
     def _on_phase_changed(self, phase: str) -> None:
@@ -111,45 +110,35 @@ class MainWindow(QMainWindow):
             self._refresh_launch_page()
             self._stack.setCurrentWidget(self._launch_page)
         elif phase == "launching":
-            # Keep launch page visible during launching so logs are visible
             self._launch_page.set_launching(True)
             self._stack.setCurrentWidget(self._launch_page)
         elif phase == "ready":
             self._control_page.refresh()
             self._stack.setCurrentWidget(self._control_page)
 
-    @Slot(str, str, str, str, object)
-    def _on_new_session_requested(
-        self, root_name: str, rig_config: str, session_name: str, metadata_target: str, metadata: dict
-    ) -> None:
+    @Slot(str, str, str)
+    def _on_new_session_requested(self, template: str, name: str, data_root: str) -> None:
         """Handle new session creation request from LaunchPage."""
-        log.info("Creating new session: root=%s, rig=%s, target=%s", root_name, rig_config, metadata_target)
-        fire_and_forget(self._create_session(root_name, rig_config, session_name, metadata_target, metadata), log=log)
+        log.info("Creating new session: template=%s, name=%s", template, name)
+        fire_and_forget(self._create_session(template, name, data_root), log=log)
 
     @Slot(object)
     def _on_session_resumed(self, session: SessionListing) -> None:
         """Handle session resume request from LaunchPage."""
-        log.info("Resuming session: %s", session.directory.path)
-        fire_and_forget(self._resume_session(session.directory.path), log=log)
+        log.info("Resuming session: %s", session.uid)
+        fire_and_forget(self._resume_session(session.uid), log=log)
 
-    async def _create_session(
-        self,
-        root_name: str,
-        rig_config: str,
-        session_name: str = "",
-        metadata_target: str = BASE_METADATA_TARGET,
-        metadata: dict | None = None,
-    ) -> None:
-        """Create a new session."""
+    async def _create_session(self, template: str, name: str = "", data_root: str | None = None) -> None:
+        """Create a new session from a template."""
         try:
-            await self._app.create_session(root_name, rig_config, session_name, metadata_target, metadata)
+            await self._app.create_session(template, data_root_name=data_root or None, name=name)
         except Exception:
             log.exception("Failed to create session")
 
-    async def _resume_session(self, session_dir: Path) -> None:
+    async def _resume_session(self, uid: str) -> None:
         """Resume an existing session."""
         try:
-            await self._app.resume_session(session_dir)
+            await self._app.resume_session(uid)
         except Exception:
             log.exception("Failed to resume session")
 

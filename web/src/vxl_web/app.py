@@ -15,7 +15,8 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
-from vxl.system import SystemConfig
+from vxl.app import VOXEL_DIR, VoxelApp
+from vxl.store import YamlSessionCatalog
 
 from .services import AppService, app_router
 
@@ -34,26 +35,18 @@ class SPAStaticFiles(StaticFiles):
             raise
 
 
-def _create_lifespan(system_config: SystemConfig) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
-    """Create a lifespan context manager for the app."""
-
+def _create_lifespan(voxel_app: VoxelApp) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        """Application lifespan: initialize and cleanup."""
         log.info("Starting Voxel in lobby mode")
 
-        # Create app service (starts with no session)
-        app_service = AppService(system_config)
-
-        # Store on application state
-        app.state.system_config = system_config
+        app_service = AppService(voxel_app)
         app.state.app_service = app_service
 
-        log.info("Available session roots: %s", [r.name for r in system_config.session_roots])
+        log.info("Available data roots: %s", [r.name for r in voxel_app.data_roots])
 
         yield
 
-        # Shutdown: Close any active session
         if app_service.session_service is not None:
             log.info("Closing active session...")
             try:
@@ -61,31 +54,32 @@ def _create_lifespan(system_config: SystemConfig) -> Callable[[FastAPI], Abstrac
             except Exception:
                 log.exception("Error closing session")
 
-        # Cleanup log handler
         app_service.teardown_log_capture()
         log.info("Voxel stopped")
 
     return lifespan
 
 
-def create_app(system_config: SystemConfig | None = None, serve_static: bool = True) -> FastAPI:
+def create_app(voxel_app: VoxelApp | None = None, serve_static: bool = True) -> FastAPI:
     """Create and configure the FastAPI application.
 
     Args:
-        system_config: System configuration. If None, loads from ~/.voxel/system.yaml.
+        voxel_app: VoxelApp instance. If None, creates one with default YAML catalog.
         serve_static: Whether to serve static UI files.
-
-    Returns:
-        Configured FastAPI application.
     """
-    if system_config is None:
-        system_config = SystemConfig.load()
+    if voxel_app is None:
+        catalog = YamlSessionCatalog(
+            sessions_dir=VOXEL_DIR / "sessions",
+            templates_dir=VOXEL_DIR / "templates",
+        )
+        catalog.seed_templates()
+        voxel_app = VoxelApp(catalog)
 
     app = FastAPI(
         title="Voxel API",
         description="Web API for Voxel microscope control",
         version="0.1.0",
-        lifespan=_create_lifespan(system_config),
+        lifespan=_create_lifespan(voxel_app),
     )
 
     app.add_middleware(
@@ -96,16 +90,7 @@ def create_app(system_config: SystemConfig | None = None, serve_static: bool = T
         allow_headers=["*"],
     )
 
-    # Include app router (includes session and rig routes) under /api
     app.include_router(app_router, prefix="/api")
-
-    @app.get("/api/health")
-    async def health() -> dict[str, str]:
-        """Basic health check."""
-        return {
-            "status": "ok",
-            "service": "Voxel API",
-        }
 
     if serve_static:
         static_dir = Path(__file__).parent / "static"

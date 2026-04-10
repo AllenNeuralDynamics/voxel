@@ -1,22 +1,12 @@
 <script lang="ts">
   import type { App } from '$lib/main';
-  import type { SessionListing, SessionRoot, JsonSchema } from '$lib/main';
+  import type { SessionListing, DataRoot, TemplateInfo, JsonSchema } from '$lib/main';
   import AppMenu from './AppMenu.svelte';
   import LogViewer from '$lib/ui/LogViewer.svelte';
   import MetadataFields from '$lib/ui/MetadataFields.svelte';
   import { Collapsible } from 'bits-ui';
   import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/ui/kit';
-  import {
-    Plus,
-    FolderOpenOutline,
-    Star,
-    StarOff,
-    Archive,
-    GitFork,
-    Clipboard,
-    LucideChevronRight,
-    EllipsisVertical
-  } from '$lib/icons';
+  import { Plus, FolderOpenOutline, GitFork, Clipboard, LucideChevronRight, EllipsisVertical } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
   import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
   import { goto } from '$app/navigation';
@@ -26,80 +16,90 @@
   const { app }: { app: App } = $props();
 
   let sessions = $state<SessionListing[]>([]);
+  let templates = $state<TemplateInfo[]>([]);
+  let dataRoots = $state<DataRoot[]>([]);
   let loadingSessions = $state(false);
   let error = $state<string | null>(null);
   let metadataTargets = $state<Record<string, string>>({});
   let metadataSchema = $state<JsonSchema | null>(null);
 
   // Dialog state
-  let newSessionOpen = $state(false);
-  let forkSessionOpen = $state(false);
+  let dialogOpen = $state(false);
   let forkTarget = $state<SessionListing | null>(null);
 
-  // New session form state
-  let nsName = $state('');
-  let nsRoot = $state('');
-  let nsRig = $state('');
-  let nsMetaTarget = $state('');
-  let nsMetadata = $state<Record<string, unknown>>({});
-  let nsSubmitting = $state(false);
+  // Unified form state
+  let formName = $state('');
+  let formDescription = $state('');
+  let formTemplate = $state('');
+  let formDataRoot = $state('');
+  let formMetaTarget = $state('');
+  let formMetadata = $state<Record<string, unknown>>({});
+  let formClearStacks = $state(true);
+  let formSubmitting = $state(false);
 
-  // Fork form state
-  let fkName = $state('');
-  let fkDescription = $state('');
-  let fkRoot = $state('');
-  let fkClearStacks = $state(false);
-  let fkSubmitting = $state(false);
-
-  const roots = $derived(app.status?.roots ?? []);
-  const rigs = $derived(app.status?.rigs ?? []);
-  const phase = $derived(app.status?.phase);
-  const isIdle = $derived(phase === 'idle');
-  const isLaunching = $derived(phase === 'launching');
+  const appStatus = $derived(app.status?.status);
+  const isIdle = $derived(appStatus === 'idle');
+  const isLaunching = $derived(appStatus === 'launching');
   const connectionState = $derived(app.client.connectionState);
   const logs = $derived(app.logs);
-  const rootOptions = $derived(roots.map((r: SessionRoot) => ({ value: r.name, label: r.label ?? r.name })));
 
-  // New session form derived
-  const nsValid = $derived(nsRoot.length > 0 && nsRig.length > 0);
-
-  // Fork form derived
-  const fkSourceName = $derived(forkTarget?.config?.info.name || forkTarget?.directory.name || '');
-
-  const fkValid = $derived(fkRoot.length > 0 && fkName.trim().length > 0);
+  // Derived
+  const isFork = $derived(forkTarget !== null);
+  const forkSourceName = $derived(forkTarget?.config?.info.name || forkTarget?.uid || '');
+  const formValid = $derived(isFork ? formName.trim().length > 0 : formTemplate.length > 0);
+  const templateOptions = $derived(templates.map((t) => ({ value: t.name, label: t.rig_name || t.name })));
+  const dataRootOptions = $derived(dataRoots.map((r) => ({ value: r.name, label: r.label ?? r.name })));
 
   // ── Effects ──
 
   $effect(() => {
-    if (roots.length > 0) loadAllSessions();
+    if (connectionState === 'connected') {
+      loadAllSessions();
+      app
+        .fetchTemplates()
+        .then((t) => (templates = t))
+        .catch(console.warn);
+      app
+        .fetchDataRoots()
+        .then((r) => (dataRoots = r))
+        .catch(console.warn);
+      app
+        .fetchMetadataTargets()
+        .then((t) => (metadataTargets = t))
+        .catch(console.warn);
+    }
   });
 
+  // Reset form when dialog opens
   $effect(() => {
-    app
-      .fetchMetadataTargets()
-      .then((targets) => {
-        metadataTargets = targets;
-      })
-      .catch((e) => console.warn('[LaunchScreen] Failed to fetch metadata targets:', e));
-  });
-
-  // Reset new session form when dialog opens
-  $effect(() => {
-    if (newSessionOpen) {
-      nsName = '';
-      nsRoot = roots.length > 0 ? roots[0].name : '';
-      nsRig = rigs.length > 0 ? rigs[0] : '';
+    if (dialogOpen) {
+      formSubmitting = false;
+      formDataRoot = dataRoots.find((r) => r.default)?.name ?? dataRoots[0]?.name ?? '';
       const keys = Object.keys(metadataTargets);
-      nsMetaTarget = keys.length > 0 ? keys[0] : '';
+      formMetaTarget = keys.length > 0 ? keys[0] : '';
       if (keys.length > 0) handleMetadataTargetChanged(metadataTargets[keys[0]]);
-      nsMetadata = {};
+      formMetadata = {};
+
+      if (forkTarget) {
+        // Fork mode: pre-fill from source
+        formName = (forkTarget.config?.info.name || forkTarget.uid) + '-fork';
+        formDescription = forkTarget.config?.info.description ?? '';
+        formTemplate = '';
+        formClearStacks = true;
+      } else {
+        // Create mode
+        formName = '';
+        formDescription = '';
+        formTemplate = templates.length > 0 ? templates[0].name : '';
+        formClearStacks = true;
+      }
     }
   });
 
   // Reset metadata values when schema changes
   $effect(() => {
     if (!metadataSchema) {
-      nsMetadata = {};
+      formMetadata = {};
       return;
     }
     const values: Record<string, unknown> = {};
@@ -109,17 +109,7 @@
       else if (prop.type === 'string') values[key] = '';
       else if (prop.type === 'number' || prop.type === 'integer') values[key] = 0;
     }
-    nsMetadata = values;
-  });
-
-  // Populate fork form when target changes
-  $effect(() => {
-    if (forkTarget) {
-      fkName = (forkTarget.config?.info.name || forkTarget.directory.name) + '-fork';
-      fkDescription = forkTarget.config?.info.description ?? '';
-      fkRoot = forkTarget.directory.root_name;
-      fkClearStacks = false;
-    }
+    formMetadata = values;
   });
 
   // ── Handlers ──
@@ -128,10 +118,7 @@
     loadingSessions = true;
     error = null;
     try {
-      const allSessions = await Promise.all(roots.map((root: SessionRoot) => app.fetchSessions(root.name)));
-      sessions = allSessions
-        .flat()
-        .sort((a, b) => new Date(b.directory.modified).getTime() - new Date(a.directory.modified).getTime());
+      sessions = await app.fetchSessions();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load sessions';
       sessions = [];
@@ -149,26 +136,40 @@
     }
   }
 
-  async function handleCreateSession() {
-    if (!nsValid || nsSubmitting) return;
-    nsSubmitting = true;
+  async function handleSubmitSession() {
+    if (!formValid || formSubmitting) return;
+    formSubmitting = true;
     error = null;
     try {
-      const target = nsMetaTarget ? metadataTargets[nsMetaTarget] : '';
-      const name = nsName.trim().toLowerCase().replace(/\s+/g, '-');
-      await app.createSession(nsRoot, nsRig, name, target, nsMetadata);
-      newSessionOpen = false;
+      const name = formName.trim().toLowerCase().replace(/\s+/g, '-');
+      if (forkTarget) {
+        const sourceUid = forkTarget.uid;
+        await app.forkSession(sourceUid, {
+          name,
+          description: formDescription,
+          clearStacks: formClearStacks
+        });
+      } else {
+        await app.createSession(formTemplate, {
+          dataRoot: formDataRoot || undefined,
+          name,
+          description: formDescription
+        });
+      }
+      dialogOpen = false;
+      goto(resolve('/scout'));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to create session';
     } finally {
-      nsSubmitting = false;
+      formSubmitting = false;
     }
   }
 
   async function handleResumeSession(session: SessionListing) {
     error = null;
     try {
-      await app.resumeSession(session.directory.path);
+      const uid = session.uid;
+      await app.resumeSession(uid);
       goto(resolve('/scout'));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to resume session';
@@ -177,36 +178,12 @@
 
   function openForkDialog(session: SessionListing) {
     forkTarget = session;
-    forkSessionOpen = true;
+    dialogOpen = true;
   }
 
-  async function handleForkSubmit() {
-    if (!forkTarget || !fkValid || fkSubmitting) return;
-    fkSubmitting = true;
-    error = null;
-    try {
-      await app.forkSession(forkTarget.directory.path, fkRoot, fkName.trim(), fkDescription, fkClearStacks);
-      forkSessionOpen = false;
-      goto(resolve('/scout'));
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to fork session';
-    } finally {
-      fkSubmitting = false;
-    }
-  }
-
-  async function handleStarSession(session: SessionListing) {
-    const current = session.config?.info.status;
-    const next = current === 'starred' ? 'active' : 'starred';
-    await app.updateSessionStatus(session.directory.path, next);
-    await loadAllSessions();
-  }
-
-  async function handleArchiveSession(session: SessionListing) {
-    const current = session.config?.info.status;
-    const next = current === 'archived' ? 'active' : 'archived';
-    await app.updateSessionStatus(session.directory.path, next);
-    await loadAllSessions();
+  function openNewSessionDialog() {
+    forkTarget = null;
+    dialogOpen = true;
   }
 
   // ── Helpers ──
@@ -239,13 +216,13 @@
     }
   }
 
-  function handleNsMetaTargetChange(key: string) {
+  function handleFormMetaTargetChange(key: string) {
     const target = metadataTargets[key];
     if (target) handleMetadataTargetChanged(target);
   }
 
-  function setNsMetaValue(key: string, val: unknown) {
-    nsMetadata = { ...nsMetadata, [key]: val };
+  function setFormMetaValue(key: string, val: unknown) {
+    formMetadata = { ...formMetadata, [key]: val };
   }
 </script>
 
@@ -253,8 +230,6 @@
 {#snippet sessionCard(session: SessionListing)}
   {@const info = session.config?.info}
   {@const hasError = session.errors.length > 0}
-  {@const isStarred = info?.status === 'starred'}
-  {@const isArchived = info?.status === 'archived'}
 
   <div
     class={hasError
@@ -264,7 +239,7 @@
     {#if hasError}
       <div class="flex w-full items-center gap-2">
         <span class="min-w-0 flex-1 truncate text-sm font-medium text-fg">
-          {info?.name || session.directory.name}
+          {info?.name || session.uid}
         </span>
       </div>
       <div class="mt-2 text-xs text-danger">{session.errors[0]}</div>
@@ -279,15 +254,8 @@
               height="12"
               class="shrink-0 text-fg-muted transition-transform duration-200"
             />
-            <span class="truncate">{info?.name || session.directory.name}</span>
+            <span class="truncate">{info?.name || session.uid}</span>
           </Collapsible.Trigger>
-
-          {#if isStarred}
-            <Star width="12" height="12" class="shrink-0 fill-current text-fg-muted/60" />
-          {/if}
-          {#if isArchived}
-            <Archive width="12" height="12" class="shrink-0 text-fg-muted/60" />
-          {/if}
 
           {#if info?.last_opened}
             <span class="shrink-0 text-xs text-fg-muted/60">
@@ -313,27 +281,17 @@
                 alignOffset={-12}
                 class="min-w-40 **:data-[slot=dropdown-menu-item]:py-1"
               >
-                <DropdownMenu.Item onclick={() => handleStarSession(session)}>
-                  {#if isStarred}
-                    <StarOff width="12" height="12" />
-                  {:else}
-                    <Star width="12" height="12" />
-                  {/if}
-                  {isStarred ? 'Unstar' : 'Star'}
-                </DropdownMenu.Item>
-                <DropdownMenu.Item onclick={() => handleArchiveSession(session)}>
-                  <Archive width="12" height="12" />
-                  {isArchived ? 'Unarchive' : 'Archive'}
-                </DropdownMenu.Item>
                 <DropdownMenu.Item onclick={() => openForkDialog(session)}>
                   <GitFork width="12" height="12" />
                   Fork
                 </DropdownMenu.Item>
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item onclick={() => copyPath(session.directory.path)}>
-                  <Clipboard width="12" height="12" />
-                  Copy path
-                </DropdownMenu.Item>
+                {#if session.location}
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item onclick={() => copyPath(session.location!)}>
+                    <Clipboard width="12" height="12" />
+                    Copy location
+                  </DropdownMenu.Item>
+                {/if}
               </DropdownMenu.Content>
             </DropdownMenu.Root>
           </div>
@@ -348,31 +306,30 @@
               <span>{session.config?.rig.info.name ?? ''}</span>
               {#if info?.source}
                 <span>Source</span>
-                <span>
-                  {info.source.type === 'fork' ? 'Forked from' : 'From'}
-                  {info.source.name}
-                </span>
+                <span>{info.source}</span>
               {/if}
               {#if info?.description}
                 <span>Description</span>
                 <span>{info.description}</span>
               {/if}
-              {#if info?.status}
-                <span>Status</span>
-                <span class="capitalize">{info.status}</span>
+              {#if info?.collection}
+                <span>Collection</span>
+                <span>{info.collection}</span>
               {/if}
-              <span>Path</span>
-              <div class="flex min-w-0 items-center gap-1">
-                <span class="min-w-0 truncate">{session.directory.path}</span>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onclick={() => copyPath(session.directory.path)}
-                  title="Copy path"
-                >
-                  <Clipboard width="10" height="10" />
-                </Button>
-              </div>
+              {#if session.location}
+                <span>Location</span>
+                <div class="flex min-w-0 items-center gap-1">
+                  <span class="min-w-0 truncate">{session.location}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onclick={() => copyPath(session.location!)}
+                    title="Copy location"
+                  >
+                    <Clipboard width="10" height="10" />
+                  </Button>
+                </div>
+              {/if}
             </div>
 
             <div class="flex items-center gap-2 py-2">
@@ -380,7 +337,9 @@
                 <span>Created {formatDate(info.created_at)}</span>
                 <span>&middot;</span>
               {/if}
-              <span>Modified {formatDate(session.directory.modified)}</span>
+              {#if info?.last_opened}
+                <span>Last opened {formatDate(info.last_opened)}</span>
+              {/if}
               {#if info && info.open_count > 0}
                 <span>&middot;</span>
                 <span>Opened {info.open_count} {info.open_count === 1 ? 'time' : 'times'}</span>
@@ -435,7 +394,7 @@
     {:else}
       <!-- Toolbar -->
       <div class="flex items-center gap-2 px-4 py-3">
-        <Button variant="ghost" size="sm" onclick={() => (newSessionOpen = true)}>
+        <Button variant="ghost" size="sm" onclick={openNewSessionDialog}>
           <Plus width="14" height="14" />
           New Session
         </Button>
@@ -459,7 +418,7 @@
           </div>
         {:else}
           <div class="space-y-2">
-            {#each sessions as session (session.directory.path)}
+            {#each sessions as session (session.uid)}
               {@render sessionCard(session)}
             {/each}
           </div>
@@ -478,102 +437,80 @@
 <!-- New Session Dialog                         -->
 <!-- ═══════════════════════════════════════════ -->
 
-<Dialog.Root bind:open={newSessionOpen}>
+<Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content size="xl">
     <Dialog.Header>
-      <Dialog.Title>New Session</Dialog.Title>
+      {#if isFork}
+        <Dialog.Title>Forking: {forkSourceName}</Dialog.Title>
+      {:else}
+        <Dialog.Title>New Session</Dialog.Title>
+      {/if}
     </Dialog.Header>
+    <hr class="-mx-4 border-border" />
 
-    <div class="grid grid-cols-2 gap-4">
-      <Field label="Session Root">
-        <Select options={rootOptions} bind:value={nsRoot} />
-      </Field>
-
-      <Field label="Rig Configuration">
-        <Select options={rigs.map((r) => ({ value: r, label: r }))} bind:value={nsRig} />
-      </Field>
-
-      <Field label="Session Name" id="ns-name">
-        <TextInput bind:value={nsName} id="ns-name" align="left" placeholder="Auto-generated if empty" />
-      </Field>
-
-      {#if Object.keys(metadataTargets).length > 0}
-        <Field label="Metadata Target">
-          <Select
-            options={Object.keys(metadataTargets).map((k) => ({ value: k, label: sanitizeString(k) }))}
-            bind:value={nsMetaTarget}
-            onchange={handleNsMetaTargetChange}
-          />
-        </Field>
-      {/if}
-
-      {#if metadataSchema}
-        <div class="col-span-full">
-          <MetadataFields schema={metadataSchema} values={nsMetadata} onChange={setNsMetaValue}>
-            {#snippet field(key, prop, input)}
-              {@const fullSpan = key === 'notes' || prop.type === 'array' ? 'col-span-full' : ''}
-              <div class={fullSpan}>
-                <Field label={sanitizeString(key)}>
-                  {@render input()}
-                </Field>
-              </div>
-            {/snippet}
-          </MetadataFields>
-        </div>
-      {/if}
-    </div>
-
-    <Dialog.Footer>
-      <Button variant="outline" onclick={() => (newSessionOpen = false)}>Cancel</Button>
-      <Button variant="success" onclick={handleCreateSession} disabled={!nsValid || nsSubmitting}>
-        {nsSubmitting ? 'Creating...' : 'Create Session'}
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- ═══════════════════════════════════════════ -->
-<!-- Fork Session Dialog                        -->
-<!-- ═══════════════════════════════════════════ -->
-
-<Dialog.Root bind:open={forkSessionOpen}>
-  <Dialog.Content size="xl">
-    {#if forkTarget}
-      <Dialog.Header>
-        <Dialog.Title>Fork Session</Dialog.Title>
-        <Dialog.Description>
-          Forking from: {fkSourceName}
-        </Dialog.Description>
-      </Dialog.Header>
-
+    <div class="flex flex-col gap-4">
       <div class="grid grid-cols-2 gap-4">
-        <Field label="Session Root">
-          <Select options={rootOptions} bind:value={fkRoot} />
-        </Field>
-
-        <Field label="Session Name">
-          <TextInput bind:value={fkName} align="left" />
-        </Field>
-
-        <div class="col-span-2">
-          <Field label="Description">
-            <TextInput bind:value={fkDescription} align="left" />
+        {#if !isFork}
+          <Field label="Template">
+            <Select options={templateOptions} bind:value={formTemplate} />
           </Field>
-        </div>
+        {/if}
 
-        <div class="col-span-2 flex items-center gap-2">
-          <Checkbox bind:checked={fkClearStacks} />
-          <span class="text-sm text-fg">Clear stacks</span>
-          <span class="text-xs text-fg-muted">If unchecked, existing stacks are reset to planned</span>
-        </div>
+        <Field label="Data Root">
+          <Select options={dataRootOptions} bind:value={formDataRoot} />
+        </Field>
+
+        <Field label="Session Name" id="form-name">
+          <TextInput bind:value={formName} id="form-name" align="left" placeholder="Auto-generated if empty" />
+        </Field>
+
+        <Field label="Description">
+          <TextInput bind:value={formDescription} align="left" placeholder="" />
+        </Field>
       </div>
 
-      <Dialog.Footer>
-        <Button variant="outline" onclick={() => (forkSessionOpen = false)}>Cancel</Button>
-        <Button variant="success" onclick={handleForkSubmit} disabled={!fkValid || fkSubmitting}>
-          {fkSubmitting ? 'Creating...' : 'Create Fork'}
-        </Button>
-      </Dialog.Footer>
-    {/if}
+      <div class="flex flex-col gap-2">
+        <div class="col-span-full my-1 flex items-center gap-3">
+          <span class="shrink-0 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Metadata</span>
+          <hr class="flex-1 border-border" />
+        </div>
+
+        {#if Object.keys(metadataTargets).length > 0}
+          <div class="col-span-full grid grid-cols-[10rem_1fr] items-center gap-x-3">
+            <div class="text-xs text-fg-muted">Schema</div>
+            <Select
+              options={Object.keys(metadataTargets).map((k) => ({ value: k, label: sanitizeString(k) }))}
+              bind:value={formMetaTarget}
+              onchange={handleFormMetaTargetChange}
+              size="sm"
+            />
+          </div>
+        {/if}
+
+        {#if metadataSchema}
+          <div class="col-span-full grid grid-cols-[10rem_1fr] items-start gap-x-3 gap-y-2 pb-2">
+            <MetadataFields schema={metadataSchema} values={formMetadata} onChange={setFormMetaValue} size="sm">
+              <!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
+              {#snippet field(key, _prop, input)}
+                <div class="pt-1 text-xs text-fg-muted">{sanitizeString(key)}</div>
+                <div>{@render input()}</div>
+              {/snippet}
+            </MetadataFields>
+          </div>
+        {/if}
+      </div>
+    </div>
+    <hr class="-mx-4 border-border" />
+    <Dialog.Footer>
+      <div class="flex items-center gap-2">
+        <Checkbox bind:checked={formClearStacks} disabled={!isFork} />
+        <span class="text-xs text-fg-muted">Clear stacks</span>
+      </div>
+      <div class="flex-1"></div>
+      <Button variant="outline" onclick={() => (dialogOpen = false)}>Cancel</Button>
+      <Button variant="success" onclick={handleSubmitSession} disabled={!formValid || formSubmitting}>
+        {formSubmitting ? 'Creating...' : isFork ? 'Create Fork' : 'Create Session'}
+      </Button>
+    </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

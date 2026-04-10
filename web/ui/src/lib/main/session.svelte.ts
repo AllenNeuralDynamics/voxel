@@ -3,11 +3,10 @@ import type { Client, DaqWaveformsResponse } from './client.svelte';
 import { DevicesManager } from './devices.svelte';
 import { sanitizeString, UndoStack } from '$lib/utils';
 import type {
-  AppStatus,
+  AppStatusUpdate,
   AcquisitionConfig,
   GridConfig,
   SessionDetails,
-  StorageConfig,
   Tile,
   Stack,
   StackStatus,
@@ -26,7 +25,7 @@ import { type AlignEdge, computeAlignedOffset } from './grid';
 
 export interface SessionInit {
   client: Client;
-  status: AppStatus;
+  status: AppStatusUpdate;
 }
 
 export class Session {
@@ -35,7 +34,7 @@ export class Session {
   preview = $state<PreviewState>(null!);
   stage = $state<Stage>(null!);
 
-  #appStatus = $state<AppStatus>();
+  #appStatus = $state<AppStatusUpdate>();
   details = $state<SessionDetails>(null!);
   rig_cfg = $derived<VoxelRigConfig>(this.details.config.rig!);
 
@@ -46,13 +45,10 @@ export class Session {
       sort_by_profile: false,
       z_step: 1.0,
       default_z_start: 0.0,
-      default_z_end: 511.0
-    }
-  );
-  storage = $derived<StorageConfig>(
-    this.#appStatus?.session?.storage ?? {
+      default_z_end: 511.0,
+      store_path: './data',
       max_level: 3,
-      compression: 'blosc.lz4',
+      compression: 'blosc_lz4',
       batch_z_shards: 1,
       target_shard_gb: 1.0
     }
@@ -217,7 +213,7 @@ export class Session {
     this.devices.destroy();
   }
 
-  updateStatus(status: AppStatus): void {
+  updateStatus(status: AppStatusUpdate): void {
     this.#appStatus = status;
   }
 

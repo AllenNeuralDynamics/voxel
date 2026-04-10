@@ -3,8 +3,8 @@
 This service manages:
 - WebSocket client communication
 - Log streaming from app startup
-- Session lifecycle (launch/close)
-- App-level status (roots, rigs, session)
+- Session lifecycle (create/resume/fork/close) via VoxelApp
+- App-level status broadcasting
 """
 
 import asyncio
@@ -13,51 +13,45 @@ import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from vxl import Session
-from vxl.metadata import BASE_METADATA_TARGET, discover_metadata_targets, resolve_metadata_class
-from vxl.session import SessionConfig, SessionStatus
-from vxl.system import SessionRoot, SystemConfig, get_rig_path, list_rigs
+from vxl.app import VoxelApp
+from vxl.config import DataRoot
+from vxl.metadata import discover_metadata_targets, resolve_metadata_class
+from vxl.store import SessionListing, TemplateInfo
 from vxl_web.services.msg_queue import MsgQueue
 from vxlib import fire_and_forget
 
 from .acq import acq_router
 from .rig import rig_router
-from .session import SessionService, SessionState, info_router
+from .session import SessionDetails, SessionService, SessionStateUpdate, info_router
 
 router = APIRouter(tags=["app"])
-router.include_router(info_router)  # Session info/status/metadata endpoints
-router.include_router(acq_router)  # Acquisition config endpoints
-router.include_router(rig_router)  # Rig/device/profile endpoints
+router.include_router(info_router)
+router.include_router(acq_router)
+router.include_router(rig_router)
 log = logging.getLogger(__name__)
 
 
 def _utc_timestamp() -> str:
-    """Return an ISO 8601 timestamp in UTC."""
     return datetime.now(UTC).isoformat()
 
 
-AppPhase = Literal["idle", "launching", "ready"]
+AppStatus = Literal["idle", "launching", "ready"]
 
 
-class AppStatus(BaseModel):
-    """Overall application status."""
+class AppStatusUpdate(BaseModel):
+    """Overall application status broadcast."""
 
-    phase: AppPhase
-    roots: list[SessionRoot]
-    rigs: list[str]
-    session: SessionState | None = None
+    status: AppStatus
+    session: SessionStateUpdate | None = None
     timestamp: str
 
 
 class LogMessage(BaseModel):
-    """Log message for WebSocket streaming."""
-
     level: str
     message: str
     logger: str
@@ -65,57 +59,40 @@ class LogMessage(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    """Request to create a new session."""
+    """Unified request for create/resume/fork."""
 
-    root_name: str
-    rig_config: str
-    session_name: str = ""
-    metadata_target: str = BASE_METADATA_TARGET
-    metadata: dict[str, Any] | None = None
-
-
-class ResumeSessionRequest(BaseModel):
-    """Request to resume an existing session."""
-
-    session_dir: str
-
-
-class UpdateSessionStatusRequest(BaseModel):
-    """Request to update a session's status (star/archive)."""
-
-    session_dir: str
-    status: str  # "active", "archived", "starred"
-
-
-class ForkSessionRequest(BaseModel):
-    """Request to fork a new session from an existing one."""
-
-    source_session_dir: str
-    root_name: str
+    # Create from template
+    template: str | None = None
+    # Fork from existing session
+    source_session: str | None = None
+    # Resume existing session
+    resume: str | None = None
+    # Common fields
+    data_root: str | None = None
     name: str = ""
     description: str = ""
+    collection: str = ""
     clear_stacks: bool = False
 
 
 class AppService:
     """App-level service managing WebSocket clients and session lifecycle.
 
-    Hierarchy: AppService → SessionService → RigService
+    Delegates session lifecycle to VoxelApp. Handles WebSocket
+    broadcasting and client management.
     """
 
-    def __init__(self, system_config: SystemConfig):
-        self.system_config = system_config
+    def __init__(self, voxel_app: VoxelApp):
+        self.voxel_app = voxel_app
         self.session_service: SessionService | None = None
         self.clients: dict[str, MsgQueue] = {}
         self._log_handler: _WebSocketLogHandler | None = None
-        self._phase: AppPhase = "idle"
-        self._status_lock = asyncio.Lock()  # Serialize status fetching (ZMQ calls)
+        self._status: AppStatus = "idle"
+        self._status_lock = asyncio.Lock()
 
         self._setup_log_capture()
 
     def _setup_log_capture(self) -> None:
-        """Set up log capture for WebSocket streaming."""
-
         def _broadcast_log(record: logging.LogRecord) -> None:
             log_msg = LogMessage(
                 level=record.levelname.lower(),
@@ -127,14 +104,10 @@ class AppService:
 
         self._log_handler = _WebSocketLogHandler(_broadcast_log)
         self._log_handler.setLevel(logging.INFO)
-
-        # Attach to root logger to capture all logs
         root_logger = logging.getLogger()
         root_logger.addHandler(self._log_handler)
-        log.debug("Log capture enabled for WebSocket streaming")
 
     def teardown_log_capture(self) -> None:
-        """Remove log capture handler."""
         if self._log_handler:
             root_logger = logging.getLogger()
             root_logger.removeHandler(self._log_handler)
@@ -143,10 +116,6 @@ class AppService:
     # ==================== Client Management ====================
 
     def _broadcast(self, data: dict[str, Any] | bytes, with_status: bool = False, exclude: str | None = None) -> None:
-        """Broadcast to all clients. Dict = JSON control, bytes = binary preview.
-
-        Control messages (JSON) get priority=0, preview data (bytes) gets priority=1.
-        """
         if data:
             msg_type = "bytes" if isinstance(data, bytes) else "json"
             priority = 1 if msg_type == "bytes" else 0
@@ -159,45 +128,35 @@ class AppService:
             self._schedule_status_broadcast()
 
     def _send_to_client(self, client_id: str, data: dict[str, Any]) -> None:
-        """Send a message to a specific client."""
         queue = self.clients.get(client_id)
         if queue:
             queue.put("json", data)
 
     async def add_client(self, client_id: str, queue: MsgQueue) -> None:
-        """Register a new client and send initial status snapshot."""
         self.clients[client_id] = queue
         log.info("Client %s connected. Total: %d", client_id, len(self.clients))
-
-        # Send initial app status (use lock to prevent ZMQ conflicts)
         async with self._status_lock:
             status = await self.get_app_status()
             self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
 
     def remove_client(self, client_id: str) -> None:
-        """Remove a client from the distribution list."""
         self.clients.pop(client_id, None)
         log.info("Client %s disconnected. Total: %d", client_id, len(self.clients))
 
     # ==================== Status ====================
 
-    async def get_app_status(self) -> AppStatus:
-        """Get current app status."""
-        session_status = None
+    async def get_app_status(self) -> AppStatusUpdate:
+        session_state = None
         if self.session_service:
-            session_status = await self.session_service.get_status()
+            session_state = await self.session_service.get_status()
 
-        return AppStatus(
-            phase=self._phase,
-            roots=self.system_config.session_roots,
-            rigs=list_rigs(),
-            session=session_status,
+        return AppStatusUpdate(
+            status=self._status,
+            session=session_state,
             timestamp=_utc_timestamp(),
         )
 
     async def _broadcast_status(self) -> None:
-        """Broadcast app status to all clients."""
-        # Use lock to serialize status fetching (prevents ZMQ REQ/REP conflicts)
         async with self._status_lock:
             try:
                 status = await self.get_app_status()
@@ -206,142 +165,68 @@ class AppService:
                 log.warning("Failed to broadcast status: %s", e)
 
     def _schedule_status_broadcast(self) -> None:
-        """Schedule an async status broadcast. Use this from sync contexts."""
         fire_and_forget(self._broadcast_status(), log=log, timeout=5.0)
 
     # ==================== Session Lifecycle ====================
 
-    async def create_session(
-        self,
-        root_name: str,
-        rig_config: str,
-        session_name: str = "",
-        metadata_target: str = BASE_METADATA_TARGET,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Create a new session."""
+    async def create_session(self, request: CreateSessionRequest) -> None:
+        """Create, resume, or fork a session based on request fields."""
         if self.session_service is not None:
             raise RuntimeError("A session is already active. Close it first.")
 
-        root = self.system_config.get_root(root_name)
-        if root is None:
-            raise ValueError(f"Session root '{root_name}' not found")
-
-        config_path = get_rig_path(rig_config)
-        if config_path is None:
-            raise ValueError(f"Rig config '{rig_config}' not found in ~/.voxel/rigs/")
-
-        self._phase = "launching"
+        self._status = "launching"
         await self._broadcast_status()
 
         try:
-            session = await Session.create(root.path, config_path, session_name, metadata_target, metadata)
-            self.session_service = SessionService(session=session, broadcast=self._broadcast)
+            if request.resume:
+                session = await self.voxel_app.resume_session(request.resume)
+            else:
+                session = await self.voxel_app.create_session(
+                    template=request.template,
+                    source_session=request.source_session,
+                    data_root_name=request.data_root,
+                    name=request.name,
+                    description=request.description,
+                    collection=request.collection,
+                    clear_stacks=request.clear_stacks,
+                )
 
-            log.info(f"Session created: {session.session_dir}")
-            self._phase = "ready"
+            self.session_service = SessionService(session=session, broadcast=self._broadcast)
+            self._status = "ready"
             await self._broadcast_status()
 
         except Exception:
-            log.exception("Failed to create session")
+            log.exception("Failed to create/resume session")
             self.session_service = None
-            self._phase = "idle"
-            await self._broadcast_status()
-            raise
-
-    async def resume_session(self, session_dir: Path) -> None:
-        """Resume an existing session."""
-        if self.session_service is not None:
-            raise RuntimeError("A session is already active. Close it first.")
-
-        self._phase = "launching"
-        await self._broadcast_status()
-
-        try:
-            session = await Session.resume(session_dir)
-            self.session_service = SessionService(session=session, broadcast=self._broadcast)
-
-            log.info(f"Session resumed: {session_dir}")
-            self._phase = "ready"
-            await self._broadcast_status()
-
-        except Exception:
-            log.exception("Failed to resume session")
-            self.session_service = None
-            self._phase = "idle"
-            await self._broadcast_status()
-            raise
-
-    async def fork_session(
-        self,
-        source_session_dir: Path,
-        root_name: str,
-        name: str = "",
-        description: str = "",
-        clear_stacks: bool = False,
-    ) -> None:
-        """Fork a new session from an existing one."""
-        if self.session_service is not None:
-            raise RuntimeError("A session is already active. Close it first.")
-
-        root = self.system_config.get_root(root_name)
-        if root is None:
-            raise ValueError(f"Session root '{root_name}' not found")
-
-        self._phase = "launching"
-        await self._broadcast_status()
-
-        try:
-            session = await Session.fork(source_session_dir, root.path, name, description, clear_stacks)
-            self.session_service = SessionService(session=session, broadcast=self._broadcast)
-
-            log.info(f"Session forked from {source_session_dir.name}: {session.session_dir}")
-            self._phase = "ready"
-            await self._broadcast_status()
-
-        except Exception:
-            log.exception("Failed to fork session")
-            self.session_service = None
-            self._phase = "idle"
+            self._status = "idle"
             await self._broadcast_status()
             raise
 
     async def close_session(self) -> None:
-        """Close the current session."""
         if self.session_service is None:
             raise RuntimeError("No active session to close")
 
         try:
-            # Stop preview if running (stop_preview is a no-op if not previewing)
             await self.session_service.rig_service.rig.stop_preview()
-
-            # Save session state and stop the rig
-            await self.session_service.session.close()
-
-            log.info(f"Session closed: {self.session_service.session.session_dir}")
-
+            await self.voxel_app.close_session()
         except Exception:
             log.exception("Error during session close")
         finally:
             self.session_service = None
-            self._phase = "idle"
+            self._status = "idle"
             if self.clients:
                 await self._broadcast_status()
-            log.debug("Session cleanup complete")
 
     # ==================== Message Handling ====================
 
     async def handle_client_message(self, client_id: str, message: dict[str, Any]) -> None:
-        """Handle incoming message from a client."""
         topic = message.get("topic")
         payload = message.get("payload", {})
 
         if not topic:
-            log.warning("Received message without topic from client %s", client_id)
             return
 
         try:
-            # App-level topics
             if topic == "request_status":
                 status = await self.get_app_status()
                 self._send_to_client(client_id, {"topic": "status", "payload": status.model_dump(mode="json")})
@@ -359,9 +244,7 @@ class AppService:
                     queue.paused = False
                 return
 
-            # Session-level topics - delegate to session service
             if self.session_service is None:
-                log.warning("No active session for topic %s from client %s", topic, client_id)
                 self._send_to_client(
                     client_id,
                     {"topic": "error", "payload": {"error": "No active session", "topic": topic}},
@@ -372,21 +255,13 @@ class AppService:
 
         except (ValueError, RuntimeError) as e:
             log.warning("Client %s message '%s' rejected: %s", client_id, topic, e)
-            self._send_to_client(
-                client_id,
-                {"topic": "error", "payload": {"error": str(e), "topic": topic}},
-            )
+            self._send_to_client(client_id, {"topic": "error", "payload": {"error": str(e), "topic": topic}})
         except Exception as e:
             log.exception("Unexpected error handling message '%s' from client %s", topic, client_id)
-            self._send_to_client(
-                client_id,
-                {"topic": "error", "payload": {"error": str(e), "topic": topic}},
-            )
+            self._send_to_client(client_id, {"topic": "error", "payload": {"error": str(e), "topic": topic}})
 
 
 class _WebSocketLogHandler(logging.Handler):
-    """Log handler that broadcasts to WebSocket clients."""
-
     def __init__(self, callback: Callable[[logging.LogRecord], None]):
         super().__init__()
         self._callback = callback
@@ -398,22 +273,22 @@ class _WebSocketLogHandler(logging.Handler):
             self.handleError(record)
 
 
-# ==================== WebSocket Endpoint ====================
+# ==================== Dependencies ====================
 
 
 def get_app_service_websocket(websocket: WebSocket) -> AppService:
-    """Dependency helper for WebSocket routes."""
     return websocket.app.state.app_service
 
 
 def get_app_service(request: Request) -> AppService:
-    """Dependency helper for HTTP routes."""
     return request.app.state.app_service
 
 
+# ==================== WebSocket ====================
+
+
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends(get_app_service_websocket)):  # noqa: C901 - WebSocket message routing
-    """Unified WebSocket endpoint for all app, session, and rig communication."""
+async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends(get_app_service_websocket)):  # noqa: C901
     await websocket.accept()
     client_id = str(uuid.uuid4())
     queue = MsgQueue()
@@ -423,7 +298,6 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
     shutdown = asyncio.Event()
 
     async def sender():
-        """Send messages from priority queue to client. Overviews before tiles."""
         try:
             while not shutdown.is_set():
                 try:
@@ -443,7 +317,6 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
             shutdown.set()
 
     async def receiver():
-        """Receive messages from client."""
         try:
             while not shutdown.is_set():
                 data = await websocket.receive_text()
@@ -465,7 +338,6 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
     finally:
         shutdown.set()
         service.remove_client(client_id)
-        # Auto-stop preview only if this was the last client
         if len(service.clients) == 0 and service.session_service:
             try:
                 log.info("Last client disconnected, stopping preview")
@@ -478,46 +350,42 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
 
 
 @router.get("/status")
-async def get_status(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatus:
-    """Get current app status including session if active."""
+async def get_status(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatusUpdate:
     return await service.get_app_status()
 
 
-@router.get("/roots/{root_name}/sessions")
+@router.get("/templates")
+async def list_templates(service: Annotated[AppService, Depends(get_app_service)]) -> list[TemplateInfo]:
+    return service.voxel_app.catalog.list_templates()
+
+
+@router.get("/data-roots")
+async def list_data_roots(service: Annotated[AppService, Depends(get_app_service)]) -> list[DataRoot]:
+    return service.voxel_app.data_roots
+
+
+@router.get("/sessions")
 async def list_sessions(
-    root_name: str,
     service: Annotated[AppService, Depends(get_app_service)],
-    limit: int = 50,
-    offset: int = 0,
-) -> dict:
-    """List sessions in a root with pagination."""
-    try:
-        sessions = service.system_config.list_sessions(root_name, limit=limit, offset=offset)
-        total = service.system_config.count_sessions(root_name)
-        return {
-            "sessions": [s.model_dump(mode="json") for s in sessions],
-            "total": total,
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    collection: str | None = None,
+) -> list[SessionListing]:
+    sessions = service.voxel_app.catalog.list_sessions()
+    if collection is not None:
+        sessions = [s for s in sessions if s.config and s.config.get("info", {}).get("collection") == collection]
+    return sessions
 
 
-@router.post("/session/create")
+@router.post("/session")
 async def create_session(
     request: CreateSessionRequest, service: Annotated[AppService, Depends(get_app_service)]
-) -> AppStatus:
-    """Create a new session."""
+) -> AppStatusUpdate:
     try:
-        await service.create_session(
-            root_name=request.root_name,
-            rig_config=request.rig_config,
-            session_name=request.session_name,
-            metadata_target=request.metadata_target,
-            metadata=request.metadata,
-        )
+        await service.create_session(request)
         return await service.get_app_status()
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
@@ -525,65 +393,8 @@ async def create_session(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/session/resume")
-async def resume_session(
-    request: ResumeSessionRequest, service: Annotated[AppService, Depends(get_app_service)]
-) -> AppStatus:
-    """Resume an existing session."""
-    try:
-        await service.resume_session(Path(request.session_dir))
-        return await service.get_app_status()
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except Exception as e:
-        log.exception("Failed to resume session")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.post("/session/fork")
-async def fork_session(
-    request: ForkSessionRequest, service: Annotated[AppService, Depends(get_app_service)]
-) -> AppStatus:
-    """Fork a new session from an existing one."""
-    try:
-        await service.fork_session(
-            source_session_dir=Path(request.source_session_dir),
-            root_name=request.root_name,
-            name=request.name,
-            description=request.description,
-            clear_stacks=request.clear_stacks,
-        )
-        return await service.get_app_status()
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        log.exception("Failed to fork session")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.patch("/session/status")
-async def update_session_status(request: UpdateSessionStatusRequest) -> dict[str, str]:
-    """Update a session's status (star, archive, restore)."""
-    session_file = Path(request.session_dir) / "session.voxel.yaml"
-    try:
-        status = SessionStatus(request.status)
-        SessionConfig.update_status(session_file, status)
-        return {"status": status.value}
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@router.delete("/session")
-async def close_session(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatus:
-    """Close the current session."""
+@router.post("/session/close")
+async def close_session(service: Annotated[AppService, Depends(get_app_service)]) -> AppStatusUpdate:
     try:
         await service.close_session()
         return await service.get_app_status()
@@ -594,15 +405,18 @@ async def close_session(service: Annotated[AppService, Depends(get_app_service)]
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok", "service": "Voxel API"}
+
+
 @router.get("/metadata/targets")
 async def get_metadata_targets() -> dict:
-    """Return available metadata targets for session creation."""
     return {"targets": discover_metadata_targets()}
 
 
 @router.get("/metadata/schema")
 async def get_metadata_schema(target: str) -> dict:
-    """Return JSON Schema for a metadata target class."""
     try:
         cls = resolve_metadata_class(target)
         return cls.model_json_schema()
