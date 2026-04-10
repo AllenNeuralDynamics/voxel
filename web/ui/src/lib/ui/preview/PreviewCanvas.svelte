@@ -6,7 +6,7 @@
   import PanZoomControls from './PanZoomControls.svelte';
   import Histogram from './Histogram.svelte';
   import type { PreviewState } from '$lib/main';
-  import { compositeTiledFrames } from '$lib/main/preview.svelte.ts';
+  import { channelBoundingBox, compositeTiledFrames } from '$lib/main/preview.svelte.ts';
   import { clampTopLeft } from '$lib/utils';
 
   let canvasEl: HTMLCanvasElement;
@@ -14,9 +14,10 @@
 
   interface Props {
     previewer: PreviewState;
+    fov: { width: number; height: number };
   }
 
-  let { previewer }: Props = $props();
+  let { previewer, fov }: Props = $props();
 
   let ctx: CanvasRenderingContext2D | null = null;
   let isRendering = false;
@@ -189,6 +190,38 @@
 
   // Channels with names (for histogram strip)
   const namedChannels = $derived(previewer.channels.filter((c) => c.name));
+
+  // ── Scale bar ──────────────────────────────────────────────────────
+  // Pick a "nice" round bar length that fits ~15-25% of the canvas width.
+
+  const NICE_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+
+  let scaleBar = $derived.by(() => {
+    const { maxW, maxH } = channelBoundingBox(previewer.channels);
+    if (maxW <= 0 || maxH <= 0 || fov.width <= 0) return null;
+
+    const cw = containerSize.width;
+    const ch = containerSize.height;
+    if (cw <= 0 || ch <= 0) return null;
+
+    // Compute draw area (same contain-fit as compositeTiledFrames)
+    const vp = previewer.viewport;
+    const vpAspect = (vp.w * maxW) / (vp.h * maxH);
+    const canvasAspect = cw / ch;
+    const drawW = canvasAspect > vpAspect ? ch * vpAspect : cw;
+
+    // µm per CSS pixel
+    const umPerPx = (vp.w * fov.width) / drawW;
+    if (!Number.isFinite(umPerPx) || umPerPx <= 0) return null;
+
+    // Target bar: ~20% of canvas width
+    const targetUm = umPerPx * cw * 0.2;
+    const barUm = NICE_STEPS.findLast((s) => s <= targetUm) ?? NICE_STEPS[0];
+    const barPx = barUm / umPerPx;
+
+    const label = barUm >= 1000 ? `${barUm / 1000} mm` : `${barUm} µm`;
+    return { barPx, label };
+  });
 </script>
 
 <div class="grid h-full grid-rows-[auto_1fr_auto] bg-canvas" bind:this={containerEl}>
@@ -211,8 +244,17 @@
   </div>
 
   <!-- Center: Canvas -->
-  <div class="flex items-center justify-center overflow-hidden px-4" bind:this={canvasContainerEl}>
-    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}> </canvas>
+  <div class="relative flex items-center justify-center overflow-hidden px-4" bind:this={canvasContainerEl}>
+    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}></canvas>
+    {#if scaleBar}
+      <div class="pointer-events-none absolute bottom-6 right-6 flex flex-col items-end gap-0.5">
+        <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{scaleBar.label}</span>
+        <div
+          class="h-1 rounded-full bg-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+          style:width="{scaleBar.barPx}px"
+        ></div>
+      </div>
+    {/if}
   </div>
 
   <!-- Bottom: Channel Histograms -->

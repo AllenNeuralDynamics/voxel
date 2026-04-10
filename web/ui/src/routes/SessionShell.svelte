@@ -156,7 +156,7 @@
       <main class="flex h-full flex-col overflow-hidden">
         <PaneGroup direction="vertical" autoSaveId="shell.right">
           <Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
-            <PreviewCanvas previewer={session.preview} />
+            <PreviewCanvas previewer={session.preview} fov={session.fov} />
           </Pane>
           <PaneDivider direction="horizontal" />
           <Pane defaultSize={50} minSize={30} class="h-full flex-1">
