@@ -150,26 +150,21 @@ export interface SquareWaveform extends BaseWaveform {
  */
 export interface SineWaveform extends BaseWaveform {
   type: 'sine';
-  frequency: number; // Hz (SI)
+  frequency?: number | null; // Hz (SI)
+  cycles?: number | null;
   phase?: number; // Radians
 }
 
 /**
- * Triangle wave (matches backend TriangleWave from voxel.daq.wave)
- */
-export interface TriangleWaveform extends BaseWaveform {
-  type: 'triangle';
-  frequency: number; // Hz (SI)
-  symmetry?: number; // 0.0 to 1.0
-}
-
-/**
  * Sawtooth wave (matches backend SawtoothWave from voxel.daq.wave)
+ * symmetry: 1.0 = ramp up, 0.0 = ramp down, 0.5 = symmetric triangle
  */
 export interface SawtoothWaveform extends BaseWaveform {
   type: 'sawtooth';
-  frequency: number; // Hz (SI)
-  width?: number;
+  frequency?: number | null; // Hz (SI)
+  cycles?: number | null;
+  phase?: number; // Radians
+  symmetry?: number; // 0.0 to 1.0
 }
 
 /**
@@ -196,7 +191,6 @@ export type Waveform =
   | PulseWaveform
   | SquareWaveform
   | SineWaveform
-  | TriangleWaveform
   | SawtoothWaveform
   | MultiPointWaveform
   | CSVWaveform;

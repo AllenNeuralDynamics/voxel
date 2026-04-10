@@ -694,7 +694,7 @@ class VoxelRig(Rig):
 
         # Ensure TTL stepper is disabled so z_axis waveform pulses have no effect during preview
         if self.scanning_axis:
-            with suppress(NotImplementedError):
+            with suppress(NotImplementedError, RuntimeError):
                 await self.scanning_axis.reset_ttl_stepper()
 
         if started:

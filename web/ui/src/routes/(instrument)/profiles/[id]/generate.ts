@@ -7,6 +7,18 @@ export interface WaveformTraces {
   traces: Record<string, number[]>;
 }
 
+/** Resolve effective frequency: cycles takes precedence, then frequency, then 1 cycle default. */
+function resolveFrequency(
+  waveform: Waveform & { cycles?: number | null; frequency?: number | null },
+  windowSpan: number
+): number {
+  if (waveform.cycles != null && waveform.cycles > 0 && windowSpan > 0) {
+    return waveform.cycles / windowSpan;
+  }
+  if (waveform.frequency != null) return Number(waveform.frequency);
+  return windowSpan > 0 ? 1 / windowSpan : 0;
+}
+
 /**
  * Generate voltage traces for all waveforms over a single frame.
  *
@@ -73,38 +85,30 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
       return vMax;
 
     case 'square': {
-      const freq = Number(waveform.frequency || 0);
+      const freq = resolveFrequency(waveform, windowSpan);
       const dc = waveform.duty_cycle;
       if (freq > 0) {
-        const phase = (tNorm * freq) % 1;
-        return phase < dc ? vMax : vMin;
+        const phaseOffset = (waveform.phase ?? 0) / (2 * Math.PI);
+        const phi = (tNorm * freq + phaseOffset) % 1;
+        return phi < dc ? vMax : vMin;
       }
-      // No frequency — single pulse with duty_cycle ratio
       return tNorm / windowSpan < dc ? vMax : vMin;
     }
 
     case 'sawtooth': {
-      const freq = Number(waveform.frequency);
-      const w = waveform.width ?? 1;
-      const phase = (tNorm * freq) % 1;
-      const val = phase < w ? phase / w : 1 - (phase - w) / (1 - w);
+      const freq = resolveFrequency(waveform, windowSpan);
+      const sym = waveform.symmetry ?? 1;
+      const phaseOffset = (waveform.phase ?? 0) / (2 * Math.PI);
+      const phi = (tNorm * freq + phaseOffset) % 1;
+      const val = phi < sym ? phi / sym : 1 - (phi - sym) / (1 - sym);
       return vMin + (vMax - vMin) * val;
     }
 
     case 'sine': {
-      const freq = Number(waveform.frequency);
+      const freq = resolveFrequency(waveform, windowSpan);
       const phase = waveform.phase ?? 0;
       const val = Math.sin(2 * Math.PI * freq * tNorm + phase);
-      // Map [-1, 1] → [vMin, vMax]
       return vMin + ((vMax - vMin) * (val + 1)) / 2;
-    }
-
-    case 'triangle': {
-      const freq = Number(waveform.frequency);
-      const sym = waveform.symmetry ?? 0.5;
-      const phase = (tNorm * freq) % 1;
-      const val = phase < sym ? phase / sym : 1 - (phase - sym) / (1 - sym);
-      return vMin + (vMax - vMin) * val;
     }
 
     case 'multi_point': {

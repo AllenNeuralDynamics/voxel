@@ -14,9 +14,8 @@
   const WAVEFORM_TYPE_DEFAULTS: Record<string, Record<string, unknown>> = {
     pulse: {},
     square: { duty_cycle: 0.5 },
-    sine: { frequency: 10, phase: 0 },
-    triangle: { frequency: 10, symmetry: 0.5 },
-    sawtooth: { frequency: 10, width: 1 }
+    sine: { cycles: 1, phase: 0 },
+    sawtooth: { cycles: 1, symmetry: 1.0 }
   };
 
   function changeWaveformType(source: Waveform, newType: string): Waveform | null {
@@ -236,7 +235,6 @@
     { value: 'pulse', label: 'Pulse' },
     { value: 'square', label: 'Square' },
     { value: 'sine', label: 'Sine' },
-    { value: 'triangle', label: 'Triangle' },
     { value: 'sawtooth', label: 'Sawtooth' },
     { value: 'multi_point', label: 'Multi-point' },
     { value: 'csv', label: 'CSV' }
@@ -821,9 +819,26 @@
               onChange={(v) => updateEditingField('duty_cycle', v)}
             />
           {/if}
-          {#if wf.type === 'square' || wf.type === 'sine' || wf.type === 'triangle' || wf.type === 'sawtooth'}
+          {#if wf.type === 'square' || wf.type === 'sine' || wf.type === 'sawtooth'}
+            {@const windowSpan = (wf.window?.max ?? 1) - (wf.window?.min ?? 0)}
+            {@const hasCycles = wf.cycles != null && wf.cycles > 0}
+            {@const derivedFreq = hasCycles && windowSpan > 0 ? wf.cycles / (windowSpan * duration) : wf.frequency ?? 0}
             <SpinBox
-              value={wf.frequency ?? 0}
+              value={wf.cycles ?? 0}
+              prefix="Cycles"
+              size="xs"
+              appearance="full"
+              step={1}
+              min={0}
+              numCharacters={4}
+              align="right"
+              onChange={(v) => {
+                updateEditingField('cycles', v > 0 ? v : null);
+                if (v > 0) updateEditingField('frequency', null);
+              }}
+            />
+            <SpinBox
+              value={derivedFreq}
               prefix="Freq"
               suffix=" Hz"
               size="xs"
@@ -832,10 +847,12 @@
               min={0}
               numCharacters={8}
               align="right"
-              onChange={(v) => updateEditingField('frequency', v)}
+              disabled={hasCycles}
+              onChange={(v) => {
+                updateEditingField('frequency', v > 0 ? v : null);
+                if (v > 0) updateEditingField('cycles', null);
+              }}
             />
-          {/if}
-          {#if wf.type === 'sine'}
             <SpinBox
               value={(wf.phase ?? 0) * (180 / Math.PI)}
               prefix="Phase"
@@ -848,9 +865,9 @@
               onChange={(v) => updateEditingField('phase', v * (Math.PI / 180))}
             />
           {/if}
-          {#if wf.type === 'triangle'}
+          {#if wf.type === 'sawtooth'}
             <SpinBox
-              value={wf.symmetry ?? 0.5}
+              value={wf.symmetry ?? 1}
               prefix="Symmetry"
               min={0}
               max={1}
@@ -861,21 +878,6 @@
               numCharacters={6}
               align="right"
               onChange={(v) => updateEditingField('symmetry', v)}
-            />
-          {/if}
-          {#if wf.type === 'sawtooth'}
-            <SpinBox
-              value={wf.width ?? 1}
-              prefix="Width"
-              min={0}
-              max={1}
-              step={0.05}
-              size="xs"
-              appearance="full"
-              decimals={2}
-              numCharacters={6}
-              align="right"
-              onChange={(v) => updateEditingField('width', v)}
             />
           {/if}
 

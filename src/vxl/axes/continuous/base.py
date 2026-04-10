@@ -337,7 +337,8 @@ class ContinuousAxisController(DeviceController[ContinuousAxis]):
     @describe(label="Reset TTL Stepper")
     async def reset_ttl_stepper(self) -> None:
         if not self._ttl_stepper:
-            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+            self.log.warning("reset_ttl_stepper called but axis %s has no TTL stepper", self.device.uid)
+            return
 
         await self._run_sync(self._ttl_stepper.reset)
         self._scan_mode = ScanMode.IDLE

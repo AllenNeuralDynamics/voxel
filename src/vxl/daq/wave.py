@@ -38,87 +38,83 @@ class BaseWaveform(BaseModel, ABC):
         """Generate N samples covering exactly [window.min, window.max)."""
 
 
-class SquareWave(BaseWaveform):
+class PeriodicWaveform(BaseWaveform, ABC):
+    """Base for waveforms with frequency/cycles periodicity.
+
+    Specify either `cycles` (integer, guarantees clean periodicity) or
+    `frequency` (Hz, for exact frequency control). If both are set,
+    `cycles` takes precedence. Defaults to 1 cycle if neither is set.
+    """
+
+    frequency: Frequency | None = None
+    cycles: int | None = None
+    phase: Angle = Angle(0.0)
+
+    @property
+    def effective_frequency(self) -> float:
+        """Resolve frequency from cycles or direct frequency setting."""
+        span = self.window.span
+        if self.cycles is not None:
+            return self.cycles / span if span > 0 else 0
+        if self.frequency is not None:
+            return float(self.frequency)
+        return 1 / span if span > 0 else 0
+
+    def _effective_sample_rate(self, n: int) -> float:
+        """Compute the effective sample rate for the windowed segment."""
+        span = self.window.span
+        return n / span if span > 0 else 0
+
+    def _phase_array(self, n: int) -> np.ndarray:
+        """Generate a normalized phase array [0..1) repeating at effective_frequency."""
+        fs = self._effective_sample_rate(n)
+        if fs <= 0:
+            return np.zeros(n)
+        t = np.arange(n) / fs
+        phase_offset = self.phase / (2 * np.pi)
+        return (t * self.effective_frequency + phase_offset) % 1.0
+
+
+class SquareWave(PeriodicWaveform):
     type: Literal["square"]
     duty_cycle: float
-    cycles: int | None = None
-    frequency: Frequency | None = None
 
     def _generate_waveform(self, n: int) -> np.ndarray:
         if self.window.span == 0:
             return np.array([])
-
-        # Determine the effective frequency for the window.
-        if self.frequency is not None:
-            freq = self.frequency
-        else:
-            num_cycles = self.cycles or 1
-            freq = num_cycles / self.window.span
-
-        # Calculate the effective sample rate for this segment.
-        fs = n / self.window.span
-
-        # Generate the waveform using a time vector and modulo arithmetic,
-        # which is more precise than tiling.
-        t = np.arange(n) / fs
-        phi = (t * freq) % 1.0
-
+        phi = self._phase_array(n)
         return np.where(phi < self.duty_cycle, self.voltage.max, self.voltage.min)
 
 
-class SineWave(BaseWaveform):
+class SineWave(PeriodicWaveform):
     type: Literal["sine"]
-    frequency: Frequency
-    phase: Angle = Angle(0.0)  # radians
 
     def _generate_waveform(self, n: int) -> np.ndarray:
-        window_duration = self.window.max - self.window.min
-        if window_duration == 0:
+        if self.window.span == 0:
             return np.array([])
-        # Calculate the effective sample rate for this specific window segment.
-        fs = n / window_duration
-
+        # Sine uses phase directly in the sin() call rather than _phase_array
+        fs = self._effective_sample_rate(n)
         t = np.arange(n) / fs
-        shape_normalized = np.sin(2 * np.pi * self.frequency * t + self.phase)
-        return (shape_normalized + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
+        shape = np.sin(2 * np.pi * self.effective_frequency * t + self.phase)
+        return (shape + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
 
 
-class TriangleWave(BaseWaveform):
-    type: Literal["triangle"]
-    frequency: Frequency
-    symmetry: float = 0.5
+class SawtoothWave(PeriodicWaveform):
+    """Sawtooth/triangle waveform. `symmetry` controls rise/fall ratio:
+    1.0 = pure ramp up, 0.0 = pure ramp down, 0.5 = symmetric triangle.
+    """
 
-    def _generate_waveform(self, n: int) -> np.ndarray:
-        window_duration = self.window.max - self.window.min
-        if window_duration == 0:
-            return np.array([])
-        # Calculate the effective sample rate for this specific window segment.
-        fs = n / window_duration
-
-        t = np.arange(n) / fs
-        phi = (t * float(self.frequency)) % 1.0
-        raw = np.where(phi < self.symmetry, 2 * phi / self.symmetry - 1, 2 * (1 - phi) / (1 - self.symmetry) - 1)
-        return (raw + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
-
-
-class SawtoothWave(BaseWaveform):
     type: Literal["sawtooth"]
-    frequency: Frequency
-    width: float = 1.0
+    symmetry: float = 1.0
 
     def _generate_waveform(self, n: int) -> np.ndarray:
-        window_duration = self.window.max - self.window.min
-        if window_duration == 0:
+        if self.window.span == 0:
             return np.array([])
-        # Calculate the effective sample rate for this specific window segment.
-        fs = n / window_duration
-
-        t = np.arange(n) / fs
-        phi = (t * float(self.frequency)) % 1.0
+        phi = self._phase_array(n)
         raw = np.where(
-            phi < self.width,
-            2 * phi / self.width - 1,
-            1 - 2 * (phi - self.width) / (1 - self.width) if (1 - self.width) != 0 else -1,
+            phi < self.symmetry,
+            2 * phi / self.symmetry - 1,
+            1 - 2 * (phi - self.symmetry) / (1 - self.symmetry) if (1 - self.symmetry) != 0 else -1,
         )
         return (raw + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
 
@@ -224,7 +220,7 @@ class CSVWaveform(BaseWaveform):
 
 
 Waveform = Annotated[
-    SquareWave | SineWave | TriangleWave | SawtoothWave | MultiPointWaveform | PulseWaveform | CSVWaveform,
+    SquareWave | SineWave | SawtoothWave | MultiPointWaveform | PulseWaveform | CSVWaveform,
     Discriminator("type"),
 ]
 
