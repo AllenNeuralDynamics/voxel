@@ -18,9 +18,8 @@ from egrabber import (
     StreamModule,
     ct,
 )
-from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
-from vxlib.vec import IVec2D, Vec2D
 
+from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxl.camera.base import (
     Camera,
     IntRange,
@@ -32,6 +31,7 @@ from vxl.camera.base import (
     TriggerPolarity,
 )
 from vxlib import thread_safe_singleton
+from vxlib.vec import IVec2D, Vec2D
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 
@@ -461,3 +461,6 @@ class VieworksCamera(Camera):
                     self.log.exception("Failed to restore initial pixel format %s", initial)
             self.log.debug("Completed querying pixel format options: %s", options)
         return options
+
+    def close(self) -> None:
+        del self._dev
