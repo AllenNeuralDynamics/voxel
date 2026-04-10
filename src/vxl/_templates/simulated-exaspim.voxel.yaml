@@ -45,7 +45,7 @@ rig:
       init: { lower_limit: 0, upper_limit: 25000 }
     z_axis:
       target: *linear_axis_target
-      init: { lower_limit: 0, upper_limit: 50000 }
+      init: { lower_limit: 0, upper_limit: 50000, has_ttl_stepper: true }
     left_focus:
       target: *linear_axis_target
       init: { lower_limit: 0, upper_limit: 10000 }
@@ -71,6 +71,7 @@ rig:
       right_tunable_lens: ao3
       positive_galvo: ao26
       negative_galvo: ao27
+      z_axis: ao5
 
   stage:
     x: x_axis
@@ -163,8 +164,11 @@ rig:
             voltage: { min: 0.0, max: 0.01 }
             window: { min: 0.0, max: 1.0 }
             frequency: 1.838235
+          z_axis: &z_axis_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.0, max: 0.01 }
       desc: "Single GFP channel imaging"
-
     single_rfp:
       channels: ["rfp"]
       daq:
@@ -177,8 +181,8 @@ rig:
           right_tunable_lens: *right_tunable_lens_waveform
           positive_galvo: *positive_galvo_waveform
           negative_galvo: *negative_galvo_waveform
+          z_axis: *z_axis_waveform
       desc: "Single RFP channel imaging"
-
     single_cy5:
       channels: ["cy5"]
       daq:
@@ -191,6 +195,7 @@ rig:
           right_tunable_lens: *right_tunable_lens_waveform
           positive_galvo: *positive_galvo_waveform
           negative_galvo: *negative_galvo_waveform
+          z_axis: *z_axis_waveform
       desc: "Single Cy5 channel imaging"
 
 info:

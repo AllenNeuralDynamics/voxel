@@ -692,6 +692,11 @@ class VoxelRig(Rig):
         self._mode = RigMode.PREVIEWING
         self.log.info("Preview started (%d cameras)", started)
 
+        # Ensure TTL stepper is disabled so z_axis waveform pulses have no effect during preview
+        if self.scanning_axis:
+            with suppress(NotImplementedError):
+                await self.scanning_axis.reset_ttl_stepper()
+
         if started:
             await self._enable_channel_lasers()
 
