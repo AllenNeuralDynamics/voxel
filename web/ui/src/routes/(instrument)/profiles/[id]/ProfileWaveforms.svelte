@@ -14,9 +14,9 @@
   const WAVEFORM_TYPE_DEFAULTS: Record<string, Record<string, unknown>> = {
     pulse: {},
     square: { duty_cycle: 0.5 },
-    sine: { frequency: 1000, phase: 0 },
-    triangle: { frequency: 1000, symmetry: 0.5 },
-    sawtooth: { frequency: 1000, width: 1 }
+    sine: { frequency: 10, phase: 0 },
+    triangle: { frequency: 10, symmetry: 0.5 },
+    sawtooth: { frequency: 10, width: 1 }
   };
 
   function changeWaveformType(source: Waveform, newType: string): Waveform | null {
@@ -50,6 +50,7 @@
   const isActiveProfile = $derived(profileId === session.activeProfileId);
   const isIdle = $derived(session.mode === 'idle');
   const canEdit = $derived(isActiveProfile && isIdle);
+  let configOnly = $state(false);
 
   // ── DAQ hardware voltage range ──
 
@@ -247,7 +248,7 @@
   const plotHeight = 300;
   let plotContainerWidth = $state(600);
 
-  const plotData = $derived(generateTraces(displayWaveforms, duration, restTime, 500));
+  const plotData = $derived(generateTraces(displayWaveforms, duration, restTime));
   const plotRawRange = $derived(voltageRange(displayWaveforms));
   const plotYAxis = $derived(niceTicks(plotRawRange.min, plotRawRange.max));
   const plotVRange = $derived({ min: plotYAxis.min, max: plotYAxis.max });
@@ -494,10 +495,16 @@
     <!-- ═══ MAIN: Sidebar + Plot ═══ -->
     <div class="flex">
       <!-- Sidebar: Device list -->
-      <div class="flex w-28 shrink-0 flex-col gap-0.5 border-r px-2 py-2">
+      <div class="flex w-36 shrink-0 flex-col gap-0.5 border-r px-2 py-2">
+        <label class="mb-1 flex cursor-pointer items-center gap-1 px-1.5 py-1 text-[10px] text-fg-muted">
+          <input type="checkbox" bind:checked={configOnly} class="accent-primary" />
+          Config only
+        </label>
         {#each waveformDeviceIds as deviceId (deviceId)}
           {@const isSelected = deviceId === selectedDeviceId}
           {@const isHidden = hiddenDevices.has(deviceId)}
+          {@const port = session.rig_cfg.daq.acq_ports[deviceId]}
+          {@const label = port ? `${sanitizeString(deviceId)} (${port})` : sanitizeString(deviceId)}
           <div
             class="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-fg-muted transition-colors
 							{isSelected ? 'bg-element-selected text-fg' : ''}"
@@ -523,8 +530,12 @@
                 }
               }}
               disabled={!canEdit}
+              title={label}
             >
-              {sanitizeString(deviceId)}
+              <span class="mr-0.5">{sanitizeString(deviceId)}</span>
+              {#if port}
+                <span class="text-fg-faint">({port})</span>
+              {/if}
             </button>
           </div>
         {/each}
@@ -654,7 +665,7 @@
               </text>
             {/each}
 
-            <!-- ═══ Handle visible lines ═══ -->
+            <!-- ═══ Handle visible lines (behind traces) ═══ -->
             {#if editingWaveform && selectedDeviceId}
               <g stroke={HANDLE_LINE_COLOR} stroke-width="1" stroke-dasharray="4 2" pointer-events="none">
                 <line x1={plotPadding.left} y1={vminY} x2={plotPadding.left + plotW} y2={vminY} />
@@ -664,40 +675,39 @@
               </g>
             {/if}
 
-            <!-- Applied traces (behind config, only for active profile) -->
-            {#if isActiveProfile && appliedTraces}
+            <!-- Traces: applied by default, config for the device being edited.
+                 configOnly checkbox overrides to show all config traces. -->
+            <g pointer-events="none">
               {#each waveformDeviceIds as deviceId (deviceId)}
-                {@const voltages = appliedTraces.wfs[deviceId]}
                 {@const isSelected = deviceId === selectedDeviceId}
-                {#if voltages && !hiddenDevices.has(deviceId)}
-                  <path
-                    d={buildAppliedPath(voltages, appliedTraces.time)}
-                    fill="none"
-                    stroke={waveformColors[deviceId] ?? '#888'}
-                    stroke-width="1"
-                    stroke-linejoin="round"
-                    stroke-dasharray="4 2"
-                    opacity={!selectedDeviceId ? 0.3 : isSelected ? 0.5 : 0.15}
-                  />
+                {@const isEditing = isSelected && !!editingWaveform}
+                {@const useConfig = configOnly || isEditing || !appliedTraces?.wfs[deviceId]}
+                {#if !hiddenDevices.has(deviceId)}
+                  {#if useConfig}
+                    {@const voltages = plotData.traces[deviceId]}
+                    {#if voltages}
+                      <path
+                        d={buildPath(voltages)}
+                        fill="none"
+                        stroke={waveformColors[deviceId] ?? '#888'}
+                        stroke-width={isEditing ? 1.5 : 1}
+                        stroke-linejoin="round"
+                        opacity={selectedDeviceId ? (isSelected ? 0.6 : 0.3) : 0.75}
+                      />
+                    {/if}
+                  {:else}
+                    <path
+                      d={buildAppliedPath(appliedTraces.wfs[deviceId], appliedTraces.time)}
+                      fill="none"
+                      stroke={waveformColors[deviceId] ?? '#888'}
+                      stroke-width="1"
+                      stroke-linejoin="round"
+                      opacity={selectedDeviceId ? 0.25 : 0.75}
+                    />
+                  {/if}
                 {/if}
               {/each}
-            {/if}
-
-            <!-- Config traces (primary visualization, always visible) -->
-            {#each waveformDeviceIds as deviceId (deviceId)}
-              {@const voltages = plotData.traces[deviceId]}
-              {@const isSelected = deviceId === selectedDeviceId}
-              {#if voltages && !hiddenDevices.has(deviceId)}
-                <path
-                  d={buildPath(voltages)}
-                  fill="none"
-                  stroke={waveformColors[deviceId] ?? '#888'}
-                  stroke-width={isSelected && editingWaveform ? 1.5 : 1}
-                  stroke-linejoin="round"
-                  opacity={!selectedDeviceId ? 0.75 : isSelected ? 0.6 : 0.3}
-                />
-              {/if}
-            {/each}
+            </g>
 
             <!-- ═══ Handle hit targets (above traces for pointer events) ═══ -->
             {#if editingWaveform && selectedDeviceId}

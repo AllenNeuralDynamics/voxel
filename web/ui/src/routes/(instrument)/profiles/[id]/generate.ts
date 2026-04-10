@@ -13,14 +13,23 @@ export interface WaveformTraces {
  * @param waveforms - Device ID → waveform definition.
  * @param duration - Frame active duration in seconds.
  * @param restTime - Rest period after the active duration in seconds.
- * @param numPoints - Number of sample points to generate (default 500).
+ * Sample count adapts to the highest frequency waveform to avoid aliasing.
  */
 export function generateTraces(
   waveforms: Record<string, Waveform>,
   duration: number,
-  restTime: number,
-  numPoints = 500
+  restTime: number
 ): WaveformTraces {
+  // Compute max cycles across all waveforms to size the sample count
+  let maxCycles = 0;
+  for (const wf of Object.values(waveforms)) {
+    const freq = Number((wf as Record<string, unknown>).frequency || 0);
+    const span = (wf.window?.max ?? 1) - (wf.window?.min ?? 0);
+    maxCycles = Math.max(maxCycles, freq * span);
+  }
+  // At least 10 points per cycle, clamped to [2000, 20000]
+  const numPoints = Math.max(2000, Math.min(20000, Math.ceil(maxCycles * 10)));
+
   const totalTime = duration + restTime;
   const dt = totalTime / (numPoints - 1);
   const time = Array.from({ length: numPoints }, (_, i) => i * dt);
@@ -55,8 +64,9 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
   // Outside window → rest voltage
   if (norm < wMin || norm > wMax) return restV;
 
-  const windowDur = (wMax - wMin) * duration;
-  const tWindow = (norm - wMin) * duration; // seconds since window start
+  // Normalized time since window start (matches backend's time axis)
+  const tNorm = norm - wMin;
+  const windowSpan = wMax - wMin;
 
   switch (waveform.type) {
     case 'pulse':
@@ -66,23 +76,25 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
       const freq = Number(waveform.frequency || 0);
       const dc = waveform.duty_cycle;
       if (freq > 0) {
-        const phase = (tWindow * freq) % 1;
+        const phase = (tNorm * freq) % 1;
         return phase < dc ? vMax : vMin;
       }
       // No frequency — single pulse with duty_cycle ratio
-      return tWindow / windowDur < dc ? vMax : vMin;
+      return tNorm / windowSpan < dc ? vMax : vMin;
     }
 
     case 'sawtooth': {
       const freq = Number(waveform.frequency);
-      const phase = (tWindow * freq) % 1;
-      return vMin + (vMax - vMin) * phase;
+      const w = waveform.width ?? 1;
+      const phase = (tNorm * freq) % 1;
+      const val = phase < w ? phase / w : 1 - (phase - w) / (1 - w);
+      return vMin + (vMax - vMin) * val;
     }
 
     case 'sine': {
       const freq = Number(waveform.frequency);
       const phase = waveform.phase ?? 0;
-      const val = Math.sin(2 * Math.PI * freq * tWindow + phase);
+      const val = Math.sin(2 * Math.PI * freq * tNorm + phase);
       // Map [-1, 1] → [vMin, vMax]
       return vMin + ((vMax - vMin) * (val + 1)) / 2;
     }
@@ -90,7 +102,7 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
     case 'triangle': {
       const freq = Number(waveform.frequency);
       const sym = waveform.symmetry ?? 0.5;
-      const phase = (tWindow * freq) % 1;
+      const phase = (tNorm * freq) % 1;
       const val = phase < sym ? phase / sym : 1 - (phase - sym) / (1 - sym);
       return vMin + (vMax - vMin) * val;
     }
@@ -98,7 +110,7 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
     case 'multi_point': {
       const pts = waveform.points;
       if (!pts.length) return restV;
-      const normWindow = tWindow / windowDur; // 0..1 within window
+      const normWindow = tNorm / windowSpan; // 0..1 within window
       // Clamp to first/last point
       if (normWindow <= pts[0][0]) return vMin + (vMax - vMin) * pts[0][1];
       if (normWindow >= pts[pts.length - 1][0]) return vMin + (vMax - vMin) * pts[pts.length - 1][1];

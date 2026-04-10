@@ -21,7 +21,7 @@ class BaseWaveform(BaseModel, ABC):
 
     def get_array(self, total_samples: int) -> np.ndarray:
         """Generate the waveform array for the entire task duration."""
-        arr = np.zeros(total_samples, float)
+        arr = np.full(total_samples, float(self.rest_voltage))
         start_idx = int(self.window.min * total_samples)
         end_idx = int(self.window.max * total_samples)
         n = end_idx - start_idx
@@ -118,7 +118,7 @@ class SawtoothWave(BaseWaveform):
         raw = np.where(
             phi < self.width,
             2 * phi / self.width - 1,
-            -1 + 2 * (phi - self.width) / (1 - self.width) if (1 - self.width) != 0 else -1,
+            1 - 2 * (phi - self.width) / (1 - self.width) if (1 - self.width) != 0 else -1,
         )
         return (raw + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
 

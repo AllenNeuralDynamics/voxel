@@ -164,6 +164,9 @@ class VoxelRigConfig(RigConfig):
             if channel.illumination in self.illumination:
                 device_ids.update(self.illumination[channel.illumination].aux_devices)
 
+        # Include devices that have waveforms defined in the profile
+        device_ids.update(profile.daq.waveforms.keys())
+
         return device_ids
 
     @model_validator(mode="after")
