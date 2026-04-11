@@ -83,6 +83,8 @@
     showCheckmark?: boolean;
     icon?: Component;
     emptyMessage?: string;
+    prefix?: string;
+    suffix?: string;
     class?: string;
   }
 
@@ -96,6 +98,8 @@
     showCheckmark = false,
     icon = ChevronDown,
     emptyMessage,
+    prefix,
+    suffix,
     variant = 'filled',
     size = 'md',
     class: className = ''
@@ -122,6 +126,7 @@
 
 <SelectPrimitive.Root type="single" {value} onValueChange={handleChange} {items} disabled={disabled || loading}>
   <SelectPrimitive.Trigger class={cn(styles.trigger(), className)}>
+    {#if prefix}<span class="shrink-0 text-fg-muted">{prefix}</span>{/if}
     <span class="truncate">
       {#if selectedLabel}
         {selectedLabel}
@@ -129,6 +134,7 @@
         <span class="text-fg-muted">{placeholder}</span>
       {/if}
     </span>
+    {#if suffix}<span class="shrink-0 text-fg-muted">{suffix}</span>{/if}
     {#if loading}
       <DotsSpinner class="shrink-0 text-fg-muted" width={iconSizes[size]} height={iconSizes[size]} />
     {:else}

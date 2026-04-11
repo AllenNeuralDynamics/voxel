@@ -5,7 +5,7 @@
   import type { SelectOption } from '$lib/ui/kit/Select.svelte';
   import { generateTraces, niceTicks, voltageRange } from './generate';
   import { SpinBox, Select, Button } from '$lib/ui/kit';
-  import { sanitizeString } from '$lib/utils';
+  import { cn, sanitizeString } from '$lib/utils';
   import { Check, Close } from '$lib/icons';
   import { toast } from 'svelte-sonner';
   import { watch } from 'runed';
@@ -41,9 +41,10 @@
   interface Props {
     session: Session;
     profileId: string;
+    class?: string;
   }
 
-  let { session, profileId }: Props = $props();
+  let { session, profileId, class: className }: Props = $props();
 
   const profile = $derived(session.rig_cfg.profiles[profileId]);
   const isActiveProfile = $derived(profileId === session.activeProfileId);
@@ -92,6 +93,9 @@
 
   let selectedDeviceId = $state<string | null>(null);
   let editingWaveform = $state<Waveform | null>(null);
+
+  type VoltageMode = 'minmax' | 'ampoffset';
+  let voltageMode = $state<VoltageMode>('minmax');
 
   function selectDevice(deviceId: string) {
     if (!canEdit) return;
@@ -220,6 +224,21 @@
     editingWaveform.rest_voltage = Math.max(editingWaveform.voltage.min, Math.min(editingWaveform.voltage.max, rest));
   }
 
+  function setEditingAmplitude(amplitude: number) {
+    if (!editingWaveform || !isFinite(amplitude)) return;
+    const offset = (editingWaveform.voltage.max + editingWaveform.voltage.min) / 2;
+    const amp = Math.max(0, amplitude);
+    setEditingVoltage('min', offset - amp);
+    setEditingVoltage('max', offset + amp);
+  }
+
+  function setEditingOffset(offset: number) {
+    if (!editingWaveform || !isFinite(offset)) return;
+    const amp = (editingWaveform.voltage.max - editingWaveform.voltage.min) / 2;
+    setEditingVoltage('min', offset - amp);
+    setEditingVoltage('max', offset + amp);
+  }
+
   function updateEditingWindow(key: 'min' | 'max', value: number) {
     if (!editingWaveform || !isFinite(value)) return;
     editingWaveform.window[key] = value;
@@ -242,9 +261,21 @@
 
   // ── Plot geometry ──
 
-  const plotPadding = { top: 16, right: 16, bottom: 28, left: 48 };
-  const plotHeight = 300;
-  let plotContainerWidth = $state(600);
+  const plotPadding = { top: 16, right: 40, bottom: 36, left: 48 };
+  let plotContainerEl = $state<HTMLDivElement>();
+  let plotContainerWidth = $state(800);
+  let plotContainerHeight = $state(300);
+
+  $effect(() => {
+    if (!plotContainerEl) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0) plotContainerWidth = width;
+      if (height > 0) plotContainerHeight = height;
+    });
+    observer.observe(plotContainerEl);
+    return () => observer.disconnect();
+  });
 
   const plotData = $derived(generateTraces(displayWaveforms, duration, restTime));
   const plotRawRange = $derived(voltageRange(displayWaveforms));
@@ -252,7 +283,7 @@
   const plotVRange = $derived({ min: plotYAxis.min, max: plotYAxis.max });
 
   const plotW = $derived(plotContainerWidth - plotPadding.left - plotPadding.right);
-  const plotH = $derived(plotHeight - plotPadding.top - plotPadding.bottom);
+  const plotH = $derived(plotContainerHeight - plotPadding.top - plotPadding.bottom);
 
   function toSvgX(t: number): number {
     if (totalTime <= 0) return plotPadding.left;
@@ -317,10 +348,21 @@
 
     if (dragging === 'vmin' || dragging === 'vmax') {
       const voltage = svgYToVoltageFrozen(e.clientY, rect);
-      if (dragging === 'vmin') {
-        setEditingVoltage('min', Math.min(voltage, editingWaveform.voltage.max - 0.01));
+      if (voltageMode === 'ampoffset') {
+        if (dragging === 'vmin') {
+          // vmin handle = offset (center line) in ampoffset mode
+          setEditingOffset(voltage);
+        } else {
+          // vmax handle = top (offset + amplitude)
+          const offset = (editingWaveform.voltage.max + editingWaveform.voltage.min) / 2;
+          setEditingAmplitude(Math.max(0, voltage - offset));
+        }
       } else {
-        setEditingVoltage('max', Math.max(voltage, editingWaveform.voltage.min + 0.01));
+        if (dragging === 'vmin') {
+          setEditingVoltage('min', Math.min(voltage, editingWaveform.voltage.max - 0.01));
+        } else {
+          setEditingVoltage('max', Math.max(voltage, editingWaveform.voltage.min + 0.01));
+        }
       }
     } else {
       const frac = svgXToWindowFrac(e.clientX, rect);
@@ -340,7 +382,13 @@
 
   // ── Handle positions (derived) ──
 
-  const vminY = $derived(editingWaveform ? toSvgY(editingWaveform.voltage.min) : 0);
+  const vminY = $derived.by(() => {
+    if (!editingWaveform) return 0;
+    if (voltageMode === 'ampoffset') {
+      return toSvgY((editingWaveform.voltage.max + editingWaveform.voltage.min) / 2); // offset (center)
+    }
+    return toSvgY(editingWaveform.voltage.min);
+  });
   const vmaxY = $derived(editingWaveform ? toSvgY(editingWaveform.voltage.max) : 0);
   const wminX = $derived(editingWaveform ? toSvgX(editingWaveform.window.min * duration) : 0);
   const wmaxX = $derived(editingWaveform ? toSvgX(editingWaveform.window.max * duration) : 0);
@@ -428,7 +476,7 @@
 </script>
 
 {#if profile}
-  <div class="flex flex-col gap-0 rounded border bg-card shadow-sm">
+  <div class={cn('grid grid-rows-[auto_1fr_auto]', className)}>
     <!-- ═══ HEADER: Timing controls ═══ -->
     <div class="flex flex-wrap items-center justify-between gap-3 gap-y-0 border-b px-3 py-1.5">
       <div class="flex min-h-10 items-center gap-3">
@@ -491,7 +539,7 @@
     </div>
 
     <!-- ═══ MAIN: Sidebar + Plot ═══ -->
-    <div class="flex">
+    <div class="flex min-h-0 overflow-hidden">
       <!-- Sidebar: Device list -->
       <div class="flex w-36 shrink-0 flex-col gap-0.5 border-r px-2 py-2">
         <label class="mb-1 flex cursor-pointer items-center gap-1 px-1.5 py-1 text-[10px] text-fg-muted">
@@ -540,30 +588,59 @@
       </div>
 
       <!-- Plot area -->
-      <div class="relative min-w-0 flex-1 overflow-hidden px-2 py-2" bind:clientWidth={plotContainerWidth}>
+      <div class="relative m-2 min-h-60 min-w-0 flex-1 overflow-hidden" bind:this={plotContainerEl}>
         {#if waveformDeviceIds.length > 0 && duration > 0}
-          <!-- Floating voltage inputs (V-min / V-max) -->
+          <!-- Floating voltage inputs -->
           {#if editingWaveform && selectedDeviceId}
-            <input
-              type="text"
-              class="handle-input"
-              style="position:absolute; right:4px; top:{vLabelPositions.maxTop - 7}px; color:{handleInputColors.vmax};"
-              value="{editingWaveform.voltage.max.toFixed(2)} V"
-              onchange={(e) => {
-                const v = parseFloat((e.target as HTMLInputElement).value);
-                if (!isNaN(v)) setEditingVoltage('max', v);
-              }}
-            />
-            <input
-              type="text"
-              class="handle-input"
-              style="position:absolute; right:4px; top:{vLabelPositions.minTop - 7}px; color:{handleInputColors.vmin};"
-              value="{editingWaveform.voltage.min.toFixed(2)} V"
-              onchange={(e) => {
-                const v = parseFloat((e.target as HTMLInputElement).value);
-                if (!isNaN(v)) setEditingVoltage('min', v);
-              }}
-            />
+            {#if voltageMode === 'ampoffset'}
+              {@const amp = (editingWaveform.voltage.max - editingWaveform.voltage.min) / 2}
+              {@const offset = (editingWaveform.voltage.max + editingWaveform.voltage.min) / 2}
+              <input
+                type="text"
+                class="handle-input"
+                style="position:absolute; right:4px; top:{vLabelPositions.maxTop -
+                  7}px; color:{handleInputColors.vmax};"
+                value="{amp.toFixed(2)} V"
+                onchange={(e) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!isNaN(v)) setEditingAmplitude(v);
+                }}
+              />
+              <input
+                type="text"
+                class="handle-input"
+                style="position:absolute; right:4px; top:{vLabelPositions.minTop -
+                  7}px; color:{handleInputColors.vmin};"
+                value="{offset.toFixed(2)} V"
+                onchange={(e) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!isNaN(v)) setEditingOffset(v);
+                }}
+              />
+            {:else}
+              <input
+                type="text"
+                class="handle-input"
+                style="position:absolute; right:4px; top:{vLabelPositions.maxTop -
+                  7}px; color:{handleInputColors.vmax};"
+                value="{editingWaveform.voltage.max.toFixed(2)} V"
+                onchange={(e) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!isNaN(v)) setEditingVoltage('max', v);
+                }}
+              />
+              <input
+                type="text"
+                class="handle-input"
+                style="position:absolute; right:4px; top:{vLabelPositions.minTop -
+                  7}px; color:{handleInputColors.vmin};"
+                value="{editingWaveform.voltage.min.toFixed(2)} V"
+                onchange={(e) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!isNaN(v)) setEditingVoltage('min', v);
+                }}
+              />
+            {/if}
             <!-- Floating window inputs (W-min / W-max) — top to avoid x-axis labels -->
             <input
               type="text"
@@ -587,7 +664,12 @@
             />
           {/if}
 
-          <svg width="100%" height={plotHeight} viewBox="0 0 {plotContainerWidth} {plotHeight}" class="select-none">
+          <svg
+            viewBox="0 0 {plotContainerWidth} {plotContainerHeight}"
+            style="width: {plotContainerWidth}px; height: {plotContainerHeight}px;"
+            overflow="visible"
+            class="select-none"
+          >
             <!-- Horizontal grid + Y-axis labels -->
             {#each plotYAxis.ticks as v (v)}
               {@const y = toSvgY(v)}
@@ -650,7 +732,7 @@
                 y={plotPadding.top}
                 width={Math.max(0, plotPadding.left + plotW - restX)}
                 height={plotH}
-                class="fill-muted/70"
+                class="fill-muted/15"
               />
             {/if}
 
@@ -658,7 +740,7 @@
             {#each [0, 0.25, 0.5, 0.75, 1] as frac (frac)}
               {@const t = frac * totalTime}
               {@const x = toSvgX(t)}
-              <text {x} y={plotHeight - 4} text-anchor="middle" class="fill-fg-muted text-xs">
+              <text {x} y={plotContainerHeight - 10} text-anchor="middle" class="fill-fg-muted text-xs">
                 {formatPlotTime(t)}
               </text>
             {/each}
@@ -721,7 +803,7 @@
                     onpointerup={onHandleUp}
                     role="slider"
                     tabindex="0"
-                    aria-label="Voltage minimum"
+                    aria-label={voltageMode === 'ampoffset' ? 'Offset' : 'Voltage minimum'}
                     aria-valuenow={editingWaveform?.voltage.min ?? 0}
                   />
                   <line
@@ -734,7 +816,7 @@
                     onpointerup={onHandleUp}
                     role="slider"
                     tabindex="0"
-                    aria-label="Voltage maximum"
+                    aria-label={voltageMode === 'ampoffset' ? 'Amplitude' : 'Voltage maximum'}
                     aria-valuenow={editingWaveform?.voltage.max ?? 0}
                   />
                 </g>
@@ -770,7 +852,7 @@
             {/if}
           </svg>
         {:else}
-          <div class="flex items-center justify-center" style:height="{plotHeight}px">
+          <div class="flex h-full items-center justify-center">
             <span class="text-sm text-fg-muted">No waveform data</span>
           </div>
         {/if}
@@ -781,15 +863,28 @@
     <div class="border-t px-3 py-2">
       {#if editingWaveform && selectedDeviceId && canEdit}
         {@const wf = editingWaveform}
-        <div class="flex flex-wrap items-end gap-3">
-          <!-- Type selector -->
-          <div class="w-24">
-            <Select size="xs" value={wf.type} options={waveformTypeOptions} onchange={(v) => changeEditingType(v)} />
-          </div>
-
+        <div class="grid grid-cols-4 items-end gap-3">
+          <!-- Row 1: Common controls -->
+          <Select
+            prefix="Waveform Type"
+            size="xs"
+            value={wf.type}
+            options={waveformTypeOptions}
+            onchange={(v) => changeEditingType(v)}
+          />
+          <Select
+            prefix="Voltage Mode"
+            size="xs"
+            value={voltageMode}
+            options={[
+              { value: 'minmax', label: 'Min / Max' },
+              { value: 'ampoffset', label: 'Amp / Offset' }
+            ]}
+            onchange={(v) => (voltageMode = v as VoltageMode)}
+          />
           <SpinBox
             value={wf.rest_voltage ?? 0}
-            prefix="Rest V"
+            prefix="Rest Voltage"
             suffix=" V"
             size="xs"
             appearance="full"
@@ -802,27 +897,36 @@
             align="right"
             onChange={(v) => updateEditingField('rest_voltage', v)}
           />
+          <div class="flex justify-end gap-1.5">
+            <Button variant="ghost" size="sm" onclick={cancelEditing} title="Cancel">
+              <Close width="14" height="14" class="text-danger" />
+            </Button>
+            <Button variant="ghost" size="sm" onclick={commitEditing} title="Apply changes">
+              <Check width="14" height="14" class="text-success" />
+            </Button>
+          </div>
 
-          <!-- Type-specific fields -->
-          {#if wf.type === 'square'}
-            <SpinBox
-              value={wf.duty_cycle}
-              prefix="Duty"
-              min={0}
-              max={1}
-              step={0.05}
-              size="xs"
-              appearance="full"
-              decimals={2}
-              numCharacters={6}
-              align="right"
-              onChange={(v) => updateEditingField('duty_cycle', v)}
-            />
-          {/if}
+          <!-- Row 2: Type-specific fields (same 4-col grid) -->
           {#if wf.type === 'square' || wf.type === 'sine' || wf.type === 'sawtooth'}
             {@const windowSpan = (wf.window?.max ?? 1) - (wf.window?.min ?? 0)}
             {@const hasCycles = wf.cycles != null && wf.cycles > 0}
-            {@const derivedFreq = hasCycles && windowSpan > 0 ? wf.cycles / (windowSpan * duration) : wf.frequency ?? 0}
+            {@const derivedFreq =
+              hasCycles && windowSpan > 0 ? wf.cycles! / (windowSpan * duration) : (wf.frequency ?? 0)}
+            {#if wf.type === 'square'}
+              <SpinBox
+                value={wf.duty_cycle}
+                prefix="Duty"
+                min={0}
+                max={1}
+                step={0.05}
+                size="xs"
+                appearance="full"
+                decimals={2}
+                numCharacters={6}
+                align="right"
+                onChange={(v) => updateEditingField('duty_cycle', v)}
+              />
+            {/if}
             <SpinBox
               value={wf.cycles ?? 0}
               prefix="Cycles"
@@ -859,37 +963,28 @@
               suffix=" deg"
               size="xs"
               appearance="full"
-              step={5}
+              step={0.1}
+              decimals={1}
               numCharacters={6}
               align="right"
               onChange={(v) => updateEditingField('phase', v * (Math.PI / 180))}
             />
+            {#if wf.type === 'sawtooth'}
+              <SpinBox
+                value={wf.symmetry ?? 1}
+                prefix="Symmetry"
+                min={0}
+                max={1}
+                step={0.05}
+                size="xs"
+                appearance="full"
+                decimals={2}
+                numCharacters={6}
+                align="right"
+                onChange={(v) => updateEditingField('symmetry', v)}
+              />
+            {/if}
           {/if}
-          {#if wf.type === 'sawtooth'}
-            <SpinBox
-              value={wf.symmetry ?? 1}
-              prefix="Symmetry"
-              min={0}
-              max={1}
-              step={0.05}
-              size="xs"
-              appearance="full"
-              decimals={2}
-              numCharacters={6}
-              align="right"
-              onChange={(v) => updateEditingField('symmetry', v)}
-            />
-          {/if}
-
-          <!-- Commit / Cancel -->
-          <div class="ml-auto flex gap-1.5">
-            <Button variant="ghost" size="sm" onclick={cancelEditing} title="Cancel">
-              <Close width="14" height="14" />
-            </Button>
-            <Button variant="outline" size="sm" onclick={commitEditing} title="Apply changes">
-              <Check width="14" height="14" />
-            </Button>
-          </div>
         </div>
       {:else if canEdit}
         <p class="text-xs leading-ui-sm text-fg-muted">Select a device to edit its waveform</p>

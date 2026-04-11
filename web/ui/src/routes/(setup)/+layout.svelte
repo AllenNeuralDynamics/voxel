@@ -7,6 +7,7 @@
   import LasersPanel from '$lib/ui/LasersPanel.svelte';
   import CamerasPanel from '$lib/ui/CamerasPanel.svelte';
   import AuxDevicesPanel from '$lib/ui/AuxDevicesPanel.svelte';
+  import ProfileWaveforms from '../(instrument)/profiles/[id]/ProfileWaveforms.svelte';
   import { ProfileSelector } from '$lib/ui/profile';
   import { PersistedState } from 'runed';
 
@@ -69,6 +70,14 @@
       <CamerasPanel {session} class="h-full overflow-auto p-4" />
     {:else if bottomPanelTab === 'lasers'}
       <LasersPanel {session} />
+    {:else if bottomPanelTab === 'waveforms'}
+      {#if session.activeProfileId}
+        <ProfileWaveforms {session} profileId={session.activeProfileId} class="h-full overflow-auto p-2" />
+      {:else}
+        <div class="flex h-full items-center justify-center text-sm text-fg-muted">
+          Select a profile to view waveforms
+        </div>
+      {/if}
     {:else if bottomPanelTab === 'logs'}
       <div class="h-full overflow-hidden bg-card p-2">
         <LogViewer {logs} onClear={clearLogs} />
@@ -81,6 +90,7 @@
     <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
     <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}>Auxiliary</button>
     <button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}>Cameras</button>
+    <button onclick={() => selectTab('waveforms')} class={tabClass(bottomPanelTab === 'waveforms')}>Waveforms</button>
     <button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
       Lasers
       {#each Object.values(session.lasers) as laser (laser.deviceId)}

@@ -143,6 +143,7 @@ export interface SquareWaveform extends BaseWaveform {
   duty_cycle: number;
   cycles?: number | null;
   frequency?: number | null; // Hz (SI)
+  phase?: number; // Radians
 }
 
 /**

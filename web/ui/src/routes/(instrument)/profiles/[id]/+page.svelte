@@ -36,7 +36,9 @@
     <div class="space-y-4 overflow-auto p-4">
       <section>
         <h3 class={sectionHeader}>Waveforms</h3>
-        <ProfileWaveforms {session} {profileId} />
+        <div class="rounded border shadow-sm">
+          <ProfileWaveforms {session} {profileId} />
+        </div>
       </section>
       <section>
         <h3 class={sectionHeader}>Lasers</h3>

@@ -35,8 +35,8 @@ export function generateTraces(
   // Compute max cycles across all waveforms to size the sample count
   let maxCycles = 0;
   for (const wf of Object.values(waveforms)) {
-    const freq = Number((wf as Record<string, unknown>).frequency || 0);
     const span = (wf.window?.max ?? 1) - (wf.window?.min ?? 0);
+    const freq = 'frequency' in wf && wf.frequency ? Number(wf.frequency) : 0;
     maxCycles = Math.max(maxCycles, freq * span);
   }
   // At least 10 points per cycle, clamped to [2000, 20000]
