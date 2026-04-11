@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Session } from '$lib/main';
   import type { StackOrder } from '$lib/main/types';
+  import { STACK_ORDER_OPTIONS } from '$lib/main/types';
   import { Checkbox, Select, SortableList } from '$lib/ui/kit';
   import { GripVertical } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
@@ -10,16 +11,6 @@
   }
 
   let { session }: Props = $props();
-
-  const STACK_ORDER_OPTIONS: { value: StackOrder; label: string }[] = [
-    { value: 'sweep_row', label: 'Sweep (Row)' },
-    { value: 'sweep_column', label: 'Sweep (Column)' },
-    { value: 'snake_row', label: 'Snake (Row)' },
-    { value: 'snake_column', label: 'Snake (Column)' },
-    { value: 'nearest_neighbor', label: 'Nearest Neighbor' },
-    { value: 'optimized', label: 'Optimized (NN + 2-opt)' },
-    { value: 'custom', label: 'Custom' }
-  ];
 
   const planProfiles = $derived(session.acq.profile_order.map((id) => ({ profile_id: id })));
 </script>

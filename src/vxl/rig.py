@@ -36,6 +36,7 @@ class RigMode(StrEnum):
     ACQUIRING = "acquiring"
 
 
+
 @dataclass(frozen=True)
 class VoxelStage:
     x: ContinuousAxisHandle

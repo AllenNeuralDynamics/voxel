@@ -6,11 +6,9 @@
 </script>
 
 <script lang="ts">
-  import type { Component } from 'svelte';
   import type { Session } from '$lib/main';
   import type { LayerVisibility } from '$lib/main/types';
   import { type Tile, type Stack } from '$lib/main/types';
-  import { GridLines, StackLight, ImageLight } from '$lib/icons';
   import { compositeFullFrames } from '$lib/main/preview.svelte';
   import { sanitizeString } from '$lib/utils';
   import { ContextMenu } from '$lib/ui/kit';
@@ -25,12 +23,6 @@
 
   let { session, layers = $bindable({ grid: false, stacks: true, path: true, fov: true, thumbnail: true }) }: Props =
     $props();
-
-  const layerItems: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
-    { key: 'grid', color: 'text-fg-muted', Icon: GridLines, title: 'Toggle grid' },
-    { key: 'stacks', color: 'text-info', Icon: StackLight, title: 'Toggle stacks' },
-    { key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' }
-  ];
 
   // ── Geometry ─────────────────────────────────────────────────────────
 
@@ -753,17 +745,6 @@
       disabled={session.stage.y.isMoving}
       oninput={onSliderInputY}
     />
-    <div class="absolute right-1 bottom-1 z-10 flex items-center gap-1 rounded-full">
-      {#each layerItems as { key, color, Icon, title } (key)}
-        <button
-          onclick={() => (layers[key] = !layers[key])}
-          class="cursor-pointer rounded-full p-1.5 transition-colors {layers[key] ? `${color} ` : 'text-fg-faint'}"
-          {title}
-        >
-          <Icon width="14" height="14" />
-        </button>
-      {/each}
-    </div>
     <ContextMenu.Root>
       <ContextMenu.Trigger>
         <svg
@@ -798,7 +779,7 @@
     border: none;
     background-color: transparent;
     --_track-color: var(--color-border);
-    --_track-width: 1px;
+    --_track-width: 0.5px;
     --_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / 100% var(--_track-width) no-repeat;
 
     &::-webkit-slider-runnable-track {

@@ -66,6 +66,8 @@ export { default as GitFork } from '~icons/lucide/git-fork';
 export { default as Star } from '~icons/lucide/star';
 export { default as StarOff } from '~icons/lucide/star-off';
 
+export { default as PanelLeft } from '~icons/lucide/panel-left';
+
 // Theme mode
 export { default as Sun } from '~icons/lucide/sun';
 export { default as Moon } from '~icons/lucide/moon';

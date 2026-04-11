@@ -9,7 +9,6 @@
   import { watch } from 'runed';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { Stack, StackStatus } from '$lib/main/types';
-  import StackOrdering from '$lib/ui/StackOrdering.svelte';
 
   const session = getSessionContext();
 
@@ -620,13 +619,6 @@
           </div>
           <hr class="my-2 border-border" />
         {/if}
-      {/if}
-
-      <!-- Stack ordering (always visible) -->
-      {#if session.stacks.length > 0}
-        <div class="@container mt-auto border-t border-border px-4 py-3">
-          <StackOrdering {session} />
-        </div>
       {/if}
     </div>
   </Pane>
