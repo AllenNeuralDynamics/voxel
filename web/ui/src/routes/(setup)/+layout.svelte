@@ -88,9 +88,9 @@
 <footer class="flex h-ui-xl items-center justify-between gap-20 border-t border-border px-4 py-2">
   <div class="flex divide-x divide-border rounded border border-border">
     <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
+    <button onclick={() => selectTab('waveforms')} class={tabClass(bottomPanelTab === 'waveforms')}>Waveforms</button>
     <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}>Auxiliary</button>
     <button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}>Cameras</button>
-    <button onclick={() => selectTab('waveforms')} class={tabClass(bottomPanelTab === 'waveforms')}>Waveforms</button>
     <button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
       Lasers
       {#each Object.values(session.lasers) as laser (laser.deviceId)}
