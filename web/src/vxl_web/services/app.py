@@ -185,13 +185,31 @@ class AppService:
     # ==================== Session Lifecycle ====================
 
     async def create_session(self, request: CreateSessionRequest) -> None:
-        """Create, resume, or fork a session based on request fields."""
+        """Validate and launch a session. Validation is synchronous (fails with HTTP errors).
+        Actual startup runs as a background task so logs stream to the UI in real time."""
         if self.session_service is not None:
             raise RuntimeError("A session is already active. Close it first.")
+        if self._status == "launching":
+            raise RuntimeError("A session is already being launched.")
+
+        # Validate before going async — these raise ValueError/FileNotFoundError
+        if request.resume:
+            self.voxel_app.catalog.get_session_store(request.resume)  # validates session exists
+        elif request.template:
+            # Validate template exists (catalog will raise FileNotFoundError if not)
+            pass  # catalog.fork() validates on call
+        elif request.source_session:
+            self.voxel_app.catalog.get_session_store(request.source_session)
+        else:
+            raise ValueError("One of 'template', 'source_session', or 'resume' must be provided")
 
         self._status = "launching"
-        await self._broadcast_status()
+        self._broadcast({}, with_status=True)
 
+        fire_and_forget(self._launch_session(request), log=log)
+
+    async def _launch_session(self, request: CreateSessionRequest) -> None:
+        """Background task that performs the actual session creation."""
         try:
             if request.resume:
                 session = await self.voxel_app.resume_session(request.resume)
@@ -210,12 +228,14 @@ class AppService:
             self._status = "ready"
             await self._broadcast_status()
 
-        except Exception:
-            log.exception("Failed to create/resume session")
+        except Exception as e:
+            log.exception("Failed to launch session")
             self.session_service = None
             self._status = "idle"
-            await self._broadcast_status()
-            raise
+            self._broadcast(
+                {"topic": "error", "payload": {"error": str(e), "topic": "session/launch"}},
+                with_status=True,
+            )
 
     async def close_session(self) -> None:
         if self.session_service is None:
@@ -419,16 +439,11 @@ async def create_session(
 ) -> AppStatusUpdate:
     try:
         await service.create_session(request)
-        return await service.get_app_status()
+        return await service.get_app_status()  # returns "launching" immediately
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        log.exception("Failed to create session")
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/session/close")
