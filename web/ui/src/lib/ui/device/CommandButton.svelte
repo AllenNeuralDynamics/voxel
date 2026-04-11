@@ -2,7 +2,7 @@
   import type { DevicesManager, CommandInfo, CommandResult, ParamInfo } from '$lib/main';
   import { isErrorMsg } from '$lib/main';
   import { cn, sanitizeString } from '$lib/utils';
-  import { Button, Dialog, SpinBox, TextInput } from '$lib/ui/kit';
+  import { Button, Dialog, Select, SpinBox, TextInput } from '$lib/ui/kit';
 
   interface Props {
     deviceId: string;
@@ -32,10 +32,18 @@
   let executing = $state(false);
   let lastResult = $state<CommandResult | null>(null);
 
+  const NUMERIC_TYPES = new Set(['int', 'float', 'number']);
+
+  /** Check if dtype is numeric, allowing none in unions (e.g. "float | none" but not "float | str"). */
+  function isNumericDtype(dtype: string): boolean {
+    const types = dtype.split(' | ');
+    return types.some((t) => NUMERIC_TYPES.has(t)) && types.every((t) => NUMERIC_TYPES.has(t) || t === 'none');
+  }
+
   function getDefaultValue(param: ParamInfo): unknown {
     if (param.default != null) return param.default;
     if (param.dtype === 'str') return '';
-    if (param.dtype === 'int' || param.dtype === 'float' || param.dtype === 'number') return 0;
+    if (isNumericDtype(param.dtype)) return 0;
     if (param.dtype === 'bool') return false;
     return '';
   }
@@ -53,6 +61,11 @@
       lastResult = hasParams
         ? await devicesManager.executeCommand(deviceId, commandName, [], kwargs)
         : await devicesManager.executeCommand(deviceId, commandName);
+      // Auto-close on success
+      if (!isErrorMsg(lastResult.result)) {
+        open = false;
+        lastResult = null;
+      }
     } catch (e) {
       lastResult = {
         device: deviceId,
@@ -99,11 +112,18 @@
               <span class="text-xs font-medium text-fg-muted">
                 {sanitizeString(name)}
               </span>
-              {#if param.dtype === 'int' || param.dtype === 'float' || param.dtype === 'number'}
+              {#if param.options && param.options.length > 0}
+                <Select
+                  value={typeof paramValues[name] === 'string' ? paramValues[name] : String(getDefaultValue(param))}
+                  options={param.options.map((o: string) => ({ value: o, label: o }))}
+                  onchange={(v) => (paramValues[name] = v)}
+                  size="xs"
+                />
+              {:else if isNumericDtype(param.dtype)}
                 <SpinBox
                   value={typeof paramValues[name] === 'number' ? paramValues[name] : (getDefaultValue(param) as number)}
                   onChange={(v) => (paramValues[name] = v)}
-                  step={param.dtype === 'int' ? 1 : 0.1}
+                  step={param.dtype.includes('int') ? 1 : 0.1}
                   appearance="bordered"
                   size="xs"
                 />
@@ -125,9 +145,10 @@
           class={cn('rounded border p-2', isError ? 'border-danger/30 bg-danger/5' : 'border-border bg-element-bg/30')}
         >
           <pre
-            class={cn('max-h-40 overflow-auto font-mono text-sm', isError ? 'text-danger' : 'text-fg')}>{formatResult(
-              lastResult.result
-            )}</pre>
+            class={cn(
+              'max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-sm',
+              isError ? 'text-danger' : 'text-fg'
+            )}>{formatResult(lastResult.result)}</pre>
         </div>
       {/if}
 

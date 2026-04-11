@@ -2,7 +2,7 @@ import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from enum import StrEnum
+from enum import Enum, StrEnum
 from functools import wraps
 from typing import Any, ClassVar, Literal, Self, Union, get_args, get_origin
 
@@ -141,6 +141,7 @@ class ParamInfo(BaseModel):
     required: bool = True
     default: Any | None = None
     kind: Literal["regular", "var_positional", "var_keyword"] = "regular"
+    options: list[str] | None = None
 
     @property
     def types(self) -> list[str]:
@@ -172,11 +173,23 @@ class CommandInfo(AttributeInfo):
             elif param.kind == inspect.Parameter.VAR_KEYWORD:
                 kind = "var_keyword"
 
+            # Extract enum options from type annotation
+            annotation = param.annotation
+            options: list[str] | None = None
+            if isinstance(annotation, type) and issubclass(annotation, Enum):
+                options = [e.value for e in annotation]
+
+            # Serialize enum defaults as their value
+            default = param.default if param.default != inspect.Parameter.empty else None
+            if isinstance(default, Enum):
+                default = default.value
+
             kwargs[param_name] = ParamInfo(
                 dtype=dtype,
                 required=param.default == inspect.Parameter.empty,
-                default=param.default if param.default != inspect.Parameter.empty else None,
+                default=default,
                 kind=kind,
+                options=options,
             )
 
         return cls(name=name, label=label, desc=desc, params=kwargs)

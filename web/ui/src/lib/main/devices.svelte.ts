@@ -27,6 +27,7 @@ export interface ParamInfo {
   required: boolean;
   default?: unknown | null;
   kind: 'regular' | 'var_positional' | 'var_keyword';
+  options?: string[] | null;
 }
 
 export interface CommandInfo {
