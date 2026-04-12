@@ -344,52 +344,54 @@
       </div>
       -->
 
-      <div class="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-x-3 gap-y-2">
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-1">
-            <span class="text-xs text-fg-muted">Exposure</span>
-            {@render unsavedDot(savedProps?.exposure_time_ms, isOther)}
-            {#if expDiverged}
-              <span class="text-xs text-warning/70"
-                >· {formatSaved(savedProps?.exposure_time_ms, exposureDecimals(constraints.exposure.step))} ms</span
-              >
-            {/if}
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(22rem,1fr))] gap-x-3 gap-y-2">
+        <div class="flex flex-wrap gap-x-3 gap-y-2 *:min-w-40 *:flex-1">
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-1">
+              <span class="text-xs text-fg-muted">Exposure</span>
+              {@render unsavedDot(savedProps?.exposure_time_ms, isOther)}
+              {#if expDiverged}
+                <span class="text-xs text-warning/70"
+                  >· {formatSaved(savedProps?.exposure_time_ms, exposureDecimals(constraints.exposure.step))} ms</span
+                >
+              {/if}
+            </div>
+            <SpinBox
+              value={camera.exposure?.value ?? 0}
+              min={constraints.exposure.min}
+              max={constraints.exposure.max}
+              step={constraints.exposure.step}
+              decimals={exposureDecimals(constraints.exposure.step)}
+              suffix="ms"
+              appearance="full"
+              align="left"
+              size="xs"
+              onChange={(v) => forLinked(camera, (c) => c.setExposure(v))}
+            />
           </div>
-          <SpinBox
-            value={camera.exposure?.value ?? 0}
-            min={constraints.exposure.min}
-            max={constraints.exposure.max}
-            step={constraints.exposure.step}
-            decimals={exposureDecimals(constraints.exposure.step)}
-            suffix="ms"
-            appearance="full"
-            align="left"
-            size="xs"
-            onChange={(v) => forLinked(camera, (c) => c.setExposure(v))}
-          />
-        </div>
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-1">
-            <span class="text-xs text-fg-muted">Frame Rate</span>
-            {@render unsavedDot(savedProps?.frame_rate_hz, isOther)}
-            {#if frDiverged}
-              <span class="text-xs text-warning/70">· {formatSaved(savedProps?.frame_rate_hz, 2)} Hz</span>
-            {/if}
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-1">
+              <span class="text-xs text-fg-muted">Frame Rate</span>
+              {@render unsavedDot(savedProps?.frame_rate_hz, isOther)}
+              {#if frDiverged}
+                <span class="text-xs text-warning/70">· {formatSaved(savedProps?.frame_rate_hz, 2)} Hz</span>
+              {/if}
+            </div>
+            <SpinBox
+              value={camera.frameRate?.value ?? 0}
+              min={constraints.frameRate.min}
+              max={constraints.frameRate.max}
+              step={constraints.frameRate.step}
+              decimals={2}
+              suffix="Hz"
+              appearance="full"
+              align="left"
+              size="xs"
+              onChange={(v) => forLinked(camera, (c) => c.setFrameRate(v))}
+            />
           </div>
-          <SpinBox
-            value={camera.frameRate?.value ?? 0}
-            min={constraints.frameRate.min}
-            max={constraints.frameRate.max}
-            step={constraints.frameRate.step}
-            decimals={2}
-            suffix="Hz"
-            appearance="full"
-            align="left"
-            size="xs"
-            onChange={(v) => forLinked(camera, (c) => c.setFrameRate(v))}
-          />
         </div>
-        {#if constraints.binningOptions.length > 0}
+        <div class="flex flex-wrap gap-x-3 gap-y-2 *:min-w-40 *:flex-1">
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-1">
               <span class="text-xs text-fg-muted">Binning</span>
@@ -400,13 +402,16 @@
             </div>
             <Select
               value={String(camera.binning?.value ?? '')}
-              options={constraints.binningOptions.map((b) => ({ value: String(b), label: `${b}x` }))}
+              options={constraints.binningOptions.length > 0
+                ? constraints.binningOptions.map((b) => ({ value: String(b), label: `${b}x` }))
+                : camera.binning?.value != null
+                  ? [{ value: String(camera.binning.value), label: `${camera.binning.value}x` }]
+                  : []}
               size="xs"
+              disabled={constraints.binningOptions.length <= 1}
               onchange={(v) => forLinked(camera, (c) => c.setBinning(Number(v)))}
             />
           </div>
-        {/if}
-        {#if constraints.pixelFormatOptions.length > 0}
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-1">
               <span class="text-xs text-fg-muted">Format</span>
@@ -417,12 +422,17 @@
             </div>
             <Select
               value={String(camera.pixelFormat?.value ?? '')}
-              options={constraints.pixelFormatOptions.map((f) => ({ value: f, label: f }))}
+              options={constraints.pixelFormatOptions.length > 0
+                ? constraints.pixelFormatOptions.map((f) => ({ value: f, label: f }))
+                : camera.pixelFormat?.value != null
+                  ? [{ value: String(camera.pixelFormat.value), label: String(camera.pixelFormat.value) }]
+                  : []}
               size="xs"
+              disabled={constraints.pixelFormatOptions.length <= 1}
               onchange={(v) => forLinked(camera, (c) => c.setPixelFormat(v))}
             />
           </div>
-        {/if}
+        </div>
       </div>
     </div>
 
@@ -432,7 +442,6 @@
         class="-mx-3 my-2 flex cursor-pointer items-center gap-2 px-3 text-fg-muted transition-colors hover:text-fg"
         onclick={() => (roiExpanded = !roiExpanded)}
       >
-        <hr class="flex-1 border-border" />
         <span class="text-xs font-medium tracking-wide uppercase">ROI</span>
         {#if !isOther && !savedRoi}
           {@render unsavedDot(savedRoi, isOther)}
@@ -441,6 +450,7 @@
         {:else}
           <span class="invisible text-xs">*</span>
         {/if}
+        <hr class="flex-1 border-border" />
         {#if roiExpanded}
           <ChevronDown width="12" height="12" />
         {:else}
@@ -450,7 +460,7 @@
 
       <div class="flex flex-col gap-2">
         {#if roiExpanded}
-          <div class="grid grid-cols-[minmax(0,200px)_3fr] gap-3">
+          <div class="grid grid-cols-[minmax(120px,1fr)_3fr] gap-3">
             <!-- SVG sensor diagram -->
             <svg
               viewBox="0 0 {sensorW} {sensorH}"

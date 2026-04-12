@@ -90,7 +90,7 @@ class DeviceController[D: Device]:
             return Result(ErrorMsg(msg=f"Unknown command: {command}"))
 
         cmd = self._commands[command]
-        self.log.info("", extra={"action": "cmd.execute", "target": command})
+        self.log.debug("", extra={"action": "cmd.execute", "target": command})
         try:
             if cmd.is_async:
                 result = await cmd(*args, **kwargs)
@@ -118,7 +118,7 @@ class DeviceController[D: Device]:
                 results[key] = Result(ErrorMsg(msg=f"Unknown command: {cmd_req.attr}"))
                 continue
             cmd = self._commands[cmd_req.attr]
-            self.log.info("", extra={"action": "cmd.execute", "target": cmd_req.attr})
+            self.log.debug("", extra={"action": "cmd.execute", "target": cmd_req.attr})
             try:
                 if cmd.is_async:
                     result = await cmd(*cmd_req.args, **cmd_req.kwargs)

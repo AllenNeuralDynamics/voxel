@@ -88,7 +88,7 @@
 			{selectedDeviceId === laser.deviceId ? 'border-border bg-panel' : 'hover:bg-panel/50'}"
   >
     <!-- Wavelength dot + label + divergence dot -->
-    <div class="flex min-w-20 shrink-0 items-center gap-1">
+    <div class="flex min-w-24 shrink-0 items-center gap-1">
       <div class="mr-1">
         {@render channelDot(laser, cfg)}
       </div>
@@ -299,7 +299,7 @@
   </div>
 {:else if selectedLaser}
   {@const groupLabelClasses = 'text-xs leading-ui-sm font-medium text-fg-muted/60 uppercase'}
-  <div class={cn('grid h-full grid-cols-[minmax(300px,2fr)_minmax(300px,5fr)]', className)}>
+  <div class={cn('grid h-full grid-cols-[minmax(350px,2fr)_minmax(350px,5fr)]', className)}>
     <!-- Left: detail panel -->
     {@render detailPanel(
       selectedLaser,

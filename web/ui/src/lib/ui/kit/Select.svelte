@@ -126,7 +126,7 @@
 
 <SelectPrimitive.Root type="single" {value} onValueChange={handleChange} {items} disabled={disabled || loading}>
   <SelectPrimitive.Trigger class={cn(styles.trigger(), className)}>
-    {#if prefix}<span class="shrink-0 text-fg-muted">{prefix}</span>{/if}
+    {#if prefix}<span class="mr-auto shrink-0 text-fg-muted">{prefix}</span>{/if}
     <span class="truncate">
       {#if selectedLabel}
         {selectedLabel}

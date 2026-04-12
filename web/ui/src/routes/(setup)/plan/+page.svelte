@@ -238,7 +238,7 @@
   // --- Pane sizing (pixel-based min for sidebar) ---
 
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebarMin = createPaneMinSize(() => paneGroupEl, 350);
+  const sidebarMin = createPaneMinSize(() => paneGroupEl, 300);
 </script>
 
 {#snippet stackRow(stack: Stack, selected: boolean)}
@@ -302,7 +302,7 @@
           onchange={(v) => (filter = v as StackFilter)}
           size="xs"
           variant="ghost"
-          class="w-36 shrink-0"
+          class="w-28 shrink-0"
         />
         <span class="text-xs text-fg-muted">
           {#if filter === 'all'}
@@ -320,7 +320,7 @@
             step={0.001}
             decimals={3}
             numCharacters={8}
-            prefix="Default Z Start"
+            prefix="Z Start"
             suffix="mm"
             align="right"
             onChange={(value) => session.setGridZRange(value * 1000, session.acq.default_z_end)}
@@ -332,7 +332,7 @@
             step={0.001}
             decimals={3}
             numCharacters={8}
-            prefix="Default Z End"
+            prefix="Z End"
             suffix="mm"
             align="right"
             onChange={(value) => session.setGridZRange(session.acq.default_z_start, value * 1000)}
@@ -431,7 +431,7 @@
 
           <hr class="border-border" />
           <div class="px-4 py-2">
-            <div class="-mr-1 grid grid-cols-[minmax(7rem,auto)_1fr_auto] items-center gap-x-1 gap-y-1.5">
+            <div class="-mr-1 grid grid-cols-[minmax(6rem,auto)_1fr_auto] items-center gap-x-1 gap-y-1.5">
               <!-- Profile -->
               <span class="flex h-ui-xs items-center text-[10px] text-fg-faint"
                 >Profile{profileBreakdown.length > 1 ? 's' : ''}</span

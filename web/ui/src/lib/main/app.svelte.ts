@@ -192,6 +192,12 @@ export class App {
     if (this.hasSession) throw new Error('A session is already active. Close it first.');
 
     this.error = null;
+
+    // Optimistic: show launching state immediately before HTTP round-trip
+    if (this.status) {
+      this.status = { ...this.status, status: 'launching' };
+    }
+
     try {
       const response = await fetch(`${this.#client.baseUrl}/api/session`, {
         method: 'POST',
@@ -204,6 +210,10 @@ export class App {
         throw new Error(errorData.detail || response.statusText);
       }
     } catch (error) {
+      // Revert optimistic state on error
+      if (this.status) {
+        this.status = { ...this.status, status: 'idle' };
+      }
       const msg = error instanceof Error ? error.message : 'Session request failed';
       this.error = msg;
       toast.error(msg);
