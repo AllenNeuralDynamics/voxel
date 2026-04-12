@@ -4,6 +4,7 @@ Store: owns the config lifecycle (load, hold, persist) with format-specific conc
 Catalog: discovers sessions/templates and creates stores.
 """
 
+import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -47,6 +48,14 @@ class SessionStore(ABC):
 
     @abstractmethod
     def save(self) -> None: ...
+
+    async def aload(self) -> SessionConfig:
+        """Async load — runs sync load in a thread."""
+        return await asyncio.to_thread(self.load)
+
+    async def asave(self) -> None:
+        """Async save — runs sync save in a thread."""
+        await asyncio.to_thread(self.save)
 
 
 # ==================== Listing Types ====================
@@ -102,6 +111,20 @@ class SessionCatalog(ABC):
 
     @abstractmethod
     def get_session_store(self, uid: str) -> SessionStore: ...
+
+    async def afork(
+        self,
+        uid: str,
+        info: SessionInfo,
+        *,
+        template: str | None = None,
+        session: str | None = None,
+        clear_stacks: bool = False,
+    ) -> SessionStore:
+        """Async fork — runs sync fork in a thread."""
+        return await asyncio.to_thread(
+            self.fork, uid, info, template=template, session=session, clear_stacks=clear_stacks
+        )
 
 
 # ==================== YAML Implementations ====================

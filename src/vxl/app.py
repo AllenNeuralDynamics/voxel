@@ -202,8 +202,8 @@ class VoxelApp:
             open_count=1,
         )
 
-        # Fork via catalog (handles loading source, patching info, persisting)
-        store = self._catalog.fork(
+        # Fork via catalog (async — YAML I/O runs in a thread)
+        store = await self._catalog.afork(
             uid,
             info,
             template=template,
@@ -231,7 +231,7 @@ class VoxelApp:
             raise RuntimeError("A session is already active. Close it first.")
 
         store = self._catalog.get_session_store(uid)
-        config = store.load()
+        config = await store.aload()
 
         # Update lifecycle fields
         config.info.last_opened = datetime.now(tz=UTC)
@@ -243,7 +243,7 @@ class VoxelApp:
 
         self._store = store
         self._session = Session(config=config, store=store, rig=rig)
-        store.save()
+        await store.asave()
         log.info(f"Resumed session: {uid} ({config.info.open_count} opens)")
         return self._session
 

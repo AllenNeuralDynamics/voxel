@@ -10,7 +10,7 @@ from ruyaml import YAML
 
 from rigup._utils import get_local_ip
 from rigup.cluster import ClusterConfig, ClusterManager, NodeConfig, RigNode
-from rigup.device import Device, DeviceConfig, DeviceHandle, build_objects
+from rigup.device import Device, DeviceConfig, DeviceHandle, build_objects, build_objects_async
 from rigup.local import LocalAdapter
 
 logger = logging.getLogger(__name__)
@@ -122,10 +122,11 @@ class Rig:
         """
         self.log.info(f"Starting {self.config.info.name}...")
 
-        # Phase 1: Build local devices from top-level config.devices
+        # Phase 1: Build local devices (async — runs device constructors in threads,
+        # yields to event loop between dependency layers for real-time log streaming)
         if self.config.devices:
             self.log.info(f"Building {len(self.config.devices)} local devices...")
-            devices, errors = build_objects(self.config.devices, base_cls=Device)
+            devices, errors = await build_objects_async(self.config.devices, base_cls=Device)
 
             if errors:
                 for uid, error in errors.items():

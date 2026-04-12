@@ -26,7 +26,7 @@ from .base import (
     get_command_help,
     runcmd,
 )
-from .build import BuildConfig, BuildError, BuildGroupSpec, DeviceConfig, build_objects
+from .build import BuildConfig, BuildError, BuildGroupSpec, DeviceConfig, build_objects, build_objects_async
 from .controller import DeviceController, PublishFn, StreamCallback
 from .handle import Adapter, DeviceHandle
 from .props.common import PropertyModel
@@ -66,6 +66,7 @@ __all__ = [
     "Results",
     "StreamCallback",
     "build_objects",
+    "build_objects_async",
     "collect_commands",
     "collect_properties",
     "deliminated_float",
