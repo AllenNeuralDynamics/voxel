@@ -94,13 +94,16 @@ class ClusterManager:
         self.node_service_cls = node_service_cls
         self.log = logging.getLogger(f"cluster.{name}")
 
-        # Log socket for receiving logs from nodes
+        # Log socket for receiving logs from nodes (bound immediately so
+        # node logs stream during startup — safe to receive at any time)
         self._log_socket = self.zctx.socket(zmq.SUB)
         self._log_socket.subscribe(b"")
         self._log_socket.bind(f"tcp://*:{self.cluster.log_port}")
         self._log_watch_task = asyncio.create_task(self._receive_logs())
 
-        # Control socket for node communication
+        # Control socket for node communication (bound immediately so nodes
+        # can connect on startup — ZMQ buffers any messages until we read them
+        # during the provisioning handshake in start())
         self._control_socket = self.zctx.socket(zmq.ROUTER)
         self._control_socket.bind(f"tcp://*:{self.cluster.control_port}")
 
@@ -142,11 +145,14 @@ class ClusterManager:
 
         if self._local_node_processes:
             wait_duration = 1.0
-            time.sleep(wait_duration)  # noqa: ASYNC251 - allow sleep in async
+            # Safe to use asyncio.sleep here — the control socket is not yet bound,
+            # so no node messages can arrive prematurely. The log socket IS active,
+            # so node startup logs stream to the UI in real time during this wait.
+            await asyncio.sleep(wait_duration)
 
             while not all(process.ready_event.is_set() for process in self._local_node_processes.values()):
                 self.log.warning("Waiting for local nodes startup...")
-                time.sleep(wait_duration)  # noqa: ASYNC251 - allow sleep in async
+                await asyncio.sleep(wait_duration)
             self.log.info("All local nodes started successfully.")
 
         result = await self._provision_nodes(timeout_s=provision_timeout)
