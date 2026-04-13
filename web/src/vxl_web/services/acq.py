@@ -118,7 +118,6 @@ async def update_storage(
         acq.max_level = request.max_level
     if request.compression is not None:
         acq.compression = request.compression
-    service.session.save()
     service.broadcast({}, with_status=True)
 
 

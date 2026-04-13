@@ -166,6 +166,7 @@ class VoxelApp:
 
         self._store = store
         self._session = Session(config=config, store=store, rig=rig)
+        await self._session.start()
         log.info(f"Session created: {uid}")
         return self._session
 
@@ -188,6 +189,7 @@ class VoxelApp:
         self._store = store
         self._session = Session(config=config, store=store, rig=rig)
         await store.asave()
+        await self._session.start()
         log.info(f"Resumed session: {uid} ({config.info.open_count} opens)")
         return self._session
 

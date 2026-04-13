@@ -1,5 +1,7 @@
 """Session runtime — manages rig interaction, stacks, metadata, and acquisition."""
 
+import asyncio
+import contextlib
 import datetime
 import logging
 from pathlib import Path
@@ -25,6 +27,8 @@ class Session:
     and acquisition execution. Persistence is delegated to the injected store.
     """
 
+    _AUTOSAVE_INTERVAL = 0.5  # seconds between autosave ticks
+
     def __init__(self, config: SessionConfig, store: SessionStore, rig: VoxelRig) -> None:
         self._config = config
         self._store = store
@@ -35,9 +39,33 @@ class Session:
         self._fov_size: tuple[float, float] | None = rig.get_topic_value("fov")
         self._unsubscribe_fov = rig.subscribe("fov", self._on_fov_changed)
 
-    def save(self) -> None:
-        """Persist session config via the store."""
-        self._store.save()
+        self._autosave_task: asyncio.Task[None] | None = None
+        self._last_persisted_dump: dict[str, Any] | None = None
+
+    async def start(self) -> None:
+        """Start the autosave loop. Must be called from an async context."""
+        if self._autosave_task is not None:
+            return
+        self._last_persisted_dump = self._config.model_dump(mode="json")
+        self._autosave_task = asyncio.create_task(self._autosave_loop())
+
+    async def _autosave_loop(self) -> None:
+        while True:
+            try:
+                await asyncio.sleep(self._AUTOSAVE_INTERVAL)
+                await self.save()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self._log.exception("Autosave tick failed")
+
+    async def save(self) -> None:
+        """Persist the config if it has changed since the last write. Idempotent."""
+        current = self._config.model_dump(mode="json")
+        if current == self._last_persisted_dump:
+            return
+        await self._store.asave()
+        self._last_persisted_dump = current
 
     # ==================== Properties ====================
 
@@ -136,7 +164,6 @@ class Session:
         instance = cls()
         self._config.metadata_target = target
         self._config.metadata = instance.model_dump()
-        self.save()
 
     def update_metadata(self, values: dict[str, Any]) -> None:
         """Update experiment metadata, respecting provenance locking."""
@@ -151,7 +178,6 @@ class Session:
         merged = {**self._config.metadata, **values}
         cls(**merged)
         self._config.metadata = merged
-        self.save()
 
     # ==================== Device Props (Save to Profile) ====================
 
@@ -162,7 +188,6 @@ class Session:
         profile_id = self._rig.active_profile_id
         captured = await self._rig.capture_device_props(device_id)
         self._config.rig.profiles[profile_id].props[device_id] = captured
-        self.save()
 
     async def save_all_device_props(self) -> list[str]:
         """Capture and persist properties for all settable devices in the active profile."""
@@ -187,7 +212,6 @@ class Session:
             raise RuntimeError("No active profile")
         roi = await self._rig.capture_camera_roi(camera_id)
         self._config.rig.profiles[self._rig.active_profile_id].rois[camera_id] = roi
-        self.save()
         return roi
 
     # ==================== Profile Settings ====================
@@ -213,7 +237,6 @@ class Session:
                         f"exceeds DAQ range [{ao_range.min}, {ao_range.max}]V"
                     )
 
-        self.save()
         await self._rig.update_active_waveforms()
 
     async def apply_profile_props(self, device_ids: list[str] | None = None) -> list[str]:
@@ -263,7 +286,6 @@ class Session:
     def set_default_z_range(self, default_z_start: float, default_z_end: float) -> None:
         self._config.acq.default_z_start = default_z_start
         self._config.acq.default_z_end = default_z_end
-        self.save()
 
     def update_grid(
         self,
@@ -285,7 +307,6 @@ class Session:
             if not 0.0 <= overlap_y < 1.0:
                 raise ValueError(f"Overlap Y must be in [0.0, 1.0), got {overlap_y}")
             gc.overlap_y = overlap_y
-        self.save()
 
     # ==================== Stack Management ====================
 
@@ -293,7 +314,6 @@ class Session:
         self._config.stacks = {sid: s for sid, s in self._config.stacks.items() if s.profile_id != profile_id}
         if profile_id in self._config.acq.profile_order:
             self._config.acq.profile_order.remove(profile_id)
-        self.save()
 
     def _has_stack_near(self, x: float, y: float, profile_id: str, tolerance: float = 0.1) -> bool:
         return any(
@@ -337,7 +357,6 @@ class Session:
             self._config.stacks[stack.stack_id] = stack
             added.append(stack)
 
-        self.save()
         return added
 
     def edit_stacks(self, edits: list[dict[str, str | float]]) -> list[Stack]:
@@ -366,7 +385,6 @@ class Session:
             stack.edited_at = datetime.datetime.now(tz=datetime.UTC)
             edited.append(stack)
 
-        self.save()
         return edited
 
     def remove_stacks(self, stack_ids: list[str]) -> None:
@@ -384,20 +402,16 @@ class Session:
 
         profiles_with_stacks = {s.profile_id for s in self._config.stacks.values()}
         self._config.acq.profile_order = [pid for pid in self._config.acq.profile_order if pid in profiles_with_stacks]
-        self.save()
 
     def set_stack_order(self, order: StackOrder) -> None:
         self._config.acq.stack_order = order
-        self.save()
 
     def set_sort_by_profile(self, sort_by_profile: bool) -> None:
         self._config.acq.sort_by_profile = sort_by_profile
-        self.save()
 
     def reorder_profiles(self, profile_ids: list[str]) -> None:
         acq = self._config.acq
         acq.profile_order = [pid for pid in profile_ids if pid in acq.profile_order]
-        self.save()
 
     # ==================== Acquisition ====================
 
@@ -422,7 +436,6 @@ class Session:
         stack.status = result.status
         stack.output_path = str(result.output_dir)
         stack.completed_at = datetime.datetime.now(tz=datetime.UTC)
-        self.save()
         return result
 
     def _pick_next_stack(self) -> Stack | None:
@@ -454,6 +467,11 @@ class Session:
     async def close(self) -> None:
         """Save final state and stop rig."""
         self._unsubscribe_fov()
-        self.save()
+        if self._autosave_task is not None:
+            self._autosave_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._autosave_task
+            self._autosave_task = None
+        await self.save()
         await self._rig.stop()
         self._log.info("Session closed")
