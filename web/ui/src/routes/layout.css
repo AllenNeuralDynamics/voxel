@@ -121,7 +121,7 @@
   --stack-status: var(--color-info);
 }
 [data-stack-status='acquiring'] {
-  --stack-status: var(--color-info);
+  --stack-status: var(--color-warning);
 }
 [data-stack-status='completed'] {
   --stack-status: var(--color-success);
@@ -130,7 +130,7 @@
   --stack-status: var(--color-danger);
 }
 [data-stack-status='skipped'] {
-  --stack-status: var(--color-warning);
+  --stack-status: var(--color-fg-muted);
 }
 
 /* ── Keyframes ────────────────────────────────────────────────────────── */
