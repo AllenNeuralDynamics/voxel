@@ -219,6 +219,11 @@ class OMEZarrWriter:
         return self.buffers[self._current_slot]
 
     @property
+    def ready_for_batch(self) -> bool:
+        """Whether at least one ring slot is IDLE and can accept a new batch."""
+        return any(buf.stage == BufferStage.IDLE for buf in self.buffers)
+
+    @property
     def latest_frame(self) -> np.ndarray:
         if self._global_z == 0:
             raise RuntimeError("No frames have been added yet")

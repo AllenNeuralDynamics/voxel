@@ -1,4 +1,5 @@
 import asyncio
+import math
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
-from vxl.stack import ChannelResult, Stack, StackResult, StackStatus, StorageConfig
+from vxl.stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus, StorageConfig
 from vxl.sync import SyncTask
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
@@ -837,9 +838,12 @@ class VoxelRig(Rig):
             # 2. Configure TTL stepper on scanning axis for relative stepping
             await self.scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
 
-            # 3. Queue relative moves for each frame
-            for _ in range(stack.num_frames):
-                await self.scanning_axis.queue_relative_move(stack.z_step)
+            # 3. Compute batch structure. batch_z = batch_z_shards * max_level.factor
+            #    matches WriterConfig.compute_shard_shape_from_target for typical configs
+            #    (num_frames >= max_level.factor); tiny stacks would have smaller shard.z.
+            batch_z = storage.batch_z_shards * storage.max_level.factor
+            num_batches = math.ceil(stack.num_frames / batch_z)
+            cam_uids = list(channel_cam_map.values())
 
             # 4. Create stack sync task (closes any existing one)
             self.sync_task = await self._create_sync_task(for_stack=True)
@@ -853,36 +857,56 @@ class VoxelRig(Rig):
                         channel_index=i,
                         num_channels=num_channels,
                     )
-                    for i, cam_id in enumerate(channel_cam_map.values())
+                    for i, cam_id in enumerate(cam_uids)
                 )
             )
 
             # 6. Enable lasers
             await self._enable_channel_lasers()
 
-            # 7. Start sync task and capture frames (all cameras in parallel)
-            await self.sync_task.start()
-            batch_results = await asyncio.gather(
-                *(
-                    self.cameras[cam_id].capture_batch(num_frames=stack.num_frames)
-                    for cam_id in channel_cam_map.values()
-                )
-            )
+            # 7. Per-batch capture loop. Each batch: wait for all cameras to have a free
+            #    slot, queue moves for the batch, arm the sync task, gather captures,
+            #    stop the sync task. Cross-camera backpressure prevents dropped frames
+            #    when any writer runs long.
+            results_by_cam: dict[str, list[BatchResult]] = {uid: [] for uid in cam_uids}
+            for batch_idx in range(num_batches):
+                frames_in_batch = min(batch_z, stack.num_frames - batch_idx * batch_z)
 
-            # 8. Stop and cleanup
-            await self.sync_task.stop()
+                # Wait for all cameras to have a free ring slot before queueing next batch.
+                while True:
+                    readies = await asyncio.gather(*(self.cameras[uid].is_ready_for_batch() for uid in cam_uids))
+                    if all(readies):
+                        break
+                    await asyncio.sleep(0.005)
+
+                # Queue moves for this batch
+                for _ in range(frames_in_batch):
+                    await self.scanning_axis.queue_relative_move(stack.z_step)
+
+                # Fire TTL + capture this batch
+                await self.sync_task.start()
+                per_cam_results = await asyncio.gather(
+                    *(self.cameras[uid].capture_batch(num_frames=frames_in_batch) for uid in cam_uids)
+                )
+                await self.sync_task.stop()
+
+                for uid, result in zip(cam_uids, per_cam_results, strict=True):
+                    results_by_cam[uid].append(result)
+
+            # 8. Close sync task and tear down stepping
             await self.sync_task.close()
             self.sync_task = None
             await self._disable_channel_lasers()
             await self.scanning_axis.reset_ttl_stepper()
 
             # 9. Finalize all cameras in parallel (close writers, disarm)
-            await asyncio.gather(*(self.cameras[cam_id].finalize_stack() for cam_id in channel_cam_map.values()))
+            await asyncio.gather(*(self.cameras[uid].finalize_stack() for uid in cam_uids))
 
-            # Build channel results
-            channels: dict[str, ChannelResult] = {}
-            for (ch_id, cam_id), batch_result in zip(channel_cam_map.items(), batch_results, strict=True):
-                channels[ch_id] = ChannelResult(camera_id=cam_id, batches=[batch_result])
+            # Build channel results with all batches per channel
+            channels: dict[str, ChannelResult] = {
+                ch_id: ChannelResult(camera_id=cam_id, batches=results_by_cam[cam_id])
+                for ch_id, cam_id in channel_cam_map.items()
+            }
 
             stack.status = StackStatus.COMPLETED
             completed_at = datetime.now()

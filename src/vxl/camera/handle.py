@@ -109,3 +109,8 @@ class CameraHandle(DeviceHandle[Camera]):
         if isinstance(value, (list, tuple)):
             return Vec2D(y=value[0], x=value[1])
         return Vec2D(y=value["y"], x=value["x"])
+
+    async def is_ready_for_batch(self) -> bool:
+        """Whether the writer has at least one free slot to accept the next batch."""
+        value = await self.get_prop_value("ready_for_batch")
+        return bool(value)

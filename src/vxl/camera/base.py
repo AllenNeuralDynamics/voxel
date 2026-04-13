@@ -528,6 +528,16 @@ class CameraController(DeviceController[Camera]):
         self._mode = CameraMode.IDLE
         log.info("Stack finalized for %s", self.device.uid)
 
+    @property
+    @describe(label="Ready For Batch", stream=True)
+    def ready_for_batch(self) -> bool:
+        """Whether the writer has at least one free slot to accept the next batch.
+
+        True when no stack is initialized, or when at least one ring-buffer slot
+        is IDLE.
+        """
+        return self._writer is None or self._writer.ready_for_batch
+
     @describe(label="Capture Batch")
     async def capture_batch(self, num_frames: int) -> BatchResult:
         """Capture a batch of frames. Must call initialize_stack first.
