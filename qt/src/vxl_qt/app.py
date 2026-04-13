@@ -10,10 +10,9 @@ from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QObject, Signal
 
-from vxl.app import VOXEL_DIR
 from vxl.app import VoxelApp as CoreVoxelApp
 from vxl.config import DataRoot
-from vxl.store import SessionListing, TemplateInfo, YamlSessionCatalog
+from vxl.store import SessionListing, TemplateInfo
 from vxl_qt.store import DevicesStore, GridStore, PreviewStore, StageStore
 
 if TYPE_CHECKING:
@@ -43,13 +42,7 @@ class VoxelApp(QObject):
         self._phase: AppPhase = "idle"
         self._error: str = ""
 
-        # Core app with YAML catalog
-        catalog = YamlSessionCatalog(
-            sessions_dir=VOXEL_DIR / "sessions",
-            templates_dir=VOXEL_DIR / "templates",
-        )
-        catalog.seed_templates()
-        self._core = CoreVoxelApp(catalog)
+        self._core = CoreVoxelApp()
 
         # Child stores
         self.devices = DevicesStore(parent=self)

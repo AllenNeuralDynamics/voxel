@@ -8,7 +8,7 @@ import pydantic_tensorstore as pts
 import tensorstore as ts
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import PyramidBuffer
+from ome_zarr_writer.buffer import BufferSlot
 from ome_zarr_writer.s3_utils import S3Config
 from ome_zarr_writer.types import Compression, ScaleLevel
 
@@ -103,12 +103,12 @@ class TensorStoreBackend(Backend):
         ts_spec = pts_spec.to_tensorstore()
         self._stores[level] = ts.open(ts_spec, create=True, delete_existing=self.overwrite).result()  # pyright: ignore reportAttributeAccessIssue
 
-    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
+    def write_batch(self, buffer: BufferSlot, channel_index: int = 0) -> bool:
         """
         Write all scale levels of a batch to TensorStore in parallel.
 
         Args:
-            buffer: PyramidBuffer with computed pyramid (called during FLUSHING)
+            buffer: BufferSlot with computed pyramid (called during FLUSHING)
             channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:
@@ -137,7 +137,7 @@ class TensorStoreBackend(Backend):
         return success
 
     def _write_single_scale(
-        self, level: ScaleLevel, buffer: PyramidBuffer, z_start: int, z_end: int, channel_index: int
+        self, level: ScaleLevel, buffer: BufferSlot, z_start: int, z_end: int, channel_index: int
     ) -> bool:
         """
         Write a single scale level to TensorStore.

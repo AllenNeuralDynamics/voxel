@@ -13,15 +13,15 @@ from concurrent.futures import Future, ThreadPoolExecutor
 import numpy as np
 from vxlib.vec import UIVec3D
 
-from ome_zarr_writer.pyramid import pyramids_3d
 from ome_zarr_writer.types import Dtype, ScaleLevel
 
-from ._base import BufferStage, PyramidBuffer
+from ._base import BufferSlot, BufferStage
+from ._pyramid import pyramids_3d_numba
 
 log = logging.getLogger(__name__)
 
 
-class ThreadedBuffer(PyramidBuffer):
+class ThreadedBufferSlot(BufferSlot):
     """Buffer slot backed by plain numpy arrays with thread-based downsampling."""
 
     def __init__(self, name: str, shape_l0: UIVec3D, max_level: ScaleLevel, dtype: Dtype):
@@ -63,7 +63,7 @@ class ThreadedBuffer(PyramidBuffer):
         def _downsample():
             try:
                 block = self._arrays[ScaleLevel.L0][: self.filled_l0]
-                pyramid = pyramids_3d(block, self.max_level)
+                pyramid = pyramids_3d_numba(block, self.max_level, parallel=False)
 
                 for level, vol in pyramid.items():
                     arr = self._arrays[level]

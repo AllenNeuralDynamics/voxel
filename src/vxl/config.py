@@ -472,7 +472,5 @@ class DataRoot(BaseModel):
     default: bool = False
 
 
-class SystemConfig(BaseModel):
-    """Global system configuration."""
-
-    data_roots: list[DataRoot] = Field(default_factory=list)
+# SystemConfig moved to vxl.system — now a BaseSettings that loads ~/.voxel/system.yaml
+# directly and exposes machine-introspected properties alongside user preferences.

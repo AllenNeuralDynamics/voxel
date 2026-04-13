@@ -9,7 +9,7 @@ import zarrs  # noqa: F401
 from zarr.storage import LocalStore
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import PyramidBuffer
+from ome_zarr_writer.buffer import BufferSlot
 from ome_zarr_writer.types import Compression, ScaleLevel
 
 log = logging.getLogger(__name__)
@@ -95,12 +95,12 @@ class ZarrsBackend(Backend):
             )
             self._arrays[level] = arr
 
-    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
+    def write_batch(self, buffer: BufferSlot, channel_index: int = 0) -> bool:
         """
-        Write a complete PyramidBuffer batch to Zarrs arrays.
+        Write a complete BufferSlot batch to Zarrs arrays.
 
         Args:
-            buffer: PyramidBuffer ready for storage (all scales computed)
+            buffer: BufferSlot ready for storage (all scales computed)
             channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:

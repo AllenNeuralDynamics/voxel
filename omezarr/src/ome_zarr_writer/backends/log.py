@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from ome_zarr_writer.buffer import PyramidBuffer
+from ome_zarr_writer.buffer import BufferSlot
 
 from .base import Backend
 
@@ -45,12 +45,12 @@ class LogBackend(Backend):
             f.write(f"# Total batches: {self.cfg.num_batches}\n")
             f.write("#" + "=" * 70 + "\n")
 
-    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
+    def write_batch(self, buffer: BufferSlot, channel_index: int = 0) -> bool:
         """
         'Write' a batch by logging its metadata to the text file.
 
         Args:
-            buffer: PyramidBuffer with computed pyramid (called during FLUSHING)
+            buffer: BufferSlot with computed pyramid (called during FLUSHING)
 
         Returns:
             True on success, False on failure

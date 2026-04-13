@@ -15,8 +15,7 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
-from vxl.app import VOXEL_DIR, VoxelApp
-from vxl.store import YamlSessionCatalog
+from vxl.app import VoxelApp
 
 from .services import AppService, app_router
 
@@ -68,12 +67,7 @@ def create_app(voxel_app: VoxelApp | None = None, serve_static: bool = True) -> 
         serve_static: Whether to serve static UI files.
     """
     if voxel_app is None:
-        catalog = YamlSessionCatalog(
-            sessions_dir=VOXEL_DIR / "sessions",
-            templates_dir=VOXEL_DIR / "templates",
-        )
-        catalog.seed_templates()
-        voxel_app = VoxelApp(catalog)
+        voxel_app = VoxelApp()
 
     app = FastAPI(
         title="Voxel API",

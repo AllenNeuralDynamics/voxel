@@ -487,6 +487,8 @@ class CameraController(DeviceController[Camera]):
             raise RuntimeError(f"Cannot initialize stack: camera in {self._mode} mode")
 
         self._mode = CameraMode.ACQUISITION
+        self._preview_publishing = True
+        self._frame_idx = 0
 
         # Arm camera (allocates buffers, configures trigger)
         await self._run_sync(lambda: self.device.arm(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity))
@@ -517,6 +519,8 @@ class CameraController(DeviceController[Camera]):
     @describe(label="Finalize Stack")
     async def finalize_stack(self) -> None:
         """Complete stack acquisition. Closes writer and disarms camera."""
+        self._preview_publishing = False  # immediately blocks any in-flight fire_and_forget publishes
+        self._previewer.cancel_tile_task()
         if self._writer is not None:
             self._writer.close()
             self._writer = None
@@ -545,6 +549,8 @@ class CameraController(DeviceController[Camera]):
         for _ in range(num_frames):
             frame = await self._run_sync(self.device.grab_frame)
             self._writer.add_frame(frame)
+            await self._previewer.new_frame(frame, self._frame_idx)
+            self._frame_idx += 1
             frames_captured += 1
 
             stream_info = self.device.stream_info

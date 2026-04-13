@@ -145,8 +145,8 @@
               value={session.acq.target_shard_gb ?? 1}
               min={0.1}
               max={10}
-              step={0.5}
-              decimals={1}
+              step={0.05}
+              decimals={2}
               suffix="GB"
               onChange={(v) => session.updateStorage({ target_shard_gb: v })}
               size="xs"

@@ -333,6 +333,7 @@ class PreviewGenerator:
         self._lut: np.ndarray | None = None  # (256, 3) uint8, cached
         self._tile_task: asyncio.Task | None = None  # background tile generation
         self._tile_futures: list[asyncio.Future] = []  # tracked for cancellation
+        self._overview_task: asyncio.Task | None = None  # background overview generation
         self.log = logging.getLogger(f"{self._uid}.PreviewGenerator")
 
         # Dedicated executor for overview (never competes with tiles)
@@ -351,22 +352,25 @@ class PreviewGenerator:
         self._lut = resolve_colormap(value) if value else None
 
     async def new_frame(self, frame: np.ndarray, idx: int) -> None:
-        """Process a new raw frame: generate overview + tiles.
+        """Process a new raw frame: dispatch overview + tiles as background tasks.
 
-        Overview blocks (quick, carries histogram). Tiles are fired off as a
-        background task so the preview loop can immediately grab the next frame.
-        If tiles from the previous frame are still generating, they're cancelled.
+        Tiles use cancel-stale (latest viewport invalidates prior work). Overview
+        uses skip-if-busy — if the previous overview hasn't finished, drop this
+        frame's preview rather than queueing. Returns immediately so callers
+        (preview loop, acquisition grab loop) are not gated by preview work.
         """
         self._idx = idx
         self._current_frame = frame
-        loop = asyncio.get_event_loop()
 
-        # Cancel stale tiles and start new ones concurrently with overview
         if self._tile_sink is not None:
             self.cancel_tile_task()
             self._tile_task = asyncio.create_task(self._generate_and_send_tiles(frame, idx, self.viewport))
 
-        # Overview blocks (runs on dedicated executor, concurrent with tile threads)
+        if self._overview_task is None or self._overview_task.done():
+            self._overview_task = asyncio.create_task(self._run_overview(frame, idx))
+
+    async def _run_overview(self, frame: np.ndarray, idx: int) -> None:
+        loop = asyncio.get_event_loop()
         overview = await loop.run_in_executor(self._overview_executor, self._generate_overview, frame, idx)
         self._frame_sink(overview)
 
@@ -410,6 +414,9 @@ class PreviewGenerator:
     def shutdown(self) -> None:
         """Shutdown the preview generator and cleanup resources."""
         self.cancel_tile_task()
+        if self._overview_task is not None and not self._overview_task.done():
+            self._overview_task.cancel()
+        self._overview_task = None
         self._overview_executor.shutdown(wait=False, cancel_futures=True)
         self._executor.shutdown(wait=False, cancel_futures=True)
 

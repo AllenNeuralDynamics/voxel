@@ -24,6 +24,8 @@ dependencies = [
     "numpy>=2.3.4",
     "ome-zarr-writer",
     "opencv-python-headless>=4.11.0.86",
+    "psutil>=5.9",
+    "pydantic-settings>=2.13.1",
     "rich>=14.2.0",
     "ruyaml>=0.91.0",
 ]

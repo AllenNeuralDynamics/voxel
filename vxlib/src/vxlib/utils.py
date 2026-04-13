@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 import socket
 import threading
 from collections.abc import Callable, Coroutine
@@ -30,6 +31,14 @@ def format_relative_time(dt: datetime) -> str:
     if delta.days < 7:
         return f"{delta.days}d ago"
     return dt.strftime("%b %d")
+
+
+def slugify(name: str) -> str:
+    """Convert a display name to a filesystem-friendly slug."""
+    s = name.strip().lower()
+    s = re.sub(r"[^\w\s-]", "", s)
+    s = re.sub(r"[\s_]+", "-", s)
+    return s.strip("-")
 
 
 def display_name(name: str, replacements: dict[str, str] | None = None) -> str:

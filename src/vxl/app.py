@@ -7,88 +7,18 @@ Session/template discovery is delegated to the injected SessionCatalog.
 import getpass
 import logging
 import platform
-import re
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
-from ruyaml import YAML
-
-from vxl.config import DataRoot, SessionInfo, SystemConfig
+from vxl.config import DataRoot, SessionInfo
 from vxl.rig import VoxelRig
 from vxl.session import Session
-from vxl.store import SessionCatalog, SessionStore
+from vxl.store import SessionCatalog, SessionStore, YamlSessionCatalog
+from vxl.system import VOXEL_DIR, SystemConfig
+from vxlib import slugify
 
 log = logging.getLogger(__name__)
-
-yaml = YAML()
-yaml.preserve_quotes = True  # type: ignore[assignment]
-
-# ==================== Constants ====================
-
-VOXEL_DIR = Path.home() / ".voxel"
-SYSTEM_CONFIG_FILE = VOXEL_DIR / "system.yaml"
-
-
-# ==================== Helpers ====================
-
-
-def slugify(name: str) -> str:
-    """Convert a display name to a filesystem-friendly slug."""
-    s = name.strip().lower()
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"[\s_]+", "-", s)
-    return s.strip("-")
-
-
-def load_system_config() -> SystemConfig:
-    """Load system config from ~/.voxel/system.yaml, creating defaults if missing."""
-    if not SYSTEM_CONFIG_FILE.exists():
-        log.info("First run detected, creating ~/.voxel/ directory structure")
-        _create_system_defaults()
-
-    with SYSTEM_CONFIG_FILE.open() as f:
-        data = yaml.load(f) or {}
-
-    roots = []
-    for root_data in data.get("data_roots", []):
-        path = Path(root_data["path"]).expanduser().resolve()
-        roots.append(
-            DataRoot(
-                name=root_data["name"],
-                path=path,
-                label=root_data.get("label"),
-                default=root_data.get("default", False),
-            ),
-        )
-
-    return SystemConfig(data_roots=roots)
-
-
-def _create_system_defaults() -> None:
-    """Create default ~/.voxel/ directory structure on first run."""
-    VOXEL_DIR.mkdir(parents=True, exist_ok=True)
-
-    data_dir = VOXEL_DIR / "data"
-    data_dir.mkdir(exist_ok=True)
-
-    system_yaml: dict[str, Any] = {
-        "data_roots": [
-            {
-                "name": "local",
-                "label": "Local Storage",
-                "path": str(data_dir),
-                "default": True,
-            },
-        ],
-    }
-    with SYSTEM_CONFIG_FILE.open("w") as f:
-        yaml.dump(system_yaml, f)
-    log.info(f"Created system config: {SYSTEM_CONFIG_FILE}")
-
-
-# ==================== VoxelApp ====================
 
 
 class VoxelApp:
@@ -99,8 +29,22 @@ class VoxelApp:
     - Active session lifecycle (create, resume, close) — via catalog
     """
 
-    def __init__(self, catalog: SessionCatalog) -> None:
-        self._system_config = load_system_config()
+    def __init__(self, catalog: SessionCatalog | None = None) -> None:
+        """Construct VoxelApp.
+
+        Args:
+            catalog: Optional explicit catalog. Primarily for tests or alternate
+                backends. When omitted, defaults to a YAML catalog rooted at
+                ``~/.voxel/`` with templates pre-seeded.
+        """
+        if catalog is None:
+            catalog = YamlSessionCatalog(
+                sessions_dir=VOXEL_DIR / "sessions",
+                templates_dir=VOXEL_DIR / "templates",
+            )
+            catalog.seed_templates()
+
+        self._system_config = SystemConfig.load()
         self._catalog = catalog
         self._session: Session | None = None
         self._store: SessionStore | None = None

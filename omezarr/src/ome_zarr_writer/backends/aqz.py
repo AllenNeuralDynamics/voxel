@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import PyramidBuffer
+from ome_zarr_writer.buffer import BufferSlot
 from ome_zarr_writer.types import Compression, ScaleLevel
 
 log = logging.getLogger(__name__)
@@ -233,12 +233,12 @@ class AcquireZarrBackend(Backend):
         stream = aqz.ZarrStream(stream_settings)
         self._streams[level] = stream
 
-    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
+    def write_batch(self, buffer: BufferSlot, channel_index: int = 0) -> bool:
         """
         Write all scale levels of a batch to acquire-zarr streams in parallel.
 
         Args:
-            buffer: PyramidBuffer with computed pyramid
+            buffer: BufferSlot with computed pyramid
             channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:
@@ -275,7 +275,7 @@ class AcquireZarrBackend(Backend):
     def _write_single_scale(
         self,
         level: ScaleLevel,
-        buffer: PyramidBuffer,
+        buffer: BufferSlot,
         z_start: int,
         z_end: int,
         channel_index: int,

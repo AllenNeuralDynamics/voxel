@@ -45,7 +45,7 @@ class BufferStatus(BaseModel):
         return self.stage == BufferStage.COLLECTING
 
 
-class PyramidBuffer(ABC):
+class BufferSlot(ABC):
     """Abstract base for a ring buffer slot that collects frames and downsamples.
 
     Implementations differ in storage (numpy arrays vs SharedMemory) and

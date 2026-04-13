@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from ome_zarr_writer.buffer import PyramidBuffer
+from ome_zarr_writer.buffer import BufferSlot
 from ome_zarr_writer.config import WriterConfig
 from ome_zarr_writer.s3_utils import S3Config
 
@@ -77,12 +77,12 @@ class Backend(ABC):
         ...
 
     @abstractmethod
-    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
+    def write_batch(self, buffer: BufferSlot, channel_index: int = 0) -> bool:
         """
         Write a completed buffer batch to storage.
 
         Args:
-            buffer: PyramidBuffer with all scale levels computed (stage=READY)
+            buffer: BufferSlot with all scale levels computed (stage=READY)
             channel_index: Channel index to write to in the (C, Z, Y, X) array
 
         Returns:
@@ -124,12 +124,12 @@ class MultiBackend(Backend):
     def _initialize(self) -> None:
         pass
 
-    def write_batch(self, buffer: PyramidBuffer, channel_index: int = 0) -> bool:
+    def write_batch(self, buffer: BufferSlot, channel_index: int = 0) -> bool:
         """
         Write batch to all child backends.
 
         Args:
-            buffer: PyramidBuffer with computed pyramid
+            buffer: BufferSlot with computed pyramid
             channel_index: Channel index to write to
 
         Returns:

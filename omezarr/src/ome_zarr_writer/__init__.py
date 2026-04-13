@@ -31,9 +31,9 @@ from .backends.base import Backend, MultiBackend
 
 # Buffer types (for advanced usage)
 from .buffer import (
+    BufferSlot,
     BufferStage,
     BufferStatus,
-    PyramidBuffer,
 )
 
 # Configuration
@@ -69,7 +69,7 @@ __all__ = [
     # Buffer (advanced)
     "BufferStage",
     "BufferStatus",
-    "PyramidBuffer",
+    "BufferSlot",
     # Backend base (for custom backends)
     "Backend",
     "MultiBackend",

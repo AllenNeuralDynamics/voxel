@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, computed_field
 from vxlib.vec import UIVec3D
 
 from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import BufferMode, BufferStage, BufferStatus, PyramidBuffer, create_ring_buffer
+from ome_zarr_writer.buffer import BufferSlot, BufferStage, BufferStatus, PyramidRingBuffer
 from ome_zarr_writer.types import ScaleLevel
 
 log = logging.getLogger(__name__)
@@ -135,8 +135,8 @@ class OMEZarrWriter:
         self,
         backend: Backend,
         channel_index: int = 0,
-        slots: int = 3,
-        buffer_mode: BufferMode = "threaded",
+        slots: int = 6,
+        buffer_mode: PyramidRingBuffer | str = PyramidRingBuffer.PROCESS,
         status_callback: Callable[[StreamStatus], None] | None = None,
         status_interval: float = 5.0,
     ) -> None:
@@ -146,7 +146,9 @@ class OMEZarrWriter:
             backend: Backend instance (contains cfg)
             channel_index: Channel index this writer writes to in the (C, Z, Y, X) array
             slots: Number of buffer slots in the ring (minimum 2)
-            buffer_mode: Buffer implementation — "threaded" or "process"
+            buffer_mode: Ring-buffer factory — accepts a `PyramidRingBuffer`
+                member or the equivalent string ("threaded" | "process"). Cast
+                to the enum immediately at the start of __init__.
             status_callback: Called periodically with status updates.
                            Default: prints to console with rich formatting.
                            None: silent (no auto-reporting).
@@ -158,6 +160,7 @@ class OMEZarrWriter:
         self.backend = backend
         self.channel_index = channel_index
         self.slots = slots
+        self.buffer_mode = PyramidRingBuffer(buffer_mode)
 
         # Create buffer shape for each batch
         self.batch_shape = UIVec3D(
@@ -166,14 +169,13 @@ class OMEZarrWriter:
             x=self.cfg.volume_shape.x,
         )
 
-        # Initialize ring of buffers
-        self.buffers = create_ring_buffer(
+        # Initialize ring of buffers via the mode's factory.
+        self.buffers = self.buffer_mode(
             slots=slots,
             prefix="ring",
             shape_l0=self.batch_shape,
             max_level=self.cfg.max_level,
             dtype=self.cfg.dtype,
-            mode=buffer_mode,
         )
 
         # Track state
@@ -213,7 +215,7 @@ class OMEZarrWriter:
             log.warning("batch %d write failed", buf.batch_idx)
 
     @property
-    def current_buffer(self) -> PyramidBuffer:
+    def current_buffer(self) -> BufferSlot:
         return self.buffers[self._current_slot]
 
     @property
@@ -266,7 +268,7 @@ class OMEZarrWriter:
         self._current_slot = next_slot
         self.buffers[self._current_slot].assign_batch(self._batch_number)
 
-    def get_buffer_for_batch(self, batch_idx: int) -> PyramidBuffer | None:
+    def get_buffer_for_batch(self, batch_idx: int) -> BufferSlot | None:
         """Get the buffer containing a specific batch, if available."""
         for buf in self.buffers:
             if buf.batch_idx == batch_idx and buf.stage == BufferStage.IDLE:
