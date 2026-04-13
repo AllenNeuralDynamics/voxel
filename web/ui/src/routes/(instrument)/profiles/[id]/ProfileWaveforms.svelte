@@ -48,8 +48,8 @@
 
   const profile = $derived(session.rig_cfg.profiles[profileId]);
   const isActiveProfile = $derived(profileId === session.activeProfileId);
-  const isIdle = $derived(session.mode === 'idle');
-  const canEdit = $derived(isActiveProfile && isIdle);
+  const isAcquiring = $derived(session.mode === 'acquiring');
+  const canEdit = $derived(isActiveProfile && !isAcquiring);
   let configOnly = $state(false);
 
   // ── DAQ hardware voltage range ──
@@ -992,7 +992,7 @@
         <p class="text-xs leading-ui-sm text-warning/50">
           {!isActiveProfile
             ? 'Activate profile to edit timing and waveforms'
-            : 'Stop preview to edit timing and waveforms'}
+            : 'Stop acquisition to edit timing and waveforms'}
         </p>
       {/if}
     </div>

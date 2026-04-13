@@ -501,18 +501,40 @@ class VoxelRig(Rig):
         return {k: v for k, v in profile.daq.waveforms.items() if k not in profile.daq.stack_only}
 
     async def update_active_waveforms(self) -> None:
-        """Recreate SyncTask with current profile's waveform/timing config.
+        """Apply the active profile's waveform/timing changes to hardware.
 
-        Called after Session has already mutated profile.daq in the config.
-        Only allowed when IDLE — DAQ must not be actively running.
+        Called after Session has mutated profile.daq in the config. Dispatches
+        based on current mode and whether timing (shape) changed:
+          - ACQUIRING: refuses (stack runs are time-critical)
+          - PREVIEWING, value-only: stop/restart the AO buffer with new waveforms
+          - PREVIEWING, shape change: rebuild the SyncTask scaffold and restart it
+            (cameras, lasers, and flushers keep running)
+          - IDLE, shape change: rebuild the scaffold; next start picks up waveforms
+          - IDLE, value-only: no-op; next start reads waveforms from profile.daq
 
         Raises:
-            RuntimeError: If mode is not IDLE or no active profile.
+            RuntimeError: If mode is ACQUIRING.
         """
-        if self._mode != RigMode.IDLE:
-            raise RuntimeError(f"Cannot update waveforms while {self._mode}")
-        await self._create_sync_task()
-        self.log.debug("recreated sync task with updated waveforms")
+        if self._mode == RigMode.ACQUIRING:
+            raise RuntimeError("Cannot update waveforms while acquiring")
+
+        if self.sync_task is None:
+            return  # next start_preview/stack will build it with current config
+
+        profile = self.config.profiles[self._active_profile_id]
+        shape_changed = profile.daq.timing != self.sync_task.timing
+
+        if shape_changed:
+            await self._create_sync_task()  # closes + recreates + sets up
+            if self._mode == RigMode.PREVIEWING:
+                await self.sync_task.start(self._active_profile_waveforms())
+                self.log.debug("rebuilt sync task for timing change (preview running)")
+            else:
+                self.log.debug("rebuilt sync task scaffold for timing change")
+        elif self._mode == RigMode.PREVIEWING:
+            await self.sync_task.stop()
+            await self.sync_task.start(self._active_profile_waveforms())
+            self.log.debug("live-updated sync task waveforms")
 
     async def capture_device_props(self, device_id: str) -> dict[str, Any]:
         """Capture current writable property values for a device.
