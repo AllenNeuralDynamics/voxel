@@ -12,7 +12,7 @@ from vxl.daq.wave import Waveform
 from vxl.quantity import Frequency, NormalizedRange, Time
 
 
-class TriggerConfig(BaseModel):
+class SyncTriggerConfig(BaseModel):
     pin: str
     counter: str
     duty_cycle: float = Field(0.5, ge=0, le=1)
@@ -22,7 +22,7 @@ class FrameTiming(BaseModel):
     sample_rate: Frequency = Field(..., gt=0)
     duration: Time = Field(..., gt=0)
     rest_time: Time = Field(default=Time(0.0), ge=0)
-    clock: TriggerConfig | None = None
+    clock: SyncTriggerConfig | None = None
 
     @model_validator(mode="after")
     def validate_duration_and_sample_rate(self) -> Self:
@@ -42,7 +42,7 @@ class FrameTiming(BaseModel):
         return int(self.sample_rate * self.duration)
 
 
-class SyncTaskData(BaseModel):
+class SyncTaskConfig(BaseModel):
     """Sync task timing and waveform data (without port assignments)."""
 
     timing: FrameTiming
@@ -71,13 +71,13 @@ class SyncTaskData(BaseModel):
         return m
 
 
-class SyncTaskConfig(SyncTaskData):
+class SyncTaskProps(SyncTaskConfig):
     """Sync task configuration with port assignments."""
 
     ports: dict[str, str]
 
     @classmethod
-    def from_data(cls, data: SyncTaskData, ports: dict[str, str]) -> "SyncTaskConfig":
+    def from_config(cls, data: SyncTaskConfig, ports: dict[str, str]) -> "SyncTaskProps":
         return cls(timing=data.timing, waveforms=data.waveforms, ports=ports)
 
 

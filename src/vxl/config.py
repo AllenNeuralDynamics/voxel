@@ -10,7 +10,7 @@ from rigup import RigConfig
 from vxl.camera.base import SensorROI
 from vxl.metadata import BASE_METADATA_TARGET
 from vxl.stack import Stack, StackOrder
-from vxl.sync import SyncTaskData
+from vxl.sync import SyncTaskConfig
 
 
 class GridConfig(BaseModel):
@@ -102,7 +102,7 @@ class ChannelConfig(BaseModel):
 
 class ProfileConfig(BaseModel):
     channels: list[str]
-    daq: SyncTaskData
+    daq: SyncTaskConfig
     grid: GridConfig = Field(default_factory=GridConfig)
     props: dict[str, dict[str, Any]] = Field(default_factory=dict)
     setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)

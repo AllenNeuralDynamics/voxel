@@ -207,9 +207,9 @@ export type Waveform =
   | CSVWaveform;
 
 /**
- * Sync task configuration (matches backend SyncTaskData from voxel.sync_task)
+ * Sync task configuration (matches backend SyncTaskConfig from voxel.sync_task)
  */
-export interface SyncTaskData {
+export interface SyncTaskConfig {
   timing: FrameTiming;
   waveforms: Record<string, Waveform>; // device_id -> waveform
   stack_only?: string[]; // Waveforms excluded from frame streaming (included only during stack acquisition)
@@ -231,7 +231,7 @@ export interface ProfileConfig {
   label?: string | null;
   desc: string;
   channels: string[]; // list of channel IDs
-  daq: SyncTaskData; // DAQ sync task configuration
+  daq: SyncTaskConfig; // DAQ sync task configuration
   grid: GridConfig; // Grid configuration for tile planning
   props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
   setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
