@@ -128,13 +128,15 @@ class StackOrder(StrEnum):
 
 
 class StorageConfig(BaseModel):
-    """Settings for how acquired data is stored."""
+    """Settings for how acquired data is stored.
+
+    Content decisions only. batch_z_shards and target_shard_gb live on the rig
+    as runtime pipeline knobs — see rig.py constants.
+    """
 
     store_path: Path = Field(description="Absolute path where acquired zarr data is written")
     max_level: ScaleLevel = Field(default=ScaleLevel.L3, description="Maximum pyramid downscale level")
     compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
-    batch_z_shards: int = Field(default=1, gt=0, description="Number of Z shards per batch")
-    target_shard_gb: float = Field(default=1.0, gt=0, description="Target shard size in GB")
 
 
 class StackStatus(StrEnum):

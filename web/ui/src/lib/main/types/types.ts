@@ -52,8 +52,6 @@ export interface AcquisitionConfig {
   store_path: string;
   max_level: number;
   compression: string;
-  batch_z_shards: number;
-  target_shard_gb: number;
 }
 
 /**

@@ -26,6 +26,13 @@ from vxl.sync import SyncTask
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
 
+# Pipeline knobs — hardcoded defaults for now. Will be replaced with
+# per-acquisition computation from System.ram_share + camera.frame_size_mb
+# once that logic lands. Not persisted anywhere; the rig supplies them
+# directly to each camera's initialize_stack call.
+_DEFAULT_BATCH_Z_SHARDS = 1
+_DEFAULT_TARGET_SHARD_GB = 1.0
+
 Unsubscribe = Callable[[], None]
 
 
@@ -841,14 +848,16 @@ class VoxelRig(Rig):
             # 3. Compute batch structure. batch_z = batch_z_shards * max_level.factor
             #    matches WriterConfig.compute_shard_shape_from_target for typical configs
             #    (num_frames >= max_level.factor); tiny stacks would have smaller shard.z.
-            batch_z = storage.batch_z_shards * storage.max_level.factor
+            batch_z = _DEFAULT_BATCH_Z_SHARDS * storage.max_level.factor
             num_batches = math.ceil(stack.num_frames / batch_z)
             cam_uids = list(channel_cam_map.values())
 
             # 4. Create stack sync task (closes any existing one)
             self.sync_task = await self._create_sync_task(for_stack=True)
 
-            # 5. Initialize all cameras in parallel (arm + create writers)
+            # 5. Initialize all cameras in parallel (arm + create writers).
+            #    Pipeline knobs are rig-supplied runtime values — not persisted.
+            #    Will become computed from per-camera RAM budgets.
             await asyncio.gather(
                 *(
                     self.cameras[cam_id].initialize_stack(
@@ -856,6 +865,8 @@ class VoxelRig(Rig):
                         storage=storage,
                         channel_index=i,
                         num_channels=num_channels,
+                        batch_z_shards=_DEFAULT_BATCH_Z_SHARDS,
+                        target_shard_gb=_DEFAULT_TARGET_SHARD_GB,
                     )
                     for i, cam_id in enumerate(cam_uids)
                 )

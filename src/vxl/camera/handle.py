@@ -65,8 +65,11 @@ class CameraHandle(DeviceHandle[Camera]):
         self,
         stack: Stack,
         storage: StorageConfig,
-        channel_index: int = 0,
+        *,
         num_channels: int = 1,
+        channel_index: int = 0,
+        batch_z_shards: int = 1,
+        target_shard_gb: float = 1.0,
         trigger_mode: TriggerMode = TriggerMode.ON,
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
     ) -> None:
@@ -75,10 +78,12 @@ class CameraHandle(DeviceHandle[Camera]):
             "initialize_stack",
             stack,
             storage,
-            channel_index,
-            num_channels,
-            trigger_mode,
-            trigger_polarity,
+            num_channels=num_channels,
+            channel_index=channel_index,
+            batch_z_shards=batch_z_shards,
+            target_shard_gb=target_shard_gb,
+            trigger_mode=trigger_mode,
+            trigger_polarity=trigger_polarity,
         )
 
     async def finalize_stack(self) -> None:

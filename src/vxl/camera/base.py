@@ -471,15 +471,21 @@ class CameraController(DeviceController[Camera]):
         self,
         stack: Stack,
         storage: StorageConfig,
-        channel_index: int = 0,
+        *,
         num_channels: int = 1,
+        channel_index: int = 0,
+        batch_z_shards: int = 1,
+        target_shard_gb: float = 1.0,
         trigger_mode: TriggerMode = TriggerMode.ON,
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
     ) -> None:
         """Prepare camera and writer for a stack acquisition.
 
         Arms the camera (allocates buffers, configures trigger) and creates
-        an OMEZarrWriter for writing frames to disk.
+        an OMEZarrWriter for writing frames to disk. The ``batch_z_shards`` and
+        ``target_shard_gb`` kwargs are runtime pipeline knobs supplied by the
+        rig — not persisted in any config — so the rig can eventually compute
+        them from per-camera RAM budgets.
         """
         if self._writer is not None:
             raise RuntimeError("Stack already initialized. Call finalize_stack() first.")
@@ -493,7 +499,7 @@ class CameraController(DeviceController[Camera]):
         # Arm camera (allocates buffers, configures trigger)
         await self._run_sync(lambda: self.device.arm(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity))
 
-        # Build WriterConfig from device properties + stack + storage
+        # Build WriterConfig from device properties + stack + storage + pipeline knobs
         frame_size = self.device.frame_size_px
         cfg = WriterConfig.create(
             name=stack.stack_id,
@@ -505,8 +511,8 @@ class CameraController(DeviceController[Camera]):
             dtype=self.device.pixel_type,
             max_level=storage.max_level,
             compression=storage.compression,
-            batch_z_shards=storage.batch_z_shards,
-            target_shard_gb=storage.target_shard_gb,
+            batch_z_shards=batch_z_shards,
+            target_shard_gb=target_shard_gb,
         )
 
         # Create backend + writer

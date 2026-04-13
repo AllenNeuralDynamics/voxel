@@ -195,8 +195,6 @@ acq:
   store_path: ./data
   max_level: 3
   compression: blosc.lz4
-  batch_z_shards: 1
-  target_shard_gb: 1.0
 
 grid:
   x_offset: 0.0

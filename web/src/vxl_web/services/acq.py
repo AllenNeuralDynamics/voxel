@@ -96,8 +96,6 @@ class StorageSettingsRequest(BaseModel):
     store_path: str | None = None
     max_level: int | None = None
     compression: str | None = None
-    batch_z_shards: int | None = None
-    target_shard_gb: float | None = None
 
 
 # ==================== Settings Endpoints ====================
@@ -113,8 +111,6 @@ async def get_storage(
         "store_path": str(s.store_path) if s.store_path else None,
         "max_level": s.max_level,
         "compression": s.compression,
-        "batch_z_shards": s.batch_z_shards,
-        "target_shard_gb": s.target_shard_gb,
     }
 
 
@@ -131,10 +127,6 @@ async def update_storage(
         acq.max_level = ScaleLevel(request.max_level)
     if request.compression is not None:
         acq.compression = Compression(request.compression)
-    if request.batch_z_shards is not None:
-        acq.batch_z_shards = request.batch_z_shards
-    if request.target_shard_gb is not None:
-        acq.target_shard_gb = request.target_shard_gb
     service.session.save()
     service.broadcast({}, with_status=True)
     updated = service.session.storage
@@ -142,8 +134,6 @@ async def update_storage(
         "store_path": str(updated.store_path) if updated.store_path else None,
         "max_level": updated.max_level,
         "compression": updated.compression,
-        "batch_z_shards": updated.batch_z_shards,
-        "target_shard_gb": updated.target_shard_gb,
     }
 
 

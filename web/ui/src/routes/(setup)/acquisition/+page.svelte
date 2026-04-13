@@ -140,33 +140,6 @@
               onChange={(v) => session.updateStorage({ max_level: v })}
               size="xs"
             />
-            <span class="text-fg-muted">Shard Size</span>
-            <SpinBox
-              value={session.acq.target_shard_gb ?? 1}
-              min={0.1}
-              max={10}
-              step={0.05}
-              decimals={2}
-              suffix="GB"
-              onChange={(v) => session.updateStorage({ target_shard_gb: v })}
-              size="xs"
-            />
-            <span class="text-fg-muted">Batch Z Shards</span>
-            <div class="flex items-center gap-1.5">
-              <SpinBox
-                value={session.acq.batch_z_shards ?? 1}
-                min={1}
-                max={16}
-                step={1}
-                numCharacters={3}
-                draggable={false}
-                onChange={(v) => session.updateStorage({ batch_z_shards: v })}
-                size="xs"
-              />
-              <span class="text-fg-faint">
-                = {(session.acq.batch_z_shards ?? 1) * (1 << (session.acq.max_level ?? 3))} frames
-              </span>
-            </div>
           </div>
         </section>
 

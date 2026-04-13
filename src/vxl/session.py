@@ -67,8 +67,6 @@ class Session:
             store_path=path,
             max_level=acq.max_level,
             compression=acq.compression,
-            batch_z_shards=acq.batch_z_shards,
-            target_shard_gb=acq.target_shard_gb,
         )
 
     @property

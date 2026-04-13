@@ -48,9 +48,7 @@ export class Session {
       default_z_end: 511.0,
       store_path: './data',
       max_level: 3,
-      compression: 'blosc_lz4',
-      batch_z_shards: 1,
-      target_shard_gb: 1.0
+      compression: 'blosc_lz4'
     }
   );
   acquisitionProfileIds = $derived<string[]>(this.acq.profile_order);

@@ -54,12 +54,18 @@ class StreamStatus(BaseModel):
         return self.global_z >= self.total_frames
 
     def summary(self) -> str:
-        """One-line summary for quick reporting."""
+        """One-line summary for quick reporting.
+
+        Reports instantaneous rates rather than lifetime averages: `fps_inst`
+        and `throughput_gbs_inst` reflect the most recent status window
+        (~5 s), avoiding the artifact where cumulative averages decline
+        throughout a run simply because early "warm-up" batches were faster.
+        """
         return (
             f"Frame {self.global_z}/{self.total_frames} ({self.progress_percent:.1f}%) | "
             f"Batch {self.current_batch}/{self.total_batches} | "
-            f"FPS: {self.fps:.1f} (inst: {self.fps_inst:.1f}) | "
-            f"Throughput: {self.throughput_gbs:.2f} GB/s"
+            f"FPS: {self.fps_inst:.1f} | "
+            f"Throughput: {self.throughput_gbs_inst:.2f} GB/s"
         )
 
     @classmethod
