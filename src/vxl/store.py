@@ -253,7 +253,7 @@ class YamlSessionStore(SessionStore):
         }
 
     def _sync_rig_profiles(self) -> None:
-        """Sync mutable profile fields (grid, props, setup, rois) into raw data."""
+        """Sync mutable profile fields (grid, daq, props, setup, rois) into raw data."""
         if self._raw_data is None or self._config is None:
             return
 
@@ -267,6 +267,7 @@ class YamlSessionStore(SessionStore):
                 continue
 
             raw_profile["grid"] = profile.grid.model_dump()
+            raw_profile["daq"] = profile.daq.model_dump(mode="json")
 
             if profile.props:
                 raw_profile["props"] = dict(profile.props)

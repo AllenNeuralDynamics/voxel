@@ -21,6 +21,7 @@ from vxl.camera.handle import CameraHandle
 from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
 from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
+from vxl.daq.wave import Waveform
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
 from vxl.stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus
@@ -485,13 +486,19 @@ class VoxelRig(Rig):
             uid=f"{'stack' if for_stack else 'acq'}_{self._active_profile_id}",
             daq=self.daq,
             timing=profile.daq.timing,
-            waveforms=profile.daq.waveforms,
             ports=filtered_ports,
-            for_stack=for_stack,
-            stack_only=profile.daq.stack_only if for_stack else [],
         )
         await self.sync_task.setup()
         return self.sync_task
+
+    def _active_profile_waveforms(self, *, for_stack: bool = False) -> dict[str, Waveform]:
+        """Return waveforms for the active profile, excluding stack_only entries in frame mode."""
+        if not self._active_profile_id:
+            raise RuntimeError("No active profile")
+        profile = self.config.profiles[self._active_profile_id]
+        if for_stack:
+            return profile.daq.waveforms
+        return {k: v for k, v in profile.daq.waveforms.items() if k not in profile.daq.stack_only}
 
     async def update_active_waveforms(self) -> None:
         """Recreate SyncTask with current profile's waveform/timing config.
@@ -711,7 +718,7 @@ class VoxelRig(Rig):
             await self._enable_channel_lasers()
 
         self.sync_task = await self._create_sync_task()
-        await self.sync_task.start()
+        await self.sync_task.start(self._active_profile_waveforms())
 
     async def _enable_channel_lasers(self) -> None:
         """Enable lasers for all active channels."""
@@ -871,6 +878,7 @@ class VoxelRig(Rig):
 
             # 4. Create stack sync task (closes any existing one)
             self.sync_task = await self._create_sync_task(for_stack=True)
+            stack_waveforms = self._active_profile_waveforms(for_stack=True)
 
             # 5. Initialize all cameras in parallel (arm + create writers).
             #    Pipeline knobs are rig-supplied runtime values — not persisted.
@@ -913,7 +921,7 @@ class VoxelRig(Rig):
                     await self.scanning_axis.queue_relative_move(stack.z_step)
 
                 # Fire TTL + capture this batch
-                await self.sync_task.start()
+                await self.sync_task.start(stack_waveforms)
                 per_cam_results = await asyncio.gather(
                     *(self.cameras[uid].capture_batch(num_frames=frames_in_batch) for uid in cam_uids)
                 )

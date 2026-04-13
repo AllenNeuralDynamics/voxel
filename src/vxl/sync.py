@@ -1,7 +1,6 @@
 """Synchronization task for DAQ waveform generation."""
 
 import logging
-from dataclasses import dataclass
 from typing import Any, Self
 
 import numpy as np
@@ -81,42 +80,17 @@ class SyncTaskProps(SyncTaskConfig):
         return cls(timing=data.timing, waveforms=data.waveforms, ports=ports)
 
 
-@dataclass(frozen=True)
-class WaveGenChannel:
-    name: str
-    pin: str
-    wave: Waveform
-
-
 class SyncTask:
     """Orchestrates DAQ waveform generation synchronized to camera frames."""
 
-    def __init__(
-        self,
-        *,
-        uid: str,
-        daq: DaqHandle,
-        timing: FrameTiming,
-        waveforms: dict[str, Waveform],
-        ports: dict[str, str],
-        for_stack: bool = False,
-        stack_only: list[str] | None = None,
-    ) -> None:
+    def __init__(self, *, uid: str, daq: DaqHandle, timing: FrameTiming, ports: dict[str, str]) -> None:
         self._uid = uid
         self._log = logging.getLogger(self._uid)
         self._daq = daq
         self._timing = timing
-        self._for_stack = for_stack
-        self._stack_only = stack_only or []
-
-        # Filter waveforms: stack mode gets all, frame mode excludes stack_only
-        if for_stack:
-            self._waveforms = waveforms
-        else:
-            self._waveforms = {k: v for k, v in waveforms.items() if k not in self._stack_only}
-
         self._ports = ports
-        self._channels: dict[str, WaveGenChannel] = {}
+
+        self._waveforms: dict[str, Waveform] = {}
 
         self._ao_task_name: str | None = None
         self._ao_channel_names: list[str] = []
@@ -140,27 +114,9 @@ class SyncTask:
         return self._ports
 
     async def setup(self) -> None:
-        """Set up the task."""
+        """Set up the task hardware scaffolding (AO task, timing, trigger, clock)."""
         if self._is_setup:
             raise RuntimeError(f"Task '{self._uid}' is already set up")
-
-        # Validate ports have waveforms
-        for name in self._ports:
-            if name not in self._waveforms:
-                raise ValueError(f"No waveform defined for port '{name}'")
-
-        # Validate waveform voltages against DAQ hardware range
-        ao_range = await self._daq.get_ao_voltage_range()
-        for name, wf in self._waveforms.items():
-            if wf.voltage.min < ao_range.min or wf.voltage.max > ao_range.max:
-                raise ValueError(
-                    f"Waveform '{name}' voltage [{wf.voltage.min}, {wf.voltage.max}]V "
-                    f"exceeds DAQ range [{ao_range.min}, {ao_range.max}]V"
-                )
-
-        # Store channel info
-        for name, port in self._ports.items():
-            self._channels[name] = WaveGenChannel(name=name, pin=port, wave=self._waveforms[name])
 
         # Create AO task
         pins = list(self._ports.values())
@@ -183,45 +139,31 @@ class SyncTask:
             await self._daq.configure_ao_trigger(self._uid, trigger_pfi, retriggerable=True)
 
         # Create clock task if configured
-        await self._setup_clock_task()
+        if self._timing.clock:
+            clock_task_info = await self._daq.create_co_task(
+                f"{self._uid}_clock",
+                counter=self._timing.clock.counter,
+                frequency_hz=self._timing.frequency,
+                duty_cycle=self._timing.clock.duty_cycle,
+                output_pin=self._timing.clock.pin,
+            )
+            self._clock_task_name = clock_task_info.name
+            self._log.debug("created clock task '%s' at %sHz", self._clock_task_name, self._timing.frequency)
 
         self._is_setup = True
-
-    async def _setup_clock_task(self) -> None:
-        """Create clock task if configured."""
-        if not self._timing.clock:
-            return
-
-        clock_task_name = f"{self._uid}_clock"
-        await self._daq.create_co_task(
-            clock_task_name,
-            counter=self._timing.clock.counter,
-            frequency_hz=self._timing.frequency,
-            duty_cycle=self._timing.clock.duty_cycle,
-            output_pin=self._timing.clock.pin,
-        )
-        self._clock_task_name = clock_task_name
-        self._log.debug("created clock task '%s' at %sHz", clock_task_name, self._timing.frequency)
 
     async def _write(self) -> None:
         """Generate and write waveform data."""
         if self._ao_task_name is None:
             raise RuntimeError("AO task not created")
 
-        # Get channel names from the task via handle
-        channel_names = self._ao_channel_names
         data_arrays: list[np.ndarray] = []
-
-        for channel_name in channel_names:
-            matched = False
-            for channel in self._channels.values():
-                if channel_name.upper().endswith(channel.pin.upper()):
-                    waveform_array = channel.wave.get_array(self._timing.num_samples)
-                    data_arrays.append(waveform_array)
-                    matched = True
+        for channel_name in self._ao_channel_names:
+            for name, pin in self._ports.items():
+                if channel_name.upper().endswith(pin.upper()):
+                    data_arrays.append(self._waveforms[name].get_array(self._timing.num_samples))
                     break
-
-            if not matched:
+            else:
                 raise ValueError(f"Channel '{channel_name}' not found in local channels")
 
         data = np.vstack(data_arrays) if len(data_arrays) > 1 else data_arrays[0]
@@ -231,12 +173,27 @@ class SyncTask:
         if written_samples != self._timing.num_samples:
             self._log.warning(f"Only wrote {written_samples}/{self._timing.num_samples} samples")
 
-    async def start(self) -> None:
-        """Write waveforms and start the task."""
+    async def start(self, waveforms: dict[str, Waveform]) -> None:
+        """Validate waveforms, write the buffer, and start the task."""
         if not self._is_setup:
             raise RuntimeError(f"Task '{self._uid}' is not set up")
         if self._ao_task_name is None:
             raise RuntimeError("AO task not created")
+
+        for name in self._ports:
+            if name not in waveforms:
+                raise ValueError(f"No waveform defined for port '{name}'")
+
+        ao_range = await self._daq.get_ao_voltage_range()
+        for name in self._ports:
+            wf = waveforms[name]
+            if wf.voltage.min < ao_range.min or wf.voltage.max > ao_range.max:
+                raise ValueError(
+                    f"Waveform '{name}' voltage [{wf.voltage.min}, {wf.voltage.max}]V "
+                    f"exceeds DAQ range [{ao_range.min}, {ao_range.max}]V"
+                )
+
+        self._waveforms = {name: waveforms[name] for name in self._ports}
 
         await self._write()
         await self._daq.start_task(self._ao_task_name)
@@ -269,20 +226,22 @@ class SyncTask:
             self._ao_task_name = None
 
         self._is_setup = False
-        self._channels.clear()
+        self._waveforms.clear()
 
     def get_written_waveforms(self, target_points: int | None = None) -> dict[str, list[float]]:
         """Get waveform data for visualization."""
         if not self._is_setup:
             raise RuntimeError(f"Task '{self._uid}' is not set up")
+        if not self._waveforms:
+            raise RuntimeError(f"Task '{self._uid}' has no waveforms (not started)")
 
         waveforms = {}
-        for name, channel in self._channels.items():
-            waveform_array = channel.wave.get_array(self._timing.num_samples)
+        for name, wave in self._waveforms.items():
+            waveform_array = wave.get_array(self._timing.num_samples)
 
             rest_samples = int(self._timing.sample_rate * self._timing.rest_time)
             if rest_samples > 0:
-                rest_value = float(channel.wave.rest_voltage)
+                rest_value = float(wave.rest_voltage)
                 waveform_array = np.concatenate([waveform_array, np.full(rest_samples, rest_value)])
 
             if target_points and len(waveform_array) > target_points:
