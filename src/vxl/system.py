@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import psutil
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     InitSettingsSource,
@@ -25,12 +25,19 @@ from pydantic_settings import (
 )
 from ruyaml import YAML
 
-from vxl.config import DataRoot
-
 log = logging.getLogger(__name__)
 
 VOXEL_DIR = Path.home() / ".voxel"
 SYSTEM_CONFIG_PATH = VOXEL_DIR / "system.yaml"
+
+
+class DataRoot(BaseModel):
+    """A storage location for acquired session data."""
+
+    name: str
+    label: str | None = None
+    path: Path
+    default: bool = False
 
 
 class RuyamlConfigSettingsSource(InitSettingsSource):

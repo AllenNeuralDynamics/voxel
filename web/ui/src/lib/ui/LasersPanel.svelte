@@ -88,11 +88,11 @@
 			{selectedDeviceId === laser.deviceId ? 'border-border bg-panel' : 'hover:bg-panel/50'}"
   >
     <!-- Wavelength dot + label + divergence dot -->
-    <div class="flex min-w-24 shrink-0 items-center gap-1">
+    <div class="flex min-w-22 shrink-0 items-center gap-1">
       <div class="mr-1">
         {@render channelDot(laser, cfg)}
       </div>
-      <span class="w-[6ch] text-sm font-medium tabular-nums">
+      <span class="min-w-[7ch] text-sm font-medium tabular-nums">
         {laser.wavelength ? `${laser.wavelength} nm` : 'Laser'}
       </span>
       <span class="inline-block size-1 rounded-full bg-warning {showIndicator ? 'opacity-70' : 'opacity-0 '}"> </span>

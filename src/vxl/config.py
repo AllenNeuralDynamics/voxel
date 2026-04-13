@@ -464,14 +464,5 @@ class SessionConfig(BaseModel):
 # ==================== System Config ====================
 
 
-class DataRoot(BaseModel):
-    """A storage location for acquired session data."""
-
-    name: str
-    label: str | None = None
-    path: Path
-    default: bool = False
-
-
 # SystemConfig moved to vxl.system — now a BaseSettings that loads ~/.voxel/system.yaml
 # directly and exposes machine-introspected properties alongside user preferences.

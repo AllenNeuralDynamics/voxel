@@ -541,7 +541,7 @@
     <!-- ═══ MAIN: Sidebar + Plot ═══ -->
     <div class="flex min-h-0 overflow-hidden">
       <!-- Sidebar: Device list -->
-      <div class="flex w-36 shrink-0 flex-col gap-0.5 border-r px-2 py-2">
+      <div class="flex max-w-48 min-w-36 shrink-0 flex-col gap-0.5 border-r px-2 py-2">
         <label class="mb-1 flex cursor-pointer items-center gap-1 px-1.5 py-1 text-[10px] text-fg-muted">
           <input type="checkbox" bind:checked={configOnly} class="accent-primary" />
           Config only

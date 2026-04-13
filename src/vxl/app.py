@@ -11,11 +11,11 @@ import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 
-from vxl.config import DataRoot, SessionInfo
+from vxl.config import SessionInfo
 from vxl.rig import VoxelRig
 from vxl.session import Session
 from vxl.store import SessionCatalog, SessionStore, YamlSessionCatalog
-from vxl.system import VOXEL_DIR, SystemConfig
+from vxl.system import VOXEL_DIR, DataRoot, SystemConfig
 from vxlib import slugify
 
 log = logging.getLogger(__name__)

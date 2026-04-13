@@ -26,9 +26,9 @@ from fastapi import (
 from pydantic import BaseModel
 
 from vxl.app import VoxelApp
-from vxl.config import DataRoot
 from vxl.metadata import discover_metadata_targets, resolve_metadata_class
 from vxl.store import SessionListing, TemplateInfo
+from vxl.system import DataRoot
 from vxl_web.services.msg_queue import MsgQueue
 from vxlib import fire_and_forget
 

@@ -146,7 +146,7 @@
         >
           <pre
             class={cn(
-              'max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-sm',
+              'max-h-40 overflow-auto font-mono text-sm break-all whitespace-pre-wrap',
               isError ? 'text-danger' : 'text-fg'
             )}>{formatResult(lastResult.result)}</pre>
         </div>

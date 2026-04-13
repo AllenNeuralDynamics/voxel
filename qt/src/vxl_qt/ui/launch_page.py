@@ -18,9 +18,9 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import QBoxLayout, QLabel, QScrollArea, QWidget
 
-from vxl.config import DataRoot
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.store import SessionListing, TemplateInfo
+from vxl.system import DataRoot
 from vxl_qt.ui.assets import VOXEL_LOGO
 from vxl_qt.ui.kit import (
     Button,

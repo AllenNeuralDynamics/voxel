@@ -141,7 +141,7 @@ class ParamInfo(BaseModel):
     required: bool = True
     default: Any | None = None
     kind: Literal["regular", "var_positional", "var_keyword"] = "regular"
-    options: list[str] | None = None
+    options: list[str | int | float] | None = None
 
     @property
     def types(self) -> list[str]:
@@ -175,7 +175,7 @@ class CommandInfo(AttributeInfo):
 
             # Extract enum options from type annotation
             annotation = param.annotation
-            options: list[str] | None = None
+            options: list[str | int | float] | None = None
             if isinstance(annotation, type) and issubclass(annotation, Enum):
                 options = [e.value for e in annotation]
 

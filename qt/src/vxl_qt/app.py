@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Literal
 from PySide6.QtCore import QObject, Signal
 
 from vxl.app import VoxelApp as CoreVoxelApp
-from vxl.config import DataRoot
 from vxl.store import SessionListing, TemplateInfo
+from vxl.system import DataRoot
 from vxl_qt.store import DevicesStore, GridStore, PreviewStore, StageStore
 
 if TYPE_CHECKING:

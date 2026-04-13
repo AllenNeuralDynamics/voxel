@@ -46,7 +46,7 @@
       {@const gridLimY = (session.fov.height * (1 - (gc.overlap_y ?? 0.1))) / 1000}
       <div
         transition:slide={{ duration: 200, axis: 'x' }}
-        class="flex shrink-0 flex-col gap-6 border-r border-border px-4 py-4"
+        class="flex shrink-0 flex-col gap-6 border-r border-border px-4 py-2"
         style="width: clamp(10rem, 25%, 16rem)"
       >
         <!-- Offset -->
