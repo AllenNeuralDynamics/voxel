@@ -131,7 +131,7 @@ class SessionCatalog(ABC):
 
 
 class YamlSessionStore(SessionStore):
-    """Loads and saves SessionConfig from/to a .voxel.yaml file.
+    """Loads and saves SessionConfig from/to a voxel.yaml file.
 
     Preserves YAML anchors and aliases across round-trips by keeping
     the raw parsed dict alongside the validated Pydantic model.
@@ -286,7 +286,8 @@ class YamlSessionStore(SessionStore):
                 del raw_profile["rois"]
 
 
-SESSION_EXT = ".voxel.yaml"
+SESSION_DIR_SUFFIX = ".voxel"
+SESSION_FILENAME = "voxel.yaml"
 
 
 class YamlSessionCatalog(SessionCatalog):
@@ -294,7 +295,7 @@ class YamlSessionCatalog(SessionCatalog):
 
     Layout:
         sessions_dir/
-            <uid>/<uid>.voxel.yaml
+            <uid>.voxel/voxel.yaml
         templates_dir/
             <name>.voxel.yaml
     """
@@ -305,10 +306,26 @@ class YamlSessionCatalog(SessionCatalog):
         self._sessions_dir = sessions_dir
         self._templates_dir = templates_dir
         self._ensure_dirs()
+        self._migrate_legacy_sessions()
 
     def _ensure_dirs(self) -> None:
         self._sessions_dir.mkdir(parents=True, exist_ok=True)
         self._templates_dir.mkdir(parents=True, exist_ok=True)
+
+    def _migrate_legacy_sessions(self) -> None:
+        """Migrate old layout (uid/uid.voxel.yaml) to new bundle layout (uid.voxel/voxel.yaml)."""
+        for child in self._sessions_dir.iterdir():
+            if not child.is_dir() or child.name.endswith(SESSION_DIR_SUFFIX):
+                continue
+            old_yaml = child / f"{child.name}.voxel.yaml"
+            if not old_yaml.exists():
+                continue
+            old_yaml.rename(child / SESSION_FILENAME)
+            old_bak = child / f"{child.name}.voxel.yaml.bak"
+            if old_bak.exists():
+                old_bak.rename(child / "voxel.yaml.bak")
+            child.rename(child.parent / f"{child.name}{SESSION_DIR_SUFFIX}")
+            log.info("Migrated session: %s", child.name)
 
     def list_sessions(self) -> list[SessionListing]:
         """Scan sessions directory, parse configs in parallel."""
@@ -316,14 +333,15 @@ class YamlSessionCatalog(SessionCatalog):
         # Phase 1: fast scan — stat only
         entries: list[tuple[str, Path, datetime]] = []  # (uid, path, modified)
         for child in self._sessions_dir.iterdir():
-            if not child.is_dir():
+            if not child.is_dir() or not child.name.endswith(SESSION_DIR_SUFFIX):
                 continue
-            session_file = child / f"{child.name}{SESSION_EXT}"
+            uid = child.name.removesuffix(SESSION_DIR_SUFFIX)
+            session_file = child / SESSION_FILENAME
             if not session_file.exists():
                 continue
             try:
                 modified = datetime.fromtimestamp(session_file.stat().st_mtime)
-                entries.append((child.name, session_file, modified))
+                entries.append((uid, session_file, modified))
             except Exception as e:
                 log.warning(f"Failed to stat session {child}: {e}")
 
@@ -403,14 +421,14 @@ class YamlSessionCatalog(SessionCatalog):
         )
 
         # Create store and persist
-        session_dir = self._sessions_dir / uid
+        session_dir = self._sessions_dir / f"{uid}{SESSION_DIR_SUFFIX}"
         session_dir.mkdir(parents=True, exist_ok=True)
-        store = YamlSessionStore(session_dir / f"{uid}{SESSION_EXT}")
+        store = YamlSessionStore(session_dir / SESSION_FILENAME)
         store.initialize(config)
         return store
 
     def get_session_store(self, uid: str) -> YamlSessionStore:
-        path = self._sessions_dir / uid / f"{uid}{SESSION_EXT}"
+        path = self._sessions_dir / f"{uid}{SESSION_DIR_SUFFIX}" / SESSION_FILENAME
         if not path.exists():
             raise FileNotFoundError(f"No session found: {uid}")
         return YamlSessionStore(path)
