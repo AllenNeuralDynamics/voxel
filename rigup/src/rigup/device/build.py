@@ -42,14 +42,15 @@ class BuildError(BaseModel):
 type BuildGroupSpec = dict[str, BuildConfig]
 
 
-type BuildObjectsResult = tuple[Mapping[str, object], Mapping[str, BuildError]]
+type BuildObjectsResult[T] = tuple[Mapping[str, T], Mapping[str, BuildError]]
 
 
-def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildObjectsResult:  # noqa: C901 - factory with dependency resolution
+def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildObjectsResult[T]:  # noqa: C901 - factory with dependency resolution
     """Build objects from configuration with error accumulation and dependency resolution.
 
     Args:
-        cfg: Node configuration containing obj specifications
+        cfgs: Node configuration containing obj specifications
+        base_cls: Base class for type checking (default: object)
 
     Returns:
         Tuple of (successful_objects, build_errors)
@@ -361,7 +362,7 @@ def _build_group_sync[T](
     return results
 
 
-async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildObjectsResult:
+async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildObjectsResult[T]:
     """Build devices asynchronously with dependency resolution.
 
     Devices are sorted into dependency layers. Within each layer, devices

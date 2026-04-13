@@ -6,7 +6,7 @@ import logging
 import sys
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from typing import Any, Literal
 
@@ -60,8 +60,8 @@ class DeviceBuildResult(BaseModel):
 class ProvisionComplete(BaseModel):
     """Payload: Node reports successful provisioning with device addresses."""
 
-    devices: dict[str, DeviceProvision]
-    errors: dict[str, DeviceBuildError] = {}
+    devices: Mapping[str, DeviceProvision]
+    errors: Mapping[str, DeviceBuildError] = {}
 
 
 class DeviceHealth(BaseModel):

@@ -10,7 +10,7 @@ from ruyaml import YAML
 
 from rigup._utils import get_local_ip
 from rigup.cluster import ClusterConfig, ClusterManager, NodeConfig, RigNode
-from rigup.device import Device, DeviceConfig, DeviceHandle, build_objects, build_objects_async
+from rigup.device import Device, DeviceConfig, DeviceHandle, build_objects_async
 from rigup.local import LocalAdapter
 
 logger = logging.getLogger(__name__)
