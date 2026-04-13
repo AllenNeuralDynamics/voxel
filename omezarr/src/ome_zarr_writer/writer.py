@@ -154,8 +154,8 @@ class OMEZarrWriter:
                            None: silent (no auto-reporting).
             status_interval: How often to call status_callback (seconds)
         """
-        if slots < 2:
-            raise ValueError("Ring buffer requires at least 2 slots")
+        if slots < 1:
+            raise ValueError("Ring buffer requires at least 1 slot")
 
         self.backend = backend
         self.channel_index = channel_index
@@ -178,14 +178,14 @@ class OMEZarrWriter:
             dtype=self.cfg.dtype,
         )
 
-        # Track state
+        # Track state. Batch assignment is lazy — `_batch_number` names the
+        # next batch to assign, and `add_frame` assigns it to the current slot
+        # on the first frame of each batch. This keeps the current slot in IDLE
+        # state between batches so `ready_for_batch` reflects real capacity.
         self._global_z = 0
         self._current_slot = 0
         self._batch_number = 0
         self._pending: dict[int, Future] = {}  # slot_idx → processing future
-
-        # Assign first buffer to batch 0
-        self.buffers[self._current_slot].assign_batch(0)
 
         # Status reporting
         self._status_callback = status_callback or self._default_status_callback
@@ -241,6 +241,12 @@ class OMEZarrWriter:
             raise RuntimeError(f"Volume complete: cannot add more frames ({self._global_z}/{self.cfg.volume_shape.z})")
 
         buf = self.current_buffer
+        # Lazy batch assignment: first frame of a batch promotes the slot from
+        # IDLE to COLLECTING. Keeps the post-rotation window observable as IDLE
+        # so cross-camera readiness checks stay honest.
+        if buf.stage == BufferStage.IDLE:
+            buf.assign_batch(self._batch_number)
+            self._batch_number += 1
         z_in_buffer = self._global_z % self.cfg.batch_z
 
         buf.add_frame(frame, z_in_buffer)
@@ -262,16 +268,18 @@ class OMEZarrWriter:
             self._rotate_buffer()
 
     def _rotate_buffer(self) -> None:
-        """Rotate to the next buffer slot, flushing if necessary."""
+        """Rotate to the next buffer slot, flushing any in-flight work there.
+
+        Does NOT assign a new batch to the new current slot — that happens
+        lazily in `add_frame` when the first frame of the next batch arrives.
+        """
         next_slot = (self._current_slot + 1) % self.slots
-        self._batch_number += 1
 
         # If next slot has a pending future, flush it first
         if next_slot in self._pending:
             self._flush_slot(next_slot)
 
         self._current_slot = next_slot
-        self.buffers[self._current_slot].assign_batch(self._batch_number)
 
     def get_buffer_for_batch(self, batch_idx: int) -> BufferSlot | None:
         """Get the buffer containing a specific batch, if available."""
