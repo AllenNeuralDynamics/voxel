@@ -5,9 +5,11 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 import zmq.asyncio
+from ome_zarr_writer.types import Compression, ScaleLevel
 from rigup.device import PropResults, PropsCallback
 from vxlib.color import Color
 from vxlib.utils import CoalescedFlush, merge_dicts
@@ -21,7 +23,7 @@ from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
 from vxl.device import DeviceType
 from vxl.node import VoxelNode
-from vxl.stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus, StorageConfig
+from vxl.stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus
 from vxl.sync import SyncTask
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
@@ -805,8 +807,20 @@ class VoxelRig(Rig):
     def scanning_axis(self) -> ContinuousAxisHandle:
         return self.stage.scanning_axis
 
-    async def acquire_stack(self, stack: Stack, storage: StorageConfig) -> StackResult:
-        """Acquire a z-stack at one tile position."""
+    async def acquire_stack(
+        self,
+        stack: Stack,
+        *,
+        store_path: Path,
+        max_level: ScaleLevel = ScaleLevel.L3,
+        compression: Compression = Compression.BLOSC_LZ4,
+    ) -> StackResult:
+        """Acquire a z-stack at one tile position.
+
+        Each camera writes its own single-channel OME-Zarr, named by the
+        channel it serves, under a per-stack directory:
+        ``{store_path}/{stack_id}/{channel_name}.ome.zarr``.
+        """
         if self._mode == RigMode.ACQUIRING:
             raise RuntimeError("Cannot acquire stack while another acquisition is in progress")
         if self._mode == RigMode.PREVIEWING:
@@ -827,12 +841,15 @@ class VoxelRig(Rig):
         if self.daq is None:
             raise RuntimeError("DAQ not initialized")
 
-        # Map channel_id → cam_id for active channels
-        channel_cam_map: dict[str, str] = {}
+        # Per-stack subdir so different stacks don't collide on channel names.
+        stack_store = store_path / stack.stack_id
+
+        # Map channel_id → (cam_id, channel_name). Channel name is the zarr
+        # filename — prefer channel.label, fall back to the channel key.
+        channel_cam_map: dict[str, tuple[str, str]] = {}
         for ch_id, channel in self.active_channels.items():
             if channel.detection in self.cameras:
-                channel_cam_map[ch_id] = channel.detection
-        num_channels = len(channel_cam_map)
+                channel_cam_map[ch_id] = (channel.detection, channel.label or ch_id)
 
         try:
             # 1. Move stage to tile XY position and z_start
@@ -848,9 +865,9 @@ class VoxelRig(Rig):
             # 3. Compute batch structure. batch_z = batch_z_shards * max_level.factor
             #    matches WriterConfig.compute_shard_shape_from_target for typical configs
             #    (num_frames >= max_level.factor); tiny stacks would have smaller shard.z.
-            batch_z = _DEFAULT_BATCH_Z_SHARDS * storage.max_level.factor
+            batch_z = _DEFAULT_BATCH_Z_SHARDS * max_level.factor
             num_batches = math.ceil(stack.num_frames / batch_z)
-            cam_uids = list(channel_cam_map.values())
+            cam_uids = [cam_id for cam_id, _ in channel_cam_map.values()]
 
             # 4. Create stack sync task (closes any existing one)
             self.sync_task = await self._create_sync_task(for_stack=True)
@@ -862,13 +879,14 @@ class VoxelRig(Rig):
                 *(
                     self.cameras[cam_id].initialize_stack(
                         stack=stack,
-                        storage=storage,
-                        channel_index=i,
-                        num_channels=num_channels,
+                        store_path=stack_store,
+                        channel_name=channel_name,
+                        max_level=max_level,
+                        compression=compression,
                         batch_z_shards=_DEFAULT_BATCH_Z_SHARDS,
                         target_shard_gb=_DEFAULT_TARGET_SHARD_GB,
                     )
-                    for i, cam_id in enumerate(cam_uids)
+                    for cam_id, channel_name in channel_cam_map.values()
                 )
             )
 
@@ -913,10 +931,15 @@ class VoxelRig(Rig):
             # 9. Finalize all cameras in parallel (close writers, disarm)
             await asyncio.gather(*(self.cameras[uid].finalize_stack() for uid in cam_uids))
 
-            # Build channel results with all batches per channel
+            # Build channel results with all batches per channel. Each channel's
+            # zarr path is {stack_store}/{channel_name}.ome.zarr.
             channels: dict[str, ChannelResult] = {
-                ch_id: ChannelResult(camera_id=cam_id, batches=results_by_cam[cam_id])
-                for ch_id, cam_id in channel_cam_map.items()
+                ch_id: ChannelResult(
+                    camera_id=cam_id,
+                    output_path=stack_store / f"{channel_name}.ome.zarr",
+                    batches=results_by_cam[cam_id],
+                )
+                for ch_id, (cam_id, channel_name) in channel_cam_map.items()
             }
 
             stack.status = StackStatus.COMPLETED
@@ -926,7 +949,7 @@ class VoxelRig(Rig):
             return StackResult(
                 stack_id=stack.stack_id,
                 status=StackStatus.COMPLETED,
-                output_dir=storage.store_path,
+                output_dir=stack_store,
                 channels=channels,
                 num_frames=stack.num_frames,
                 started_at=started_at,
@@ -940,13 +963,13 @@ class VoxelRig(Rig):
             self._mode = RigMode.IDLE
             # Attempt cleanup on failure
             with suppress(Exception):
-                await asyncio.gather(*(self.cameras[cam_id].finalize_stack() for cam_id in channel_cam_map.values()))
+                await asyncio.gather(*(self.cameras[cam_id].finalize_stack() for cam_id, _ in channel_cam_map.values()))
             with suppress(Exception):
                 await self.scanning_axis.reset_ttl_stepper()
             return StackResult(
                 stack_id=stack.stack_id,
                 status=StackStatus.FAILED,
-                output_dir=storage.store_path,
+                output_dir=stack_store,
                 channels={},
                 num_frames=0,
                 started_at=started_at,

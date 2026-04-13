@@ -10,7 +10,7 @@ from vxl.config import AcquisitionConfig, SessionConfig, SessionInfo
 from vxl.daq.wave import validate_waveform
 from vxl.metadata import resolve_metadata_class
 from vxl.rig import RigMode, VoxelRig
-from vxl.stack import Stack, StackOrder, StackResult, StackStatus, StorageConfig
+from vxl.stack import Stack, StackOrder, StackResult, StackStatus
 from vxl.store import SessionStore
 from vxl.sync import FrameTiming
 
@@ -58,16 +58,14 @@ class Session:
         return self._config.acq
 
     @property
-    def storage(self) -> StorageConfig:
-        """Construct StorageConfig with resolved data path."""
-        acq = self._config.acq
+    def store_path(self) -> Path:
+        """Resolved base path for acquired zarrs.
+
+        Prefers ``info.data_path`` (session-level chosen at creation) over
+        ``acq.store_path`` (user-editable default).
+        """
         data_path = self._config.info.data_path
-        path = Path(data_path) if data_path else acq.store_path
-        return StorageConfig(
-            store_path=path,
-            max_level=acq.max_level,
-            compression=acq.compression,
-        )
+        return Path(data_path) if data_path else self._config.acq.store_path
 
     @property
     def stacks(self) -> dict[str, Stack]:
@@ -414,7 +412,12 @@ class Session:
             raise RuntimeError("Another stack is currently being acquired")
 
         stack.started_at = datetime.datetime.now(tz=datetime.UTC)
-        result = await self._rig.acquire_stack(stack, self.storage)
+        result = await self._rig.acquire_stack(
+            stack,
+            store_path=self.store_path,
+            max_level=self.acq.max_level,
+            compression=self.acq.compression,
+        )
 
         stack.status = result.status
         stack.output_path = str(result.output_dir)

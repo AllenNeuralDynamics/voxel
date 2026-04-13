@@ -401,9 +401,10 @@ class AcquisitionConfig(BaseModel):
     default_z_start: float = 0.0  # default Z start for new stacks (µm)
     default_z_end: float = 511.0  # default Z end for new stacks (µm) — 512 frames at 1µm step
 
-    # Storage settings (resolved to StorageConfig at runtime by Session).
-    # batch_z_shards and target_shard_gb are intentionally NOT persisted here —
-    # they're runtime pipeline knobs supplied by the rig (see rig.py constants).
+    # Storage settings. store_path is resolved by Session.store_path
+    # (prefers info.data_path when set). batch_z_shards and target_shard_gb
+    # are intentionally NOT persisted here — they're runtime pipeline knobs
+    # supplied by the rig (see rig.py constants).
     store_path: Path = Field(
         default=Path("./data"), description="Path for acquired data (relative to session dir or absolute)"
     )

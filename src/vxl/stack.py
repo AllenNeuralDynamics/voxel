@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
-from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel, Field, computed_field
 
 # ==================== Ordering Algorithms ====================
@@ -127,18 +126,6 @@ class StackOrder(StrEnum):
 # ==================== Data Models ====================
 
 
-class StorageConfig(BaseModel):
-    """Settings for how acquired data is stored.
-
-    Content decisions only. batch_z_shards and target_shard_gb live on the rig
-    as runtime pipeline knobs — see rig.py constants.
-    """
-
-    store_path: Path = Field(description="Absolute path where acquired zarr data is written")
-    max_level: ScaleLevel = Field(default=ScaleLevel.L3, description="Maximum pyramid downscale level")
-    compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
-
-
 class StackStatus(StrEnum):
     PLANNED = "planned"
     ACQUIRING = "acquiring"
@@ -211,6 +198,7 @@ class ChannelResult(BaseModel):
     """Result of a full stack acquisition for one channel."""
 
     camera_id: str
+    output_path: Path
     batches: list[BatchResult]
 
 

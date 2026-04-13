@@ -4,13 +4,15 @@ from abc import abstractmethod
 from contextlib import suppress
 from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal, cast
 
 import numpy as np
 from ome_zarr_writer import OMEZarrWriter, WriterConfig
 from ome_zarr_writer.backends.log import LogBackend
-
-# from ome_zarr_writer.backends.ts import TensorStoreBackend
+from ome_zarr_writer.backends.ts import TensorStoreBackend
+from ome_zarr_writer.buffer import PyramidRingBuffer
+from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel
 from rigup.device import DeviceController
 from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
@@ -26,10 +28,15 @@ from vxl.camera.preview import (
     PreviewViewport,
 )
 from vxl.device import DeviceType
-from vxl.stack import BatchResult, Stack, StorageConfig
+from vxl.stack import BatchResult, Stack
+from vxl.system import System
 from vxlib import Dtype, SchemaModel, fire_and_forget
 
 log = logging.getLogger(__name__)
+
+TESTING = True
+
+WRITER_BACKEND_CLS = LogBackend if TESTING else TensorStoreBackend
 
 
 class IntRange(BaseModel):
@@ -114,6 +121,8 @@ PIXEL_FMT_TO_DTYPE: dict[PixelFormat, Dtype] = {
 }
 
 BINNING_OPTIONS = [1, 2, 4, 8]
+
+MAX_SLOTS = 12
 
 
 class Camera(Device):
@@ -350,12 +359,21 @@ class CameraController(DeviceController[Camera]):
         )
         self._writer: OMEZarrWriter | None = None
         self._preview_publishing = False  # gate for fire_and_forget publishes
+        # Register with the node's RAM mediator so this camera gets a fair share.
+        System.reserve_ram(self.device.uid, weight=1.0)
 
     def close(self) -> None:
         self._preview_publishing = False
         self._publish_fn = None
         self._previewer.shutdown()
+        System.release_ram(self.device.uid)
         super().close()
+
+    @property
+    @describe(label="RAM Budget", units="bytes", stream=True)
+    def ram_budget_bytes(self) -> int:
+        """Current RAM share for this camera from the node-level System singleton."""
+        return System.ram_share(self.device.uid)
 
     @property
     @describe(label="Camera Mode", stream=True)
@@ -470,10 +488,11 @@ class CameraController(DeviceController[Camera]):
     async def initialize_stack(
         self,
         stack: Stack,
-        storage: StorageConfig,
         *,
-        num_channels: int = 1,
-        channel_index: int = 0,
+        store_path: Path,
+        channel_name: str,
+        max_level: ScaleLevel = ScaleLevel.L3,
+        compression: Compression = Compression.BLOSC_LZ4,
         batch_z_shards: int = 1,
         target_shard_gb: float = 1.0,
         trigger_mode: TriggerMode = TriggerMode.ON,
@@ -481,11 +500,15 @@ class CameraController(DeviceController[Camera]):
     ) -> None:
         """Prepare camera and writer for a stack acquisition.
 
-        Arms the camera (allocates buffers, configures trigger) and creates
-        an OMEZarrWriter for writing frames to disk. The ``batch_z_shards`` and
-        ``target_shard_gb`` kwargs are runtime pipeline knobs supplied by the
-        rig — not persisted in any config — so the rig can eventually compute
-        them from per-camera RAM budgets.
+        Arms the camera (allocates buffers, configures trigger) and creates an
+        OMEZarrWriter that writes a single-channel OME-Zarr named by
+        ``channel_name`` at ``store_path / {channel_name}.ome.zarr``. The caller
+        (rig) is responsible for composing a per-stack ``store_path`` so that
+        stacks written to the same base don't collide on channel names.
+
+        ``batch_z_shards`` and ``target_shard_gb`` are runtime pipeline knobs
+        supplied by the rig — not persisted in any config — so the rig can
+        eventually compute them from per-camera RAM budgets.
         """
         if self._writer is not None:
             raise RuntimeError("Stack already initialized. Call finalize_stack() first.")
@@ -499,28 +522,55 @@ class CameraController(DeviceController[Camera]):
         # Arm camera (allocates buffers, configures trigger)
         await self._run_sync(lambda: self.device.arm(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity))
 
-        # Build WriterConfig from device properties + stack + storage + pipeline knobs
-        frame_size = self.device.frame_size_px
+        frame_size_px = self.device.frame_size_px
         cfg = WriterConfig.create(
-            name=stack.stack_id,
+            name=channel_name,
             num_frames=stack.num_frames,
-            frame_height=frame_size.y,
-            frame_width=frame_size.x,
+            frame_height=frame_size_px.y,
+            frame_width=frame_size_px.x,
             z_step=stack.z_step,
             pixel_size=self.device.effective_pixel_size_um,
             dtype=self.device.pixel_type,
-            max_level=storage.max_level,
-            compression=storage.compression,
+            max_level=max_level,
+            compression=compression,
             batch_z_shards=batch_z_shards,
             target_shard_gb=target_shard_gb,
         )
 
-        # Create backend + writer
-        store_path = str(storage.store_path) if storage.store_path else "."
-        backend_cls = LogBackend  # TensorStoreBackend
-        backend = backend_cls(cfg, storage_root=store_path, channel_index=channel_index, num_channels=num_channels)
-        self._writer = OMEZarrWriter(backend, channel_index=channel_index)
-        log.info("Stack initialized for %s: %s ch=%d", self.device.uid, stack.stack_id, channel_index)
+        # Derive ring slots from this camera's RAM budget. Refuses acquisition
+        # if not even 1 slot fits — user needs to reduce batch_z_shards,
+        # target_shard_gb, max_level, or ROI (or raise max_ram_fraction).
+        frame_bytes = frame_size_px.y * frame_size_px.x * self.device.pixel_type.itemsize
+        per_slot_bytes = int(cfg.batch_z * frame_bytes * 8 / 7)  # incl. pyramid tail
+        budget = self.ram_budget_bytes
+        max_slots = budget // per_slot_bytes if per_slot_bytes else 0
+        if max_slots < 1:
+            raise RuntimeError(
+                f"{self.device.uid}: cannot fit even 1 slot. "
+                f"Needs {per_slot_bytes:,} bytes/slot, RAM share {budget:,} bytes. "
+                f"Reduce batch_z_shards, target_shard_gb, max_level, or ROI; "
+                f"or raise max_ram_fraction in ~/.voxel/system.yaml."
+            )
+        # Cap slots at cpu_count (no parallelism past that) and at MAX_SLOTS
+        # (coordination + cache pressure outweighs gains beyond that).
+        slots = min(System.cpu_count(), MAX_SLOTS, max_slots)
+        # PROCESS is worthwhile once the machine has enough cores to amortize
+        # process-spawn overhead and benefit from per-worker parallel numba.
+        ring_buf = PyramidRingBuffer.by_cpu_count(System.cpu_count())
+
+        # Backend composes the final path as `{storage_root}/{cfg.name}.ome.zarr`.
+        backend = WRITER_BACKEND_CLS(cfg, storage_root=str(store_path))
+        self._writer = OMEZarrWriter(backend, slots=slots, ring_buffer=ring_buf)
+        log.info(
+            "Stack initialized for %s: %s ch=%s slots=%d mode=%s (%.2f GB/slot, %.2f GB share)",
+            self.device.uid,
+            stack.stack_id,
+            channel_name,
+            slots,
+            ring_buf.value,
+            per_slot_bytes / 1e9,
+            budget / 1e9,
+        )
 
     @describe(label="Finalize Stack")
     async def finalize_stack(self) -> None:

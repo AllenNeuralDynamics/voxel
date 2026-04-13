@@ -94,47 +94,32 @@ class StorageSettingsRequest(BaseModel):
     """Request model for updating storage settings."""
 
     store_path: str | None = None
-    max_level: int | None = None
-    compression: str | None = None
+    max_level: ScaleLevel | None = None
+    compression: Compression | None = None
 
 
 # ==================== Settings Endpoints ====================
 
 
-@acq_router.get("/storage")
-async def get_storage(
-    service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict:
-    """Get current storage settings."""
-    s = service.session.storage
-    return {
-        "store_path": str(s.store_path) if s.store_path else None,
-        "max_level": s.max_level,
-        "compression": s.compression,
-    }
-
-
-@acq_router.patch("/storage")
+@acq_router.patch("/storage", status_code=204)
 async def update_storage(
     request: StorageSettingsRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
-) -> dict:
-    """Update storage settings."""
+) -> None:
+    """Update storage settings.
+
+    Returns 204 No Content — the updated state propagates to clients via
+    the status broadcast.
+    """
     acq = service.session.acq
     if request.store_path is not None:
         acq.store_path = Path(request.store_path)
     if request.max_level is not None:
-        acq.max_level = ScaleLevel(request.max_level)
+        acq.max_level = request.max_level
     if request.compression is not None:
-        acq.compression = Compression(request.compression)
+        acq.compression = request.compression
     service.session.save()
     service.broadcast({}, with_status=True)
-    updated = service.session.storage
-    return {
-        "store_path": str(updated.store_path) if updated.store_path else None,
-        "max_level": updated.max_level,
-        "compression": updated.compression,
-    }
 
 
 # ==================== Acquisition Control ====================

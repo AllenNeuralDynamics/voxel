@@ -20,6 +20,8 @@ __all__ = [
     "ThreadedBufferSlot",
 ]
 
+MIN_CPU_COUNT_FOR_MULTIPROCESS = 12
+
 
 class PyramidRingBuffer(StrEnum):
     """Factory + identifier for a ring of pyramid-downsampling slots.
@@ -78,3 +80,10 @@ class PyramidRingBuffer(StrEnum):
                 buffers_dict[slot_idx] = buf
 
         return [buffers_dict[i] for i in range(slots)]
+
+    @staticmethod
+    def by_cpu_count(n: int) -> "PyramidRingBuffer":
+        """Factory method to choose buffer mode based on CPU count."""
+        if n >= MIN_CPU_COUNT_FOR_MULTIPROCESS:
+            return PyramidRingBuffer.PROCESS
+        return PyramidRingBuffer.THREADED

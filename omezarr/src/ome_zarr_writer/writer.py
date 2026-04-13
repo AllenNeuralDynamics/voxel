@@ -142,7 +142,7 @@ class OMEZarrWriter:
         backend: Backend,
         channel_index: int = 0,
         slots: int = 6,
-        buffer_mode: PyramidRingBuffer | str = PyramidRingBuffer.PROCESS,
+        ring_buffer: PyramidRingBuffer | str = PyramidRingBuffer.PROCESS,
         status_callback: Callable[[StreamStatus], None] | None = None,
         status_interval: float = 5.0,
     ) -> None:
@@ -166,7 +166,7 @@ class OMEZarrWriter:
         self.backend = backend
         self.channel_index = channel_index
         self.slots = slots
-        self.buffer_mode = PyramidRingBuffer(buffer_mode)
+        self.buf = PyramidRingBuffer(ring_buffer)
 
         # Create buffer shape for each batch
         self.batch_shape = UIVec3D(
@@ -176,7 +176,7 @@ class OMEZarrWriter:
         )
 
         # Initialize ring of buffers via the mode's factory.
-        self.buffers = self.buffer_mode(
+        self.buffers = self.buf(
             slots=slots,
             prefix="ring",
             shape_l0=self.batch_shape,

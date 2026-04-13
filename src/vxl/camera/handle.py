@@ -1,11 +1,14 @@
 """Camera device handle with typed methods."""
 
+from pathlib import Path
+
+from ome_zarr_writer.types import Compression, ScaleLevel
 from rigup.device import DeviceHandle
 from vxlib.vec import Vec2D
 
 from vxl.camera.base import Camera, SensorROI, TriggerMode, TriggerPolarity
 from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
-from vxl.stack import BatchResult, Stack, StorageConfig
+from vxl.stack import BatchResult, Stack
 
 
 class CameraHandle(DeviceHandle[Camera]):
@@ -64,10 +67,11 @@ class CameraHandle(DeviceHandle[Camera]):
     async def initialize_stack(
         self,
         stack: Stack,
-        storage: StorageConfig,
         *,
-        num_channels: int = 1,
-        channel_index: int = 0,
+        store_path: Path,
+        channel_name: str,
+        max_level: ScaleLevel = ScaleLevel.L3,
+        compression: Compression = Compression.BLOSC_LZ4,
         batch_z_shards: int = 1,
         target_shard_gb: float = 1.0,
         trigger_mode: TriggerMode = TriggerMode.ON,
@@ -77,9 +81,10 @@ class CameraHandle(DeviceHandle[Camera]):
         await self.call(
             "initialize_stack",
             stack,
-            storage,
-            num_channels=num_channels,
-            channel_index=channel_index,
+            store_path=store_path,
+            channel_name=channel_name,
+            max_level=max_level,
+            compression=compression,
             batch_z_shards=batch_z_shards,
             target_shard_gb=target_shard_gb,
             trigger_mode=trigger_mode,
