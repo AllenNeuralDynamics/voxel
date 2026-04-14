@@ -8,7 +8,6 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Annotated, Any, Protocol
 
@@ -269,10 +268,7 @@ class RigService:
         profile_id = self.rig.active_profile_id
         profile = self.rig.config.profiles.get(profile_id) if profile_id else None
 
-        traces: dict = {}
-        if self.rig.sync_task:
-            with suppress(RuntimeError):
-                traces = self.rig.sync_task.get_written_waveforms(target_points=1000)
+        traces = self.rig.get_written_waveforms(target_points=1000)
 
         result: dict = {"profile_id": profile_id, "traces": traces}
         if profile:

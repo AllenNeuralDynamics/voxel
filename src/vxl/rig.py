@@ -90,7 +90,7 @@ class VoxelRig(Rig):
         self._active_profile_id: str = next(iter(self.config.profiles.keys()))
 
         self._mode: RigMode = RigMode.IDLE
-        self.sync_task: SyncTask | None = None
+        self._sync_task: SyncTask | None = None
 
         # Topic registry for derived values (e.g. FOV)
         self._topic_callbacks: dict[str, list[Callable]] = {}
@@ -434,16 +434,14 @@ class VoxelRig(Rig):
         tasks = [cam.clear_preview_cache() for cam in self.cameras.values()]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 1. Close existing sync task if any (will be recreated by preview/acquisition)
-        if self.sync_task:
-            await self.sync_task.close()
-            self.sync_task = None
-
-        # 2. Configure devices (filter wheels, etc.)
+        # 1. Configure devices (filter wheels, etc.)
         await self._configure_profile_devices(profile_id)
 
-        # 3. Update active profile state
+        # 2. Update active profile state
         self._active_profile_id = profile_id
+
+        # 3. Rebuild sync task scaffold for the new profile
+        await self.sync_task(refresh=True)
 
         # 5. Apply default colormaps to cameras based on emission wavelengths
         default_colormaps: dict[str, str] = {}
@@ -465,31 +463,51 @@ class VoxelRig(Rig):
 
         self.log.info(f"Active profile changed to '{profile_id}' (channels: {list(self.active_channels)})")
 
-    async def _create_sync_task(self, for_stack: bool = False) -> SyncTask:
-        """Create a SyncTask for the active profile, closing any existing one first."""
-        if self.sync_task:
-            await self.sync_task.close()
-            self.sync_task = None
+    async def sync_task(self, *, refresh: bool = False) -> SyncTask:
+        """Return the active profile's sync task, creating its scaffold on first use.
 
-        if not self._active_profile_id:
-            raise RuntimeError("No active profile")
-        if self.daq is None:
-            raise RuntimeError("DAQ not initialized")
+        Args:
+            refresh: If True, close the current scaffold (if any) and rebuild a fresh one.
+                     Used at profile-switch time and on timing (shape) changes.
+        """
+        if refresh and self._sync_task is not None:
+            await self._sync_task.close()
+            self._sync_task = None
 
-        profile = self.config.profiles[self._active_profile_id]
-        profile_device_ids = self.config.get_profile_device_ids(self._active_profile_id)
-        filtered_ports = {
-            device_id: port for device_id, port in self.config.daq.acq_ports.items() if device_id in profile_device_ids
-        }
+        if self._sync_task is None:
+            if not self._active_profile_id:
+                raise RuntimeError("No active profile")
+            if self.daq is None:
+                raise RuntimeError("DAQ not initialized")
 
-        self.sync_task = SyncTask(
-            uid=f"{'stack' if for_stack else 'acq'}_{self._active_profile_id}",
-            daq=self.daq,
-            timing=profile.daq.timing,
-            ports=filtered_ports,
-        )
-        await self.sync_task.setup()
-        return self.sync_task
+            profile = self.config.profiles[self._active_profile_id]
+            profile_device_ids = self.config.get_profile_device_ids(self._active_profile_id)
+            ports = {
+                dev_id: port for dev_id, port in self.config.daq.acq_ports.items() if dev_id in profile_device_ids
+            }
+
+            task = SyncTask(
+                uid=f"sync_{self._active_profile_id}",
+                daq=self.daq,
+                timing=profile.daq.timing,
+                ports=ports,
+            )
+            await task.setup()
+            self._sync_task = task
+
+        return self._sync_task
+
+    def get_written_waveforms(self, target_points: int | None = None) -> dict[str, list[float]]:
+        """Get visualization traces from the currently-running sync task.
+
+        Returns an empty dict if the sync task has not been started yet.
+        """
+        if self._sync_task is None:
+            return {}
+        try:
+            return self._sync_task.get_written_waveforms(target_points=target_points)
+        except RuntimeError:
+            return {}
 
     def _active_profile_waveforms(self, *, for_stack: bool = False) -> dict[str, Waveform]:
         """Return waveforms for the active profile, excluding stack_only entries in frame mode."""
@@ -518,22 +536,22 @@ class VoxelRig(Rig):
         if self._mode == RigMode.ACQUIRING:
             raise RuntimeError("Cannot update waveforms while acquiring")
 
-        if self.sync_task is None:
-            return  # next start_preview/stack will build it with current config
+        if self._sync_task is None:
+            return  # no active profile yet
 
         profile = self.config.profiles[self._active_profile_id]
-        shape_changed = profile.daq.timing != self.sync_task.timing
+        shape_changed = profile.daq.timing != self._sync_task.timing
 
         if shape_changed:
-            await self._create_sync_task()  # closes + recreates + sets up
+            task = await self.sync_task(refresh=True)
             if self._mode == RigMode.PREVIEWING:
-                await self.sync_task.start(self._active_profile_waveforms())
+                await task.start(self._active_profile_waveforms())
                 self.log.debug("rebuilt sync task for timing change (preview running)")
             else:
                 self.log.debug("rebuilt sync task scaffold for timing change")
         elif self._mode == RigMode.PREVIEWING:
-            await self.sync_task.stop()
-            await self.sync_task.start(self._active_profile_waveforms())
+            await self._sync_task.stop()
+            await self._sync_task.start(self._active_profile_waveforms())
             self.log.debug("live-updated sync task waveforms")
 
     async def capture_device_props(self, device_id: str) -> dict[str, Any]:
@@ -739,8 +757,8 @@ class VoxelRig(Rig):
         if started:
             await self._enable_channel_lasers()
 
-        self.sync_task = await self._create_sync_task()
-        await self.sync_task.start(self._active_profile_waveforms())
+        task = await self.sync_task()
+        await task.start(self._active_profile_waveforms())
 
     async def _enable_channel_lasers(self) -> None:
         """Enable lasers for all active channels."""
@@ -823,8 +841,8 @@ class VoxelRig(Rig):
         tasks = [self.cameras[cam_id].stop_preview() for cam_id in self.camera_channels if cam_id in self.cameras]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        if self.sync_task:
-            await self.sync_task.stop()
+        if self._sync_task:
+            await self._sync_task.stop()
 
         await self._disable_channel_lasers()
         self._mode = RigMode.IDLE
@@ -898,8 +916,8 @@ class VoxelRig(Rig):
             num_batches = math.ceil(stack.num_frames / batch_z)
             cam_uids = [cam_id for cam_id, _ in channel_cam_map.values()]
 
-            # 4. Create stack sync task (closes any existing one)
-            self.sync_task = await self._create_sync_task(for_stack=True)
+            # 4. Sync task is owned by the active profile — fetch the scaffold once
+            sync_task = await self.sync_task()
             stack_waveforms = self._active_profile_waveforms(for_stack=True)
 
             # 5. Initialize all cameras in parallel (arm + create writers).
@@ -943,18 +961,16 @@ class VoxelRig(Rig):
                     await self.scanning_axis.queue_relative_move(stack.z_step)
 
                 # Fire TTL + capture this batch
-                await self.sync_task.start(stack_waveforms)
+                await sync_task.start(stack_waveforms)
                 per_cam_results = await asyncio.gather(
                     *(self.cameras[uid].capture_batch(num_frames=frames_in_batch) for uid in cam_uids)
                 )
-                await self.sync_task.stop()
+                await sync_task.stop()
 
                 for uid, result in zip(cam_uids, per_cam_results, strict=True):
                     results_by_cam[uid].append(result)
 
-            # 8. Close sync task and tear down stepping
-            await self.sync_task.close()
-            self.sync_task = None
+            # 8. Tear down stepping (sync_task scaffold stays — owned by active profile)
             await self._disable_channel_lasers()
             await self.scanning_axis.reset_ttl_stepper()
 
@@ -1018,4 +1034,7 @@ class VoxelRig(Rig):
             with suppress(Exception, asyncio.CancelledError):
                 await unsub()
         self._preview_unsubs.clear()
+        if self._sync_task:
+            await self._sync_task.close()
+            self._sync_task = None
         await super().stop()
