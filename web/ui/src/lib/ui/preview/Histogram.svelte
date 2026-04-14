@@ -22,7 +22,7 @@
 
   let {
     label,
-    histData: histogram,
+    histData,
     levelsMin,
     levelsMax,
     onLevelsChange,
@@ -34,9 +34,24 @@
     onVisibilityChange
   }: Props = $props();
 
-  // ── Colormap Colors ────────────────────────────────────────────────
+  // ── Constants ─────────────────────────────────────────────────────
 
+  const svgHeight = 20;
+  const labelWidth = 36;
+  const labelGap = 4;
   const gradientId = `ch-grad-${Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('')}`;
+
+  // ── State ─────────────────────────────────────────────────────────
+
+  let windowMin = $state(0);
+  let windowMax = $state(0);
+  let hasAutoFit = $state(false);
+  let svgWidth = $state(256);
+  let columnWidth = $state(288);
+  let dragging = $state<'min' | 'max' | null>(null);
+  let histContainerEl = $state<HTMLElement | null>(null);
+
+  // ── Derived: Domain ───────────────────────────────────────────────
 
   const colors = $derived.by(() => {
     if (!colormap) return ['#06b6d4'];
@@ -48,44 +63,14 @@
     return ['#06b6d4'];
   });
 
-  // ── Display Window ─────────────────────────────────────────────────
-
-  let windowMin = $state(0);
-  let windowMax = $state(0);
-  let hasAutoFit = $state(false);
-  let prevDTMax = -1;
-
-  $effect.pre(() => {
-    if (dataTypeMax !== prevDTMax) {
-      windowMin = 0;
-      windowMax = dataTypeMax;
-      hasAutoFit = false;
-      prevDTMax = dataTypeMax;
-    }
-  });
-
-  const hasValidData = $derived(!!histogram && histogram.length > 0);
-  const numBins = $derived(histogram?.length || 1);
+  const hasValidData = $derived(!!histData && histData.length > 0);
+  const numBins = $derived(histData?.length || 1);
   const startBin = $derived(Math.floor((windowMin / dataTypeMax) * (numBins - 1)));
   const endBin = $derived(Math.ceil((windowMax / dataTypeMax) * (numBins - 1)));
-
-  // ── Levels ─────────────────────────────────────────────────────────
-
   const minIntensity = $derived(Math.round(levelsMin * dataTypeMax));
   const maxIntensity = $derived(Math.round(levelsMax * dataTypeMax));
 
-  // ── Histogram SVG ─────────────────────────────────────────────────
-
-  let svgWidth = $state(256);
-  const svgHeight = 20;
-
-  const displayHist = $derived.by(() => {
-    if (!hasValidData || !histogram) return [];
-    const slice = histogram.slice(startBin, endBin + 1);
-    const peak = Math.max(...slice);
-    if (peak === 0) return slice.map(() => 0);
-    return slice.map((c) => c / peak);
-  });
+  // ── Mapping: level ↔ pixel X ──────────────────────────────────────
 
   function levelToX(level: number): number {
     if (windowMax === windowMin) return 0;
@@ -93,8 +78,25 @@
     return ((intensity - windowMin) / (windowMax - windowMin)) * svgWidth;
   }
 
+  function xToLevel(clientX: number, rect: DOMRect): number {
+    const x = Math.max(0, Math.min(svgWidth, clientX - rect.left));
+    const rel = x / svgWidth;
+    const intensity = windowMin + rel * (windowMax - windowMin);
+    return intensity / dataTypeMax;
+  }
+
+  // ── Derived: Geometry ─────────────────────────────────────────────
+
   const minHandleX = $derived(Math.max(0, Math.min(svgWidth, levelToX(levelsMin))));
   const maxHandleX = $derived(Math.max(0, Math.min(svgWidth - 2, levelToX(levelsMax))));
+
+  const displayHist = $derived.by(() => {
+    if (!hasValidData || !histData) return [];
+    const slice = histData.slice(startBin, endBin + 1);
+    const peak = Math.max(...slice);
+    if (peak === 0) return slice.map(() => 0);
+    return slice.map((c) => c / peak);
+  });
 
   const bgPoints = $derived.by(() => {
     if (displayHist.length === 0) return '';
@@ -138,122 +140,6 @@
     return `${first.x},${svgHeight} ${fgEntries.map((p) => `${p.x},${p.y}`).join(' ')} ${last.x},${svgHeight}`;
   });
 
-  // ── Drag Interaction ──────────────────────────────────────────────
-
-  let dragging = $state<'min' | 'max' | null>(null);
-
-  function xToLevel(clientX: number, rect: DOMRect): number {
-    const x = Math.max(0, Math.min(svgWidth, clientX - rect.left));
-    const rel = x / svgWidth;
-    const intensity = windowMin + rel * (windowMax - windowMin);
-    return intensity / dataTypeMax;
-  }
-
-  function onHandleDown(e: PointerEvent, handle: 'min' | 'max') {
-    e.preventDefault();
-    (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
-    dragging = handle;
-  }
-
-  function onHandleMove(e: PointerEvent) {
-    if (!dragging) return;
-    const svg = (e.currentTarget as SVGElement).closest('svg');
-    if (!svg) return;
-    const level = xToLevel(e.clientX, svg.getBoundingClientRect());
-
-    const minGap = 1 / dataTypeMax;
-    if (dragging === 'min') {
-      onLevelsChange(Math.max(0, Math.min(level, levelsMax - minGap)), levelsMax);
-    } else {
-      onLevelsChange(levelsMin, Math.min(1, Math.max(level, levelsMin + minGap)));
-    }
-  }
-
-  function onHandleUp(e: PointerEvent) {
-    (e.currentTarget as SVGElement).releasePointerCapture(e.pointerId);
-    dragging = null;
-  }
-
-  // ── Auto Fit & Auto Levels ────────────────────────────────────────
-
-  function autoFit() {
-    if (!hasValidData || !histogram) return;
-    let lo = 0;
-    let hi = numBins - 1;
-    for (let i = 0; i < numBins; i++) {
-      if (histogram[i] > 0) {
-        lo = i;
-        break;
-      }
-    }
-    for (let i = numBins - 1; i >= 0; i--) {
-      if (histogram[i] > 0) {
-        hi = i;
-        break;
-      }
-    }
-    const pad = (hi - lo) * 0.15;
-    windowMin = Math.round((Math.max(0, lo - pad) / (numBins - 1)) * dataTypeMax);
-    windowMax = Math.round((Math.min(numBins - 1, hi + pad) / (numBins - 1)) * dataTypeMax);
-    hasAutoFit = true;
-  }
-
-  $effect(() => {
-    if (hasValidData && !hasAutoFit) autoFit();
-  });
-
-  function autoLevels() {
-    if (!hasValidData || !histogram) return;
-    const result = computeAutoLevels(histogram);
-    if (result) onLevelsChange(result.min, result.max);
-  }
-
-  // ── Scroll-to-Zoom ───────────────────────────────────────────────
-
-  let histContainerEl = $state<HTMLElement | null>(null);
-
-  function onHistWheel(e: WheelEvent) {
-    e.preventDefault();
-
-    const range = windowMax - windowMin;
-    const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85;
-    const newRange = Math.max(range * zoomFactor, dataTypeMax * 0.01);
-
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mouseRel = (e.clientX - rect.left) / rect.width;
-    const pivot = windowMin + range * mouseRel;
-
-    windowMin = Math.max(0, Math.round(pivot - newRange * mouseRel));
-    windowMax = Math.min(dataTypeMax, Math.round(pivot + newRange * (1 - mouseRel)));
-  }
-
-  useEventListener(() => histContainerEl, 'wheel', onHistWheel, { passive: false });
-
-  // ── Floating Level Inputs ─────────────────────────────────────────
-
-  const labelWidth = 36;
-  const labelGap = 4;
-
-  function commitFloatingInput(e: Event, handle: 'min' | 'max') {
-    const val = parseInt((e.target as HTMLInputElement).value);
-    if (isNaN(val)) return;
-    if (handle === 'min') {
-      onLevelsChange(Math.max(0, Math.min(val, maxIntensity - 1)) / dataTypeMax, levelsMax);
-    } else {
-      onLevelsChange(levelsMin, Math.min(dataTypeMax, Math.max(val, minIntensity + 1)) / dataTypeMax);
-    }
-  }
-
-  function commitWindowInput(e: Event, bound: 'min' | 'max') {
-    const val = parseInt((e.target as HTMLInputElement).value);
-    if (isNaN(val)) return;
-    if (bound === 'min') {
-      windowMin = Math.max(0, Math.min(val, windowMax - 1));
-    } else {
-      windowMax = Math.min(dataTypeMax, Math.max(val, windowMin + 1));
-    }
-  }
-
   const labelPositions = $derived.by(() => {
     const containerW = svgWidth;
 
@@ -288,10 +174,155 @@
     return { minLeft, maxLeft };
   });
 
-  // ── Layout ────────────────────────────────────────────────────────
+  // ── Handlers: Drag ────────────────────────────────────────────────
 
-  let columnWidth = $state(288);
+  function onHandleDown(e: PointerEvent, handle: 'min' | 'max') {
+    e.preventDefault();
+    (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+    dragging = handle;
+  }
+
+  function onHandleMove(e: PointerEvent) {
+    if (!dragging) return;
+    const svg = (e.currentTarget as SVGElement).closest('svg');
+    if (!svg) return;
+    const level = xToLevel(e.clientX, svg.getBoundingClientRect());
+
+    const minGap = 1 / dataTypeMax;
+    if (dragging === 'min') {
+      onLevelsChange(Math.max(0, Math.min(level, levelsMax - minGap)), levelsMax);
+    } else {
+      onLevelsChange(levelsMin, Math.min(1, Math.max(level, levelsMin + minGap)));
+    }
+  }
+
+  function onHandleUp(e: PointerEvent) {
+    (e.currentTarget as SVGElement).releasePointerCapture(e.pointerId);
+    dragging = null;
+  }
+
+  // ── Handlers: Wheel Zoom ──────────────────────────────────────────
+
+  function onHistWheel(e: WheelEvent) {
+    e.preventDefault();
+
+    const range = windowMax - windowMin;
+    const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85;
+    const newRange = Math.max(range * zoomFactor, dataTypeMax * 0.01);
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mouseRel = (e.clientX - rect.left) / rect.width;
+    const pivot = windowMin + range * mouseRel;
+
+    windowMin = Math.max(0, Math.round(pivot - newRange * mouseRel));
+    windowMax = Math.min(dataTypeMax, Math.round(pivot + newRange * (1 - mouseRel)));
+  }
+
+  useEventListener(() => histContainerEl, 'wheel', onHistWheel, { passive: false });
+
+  // ── Handlers: Auto Fit & Auto Levels ──────────────────────────────
+
+  function autoFit() {
+    if (!hasValidData || !histData) return;
+    let lo = 0;
+    let hi = numBins - 1;
+    for (let i = 0; i < numBins; i++) {
+      if (histData[i] > 0) {
+        lo = i;
+        break;
+      }
+    }
+    for (let i = numBins - 1; i >= 0; i--) {
+      if (histData[i] > 0) {
+        hi = i;
+        break;
+      }
+    }
+    const pad = (hi - lo) * 0.15;
+    windowMin = Math.round((Math.max(0, lo - pad) / (numBins - 1)) * dataTypeMax);
+    windowMax = Math.round((Math.min(numBins - 1, hi + pad) / (numBins - 1)) * dataTypeMax);
+    hasAutoFit = true;
+  }
+
+  function autoLevels() {
+    if (!hasValidData || !histData) return;
+    const result = computeAutoLevels(histData);
+    if (result) onLevelsChange(result.min, result.max);
+  }
+
+  // ── Handlers: Input Commits ───────────────────────────────────────
+
+  function commitFloatingInput(e: Event, handle: 'min' | 'max') {
+    const val = parseInt((e.target as HTMLInputElement).value);
+    if (isNaN(val)) return;
+    if (handle === 'min') {
+      onLevelsChange(Math.max(0, Math.min(val, maxIntensity - 1)) / dataTypeMax, levelsMax);
+    } else {
+      onLevelsChange(levelsMin, Math.min(dataTypeMax, Math.max(val, minIntensity + 1)) / dataTypeMax);
+    }
+  }
+
+  function commitWindowInput(e: Event, bound: 'min' | 'max') {
+    const val = parseInt((e.target as HTMLInputElement).value);
+    if (isNaN(val)) return;
+    if (bound === 'min') {
+      windowMin = Math.max(0, Math.min(val, windowMax - 1));
+    } else {
+      windowMax = Math.min(dataTypeMax, Math.max(val, windowMin + 1));
+    }
+  }
+
+  // ── Effects ───────────────────────────────────────────────────────
+
+  $effect.pre(() => {
+    windowMin = 0;
+    windowMax = dataTypeMax;
+    hasAutoFit = false;
+  });
+
+  $effect(() => {
+    if (hasValidData && !hasAutoFit) autoFit();
+  });
 </script>
+
+{#snippet handle(x: number, color: string, ariaLabel: string, value: number, kind: 'min' | 'max')}
+  <line
+    x1={x}
+    y1="0"
+    x2={x}
+    y2={svgHeight}
+    stroke={color}
+    stroke-width="1"
+    stroke-opacity="0.9"
+    pointer-events="none"
+  />
+  <line
+    x1={x}
+    y1="0"
+    x2={x}
+    y2={svgHeight}
+    stroke="transparent"
+    stroke-width="12"
+    class="cursor-ew-resize"
+    onpointerdown={(e) => onHandleDown(e, kind)}
+    onpointermove={onHandleMove}
+    onpointerup={onHandleUp}
+    role="slider"
+    tabindex="0"
+    aria-label={ariaLabel}
+    aria-valuenow={value}
+  />
+{/snippet}
+
+{#snippet floatingLabel(left: number, value: number, kind: 'min' | 'max')}
+  <input
+    type="text"
+    class="hist-input floating-input"
+    style:left="{left}px"
+    {value}
+    onchange={(e) => commitFloatingInput(e, kind)}
+  />
+{/snippet}
 
 {#snippet histSvg()}
   {#if hasValidData}
@@ -321,63 +352,9 @@
         <polyline points={fgPoints} fill="none" stroke="url(#{gradientId})" stroke-width="1.5" class="non-scaling" />
       {/if}
 
-      <!-- Min handle -->
-      <line
-        x1={minHandleX}
-        y1="0"
-        x2={minHandleX}
-        y2={svgHeight}
-        stroke="#10b981"
-        stroke-width="1"
-        stroke-opacity="0.9"
-        pointer-events="none"
-      />
-      <line
-        x1={minHandleX}
-        y1="0"
-        x2={minHandleX}
-        y2={svgHeight}
-        stroke="transparent"
-        stroke-width="12"
-        class="cursor-ew-resize"
-        onpointerdown={(e) => onHandleDown(e, 'min')}
-        onpointermove={onHandleMove}
-        onpointerup={onHandleUp}
-        role="slider"
-        tabindex="0"
-        aria-label="Minimum level"
-        aria-valuenow={minIntensity}
-      />
+      {@render handle(minHandleX, '#10b981', 'Minimum level', minIntensity, 'min')}
+      {@render handle(maxHandleX, '#f59e0b', 'Maximum level', maxIntensity, 'max')}
 
-      <!-- Max handle -->
-      <line
-        x1={maxHandleX}
-        y1="0"
-        x2={maxHandleX}
-        y2={svgHeight}
-        stroke="#f59e0b"
-        stroke-width="1"
-        stroke-opacity="0.9"
-        pointer-events="none"
-      />
-      <line
-        x1={maxHandleX}
-        y1="0"
-        x2={maxHandleX}
-        y2={svgHeight}
-        stroke="transparent"
-        stroke-width="12"
-        class="cursor-ew-resize"
-        onpointerdown={(e) => onHandleDown(e, 'max')}
-        onpointermove={onHandleMove}
-        onpointerup={onHandleUp}
-        role="slider"
-        tabindex="0"
-        aria-label="Maximum level"
-        aria-valuenow={maxIntensity}
-      />
-
-      <!-- Dimming outside range -->
       <rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
       <rect
         x={maxHandleX}
@@ -409,25 +386,11 @@
     </div>
   {/if}
 
-  <!-- Floating Level Inputs -->
   <div class="floating-row relative" class:invisible={!hasValidData}>
-    <input
-      type="text"
-      class="hist-input floating-input"
-      style:left="{labelPositions.minLeft}px"
-      value={minIntensity}
-      onchange={(e) => commitFloatingInput(e, 'min')}
-    />
-    <input
-      type="text"
-      class="hist-input floating-input"
-      style:left="{labelPositions.maxLeft}px"
-      value={maxIntensity}
-      onchange={(e) => commitFloatingInput(e, 'max')}
-    />
+    {@render floatingLabel(labelPositions.minLeft, minIntensity, 'min')}
+    {@render floatingLabel(labelPositions.maxLeft, maxIntensity, 'max')}
   </div>
 
-  <!-- Histogram -->
   <ContextMenu.Root>
     <ContextMenu.Trigger
       class="relative border-b border-b-input bg-transparent"
@@ -457,7 +420,6 @@
     </ContextMenu.Content>
   </ContextMenu.Root>
 
-  <!-- Window Range + Label -->
   <div class="flex -translate-y-px items-center justify-between">
     <input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
 
