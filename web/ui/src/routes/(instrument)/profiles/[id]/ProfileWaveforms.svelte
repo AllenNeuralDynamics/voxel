@@ -600,7 +600,7 @@
                 class="handle-input"
                 style="position:absolute; right:4px; top:{vLabelPositions.maxTop -
                   7}px; color:{handleInputColors.vmax};"
-                value="{amp.toFixed(2)} V"
+                value="{amp.toFixed(4)} V"
                 onchange={(e) => {
                   const v = parseFloat((e.target as HTMLInputElement).value);
                   if (!isNaN(v)) setEditingAmplitude(v);
@@ -611,7 +611,7 @@
                 class="handle-input"
                 style="position:absolute; right:4px; top:{vLabelPositions.minTop -
                   7}px; color:{handleInputColors.vmin};"
-                value="{offset.toFixed(2)} V"
+                value="{offset.toFixed(4)} V"
                 onchange={(e) => {
                   const v = parseFloat((e.target as HTMLInputElement).value);
                   if (!isNaN(v)) setEditingOffset(v);
@@ -623,7 +623,7 @@
                 class="handle-input"
                 style="position:absolute; right:4px; top:{vLabelPositions.maxTop -
                   7}px; color:{handleInputColors.vmax};"
-                value="{editingWaveform.voltage.max.toFixed(2)} V"
+                value="{editingWaveform.voltage.max.toFixed(4)} V"
                 onchange={(e) => {
                   const v = parseFloat((e.target as HTMLInputElement).value);
                   if (!isNaN(v)) setEditingVoltage('max', v);
@@ -634,7 +634,7 @@
                 class="handle-input"
                 style="position:absolute; right:4px; top:{vLabelPositions.minTop -
                   7}px; color:{handleInputColors.vmin};"
-                value="{editingWaveform.voltage.min.toFixed(2)} V"
+                value="{editingWaveform.voltage.min.toFixed(4)} V"
                 onchange={(e) => {
                   const v = parseFloat((e.target as HTMLInputElement).value);
                   if (!isNaN(v)) setEditingVoltage('min', v);
@@ -646,7 +646,7 @@
               type="text"
               class="handle-input text-left"
               style="position:absolute; top:2px; left:{wLabelPositions.minLeft}px; color:{handleInputColors.wmin};"
-              value={editingWaveform.window.min.toFixed(2)}
+              value={editingWaveform.window.min.toFixed(4)}
               onchange={(e) => {
                 const v = parseFloat((e.target as HTMLInputElement).value);
                 if (!isNaN(v)) updateEditingWindow('min', Math.max(0, Math.min(1, v)));
@@ -656,7 +656,7 @@
               type="text"
               class="handle-input text-left"
               style="position:absolute; top:2px; left:{wLabelPositions.maxLeft}px; color:{handleInputColors.wmax};"
-              value={editingWaveform.window.max.toFixed(2)}
+              value={editingWaveform.window.max.toFixed(4)}
               onchange={(e) => {
                 const v = parseFloat((e.target as HTMLInputElement).value);
                 if (!isNaN(v)) updateEditingWindow('max', Math.max(0, Math.min(1, v)));

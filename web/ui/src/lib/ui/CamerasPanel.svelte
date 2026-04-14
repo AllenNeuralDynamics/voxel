@@ -32,13 +32,12 @@
 
   // ── Camera lists ──
 
-  const allCameras = $derived(Object.values(session.cameras));
   const profileCameraIds = $derived.by(() => {
     if (!profile) return new Set<string>();
     return new Set(profile.channels.map((chId) => session.rig_cfg.channels[chId]?.detection).filter(Boolean));
   });
-  const cameras = $derived(allCameras.filter((c) => profileCameraIds.has(c.deviceId)));
-  const otherCameras = $derived(allCameras.filter((c) => !profileCameraIds.has(c.deviceId)));
+  const cameras = $derived(Object.values(session.cameras).filter((c) => profileCameraIds.has(c.deviceId)));
+  const otherCameras = $derived(Object.values(session.cameras).filter((c) => !profileCameraIds.has(c.deviceId)));
 
   // ── Linking state ──
 

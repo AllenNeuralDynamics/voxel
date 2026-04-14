@@ -113,7 +113,7 @@ class SawtoothWave(PeriodicWaveform):
         phi = self._phase_array(n)
         raw = np.where(
             phi < self.symmetry,
-            2 * phi / self.symmetry - 1,
+            2 * phi / max(self.symmetry, 1e-6) - 1,
             1 - 2 * (phi - self.symmetry) / (1 - self.symmetry) if (1 - self.symmetry) != 0 else -1,
         )
         return (raw + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
