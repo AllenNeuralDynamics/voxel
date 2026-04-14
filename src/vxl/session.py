@@ -1,7 +1,5 @@
 """Session runtime — manages rig interaction, stacks, metadata, and acquisition."""
 
-import asyncio
-import contextlib
 import datetime
 import logging
 from pathlib import Path
@@ -39,33 +37,9 @@ class Session:
         self._fov_size: tuple[float, float] | None = rig.get_topic_value("fov")
         self._unsubscribe_fov = rig.subscribe("fov", self._on_fov_changed)
 
-        self._autosave_task: asyncio.Task[None] | None = None
-        self._last_persisted_dump: dict[str, Any] | None = None
-
     async def start(self) -> None:
-        """Start the autosave loop. Must be called from an async context."""
-        if self._autosave_task is not None:
-            return
-        self._last_persisted_dump = self._config.model_dump(mode="json")
-        self._autosave_task = asyncio.create_task(self._autosave_loop())
-
-    async def _autosave_loop(self) -> None:
-        while True:
-            try:
-                await asyncio.sleep(self._AUTOSAVE_INTERVAL)
-                await self.save()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self._log.exception("Autosave tick failed")
-
-    async def save(self) -> None:
-        """Persist the config if it has changed since the last write. Idempotent."""
-        current = self._config.model_dump(mode="json")
-        if current == self._last_persisted_dump:
-            return
-        await self._store.asave()
-        self._last_persisted_dump = current
+        """Begin autosaving the config through the store."""
+        await self._store.start_autosave(self._AUTOSAVE_INTERVAL)
 
     # ==================== Properties ====================
 
@@ -465,13 +439,8 @@ class Session:
     # ==================== Lifecycle ====================
 
     async def close(self) -> None:
-        """Save final state and stop rig."""
+        """Stop autosaving (with a final flush), unsubscribe, and stop the rig."""
         self._unsubscribe_fov()
-        if self._autosave_task is not None:
-            self._autosave_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._autosave_task
-            self._autosave_task = None
-        await self.save()
+        await self._store.stop_autosave()
         await self._rig.stop()
         self._log.info("Session closed")

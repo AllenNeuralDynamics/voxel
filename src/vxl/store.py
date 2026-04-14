@@ -5,13 +5,14 @@ Catalog: discovers sessions/templates and creates stores.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, final
 
 from pydantic import BaseModel, Field
 from ruyaml import YAML
@@ -37,7 +38,18 @@ def _make_yaml() -> YAML:
 
 
 class SessionStore(ABC):
-    """Base class for session config persistence."""
+    """Base class for session config persistence.
+
+    Subclasses implement sync ``load()`` / ``save()``. The async write path —
+    dedup, locking, and the optional autosave loop — lives here and is marked
+    ``@final`` so callers get consistent semantics regardless of backend.
+    """
+
+    def __init__(self) -> None:
+        self._last_persisted_dump: dict[str, Any] | None = None
+        self._autosave_task: asyncio.Task[None] | None = None
+        self._save_lock = asyncio.Lock()
+        self._log = logging.getLogger(self.__class__.__name__)
 
     @property
     @abstractmethod
@@ -49,13 +61,50 @@ class SessionStore(ABC):
     @abstractmethod
     def save(self) -> None: ...
 
+    @final
     async def aload(self) -> SessionConfig:
-        """Async load — runs sync load in a thread."""
-        return await asyncio.to_thread(self.load)
+        """Async load — runs sync load in a thread and seeds the dedup cache."""
+        cfg = await asyncio.to_thread(self.load)
+        self._last_persisted_dump = cfg.model_dump(mode="json")
+        return cfg
 
-    async def asave(self) -> None:
-        """Async save — runs sync save in a thread."""
-        await asyncio.to_thread(self.save)
+    @final
+    async def asave(self) -> bool:
+        """Save if config changed since last persist. Returns True iff written."""
+        async with self._save_lock:
+            current = self.config.model_dump(mode="json")
+            if current == self._last_persisted_dump:
+                return False
+            await asyncio.to_thread(self.save)
+            self._last_persisted_dump = current
+            return True
+
+    @final
+    async def start_autosave(self, interval: float) -> None:
+        """Begin periodic ``asave()`` at ``interval`` seconds. Idempotent."""
+        if self._autosave_task is not None:
+            return
+        self._autosave_task = asyncio.create_task(self._autosave_loop(interval))
+
+    @final
+    async def stop_autosave(self) -> None:
+        """Cancel the autosave loop and perform a final ``asave()``. Idempotent."""
+        if self._autosave_task is not None:
+            self._autosave_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._autosave_task
+            self._autosave_task = None
+        await self.asave()
+
+    async def _autosave_loop(self, interval: float) -> None:
+        while True:
+            try:
+                await asyncio.sleep(interval)
+                await self.asave()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self._log.exception("Autosave tick failed")
 
 
 # ==================== Listing Types ====================
@@ -141,6 +190,7 @@ class YamlSessionStore(SessionStore):
     """
 
     def __init__(self, path: Path) -> None:
+        super().__init__()
         self._path = path
         self._config: SessionConfig | None = None
         self._raw_data: dict[str, Any] | None = None
@@ -167,6 +217,7 @@ class YamlSessionStore(SessionStore):
 
         self._raw_data = raw_data
         self._config = SessionConfig.model_validate(raw_data)
+        self._last_persisted_dump = self._config.model_dump(mode="json")
         return self._config
 
     def initialize(self, config: SessionConfig, raw_data: dict[str, Any] | None = None) -> None:
@@ -180,6 +231,7 @@ class YamlSessionStore(SessionStore):
         self._config = config
         self._raw_data = raw_data
         self.save()
+        self._last_persisted_dump = config.model_dump(mode="json")
 
     def save(self) -> None:
         """Save config to YAML, preserving anchors if available.
