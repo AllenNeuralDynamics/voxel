@@ -71,8 +71,6 @@
 
   // ── Levels ─────────────────────────────────────────────────────────
 
-  const minBin = $derived(Math.round(levelsMin * (numBins - 1)));
-  const maxBin = $derived(Math.round(levelsMax * (numBins - 1)));
   const minIntensity = $derived(Math.round(levelsMin * dataTypeMax));
   const maxIntensity = $derived(Math.round(levelsMax * dataTypeMax));
 
@@ -89,15 +87,14 @@
     return slice.map((c) => c / peak);
   });
 
-  function binToX(bin: number): number {
-    if (endBin === startBin) return 0;
-    if (bin <= startBin) return 0;
-    if (bin >= endBin) return svgWidth;
-    return ((bin - startBin) / (endBin - startBin)) * svgWidth;
+  function levelToX(level: number): number {
+    if (windowMax === windowMin) return 0;
+    const intensity = level * dataTypeMax;
+    return ((intensity - windowMin) / (windowMax - windowMin)) * svgWidth;
   }
 
-  const minHandleX = $derived(binToX(minBin));
-  const maxHandleX = $derived(Math.min(binToX(maxBin), svgWidth - 2));
+  const minHandleX = $derived(Math.max(0, Math.min(svgWidth, levelToX(levelsMin))));
+  const maxHandleX = $derived(Math.max(0, Math.min(svgWidth - 2, levelToX(levelsMax))));
 
   const bgPoints = $derived.by(() => {
     if (displayHist.length === 0) return '';
@@ -111,18 +108,25 @@
   });
 
   const fgEntries = $derived.by(() => {
-    if (displayHist.length === 0) return [];
-    return displayHist
-      .map((v, i) => {
-        const actualBin = startBin + i;
-        if (actualBin >= minBin && actualBin <= maxBin) {
-          const x = (i / (displayHist.length - 1 || 1)) * svgWidth;
-          const y = svgHeight - v * svgHeight;
-          return { x, y };
-        }
-        return null;
-      })
-      .filter((p): p is { x: number; y: number } => p !== null);
+    if (displayHist.length < 2) return [];
+    const step = svgWidth / (displayHist.length - 1);
+    const yAt = (x: number): number => {
+      const fIdx = x / step;
+      const i0 = Math.max(0, Math.min(displayHist.length - 1, Math.floor(fIdx)));
+      const i1 = Math.min(i0 + 1, displayHist.length - 1);
+      const t = fIdx - i0;
+      const v = displayHist[i0] + (displayHist[i1] - displayHist[i0]) * t;
+      return svgHeight - v * svgHeight;
+    };
+    const entries: { x: number; y: number }[] = [{ x: minHandleX, y: yAt(minHandleX) }];
+    for (let i = 0; i < displayHist.length; i++) {
+      const x = i * step;
+      if (x > minHandleX && x < maxHandleX) {
+        entries.push({ x, y: svgHeight - displayHist[i] * svgHeight });
+      }
+    }
+    entries.push({ x: maxHandleX, y: yAt(maxHandleX) });
+    return entries;
   });
 
   const fgPoints = $derived(fgEntries.map((p) => `${p.x},${p.y}`).join(' '));
@@ -141,8 +145,8 @@
   function xToLevel(clientX: number, rect: DOMRect): number {
     const x = Math.max(0, Math.min(svgWidth, clientX - rect.left));
     const rel = x / svgWidth;
-    const bin = startBin + rel * (endBin - startBin);
-    return bin / (numBins - 1);
+    const intensity = windowMin + rel * (windowMax - windowMin);
+    return intensity / dataTypeMax;
   }
 
   function onHandleDown(e: PointerEvent, handle: 'min' | 'max') {
@@ -157,10 +161,11 @@
     if (!svg) return;
     const level = xToLevel(e.clientX, svg.getBoundingClientRect());
 
+    const minGap = 1 / dataTypeMax;
     if (dragging === 'min') {
-      onLevelsChange(Math.max(0, Math.min(level, levelsMax - 0.001)), levelsMax);
+      onLevelsChange(Math.max(0, Math.min(level, levelsMax - minGap)), levelsMax);
     } else {
-      onLevelsChange(levelsMin, Math.min(1, Math.max(level, levelsMin + 0.001)));
+      onLevelsChange(levelsMin, Math.min(1, Math.max(level, levelsMin + minGap)));
     }
   }
 
