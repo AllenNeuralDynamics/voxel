@@ -1,11 +1,8 @@
-"""Session-level service for Voxel acquisition control.
+"""Session service — composes peer services, owns WS router, handles session/grid/output REST.
 
-This service owns the Session and RigService, handling:
-- Session state management
-- Acquisition control
-- Session info/status/metadata endpoints
-
-Plan and rig endpoints are in their own modules.
+Peer services (profiles, preview, devices, stacks, acquisition) are constructed
+here and exposed as attributes. Inbound WS messages flow through ``handle_message``
+which delegates via ``WsRouter``.
 """
 
 import logging
@@ -13,269 +10,272 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from vxl import AcquisitionConfig, RigMode, Session
+from vxl import Session
 from vxl.camera.preview import PreviewConfig
 from vxl.config import GridConfig
-from vxl.metadata import discover_metadata_targets, resolve_metadata_class
-from vxl.stack import Stack, StackStatus
-from vxlib import fire_and_forget
+from vxl.metadata import resolve_metadata_class
+from vxl.session import SessionMode
 
-from .rig import BroadcastCallback, RigService
+from .acquisition import AcquisitionService
+from .devices import DevicesService, DevicesSnapshot, snapshot_devices
+from .preview import PreviewService
+from .profiles import ProfilesService
+from .stacks import StacksService
+from .ws import BroadcastCallback, WsRouter
 
-info_router = APIRouter(prefix="/session", tags=["session"])
 log = logging.getLogger(__name__)
+info_router = APIRouter(tags=["session"])
 
 
 def _utc_timestamp() -> str:
-    """Return an ISO 8601 timestamp in UTC."""
     return datetime.now(UTC).isoformat()
 
 
-class SessionDetails(BaseModel):
-    """Active session details — config + metadata schema."""
+# ==================== Serialization models ====================
 
+
+class SessionDetails(BaseModel):
     config: dict[str, Any]
     metadata_schema: dict[str, Any]
+    devices: DevicesSnapshot
 
 
 class SessionStateUpdate(BaseModel):
-    """Dynamic session state broadcast via WebSocket."""
-
     active_profile_id: str | None
-    mode: RigMode
-    preview: dict[str, PreviewConfig] = Field(default_factory=dict)
+    mode: SessionMode
+    preview: dict[str, PreviewConfig] = {}
     metadata: dict[str, Any]
-    acq: AcquisitionConfig
-    grid: GridConfig
-    stacks: dict[str, Stack]
+    plan: dict[str, Any]
+    output: dict[str, Any]
+    grid: dict[str, Any]
+    stacks: dict[str, Any]
     stack_order: list[str]
     fov: tuple[float, float] | None = None
     timestamp: str
 
 
+# ==================== Service ====================
+
+
 class SessionService:
-    """Session-level service owning Session and RigService.
+    """Composition root for per-service REST + WS. Owns the inbound WS router."""
 
-    Receives a broadcast callback from AppService for client communication.
-    """
-
-    def __init__(
-        self,
-        session: Session,
-        broadcast: BroadcastCallback,
-    ):
+    def __init__(self, session: Session, broadcast: BroadcastCallback) -> None:
         self.session = session
         self.broadcast = broadcast
 
-        # Subscribe to FOV changes to trigger status broadcasts
-        self._unsubscribe_fov = session.rig.subscribe("fov", self._on_fov_changed)
+        # Compose peers
+        self.profiles = ProfilesService(session, broadcast)
+        self.preview = PreviewService(session, broadcast)
+        self.devices = DevicesService(session, broadcast)
+        self.stacks = StacksService(session, broadcast)
+        self.acquisition = AcquisitionService(session, broadcast)
 
-        # Compose RigService with broadcast callback
-        self.rig_service = RigService(
-            rig=session.rig,
-            broadcast=broadcast,
-        )
+        # WS router — delegates by topic prefix
+        self._router = WsRouter([self.profiles, self.preview, self.devices, self.stacks, self.acquisition])
 
-    async def _on_fov_changed(self, _fov: tuple[float, float]) -> None:
-        """Broadcast updated status when FOV changes."""
-        self.broadcast({}, with_status=True)
+        # Subscribe to FOV changes for status broadcasts
+        self._unsub_fov = session.rig.profiles.fov_changed.subscribe(self._on_fov_changed)
 
-    # ==================== Info & Status ====================
+    async def open(self) -> None:
+        """Finish async setup — must be awaited after construction.
 
-    def get_session_details(self) -> SessionDetails:
-        """Get session details (fetched once at session start)."""
-        cls = resolve_metadata_class(self.session.metadata_target)
+        Sub-services with async subscriptions (currently just ``devices``)
+        complete them here.
+        """
+        await self.devices.open()
+
+    async def close(self) -> None:
+        """Tear down all peer services in reverse construction order. No broadcasts.
+
+        Each sub-service is closed independently; one failure doesn't block siblings.
+        Call this before backend session teardown (VoxelApp.close_session) so the
+        rig is still alive while subscriptions are unwired.
+        """
+        self._unsub_fov()
+        for close in (
+            self.acquisition.close,
+            self.stacks.close,
+            self.devices.close,
+            self.preview.close,
+            self.profiles.close,
+        ):
+            try:
+                await close()
+            except Exception:
+                log.exception("Error in %s", close.__qualname__)
+
+    async def stop_preview_for_idle(self) -> None:
+        """Stop preview when the last WS client disconnects (bleaching safety). No broadcast."""
+        await self.preview.close()
+
+    # ---- WS ----
+
+    async def handle_message(self, sender_id: str, topic: str, payload: dict[str, Any]) -> None:
+        try:
+            await self._router.dispatch(sender_id, topic, payload)
+        except Exception as e:
+            log.exception("Error handling WS message %s", topic)
+            self.broadcast({"topic": "error", "payload": {"error": str(e), "topic": topic}})
+
+    # ---- Status ----
+
+    async def get_session_details(self) -> SessionDetails:
+        cls = resolve_metadata_class(self.session.metadata_schema)
         return SessionDetails(
             config=self.session.config.model_dump(mode="json"),
             metadata_schema=cls.model_json_schema(),
+            devices=await snapshot_devices(self.session),
         )
 
     async def get_status(self) -> SessionStateUpdate:
-        """Get current dynamic session status."""
-        preview = await self.session.rig.get_channel_preview_configs()
-
-        try:
-            fov = self.session.get_fov_size()
-        except ValueError:
-            fov = None
-
+        preview_configs = await self.preview.session.preview.get_channel_preview_configs()
+        profiles = self.session.rig.profiles
         return SessionStateUpdate(
-            active_profile_id=self.session.rig.active_profile_id,
-            mode=self.session.rig.mode,
+            active_profile_id=profiles.active_id,
+            mode=self.session.mode,
+            preview=preview_configs,
             metadata=self.session.metadata,
-            acq=self.session.acq,
-            grid=self.session.grid,
-            stacks=self.session.stacks,
-            stack_order=self.session.compute_stack_order(),
-            fov=fov,
-            preview=preview,
+            plan=self.session.config.plan.model_dump(mode="json"),
+            output=self.session.config.output.model_dump(mode="json"),
+            grid=self.session.config.grid.model_dump(mode="json"),
+            stacks={s.stack_id: s.model_dump() for s in self.session.stacks},
+            stack_order=self.session.stacks.compute_order(),
+            fov=profiles.fov,
             timestamp=_utc_timestamp(),
         )
 
-    # ==================== Message Handling ====================
+    # ---- Private ----
 
-    async def handle_message(self, client_id: str, topic: str, payload: dict[str, Any]) -> None:
-        """Handle incoming message from a client.
-
-        Only handles rig-level WS topics (preview/*, device/*, profile/update).
-        Acquisition control and plan topics are REST-only.
-        """
-        # Try rig service first (preview/*, device/*, profile/update)
-        if await self.rig_service.handle_message(client_id, topic, payload):
-            return
-
-        log.warning("Unknown topic from client %s: %s", client_id, topic)
-
-    # ==================== Acquisition ====================
-
-    def start_acquisition(self, stack_id: str | None = None) -> None:
-        """Launch acquisition as a background task."""
-        if stack_id:
-            fire_and_forget(self._run_single_acquisition(stack_id), log=log)
-        else:
-            fire_and_forget(self._run_full_acquisition(), log=log)
-
-    async def _run_single_acquisition(self, stack_id: str) -> None:
-        """Run acquisition for a single stack."""
-        try:
-            self.broadcast(
-                {"topic": "acq/progress", "payload": {"status": "started", "stack_id": stack_id}},
-                with_status=True,
-            )
-            result = await self.session.acquire_stack(stack_id)
-            self.broadcast(
-                {
-                    "topic": "acq/progress",
-                    "payload": {
-                        "status": "completed" if result.status == StackStatus.COMPLETED else "failed",
-                        "stack_id": stack_id,
-                        "error": result.error_message,
-                    },
-                },
-                with_status=True,
-            )
-        except Exception as e:
-            log.exception(f"Acquisition failed for {stack_id}")
-            self.broadcast(
-                {"topic": "acq/progress", "payload": {"status": "failed", "stack_id": stack_id, "error": str(e)}},
-                with_status=True,
-            )
-        # Status broadcast (with_status=True) already includes stacks
-
-    async def _run_full_acquisition(self) -> None:
-        """Run acquisition for all pending stacks."""
-        pending = [s for s in self.session.stacks.values() if s.status == StackStatus.PLANNED]
-        total = len(pending)
-
-        self.broadcast(
-            {"topic": "acq/progress", "payload": {"status": "started", "total": total, "completed": 0}},
-            with_status=True,
-        )
-
-        completed = 0
-        for stack in pending:
-            try:
-                result = await self.session.acquire_stack(stack.stack_id)
-                if result.status == StackStatus.COMPLETED:
-                    completed += 1
-                self.broadcast(
-                    {
-                        "topic": "acq/progress",
-                        "payload": {
-                            "status": "in_progress",
-                            "tile_id": stack.stack_id,
-                            "total": total,
-                            "completed": completed,
-                        },
-                    },
-                    with_status=True,
-                )
-            except Exception as e:
-                log.exception(f"Acquisition failed for {stack.stack_id}")
-                self.broadcast(
-                    {
-                        "topic": "acq/progress",
-                        "payload": {"status": "failed", "tile_id": stack.stack_id, "error": str(e)},
-                    },
-                    with_status=True,
-                )
-            # Status broadcast (with_status=True) already includes stacks
-
-        self.broadcast(
-            {"topic": "acq/progress", "payload": {"status": "completed", "total": total, "completed": completed}},
-            with_status=True,
-        )
+    async def _on_fov_changed(self, _fov: tuple[float, float]) -> None:
+        self.broadcast({}, with_status=True)
 
 
-# ==================== Dependencies ====================
+# ==================== Dependency ====================
 
 
 def get_session_service(request: Request) -> SessionService:
-    """Dependency helper for HTTP routes requiring an active session."""
     app_service = request.app.state.app_service
     if app_service.session_service is None:
         raise HTTPException(status_code=503, detail="No active session")
     return app_service.session_service
 
 
-# ==================== REST Endpoints ====================
+# ==================== Request models ====================
 
 
 class MetadataUpdateRequest(BaseModel):
-    """Request model for updating session metadata."""
-
     metadata: dict[str, Any]
 
 
-class AcquireRequest(BaseModel):
-    """Request model for starting acquisition."""
+class MetadataSchemaRequest(BaseModel):
+    """Wire field ``schema`` maps to Python ``target`` — avoids collision with ``BaseModel.schema``."""
 
-    tile_id: str | None = Field(default=None, description="Specific tile to acquire, or None for all pending")
-
-
-@info_router.get("/details")
-async def get_session_details(service: Annotated[SessionService, Depends(get_session_service)]) -> SessionDetails:
-    """Get session details (fetched once at session start)."""
-    return service.get_session_details()
+    model_config = ConfigDict(populate_by_name=True)
+    target: str = Field(alias="schema", serialization_alias="schema")
 
 
-@info_router.patch("/metadata")
+class GridUpdateRequest(BaseModel):
+    x_offset: float | None = None
+    y_offset: float | None = None
+    overlap_x: float | None = None
+    overlap_y: float | None = None
+
+
+class OutputUpdateRequest(BaseModel):
+    store_path: str | None = None
+    max_level: str | None = None
+    compression: str | None = None
+
+
+# ==================== Session REST ====================
+
+
+@info_router.get("/session/details")
+async def get_session_details(
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> SessionDetails:
+    return await service.get_session_details()
+
+
+@info_router.patch("/session/metadata")
 async def update_metadata(
     request: MetadataUpdateRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> dict[str, Any]:
-    """Update session metadata (annotation fields always, provenance fields only pre-acquisition)."""
     try:
         service.session.update_metadata(request.metadata)
-        service.broadcast({}, with_status=True)
-        return {"metadata": service.session.metadata}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    service.broadcast({}, with_status=True)
+    return {"metadata": service.session.metadata}
 
 
-class MetadataTargetRequest(BaseModel):
-    """Request model for changing the metadata schema class."""
-
-    target: str
-
-
-@info_router.patch("/metadata-target")
-async def update_metadata_target(
-    request: MetadataTargetRequest,
+@info_router.patch("/session/metadata-schema")
+async def update_metadata_schema(
+    request: MetadataSchemaRequest,
     service: Annotated[SessionService, Depends(get_session_service)],
 ) -> SessionDetails:
-    """Change the metadata schema class. Resets metadata to new schema defaults."""
     try:
-        service.session.set_metadata_target(request.target)
-        service.broadcast({}, with_status=True)
-        return service.get_session_details()
+        service.session.set_metadata_schema(request.target)
     except (ValueError, TypeError, ImportError, AttributeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    service.broadcast({}, with_status=True)
+    return await service.get_session_details()
 
 
-@info_router.get("/metadata-targets")
-async def get_metadata_targets() -> dict[str, Any]:
-    """Return available metadata targets for the session metadata schema selector."""
-    return {"targets": discover_metadata_targets()}
+# ==================== Grid REST ====================
+
+
+@info_router.get("/grid")
+async def get_grid(service: Annotated[SessionService, Depends(get_session_service)]) -> GridConfig:
+    return service.session.config.grid
+
+
+@info_router.patch("/grid")
+async def update_grid(
+    request: GridUpdateRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> GridConfig:
+    grid = service.session.config.grid
+    try:
+        if request.x_offset is not None:
+            grid.x_offset = request.x_offset
+        if request.y_offset is not None:
+            grid.y_offset = request.y_offset
+        if request.overlap_x is not None:
+            grid.overlap_x = request.overlap_x
+        if request.overlap_y is not None:
+            grid.overlap_y = request.overlap_y
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    service.broadcast({}, with_status=True)
+    return grid
+
+
+# ==================== Output REST ====================
+
+
+@info_router.get("/output")
+async def get_output(service: Annotated[SessionService, Depends(get_session_service)]) -> dict[str, Any]:
+    return service.session.config.output.model_dump(mode="json")
+
+
+@info_router.patch("/output")
+async def update_output(
+    request: OutputUpdateRequest,
+    service: Annotated[SessionService, Depends(get_session_service)],
+) -> dict[str, Any]:
+    from pathlib import Path  # noqa: PLC0415 — conditional import kept local
+
+    output = service.session.config.output
+    if request.store_path is not None:
+        output.store_path = Path(request.store_path)
+    if request.max_level is not None:
+        output.max_level = request.max_level  # type: ignore[assignment]
+    if request.compression is not None:
+        output.compression = request.compression  # type: ignore[assignment]
+    service.broadcast({}, with_status=True)
+    return output.model_dump(mode="json")

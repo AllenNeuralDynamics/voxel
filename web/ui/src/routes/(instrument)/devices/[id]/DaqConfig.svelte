@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Session } from '$lib/main';
+  import type { Session } from '$lib/app';
   import { cn, sanitizeString } from '$lib/utils';
-  import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
+  import DeviceBrowser from '$lib/device/DeviceBrowser.svelte';
 
   interface Props {
     session: Session;

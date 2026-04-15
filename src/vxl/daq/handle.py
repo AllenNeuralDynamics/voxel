@@ -1,8 +1,7 @@
 """DAQ device handle with typed task operations."""
 
 from rigup.device import DeviceHandle
-
-from vxl.quantity import QuantityRange, VoltageRange
+from vxlib.quantity import QuantityRange, VoltageRange
 
 from .base import AcqSampleMode, PinInfo, TaskInfo, VoxelDaq
 

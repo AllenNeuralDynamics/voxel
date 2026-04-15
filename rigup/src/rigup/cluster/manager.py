@@ -120,7 +120,7 @@ class ClusterManager:
         local_hostnames = {get_local_ip(), "localhost", "127.0.0.1", "::1", None}
         return {uid for uid, cfg in self.nodes.items() if cfg.hostname in local_hostnames}
 
-    async def start(self, connection_timeout: float = 30.0, provision_timeout: float = 30.0):
+    async def open(self, connection_timeout: float = 30.0, provision_timeout: float = 30.0):
         """Start the cluster and provision all nodes.
 
         Args:
@@ -326,37 +326,50 @@ class ClusterManager:
             raise RuntimeError(msg) from e
 
     async def _monitor_node_heartbeats(self, check_interval: float = 5.0, heartbeat_timeout: float = 10.0):
-        """Monitor node heartbeats and log warnings if nodes become unresponsive."""
+        """Consume heartbeats and periodically warn about unresponsive nodes.
+
+        Single-task design: blocks on ``recv_multipart`` with a deadline-derived
+        timeout so heartbeats are processed the moment they arrive (no 5-second
+        batching delay) while age-checks still run on a non-drifting schedule.
+
+        Sole reader of ``self._control_socket`` during steady state; cancelled
+        by ``close()`` before ``_shutdown_nodes`` takes the socket.
+        """
+        next_check = time.monotonic() + check_interval
         while True:
             try:
-                await asyncio.sleep(check_interval)
-
-                current_time = time.time()
-                for node_id, last_heartbeat in self._node_heartbeats.items():
-                    time_since_heartbeat = current_time - last_heartbeat
-
-                    if time_since_heartbeat > heartbeat_timeout:
-                        self.log.warning(
-                            f"Node '{node_id}' heartbeat timeout ({time_since_heartbeat:.1f}s since last heartbeat)",
-                        )
-
+                timeout = max(0.0, next_check - time.monotonic())
                 try:
-                    while True:
-                        parts = await asyncio.wait_for(self._control_socket.recv_multipart(), timeout=0.1)
-                        msg = RigMessage.from_parts(parts)
-                        node_id = msg.identity.decode()
-
-                        if msg.action == NodeAction.HEARTBEAT:
-                            _ = msg.decode_payload(NodeHeartbeat)
-                            self._node_heartbeats[node_id] = time.time()
-
+                    parts = await asyncio.wait_for(
+                        self._control_socket.recv_multipart(),
+                        timeout=timeout,
+                    )
+                    msg = RigMessage.from_parts(parts)
+                    if msg.action == NodeAction.HEARTBEAT:
+                        _ = msg.decode_payload(NodeHeartbeat)
+                        self._node_heartbeats[msg.identity.decode()] = time.time()
                 except TimeoutError:
-                    pass
-
+                    # Deadline reached — check ages, schedule next deadline.
+                    self._check_heartbeat_ages(heartbeat_timeout)
+                    next_check = time.monotonic() + check_interval
             except asyncio.CancelledError:
                 break
             except Exception:
                 self.log.exception("Error in heartbeat monitor")
+                # Back off briefly on unexpected errors so we don't spin if the
+                # socket is in a permanently bad state.
+                with suppress(asyncio.CancelledError):
+                    await asyncio.sleep(1.0)
+
+    def _check_heartbeat_ages(self, heartbeat_timeout: float) -> None:
+        """Log a warning for each node whose last heartbeat is older than the threshold."""
+        current_time = time.time()
+        for node_id, last_heartbeat in self._node_heartbeats.items():
+            time_since_heartbeat = current_time - last_heartbeat
+            if time_since_heartbeat > heartbeat_timeout:
+                self.log.warning(
+                    f"Node '{node_id}' heartbeat timeout ({time_since_heartbeat:.1f}s since last heartbeat)",
+                )
 
     async def _receive_logs(self):
         """Background task to receive logs from nodes and forward to Python logging."""
@@ -373,8 +386,8 @@ class ClusterManager:
         except Exception:
             self.log.exception("Error in log receiver")
 
-    async def stop(self):
-        """Stop all nodes and cleanup."""
+    async def close(self):
+        """Close all nodes and cleanup."""
         self.log.info("Stopping cluster...")
 
         if self._heartbeat_monitor_task:

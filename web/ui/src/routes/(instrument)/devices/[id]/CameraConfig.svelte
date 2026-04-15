@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { Session } from '$lib/main';
+  import type { Session } from '$lib/app';
   import { cn, sanitizeString } from '$lib/utils';
-  import { SliderInput } from '$lib/ui/device';
-  import { Select, SpinBox, Button } from '$lib/ui/kit';
-  import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
+  import { SliderInput } from '$lib/device';
+  import { Select, SpinBox, Button } from '$lib/kit';
+  import DeviceBrowser from '$lib/device/DeviceBrowser.svelte';
 
   const cameraExclusions = {
     props: [

@@ -5,12 +5,13 @@ from typing import Any, Self
 from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel, Field, field_validator, model_validator
 from rigup.device.base import CommandRequest
+from vxlib.quantity import NormalizedRange
 
 from rigup import RigConfig
 from vxl.camera.base import SensorROI
-from vxl.metadata import BASE_METADATA_TARGET
+from vxl.daq import FrameTiming, Waveform
+from vxl.metadata import BASE_METADATA_SCHEMA
 from vxl.stack import Stack, StackOrder
-from vxl.sync import SyncTaskConfig
 
 
 class GridConfig(BaseModel):
@@ -75,9 +76,10 @@ class DetectionPathConfig(OpticalPathConfig):
 class IlluminationPathConfig(OpticalPathConfig): ...
 
 
-class VoxelLayout(BaseModel):
-    detection: dict[str, DetectionPathConfig]
-    illumination: dict[str, IlluminationPathConfig]
+# Not needed
+# class VoxelLayout(BaseModel):
+#     detection: dict[str, DetectionPathConfig]
+#     illumination: dict[str, IlluminationPathConfig]
 
 
 class ChannelConfig(BaseModel):
@@ -98,6 +100,35 @@ class ChannelConfig(BaseModel):
             if v < 200 or v > 2000:
                 raise ValueError(f"emission wavelength out of reasonable range: {v} nm")
         return v
+
+
+class SyncTaskConfig(BaseModel):
+    """Sync task timing and waveform data (without port assignments)."""
+
+    timing: FrameTiming
+    waveforms: dict[str, Waveform]
+    stack_only: list[str] = Field(default_factory=list)
+
+    def get_waveforms(self, for_stack: bool = False) -> dict[str, Waveform]:
+        """Get waveforms filtered by mode. Stack mode gets all, frame mode excludes stack_only."""
+        if for_stack:
+            return self.waveforms
+        return {k: v for k, v in self.waveforms.items() if k not in self.stack_only}
+
+    @model_validator(mode="before")
+    @classmethod
+    def insert_missing_windows(cls, m: Any) -> Any:
+        waveforms = m.get("waveforms", {})
+        timing = m.get("timing")
+        if timing is None:
+            return m
+        duration = timing.get("duration") if isinstance(timing, dict) else getattr(timing, "duration", None)
+        if duration is None:
+            return m
+        for wf in waveforms.values():
+            if isinstance(wf, dict) and "window" not in wf:
+                wf["window"] = NormalizedRange()
+        return m
 
 
 class ProfileConfig(BaseModel):
@@ -387,13 +418,7 @@ class VoxelRigConfig(RigConfig):
 # ==================== Session Config ====================
 
 
-class AcquisitionConfig(BaseModel):
-    """Acquisition configuration: stack ordering, profile management, and storage settings.
-
-    Profile membership is implicit: add_stacks auto-adds a profile to
-    profile_order, removing the last stack auto-removes it.
-    """
-
+class PlanConfig(BaseModel):
     profile_order: list[str] = Field(default_factory=list)
     stack_order: StackOrder = StackOrder.SNAKE_ROW
     sort_by_profile: bool = False
@@ -401,6 +426,12 @@ class AcquisitionConfig(BaseModel):
     default_z_start: float = 0.0  # default Z start for new stacks (µm)
     default_z_end: float = 511.0  # default Z end for new stacks (µm) — 512 frames at 1µm step
 
+    def has_profile(self, profile_id: str) -> bool:
+        """Check if a profile is in the plan."""
+        return profile_id in self.profile_order
+
+
+class OutputConfig(BaseModel):
     # Storage settings. store_path is resolved by Session.store_path
     # (prefers info.data_path when set). batch_z_shards and target_shard_gb
     # are intentionally NOT persisted here — they're runtime pipeline knobs
@@ -410,10 +441,6 @@ class AcquisitionConfig(BaseModel):
     )
     max_level: ScaleLevel = Field(default=ScaleLevel.L3, description="Maximum pyramid downscale level")
     compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
-
-    def has_profile(self, profile_id: str) -> bool:
-        """Check if a profile is in the plan."""
-        return profile_id in self.profile_order
 
 
 class SessionInfo(BaseModel):
@@ -448,21 +475,17 @@ class SessionConfig(BaseModel):
     This model represents the complete session file (.voxel.yaml) with:
     - rig: The full VoxelRigConfig
     - info: Session identity and lifecycle metadata
-    - acq: Acquisition config (profile order, storage settings, z defaults)
+    - plan: Traversal ordering + per-stack defaults
+    - output: Storage path, pyramid level, compression
+    - grid: Grid offsets and overlap
     - stacks: Acquisition stacks (tiles + z-ranges)
     """
 
     rig: VoxelRigConfig
     info: SessionInfo
-    metadata_target: str = Field(default=BASE_METADATA_TARGET, description="Import path for metadata class")
+    metadata_schema: str = Field(default=BASE_METADATA_SCHEMA, description="Import path for metadata class")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Experiment metadata values")
-    acq: AcquisitionConfig = Field(default_factory=AcquisitionConfig)
+    plan: PlanConfig = Field(default_factory=PlanConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
     grid: GridConfig = Field(default_factory=GridConfig)
     stacks: dict[str, Stack] = Field(default_factory=dict)
-
-
-# ==================== System Config ====================
-
-
-# SystemConfig moved to vxl.system — now a BaseSettings that loads ~/.voxel/system.yaml
-# directly and exposes machine-introspected properties alongside user preferences.

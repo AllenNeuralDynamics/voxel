@@ -174,7 +174,7 @@ class ControlPanel(QWidget):
             return []
 
         options: list[SelectOption] = []
-        for profile_id in rig.available_profiles:
+        for profile_id in rig.profiles.available:
             profile = rig.config.profiles.get(profile_id)
             if profile:
                 label = profile.label or display_name(profile_id)
@@ -194,14 +194,14 @@ class ControlPanel(QWidget):
             return
 
         self._profile_select.blockSignals(True)
-        self._profile_select.set_options(self._build_profile_options(), rig.active_profile_id)
+        self._profile_select.set_options(self._build_profile_options(), rig.profiles.active_id)
         self._profile_select.blockSignals(False)
 
     def _on_devices_ready(self) -> None:
         """Initialize controls when devices are ready."""
-        rig = self._app.rig
-        if rig:
-            rig.set_frame_callback(self._on_frame)
+        session = self._app.session
+        if session:
+            session.preview.set_frame_callback(self._on_frame)
         self._refresh_profile_select()
         self.rebuild_channel_sections()
 
@@ -218,7 +218,7 @@ class ControlPanel(QWidget):
         self._channels_box.clear()
 
         # Create new sections for active channels
-        for channel_id, channel_config in rig.active_channels.items():
+        for channel_id, channel_config in rig.profiles.active_channels.items():
             section = ChannelSection(
                 channel_id=channel_id,
                 channel_config=channel_config,
@@ -234,7 +234,7 @@ class ControlPanel(QWidget):
     def _on_profile_selected(self, profile_id: str) -> None:
         """Handle profile selection from dropdown."""
         rig = self._app.rig
-        if not rig or profile_id == rig.active_profile_id:
+        if not rig or profile_id == rig.profiles.active_id:
             return
 
         log.info("Switching profile to: %s", profile_id)
@@ -242,12 +242,12 @@ class ControlPanel(QWidget):
 
     async def _switch_profile(self, profile_id: str) -> None:
         """Switch to a new profile."""
-        rig = self._app.rig
-        if not rig:
+        session = self._app.session
+        if not session:
             return
 
         try:
-            await rig.set_active_profile(profile_id)
+            await session.set_active_profile(profile_id)
             self.profile_changed.emit(profile_id)
             self.rebuild_channel_sections()
             self._app.preview.clear_frames()
@@ -257,15 +257,15 @@ class ControlPanel(QWidget):
             log.exception("Failed to switch profile")
             # Revert selection to current profile
             self._profile_select.blockSignals(True)
-            self._profile_select.set_value(rig.active_profile_id)
+            self._profile_select.set_value(session.rig.profiles.active_id)
             self._profile_select.blockSignals(False)
 
     def _on_viewport_changed(self, x: float, y: float, w: float, h: float) -> None:
-        """Handle viewport changes from preview store - notify rig."""
-        rig = self._app.rig
-        if rig:
+        """Handle viewport changes from preview store - notify preview controller."""
+        session = self._app.session
+        if session:
             viewport = PreviewViewport(x=x, y=y, w=w, h=h)
-            fire_and_forget(rig.update_preview_viewport(viewport), log=log)
+            fire_and_forget(session.preview.update_viewport(viewport), log=log)
 
     def _on_preview_clicked(self) -> None:
         """Toggle preview state."""
@@ -286,16 +286,16 @@ class ControlPanel(QWidget):
         """Start preview streaming."""
         self._auto_leveled_channels.clear()
         self._app.preview.clear_frames()
-        rig = self._app.rig
-        if rig:
+        session = self._app.session
+        if session:
             viewport = self._app.preview.viewport
-            await rig.start_preview(crop=viewport)
+            await session.start_preview(crop=viewport)
 
     async def _stop_preview(self) -> None:
         """Stop preview streaming."""
-        rig = self._app.rig
-        if rig:
-            await rig.stop_preview()
+        session = self._app.session
+        if session:
+            await session.stop_preview()
 
     async def _on_frame(self, topic: str, channel: str, data: bytes) -> None:
         """Frame callback - decode overview frames and send to preview store.
@@ -345,9 +345,9 @@ class ControlPanel(QWidget):
         levels = PreviewLevels.from_histogram(histogram)
         log.info("Auto-levels for %s: min=%.3f, max=%.3f", channel_id, levels.min, levels.max)
 
-        rig = self._app.rig
-        if rig:
-            fire_and_forget(rig.update_preview_levels({channel_id: levels}), log=log)
+        session = self._app.session
+        if session:
+            fire_and_forget(session.preview.update_levels({channel_id: levels}), log=log)
 
     def _on_exit_clicked(self) -> None:
         """Exit the active session."""

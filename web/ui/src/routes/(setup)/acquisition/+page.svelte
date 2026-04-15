@@ -1,9 +1,9 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
   import { Crosshair } from '$lib/icons';
-  import { Button, PaneDivider, SpinBox, Select } from '$lib/ui/kit';
-  import MetadataPanel from '$lib/ui/MetadataPanel.svelte';
-  import StackSelector from '$lib/ui/StackSelector.svelte';
+  import { Button, PaneDivider, SpinBox, Select } from '$lib/kit';
+  import MetadataPanel from '$lib/metadata/MetadataPanel.svelte';
+  import StackSelector from '$lib/stacks/StackSelector.svelte';
   import { sanitizeString } from '$lib/utils';
   import { Pane, PaneGroup } from 'paneforge';
   import { toast } from 'svelte-sonner';
@@ -22,24 +22,24 @@
   // ── Stack inspector ──
 
   const isAcquiring = $derived(session.mode === 'acquiring');
-  const acquiringStack = $derived(session.stacks.find((s) => s.status === 'acquiring'));
+  const acquiringStack = $derived(session.stacks.list.find((s) => s.status === 'acquiring'));
   let followLive = $state(true);
 
   // Auto-select first stack if nothing is selected
   $effect(() => {
-    if (session.selectedStacks.length === 0 && session.stacks.length > 0) {
-      session.selectStacks([session.stacks[0]]);
+    if (session.stacks.selected.length === 0 && session.stacks.list.length > 0) {
+      session.stacks.select([session.stacks.list[0]]);
     }
   });
 
   // Auto-follow: select the acquiring stack when followLive is on
   $effect(() => {
     if (followLive && acquiringStack) {
-      session.selectStacks([acquiringStack]);
+      session.stacks.select([acquiringStack]);
     }
   });
 
-  const inspectedStack = $derived(session.selectedStacks[0] ?? null);
+  const inspectedStack = $derived(session.stacks.selected[0] ?? null);
 
   // Break out of follow mode when user manually selects
   function onManualSelect() {
@@ -57,13 +57,13 @@
     let completed = 0;
     let failed = 0;
     let acquiring = 0;
-    for (const s of session.stacks) {
+    for (const s of session.stacks.list) {
       if (s.status === 'planned') planned++;
       else if (s.status === 'completed') completed++;
       else if (s.status === 'failed') failed++;
       else if (s.status === 'acquiring') acquiring++;
     }
-    return { planned, completed, failed, acquiring, total: session.stacks.length };
+    return { planned, completed, failed, acquiring, total: session.stacks.list.length };
   });
 
   const progressFraction = $derived(
@@ -116,7 +116,7 @@
             <!-- TODO: Store path editing — needs multiline or path picker for long paths -->
             <!-- <span class="text-fg-muted">Store Path</span>
             <TextInput
-              value={session.acq.store_path ?? ''}
+              value={session.output.store_path ?? ''}
               placeholder="/path/to/zarr"
               align="left"
               onChange={(v) => session.updateStorage({ store_path: v || null })}
@@ -124,14 +124,14 @@
             /> -->
             <span class="text-fg-muted">Compression</span>
             <Select
-              value={session.acq.compression ?? 'blosc.lz4'}
+              value={session.output.compression ?? 'blosc.lz4'}
               options={COMPRESSION_OPTIONS}
               onchange={(v) => session.updateStorage({ compression: v })}
               size="xs"
             />
             <span class="text-fg-muted">Pyramid Level</span>
             <SpinBox
-              value={session.acq.max_level ?? 3}
+              value={session.output.max_level ?? 3}
               min={0}
               max={7}
               step={1}
@@ -158,7 +158,7 @@
     <!-- Stack selector -->
     <div class="flex items-center gap-2 px-4 pt-3 pb-2">
       <div class="min-w-0 flex-1" onclick={onManualSelect} onkeydown={onManualSelect} role="presentation">
-        <StackSelector {session} size="sm" class="w-full" />
+        <StackSelector stacks={session.stacks} size="sm" class="w-full" />
       </div>
       <button
         class="cursor-pointer rounded bg-transparent p-1 transition-colors
@@ -274,7 +274,7 @@
         <Button
           size="sm"
           variant={isAcquiring ? 'outline' : 'default'}
-          onclick={() => (isAcquiring ? session.stopAcquisition() : session.startAcquisition())}
+          onclick={() => (isAcquiring ? session.acquisition.stop() : session.acquisition.start())}
           class="w-full {isAcquiring ? 'border-danger text-danger hover:bg-danger/10' : ''}"
         >
           {isAcquiring ? 'Stop Acquisition' : 'Start Acquisition'}

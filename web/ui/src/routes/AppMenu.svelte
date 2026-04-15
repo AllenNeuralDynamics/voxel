@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import type { App } from '$lib/main';
-  import { DropdownMenu } from '$lib/ui/kit';
+  import type { App } from '$lib/app';
+  import { DropdownMenu } from '$lib/kit';
   import { AlertOutline, DotsVertical, Restore } from '$lib/icons';
   import { AppearanceSheet } from '$lib/themes';
   import { cn } from '$lib/utils';

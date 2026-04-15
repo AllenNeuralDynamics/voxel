@@ -1,14 +1,14 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
-  import { Button, Dialog, DropdownMenu, NudgeInput, Select, SpinBox } from '$lib/ui/kit';
+  import { Button, Dialog, DropdownMenu, NudgeInput, Select, SpinBox } from '$lib/kit';
   import { Pane, PaneGroup } from 'paneforge';
-  import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { sanitizeString, cn, createPaneMinSize } from '$lib/utils';
   import { ChevronDown, ChevronRight, EllipsisVertical } from '$lib/icons';
-  import StackStatusIcon from '$lib/ui/StackStatusIcon.svelte';
+  import StackStatusIcon from '$lib/StackStatusIcon.svelte';
   import { watch } from 'runed';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-  import type { Stack, StackStatus } from '$lib/main/types';
+  import type { Stack, StackStatus } from '$lib/app/types';
 
   const session = getSessionContext();
 
@@ -37,7 +37,7 @@
   let collapsedProfiles = new SvelteSet<string>();
 
   const profileGroups = $derived.by<ProfileGroup[]>(() => {
-    const allStacks = filter === 'all' ? session.stacks : session.stacks.filter((s) => s.status === filter);
+    const allStacks = filter === 'all' ? session.stacks.list : session.stacks.list.filter((s) => s.status === filter);
 
     const groupMap = new SvelteMap<string, Stack[]>();
     for (const s of allStacks) {
@@ -46,8 +46,8 @@
       else groupMap.set(s.profile_id, [s]);
     }
 
-    const activeId = session.activeProfileId;
-    const profileOrder = session.acq.profile_order;
+    const activeId = session.profiles.activeId;
+    const profileOrder = session.stacks.plan.profile_order;
 
     const groups: ProfileGroup[] = [];
     for (const [profileId, stacks] of groupMap) {
@@ -71,13 +71,13 @@
   const flatStacks = $derived(profileGroups.flatMap((g) => (collapsedProfiles.has(g.profileId) ? [] : g.stacks)));
 
   const totalCount = $derived(
-    filter === 'all' ? session.stacks.length : session.stacks.filter((s) => s.status === filter).length
+    filter === 'all' ? session.stacks.list.length : session.stacks.list.filter((s) => s.status === filter).length
   );
 
-  const hasSelection = $derived(session.selectedStacks.length > 0);
+  const hasSelection = $derived(session.stacks.selected.length > 0);
 
   // Acquisition order: index of each stack in the plan's ordered stacks list
-  const acquisitionOrder = $derived(new Map(session.stacks.map((s, i) => [s.stack_id, i + 1])));
+  const acquisitionOrder = $derived(new Map(session.stacks.list.map((s, i) => [s.stack_id, i + 1])));
 
   // --- Merged Z values for batch editing ---
 
@@ -87,7 +87,7 @@
     return values.every((v) => v === first) ? first : undefined;
   }
 
-  const selectedStacks = $derived(session.selectedStacks);
+  const selectedStacks = $derived(session.stacks.selected);
 
   // Common values in mm (undefined = mixed)
   function toMm(v: number | undefined): number {
@@ -132,7 +132,7 @@
 
   function applyPosition(axis: 'x' | 'y', value: number) {
     if (selectedStacks.length === 0) return;
-    session.editStacks(
+    session.stacks.edit(
       selectedStacks.map((s) => ({
         stackId: s.stack_id,
         ...(axis === 'x' ? { x: value } : { y: value })
@@ -142,7 +142,7 @@
 
   function applyNudge(dx: number, dy: number) {
     if (selectedStacks.length === 0 || (dx === 0 && dy === 0)) return;
-    session.editStacks(
+    session.stacks.edit(
       selectedStacks.map((s) => ({
         stackId: s.stack_id,
         x: s.x + dx,
@@ -154,7 +154,7 @@
 
   function applyFrameCount(frames: number) {
     if (selectedStacks.length === 0 || frames < 1) return;
-    session.editStacks(
+    session.stacks.edit(
       selectedStacks.map((s) => ({
         stackId: s.stack_id,
         zEndUm: s.z_start + (frames - 1) * s.z_step
@@ -164,7 +164,7 @@
 
   function applyZRange(field: 'zStartUm' | 'zEndUm', value: number) {
     if (selectedStacks.length === 0) return;
-    session.editStacks(
+    session.stacks.edit(
       selectedStacks.map((s) => ({
         stackId: s.stack_id,
         zStartUm: field === 'zStartUm' ? value : s.z_start,
@@ -174,9 +174,9 @@
   }
 
   function removeSelectedStacks() {
-    const stacks = session.selectedStacks;
+    const stacks = session.stacks.selected;
     if (stacks.length === 0) return;
-    session.removeStacks(stacks.map((s) => s.stack_id));
+    session.stacks.remove(stacks.map((s) => s.stack_id));
     clearDialogOpen = false;
   }
 
@@ -184,10 +184,10 @@
 
   function handleRowClick(stack: Stack, e: MouseEvent) {
     if (e.metaKey || e.ctrlKey) {
-      if (session.isStackSelected(stack.stack_id)) {
-        session.removeStacksFromSelection([stack]);
+      if (session.stacks.isSelected(stack.stack_id)) {
+        session.stacks.removeFromSelection([stack]);
       } else {
-        session.addStacksToSelection([stack]);
+        session.stacks.addToSelection([stack]);
       }
     } else if (e.shiftKey && lastClickedId) {
       const lastIdx = flatStacks.findIndex((s) => s.stack_id === lastClickedId);
@@ -195,14 +195,14 @@
       if (lastIdx >= 0 && curIdx >= 0) {
         const from = Math.min(lastIdx, curIdx);
         const to = Math.max(lastIdx, curIdx);
-        session.selectStacks(flatStacks.slice(from, to + 1));
+        session.stacks.select(flatStacks.slice(from, to + 1));
       } else {
-        session.selectStacks([stack]);
+        session.stacks.select([stack]);
       }
-    } else if (session.isStackSelected(stack.stack_id) && session.selectedStacks.length === 1) {
-      session.clearStackSelection();
+    } else if (session.stacks.isSelected(stack.stack_id) && session.stacks.selected.length === 1) {
+      session.stacks.clearSelection();
     } else {
-      session.selectStacks([stack]);
+      session.stacks.select([stack]);
     }
     lastClickedId = stack.stack_id;
   }
@@ -220,7 +220,7 @@
   // --- Auto-scroll to selection from canvas ---
 
   watch(
-    () => session.selectedStacks[0],
+    () => session.stacks.selected[0],
     (first) => {
       if (!first) return;
       const el = document.getElementById(`stack-${first.stack_id}`);
@@ -308,7 +308,7 @@
           {#if filter === 'all'}
             {totalCount} stack{totalCount !== 1 ? 's' : ''}
           {:else}
-            {totalCount} of {session.stacks.length} stacks
+            {totalCount} of {session.stacks.list.length} stacks
           {/if}
         </span>
         <div class="flex-1"></div>
@@ -316,26 +316,26 @@
           <SpinBox
             size="xs"
             variant="ghost"
-            value={session.acq.default_z_start / 1000}
+            value={session.stacks.plan.default_z_start / 1000}
             step={0.001}
             decimals={3}
             numCharacters={8}
             prefix="Z Start"
             suffix="mm"
             align="right"
-            onChange={(value) => session.setGridZRange(value * 1000, session.acq.default_z_end)}
+            onChange={(value) => session.stacks.setDefaultZRange(value * 1000, session.stacks.plan.default_z_end)}
           />
           <SpinBox
             size="xs"
             variant="ghost"
-            value={session.acq.default_z_end / 1000}
+            value={session.stacks.plan.default_z_end / 1000}
             step={0.001}
             decimals={3}
             numCharacters={8}
             prefix="Z End"
             suffix="mm"
             align="right"
-            onChange={(value) => session.setGridZRange(session.acq.default_z_start, value * 1000)}
+            onChange={(value) => session.stacks.setDefaultZRange(session.stacks.plan.default_z_start, value * 1000)}
           />
         </div>
       </div>
@@ -349,7 +349,7 @@
         {#if profileGroups.length === 0}
           <div class="col-span-full flex min-h-32 items-center justify-center p-4">
             <p class="text-sm text-fg-faint">
-              {#if session.stacks.length === 0}
+              {#if session.stacks.list.length === 0}
                 No stacks — add stacks from the grid
               {:else}
                 No stacks match filter
@@ -388,7 +388,7 @@
             <!-- Stack rows -->
             {#if !collapsed}
               {#each group.stacks as stack (stack.stack_id)}
-                {@const selected = session.isStackSelected(stack.stack_id)}
+                {@const selected = session.stacks.isSelected(stack.stack_id)}
                 {@render stackRow(stack, selected)}
               {/each}
             {/if}
@@ -547,7 +547,7 @@
                   <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.stage.z.position)}>
                     Match stage Z
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.acq.default_z_start)}>
+                  <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.stacks.plan.default_z_start)}>
                     Reset to default
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
@@ -571,7 +571,7 @@
                   <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.stage.z.position)}>
                     Match stage Z
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.acq.default_z_end)}>
+                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.stacks.plan.default_z_end)}>
                     Reset to default
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
@@ -637,7 +637,7 @@
           {#if clearMode === 'selected'}
             Remove {selectedStacks.length} selected stack{selectedStacks.length !== 1 ? 's' : ''}?
           {:else}
-            {@const count = session.stacks.filter((s) => s.profile_id === clearProfileId).length}
+            {@const count = session.stacks.list.filter((s) => s.profile_id === clearProfileId).length}
             Remove all {count} stack{count !== 1 ? 's' : ''} for
             <strong>{clearProfileLabel}</strong>?
           {/if}
@@ -655,8 +655,8 @@
             if (clearMode === 'selected') {
               removeSelectedStacks();
             } else {
-              session.removeStacks(
-                session.stacks.filter((s) => s.profile_id === clearProfileId).map((s) => s.stack_id)
+              session.stacks.remove(
+                session.stacks.list.filter((s) => s.profile_id === clearProfileId).map((s) => s.stack_id)
               );
               clearDialogOpen = false;
             }

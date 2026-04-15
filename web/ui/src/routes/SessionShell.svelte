@@ -3,17 +3,17 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
-  import type { App, Session } from '$lib/main';
+  import type { App, Session } from '$lib/app';
   import { setSessionContext, setLogsContext } from '$lib/context';
-  import { PreviewCanvas } from '$lib/ui/preview';
-  import { GridCanvas } from '$lib/ui/grid';
+  import { PreviewCanvas } from '$lib/preview';
+  import { GridCanvas } from '$lib/grid';
   import { Pane, PaneGroup } from 'paneforge';
-  import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-  import { Button, Dialog, DropdownMenu } from '$lib/ui/kit';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import { Button, Dialog, DropdownMenu } from '$lib/kit';
   import { ChevronDown, Crosshair, Layers, Play, Microscope, Power } from '$lib/icons';
   import AppMenu from './AppMenu.svelte';
-  import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
-  import StartButton from '$lib/ui/StartButton.svelte';
+  import VoxelLogo from '$lib/VoxelLogo.svelte';
+  import StartButton from '$lib/StartButton.svelte';
 
   import { cn, createPaneMinSize, createHotkey } from '$lib/utils';
   import type { Pathname } from '$app/types';
@@ -156,7 +156,7 @@
       <main class="flex h-full flex-col overflow-hidden">
         <PaneGroup direction="vertical" autoSaveId="shell.right">
           <Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
-            <PreviewCanvas previewer={session.preview} fov={session.fov} />
+            <PreviewCanvas previewer={session.preview} fov={session.mosaic.fov} />
           </Pane>
           <PaneDivider direction="horizontal" />
           <Pane defaultSize={50} minSize={30} class="h-full flex-1">

@@ -10,7 +10,7 @@
     TagInput,
     TextArea,
     TextInput
-  } from '$lib/ui/kit';
+  } from '$lib/kit';
   import { ThemePicker } from '$lib/themes';
 
   let checked = $state(true);

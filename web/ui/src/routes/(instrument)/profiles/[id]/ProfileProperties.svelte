@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { Session } from '$lib/main';
-  import { discoverProfileDevices, isFilterWheel, isPropDiverged, formatPropValue, decimalsFromStep } from '$lib/main';
+  import type { Session } from '$lib/app';
+  import { discoverProfileDevices, isFilterWheel, isPropDiverged, formatPropValue, decimalsFromStep } from '$lib/app';
   import { Collapsible } from 'bits-ui';
   import { ChevronRight, Restore } from '$lib/icons';
-  import { Button, SpinBox, Select, Switch } from '$lib/ui/kit';
+  import { Button, SpinBox, Select, Switch } from '$lib/kit';
   import { sanitizeString } from '$lib/utils';
 
   interface Props {
@@ -30,7 +30,7 @@
     ).filter((g) => g.devices.length > 0)
   );
 
-  const isActiveProfile = $derived(profileId === session.activeProfileId);
+  const isActiveProfile = $derived(profileId === session.profiles.activeId);
 
   /** Per-device setup commands open state. */
   let setupOpen: Record<string, boolean> = $state({});
@@ -48,7 +48,7 @@
               size="xs"
               class="text-fg-faint"
               onclick={() => {
-                for (const d of group.devices) session.saveProfileProps(d.id);
+                for (const d of group.devices) session.profiles.saveProps(d.id);
               }}
             >
               Save All
@@ -82,13 +82,13 @@
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          onclick={() => session.applyProfileProps([deviceId])}
+                          onclick={() => session.profiles.applyProps([deviceId])}
                           title="Revert to saved"
                         >
                           <Restore width="14" height="14" />
                         </Button>
                       {/if}
-                      <Button variant="outline" size="xs" onclick={() => session.saveProfileProps(deviceId)}
+                      <Button variant="outline" size="xs" onclick={() => session.profiles.saveProps(deviceId)}
                         >Save</Button
                       >
                     </div>

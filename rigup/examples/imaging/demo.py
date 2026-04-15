@@ -114,7 +114,7 @@ async def main():
         # except KeyboardInterrupt:
         #     print("\n[yellow]Shutting down...[/yellow]")
     finally:
-        await controller.stop()
+        await controller.close()
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from vxl.config import SessionInfo
-from vxl.rig import VoxelRig
 from vxl.session import Session
 from vxl.store import SessionCatalog, SessionStore, YamlSessionCatalog
 from vxl.system import VOXEL_DIR, DataRoot, SystemConfig
@@ -154,19 +153,14 @@ class VoxelApp:
             session=source_session,
             clear_stacks=clear_stacks,
         )
-        config = store.config
 
         # Create data directory
         if data_path:
             Path(data_path).mkdir(parents=True, exist_ok=True)
 
-        # Start rig
-        rig = VoxelRig(config=config.rig)
-        await rig.start()
-
         self._store = store
-        self._session = Session(config=config, store=store, rig=rig)
-        await self._session.start()
+        self._session = Session(store)
+        await self._session.open()
         log.info(f"Session created: {uid}")
         return self._session
 
@@ -182,25 +176,22 @@ class VoxelApp:
         config.info.last_opened = datetime.now(tz=UTC)
         config.info.open_count += 1
 
-        # Start rig
-        rig = VoxelRig(config=config.rig)
-        await rig.start()
-
         self._store = store
-        self._session = Session(config=config, store=store, rig=rig)
+        self._session = Session(store)
         await store.asave()
-        await self._session.start()
+        await self._session.open()
         log.info(f"Resumed session: {uid} ({config.info.open_count} opens)")
         return self._session
 
     async def close_session(self) -> None:
         """Close the active session."""
-        if self._session is None:
-            raise RuntimeError("No active session to close")
+        if self._session is not None:
+            try:
+                await self._session.close()
+                log.info(f"Session closed: {self._session.config.info.uid}")
+            finally:
+                self._session = None
+        else:
+            log.warning("No active session to close")
 
-        try:
-            await self._session.close()
-            log.info(f"Session closed: {self._session.config.info.uid}")
-        finally:
-            self._session = None
-            self._store = None
+        self._store = None

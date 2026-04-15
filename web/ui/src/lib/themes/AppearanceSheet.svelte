@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Sheet } from '$lib/ui/kit';
+  import { Sheet } from '$lib/kit';
   import ThemePicker from './ThemePicker.svelte';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();

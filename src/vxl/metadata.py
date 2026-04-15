@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
 ENTRY_POINT_GROUP = "vxl.metadata"
-BASE_METADATA_TARGET = "vxl.metadata.ExperimentMetadata"
+BASE_METADATA_SCHEMA = "vxl.metadata.ExperimentMetadata"
 
 AnatomicalDirectionX = Literal["Anterior_to_posterior", "Posterior_to_anterior"]
 AnatomicalDirectionY = Literal["Inferior_to_superior", "Superior_to_inferior"]
@@ -92,15 +92,15 @@ class ExaspimMetadata(ExperimentMetadata):
     )
 
 
-def discover_metadata_targets() -> dict[str, str]:
-    """Discover registered metadata targets via entry points.
+def discover_metadata_schema() -> dict[str, str]:
+    """Discover registered metadata schema via entry points.
 
     Returns {name: import_path} for UI selection. Always includes
     the base ExperimentMetadata as the first entry.
     """
-    targets: dict[str, str] = {"Base": BASE_METADATA_TARGET}
-    targets.update({ep.name: ep.value for ep in entry_points(group=ENTRY_POINT_GROUP)})
-    return targets
+    schema: dict[str, str] = {"Base": BASE_METADATA_SCHEMA}
+    schema.update({ep.name: ep.value for ep in entry_points(group=ENTRY_POINT_GROUP)})
+    return schema
 
 
 def resolve_metadata_class(target: str) -> type[ExperimentMetadata]:

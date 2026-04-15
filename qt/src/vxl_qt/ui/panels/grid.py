@@ -10,7 +10,8 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QWidget
 
-from vxl.stack import Stack, StackOrder, Tile
+from vxl.stack import Stack, StackOrder
+from vxl_qt.tile import Tile
 from vxl_qt.store import (
     STACK_STATUS_COLORS,
     GridStore,
@@ -321,7 +322,7 @@ class ZRangeEditor(PropertyEditor):
 
     def _update_slices_display(self) -> None:
         """Update the slices count based on current Z values."""
-        z_step = self._store.acq_config.z_step
+        z_step = self._store.plan_config.z_step
         if z_step > 0:
             z_range = abs(self._z_end_spin.value() - self._z_start_spin.value())
             slices = int(z_range / z_step) + 1
@@ -341,9 +342,9 @@ class ZRangeEditor(PropertyEditor):
     def load_defaults(self) -> None:
         """Load default Z range from grid config."""
         self._updating = True
-        acq = self._store.acq_config
-        self._z_start_spin.setValue(int(acq.default_z_start))
-        self._z_end_spin.setValue(int(acq.default_z_end))
+        plan = self._store.plan_config
+        self._z_start_spin.setValue(int(plan.default_z_start))
+        self._z_end_spin.setValue(int(plan.default_z_end))
         self._update_slices_display()
         self._updating = False
 
@@ -768,7 +769,7 @@ class GridSettingsSection(QWidget):
         self._offset_y_spin.setValue(config.y_offset / 1000)
         self._overlap_x_spin.setValue(config.overlap_x)
         self._overlap_y_spin.setValue(config.overlap_y)
-        self._z_step_label.setText(f"{self._store.acq_config.z_step:.1f} µm")
+        self._z_step_label.setText(f"{self._store.plan_config.z_step:.1f} µm")
         self._order_select.set_value(self._store.stack_order)
 
         self._offset_x_spin.blockSignals(False)

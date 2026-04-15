@@ -2,13 +2,13 @@
   import { getSessionContext, getLogsContext } from '$lib/context';
   import { cn } from '$lib/utils';
   import { Pane, PaneGroup } from 'paneforge';
-  import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-  import LogViewer from '$lib/ui/LogViewer.svelte';
-  import LasersPanel from '$lib/ui/LasersPanel.svelte';
-  import CamerasPanel from '$lib/ui/CamerasPanel.svelte';
-  import AuxDevicesPanel from '$lib/ui/AuxDevicesPanel.svelte';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import LogViewer from '$lib/LogViewer.svelte';
+  import LasersPanel from '$lib/device/LasersPanel.svelte';
+  import CamerasPanel from '$lib/device/CamerasPanel.svelte';
+  import AuxDevicesPanel from '$lib/device/AuxDevicesPanel.svelte';
   import ProfileWaveforms from '../(instrument)/profiles/[id]/ProfileWaveforms.svelte';
-  import { ProfileSelector } from '$lib/ui/profile';
+  import { ProfileSelector } from '$lib/profile';
   import { PersistedState } from 'runed';
 
   let { children } = $props();
@@ -71,8 +71,15 @@
     {:else if bottomPanelTab === 'lasers'}
       <LasersPanel {session} />
     {:else if bottomPanelTab === 'waveforms'}
-      {#if session.activeProfileId}
-        <ProfileWaveforms {session} profileId={session.activeProfileId} class="h-full overflow-auto p-2" />
+      {#if session.profiles.activeId}
+        <ProfileWaveforms
+          profiles={session.profiles}
+          devices={session.devices}
+          rigCfg={session.rig_cfg}
+          acquiring={session.mode === 'acquiring'}
+          profileId={session.profiles.activeId}
+          class="h-full overflow-auto p-2"
+        />
       {:else}
         <div class="flex h-full items-center justify-center text-sm text-fg-muted">
           Select a profile to view waveforms
@@ -107,6 +114,6 @@
     </button>
   </div>
   <div class="max-w-100 min-w-40 flex-1">
-    <ProfileSelector {session} size="xs" class="w-full" />
+    <ProfileSelector profiles={session.profiles} stacks={session.stacks} size="xs" class="w-full" />
   </div>
 </footer>

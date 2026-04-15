@@ -1,14 +1,14 @@
 <script lang="ts">
-  import type { App } from '$lib/main';
-  import type { SessionListing, DataRoot, TemplateInfo, JsonSchema } from '$lib/main';
+  import type { App } from '$lib/app';
+  import type { SessionListing, DataRoot, TemplateInfo, JsonSchema } from '$lib/app';
   import AppMenu from './AppMenu.svelte';
-  import LogViewer from '$lib/ui/LogViewer.svelte';
-  import MetadataFields from '$lib/ui/MetadataFields.svelte';
+  import LogViewer from '$lib/LogViewer.svelte';
+  import MetadataFields from '$lib/metadata/MetadataFields.svelte';
   import { Collapsible } from 'bits-ui';
-  import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/ui/kit';
+  import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/kit';
   import { Plus, FolderOpenOutline, GitFork, Clipboard, LucideChevronRight, EllipsisVertical } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
-  import VoxelLogo from '$lib/ui/VoxelLogo.svelte';
+  import VoxelLogo from '$lib/VoxelLogo.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { toast } from 'svelte-sonner';
@@ -20,7 +20,7 @@
   let dataRoots = $state<DataRoot[]>([]);
   let loadingSessions = $state(false);
   let error = $state<string | null>(null);
-  let metadataTargets = $state<Record<string, string>>({});
+  let metadataSchemas = $state<Record<string, string>>({});
   let metadataSchema = $state<JsonSchema | null>(null);
 
   // Dialog state
@@ -64,8 +64,8 @@
         .then((r) => (dataRoots = r))
         .catch(console.warn);
       app
-        .fetchMetadataTargets()
-        .then((t) => (metadataTargets = t))
+        .fetchMetadataSchemas()
+        .then((t) => (metadataSchemas = t))
         .catch(console.warn);
     }
   });
@@ -75,9 +75,9 @@
     if (dialogOpen) {
       formSubmitting = false;
       formDataRoot = dataRoots.find((r) => r.default)?.name ?? dataRoots[0]?.name ?? '';
-      const keys = Object.keys(metadataTargets);
+      const keys = Object.keys(metadataSchemas);
       formMetaTarget = keys.length > 0 ? keys[0] : '';
-      if (keys.length > 0) handleMetadataTargetChanged(metadataTargets[keys[0]]);
+      if (keys.length > 0) handleMetadataSchemaChanged(metadataSchemas[keys[0]]);
       formMetadata = {};
 
       if (forkTarget) {
@@ -127,7 +127,7 @@
     }
   }
 
-  async function handleMetadataTargetChanged(target: string) {
+  async function handleMetadataSchemaChanged(target: string) {
     try {
       metadataSchema = await app.fetchMetadataSchema(target);
     } catch (e) {
@@ -217,8 +217,8 @@
   }
 
   function handleFormMetaTargetChange(key: string) {
-    const target = metadataTargets[key];
-    if (target) handleMetadataTargetChanged(target);
+    const target = metadataSchemas[key];
+    if (target) handleMetadataSchemaChanged(target);
   }
 
   function setFormMetaValue(key: string, val: unknown) {
@@ -475,11 +475,11 @@
           <hr class="flex-1 border-border" />
         </div>
 
-        {#if Object.keys(metadataTargets).length > 0}
+        {#if Object.keys(metadataSchemas).length > 0}
           <div class="col-span-full grid grid-cols-[10rem_1fr] items-center gap-x-3">
             <div class="text-xs text-fg-muted">Schema</div>
             <Select
-              options={Object.keys(metadataTargets).map((k) => ({ value: k, label: sanitizeString(k) }))}
+              options={Object.keys(metadataSchemas).map((k) => ({ value: k, label: sanitizeString(k) }))}
               bind:value={formMetaTarget}
               onchange={handleFormMetaTargetChange}
               size="sm"

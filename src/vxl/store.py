@@ -22,6 +22,8 @@ from vxl.stack import StackStatus
 
 log = logging.getLogger(__name__)
 
+_DEFAULT_AUTOSAVE_INTERVAL = 0.5
+
 
 def _make_yaml() -> YAML:
     """Create a configured YAML instance for session config I/O.
@@ -80,7 +82,7 @@ class SessionStore(ABC):
             return True
 
     @final
-    async def start_autosave(self, interval: float) -> None:
+    async def start_autosave(self, interval: float = _DEFAULT_AUTOSAVE_INTERVAL) -> None:
         """Begin periodic ``asave()`` at ``interval`` seconds. Idempotent."""
         if self._autosave_task is not None:
             return
@@ -280,26 +282,31 @@ class YamlSessionStore(SessionStore):
         config = self._config
         assert config is not None  # noqa: S101
 
-        acq_data = config.acq.model_dump(mode="json")
+        plan_data = config.plan.model_dump(mode="json")
+        output_data = config.output.model_dump(mode="json")
         grid_data = config.grid.model_dump(mode="json")
         stacks_data = {sid: s.model_dump(mode="json") for sid, s in config.stacks.items()}
 
         if self._raw_data is not None:
             self._raw_data["info"] = config.info.model_dump(mode="json")
-            self._raw_data["metadata_target"] = config.metadata_target
+            self._raw_data["metadata_schema"] = config.metadata_schema
+            self._raw_data.pop("metadata_target", None)  # drop legacy key from pre-rename YAMLs
             self._raw_data["metadata"] = config.metadata
-            self._raw_data["acq"] = acq_data
+            self._raw_data["plan"] = plan_data
+            self._raw_data["output"] = output_data
             self._raw_data["grid"] = grid_data
             self._raw_data["stacks"] = stacks_data
+            self._raw_data.pop("acq", None)  # drop legacy key from pre-split YAMLs
             self._sync_rig_profiles()
             return self._raw_data
 
         return {
             "rig": config.rig.model_dump(mode="json"),
             "info": config.info.model_dump(mode="json"),
-            "metadata_target": config.metadata_target,
+            "metadata_schema": config.metadata_schema,
             "metadata": config.metadata,
-            "acq": acq_data,
+            "plan": plan_data,
+            "output": output_data,
             "grid": grid_data,
             "stacks": stacks_data,
         }
@@ -450,9 +457,10 @@ class YamlSessionCatalog(SessionCatalog):
 
         # Build new config
         stacks = {} if clear_stacks else source_config.stacks
-        acq = source_config.acq.model_copy()
+        plan = source_config.plan.model_copy()
+        output = source_config.output.model_copy()
         if clear_stacks:
-            acq.profile_order = []
+            plan.profile_order = []
 
         # Reset stack statuses for fork
         if not clear_stacks:
@@ -466,9 +474,10 @@ class YamlSessionCatalog(SessionCatalog):
         config = SessionConfig(
             rig=source_config.rig,
             info=info,
-            metadata_target=source_config.metadata_target,
+            metadata_schema=source_config.metadata_schema,
             metadata=source_config.metadata,
-            acq=acq,
+            plan=plan,
+            output=output,
             grid=source_config.grid,
             stacks=stacks,
         )

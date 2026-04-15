@@ -6,10 +6,12 @@ requires-python = ">=3.13"
 members = [
     "ome-zarr-writer",
     "rigup",
+    "rigur",
     "vxl",
     "vxl-drivers",
     "vxl-qt",
     "vxl-web",
+    "vxl2",
     "vxlib",
 ]
 
@@ -1652,6 +1654,37 @@ dev = [
 ]
 
 [[package]]
+name = "rigur"
+version = "0.1.0"
+source = { editable = "rigur" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyzmq" },
+    { name = "ruyaml" },
+    { name = "vxlib" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.12.0" },
+    { name = "pyzmq", specifier = ">=27.1.0" },
+    { name = "ruyaml", specifier = ">=0.91.0" },
+    { name = "vxlib", editable = "vxlib" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.26.0" },
+]
+
+[[package]]
 name = "rsa"
 version = "4.9.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2057,6 +2090,37 @@ requires-dist = [
     { name = "uvloop", marker = "sys_platform != 'win32'" },
     { name = "vxl", editable = "." },
     { name = "websockets", specifier = ">=15.0.1" },
+]
+
+[[package]]
+name = "vxl2"
+version = "0.1.0"
+source = { editable = "vxl2" }
+dependencies = [
+    { name = "msgpack-numpy" },
+    { name = "numpy" },
+    { name = "ome-zarr-writer" },
+    { name = "opencv-python-headless" },
+    { name = "psutil" },
+    { name = "pydantic-settings" },
+    { name = "rich" },
+    { name = "rigur" },
+    { name = "ruyaml" },
+    { name = "vxlib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "msgpack-numpy", specifier = ">=0.4.8" },
+    { name = "numpy", specifier = ">=2.3.4" },
+    { name = "ome-zarr-writer", editable = "omezarr" },
+    { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
+    { name = "psutil", specifier = ">=5.9" },
+    { name = "pydantic-settings", specifier = ">=2.13.1" },
+    { name = "rich", specifier = ">=14.2.0" },
+    { name = "rigur", editable = "rigur" },
+    { name = "ruyaml", specifier = ">=0.91.0" },
+    { name = "vxlib", editable = "vxlib" },
 ]
 
 [[package]]

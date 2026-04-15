@@ -13,8 +13,18 @@ from .log import (
     get_uvicorn_log_config,
 )
 from .poller import Poller
+from .signal import Cell, Signal, Sink, Unsub
 from .types import Dtype, SchemaModel
-from .utils import display_name, fire_and_forget, format_relative_time, get_local_ip, slugify, thread_safe_singleton
+from .utils import (
+    bounded,
+    display_name,
+    fire_and_forget,
+    format_relative_time,
+    get_local_ip,
+    merge_dicts,
+    slugify,
+    thread_safe_singleton,
+)
 from .vec import IVec2D, IVec3D, UIVec2D, UIVec3D, UVec2D, UVec3D, Vec2D, Vec3D
 
 __all__ = [
@@ -25,14 +35,19 @@ __all__ = [
     "Dtype",
     "IVec2D",
     "IVec3D",
+    "Cell",
     "Poller",
     "SchemaModel",
+    "Signal",
+    "Sink",
+    "Unsub",
     "UIVec2D",
     "UIVec3D",
     "UVec2D",
     "UVec3D",
     "Vec2D",
     "Vec3D",
+    "bounded",
     "configure_logging",
     "display_name",
     "fire_and_forget",
@@ -40,6 +55,7 @@ __all__ = [
     "get_colormap_catalog",
     "get_local_ip",
     "get_uvicorn_log_config",
+    "merge_dicts",
     "resolve_colormap",
     "slugify",
     "thread_safe_singleton",

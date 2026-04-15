@@ -1,14 +1,14 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
-  import type { Snapshot } from '$lib/main/snapshots.svelte';
-  import { Button, ContextMenu, Rename } from '$lib/ui/kit';
+  import type { Snapshot } from '$lib/app/snapshots.svelte';
+  import { Button, ContextMenu, Rename } from '$lib/kit';
   import { Pane, PaneGroup } from 'paneforge';
-  import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { cn, createPaneMinSize } from '$lib/utils';
   import { Crosshair, TrashCanOutline, ImageLight } from '$lib/icons';
 
   const session = getSessionContext();
-  const snaps = $derived(session.snaps);
+  const snaps = $derived(session.mosaic.snaps);
 
   let renamingId = $state<string | null>(null);
 
@@ -120,14 +120,14 @@
       <ContextMenu.Item onSelect={() => (renamingId = snap.id)}>Rename</ContextMenu.Item>
       <ContextMenu.Separator />
       <ContextMenu.Sub>
-        <ContextMenu.SubTrigger disabled={!session.gridConfig}>Align grid</ContextMenu.SubTrigger>
+        <ContextMenu.SubTrigger disabled={!session.mosaic.config}>Align grid</ContextMenu.SubTrigger>
         <ContextMenu.SubContent>
-          <ContextMenu.Item onSelect={() => session.alignGrid('top', snapPos)}>Top</ContextMenu.Item>
-          <ContextMenu.Item onSelect={() => session.alignGrid('bottom', snapPos)}>Bottom</ContextMenu.Item>
-          <ContextMenu.Item onSelect={() => session.alignGrid('left', snapPos)}>Left</ContextMenu.Item>
-          <ContextMenu.Item onSelect={() => session.alignGrid('right', snapPos)}>Right</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => session.mosaic.align('top', snapPos)}>Top</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => session.mosaic.align('bottom', snapPos)}>Bottom</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => session.mosaic.align('left', snapPos)}>Left</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => session.mosaic.align('right', snapPos)}>Right</ContextMenu.Item>
           <ContextMenu.Separator />
-          <ContextMenu.Item onSelect={() => session.alignGrid('center', snapPos)}>Center</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => session.mosaic.align('center', snapPos)}>Center</ContextMenu.Item>
         </ContextMenu.SubContent>
       </ContextMenu.Sub>
       <ContextMenu.Separator />

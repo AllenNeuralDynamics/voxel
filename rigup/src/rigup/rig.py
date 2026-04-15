@@ -140,7 +140,7 @@ class Rig:
 
         # Phase 2: Start distributed cluster (if configured)
         if self._cluster:
-            await self._cluster.start(
+            await self._cluster.open(
                 connection_timeout=connection_timeout,
                 provision_timeout=provision_timeout,
             )
@@ -189,8 +189,8 @@ class Rig:
         handle = self.handles[device_id]
         return handle.device
 
-    async def stop(self):
-        """Stop all devices and cleanup."""
+    async def close(self):
+        """Close all devices and cleanup."""
         self.log.info("Stopping rig...")
 
         # Close local handles
@@ -202,9 +202,9 @@ class Rig:
                 except Exception:
                     self.log.exception(f"Error closing handle {uid}")
 
-        # Stop cluster if running
+        # Close cluster if running
         if self._cluster:
-            await self._cluster.stop()
+            await self._cluster.close()
 
         # Cleanup auto-created ZMQ context
         if self._owns_zctx and self.zctx is not None:

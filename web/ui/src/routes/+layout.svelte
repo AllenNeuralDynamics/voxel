@@ -1,10 +1,10 @@
 <script lang="ts">
   import './layout.css';
   import favicon from '$lib/assets/favicon.svg';
-  import { Toaster } from '$lib/ui/kit';
+  import { Toaster } from '$lib/kit';
   import { onMount, onDestroy } from 'svelte';
   import { useEventListener } from 'runed';
-  import { App } from '$lib/main';
+  import { App } from '$lib/app';
   import SessionShell from './SessionShell.svelte';
   import LaunchScreen from './LaunchScreen.svelte';
 

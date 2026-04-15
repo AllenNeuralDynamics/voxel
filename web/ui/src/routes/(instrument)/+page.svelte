@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
   import { sanitizeString, wavelengthToColor } from '$lib/utils';
-  import { JsonView } from '$lib/ui/kit';
+  import { JsonView } from '$lib/kit';
 
   const session = getSessionContext();
   const config = $derived(session.rig_cfg);
@@ -15,9 +15,9 @@
     {[...session.devices.devices.values()].filter((d) => d.connected).length}/{session.devices.devices.size} devices
   </span>
   <span>&middot;</span>
-  <span>{session.tiles.length} tiles</span>
+  <span>{session.mosaic.list.length} tiles</span>
   <span>&middot;</span>
-  <span>{session.stacks.length} stacks</span>
+  <span>{session.stacks.list.length} stacks</span>
 </div>
 
 <!-- Channel cards -->

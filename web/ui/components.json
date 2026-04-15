@@ -5,9 +5,9 @@
     "baseColor": "zinc"
   },
   "aliases": {
-    "components": "$lib/ui/kit/cn",
+    "components": "$lib/kit/cn",
     "utils": "$lib/utils",
-    "ui": "$lib/ui/kit/cn",
+    "ui": "$lib/kit/cn",
     "hooks": "$lib/hooks",
     "lib": "$lib"
   },

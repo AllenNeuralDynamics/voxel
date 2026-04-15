@@ -178,7 +178,7 @@ class TestLocalRig:
             assert "laser_1" in rig.handles
             assert "camera_1" in rig.handles
         finally:
-            await rig.stop()
+            await rig.close()
 
     @pytest.mark.asyncio
     async def test_device_handle_call(self, local_config: RigConfig):
@@ -198,7 +198,7 @@ class TestLocalRig:
             state = await laser.get_prop_value("state")
             assert state.lower() == "on"
         finally:
-            await rig.stop()
+            await rig.close()
 
     @pytest.mark.asyncio
     async def test_device_handle_properties(self, local_config: RigConfig):
@@ -222,7 +222,7 @@ class TestLocalRig:
             resolution = await camera.get_prop_value("resolution")
             assert resolution == [640, 480]
         finally:
-            await rig.stop()
+            await rig.close()
 
     @pytest.mark.asyncio
     async def test_device_handle_interface(self, local_config: RigConfig):
@@ -247,7 +247,7 @@ class TestLocalRig:
             assert "state" in interface.properties
             assert interface.properties["power"].units == "mW"
         finally:
-            await rig.stop()
+            await rig.close()
 
     @pytest.mark.asyncio
     async def test_device_handle_error_handling(self, local_config: RigConfig):
@@ -266,7 +266,7 @@ class TestLocalRig:
             with pytest.raises(RuntimeError, match="negative"):
                 await laser.set_prop("power", -10.0)
         finally:
-            await rig.stop()
+            await rig.close()
 
     @pytest.mark.asyncio
     async def test_get_device_returns_local_device(self, local_config: RigConfig):
@@ -280,7 +280,7 @@ class TestLocalRig:
             assert isinstance(device, MockLaser)
             assert device.max_power == 50.0
         finally:
-            await rig.stop()
+            await rig.close()
 
     @pytest.mark.asyncio
     async def test_multiple_device_operations(self, local_config: RigConfig):
@@ -309,7 +309,7 @@ class TestLocalRig:
             count = await camera.get_prop_value("frame_count")
             assert count == 4
         finally:
-            await rig.stop()
+            await rig.close()
 
 
 class TestDeviceController:
@@ -520,7 +520,7 @@ class TestBatchCommands:
             assert result.is_ok
             assert result.results["0:enable"].is_ok
         finally:
-            await rig.stop()
+            await rig.close()
 
     @pytest.mark.asyncio
     async def test_empty_commands(self):

@@ -1,0 +1,30 @@
+[project]
+name = "vxl2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "rigur",
+    "vxlib",
+    "msgpack-numpy>=0.4.8",
+    "numpy>=2.3.4",
+    "ome-zarr-writer",
+    "opencv-python-headless>=4.11.0.86",
+    "psutil>=5.9",
+    "pydantic-settings>=2.13.1",
+    "rich>=14.2.0",
+    "ruyaml>=0.91.0",
+]
+
+[tool.uv.sources]
+ome-zarr-writer = { workspace = true }
+rigur = { workspace = true }
+vxlib = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.11.2,<0.12.0"]
+build-backend = "uv_build"

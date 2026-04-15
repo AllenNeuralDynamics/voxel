@@ -319,7 +319,7 @@ class NewSessionForm(QWidget):
         layout = vbox(self)
         layout.addWidget(form)
 
-        # Initialize metadata select (will be populated by set_metadata_targets)
+        # Initialize metadata select (will be populated by set_metadata_schemas)
 
         self._update_button_state()
         self._connect_signals()
@@ -330,7 +330,7 @@ class NewSessionForm(QWidget):
         self._template_select.value_changed.connect(lambda _: self._on_form_changed())
         self._root_select.value_changed.connect(lambda _: self._on_form_changed())
         self._name_input.textChanged.connect(self._update_path_preview)
-        self._metadata_select.value_changed.connect(self._on_metadata_target_changed)
+        self._metadata_select.value_changed.connect(self._on_metadata_schema_changed)
         self._metadata_form.changed.connect(self._update_path_preview)
 
     def set_roots(self, roots: list[DataRoot]) -> None:
@@ -348,11 +348,11 @@ class NewSessionForm(QWidget):
             self._template_select.addItem(label, t.name)
         self._on_form_changed()
 
-    def set_metadata_targets(self, targets: dict[str, str]) -> None:
+    def set_metadata_schemas(self, targets: dict[str, str]) -> None:
         options = [(path, display_name(name)) for name, path in targets.items()]
         self._metadata_select.set_options(options)
 
-    def _on_metadata_target_changed(self, target: object) -> None:
+    def _on_metadata_schema_changed(self, target: object) -> None:
         try:
             cls = resolve_metadata_class(str(target))
         except Exception:
@@ -588,9 +588,9 @@ class LaunchPage(QWidget):
         """Set available templates in the form."""
         self._new_session_form.set_templates(templates)
 
-    def set_metadata_targets(self, targets: dict[str, str]) -> None:
+    def set_metadata_schemas(self, targets: dict[str, str]) -> None:
         """Set available metadata targets in the form."""
-        self._new_session_form.set_metadata_targets(targets)
+        self._new_session_form.set_metadata_schemas(targets)
 
     def set_sessions(self, sessions: list[SessionListing]) -> None:
         """Set the list of recent sessions."""

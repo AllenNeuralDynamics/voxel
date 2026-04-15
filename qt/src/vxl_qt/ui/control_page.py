@@ -313,9 +313,9 @@ class ControlPage(QWidget):
 
     async def _switch_profile(self, profile_id: str) -> None:
         """Switch to a new profile (async)."""
-        rig = self._app.rig
-        if rig:
-            await rig.set_active_profile(profile_id)
+        session = self._app.session
+        if session:
+            await session.set_active_profile(profile_id)
             self._left_sidebar.rebuild_channel_sections()
 
     def refresh(self) -> None:

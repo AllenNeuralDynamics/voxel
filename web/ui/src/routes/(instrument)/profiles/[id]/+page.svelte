@@ -3,9 +3,9 @@
   import { page } from '$app/state';
   import { sanitizeString } from '$lib/utils';
   import ProfileWaveforms from './ProfileWaveforms.svelte';
-  import CamerasPanel from '$lib/ui/CamerasPanel.svelte';
-  import AuxDevicesPanel from '$lib/ui/AuxDevicesPanel.svelte';
-  import LasersPanel from '$lib/ui/LasersPanel.svelte';
+  import CamerasPanel from '$lib/device/CamerasPanel.svelte';
+  import AuxDevicesPanel from '$lib/device/AuxDevicesPanel.svelte';
+  import LasersPanel from '$lib/device/LasersPanel.svelte';
 
   const session = getSessionContext();
   const profileId = $derived(page.params.id!);
@@ -37,7 +37,13 @@
       <section>
         <h3 class={sectionHeader}>Waveforms</h3>
         <div class="rounded border shadow-sm">
-          <ProfileWaveforms {session} {profileId} />
+          <ProfileWaveforms
+            profiles={session.profiles}
+            devices={session.devices}
+            rigCfg={session.rig_cfg}
+            acquiring={session.mode === 'acquiring'}
+            {profileId}
+          />
         </div>
       </section>
       <section>

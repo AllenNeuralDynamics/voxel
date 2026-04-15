@@ -138,10 +138,10 @@ async def test_distributed_rig():
         return False
 
     finally:
-        print("\n7. Stopping rig...")
+        print("\n7. Closing rig...")
         if rig:
-            await rig.stop()
-            print("   ✓ Rig stopped")
+            await rig.close()
+            print("   ✓ Rig closed")
 
         print("8. Terminating ZMQ context...")
         zctx.term()

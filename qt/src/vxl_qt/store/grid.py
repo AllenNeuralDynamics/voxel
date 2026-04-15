@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
 
-from vxl.config import AcquisitionConfig, GridConfig
-from vxl.stack import Stack, StackOrder, StackStatus, Tile
+from vxl.config import GridConfig, PlanConfig
+from vxl.stack import Stack, StackOrder, StackStatus
+from vxl_qt.tile import Tile
 
 if TYPE_CHECKING:
     from vxl import Session
@@ -151,36 +152,36 @@ class GridStore(QObject):
         """List of stacks from session."""
         if self._session is None:
             return []
-        return list(self._session.stacks.values())
+        return list(self._session.stacks)
 
     @property
     def grid_config(self) -> GridConfig:
         """Current grid configuration."""
         if self._session is None:
             return GridConfig()
-        return self._session.grid or GridConfig()
+        return self._session.config.grid
 
     @property
-    def acq_config(self) -> AcquisitionConfig:
-        """Current acquisition configuration (z_step, default Z range, etc.)."""
+    def plan_config(self) -> PlanConfig:
+        """Current plan configuration (z_step, default Z range, stack ordering, etc.)."""
         if self._session is None:
-            return AcquisitionConfig()
-        return self._session.acq
+            return PlanConfig()
+        return self._session.config.plan
 
     @property
     def stack_order(self) -> StackOrder:
         """Current stack ordering strategy."""
         if self._session is None:
             return StackOrder.SNAKE_ROW
-        return self._session.stack_order
+        return self._session.config.plan.stack_order
 
     @property
     def grid_locked(self) -> bool:
         """Whether grid is locked (stacks exist for the active profile)."""
         if self._session is None:
             return False
-        active_pid = self._session.rig.active_profile_id
-        return any(s.profile_id == active_pid for s in self._session.stacks.values())
+        active_pid = self._session.rig.profiles.active_id
+        return any(s.profile_id == active_pid for s in self._session.stacks)
 
     @property
     def fov_size(self) -> tuple[float, float]:
@@ -248,14 +249,17 @@ class GridStore(QObject):
             self._fov_size = None
         else:
             try:
-                self._fov_size = self._session.get_fov_size()
+                fov = self._session.rig.profiles.fov
+                if fov is None:
+                    raise ValueError("FOV not available (no active profile or cameras)")
+                self._fov_size = fov
                 stage = self._session.rig.stage
                 x_lo = await stage.x.get_lower_limit()
                 x_hi = await stage.x.get_upper_limit()
                 y_lo = await stage.y.get_lower_limit()
                 y_hi = await stage.y.get_upper_limit()
                 self._tiles = _generate_tiles(
-                    self._session.grid, self._fov_size, stage_w=x_hi - x_lo, stage_h=y_hi - y_lo
+                    self._session.config.grid, self._fov_size, stage_w=x_hi - x_lo, stage_h=y_hi - y_lo
                 )
             except (ValueError, KeyError):
                 # No active profile or cameras
@@ -273,7 +277,9 @@ class GridStore(QObject):
             log.warning("Cannot modify grid: acquisition has started")
             return
 
-        self._session.update_grid(x_offset=x_um, y_offset=y_um)
+        grid = self._session.config.grid
+        grid.x_offset = x_um
+        grid.y_offset = y_um
         await self.refresh_tiles()
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
@@ -286,7 +292,9 @@ class GridStore(QObject):
             log.warning("Cannot modify grid: acquisition has started")
             return
 
-        self._session.update_grid(overlap_x=overlap_x, overlap_y=overlap_y)
+        grid = self._session.config.grid
+        grid.overlap_x = overlap_x
+        grid.overlap_y = overlap_y
         await self.refresh_tiles()
         self.grid_config_changed.emit()
         self.stacks_changed.emit()  # Stack positions may have changed
@@ -295,7 +303,7 @@ class GridStore(QObject):
         """Set stack ordering strategy."""
         if self._session is None:
             return
-        self._session.set_stack_order(order)
+        self._session.stacks.update_order(stack_order=order)
         self.stacks_changed.emit()  # Stack order changed
 
     # ==================== Stack Management ====================
@@ -312,7 +320,7 @@ class GridStore(QObject):
         if self._session is None:
             return []
 
-        added = self._session.add_stacks(stacks)
+        added = self._session.stacks.add(stacks)
         self.stacks_changed.emit()
         return added
 
@@ -328,7 +336,7 @@ class GridStore(QObject):
         if self._session is None:
             return []
 
-        edited = self._session.edit_stacks(edits)
+        edited = self._session.stacks.edit(edits)
         self.stacks_changed.emit()
         return edited
 
@@ -337,7 +345,7 @@ class GridStore(QObject):
         if self._session is None:
             return
 
-        self._session.remove_stacks(stack_ids)
+        self._session.stacks.remove(stack_ids)
         self.stacks_changed.emit()
 
     # ==================== Layer Visibility ====================

@@ -1,22 +1,20 @@
 from .app import VoxelApp
-from .config import AcquisitionConfig, GridConfig, SessionConfig, VoxelRigConfig
-from .node import VoxelNode
-from .rig import RigMode, VoxelRig
-from .session import Session
-from .stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus, Tile
+from .config import GridConfig, OutputConfig, SessionConfig, VoxelRigConfig
+from .rig import VoxelNode, VoxelRig
+from .session import Session, SessionMode
+from .stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus
 
 __all__ = [
-    "AcquisitionConfig",
     "BatchResult",
     "ChannelResult",
     "GridConfig",
-    "RigMode",
+    "OutputConfig",
     "Session",
     "SessionConfig",
+    "SessionMode",
     "Stack",
     "StackResult",
     "StackStatus",
-    "Tile",
     "VoxelApp",
     "VoxelNode",
     "VoxelRig",

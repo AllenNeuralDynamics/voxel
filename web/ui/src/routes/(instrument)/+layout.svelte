@@ -11,10 +11,10 @@
   import { resolve } from '$app/paths';
   import { Collapsible } from 'bits-ui';
   import { ChevronDown, ChevronRight } from '$lib/icons';
-  import { DropdownMenu } from '$lib/ui/kit';
+  import { DropdownMenu } from '$lib/kit';
   import { Pane, PaneGroup } from 'paneforge';
-  import PaneDivider from '$lib/ui/kit/PaneDivider.svelte';
-  import LogViewer from '$lib/ui/LogViewer.svelte';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import LogViewer from '$lib/LogViewer.svelte';
 
   // Track the current instrument sub-path so we can restore it
   $effect(() => {
@@ -60,7 +60,7 @@
       label: profile.label ?? sanitizeString(id),
       path: `/profiles/${id}`,
       active: activeProfileId === id,
-      isActiveProfile: id === session.activeProfileId
+      isActiveProfile: id === session.profiles.activeId
     }))
   );
 
@@ -75,7 +75,7 @@
   );
 
   function activateAndNav(profileId: string) {
-    session.activateProfile(profileId);
+    session.profiles.setActive(profileId);
     nav(`/profiles/${profileId}`);
   }
 

@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { Session } from '$lib/main';
-  import { discoverProfileDevices } from '$lib/main';
-  import type { Waveform, FrameTiming } from '$lib/main';
-  import type { SelectOption } from '$lib/ui/kit/Select.svelte';
+  import type { DevicesManager, ProfilesManager } from '$lib/app';
+  import { discoverProfileDevices } from '$lib/app';
+  import type { Waveform, FrameTiming, VoxelRigConfig } from '$lib/app';
+  import type { SelectOption } from '$lib/kit/Select.svelte';
   import { generateTraces, niceTicks, voltageRange } from './generate';
-  import { SpinBox, Select, Button } from '$lib/ui/kit';
+  import { SpinBox, Select, Button } from '$lib/kit';
   import { cn, sanitizeString } from '$lib/utils';
   import { Check, Close } from '$lib/icons';
   import { toast } from 'svelte-sonner';
@@ -39,24 +39,26 @@
   }
 
   interface Props {
-    session: Session;
+    profiles: ProfilesManager;
+    devices: DevicesManager;
+    rigCfg: VoxelRigConfig;
+    acquiring: boolean;
     profileId: string;
     class?: string;
   }
 
-  let { session, profileId, class: className }: Props = $props();
+  let { profiles, devices, rigCfg, acquiring, profileId, class: className }: Props = $props();
 
-  const profile = $derived(session.rig_cfg.profiles[profileId]);
-  const isActiveProfile = $derived(profileId === session.activeProfileId);
-  const isAcquiring = $derived(session.mode === 'acquiring');
-  const canEdit = $derived(isActiveProfile && !isAcquiring);
+  const profile = $derived(rigCfg.profiles[profileId]);
+  const isActiveProfile = $derived(profileId === profiles.activeId);
+  const canEdit = $derived(isActiveProfile && !acquiring);
   let configOnly = $state(false);
 
   // ── DAQ hardware voltage range ──
 
-  const daqDeviceId = $derived(session.rig_cfg.daq.device);
+  const daqDeviceId = $derived(rigCfg.daq.device);
   const daqRange = $derived.by(() => {
-    const val = session.devices.getPropertyValue(daqDeviceId, 'ao_voltage_range') as
+    const val = devices.getPropertyValue(daqDeviceId, 'ao_voltage_range') as
       | { min: number; max: number }
       | null
       | undefined;
@@ -71,7 +73,7 @@
 
   // ── Waveform devices (role-sorted, with trace colors) ──
 
-  const profileDevices = $derived(discoverProfileDevices(session.rig_cfg, profileId));
+  const profileDevices = $derived(discoverProfileDevices(rigCfg, profileId));
   const waveformDevices = $derived(
     profileDevices.filter((d) => {
       const wf = profile?.daq.waveforms[d.id];
@@ -112,15 +114,7 @@
   async function commitEditing() {
     if (!selectedDeviceId || !editingWaveform) return;
     try {
-      const res = await fetch(`${session.client.baseUrl}/api/rig/profile/waveforms`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waveforms: { [selectedDeviceId]: editingWaveform } })
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(data.detail || res.statusText);
-      }
+      await profiles.patchWaveforms({ waveforms: { [selectedDeviceId]: editingWaveform } });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update waveform');
       return;
@@ -171,15 +165,7 @@
   async function commitTiming() {
     if (!canEdit || !timingDirty) return;
     try {
-      const res = await fetch(`${session.client.baseUrl}/api/rig/profile/waveforms`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timing: localTiming })
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(data.detail || res.statusText);
-      }
+      await profiles.patchWaveforms({ timing: localTiming });
       timingDirty = false;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update timing');
@@ -458,8 +444,8 @@
 
   // ── Applied traces (server-computed voltage arrays, ground truth) ──
   const appliedTraces = $derived.by(() => {
-    if (!session.appliedWaveforms?.traces) return null;
-    const wfs = session.appliedWaveforms.traces;
+    if (!profiles.appliedWaveforms?.traces) return null;
+    const wfs = profiles.appliedWaveforms.traces;
     const firstVoltages = Object.values(wfs)[0];
     if (!firstVoltages?.length) return null;
     const n = firstVoltages.length;
@@ -549,7 +535,7 @@
         {#each waveformDeviceIds as deviceId (deviceId)}
           {@const isSelected = deviceId === selectedDeviceId}
           {@const isHidden = hiddenDevices.has(deviceId)}
-          {@const port = session.rig_cfg.daq.acq_ports[deviceId]}
+          {@const port = rigCfg.daq.acq_ports[deviceId]}
           {@const label = port ? `${sanitizeString(deviceId)} (${port})` : sanitizeString(deviceId)}
           <div
             class="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-fg-muted transition-colors

@@ -124,76 +124,43 @@ def fire_and_forget(
     return task
 
 
-class CoalescedFlush[T]:
-    """Background task that coalesces rapid updates of type T into batched flushes.
+async def bounded[T](
+    coro: Coroutine[Any, Any, T],
+    *,
+    timeout: float,
+    label: str,
+    log: logging.Logger | None = None,
+) -> T | None:
+    """Await ``coro`` with a timeout. On timeout, log a warning and return ``None``.
 
-    Each ``put()`` stores a pending value and signals the flush loop. Rapid
-    calls between flushes are coalesced — the flush callback receives only
-    the latest (or merged) value.
+    Intended for teardown / close paths where a hanging remote operation (e.g.,
+    a ZMQ call to a dying peer) must not block the rest of shutdown. Reaching
+    the timeout indicates the peer is unresponsive; the caller proceeds
+    regardless rather than hanging indefinitely.
 
-    An optional *reducer* controls how successive puts combine:
-    - Without reducer (default): latest value wins.
-    - With reducer: ``value = reducer(old, new)`` on each put.
+    Other exceptions propagate unchanged — this helper only handles timeouts.
+    Callers that need timeout-as-error semantics should use
+    :func:`asyncio.wait_for` directly.
 
-    Usage::
+    Args:
+        coro: Coroutine to await.
+        timeout: Maximum seconds to wait before giving up.
+        label: Short identifier for the operation, used in the timeout log line.
+        log: Logger to use for the timeout warning. Defaults to vxlib.utils.
 
-        # Scalar — latest wins
-        vp_flush = CoalescedFlush[Viewport]()
-        vp_flush.start(send_viewport)
-        vp_flush.put(vp1)  # queued
-        vp_flush.put(vp2)  # replaces vp1
-
-        # Dict — merge across puts
-        lvl_flush = CoalescedFlush[dict[str, Levels]](reducer=lambda o, n: {**o, **n})
-        lvl_flush.start(send_levels)
-        lvl_flush.put({"ch1": l1})  # queued
-        lvl_flush.put({"ch2": l2})  # merged → {"ch1": l1, "ch2": l2}
+    Returns:
+        The coroutine's result on success, ``None`` on timeout.
     """
-
-    def __init__(self, *, reducer: Callable[[T, T], T] | None = None) -> None:
-        self._reducer = reducer
-        self._event = asyncio.Event()
-        self._task: asyncio.Task[None] | None = None
-        self._flush: Callable[[T], Coroutine[Any, Any, None]] | None = None
-        self._value: T | None = None
-
-    def start(self, flush: Callable[[T], Coroutine[Any, Any, None]]) -> None:
-        """Start the background flush loop with the given callback."""
-        self._flush = flush
-        if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._loop())
-
-    def stop(self) -> None:
-        """Stop the flush loop and discard pending value."""
-        if self._task and not self._task.done():
-            self._task.cancel()
-            self._task = None
-        self._value = None
-        self._event.clear()
-
-    def put(self, value: T) -> None:
-        """Store a pending value and signal flush. Applies reducer if set."""
-        if self._reducer is not None and self._value is not None:
-            self._value = self._reducer(self._value, value)
-        else:
-            self._value = value
-        self._event.set()
-
-    async def _loop(self) -> None:
-        try:
-            while True:
-                await self._event.wait()
-                self._event.clear()
-                if self._flush and self._value is not None:
-                    value = self._value
-                    self._value = None
-                    await self._flush(value)
-        except asyncio.CancelledError:
-            return
+    logger = log or _log
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout)
+    except TimeoutError:
+        logger.warning("%s timed out after %ss", label, timeout)
+        return None
 
 
 def merge_dicts[K, V](old: dict[K, V], new: dict[K, V]) -> dict[K, V]:
-    """Reducer for CoalescedFlush that merges dicts (new entries override old)."""
+    """Reducer for ``Sink``: merges dicts (new entries override old)."""
     return {**old, **new}
 
 

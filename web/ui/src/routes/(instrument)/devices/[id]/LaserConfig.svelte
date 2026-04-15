@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { Session } from '$lib/main';
+  import type { Session } from '$lib/app';
   import { cn, sanitizeString, wavelengthToColor } from '$lib/utils';
-  import { SliderInput } from '$lib/ui/device';
-  import { Switch } from '$lib/ui/kit';
-  import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
+  import { SliderInput } from '$lib/device';
+  import { Switch } from '$lib/kit';
+  import DeviceBrowser from '$lib/device/DeviceBrowser.svelte';
 
   const laserExclusions = {
     props: ['wavelength', 'is_enabled', 'power_setpoint_mw', 'power_mw', 'temperature_c'],

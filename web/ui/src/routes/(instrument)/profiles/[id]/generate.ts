@@ -1,4 +1,4 @@
-import type { Waveform } from '$lib/main';
+import type { Waveform } from '$lib/app';
 
 export interface WaveformTraces {
   /** Time values in seconds. */

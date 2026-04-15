@@ -12,7 +12,7 @@ from rigup import Device, describe
 from vxl.device import DeviceType
 
 if TYPE_CHECKING:
-    from vxl.quantity import VoltageRange
+    from vxlib.quantity import VoltageRange
 
 
 class PinInfo(BaseModel):

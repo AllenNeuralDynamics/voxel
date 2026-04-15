@@ -2,7 +2,7 @@
   import { getSessionContext } from '$lib/context';
   import { page } from '$app/state';
   import { cn, sanitizeString } from '$lib/utils';
-  import DeviceBrowser from '$lib/ui/device/DeviceBrowser.svelte';
+  import DeviceBrowser from '$lib/device/DeviceBrowser.svelte';
   import CameraConfig from './CameraConfig.svelte';
   import LaserConfig from './LaserConfig.svelte';
   import DaqConfig from './DaqConfig.svelte';

@@ -10,9 +10,9 @@ from nidaqmx.errors import DaqError
 from nidaqmx.system import System as NiSystem
 from nidaqmx.system.device import Device as NiDevice
 from nidaqmx.task import Task as NiTask
+from vxlib.quantity import VoltageRange
 
 from vxl.daq import AcqSampleMode, AOTask, COTask, PinInfo, TaskStatus, VoxelDaq
-from vxl.quantity import VoltageRange
 
 
 class NiDaqModel(StrEnum):

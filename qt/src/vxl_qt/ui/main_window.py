@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
 )
 
-from vxl.metadata import discover_metadata_targets
+from vxl.metadata import discover_metadata_schema
 from vxl.store import SessionListing
 from vxl_qt.app import VoxelApp
 from vxl_qt.ui.control_page import ControlPage
@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
         """Refresh launch page data from app."""
         self._launch_page.set_roots(self._app.data_roots)
         self._launch_page.set_templates(self._app.templates)
-        self._launch_page.set_metadata_targets(discover_metadata_targets())
+        self._launch_page.set_metadata_schemas(discover_metadata_schema())
         self._launch_page.set_sessions(self._app.list_sessions())
 
     @Slot(str)
