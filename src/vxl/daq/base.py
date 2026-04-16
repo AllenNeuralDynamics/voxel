@@ -1,122 +1,194 @@
 """DAQ interface definitions for Voxel systems."""
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Mapping
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict
 
-from rigup import Device, describe
+from rigup import Device, DeviceController, describe
 from vxl.device import DeviceType
+
+from .task import AcqSampleMode, AOTask, COTask, PinInfo, TaskInfo
 
 if TYPE_CHECKING:
     from vxlib.quantity import VoltageRange
 
 
-class PinInfo(BaseModel):
-    """Pin information with multi-alias support."""
+class DaqController(DeviceController["VoxelDaq"]):
+    """Controller for VoxelDaq devices with async task management."""
 
-    model_config = ConfigDict(frozen=True)
-
-    pin: str
-    path: str
-    task_name: str
-    pfi: str | None = None
-
-
-class TaskInfo(BaseModel):
-    """Serializable task information for remote communication."""
-
-    model_config = ConfigDict(frozen=True)
-
-    name: str
-    channel_names: list[str]
-    output_terminal: str | None = None
-
-
-class AcqSampleMode(StrEnum):
-    CONTINUOUS = "continuous"
-    FINITE = "finite"
-
-
-class TaskStatus(StrEnum):
-    IDLE = "idle"
-    RUNNING = "running"
-    ERROR = "error"
-
-
-# ==================== Task ABC Classes ====================
-
-
-class DaqTask(ABC):
-    """Base class for DAQ tasks."""
+    # ==================== Serializable Properties ====================
 
     @property
-    @abstractmethod
-    def name(self) -> str: ...
+    @describe(label="Active Tasks", desc="Currently active task information", stream=True)
+    def active_tasks(self) -> dict[str, TaskInfo]:
+        """Serializable task information for UI streaming."""
+        return {
+            name: TaskInfo(
+                name=task.name,
+                channel_names=task.channel_names,
+                output_terminal=getattr(task, "output_terminal", None),
+            )
+            for name, task in self.device.get_tasks().items()
+        }
 
-    @property
-    @abstractmethod
-    def status(self) -> TaskStatus: ...
+    # ==================== Pin Management ====================
 
-    @property
-    @abstractmethod
-    def channel_names(self) -> list[str]: ...
+    @describe(label="Assign Pin", desc="Assign a pin to a task")
+    async def assign_pin(self, task_name: str, pin: str) -> PinInfo:
+        return await self._run_sync(self.device.assign_pin, task_name, pin)
 
-    @abstractmethod
-    def start(self) -> None: ...
+    @describe(label="Release Pin", desc="Release a pin from its task")
+    async def release_pin(self, pin: PinInfo) -> bool:
+        return await self._run_sync(self.device.release_pin, pin)
 
-    @abstractmethod
-    def stop(self) -> None: ...
+    @describe(label="Release Pins for Task", desc="Release all pins for a task")
+    async def release_pins_for_task(self, task_name: str) -> None:
+        await self._run_sync(self.device.release_pins_for_task, task_name)
 
-    @abstractmethod
-    def close(self) -> None: ...
+    @describe(label="Get PFI Path", desc="Get PFI path for a pin")
+    async def get_pfi_path(self, pin: str) -> str:
+        return await self._run_sync(self.device.get_pfi_path, pin)
 
-    @abstractmethod
-    def wait_until_done(self, timeout: float) -> None: ...
+    # ==================== Task Factory ====================
 
+    @describe(label="Create AO Task", desc="Create an analog output task")
+    async def create_ao_task(self, task_name: str, pins: list[str]) -> TaskInfo:
+        task = await self._run_sync(self.device.create_ao_task, task_name, pins)
+        return TaskInfo(name=task.name, channel_names=task.channel_names)
 
-class AOTask(DaqTask):
-    """Analog output task."""
+    @describe(label="Create CO Task", desc="Create a counter output task")
+    async def create_co_task(
+        self,
+        task_name: str,
+        counter: str,
+        frequency_hz: float,
+        duty_cycle: float = 0.5,
+        pulses: int | None = None,
+        output_pin: str | None = None,
+    ) -> TaskInfo:
+        task = await self._run_sync(
+            self.device.create_co_task,
+            task_name,
+            counter,
+            frequency_hz,
+            duty_cycle,
+            pulses,
+            output_pin,
+        )
+        return TaskInfo(name=task.name, channel_names=task.channel_names, output_terminal=task.output_terminal)
 
-    @abstractmethod
-    def write(self, data: np.ndarray) -> int: ...
+    @describe(label="Close Task", desc="Close a task and release its pins")
+    async def close_task(self, task_name: str) -> None:
+        await self._run_sync(self.device.close_task, task_name)
 
-    @abstractmethod
-    def cfg_samp_clk_timing(self, rate: float, sample_mode: AcqSampleMode, samps_per_chan: int) -> None: ...
+    # ==================== Task Operations ====================
 
-    @abstractmethod
-    def cfg_dig_edge_start_trig(self, trigger_source: str, *, retriggerable: bool = False) -> None: ...
+    @describe(label="Start Task", desc="Start a task by name")
+    async def start_task(self, task_name: str) -> None:
+        task = self.device.get_tasks().get(task_name)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' not found")
+        await self._run_sync(task.start)
 
+    @describe(label="Stop Task", desc="Stop a task by name")
+    async def stop_task(self, task_name: str) -> None:
+        task = self.device.get_tasks().get(task_name)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' not found")
+        await self._run_sync(task.stop)
 
-class COTask(DaqTask):
-    """Counter output task."""
+    @describe(label="Write to AO Task", desc="Write data to an analog output task")
+    async def write_ao_task(self, task_name: str, data: list) -> int:
+        task = self.device.get_tasks().get(task_name)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' not found")
+        if not isinstance(task, AOTask):
+            raise TypeError(f"Task '{task_name}' is not an AOTask")
+        # Convert to numpy array (data arrives as list over ZMQ)
+        arr = np.asarray(data, dtype=np.float64)
+        return await self._run_sync(task.write, arr)
 
-    @property
-    @abstractmethod
-    def frequency_hz(self) -> float: ...
+    @describe(label="Configure AO Timing", desc="Configure sample clock timing for AO task")
+    async def configure_ao_timing(
+        self,
+        task_name: str,
+        rate: float,
+        sample_mode: AcqSampleMode,
+        samps_per_chan: int,
+    ) -> None:
+        task = self.device.get_tasks().get(task_name)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' not found")
+        if not isinstance(task, AOTask):
+            raise TypeError(f"Task '{task_name}' is not an AOTask")
+        await self._run_sync(task.cfg_samp_clk_timing, rate, sample_mode, samps_per_chan)
 
-    @property
-    @abstractmethod
-    def duty_cycle(self) -> float: ...
+    @describe(label="Configure AO Trigger", desc="Configure digital edge start trigger for AO task")
+    async def configure_ao_trigger(
+        self,
+        task_name: str,
+        trigger_source: str,
+        retriggerable: bool = False,
+    ) -> None:
+        task = self.device.get_tasks().get(task_name)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' not found")
+        if not isinstance(task, AOTask):
+            raise TypeError(f"Task '{task_name}' is not an AOTask")
+        await self._run_sync(task.cfg_dig_edge_start_trig, trigger_source, retriggerable=retriggerable)
 
-    @property
-    @abstractmethod
-    def output_terminal(self) -> str | None: ...
+    @describe(label="Configure CO Trigger", desc="Configure digital edge start trigger for CO task")
+    async def configure_co_trigger(
+        self,
+        task_name: str,
+        trigger_source: str,
+        retriggerable: bool = False,
+    ) -> None:
+        task = self.device.get_tasks().get(task_name)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' not found")
+        if not isinstance(task, COTask):
+            raise TypeError(f"Task '{task_name}' is not a COTask")
+        await self._run_sync(task.cfg_dig_edge_start_trig, trigger_source, retriggerable=retriggerable)
 
-    @abstractmethod
-    def cfg_dig_edge_start_trig(self, trigger_source: str, *, retriggerable: bool = False) -> None: ...
+    @describe(label="Wait for Task", desc="Wait for a task to complete")
+    async def wait_for_task(self, task_name: str, timeout_s: float) -> None:
+        task = self.device.get_tasks().get(task_name)
+        if task is None:
+            raise ValueError(f"Task '{task_name}' not found")
+        await self._run_sync(task.wait_until_done, timeout_s)
 
+    # ==================== Lifecycle ====================
 
-# ==================== VoxelDaq Device ====================
+    @describe(label="Stop All Tasks", desc="Stop all active tasks")
+    async def stop_all_tasks(self) -> None:
+        for task in self.device.get_tasks().values():
+            try:
+                await self._run_sync(task.stop)
+            except Exception as e:
+                self.log.warning(f"Error stopping task '{task.name}': {e}")
+
+    @describe(label="Close All Tasks", desc="Close all tasks and release all pins")
+    async def close_all_tasks(self) -> None:
+        for task_name in list(self.device.get_tasks().keys()):
+            try:
+                await self._run_sync(self.device.close_task, task_name)
+            except Exception as e:
+                self.log.warning(f"Error closing task '{task_name}': {e}")
+
+    async def close(self) -> None:
+        """Close the controller and all tasks."""
+        self.device.close()
+        await super().close()
 
 
 class VoxelDaq(Device):
     """DAQ device interface with pin management and task factory methods."""
 
     __DEVICE_TYPE__ = DeviceType.DAQ
+    __CONTROLLER_TYPE__ = DaqController
 
     @property
     @abstractmethod

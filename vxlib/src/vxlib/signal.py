@@ -14,6 +14,7 @@ logged and never propagate up — one bad subscriber doesn't poison the others.
 """
 
 import asyncio
+import contextlib
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
@@ -36,10 +37,8 @@ class Signal[T]:
         return lambda: self._unsubscribe(cb)
 
     def _unsubscribe(self, cb: Listener[T]) -> None:
-        try:
+        with contextlib.suppress(ValueError):
             self._subs.remove(cb)
-        except ValueError:
-            pass  # already unsubscribed; idempotent
 
     async def emit(self, value: T) -> None:
         """Invoke every subscriber with ``value``. Awaits async callbacks."""

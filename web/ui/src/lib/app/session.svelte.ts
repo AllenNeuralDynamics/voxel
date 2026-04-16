@@ -53,7 +53,7 @@ export class Session {
   // ──────────────────────────────── Session-owned config state ────────────────────────────────
 
   details = $state<SessionDetails>(null!);
-  rig_cfg = $derived<VoxelRigConfig>(this.details.config.rig!);
+  rig_cfg = $derived<VoxelRigConfig>(this.details.config);
 
   mode = $state<SessionMode>('idle');
   metadata = $state<Record<string, unknown>>({});
@@ -69,7 +69,7 @@ export class Session {
     this.devices = new DevicesManager(init.client, init.details.devices);
 
     const initialSessionStatus = init.status.session ?? null;
-    const rigCfg = init.details.config.rig!;
+    const rigCfg = init.details.config;
 
     // Apply initial session-owned slice
     this.#handleStatus(initialSessionStatus);

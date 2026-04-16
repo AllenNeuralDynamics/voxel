@@ -1,8 +1,6 @@
 from abc import abstractmethod
 
-from rigup.device.props import deliminated_float
-
-from rigup import Device, describe
+from rigup import Device, deliminated_float, describe
 from vxl.device import DeviceType
 
 

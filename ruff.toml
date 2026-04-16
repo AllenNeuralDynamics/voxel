@@ -4,6 +4,7 @@ show-fixes = true
 target-version = 'py313'
 exclude = [
     '**/sdk',
+    '**/.old'
 ]
 
 [format]

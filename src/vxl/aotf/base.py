@@ -1,8 +1,6 @@
 from abc import abstractmethod
 
-from rigup.device.props import enumerated_string
-
-from rigup import Device, describe
+from rigup import Device, describe, enumerated_string
 from vxl.device import DeviceType
 
 

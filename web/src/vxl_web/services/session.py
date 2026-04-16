@@ -77,7 +77,7 @@ class SessionService:
         self._router = WsRouter([self.profiles, self.preview, self.devices, self.stacks, self.acquisition])
 
         # Subscribe to FOV changes for status broadcasts
-        self._unsub_fov = session.rig.profiles.fov_changed.subscribe(self._on_fov_changed)
+        self._unsub_fov = session.microscope.profiles.fov_changed.subscribe(self._on_fov_changed)
 
     async def open(self) -> None:
         """Finish async setup — must be awaited after construction.
@@ -109,7 +109,10 @@ class SessionService:
 
     async def stop_preview_for_idle(self) -> None:
         """Stop preview when the last WS client disconnects (bleaching safety). No broadcast."""
-        await self.preview.close()
+        try:
+            await self.session.stop_preview()
+        except Exception:
+            log.exception("Error stopping preview for idle")
 
     # ---- WS ----
 
@@ -132,7 +135,7 @@ class SessionService:
 
     async def get_status(self) -> SessionStateUpdate:
         preview_configs = await self.preview.session.preview.get_channel_preview_configs()
-        profiles = self.session.rig.profiles
+        profiles = self.session.microscope.profiles
         return SessionStateUpdate(
             active_profile_id=profiles.active_id,
             mode=self.session.mode,

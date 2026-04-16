@@ -3,8 +3,7 @@
 import asyncio
 import time
 
-from rigup.device import DeviceHandle
-
+from rigup import DeviceHandle
 from vxl.axes.continuous.base import ContinuousAxis, TTLStepperConfig
 
 _POLL_INTERVAL = 0.05  # 50 ms - matches the 20 Hz stream rate

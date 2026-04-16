@@ -10,9 +10,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from rigup.device import PropResults
-from rigup.device.base import DeviceInterface
 
+from rigup import DeviceInterface, PropResults
 from vxl import Session
 
 from .ws import BroadcastCallback
@@ -22,35 +21,25 @@ router = APIRouter(tags=["devices"])
 
 
 class DevicesService:
-    """REST + WS surface for ``session.rig.handles``. No controller on the backend."""
+    """REST + WS surface for ``session.microscope.devices``. No controller on the backend."""
 
     topic_prefixes: tuple[str, ...] = ("device/",)
 
     def __init__(self, session: Session, broadcast: BroadcastCallback) -> None:
         self.session = session
         self.broadcast = broadcast
+        self._unsubs: list[Callable[[], None]] = []
 
     async def open(self) -> None:
-        """Subscribe to every device handle's property stream.
-
-        Lifetime invariant this service relies on: ``forwarder = handle = rig = session``.
-        rigup's ``on_props_changed`` returns ``None`` — no unsub exists. We tolerate
-        this because each new session builds a new ``VoxelRig`` with a new
-        ``ClusterManager`` and fresh handles; the old cluster's handles (and the
-        forwarders bound to them) become unreferenced when the old session is
-        dropped, and get collected with it.
-
-        **This holds only while handles are 1:1 with cluster lifetime.** If rigup
-        ever adds mid-session handle replacement (device hot-swap, reconfig),
-        forwarders on replaced handles will stay registered against dead handles
-        with no transfer path — a real leak. That change must land alongside an
-        unsub API on ``on_props_changed``.
-        """
-        for device_id, handle in self.session.rig.handles.items():
-            await handle.on_props_changed(self._make_forwarder(device_id))
+        """Subscribe to every device handle's property-change signal."""
+        for device_id, handle in self.session.microscope.devices.items():
+            unsub = handle.props_changed.subscribe(self._make_forwarder(device_id))
+            self._unsubs.append(unsub)
 
     async def close(self) -> None:
-        """No-op teardown. Device-handle callbacks die with the rig (rigup-owned)."""
+        for unsub in self._unsubs:
+            unsub()
+        self._unsubs.clear()
 
     # ---- WS ----
 
@@ -77,7 +66,7 @@ class DevicesService:
     # ---- Public ops ----
 
     async def set_properties(self, device_id: str, properties: dict[str, Any]) -> dict[str, Any]:
-        handle = self.session.rig.handles.get(device_id)
+        handle = self.session.microscope.devices.get(device_id)
         if not handle:
             raise ValueError(f"Device '{device_id}' not found")
         result = await handle.set_props(**properties)
@@ -93,7 +82,7 @@ class DevicesService:
         args: list[Any],
         kwargs: dict[str, Any],
     ) -> dict[str, Any]:
-        handle = self.session.rig.handles.get(device_id)
+        handle = self.session.microscope.devices.get(device_id)
         if not handle:
             raise ValueError(f"Device '{device_id}' not found")
         response = await handle.run_command(command, *args, **kwargs)
@@ -163,7 +152,7 @@ async def snapshot_devices(session: Session) -> DevicesSnapshot:
     frontend gets identical shape from both entry points.
     """
     devices: dict[str, DeviceSnapshot] = {}
-    for device_id, handle in session.rig.handles.items():
+    for device_id, handle in session.microscope.devices.items():
         try:
             iface = await handle.interface()
             devices[device_id] = DeviceSnapshot(id=device_id, connected=True, interface=iface)
@@ -186,7 +175,7 @@ async def get_device_properties(
     props: list[str] | None = None,
 ) -> dict[str, Any]:
     """Read properties from a device. If ``props`` is omitted, reads all of them."""
-    handle = service.session.rig.handles.get(device_id)
+    handle = service.session.microscope.devices.get(device_id)
     if not handle:
         raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found")
     if props:

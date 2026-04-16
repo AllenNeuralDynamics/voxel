@@ -11,6 +11,8 @@ from typing import Any
 import zmq.asyncio
 from ome_zarr_writer.types import Compression, ScaleLevel
 from rigup.device import PropResults, PropsCallback
+from vxl.node import VoxelNode
+from vxl.sync import SyncTask
 from vxlib.color import Color
 from vxlib.utils import CoalescedFlush, merge_dicts
 
@@ -23,9 +25,7 @@ from vxl.config import ChannelConfig, ProfileConfig, VoxelRigConfig
 from vxl.daq import DaqHandle
 from vxl.daq.wave import Waveform
 from vxl.device import DeviceType
-from vxl.node import VoxelNode
 from vxl.stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus
-from vxl.sync import SyncTask
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
 
@@ -226,7 +226,7 @@ class VoxelRig(Rig):
 
         await self.set_active_profile(self._active_profile_id)
 
-    def _validate_device_types(self) -> None:  # noqa: C901 - validates many device types
+    def _validate_device_types(self) -> None:
         """Validate device type assignments after provisioning."""
         errors = []
 

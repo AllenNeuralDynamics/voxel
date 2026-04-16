@@ -19,10 +19,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from vxl.config import SessionConfig
+from vxl.microscope import Microscope
 from vxl.stack import Stack, StackOrder, StackStatus
 
 if TYPE_CHECKING:
-    from vxl.rig import VoxelRig
     from vxlib import Unsub
 
 
@@ -34,8 +34,8 @@ class Stacks:
     ``session.config.stacks``.
     """
 
-    def __init__(self, rig: "VoxelRig", config: SessionConfig) -> None:
-        self._rig = rig
+    def __init__(self, microscope: Microscope, config: SessionConfig) -> None:
+        self._scope = microscope
         self._config = config
         self._log = logging.getLogger("Stacks")
         self._unsub_fov: Unsub | None = None
@@ -44,7 +44,7 @@ class Stacks:
 
     async def open(self) -> None:
         """Subscribe to FOV changes for planned-stack auto-resize."""
-        self._unsub_fov = self._rig.profiles.fov_changed.subscribe(self._on_fov_changed)
+        self._unsub_fov = self._scope.profiles.fov_changed.subscribe(self._on_fov_changed)
 
     async def close(self) -> None:
         if self._unsub_fov is not None:
@@ -123,7 +123,7 @@ class Stacks:
         if not stacks:
             return []
 
-        active_id = self._rig.profiles.active_id
+        active_id = self._scope.profiles.active_id
         if active_id is None:
             raise RuntimeError("No active profile — select a profile before adding stacks")
 
@@ -264,14 +264,14 @@ class Stacks:
         )
 
     def _require_fov(self) -> tuple[float, float]:
-        fov = self._rig.profiles.fov
+        fov = self._scope.profiles.fov
         if fov is None:
             raise ValueError("FOV not available (no active profile or cameras)")
         return fov
 
     async def _on_fov_changed(self, fov: tuple[float, float]) -> None:
         """Resize PLANNED stacks of the active profile when FOV changes."""
-        active_id = self._rig.profiles.active_id
+        active_id = self._scope.profiles.active_id
         fov_w, fov_h = fov
         for stack in self._config.stacks.values():
             if stack.status == StackStatus.PLANNED and stack.profile_id == active_id:

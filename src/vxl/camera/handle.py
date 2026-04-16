@@ -3,9 +3,9 @@
 from pathlib import Path
 
 from ome_zarr_writer.types import Compression, ScaleLevel
-from rigup.device import DeviceHandle
 from vxlib.vec import Vec2D
 
+from rigup import DeviceHandle
 from vxl.camera.base import Camera, SensorROI, TriggerMode, TriggerPolarity
 from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
 from vxl.stack import BatchResult, Stack

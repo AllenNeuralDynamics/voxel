@@ -24,7 +24,7 @@ from vxl.camera.preview import PreviewViewport
 from vxl.config import SessionConfig
 from vxl.controllers import AcquisitionEngine, PreviewController, Stacks
 from vxl.metadata import resolve_metadata_class
-from vxl.rig import VoxelRig
+from vxl.microscope import Microscope
 from vxl.stack import StackResult
 from vxl.store import SessionStore
 
@@ -47,13 +47,13 @@ class Session:
     def __init__(self, store: SessionStore) -> None:
         self._store = store
         self._config: SessionConfig = store.config
-        self._rig = VoxelRig(config=self._config.rig)
+        self._scope = Microscope(config=self._config)
         self._log = logging.getLogger(f"Session({self._config.info.uid})")
 
         # Controllers composed by Session. All take rig (and optionally config).
-        self.preview = PreviewController(self._rig)
-        self.acquisition = AcquisitionEngine(self._rig)
-        self.stacks = Stacks(self._rig, self._config)
+        self.preview = PreviewController(self._scope)
+        self.acquisition = AcquisitionEngine(self._scope)
+        self.stacks = Stacks(self._scope, self._config)
 
         self._unsub_profile: Unsub | None = None
 
@@ -61,12 +61,12 @@ class Session:
 
     async def open(self) -> None:
         """Open rig, controllers, wire callbacks, and begin autosaving."""
-        await self._rig.start()
+        await self._scope.open()
         await self.stacks.open()
-        self._unsub_profile = self._rig.profiles.profile_changed.subscribe(self._on_profile_changed)
+        self._unsub_profile = self._scope.profiles.profile_changed.subscribe(self._on_profile_changed)
         # rig.profiles.open() fires profile_changed before we subscribe — apply
         # initial colormaps explicitly to cover that first activation.
-        await self.preview.apply_default_colormaps(self._rig.profiles.default_colormaps())
+        await self.preview.apply_default_colormaps(self._scope.profiles.default_colormaps())
         await self._store.start_autosave()
 
     async def close(self) -> None:
@@ -76,14 +76,14 @@ class Session:
             self._unsub_profile = None
         await self._store.stop_autosave()
         await self.stacks.close()
-        await self._rig.close()
+        await self._scope.close()
         self._log.info("Session closed")
 
     # ==================== Properties ====================
 
     @property
-    def rig(self) -> VoxelRig:
-        return self._rig
+    def microscope(self) -> Microscope:
+        return self._scope
 
     @property
     def mode(self) -> SessionMode:
@@ -168,7 +168,7 @@ class Session:
         restart = self.preview.is_running
         if restart:
             await self.stop_preview()
-        await self._rig.profiles.set_active_profile(profile_id)
+        await self._scope.profiles.set_active_profile(profile_id)
         if restart:
             await self.start_preview()
 
@@ -197,10 +197,10 @@ class Session:
         """Edit active profile's waveforms/timing and push to the DAQ. Blocked during acquisition."""
         if self.acquisition.is_running:
             raise RuntimeError("Cannot update waveforms while acquiring")
-        await self._rig.profiles.update_waveforms(waveforms=waveforms, timing=timing)
+        await self._scope.profiles.update_waveforms(waveforms=waveforms, timing=timing)
 
     # ==================== Private ====================
 
     async def _on_profile_changed(self, _profile_id: str) -> None:
         """Reapply default colormaps when the active profile changes."""
-        await self.preview.apply_default_colormaps(self._rig.profiles.default_colormaps())
+        await self.preview.apply_default_colormaps(self._scope.profiles.default_colormaps())

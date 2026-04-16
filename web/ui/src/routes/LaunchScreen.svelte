@@ -303,7 +303,7 @@
           <div class="mt-2 space-y-1 border-t border-border/50 pt-1.5 pl-5 text-xs text-fg-muted">
             <div class="grid grid-cols-[4rem_1fr] items-center gap-x-3 *:h-5 [&>*:nth-child(odd)]:text-fg-muted/80">
               <span>Rig</span>
-              <span>{session.config?.rig.info.name ?? ''}</span>
+              <span>{session.config?.rig.name ?? ''}</span>
               {#if info?.source}
                 <span>Source</span>
                 <span>{info.source}</span>

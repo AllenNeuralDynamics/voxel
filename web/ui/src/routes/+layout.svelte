@@ -15,7 +15,7 @@
   const app = new App();
 
   function cleanup() {
-    app.destroy();
+    app.dispose();
   }
 
   useEventListener(window, 'beforeunload', cleanup);

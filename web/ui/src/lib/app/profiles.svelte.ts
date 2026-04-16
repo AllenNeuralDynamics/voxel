@@ -2,20 +2,14 @@
  * ProfilesManager — profile switching, device-prop save/apply, camera ROI,
  * DAQ waveforms/timing edits and live broadcast state.
  *
- * Mirrors backend ``session.rig.profiles``. Self-subscribes to the ``status``
- * and ``profile/*`` WS topics; takes ``client`` for REST + a ``getRigCfg``
- * getter for reading the static rig config (channels, profiles map).
+ * Mirrors backend ``session.microscope.profiles``. Self-subscribes to the
+ * ``status`` and ``profile/*`` WS topics; takes ``client`` for REST + a
+ * ``getCfg`` getter for reading the session config (channels, profiles map).
  */
 
 import { toast } from 'svelte-sonner';
 import type { Client, DaqWaveformsResponse } from './client.svelte';
-import type {
-  AppStatusUpdate,
-  SessionStateUpdate,
-  VoxelRigConfig,
-  ChannelConfig,
-  ProfileConfig
-} from './types';
+import type { AppStatusUpdate, SessionStateUpdate, VoxelRigConfig, ChannelConfig, ProfileConfig } from './types';
 
 export class ProfilesManager {
   activeId = $state<string | null>(null);
@@ -24,12 +18,12 @@ export class ProfilesManager {
   appliedWaveforms = $state<DaqWaveformsResponse | null>(null);
 
   readonly #client: Client;
-  readonly #getRigCfg: () => VoxelRigConfig;
+  readonly #getCfg: () => VoxelRigConfig;
   #unsubscribers: Array<() => void> = [];
 
-  constructor(client: Client, getRigCfg: () => VoxelRigConfig, initialStatus: SessionStateUpdate | null) {
+  constructor(client: Client, getCfg: () => VoxelRigConfig, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
-    this.#getRigCfg = getRigCfg;
+    this.#getCfg = getCfg;
     this.handleStatus(initialStatus);
     this.#unsubscribers.push(
       client.subscribe('status', (_topic, payload) => {
@@ -38,7 +32,7 @@ export class ProfilesManager {
       client.on('profile/waveforms', (data) => {
         this.appliedWaveforms = data;
         if (data.profile_id) {
-          const profile = this.#getRigCfg().profiles?.[data.profile_id];
+          const profile = this.#getCfg().profiles?.[data.profile_id];
           if (profile) {
             if (data.waveforms) profile.daq.waveforms = data.waveforms;
             if (data.timing) profile.daq.timing = data.timing;
@@ -48,7 +42,7 @@ export class ProfilesManager {
       client.on('profile/props_saved', (payload) => {
         let count = 0;
         for (const [profileId, devices] of Object.entries(payload)) {
-          const profile = this.#getRigCfg().profiles?.[profileId];
+          const profile = this.#getCfg().profiles?.[profileId];
           if (!profile) continue;
           if (!profile.props) profile.props = {};
           for (const [deviceId, props] of Object.entries(devices)) {
@@ -62,7 +56,7 @@ export class ProfilesManager {
         toast.success(`Applied saved props to ${payload.devices.length} device(s)`);
       }),
       client.on('profile/roi_saved', (payload) => {
-        const profile = this.#getRigCfg().profiles?.[payload.profile_id];
+        const profile = this.#getCfg().profiles?.[payload.profile_id];
         if (profile) {
           if (!profile.rois) profile.rois = {};
           profile.rois[payload.camera_id] = payload.roi;
@@ -93,13 +87,13 @@ export class ProfilesManager {
 
   activeChannels = $derived<Record<string, ChannelConfig>>(this.#deriveActiveChannels());
 
-  available = $derived.by<Record<string, ProfileConfig>>(() => this.#getRigCfg().profiles ?? {});
+  available = $derived.by<Record<string, ProfileConfig>>(() => this.#getCfg().profiles ?? {});
   availableIds = $derived.by<string[]>(() => Object.keys(this.available));
 
   #deriveActiveChannels(): Record<string, ChannelConfig> {
     const id = this.activeId;
     if (!id) return {};
-    const cfg = this.#getRigCfg();
+    const cfg = this.#getCfg();
     const profile = cfg.profiles?.[id];
     if (!profile) return {};
     const out: Record<string, ChannelConfig> = {};

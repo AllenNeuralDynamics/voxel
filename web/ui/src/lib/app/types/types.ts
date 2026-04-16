@@ -3,7 +3,16 @@
 // Status models matching backend API
 // ============================================================================
 
-import type { StackOrder, VoxelRigConfig } from './config.ts';
+import type {
+  StackOrder,
+  RigConfig,
+  DaqConfig,
+  StageConfig,
+  DetectionPathConfig,
+  IlluminationPathConfig,
+  ChannelConfig,
+  ProfileConfig
+} from './config.ts';
 
 /**
  * Data root - a storage location for acquired session data.
@@ -113,8 +122,24 @@ export interface DeviceSnapshot {
   error?: string;
 }
 
+/**
+ * Session configuration -- extends MicroscopeConfig with session-specific fields.
+ * Matches backend SessionConfig(MicroscopeConfig) from voxel.config.
+ *
+ * Microscope fields (daq, stage, detection, illumination, channels, profiles)
+ * live directly on this object alongside the slim `rig` topology.
+ */
 export interface SessionConfig {
-  rig: VoxelRigConfig;
+  // Slim rig topology (name, devices, nodes)
+  rig: RigConfig;
+  // Microscope-level config (from MicroscopeConfig base)
+  daq: DaqConfig;
+  stage: StageConfig;
+  detection: Record<string, DetectionPathConfig>;
+  illumination: Record<string, IlluminationPathConfig>;
+  channels: Record<string, ChannelConfig>;
+  profiles: Record<string, ProfileConfig>;
+  // Session identity and state
   info: SessionInfo;
   metadata_schema: string;
   metadata: Record<string, unknown>;

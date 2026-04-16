@@ -385,11 +385,12 @@ async def websocket_endpoint(websocket: WebSocket, service: AppService = Depends
         shutdown.set()
         service.remove_client(client_id)
         # Bleaching safety: if nobody's watching, stop the preview.
-        # No broadcast — clients are gone anyway.
+        # Short timeout so Ctrl+C shutdown isn't blocked waiting for a
+        # reply from a subprocess that's already dying from SIGINT.
         if len(service.clients) == 0 and service.session_service:
             try:
                 log.info("Last client disconnected, stopping preview")
-                await service.session_service.stop_preview_for_idle()
+                await asyncio.wait_for(service.session_service.stop_preview_for_idle(), timeout=5.0)
             except Exception as e:
                 log.warning("Error stopping preview on idle: %s", e)
 

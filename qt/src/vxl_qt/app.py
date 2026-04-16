@@ -16,7 +16,8 @@ from vxl.system import DataRoot
 from vxl_qt.store import DevicesStore, GridStore, PreviewStore, StageStore
 
 if TYPE_CHECKING:
-    from vxl import Session, VoxelRig
+    from vxl import Session
+    from vxl.microscope import Microscope
 
 log = logging.getLogger(__name__)
 
@@ -73,9 +74,9 @@ class VoxelApp(QObject):
         return self._core.session
 
     @property
-    def rig(self) -> "VoxelRig | None":
+    def microscope(self) -> "Microscope | None":
         s = self._core.session
-        return s.rig if s else None
+        return s.microscope if s else None
 
     @property
     def error(self) -> str:
@@ -192,7 +193,7 @@ class VoxelApp(QObject):
         log.info("DevicesStore started")
 
         # Bind stage store to axis adapters
-        stage_cfg = session.rig.config.stage
+        stage_cfg = session.microscope.config.stage
         x_adapter = self.devices.get_adapter(stage_cfg.x)
         y_adapter = self.devices.get_adapter(stage_cfg.y)
         z_adapter = self.devices.get_adapter(stage_cfg.z)

@@ -1,0 +1,205 @@
+# Simulated ExASPIM - local mode, ExASPIM waveform layout
+rig:
+  info:
+    name: "Simulated ExASPIM"
+
+  devices:
+    daq_1:
+      target: vxl.daq.simulated.SimulatedDaq
+      init: { device_name: "MockDev1" }
+    camera:
+      target: vxl.camera.simulated.SimulatedCamera
+      init:
+        pixel_size_um: "3.76,3.76"
+        sensor_size_px: "10640,14192"
+    fw_emission:
+      target: vxl.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: { "0": "BP525", "1": "BP600", "2": "BP700" }
+    laser_488:
+      target: &aotf_laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
+      init: { wavelength: 488, aotf: aotf_1, aotf_channel: 2, aotf_frequency_mhz: 98.2 }
+    laser_561:
+      target: *aotf_laser_target
+      init: { wavelength: 561, aotf: aotf_1, aotf_channel: 3, aotf_frequency_mhz: 87.4 }
+    laser_640:
+      target: *aotf_laser_target
+      init: { wavelength: 640, aotf: aotf_1, aotf_channel: 4, aotf_frequency_mhz: 78.6 }
+    x_axis:
+      target: &linear_axis_target vxl.axes.simulated.SimulatedContinuousAxis
+      init: { lower_limit: 0, upper_limit: 40000 }
+    y_axis:
+      target: *linear_axis_target
+      init: { lower_limit: 0, upper_limit: 25000 }
+    z_axis:
+      target: *linear_axis_target
+      init: { lower_limit: 0, upper_limit: 50000, has_ttl_stepper: true }
+    left_focus:
+      target: *linear_axis_target
+      init: { lower_limit: 0, upper_limit: 10000 }
+    right_focus:
+      target: *linear_axis_target
+      init: { lower_limit: 0, upper_limit: 10000 }
+    camera_focus:
+      target: *linear_axis_target
+      init: { lower_limit: 0, upper_limit: 10000 }
+    aotf_1:
+      target: vxl.aotf.simulated.SimulatedAotf
+      init: { blanking_mode: "external" }
+
+  daq:
+    device: daq_1
+    acq_ports:
+      aotf_1: ao0
+      camera: ao21
+      laser_488: ao17
+      laser_561: ao13
+      laser_640: ao9
+      left_tunable_lens: ao1
+      right_tunable_lens: ao3
+      positive_galvo: ao26
+      negative_galvo: ao27
+      z_axis: ao5
+
+  stage:
+    x: x_axis
+    y: y_axis
+    z: z_axis
+
+  detection:
+    camera:
+      aux_devices: [camera_focus]
+      filter_wheels: [fw_emission]
+      magnification: 5.0
+      rotation_deg: 90
+
+  illumination:
+    laser_488:
+      aux_devices: [left_focus, right_focus]
+    laser_561:
+      aux_devices: [left_focus, right_focus]
+    laser_640:
+      aux_devices: [left_focus, right_focus]
+
+  channels:
+    gfp:
+      detection: camera
+      illumination: laser_488
+      filters: { fw_emission: "BP525" }
+      desc: "GFP using 488nm excitation"
+      label: GFP
+      emission: 510
+    rfp:
+      detection: camera
+      illumination: laser_561
+      filters: { fw_emission: "BP600" }
+      desc: "RFP using 561nm excitation"
+      label: RFP
+      emission: 600
+    cy5:
+      detection: camera
+      illumination: laser_640
+      filters: { fw_emission: "BP700" }
+      desc: "Cy5 using 640nm excitation"
+      label: Cy5
+      emission: 670
+
+  profiles:
+    single_gfp:
+      channels: ["gfp"]
+      daq:
+        timing: &default_timing
+          sample_rate: "10 kHz"
+          duration: "544 ms"
+          rest_time: "0 s"
+        waveforms:
+          camera: &camera_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.045956, max: 0.25 }
+          laser_488: &laser_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.027574, max: 1.0 }
+          aotf_1: &aotf_blanking_waveform
+            type: sawtooth
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.0, max: 1.0 }
+            cycles: 1
+            symmetry: 0.5
+          left_tunable_lens: &left_tunable_lens_waveform
+            type: sawtooth
+            voltage: { min: 1.98, max: 4.28 }
+            window: { min: 0.0, max: 1.0 }
+            cycles: 1
+            symmetry: 1.0
+          right_tunable_lens: &right_tunable_lens_waveform
+            type: sawtooth
+            voltage: { min: 4.85, max: 4.851 }
+            window: { min: 0.0, max: 1.0 }
+            cycles: 1
+            symmetry: 1.0
+          positive_galvo: &positive_galvo_waveform
+            type: sawtooth
+            voltage: { min: 0.0, max: 0.01 }
+            window: { min: 0.0, max: 1.0 }
+            cycles: 1
+          negative_galvo: &negative_galvo_waveform
+            type: sawtooth
+            voltage: { min: 0.0, max: 0.01 }
+            window: { min: 0.0, max: 1.0 }
+            cycles: 1
+          z_axis: &z_axis_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.0, max: 0.01 }
+      desc: "Single GFP channel imaging"
+    single_rfp:
+      channels: ["rfp"]
+      daq:
+        timing: *default_timing
+        waveforms:
+          camera: *camera_waveform
+          laser_561: *laser_waveform
+          aotf_1: *aotf_blanking_waveform
+          left_tunable_lens: *left_tunable_lens_waveform
+          right_tunable_lens: *right_tunable_lens_waveform
+          positive_galvo: *positive_galvo_waveform
+          negative_galvo: *negative_galvo_waveform
+          z_axis: *z_axis_waveform
+      desc: "Single RFP channel imaging"
+    single_cy5:
+      channels: ["cy5"]
+      daq:
+        timing: *default_timing
+        waveforms:
+          camera: *camera_waveform
+          laser_640: *laser_waveform
+          aotf_1: *aotf_blanking_waveform
+          left_tunable_lens: *left_tunable_lens_waveform
+          right_tunable_lens: *right_tunable_lens_waveform
+          positive_galvo: *positive_galvo_waveform
+          negative_galvo: *negative_galvo_waveform
+          z_axis: *z_axis_waveform
+      desc: "Single Cy5 channel imaging"
+
+info:
+  name: ""
+  description: ""
+
+acq:
+  stack_order: snake_row
+  z_step: 1.0
+  default_z_start: 0.0
+  default_z_end: 511.0
+  store_path: ./data
+  max_level: 3
+  compression: blosc.lz4
+
+grid:
+  x_offset: 0.0
+  y_offset: 0.0
+  overlap_x: 0.1
+  overlap_y: 0.1
+
+stacks: {}

@@ -49,16 +49,8 @@ class PreviewService:
     # ---- Lifecycle ----
 
     async def close(self) -> None:
-        """Stop preview if running. No broadcast. Idempotent. Swallows errors.
-
-        Safe to call during session teardown — any failure is logged, not raised,
-        so siblings still get closed.
-        """
-        try:
-            async with self._preview_lock:
-                await self.session.stop_preview()
-        except Exception:
-            log.exception("Error stopping preview during close")
+        """Detach the frame callback. No device RPCs — rig close handles teardown."""
+        self.session.preview.set_frame_callback(None)
 
     # ---- Private ----
 

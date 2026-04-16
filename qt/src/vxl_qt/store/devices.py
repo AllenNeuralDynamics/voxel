@@ -54,11 +54,11 @@ class DevicesStore(QObject):
         return self._session
 
     @property
-    def rig(self):
-        """Access the underlying rig."""
+    def microscope(self):
+        """Access the underlying microscope."""
         if self._session is None:
             return None
-        return self._session.rig
+        return self._session.microscope
 
     @property
     def adapters(self) -> dict[str, DeviceHandleQt]:
@@ -72,10 +72,10 @@ class DevicesStore(QObject):
             return
 
         self._session = session
-        rig = session.rig
-        log.info("Starting DevicesStore with %d devices", len(rig.handles))
+        scope = session.microscope
+        log.info("Starting DevicesStore with %d devices", len(scope.devices))
 
-        for uid, handle in rig.handles.items():
+        for uid, handle in scope.devices.items():
             adapter = DeviceHandleQt(handle, parent=self)
             adapter.properties_changed.connect(lambda props, uid=uid: self._on_properties(uid, props))
 
@@ -135,29 +135,29 @@ class DevicesStore(QObject):
 
     def get_lasers(self) -> dict[str, DeviceHandleQt]:
         """Get all laser device adapters."""
-        if self.rig is None:
+        if self.microscope is None:
             return {}
-        return {uid: self._adapters[uid] for uid in self.rig.lasers if uid in self._adapters}
+        return {uid: self._adapters[uid] for uid in self.microscope.lasers if uid in self._adapters}
 
     def get_cameras(self) -> dict[str, DeviceHandleQt]:
         """Get all camera device adapters."""
-        if self.rig is None:
+        if self.microscope is None:
             return {}
-        return {uid: self._adapters[uid] for uid in self.rig.cameras if uid in self._adapters}
+        return {uid: self._adapters[uid] for uid in self.microscope.cameras if uid in self._adapters}
 
     def get_filter_wheels(self) -> dict[str, DeviceHandleQt]:
         """Get all filter wheel device adapters."""
-        if self.rig is None:
+        if self.microscope is None:
             return {}
-        return {uid: self._adapters[uid] for uid in self.rig.fws if uid in self._adapters}
+        return {uid: self._adapters[uid] for uid in self.microscope.fws if uid in self._adapters}
 
     def get_stage_axes(self) -> dict[str, DeviceHandleQt]:
         """Get stage axis adapters (x, y, z)."""
-        if self.rig is None:
+        if self.microscope is None:
             return {}
         stage_ids = [
-            self.rig.config.stage.x,
-            self.rig.config.stage.y,
-            self.rig.config.stage.z,
+            self.microscope.config.stage.x,
+            self.microscope.config.stage.y,
+            self.microscope.config.stage.z,
         ]
         return {uid: self._adapters[uid] for uid in stage_ids if uid in self._adapters}

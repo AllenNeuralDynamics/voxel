@@ -1,5 +1,3 @@
-import type { GridConfig } from './types.ts';
-
 /**
  * Stack ordering strategy (matches backend StackOrder from voxel.stack)
  */
@@ -39,18 +37,15 @@ export interface NodeConfig {
 }
 
 /**
- * Rig info (matches backend RigInfo from rigup.rig)
+ * Rig configuration (matches backend rigup.config.RigConfig).
+ *
+ * Contains hardware topology only: name, local devices, and remote nodes.
+ * Microscope-specific sections (daq, stage, detection, etc.) live on MicroscopeConfig.
  */
-export interface RigInfo {
+export interface RigConfig {
   name: string;
-}
-
-/**
- * Cluster configuration (matches backend ClusterConfig from rigup.rig)
- */
-export interface ClusterConfig {
-  control_port: number;
-  log_port: number;
+  devices: Record<string, DeviceConfig>;
+  nodes?: Record<string, NodeConfig>;
 }
 
 /**
@@ -232,20 +227,19 @@ export interface ProfileConfig {
   desc: string;
   channels: string[]; // list of channel IDs
   daq: SyncTaskConfig; // DAQ sync task configuration
-  grid: GridConfig; // Grid configuration for tile planning
   props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
   setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
   rois?: Record<string, { x: number; y: number; w: number; h: number }>; // camera_id -> sensor ROI
 }
 
 /**
- * Complete Voxel rig configuration (matches backend VoxelRigConfig from voxel.config)
+ * Microscope configuration (matches backend MicroscopeConfig from voxel.config).
+ *
+ * Embeds a slim {@link RigConfig} for hardware topology and adds microscope-specific
+ * sections: DAQ, stage, optical paths, channels, and profiles.
  */
-export interface VoxelRigConfig {
-  info: RigInfo;
-  cluster: ClusterConfig;
-  devices: Record<string, DeviceConfig>;
-  nodes: Record<string, NodeConfig>;
+export interface MicroscopeConfig {
+  rig: RigConfig;
   daq: DaqConfig;
   stage: StageConfig;
   detection: Record<string, DetectionPathConfig>;
@@ -253,3 +247,6 @@ export interface VoxelRigConfig {
   channels: Record<string, ChannelConfig>;
   profiles: Record<string, ProfileConfig>;
 }
+
+/** @deprecated Use {@link MicroscopeConfig} instead. */
+export type VoxelRigConfig = MicroscopeConfig;

@@ -4,9 +4,8 @@ import logging
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
-from rigup.device import PropResults
 
-from rigup import DeviceHandle
+from rigup import DeviceHandle, PropResults
 from vxlib import fire_and_forget
 
 
@@ -55,7 +54,7 @@ class DeviceHandleQt(QObject):
 
         try:
             # Subscribe to property updates
-            await self._handle.on_props_changed(self._on_properties)
+            self._handle.props_changed.subscribe(self._on_properties)
             self._started = True
             self.connected.emit(True)
             self.log.info("Adapter started")
@@ -160,4 +159,4 @@ class DeviceHandleQt(QObject):
         Returns:
             Device type string
         """
-        return await self._handle.device_type()
+        return (await self._handle.interface()).type

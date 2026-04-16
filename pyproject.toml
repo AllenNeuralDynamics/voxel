@@ -52,8 +52,6 @@ members = [
     "qt",
     "vxlib",
     "omezarr",
-    "rigur",
-    "vxl2",
 ]
 
 [tool.uv.sources]

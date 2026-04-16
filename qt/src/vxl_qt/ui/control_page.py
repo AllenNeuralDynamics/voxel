@@ -289,7 +289,7 @@ class ControlPage(QWidget):
 
     def _on_devices_ready(self) -> None:
         """Initialize UI when devices are ready."""
-        rig = self._app.rig
+        rig = self._app.microscope
         if not rig:
             return
 
@@ -306,7 +306,7 @@ class ControlPage(QWidget):
 
     def _on_profile_changed(self, profile_id: str) -> None:
         """Handle profile selection change from header."""
-        rig = self._app.rig
+        rig = self._app.microscope
         if rig:
             log.info("Switching to profile: %s", profile_id)
             fire_and_forget(self._switch_profile(profile_id), log=log)

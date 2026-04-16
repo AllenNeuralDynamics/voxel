@@ -37,11 +37,7 @@ _anchors:
     window: { min: 0.05, max: 0.95 }
 
 rig:
-  info:
-    name: "Simulated Hybrid Rig"
-
-  cluster:
-    control_port: 9000
+  name: "Simulated Hybrid Rig"
 
   # Local devices - no ZMQ overhead for these
   devices:
@@ -106,110 +102,111 @@ rig:
             pixel_size_um: *sim_pixel_size_um
             sensor_size_px: *sim_camera_sensor_px
 
-  stage:
-    x: x_axis
-    y: y_axis
-    z: z_axis
+stage:
+  x: x_axis
+  y: y_axis
+  z: z_axis
 
-  daq:
-    device: daq_1
-    acq_ports:
-      laser_488: ao0
-      laser_561: ao1
-      camera_1: ao2
-      camera_2: ao3
-      aotf_1: ao4
+daq:
+  device: daq_1
+  acq_ports:
+    laser_488: ao0
+    laser_561: ao1
+    camera_1: ao2
+    camera_2: ao3
+    aotf_1: ao4
 
-  detection:
-    camera_1:
-      filter_wheels: [fw_detection, fw_emission_cam1]
-      magnification: 8.0
-    camera_2:
-      filter_wheels: [fw_detection, fw_emission_cam2]
-      magnification: 8.0
+detection:
+  camera_1:
+    filter_wheels: [fw_detection, fw_emission_cam1]
+    magnification: 8.0
+  camera_2:
+    filter_wheels: [fw_detection, fw_emission_cam2]
+    magnification: 8.0
 
-  illumination:
-    laser_488: {}
-    laser_561: {}
+illumination:
+  laser_488: {}
+  laser_561: {}
 
-  channels:
-    gfp_cam1:
-      detection: camera_1
-      illumination: laser_488
-      filters:
-        fw_detection: "Quad-DGRC"
-        fw_emission_cam1: "BP525"
-      desc: "GFP on camera 1"
-      label: GFP-1
-      emission: 510
-    gfp_cam2:
-      detection: camera_2
-      illumination: laser_488
-      filters:
-        fw_detection: "Quad-DGRC"
-        fw_emission_cam2: "BP525"
-      desc: "GFP on camera 2"
-      label: GFP-2
-      emission: 510
-    rfp_cam1:
-      detection: camera_1
-      illumination: laser_561
-      filters:
-        fw_detection: "Quad-DGRC"
-        fw_emission_cam1: "BP600"
-      desc: "RFP on camera 1"
-      label: RFP-1
-      emission: 600
-    rfp_cam2:
-      detection: camera_2
-      illumination: laser_561
-      filters:
-        fw_detection: "Quad-DGRC"
-        fw_emission_cam2: "BP600"
-      desc: "RFP on camera 2"
-      label: RFP-2
-      emission: 600
+channels:
+  gfp_cam1:
+    detection: camera_1
+    illumination: laser_488
+    filters:
+      fw_detection: "Quad-DGRC"
+      fw_emission_cam1: "BP525"
+    desc: "GFP on camera 1"
+    label: GFP-1
+    emission: 510
+  gfp_cam2:
+    detection: camera_2
+    illumination: laser_488
+    filters:
+      fw_detection: "Quad-DGRC"
+      fw_emission_cam2: "BP525"
+    desc: "GFP on camera 2"
+    label: GFP-2
+    emission: 510
+  rfp_cam1:
+    detection: camera_1
+    illumination: laser_561
+    filters:
+      fw_detection: "Quad-DGRC"
+      fw_emission_cam1: "BP600"
+    desc: "RFP on camera 1"
+    label: RFP-1
+    emission: 600
+  rfp_cam2:
+    detection: camera_2
+    illumination: laser_561
+    filters:
+      fw_detection: "Quad-DGRC"
+      fw_emission_cam2: "BP600"
+    desc: "RFP on camera 2"
+    label: RFP-2
+    emission: 600
 
-  profiles:
-    dual_gfp:
-      channels: ["gfp_cam1", "gfp_cam2"]
-      daq:
-        timing: *default_timing
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          camera_2: *camera_waveform_ch2
-          laser_488: *laser_waveform_ch1
-          aotf_1: *aotf_blanking_waveform
-      desc: "Dual camera GFP imaging"
-    dual_rfp:
-      channels: ["rfp_cam1", "rfp_cam2"]
-      daq:
-        timing: *default_timing
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          camera_2: *camera_waveform_ch2
-          laser_561: *laser_waveform_ch1
-          aotf_1: *aotf_blanking_waveform
-      desc: "Dual camera RFP imaging"
-    single_gfp:
-      channels: ["gfp_cam1"]
-      daq:
-        timing: *default_timing
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          laser_488: *laser_waveform_ch1
-          aotf_1: *aotf_blanking_waveform
-      desc: "Single camera GFP"
+profiles:
+  dual_gfp:
+    channels: ["gfp_cam1", "gfp_cam2"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        camera_2: *camera_waveform_ch2
+        laser_488: *laser_waveform_ch1
+        aotf_1: *aotf_blanking_waveform
+    desc: "Dual camera GFP imaging"
+  dual_rfp:
+    channels: ["rfp_cam1", "rfp_cam2"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        camera_2: *camera_waveform_ch2
+        laser_561: *laser_waveform_ch1
+        aotf_1: *aotf_blanking_waveform
+    desc: "Dual camera RFP imaging"
+  single_gfp:
+    channels: ["gfp_cam1"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform_ch1
+        laser_488: *laser_waveform_ch1
+        aotf_1: *aotf_blanking_waveform
+    desc: "Single camera GFP"
 
 info:
   name: ""
   description: ""
 
-acq:
+plan:
   stack_order: snake_row
   z_step: 1.0
   default_z_start: 0.0
   default_z_end: 511.0
+output:
   store_path: ./data
   max_level: 3
   compression: blosc.lz4

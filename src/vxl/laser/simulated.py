@@ -1,8 +1,6 @@
 import random
 
-from rigup.device.props import deliminated_float
-
-from rigup import describe
+from rigup import deliminated_float, describe
 from vxl.aotf.base import AOTF
 from vxl.laser.base import Laser
 

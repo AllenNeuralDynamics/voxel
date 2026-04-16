@@ -14,11 +14,9 @@ from ome_zarr_writer.backends.ts import TensorStoreBackend
 from ome_zarr_writer.buffer import PyramidRingBuffer
 from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel
-from rigup.device import DeviceController
-from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
-from rigup import Device, describe
+from rigup import Device, DeviceController, deliminated_float, describe, enumerated_int, enumerated_string
 from vxl.camera.preview import (
     PreviewConfig,
     PreviewFrame,
@@ -125,229 +123,14 @@ BINNING_OPTIONS = [1, 2, 4, 8]
 MAX_SLOTS = 12
 
 
-class Camera(Device):
-    __DEVICE_TYPE__ = DeviceType.CAMERA
-
-    trigger_mode: TriggerMode = TriggerMode.OFF
-    trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE
-
-    @property
-    @abstractmethod
-    @describe(label="Sensor Size", units="px")
-    def sensor_size_px(self) -> IVec2D:
-        """Get the size of the camera sensor in pixels."""
-
-    @property
-    @abstractmethod
-    @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D:
-        """Get the size of the camera pixel in microns."""
-
-    @enumerated_string(options=list(PIXEL_FMT_TO_DTYPE.keys()))
-    @abstractmethod
-    @describe(label="Pixel Format", stream=True)
-    def pixel_format(self) -> PixelFormat:
-        """Get the pixel format of the camera."""
-
-    @pixel_format.setter
-    @abstractmethod
-    def pixel_format(self, pixel_format: str) -> None:
-        """Set the pixel format of the camera."""
-
-    @property
-    @describe(label="Pixel Type", stream=True)
-    def pixel_type(self) -> Dtype:
-        """Get the pixel type of the camera."""
-        return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
-
-    @enumerated_int(options=BINNING_OPTIONS)
-    @abstractmethod
-    @describe(label="Binning", stream=True)
-    def binning(self) -> int:
-        """Get the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
-
-    @binning.setter
-    @abstractmethod
-    def binning(self, binning: int) -> None:
-        """Set the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
-
-    @deliminated_float()
-    @abstractmethod
-    @describe(label="Exposure Time", units="ms", stream=True)
-    def exposure_time_ms(self) -> float:
-        """Get the exposure time of the camera in ms."""
-
-    @exposure_time_ms.setter
-    @abstractmethod
-    def exposure_time_ms(self, exposure_time_ms: float) -> None:
-        """Set the exposure time of the camera in ms."""
-
-    @deliminated_float()
-    @abstractmethod
-    @describe(label="Frame Rate", units="Hz", stream=True)
-    def frame_rate_hz(self) -> float:
-        """Get the frame rate of the camera in Hz."""
-
-    @frame_rate_hz.setter
-    @abstractmethod
-    def frame_rate_hz(self, value: float) -> None:
-        """Set the frame rate of the camera in Hz."""
-
-    # ==================== Sensor ROI ====================
-
-    @abstractmethod
-    def _get_roi(self) -> SensorROI:
-        """Read the current ROI from hardware in sensor pixel coordinates."""
-
-    @abstractmethod
-    def _set_roi(self, roi: SensorROI) -> None:
-        """Apply ROI to hardware. Values are pre-snapped by update_roi."""
-
-    @property
-    @abstractmethod
-    @describe(label="ROI Grid", stream=True)
-    def roi_grid(self) -> ROIGrid:
-        """Hardware constraints for the sensor ROI.
-
-        Returns the valid size ranges (min/max/step) for each axis.
-        These are dynamic — they may change with binning mode.
-        """
-
-    @property
-    @describe(label="Sensor ROI", stream=True)
-    def roi(self) -> SensorROI:
-        """Current sensor ROI in physical sensor pixels (pre-binning)."""
-        return self._get_roi()
-
-    @describe(label="Update ROI")
-    def update_roi(self, roi: SensorROI, *, snap: bool = True) -> SensorROI:
-        """Set sensor ROI. Returns the actual applied ROI.
-
-        Args:
-            roi: Desired ROI in physical sensor pixels (pre-binning).
-            snap: If True (default), clamp and align to hardware grid.
-                  If False, raise ValueError if ROI doesn't conform.
-        """
-        grid = self.roi_grid
-        snapped = roi.snap(grid)
-        if not snap and roi != snapped:
-            raise ValueError(f"ROI {roi} does not conform to grid {grid}; nearest valid ROI is {snapped}")
-        self._set_roi(snapped)
-        return self._get_roi()
-
-    @property
-    @describe(label="Frame Size", units="px", stream=True)
-    def frame_size_px(self) -> IVec2D:
-        """Get the image size in pixels (post-binning frame coordinates)."""
-        roi = self.roi
-        b = int(self.binning)
-        return IVec2D(y=roi.h // b, x=roi.w // b)
-
-    @property
-    @describe(label="Frame Size", units="MB", stream=True)
-    def frame_size_mb(self) -> float:
-        """Get the size of the camera image in MB."""
-        return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
-
-    @property
-    @describe(label="Effective Pixel Size", units="µm", stream=True)
-    def effective_pixel_size_um(self) -> Vec2D:
-        """Physical size of each output pixel in µm, accounting for binning."""
-        b = int(self.binning)
-        return Vec2D(x=self.pixel_size_um.x * b, y=self.pixel_size_um.y * b)
-
-    @property
-    @describe(label="Frame Area", units="µm", stream=True)
-    def frame_area_um(self) -> Vec2D:
-        """Get the physical frame size in micrometers."""
-        roi = self.roi
-        return Vec2D(
-            x=roi.w * self.pixel_size_um.x,
-            y=roi.h * self.pixel_size_um.y,
-        )
-
-    @property
-    @abstractmethod
-    @describe(label="Stream Info", stream=True)
-    def stream_info(self) -> StreamInfo | None:
-        """Return a dictionary of the acquisition state or None if not acquiring.
-
-        - Frame Index - frame number of the acquisition
-        - Input Buffer Size - number of free frames in buffer
-        - Output Buffer Size - number of frames to grab from buffer
-        - Dropped Frames - number of dropped frames
-        - Data Rate [MB/s] - data rate of acquisition
-        - Frame Rate [fps] - frames per second of acquisition
-        """
-
-    @abstractmethod
-    def _configure_trigger_mode(self, mode: TriggerMode) -> None:
-        """Configure the trigger mode of the camera."""
-
-    @abstractmethod
-    def _configure_trigger_polarity(self, polarity: TriggerPolarity) -> None:
-        """Configure the trigger polarity of the camera."""
-
-    @abstractmethod
-    def _arm(self) -> None:
-        """Allocate capture buffers. Called by arm()."""
-
-    def disarm(self) -> None:
-        """Release capture buffers. Override if driver needs explicit cleanup."""
-
-    def arm(self, trigger_mode: TriggerMode | None = None, trigger_polarity: TriggerPolarity | None = None):
-        """Configure trigger and allocate capture buffers.
-
-        Safe to call multiple times — releases existing buffers before re-allocating.
-        """
-        self.disarm()
-        self.trigger_mode = trigger_mode if trigger_mode is not None else self.trigger_mode
-        self.trigger_polarity = trigger_polarity if trigger_polarity is not None else self.trigger_polarity
-        self._configure_trigger_mode(self.trigger_mode)
-        self._configure_trigger_polarity(self.trigger_polarity)
-        self._arm()
-
-    @abstractmethod
-    def start(self, frame_count: int | None = None) -> None:
-        """Start the camera to acquire a certain number of frames.
-
-        If frame number is not specified, acquires infinitely until stopped.
-        Initializes the camera buffer.
-
-        Arguments:
-            frame_count: The number of frames to acquire. If None, acquires indefinitely until stopped.
-        """
-
-    @abstractmethod
-    def grab_frame(self) -> np.ndarray:
-        """Grab a frame from the camera buffer.
-
-        If binning is via software, the GPU binned
-        image is computed and returned.
-
-        Returns:
-            The camera frame of size (height, width).
-
-        Raises:
-            RuntimeError: If the camera is not started.
-        """
-
-    @abstractmethod
-    def stop(self) -> None:
-        """Stop the camera."""
-
-
-# ==================== Camera Controller ====================
-
-
 class CameraMode(StrEnum):
     IDLE = "IDLE"
     PREVIEW = "PREVIEW"
     ACQUISITION = "ACQUISITION"
 
 
-class CameraController(DeviceController[Camera]):
-    def __init__(self, device: Camera, stream_interval: float = 0.5):
+class CameraController(DeviceController["Camera"]):
+    def __init__(self, device: "Camera", stream_interval: float = 0.5):
         super().__init__(device, stream_interval=stream_interval)
         self._mode = CameraMode.IDLE
         self._preview_task: asyncio.Task | None = None
@@ -364,12 +147,12 @@ class CameraController(DeviceController[Camera]):
         # Register with the node's RAM mediator so this camera gets a fair share.
         System.reserve_ram(self.device.uid, weight=1.0)
 
-    def close(self) -> None:
+    async def close(self) -> None:
         self._frame_sink.close()
         self._publish_fn = None
         self._previewer.shutdown()
         System.release_ram(self.device.uid)
-        super().close()
+        await super().close()
 
     @property
     @describe(label="RAM Budget", units="bytes", stream=True)
@@ -631,3 +414,219 @@ class CameraController(DeviceController[Camera]):
             duration_s=(completed_at - started_at).total_seconds(),
             dropped_frames=dropped,
         )
+
+
+class Camera(Device):
+    __DEVICE_TYPE__ = DeviceType.CAMERA
+    __CONTROLLER_TYPE__ = CameraController
+
+    trigger_mode: TriggerMode = TriggerMode.OFF
+    trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE
+
+    @property
+    @abstractmethod
+    @describe(label="Sensor Size", units="px")
+    def sensor_size_px(self) -> IVec2D:
+        """Get the size of the camera sensor in pixels."""
+
+    @property
+    @abstractmethod
+    @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
+    def pixel_size_um(self) -> Vec2D:
+        """Get the size of the camera pixel in microns."""
+
+    @enumerated_string(options=list(PIXEL_FMT_TO_DTYPE.keys()))
+    @abstractmethod
+    @describe(label="Pixel Format", stream=True)
+    def pixel_format(self) -> PixelFormat:
+        """Get the pixel format of the camera."""
+
+    @pixel_format.setter
+    @abstractmethod
+    def pixel_format(self, pixel_format: str) -> None:
+        """Set the pixel format of the camera."""
+
+    @property
+    @describe(label="Pixel Type", stream=True)
+    def pixel_type(self) -> Dtype:
+        """Get the pixel type of the camera."""
+        return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
+
+    @enumerated_int(options=BINNING_OPTIONS)
+    @abstractmethod
+    @describe(label="Binning", stream=True)
+    def binning(self) -> int:
+        """Get the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
+
+    @binning.setter
+    @abstractmethod
+    def binning(self, binning: int) -> None:
+        """Set the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
+
+    @deliminated_float()
+    @abstractmethod
+    @describe(label="Exposure Time", units="ms", stream=True)
+    def exposure_time_ms(self) -> float:
+        """Get the exposure time of the camera in ms."""
+
+    @exposure_time_ms.setter
+    @abstractmethod
+    def exposure_time_ms(self, exposure_time_ms: float) -> None:
+        """Set the exposure time of the camera in ms."""
+
+    @deliminated_float()
+    @abstractmethod
+    @describe(label="Frame Rate", units="Hz", stream=True)
+    def frame_rate_hz(self) -> float:
+        """Get the frame rate of the camera in Hz."""
+
+    @frame_rate_hz.setter
+    @abstractmethod
+    def frame_rate_hz(self, value: float) -> None:
+        """Set the frame rate of the camera in Hz."""
+
+    # ==================== Sensor ROI ====================
+
+    @abstractmethod
+    def _get_roi(self) -> SensorROI:
+        """Read the current ROI from hardware in sensor pixel coordinates."""
+
+    @abstractmethod
+    def _set_roi(self, roi: SensorROI) -> None:
+        """Apply ROI to hardware. Values are pre-snapped by update_roi."""
+
+    @property
+    @abstractmethod
+    @describe(label="ROI Grid", stream=True)
+    def roi_grid(self) -> ROIGrid:
+        """Hardware constraints for the sensor ROI.
+
+        Returns the valid size ranges (min/max/step) for each axis.
+        These are dynamic — they may change with binning mode.
+        """
+
+    @property
+    @describe(label="Sensor ROI", stream=True)
+    def roi(self) -> SensorROI:
+        """Current sensor ROI in physical sensor pixels (pre-binning)."""
+        return self._get_roi()
+
+    @describe(label="Update ROI")
+    def update_roi(self, roi: SensorROI, *, snap: bool = True) -> SensorROI:
+        """Set sensor ROI. Returns the actual applied ROI.
+
+        Args:
+            roi: Desired ROI in physical sensor pixels (pre-binning).
+            snap: If True (default), clamp and align to hardware grid.
+                  If False, raise ValueError if ROI doesn't conform.
+        """
+        grid = self.roi_grid
+        snapped = roi.snap(grid)
+        if not snap and roi != snapped:
+            raise ValueError(f"ROI {roi} does not conform to grid {grid}; nearest valid ROI is {snapped}")
+        self._set_roi(snapped)
+        return self._get_roi()
+
+    @property
+    @describe(label="Frame Size", units="px", stream=True)
+    def frame_size_px(self) -> IVec2D:
+        """Get the image size in pixels (post-binning frame coordinates)."""
+        roi = self.roi
+        b = int(self.binning)
+        return IVec2D(y=roi.h // b, x=roi.w // b)
+
+    @property
+    @describe(label="Frame Size", units="MB", stream=True)
+    def frame_size_mb(self) -> float:
+        """Get the size of the camera image in MB."""
+        return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
+
+    @property
+    @describe(label="Effective Pixel Size", units="µm", stream=True)
+    def effective_pixel_size_um(self) -> Vec2D:
+        """Physical size of each output pixel in µm, accounting for binning."""
+        b = int(self.binning)
+        return Vec2D(x=self.pixel_size_um.x * b, y=self.pixel_size_um.y * b)
+
+    @property
+    @describe(label="Frame Area", units="µm", stream=True)
+    def frame_area_um(self) -> Vec2D:
+        """Get the physical frame size in micrometers."""
+        roi = self.roi
+        return Vec2D(
+            x=roi.w * self.pixel_size_um.x,
+            y=roi.h * self.pixel_size_um.y,
+        )
+
+    @property
+    @abstractmethod
+    @describe(label="Stream Info", stream=True)
+    def stream_info(self) -> StreamInfo | None:
+        """Return a dictionary of the acquisition state or None if not acquiring.
+
+        - Frame Index - frame number of the acquisition
+        - Input Buffer Size - number of free frames in buffer
+        - Output Buffer Size - number of frames to grab from buffer
+        - Dropped Frames - number of dropped frames
+        - Data Rate [MB/s] - data rate of acquisition
+        - Frame Rate [fps] - frames per second of acquisition
+        """
+
+    @abstractmethod
+    def _configure_trigger_mode(self, mode: TriggerMode) -> None:
+        """Configure the trigger mode of the camera."""
+
+    @abstractmethod
+    def _configure_trigger_polarity(self, polarity: TriggerPolarity) -> None:
+        """Configure the trigger polarity of the camera."""
+
+    @abstractmethod
+    def _arm(self) -> None:
+        """Allocate capture buffers. Called by arm()."""
+
+    def disarm(self) -> None:
+        """Release capture buffers. Override if driver needs explicit cleanup."""
+
+    def arm(self, trigger_mode: TriggerMode | None = None, trigger_polarity: TriggerPolarity | None = None):
+        """Configure trigger and allocate capture buffers.
+
+        Safe to call multiple times — releases existing buffers before re-allocating.
+        """
+        self.disarm()
+        self.trigger_mode = trigger_mode if trigger_mode is not None else self.trigger_mode
+        self.trigger_polarity = trigger_polarity if trigger_polarity is not None else self.trigger_polarity
+        self._configure_trigger_mode(self.trigger_mode)
+        self._configure_trigger_polarity(self.trigger_polarity)
+        self._arm()
+
+    @abstractmethod
+    def start(self, frame_count: int | None = None) -> None:
+        """Start the camera to acquire a certain number of frames.
+
+        If frame number is not specified, acquires infinitely until stopped.
+        Initializes the camera buffer.
+
+        Arguments:
+            frame_count: The number of frames to acquire. If None, acquires indefinitely until stopped.
+        """
+
+    @abstractmethod
+    def grab_frame(self) -> np.ndarray:
+        """Grab a frame from the camera buffer.
+
+        If binning is via software, the GPU binned
+        image is computed and returned.
+
+        Returns:
+            The camera frame of size (height, width).
+
+        Raises:
+            RuntimeError: If the camera is not started.
+        """
+
+    @abstractmethod
+    def stop(self) -> None:
+        """Stop the camera."""
+
+
+# ==================== Camera Controller ====================

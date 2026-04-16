@@ -3,7 +3,7 @@ import time
 from threading import Event, Thread
 from typing import Any
 
-from vxl.axes.continuous.base import (
+from vxl.axes.continuous import (
     ContinuousAxis,
     StepMode,
     TriggerMode,

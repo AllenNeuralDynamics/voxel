@@ -1,212 +1,115 @@
-"""Primary controller for rig orchestration."""
+"""Rig — top-level orchestrator for a set of devices across nodes.
+
+Usage::
+
+    rig = Rig(config)
+    await rig.open()  # connect nodes, build all devices
+    handle = rig.devices["camera_1"]
+    await handle.call("start_preview")
+    await rig.close()  # close devices, disconnect nodes
+"""
 
 import logging
-from pathlib import Path
-from typing import Self
 
-import zmq.asyncio
-from pydantic import BaseModel, Field
-from ruyaml import YAML
-
-from rigup._utils import get_local_ip
-from rigup.cluster import ClusterConfig, ClusterManager, NodeConfig, RigNode
-from rigup.device import Device, DeviceConfig, DeviceHandle, build_objects_async
-from rigup.local import LocalAdapter
-
-logger = logging.getLogger(__name__)
-yaml = YAML(typ="safe")
-
-
-class RigInfo(BaseModel):
-    name: str
-
-
-class RigConfig(BaseModel):
-    """Complete rig configuration.
-
-    Supports three modes:
-    - Local-only: Use top-level `devices` for local devices (no networking required)
-    - Distributed: Use `nodes` for remote/distributed devices (requires ZMQ)
-    - Hybrid: Use both `devices` and `nodes` together
-    """
-
-    info: RigInfo
-    cluster: ClusterConfig = Field(default_factory=ClusterConfig)
-    devices: dict[str, DeviceConfig] = Field(default_factory=dict)  # Local devices
-    nodes: dict[str, NodeConfig] = Field(default_factory=dict)  # Distributed nodes
-
-    @classmethod
-    def from_yaml(cls, path: str | Path) -> Self:
-        """Load configuration from YAML file."""
-        with Path(path).open() as f:
-            data = yaml.load(f)
-        # remove the key _anchors
-        data.pop("_anchors", None)
-        logger.debug(f"Loaded config: {data}")
-        return cls.model_validate(data)
-
-    @property
-    def device_uids(self) -> set[str]:
-        """All device UIDs across local devices and nodes."""
-        node_devices = {device_id for node in self.nodes.values() for device_id in node.devices}
-        return node_devices | set(self.devices.keys())
-
-    @property
-    def local_nodes(self) -> dict[str, NodeConfig]:
-        local_hostnames = [get_local_ip(), "localhost", "127.0.0.1", "::1", None]
-        return {uid: cfg for uid, cfg in self.nodes.items() if cfg.hostname in local_hostnames}
-
-    @property
-    def remote_nodes(self) -> dict[str, NodeConfig]:
-        local_hosts = self.local_nodes
-        return {uid: cfg for uid, cfg in self.nodes.items() if uid not in local_hosts}
+from rigup.build import BuildError
+from rigup.config import NodeConfig, RigConfig
+from rigup.device import DeviceHandle
+from rigup.node import LocalNode, Node, RemoteNode, SubprocessNode
 
 
 class Rig:
-    """Primary controller that orchestrates the entire rig.
+    """Orchestrates devices across local, subprocess, and remote nodes.
 
-    Supports three modes based on config:
-    - Local-only: Top-level `devices` in config, no networking required
-    - Distributed: `nodes` in config, requires ZMQ context
-    - Hybrid: Both `devices` and `nodes`
-
-    Subclasses can customize:
-    - node_cls(): Return RigNode subclass for controllers and handles
+    ``open`` creates nodes from config, connects/spawns them, and builds
+    all declared devices. ``close`` tears everything down. No partial
+    operations — the rig is either fully open or fully closed.
     """
 
-    @classmethod
-    def node_cls(cls) -> type[RigNode]:
-        """Return the RigNode class for controller and handle creation."""
-        return RigNode
+    def __init__(self, config: RigConfig) -> None:
+        self._config = config
+        self._log = logging.getLogger(f"rigup.rig.{config.name}")
+        self._nodes: dict[str, Node] = {}
+        self._build_errors: dict[str, BuildError] = {}
 
-    def __init__(self, config: RigConfig, zctx: zmq.asyncio.Context | None = None):
-        self.config = config
-        self.log = logging.getLogger(f"rig.{config.info.name}")
+    @property
+    def name(self) -> str:
+        return self._config.name
 
-        # Handles for all devices (local and remote)
-        self.handles: dict[str, DeviceHandle] = {}
+    @property
+    def config(self) -> RigConfig:
+        return self._config
 
-        # Local devices built from top-level config.devices
-        self._local_devices: dict[str, Device] = {}
+    @property
+    def nodes(self) -> dict[str, Node]:
+        return self._nodes
 
-        # Cluster manager for distributed mode (optional)
-        self._cluster: ClusterManager | None = None
-        self._owns_zctx = False
+    @property
+    def devices(self) -> dict[str, DeviceHandle]:
+        result: dict[str, DeviceHandle] = {}
+        for node in self._nodes.values():
+            result.update(node.devices)
+        return result
 
-        # Auto-create ZMQ context if needed for distributed nodes
-        if config.nodes:
-            if zctx is None:
-                zctx = zmq.asyncio.Context()
-                self._owns_zctx = True
-                self.log.debug("Auto-created ZMQ context for distributed nodes")
-            self._cluster = self._create_cluster_manager(zctx, config)
+    @property
+    def build_errors(self) -> dict[str, BuildError]:
+        return self._build_errors
 
-        self.zctx = zctx
+    async def open(self) -> None:
+        """Create nodes, connect/spawn them, and build all declared devices."""
+        self._log.info("Opening rig '%s'", self.name)
+        self._build_errors.clear()
 
-    def _create_cluster_manager(self, zctx: zmq.asyncio.Context, config: RigConfig) -> ClusterManager:
-        """Create cluster manager."""
-        return ClusterManager(
-            zctx=zctx,
-            name=config.info.name,
-            cfg=config.cluster,
-            nodes=config.nodes,
-            node_service_cls=self.node_cls(),
+        self._create_nodes()
+
+        for node in self._nodes.values():
+            await node.open()
+
+        await self._build_all_devices()
+
+        device_count = sum(len(n.devices) for n in self._nodes.values())
+        self._log.info(
+            "Rig '%s' open: %d devices across %d nodes (%d build errors)",
+            self.name,
+            device_count,
+            len(self._nodes),
+            len(self._build_errors),
         )
 
-    async def start(self, connection_timeout: float = 30.0, provision_timeout: float = 30.0):
-        """Complete startup sequence.
+    async def close(self) -> None:
+        """Close all devices and disconnect/terminate all nodes."""
+        self._log.info("Closing rig '%s'", self.name)
+        for node in reversed(list(self._nodes.values())):
+            try:
+                await node.close()
+            except Exception:
+                self._log.exception("Error closing node %s", node.node_id)
+        self._nodes.clear()
+        self._build_errors.clear()
+        self._log.info("Rig '%s' closed", self.name)
 
-        Args:
-            connection_timeout: How long to wait for all devices to connect
-            provision_timeout: How long to wait for nodes to provision
-        """
-        self.log.info(f"Starting {self.config.info.name}...")
+    def _create_nodes(self) -> None:
+        if self._config.devices:
+            self._nodes["local"] = LocalNode()
 
-        # Phase 1: Build local devices (async — runs device constructors in threads,
-        # yields to event loop between dependency layers for real-time log streaming)
-        if self.config.devices:
-            self.log.info(f"Building {len(self.config.devices)} local devices...")
-            devices, errors = await build_objects_async(self.config.devices, base_cls=Device)
+        for node_id, node_cfg in self._config.nodes.items():
+            self._nodes[node_id] = self._create_transport_node(node_id, node_cfg)
 
-            if errors:
-                for uid, error in errors.items():
-                    self.log.error(f"Failed to build local device {uid}: {error.message}")
+    def _create_transport_node(self, node_id: str, config: NodeConfig) -> Node:
+        match config.kind:
+            case "subprocess":
+                return SubprocessNode(node_id, config)
+            case "remote":
+                return RemoteNode(node_id, config)
 
-            for uid, dev in devices.items():
-                self._local_devices[uid] = dev
-                adapter = LocalAdapter(self.node_cls().create_controller(dev))
-                self.handles[uid] = self.node_cls().create_handle(dev.__DEVICE_TYPE__, adapter)
-                self.log.debug(f"Created local handle for {uid}")
+    async def _build_all_devices(self) -> None:
+        if self._config.devices:
+            local = self._nodes.get("local")
+            if local is not None:
+                _, errors = await local.build_devices(self._config.devices)
+                self._build_errors.update(errors)
 
-        # Phase 2: Start distributed cluster (if configured)
-        if self._cluster:
-            await self._cluster.open(
-                connection_timeout=connection_timeout,
-                provision_timeout=provision_timeout,
-            )
-            # Add remote handles to our handles dict
-            self.handles.update(self._cluster.handles)
-
-        await self._on_start_complete()
-
-        # Log summary
-        local_count = len(self._local_devices)
-        remote_count = len(self.handles) - local_count
-        self.log.info(
-            f"{self.config.info.name} ready with {len(self.handles)} devices "
-            f"({local_count} local, {remote_count} remote)",
-        )
-
-    async def _on_start_complete(self) -> None:
-        """Override for custom validation after startup completes."""
-
-    def get_handle(self, device_id: str) -> DeviceHandle:
-        """Get handle for a specific device.
-
-        Args:
-            device_id: Device identifier
-
-        Returns:
-            DeviceHandle instance
-
-        Raises:
-            KeyError: If device not found
-        """
-        return self.handles[device_id]
-
-    def get_device(self, device_id: str) -> Device | None:
-        """Get raw device if local, None if remote.
-
-        Args:
-            device_id: Device identifier
-
-        Returns:
-            Device instance if local, None if remote
-
-        Raises:
-            KeyError: If device not found
-        """
-        handle = self.handles[device_id]
-        return handle.device
-
-    async def close(self):
-        """Close all devices and cleanup."""
-        self.log.info("Stopping rig...")
-
-        # Close local handles
-        for uid, handle in self.handles.items():
-            if handle.device is not None:
-                self.log.debug(f"Closing local handle {uid}")
-                try:
-                    await handle.close()
-                except Exception:
-                    self.log.exception(f"Error closing handle {uid}")
-
-        # Close cluster if running
-        if self._cluster:
-            await self._cluster.close()
-
-        # Cleanup auto-created ZMQ context
-        if self._owns_zctx and self.zctx is not None:
-            self.zctx.term()
-            self.log.debug("ZMQ context terminated")
+        for node_id, node_cfg in self._config.nodes.items():
+            node = self._nodes.get(node_id)
+            if node is not None and node_cfg.devices:
+                _, errors = await node.build_devices(node_cfg.devices)
+                self._build_errors.update(errors)

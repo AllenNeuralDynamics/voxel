@@ -290,18 +290,24 @@ class YamlSessionStore(SessionStore):
         if self._raw_data is not None:
             self._raw_data["info"] = config.info.model_dump(mode="json")
             self._raw_data["metadata_schema"] = config.metadata_schema
-            self._raw_data.pop("metadata_target", None)  # drop legacy key from pre-rename YAMLs
+            self._raw_data.pop("metadata_target", None)
             self._raw_data["metadata"] = config.metadata
             self._raw_data["plan"] = plan_data
             self._raw_data["output"] = output_data
             self._raw_data["grid"] = grid_data
             self._raw_data["stacks"] = stacks_data
-            self._raw_data.pop("acq", None)  # drop legacy key from pre-split YAMLs
-            self._sync_rig_profiles()
+            self._raw_data.pop("acq", None)
+            self._sync_profiles()
             return self._raw_data
 
         return {
             "rig": config.rig.model_dump(mode="json"),
+            "daq": config.daq.model_dump(mode="json"),
+            "stage": config.stage.model_dump(mode="json"),
+            "detection": {k: v.model_dump(mode="json") for k, v in config.detection.items()},
+            "illumination": {k: v.model_dump(mode="json") for k, v in config.illumination.items()},
+            "channels": {k: v.model_dump(mode="json") for k, v in config.channels.items()},
+            "profiles": {k: v.model_dump(mode="json") for k, v in config.profiles.items()},
             "info": config.info.model_dump(mode="json"),
             "metadata_schema": config.metadata_schema,
             "metadata": config.metadata,
@@ -311,21 +317,20 @@ class YamlSessionStore(SessionStore):
             "stacks": stacks_data,
         }
 
-    def _sync_rig_profiles(self) -> None:
-        """Sync mutable profile fields (grid, daq, props, setup, rois) into raw data."""
+    def _sync_profiles(self) -> None:
+        """Sync mutable profile fields (daq, props, setup, rois) into raw data."""
         if self._raw_data is None or self._config is None:
             return
 
-        rig_data = self._raw_data.get("rig", {})
-        if "profiles" not in rig_data:
+        raw_profiles = self._raw_data.get("profiles")
+        if raw_profiles is None:
             return
 
-        for profile_id, profile in self._config.rig.profiles.items():
-            raw_profile = rig_data["profiles"].get(profile_id)
+        for profile_id, profile in self._config.profiles.items():
+            raw_profile = raw_profiles.get(profile_id)
             if raw_profile is None:
                 continue
 
-            raw_profile["grid"] = profile.grid.model_dump()
             raw_profile["daq"] = profile.daq.model_dump(mode="json")
 
             if profile.props:
@@ -473,6 +478,12 @@ class YamlSessionCatalog(SessionCatalog):
 
         config = SessionConfig(
             rig=source_config.rig,
+            daq=source_config.daq,
+            stage=source_config.stage,
+            detection=source_config.detection,
+            illumination=source_config.illumination,
+            channels=source_config.channels,
+            profiles=source_config.profiles,
             info=info,
             metadata_schema=source_config.metadata_schema,
             metadata=source_config.metadata,
@@ -543,7 +554,7 @@ class YamlSessionCatalog(SessionCatalog):
                 y = _make_yaml()
                 with path.open() as f:
                     raw = y.load(f)
-                rig_name = raw.get("rig", {}).get("info", {}).get("name", "")
+                rig_name = raw.get("rig", {}).get("name", "")
             except Exception:
                 log.warning(f"Failed to parse template {path}")
             templates.append(TemplateInfo(name=name, path=path, rig_name=rig_name))

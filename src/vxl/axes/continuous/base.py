@@ -5,9 +5,8 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
-from rigup.device import DeviceController
 
-from rigup import describe
+from rigup import DeviceController, describe
 from vxl.axes.base import Axis
 from vxl.device import DeviceType
 
@@ -76,6 +75,67 @@ class TTLStepper(ABC):
         """Reset the step-and-shoot configuration and clear the buffer."""
 
 
+class ScanMode(StrEnum):
+    IDLE = "IDLE"
+    TTL_STEPPING = "TTL_STEPPING"
+
+
+class ContinuousAxisController(DeviceController["ContinuousAxis"]):
+    """Controller for ContinuousAxis with TTL stepping support."""
+
+    def __init__(self, device: "ContinuousAxis", stream_interval: float = 0.05):
+        super().__init__(device, stream_interval=stream_interval)
+        self._scan_mode = ScanMode.IDLE
+        self._ttl_stepper = device.get_ttl_stepper()
+
+    @property
+    @describe(label="Scan Mode", stream=True)
+    def scan_mode(self) -> ScanMode:
+        return self._scan_mode
+
+    @property
+    @describe(label="TTL Stepping Available")
+    def ttl_stepping_available(self) -> bool:
+        return self._ttl_stepper is not None
+
+    @describe(label="Configure TTL Stepper")
+    async def configure_ttl_stepper(self, cfg: TTLStepperConfig) -> None:
+        if not self._ttl_stepper:
+            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+        if self._scan_mode != ScanMode.IDLE:
+            raise RuntimeError(f"Cannot configure TTL stepper while in {self._scan_mode} mode")
+
+        await self._run_sync(self._ttl_stepper.configure, cfg)
+        self._scan_mode = ScanMode.TTL_STEPPING
+
+    @describe(label="Queue Absolute Move")
+    async def queue_absolute_move(self, position: float) -> None:
+        if not self._ttl_stepper:
+            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+        if self._scan_mode != ScanMode.TTL_STEPPING:
+            raise RuntimeError("TTL stepper not configured")
+
+        await self._run_sync(self._ttl_stepper.queue_absolute_move, position)
+
+    @describe(label="Queue Relative Move")
+    async def queue_relative_move(self, delta: float) -> None:
+        if not self._ttl_stepper:
+            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+        if self._scan_mode != ScanMode.TTL_STEPPING:
+            raise RuntimeError("TTL stepper not configured")
+
+        await self._run_sync(self._ttl_stepper.queue_relative_move, delta)
+
+    @describe(label="Reset TTL Stepper")
+    async def reset_ttl_stepper(self) -> None:
+        if not self._ttl_stepper:
+            self.log.warning("reset_ttl_stepper called but axis %s has no TTL stepper", self.device.uid)
+            return
+
+        await self._run_sync(self._ttl_stepper.reset)
+        self._scan_mode = ScanMode.IDLE
+
+
 class ContinuousAxis(Axis):
     """Base class for continuous motion axes (linear or rotational).
 
@@ -92,6 +152,7 @@ class ContinuousAxis(Axis):
     """
 
     __DEVICE_TYPE__ = DeviceType.CONTINUOUS_AXIS
+    __CONTROLLER_TYPE__ = ContinuousAxisController
 
     def __init__(self, uid: str, units: str = "um") -> None:
         super().__init__(uid=uid)
@@ -281,64 +342,3 @@ class ContinuousAxis(Axis):
 
 
 # ==================== Continuous Axis Controller ====================
-
-
-class ScanMode(StrEnum):
-    IDLE = "IDLE"
-    TTL_STEPPING = "TTL_STEPPING"
-
-
-class ContinuousAxisController(DeviceController[ContinuousAxis]):
-    """Controller for ContinuousAxis with TTL stepping support."""
-
-    def __init__(self, device: ContinuousAxis, stream_interval: float = 0.5):
-        super().__init__(device, stream_interval=stream_interval)
-        self._scan_mode = ScanMode.IDLE
-        self._ttl_stepper = device.get_ttl_stepper()
-
-    @property
-    @describe(label="Scan Mode", stream=True)
-    def scan_mode(self) -> ScanMode:
-        return self._scan_mode
-
-    @property
-    @describe(label="TTL Stepping Available")
-    def ttl_stepping_available(self) -> bool:
-        return self._ttl_stepper is not None
-
-    @describe(label="Configure TTL Stepper")
-    async def configure_ttl_stepper(self, cfg: TTLStepperConfig) -> None:
-        if not self._ttl_stepper:
-            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
-        if self._scan_mode != ScanMode.IDLE:
-            raise RuntimeError(f"Cannot configure TTL stepper while in {self._scan_mode} mode")
-
-        await self._run_sync(self._ttl_stepper.configure, cfg)
-        self._scan_mode = ScanMode.TTL_STEPPING
-
-    @describe(label="Queue Absolute Move")
-    async def queue_absolute_move(self, position: float) -> None:
-        if not self._ttl_stepper:
-            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
-        if self._scan_mode != ScanMode.TTL_STEPPING:
-            raise RuntimeError("TTL stepper not configured")
-
-        await self._run_sync(self._ttl_stepper.queue_absolute_move, position)
-
-    @describe(label="Queue Relative Move")
-    async def queue_relative_move(self, delta: float) -> None:
-        if not self._ttl_stepper:
-            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
-        if self._scan_mode != ScanMode.TTL_STEPPING:
-            raise RuntimeError("TTL stepper not configured")
-
-        await self._run_sync(self._ttl_stepper.queue_relative_move, delta)
-
-    @describe(label="Reset TTL Stepper")
-    async def reset_ttl_stepper(self) -> None:
-        if not self._ttl_stepper:
-            self.log.warning("reset_ttl_stepper called but axis %s has no TTL stepper", self.device.uid)
-            return
-
-        await self._run_sync(self._ttl_stepper.reset)
-        self._scan_mode = ScanMode.IDLE

@@ -13,9 +13,9 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from rigup.device import PropResults
 from vxlib.color import Color
 
+from rigup import PropResults
 from vxl.camera.base import SensorROI
 from vxl.config import ChannelConfig, ProfileConfig
 from vxl.daq import FrameTiming, SyncTask
@@ -23,7 +23,7 @@ from vxl.daq.wave import validate_waveform
 from vxlib import Signal
 
 if TYPE_CHECKING:
-    from vxl.rig import VoxelRig
+    from .microscope import Microscope
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
 
@@ -45,13 +45,13 @@ class Profiles:
     #: Fires when the effective FOV changes (from profile switch or camera re-config).
     fov_changed: Signal[tuple[float, float]]
 
-    def __init__(self, rig: "VoxelRig") -> None:
-        self._rig = rig
+    def __init__(self, microscope: "Microscope") -> None:
+        self._scope = microscope
         self._log = logging.getLogger("Profiles")
 
-        if not rig.config.profiles:
+        if not microscope.config.profiles:
             raise ValueError("No profiles defined in configuration")
-        self._active_id: str = next(iter(rig.config.profiles.keys()))
+        self._active_id: str = next(iter(microscope.config.profiles.keys()))
 
         self._sync_task: SyncTask | None = None
 
@@ -65,20 +65,20 @@ class Profiles:
 
     async def open(self) -> None:
         """Subscribe cameras for FOV triggers and activate the default profile."""
-        for cam_id, handle in self._rig.cameras.items():
-            await handle.on_props_changed(self._make_camera_props_callback(cam_id))
+        for cam_id, handle in self._scope.cameras.items():
+            handle.props_changed.subscribe(self._make_camera_props_callback(cam_id))
         await self.set_active_profile(self._active_id)
 
     async def close(self) -> None:
         if self._sync_task is not None:
-            await self._sync_task.close()
+            self._sync_task.abandon()
             self._sync_task = None
 
     # ==================== Active profile state ====================
 
     @property
     def active(self) -> ProfileConfig:
-        return self._rig.config.profiles[self._active_id]
+        return self._scope.config.profiles[self._active_id]
 
     @property
     def active_id(self) -> str:
@@ -87,14 +87,14 @@ class Profiles:
     @property
     def active_channels(self) -> dict[str, ChannelConfig]:
         return {
-            ch_id: self._rig.config.channels[ch_id]
+            ch_id: self._scope.config.channels[ch_id]
             for ch_id in self.active.channels
-            if ch_id in self._rig.config.channels
+            if ch_id in self._scope.config.channels
         }
 
     @property
     def available(self) -> list[str]:
-        return list(self._rig.config.profiles.keys())
+        return list(self._scope.config.profiles.keys())
 
     def default_colormaps(self) -> dict[str, str]:
         """Per-channel default colormap from emission wavelength; ``'green'`` fallback."""
@@ -120,7 +120,7 @@ class Profiles:
         caller must treat the rig as potentially inconsistent until another
         successful ``set_active_profile`` call lands.
         """
-        if profile_id not in self._rig.config.profiles:
+        if profile_id not in self._scope.config.profiles:
             raise ValueError(f"Profile '{profile_id}' not found in config")
         if profile_id == self._active_id:
             return
@@ -157,15 +157,17 @@ class Profiles:
     async def sync_task(self) -> SyncTask:
         """Return the active profile's sync task, constructing it on first use."""
         if self._sync_task is None:
-            if self._rig.daq is None:
+            if self._scope.daq is None:
                 raise RuntimeError("DAQ not initialized")
-            profile_device_ids = self._rig.config.get_profile_device_ids(self._active_id)
+            profile_device_ids = self._scope.config.get_profile_device_ids(self._active_id)
             ports = {
-                dev_id: port for dev_id, port in self._rig.config.daq.acq_ports.items() if dev_id in profile_device_ids
+                dev_id: port
+                for dev_id, port in self._scope.config.daq.acq_ports.items()
+                if dev_id in profile_device_ids
             }
             self._sync_task = SyncTask(
                 uid=f"sync_{self._active_id}",
-                daq=self._rig.daq,
+                daq=self._scope.daq,
                 ports=ports,
             )
         return self._sync_task
@@ -192,8 +194,8 @@ class Profiles:
         )
         parsed_timing = FrameTiming.model_validate(timing) if timing is not None else None
 
-        if parsed_waveforms and self._rig.daq is not None:
-            ao_range = await self._rig.daq.get_ao_voltage_range()
+        if parsed_waveforms and self._scope.daq is not None:
+            ao_range = await self._scope.daq.get_ao_voltage_range()
             for device_id, wf in parsed_waveforms.items():
                 if wf.voltage.min < ao_range.min or wf.voltage.max > ao_range.max:
                     raise ValueError(
@@ -220,20 +222,20 @@ class Profiles:
     async def enable_active_lasers(self) -> None:
         """Enable lasers for all active channels. Per-channel errors are logged, not raised."""
         for chan_id, channel in self.active_channels.items():
-            if channel.illumination not in self._rig.lasers:
+            if channel.illumination not in self._scope.lasers:
                 continue
             try:
-                await self._rig.lasers[channel.illumination].call("enable")
+                await self._scope.lasers[channel.illumination].call("enable")
             except Exception:
                 self._log.exception("Failed to enable laser for channel '%s'", chan_id)
 
     async def disable_active_lasers(self) -> None:
         """Disable lasers for all active channels. Per-channel errors are logged, not raised."""
         for chan_id, channel in self.active_channels.items():
-            if channel.illumination not in self._rig.lasers:
+            if channel.illumination not in self._scope.lasers:
                 continue
             try:
-                await self._rig.lasers[channel.illumination].call("disable")
+                await self._scope.lasers[channel.illumination].call("disable")
             except Exception:
                 self._log.exception("Failed to disable laser for channel '%s'", chan_id)
 
@@ -241,12 +243,12 @@ class Profiles:
 
     async def capture_device_props(self, device_id: str) -> dict[str, Any]:
         """Read current rw property values from a settable device in the active profile."""
-        profile_devices = self._rig.config.get_profile_device_ids(self._active_id)
-        settable = profile_devices - self._rig.config.filter_wheels
+        profile_devices = self._scope.config.get_profile_device_ids(self._active_id)
+        settable = profile_devices - self._scope.config.filter_wheels
         if device_id not in settable:
             raise ValueError(f"Device '{device_id}' is not a settable device for the active profile")
 
-        handle = self._rig.handles.get(device_id)
+        handle = self._scope.devices.get(device_id)
         if not handle:
             raise ValueError(f"Device '{device_id}' not found")
 
@@ -262,7 +264,7 @@ class Profiles:
         return captured
 
     async def apply_device_props(self, device_id: str, props: dict[str, Any]) -> None:
-        handle = self._rig.handles.get(device_id)
+        handle = self._scope.devices.get(device_id)
         if not handle:
             raise ValueError(f"Device '{device_id}' not found")
         result = await handle.set_props(**props)
@@ -275,11 +277,11 @@ class Profiles:
         self.active.props[device_id] = captured
 
     async def save_all_device_props(self) -> list[str]:
-        profile_devices = self._rig.config.get_profile_device_ids(self._active_id)
-        settable = profile_devices - self._rig.config.filter_wheels
+        profile_devices = self._scope.config.get_profile_device_ids(self._active_id)
+        settable = profile_devices - self._scope.config.filter_wheels
         saved: list[str] = []
         for device_id in sorted(settable):
-            if device_id not in self._rig.handles:
+            if device_id not in self._scope.devices:
                 continue
             await self.save_device_props(device_id)
             saved.append(device_id)
@@ -303,14 +305,14 @@ class Profiles:
     # ==================== Camera ROI ====================
 
     async def capture_camera_roi(self, camera_id: str) -> SensorROI:
-        camera = self._rig.cameras.get(camera_id)
+        camera = self._scope.cameras.get(camera_id)
         if not camera:
             raise ValueError(f"Camera '{camera_id}' not found")
         roi_value = await camera.get_prop_value("roi")
         return SensorROI.model_validate(roi_value) if isinstance(roi_value, dict) else roi_value
 
     async def apply_camera_roi(self, camera_id: str, roi: SensorROI) -> SensorROI:
-        camera = self._rig.cameras.get(camera_id)
+        camera = self._scope.cameras.get(camera_id)
         if not camera:
             raise ValueError(f"Camera '{camera_id}' not found")
         result = await camera.update_roi(roi)
@@ -337,7 +339,7 @@ class Profiles:
 
     async def _configure_profile_devices(self, profile_id: str) -> None:
         """Apply filter wheels, saved props, setup commands, and camera ROIs for a profile."""
-        profile = self._rig.config.profiles[profile_id]
+        profile = self._scope.config.profiles[profile_id]
 
         await self._set_filter_wheels(profile_id)
 
@@ -350,7 +352,7 @@ class Profiles:
                 self._log.exception("Failed to apply props to '%s'", device_id)
 
         for device_id, commands in profile.setup.items():
-            handle = self._rig.handles.get(device_id)
+            handle = self._scope.devices.get(device_id)
             if not handle:
                 self._log.warning("setup: device '%s' not found, skipping", device_id)
                 continue
@@ -370,16 +372,16 @@ class Profiles:
                 self._log.exception("Failed to apply ROI for '%s'", camera_id)
 
     async def _set_filter_wheels(self, profile_id: str) -> None:
-        profile = self._rig.config.profiles[profile_id]
+        profile = self._scope.config.profiles[profile_id]
         filter_positions: dict[str, str] = {}
         for ch_id in profile.channels:
-            if ch_id in self._rig.config.channels:
-                filter_positions.update(self._rig.config.channels[ch_id].filters)
+            if ch_id in self._scope.config.channels:
+                filter_positions.update(self._scope.config.channels[ch_id].filters)
 
         tasks = []
         for fw_id, position_label in filter_positions.items():
-            if fw_id in self._rig.fws:
-                tasks.append(self._rig.fws[fw_id].call("select", position_label, wait=True))
+            if fw_id in self._scope.fws:
+                tasks.append(self._scope.fws[fw_id].call("select", position_label, wait=True))
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -388,9 +390,9 @@ class Profiles:
         async with self._fov_lock:
             fovs: list[tuple[float, float]] = []
             for channel in self.active_channels.values():
-                detection_path = self._rig.config.detection[channel.detection]
+                detection_path = self._scope.config.detection[channel.detection]
                 magnification = detection_path.magnification
-                camera = self._rig.cameras.get(channel.detection)
+                camera = self._scope.cameras.get(channel.detection)
                 if not camera:
                     continue
                 frame_area = await camera.get_frame_area_um()
@@ -414,9 +416,9 @@ class Profiles:
     def _make_camera_props_callback(self, camera_id: str) -> Callable[[PropResults], Awaitable[None]]:
         async def _on_camera_props(props: PropResults) -> None:
             profile_cameras = {
-                self._rig.config.channels[ch].detection
+                self._scope.config.channels[ch].detection
                 for ch in self.active.channels
-                if ch in self._rig.config.channels
+                if ch in self._scope.config.channels
             }
             if camera_id not in profile_cameras:
                 return

@@ -5,7 +5,7 @@
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { sanitizeString, cn, createPaneMinSize } from '$lib/utils';
   import { ChevronDown, ChevronRight, EllipsisVertical } from '$lib/icons';
-  import StackStatusIcon from '$lib/StackStatusIcon.svelte';
+  import StackStatusIcon from '$lib/stacks/StackStatusIcon.svelte';
   import { watch } from 'runed';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { Stack, StackStatus } from '$lib/app/types';

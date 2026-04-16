@@ -169,7 +169,7 @@ class ControlPanel(QWidget):
 
     def _build_profile_options(self) -> list[SelectOption]:
         """Build select options from rig profiles."""
-        rig = self._app.rig
+        rig = self._app.microscope
         if not rig:
             return []
 
@@ -189,7 +189,7 @@ class ControlPanel(QWidget):
 
     def _refresh_profile_select(self) -> None:
         """Refresh the profile selector from rig state."""
-        rig = self._app.rig
+        rig = self._app.microscope
         if not rig:
             return
 
@@ -207,7 +207,7 @@ class ControlPanel(QWidget):
 
     def rebuild_channel_sections(self) -> None:
         """Rebuild channel sections for the current profile."""
-        rig = self._app.rig
+        rig = self._app.microscope
         devices = self._app.devices
 
         if not rig or not devices:
@@ -233,7 +233,7 @@ class ControlPanel(QWidget):
 
     def _on_profile_selected(self, profile_id: str) -> None:
         """Handle profile selection from dropdown."""
-        rig = self._app.rig
+        rig = self._app.microscope
         if not rig or profile_id == rig.profiles.active_id:
             return
 
@@ -257,7 +257,7 @@ class ControlPanel(QWidget):
             log.exception("Failed to switch profile")
             # Revert selection to current profile
             self._profile_select.blockSignals(True)
-            self._profile_select.set_value(session.rig.profiles.active_id)
+            self._profile_select.set_value(session.microscope.profiles.active_id)
             self._profile_select.blockSignals(False)
 
     def _on_viewport_changed(self, x: float, y: float, w: float, h: float) -> None:

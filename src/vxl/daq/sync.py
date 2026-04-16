@@ -19,9 +19,9 @@ import numpy as np
 from pydantic import BaseModel, Field, computed_field, model_validator
 from vxlib.quantity import Frequency, Time
 
-from vxl.daq import AcqSampleMode, DaqHandle
+from vxl.daq.handle import DaqHandle
+from vxl.daq.task import AcqSampleMode
 from vxl.daq.wave import Waveform
-from vxlib import bounded
 
 
 class SyncTriggerConfig(BaseModel):
@@ -139,9 +139,9 @@ class SyncTask:
             self._running = False
 
         if self._ao_task_name is None or self._timing != timing:
-            await self._release_scaffold()
+            await self._teardown()
             self._timing = timing
-            await self._build_scaffold()
+            await self._scaffold()
 
         self._waveforms = {name: waveforms[name] for name in self._ports}
         await self._write_buffer()
@@ -180,9 +180,9 @@ class SyncTask:
             if self._running:
                 await self._stop_tasks()
                 self._running = False
-            await self._release_scaffold()
+            await self._teardown()
             self._timing = timing
-            await self._build_scaffold()
+            await self._scaffold()
             self._waveforms = relevant
             await self._write_buffer()
             if was_running:
@@ -209,23 +209,30 @@ class SyncTask:
         self._running = False
 
     async def close(self) -> None:
-        """Stop (if running) and release all DAQ resources.
+        """Stop (if running) and release all DAQ resources via RPC.
 
-        Both ZMQ calls are bounded because the DAQ node may be simultaneously
-        shutting down (e.g., during Ctrl+C — the subprocess tree gets SIGINT
-        and nodes die before our shutdown command reaches them). On timeout
-        we log and continue; rigup's cluster close downstream force-terminates
-        the node processes anyway.
+        Use this during normal operation (e.g., profile switch) where the
+        node is alive and tasks need to be explicitly released so the next
+        profile can claim the same DAQ pins.
         """
         if self._running:
-            await bounded(self._stop_tasks(), timeout=2.0, label=f"SyncTask({self._uid}) stop_tasks", log=self._log)
+            await self._stop_tasks()
             self._running = False
-        await bounded(
-            self._release_scaffold(),
-            timeout=2.0,
-            label=f"SyncTask({self._uid}) release_scaffold",
-            log=self._log,
-        )
+        await self._teardown()
+        self._timing = None
+        self._waveforms.clear()
+
+    def abandon(self) -> None:
+        """Clear local state without sending any RPCs.
+
+        Use this during shutdown when the node is dying or already dead.
+        The node's own teardown releases DAQ resources; sending RPCs would
+        either hang (dead peer) or be redundant (peer already cleaned up).
+        """
+        self._ao_task_name = None
+        self._clock_task_name = None
+        self._ao_channel_names = []
+        self._running = False
         self._timing = None
         self._waveforms.clear()
 
@@ -272,7 +279,7 @@ class SyncTask:
 
     # ---- scaffold lifecycle ----
 
-    async def _build_scaffold(self) -> None:
+    async def _scaffold(self) -> None:
         timing = self._timing
         if timing is None:
             raise RuntimeError("cannot build scaffold without timing")
@@ -303,13 +310,13 @@ class SyncTask:
             self._clock_task_name = clock_info.name
             self._log.debug("created clock task '%s' at %s Hz", self._clock_task_name, timing.frequency)
 
-    async def _release_scaffold(self) -> None:
+    async def _teardown(self) -> None:
         if self._clock_task_name:
             await self._daq.close_task(self._clock_task_name)
-            self._clock_task_name = None
         if self._ao_task_name:
             await self._daq.close_task(self._ao_task_name)
-            self._ao_task_name = None
+        self._clock_task_name = None
+        self._ao_task_name = None
         self._ao_channel_names = []
 
     # ---- start/stop + buffer write ----

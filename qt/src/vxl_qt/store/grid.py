@@ -180,7 +180,7 @@ class GridStore(QObject):
         """Whether grid is locked (stacks exist for the active profile)."""
         if self._session is None:
             return False
-        active_pid = self._session.rig.profiles.active_id
+        active_pid = self._session.microscope.profiles.active_id
         return any(s.profile_id == active_pid for s in self._session.stacks)
 
     @property
@@ -249,22 +249,26 @@ class GridStore(QObject):
             self._fov_size = None
         else:
             try:
-                fov = self._session.rig.profiles.fov
-                if fov is None:
-                    raise ValueError("FOV not available (no active profile or cameras)")
-                self._fov_size = fov
-                stage = self._session.rig.stage
-                x_lo = await stage.x.get_lower_limit()
-                x_hi = await stage.x.get_upper_limit()
-                y_lo = await stage.y.get_lower_limit()
-                y_hi = await stage.y.get_upper_limit()
-                self._tiles = _generate_tiles(
-                    self._session.config.grid, self._fov_size, stage_w=x_hi - x_lo, stage_h=y_hi - y_lo
-                )
+                fov = self._session.microscope.profiles.fov
             except (ValueError, KeyError):
-                # No active profile or cameras
+                fov = None
+            if fov is None:
                 self._tiles = []
                 self._fov_size = None
+            else:
+                try:
+                    self._fov_size = fov
+                    stage = self._session.microscope.stage
+                    x_lo = await stage.x.get_lower_limit()
+                    x_hi = await stage.x.get_upper_limit()
+                    y_lo = await stage.y.get_lower_limit()
+                    y_hi = await stage.y.get_upper_limit()
+                    self._tiles = _generate_tiles(
+                        self._session.config.grid, self._fov_size, stage_w=x_hi - x_lo, stage_h=y_hi - y_lo
+                    )
+                except (ValueError, KeyError):
+                    self._tiles = []
+                    self._fov_size = None
 
         self.tiles_changed.emit()
         log.debug("Tiles refreshed: %d tiles", len(self._tiles))

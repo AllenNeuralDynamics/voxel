@@ -2,9 +2,9 @@ import time
 from typing import ClassVar, cast, final
 
 import numpy as np
-from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
 from vxlib.vec import IVec2D, Vec2D
 
+from rigup import deliminated_float, enumerated_int, enumerated_string
 from vxl.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,

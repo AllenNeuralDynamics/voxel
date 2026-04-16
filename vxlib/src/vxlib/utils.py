@@ -127,7 +127,7 @@ def fire_and_forget(
 async def bounded[T](
     coro: Coroutine[Any, Any, T],
     *,
-    timeout: float,
+    timeout_s: float,
     label: str,
     log: logging.Logger | None = None,
 ) -> T | None:
@@ -144,7 +144,7 @@ async def bounded[T](
 
     Args:
         coro: Coroutine to await.
-        timeout: Maximum seconds to wait before giving up.
+        timeout_s: Maximum seconds to wait before giving up.
         label: Short identifier for the operation, used in the timeout log line.
         log: Logger to use for the timeout warning. Defaults to vxlib.utils.
 
@@ -153,9 +153,9 @@ async def bounded[T](
     """
     logger = log or _log
     try:
-        return await asyncio.wait_for(coro, timeout=timeout)
+        return await asyncio.wait_for(coro, timeout=timeout_s)
     except TimeoutError:
-        logger.warning("%s timed out after %ss", label, timeout)
+        logger.warning("%s timed out after %ss", label, timeout_s)
         return None
 
 

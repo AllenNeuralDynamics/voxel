@@ -27,8 +27,7 @@ _anchors:
     window: { min: 0.05, max: 0.95 }
 
 rig:
-  info:
-    name: "Simulated Local Rig"
+  name: "Simulated Local Rig"
 
   # All devices defined at top level = local mode (no ZMQ overhead)
   devices:
@@ -71,75 +70,76 @@ rig:
       target: *linear_axis_target
       init: { lower_limit: 0, upper_limit: 50000 }
 
-  stage:
-    x: x_axis
-    y: y_axis
-    z: z_axis
+stage:
+  x: x_axis
+  y: y_axis
+  z: z_axis
 
-  daq:
-    device: daq_1
-    acq_ports:
-      laser_488: ao0
-      laser_561: ao1
-      camera_1: ao2
-      aotf_1: ao3
+daq:
+  device: daq_1
+  acq_ports:
+    laser_488: ao0
+    laser_561: ao1
+    camera_1: ao2
+    aotf_1: ao3
 
-  detection:
-    camera_1:
-      filter_wheels: [fw_emission]
-      magnification: 8.0
+detection:
+  camera_1:
+    filter_wheels: [fw_emission]
+    magnification: 8.0
 
-  illumination:
-    laser_488: {}
-    laser_561: {}
+illumination:
+  laser_488: {}
+  laser_561: {}
 
-  channels:
-    gfp:
-      detection: camera_1
-      illumination: laser_488
-      filters:
-        fw_emission: "BP525"
-      desc: "GFP channel"
-      label: GFP
-      emission: 510
-    rfp:
-      detection: camera_1
-      illumination: laser_561
-      filters:
-        fw_emission: "BP600"
-      desc: "RFP channel"
-      label: RFP
-      emission: 600
+channels:
+  gfp:
+    detection: camera_1
+    illumination: laser_488
+    filters:
+      fw_emission: "BP525"
+    desc: "GFP channel"
+    label: GFP
+    emission: 510
+  rfp:
+    detection: camera_1
+    illumination: laser_561
+    filters:
+      fw_emission: "BP600"
+    desc: "RFP channel"
+    label: RFP
+    emission: 600
 
-  profiles:
-    single_gfp:
-      channels: ["gfp"]
-      daq:
-        timing: *default_timing
-        waveforms:
-          camera_1: *camera_waveform
-          laser_488: *laser_waveform
-          aotf_1: *aotf_blanking_waveform
-      desc: "Single GFP channel"
-    single_rfp:
-      channels: ["rfp"]
-      daq:
-        timing: *default_timing
-        waveforms:
-          camera_1: *camera_waveform
-          laser_561: *laser_waveform
-          aotf_1: *aotf_blanking_waveform
-      desc: "Single RFP channel"
+profiles:
+  single_gfp:
+    channels: ["gfp"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform
+        laser_488: *laser_waveform
+        aotf_1: *aotf_blanking_waveform
+    desc: "Single GFP channel"
+  single_rfp:
+    channels: ["rfp"]
+    daq:
+      timing: *default_timing
+      waveforms:
+        camera_1: *camera_waveform
+        laser_561: *laser_waveform
+        aotf_1: *aotf_blanking_waveform
+    desc: "Single RFP channel"
 
 info:
   name: ""
   description: ""
 
-acq:
+plan:
   stack_order: snake_row
   z_step: 1.0
   default_z_start: 0.0
   default_z_end: 511.0
+output:
   store_path: ./data
   max_level: 3
   compression: blosc.lz4

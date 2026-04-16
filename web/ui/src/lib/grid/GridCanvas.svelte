@@ -22,7 +22,7 @@
   let offsetLinked = $state(false);
   let overlapLinked = $state(true);
 
-  let gc = $derived<GridConfig | null>(session.rig_cfg.profiles[session.profiles.activeId ?? '']?.grid ?? null);
+  let gc = $derived<GridConfig>(session.mosaic.config);
 
   const layerItems: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
     { key: 'grid', color: 'text-fg-muted', Icon: GridLines, title: 'Toggle grid' },
@@ -41,7 +41,7 @@
 {#if session.stage && session.stage.x && session.stage.y && session.stage.z}
   <div class="flex h-full">
     <!-- Grid controls sidebar (collapses when grid layer hidden) -->
-    {#if gc && sidebarOpen}
+    {#if sidebarOpen}
       {@const gridLimX = (session.mosaic.fov.width * (1 - (gc.overlap_x ?? 0.1))) / 1000}
       {@const gridLimY = (session.mosaic.fov.height * (1 - (gc.overlap_y ?? 0.1))) / 1000}
       <div
@@ -58,7 +58,7 @@
               title={offsetLinked ? 'Unlink X/Y' : 'Link X/Y'}
               onclick={() => {
                 offsetLinked = !offsetLinked;
-                if (offsetLinked && gc) session.mosaic.setOffset(gc.x_offset, gc.x_offset);
+                if (offsetLinked) session.mosaic.setOffset(gc.x_offset, gc.x_offset);
               }}
             >
               {#if offsetLinked}<Link class="h-3 w-3" />{:else}<LinkOff class="h-3 w-3" />{/if}
@@ -92,7 +92,7 @@
               size="xs"
               variant="ghost"
               align="right"
-              onChange={(v) => session.mosaic.setOffset(v * 1000, gc!.y_offset)}
+              onChange={(v) => session.mosaic.setOffset(v * 1000, gc.y_offset)}
             />
             <SpinBox
               value={gc.y_offset / 1000}
@@ -106,7 +106,7 @@
               size="xs"
               variant="ghost"
               align="right"
-              onChange={(v) => session.mosaic.setOffset(gc!.x_offset, v * 1000)}
+              onChange={(v) => session.mosaic.setOffset(gc.x_offset, v * 1000)}
             />
           {/if}
         </div>
@@ -120,7 +120,7 @@
               title={overlapLinked ? 'Unlink X/Y' : 'Link X/Y'}
               onclick={() => {
                 overlapLinked = !overlapLinked;
-                if (overlapLinked && gc) session.mosaic.setOverlap(gc.overlap_x, gc.overlap_x);
+                if (overlapLinked) session.mosaic.setOverlap(gc.overlap_x, gc.overlap_x);
               }}
             >
               {#if overlapLinked}<Link class="h-3 w-3" />{:else}<LinkOff class="h-3 w-3" />{/if}
@@ -154,7 +154,7 @@
               size="xs"
               variant="ghost"
               align="right"
-              onChange={(v) => session.mosaic.setOverlap(v, gc!.overlap_y)}
+              onChange={(v) => session.mosaic.setOverlap(v, gc.overlap_y)}
             />
             <SpinBox
               value={gc.overlap_y}
@@ -168,7 +168,7 @@
               size="xs"
               variant="ghost"
               align="right"
-              onChange={(v) => session.mosaic.setOverlap(gc!.overlap_x, v)}
+              onChange={(v) => session.mosaic.setOverlap(gc.overlap_x, v)}
             />
           {/if}
         </div>

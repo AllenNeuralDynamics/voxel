@@ -21,14 +21,14 @@ router = APIRouter(tags=["profile"])
 
 
 class ProfilesService:
-    """REST + WS surface for ``session.rig.profiles``."""
+    """REST + WS surface for ``session.microscope.profiles``."""
 
     topic_prefixes: tuple[str, ...] = ("profile/",)
 
     def __init__(self, session: Session, broadcast: BroadcastCallback) -> None:
         self.session = session
         self.broadcast = broadcast
-        self._unsub = session.rig.profiles.profile_changed.subscribe(self._on_profile_changed)
+        self._unsub = session.microscope.profiles.profile_changed.subscribe(self._on_profile_changed)
 
     async def close(self) -> None:
         self._unsub()
@@ -53,7 +53,7 @@ class ProfilesService:
 
     def get_waveform_traces(self) -> dict[str, Any]:
         """Active profile's waveforms + timing + sampled traces for visualization."""
-        profiles = self.session.rig.profiles
+        profiles = self.session.microscope.profiles
         traces = profiles.preview_traces(target_points=1000)
         daq = profiles.active.daq.model_dump(mode="json")
         return {
@@ -134,9 +134,9 @@ async def save_props(
 ) -> dict[str, list[str]]:
     try:
         if request.device_id is None:
-            saved = await service.session.rig.profiles.save_all_device_props()
+            saved = await service.session.microscope.profiles.save_all_device_props()
         else:
-            await service.session.rig.profiles.save_device_props(request.device_id)
+            await service.session.microscope.profiles.save_device_props(request.device_id)
             saved = [request.device_id]
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -148,7 +148,7 @@ async def apply_props(
     request: ApplyPropsRequest,
     service: Annotated[ProfilesService, Depends(get_profiles_service)],
 ) -> dict[str, list[str]]:
-    applied = await service.session.rig.profiles.apply_profile_props(request.device_ids)
+    applied = await service.session.microscope.profiles.apply_profile_props(request.device_ids)
     return {"applied": applied}
 
 
@@ -158,7 +158,7 @@ async def save_roi(
     service: Annotated[ProfilesService, Depends(get_profiles_service)],
 ) -> dict[str, Any]:
     try:
-        roi = await service.session.rig.profiles.save_camera_roi(request.camera_id)
+        roi = await service.session.microscope.profiles.save_camera_roi(request.camera_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"camera_id": request.camera_id, "roi": roi.model_dump()}
@@ -170,7 +170,7 @@ async def apply_roi(
     service: Annotated[ProfilesService, Depends(get_profiles_service)],
 ) -> dict[str, Any]:
     try:
-        roi = await service.session.rig.profiles.revert_camera_roi(request.camera_id)
+        roi = await service.session.microscope.profiles.revert_camera_roi(request.camera_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"camera_id": request.camera_id, "roi": roi.model_dump() if roi else None}

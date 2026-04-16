@@ -1,19 +1,13 @@
 """User-facing device handle."""
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Self
 
-from .base import (
-    CommandRequest,
-    Device,
-    DeviceInterface,
-    PropResults,
-    PropsCallback,
-    Result,
-    Results,
-)
-from .controller import StreamCallback
+from vxlib import Signal
+
+from .driver import Device, StreamCallback
 from .props import PropertyModel
+from .schema import CommandRequest, DeviceInterface, PropResults, Result, Results
 
 
 class Adapter[D: Device](ABC):
@@ -26,6 +20,10 @@ class Adapter[D: Device](ABC):
     @property
     @abstractmethod
     def device(self) -> D | None: ...
+
+    @property
+    @abstractmethod
+    def props_changed(self) -> Signal[PropResults]: ...
 
     @abstractmethod
     async def interface(self) -> DeviceInterface: ...
@@ -43,9 +41,6 @@ class Adapter[D: Device](ABC):
     async def set_props(self, **props: Any) -> PropResults: ...
 
     @abstractmethod
-    async def on_props_changed(self, callback: PropsCallback) -> None: ...
-
-    @abstractmethod
     async def subscribe(self, topic: str, callback: StreamCallback) -> None: ...
 
     @abstractmethod
@@ -56,26 +51,39 @@ class Adapter[D: Device](ABC):
 
 
 class DeviceHandle[D: Device]:
-    """User-facing async API for device access. Works with local or remote adapters."""
+    """User-facing async API for device access. Works with local or remote adapters.
+
+    Subclass to add typed convenience methods for specific device kinds::
+
+        class CameraHandle(DeviceHandle):
+            async def start_preview(self) -> None:
+                await self.call("start_preview")
+
+
+        camera = CameraHandle.wrap(raw_handle)
+    """
 
     def __init__(self, adapter: Adapter[D]):
         self._adapter = adapter
         self._interface: DeviceInterface | None = None
 
     @property
+    def adapter(self) -> Adapter[D]:
+        return self._adapter
+
+    @classmethod
+    def wrap(cls, handle: "DeviceHandle") -> Self:
+        """Create a typed handle sharing another handle's adapter."""
+        return cls(handle.adapter)
+
+    @property
     def uid(self) -> str:
         return self._adapter.uid
 
-    async def device_type(self) -> str:
-        """Get device type, fetching interface if needed."""
-        if self._interface is None:
-            self._interface = await self._adapter.interface()
-        return self._interface.type
-
     @property
-    def device(self) -> D | None:
-        """Raw device if local, None if remote."""
-        return self._adapter.device
+    def props_changed(self) -> Signal[PropResults]:
+        """Fires on property changes for ``stream=True`` props. Subscribe to receive ``PropResults``."""
+        return self._adapter.props_changed
 
     async def call(self, command: str, *args: Any, **kwargs: Any) -> Any:
         """Call a command and return the result, raising on error."""
@@ -115,10 +123,6 @@ class DeviceHandle[D: Device]:
         if self._interface is None:
             self._interface = await self._adapter.interface()
         return self._interface
-
-    async def on_props_changed(self, callback: PropsCallback) -> None:
-        """Register callback for property change notifications."""
-        await self._adapter.on_props_changed(callback)
 
     async def subscribe(self, topic: str, callback: StreamCallback) -> None:
         await self._adapter.subscribe(topic, callback)

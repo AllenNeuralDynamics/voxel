@@ -9,7 +9,7 @@
 
 <!-- Compact header -->
 <div class="flex items-center gap-3 px-4 text-sm text-fg-muted">
-  <span class="font-medium text-fg">{config.info.name}</span>
+  <span class="font-medium text-fg">{session.details.config.rig.name}</span>
   <span>&middot;</span>
   <span>
     {[...session.devices.devices.values()].filter((d) => d.connected).length}/{session.devices.devices.size} devices

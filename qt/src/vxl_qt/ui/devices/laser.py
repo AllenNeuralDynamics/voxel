@@ -40,11 +40,14 @@ class LaserControl(QWidget):
 
     Example (standalone):
         from vxl_drivers.lasers.simulated import SimulatedLaser
-        from rigup import create_local_handle
+        from rigup import DeviceController, DeviceHandle
+        from rigup.node import LocalAdapter
         from vxl_qt.handle import DeviceHandleQt
 
         device = SimulatedLaser(uid="laser", wavelength=488, max_power_mw=100)
-        handle = create_local_handle(device)
+        controller = DeviceController(device)
+        controller.start_streaming()
+        handle = DeviceHandle(LocalAdapter(controller))
         adapter = DeviceHandleQt(handle)
         await adapter.start()
         widget = LaserControl(adapter)

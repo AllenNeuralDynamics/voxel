@@ -22,10 +22,10 @@
 #   - Document illegal state transitions in the ABC (start-while-running,
 #     write-after-close, etc.) — currently driver-defined.
 
-from .base import AcqSampleMode, AOTask, COTask, DaqTask, PinInfo, TaskInfo, TaskStatus, VoxelDaq
-from .controller import DaqController
+from .base import DaqController, VoxelDaq
 from .handle import DaqHandle
 from .sync import FrameTiming, SyncTask
+from .task import AcqSampleMode, AOTask, COTask, DaqTask, PinInfo, TaskInfo, TaskStatus
 from .wave import Waveform
 
 __all__ = [

@@ -1,0 +1,187 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '../lib/themes/index.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Density tokens ───────────────────────────────────────────────────── */
+
+:root {
+  --ui-xs: 1.75rem;
+  --ui-sm: 2rem;
+  --ui-md: 2.25rem;
+  --ui-lg: 2.5rem;
+  --ui-xl: 3rem;
+}
+
+.density-compact {
+  --ui-xs: 1.5rem;
+  --ui-sm: 1.75rem;
+  --ui-md: 2rem;
+  --ui-lg: 2.25rem;
+  --ui-xl: 3.5rem;
+}
+
+.density-comfortable {
+  --ui-xs: 2rem;
+  --ui-sm: 2.25rem;
+  --ui-md: 2.5rem;
+  --ui-lg: 2.75rem;
+  --ui-xl: 3.75rem;
+}
+
+.nss {
+  vector-effect: non-scaling-stroke;
+}
+
+@theme inline {
+  /* ── Density ───────────────────────────────────────────────────────── */
+  --spacing-ui-xs: var(--ui-xs);
+  --spacing-ui-sm: var(--ui-sm);
+  --spacing-ui-md: var(--ui-md);
+  --spacing-ui-lg: var(--ui-lg);
+  --spacing-ui-xl: var(--ui-xl);
+
+  /* ── Surfaces ──────────────────────────────────────────────────────── */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-elevated: var(--elevated);
+  --color-floating: var(--floating);
+  --color-backdrop: var(--backdrop);
+
+  /* ── Element ───────────────────────────────────────────────────────── */
+  --color-element-bg: var(--element-bg);
+  --color-element-hover: var(--element-hover);
+  --color-element-active: var(--element-active);
+  --color-element-selected: var(--element-selected);
+
+  /* ── Text ──────────────────────────────────────────────────────────── */
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-fg-accent: var(--fg-accent);
+
+  /* ── Borders ───────────────────────────────────────────────────────── */
+  --color-border: var(--border);
+  --color-border-variant: var(--border-variant);
+  --color-border-focused: var(--border-focused);
+  --color-border-selected: var(--border-selected);
+  --color-border-disabled: var(--border-disabled);
+  --color-input: var(--border-variant);
+  --color-ring: var(--border-focused);
+
+  /* ── Interactive ───────────────────────────────────────────────────── */
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-secondary: var(--secondary);
+  --color-secondary-fg: var(--secondary-fg);
+
+  /* ── Semantic ──────────────────────────────────────────────────────── */
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-fg: var(--danger-fg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-fg: var(--success-fg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-fg: var(--warning-fg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-info-fg: var(--info-fg);
+  /* ── Animations ────────────────────────────────────────────────────── */
+  --animate-collapsible-down: collapsible-down 0.2s ease-out;
+  --animate-collapsible-up: collapsible-up 0.2s ease-out;
+
+  /* ── shadcn legacy (remove after migration) ────────────────────────
+	 * These keep bg-background, text-muted-foreground, etc. working
+	 * until all components are migrated to the new token names.
+	 * ──────────────────────────────────────────────────────────────────── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+/* ── Stack status ─────────────────────────────────────────────────────── */
+
+[data-stack-status='planned'] {
+  --stack-status: var(--color-info);
+}
+[data-stack-status='acquiring'] {
+  --stack-status: var(--color-warning);
+}
+[data-stack-status='completed'] {
+  --stack-status: var(--color-success);
+}
+[data-stack-status='failed'] {
+  --stack-status: var(--color-danger);
+}
+[data-stack-status='skipped'] {
+  --stack-status: var(--color-fg-muted);
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────── */
+
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--bits-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--bits-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+/* ── Base layer ───────────────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Thin scrollbars — webkit (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 2px !important;
+    height: 2px !important;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb) !important;
+    border-radius: 3px !important;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover) !important;
+  }
+
+  /* Thin scrollbars — Firefox */
+  * {
+    scrollbar-width: thin !important;
+    scrollbar-color: var(--scrollbar-thumb) transparent !important;
+  }
+}

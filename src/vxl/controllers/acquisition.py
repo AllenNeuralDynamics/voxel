@@ -18,7 +18,7 @@ from pathlib import Path
 from ome_zarr_writer.types import Compression, ScaleLevel
 
 from vxl.axes import StepMode, TTLStepperConfig
-from vxl.rig import VoxelRig
+from vxl.microscope import Microscope
 from vxl.stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus
 
 # Pipeline knobs — hardcoded defaults. Will be replaced with per-acquisition
@@ -31,8 +31,8 @@ _DEFAULT_TARGET_SHARD_GB = 1.0
 class AcquisitionEngine:
     """Runs a single stack. Mutates stack fields; returns a ``StackResult``."""
 
-    def __init__(self, rig: VoxelRig) -> None:
-        self._rig = rig
+    def __init__(self, microscope: Microscope) -> None:
+        self._scope = microscope
         self._log = logging.getLogger("Acquisition")
         self._running = False
 
@@ -57,7 +57,7 @@ class AcquisitionEngine:
         Switches profiles if ``stack.profile_id`` doesn't match the active profile.
         Channels write into ``{store_path}/{stack_id}/{channel_name}.ome.zarr``.
         """
-        profiles = self._rig.profiles
+        profiles = self._scope.profiles
         if profiles.active_id != stack.profile_id:
             await profiles.set_active_profile(stack.profile_id)
 
@@ -69,13 +69,13 @@ class AcquisitionEngine:
         stack_store = store_path / stack.stack_id
         channel_cam_map = self._build_channel_cam_map()
         cam_uids = [cam_id for cam_id, _ in channel_cam_map.values()]
-        scanning_axis = self._rig.stage.scanning_axis
+        scanning_axis = self._scope.stage.scanning_axis
 
         try:
             await asyncio.gather(
-                self._rig.stage.x.move_abs(stack.x, wait=True),
-                self._rig.stage.y.move_abs(stack.y, wait=True),
-                self._rig.stage.z.move_abs(stack.z_start, wait=True),
+                self._scope.stage.x.move_abs(stack.x, wait=True),
+                self._scope.stage.y.move_abs(stack.y, wait=True),
+                self._scope.stage.z.move_abs(stack.z_start, wait=True),
             )
 
             await scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
@@ -92,7 +92,7 @@ class AcquisitionEngine:
 
             await asyncio.gather(
                 *(
-                    self._rig.cameras[cam_id].initialize_stack(
+                    self._scope.cameras[cam_id].initialize_stack(
                         stack=stack,
                         store_path=stack_store,
                         channel_name=channel_name,
@@ -105,7 +105,7 @@ class AcquisitionEngine:
                 )
             )
 
-            await self._rig.profiles.enable_active_lasers()
+            await self._scope.profiles.enable_active_lasers()
 
             # Per-batch capture: wait for free slot, queue moves, start sync,
             # gather captures, stop sync. Cross-camera backpressure prevents
@@ -115,7 +115,7 @@ class AcquisitionEngine:
                 frames_in_batch = min(batch_z, stack.num_frames - batch_idx * batch_z)
 
                 while True:
-                    readies = await asyncio.gather(*(self._rig.cameras[uid].is_ready_for_batch() for uid in cam_uids))
+                    readies = await asyncio.gather(*(self._scope.cameras[uid].is_ready_for_batch() for uid in cam_uids))
                     if all(readies):
                         break
                     await asyncio.sleep(0.005)
@@ -125,17 +125,17 @@ class AcquisitionEngine:
 
                 await sync_task.start()
                 per_cam_results = await asyncio.gather(
-                    *(self._rig.cameras[uid].capture_batch(num_frames=frames_in_batch) for uid in cam_uids)
+                    *(self._scope.cameras[uid].capture_batch(num_frames=frames_in_batch) for uid in cam_uids)
                 )
                 await sync_task.stop()
 
                 for uid, result in zip(cam_uids, per_cam_results, strict=True):
                     results_by_cam[uid].append(result)
 
-            await self._rig.profiles.disable_active_lasers()
+            await self._scope.profiles.disable_active_lasers()
             await scanning_axis.reset_ttl_stepper()
 
-            await asyncio.gather(*(self._rig.cameras[uid].finalize_stack() for uid in cam_uids))
+            await asyncio.gather(*(self._scope.cameras[uid].finalize_stack() for uid in cam_uids))
 
             channels: dict[str, ChannelResult] = {
                 ch_id: ChannelResult(
@@ -169,12 +169,12 @@ class AcquisitionEngine:
 
             with suppress(Exception):
                 await asyncio.gather(
-                    *(self._rig.cameras[cam_id].finalize_stack() for cam_id, _ in channel_cam_map.values())
+                    *(self._scope.cameras[cam_id].finalize_stack() for cam_id, _ in channel_cam_map.values())
                 )
             with suppress(Exception):
                 await scanning_axis.reset_ttl_stepper()
             with suppress(Exception):
-                await self._rig.profiles.disable_active_lasers()
+                await self._scope.profiles.disable_active_lasers()
 
             return StackResult(
                 stack_id=stack.stack_id,
@@ -198,7 +198,7 @@ class AcquisitionEngine:
         Channel name prefers ``channel.label``; falls back to the channel key.
         """
         out: dict[str, tuple[str, str]] = {}
-        for ch_id, channel in self._rig.profiles.active_channels.items():
-            if channel.detection in self._rig.cameras:
+        for ch_id, channel in self._scope.profiles.active_channels.items():
+            if channel.detection in self._scope.cameras:
                 out[ch_id] = (channel.detection, channel.label or ch_id)
         return out

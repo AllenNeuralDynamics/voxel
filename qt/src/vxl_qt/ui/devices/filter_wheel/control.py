@@ -221,8 +221,9 @@ if __name__ == "__main__":
 
     from PySide6.QtWidgets import QApplication, QMainWindow
     from qasync import QEventLoop, asyncSlot
+    from rigup.node import LocalAdapter
 
-    from rigup import create_local_handle
+    from rigup import DeviceController, DeviceHandle
     from vxl.axes.simulated import SimulatedDiscreteAxis
     from vxl_qt.handle import DeviceHandleQt
 
@@ -240,7 +241,9 @@ if __name__ == "__main__":
                 slot_count=6,
             )
 
-            handle = create_local_handle(device)
+            controller = DeviceController(device)
+            controller.start_streaming()
+            handle = DeviceHandle(LocalAdapter(controller))
             self._adapter = DeviceHandleQt(handle)
             await self._adapter.start()
 
