@@ -1,48 +1,56 @@
-# Distributed configuration — all devices on subprocess nodes (no local devices)
+# Remote configuration — tests all three node types:
+#   local:      DAQ + AOTF + lasers (in-process, no transport)
+#   subprocess: axes + filter wheels (IPC, auto-spawned)
+#   remote:     cameras (TCP, manually started)
+#
+# Start the camera daemon on the remote host before launching:
+#   python -m rigup.node._runner cameras tcp://0.0.0.0:5555
 
 rig:
-  name: "Simulated Distributed Rig"
+  name: "Remote Rig"
+
+  devices:
+    daq_1:
+      target: &daq_target vxl.daq.simulated.SimulatedDaq
+      init: { device_name: "MockDev1" }
+    aotf_1:
+      target: &aotf_target vxl.aotf.simulated.SimulatedAotf
+      init: { blanking_mode: "external" }
+    laser_405:
+      target: &aotf_laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
+      init:
+        wavelength: 405
+        aotf: aotf_1
+        aotf_channel: 1
+        aotf_frequency_mhz: 110.5
+    laser_488:
+      target: *aotf_laser_target
+      init:
+        wavelength: 488
+        aotf: aotf_1
+        aotf_channel: 2
+        aotf_frequency_mhz: 98.2
+    laser_561:
+      target: *aotf_laser_target
+      init:
+        wavelength: 561
+        aotf: aotf_1
+        aotf_channel: 3
+        aotf_frequency_mhz: 87.4
+    laser_640:
+      target: *aotf_laser_target
+      init:
+        wavelength: 640
+        aotf: aotf_1
+        aotf_channel: 4
+        aotf_frequency_mhz: 78.6
+    laser_730:
+      target: vxl.laser.simulated.SimulatedLaser
+      init: { wavelength: 730 }
 
   nodes:
-    primary:
+    motion:
       devices:
-        daq_1:
-          target: vxl.daq.simulated.SimulatedDaq
-          init: { device_name: "MockDev1" }
-        aotf_1:
-          target: vxl.aotf.simulated.SimulatedAotf
-          init: { blanking_mode: "external" }
-        laser_405:
-          target: &aotf_laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
-          init:
-            wavelength: 405
-            aotf: aotf_1
-            aotf_channel: 1
-            aotf_frequency_mhz: 110.5
-        laser_488:
-          target: *aotf_laser_target
-          init:
-            wavelength: 488
-            aotf: aotf_1
-            aotf_channel: 2
-            aotf_frequency_mhz: 98.2
-        laser_561:
-          target: *aotf_laser_target
-          init:
-            wavelength: 561
-            aotf: aotf_1
-            aotf_channel: 3
-            aotf_frequency_mhz: 87.4
-        laser_640:
-          target: *aotf_laser_target
-          init:
-            wavelength: 640
-            aotf: aotf_1
-            aotf_channel: 4
-            aotf_frequency_mhz: 78.6
-        laser_730:
-          target: vxl.laser.simulated.SimulatedLaser
-          init: { wavelength: 730 }
         fw_detection_shared:
           target: &fw_target vxl.axes.simulated.SimulatedDiscreteAxis
           init:
@@ -65,15 +73,15 @@ rig:
           target: *axis_target
           init: { lower_limit: 0, upper_limit: 50000, has_ttl_stepper: true }
 
-    node_1:
+    cameras:
+      kind: remote
+      address: tcp://<host-ip>:5555
       devices:
         camera_1: &sim_camera
           target: vxl.camera.simulated.SimulatedCamera
           init:
             pixel_size_um: "3.76,3.76"
             sensor_size_px: "10640,14192"
-    node_2:
-      devices:
         camera_2: *sim_camera
 
 stage:
@@ -185,48 +193,6 @@ profiles:
           voltage: { min: 0.0, max: 5.0 }
           window: { min: 0.05, max: 0.95 }
     desc: "Simultaneous DAPI (cam1) and GFP (cam2) imaging"
-  dapi_cy5:
-    channels: ["dapi", "cy5"]
-    daq:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform_ch1
-        laser_405: *laser_waveform_ch1
-        camera_2: *camera_waveform_ch2
-        laser_640: *laser_waveform_ch2
-        aotf_1: *aotf_blanking_waveform
-    desc: "Simultaneous DAPI (cam1) and Cy5 (cam2) imaging"
-  gfp_rfp:
-    channels: ["gfp", "rfp"]
-    daq:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform_ch1
-        laser_561: *laser_waveform_ch1
-        camera_2: *camera_waveform_ch2
-        laser_488: *laser_waveform_ch2
-        aotf_1: *aotf_blanking_waveform
-    desc: "Simultaneous GFP (cam2) and RFP (cam1) imaging"
-  rfp_cy5:
-    channels: ["rfp", "cy5"]
-    daq:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform_ch1
-        laser_561: *laser_waveform_ch1
-        camera_2: *camera_waveform_ch2
-        laser_640: *laser_waveform_ch2
-        aotf_1: *aotf_blanking_waveform
-    desc: "Simultaneous RFP (cam1) and Cy5 (cam2) imaging"
-  single_dapi:
-    channels: ["dapi"]
-    daq:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform_ch1
-        laser_405: *laser_waveform_ch1
-        aotf_1: *aotf_blanking_waveform
-    desc: "Single DAPI channel for nuclear staining"
   single_gfp:
     channels: ["gfp"]
     daq:
@@ -245,23 +211,6 @@ profiles:
         laser_561: *laser_waveform_ch1
         aotf_1: *aotf_blanking_waveform
     desc: "Single RFP channel imaging"
-  single_cy5:
-    channels: ["cy5"]
-    daq:
-      timing: *default_timing
-      waveforms:
-        camera_2: *camera_waveform_ch1
-        laser_640: *laser_waveform_ch1
-        aotf_1: *aotf_blanking_waveform
-    desc: "Single Cy5 far-red channel imaging"
-  single_nir:
-    channels: ["nir"]
-    daq:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform_ch1
-        laser_730: *laser_waveform_ch1
-    desc: "Single NIR channel for iRFP/miRFP imaging"
 
 info:
   name: ""

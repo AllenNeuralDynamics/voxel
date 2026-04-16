@@ -249,8 +249,8 @@ class PreviewTiles:
 
 # ── Sink Types ─────────────────────────────────────────────────────────
 
-type PreviewFrameSink = Callable[[PreviewFrame], None]
-type PreviewTileSink = Callable[[PreviewTiles], Awaitable[None]]
+type PreviewFrameSink = Callable[["PreviewFrame"], None]
+type PreviewTileSink = Callable[[bytes], Awaitable[None]]
 
 
 # ── Tile Scale Selection ──────────────────────────────────────────────
@@ -324,7 +324,7 @@ class PreviewGenerator:
         self._frame_sink = frame_sink
         self._tile_sink = tile_sink
         self._target_width: int = target_width
-        self._fmt: PreviewFmt = fmt or PreviewFmt.JPEG
+        self._fmt: PreviewFmt = fmt
         self.viewport = viewport or PreviewViewport()
         self.levels = levels or PreviewLevels()
         self._idx: int = 0
@@ -530,7 +530,9 @@ class PreviewGenerator:
                 ),
                 tiles=tiles,
             )
-            await self._tile_sink(batch)  # type: ignore[misc]
+            packed = await loop.run_in_executor(self._executor, batch.pack)
+            if self._tile_sink is not None:
+                await self._tile_sink(packed)
 
     def _generate_tile(
         self,
@@ -588,7 +590,7 @@ class PreviewGenerator:
 # ── Encoding Functions ─────────────────────────────────────────────────
 
 
-def convert_to_jpeg(frame: np.ndarray, quality: int = 85) -> bytes:
+def convert_to_jpeg(frame: np.ndarray, quality: int = 100) -> bytes:
     """Convert a NumPy array (BGR image) to JPEG-encoded bytes using OpenCV."""
     encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
     success, encoded_image = cv2.imencode(".jpg", cast("cv2.UMat", frame), encode_params)

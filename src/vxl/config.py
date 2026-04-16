@@ -180,6 +180,11 @@ class MicroscopeConfig(BaseModel):
         device_ids.update(profile.daq.waveforms.keys())
         return device_ids
 
+    def get_profile_daq_ports(self, profile_id: str) -> dict[str, str]:
+        """AO port mapping for a profile — only ports whose device is in the profile's channel set."""
+        profile_device_ids = self.get_profile_device_ids(profile_id)
+        return {dev_id: port for dev_id, port in self.daq.acq_ports.items() if dev_id in profile_device_ids}
+
     @model_validator(mode="after")
     def validate_device_references(self) -> Self:
         errors = []

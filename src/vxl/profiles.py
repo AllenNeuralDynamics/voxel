@@ -71,7 +71,7 @@ class Profiles:
 
     async def close(self) -> None:
         if self._sync_task is not None:
-            self._sync_task.abandon()
+            self._sync_task.close()
             self._sync_task = None
 
     # ==================== Active profile state ====================
@@ -125,19 +125,14 @@ class Profiles:
         if profile_id == self._active_id:
             return
 
-        if self._sync_task is not None:
-            await self._sync_task.close()
-            self._sync_task = None
-
         try:
+            await asyncio.gather(*[camera.clear_preview_cache() for camera in self._scope.cameras.values()])
             await self._configure_profile_devices(profile_id)
             self._active_id = profile_id
             await self._compute_and_publish_fov()
-            # Build the sync task AND load the profile's configured waveforms so
-            # preview_traces() returns real data on the first profile_changed emit
-            # rather than {}. Preview/acquisition will re-apply with their own
-            # waveforms when they start — this apply covers the in-between window.
+
             task = await self.sync_task()
+            await task.reset(ports=self._scope.config.get_profile_daq_ports(profile_id))
             await task.apply(self.active.daq.timing, self.active_waveforms())
         except Exception:
             self._log.exception(
@@ -159,16 +154,10 @@ class Profiles:
         if self._sync_task is None:
             if self._scope.daq is None:
                 raise RuntimeError("DAQ not initialized")
-            profile_device_ids = self._scope.config.get_profile_device_ids(self._active_id)
-            ports = {
-                dev_id: port
-                for dev_id, port in self._scope.config.daq.acq_ports.items()
-                if dev_id in profile_device_ids
-            }
             self._sync_task = SyncTask(
                 uid=f"sync_{self._active_id}",
                 daq=self._scope.daq,
-                ports=ports,
+                ports=self._scope.config.get_profile_daq_ports(self._active_id),
             )
         return self._sync_task
 

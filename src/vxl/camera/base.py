@@ -22,13 +22,12 @@ from vxl.camera.preview import (
     PreviewFrame,
     PreviewGenerator,
     PreviewLevels,
-    PreviewTiles,
     PreviewViewport,
 )
 from vxl.device import DeviceType
 from vxl.stack import BatchResult, Stack
 from vxl.system import System
-from vxlib import Dtype, SchemaModel, Sink
+from vxlib import Dtype, SchemaModel
 
 log = logging.getLogger(__name__)
 
@@ -141,14 +140,12 @@ class CameraController(DeviceController["Camera"]):
             uid=device.uid,
         )
         self._writer: OMEZarrWriter | None = None
-        # Latest-wins sink for preview frames: rapid frame callbacks (30fps+) collapse
-        # into one in-flight publish per network round-trip. Lazy-starts on first put.
-        self._frame_sink: Sink[bytes] = Sink(drain=self._publish_preview)
-        # Register with the node's RAM mediator so this camera gets a fair share.
+        self._preview_publishing = False
+        self._publish_task: asyncio.Task | None = None
         System.reserve_ram(self.device.uid, weight=1.0)
 
     async def close(self) -> None:
-        self._frame_sink.close()
+        self._preview_publishing = False
         self._publish_fn = None
         self._previewer.shutdown()
         System.release_ram(self.device.uid)
@@ -166,33 +163,38 @@ class CameraController(DeviceController["Camera"]):
         return self._mode
 
     def _on_preview_frame(self, frame: PreviewFrame) -> None:
-        # Sync callback from the previewer; sink lazy-starts and coalesces.
-        self._frame_sink.put(frame.pack())
+        if not self._preview_publishing:
+            return
+        if self._publish_task is not None and not self._publish_task.done():
+            return
+        self._publish_task = asyncio.create_task(self._publish_overview(frame))
 
-    async def _publish_preview(self, data: bytes) -> None:
-        # Sink drain — log-and-continue on transient publish errors (e.g. closed handle).
+    async def _publish_overview(self, frame: PreviewFrame) -> None:
         with suppress(RuntimeError):
-            await self.publish("preview", data)
+            await self.publish("preview", frame.pack())
 
-    async def _on_preview_tiles(self, batch: PreviewTiles) -> None:
-        # Tiles are already in async context and are bursty (one batch per
-        # viewport change), not per-frame. Direct await provides natural
-        # backpressure; no sink needed.
+    async def _on_preview_tiles(self, packed: bytes) -> None:
+        if not self._preview_publishing:
+            return
         with suppress(RuntimeError):
-            await self.publish("preview_tile", batch.pack())
+            await self.publish("preview_tile", packed)
 
     @describe(label="Update Preview Viewport")
     async def update_preview_viewport(self, viewport: PreviewViewport):
         if self._mode == CameraMode.PREVIEW:
             self._previewer.viewport = viewport
         else:
+            self._preview_publishing = True
             await self._previewer.reprocess_viewport(viewport)
+            self._preview_publishing = False
 
     @describe(label="Update Preview Levels")
     async def update_preview_levels(self, levels: PreviewLevels):
         self._previewer.levels = levels
         if self._mode != CameraMode.PREVIEW:
+            self._preview_publishing = True
             await self._previewer.reprocess()
+            self._preview_publishing = False
 
     @describe(label="Clear Preview Cache")
     async def clear_preview_cache(self) -> None:
@@ -202,7 +204,9 @@ class CameraController(DeviceController["Camera"]):
     @describe(label="Update Preview Colormap")
     async def update_preview_colormap(self, colormap: str | None) -> None:
         self._previewer.colormap = colormap
+        self._preview_publishing = True
         await self._previewer.reprocess()
+        self._preview_publishing = False
 
     @property
     @describe(label="Preview Config", stream=True)
@@ -235,6 +239,7 @@ class CameraController(DeviceController["Camera"]):
         await self._run_sync(_arm_and_start)
 
         self._mode = CameraMode.PREVIEW
+        self._preview_publishing = True
         self._frame_idx = 0
         self._preview_task = asyncio.create_task(self._preview_loop())
 
@@ -258,7 +263,7 @@ class CameraController(DeviceController["Camera"]):
             return
 
         self._mode = CameraMode.IDLE
-        self._frame_sink.close()  # drops any pending frame; next put will lazy-restart
+        self._preview_publishing = False
         self._previewer.cancel_tile_task()
         if self._preview_task:
             await self._preview_task
@@ -356,7 +361,7 @@ class CameraController(DeviceController["Camera"]):
     @describe(label="Finalize Stack")
     async def finalize_stack(self) -> None:
         """Complete stack acquisition. Closes writer and disarms camera."""
-        self._frame_sink.close()  # stops any in-flight frame publish
+        self._preview_publishing = False
         self._previewer.cancel_tile_task()
         if self._writer is not None:
             self._writer.close()

@@ -74,6 +74,7 @@ class Cell[T]:
         class Camera:
             exposure: Cell[float] = Cell(0.01)
 
+
         # Consumer: read current value
         current = camera.exposure.value
 

@@ -35,7 +35,10 @@ Repository = "https://github.com/AllenNeuralDynamics/voxel"
 Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
 [project.scripts]
-vxl-migrate = "vxl.session.migrate:main"
+vxl = "vxl_web.cli:main"
+voxel = "vxl_web.cli:main"
+vxl-node = "rigup.node._runner:standalone_main"
+voxel-node = "rigup.node._runner:standalone_main"
 
 [project.entry-points."vxl.metadata"]
 exaspim = "vxl.metadata.ExaspimMetadata"

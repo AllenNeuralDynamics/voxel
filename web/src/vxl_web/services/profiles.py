@@ -43,11 +43,6 @@ class ProfilesService:
                 if not profile_id:
                     raise ValueError("Missing profile_id")
                 await self.session.set_active_profile(profile_id)
-                self.broadcast_waveforms()
-                self.broadcast(
-                    {"topic": "profile/changed", "payload": {"profile_id": profile_id}},
-                    with_status=True,
-                )
 
     # ---- Waveform helpers ----
 
@@ -69,8 +64,9 @@ class ProfilesService:
         except Exception:
             log.exception("Failed to broadcast waveforms")
 
-    async def _on_profile_changed(self, _profile_id: str) -> None:
+    async def _on_profile_changed(self, profile_id: str) -> None:
         self.broadcast_waveforms()
+        self.broadcast({"topic": "profile/changed", "payload": {"profile_id": profile_id}}, with_status=True)
 
 
 # ==================== Dependency ====================
@@ -123,7 +119,6 @@ async def set_active_profile(
         await service.session.set_active_profile(request.profile_id)
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    service.broadcast_waveforms()
     return {"profile_id": request.profile_id}
 
 
@@ -133,13 +128,19 @@ async def save_props(
     service: Annotated[ProfilesService, Depends(get_profiles_service)],
 ) -> dict[str, list[str]]:
     try:
+        profiles = service.session.microscope.profiles
         if request.device_id is None:
-            saved = await service.session.microscope.profiles.save_all_device_props()
+            saved = await profiles.save_all_device_props()
         else:
-            await service.session.microscope.profiles.save_device_props(request.device_id)
+            await profiles.save_device_props(request.device_id)
             saved = [request.device_id]
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    saved_props = {dev: profiles.active.props.get(dev, {}) for dev in saved}
+    service.broadcast(
+        {"topic": "profile/props_saved", "payload": {profiles.active_id: saved_props}},
+        with_status=True,
+    )
     return {"saved": saved}
 
 
@@ -149,6 +150,10 @@ async def apply_props(
     service: Annotated[ProfilesService, Depends(get_profiles_service)],
 ) -> dict[str, list[str]]:
     applied = await service.session.microscope.profiles.apply_profile_props(request.device_ids)
+    service.broadcast(
+        {"topic": "profile/props_applied", "payload": {"devices": applied}},
+        with_status=True,
+    )
     return {"applied": applied}
 
 
@@ -158,9 +163,18 @@ async def save_roi(
     service: Annotated[ProfilesService, Depends(get_profiles_service)],
 ) -> dict[str, Any]:
     try:
-        roi = await service.session.microscope.profiles.save_camera_roi(request.camera_id)
+        profiles = service.session.microscope.profiles
+        roi = await profiles.save_camera_roi(request.camera_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    service.broadcast(
+        {"topic": "profile/roi_saved", "payload": {
+            "profile_id": profiles.active_id,
+            "camera_id": request.camera_id,
+            "roi": roi.model_dump(),
+        }},
+        with_status=True,
+    )
     return {"camera_id": request.camera_id, "roi": roi.model_dump()}
 
 
@@ -173,6 +187,10 @@ async def apply_roi(
         roi = await service.session.microscope.profiles.revert_camera_roi(request.camera_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    service.broadcast(
+        {"topic": "profile/roi_applied", "payload": {"camera_id": request.camera_id}},
+        with_status=True,
+    )
     return {"camera_id": request.camera_id, "roi": roi.model_dump() if roi else None}
 
 
@@ -186,6 +204,7 @@ async def update_waveforms(
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     service.broadcast_waveforms()
+    service.broadcast({}, with_status=True)
     return service.get_waveform_traces()
 
 

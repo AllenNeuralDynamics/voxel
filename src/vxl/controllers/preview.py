@@ -1,11 +1,11 @@
 """PreviewController — live camera preview with coalesced viewport/levels/colormap updates.
 
-Activity-scoped: ``start`` wires camera-preview subscriptions + starts flushers +
-fires the DAQ; ``stop`` reverses everything. No separate open/close — preview
-either is or isn't running. The controller is otherwise stateless after __init__.
+Two-level lifecycle:
+  - ``open()`` / ``close()`` — session-scoped, subscribes to ALL camera streams
+  - ``start()`` / ``stop()`` — activity-scoped, arms cameras + DAQ + lasers
 
-Consumes ``rig.profiles`` read-mostly: active channels, sync task, current
-waveforms + timing. Does not drive profile switching — that's Session's job.
+Streams stay connected across start/stop cycles so viewport/levels/colormap
+edits while stopped can still trigger reprocessed tiles from the cached frame.
 """
 
 import logging
@@ -37,7 +37,8 @@ class PreviewController:
         self._log = logging.getLogger("Preview")
 
         self._frame_callback: FrameCallback | None = None
-        self._preview_unsubs: list[Callable[[], Awaitable[None]]] = []
+        self._streams_connected = False
+        self._stream_unsubs: list[Callable[[], Awaitable[None]]] = []
         self._viewport = PreviewViewport()
 
         # Coalescing sinks: rapid UI updates collapse into one in-flight camera RPC each.
@@ -58,6 +59,39 @@ class PreviewController:
     def is_running(self) -> bool:
         return self._running
 
+    async def open(self) -> None:
+        """Subscribe to all camera streams. Called by Session.open().
+        The forward callback filters by active profile.
+        """
+        if self._streams_connected:
+            return
+        for cam_id, handle in self._scope.cameras.items():
+            frame_cb = self._make_forward(cam_id, "preview")
+            tile_cb = self._make_forward(cam_id, "preview_tile")
+            await handle.subscribe("preview", frame_cb)
+            await handle.subscribe("preview_tile", tile_cb)
+
+            async def _unsub(
+                h: CameraHandle = handle,
+                fcb: Callable[[bytes], Awaitable[None]] = frame_cb,
+                tcb: Callable[[bytes], Awaitable[None]] = tile_cb,
+            ) -> None:
+                with suppress(Exception):
+                    await h.unsubscribe("preview", fcb)
+                with suppress(Exception):
+                    await h.unsubscribe("preview_tile", tcb)
+
+            self._stream_unsubs.append(_unsub)
+        self._streams_connected = True
+
+    async def close(self) -> None:
+        """Unsubscribe from all camera streams. Called by Session.close()."""
+        for unsub in self._stream_unsubs:
+            with suppress(Exception):
+                await unsub()
+        self._stream_unsubs.clear()
+        self._streams_connected = False
+
     # ==================== Activity lifecycle ====================
 
     async def start(self, crop: PreviewViewport | None = None) -> None:
@@ -70,6 +104,8 @@ class PreviewController:
         if self._running:
             self._log.warning("Preview already running")
             return
+        if not self._streams_connected:
+            self._log.warning("start() called before open() — streams not connected")
 
         profiles = self._scope.profiles
         if not profiles.active_channels:
@@ -78,7 +114,7 @@ class PreviewController:
         if crop is not None:
             self._viewport = crop
 
-        await self._subscribe_streams()
+        await self._send_viewport(self._viewport)
 
         started = 0
         for cam_id in self._active_camera_ids():
@@ -87,9 +123,6 @@ class PreviewController:
                 started += 1
             except Exception:
                 self._log.exception("Camera %s failed to start preview", cam_id)
-
-        if self._viewport.needs_adjustment:
-            await self._send_viewport(self._viewport)
 
         # Sinks lazy-start on first put — no explicit start needed.
 
@@ -127,7 +160,6 @@ class PreviewController:
         await task.stop()
 
         await self._scope.profiles.disable_active_lasers()
-        await self._unsubscribe_streams()
 
         self._running = False
         self._log.info("Preview stopped")
@@ -193,32 +225,6 @@ class PreviewController:
             for chan_id, ch in self._scope.profiles.active_channels.items()
             if ch.detection in self._scope.cameras
         }
-
-    async def _subscribe_streams(self) -> None:
-        for cam_id in self._active_camera_ids():
-            handle = self._scope.cameras[cam_id]
-            frame_cb = self._make_forward(cam_id, "preview")
-            tile_cb = self._make_forward(cam_id, "preview_tile")
-            await handle.subscribe("preview", frame_cb)
-            await handle.subscribe("preview_tile", tile_cb)
-
-            async def _unsub(
-                h: CameraHandle = handle,
-                fcb: Callable[[bytes], Awaitable[None]] = frame_cb,
-                tcb: Callable[[bytes], Awaitable[None]] = tile_cb,
-            ) -> None:
-                with suppress(Exception):
-                    await h.unsubscribe("preview", fcb)
-                with suppress(Exception):
-                    await h.unsubscribe("preview_tile", tcb)
-
-            self._preview_unsubs.append(_unsub)
-
-    async def _unsubscribe_streams(self) -> None:
-        for unsub in self._preview_unsubs:
-            with suppress(Exception):
-                await unsub()
-        self._preview_unsubs.clear()
 
     def _make_forward(self, camera_id: str, topic: str) -> Callable[[bytes], Awaitable[None]]:
         async def forward(data: bytes) -> None:

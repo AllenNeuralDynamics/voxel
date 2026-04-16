@@ -141,9 +141,7 @@ async def remove_stacks(
 ) -> dict[str, Any]:
     try:
         removed = [
-            service.session.stacks[sid].model_dump()
-            for sid in request.stack_ids
-            if sid in service.session.stacks
+            service.session.stacks[sid].model_dump() for sid in request.stack_ids if sid in service.session.stacks
         ]
         service.session.stacks.remove(request.stack_ids)
     except RuntimeError as e:

@@ -88,12 +88,18 @@ class TransportAdapter[D: Device](Adapter[D]):
 
     async def run_commands(self, commands: list[CommandRequest]) -> Results:
         return await call(
-            self._transport, Action.RUN_COMMANDS, RunCommandsRequest(uid=self._uid, commands=commands), Results,
+            self._transport,
+            Action.RUN_COMMANDS,
+            RunCommandsRequest(uid=self._uid, commands=commands),
+            Results,
         )
 
     async def get_props(self, *props: str) -> PropResults:
         return await call(
-            self._transport, Action.GET_PROPS, GetPropsRequest(uid=self._uid, props=list(props)), PropResults,
+            self._transport,
+            Action.GET_PROPS,
+            GetPropsRequest(uid=self._uid, props=list(props)),
+            PropResults,
         )
 
     async def set_props(self, **props: Any) -> PropResults:

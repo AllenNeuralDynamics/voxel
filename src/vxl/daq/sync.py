@@ -59,29 +59,31 @@ class SyncTask:
 
     State machine::
 
-        cold ──apply(cfg)──▶ loaded ──start()──▶ outputting
-           ◀──close()───────── ◀──pause()───────
+        cold ──apply()──▶ loaded ──start()──▶ outputting
+           ◀──reset()──────── ◀──stop()────────
 
     ``apply`` preserves running state — if called while outputting, the task
-    briefly pauses, reloads, and resumes on its own. Callers don't need to
-    track whether output was running before a config change.
+    briefly pauses, reloads, and resumes on its own.
 
-    Typical preview use::
+    Lifecycle::
+
+        reset(ports)  — release scaffold, update ports (profile switch)
+        close()       — clear local state, no RPCs (shutdown)
+
+    Typical preview::
 
         await task.apply(timing, waveforms)
         await task.start()
         await task.apply(timing, new_waveforms)  # transparent hot-reload
-        await task.pause()
-        await task.close()
+        await task.stop()
 
-    Typical acquisition use (arm once, start/pause per batch)::
+    Typical acquisition (start/stop per batch)::
 
         await task.apply(timing, stack_waveforms)
         for batch in batches:
             await task.start()
             # ... gather ...
-            await task.pause()
-        await task.close()
+            await task.stop()
     """
 
     def __init__(self, *, uid: str, daq: DaqHandle, ports: dict[str, str]) -> None:
@@ -208,21 +210,22 @@ class SyncTask:
         await self._stop_tasks()
         self._running = False
 
-    async def close(self) -> None:
-        """Stop (if running) and release all DAQ resources via RPC.
+    async def reset(self, *, ports: dict[str, str] | None = None) -> None:
+        """Release scaffold, optionally update ports. Next ``apply()`` rebuilds.
 
-        Use this during normal operation (e.g., profile switch) where the
-        node is alive and tasks need to be explicitly released so the next
-        profile can claim the same DAQ pins.
+        Use this on profile switch where the DAQ pins change but the
+        underlying DAQ device stays the same.
         """
         if self._running:
             await self._stop_tasks()
             self._running = False
         await self._teardown()
+        if ports is not None:
+            self._ports = ports
         self._timing = None
         self._waveforms.clear()
 
-    def abandon(self) -> None:
+    def close(self) -> None:
         """Clear local state without sending any RPCs.
 
         Use this during shutdown when the node is dying or already dead.

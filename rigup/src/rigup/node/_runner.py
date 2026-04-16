@@ -5,11 +5,13 @@ and serves until shutdown. Two entry points use it:
 
 - :func:`subprocess_main` — internal, invoked by :class:`SubprocessNode` via
   ``sys.executable -m rigup.node._runner <node_id> <address>``.
-- :func:`standalone_main` — public, for manually-run remote daemons (future
-  ``rigup-node`` console script).
+- :func:`standalone_main` — public CLI for manually-run remote daemons.
+  Wired as ``rigup-node`` (rigup package) and ``vxl-node`` (vxl-web package).
 """
 
+import argparse
 import asyncio
+import logging
 import signal
 import sys
 
@@ -54,10 +56,28 @@ def subprocess_main() -> None:
 def standalone_main() -> None:
     """Public entry point for manually-run remote daemons.
 
-    Future: proper argparse with ``--port``, ``--host``, ``--config``, etc.
-    Will be wired as a console script (``rigup-node``) in pyproject.toml.
+    Usage::
+
+        vxl-node <node_id> --address tcp://0.0.0.0:5555
+        rigup-node cameras --address tcp://0.0.0.0:5555 --debug
     """
-    raise NotImplementedError("standalone_main is not yet implemented — use subprocess_main for now")
+    parser = argparse.ArgumentParser(
+        prog="vxl-node",
+        description="Start a rigup node daemon for remote device hosting.",
+    )
+    parser.add_argument("node_id", help="Node identifier (must match the rig config)")
+    parser.add_argument("--address", "-a", required=True, help="ZMQ bind address (e.g. tcp://0.0.0.0:5555)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
+
+    level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=level, format="%(asctime)s %(levelname)-5s %(name)s: %(message)s", datefmt="[%X]")
+
+    log = logging.getLogger("rigup.node")
+    log.info("Starting node '%s' at %s", args.node_id, args.address)
+
+    address = _parse_address(args.address)
+    asyncio.run(run(args.node_id, address))
 
 
 if __name__ == "__main__":

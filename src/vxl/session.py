@@ -62,6 +62,7 @@ class Session:
     async def open(self) -> None:
         """Open rig, controllers, wire callbacks, and begin autosaving."""
         await self._scope.open()
+        await self.preview.open()
         await self.stacks.open()
         self._unsub_profile = self._scope.profiles.profile_changed.subscribe(self._on_profile_changed)
         # rig.profiles.open() fires profile_changed before we subscribe — apply
@@ -74,6 +75,7 @@ class Session:
         if self._unsub_profile is not None:
             self._unsub_profile()
             self._unsub_profile = None
+        await self.preview.close()
         await self._store.stop_autosave()
         await self.stacks.close()
         await self._scope.close()

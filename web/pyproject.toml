@@ -15,12 +15,6 @@ dependencies = [
     "uvloop; platform_system != 'Windows'",
 ]
 
-[project.scripts]
-vxl = "vxl_web.cli:main"
-voxel = "vxl_web.cli:main"
-vxl-node = "vxl.rig:node_main"
-voxel-node = "vxl.rig:node_main"
-
 [tool.uv.sources]
 vxl = { workspace = true }
 
