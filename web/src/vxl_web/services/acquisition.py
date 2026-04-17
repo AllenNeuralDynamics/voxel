@@ -1,7 +1,9 @@
 """Acquisition service — REST control for ``session.acquisition``.
 
-Launches acquisition as a background task and broadcasts progress over WS.
-No WS topics owned (progress updates go out as broadcasts, not responses).
+Launches acquisition as a background task. Progress broadcasts are driven by
+subscribing to ``session.acquisition.progress`` (a Cell[StackProgress | None])
+and emitting each update as a ``stack/progress`` event. No manual broadcast
+orchestration — the engine is the source of truth.
 """
 
 import logging
@@ -11,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from vxl import Session
-from vxl.stack import StackStatus
+from vxl.stack import StackProgress, StackStatus
 from vxlib import fire_and_forget
 
 from .ws import BroadcastCallback
@@ -24,97 +26,35 @@ router = APIRouter(tags=["acquisition"])
 
 
 class AcquisitionService:
-    """Wraps ``session.acquire_stack`` / ``acquire_all`` as fire-and-forget background tasks."""
+    """Subscribes to engine progress; launches acquisitions as background tasks."""
 
     topic_prefixes: tuple[str, ...] = ()
 
     def __init__(self, session: Session, broadcast: BroadcastCallback) -> None:
         self.session = session
         self.broadcast = broadcast
+        self._unsub_progress = session.acquisition.progress.subscribe(self._on_progress)
 
     async def handle_message(self, sender_id: str, topic: str, payload: dict[str, Any]) -> None:
         pass
 
     async def close(self) -> None:
-        """No-op — acquisition background tasks are fire-and-forget and die with the event loop."""
+        self._unsub_progress()
 
     # ---- Launchers ----
 
     def start_single(self, stack_id: str) -> None:
-        fire_and_forget(self._run_single(stack_id), log=log)
+        fire_and_forget(self.session.acquire_stack(stack_id), log=log)
 
     def start_all(self) -> None:
-        fire_and_forget(self._run_all(), log=log)
+        fire_and_forget(self.session.acquire_all(), log=log)
 
-    # ---- Background coroutines ----
+    # ---- Progress subscription ----
 
-    async def _run_single(self, stack_id: str) -> None:
-        try:
-            self.broadcast(
-                {"topic": "acq/progress", "payload": {"status": "started", "stack_id": stack_id}},
-                with_status=True,
-            )
-            result = await self.session.acquire_stack(stack_id)
-            self.broadcast(
-                {
-                    "topic": "acq/progress",
-                    "payload": {
-                        "status": "completed" if result.status == StackStatus.COMPLETED else "failed",
-                        "stack_id": stack_id,
-                        "error": result.error_message,
-                    },
-                },
-                with_status=True,
-            )
-        except Exception as e:
-            log.exception("Acquisition failed for %s", stack_id)
-            self.broadcast(
-                {"topic": "acq/progress", "payload": {"status": "failed", "stack_id": stack_id, "error": str(e)}},
-                with_status=True,
-            )
-
-    async def _run_all(self) -> None:
-        stacks = self.session.stacks
-        pending = [s for s in stacks if s.status == StackStatus.PLANNED]
-        total = len(pending)
-
-        self.broadcast(
-            {"topic": "acq/progress", "payload": {"status": "started", "total": total, "completed": 0}},
-            with_status=True,
-        )
-
-        completed = 0
-        for stack in pending:
-            try:
-                result = await self.session.acquire_stack(stack.stack_id)
-                if result.status == StackStatus.COMPLETED:
-                    completed += 1
-                self.broadcast(
-                    {
-                        "topic": "acq/progress",
-                        "payload": {
-                            "status": "in_progress",
-                            "stack_id": stack.stack_id,
-                            "total": total,
-                            "completed": completed,
-                        },
-                    },
-                    with_status=True,
-                )
-            except Exception as e:
-                log.exception("Acquisition failed for %s", stack.stack_id)
-                self.broadcast(
-                    {
-                        "topic": "acq/progress",
-                        "payload": {"status": "failed", "stack_id": stack.stack_id, "error": str(e)},
-                    },
-                    with_status=True,
-                )
-
-        self.broadcast(
-            {"topic": "acq/progress", "payload": {"status": "completed", "total": total, "completed": completed}},
-            with_status=True,
-        )
+    async def _on_progress(self, progress: StackProgress | None) -> None:
+        if progress is None:
+            return
+        self.broadcast({"topic": "stack/progress", "payload": progress.model_dump(mode="json")})
 
 
 # ==================== Dependency ====================

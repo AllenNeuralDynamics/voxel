@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { watch, ElementSize } from 'runed';
-  import { createHotkey } from '@tanstack/svelte-hotkeys';
   import { Bargraph } from '$lib/icons';
   import PreviewInfo from './PreviewInfo.svelte';
   import PanZoomControls from './PanZoomControls.svelte';
@@ -39,14 +38,6 @@
     }
   );
 
-  // Alt+P toggles preview streaming
-  createHotkey('Alt+P', () => {
-    if (previewer.isPreviewing) {
-      previewer.stopPreview();
-    } else {
-      previewer.startPreview();
-    }
-  });
 
   // Resize canvas pixel dimensions to match container at device pixel ratio
   watch(
@@ -265,7 +256,7 @@
 
   <!-- Center: Canvas -->
   <div class="relative flex flex-1 items-center justify-center overflow-hidden" bind:this={canvasContainerEl}>
-    <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}></canvas>
+    <canvas bind:this={canvasEl} class="h-full w-full"></canvas>
     <!-- Overlay: frame counter (left) + histogram toggle (right) -->
     <div class="pointer-events-auto absolute top-0 right-4 left-4 flex items-center justify-between">
       <button

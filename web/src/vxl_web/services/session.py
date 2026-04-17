@@ -76,8 +76,9 @@ class SessionService:
         # WS router — delegates by topic prefix
         self._router = WsRouter([self.profiles, self.preview, self.devices, self.stacks, self.acquisition])
 
-        # Subscribe to FOV changes for status broadcasts
-        self._unsub_fov = session.microscope.profiles.fov_changed.subscribe(self._on_fov_changed)
+        # Subscribe to state changes for status broadcasts
+        self._unsub_fov = session.microscope.profiles.fov.subscribe(self._on_fov_changed)
+        self._unsub_mode = session.mode.subscribe(self._on_mode_changed)
 
     async def open(self) -> None:
         """Finish async setup — must be awaited after construction.
@@ -95,6 +96,7 @@ class SessionService:
         rig is still alive while subscriptions are unwired.
         """
         self._unsub_fov()
+        self._unsub_mode()
         for close in (
             self.acquisition.close,
             self.stacks.close,
@@ -138,7 +140,7 @@ class SessionService:
         profiles = self.session.microscope.profiles
         return SessionStateUpdate(
             active_profile_id=profiles.active_id,
-            mode=self.session.mode,
+            mode=self.session.mode.value,
             preview=preview_configs,
             metadata=self.session.metadata,
             plan=self.session.config.plan.model_dump(mode="json"),
@@ -146,13 +148,16 @@ class SessionService:
             grid=self.session.config.grid.model_dump(mode="json"),
             stacks={s.stack_id: s.model_dump() for s in self.session.stacks},
             stack_order=self.session.stacks.compute_order(),
-            fov=profiles.fov,
+            fov=profiles.fov.value,
             timestamp=_utc_timestamp(),
         )
 
     # ---- Private ----
 
-    async def _on_fov_changed(self, _fov: tuple[float, float]) -> None:
+    async def _on_fov_changed(self, _fov: tuple[float, float] | None) -> None:
+        self.broadcast({}, with_status=True)
+
+    async def _on_mode_changed(self, _mode: SessionMode) -> None:
         self.broadcast({}, with_status=True)
 
 

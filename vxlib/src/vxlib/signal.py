@@ -1,15 +1,24 @@
-"""Reactive primitives: Signal (events), Cell (values), Sink (coalesced async drain).
+"""Reactive primitives: Signal (events), Cell (values), Derived (computed), Sink (drain).
 
-Three small classes covering distinct roles:
+Class hierarchy:
 
-* :class:`Signal` — push-only event stream. Multiple subscribers; every emit delivered.
-* :class:`Cell` — value that subscribers can read AND watch. Multiple subscribers;
-  every change delivered (with equality-skip).
+* :class:`Subscribable` — shared base. Holds subscribers, dispatches emissions.
+  Not typically instantiated directly; use one of the subclasses below.
+* :class:`Signal` — push-only event stream with a public ``emit``. Use for
+  discrete events that don't carry a persistent value.
+* :class:`Cell` — carries a current value. ``.value`` to read, ``.set(v)`` to
+  update; emits to subscribers only on actual change.
+* :class:`Derived` — read-only value computed from other Subscribables.
+  Recomputes when any dependency emits; emits on actual value change.
 * :class:`Sink` — sync producer → async drain bridge with latest-wins (or fold)
   semantics. Single drain, configured at construction. Drops intermediate puts
-  when the drain is slow.
+  when the drain is slow. (Standalone; does not inherit from Subscribable.)
 
-All three handle sync OR async callbacks transparently. Callback exceptions are
+Signal, Cell, and Derived all inherit from :class:`Subscribable`, so any of
+them is a valid ``Subscribable[T]`` input wherever "something I can subscribe
+to" is the contract (e.g., ``Derived.deps``).
+
+All handle sync OR async callbacks transparently. Callback exceptions are
 logged and never propagate up — one bad subscriber doesn't poison the others.
 """
 
@@ -17,7 +26,8 @@ import asyncio
 import contextlib
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -25,9 +35,7 @@ type Listener[T] = Callable[[T], Awaitable[None] | None]
 type Unsub = Callable[[], None]
 
 
-class Signal[T]:
-    """Typed push-only event stream. See module docstring."""
-
+class Subscribable[T]:
     def __init__(self) -> None:
         self._subs: list[Listener[T]] = []
 
@@ -36,11 +44,7 @@ class Signal[T]:
         self._subs.append(cb)
         return lambda: self._unsubscribe(cb)
 
-    def _unsubscribe(self, cb: Listener[T]) -> None:
-        with contextlib.suppress(ValueError):
-            self._subs.remove(cb)
-
-    async def emit(self, value: T) -> None:
+    async def _notify(self, value: T) -> None:
         """Invoke every subscriber with ``value``. Awaits async callbacks."""
         for cb in list(self._subs):
             try:
@@ -48,18 +52,33 @@ class Signal[T]:
                 if inspect.isawaitable(result):
                     await result
             except Exception:
-                log.exception("Error in Signal subscriber")
+                log.exception("Error in %s subscriber", type(self).__name__)
+
+    def _unsubscribe(self, cb: Listener[T]) -> None:
+        with contextlib.suppress(ValueError):
+            self._subs.remove(cb)
 
     def __len__(self) -> int:
         return len(self._subs)
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(subs={len(self._subs)})"
 
-class Cell[T]:
-    """Push-pull value cell: holds a value AND notifies on change.
 
-    Unlike ``Signal[T]`` (push-only event stream), a ``Cell[T]`` carries a
-    current value that subscribers can read at any time. Setting a new value
-    via :meth:`set` emits only if the new value differs from the current one.
+class Signal[T](Subscribable[T]):
+    """Typed push-only event stream. See module docstring."""
+
+    async def emit(self, value: T) -> None:
+        """Invoke every subscriber with ``value``. Awaits async callbacks."""
+        await self._notify(value)
+
+
+class Cell[T](Subscribable[T]):
+    """Push-pull value cell: a :class:`Subscribable` that also carries a current value.
+
+    Caches its current value and dedupes emissions — setting a new value via
+    :meth:`set` emits to subscribers only if the new value differs from the
+    current one.
 
     This is the observer-pattern equivalent of Svelte's ``$state`` or Vue's
     ``ref`` — useful when the *value itself* is the API (e.g., a hardware
@@ -86,8 +105,8 @@ class Cell[T]:
     """
 
     def __init__(self, initial: T) -> None:
+        super().__init__()
         self._value = initial
-        self._changed = Signal[T]()
 
     @property
     def value(self) -> T:
@@ -98,14 +117,76 @@ class Cell[T]:
         """Update the value. Emits to subscribers only if ``new != current``."""
         if new != self._value:
             self._value = new
-            await self._changed.emit(new)
+            await self._notify(new)
 
-    def subscribe(self, cb: Listener[T]) -> Unsub:
-        """Register ``cb`` to be invoked on future value changes."""
-        return self._changed.subscribe(cb)
+    def __repr__(self) -> str:
+        return f"Cell({self._value!r}, subs={len(self._subs)})"
 
-    def __len__(self) -> int:
-        return len(self._changed)
+
+class Derived[T](Subscribable[T]):
+    """Read-only value computed from one or more Subscribables.
+
+    Recomputes the value whenever any dependency emits. Emits to its own
+    subscribers only if the recomputed value differs from the previous one
+    (equality-skip, same as :class:`Cell`).
+
+    Dependencies are declared explicitly — no auto-tracking — which keeps the
+    implementation simple and the dependency graph legible at the call site.
+    Any :class:`Subscribable` is a valid dep (Signal, Cell, or Derived); the
+    compute function is responsible for reading whatever state it needs.
+
+    Typical use::
+
+        preview_running = Cell[bool](False)
+        acq_running = Cell[bool](False)
+
+        mode = Derived[SessionMode](
+            deps=[preview_running, acq_running],
+            compute=lambda: (
+                SessionMode.ACQUIRING
+                if acq_running.value
+                else SessionMode.PREVIEWING
+                if preview_running.value
+                else SessionMode.IDLE
+            ),
+        )
+
+        # Consumer: read current
+        current = mode.value
+
+        # Consumer: react to changes
+        mode.subscribe(lambda m: print(f"mode → {m}"))
+    """
+
+    def __init__(
+        self,
+        deps: Sequence[Subscribable[Any]],
+        compute: Callable[[], T],
+    ) -> None:
+        super().__init__()
+        self._compute = compute
+        self._value: T = compute()
+        self._unsubs: list[Unsub] = [dep.subscribe(self._on_dep_change) for dep in deps]
+
+    async def _on_dep_change(self, _: Any) -> None:
+        new = self._compute()
+        if new != self._value:
+            self._value = new
+            await self._notify(new)
+
+    @property
+    def value(self) -> T:
+        """Current computed value."""
+        return self._value
+
+    def close(self) -> None:
+        """Detach from all dependencies. Idempotent."""
+        for unsub in self._unsubs:
+            unsub()
+        self._unsubs = []
+
+    def __repr__(self) -> str:
+        return f"Derived({self._value!r}, subs={len(self._subs)})"
 
 
 class Sink[T]:

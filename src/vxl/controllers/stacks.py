@@ -44,7 +44,7 @@ class Stacks:
 
     async def open(self) -> None:
         """Subscribe to FOV changes for planned-stack auto-resize."""
-        self._unsub_fov = self._scope.profiles.fov_changed.subscribe(self._on_fov_changed)
+        self._unsub_fov = self._scope.profiles.fov.subscribe(self._on_fov_changed)
 
     async def close(self) -> None:
         if self._unsub_fov is not None:
@@ -264,13 +264,15 @@ class Stacks:
         )
 
     def _require_fov(self) -> tuple[float, float]:
-        fov = self._scope.profiles.fov
+        fov = self._scope.profiles.fov.value
         if fov is None:
             raise ValueError("FOV not available (no active profile or cameras)")
         return fov
 
-    async def _on_fov_changed(self, fov: tuple[float, float]) -> None:
+    async def _on_fov_changed(self, fov: tuple[float, float] | None) -> None:
         """Resize PLANNED stacks of the active profile when FOV changes."""
+        if fov is None:
+            return
         active_id = self._scope.profiles.active_id
         fov_w, fov_h = fov
         for stack in self._config.stacks.values():

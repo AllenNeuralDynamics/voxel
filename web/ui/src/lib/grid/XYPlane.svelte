@@ -158,7 +158,7 @@
   );
 
   // Clear stale thumbnail when stage moves without preview running
-  let shouldClearThumbnail = $derived(!session.preview?.isPreviewing && isXYMoving);
+  let shouldClearThumbnail = $derived(session.mode === 'idle' && isXYMoving);
   watch(
     () => shouldClearThumbnail,
     (clear) => {

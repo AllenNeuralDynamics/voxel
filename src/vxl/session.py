@@ -25,8 +25,9 @@ from vxl.config import SessionConfig
 from vxl.controllers import AcquisitionEngine, PreviewController, Stacks
 from vxl.metadata import resolve_metadata_class
 from vxl.microscope import Microscope
-from vxl.stack import StackResult
+from vxl.stack import StackProgress
 from vxl.store import SessionStore
+from vxlib import Derived
 
 if TYPE_CHECKING:
     from vxlib import Unsub
@@ -54,6 +55,12 @@ class Session:
         self.preview = PreviewController(self._scope)
         self.acquisition = AcquisitionEngine(self._scope)
         self.stacks = Stacks(self._scope, self._config)
+
+        # Derived session mode — tracks preview/acquisition activity cells.
+        self.mode: Derived[SessionMode] = Derived(
+            deps=[self.preview.is_running, self.acquisition.is_running],
+            compute=self._derive_session_mode,
+        )
 
         self._unsub_profile: Unsub | None = None
 
@@ -87,12 +94,10 @@ class Session:
     def microscope(self) -> Microscope:
         return self._scope
 
-    @property
-    def mode(self) -> SessionMode:
-        """Derived from controllers — no stored mode state."""
-        if self.acquisition.is_running:
+    def _derive_session_mode(self) -> SessionMode:
+        if self.acquisition.is_running.value:
             return SessionMode.ACQUIRING
-        if self.preview.is_running:
+        if self.preview.is_running.value:
             return SessionMode.PREVIEWING
         return SessionMode.IDLE
 
@@ -151,34 +156,34 @@ class Session:
 
     async def start_preview(self, crop: PreviewViewport | None = None) -> None:
         """Begin preview. Blocked if anything else is already running."""
-        if self.acquisition.is_running:
+        if self.acquisition.is_running.value:
             raise RuntimeError("Cannot start preview during acquisition")
-        if self.preview.is_running:
+        if self.preview.is_running.value:
             return
         await self.preview.start(crop)
 
     async def stop_preview(self) -> None:
         """Halt preview. No-op if not previewing."""
-        if not self.preview.is_running:
+        if not self.preview.is_running.value:
             return
         await self.preview.stop()
 
     async def set_active_profile(self, profile_id: str) -> None:
         """Switch profiles, pausing/resuming preview around the switch."""
-        if self.acquisition.is_running:
+        if self.acquisition.is_running.value:
             raise RuntimeError("Cannot switch profiles during acquisition")
-        restart = self.preview.is_running
+        restart = self.preview.is_running.value
         if restart:
             await self.stop_preview()
         await self._scope.profiles.set_active_profile(profile_id)
         if restart:
             await self.start_preview()
 
-    async def acquire_stack(self, stack_id: str) -> StackResult:
+    async def acquire_stack(self, stack_id: str) -> StackProgress:
         """Run a single acquisition. Stops preview first if running."""
-        if self.acquisition.is_running:
+        if self.acquisition.is_running.value:
             raise RuntimeError("Another acquisition is in progress")
-        if self.preview.is_running:
+        if self.preview.is_running.value:
             await self.stop_preview()
         stack = self.stacks[stack_id]
         return await self.acquisition.run(
@@ -188,16 +193,16 @@ class Session:
             compression=self._config.output.compression,
         )
 
-    async def acquire_all(self) -> list[StackResult]:
+    async def acquire_all(self) -> list[StackProgress]:
         """Acquire every PLANNED stack in traversal order."""
-        results: list[StackResult] = []
+        results: list[StackProgress] = []
         while (stack := self.stacks.next_planned()) is not None:
             results.append(await self.acquire_stack(stack.stack_id))
         return results
 
     async def update_waveforms(self, *, waveforms: dict | None = None, timing: dict | None = None) -> None:
         """Edit active profile's waveforms/timing and push to the DAQ. Blocked during acquisition."""
-        if self.acquisition.is_running:
+        if self.acquisition.is_running.value:
             raise RuntimeError("Cannot update waveforms while acquiring")
         await self._scope.profiles.update_waveforms(waveforms=waveforms, timing=timing)
 

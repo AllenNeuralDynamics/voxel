@@ -218,10 +218,10 @@ class ControlPanel(QWidget):
         self._channels_box.clear()
 
         # Create new sections for active channels
-        for channel_id, channel_config in rig.profiles.active_channels.items():
+        for channel_id, channel in rig.profiles.active_channels.items():
             section = ChannelSection(
                 channel_id=channel_id,
-                channel_config=channel_config,
+                channel_config=channel.config,
                 devices=devices,
             )
             section.auto_levels_requested.connect(self._on_auto_levels_requested)

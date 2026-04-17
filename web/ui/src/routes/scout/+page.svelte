@@ -12,7 +12,7 @@
 
   let renamingId = $state<string | null>(null);
 
-  let canSnap = $derived(session.preview.isPreviewing || session.mode === 'acquiring');
+  let canSnap = $derived(session.mode !== 'idle');
 
   let previewUrl = $state<string | null>(null);
   let previewAspect = $state('');

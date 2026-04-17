@@ -265,7 +265,6 @@ export interface Stack {
   z_step: number;
   profile_id: string;
   status: StackStatus;
-  output_path: string | null;
   num_frames: number;
   created_at: string;
   edited_at: string | null;
@@ -275,15 +274,29 @@ export interface Stack {
 }
 
 /**
- * Acquisition progress payload
- * Topic: 'acq/progress'
+ * Result of one camera capture_batch call — matches backend BatchResult.
  */
-export interface AcquisitionProgress {
-  status: 'started' | 'in_progress' | 'completed' | 'failed';
-  tile_id?: string;
-  total?: number;
-  completed?: number;
-  error?: string;
+export interface BatchResult {
+  num_frames: number;
+  started_at: string;
+  completed_at: string;
+  duration_s: number;
+  dropped_frames: number;
+}
+
+/**
+ * Live progress for a single stack — matches backend StackProgress.
+ * Topic: 'stack/progress'
+ */
+export interface StackProgress {
+  stack_id: string;
+  status: StackStatus;
+  expected_frames: number;
+  timestamp: string;
+  started_at: string;
+  completed_at: string | null;
+  channels: Record<string, BatchResult[]>;
+  error_message: string | null;
 }
 
 /**

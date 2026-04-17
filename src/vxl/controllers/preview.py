@@ -15,7 +15,8 @@ from contextlib import suppress
 from vxl.camera.handle import CameraHandle
 from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
 from vxl.microscope import Microscope
-from vxlib import Sink, merge_dicts
+from vxl.profiles import Channel
+from vxlib import Cell, Sink, merge_dicts
 
 FrameCallback = Callable[[str, str, bytes], Awaitable[None]]
 
@@ -47,17 +48,13 @@ class PreviewController:
         self._levels_sink: Sink[dict[str, PreviewLevels]] = Sink(drain=self._send_levels, reducer=merge_dicts)
         self._colormaps_sink: Sink[dict[str, str]] = Sink(drain=self._send_colormaps, reducer=merge_dicts)
 
-        self._running = False
+        self.is_running: Cell[bool] = Cell(False)
 
     # ==================== Config ====================
 
     def set_frame_callback(self, callback: FrameCallback | None) -> None:
         """Register the (topic, channel, data) sink. One callback total; last call wins."""
         self._frame_callback = callback
-
-    @property
-    def is_running(self) -> bool:
-        return self._running
 
     async def open(self) -> None:
         """Subscribe to all camera streams. Called by Session.open().
@@ -101,7 +98,7 @@ class PreviewController:
         adjusted, kicks off coalesced flushers, resets TTL stepper, enables
         lasers, applies + starts the sync task.
         """
-        if self._running:
+        if self.is_running.value:
             self._log.warning("Preview already running")
             return
         if not self._streams_connected:
@@ -117,12 +114,12 @@ class PreviewController:
         await self._send_viewport(self._viewport)
 
         started = 0
-        for cam_id in self._active_camera_ids():
+        for ch in profiles.active_channels.values():
             try:
-                await self._scope.cameras[cam_id].start_preview()
+                await ch.camera.start_preview()
                 started += 1
             except Exception:
-                self._log.exception("Camera %s failed to start preview", cam_id)
+                self._log.exception("Camera %s failed to start preview", ch.camera.uid)
 
         # Sinks lazy-start on first put — no explicit start needed.
 
@@ -136,12 +133,12 @@ class PreviewController:
         await task.apply(profiles.active.daq.timing, profiles.active_waveforms())
         await task.start()
 
-        self._running = True
+        await self.is_running.set(True)
         self._log.info("Preview started (%d cameras)", started)
 
     async def stop(self) -> None:
         """Halt live preview. Reverse of ``start``; safe to call when not running."""
-        if not self._running:
+        if not self.is_running.value:
             return
 
         self._log.debug("stopping preview...")
@@ -149,19 +146,18 @@ class PreviewController:
         self._levels_sink.close()
         self._colormaps_sink.close()
 
-        cam_ids = self._active_camera_ids()
-        for cam_id in cam_ids:
+        for ch in self._scope.profiles.active_channels.values():
             try:
-                await self._scope.cameras[cam_id].stop_preview()
+                await ch.camera.stop_preview()
             except Exception:
-                self._log.exception("Camera %s failed to stop preview", cam_id)
+                self._log.exception("Camera %s failed to stop preview", ch.camera.uid)
 
         task = await self._scope.profiles.sync_task()
         await task.stop()
 
         await self._scope.profiles.disable_active_lasers()
 
-        self._running = False
+        await self.is_running.set(False)
         self._log.info("Preview stopped")
 
     # ==================== Updates (coalesced when running) ====================
@@ -169,21 +165,21 @@ class PreviewController:
     async def update_viewport(self, viewport: PreviewViewport) -> None:
         """Update preview viewport. Coalesced while running, direct otherwise."""
         self._viewport = viewport
-        if self._running:
+        if self.is_running.value:
             self._vp_sink.put(viewport)
         else:
             await self._send_viewport(viewport)
 
     async def update_levels(self, levels: dict[str, PreviewLevels]) -> None:
         """Update per-channel preview levels. Coalesced while running, direct otherwise."""
-        if self._running:
+        if self.is_running.value:
             self._levels_sink.put(levels)
         else:
             await self._send_levels(levels)
 
     async def update_colormaps(self, colormaps: dict[str, str]) -> None:
         """Update per-channel preview colormaps. Coalesced while running, direct otherwise."""
-        if self._running:
+        if self.is_running.value:
             self._colormaps_sink.put(colormaps)
         else:
             await self._send_colormaps(colormaps)
@@ -200,68 +196,51 @@ class PreviewController:
         """Query active cameras for their current preview configs, keyed by channel."""
         configs: dict[str, PreviewConfig] = {}
         for chan_id, channel in self._scope.profiles.active_channels.items():
-            camera = self._scope.cameras.get(channel.detection)
-            if camera:
-                result = await camera.get_prop_value("preview_config")
-                configs[chan_id] = PreviewConfig.model_validate(result) if isinstance(result, dict) else result
+            result = await channel.camera.get_prop_value("preview_config")
+            configs[chan_id] = PreviewConfig.model_validate(result) if isinstance(result, dict) else result
         return configs
 
     # ==================== Private ====================
-
-    def _active_camera_ids(self) -> list[str]:
-        """Camera IDs for the current active profile's channels, deduplicated."""
-        seen: set[str] = set()
-        out: list[str] = []
-        for ch in self._scope.profiles.active_channels.values():
-            if ch.detection in self._scope.cameras and ch.detection not in seen:
-                seen.add(ch.detection)
-                out.append(ch.detection)
-        return out
-
-    def _camera_to_channel(self) -> dict[str, str]:
-        """Map camera_id → channel_id for forwarded frame labeling."""
-        return {
-            ch.detection: chan_id
-            for chan_id, ch in self._scope.profiles.active_channels.items()
-            if ch.detection in self._scope.cameras
-        }
 
     def _make_forward(self, camera_id: str, topic: str) -> Callable[[bytes], Awaitable[None]]:
         async def forward(data: bytes) -> None:
             if self._frame_callback is None:
                 return
-            channel = self._camera_to_channel().get(camera_id)
-            if channel is None:
+            channel_id = next(
+                (ch.id for ch in self._scope.profiles.active_channels.values() if ch.camera.uid == camera_id),
+                None,
+            )
+            if channel_id is None:
                 return
             try:
-                await self._frame_callback(topic, channel, data)
+                await self._frame_callback(topic, channel_id, data)
             except Exception:
-                self._log.exception("Error in %s callback for %s", topic, channel)
+                self._log.exception("Error in %s callback for %s", topic, channel_id)
 
         return forward
 
-    def _to_sensor_viewport(self, camera_id: str, viewport: PreviewViewport) -> PreviewViewport:
+    @staticmethod
+    def _to_sensor_viewport(channel: Channel, viewport: PreviewViewport) -> PreviewViewport:
         """Stage-normalized viewport → sensor-normalized, applying camera rotation."""
-        dp = self._scope.config.detection.get(camera_id)
-        if not dp or dp.rotation_deg == 0:
+        if channel.detection_path.rotation_deg == 0:
             return viewport
-        return viewport.to_sensor_space(dp.rotation_deg)
+        return viewport.to_sensor_space(channel.detection_path.rotation_deg)
 
     async def _send_viewport(self, viewport: PreviewViewport) -> None:
-        for cam_id in self._active_camera_ids():
+        for ch in self._scope.profiles.active_channels.values():
             try:
-                await self._scope.cameras[cam_id].update_preview_viewport(self._to_sensor_viewport(cam_id, viewport))
+                await ch.camera.update_preview_viewport(self._to_sensor_viewport(ch, viewport))
             except Exception:
-                self._log.exception("Viewport update failed for %s", cam_id)
+                self._log.exception("Viewport update failed for %s", ch.id)
 
     async def _send_levels(self, levels: dict[str, PreviewLevels]) -> None:
         active = self._scope.profiles.active_channels
         for ch_id, lvl in levels.items():
             ch = active.get(ch_id)
-            if ch is None or ch.detection not in self._scope.cameras:
+            if ch is None:
                 continue
             try:
-                await self._scope.cameras[ch.detection].update_preview_levels(lvl)
+                await ch.camera.update_preview_levels(lvl)
             except Exception:
                 self._log.exception("Levels update failed for %s", ch_id)
 
@@ -269,9 +248,9 @@ class PreviewController:
         active = self._scope.profiles.active_channels
         for ch_id, cmap in colormaps.items():
             ch = active.get(ch_id)
-            if ch is None or ch.detection not in self._scope.cameras:
+            if ch is None:
                 continue
             try:
-                await self._scope.cameras[ch.detection].update_preview_colormap(cmap)
+                await ch.camera.update_preview_colormap(cmap)
             except Exception:
                 self._log.exception("Colormap update failed for %s", ch_id)

@@ -74,6 +74,11 @@
 
   createHotkey('Mod+Z', () => session?.undo.undo());
   createHotkey('Mod+Shift+Z', () => session?.undo.redo());
+  createHotkey('Alt+P', () => {
+    if (!session) return;
+    if (session.mode === 'previewing') session.preview.stopPreview();
+    else session.preview.startPreview();
+  });
   createHotkeySequence(['Mod+K', 'T'], () => (themes.pickerOpen = true));
   createHotkeySequence(['Mod+K', 'Q'], () => {
     if (session) closeDialogOpen = true;
@@ -213,7 +218,7 @@
               onCollapse={() => {}}
             >
               {#if bottomPanelTab === 'devices'}
-                <AuxDevicesPanel {session} class="h-full overflow-auto p-2" />
+                <AuxDevicesPanel {session} class="h-full overflow-auto p-4" />
               {:else if bottomPanelTab === 'cameras'}
                 <CamerasPanel {session} class="h-full overflow-auto p-4" />
               {:else if bottomPanelTab === 'lasers'}
@@ -226,7 +231,7 @@
                     rigCfg={session.rig_cfg}
                     acquiring={session.mode === 'acquiring'}
                     profileId={session.profiles.activeId}
-                    class="h-full overflow-auto p-2"
+                    class="h-full overflow-auto"
                   />
                 {:else}
                   <div class="flex h-full items-center justify-center text-sm text-fg-muted">
@@ -234,7 +239,7 @@
                   </div>
                 {/if}
               {:else if bottomPanelTab === 'logs'}
-                <div class="h-full overflow-hidden bg-card p-2">
+                <div class="h-full overflow-hidden bg-card p-4 pt-2">
                   <LogViewer {logs} onClear={clearLogs} />
                 </div>
               {/if}
@@ -260,7 +265,9 @@
                 <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}
                   >Auxiliary</button
                 >
-                <button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}>Cameras</button>
+                <button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}
+                  >Cameras</button
+                >
                 <button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
                   Lasers
                   {#each Object.values(session.lasers) as laser (laser.deviceId)}

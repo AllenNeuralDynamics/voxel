@@ -12,6 +12,7 @@ import type {
   FrameTiming,
   LogMessage,
   SessionDetails,
+  StackProgress,
   Waveform
 } from './types/index.ts';
 
@@ -157,6 +158,7 @@ export interface TopicHandlers {
     roi: { x: number; y: number; w: number; h: number };
   }) => void;
   'profile/roi_applied'?: (payload: { camera_id: string }) => void;
+  'stack/progress'?: (payload: StackProgress) => void;
 }
 
 // --- Backend resolution ---

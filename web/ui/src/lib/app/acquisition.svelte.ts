@@ -1,25 +1,35 @@
 /**
- * AcquisitionManager — start/stop acquisition control.
+ * AcquisitionManager — start/stop control + live per-stack progress.
  *
- * Mirrors backend ``session.acquisition``. Self-subscribes to the ``status``
- * WS topic to track live mode; takes ``client`` for REST calls.
+ * Mirrors backend ``session.acquisition``. Self-subscribes to ``status`` (mode)
+ * and ``stack/progress`` (frame-level progress) WS topics; uses ``client`` for
+ * REST calls.
  */
 
+import { SvelteMap } from 'svelte/reactivity';
 import { toast } from 'svelte-sonner';
 import type { Client } from './client.svelte';
-import type { AppStatusUpdate, SessionStateUpdate, SessionMode } from './types';
+import type { AppStatusUpdate, SessionStateUpdate, SessionMode, StackProgress } from './types';
 
 export class AcquisitionManager {
   mode = $state<SessionMode>('idle');
 
+  /** Live per-stack progress, keyed by stack_id. Populated by ``stack/progress`` events. */
+  progressByStack = new SvelteMap<string, StackProgress>();
+
   readonly #client: Client;
-  readonly #unsubscribe: () => void;
+  readonly #unsubStatus: () => void;
+  readonly #unsubProgress: () => void;
 
   constructor(client: Client, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.handleStatus(initialStatus);
-    this.#unsubscribe = client.subscribe('status', (_topic, payload) => {
+    this.#unsubStatus = client.subscribe('status', (_topic, payload) => {
       this.handleStatus((payload as AppStatusUpdate).session ?? null);
+    });
+    this.#unsubProgress = client.subscribe('stack/progress', (_topic, payload) => {
+      const progress = payload as StackProgress;
+      this.progressByStack.set(progress.stack_id, progress);
     });
   }
 
@@ -28,12 +38,26 @@ export class AcquisitionManager {
   }
 
   dispose(): void {
-    this.#unsubscribe();
+    this.#unsubStatus();
+    this.#unsubProgress();
   }
 
   // ── Derived ──
 
   isRunning = $derived<boolean>(this.mode === 'acquiring');
+
+  /**
+   * Frames captured for a stack — MIN across channels to reflect "all channels
+   * at this depth." Returns 0 if no progress event has landed yet.
+   */
+  framesCaptured(stackId: string): number {
+    const progress = this.progressByStack.get(stackId);
+    if (!progress) return 0;
+    const channelTotals = Object.values(progress.channels).map((batches) =>
+      batches.reduce((sum, b) => sum + b.num_frames, 0)
+    );
+    return channelTotals.length > 0 ? Math.min(...channelTotals) : 0;
+  }
 
   // ── Commands ──
 

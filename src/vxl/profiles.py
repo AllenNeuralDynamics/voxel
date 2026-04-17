@@ -11,21 +11,69 @@ No mode awareness. Session orchestrates the pause/switch/resume dance around
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from vxlib.color import Color
 
-from rigup import PropResults
+from rigup import DeviceHandle, PropResults
 from vxl.camera.base import SensorROI
-from vxl.config import ChannelConfig, ProfileConfig
+from vxl.camera.handle import CameraHandle
+from vxl.config import ChannelConfig, DetectionPathConfig, IlluminationPathConfig, ProfileConfig
 from vxl.daq import FrameTiming, SyncTask
 from vxl.daq.wave import validate_waveform
-from vxlib import Signal
+from vxlib import Cell, Signal
 
 if TYPE_CHECKING:
     from .microscope import Microscope
 
 _FOV_PROPERTIES = frozenset({"frame_area_um"})
+
+
+@dataclass(frozen=True)
+class Channel:
+    """Active-profile channel — persisted :class:`ChannelConfig` + resolved handles.
+
+    Built by :class:`Profiles` on profile activation. ``config`` is the single
+    source of truth for user-edited fields; ergonomic pass-through properties
+    (``detection``, ``emission``, …) let call sites avoid an extra ``.config``
+    hop without copying state.
+    """
+
+    # Identity
+    id: str
+
+    # Persisted (single source of truth)
+    config: ChannelConfig
+
+    # Resolved runtime references
+    camera: CameraHandle
+    laser: DeviceHandle | None
+    detection_path: DetectionPathConfig
+    illumination_path: IlluminationPathConfig
+    filter_wheels: dict[str, DeviceHandle]
+
+    # ---- ChannelConfig pass-throughs ----
+
+    @property
+    def filters(self) -> dict[str, str]:
+        return self.config.filters
+
+    @property
+    def emission(self) -> float | None:
+        return self.config.emission
+
+    # ---- Derived ----
+
+    @property
+    def zarr_name(self) -> str:
+        """Directory name for this channel's zarr output. Prefers label, falls back to id."""
+        return self.config.label or self.id
+
+    @property
+    def default_colormap(self) -> str:
+        """Default colormap from emission wavelength; ``'green'`` fallback."""
+        return str(Color.from_wavelength(self.config.emission)) if self.config.emission else "green"
 
 
 class Profiles:
@@ -36,14 +84,14 @@ class Profiles:
       - ``set_active_profile(id)`` — configures devices for the new profile
       - Sync task access + ``apply_waveforms`` / ``stop_waveforms``
       - Device-prop and camera-ROI primitives (capture / apply / save / revert)
-      - FOV property + ``fov_changed`` signal
+      - ``fov`` Cell — current effective FOV; subscribe for change notifications.
       - ``profile_changed`` signal (Session uses this to reapply default colormaps)
     """
 
     #: Fires after a profile switch completes. Payload is the new active profile id.
     profile_changed: Signal[str]
-    #: Fires when the effective FOV changes (from profile switch or camera re-config).
-    fov_changed: Signal[tuple[float, float]]
+    #: Current effective FOV. ``None`` until first successful compute. Subscribe for changes.
+    fov: Cell[tuple[float, float] | None]
 
     def __init__(self, microscope: "Microscope") -> None:
         self._scope = microscope
@@ -52,22 +100,26 @@ class Profiles:
         if not microscope.config.profiles:
             raise ValueError("No profiles defined in configuration")
         self._active_id: str = next(iter(microscope.config.profiles.keys()))
+        # All channels defined in config, resolved to handles. Populated by open().
+        self._channels: dict[str, Channel] = {}
 
         self._sync_task: SyncTask | None = None
 
-        self._fov: tuple[float, float] | None = None
         self._fov_lock = asyncio.Lock()
 
         self.profile_changed = Signal()
-        self.fov_changed = Signal()
+        self.fov = Cell(None)
 
     # ==================== Lifecycle ====================
 
     async def open(self) -> None:
-        """Subscribe cameras for FOV triggers and activate the default profile."""
+        """Build channels, subscribe cameras for FOV triggers, activate the default profile."""
         for cam_id, handle in self._scope.cameras.items():
             handle.props_changed.subscribe(self._make_camera_props_callback(cam_id))
-        await self.set_active_profile(self._active_id)
+        self._channels = self._build_channels()
+        # set_active_profile would no-op since _active_id already matches.
+        # Call the inner activator directly for the first-time hardware apply.
+        await self._activate(self._active_id)
 
     async def close(self) -> None:
         if self._sync_task is not None:
@@ -85,12 +137,14 @@ class Profiles:
         return self._active_id
 
     @property
-    def active_channels(self) -> dict[str, ChannelConfig]:
-        return {
-            ch_id: self._scope.config.channels[ch_id]
-            for ch_id in self.active.channels
-            if ch_id in self._scope.config.channels
-        }
+    def channels(self) -> dict[str, Channel]:
+        """All channels defined in config, with resolved hardware handles."""
+        return self._channels
+
+    @property
+    def active_channels(self) -> dict[str, Channel]:
+        """Channels belonging to the currently active profile. Projection over ``channels``."""
+        return {ch_id: self._channels[ch_id] for ch_id in self.active.channels if ch_id in self._channels}
 
     @property
     def available(self) -> list[str]:
@@ -98,10 +152,7 @@ class Profiles:
 
     def default_colormaps(self) -> dict[str, str]:
         """Per-channel default colormap from emission wavelength; ``'green'`` fallback."""
-        out: dict[str, str] = {}
-        for ch_id, channel in self.active_channels.items():
-            out[ch_id] = str(Color.from_wavelength(channel.emission)) if channel.emission else "green"
-        return out
+        return {ch_id: ch.default_colormap for ch_id, ch in self.active_channels.items()}
 
     async def set_active_profile(self, profile_id: str) -> None:
         """Switch to a profile: configure devices, recompute FOV, build sync task, notify.
@@ -124,7 +175,10 @@ class Profiles:
             raise ValueError(f"Profile '{profile_id}' not found in config")
         if profile_id == self._active_id:
             return
+        await self._activate(profile_id)
 
+    async def _activate(self, profile_id: str) -> None:
+        """Inner activation. Bypasses same-id no-op; used by open() and set_active_profile."""
         try:
             await asyncio.gather(*[camera.clear_preview_cache() for camera in self._scope.cameras.values()])
             await self._configure_profile_devices(profile_id)
@@ -211,20 +265,20 @@ class Profiles:
     async def enable_active_lasers(self) -> None:
         """Enable lasers for all active channels. Per-channel errors are logged, not raised."""
         for chan_id, channel in self.active_channels.items():
-            if channel.illumination not in self._scope.lasers:
+            if channel.laser is None:
                 continue
             try:
-                await self._scope.lasers[channel.illumination].call("enable")
+                await channel.laser.call("enable")
             except Exception:
                 self._log.exception("Failed to enable laser for channel '%s'", chan_id)
 
     async def disable_active_lasers(self) -> None:
         """Disable lasers for all active channels. Per-channel errors are logged, not raised."""
         for chan_id, channel in self.active_channels.items():
-            if channel.illumination not in self._scope.lasers:
+            if channel.laser is None:
                 continue
             try:
-                await self._scope.lasers[channel.illumination].call("disable")
+                await channel.laser.call("disable")
             except Exception:
                 self._log.exception("Failed to disable laser for channel '%s'", chan_id)
 
@@ -318,12 +372,6 @@ class Profiles:
             return None
         return await self.apply_camera_roi(camera_id, roi)
 
-    # ==================== FOV ====================
-
-    @property
-    def fov(self) -> tuple[float, float] | None:
-        return self._fov
-
     # ==================== Private ====================
 
     async def _configure_profile_devices(self, profile_id: str) -> None:
@@ -361,17 +409,15 @@ class Profiles:
                 self._log.exception("Failed to apply ROI for '%s'", camera_id)
 
     async def _set_filter_wheels(self, profile_id: str) -> None:
+        """Select the configured filter slot on each filter wheel used by the profile."""
         profile = self._scope.config.profiles[profile_id]
-        filter_positions: dict[str, str] = {}
-        for ch_id in profile.channels:
-            if ch_id in self._scope.config.channels:
-                filter_positions.update(self._scope.config.channels[ch_id].filters)
-
         tasks = []
-        for fw_id, position_label in filter_positions.items():
-            if fw_id in self._scope.fws:
-                tasks.append(self._scope.fws[fw_id].call("select", position_label, wait=True))
-
+        for ch_id in profile.channels:
+            ch = self._channels.get(ch_id)
+            if ch is None:
+                continue
+            for fw_id, fw_handle in ch.filter_wheels.items():
+                tasks.append(fw_handle.call("select", ch.filters[fw_id], wait=True))
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -379,15 +425,11 @@ class Profiles:
         async with self._fov_lock:
             fovs: list[tuple[float, float]] = []
             for channel in self.active_channels.values():
-                detection_path = self._scope.config.detection[channel.detection]
-                magnification = detection_path.magnification
-                camera = self._scope.cameras.get(channel.detection)
-                if not camera:
-                    continue
-                frame_area = await camera.get_frame_area_um()
-                fov_w = frame_area.x / magnification
-                fov_h = frame_area.y / magnification
-                if detection_path.rotation_deg % 180 != 0:
+                frame_area = await channel.camera.get_frame_area_um()
+                mag = channel.detection_path.magnification
+                fov_w = frame_area.x / mag
+                fov_h = frame_area.y / mag
+                if channel.detection_path.rotation_deg % 180 != 0:
                     fov_w, fov_h = fov_h, fov_w
                 fovs.append((fov_w, fov_h))
 
@@ -398,21 +440,39 @@ class Profiles:
                 self._log.warning("Cameras disagree on FOV; using bounding box")
 
             new_fov = (max(w for w, _ in fovs), max(h for _, h in fovs))
-            if new_fov != self._fov:
-                self._fov = new_fov
-                await self.fov_changed.emit(new_fov)
+            await self.fov.set(new_fov)
 
     def _make_camera_props_callback(self, camera_id: str) -> Callable[[PropResults], Awaitable[None]]:
         async def _on_camera_props(props: PropResults) -> None:
-            profile_cameras = {
-                self._scope.config.channels[ch].detection
-                for ch in self.active.channels
-                if ch in self._scope.config.channels
-            }
-            if camera_id not in profile_cameras:
+            active_cam_ids = {ch.config.detection for ch in self.active_channels.values()}
+            if camera_id not in active_cam_ids:
                 return
             if not (set(props.ok.keys()) & _FOV_PROPERTIES):
                 return
             await self._compute_and_publish_fov()
 
         return _on_camera_props
+
+    def _build_channels(self) -> dict[str, Channel]:
+        """Resolve every channel in config to a :class:`Channel`. Raises on missing camera."""
+        out: dict[str, Channel] = {}
+        for ch_id, config in self._scope.config.channels.items():
+            camera = self._scope.cameras.get(config.detection)
+            if camera is None:
+                raise ValueError(
+                    f"Channel '{ch_id}' references detection path '{config.detection}' which has no camera"
+                )
+            laser = self._scope.lasers.get(config.illumination)
+            detection_path = self._scope.config.detection[config.detection]
+            illumination_path = self._scope.config.illumination[config.illumination]
+            filter_wheels = {fw_id: self._scope.fws[fw_id] for fw_id in config.filters if fw_id in self._scope.fws}
+            out[ch_id] = Channel(
+                id=ch_id,
+                config=config,
+                camera=camera,
+                laser=laser,
+                detection_path=detection_path,
+                illumination_path=illumination_path,
+                filter_wheels=filter_wheels,
+            )
+        return out

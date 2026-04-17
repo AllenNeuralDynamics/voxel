@@ -2,11 +2,10 @@ from .app import VoxelApp
 from .config import GridConfig, MicroscopeConfig, OutputConfig, SessionConfig
 from .microscope import Microscope
 from .session import Session, SessionMode
-from .stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus
+from .stack import BatchResult, Stack, StackProgress, StackStatus
 
 __all__ = [
     "BatchResult",
-    "ChannelResult",
     "GridConfig",
     "Microscope",
     "MicroscopeConfig",
@@ -15,7 +14,7 @@ __all__ = [
     "SessionConfig",
     "SessionMode",
     "Stack",
-    "StackResult",
+    "StackProgress",
     "StackStatus",
     "VoxelApp",
 ]

@@ -13,7 +13,7 @@ from .log import (
     get_uvicorn_log_config,
 )
 from .poller import Poller
-from .signal import Cell, Signal, Sink, Unsub
+from .signal import Cell, Derived, Signal, Sink, Unsub
 from .types import Dtype, SchemaModel
 from .utils import (
     bounded,
@@ -33,6 +33,7 @@ __all__ = [
     "Color",
     "Colormap",
     "ColormapGroup",
+    "Derived",
     "Dtype",
     "IVec2D",
     "IVec3D",

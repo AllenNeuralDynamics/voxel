@@ -3,9 +3,10 @@
 One-shot: each call to ``run(stack, ...)`` is self-contained. No lifecycle (no
 start/stop/close). Stateless between runs apart from the injected rig reference.
 
-``run`` mutates ``stack.status`` / timestamps / output_path in place and returns
-a ``StackResult``. Session treats the stack as "owned by acquisition for the
-duration of the call" — it does not need to write stack fields afterwards.
+``run`` mutates ``stack.status`` and lifecycle timestamps in place and returns
+the final ``StackProgress``. During the run, ``self.progress`` (a Cell) emits
+periodic snapshots — initial at start, partial after each batch, terminal at
+completion or failure — so observers can track progress reactively.
 """
 
 import asyncio
@@ -19,7 +20,8 @@ from ome_zarr_writer.types import Compression, ScaleLevel
 
 from vxl.axes import StepMode, TTLStepperConfig
 from vxl.microscope import Microscope
-from vxl.stack import BatchResult, ChannelResult, Stack, StackResult, StackStatus
+from vxl.stack import BatchResult, Stack, StackProgress, StackStatus
+from vxlib import Cell
 
 # Pipeline knobs — hardcoded defaults. Will be replaced with per-acquisition
 # computation from System.ram_share + camera.frame_size_mb once that logic
@@ -29,16 +31,13 @@ _DEFAULT_TARGET_SHARD_GB = 1.0
 
 
 class AcquisitionEngine:
-    """Runs a single stack. Mutates stack fields; returns a ``StackResult``."""
+    """Runs a single stack. Emits progress via ``self.progress`` Cell; returns final ``StackProgress``."""
 
     def __init__(self, microscope: Microscope) -> None:
         self._scope = microscope
         self._log = logging.getLogger("Acquisition")
-        self._running = False
-
-    @property
-    def is_running(self) -> bool:
-        return self._running
+        self.is_running: Cell[bool] = Cell(False)
+        self.progress: Cell[StackProgress | None] = Cell(None)
 
     async def run(
         self,
@@ -47,7 +46,7 @@ class AcquisitionEngine:
         store_path: Path,
         max_level: ScaleLevel = ScaleLevel.L3,
         compression: Compression = Compression.BLOSC_LZ4,
-    ) -> StackResult:
+    ) -> StackProgress:
         """Acquire one stack at its tile position across all active channels.
 
         Caller is responsible for ensuring no other hardware activity is running
@@ -64,12 +63,27 @@ class AcquisitionEngine:
         started_at = datetime.datetime.now(tz=datetime.UTC)
         stack.started_at = started_at
         stack.status = StackStatus.ACQUIRING
-        self._running = True
+        await self.is_running.set(True)
 
         stack_store = store_path / stack.stack_id
-        channel_cam_map = self._build_channel_cam_map()
-        cam_uids = [cam_id for cam_id, _ in channel_cam_map.values()]
+        channels = list(profiles.active_channels.values())
+        results_by_ch: dict[str, list[BatchResult]] = {ch.id: [] for ch in channels}
         scanning_axis = self._scope.stage.scanning_axis
+
+        def build_progress() -> dict[str, list[BatchResult]]:
+            # Copy per-channel lists so later batches don't mutate emitted snapshots.
+            return {ch.id: list(results_by_ch[ch.id]) for ch in channels}
+
+        # Emit initial progress.
+        await self.progress.set(
+            StackProgress(
+                stack_id=stack.stack_id,
+                status=StackStatus.ACQUIRING,
+                expected_frames=stack.num_frames,
+                timestamp=started_at,
+                started_at=started_at,
+            )
+        )
 
         try:
             await asyncio.gather(
@@ -92,16 +106,16 @@ class AcquisitionEngine:
 
             await asyncio.gather(
                 *(
-                    self._scope.cameras[cam_id].initialize_stack(
+                    ch.camera.initialize_stack(
                         stack=stack,
                         store_path=stack_store,
-                        channel_name=channel_name,
+                        channel_name=ch.zarr_name,
                         max_level=max_level,
                         compression=compression,
                         batch_z_shards=_DEFAULT_BATCH_Z_SHARDS,
                         target_shard_gb=_DEFAULT_TARGET_SHARD_GB,
                     )
-                    for cam_id, channel_name in channel_cam_map.values()
+                    for ch in channels
                 )
             )
 
@@ -110,12 +124,11 @@ class AcquisitionEngine:
             # Per-batch capture: wait for free slot, queue moves, start sync,
             # gather captures, stop sync. Cross-camera backpressure prevents
             # dropped frames when any writer runs long.
-            results_by_cam: dict[str, list[BatchResult]] = {uid: [] for uid in cam_uids}
             for batch_idx in range(num_batches):
                 frames_in_batch = min(batch_z, stack.num_frames - batch_idx * batch_z)
 
                 while True:
-                    readies = await asyncio.gather(*(self._scope.cameras[uid].is_ready_for_batch() for uid in cam_uids))
+                    readies = await asyncio.gather(*(ch.camera.is_ready_for_batch() for ch in channels))
                     if all(readies):
                         break
                     await asyncio.sleep(0.005)
@@ -124,43 +137,46 @@ class AcquisitionEngine:
                     await scanning_axis.queue_relative_move(stack.z_step)
 
                 await sync_task.start()
-                per_cam_results = await asyncio.gather(
-                    *(self._scope.cameras[uid].capture_batch(num_frames=frames_in_batch) for uid in cam_uids)
+                per_ch_results = await asyncio.gather(
+                    *(ch.camera.capture_batch(num_frames=frames_in_batch) for ch in channels)
                 )
                 await sync_task.stop()
 
-                for uid, result in zip(cam_uids, per_cam_results, strict=True):
-                    results_by_cam[uid].append(result)
+                for ch, result in zip(channels, per_ch_results, strict=True):
+                    results_by_ch[ch.id].append(result)
+
+                # Emit partial progress after each batch.
+                await self.progress.set(
+                    StackProgress(
+                        stack_id=stack.stack_id,
+                        status=StackStatus.ACQUIRING,
+                        expected_frames=stack.num_frames,
+                        timestamp=datetime.datetime.now(tz=datetime.UTC),
+                        started_at=started_at,
+                        channels=build_progress(),
+                    )
+                )
 
             await self._scope.profiles.disable_active_lasers()
             await scanning_axis.reset_ttl_stepper()
 
-            await asyncio.gather(*(self._scope.cameras[uid].finalize_stack() for uid in cam_uids))
-
-            channels: dict[str, ChannelResult] = {
-                ch_id: ChannelResult(
-                    camera_id=cam_id,
-                    output_path=stack_store / f"{channel_name}.ome.zarr",
-                    batches=results_by_cam[cam_id],
-                )
-                for ch_id, (cam_id, channel_name) in channel_cam_map.items()
-            }
+            await asyncio.gather(*(ch.camera.finalize_stack() for ch in channels))
 
             completed_at = datetime.datetime.now(tz=datetime.UTC)
             stack.status = StackStatus.COMPLETED
             stack.completed_at = completed_at
-            stack.output_path = str(stack_store)
 
-            return StackResult(
+            final = StackProgress(
                 stack_id=stack.stack_id,
                 status=StackStatus.COMPLETED,
-                output_dir=stack_store,
-                channels=channels,
-                num_frames=stack.num_frames,
+                expected_frames=stack.num_frames,
+                timestamp=completed_at,
                 started_at=started_at,
                 completed_at=completed_at,
-                duration_s=(completed_at - started_at).total_seconds(),
+                channels=build_progress(),
             )
+            await self.progress.set(final)
+            return final
 
         except Exception as e:
             completed_at = datetime.datetime.now(tz=datetime.UTC)
@@ -168,37 +184,23 @@ class AcquisitionEngine:
             stack.completed_at = completed_at
 
             with suppress(Exception):
-                await asyncio.gather(
-                    *(self._scope.cameras[cam_id].finalize_stack() for cam_id, _ in channel_cam_map.values())
-                )
+                await asyncio.gather(*(ch.camera.finalize_stack() for ch in channels))
             with suppress(Exception):
                 await scanning_axis.reset_ttl_stepper()
             with suppress(Exception):
                 await self._scope.profiles.disable_active_lasers()
 
-            return StackResult(
+            final = StackProgress(
                 stack_id=stack.stack_id,
                 status=StackStatus.FAILED,
-                output_dir=stack_store,
-                channels={},
-                num_frames=0,
+                expected_frames=stack.num_frames,
+                timestamp=completed_at,
                 started_at=started_at,
                 completed_at=completed_at,
-                duration_s=(completed_at - started_at).total_seconds(),
+                channels=build_progress(),
                 error_message=str(e),
             )
+            await self.progress.set(final)
+            return final
         finally:
-            self._running = False
-
-    # ==================== Private ====================
-
-    def _build_channel_cam_map(self) -> dict[str, tuple[str, str]]:
-        """Map channel_id → (camera_id, channel_name_for_zarr).
-
-        Channel name prefers ``channel.label``; falls back to the channel key.
-        """
-        out: dict[str, tuple[str, str]] = {}
-        for ch_id, channel in self._scope.profiles.active_channels.items():
-            if channel.detection in self._scope.cameras:
-                out[ch_id] = (channel.detection, channel.label or ch_id)
-        return out
+            await self.is_running.set(False)

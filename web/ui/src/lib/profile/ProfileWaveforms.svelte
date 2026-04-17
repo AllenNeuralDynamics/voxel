@@ -464,7 +464,7 @@
 {#if profile}
   <div class={cn('grid grid-rows-[auto_1fr_auto]', className)}>
     <!-- ═══ HEADER: Timing controls ═══ -->
-    <div class="flex flex-wrap items-center justify-between gap-3 gap-y-0 border-b px-3 py-1.5">
+    <div class="flex flex-wrap items-center justify-between gap-3 gap-y-0 border-b px-4 py-1.5">
       <div class="flex min-h-10 items-center gap-3">
         <SpinBox
           value={sampleRate}
@@ -527,7 +527,7 @@
     <!-- ═══ MAIN: Sidebar + Plot ═══ -->
     <div class="flex min-h-0 overflow-hidden">
       <!-- Sidebar: Device list -->
-      <div class="flex max-w-48 min-w-36 shrink-0 flex-col gap-0.5 border-r px-2 py-2">
+      <div class="flex max-w-48 min-w-36 shrink-0 flex-col gap-0.5 border-r px-4 py-2">
         <label class="mb-1 flex cursor-pointer items-center gap-1 px-1.5 py-1 text-[10px] text-fg-muted">
           <input type="checkbox" bind:checked={configOnly} class="accent-primary" />
           Config only
@@ -846,7 +846,7 @@
     </div>
 
     <!-- ═══ FOOTER: Device editor ═══ -->
-    <div class="border-t px-3 py-2">
+    <div class="border-t px-4 py-2">
       {#if editingWaveform && selectedDeviceId && canEdit}
         {@const wf = editingWaveform}
         <div class="grid grid-cols-4 items-end gap-3">

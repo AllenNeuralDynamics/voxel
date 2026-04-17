@@ -13,7 +13,7 @@ import cv2
 import msgpack
 import msgpack_numpy as mpack_numpy
 import numpy as np
-from pydantic import Field
+from pydantic import Field, field_validator
 from vxlib.color import resolve_colormap
 
 from vxlib import SchemaModel
@@ -45,12 +45,19 @@ class PreviewViewport(SchemaModel):
 
     When sent from the frontend, coordinates are stage-normalized.
     The rig inverse-rotates per camera to produce sensor-normalized viewports.
+    Origin values are clamped to absorb floating-point drift from arithmetic
+    like ``1 - x - w``.
     """
 
-    x: float = Field(default=0.0, ge=0.0, le=1.0, description="Top-left X in normalized coords.")
-    y: float = Field(default=0.0, ge=0.0, le=1.0, description="Top-left Y in normalized coords.")
+    x: float = Field(default=0.0, description="Top-left X in normalized coords.")
+    y: float = Field(default=0.0, description="Top-left Y in normalized coords.")
     w: float = Field(default=1.0, gt=0.0, le=1.0, description="Viewport width in normalized coords.")
     h: float = Field(default=1.0, gt=0.0, le=1.0, description="Viewport height in normalized coords.")
+
+    @field_validator("x", "y", mode="before")
+    @classmethod
+    def _clamp_origin(cls, v: float) -> float:
+        return max(0.0, min(1.0, float(v)))
 
     @property
     def needs_adjustment(self) -> bool:

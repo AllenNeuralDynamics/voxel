@@ -474,7 +474,6 @@ class YamlSessionCatalog(SessionCatalog):
                 stack.started_at = None
                 stack.completed_at = None
                 stack.skipped_at = None
-                stack.output_path = None
 
         config = SessionConfig(
             rig=source_config.rig,

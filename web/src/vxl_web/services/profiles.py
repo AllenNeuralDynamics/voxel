@@ -60,13 +60,13 @@ class ProfilesService:
 
     def broadcast_waveforms(self) -> None:
         try:
-            self.broadcast({"topic": "profile/waveforms", "payload": self.get_waveform_traces()}, with_status=True)
+            self.broadcast({"topic": "profile/waveforms", "payload": self.get_waveform_traces()})
         except Exception:
             log.exception("Failed to broadcast waveforms")
 
     async def _on_profile_changed(self, profile_id: str) -> None:
         self.broadcast_waveforms()
-        self.broadcast({"topic": "profile/changed", "payload": {"profile_id": profile_id}}, with_status=True)
+        self.broadcast({"topic": "profile/changed", "payload": {"profile_id": profile_id}})
 
 
 # ==================== Dependency ====================

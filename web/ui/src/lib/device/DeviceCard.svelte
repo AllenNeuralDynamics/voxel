@@ -14,13 +14,11 @@
   const type = $derived(device?.interface?.type);
   const connected = $derived(device?.connected ?? false);
   const error = $derived(device?.error);
-
-  const href = $derived(resolve(`/devices/${deviceId}` as '/'));
 </script>
 
 {#if device}
   <a
-    {href}
+    href={resolve(`/devices/${deviceId}` as '/')}
     class={cn(
       'block rounded-lg border bg-card p-3 text-sm text-fg shadow-sm transition-colors',
       'hover:border-fg-faint hover:bg-element-hover'

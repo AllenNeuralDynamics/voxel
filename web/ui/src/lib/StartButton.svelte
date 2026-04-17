@@ -10,9 +10,8 @@
 
   let { session, class: className }: Props = $props();
 
-  const isPreviewing = $derived(session.preview.isPreviewing);
+  const isPreviewing = $derived(session.mode === 'previewing');
   const isAcquiring = $derived(session.mode === 'acquiring');
-  const isRunning = $derived(isPreviewing || isAcquiring);
 
   function handleClick() {
     if (isAcquiring) session.acquisition.stop();
@@ -23,7 +22,7 @@
 
 <button
   class={cn(
-    buttonVariants({ variant: isRunning ? 'danger' : 'success', size: 'lg' }),
+    buttonVariants({ variant: isPreviewing || isAcquiring ? 'danger' : 'success', size: 'lg' }),
     'min-w-44 rounded-md',
     className
   )}

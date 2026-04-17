@@ -4,7 +4,6 @@ import math
 import secrets
 from datetime import UTC, datetime
 from enum import StrEnum
-from pathlib import Path
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -152,7 +151,6 @@ class Stack(BaseModel):
     z_step: float
     profile_id: str
     status: StackStatus = StackStatus.PLANNED
-    output_path: str | None = None
 
     # Timestamps (UTC)
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
@@ -177,23 +175,14 @@ class BatchResult(BaseModel):
     dropped_frames: int = 0
 
 
-class ChannelResult(BaseModel):
-    """Result of a full stack acquisition for one channel."""
-
-    camera_id: str
-    output_path: Path
-    batches: list[BatchResult]
-
-
-class StackResult(BaseModel):
+class StackProgress(BaseModel):
     """Result of acquiring a z-stack."""
 
     stack_id: str
     status: StackStatus
-    output_dir: Path
-    channels: dict[str, ChannelResult]
-    num_frames: int
+    expected_frames: int
+    timestamp: datetime
     started_at: datetime
-    completed_at: datetime
-    duration_s: float
+    completed_at: datetime | None = None
+    channels: dict[str, list[BatchResult]] = Field(default_factory=dict)
     error_message: str | None = None

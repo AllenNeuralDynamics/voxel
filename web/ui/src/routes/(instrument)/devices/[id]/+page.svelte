@@ -18,7 +18,7 @@
   // Redirect if this route points at a device that no longer exists
   $effect(() => {
     if (!session.devices.devices.has(deviceId)) {
-      goto(resolve('/' as '/'), { keepFocus: true, noScroll: true });
+      goto(resolve('/' as const), { keepFocus: true, noScroll: true });
     }
   });
 </script>
