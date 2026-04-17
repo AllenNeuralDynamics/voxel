@@ -45,13 +45,9 @@
         {#each profile.channels as channelId (channelId)}
           {@const ch = channels[channelId]}
           {#if ch}
-            <span
-              class="flex items-center gap-1 rounded bg-element-bg px-1.5 py-0.5 text-xs text-fg-muted"
-            >
+            <span class="flex items-center gap-1 rounded bg-element-bg px-1.5 py-0.5 text-xs text-fg-muted">
               {#if ch.emission}
-                <span
-                  class="h-1.5 w-1.5 rounded-full"
-                  style="background-color: {wavelengthToColor(ch.emission)}"
+                <span class="h-1.5 w-1.5 rounded-full" style="background-color: {wavelengthToColor(ch.emission)}"
                 ></span>
               {/if}
               {ch.label ?? sanitizeString(channelId)}

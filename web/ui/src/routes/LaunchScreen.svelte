@@ -5,15 +5,7 @@
   import MetadataFields from '$lib/metadata/MetadataFields.svelte';
   import { Collapsible } from 'bits-ui';
   import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/kit';
-  import {
-    Plus,
-    FolderOpenOutline,
-    GitFork,
-    Clipboard,
-    LucideChevronRight,
-    EllipsisVertical,
-    Cog
-  } from '$lib/icons';
+  import { Plus, FolderOpenOutline, GitFork, Clipboard, LucideChevronRight, EllipsisVertical, Cog } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
   import { themes } from '$lib/themes';

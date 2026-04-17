@@ -38,7 +38,6 @@
     }
   );
 
-
   // Resize canvas pixel dimensions to match container at device pixel ratio
   watch(
     () => [containerSize.width, containerSize.height] as const,

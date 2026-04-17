@@ -168,11 +168,14 @@ async def save_roi(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     service.broadcast(
-        {"topic": "profile/roi_saved", "payload": {
-            "profile_id": profiles.active_id,
-            "camera_id": request.camera_id,
-            "roi": roi.model_dump(),
-        }},
+        {
+            "topic": "profile/roi_saved",
+            "payload": {
+                "profile_id": profiles.active_id,
+                "camera_id": request.camera_id,
+                "roi": roi.model_dump(),
+            },
+        },
         with_status=True,
     )
     return {"camera_id": request.camera_id, "roi": roi.model_dump()}

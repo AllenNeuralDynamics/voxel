@@ -249,7 +249,7 @@ class GridStore(QObject):
             self._fov_size = None
         else:
             try:
-                fov = self._session.microscope.profiles.fov
+                fov = self._session.microscope.profiles.fov.value
             except (ValueError, KeyError):
                 fov = None
             if fov is None:
@@ -264,7 +264,7 @@ class GridStore(QObject):
                     y_lo = await stage.y.get_lower_limit()
                     y_hi = await stage.y.get_upper_limit()
                     self._tiles = _generate_tiles(
-                        self._session.config.grid, self._fov_size, stage_w=x_hi - x_lo, stage_h=y_hi - y_lo
+                        self._session.config.grid, fov, stage_w=x_hi - x_lo, stage_h=y_hi - y_lo
                     )
                 except (ValueError, KeyError):
                     self._tiles = []
