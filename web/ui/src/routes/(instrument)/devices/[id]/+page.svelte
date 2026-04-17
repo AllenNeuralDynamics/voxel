@@ -1,6 +1,8 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { resolve } from '$app/paths';
   import { cn, sanitizeString } from '$lib/utils';
   import DeviceBrowser from '$lib/device/DeviceBrowser.svelte';
   import CameraConfig from './CameraConfig.svelte';
@@ -12,6 +14,13 @@
   const daqDeviceId = $derived(session.rig_cfg.daq.device);
   const devicesManager = $derived(session.devices);
   const device = $derived(devicesManager.getDevice(deviceId));
+
+  // Redirect if this route points at a device that no longer exists
+  $effect(() => {
+    if (!session.devices.devices.has(deviceId)) {
+      goto(resolve('/' as '/'), { keepFocus: true, noScroll: true });
+    }
+  });
 </script>
 
 {#if session.devices.devices.has(deviceId)}

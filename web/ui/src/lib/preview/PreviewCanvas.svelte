@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { watch, ElementSize } from 'runed';
+  import { createHotkey } from '@tanstack/svelte-hotkeys';
   import { Bargraph } from '$lib/icons';
   import PreviewInfo from './PreviewInfo.svelte';
   import PanZoomControls from './PanZoomControls.svelte';
@@ -37,6 +38,15 @@
       needsRedraw = true;
     }
   );
+
+  // Alt+P toggles preview streaming
+  createHotkey('Alt+P', () => {
+    if (previewer.isPreviewing) {
+      previewer.stopPreview();
+    } else {
+      previewer.startPreview();
+    }
+  });
 
   // Resize canvas pixel dimensions to match container at device pixel ratio
   watch(
@@ -224,10 +234,10 @@
   });
 </script>
 
-<div class="grid h-full grid-rows-[auto_1fr] bg-canvas" bind:this={containerEl}>
+<div class="flex h-full flex-col bg-canvas" bind:this={containerEl}>
   <!-- Top: Channel Histograms -->
-  <div class="flex items-start gap-4 px-4 py-4">
-    {#if showHistograms}
+  {#if showHistograms}
+    <div class="flex items-start gap-4 px-4 py-4">
       <div class="flex min-w-0 flex-1 justify-around gap-8">
         {#each namedChannels as channel (channel.idx)}
           <div class=" min-w-0 flex-1">
@@ -250,25 +260,25 @@
           </div>
         {/each}
       </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
 
   <!-- Center: Canvas -->
-  <div class="relative flex items-center justify-center overflow-hidden" bind:this={canvasContainerEl}>
+  <div class="relative flex flex-1 items-center justify-center overflow-hidden" bind:this={canvasContainerEl}>
     <canvas bind:this={canvasEl} class="h-full w-full" class:is-idle={!previewer.isPreviewing}></canvas>
     <!-- Overlay: frame counter (left) + histogram toggle (right) -->
-    <div class="pointer-events-auto absolute top-4 right-4 left-4 flex items-center justify-between">
-      <PreviewInfo {previewer} />
+    <div class="pointer-events-auto absolute top-0 right-4 left-4 flex items-center justify-between">
       <button
         onclick={() => (showHistograms = !showHistograms)}
         class="flex cursor-pointer items-center justify-center rounded-full p-1 transition-colors hover:bg-element-hover {showHistograms
-          ? 'text-fg-muted'
-          : 'text-fg-muted/40'}"
+          ? 'text-fg'
+          : 'text-fg-muted'}"
         aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
         title={showHistograms ? 'Hide histograms' : 'Show histograms'}
       >
         <Bargraph width="14" height="14" />
       </button>
+      <PreviewInfo {previewer} />
     </div>
     <!-- Overlay: pan/zoom controls (bottom-left) + scale bar (bottom-right) -->
     <div class="pointer-events-none absolute right-4 bottom-4 left-4 flex items-end justify-between">

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DevicesManager, ProfilesManager } from '$lib/app';
   import { discoverProfileDevices } from '$lib/app';
-  import type { Waveform, FrameTiming, VoxelRigConfig } from '$lib/app';
+  import type { Waveform, FrameTiming, MicroscopeConfig } from '$lib/app';
   import type { SelectOption } from '$lib/kit/Select.svelte';
   import { generateTraces, niceTicks, voltageRange } from './generate';
   import { SpinBox, Select, Button } from '$lib/kit';
@@ -41,7 +41,7 @@
   interface Props {
     profiles: ProfilesManager;
     devices: DevicesManager;
-    rigCfg: VoxelRigConfig;
+    rigCfg: MicroscopeConfig;
     acquiring: boolean;
     profileId: string;
     class?: string;

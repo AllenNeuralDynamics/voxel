@@ -49,7 +49,8 @@
 
 <script lang="ts">
   import { Minus, Plus } from '$lib/icons';
-  import { cn, useModifierHeld } from '$lib/utils';
+  import { cn } from '$lib/utils';
+  import { getIsKeyHeld } from '@tanstack/svelte-hotkeys';
 
   interface Props extends NudgeVariants {
     /** Step size per button click / scroll tick / arrow key */
@@ -82,8 +83,7 @@
   }: Props = $props();
 
   const styles = $derived(nudgeVariants({ size }));
-  const alt = useModifierHeld('alt');
-  const altHeld = $derived(alt.current);
+  const alt = getIsKeyHeld('Alt');
 
   function activeStep(e?: { shiftKey?: boolean }): number {
     return fineStep !== undefined && e?.shiftKey ? fineStep : step;
@@ -237,7 +237,7 @@
   </button>
 
   <div
-    class={cn(styles.body(), altHeld ? 'cursor-ew-resize' : 'cursor-default')}
+    class={cn(styles.body(), alt.held ? 'cursor-ew-resize' : 'cursor-default')}
     onpointerdown={handlePointerDown}
     role="group"
   >
@@ -251,7 +251,7 @@
       class={cn(
         styles.value(),
         'w-full bg-transparent outline-none',
-        altHeld ? 'cursor-ew-resize' : 'cursor-default',
+        alt.held ? 'cursor-ew-resize' : 'cursor-default',
         gestureActive && gestureValue !== 0 ? 'text-info' : ''
       )}
       value={displayValue}

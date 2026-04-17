@@ -95,6 +95,9 @@ class ThemeManager {
   /** Persisted user preferences. */
   readonly prefs = new PersistedState<ThemePrefs>('voxel-theme', DEFAULTS);
 
+  /** Whether the AppearanceSheet is currently open. */
+  pickerOpen = $state(false);
+
   /** System prefers dark — tracked reactively via matchMedia. */
   systemDark = $state(typeof window !== 'undefined' && window.matchMedia(MEDIA).matches);
 

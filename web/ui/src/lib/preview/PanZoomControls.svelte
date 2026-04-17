@@ -12,7 +12,6 @@
   let { previewer }: Props = $props();
 
   let isDefault = $derived(isDefaultViewport(previewer.viewport));
-  let hover = $state(false);
 
   // Local state for inputs (synced from previewer)
   let panX = $state(0);
@@ -49,16 +48,7 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="flex items-center gap-1 font-mono text-xs"
-  onmouseenter={() => (hover = true)}
-  onmouseleave={() => (hover = false)}
-  onfocusin={() => (hover = true)}
-  onfocusout={(e) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) hover = false;
-  }}
->
+<div class="flex items-center gap-1 font-mono text-xs">
   <button
     onclick={() => previewer.resetViewport()}
     disabled={isDefault}
@@ -78,7 +68,6 @@
       numCharacters={5}
       size="xs"
       variant="filled"
-      appearance={hover ? 'full' : 'bordered'}
       prefix="Zoom"
       suffix="x"
       onChange={handleZoomChange}
@@ -93,7 +82,6 @@
       numCharacters={5}
       size="xs"
       variant="filled"
-      appearance={hover ? 'full' : 'bordered'}
       prefix="Pan X"
       onChange={handlePanXChange}
     />
@@ -107,7 +95,6 @@
       numCharacters={5}
       size="xs"
       variant="filled"
-      appearance={hover ? 'full' : 'bordered'}
       prefix="Pan Y"
       onChange={handlePanYChange}
     />

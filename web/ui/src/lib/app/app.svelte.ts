@@ -53,6 +53,7 @@ export class App {
 
   async retryConnection(): Promise<void> {
     this.status = null;
+    this.#client.resetReconnectState();
     await this.#client.connect();
     this.#client.requestStatus();
   }

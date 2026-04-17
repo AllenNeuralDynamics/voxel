@@ -201,8 +201,8 @@ export interface ClientOptions {
 const DEFAULT_OPTIONS: Required<Omit<ClientOptions, 'apiUrl'>> = {
   autoReconnect: true,
   initialReconnectDelayMs: 1000,
-  maxReconnectDelayMs: 15000,
-  maxReconnectAttempts: 10
+  maxReconnectDelayMs: 5000,
+  maxReconnectAttempts: 5
 };
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
@@ -219,24 +219,10 @@ export class Client {
   private connectionHandlers = new SvelteSet<ConnectionHandler>();
   private errorHandlers = new SvelteSet<ErrorHandler>();
 
-  private url: string;
+  readonly wsUrl: string;
   readonly baseUrl: string;
 
   connectionState = $state<ConnectionState>('idle');
-  connectionMessage = $derived.by(() => {
-    switch (this.connectionState) {
-      case 'idle':
-        return '';
-      case 'connecting':
-        return 'Connecting to server...';
-      case 'connected':
-        return 'Connected';
-      case 'reconnecting':
-        return `Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`;
-      case 'failed':
-        return 'Connection failed';
-    }
-  });
   isConnected = $derived(this.connectionState === 'connected');
 
   constructor(options: ClientOptions = {}) {
@@ -248,7 +234,7 @@ export class Client {
     this.maxReconnectAttempts = resolved.maxReconnectAttempts;
 
     const backend = resolveBackend(apiUrl);
-    this.url = backend.wsUrl;
+    this.wsUrl = backend.wsUrl;
     this.baseUrl = backend.baseUrl;
   }
 
@@ -262,7 +248,7 @@ export class Client {
     return new Promise((resolve, reject) => {
       try {
         this.cleanupSocket();
-        this.ws = new WebSocket(this.url);
+        this.ws = new WebSocket(this.wsUrl);
         this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
@@ -638,6 +624,19 @@ export class Client {
   private notifyError(error: Error): void {
     for (const h of this.errorHandlers) {
       h(error);
+    }
+  }
+
+  /**
+   * Reset reconnect counters and clear any pending retry timer. Use this when
+   * the user initiates a manual reconnect so they get a fresh retry cycle.
+   */
+  resetReconnectState(): void {
+    this.reconnectAttempts = 0;
+    this.reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
   }
 

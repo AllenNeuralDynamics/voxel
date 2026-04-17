@@ -9,7 +9,7 @@
 
 import { toast } from 'svelte-sonner';
 import type { Client, DaqWaveformsResponse } from './client.svelte';
-import type { AppStatusUpdate, SessionStateUpdate, VoxelRigConfig, ChannelConfig, ProfileConfig } from './types';
+import type { AppStatusUpdate, SessionStateUpdate, MicroscopeConfig, ChannelConfig, ProfileConfig } from './types';
 
 export class ProfilesManager {
   activeId = $state<string | null>(null);
@@ -18,10 +18,10 @@ export class ProfilesManager {
   appliedWaveforms = $state<DaqWaveformsResponse | null>(null);
 
   readonly #client: Client;
-  readonly #getCfg: () => VoxelRigConfig;
+  readonly #getCfg: () => MicroscopeConfig;
   #unsubscribers: Array<() => void> = [];
 
-  constructor(client: Client, getCfg: () => VoxelRigConfig, initialStatus: SessionStateUpdate | null) {
+  constructor(client: Client, getCfg: () => MicroscopeConfig, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.#getCfg = getCfg;
     this.handleStatus(initialStatus);

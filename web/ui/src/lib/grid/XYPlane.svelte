@@ -149,8 +149,9 @@
     }
   });
 
+  // Redraw only when an overview frame arrives (not on tile batches)
   watch(
-    () => session.preview?.redrawGeneration,
+    () => session.preview?.channels.map((ch) => ch.latestFrameInfo?.frame_idx ?? -1).join(','),
     () => {
       needsRedraw = true;
     }

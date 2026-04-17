@@ -1,4 +1,4 @@
-import type { VoxelRigConfig, ChannelConfig } from './types';
+import type { MicroscopeConfig, ChannelConfig } from './types';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { wavelengthToColor, desaturateColor } from '$lib/utils';
 
@@ -55,7 +55,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 /** Check if a device ID is a filter wheel in any detection path. */
-export function isFilterWheel(config: VoxelRigConfig, deviceId: string): boolean {
+export function isFilterWheel(config: MicroscopeConfig, deviceId: string): boolean {
   for (const detPath of Object.values(config.detection)) {
     if (detPath.filter_wheels.includes(deviceId)) return true;
   }
@@ -72,7 +72,7 @@ export function isFilterWheel(config: VoxelRigConfig, deviceId: string): boolean
  *
  * Returns sorted by role order.
  */
-export function discoverProfileDevices(config: VoxelRigConfig, profileId: string): ProfileDevice[] {
+export function discoverProfileDevices(config: MicroscopeConfig, profileId: string): ProfileDevice[] {
   const profile = config.profiles[profileId];
   if (!profile) return [];
 
@@ -147,7 +147,7 @@ export function discoverProfileDevices(config: VoxelRigConfig, profileId: string
  * - 'path'    — Detection vs Illumination
  * - 'channel' — per-channel groups
  */
-export function groupProfileDevices(config: VoxelRigConfig, profileId: string, mode: GroupMode): DeviceGroup[] {
+export function groupProfileDevices(config: MicroscopeConfig, profileId: string, mode: GroupMode): DeviceGroup[] {
   const profile = config.profiles[profileId];
   if (!profile) return [];
 
@@ -168,7 +168,7 @@ export function groupProfileDevices(config: VoxelRigConfig, profileId: string, m
 
 /** Find the channel that uses a given device (camera or laser). */
 export function getChannelFor(
-  config: VoxelRigConfig,
+  config: MicroscopeConfig,
   profileId: string,
   deviceId: string
 ): { id: string; config: ChannelConfig } | undefined {
@@ -185,7 +185,7 @@ export function getChannelFor(
 
 // ── Internal helpers ───────────────────────────────────────
 
-function resolveChannels(config: VoxelRigConfig, profileId: string): Record<string, ChannelConfig> {
+function resolveChannels(config: MicroscopeConfig, profileId: string): Record<string, ChannelConfig> {
   const profile = config.profiles[profileId];
   if (!profile) return {};
   const result: Record<string, ChannelConfig> = {};
@@ -206,7 +206,7 @@ function collectChannelDevices(channels: Record<string, ChannelConfig>): SvelteS
   return devices;
 }
 
-function groupByRole(config: VoxelRigConfig, profileId: string): DeviceGroup[] {
+function groupByRole(config: MicroscopeConfig, profileId: string): DeviceGroup[] {
   const devices = discoverProfileDevices(config, profileId);
   return [
     {
@@ -217,7 +217,7 @@ function groupByRole(config: VoxelRigConfig, profileId: string): DeviceGroup[] {
   ];
 }
 
-function groupByType(config: VoxelRigConfig, channels: Record<string, ChannelConfig>): DeviceGroup[] {
+function groupByType(config: MicroscopeConfig, channels: Record<string, ChannelConfig>): DeviceGroup[] {
   const devicesByType = new SvelteMap<string, SvelteSet<string>>();
   const profileDevices = collectChannelDevices(channels);
 

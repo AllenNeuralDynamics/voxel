@@ -504,12 +504,12 @@ class PreviewGenerator:
             for col, row in visible
         ]
 
+        tiles: list[PreviewTile] = []
         try:
-            tiles: list[PreviewTile] = []
             for coro in asyncio.as_completed(self._tile_futures):
                 tiles.append(await coro)
         except asyncio.CancelledError:
-            return  # new frame arrived, abandon remaining tiles
+            pass  # send whatever completed before cancellation
         finally:
             self._tile_futures = []
 

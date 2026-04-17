@@ -1,14 +1,22 @@
 <script lang="ts">
   import type { App } from '$lib/app';
   import type { SessionListing, DataRoot, TemplateInfo, JsonSchema } from '$lib/app';
-  import AppMenu from './AppMenu.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
   import MetadataFields from '$lib/metadata/MetadataFields.svelte';
   import { Collapsible } from 'bits-ui';
   import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/kit';
-  import { Plus, FolderOpenOutline, GitFork, Clipboard, LucideChevronRight, EllipsisVertical } from '$lib/icons';
+  import {
+    Plus,
+    FolderOpenOutline,
+    GitFork,
+    Clipboard,
+    LucideChevronRight,
+    EllipsisVertical,
+    Cog
+  } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
+  import { themes } from '$lib/themes';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { toast } from 'svelte-sonner';
@@ -38,7 +46,6 @@
   let formSubmitting = $state(false);
 
   const appStatus = $derived(app.status?.status);
-  const isIdle = $derived(appStatus === 'idle');
   const isLaunching = $derived(appStatus === 'launching');
   const connectionState = $derived(app.client.connectionState);
   const logs = $derived(app.logs);
@@ -367,9 +374,15 @@
             <VoxelLogo class="h-8 w-8" />
             <h1 class="text-2xl font-light text-fg uppercase">Voxel</h1>
           </div>
-          <AppMenu {app} class="w-4" />
+          <button
+            title="Appearance"
+            onclick={() => (themes.pickerOpen = true)}
+            class="flex items-center rounded p-1 text-fg-muted transition-colors hover:text-fg"
+          >
+            <Cog width="16" height="16" />
+          </button>
         </div>
-        <p class="text-sm text-fg-muted">Light sheet microscopy</p>
+        <!-- <p class="text-sm text-fg-muted">Light sheet microscopy</p> -->
       </div>
 
       {#if error}
@@ -379,17 +392,10 @@
       {/if}
     </div>
 
-    {#if connectionState === 'failed'}
-      <div class="flex flex-1 flex-col items-center justify-center gap-3">
-        <p class="text-base text-danger">{app.client.connectionMessage}</p>
-        <Button variant="outline" size="sm" onclick={() => app.retryConnection()}>Retry</Button>
-      </div>
-    {:else if !isIdle || isLaunching}
+    {#if isLaunching}
       <div class="flex flex-1 items-center justify-center gap-2">
         <div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-        <p class="text-sm text-fg-muted">
-          {isLaunching ? 'Starting session...' : app.client.connectionMessage}
-        </p>
+        <p class="text-sm text-fg-muted">Starting session&hellip;</p>
       </div>
     {:else}
       <!-- Toolbar -->

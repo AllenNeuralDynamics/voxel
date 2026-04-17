@@ -6,6 +6,7 @@
       'inline-flex shrink-0 items-center justify-center',
       'rounded border font-medium',
       'transition-colors focus:outline-none',
+      'focus-visible:ring-2 focus-visible:ring-focused focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
       'disabled:pointer-events-none disabled:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0'
     ],

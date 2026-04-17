@@ -8,7 +8,7 @@ import type {
   OutputConfig,
   SessionDetails,
   SessionMode,
-  VoxelRigConfig
+  MicroscopeConfig
 } from './types';
 
 import { PreviewManager, compositeFullFrames } from './preview.svelte';
@@ -53,7 +53,7 @@ export class Session {
   // ──────────────────────────────── Session-owned config state ────────────────────────────────
 
   details = $state<SessionDetails>(null!);
-  rig_cfg = $derived<VoxelRigConfig>(this.details.config);
+  rig_cfg = $derived<MicroscopeConfig>(this.details.config);
 
   mode = $state<SessionMode>('idle');
   metadata = $state<Record<string, unknown>>({});

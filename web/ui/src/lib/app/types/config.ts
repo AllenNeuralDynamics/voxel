@@ -247,6 +247,3 @@ export interface MicroscopeConfig {
   channels: Record<string, ChannelConfig>;
   profiles: Record<string, ProfileConfig>;
 }
-
-/** @deprecated Use {@link MicroscopeConfig} instead. */
-export type VoxelRigConfig = MicroscopeConfig;

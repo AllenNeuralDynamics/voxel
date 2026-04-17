@@ -1,4 +1,4 @@
-import type { ChannelConfig, PreviewConfig, VoxelRigConfig } from './types';
+import type { ChannelConfig, PreviewConfig, MicroscopeConfig } from './types';
 import type { PreviewViewport, PreviewFrameInfo, PreviewTileInfo, PreviewLevels, Client } from './client.svelte';
 import type { AppStatusUpdate } from './types';
 
@@ -78,7 +78,7 @@ function sensorToStage(tx: number, ty: number, tw: number, th: number, rot: numb
 
 /** Draw a bitmap rotated at a pixel position. For 0° draws directly; otherwise saves/restores context. */
 function drawRotated(
-  ctx: CanvasRenderingContext2D,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   bitmap: ImageBitmap,
   sx: number,
   sy: number,
@@ -104,12 +104,37 @@ function drawRotated(
   ctx.restore();
 }
 
+// Reusable offscreen canvas pool for per-channel compositing.
+// Channels are drawn to an offscreen canvas with 'source-over' (overview base +
+// tile overlay), then composited onto the main canvas with 'lighter' for
+// multi-channel additive blending. This avoids double-brightness artifacts
+// from drawing overview + tiles to the same 'lighter' target.
+let _offscreenPool: OffscreenCanvas[] = [];
+let _offscreenPoolSize = { w: 0, h: 0 };
+
+function getOffscreenCanvas(idx: number, w: number, h: number): OffscreenCanvasRenderingContext2D {
+  if (_offscreenPoolSize.w !== w || _offscreenPoolSize.h !== h) {
+    _offscreenPool = [];
+    _offscreenPoolSize = { w, h };
+  }
+  if (idx >= _offscreenPool.length) {
+    _offscreenPool.push(new OffscreenCanvas(w, h));
+  }
+  const oc = _offscreenPool[idx];
+  const octx = oc.getContext('2d')!;
+  octx.clearRect(0, 0, w, h);
+  return octx;
+}
+
 /**
- * Composite tiles (or overview fallback) for all visible channels.
+ * Composite tiles (with overview backdrop) for all visible channels.
  *
- * All channels share a single viewport→pixel mapping in bounding-box (stage)
- * space. Each tile's sensor position is transformed to stage space, then to
- * pixel coords. Rotated bitmaps are drawn with per-tile canvas transforms.
+ * Each channel is drawn to an offscreen canvas using 'source-over': the
+ * overview frame provides a low-resolution base, and tiles overlay it at
+ * full resolution where available. The offscreen canvases are then
+ * composited onto the main canvas with 'lighter' for multi-channel
+ * additive blending. This ensures no blank areas when tiles only partially
+ * cover the viewport.
  */
 export function compositeTiledFrames(
   ctx: CanvasRenderingContext2D,
@@ -146,8 +171,10 @@ export function compositeTiledFrames(
   ctx.imageSmoothingQuality = 'high';
   ctx.globalCompositeOperation = 'lighter';
 
+  let offIdx = 0;
   for (const ch of channels) {
     if (!ch.visible || ch.sensorWidth <= 0 || ch.sensorHeight <= 0) continue;
+    if (!ch.frame && ch.tiles.size === 0) continue;
 
     const rot = ((ch.rotationDeg % 360) + 360) % 360;
     const rad = (rot * Math.PI) / 180;
@@ -157,39 +184,16 @@ export function compositeTiledFrames(
     const offsetX = (1 - scaleX) / 2;
     const offsetY = (1 - scaleY) / 2;
 
-    if (ch.tiles.size > 0) {
-      for (const { bitmap, scale, col, row } of ch.tiles.values()) {
-        const gridSize = 2 ** scale;
-        const st = sensorToStage(col / gridSize, row / gridSize, 1 / gridSize, 1 / gridSize, rot);
+    // Draw this channel to an offscreen canvas with source-over so that
+    // tiles cleanly replace the overview backdrop without additive doubling.
+    const octx = getOffscreenCanvas(offIdx++, canvas.width, canvas.height);
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
 
-        const px = toPixelX(offsetX + st.x * scaleX);
-        const py = toPixelY(offsetY + st.y * scaleY);
-        const pw = toPixelW(st.w * scaleX);
-        const ph = toPixelH(st.h * scaleY);
-
-        // Skip tiles entirely outside canvas
-        if (px + pw < 0 || py + ph < 0 || px > canvas.width || py > canvas.height) continue;
-
-        const dx = Math.round(px);
-        const dy = Math.round(py);
-        drawRotated(
-          ctx,
-          bitmap,
-          0,
-          0,
-          bitmap.width,
-          bitmap.height,
-          dx,
-          dy,
-          Math.round(px + pw) - dx,
-          Math.round(py + ph) - dy,
-          rad,
-          swapped
-        );
-      }
-    } else if (ch.frame) {
+    // 1. Overview backdrop (low-res, full sensor)
+    if (ch.frame) {
       drawRotated(
-        ctx,
+        octx,
         ch.frame,
         0,
         0,
@@ -203,6 +207,39 @@ export function compositeTiledFrames(
         swapped
       );
     }
+
+    // 2. Tile overlay (high-res, replaces overview where present)
+    for (const { bitmap, scale, col, row } of ch.tiles.values()) {
+      const gridSize = 2 ** scale;
+      const st = sensorToStage(col / gridSize, row / gridSize, 1 / gridSize, 1 / gridSize, rot);
+
+      const px = toPixelX(offsetX + st.x * scaleX);
+      const py = toPixelY(offsetY + st.y * scaleY);
+      const pw = toPixelW(st.w * scaleX);
+      const ph = toPixelH(st.h * scaleY);
+
+      if (px + pw < 0 || py + ph < 0 || px > canvas.width || py > canvas.height) continue;
+
+      const dx = Math.round(px);
+      const dy = Math.round(py);
+      drawRotated(
+        octx,
+        bitmap,
+        0,
+        0,
+        bitmap.width,
+        bitmap.height,
+        dx,
+        dy,
+        Math.round(px + pw) - dx,
+        Math.round(py + ph) - dy,
+        rad,
+        swapped
+      );
+    }
+
+    // 3. Composite this channel onto the main canvas with additive blending
+    ctx.drawImage(octx.canvas, 0, 0);
   }
 
   ctx.globalCompositeOperation = 'source-over';
@@ -308,7 +345,7 @@ export class PreviewManager {
   redrawGeneration = $state(0);
 
   #client: Client;
-  #config: VoxelRigConfig;
+  #config: MicroscopeConfig;
   #unsubscribers: Array<() => void> = [];
   #viewportUpdateTimer: number | null = null;
   #viewportLastSent = 0;
@@ -316,7 +353,7 @@ export class PreviewManager {
   #levelsLastSent = new SvelteMap<string, number>();
   readonly #THROTTLE_MS = 200;
 
-  constructor(client: Client, config: VoxelRigConfig) {
+  constructor(client: Client, config: MicroscopeConfig) {
     this.#client = client;
     this.#config = config;
 
