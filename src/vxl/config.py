@@ -4,27 +4,12 @@ from typing import Any, Self
 
 from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel, Field, field_validator, model_validator
-from vxlib.quantity import NormalizedRange
 
 from rigup import CommandRequest, RigConfig
+from vxl.analog_out import AOSignals
 from vxl.camera.base import SensorROI
-from vxl.daq import FrameTiming, Waveform
 from vxl.metadata import BASE_METADATA_SCHEMA
 from vxl.stack import Stack, StackOrder
-
-
-class DaqConfig(BaseModel):
-    device: str
-    acq_ports: dict[str, str]
-
-    @field_validator("acq_ports")
-    @classmethod
-    def validate_unique_ports(cls, v: dict[str, str]) -> dict[str, str]:
-        ports = list(v.values())
-        if len(ports) != len(set(ports)):
-            duplicates = [p for p in set(ports) if ports.count(p) > 1]
-            raise ValueError(f"Duplicate acq_ports detected: {duplicates}")
-        return v
 
 
 class StageConfig(BaseModel):
@@ -73,35 +58,6 @@ class ChannelConfig(BaseModel):
         return v
 
 
-class SyncTaskConfig(BaseModel):
-    """Sync task timing and waveform data (without port assignments)."""
-
-    timing: FrameTiming
-    waveforms: dict[str, Waveform]
-    stack_only: list[str] = Field(default_factory=list)
-
-    def get_waveforms(self, for_stack: bool = False) -> dict[str, Waveform]:
-        """Get waveforms filtered by mode. Stack mode gets all, frame mode excludes stack_only."""
-        if for_stack:
-            return self.waveforms
-        return {k: v for k, v in self.waveforms.items() if k not in self.stack_only}
-
-    @model_validator(mode="before")
-    @classmethod
-    def insert_missing_windows(cls, m: Any) -> Any:
-        waveforms = m.get("waveforms", {})
-        timing = m.get("timing")
-        if timing is None:
-            return m
-        duration = timing.get("duration") if isinstance(timing, dict) else getattr(timing, "duration", None)
-        if duration is None:
-            return m
-        for wf in waveforms.values():
-            if isinstance(wf, dict) and "window" not in wf:
-                wf["window"] = NormalizedRange()
-        return m
-
-
 class GridConfig(BaseModel):
     """Grid configuration for 2D tile planning. All positions in micrometers (µm)."""
 
@@ -122,8 +78,14 @@ class GridConfig(BaseModel):
 
 
 class ProfileConfig(BaseModel):
+    """A named microscope profile: which channels + how each AO device drives signals.
+
+    ``sync`` is keyed by AO device UID. Each entry is a full ``AOSignals`` config.
+    A profile may drive any subset of the AO devices present in the rig.
+    """
+
     channels: list[str]
-    sync: SyncTaskConfig
+    sync: dict[str, AOSignals] = Field(default_factory=dict)
     props: dict[str, dict[str, Any]] = Field(default_factory=dict)
     setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)
     rois: dict[str, SensorROI] = Field(default_factory=dict)
@@ -135,11 +97,11 @@ class MicroscopeConfig(BaseModel):
     """Configuration for a light sheet microscope.
 
     Embeds a :class:`RigConfig` for hardware and adds microscope-specific
-    sections that mirror VoxelRigConfig.
+    sections. AO devices live in ``rig.devices`` with their own ``ports`` /
+    ``triggers`` init args — there is no separate top-level DAQ block.
     """
 
     rig: RigConfig = Field(default_factory=RigConfig)
-    daq: DaqConfig
     stage: StageConfig
     detection: dict[str, DetectionPathConfig]
     illumination: dict[str, IlluminationPathConfig]
@@ -177,18 +139,14 @@ class MicroscopeConfig(BaseModel):
             if channel.illumination in self.illumination:
                 device_ids.update(self.illumination[channel.illumination].aux_devices)
 
-        device_ids.update(profile.sync.waveforms.keys())
+        # Every waveform key in every AO-signals block pulls in that device too
+        for ao_signals in profile.sync.values():
+            device_ids.update(ao_signals.waveforms.keys())
         return device_ids
-
-    def get_profile_daq_ports(self, profile_id: str) -> dict[str, str]:
-        """AO port mapping for a profile — only ports whose device is in the profile's channel set."""
-        profile_device_ids = self.get_profile_device_ids(profile_id)
-        return {dev_id: port for dev_id, port in self.daq.acq_ports.items() if dev_id in profile_device_ids}
 
     @model_validator(mode="after")
     def validate_device_references(self) -> Self:
         errors = []
-        errors.extend(self._validate_daq_references())
         errors.extend(self._validate_stage_references())
         errors.extend(self._validate_path_references())
         errors.extend(self._validate_channel_references())
@@ -196,13 +154,6 @@ class MicroscopeConfig(BaseModel):
         if errors:
             raise ValueError("\n".join(errors))
         return self
-
-    def _validate_daq_references(self) -> list[str]:
-        devices = self.device_uids
-        errors = []
-        if self.daq.device not in devices:
-            errors.append(f"DAQ device '{self.daq.device}' not found in devices")
-        return errors
 
     def _validate_stage_references(self) -> list[str]:
         devices = self.device_uids
@@ -263,88 +214,103 @@ class MicroscopeConfig(BaseModel):
                         )
         return errors
 
-    def _validate_profile_references(self) -> list[str]:  # noqa: C901
-        errors = []
+    def _validate_profile_references(self) -> list[str]:
+        """Run per-profile consistency checks and return a flat list of errors."""
+        errors: list[str] = []
+        devices = self.device_uids
         for profile_id, profile in self.profiles.items():
-            if len(profile.channels) == 0:
+            if not profile.channels:
                 errors.append(f"Profile '{profile_id}' must contain at least one channel")
                 continue
+            errors.extend(self._validate_profile_channels_exist(profile_id, profile))
+            errors.extend(self._validate_profile_no_duplicate_channels(profile_id, profile))
+            errors.extend(self._validate_profile_detection_uniqueness(profile_id, profile))
+            errors.extend(self._validate_profile_filter_consistency(profile_id, profile))
+            errors.extend(self._validate_profile_sync_ao_devices(profile_id, profile, devices))
+            settable = self.get_profile_device_ids(profile_id) - self.filter_wheels
+            errors.extend(self._validate_profile_props_setup(profile_id, profile, settable))
+        return errors
 
-            for ch_id in profile.channels:
-                if ch_id not in self.channels:
-                    errors.append(f"Profile '{profile_id}' references channel '{ch_id}' which does not exist")
+    def _validate_profile_channels_exist(self, profile_id: str, profile: "ProfileConfig") -> list[str]:
+        return [
+            f"Profile '{profile_id}' references channel '{ch_id}' which does not exist"
+            for ch_id in profile.channels
+            if ch_id not in self.channels
+        ]
 
-            duplicates = [ch for ch in set(profile.channels) if profile.channels.count(ch) > 1]
-            if duplicates:
-                errors.append(f"Profile '{profile_id}' contains duplicate channels: {duplicates}")
+    @staticmethod
+    def _validate_profile_no_duplicate_channels(profile_id: str, profile: "ProfileConfig") -> list[str]:
+        duplicates = [ch for ch in set(profile.channels) if profile.channels.count(ch) > 1]
+        if duplicates:
+            return [f"Profile '{profile_id}' contains duplicate channels: {duplicates}"]
+        return []
 
-            detection_paths: dict[str, str] = {}
-            for ch_id in profile.channels:
-                if ch_id not in self.channels:
-                    continue
-                channel = self.channels[ch_id]
-                if channel.detection in detection_paths:
-                    errors.append(
-                        f"Profile '{profile_id}' has channels '{detection_paths[channel.detection]}' and "
-                        f"'{ch_id}' both using detection path '{channel.detection}' - "
-                        f"channels in a profile must use different cameras",
-                    )
-                else:
-                    detection_paths[channel.detection] = ch_id
-
-            filter_positions: dict[str, dict[str, list[str]]] = {}
-            for ch_id in profile.channels:
-                if ch_id not in self.channels:
-                    continue
-                channel = self.channels[ch_id]
-                for fw_id, filter_label in channel.filters.items():
-                    if fw_id not in filter_positions:
-                        filter_positions[fw_id] = {}
-                    if filter_label not in filter_positions[fw_id]:
-                        filter_positions[fw_id][filter_label] = []
-                    filter_positions[fw_id][filter_label].append(ch_id)
-
-            for fw_id, positions in filter_positions.items():
-                if len(positions) > 1:
-                    position_details = ", ".join(
-                        [f"'{label}' by channel(s) {channels}" for label, channels in positions.items()],
-                    )
-                    errors.append(
-                        f"Profile '{profile_id}' has conflicting filter positions for '{fw_id}': {position_details}",
-                    )
-
-            profile_devices = self.get_profile_device_ids(profile_id)
-            daq_acq_devices = set(self.daq.acq_ports.keys())
-            devices_needing_waveforms = profile_devices & daq_acq_devices
-
-            missing_waveforms = devices_needing_waveforms - set(profile.sync.waveforms.keys())
-            if missing_waveforms:
+    def _validate_profile_detection_uniqueness(self, profile_id: str, profile: "ProfileConfig") -> list[str]:
+        """Each detection path may be used by at most one channel within a profile."""
+        errors: list[str] = []
+        detection_paths: dict[str, str] = {}
+        for ch_id in profile.channels:
+            channel = self.channels.get(ch_id)
+            if channel is None:
+                continue
+            if channel.detection in detection_paths:
                 errors.append(
-                    f"Profile '{profile_id}' missing waveforms for devices in daq.acq_ports: "
-                    f"{sorted(missing_waveforms)}",
+                    f"Profile '{profile_id}' has channels '{detection_paths[channel.detection]}' and "
+                    f"'{ch_id}' both using detection path '{channel.detection}' - "
+                    f"channels in a profile must use different cameras",
                 )
+            else:
+                detection_paths[channel.detection] = ch_id
+        return errors
 
-            extra_waveforms = set(profile.sync.waveforms.keys()) - daq_acq_devices
-            if extra_waveforms:
+    def _validate_profile_filter_consistency(self, profile_id: str, profile: "ProfileConfig") -> list[str]:
+        """A filter wheel can only sit at one position across all channels in the profile."""
+        filter_positions: dict[str, dict[str, list[str]]] = {}
+        for ch_id in profile.channels:
+            channel = self.channels.get(ch_id)
+            if channel is None:
+                continue
+            for fw_id, filter_label in channel.filters.items():
+                filter_positions.setdefault(fw_id, {}).setdefault(filter_label, []).append(ch_id)
+
+        errors: list[str] = []
+        for fw_id, positions in filter_positions.items():
+            if len(positions) > 1:
+                details = ", ".join(
+                    [f"'{label}' by channel(s) {channels}" for label, channels in positions.items()]
+                )
                 errors.append(
-                    f"Profile '{profile_id}' defines waveforms for devices not in daq.acq_ports: "
-                    f"{sorted(extra_waveforms)}",
+                    f"Profile '{profile_id}' has conflicting filter positions for '{fw_id}': {details}"
                 )
+        return errors
 
-            settable_devices = profile_devices - self.filter_wheels
-            for device_id in profile.props:
-                if device_id not in settable_devices:
-                    errors.append(
-                        f"Profile '{profile_id}' props references '{device_id}' "
-                        f"which is not a settable device for this profile",
-                    )
-            for device_id in profile.setup:
-                if device_id not in settable_devices:
-                    errors.append(
-                        f"Profile '{profile_id}' setup references '{device_id}' "
-                        f"which is not a settable device for this profile",
-                    )
+    @staticmethod
+    def _validate_profile_sync_ao_devices(
+        profile_id: str, profile: "ProfileConfig", devices: set[str]
+    ) -> list[str]:
+        return [
+            f"Profile '{profile_id}' sync references AO device '{ao_uid}' which is not in rig.devices"
+            for ao_uid in profile.sync
+            if ao_uid not in devices
+        ]
 
+    @staticmethod
+    def _validate_profile_props_setup(
+        profile_id: str, profile: "ProfileConfig", settable: set[str]
+    ) -> list[str]:
+        errors: list[str] = []
+        for device_id in profile.props:
+            if device_id not in settable:
+                errors.append(
+                    f"Profile '{profile_id}' props references '{device_id}' "
+                    f"which is not a settable device for this profile"
+                )
+        for device_id in profile.setup:
+            if device_id not in settable:
+                errors.append(
+                    f"Profile '{profile_id}' setup references '{device_id}' "
+                    f"which is not a settable device for this profile"
+                )
         return errors
 
 
@@ -397,9 +363,6 @@ class SessionInfo(BaseModel):
     # Lifecycle
     last_opened: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
     open_count: int = 0
-
-
-# consider nesting output and grid inside of 'plan'?
 
 
 class SessionConfig(MicroscopeConfig):

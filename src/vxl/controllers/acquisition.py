@@ -100,9 +100,10 @@ class AcquisitionEngine:
             batch_z = _DEFAULT_BATCH_Z_SHARDS * max_level.factor
             num_batches = math.ceil(stack.num_frames / batch_z)
 
-            sync_task = await profiles.sync_task()
-            stack_waveforms = profiles.active_waveforms(for_stack=True)
-            await sync_task.apply(profiles.active.sync.timing, stack_waveforms)
+            # Load every AO block of the active profile. ``stack_only`` is gone —
+            # the active profile's ``sync`` is the stack-mode config.
+            for ao_uid, signals in profiles.active.sync.items():
+                await profiles.load_ao(ao_uid, signals)
 
             await asyncio.gather(
                 *(
@@ -136,11 +137,11 @@ class AcquisitionEngine:
                 for _ in range(frames_in_batch):
                     await scanning_axis.queue_relative_move(stack.z_step)
 
-                await sync_task.start()
+                await profiles.start_ao()
                 per_ch_results = await asyncio.gather(
                     *(ch.camera.capture_batch(num_frames=frames_in_batch) for ch in channels)
                 )
-                await sync_task.stop()
+                await profiles.stop_ao()
 
                 for ch, result in zip(channels, per_ch_results, strict=True):
                     results_by_ch[ch.id].append(result)

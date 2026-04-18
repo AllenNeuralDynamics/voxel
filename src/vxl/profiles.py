@@ -1,11 +1,11 @@
-"""Profiles — active profile state, device configuration, sync task, FOV.
+"""Profiles — active profile state, device configuration, AO orchestration, FOV.
 
-Owned by VoxelRig as ``rig.profiles``. Answers "which profile is live, and what
-devices does it configure?" Peer controllers (preview, acquisition, stacks)
-consume this through ``rig.profiles`` rather than injecting it directly.
+Owned by ``Microscope`` as ``scope.profiles``. Answers "which profile is live, and
+what devices does it configure?" Peer controllers (preview, acquisition, stacks)
+consume this through ``scope.profiles`` rather than injecting it directly.
 
 No mode awareness. Session orchestrates the pause/switch/resume dance around
-``set_active_profile`` and decides when to call ``apply_waveforms``.
+``set_active_profile`` and decides when to call ``update_ao_signals``.
 """
 
 import asyncio
@@ -17,11 +17,10 @@ from typing import TYPE_CHECKING, Any
 from vxlib.color import Color
 
 from rigup import DeviceHandle, PropResults
+from vxl.analog_out import AOSignals
 from vxl.camera.base import SensorROI
 from vxl.camera.handle import CameraHandle
 from vxl.config import ChannelConfig, DetectionPathConfig, IlluminationPathConfig, ProfileConfig
-from vxl.daq import FrameTiming, SyncTask
-from vxl.daq.wave import validate_waveform
 from vxlib import Cell, Signal
 
 if TYPE_CHECKING:
@@ -40,20 +39,13 @@ class Channel:
     hop without copying state.
     """
 
-    # Identity
     id: str
-
-    # Persisted (single source of truth)
     config: ChannelConfig
-
-    # Resolved runtime references
     camera: CameraHandle
     laser: DeviceHandle | None
     detection_path: DetectionPathConfig
     illumination_path: IlluminationPathConfig
     filter_wheels: dict[str, DeviceHandle]
-
-    # ---- ChannelConfig pass-throughs ----
 
     @property
     def filters(self) -> dict[str, str]:
@@ -62,8 +54,6 @@ class Channel:
     @property
     def emission(self) -> float | None:
         return self.config.emission
-
-    # ---- Derived ----
 
     @property
     def zarr_name(self) -> str:
@@ -77,20 +67,18 @@ class Channel:
 
 
 class Profiles:
-    """Active profile state + sync task + FOV, owned by VoxelRig as ``rig.profiles``.
+    """Active profile state + AO orchestration + FOV.
 
     Public surface:
       - Active profile state (read-only properties)
-      - ``set_active_profile(id)`` — configures devices for the new profile
-      - Sync task access + ``apply_waveforms`` / ``stop_waveforms``
+      - ``set_active_profile(id)`` — configures devices and loads AO signals for the new profile
+      - AO control: ``start_ao`` / ``stop_ao`` / ``load_ao`` / ``update_ao_signals``
       - Device-prop and camera-ROI primitives (capture / apply / save / revert)
-      - ``fov`` Cell — current effective FOV; subscribe for change notifications.
-      - ``profile_changed`` signal (Session uses this to reapply default colormaps)
+      - ``fov`` Cell — current effective FOV; subscribe for change notifications
+      - ``profile_changed`` signal — fires after a profile switch completes
     """
 
-    #: Fires after a profile switch completes. Payload is the new active profile id.
     profile_changed: Signal[str]
-    #: Current effective FOV. ``None`` until first successful compute. Subscribe for changes.
     fov: Cell[tuple[float, float] | None]
 
     def __init__(self, microscope: "Microscope") -> None:
@@ -102,9 +90,6 @@ class Profiles:
         self._active_id: str = next(iter(microscope.config.profiles.keys()))
         # All channels defined in config, resolved to handles. Populated by open().
         self._channels: dict[str, Channel] = {}
-
-        self._sync_task: SyncTask | None = None
-
         self._fov_lock = asyncio.Lock()
 
         self.profile_changed = Signal()
@@ -117,14 +102,12 @@ class Profiles:
         for cam_id, handle in self._scope.cameras.items():
             handle.props_changed.subscribe(self._make_camera_props_callback(cam_id))
         self._channels = self._build_channels()
-        # set_active_profile would no-op since _active_id already matches.
-        # Call the inner activator directly for the first-time hardware apply.
+        # set_active_profile would no-op since _active_id already matches; call _activate directly
         await self._activate(self._active_id)
 
     async def close(self) -> None:
-        if self._sync_task is not None:
-            self._sync_task.close()
-            self._sync_task = None
+        """Clear local state. AO handles live on their node; teardown happens there."""
+        self._channels = {}
 
     # ==================== Active profile state ====================
 
@@ -155,21 +138,11 @@ class Profiles:
         return {ch_id: ch.default_colormap for ch_id, ch in self.active_channels.items()}
 
     async def set_active_profile(self, profile_id: str) -> None:
-        """Switch to a profile: configure devices, recompute FOV, build sync task, notify.
+        """Switch to a profile: configure devices, recompute FOV, load AO signals, notify.
 
-        Tears down the existing sync task (ports are profile-specific). Does NOT
-        touch preview state — Session is responsible for pausing/resuming preview
-        around this call.
-
-        ``profile_changed`` fires only after the new profile is fully committed
-        (devices configured, FOV computed, sync task built) — subscribers never
-        observe an intermediate state.
-
-        Partial-failure note: if ``_configure_profile_devices`` raises after the
-        old sync task has been closed, the rig is left with the old profile's
-        ``active_id`` but the new profile's partially-configured hardware. The
-        caller must treat the rig as potentially inconsistent until another
-        successful ``set_active_profile`` call lands.
+        Does NOT touch preview state — Session is responsible for pausing/resuming preview
+        around this call. ``profile_changed`` fires only after the new profile is fully
+        committed.
         """
         if profile_id not in self._scope.config.profiles:
             raise ValueError(f"Profile '{profile_id}' not found in config")
@@ -184,81 +157,85 @@ class Profiles:
             await self._configure_profile_devices(profile_id)
             self._active_id = profile_id
             await self._compute_and_publish_fov()
-
-            task = await self.sync_task()
-            await task.reset(ports=self._scope.config.get_profile_daq_ports(profile_id))
-            await task.apply(self.active.sync.timing, self.active_waveforms())
+            await self._load_profile_ao_signals(profile_id)
         except Exception:
             self._log.exception(
-                "Failed to activate profile '%s' — hardware may be partially configured "
-                "(active_id=%s, sync task cleared)",
+                "Failed to activate profile '%s' — hardware may be partially configured (active_id=%s)",
                 profile_id,
                 self._active_id,
             )
             raise
 
         await self.profile_changed.emit(profile_id)
-
         self._log.info("Active profile -> '%s' (channels: %s)", profile_id, list(self.active_channels))
 
-    # ==================== Sync task ====================
+    # ==================== AO orchestration ====================
 
-    async def sync_task(self) -> SyncTask:
-        """Return the active profile's sync task, constructing it on first use."""
-        if self._sync_task is None:
-            if self._scope.daq is None:
-                raise RuntimeError("DAQ not initialized")
-            self._sync_task = SyncTask(
-                uid=f"sync_{self._active_id}",
-                daq=self._scope.daq,
-                ports=self._scope.config.get_profile_daq_ports(self._active_id),
-            )
-        return self._sync_task
+    async def start_ao(self, repeat: int | None = None) -> None:
+        """Start every AO device referenced by the active profile's ``sync``.
 
-    def active_waveforms(self, *, for_stack: bool = False) -> dict[str, Any]:
-        """Waveforms for the active profile. Stack mode includes ``stack_only`` entries."""
-        profile = self.active
-        if for_stack:
-            return profile.sync.waveforms
-        return {k: v for k, v in profile.sync.waveforms.items() if k not in profile.sync.stack_only}
-
-    async def update_waveforms(self, *, waveforms: dict | None = None, timing: dict | None = None) -> None:
-        """Edit the active profile's waveforms/timing and push to the DAQ.
-
-        Validates voltage range before mutating config, then calls
-        ``SyncTask.apply`` — which preserves running state, so a live preview
-        hot-reloads transparently. Callers that need "apply current config
-        without editing" use the sync task directly via ``sync_task()``.
+        Runs the handle calls concurrently. Per-AO errors are logged and re-raised so
+        the caller sees a failure; already-started engines are left running.
         """
-        profile = self.active
+        handles = self._active_ao_handles()
+        if not handles:
+            return
+        await asyncio.gather(*(h.start(repeat) for h in handles))
 
-        parsed_waveforms = (
-            {device_id: validate_waveform(wf) for device_id, wf in waveforms.items()} if waveforms is not None else None
-        )
-        parsed_timing = FrameTiming.model_validate(timing) if timing is not None else None
+    async def stop_ao(self) -> None:
+        """Stop every AO device referenced by the active profile's ``sync``. Idempotent per handle."""
+        handles = self._active_ao_handles()
+        if not handles:
+            return
+        await asyncio.gather(*(h.stop() for h in handles))
 
-        if parsed_waveforms and self._scope.daq is not None:
-            ao_range = await self._scope.daq.get_ao_voltage_range()
-            for device_id, wf in parsed_waveforms.items():
-                if wf.voltage.min < ao_range.min or wf.voltage.max > ao_range.max:
-                    raise ValueError(
-                        f"Waveform '{device_id}' voltage [{wf.voltage.min}, {wf.voltage.max}]V "
-                        f"exceeds DAQ range [{ao_range.min}, {ao_range.max}]V"
-                    )
+    async def load_ao(self, ao_uid: str, signals: AOSignals) -> None:
+        """Load ``signals`` onto the named AO device without updating the persisted config.
 
-        if parsed_waveforms is not None:
-            profile.sync.waveforms.update(parsed_waveforms)
-        if parsed_timing is not None:
-            profile.sync.timing = parsed_timing
+        Useful for temporary / stack-specific configurations. For edits the user made to
+        the active profile, prefer :meth:`update_ao_signals` which also commits to config.
+        """
+        handle = self._scope.analog_outs.get(ao_uid)
+        if handle is None:
+            raise ValueError(f"AO device '{ao_uid}' not provisioned")
+        await handle.load(signals)
 
-        task = await self.sync_task()
-        await task.apply(self.active.sync.timing, self.active_waveforms())
+    async def update_ao_signals(self, ao_uid: str, signals: AOSignals) -> None:
+        """Push ``signals`` to the AO device, then commit to the active profile's config on success.
 
-    def preview_traces(self, target_points: int | None = None) -> dict[str, list[float]]:
-        """Per-waveform visualization traces. Empty dict if no sync task yet."""
-        if self._sync_task is None:
-            return {}
-        return self._sync_task.preview_traces(target_points=target_points)
+        Apply-first ordering: if the driver rejects the new signals, the in-memory
+        ``ProfileConfig`` is left untouched. The controller runs voltage / port / trigger
+        validation internally — no need to duplicate it here.
+        """
+        handle = self._scope.analog_outs.get(ao_uid)
+        if handle is None:
+            raise ValueError(f"AO device '{ao_uid}' not provisioned")
+        await handle.load(signals)
+        self.active.sync[ao_uid] = signals
+
+    def _active_ao_handles(self) -> list[Any]:
+        """Return handles for every AO device in ``self.active.sync``. Unknown uids are dropped with a warning."""
+        handles = []
+        for ao_uid in self.active.sync:
+            handle = self._scope.analog_outs.get(ao_uid)
+            if handle is None:
+                self._log.warning("Active profile references AO '%s' which is not provisioned; skipping", ao_uid)
+                continue
+            handles.append(handle)
+        return handles
+
+    async def _load_profile_ao_signals(self, profile_id: str) -> None:
+        """Load every AO block of a profile concurrently. Used during activation."""
+        profile = self._scope.config.profiles[profile_id]
+        coros = []
+        for ao_uid, signals in profile.sync.items():
+            handle = self._scope.analog_outs.get(ao_uid)
+            if handle is None:
+                self._log.warning("Profile '%s' references AO '%s' which is not provisioned", profile_id, ao_uid)
+                continue
+            coros.append(handle.load(signals))
+        if coros:
+            await asyncio.gather(*coros)
 
     # ==================== Channel lasers ====================
 

@@ -129,9 +129,7 @@ class PreviewController:
         if started:
             await self._scope.profiles.enable_active_lasers()
 
-        task = await profiles.sync_task()
-        await task.apply(profiles.active.daq.timing, profiles.active_waveforms())
-        await task.start()
+        await profiles.start_ao()
 
         await self.is_running.set(True)
         self._log.info("Preview started (%d cameras)", started)
@@ -152,8 +150,7 @@ class PreviewController:
             except Exception:
                 self._log.exception("Camera %s failed to stop preview", ch.camera.uid)
 
-        task = await self._scope.profiles.sync_task()
-        await task.stop()
+        await self._scope.profiles.stop_ao()
 
         await self._scope.profiles.disable_active_lasers()
 

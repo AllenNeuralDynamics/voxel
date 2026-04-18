@@ -1,12 +1,23 @@
-# Local configuration — all devices in-process (no ZMQ)
+info:
+  name: ""
+  description: "Local configuration — all devices in-process (no ZMQ)"
 
 rig:
   name: "Simulated Local Rig"
 
   devices:
-    daq_1:
-      target: vxl.daq.simulated.SimulatedDaq
+    daq_hub:
+      target: vxl.analog_out.simulated.SimulatedDaqmx
       init: { device_name: "MockDev1" }
+    daq:
+      target: vxl.analog_out.simulated.SimulatedAnalogOutput
+      init:
+        hub: daq_hub
+        ports:
+          laser_488: ao0
+          laser_561: ao1
+          camera_1: ao2
+          aotf_1: ao3
     camera_1:
       target: vxl.camera.simulated.SimulatedCamera
       init:
@@ -48,14 +59,6 @@ stage:
   y: y_axis
   z: z_axis
 
-daq:
-  device: daq_1
-  acq_ports:
-    laser_488: ao0
-    laser_561: ao1
-    camera_1: ao2
-    aotf_1: ao3
-
 detection:
   camera_1:
     filter_wheels: [fw_emission]
@@ -87,43 +90,48 @@ profiles:
   single_gfp:
     channels: ["gfp"]
     sync:
-      timing: &default_timing
+      daq: &default_aosignals
         sample_rate: "100 kHz"
         duration: "0.2 s"
         rest_time: "0.05 s"
-      waveforms:
-        camera_1: &camera_waveform
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.0, max: 0.95 }
-        laser_488: &laser_waveform
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.1, max: 0.9 }
-        aotf_1: &aotf_blanking_waveform
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.05, max: 0.95 }
+        clock_src: { type: internal }
+        waveforms:
+          camera_1: &camera_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.0, max: 0.95 }
+          laser_488: &laser_488_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.1, max: 0.9 }
+          aotf_1: &aotf_blanking_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.05, max: 0.95 }
     desc: "Single GFP channel"
   single_rfp:
     channels: ["rfp"]
     sync:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform
-        laser_561: *laser_waveform
-        aotf_1: *aotf_blanking_waveform
+      daq:
+        sample_rate: "100 kHz"
+        duration: "0.2 s"
+        rest_time: "0.05 s"
+        clock_src: { type: internal }
+        waveforms:
+          camera_1: *camera_waveform
+          laser_561:
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.1, max: 0.9 }
+          aotf_1: *aotf_blanking_waveform
     desc: "Single RFP channel"
-
-info:
-  name: ""
-  description: ""
 
 plan:
   stack_order: snake_row
   z_step: 1.0
   default_z_start: 0.0
   default_z_end: 511.0
+
 output:
   store_path: ./data
   max_level: 3

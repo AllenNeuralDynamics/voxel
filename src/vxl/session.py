@@ -20,6 +20,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vxl.analog_out import AOSignals
 from vxl.camera.preview import PreviewViewport
 from vxl.config import SessionConfig
 from vxl.controllers import AcquisitionEngine, PreviewController, Stacks
@@ -200,11 +201,15 @@ class Session:
             results.append(await self.acquire_stack(stack.stack_id))
         return results
 
-    async def update_waveforms(self, *, waveforms: dict | None = None, timing: dict | None = None) -> None:
-        """Edit active profile's waveforms/timing and push to the DAQ. Blocked during acquisition."""
+    async def update_ao_signals(self, ao_uid: str, signals: AOSignals) -> None:
+        """Edit the active profile's signals for ``ao_uid`` and push to hardware.
+
+        Blocked during acquisition. Apply-first ordering: hardware load runs before
+        the in-memory config is mutated, so a driver rejection leaves config unchanged.
+        """
         if self.acquisition.is_running.value:
-            raise RuntimeError("Cannot update waveforms while acquiring")
-        await self._scope.profiles.update_waveforms(waveforms=waveforms, timing=timing)
+            raise RuntimeError("Cannot update AO signals while acquiring")
+        await self._scope.profiles.update_ao_signals(ao_uid, signals)
 
     # ==================== Private ====================
 

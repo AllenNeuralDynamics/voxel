@@ -1,11 +1,28 @@
-# Simulated ExASPIM - local mode, ExASPIM waveform layout
+info:
+  name: ""
+  description: ""
+
 rig:
   name: "Simulated ExASPIM"
 
   devices:
-    daq_1:
-      target: vxl.daq.simulated.SimulatedDaq
-      init: { device_name: "MockDev1" }
+    ao_main:
+      target: vxl.analog_out.simulated.SimulatedAnalogOutput
+      init:
+        hub: nidaq_1
+        ports:
+          aotf_1: ao0
+          camera: ao21
+          laser_488: ao17
+          laser_561: ao13
+          laser_640: ao9
+          left_tunable_lens: ao1
+          right_tunable_lens: ao3
+          left_galvo_pos: ao26
+          left_galvo_neg: ao27
+          right_galvo_pos: ao28
+          right_galvo_neg: ao29
+          z_axis: ao5
     camera:
       target: vxl.camera.simulated.SimulatedCamera
       init:
@@ -14,69 +31,41 @@ rig:
     fw_emission:
       target: vxl.axes.simulated.SimulatedDiscreteAxis
       init:
-        slots: { "0": "BP525", "1": "BP600", "2": "BP700" }
+        slots: {"0": "BP525", "1": "BP600", "2": "BP700"}
     laser_488:
       target: &aotf_laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
-      init:
-        {
-          wavelength: 488,
-          aotf: aotf_1,
-          aotf_channel: 2,
-          aotf_frequency_mhz: 98.2,
-        }
+      init: {wavelength: 488, aotf: aotf_1, aotf_channel: 2, aotf_frequency_mhz: 98.2}
     laser_561:
       target: *aotf_laser_target
-      init:
-        {
-          wavelength: 561,
-          aotf: aotf_1,
-          aotf_channel: 3,
-          aotf_frequency_mhz: 87.4,
-        }
+      init: {wavelength: 561, aotf: aotf_1, aotf_channel: 3, aotf_frequency_mhz: 87.4}
     laser_640:
       target: *aotf_laser_target
-      init:
-        {
-          wavelength: 640,
-          aotf: aotf_1,
-          aotf_channel: 4,
-          aotf_frequency_mhz: 78.6,
-        }
+      init: {wavelength: 640, aotf: aotf_1, aotf_channel: 4, aotf_frequency_mhz: 78.6}
     x_axis:
       target: &linear_axis_target vxl.axes.simulated.SimulatedContinuousAxis
-      init: { lower_limit: 0, upper_limit: 40000 }
+      init: {lower_limit: 0, upper_limit: 40000}
     y_axis:
       target: *linear_axis_target
-      init: { lower_limit: 0, upper_limit: 25000 }
+      init: {lower_limit: 0, upper_limit: 25000}
     z_axis:
       target: *linear_axis_target
-      init: { lower_limit: 0, upper_limit: 50000, has_ttl_stepper: true }
+      init: {lower_limit: 0, upper_limit: 50000, has_ttl_stepper: true}
     left_focus:
       target: *linear_axis_target
-      init: { lower_limit: 0, upper_limit: 10000 }
+      init: {lower_limit: 0, upper_limit: 10000}
     right_focus:
       target: *linear_axis_target
-      init: { lower_limit: 0, upper_limit: 10000 }
+      init: {lower_limit: 0, upper_limit: 10000}
     camera_focus:
       target: *linear_axis_target
-      init: { lower_limit: 0, upper_limit: 10000 }
+      init: {lower_limit: 0, upper_limit: 10000}
     aotf_1:
       target: vxl.aotf.simulated.SimulatedAotf
-      init: { blanking_mode: "external" }
-
-daq:
-  device: daq_1
-  acq_ports:
-    aotf_1: ao0
-    camera: ao21
-    laser_488: ao17
-    laser_561: ao13
-    laser_640: ao9
-    left_tunable_lens: ao1
-    right_tunable_lens: ao3
-    positive_galvo: ao26
-    negative_galvo: ao27
-    z_axis: ao5
+      init: {blanking_mode: "external"}
+    nidaq_1:
+      target: vxl.analog_out.simulated.SimulatedDaqmx
+      init:
+        device_name: "MockDev1"
 
 stage:
   x: x_axis
@@ -102,21 +91,21 @@ channels:
   gfp:
     detection: camera
     illumination: laser_488
-    filters: { fw_emission: "BP525" }
+    filters: {fw_emission: "BP525"}
     desc: "GFP using 488nm excitation"
     label: GFP
     emission: 510
   rfp:
     detection: camera
     illumination: laser_561
-    filters: { fw_emission: "BP600" }
+    filters: {fw_emission: "BP600"}
     desc: "RFP using 561nm excitation"
     label: RFP
     emission: 600
   cy5:
     detection: camera
     illumination: laser_640
-    filters: { fw_emission: "BP700" }
+    filters: {fw_emission: "BP700"}
     desc: "Cy5 using 640nm excitation"
     label: Cy5
     emission: 670
@@ -124,91 +113,115 @@ channels:
 profiles:
   single_gfp:
     channels: ["gfp"]
+    desc: "Single GFP channel imaging"
     sync:
-      timing: &default_timing
+      ao_main:
         sample_rate: "10 kHz"
         duration: "544 ms"
         rest_time: "0 s"
-      waveforms:
-        camera: &camera_waveform
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.045956, max: 0.25 }
-        laser_488: &laser_waveform
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.027574, max: 1.0 }
-        aotf_1: &aotf_blanking_waveform
-          type: sawtooth
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.0, max: 1.0 }
-          cycles: 1
-          symmetry: 0.5
-        left_tunable_lens: &left_tunable_lens_waveform
-          type: sawtooth
-          voltage: { min: 1.98, max: 4.28 }
-          window: { min: 0.0, max: 1.0 }
-          cycles: 1
-          symmetry: 1.0
-        right_tunable_lens: &right_tunable_lens_waveform
-          type: sawtooth
-          voltage: { min: 4.85, max: 4.851 }
-          window: { min: 0.0, max: 1.0 }
-          cycles: 1
-          symmetry: 1.0
-        positive_galvo: &positive_galvo_waveform
-          type: sawtooth
-          voltage: { min: 0.0, max: 0.01 }
-          window: { min: 0.0, max: 1.0 }
-          cycles: 1
-        negative_galvo: &negative_galvo_waveform
-          type: sawtooth
-          voltage: { min: 0.0, max: 0.01 }
-          window: { min: 0.0, max: 1.0 }
-          cycles: 1
-        z_axis: &z_axis_waveform
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.0, max: 0.01 }
-    desc: "Single GFP channel imaging"
+        clock_src:
+          type: internal
+        waveforms:
+          camera: &camera_waveform
+            type: pulse
+            voltage: {min: 0.0, max: 5.0}
+            window: {min: 0.045956, max: 0.25}
+          laser_488: &laser_waveform
+            type: pulse
+            voltage: {min: 0.0, max: 5.0}
+            window: {min: 0.027574, max: 1.0}
+          aotf_1: &aotf_blanking_waveform
+            type: triangle
+            voltage: {min: 0.0, max: 5.0}
+            window: {min: 0.0, max: 1.0}
+            cycles: 1
+            symmetry: 0.5
+          left_tunable_lens: &left_tunable_lens_waveform
+            type: triangle
+            voltage: {min: 1.98, max: 4.28}
+            window: {min: 0.0, max: 1.0}
+            cycles: 1
+            symmetry: 1.0
+          right_tunable_lens: &right_tunable_lens_waveform
+            type: triangle
+            voltage: {min: 4.85, max: 4.851}
+            window: {min: 0.0, max: 1.0}
+            cycles: 1
+            symmetry: 1.0
+          left_galvo_pos: &left_galvo_pos_waveform
+            type: triangle
+            voltage: {min: -0.5, max: 0.5}
+            window: {min: 0.0, max: 1.0}
+            cycles: 1
+            symmetry: 0.5
+          left_galvo_neg: &left_galvo_neg_waveform
+            type: derived
+            operation: mirror
+            source: left_galvo_pos
+          right_galvo_pos: &right_galvo_pos_waveform
+            type: triangle
+            voltage: {min: -0.5, max: 0.5}
+            window: {min: 0.0, max: 1.0}
+            cycles: 1
+            symmetry: 0.5
+          right_galvo_neg: &right_galvo_neg_waveform
+            type: derived
+            operation: mirror
+            source: right_galvo_pos
+          z_axis: &z_axis_waveform
+            type: pulse
+            voltage: {min: 0.0, max: 5.0}
+            window: {min: 0.0, max: 0.01}
   single_rfp:
     channels: ["rfp"]
-    sync:
-      timing: *default_timing
-      waveforms:
-        camera: *camera_waveform
-        laser_561: *laser_waveform
-        aotf_1: *aotf_blanking_waveform
-        left_tunable_lens: *left_tunable_lens_waveform
-        right_tunable_lens: *right_tunable_lens_waveform
-        positive_galvo: *positive_galvo_waveform
-        negative_galvo: *negative_galvo_waveform
-        z_axis: *z_axis_waveform
     desc: "Single RFP channel imaging"
+    sync:
+      ao_main:
+        sample_rate: "10 kHz"
+        duration: "544 ms"
+        rest_time: "0 s"
+        clock_src:
+          type: internal
+        waveforms:
+          camera: *camera_waveform
+          laser_561: *laser_waveform
+          aotf_1: *aotf_blanking_waveform
+          left_tunable_lens: *left_tunable_lens_waveform
+          right_tunable_lens: *right_tunable_lens_waveform
+          left_galvo_pos: *left_galvo_pos_waveform
+          left_galvo_neg: *left_galvo_neg_waveform
+          right_galvo_pos: *right_galvo_pos_waveform
+          right_galvo_neg: *right_galvo_neg_waveform
+          z_axis: *z_axis_waveform
   single_cy5:
     channels: ["cy5"]
-    sync:
-      timing: *default_timing
-      waveforms:
-        camera: *camera_waveform
-        laser_640: *laser_waveform
-        aotf_1: *aotf_blanking_waveform
-        left_tunable_lens: *left_tunable_lens_waveform
-        right_tunable_lens: *right_tunable_lens_waveform
-        positive_galvo: *positive_galvo_waveform
-        negative_galvo: *negative_galvo_waveform
-        z_axis: *z_axis_waveform
     desc: "Single Cy5 channel imaging"
 
-info:
-  name: ""
-  description: ""
+    sync:
+      ao_main:
+        sample_rate: "10 kHz"
+        duration: "544 ms"
+        rest_time: "0 s"
+        clock_src:
+          type: internal
+        waveforms:
+          camera: *camera_waveform
+          laser_640: *laser_waveform
+          aotf_1: *aotf_blanking_waveform
+          left_tunable_lens: *left_tunable_lens_waveform
+          right_tunable_lens: *right_tunable_lens_waveform
+          left_galvo_pos: *left_galvo_pos_waveform
+          left_galvo_neg: *left_galvo_neg_waveform
+          right_galvo_pos: *right_galvo_pos_waveform
+          right_galvo_neg: *right_galvo_neg_waveform
+          z_axis: *z_axis_waveform
 
 plan:
   stack_order: snake_row
   z_step: 1.0
   default_z_start: 0.0
   default_z_end: 511.0
+
 output:
   store_path: ./data
   max_level: 3

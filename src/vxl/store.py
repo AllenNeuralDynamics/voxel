@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from ruyaml import YAML
 
 from vxl.config import SessionConfig, SessionInfo
+from vxl.migrate import migrate as migrate_config
 from vxl.stack import StackStatus
 
 log = logging.getLogger(__name__)
@@ -217,6 +218,9 @@ class YamlSessionStore(SessionStore):
         if "_anchors" in raw_data:
             del raw_data["_anchors"]
 
+        # Normalize legacy shapes (e.g. daq/profile.daq → profile.sync) before validation.
+        raw_data = migrate_config(raw_data)
+
         self._raw_data = raw_data
         self._config = SessionConfig.model_validate(raw_data)
         self._last_persisted_dump = self._config.model_dump(mode="json")
@@ -302,7 +306,6 @@ class YamlSessionStore(SessionStore):
 
         return {
             "rig": config.rig.model_dump(mode="json"),
-            "daq": config.daq.model_dump(mode="json"),
             "stage": config.stage.model_dump(mode="json"),
             "detection": {k: v.model_dump(mode="json") for k, v in config.detection.items()},
             "illumination": {k: v.model_dump(mode="json") for k, v in config.illumination.items()},
@@ -331,7 +334,7 @@ class YamlSessionStore(SessionStore):
             if raw_profile is None:
                 continue
 
-            raw_profile["sync"] = profile.sync.model_dump(mode="json")
+            raw_profile["sync"] = {ao_uid: sig.model_dump(mode="json") for ao_uid, sig in profile.sync.items()}
 
             if profile.props:
                 raw_profile["props"] = dict(profile.props)
@@ -477,7 +480,6 @@ class YamlSessionCatalog(SessionCatalog):
 
         config = SessionConfig(
             rig=source_config.rig,
-            daq=source_config.daq,
             stage=source_config.stage,
             detection=source_config.detection,
             illumination=source_config.illumination,
@@ -527,6 +529,7 @@ class YamlSessionCatalog(SessionCatalog):
             raw = y.load(f)
         if "_anchors" in raw:
             del raw["_anchors"]
+        raw = migrate_config(raw)
         return SessionConfig.model_validate(raw)
 
     @staticmethod
@@ -537,6 +540,7 @@ class YamlSessionCatalog(SessionCatalog):
                 raw = y.load(f)
             if "_anchors" in raw:
                 del raw["_anchors"]
+            raw = migrate_config(raw)
             config = SessionConfig.model_validate(raw)
             return config.model_dump(mode="json"), []
         except Exception as e:

@@ -1,12 +1,21 @@
-# Hybrid configuration — local devices + subprocess camera nodes
+info:
+  name: ""
+  description: ""
 
 rig:
   name: "Simulated Hybrid Rig"
 
   devices:
-    daq_1:
-      target: vxl.daq.simulated.SimulatedDaq
-      init: { device_name: "MockDev1" }
+    ao_main:
+      target: vxl.analog_out.simulated.SimulatedAnalogOutput
+      init:
+        hub: nidaq_1
+        ports:
+          laser_488: ao0
+          laser_561: ao1
+          camera_1: ao2
+          camera_2: ao3
+          aotf_1: ao4
     aotf_1:
       target: vxl.aotf.simulated.SimulatedAotf
       init: { blanking_mode: "external" }
@@ -45,6 +54,10 @@ rig:
     z_axis:
       target: *axis_target
       init: { lower_limit: 0, upper_limit: 50000 }
+    nidaq_1:
+      target: vxl.analog_out.simulated.SimulatedDaqmx
+      init:
+        device_name: "MockDev1"
 
   nodes:
     camera_node_1:
@@ -54,23 +67,15 @@ rig:
           init:
             pixel_size_um: "3.76,3.76"
             sensor_size_px: "10640,14192"
+      kind: subprocess
     camera_node_2:
       devices:
         camera_2: *sim_camera
-
+      kind: subprocess
 stage:
   x: x_axis
   y: y_axis
   z: z_axis
-
-daq:
-  device: daq_1
-  acq_ports:
-    laser_488: ao0
-    laser_561: ao1
-    camera_1: ao2
-    camera_2: ao3
-    aotf_1: ao4
 
 detection:
   camera_1:
@@ -83,7 +88,6 @@ detection:
 illumination:
   laser_488: {}
   laser_561: {}
-
 channels:
   gfp_cam1:
     detection: camera_1
@@ -125,52 +129,61 @@ channels:
 profiles:
   dual_gfp:
     channels: ["gfp_cam1", "gfp_cam2"]
+    desc: "Dual camera GFP imaging"
     sync:
-      timing: &default_timing
+      ao_main:
         sample_rate: "100 kHz"
         duration: "0.2 s"
         rest_time: "0.05 s"
-      waveforms:
-        camera_1: &camera_waveform_ch1
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.0, max: 0.95 }
-        camera_2: &camera_waveform_ch2
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.02, max: 0.97 }
-        laser_488: &laser_waveform_ch1
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.1, max: 0.9 }
-        aotf_1: &aotf_blanking_waveform
-          type: pulse
-          voltage: { min: 0.0, max: 5.0 }
-          window: { min: 0.05, max: 0.95 }
-    desc: "Dual camera GFP imaging"
+        clock_src:
+          type: internal
+        waveforms:
+          camera_1: &camera_waveform_ch1
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.0, max: 0.95 }
+          camera_2: &camera_waveform_ch2
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.02, max: 0.97 }
+          laser_488: &laser_waveform_ch1
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.1, max: 0.9 }
+          aotf_1: &aotf_blanking_waveform
+            type: pulse
+            voltage: { min: 0.0, max: 5.0 }
+            window: { min: 0.05, max: 0.95 }
   dual_rfp:
     channels: ["rfp_cam1", "rfp_cam2"]
-    sync:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform_ch1
-        camera_2: *camera_waveform_ch2
-        laser_561: *laser_waveform_ch1
-        aotf_1: *aotf_blanking_waveform
     desc: "Dual camera RFP imaging"
+    sync:
+      ao_main:
+        sample_rate: "100 kHz"
+        duration: "0.2 s"
+        rest_time: "0.05 s"
+        clock_src:
+          type: internal
+        waveforms:
+          camera_1: *camera_waveform_ch1
+          camera_2: *camera_waveform_ch2
+          laser_561: *laser_waveform_ch1
+          aotf_1: *aotf_blanking_waveform
   single_gfp:
     channels: ["gfp_cam1"]
-    sync:
-      timing: *default_timing
-      waveforms:
-        camera_1: *camera_waveform_ch1
-        laser_488: *laser_waveform_ch1
-        aotf_1: *aotf_blanking_waveform
     desc: "Single camera GFP"
 
-info:
-  name: ""
-  description: ""
+    sync:
+      ao_main:
+        sample_rate: "100 kHz"
+        duration: "0.2 s"
+        rest_time: "0.05 s"
+        clock_src:
+          type: internal
+        waveforms:
+          camera_1: *camera_waveform_ch1
+          laser_488: *laser_waveform_ch1
+          aotf_1: *aotf_blanking_waveform
 
 plan:
   stack_order: snake_row

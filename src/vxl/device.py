@@ -10,3 +10,4 @@ class DeviceType(StrEnum):
     LINEAR_AXIS = "linear_axis"
     ROTATION_AXIS = "rotation_axis"
     DISCRETE_AXIS = "discrete_axis"
+    ANALOG_OUTPUT = "analog_output"
