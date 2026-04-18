@@ -226,7 +226,7 @@ export interface ProfileConfig {
   label?: string | null;
   desc: string;
   channels: string[]; // list of channel IDs
-  daq: SyncTaskConfig; // DAQ sync task configuration
+  sync: SyncTaskConfig; // DAQ sync task configuration
   props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
   setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
   rois?: Record<string, { x: number; y: number; w: number; h: number }>; // camera_id -> sensor ROI

@@ -187,7 +187,7 @@ class Profiles:
 
             task = await self.sync_task()
             await task.reset(ports=self._scope.config.get_profile_daq_ports(profile_id))
-            await task.apply(self.active.daq.timing, self.active_waveforms())
+            await task.apply(self.active.sync.timing, self.active_waveforms())
         except Exception:
             self._log.exception(
                 "Failed to activate profile '%s' — hardware may be partially configured "
@@ -219,8 +219,8 @@ class Profiles:
         """Waveforms for the active profile. Stack mode includes ``stack_only`` entries."""
         profile = self.active
         if for_stack:
-            return profile.daq.waveforms
-        return {k: v for k, v in profile.daq.waveforms.items() if k not in profile.daq.stack_only}
+            return profile.sync.waveforms
+        return {k: v for k, v in profile.sync.waveforms.items() if k not in profile.sync.stack_only}
 
     async def update_waveforms(self, *, waveforms: dict | None = None, timing: dict | None = None) -> None:
         """Edit the active profile's waveforms/timing and push to the DAQ.
@@ -247,12 +247,12 @@ class Profiles:
                     )
 
         if parsed_waveforms is not None:
-            profile.daq.waveforms.update(parsed_waveforms)
+            profile.sync.waveforms.update(parsed_waveforms)
         if parsed_timing is not None:
-            profile.daq.timing = parsed_timing
+            profile.sync.timing = parsed_timing
 
         task = await self.sync_task()
-        await task.apply(self.active.daq.timing, self.active_waveforms())
+        await task.apply(self.active.sync.timing, self.active_waveforms())
 
     def preview_traces(self, target_points: int | None = None) -> dict[str, list[float]]:
         """Per-waveform visualization traces. Empty dict if no sync task yet."""

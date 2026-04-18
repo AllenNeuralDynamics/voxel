@@ -86,7 +86,7 @@ channels:
 profiles:
   single_gfp:
     channels: ["gfp"]
-    daq:
+    sync:
       timing: &default_timing
         sample_rate: "100 kHz"
         duration: "0.2 s"
@@ -107,7 +107,7 @@ profiles:
     desc: "Single GFP channel"
   single_rfp:
     channels: ["rfp"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform

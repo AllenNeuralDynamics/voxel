@@ -102,7 +102,7 @@ class AcquisitionEngine:
 
             sync_task = await profiles.sync_task()
             stack_waveforms = profiles.active_waveforms(for_stack=True)
-            await sync_task.apply(profiles.active.daq.timing, stack_waveforms)
+            await sync_task.apply(profiles.active.sync.timing, stack_waveforms)
 
             await asyncio.gather(
                 *(

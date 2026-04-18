@@ -120,7 +120,7 @@ export function discoverProfileDevices(config: MicroscopeConfig, profileId: stri
   }
 
   // Waveform-only devices (in DAQ waveforms but not yet discovered)
-  for (const devId of Object.keys(profile.daq.waveforms)) {
+  for (const devId of Object.keys(profile.sync.waveforms)) {
     if (!roles.has(devId)) roles.set(devId, 'waveform');
   }
 

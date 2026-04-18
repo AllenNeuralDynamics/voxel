@@ -331,7 +331,7 @@ class YamlSessionStore(SessionStore):
             if raw_profile is None:
                 continue
 
-            raw_profile["daq"] = profile.daq.model_dump(mode="json")
+            raw_profile["sync"] = profile.sync.model_dump(mode="json")
 
             if profile.props:
                 raw_profile["props"] = dict(profile.props)

@@ -158,7 +158,7 @@ channels:
 profiles:
   dapi_gfp:
     channels: ["dapi", "gfp"]
-    daq:
+    sync:
       timing: &default_timing
         sample_rate: "100 kHz"
         duration: "0.2 s"
@@ -187,7 +187,7 @@ profiles:
     desc: "Simultaneous DAPI (cam1) and GFP (cam2) imaging"
   dapi_cy5:
     channels: ["dapi", "cy5"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
@@ -198,7 +198,7 @@ profiles:
     desc: "Simultaneous DAPI (cam1) and Cy5 (cam2) imaging"
   gfp_rfp:
     channels: ["gfp", "rfp"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
@@ -209,7 +209,7 @@ profiles:
     desc: "Simultaneous GFP (cam2) and RFP (cam1) imaging"
   rfp_cy5:
     channels: ["rfp", "cy5"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
@@ -220,7 +220,7 @@ profiles:
     desc: "Simultaneous RFP (cam1) and Cy5 (cam2) imaging"
   single_dapi:
     channels: ["dapi"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
@@ -229,7 +229,7 @@ profiles:
     desc: "Single DAPI channel for nuclear staining"
   single_gfp:
     channels: ["gfp"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_2: *camera_waveform_ch1
@@ -238,7 +238,7 @@ profiles:
     desc: "Single GFP channel imaging"
   single_rfp:
     channels: ["rfp"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
@@ -247,7 +247,7 @@ profiles:
     desc: "Single RFP channel imaging"
   single_cy5:
     channels: ["cy5"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_2: *camera_waveform_ch1
@@ -256,7 +256,7 @@ profiles:
     desc: "Single Cy5 far-red channel imaging"
   single_nir:
     channels: ["nir"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1

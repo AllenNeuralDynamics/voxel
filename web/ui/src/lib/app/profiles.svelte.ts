@@ -34,8 +34,8 @@ export class ProfilesManager {
         if (data.profile_id) {
           const profile = this.#getCfg().profiles?.[data.profile_id];
           if (profile) {
-            if (data.waveforms) profile.daq.waveforms = data.waveforms;
-            if (data.timing) profile.daq.timing = data.timing;
+            if (data.waveforms) profile.sync.waveforms = data.waveforms;
+            if (data.timing) profile.sync.timing = data.timing;
           }
         }
       }),

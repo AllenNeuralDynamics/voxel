@@ -123,7 +123,7 @@ class GridConfig(BaseModel):
 
 class ProfileConfig(BaseModel):
     channels: list[str]
-    daq: SyncTaskConfig
+    sync: SyncTaskConfig
     props: dict[str, dict[str, Any]] = Field(default_factory=dict)
     setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)
     rois: dict[str, SensorROI] = Field(default_factory=dict)
@@ -177,7 +177,7 @@ class MicroscopeConfig(BaseModel):
             if channel.illumination in self.illumination:
                 device_ids.update(self.illumination[channel.illumination].aux_devices)
 
-        device_ids.update(profile.daq.waveforms.keys())
+        device_ids.update(profile.sync.waveforms.keys())
         return device_ids
 
     def get_profile_daq_ports(self, profile_id: str) -> dict[str, str]:
@@ -317,14 +317,14 @@ class MicroscopeConfig(BaseModel):
             daq_acq_devices = set(self.daq.acq_ports.keys())
             devices_needing_waveforms = profile_devices & daq_acq_devices
 
-            missing_waveforms = devices_needing_waveforms - set(profile.daq.waveforms.keys())
+            missing_waveforms = devices_needing_waveforms - set(profile.sync.waveforms.keys())
             if missing_waveforms:
                 errors.append(
                     f"Profile '{profile_id}' missing waveforms for devices in daq.acq_ports: "
                     f"{sorted(missing_waveforms)}",
                 )
 
-            extra_waveforms = set(profile.daq.waveforms.keys()) - daq_acq_devices
+            extra_waveforms = set(profile.sync.waveforms.keys()) - daq_acq_devices
             if extra_waveforms:
                 errors.append(
                     f"Profile '{profile_id}' defines waveforms for devices not in daq.acq_ports: "

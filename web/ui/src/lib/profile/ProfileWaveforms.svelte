@@ -68,15 +68,15 @@
 
   // ── Source of truth: config waveforms ──
 
-  const waveforms = $derived(profile?.daq.waveforms ?? {});
-  const configTiming = $derived(profile?.daq.timing ?? { sample_rate: 100000, duration: 0.01, rest_time: 0 });
+  const waveforms = $derived(profile?.sync.waveforms ?? {});
+  const configTiming = $derived(profile?.sync.timing ?? { sample_rate: 100000, duration: 0.01, rest_time: 0 });
 
   // ── Waveform devices (role-sorted, with trace colors) ──
 
   const profileDevices = $derived(discoverProfileDevices(rigCfg, profileId));
   const waveformDevices = $derived(
     profileDevices.filter((d) => {
-      const wf = profile?.daq.waveforms[d.id];
+      const wf = profile?.sync.waveforms[d.id];
       return wf != null && wf.voltage != null && wf.window != null;
     })
   );

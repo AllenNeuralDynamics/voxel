@@ -98,12 +98,12 @@ class SineWave(PeriodicWaveform):
         return (shape + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
 
 
-class SawtoothWave(PeriodicWaveform):
+class TriangleWave(PeriodicWaveform):
     """Sawtooth/triangle waveform. `symmetry` controls rise/fall ratio:
     1.0 = pure ramp up, 0.0 = pure ramp down, 0.5 = symmetric triangle.
     """
 
-    type: Literal["sawtooth"]
+    type: Literal["triangle", "sawtooth"]
     symmetry: float = 1.0
 
     def _generate_waveform(self, n: int) -> np.ndarray:
@@ -219,7 +219,7 @@ class CSVWaveform(BaseWaveform):
 
 
 Waveform = Annotated[
-    SquareWave | SineWave | SawtoothWave | MultiPointWaveform | PulseWaveform | CSVWaveform,
+    SquareWave | SineWave | TriangleWave | MultiPointWaveform | PulseWaveform | CSVWaveform,
     Discriminator("type"),
 ]
 

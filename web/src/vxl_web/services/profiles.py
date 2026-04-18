@@ -50,7 +50,7 @@ class ProfilesService:
         """Active profile's waveforms + timing + sampled traces for visualization."""
         profiles = self.session.microscope.profiles
         traces = profiles.preview_traces(target_points=1000)
-        daq = profiles.active.daq.model_dump(mode="json")
+        daq = profiles.active.sync.model_dump(mode="json")
         return {
             "profile_id": profiles.active_id,
             "traces": traces,

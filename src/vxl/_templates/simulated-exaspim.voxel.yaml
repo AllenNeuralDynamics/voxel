@@ -17,13 +17,31 @@ rig:
         slots: { "0": "BP525", "1": "BP600", "2": "BP700" }
     laser_488:
       target: &aotf_laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
-      init: { wavelength: 488, aotf: aotf_1, aotf_channel: 2, aotf_frequency_mhz: 98.2 }
+      init:
+        {
+          wavelength: 488,
+          aotf: aotf_1,
+          aotf_channel: 2,
+          aotf_frequency_mhz: 98.2,
+        }
     laser_561:
       target: *aotf_laser_target
-      init: { wavelength: 561, aotf: aotf_1, aotf_channel: 3, aotf_frequency_mhz: 87.4 }
+      init:
+        {
+          wavelength: 561,
+          aotf: aotf_1,
+          aotf_channel: 3,
+          aotf_frequency_mhz: 87.4,
+        }
     laser_640:
       target: *aotf_laser_target
-      init: { wavelength: 640, aotf: aotf_1, aotf_channel: 4, aotf_frequency_mhz: 78.6 }
+      init:
+        {
+          wavelength: 640,
+          aotf: aotf_1,
+          aotf_channel: 4,
+          aotf_frequency_mhz: 78.6,
+        }
     x_axis:
       target: &linear_axis_target vxl.axes.simulated.SimulatedContinuousAxis
       init: { lower_limit: 0, upper_limit: 40000 }
@@ -106,7 +124,7 @@ channels:
 profiles:
   single_gfp:
     channels: ["gfp"]
-    daq:
+    sync:
       timing: &default_timing
         sample_rate: "10 kHz"
         duration: "544 ms"
@@ -155,7 +173,7 @@ profiles:
     desc: "Single GFP channel imaging"
   single_rfp:
     channels: ["rfp"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera: *camera_waveform
@@ -169,7 +187,7 @@ profiles:
     desc: "Single RFP channel imaging"
   single_cy5:
     channels: ["cy5"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera: *camera_waveform

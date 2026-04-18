@@ -125,7 +125,7 @@ channels:
 profiles:
   dual_gfp:
     channels: ["gfp_cam1", "gfp_cam2"]
-    daq:
+    sync:
       timing: &default_timing
         sample_rate: "100 kHz"
         duration: "0.2 s"
@@ -150,7 +150,7 @@ profiles:
     desc: "Dual camera GFP imaging"
   dual_rfp:
     channels: ["rfp_cam1", "rfp_cam2"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
@@ -160,7 +160,7 @@ profiles:
     desc: "Dual camera RFP imaging"
   single_gfp:
     channels: ["gfp_cam1"]
-    daq:
+    sync:
       timing: *default_timing
       waveforms:
         camera_1: *camera_waveform_ch1
