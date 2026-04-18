@@ -7,11 +7,10 @@
   import DeviceBrowser from '$lib/device/DeviceBrowser.svelte';
   import CameraConfig from './CameraConfig.svelte';
   import LaserConfig from './LaserConfig.svelte';
-  import DaqConfig from './DaqConfig.svelte';
+  import AnalogOutConfig from './AnalogOutConfig.svelte';
 
   const session = getSessionContext();
   const deviceId = $derived(page.params.id!);
-  const daqDeviceId = $derived(session.rig_cfg.daq.device);
   const devicesManager = $derived(session.devices);
   const device = $derived(devicesManager.getDevice(deviceId));
 
@@ -29,8 +28,8 @@
       <CameraConfig {session} {deviceId} />
     {:else if deviceId in session.lasers}
       <LaserConfig {session} {deviceId} />
-    {:else if deviceId === daqDeviceId}
-      <DaqConfig {session} {deviceId} />
+    {:else if deviceId in session.analog_outs}
+      <AnalogOutConfig {session} {deviceId} />
     {:else}
       <!-- Generic device config -->
       <div class="flex h-full flex-col gap-6">

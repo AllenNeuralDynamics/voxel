@@ -19,6 +19,7 @@ import { MosaicManager } from './mosaic.svelte';
 import { Stage } from './axis.svelte';
 import { Laser } from './laser.svelte';
 import { Camera } from './camera.svelte';
+import { AnalogOut } from './analog_out.svelte';
 import type { SnapshotChannel } from './snapshots.svelte';
 
 const DEFAULT_OUTPUT: OutputConfig = {
@@ -49,6 +50,7 @@ export class Session {
 
   lasers = $state<Record<string, Laser>>({});
   cameras = $state<Record<string, Camera>>({});
+  analog_outs = $state<Record<string, AnalogOut>>({});
 
   // ──────────────────────────────── Session-owned config state ────────────────────────────────
 
@@ -86,6 +88,7 @@ export class Session {
 
     this.lasers = {};
     this.cameras = {};
+    this.analog_outs = {};
     if (rigCfg.channels) {
       for (const channel of Object.values(rigCfg.channels)) {
         if (channel.illumination && !this.lasers[channel.illumination]) {
@@ -94,6 +97,13 @@ export class Session {
         if (channel.detection && !this.cameras[channel.detection]) {
           this.cameras[channel.detection] = new Camera(this.devices, channel.detection);
         }
+      }
+    }
+    // AO engines are declared directly in the rig; pick them up by the DeviceInterface type
+    // that the backend agent reports once devices are loaded.
+    for (const [uid, info] of Object.entries(init.details.devices.devices)) {
+      if (info.interface?.type === 'analog_output' && !this.analog_outs[uid]) {
+        this.analog_outs[uid] = new AnalogOut(this.devices, uid);
       }
     }
 
@@ -108,7 +118,7 @@ export class Session {
   static async create(client: Client, initialStatus: AppStatusUpdate): Promise<Session> {
     const details = await client.fetchSessionDetails();
     const session = new Session({ client, status: initialStatus, details });
-    await Promise.all([session.devices.loadProperties(), session.profiles.loadWaveforms()]);
+    await session.devices.loadProperties();
     return session;
   }
 

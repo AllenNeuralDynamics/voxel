@@ -25,7 +25,7 @@ export const STACK_ORDER_OPTIONS: { value: StackOrder; label: string }[] = [
  */
 export interface DeviceConfig {
   target: string;
-  kwargs: Record<string, unknown>;
+  init: Record<string, unknown>;
 }
 
 /**
@@ -39,21 +39,14 @@ export interface NodeConfig {
 /**
  * Rig configuration (matches backend rigup.config.RigConfig).
  *
- * Contains hardware topology only: name, local devices, and remote nodes.
- * Microscope-specific sections (daq, stage, detection, etc.) live on MicroscopeConfig.
+ * Contains hardware topology only: name, local devices, and remote nodes. AO devices
+ * carry their own `ports` / `triggers` under `init`; there is no separate top-level
+ * DAQ block on MicroscopeConfig.
  */
 export interface RigConfig {
   name: string;
   devices: Record<string, DeviceConfig>;
   nodes?: Record<string, NodeConfig>;
-}
-
-/**
- * DAQ configuration (matches backend DaqConfig from voxel.config)
- */
-export interface DaqConfig {
-  device: string;
-  acq_ports: Record<string, string>;
 }
 
 /**
@@ -95,95 +88,77 @@ export type IlluminationPathConfig = OpticalPathConfig;
 export interface ChannelConfig {
   label?: string | null;
   desc?: string;
-  detection: string; // camera device ID
-  illumination: string; // laser device ID
-  filters: Record<string, string>; // filter_wheel_id -> position_label
-  emission?: number | null; // Peak emission wavelength in nm
+  detection: string;
+  illumination: string;
+  filters: Record<string, string>;
+  emission?: number | null;
+}
+
+// ==================== Clock source ====================
+
+/**
+ * Internal clock — AO device generates its own frame clock from (duration + rest_time).
+ */
+export interface InternalClock {
+  type: 'internal';
 }
 
 /**
- * Trigger configuration for DAQ timing (matches backend TriggerConfig from voxel.daq.acq_task)
+ * External clock — AO device listens for trigger edges on a logical input pin.
+ * `source` is a key into the AO device's init-time `triggers` map.
  */
-export interface TriggerConfig {
-  pin: string;
-  counter: string;
-  duty_cycle: number; // 0.0 to 1.0
+export interface ExternalClock {
+  type: 'external';
+  source: string;
 }
 
-/**
- * Acquisition timing parameters (matches backend FrameTiming from voxel.sync_task)
- *
- * Quantity fields (sample_rate, duration, rest_time) are floats in SI base units
- * (Hz, seconds). YAML uses unit strings for readability (e.g. "100 kHz"),
- * but Pydantic's Quantity(float) subclass parses them to SI floats on load.
- */
-export interface FrameTiming {
-  sample_rate: number; // Hz (SI)
-  duration: number; // seconds (SI)
-  rest_time: number; // seconds (SI)
-  clock?: TriggerConfig | null;
-}
+export type ClockSource = InternalClock | ExternalClock;
 
-/**
- * Waveform base interface
- */
+// ==================== Waveforms ====================
+
 export interface BaseWaveform {
   voltage: { min: number; max: number };
   window: { min: number; max: number };
   rest_voltage?: number;
 }
 
-/**
- * Pulse waveform (matches backend PulseWaveform from voxel.daq.wave)
- */
 export interface PulseWaveform extends BaseWaveform {
   type: 'pulse';
 }
 
-/**
- * Square wave (matches backend SquareWave from voxel.daq.wave)
- */
 export interface SquareWaveform extends BaseWaveform {
   type: 'square';
   duty_cycle: number;
   cycles?: number | null;
-  frequency?: number | null; // Hz (SI)
-  phase?: number; // Radians
+  frequency?: number | null;
+  phase?: number;
 }
 
-/**
- * Sine wave (matches backend SineWave from voxel.daq.wave)
- */
 export interface SineWaveform extends BaseWaveform {
   type: 'sine';
-  frequency?: number | null; // Hz (SI)
+  frequency?: number | null;
   cycles?: number | null;
-  phase?: number; // Radians
+  phase?: number;
 }
 
 /**
- * Sawtooth wave (matches backend SawtoothWave from voxel.daq.wave)
- * symmetry: 1.0 = ramp up, 0.0 = ramp down, 0.5 = symmetric triangle
+ * Triangle waveform (matches backend TriangleWave from voxel.analog_out.wave).
+ * The `type` literal accepts both `'triangle'` (canonical) and `'sawtooth'` (legacy).
+ * `symmetry`: 1.0 = ramp up, 0.0 = ramp down, 0.5 = symmetric triangle.
  */
-export interface SawtoothWaveform extends BaseWaveform {
-  type: 'sawtooth';
-  frequency?: number | null; // Hz (SI)
+export interface TriangleWaveform extends BaseWaveform {
+  type: 'triangle' | 'sawtooth';
+  frequency?: number | null;
   cycles?: number | null;
-  phase?: number; // Radians
-  symmetry?: number; // 0.0 to 1.0
+  phase?: number;
+  symmetry?: number;
 }
 
-/**
- * Multi-point waveform (matches backend MultiPointWaveform from voxel.daq.wave)
- */
 export interface MultiPointWaveform extends BaseWaveform {
   type: 'multi_point';
-  points: number[][]; // Array of [time, voltage] pairs, normalized 0.0-1.0
+  points: number[][];
 }
 
-/**
- * CSV waveform (matches backend CSVWaveform from voxel.daq.wave)
- */
 export interface CSVWaveform extends BaseWaveform {
   type: 'csv';
   csv_file: string;
@@ -191,28 +166,73 @@ export interface CSVWaveform extends BaseWaveform {
 }
 
 /**
- * Union type for all waveform types (matches backend Waveform from voxel.daq.wave)
+ * Derived waveform variants — reference another channel by name and transform its output.
+ * Serialized flat: `{ type: 'derived', operation: <op>, source: <channel>, ...op_fields }`.
+ */
+export interface DerivedMirror {
+  type: 'derived';
+  operation: 'mirror';
+  source: string;
+}
+
+export interface DerivedScale {
+  type: 'derived';
+  operation: 'scale';
+  source: string;
+  factor: number;
+}
+
+export interface DerivedOffset {
+  type: 'derived';
+  operation: 'offset';
+  source: string;
+  delta: number;
+}
+
+export interface DerivedShift {
+  type: 'derived';
+  operation: 'shift';
+  source: string;
+  fraction: number;
+}
+
+export type DerivedWaveform = DerivedMirror | DerivedScale | DerivedOffset | DerivedShift;
+
+/**
+ * Full waveform union. Primitive variants carry their own shape; `DerivedWaveform`
+ * references another channel by name.
  */
 export type Waveform =
   | PulseWaveform
   | SquareWaveform
   | SineWaveform
-  | SawtoothWaveform
+  | TriangleWaveform
   | MultiPointWaveform
-  | CSVWaveform;
+  | CSVWaveform
+  | DerivedWaveform;
 
-/**
- * Sync task configuration (matches backend SyncTaskConfig from voxel.sync_task)
- */
-export interface SyncTaskConfig {
-  timing: FrameTiming;
-  waveforms: Record<string, Waveform>; // device_id -> waveform
-  stack_only?: string[]; // Waveforms excluded from frame streaming (included only during stack acquisition)
+export function isDerivedWaveform(wf: Waveform): wf is DerivedWaveform {
+  return wf.type === 'derived';
 }
 
+// ==================== AO signals ====================
+
 /**
- * Setup command entry (matches backend CommandRequest from rigup.device.base)
+ * Declarative AO device configuration (matches backend AOSignals from voxel.analog_out.models).
+ *
+ * One per AO device referenced by a profile. The backend controller diffs against
+ * its cached copy and picks the cheapest hardware path (no-op / hot-swap / rebuild).
  */
+export interface AOSignals {
+  sample_rate: number;
+  duration: number;
+  rest_time: number;
+  clock_src: ClockSource;
+  waveforms: Record<string, Waveform>;
+}
+
+// ==================== Profiles ====================
+
 export interface SetupCommand {
   attr: string;
   args?: unknown[];
@@ -220,27 +240,26 @@ export interface SetupCommand {
 }
 
 /**
- * Profile configuration - backend model (matches backend ProfileConfig from voxel.config)
+ * Profile configuration (matches backend ProfileConfig from voxel.config).
+ *
+ * `sync` is keyed by AO device UID — a profile may drive one or many AO devices,
+ * each with its own timing and waveform set.
  */
 export interface ProfileConfig {
   label?: string | null;
   desc: string;
-  channels: string[]; // list of channel IDs
-  sync: SyncTaskConfig; // DAQ sync task configuration
-  props?: Record<string, Record<string, unknown>>; // device_id -> {prop_name: value}
-  setup?: Record<string, SetupCommand[]>; // device_id -> [commands]
-  rois?: Record<string, { x: number; y: number; w: number; h: number }>; // camera_id -> sensor ROI
+  channels: string[];
+  sync: Record<string, AOSignals>;
+  props?: Record<string, Record<string, unknown>>;
+  setup?: Record<string, SetupCommand[]>;
+  rois?: Record<string, { x: number; y: number; w: number; h: number }>;
 }
 
 /**
  * Microscope configuration (matches backend MicroscopeConfig from voxel.config).
- *
- * Embeds a slim {@link RigConfig} for hardware topology and adds microscope-specific
- * sections: DAQ, stage, optical paths, channels, and profiles.
  */
 export interface MicroscopeConfig {
   rig: RigConfig;
-  daq: DaqConfig;
   stage: StageConfig;
   detection: Record<string, DetectionPathConfig>;
   illumination: Record<string, IlluminationPathConfig>;

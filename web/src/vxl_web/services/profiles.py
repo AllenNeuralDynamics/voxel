@@ -1,6 +1,8 @@
-"""Profiles service — profile switching, waveforms, ROIs, device-prop save/apply.
+"""Profiles service — profile switching, AO signals edits, ROIs, device-prop save/apply.
 
-Owns ``/profile/*`` REST routes and ``profile/*`` WS topics.
+Owns ``/profile/*`` REST routes and ``profile/*`` WS topics. Waveform / trace
+rendering has moved entirely to the client: the UI subscribes to each AO device's
+streamed ``loaded`` property and computes traces from the resolved ``AOSignals``.
 """
 
 import logging
@@ -10,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from vxl import Session
+from vxl.analog_out import AOSignals
 
 from .ws import BroadcastCallback
 
@@ -44,29 +47,11 @@ class ProfilesService:
                     raise ValueError("Missing profile_id")
                 await self.session.set_active_profile(profile_id)
 
-    # ---- Waveform helpers ----
-
-    def get_waveform_traces(self) -> dict[str, Any]:
-        """Active profile's waveforms + timing + sampled traces for visualization."""
-        profiles = self.session.microscope.profiles
-        traces = profiles.preview_traces(target_points=1000)
-        daq = profiles.active.sync.model_dump(mode="json")
-        return {
-            "profile_id": profiles.active_id,
-            "traces": traces,
-            "waveforms": daq["waveforms"],
-            "timing": daq["timing"],
-        }
-
-    def broadcast_waveforms(self) -> None:
-        try:
-            self.broadcast({"topic": "profile/waveforms", "payload": self.get_waveform_traces()})
-        except Exception:
-            log.exception("Failed to broadcast waveforms")
-
     async def _on_profile_changed(self, profile_id: str) -> None:
-        self.broadcast_waveforms()
-        self.broadcast({"topic": "profile/changed", "payload": {"profile_id": profile_id}})
+        self.broadcast(
+            {"topic": "profile/changed", "payload": {"profile_id": profile_id}},
+            with_status=True,
+        )
 
 
 # ==================== Dependency ====================
@@ -100,11 +85,6 @@ class SaveRoiRequest(BaseModel):
 
 class ApplyRoiRequest(BaseModel):
     camera_id: str
-
-
-class UpdateWaveformsRequest(BaseModel):
-    waveforms: dict[str, Any] | None = None
-    timing: dict[str, Any] | None = None
 
 
 # ==================== REST ====================
@@ -197,22 +177,22 @@ async def apply_roi(
     return {"camera_id": request.camera_id, "roi": roi.model_dump() if roi else None}
 
 
-@router.patch("/profile/waveforms")
-async def update_waveforms(
-    request: UpdateWaveformsRequest,
+@router.patch("/profile/sync/{ao_uid}")
+async def update_ao_signals(
+    ao_uid: str,
+    signals: AOSignals,
     service: Annotated[ProfilesService, Depends(get_profiles_service)],
 ) -> dict[str, Any]:
+    """Push new ``AOSignals`` to the named AO device and commit to the active profile on success.
+
+    Apply-first ordering: if the driver rejects the signals, the in-memory config is
+    left untouched and a 400 is returned. The streamed ``loaded`` property on the AO
+    device is the single source of truth for what's currently running; this endpoint
+    does not return rendered traces.
+    """
     try:
-        await service.session.update_waveforms(waveforms=request.waveforms, timing=request.timing)
+        await service.session.update_ao_signals(ao_uid, signals)
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    service.broadcast_waveforms()
     service.broadcast({}, with_status=True)
-    return service.get_waveform_traces()
-
-
-@router.get("/profile/waveforms")
-async def get_waveforms(
-    service: Annotated[ProfilesService, Depends(get_profiles_service)],
-) -> dict[str, Any]:
-    return service.get_waveform_traces()
+    return {"ao_uid": ao_uid}

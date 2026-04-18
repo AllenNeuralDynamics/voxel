@@ -2,6 +2,7 @@ export { App, type AppOptions } from './app.svelte.ts';
 export { Session } from './session.svelte.ts';
 export { Stage, Axis } from './axis.svelte.ts';
 export { Laser, POWER_HISTORY_MAX } from './laser.svelte.ts';
+export { AnalogOut, type AOState } from './analog_out.svelte.ts';
 export {
   Camera,
   type CameraMode,
@@ -19,13 +20,7 @@ export { SnapshotStore, type Snapshot, type SnapshotChannel } from './snapshots.
 export type { ColormapDef, ColormapGroup, ColormapCatalog } from './preview.svelte.ts';
 export { discoverProfileDevices, isFilterWheel, getChannelFor } from './profile.ts';
 
-export {
-  Client,
-  type ClientOptions,
-  type TopicHandlers,
-  type ConnectionState,
-  type DaqWaveformsResponse
-} from './client.svelte.ts';
+export { Client, type ClientOptions, type TopicHandlers, type ConnectionState } from './client.svelte.ts';
 export { DevicesManager, DeliminatedValue, EnumeratedValue, PlainValue } from './devices.svelte.ts';
 export type { ReactiveProperty } from './devices.svelte.ts';
 export { isErrorMsg, isPropDiverged, formatPropValue, decimalsFromStep } from './devices.svelte.ts';

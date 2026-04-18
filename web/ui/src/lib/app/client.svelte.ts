@@ -6,30 +6,10 @@
 import { unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { DevicePropertyPayload } from './devices.svelte.ts';
-import type {
-  AppStatusUpdate,
-  ErrorPayload,
-  FrameTiming,
-  LogMessage,
-  SessionDetails,
-  StackProgress,
-  Waveform
-} from './types/index.ts';
+import type { AppStatusUpdate, ErrorPayload, LogMessage, SessionDetails, StackProgress } from './types/index.ts';
 
 /** HTTP methods supported by the REST backend. */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-
-/**
- * DAQ waveforms response from REST endpoint and WS broadcast.
- * Contains both server-computed voltage arrays (traces) and the
- * config descriptors (waveforms + timing) for the active profile.
- */
-export interface DaqWaveformsResponse {
-  profile_id: string | null;
-  traces: Record<string, number[]>;
-  waveforms?: Record<string, Waveform>;
-  timing?: FrameTiming;
-}
 
 export interface PreviewViewport {
   x: number; // Top-left X in normalized sensor coords [0, 1]
@@ -147,7 +127,6 @@ export interface TopicHandlers {
   }) => void;
   'preview/levels'?: (payload: PreviewLevelsInfo) => void;
   'preview/colormap'?: (payload: { channel: string; colormap: string }) => void;
-  'profile/waveforms'?: (payload: DaqWaveformsResponse) => void;
   device?: (payload: DevicePropertyPayload) => void; // Prefix subscription
   /** Payload: {[profile_id]: {[device_id]: {[prop_name]: value}}} */
   'profile/props_saved'?: (payload: Record<string, Record<string, Record<string, unknown>>>) => void;
@@ -451,18 +430,6 @@ export class Client {
     const res = await this.request('PATCH', '/session/metadata', { metadata });
     const data = await res.json();
     return data.metadata;
-  }
-
-  /**
-   * Fetch DAQ waveforms for the active profile via REST.
-   */
-  async fetchWaveforms(): Promise<DaqWaveformsResponse> {
-    try {
-      const res = await this.request('GET', '/profile/waveforms');
-      return res.json();
-    } catch {
-      return { profile_id: null, traces: {} };
-    }
   }
 
   startPreview(): void {

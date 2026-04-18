@@ -1,21 +1,31 @@
 /**
  * ProfilesManager — profile switching, device-prop save/apply, camera ROI,
- * DAQ waveforms/timing edits and live broadcast state.
+ * per-AO ``AOSignals`` edits.
  *
  * Mirrors backend ``session.microscope.profiles``. Self-subscribes to the
  * ``status`` and ``profile/*`` WS topics; takes ``client`` for REST + a
  * ``getCfg`` getter for reading the session config (channels, profiles map).
+ *
+ * The currently-loaded AO configuration is NOT tracked here. Each AO device
+ * exposes its own streamed ``loaded: AOSignals | None`` property; the UI reads
+ * that via ``DevicesManager.getPropertyValue(aoUid, 'loaded')``.
  */
 
 import { toast } from 'svelte-sonner';
-import type { Client, DaqWaveformsResponse } from './client.svelte';
-import type { AppStatusUpdate, SessionStateUpdate, MicroscopeConfig, ChannelConfig, ProfileConfig } from './types';
+import type { Client } from './client.svelte';
+import type {
+  AOSignals,
+  AppStatusUpdate,
+  ChannelConfig,
+  MicroscopeConfig,
+  ProfileConfig,
+  SessionStateUpdate
+} from './types';
 
 export class ProfilesManager {
   activeId = $state<string | null>(null);
   profileOrder = $state<string[]>([]);
   isSwitching = $state(false);
-  appliedWaveforms = $state<DaqWaveformsResponse | null>(null);
 
   readonly #client: Client;
   readonly #getCfg: () => MicroscopeConfig;
@@ -28,16 +38,6 @@ export class ProfilesManager {
     this.#unsubscribers.push(
       client.subscribe('status', (_topic, payload) => {
         this.handleStatus((payload as AppStatusUpdate).session ?? null);
-      }),
-      client.on('profile/waveforms', (data) => {
-        this.appliedWaveforms = data;
-        if (data.profile_id) {
-          const profile = this.#getCfg().profiles?.[data.profile_id];
-          if (profile) {
-            if (data.waveforms) profile.sync.waveforms = data.waveforms;
-            if (data.timing) profile.sync.timing = data.timing;
-          }
-        }
       }),
       client.on('profile/props_saved', (payload) => {
         let count = 0;
@@ -72,10 +72,6 @@ export class ProfilesManager {
   handleStatus(s: SessionStateUpdate | null): void {
     this.activeId = s?.active_profile_id ?? null;
     this.profileOrder = s?.plan?.profile_order ?? [];
-  }
-
-  async loadWaveforms(): Promise<void> {
-    this.appliedWaveforms = await this.#client.fetchWaveforms();
   }
 
   dispose(): void {
@@ -159,7 +155,24 @@ export class ProfilesManager {
     }
   }
 
-  async patchWaveforms(body: { waveforms?: Record<string, unknown>; timing?: unknown }): Promise<void> {
-    await this.#client.request('PATCH', '/profile/waveforms', body);
+  /**
+   * Push new ``AOSignals`` to the named AO device on the backend. Apply-first
+   * ordering: on success, the active profile's in-memory config is updated and
+   * the AO's streamed ``loaded`` property reflects the new signals. On failure,
+   * the backend leaves the config untouched and returns a 400.
+   *
+   * On success we mirror the committed signals into the client-side profile config
+   * so callers reading ``profile.sync[aoUid]`` as the edit baseline see a coherent
+   * view immediately — without waiting for the next stream tick. This prevents the
+   * next PATCH from merging its edit against a stale baseline and overwriting
+   * previous edits on sibling channels.
+   */
+  async patchAoSync(aoUid: string, signals: AOSignals): Promise<void> {
+    await this.#client.request('PATCH', `/profile/sync/${aoUid}`, signals);
+    const profile = this.activeId ? this.#getCfg().profiles?.[this.activeId] : null;
+    if (profile) {
+      if (!profile.sync) profile.sync = {};
+      profile.sync[aoUid] = signals;
+    }
   }
 }

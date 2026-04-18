@@ -63,7 +63,7 @@
       min={1}
       max={100}
       step={0.1}
-      snapValue={1}
+      resetValue={1}
       decimals={1}
       numCharacters={5}
       size="xs"
@@ -77,7 +77,7 @@
       min={0}
       max={1}
       step={0.01}
-      snapValue={0}
+      resetValue={0}
       decimals={2}
       numCharacters={5}
       size="xs"
@@ -90,7 +90,7 @@
       min={0}
       max={1}
       step={0.01}
-      snapValue={0}
+      resetValue={0}
       decimals={2}
       numCharacters={5}
       size="xs"

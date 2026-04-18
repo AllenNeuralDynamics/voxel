@@ -93,7 +93,16 @@
     value?: number;
     min?: number;
     max?: number;
+    /**
+     * Snap grid. All committed values (typed + button / scroll / drag) round to
+     * ``min + n·step``. Also the fallback increment for buttons when ``coarseStep``
+     * / ``fineStep`` aren't set.
+     */
     step?: number;
+    /** Button / scroll / drag increment (default click). Defaults to ``step``. */
+    coarseStep?: number;
+    /** Shift-modifier increment. Defaults to ``step`` (one grid cell). */
+    fineStep?: number;
     decimals?: number;
     placeholder?: string;
     numCharacters?: number;
@@ -102,9 +111,8 @@
     draggable?: boolean;
     prefix?: string;
     suffix?: string;
-    snapValue?: number | (() => number);
-    /** Fine step size (Shift modifier). Defaults to step / 10. */
-    fineStep?: number;
+    /** Double-click preset target. */
+    resetValue?: number | (() => number);
     disabled?: boolean;
     class?: string;
     throttle?: number;
@@ -116,6 +124,8 @@
     min = -Infinity,
     max = Infinity,
     step = 1,
+    coarseStep,
+    fineStep,
     decimals,
     placeholder = '–',
     numCharacters = 4,
@@ -126,8 +136,7 @@
     draggable = true,
     prefix,
     suffix,
-    snapValue,
-    fineStep,
+    resetValue,
     disabled = false,
     size = 'md',
     class: className = '',
@@ -138,7 +147,7 @@
   const styles = $derived(spinBoxVariants({ variant, size, appearance }));
 
   function activeStep(e?: { shiftKey?: boolean }): number {
-    return e?.shiftKey ? (fineStep ?? step / 10) : step;
+    return e?.shiftKey ? (fineStep ?? step) : (coarseStep ?? step);
   }
 
   const throttledDragCallback = useThrottle(
@@ -233,8 +242,8 @@
   }
 
   function handleDoubleClick() {
-    if (snapValue === undefined) return;
-    const resolved = typeof snapValue === 'function' ? snapValue() : snapValue;
+    if (resetValue === undefined) return;
+    const resolved = typeof resetValue === 'function' ? resetValue() : resetValue;
     value = resolved;
     if (onValueChange) {
       onValueChange(resolved);
@@ -313,7 +322,7 @@
       role="button"
       tabindex="-1"
       onmousedown={draggable ? handleMouseDown : undefined}
-      ondblclick={snapValue !== undefined ? handleDoubleClick : undefined}
+      ondblclick={resetValue !== undefined ? handleDoubleClick : undefined}
       class={cn(styles.prefix(), draggable && 'cursor-ew-resize')}>{prefix}</span
     >
   {/if}

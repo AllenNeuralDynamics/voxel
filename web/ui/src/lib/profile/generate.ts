@@ -1,9 +1,10 @@
-import type { Waveform } from '$lib/app';
+import type { DerivedWaveform, Waveform } from '$lib/app';
+import { isDerivedWaveform } from '$lib/app';
 
 export interface WaveformTraces {
   /** Time values in seconds. */
   time: number[];
-  /** Device ID → voltage values (same length as time). */
+  /** Channel name → voltage values (same length as time). */
   traces: Record<string, number[]>;
 }
 
@@ -19,27 +20,115 @@ function resolveFrequency(
   return windowSpan > 0 ? 1 / windowSpan : 0;
 }
 
+type PrimitiveWaveform = Exclude<Waveform, DerivedWaveform>;
+
+function isPrimitive(wf: Waveform): wf is PrimitiveWaveform {
+  return !isDerivedWaveform(wf);
+}
+
+/**
+ * Resolve a derived waveform's *bounding metadata* by walking through the source and
+ * applying voltage-range / window / rest-voltage transforms.
+ *
+ * This is used ONLY for axis bounds (``voltageRange``). It is **not** used to compute
+ * sample traces — derived shapes that would swap under mirror (e.g. a symmetric
+ * triangle around rest) would render identically to the source if we tried to do this
+ * at the waveform-definition level. Traces apply the operation at the sample-array
+ * level, matching the backend's ``_apply_derived``.
+ */
+function resolvedDerivedMetadata(op: DerivedWaveform, source: PrimitiveWaveform): PrimitiveWaveform {
+  const srcMin = source.voltage.min;
+  const srcMax = source.voltage.max;
+  const srcRest = source.rest_voltage ?? srcMin;
+
+  switch (op.operation) {
+    case 'mirror':
+      return {
+        ...source,
+        voltage: { min: 2 * srcRest - srcMax, max: 2 * srcRest - srcMin },
+        rest_voltage: srcRest
+      };
+    case 'scale': {
+      const f = op.factor;
+      return {
+        ...source,
+        voltage: {
+          min: srcRest + f * (srcMin - srcRest),
+          max: srcRest + f * (srcMax - srcRest)
+        },
+        rest_voltage: srcRest
+      };
+    }
+    case 'offset': {
+      const d = op.delta;
+      return {
+        ...source,
+        voltage: { min: srcMin + d, max: srcMax + d },
+        rest_voltage: srcRest + d
+      };
+    }
+    case 'shift':
+      // Shift doesn't change voltage range.
+      return { ...source };
+  }
+}
+
+/**
+ * Resolve every derived waveform to an effective primitive (for voltage-range / metadata).
+ * Missing sources or cycles silently drop the waveform from the output.
+ *
+ * Note: the resulting primitives are NOT suitable for sample-generation of mirror-type
+ * derived waveforms on symmetric voltage ranges. Use ``generateTraces`` for accurate sample data.
+ */
+export function resolveWaveforms(waveforms: Record<string, Waveform>): Record<string, PrimitiveWaveform> {
+  const out: Record<string, PrimitiveWaveform> = {};
+  const seen: Record<string, boolean> = {};
+
+  const visit = (name: string): PrimitiveWaveform | null => {
+    if (seen[name]) return out[name] ?? null;
+    seen[name] = true;
+    const wf = waveforms[name];
+    if (!wf) return null;
+    if (isPrimitive(wf)) {
+      out[name] = wf;
+      return wf;
+    }
+    const src = visit(wf.source);
+    if (!src) return null;
+    const resolved = resolvedDerivedMetadata(wf, src);
+    out[name] = resolved;
+    return resolved;
+  };
+
+  for (const name of Object.keys(waveforms)) visit(name);
+  return out;
+}
+
 /**
  * Generate voltage traces for all waveforms over a single frame.
  *
- * @param waveforms - Device ID → waveform definition.
+ * Primitives are sampled directly. Derived waveforms are computed by transforming the
+ * source's sample array (mirror negates around rest, scale around rest, offset adds,
+ * shift circular-rolls). This matches the backend's resolution exactly, so what the
+ * plot shows is what the hardware will output.
+ *
+ * @param waveforms - Channel name → waveform definition (may include Derived entries).
  * @param duration - Frame active duration in seconds.
  * @param restTime - Rest period after the active duration in seconds.
- * Sample count adapts to the highest frequency waveform to avoid aliasing.
  */
 export function generateTraces(
   waveforms: Record<string, Waveform>,
   duration: number,
   restTime: number
 ): WaveformTraces {
-  // Compute max cycles across all waveforms to size the sample count
+  // Primitives-only pass for sizing the sample count (derived don't define frequency).
   let maxCycles = 0;
   for (const wf of Object.values(waveforms)) {
+    if (!isPrimitive(wf)) continue;
     const span = (wf.window?.max ?? 1) - (wf.window?.min ?? 0);
     const freq = 'frequency' in wf && wf.frequency ? Number(wf.frequency) : 0;
     maxCycles = Math.max(maxCycles, freq * span);
   }
-  // At least 10 points per cycle, clamped to [2000, 20000]
   const numPoints = Math.max(2000, Math.min(20000, Math.ceil(maxCycles * 10)));
 
   const totalTime = duration + restTime;
@@ -47,21 +136,83 @@ export function generateTraces(
   const time = Array.from({ length: numPoints }, (_, i) => i * dt);
   const traces: Record<string, number[]> = {};
 
-  for (const [deviceId, waveform] of Object.entries(waveforms)) {
-    traces[deviceId] = time.map((t) => sampleWaveform(waveform, t, duration));
-  }
+  // Depth-bounded sample-array resolver. Derived entries look up their source's
+  // sampled trace recursively, then apply the per-op transform.
+  const compute = (name: string, stack: Set<string>): number[] | null => {
+    if (name in traces) return traces[name];
+    if (stack.has(name)) return null; // cycle
+    const wf = waveforms[name];
+    if (!wf) return null;
+    stack.add(name);
+    if (isPrimitive(wf)) {
+      const arr = time.map((t) => sampleWaveform(wf, t, duration));
+      traces[name] = arr;
+      stack.delete(name);
+      return arr;
+    }
+    // Derived: sample the source first, then transform.
+    const sourceArr = compute(wf.source, stack);
+    stack.delete(name);
+    if (!sourceArr) return null;
+    const sourcePrimitive = findPrimitiveRoot(waveforms, wf.source, new Set());
+    const sourceRest = sourcePrimitive?.rest_voltage ?? sourcePrimitive?.voltage?.min ?? 0;
+    const arr = applyDerivedOp(wf, sourceArr, sourceRest, time, duration);
+    traces[name] = arr;
+    return arr;
+  };
 
+  for (const name of Object.keys(waveforms)) compute(name, new Set());
   return { time, traces };
 }
 
+/** Walk a chain of derived waveforms back to the underlying primitive. ``null`` on missing / cycles. */
+function findPrimitiveRoot(
+  waveforms: Record<string, Waveform>,
+  name: string,
+  visited: Set<string>
+): PrimitiveWaveform | null {
+  if (visited.has(name)) return null;
+  visited.add(name);
+  const wf = waveforms[name];
+  if (!wf) return null;
+  if (isPrimitive(wf)) return wf;
+  return findPrimitiveRoot(waveforms, wf.source, visited);
+}
+
+/** Apply a derived operation to a source sample array. Matches ``_apply_derived`` in the backend. */
+function applyDerivedOp(
+  op: DerivedWaveform,
+  sourceArr: number[],
+  sourceRest: number,
+  time: number[],
+  duration: number
+): number[] {
+  switch (op.operation) {
+    case 'mirror':
+      return sourceArr.map((v) => 2 * sourceRest - v);
+    case 'scale':
+      return sourceArr.map((v) => sourceRest + op.factor * (v - sourceRest));
+    case 'offset':
+      return sourceArr.map((v) => v + op.delta);
+    case 'shift': {
+      const n = sourceArr.length;
+      if (n === 0) return [];
+      // Shift by a fraction of the full cycle. Positive fraction = delay.
+      const shift = Math.round(op.fraction * n) % n;
+      const out = new Array<number>(n);
+      for (let i = 0; i < n; i++) out[i] = sourceArr[(i - shift + n) % n];
+      // Keep signatures symmetric; unused in this op but accepted for future extensions.
+      void time;
+      void duration;
+      return out;
+    }
+  }
+}
+
 /**
- * Compute voltage for a single waveform at a given time.
- *
- * @param waveform - Waveform definition.
- * @param t - Time in seconds (0 to duration + restTime).
- * @param duration - Active frame duration in seconds.
+ * Compute voltage for a single primitive waveform at a given time.
  */
-export function sampleWaveform(waveform: Waveform, t: number, duration: number): number {
+export function sampleWaveform(waveform: PrimitiveWaveform, t: number, duration: number): number {
   if (!waveform?.voltage || !waveform?.window) return 0;
   const { min: vMin, max: vMax } = waveform.voltage;
   if (!isFinite(vMin) || !isFinite(vMax) || !isFinite(duration) || duration <= 0) return 0;
@@ -76,7 +227,6 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
   // Outside window → rest voltage
   if (norm < wMin || norm > wMax) return restV;
 
-  // Normalized time since window start (matches backend's time axis)
   const tNorm = norm - wMin;
   const windowSpan = wMax - wMin;
 
@@ -95,6 +245,7 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
       return tNorm / windowSpan < dc ? vMax : vMin;
     }
 
+    case 'triangle':
     case 'sawtooth': {
       const freq = resolveFrequency(waveform, windowSpan);
       const sym = waveform.symmetry ?? 1;
@@ -114,11 +265,9 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
     case 'multi_point': {
       const pts = waveform.points;
       if (!pts.length) return restV;
-      const normWindow = tNorm / windowSpan; // 0..1 within window
-      // Clamp to first/last point
+      const normWindow = tNorm / windowSpan;
       if (normWindow <= pts[0][0]) return vMin + (vMax - vMin) * pts[0][1];
       if (normWindow >= pts[pts.length - 1][0]) return vMin + (vMax - vMin) * pts[pts.length - 1][1];
-      // Linear interpolation between surrounding points
       for (let i = 0; i < pts.length - 1; i++) {
         if (normWindow >= pts[i][0] && normWindow <= pts[i + 1][0]) {
           const frac = (normWindow - pts[i][0]) / (pts[i + 1][0] - pts[i][0]);
@@ -137,14 +286,6 @@ export function sampleWaveform(waveform: Waveform, t: number, duration: number):
 
 /**
  * Compute "nice" round tick values for an axis given a data range.
- *
- * Uses the standard "nice numbers" algorithm (same as D3.js / matplotlib):
- * picks a step size that is 1, 2, or 5 × 10^n so tick labels are round numbers.
- *
- * @param dataMin - Minimum data value.
- * @param dataMax - Maximum data value.
- * @param maxTicks - Desired maximum number of ticks (default 6).
- * @returns Array of tick values and the padded axis range.
  */
 export function niceTicks(
   dataMin: number,
@@ -171,16 +312,16 @@ export function niceTicks(
 
   const ticks: number[] = [];
   for (let v = niceMin; v <= niceMax + step * 0.5; v += step) {
-    ticks.push(Math.round(v / step) * step); // avoid floating-point drift
+    ticks.push(Math.round(v / step) * step);
   }
 
   return { ticks, min: niceMin, max: niceMax };
 }
 
 /**
- * Compute the global voltage range across all waveforms.
+ * Compute the global voltage range across all primitive waveforms.
  */
-export function voltageRange(waveforms: Record<string, Waveform>): { min: number; max: number } {
+export function voltageRange(waveforms: Record<string, PrimitiveWaveform>): { min: number; max: number } {
   if (Object.keys(waveforms).length === 0) return { min: -0.1, max: 0.1 };
   let min = Infinity;
   let max = -Infinity;
@@ -193,7 +334,6 @@ export function voltageRange(waveforms: Record<string, Waveform>): { min: number
     if (rest > max) max = rest;
   }
   if (!isFinite(min) || !isFinite(max)) return { min: -0.1, max: 0.1 };
-  // Add a small margin
   const margin = (max - min) * 0.05 || 0.1;
   return { min: min - margin, max: max + margin };
 }

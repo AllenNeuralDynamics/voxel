@@ -6,7 +6,6 @@
 import type {
   StackOrder,
   RigConfig,
-  DaqConfig,
   StageConfig,
   DetectionPathConfig,
   IlluminationPathConfig,
@@ -133,7 +132,6 @@ export interface SessionConfig {
   // Slim rig topology (name, devices, nodes)
   rig: RigConfig;
   // Microscope-level config (from MicroscopeConfig base)
-  daq: DaqConfig;
   stage: StageConfig;
   detection: Record<string, DetectionPathConfig>;
   illumination: Record<string, IlluminationPathConfig>;

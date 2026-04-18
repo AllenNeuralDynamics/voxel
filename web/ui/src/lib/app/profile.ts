@@ -119,9 +119,11 @@ export function discoverProfileDevices(config: MicroscopeConfig, profileId: stri
     }
   }
 
-  // Waveform-only devices (in DAQ waveforms but not yet discovered)
-  for (const devId of Object.keys(profile.sync.waveforms)) {
-    if (!roles.has(devId)) roles.set(devId, 'waveform');
+  // Waveform-only devices (in any AO's waveforms but not yet discovered)
+  for (const aoSignals of Object.values(profile.sync)) {
+    for (const devId of Object.keys(aoSignals.waveforms)) {
+      if (!roles.has(devId)) roles.set(devId, 'waveform');
+    }
   }
 
   // Resolve trace colors by role
