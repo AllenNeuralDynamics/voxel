@@ -18,6 +18,10 @@ dependencies = [
 [tool.uv.sources]
 vxl = { workspace = true }
 
+[project.scripts]
+vxl = "vxl_web.cli:main"
+voxel = "vxl_web.cli:main"
+
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
