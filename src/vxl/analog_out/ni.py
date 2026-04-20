@@ -206,9 +206,7 @@ class NiAnalogOutput(AnalogOutput):
         self._ao_channel_order: list[str] = []  # port names in the order NI applied them
         self._reserved_counter: str | None = None
 
-        # Last-applied config + arrays (for rest-voltage settle on stop)
         self._applied: AOSignals | None = None
-        self._rest_voltages: dict[str, float] = {}
 
     # ---- introspection ----
 
@@ -218,13 +216,7 @@ class NiAnalogOutput(AnalogOutput):
 
     # ---- hardware primitives ----
 
-    def setup(
-        self,
-        sample_rate: Frequency,
-        clock_src: ClockSource,
-        duration: Time,
-        rest_time: Time,
-    ) -> None:
+    def setup(self, sample_rate: Frequency, clock_src: ClockSource, duration: Time, rest_time: Time) -> None:
         if self._ao_task is not None:
             raise RuntimeError("setup() called with live AO task; teardown() first")
 
@@ -253,24 +245,23 @@ class NiAnalogOutput(AnalogOutput):
             if isinstance(clock_src, InternalClock):
                 ctr_name, ctr_path = self._hub.reserve_counter(self.uid)
                 self._reserved_counter = ctr_name
-                co_task = self._create_internal_clock(ctr_path, frame_freq)
-                # AO start trigger = CO internal output terminal
-                trig_src = f"/{self._hub.device_name}/{ctr_name.upper()}InternalOutput"
-                ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
+                self._co_task = self._create_internal_clock(ctr_path, frame_freq)
+
+            self._ao_task = ao_task
+            if isinstance(clock_src, InternalClock) and self._reserved_counter is not None:
+                trig_src = f"/{self._hub.device_name}/{self._reserved_counter.upper()}InternalOutput"
+                self._ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
                     trigger_source=trig_src,
                     trigger_edge=Edge.RISING,
                 )
-                ao_task.triggers.start_trigger.retriggerable = True
-                self._co_task = co_task
+                self._ao_task.triggers.start_trigger.retriggerable = True
             elif isinstance(clock_src, ExternalClock):
                 pfi_path = self._resolve_trigger_pfi(clock_src.source)
-                ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
+                self._ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
                     trigger_source=pfi_path,
                     trigger_edge=Edge.RISING,
                 )
-                ao_task.triggers.start_trigger.retriggerable = True
-
-            self._ao_task = ao_task
+                self._ao_task.triggers.start_trigger.retriggerable = True
             self._applied = AOSignals(
                 sample_rate=sample_rate,
                 duration=duration,
@@ -314,20 +305,23 @@ class NiAnalogOutput(AnalogOutput):
         if self._ao_task is None:
             raise RuntimeError("write() called before setup()")
 
-        # Assemble arrays in the NI channel order (same order pins were added)
-        try:
-            ordered = [np.asarray(channel_arrays[name], dtype=np.float64) for name in self._ao_channel_order]
-        except KeyError as e:
-            raise ValueError(f"Missing waveform for channel {e}") from e
+        # Infer sample count from the first provided array
+        n_samples = next(iter(channel_arrays.values())).shape[-1] if channel_arrays else 0
+
+        # Assemble arrays in the NI channel order (same order pins were added).
+        # Ports with no waveform get a zero-filled array (0 V output).
+        ordered = [
+            np.asarray(channel_arrays[name], dtype=np.float64)
+            if name in channel_arrays
+            else np.zeros(n_samples, dtype=np.float64)
+            for name in self._ao_channel_order
+        ]
 
         data = np.vstack(ordered) if len(ordered) > 1 else ordered[0]
         self._ao_task.write(data)
 
-        # Cache rest voltages keyed by port name — used by stop() to settle outputs.
-        # Arrays are full-cycle rendered with rest_voltage fill outside the window,
-        # so the last sample is a safe "rest" value for primitives. For derived
-        # channels, the controller inherits the source's rest voltage into the array.
-        self._rest_voltages = {name: float(arr[-1]) for name, arr in channel_arrays.items()}
+    def close(self) -> None:
+        self.teardown()
 
     def teardown(self) -> None:
         if self._co_task is not None:
@@ -344,7 +338,6 @@ class NiAnalogOutput(AnalogOutput):
         self._ao_channel_order = []
         self._reserved_counter = None
         self._applied = None
-        self._rest_voltages = {}
 
     def start(self, repeat: int | None = None) -> None:
         if self._ao_task is None:
@@ -364,41 +357,6 @@ class NiAnalogOutput(AnalogOutput):
             self._co_task.stop()
         if self._ao_task is not None:
             self._ao_task.stop()
-            self._settle_to_rest()
-
-    def _settle_to_rest(self) -> None:
-        """Write a single sample per channel at rest voltage to leave outputs safe."""
-        if self._ao_task is None or not self._rest_voltages:
-            return
-        try:
-            # Switch to on-demand timing for a single-sample write
-            self._ao_task.timing.cfg_samp_clk_timing(
-                rate=1000.0,
-                sample_mode=NiAcqType.FINITE,
-                samps_per_chan=1,
-            )
-            rest = np.array(
-                [self._rest_voltages[name] for name in self._ao_channel_order],
-                dtype=np.float64,
-            )
-            if rest.size == 1:
-                self._ao_task.write(rest[0])
-            else:
-                self._ao_task.write(rest.reshape(-1, 1))
-            self._ao_task.start()
-            self._ao_task.wait_until_done(timeout=1.0)
-            self._ao_task.stop()
-
-            # Restore clocked timing so the next start() is immediate
-            if self._applied is not None:
-                num_samples = int(float(self._applied.sample_rate) * float(self._applied.duration))
-                self._ao_task.timing.cfg_samp_clk_timing(
-                    rate=float(self._applied.sample_rate),
-                    sample_mode=NiAcqType.FINITE,
-                    samps_per_chan=num_samples,
-                )
-        except DaqError:
-            self._log.exception("Failed to settle AO outputs to rest voltage")
 
     def can_hotswap(self, old: AOSignals, new: AOSignals) -> bool:
         """True iff only waveform values changed (no structural change)."""
