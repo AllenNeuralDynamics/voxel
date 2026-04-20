@@ -23,6 +23,7 @@
   import CamerasPanel from '$lib/device/CamerasPanel.svelte';
   import AuxDevicesPanel from '$lib/device/AuxDevicesPanel.svelte';
   import ProfileWaveforms from '$lib/profile/ProfileWaveforms.svelte';
+  import AnalogOutPanel from '$lib/profile/AnalogOutPanel.svelte';
   import { ProfileSelector } from '$lib/profile';
   import { PreviewCanvas } from '$lib/preview';
   import { GridCanvas } from '$lib/grid';
@@ -238,6 +239,20 @@
                     Select a profile to view waveforms
                   </div>
                 {/if}
+              {:else if bottomPanelTab === 'analog-out'}
+                {#if session.profiles.activeId}
+                  <AnalogOutPanel
+                    profiles={session.profiles}
+                    devices={session.devices}
+                    rigCfg={session.rig_cfg}
+                    acquiring={session.mode === 'acquiring'}
+                    class="h-full overflow-auto"
+                  />
+                {:else}
+                  <div class="flex h-full items-center justify-center text-sm text-fg-muted">
+                    Select a profile to view waveforms
+                  </div>
+                {/if}
               {:else if bottomPanelTab === 'logs'}
                 <div class="h-full overflow-hidden bg-card p-4 pt-2">
                   <LogViewer {logs} onClear={clearLogs} />
@@ -261,6 +276,9 @@
                 <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
                 <button onclick={() => selectTab('waveforms')} class={tabClass(bottomPanelTab === 'waveforms')}
                   >Waveforms</button
+                >
+                <button onclick={() => selectTab('analog-out')} class={tabClass(bottomPanelTab === 'analog-out')}
+                  >Analog Out</button
                 >
                 <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}
                   >Auxiliary</button
