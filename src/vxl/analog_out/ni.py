@@ -21,12 +21,12 @@ from nidaqmx.errors import DaqError
 from nidaqmx.system import System as NiSystem
 from nidaqmx.system.device import Device as NiDevice
 from nidaqmx.task import Task as NiTask
-from vxlib.quantity import Frequency, Time, VoltageRange
+from vxlib.quantity import VoltageRange
 
 from rigup import Device
 
 from .base import AnalogOutput
-from .models import AOSignals, ClockSource, ExternalClock, InternalClock
+from .models import AOSignals, ExternalClock, InternalClock
 
 
 class NiDaqModel(StrEnum):
@@ -206,7 +206,8 @@ class NiAnalogOutput(AnalogOutput):
         self._ao_channel_order: list[str] = []  # port names in the order NI applied them
         self._reserved_counter: str | None = None
 
-        self._applied: AOSignals | None = None
+        self._loaded: AOSignals | None = None
+        self._finite_repeat: int | None = None  # last start()'s repeat arg; None = continuous
 
     # ---- introspection ----
 
@@ -214,14 +215,30 @@ class NiAnalogOutput(AnalogOutput):
     def voltage_range(self) -> VoltageRange:
         return self._hub.voltage_range
 
+    @property
+    def loaded(self) -> AOSignals | None:
+        return self._loaded
+
     # ---- hardware primitives ----
 
-    def setup(self, sample_rate: Frequency, clock_src: ClockSource, duration: Time, rest_time: Time) -> None:
+    def setup(self, signals: AOSignals) -> None:
         if self._ao_task is not None:
             raise RuntimeError("setup() called with live AO task; teardown() first")
 
+        sample_rate = signals.sample_rate
+        clock_src = signals.clock_src
+        duration = signals.duration
+        rest_time = signals.rest_time
+
         num_samples = int(float(sample_rate) * float(duration))
         frame_freq = 1.0 / (float(duration) + float(rest_time))
+
+        # Resolve any requested out_pin up front so failure doesn't partially configure hardware
+        physical_out_pin: str | None = None
+        if isinstance(clock_src, InternalClock) and clock_src.out_pin is not None:
+            physical_out_pin = self._triggers.get(clock_src.out_pin)
+            if physical_out_pin is None:
+                raise ValueError(f"Unknown trigger '{clock_src.out_pin}' on {self.uid}")
 
         # Create AO task and add one voltage channel per port (preserve config order)
         ao_task = NiTask(f"{self.uid}_ao")
@@ -245,7 +262,13 @@ class NiAnalogOutput(AnalogOutput):
             if isinstance(clock_src, InternalClock):
                 ctr_name, ctr_path = self._hub.reserve_counter(self.uid)
                 self._reserved_counter = ctr_name
-                self._co_task = self._create_internal_clock(ctr_path, frame_freq)
+                # If an output pin is requested, resolve and reserve it on the hub
+                # so the CO pulse can be routed to a physical PFI (downstream devices
+                # can then ride the frame clock).
+                out_pfi_path: str | None = None
+                if physical_out_pin is not None:
+                    out_pfi_path = self._hub.assign_pin(self.uid, physical_out_pin)
+                self._co_task = self._create_internal_clock(ctr_path, frame_freq, out_pfi_path)
 
             self._ao_task = ao_task
             if isinstance(clock_src, InternalClock) and self._reserved_counter is not None:
@@ -262,13 +285,7 @@ class NiAnalogOutput(AnalogOutput):
                     trigger_edge=Edge.RISING,
                 )
                 self._ao_task.triggers.start_trigger.retriggerable = True
-            self._applied = AOSignals(
-                sample_rate=sample_rate,
-                duration=duration,
-                rest_time=rest_time,
-                clock_src=clock_src,
-                waveforms={},
-            )
+            self._loaded = signals
         except Exception:
             ao_task.close()
             if self._co_task is not None:
@@ -286,33 +303,40 @@ class NiAnalogOutput(AnalogOutput):
             raise ValueError(f"Unknown trigger '{logical_source}' on {self.uid}")
         return self._hub.get_pfi_path(pin)
 
-    def _create_internal_clock(self, counter_path: str, frequency_hz: float) -> NiTask:
-        """Create a CO task that emits a continuous pulse train at ``frequency_hz``."""
+    def _create_internal_clock(self, counter_path: str, frequency_hz: float, out_pfi_path: str | None = None) -> NiTask:
+        """Create a CO task that emits a continuous pulse train at ``frequency_hz``.
+
+        When ``out_pfi_path`` is provided, the CO pulse is routed to that physical
+        terminal via ``co_pulse_term``, making the frame clock visible to external
+        devices.
+        """
         co_task = NiTask(f"{self.uid}_clock")
         try:
-            co_task.co_channels.add_co_pulse_chan_freq(
+            chan = co_task.co_channels.add_co_pulse_chan_freq(
                 counter_path,
                 freq=frequency_hz,
                 duty_cycle=0.5,
             )
+            if out_pfi_path is not None:
+                chan.co_pulse_term = out_pfi_path
             co_task.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)
         except Exception:
             co_task.close()
             raise
         return co_task
 
-    def write(self, channel_arrays: Mapping[str, np.ndarray]) -> None:
+    def write(self, port_arrays: Mapping[str, np.ndarray]) -> None:
         if self._ao_task is None:
             raise RuntimeError("write() called before setup()")
 
         # Infer sample count from the first provided array
-        n_samples = next(iter(channel_arrays.values())).shape[-1] if channel_arrays else 0
+        n_samples = next(iter(port_arrays.values())).shape[-1] if port_arrays else 0
 
         # Assemble arrays in the NI channel order (same order pins were added).
         # Ports with no waveform get a zero-filled array (0 V output).
         ordered = [
-            np.asarray(channel_arrays[name], dtype=np.float64)
-            if name in channel_arrays
+            np.asarray(port_arrays[name], dtype=np.float64)
+            if name in port_arrays
             else np.zeros(n_samples, dtype=np.float64)
             for name in self._ao_channel_order
         ]
@@ -337,29 +361,74 @@ class NiAnalogOutput(AnalogOutput):
         self._hub.release_pins_for_owner(self.uid)
         self._ao_channel_order = []
         self._reserved_counter = None
-        self._applied = None
+        self._loaded = None
+        self._finite_repeat = None
 
     def start(self, repeat: int | None = None) -> None:
         if self._ao_task is None:
             raise RuntimeError("start() called before setup()")
-        # AO arms first (waits for trigger), CO starts generating the clock edges
+
+        if self._co_task is not None:
+            # Internal clock — reprogram CO timing just-in-time. CONTINUOUS pumps
+            # forever; FINITE stops after exactly `repeat` edges, which bounds the
+            # retriggered AO task to N cycles. NI allows cfg_implicit_timing on an
+            # idle task, so we flip between modes across start() calls without
+            # rebuilding the CO task.
+            if repeat is None:
+                self._co_task.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)
+            else:
+                self._co_task.timing.cfg_implicit_timing(
+                    sample_mode=NiAcqType.FINITE,
+                    samps_per_chan=repeat,
+                )
+        elif repeat is not None:
+            # External clock — no internal counter to bound the trigger count.
+            # Implementing this would require a counter-gate: reserve a second
+            # counter in FINITE edge-count mode on the trigger PFI and route its
+            # InternalOutput as the AO start trigger, so the AO only arms for the
+            # first N external edges. Not yet implemented.
+            raise NotImplementedError(
+                f"{self.uid}: external-clock repeat bounding is not supported yet. "
+                "Use repeat=None and count cycles externally, or switch to internal clock."
+            )
+
+        # AO arms first (waits for trigger), CO starts generating the clock edges.
         self._ao_task.start()
         if self._co_task is not None:
-            # Note: repeat=N is not yet plumbed to bound the CO pulse count. For
-            # internal-clock acquisitions that need exactly N frames, callers will
-            # monitor progress externally. A follow-up can reconfigure the CO task
-            # with finite timing when repeat is provided.
-            del repeat
             self._co_task.start()
+        self._finite_repeat = repeat
+
+    def wait_until_done(self, timeout_s: float) -> None:
+        if self._finite_repeat is None:
+            raise RuntimeError(
+                f"{self.uid}: wait_until_done requires a finite acquisition "
+                "(start was called with repeat=None or not at all)"
+            )
+        # The CO task is the finite one when repeat is set; retriggerable AO tasks
+        # never report done on their own.
+        if self._co_task is not None:
+            self._co_task.wait_until_done(timeout=timeout_s)
+        else:
+            # Defensive: should not reach here — external-clock + repeat raises in start().
+            raise RuntimeError(f"{self.uid}: no CO task to wait on (external-clock path)")
 
     def stop(self) -> None:
+        # NI AO tasks hold the last written sample on the DAC after stop. Waveforms are
+        # authored to end on their rest voltage, so the line settles there without an
+        # explicit final write.
+        # TODO: verify on real hardware that the DAC actually holds (rather than going
+        # high-Z or zero) after task.stop() — confirm with a scope on the pin post-stop.
         if self._co_task is not None:
             self._co_task.stop()
         if self._ao_task is not None:
             self._ao_task.stop()
+        self._finite_repeat = None
 
-    def can_hotswap(self, old: AOSignals, new: AOSignals) -> bool:
-        """True iff only waveform values changed (no structural change)."""
+    def can_hotswap(self, new: AOSignals) -> bool:
+        """True iff only waveform values changed against the currently loaded config."""
+        old = self._loaded
+        if old is None:
+            return False
         if old.sample_rate != new.sample_rate:
             return False
         if old.duration != new.duration:

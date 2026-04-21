@@ -276,18 +276,12 @@ class MicroscopeConfig(BaseModel):
         errors: list[str] = []
         for fw_id, positions in filter_positions.items():
             if len(positions) > 1:
-                details = ", ".join(
-                    [f"'{label}' by channel(s) {channels}" for label, channels in positions.items()]
-                )
-                errors.append(
-                    f"Profile '{profile_id}' has conflicting filter positions for '{fw_id}': {details}"
-                )
+                details = ", ".join([f"'{label}' by channel(s) {channels}" for label, channels in positions.items()])
+                errors.append(f"Profile '{profile_id}' has conflicting filter positions for '{fw_id}': {details}")
         return errors
 
     @staticmethod
-    def _validate_profile_sync_ao_devices(
-        profile_id: str, profile: "ProfileConfig", devices: set[str]
-    ) -> list[str]:
+    def _validate_profile_sync_ao_devices(profile_id: str, profile: "ProfileConfig", devices: set[str]) -> list[str]:
         return [
             f"Profile '{profile_id}' sync references AO device '{ao_uid}' which is not in rig.devices"
             for ao_uid in profile.sync
@@ -295,9 +289,7 @@ class MicroscopeConfig(BaseModel):
         ]
 
     @staticmethod
-    def _validate_profile_props_setup(
-        profile_id: str, profile: "ProfileConfig", settable: set[str]
-    ) -> list[str]:
+    def _validate_profile_props_setup(profile_id: str, profile: "ProfileConfig", settable: set[str]) -> list[str]:
         errors: list[str] = []
         for device_id in profile.props:
             if device_id not in settable:

@@ -10,12 +10,12 @@ import logging
 from collections.abc import Mapping
 
 import numpy as np
-from vxlib.quantity import Frequency, Time, Voltage, VoltageRange
+from vxlib.quantity import Voltage, VoltageRange
 
 from rigup import Device
 
 from .base import AnalogOutput, AOState
-from .models import AOSignals, ClockSource, ExternalClock, InternalClock
+from .models import AOSignals, ExternalClock, InternalClock
 
 
 class SimulatedDaqmx(Device):
@@ -132,9 +132,9 @@ class SimulatedAnalogOutput(AnalogOutput):
 
         # Driver-local state
         self._sim_state: AOState = "fresh"
-        self._applied: AOSignals | None = None  # last setup'd structural config (subset of AOSignals)
+        self._loaded: AOSignals | None = None
         self._last_arrays: dict[str, np.ndarray] = {}
-        self._last_repeat: int | None = None
+        self._finite_repeat: int | None = None  # last start()'s repeat arg; None = continuous
         self._clock_reserved: str | None = None  # path to reserved internal-clock counter
 
     # ---- introspection ----
@@ -142,6 +142,10 @@ class SimulatedAnalogOutput(AnalogOutput):
     @property
     def voltage_range(self) -> VoltageRange:
         return self._hub.voltage_range
+
+    @property
+    def loaded(self) -> AOSignals | None:
+        return self._loaded
 
     @property
     def last_arrays(self) -> dict[str, np.ndarray]:
@@ -153,15 +157,11 @@ class SimulatedAnalogOutput(AnalogOutput):
 
     # ---- hardware primitives ----
 
-    def setup(
-        self,
-        sample_rate: Frequency,
-        clock_src: ClockSource,
-        duration: Time,
-        rest_time: Time,
-    ) -> None:
+    def setup(self, signals: AOSignals) -> None:
         if self._sim_state != "fresh":
             raise RuntimeError(f"setup() requires fresh state, got {self._sim_state}")
+
+        clock_src = signals.clock_src
 
         # Reserve AO pins on the hub (fails if another engine already owns one)
         for port_name, physical_pin in self._ports.items():
@@ -171,6 +171,13 @@ class SimulatedAnalogOutput(AnalogOutput):
         # For internal clock, reserve a counter (simulating NI's CO-task requirement)
         if isinstance(clock_src, InternalClock):
             self._clock_reserved = self._hub.reserve_counter(self.uid)
+            # If out_pin is requested, validate it resolves and reserve it on the hub
+            # so multi-engine pin-contention tests exercise the real allocation path.
+            if clock_src.out_pin is not None:
+                physical = self._triggers.get(clock_src.out_pin)
+                if physical is None:
+                    raise ValueError(f"Unknown trigger '{clock_src.out_pin}' on {self.uid}")
+                self._hub.assign_pin(self.uid, physical)
         elif isinstance(clock_src, ExternalClock):
             # Validate the trigger name resolves on the hub
             pin = self._triggers.get(clock_src.source)
@@ -178,45 +185,48 @@ class SimulatedAnalogOutput(AnalogOutput):
                 raise ValueError(f"Unknown trigger '{clock_src.source}' on {self.uid}")
             self._hub.get_pfi_path(pin)
 
-        # Snapshot the structural config for can_hotswap comparisons
-        self._applied = AOSignals(
-            sample_rate=sample_rate,
-            duration=duration,
-            rest_time=rest_time,
-            clock_src=clock_src,
-            waveforms={},
-        )
+        self._loaded = signals
         self._sim_state = "ready"
 
-    def write(self, channel_arrays: Mapping[str, np.ndarray]) -> None:
+    def write(self, port_arrays: Mapping[str, np.ndarray]) -> None:
         if self._sim_state == "fresh":
             raise RuntimeError("write() requires setup() first")
-        for name in channel_arrays:
+        for name in port_arrays:
             if name not in self._ports:
                 raise ValueError(f"Unknown port '{name}' on {self.uid}")
-        self._last_arrays = {name: np.asarray(arr, dtype=np.float64) for name, arr in channel_arrays.items()}
+        self._last_arrays = {name: np.asarray(arr, dtype=np.float64) for name, arr in port_arrays.items()}
 
     def teardown(self) -> None:
         self._hub.release_pins_for_owner(self.uid)
-        self._applied = None
+        self._loaded = None
         self._last_arrays = {}
         self._clock_reserved = None
+        self._finite_repeat = None
         self._sim_state = "fresh"
 
     def start(self, repeat: int | None = None) -> None:
         if self._sim_state == "fresh":
             raise RuntimeError("start() requires setup()+write()")
-        self._last_repeat = repeat
+        self._finite_repeat = repeat
         self._sim_state = "running"
 
-    def stop(self) -> None:
-        # Settle to rest voltages — record a single-sample "array" per channel at rest
-        # to mirror the contract on the real driver.
-        self._last_repeat = None
-        self._sim_state = "ready" if self._applied is not None else "fresh"
+    def wait_until_done(self, timeout_s: float) -> None:
+        del timeout_s  # simulated tasks complete instantly
+        if self._finite_repeat is None:
+            raise RuntimeError(
+                f"{self.uid}: wait_until_done requires a finite acquisition "
+                "(start was called with repeat=None or not at all)"
+            )
 
-    def can_hotswap(self, old: AOSignals, new: AOSignals) -> bool:
-        """Structural equality check: same timing, clock, and waveform key set."""
+    def stop(self) -> None:
+        self._finite_repeat = None
+        self._sim_state = "ready" if self._loaded is not None else "fresh"
+
+    def can_hotswap(self, new: AOSignals) -> bool:
+        """Structural equality check against the currently loaded config."""
+        old = self._loaded
+        if old is None:
+            return False
         if old.sample_rate != new.sample_rate:
             return False
         if old.duration != new.duration:

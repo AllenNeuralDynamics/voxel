@@ -343,30 +343,41 @@ def _signals(**overrides) -> AOSignals:
 class TestSimulatedAnalogOutput:
     def test_setup_reserves_ports_on_hub(self):
         hub, ao = _make_ao()
-        ao.setup(10_000.0, InternalClock(), 0.01, 0.0)  # type: ignore[arg-type]
+        ao.setup(_signals())
         assert hub.assigned_pins["ao0"] == "ao_main"
         assert hub.assigned_pins["ao1"] == "ao_main"
 
     def test_setup_reserves_counter_for_internal_clock(self):
         hub, ao = _make_ao()
-        ao.setup(10_000.0, InternalClock(), 0.01, 0.0)  # type: ignore[arg-type]
+        ao.setup(_signals())
         counters = [p for p, owner in hub.assigned_pins.items() if p.startswith("ctr") and owner == "ao_main"]
         assert len(counters) == 1
 
     def test_setup_skips_counter_for_external_clock(self):
         hub, ao = _make_ao()
-        ao.setup(10_000.0, ExternalClock(source="camera"), 0.01, 0.0)  # type: ignore[arg-type]
+        ao.setup(_signals(clock_src=ExternalClock(source="camera")))
         counters = [p for p in hub.assigned_pins if p.startswith("ctr")]
         assert counters == []
 
     def test_setup_rejects_external_trigger_unknown(self):
         _, ao = _make_ao()
         with pytest.raises(ValueError, match="Unknown trigger"):
-            ao.setup(10_000.0, ExternalClock(source="no_such"), 0.01, 0.0)  # type: ignore[arg-type]
+            ao.setup(_signals(clock_src=ExternalClock(source="no_such")))
+
+    def test_internal_clock_out_pin_reserves_physical_pin(self):
+        hub, ao = _make_ao()
+        ao.setup(_signals(clock_src=InternalClock(out_pin="camera")))
+        # "camera" -> "pfi0" per _make_ao default triggers; pfi0 should be owned by ao
+        assert hub.assigned_pins.get("pfi0") == "ao_main"
+
+    def test_internal_clock_out_pin_unknown_raises(self):
+        _, ao = _make_ao()
+        with pytest.raises(ValueError, match="Unknown trigger"):
+            ao.setup(_signals(clock_src=InternalClock(out_pin="no_such")))
 
     def test_write_stores_arrays(self):
         _, ao = _make_ao()
-        ao.setup(10_000.0, InternalClock(), 0.01, 0.0)  # type: ignore[arg-type]
+        ao.setup(_signals())
         arrays = {"galvo": np.arange(100, dtype=np.float64), "etl": np.zeros(100)}
         ao.write(arrays)
         assert "galvo" in ao.last_arrays
@@ -374,20 +385,20 @@ class TestSimulatedAnalogOutput:
 
     def test_write_rejects_unknown_port(self):
         _, ao = _make_ao()
-        ao.setup(10_000.0, InternalClock(), 0.01, 0.0)  # type: ignore[arg-type]
+        ao.setup(_signals())
         with pytest.raises(ValueError, match="Unknown port"):
             ao.write({"galvo": np.zeros(10), "bogus": np.zeros(10)})
 
     def test_teardown_releases_pins_and_resets_state(self):
         hub, ao = _make_ao()
-        ao.setup(10_000.0, InternalClock(), 0.01, 0.0)  # type: ignore[arg-type]
+        ao.setup(_signals())
         ao.teardown()
         assert hub.assigned_pins == {}
         assert not ao.running
 
     def test_start_stop_toggles_running(self):
         _, ao = _make_ao()
-        ao.setup(10_000.0, InternalClock(), 0.01, 0.0)  # type: ignore[arg-type]
+        ao.setup(_signals())
         ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
         assert not ao.running
         ao.start()
@@ -395,40 +406,67 @@ class TestSimulatedAnalogOutput:
         ao.stop()
         assert not ao.running
 
+    def test_wait_until_done_raises_when_no_finite_repeat(self):
+        _, ao = _make_ao()
+        ao.setup(_signals())
+        ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
+        ao.start()  # continuous (repeat=None)
+        with pytest.raises(RuntimeError, match="finite acquisition"):
+            ao.wait_until_done(timeout_s=1.0)
+
+    def test_wait_until_done_succeeds_after_finite_start(self):
+        _, ao = _make_ao()
+        ao.setup(_signals())
+        ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
+        ao.start(repeat=5)
+        ao.wait_until_done(timeout_s=1.0)  # sim returns immediately
+
+    def test_stop_clears_finite_repeat(self):
+        _, ao = _make_ao()
+        ao.setup(_signals())
+        ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
+        ao.start(repeat=5)
+        ao.stop()
+        # After stop, _finite_repeat is cleared — wait_until_done would raise
+        ao.start(repeat=3)  # must explicitly re-arm
+        ao.stop()
+        with pytest.raises(RuntimeError, match="finite acquisition"):
+            ao.wait_until_done(timeout_s=1.0)
+
     def test_can_hotswap_true_when_only_waveforms_change(self):
         _, ao = _make_ao()
-        old = _signals()
+        ao._loaded = _signals()
         new = _signals(
             waveforms={
                 "galvo": validate_waveform(_triangle(vmin=-1, vmax=1)),
                 "etl": validate_waveform(_triangle(vmin=0, vmax=2)),
             }
         )
-        assert ao.can_hotswap(old, new) is True
+        assert ao.can_hotswap(new) is True
 
     def test_can_hotswap_false_when_sample_rate_changes(self):
         _, ao = _make_ao()
-        old = _signals()
-        new = _signals(sample_rate=20_000.0)
-        assert ao.can_hotswap(old, new) is False
+        ao._loaded = _signals()
+        assert ao.can_hotswap(_signals(sample_rate=20_000.0)) is False
 
     def test_can_hotswap_false_when_duration_changes(self):
         _, ao = _make_ao()
-        old = _signals()
-        new = _signals(duration=0.02)
-        assert ao.can_hotswap(old, new) is False
+        ao._loaded = _signals()
+        assert ao.can_hotswap(_signals(duration=0.02)) is False
 
     def test_can_hotswap_false_when_clock_changes(self):
         _, ao = _make_ao()
-        old = _signals()
-        new = _signals(clock_src=ExternalClock(source="camera"))
-        assert ao.can_hotswap(old, new) is False
+        ao._loaded = _signals()
+        assert ao.can_hotswap(_signals(clock_src=ExternalClock(source="camera"))) is False
 
     def test_can_hotswap_false_when_ports_change(self):
         _, ao = _make_ao()
-        old = _signals()
-        new = _signals(waveforms={"galvo": validate_waveform(_triangle())})
-        assert ao.can_hotswap(old, new) is False
+        ao._loaded = _signals()
+        assert ao.can_hotswap(_signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
+
+    def test_can_hotswap_false_when_nothing_loaded(self):
+        _, ao = _make_ao()
+        assert ao.can_hotswap(_signals()) is False
 
 
 # ==================== AnalogOutputController state machine ====================
@@ -439,14 +477,14 @@ class TestControllerStateMachine:
         _, ao = _make_ao()
         ctrl = AnalogOutputController(ao)
         assert ctrl.state == "fresh"
-        assert ctrl.loaded is None
+        assert ao.loaded is None
 
     async def test_load_fresh_to_ready(self):
         _, ao = _make_ao()
         ctrl = AnalogOutputController(ao)
         await ctrl.load(_signals())
         assert ctrl.state == "ready"
-        assert ctrl.loaded == _signals()
+        assert ao.loaded == _signals()
 
     async def test_start_requires_load(self):
         _, ao = _make_ao()
@@ -521,6 +559,32 @@ class TestControllerStateMachine:
         await ctrl.load(_signals(sample_rate=20_000.0))  # structural change
         assert ctrl.state == "running"
 
+    async def test_wait_until_done_requires_running_state(self):
+        _, ao = _make_ao()
+        ctrl = AnalogOutputController(ao)
+        # fresh
+        with pytest.raises(RuntimeError, match="running state"):
+            await ctrl.wait_until_done(timeout_s=1.0)
+        # ready
+        await ctrl.load(_signals())
+        with pytest.raises(RuntimeError, match="running state"):
+            await ctrl.wait_until_done(timeout_s=1.0)
+
+    async def test_wait_until_done_delegates_to_driver(self):
+        _, ao = _make_ao()
+        ctrl = AnalogOutputController(ao)
+        await ctrl.load(_signals())
+        await ctrl.start(repeat=3)
+        await ctrl.wait_until_done(timeout_s=1.0)  # sim returns immediately
+
+    async def test_wait_until_done_raises_on_continuous_start(self):
+        _, ao = _make_ao()
+        ctrl = AnalogOutputController(ao)
+        await ctrl.load(_signals())
+        await ctrl.start()  # continuous
+        with pytest.raises(RuntimeError, match="finite acquisition"):
+            await ctrl.wait_until_done(timeout_s=1.0)
+
     async def test_driver_exception_resets_state(self):
         _, ao = _make_ao()
         ctrl = AnalogOutputController(ao)
@@ -536,7 +600,7 @@ class TestControllerStateMachine:
         with pytest.raises(RuntimeError, match="simulated hw fault"):
             await ctrl.load(_signals(sample_rate=20_000.0))
         assert ctrl.state == "fresh"
-        assert ctrl.loaded is None
+        assert ao.loaded is None
         # Restore for further assertions
         ao.write = original_write  # type: ignore[method-assign]
 
@@ -573,6 +637,20 @@ class TestControllerValidation:
         ctrl = AnalogOutputController(ao)
         sig = _signals(clock_src=ExternalClock(source="camera"))
         await ctrl.load(sig)  # should not raise
+        assert ctrl.state == "ready"
+
+    async def test_rejects_unknown_internal_out_pin(self):
+        _, ao = _make_ao()
+        ctrl = AnalogOutputController(ao)
+        sig = _signals(clock_src=InternalClock(out_pin="no_such_line"))
+        with pytest.raises(ValueError, match="not in triggers"):
+            await ctrl.load(sig)
+
+    async def test_accepts_known_internal_out_pin(self):
+        _, ao = _make_ao()
+        ctrl = AnalogOutputController(ao)
+        sig = _signals(clock_src=InternalClock(out_pin="camera"))
+        await ctrl.load(sig)  # should not raise; pin reserved on hub
         assert ctrl.state == "ready"
 
     async def test_rejects_derived_cycle_through_validator(self):
@@ -613,12 +691,35 @@ class TestNiAnalogOutputHelpers:
         ao = NiAnalogOutput.__new__(NiAnalogOutput)
         ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
         ao._triggers = {}  # type: ignore[attr-defined]
-        old = _signals()
-        assert ao.can_hotswap(old, _signals()) is True
-        assert ao.can_hotswap(old, _signals(sample_rate=20_000.0)) is False
-        assert ao.can_hotswap(old, _signals(duration=0.02)) is False
-        assert ao.can_hotswap(old, _signals(rest_time=0.005)) is False
-        assert ao.can_hotswap(old, _signals(clock_src=ExternalClock(source="x"))) is False
-        assert (
-            ao.can_hotswap(old, _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
-        )  # port set differs
+        ao._loaded = _signals()  # type: ignore[attr-defined]
+        assert ao.can_hotswap(_signals()) is True
+        assert ao.can_hotswap(_signals(sample_rate=20_000.0)) is False
+        assert ao.can_hotswap(_signals(duration=0.02)) is False
+        assert ao.can_hotswap(_signals(rest_time=0.005)) is False
+        assert ao.can_hotswap(_signals(clock_src=ExternalClock(source="x"))) is False
+        assert ao.can_hotswap(_signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
+
+    def test_can_hotswap_false_when_nothing_loaded(self):
+        ao = NiAnalogOutput.__new__(NiAnalogOutput)
+        ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
+        ao._triggers = {}  # type: ignore[attr-defined]
+        ao._loaded = None  # type: ignore[attr-defined]
+        assert ao.can_hotswap(_signals()) is False
+
+    def test_start_external_clock_with_repeat_raises(self):
+        # External-clock + repeat requires counter-gate hardware support that
+        # isn't implemented yet — start() must raise cleanly rather than silently
+        # ignore the bound. No CO task = external clock.
+        ao = NiAnalogOutput.__new__(NiAnalogOutput)
+        ao.uid = "ao_test"  # type: ignore[attr-defined]
+        ao._ao_task = object()  # type: ignore[attr-defined]  # truthy: passes "is not None" check
+        ao._co_task = None  # type: ignore[attr-defined]
+        with pytest.raises(NotImplementedError, match="external-clock repeat"):
+            ao.start(repeat=10)
+
+    def test_wait_until_done_raises_without_finite_repeat(self):
+        ao = NiAnalogOutput.__new__(NiAnalogOutput)
+        ao.uid = "ao_test"  # type: ignore[attr-defined]
+        ao._finite_repeat = None  # type: ignore[attr-defined]
+        with pytest.raises(RuntimeError, match="finite acquisition"):
+            ao.wait_until_done(timeout_s=1.0)

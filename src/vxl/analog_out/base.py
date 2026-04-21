@@ -5,8 +5,8 @@ The driver exposes hardware primitives only: ``setup``, ``write``, ``teardown``,
 implement these.
 
 The controller is vendor-agnostic. It owns the state machine
-(``fresh`` / ``ready`` / ``running``), validation, cached signals, derived-waveform
-resolution, and the diff that picks between no-op / hot-swap / full rebuild.
+(``fresh`` / ``ready`` / ``running``), validation, and the diff that picks between
+no-op / hot-swap / full rebuild. Waveform resolution lives on ``AOSignals``.
 
 The handle is the typed async API used by application code.
 """
@@ -17,104 +17,15 @@ from collections.abc import Mapping
 from typing import ClassVar, Literal
 
 import numpy as np
-from vxlib.quantity import Frequency, QuantityRange, Time, VoltageRange
+from vxlib.quantity import QuantityRange, VoltageRange
 
 from rigup import Device, DeviceController, DeviceHandle, describe
 from vxl.device import DeviceType
 
-from .models import AOSignals, ClockSource, ExternalClock
-from .wave import BaseWaveform, DerivedMirror, DerivedOffset, DerivedScale, DerivedShift, Waveform
+from .models import AOSignals, DerivedResolutionError, ExternalClock, InternalClock
+from .wave import BaseWaveform
 
 AOState = Literal["fresh", "ready", "running"]
-
-
-# ==================== Derived waveform resolution ====================
-
-
-class DerivedResolutionError(ValueError):
-    """Raised when derived waveforms cannot be resolved (missing source / cycle)."""
-
-
-_DerivedAny = DerivedMirror | DerivedScale | DerivedOffset | DerivedShift
-
-
-def _topo_order(waveforms: Mapping[str, Waveform]) -> list[str]:
-    """Return waveform keys in dependency order (sources before derived).
-
-    Raises ``DerivedResolutionError`` on missing sources or cycles.
-    """
-    unresolved: list[str] = []
-    for name, wf in waveforms.items():
-        if isinstance(wf, _DerivedAny):
-            if wf.source not in waveforms:
-                raise DerivedResolutionError(f"Derived waveform '{name}' references unknown source '{wf.source}'")
-            unresolved.append(name)
-
-    order: list[str] = [name for name, wf in waveforms.items() if not isinstance(wf, _DerivedAny)]
-    resolved: set[str] = set(order)
-
-    while unresolved:
-        made_progress = False
-        still_unresolved: list[str] = []
-        for name in unresolved:
-            wf = waveforms[name]
-            if not isinstance(wf, _DerivedAny):
-                continue
-            if wf.source in resolved:
-                order.append(name)
-                resolved.add(name)
-                made_progress = True
-            else:
-                still_unresolved.append(name)
-        if not made_progress:
-            raise DerivedResolutionError(
-                f"Cycle or unresolvable source among derived waveforms: {sorted(still_unresolved)}"
-            )
-        unresolved = still_unresolved
-
-    return order
-
-
-def _apply_derived(op: Waveform, source_array: np.ndarray, source_rest: float) -> np.ndarray:
-    """Apply a derived operation to a resolved source sample array."""
-    if isinstance(op, DerivedMirror):
-        return 2.0 * source_rest - source_array
-    if isinstance(op, DerivedScale):
-        return source_rest + op.factor * (source_array - source_rest)
-    if isinstance(op, DerivedOffset):
-        return source_array + float(op.delta)
-    if isinstance(op, DerivedShift):
-        n = len(source_array)
-        shift_samples = round(op.fraction * n) % n if n else 0
-        return np.roll(source_array, shift_samples)
-    raise DerivedResolutionError(f"Unknown derived waveform: {type(op).__name__}")
-
-
-def resolve_to_arrays(waveforms: Mapping[str, Waveform], num_samples: int) -> dict[str, np.ndarray]:
-    """Produce one sample array per waveform key, resolving derived entries.
-
-    Derived waveforms inherit their source's ``rest_voltage``. Cycles or missing
-    sources raise ``DerivedResolutionError``.
-    """
-    order = _topo_order(waveforms)
-    arrays: dict[str, np.ndarray] = {}
-    rest_voltages: dict[str, float] = {}
-
-    for name in order:
-        wf = waveforms[name]
-        if isinstance(wf, BaseWaveform):
-            arrays[name] = wf.get_array(num_samples)
-            rest_voltages[name] = float(wf.rest_voltage)
-        elif isinstance(wf, _DerivedAny):
-            arrays[name] = _apply_derived(wf, arrays[wf.source], rest_voltages[wf.source])
-            rest_voltages[name] = rest_voltages[wf.source]
-        else:
-            raise DerivedResolutionError(f"Unknown waveform type for '{name}': {type(wf).__name__}")
-
-    return arrays
-
-
-# ==================== Controller ====================
 
 
 class AnalogOutputController(DeviceController["AnalogOutput"]):
@@ -126,13 +37,7 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
     def __init__(self, device: "AnalogOutput", stream_interval: float = 0.1) -> None:
         super().__init__(device, stream_interval=stream_interval)
         self._state: AOState = "fresh"
-        self._loaded: AOSignals | None = None
         self._log = logging.getLogger(f"{device.uid}.AnalogOutputController")
-
-    @property
-    @describe(label="Loaded Signals", desc="Currently loaded AO signals config", stream=True)
-    def loaded(self) -> AOSignals | None:
-        return self._loaded
 
     @property
     @describe(label="State", desc="AO engine state", stream=True)
@@ -149,41 +54,42 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
         """
         self._validate_signals(signals)
 
-        old = self._loaded
+        old = self.device.loaded
         if old is not None and old == signals:
             return
 
         was_running = self._state == "running"
 
+        async def _write_resolved() -> None:
+            """Sync helper: resolve waveforms to arrays and dispatch to driver.write."""
+            await self._run_sync(self.device.write, signals.arrays())
+
         try:
-            if old is not None and await self._run_sync(self.device.can_hotswap, old, signals):
+            if await self._run_sync(self.device.can_hotswap, signals):
                 self._log.debug("load: hot-swap path")
-                await self._run_sync(self._write_resolved, signals)
+                await _write_resolved()
             else:
                 self._log.debug("load: rebuild path (was_running=%s)", was_running)
                 if was_running:
                     await self._run_sync(self.device.stop)
                 if self._state != "fresh":
                     await self._run_sync(self.device.teardown)
-                await self._run_sync(
-                    self.device.setup,
-                    signals.sample_rate,
-                    signals.clock_src,
-                    signals.duration,
-                    signals.rest_time,
-                )
-                await self._run_sync(self._write_resolved, signals)
+                await self._run_sync(self.device.setup, signals)
+                await _write_resolved()
                 if was_running:
                     await self._run_sync(self.device.start)
                     self._state = "running"
                 else:
                     self._state = "ready"
         except Exception:
+            # Best-effort recovery: clear driver's loaded state so the next load()
+            # takes the full rebuild path from a known-clean slate.
+            try:
+                await self._run_sync(self.device.teardown)
+            except Exception:
+                self._log.warning("teardown during error recovery failed", exc_info=True)
             self._state = "fresh"
-            self._loaded = None
             raise
-
-        self._loaded = signals
 
     @describe(label="Start Output", desc="Begin AO output")
     async def start(self, repeat: int | None = None) -> None:
@@ -201,6 +107,12 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
         await self._run_sync(self.device.stop)
         self._state = "ready"
 
+    @describe(label="Wait Until Done", desc="Block until the current finite AO acquisition completes")
+    async def wait_until_done(self, timeout_s: float) -> None:
+        if self._state != "running":
+            raise RuntimeError(f"wait_until_done requires running state, got {self._state}")
+        await self._run_sync(self.device.wait_until_done, timeout_s)
+
     def _validate_signals(self, signals: AOSignals) -> None:
         port_names = set(self.device.ports.keys())
         waveform_names = set(signals.waveforms.keys())
@@ -208,13 +120,22 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
             raise ValueError(f"Waveform keys not declared as ports on {self.device.uid}: {sorted(unknown)}")
 
         try:
-            _topo_order(signals.waveforms)
+            signals.arrays()
         except DerivedResolutionError as e:
             raise ValueError(str(e)) from e
 
         if isinstance(signals.clock_src, ExternalClock) and signals.clock_src.source not in self.device.triggers:
             raise ValueError(
                 f"External clock source '{signals.clock_src.source}' not in "
+                f"triggers of {self.device.uid}: {sorted(self.device.triggers)}"
+            )
+        if (
+            isinstance(signals.clock_src, InternalClock)
+            and signals.clock_src.out_pin is not None
+            and signals.clock_src.out_pin not in self.device.triggers
+        ):
+            raise ValueError(
+                f"Internal clock out_pin '{signals.clock_src.out_pin}' not in "
                 f"triggers of {self.device.uid}: {sorted(self.device.triggers)}"
             )
 
@@ -225,14 +146,6 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
                     f"Waveform '{name}' voltage [{wf.voltage.min}, {wf.voltage.max}]V "
                     f"exceeds AO range [{ao_range.min}, {ao_range.max}]V"
                 )
-
-    def _write_resolved(self, signals: AOSignals) -> None:
-        """Sync helper: resolve waveforms to arrays and dispatch to driver.write."""
-        arrays = resolve_to_arrays(signals.waveforms, signals.num_samples)
-        self.device.write(arrays)
-
-
-# ==================== Device base (after controller, so __CONTROLLER_TYPE__ resolves) ====================
 
 
 class AnalogOutput(Device):
@@ -246,13 +159,7 @@ class AnalogOutput(Device):
     __DEVICE_TYPE__: ClassVar[str] = DeviceType.ANALOG_OUTPUT
     __CONTROLLER_TYPE__: ClassVar[type] = AnalogOutputController
 
-    def __init__(
-        self,
-        uid: str,
-        *,
-        ports: Mapping[str, str],
-        triggers: Mapping[str, str] | None = None,
-    ) -> None:
+    def __init__(self, uid: str, *, ports: Mapping[str, str], triggers: Mapping[str, str] | None = None) -> None:
         super().__init__(uid=uid)
         self._ports: dict[str, str] = dict(ports)
         self._triggers: dict[str, str] = dict(triggers) if triggers else {}
@@ -263,8 +170,15 @@ class AnalogOutput(Device):
         return dict(self._ports)
 
     @property
-    @describe(label="Triggers", desc="Logical name -> physical input pin")
+    @describe(label="Triggers", desc="Logical name -> physical PFI pin (bidirectional)")
     def triggers(self) -> dict[str, str]:
+        """Logical-name to physical-PFI mapping.
+
+        Used in either direction: ``ExternalClock.source`` looks up an input PFI the
+        AO task watches for edges; ``InternalClock.out_pin`` looks up an output PFI
+        the internal clock pulse is routed to. NI PFIs are bidirectional, so one map
+        covers both roles.
+        """
         return dict(self._triggers)
 
     @property
@@ -272,9 +186,24 @@ class AnalogOutput(Device):
     @describe(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     def voltage_range(self) -> VoltageRange: ...
 
+    @property
     @abstractmethod
-    def setup(self, sample_rate: Frequency, clock_src: ClockSource, duration: Time, rest_time: Time) -> None:
-        """Reserve hardware resources and configure timing / triggering.
+    @describe(label="Loaded Signals", desc="Currently loaded AO signals config", stream=True)
+    def loaded(self) -> AOSignals | None:
+        """Last-applied ``AOSignals`` — authoritative view of what's on hardware.
+
+        Populated by ``setup`` on success, cleared by ``teardown``. Drivers own
+        their own storage; the controller's hot-swap decision and UI streaming both
+        read through this property.
+        """
+
+    @abstractmethod
+    def setup(self, signals: AOSignals) -> None:
+        """Reserve hardware resources and configure timing / triggering from ``signals``.
+
+        Drivers consume the structural fields (``sample_rate``, ``clock_src``,
+        ``duration``, ``rest_time``) to program the card and must record ``signals``
+        as their ``loaded`` state on success.
 
         For internal clock, the driver generates a repeating edge at
         ``1 / (duration + rest_time)`` internally (vendor-specific: NI uses a CO task).
@@ -283,8 +212,8 @@ class AnalogOutput(Device):
         """
 
     @abstractmethod
-    def write(self, channel_arrays: Mapping[str, np.ndarray]) -> None:
-        """Write per-channel sample arrays to the AO buffer.
+    def write(self, port_arrays: Mapping[str, np.ndarray]) -> None:
+        """Write per-port sample arrays to the AO buffer.
 
         Arrays are keyed by logical port name (matches ``self._ports``). Each array has
         length equal to ``num_samples = sample_rate * duration``.
@@ -300,22 +229,34 @@ class AnalogOutput(Device):
 
     @abstractmethod
     def stop(self) -> None:
-        """Halt output. Must settle outputs to the per-channel rest voltages.
+        """Halt output.
 
-        If no ``write`` has happened yet, this is effectively a no-op beyond halting
-        any running task.
+        Drivers are expected to leave outputs at the per-port rest voltage. Hardware
+        that holds the last written sample after stop (e.g. NI-DAQmx) satisfies this
+        implicitly when waveforms end on their rest sample; other drivers may need an
+        explicit final write. If no ``write`` has happened yet, this is effectively a
+        no-op beyond halting any running task.
         """
 
     @abstractmethod
-    def can_hotswap(self, old: AOSignals, new: AOSignals) -> bool:
-        """True when ``driver.write(resolved(new))`` alone is a safe transition from ``old``.
+    def can_hotswap(self, new: AOSignals) -> bool:
+        """True when ``driver.write(resolved(new))`` alone can transition to ``new``.
 
-        Returning False forces the controller to stop → teardown → setup → write → restart.
-        Vendors are free to be conservative; callers do not rely on aggressive hot-swap.
+        The driver compares ``new`` against its own last-applied config (tracked
+        internally from ``setup`` / ``write``). Returning False — including when no
+        prior config has been applied — forces the controller to
+        stop → teardown → setup → write → restart. Vendors are free to be conservative;
+        callers do not rely on aggressive hot-swap.
         """
 
+    @abstractmethod
+    def wait_until_done(self, timeout_s: float) -> None:
+        """Block until the current finite acquisition completes.
 
-# ==================== Handle ====================
+        Only valid after ``start(repeat=N)`` — raises ``RuntimeError`` if no finite
+        acquisition is active (e.g. ``start(repeat=None)`` was used, or the task was
+        never started). Raises on timeout via the underlying driver.
+        """
 
 
 class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
@@ -335,6 +276,9 @@ class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
 
     async def stop(self) -> None:
         await self.call("stop")
+
+    async def wait_until_done(self, timeout_s: float) -> None:
+        await self.call("wait_until_done", timeout_s)
 
     async def get_loaded(self) -> AOSignals | None:
         val = await self.get_prop_value("loaded")
@@ -367,6 +311,4 @@ __all__ = [
     "AnalogOutput",
     "AnalogOutputController",
     "AnalogOutputHandle",
-    "DerivedResolutionError",
-    "resolve_to_arrays",
 ]

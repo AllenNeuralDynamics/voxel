@@ -16,10 +16,8 @@ from .base import (
     AnalogOutputController,
     AnalogOutputHandle,
     AOState,
-    DerivedResolutionError,
-    resolve_to_arrays,
 )
-from .models import AOSignals, ClockSource, ExternalClock, InternalClock
+from .models import AOSignals, ClockSource, DerivedResolutionError, ExternalClock, InternalClock, resolve_to_arrays
 from .ni import NiAnalogOutput, NiDaqmx
 from .simulated import SimulatedAnalogOutput, SimulatedDaqmx
 

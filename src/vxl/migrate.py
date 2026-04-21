@@ -121,8 +121,7 @@ def _migrate_profiles_to_sync_dict(data: dict[str, Any], legacy_ao_uid: str | No
         stack_only = flat.get("stack_only")
         if stack_only:
             log.warning(
-                "Profile '%s': dropping deprecated `stack_only` %s. "
-                "Configure a dedicated stack profile instead.",
+                "Profile '%s': dropping deprecated `stack_only` %s. Configure a dedicated stack profile instead.",
                 profile_id,
                 stack_only,
             )
