@@ -132,7 +132,6 @@ class SimulatedAnalogOutput(AnalogOutput):
 
         # Driver-local state
         self._sim_state: AOState = "fresh"
-        self._loaded: AOSignals | None = None
         self._last_arrays: dict[str, np.ndarray] = {}
         self._finite_repeat: int | None = None  # last start()'s repeat arg; None = continuous
         self._clock_reserved: str | None = None  # path to reserved internal-clock counter
@@ -142,10 +141,6 @@ class SimulatedAnalogOutput(AnalogOutput):
     @property
     def voltage_range(self) -> VoltageRange:
         return self._hub.voltage_range
-
-    @property
-    def loaded(self) -> AOSignals | None:
-        return self._loaded
 
     @property
     def last_arrays(self) -> dict[str, np.ndarray]:
@@ -185,7 +180,6 @@ class SimulatedAnalogOutput(AnalogOutput):
                 raise ValueError(f"Unknown trigger '{clock_src.source}' on {self.uid}")
             self._hub.get_pfi_path(pin)
 
-        self._loaded = signals
         self._sim_state = "ready"
 
     def write(self, port_arrays: Mapping[str, np.ndarray]) -> None:
@@ -198,7 +192,6 @@ class SimulatedAnalogOutput(AnalogOutput):
 
     def teardown(self) -> None:
         self._hub.release_pins_for_owner(self.uid)
-        self._loaded = None
         self._last_arrays = {}
         self._clock_reserved = None
         self._finite_repeat = None
@@ -220,11 +213,11 @@ class SimulatedAnalogOutput(AnalogOutput):
 
     def stop(self) -> None:
         self._finite_repeat = None
-        self._sim_state = "ready" if self._loaded is not None else "fresh"
+        if self._sim_state == "running":
+            self._sim_state = "ready"
 
-    def can_hotswap(self, new: AOSignals) -> bool:
-        """Structural equality check against the currently loaded config."""
-        old = self._loaded
+    def can_hotswap(self, old: AOSignals | None, new: AOSignals) -> bool:
+        """Structural equality check against the previously loaded config."""
         if old is None:
             return False
         if old.sample_rate != new.sample_rate:

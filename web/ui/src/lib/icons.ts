@@ -40,6 +40,7 @@ export { default as Restore } from '~icons/mdi/restore';
 export { default as RocketLaunchOutline } from '~icons/mdi/rocket-launch-outline';
 export { default as TrashCanOutline } from '~icons/mdi/trash-can-outline';
 export { default as TuneVertical } from '~icons/mdi/tune-vertical';
+export { default as WaveformsIcon } from '~icons/mdi/sine-wave';
 export { default as ViewDashboardOutline } from '~icons/mdi/view-dashboard-outline';
 
 // Phosphor Icons

@@ -28,13 +28,23 @@
     return '';
   }
 
-  function formatPrimitive(value: unknown): string {
+  function formatNumber(value: number): string {
+    if (Number.isInteger(value)) return String(value);
+    return value.toPrecision(6).replace(/\.?0+$/, '');
+  }
+
+  function primitiveClass(value: unknown): string {
+    if (value === null || value === undefined) return 'text-fg-faint';
+    if (typeof value === 'boolean') return value ? 'text-success' : 'text-danger';
+    if (typeof value === 'number') return 'text-warning';
+    if (typeof value === 'string') return 'text-info';
+    return 'text-fg';
+  }
+
+  function primitiveText(value: unknown): string {
     if (value === null || value === undefined) return 'null';
     if (typeof value === 'boolean') return value ? 'true' : 'false';
-    if (typeof value === 'number') {
-      if (Number.isInteger(value)) return String(value);
-      return value.toPrecision(6).replace(/\.?0+$/, '');
-    }
+    if (typeof value === 'number') return formatNumber(value);
     return String(value);
   }
 </script>
@@ -48,14 +58,14 @@
             class="flex cursor-pointer list-none items-center gap-1.5 px-1 py-0.5 select-none [&::-webkit-details-marker]:hidden"
           >
             <svg
-              class="h-3 w-3 shrink-0 text-fg-muted/60 transition-transform [[open]>&]:rotate-90"
+              class="h-3 w-3 shrink-0 text-fg-muted/60 transition-transform [[open]>summary>&]:rotate-90"
               viewBox="0 0 16 16"
               fill="currentColor"
             >
               <path d="M6 4l4 4-4 4z" />
             </svg>
-            <span class="text-fg">{key}</span>
-            <span class="text-fg-muted/60">{summary(value)}</span>
+            <span class="text-fg-muted">{key}:</span>
+            <span class="text-xs text-fg-faint">{summary(value)}</span>
           </summary>
           <div class="ml-2 border-l border-border/50 pl-2">
             <JsonView data={value} depth={depth + 1} {expandDepth} />
@@ -63,12 +73,12 @@
         </details>
       {:else}
         <div class="flex items-baseline gap-2 px-1 py-0.5">
-          <span class="shrink-0 text-fg-muted">{key}</span>
-          <span class="font-mono text-fg">{formatPrimitive(value)}</span>
+          <span class="shrink-0 text-fg-muted">{key}:</span>
+          <span class="font-mono {primitiveClass(value)}">{primitiveText(value)}</span>
         </div>
       {/if}
     {/each}
   </div>
 {:else if data != null && typeof data !== 'object'}
-  <span class="font-mono text-sm text-fg">{formatPrimitive(data)}</span>
+  <span class="font-mono text-sm {primitiveClass(data)}">{primitiveText(data)}</span>
 {/if}

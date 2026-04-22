@@ -9,28 +9,26 @@
   import { resolve } from '$app/paths';
   import type { Pathname } from '$app/types';
   import { Pane, PaneGroup } from 'paneforge';
+  import { DropdownMenu } from 'bits-ui';
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
   import { App } from '$lib/app';
   import { Toaster, Dialog, Button } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { cn, createPaneMinSize } from '$lib/utils';
   import { setSessionContext, setLogsContext } from '$lib/context';
-  import { Power, Crosshair, Layers, Play } from '$lib/icons';
+  import { Crosshair, Layers, Play, WaveformsIcon, Microscope } from '$lib/icons';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
   import StartButton from '$lib/StartButton.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
   import LasersPanel from '$lib/device/LasersPanel.svelte';
   import CamerasPanel from '$lib/device/CamerasPanel.svelte';
   import AuxDevicesPanel from '$lib/device/AuxDevicesPanel.svelte';
-  import ProfileWaveforms from '$lib/profile/ProfileWaveforms.svelte';
-  import AnalogOutPanel from '$lib/profile/AnalogOutPanel.svelte';
   import { ProfileSelector } from '$lib/profile';
   import { PreviewCanvas } from '$lib/preview';
   import { GridCanvas } from '$lib/grid';
   import { AppearanceSheet, themes } from '$lib/themes';
   import LaunchScreen from './LaunchScreen.svelte';
   import ConnectionSplash from './ConnectionSplash.svelte';
-  import { lastInstrumentPath } from './(instrument)/+layout.svelte';
 
   let { children } = $props();
 
@@ -91,9 +89,11 @@
   const leftPaneMin = createPaneMinSize(() => shellRef, 850, 50);
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
-    { id: '/scout', label: 'Scout', icon: Crosshair },
+    { id: '/', label: 'Inspect', icon: Microscope },
+    { id: '/tune', label: 'Tune', icon: WaveformsIcon },
+    { id: '/snap', label: 'Snap', icon: Crosshair },
     { id: '/plan', label: 'Plan', icon: Layers },
-    { id: '/acquisition', label: 'Acquire', icon: Play }
+    { id: '/acquire', label: 'Acquire', icon: Play }
   ];
 
   const viewId = $derived<Pathname>(
@@ -101,17 +101,9 @@
       (page.url.pathname === '/debug' ? '/debug' : '/')
   );
 
-  function gotoView(id: Pathname) {
-    goto(resolve(id), { keepFocus: true, noScroll: true });
-  }
-
   function selectView(id: Pathname) {
     if (viewId === id) return;
-    if (id === '/' && lastInstrumentPath && lastInstrumentPath !== '/') {
-      goto(resolve(lastInstrumentPath as '/'), { keepFocus: true, noScroll: true });
-    } else {
-      gotoView(id);
-    }
+    goto(resolve(id), { keepFocus: true, noScroll: true });
   }
 
   // --- Bottom pane (setup) ---
@@ -157,42 +149,62 @@
     <PaneGroup direction="horizontal" autoSaveId="shell">
       <Pane defaultSize={60} minSize={leftPaneMin.value} maxSize={70}>
         <div class="grid h-full grid-rows-[auto_1fr_auto]">
-          <!-- Header: logo + nav tabs + StartButton -->
-          <header
-            class="grid grid-cols-[auto_auto_1fr] items-center gap-x-4 border-b border-border bg-elevated px-4 py-4"
-          >
-            <button
-              onclick={() => selectView('/')}
-              title="Instrument"
-              class="flex cursor-pointer items-center text-fg-muted transition-colors hover:text-fg"
-            >
-              <VoxelLogo class="size-ui-sm" />
-            </button>
+          <header class="flex items-center justify-between border-b border-border bg-elevated px-4 py-4">
+            <div class="flex items-center gap-x-4">
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger
+                  class="flex cursor-pointer items-center text-fg-muted transition-colors hover:text-fg"
+                  title="App menu"
+                >
+                  <VoxelLogo class="size-ui-sm" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    align="start"
+                    sideOffset={8}
+                    class="z-50 min-w-56 rounded-md border border-border bg-elevated p-1 text-sm shadow-lg outline-none"
+                  >
+                    <DropdownMenu.Item
+                      class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-highlighted:bg-element-hover"
+                      onclick={() => (themes.pickerOpen = true)}
+                    >
+                      Change Appearance
+                      <span class="ml-8 text-xs text-fg-faint">⌘K T</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator class="my-1 h-px bg-border" />
+                    <DropdownMenu.Item
+                      class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
+                      disabled={!session}
+                      onclick={() => (closeDialogOpen = true)}
+                    >
+                      Close Session…
+                      <span class="ml-8 text-xs text-fg-faint">⌘K Q</span>
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
 
-            <div class="col-start-3 flex items-center justify-end gap-4">
-              <StartButton {session} />
+              <nav class="grid w-fit grid-cols-5 gap-x-2">
+                {#each navTabs as tab (tab.id)}
+                  {@const Icon = tab.icon}
+                  <button
+                    onclick={() => selectView(tab.id)}
+                    class={cn(
+                      'flex h-ui-md cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 text-sm transition-colors',
+                      viewId === tab.id
+                        ? 'border-fg-faint/60 bg-element-selected text-fg'
+                        : 'border-transparent text-fg-muted hover:bg-element-hover hover:text-fg'
+                    )}
+                    title={tab.label}
+                  >
+                    <Icon width="12" height="12" class="shrink-0" />
+                    {tab.label}
+                  </button>
+                {/each}
+              </nav>
             </div>
 
-            <nav
-              class="col-start-2 row-start-1 grid w-fit grid-cols-3 divide-x divide-fg-faint/60 overflow-hidden rounded-lg border border-fg-faint/60"
-            >
-              {#each navTabs as tab (tab.id)}
-                {@const Icon = tab.icon}
-                <button
-                  onclick={() => selectView(tab.id)}
-                  class={cn(
-                    'flex h-ui-md items-center justify-center gap-2 px-4 text-sm transition-colors',
-                    viewId === tab.id
-                      ? 'bg-element-selected text-fg'
-                      : 'text-fg-muted hover:bg-element-hover hover:text-fg'
-                  )}
-                  title={tab.label}
-                >
-                  <Icon width="12" height="12" class="shrink-0" />
-                  {tab.label}
-                </button>
-              {/each}
-            </nav>
+            <StartButton {session} />
           </header>
 
           <!-- Middle: children + bottom pane -->
@@ -224,22 +236,7 @@
                 <CamerasPanel {session} class="h-full overflow-auto p-4" />
               {:else if bottomPanelTab === 'lasers'}
                 <LasersPanel {session} />
-              {:else if bottomPanelTab === 'waveforms'}
-                {#if session.profiles.activeId}
-                  <ProfileWaveforms
-                    profiles={session.profiles}
-                    devices={session.devices}
-                    rigCfg={session.rig_cfg}
-                    acquiring={session.mode === 'acquiring'}
-                    profileId={session.profiles.activeId}
-                    class="h-full overflow-auto"
-                  />
-                {:else}
-                  <div class="flex h-full items-center justify-center text-sm text-fg-muted">
-                    Select a profile to view waveforms
-                  </div>
-                {/if}
-              {:else if bottomPanelTab === 'analog-out'}
+                <!-- {:else if bottomPanelTab === 'analog-out'}
                 {#if session.profiles.activeId}
                   <AnalogOutPanel
                     profiles={session.profiles}
@@ -252,7 +249,7 @@
                   <div class="flex h-full items-center justify-center text-sm text-fg-muted">
                     Select a profile to view waveforms
                   </div>
-                {/if}
+                {/if} -->
               {:else if bottomPanelTab === 'logs'}
                 <div class="h-full overflow-hidden bg-card p-4 pt-2">
                   <LogViewer {logs} onClear={clearLogs} />
@@ -264,22 +261,11 @@
           <!-- Footer: close session + tab strip + profile selector -->
           <footer class="flex h-ui-xl items-center justify-between gap-20 border-t border-border px-4 py-2">
             <div class="flex items-center gap-2">
-              <button
-                type="button"
-                title="Close Session (⌘K Q)"
-                onclick={() => (closeDialogOpen = true)}
-                class="-ml-2 flex h-ui-xs items-center justify-center rounded px-2 text-fg-muted transition-colors hover:bg-danger/10 hover:text-danger"
-              >
-                <Power width="16" height="16" />
-              </button>
               <div class="flex divide-x divide-border rounded border border-border">
                 <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
-                <button onclick={() => selectTab('waveforms')} class={tabClass(bottomPanelTab === 'waveforms')}
-                  >Waveforms</button
-                >
-                <button onclick={() => selectTab('analog-out')} class={tabClass(bottomPanelTab === 'analog-out')}
+                <!-- <button onclick={() => selectTab('analog-out')} class={tabClass(bottomPanelTab === 'analog-out')}
                   >Analog Out</button
-                >
+                > -->
                 <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}
                   >Auxiliary</button
                 >

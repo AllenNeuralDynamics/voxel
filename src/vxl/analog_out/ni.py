@@ -206,7 +206,6 @@ class NiAnalogOutput(AnalogOutput):
         self._ao_channel_order: list[str] = []  # port names in the order NI applied them
         self._reserved_counter: str | None = None
 
-        self._loaded: AOSignals | None = None
         self._finite_repeat: int | None = None  # last start()'s repeat arg; None = continuous
 
     # ---- introspection ----
@@ -214,10 +213,6 @@ class NiAnalogOutput(AnalogOutput):
     @property
     def voltage_range(self) -> VoltageRange:
         return self._hub.voltage_range
-
-    @property
-    def loaded(self) -> AOSignals | None:
-        return self._loaded
 
     # ---- hardware primitives ----
 
@@ -285,7 +280,6 @@ class NiAnalogOutput(AnalogOutput):
                     trigger_edge=Edge.RISING,
                 )
                 self._ao_task.triggers.start_trigger.retriggerable = True
-            self._loaded = signals
         except Exception:
             ao_task.close()
             if self._co_task is not None:
@@ -361,7 +355,6 @@ class NiAnalogOutput(AnalogOutput):
         self._hub.release_pins_for_owner(self.uid)
         self._ao_channel_order = []
         self._reserved_counter = None
-        self._loaded = None
         self._finite_repeat = None
 
     def start(self, repeat: int | None = None) -> None:
@@ -424,9 +417,8 @@ class NiAnalogOutput(AnalogOutput):
             self._ao_task.stop()
         self._finite_repeat = None
 
-    def can_hotswap(self, new: AOSignals) -> bool:
-        """True iff only waveform values changed against the currently loaded config."""
-        old = self._loaded
+    def can_hotswap(self, old: AOSignals | None, new: AOSignals) -> bool:
+        """True iff only waveform values changed against the previously loaded config."""
         if old is None:
             return False
         if old.sample_rate != new.sample_rate:

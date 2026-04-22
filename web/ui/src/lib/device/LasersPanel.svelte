@@ -299,16 +299,8 @@
   </div>
 {:else if selectedLaser}
   {@const groupLabelClasses = 'text-xs leading-ui-sm font-medium text-fg-muted/60 uppercase'}
-  <div class={cn('grid h-full grid-cols-[minmax(350px,2fr)_minmax(350px,5fr)]', className)}>
-    <!-- Left: detail panel -->
-    {@render detailPanel(
-      selectedLaser,
-      session.profiles.activeId
-        ? (getChannelFor(session.rig_cfg, session.profiles.activeId, selectedLaser.deviceId)?.config ?? null)
-        : null
-    )}
-
-    <!-- Right: laser list -->
+  <div class={cn('grid h-full grid-cols-[minmax(350px,5fr)_minmax(350px,2fr)]', className)}>
+    <!-- Left: laser list -->
     <div class="flex flex-col overflow-auto px-4">
       <div class="flex h-full flex-col gap-3">
         {#if profileLasers.length > 0}
@@ -374,5 +366,12 @@
         {/if}
       </div>
     </div>
+    <!-- Right: detail panel -->
+    {@render detailPanel(
+      selectedLaser,
+      session.profiles.activeId
+        ? (getChannelFor(session.rig_cfg, session.profiles.activeId, selectedLaser.deviceId)?.config ?? null)
+        : null
+    )}
   </div>
 {/if}

@@ -435,38 +435,34 @@ class TestSimulatedAnalogOutput:
 
     def test_can_hotswap_true_when_only_waveforms_change(self):
         _, ao = _make_ao()
-        ao._loaded = _signals()
+        old = _signals()
         new = _signals(
             waveforms={
                 "galvo": validate_waveform(_triangle(vmin=-1, vmax=1)),
                 "etl": validate_waveform(_triangle(vmin=0, vmax=2)),
             }
         )
-        assert ao.can_hotswap(new) is True
+        assert ao.can_hotswap(old, new) is True
 
     def test_can_hotswap_false_when_sample_rate_changes(self):
         _, ao = _make_ao()
-        ao._loaded = _signals()
-        assert ao.can_hotswap(_signals(sample_rate=20_000.0)) is False
+        assert ao.can_hotswap(_signals(), _signals(sample_rate=20_000.0)) is False
 
     def test_can_hotswap_false_when_duration_changes(self):
         _, ao = _make_ao()
-        ao._loaded = _signals()
-        assert ao.can_hotswap(_signals(duration=0.02)) is False
+        assert ao.can_hotswap(_signals(), _signals(duration=0.02)) is False
 
     def test_can_hotswap_false_when_clock_changes(self):
         _, ao = _make_ao()
-        ao._loaded = _signals()
-        assert ao.can_hotswap(_signals(clock_src=ExternalClock(source="camera"))) is False
+        assert ao.can_hotswap(_signals(), _signals(clock_src=ExternalClock(source="camera"))) is False
 
     def test_can_hotswap_false_when_ports_change(self):
         _, ao = _make_ao()
-        ao._loaded = _signals()
-        assert ao.can_hotswap(_signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
+        assert ao.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
 
     def test_can_hotswap_false_when_nothing_loaded(self):
         _, ao = _make_ao()
-        assert ao.can_hotswap(_signals()) is False
+        assert ao.can_hotswap(None, _signals()) is False
 
 
 # ==================== AnalogOutputController state machine ====================
@@ -477,14 +473,14 @@ class TestControllerStateMachine:
         _, ao = _make_ao()
         ctrl = AnalogOutputController(ao)
         assert ctrl.state == "fresh"
-        assert ao.loaded is None
+        assert ctrl.loaded is None
 
     async def test_load_fresh_to_ready(self):
         _, ao = _make_ao()
         ctrl = AnalogOutputController(ao)
         await ctrl.load(_signals())
         assert ctrl.state == "ready"
-        assert ao.loaded == _signals()
+        assert ctrl.loaded == _signals()
 
     async def test_start_requires_load(self):
         _, ao = _make_ao()
@@ -541,23 +537,29 @@ class TestControllerStateMachine:
         await ctrl.load(_signals())
         await ctrl.start()
         # Change only waveform values — structural fields unchanged
-        await ctrl.load(
-            _signals(
-                waveforms={
-                    "galvo": validate_waveform(_triangle(vmin=-1, vmax=1)),
-                    "etl": validate_waveform(_triangle(vmin=0, vmax=2)),
-                }
-            )
+        new_signals = _signals(
+            waveforms={
+                "galvo": validate_waveform(_triangle(vmin=-1, vmax=1)),
+                "etl": validate_waveform(_triangle(vmin=0, vmax=2)),
+            }
         )
+        await ctrl.load(new_signals)
         assert ctrl.state == "running"
+        # Regression: the hot-swap path must update the streamed ``loaded`` property.
+        # Previously this was silently missed because only ``setup()`` (rebuild path)
+        # wrote to ``_loaded`` — hot-swap used ``write()`` only, leaving the streamed
+        # value stale and causing UI reverts.
+        assert ctrl.loaded == new_signals
 
     async def test_rebuild_preserves_running(self):
         _, ao = _make_ao()
         ctrl = AnalogOutputController(ao)
         await ctrl.load(_signals())
         await ctrl.start()
-        await ctrl.load(_signals(sample_rate=20_000.0))  # structural change
+        new_signals = _signals(sample_rate=20_000.0)  # structural change forces rebuild
+        await ctrl.load(new_signals)
         assert ctrl.state == "running"
+        assert ctrl.loaded == new_signals
 
     async def test_wait_until_done_requires_running_state(self):
         _, ao = _make_ao()
@@ -600,7 +602,7 @@ class TestControllerStateMachine:
         with pytest.raises(RuntimeError, match="simulated hw fault"):
             await ctrl.load(_signals(sample_rate=20_000.0))
         assert ctrl.state == "fresh"
-        assert ao.loaded is None
+        assert ctrl.loaded is None
         # Restore for further assertions
         ao.write = original_write  # type: ignore[method-assign]
 
@@ -691,20 +693,19 @@ class TestNiAnalogOutputHelpers:
         ao = NiAnalogOutput.__new__(NiAnalogOutput)
         ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
         ao._triggers = {}  # type: ignore[attr-defined]
-        ao._loaded = _signals()  # type: ignore[attr-defined]
-        assert ao.can_hotswap(_signals()) is True
-        assert ao.can_hotswap(_signals(sample_rate=20_000.0)) is False
-        assert ao.can_hotswap(_signals(duration=0.02)) is False
-        assert ao.can_hotswap(_signals(rest_time=0.005)) is False
-        assert ao.can_hotswap(_signals(clock_src=ExternalClock(source="x"))) is False
-        assert ao.can_hotswap(_signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
+        old = _signals()
+        assert ao.can_hotswap(old, _signals()) is True
+        assert ao.can_hotswap(old, _signals(sample_rate=20_000.0)) is False
+        assert ao.can_hotswap(old, _signals(duration=0.02)) is False
+        assert ao.can_hotswap(old, _signals(rest_time=0.005)) is False
+        assert ao.can_hotswap(old, _signals(clock_src=ExternalClock(source="x"))) is False
+        assert ao.can_hotswap(old, _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
 
     def test_can_hotswap_false_when_nothing_loaded(self):
         ao = NiAnalogOutput.__new__(NiAnalogOutput)
         ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
         ao._triggers = {}  # type: ignore[attr-defined]
-        ao._loaded = None  # type: ignore[attr-defined]
-        assert ao.can_hotswap(_signals()) is False
+        assert ao.can_hotswap(None, _signals()) is False
 
     def test_start_external_clock_with_repeat_raises(self):
         # External-clock + repeat requires counter-gate hardware support that

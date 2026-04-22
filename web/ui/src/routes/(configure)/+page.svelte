@@ -1,13 +1,10 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
-  import { Collapsible } from 'bits-ui';
   import { toast } from 'svelte-sonner';
   import { getSessionContext } from '$lib/context';
   import { sanitizeString, wavelengthToColor } from '$lib/utils';
-  import { JsonView } from '$lib/kit';
-  import { ChevronRight, Clipboard } from '$lib/icons';
+  import { Clipboard } from '$lib/icons';
   import { ProfileCard } from '$lib/profile';
-  import { DeviceCard } from '$lib/device';
 
   const session = getSessionContext();
   const config = $derived(session.rig_cfg);
@@ -116,18 +113,8 @@
   </dl>
 </section>
 
-<!-- Profile cards -->
-<section class="px-4 pt-4">
-  <h3 class={headingClass}>Profiles</h3>
-  <div class={cardGroupClass}>
-    {#each Object.keys(config.profiles) as profileId (profileId)}
-      <ProfileCard {session} {profileId} />
-    {/each}
-  </div>
-</section>
-
 <!-- Channel cards -->
-<section class="px-4 pt-6">
+<section class="px-4 pt-4">
   <h3 class={headingClass}>Channels</h3>
   <div class={cardGroupClass}>
     {#each Object.entries(config.channels) as [channelId, channel] (channelId)}
@@ -164,31 +151,14 @@
   </div>
 </section>
 
-<!-- Device cards -->
+<!-- Profile cards -->
 <section class="px-4 pt-6">
-  <h3 class={headingClass}>Devices</h3>
+  <h3 class={headingClass}>Profiles</h3>
   <div class={cardGroupClass}>
-    {#each [...session.devices.devices.keys()] as deviceId (deviceId)}
-      <DeviceCard {session} {deviceId} />
+    {#each Object.keys(config.profiles) as profileId (profileId)}
+      <ProfileCard {session} {profileId} />
     {/each}
   </div>
-</section>
-
-<!-- Config tree -->
-<section class="px-4 pt-6 pb-4">
-  <Collapsible.Root>
-    <Collapsible.Trigger class="group flex w-full cursor-pointer items-center justify-between text-left">
-      <h3 class={headingClass}>Configuration</h3>
-      <ChevronRight
-        width="12"
-        height="12"
-        class="shrink-0 text-fg-muted transition-transform group-data-[state=open]:rotate-90"
-      />
-    </Collapsible.Trigger>
-    <Collapsible.Content>
-      <JsonView data={config} expandDepth={2} />
-    </Collapsible.Content>
-  </Collapsible.Root>
 </section>
 
 <!-- Debug link -->

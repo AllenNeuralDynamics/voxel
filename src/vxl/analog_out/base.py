@@ -31,18 +31,35 @@ AOState = Literal["fresh", "ready", "running"]
 class AnalogOutputController(DeviceController["AnalogOutput"]):
     """Orchestrates an ``AnalogOutput`` driver: state machine + validation + diffing.
 
-    External API: ``load(signals)``, ``start(repeat)``, ``stop()``, streamed ``loaded`` property.
+    Owns the streamed ``loaded`` property — it's set from inside ``load()`` on both
+    hot-swap and rebuild paths, cleared on teardown / error recovery. Drivers are
+    stateless w.r.t. the loaded config; ``can_hotswap`` receives ``old`` and ``new``
+    as explicit args.
+
+    External API: ``load(signals)``, ``start(repeat)``, ``stop()``, streamed
+    ``state`` + ``loaded`` properties.
     """
 
     def __init__(self, device: "AnalogOutput", stream_interval: float = 0.1) -> None:
         super().__init__(device, stream_interval=stream_interval)
         self._state: AOState = "fresh"
+        self._loaded: AOSignals | None = None
         self._log = logging.getLogger(f"{device.uid}.AnalogOutputController")
 
     @property
     @describe(label="State", desc="AO engine state", stream=True)
     def state(self) -> AOState:
         return self._state
+
+    @property
+    @describe(label="Loaded Signals", desc="Currently loaded AO signals config", stream=True)
+    def loaded(self) -> AOSignals | None:
+        """Last-applied ``AOSignals`` — authoritative view of what's on hardware.
+
+        Updated inside ``load()`` on every successful transition (hot-swap or rebuild),
+        cleared on teardown / error recovery. Drivers do not track this themselves.
+        """
+        return self._loaded
 
     @describe(label="Load Signals", desc="Apply a signal configuration to the AO hardware")
     async def load(self, signals: AOSignals) -> None:
@@ -54,7 +71,7 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
         """
         self._validate_signals(signals)
 
-        old = self.device.loaded
+        old = self._loaded
         if old is not None and old == signals:
             return
 
@@ -65,7 +82,7 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
             await self._run_sync(self.device.write, signals.arrays())
 
         try:
-            if await self._run_sync(self.device.can_hotswap, signals):
+            if await self._run_sync(self.device.can_hotswap, old, signals):
                 self._log.debug("load: hot-swap path")
                 await _write_resolved()
             else:
@@ -81,6 +98,7 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
                     self._state = "running"
                 else:
                     self._state = "ready"
+            self._loaded = signals
         except Exception:
             # Best-effort recovery: clear driver's loaded state so the next load()
             # takes the full rebuild path from a known-clean slate.
@@ -89,6 +107,7 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
             except Exception:
                 self._log.warning("teardown during error recovery failed", exc_info=True)
             self._state = "fresh"
+            self._loaded = None
             raise
 
     @describe(label="Start Output", desc="Begin AO output")
@@ -186,24 +205,14 @@ class AnalogOutput(Device):
     @describe(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     def voltage_range(self) -> VoltageRange: ...
 
-    @property
-    @abstractmethod
-    @describe(label="Loaded Signals", desc="Currently loaded AO signals config", stream=True)
-    def loaded(self) -> AOSignals | None:
-        """Last-applied ``AOSignals`` — authoritative view of what's on hardware.
-
-        Populated by ``setup`` on success, cleared by ``teardown``. Drivers own
-        their own storage; the controller's hot-swap decision and UI streaming both
-        read through this property.
-        """
-
     @abstractmethod
     def setup(self, signals: AOSignals) -> None:
         """Reserve hardware resources and configure timing / triggering from ``signals``.
 
         Drivers consume the structural fields (``sample_rate``, ``clock_src``,
-        ``duration``, ``rest_time``) to program the card and must record ``signals``
-        as their ``loaded`` state on success.
+        ``duration``, ``rest_time``) to program the card. The controller tracks the
+        currently-loaded signals itself (via the streamed ``loaded`` property on
+        ``AnalogOutputController``); drivers do not need to remember them.
 
         For internal clock, the driver generates a repeating edge at
         ``1 / (duration + rest_time)`` internally (vendor-specific: NI uses a CO task).
@@ -239,14 +248,14 @@ class AnalogOutput(Device):
         """
 
     @abstractmethod
-    def can_hotswap(self, new: AOSignals) -> bool:
-        """True when ``driver.write(resolved(new))`` alone can transition to ``new``.
+    def can_hotswap(self, old: AOSignals | None, new: AOSignals) -> bool:
+        """True when ``driver.write(resolved(new))`` alone can transition from
+        ``old`` to ``new``.
 
-        The driver compares ``new`` against its own last-applied config (tracked
-        internally from ``setup`` / ``write``). Returning False — including when no
-        prior config has been applied — forces the controller to
-        stop → teardown → setup → write → restart. Vendors are free to be conservative;
-        callers do not rely on aggressive hot-swap.
+        Pure diff — both configs are explicit args, no hidden driver state. ``old=None``
+        means "no prior config loaded"; always return False so the controller takes the
+        full stop → teardown → setup → write → restart path. Vendors are free to be
+        conservative; callers do not rely on aggressive hot-swap.
         """
 
     @abstractmethod

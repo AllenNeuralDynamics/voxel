@@ -70,7 +70,7 @@
 </script>
 
 <div class="flex h-full flex-col overflow-hidden">
-  <PaneGroup direction="horizontal" autoSaveId="acquire.content" class="min-h-0 flex-1 overflow-hidden">
+  <PaneGroup direction="horizontal" autoSaveId="acquire" class="min-h-0 flex-1 overflow-hidden">
     <!-- Left column: storage + metadata -->
     <Pane defaultSize={50} minSize={40} maxSize={60}>
       <div class="@container flex h-full flex-col overflow-hidden bg-canvas">
