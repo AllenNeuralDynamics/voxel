@@ -251,7 +251,8 @@ class NiAnalogOutput(AnalogOutput):
                 samps_per_chan=num_samples,
             )
 
-            # Enable regeneration so hot-swap writes are legal while the task runs
+            # Enable regeneration so retriggered finite playback re-reads the same
+            # buffer on each trigger cycle.
             ao_task.out_stream.regen_mode = RegenerationMode.ALLOW_REGENERATION
 
             if isinstance(clock_src, InternalClock):
@@ -418,18 +419,18 @@ class NiAnalogOutput(AnalogOutput):
         self._finite_repeat = None
 
     def can_hotswap(self, old: AOSignals | None, new: AOSignals) -> bool:
-        """True iff only waveform values changed against the previously loaded config."""
-        if old is None:
-            return False
-        if old.sample_rate != new.sample_rate:
-            return False
-        if old.duration != new.duration:
-            return False
-        if old.rest_time != new.rest_time:
-            return False
-        if old.clock_src != new.clock_src:
-            return False
-        return set(old.waveforms.keys()) == set(new.waveforms.keys())
+        """Always False for this driver — every load takes the full rebuild path.
+
+        NI-DAQmx rejects writes to a task whose buffer was auto-sized by a prior
+        write and then never started (error -200547). Supporting hot-swap cleanly
+        would require either explicitly arming the AO task on first write and
+        tracking its state across stop/start cycles, or bounded buffer rewrites
+        gated on whether the task is running. Neither is worth the complexity
+        while mid-run seamless updates aren't a product requirement; rebuilding
+        on every load is a few ms of extra work and causes a brief output gap if
+        the task was running.
+        """
+        return False
 
 
 __all__ = [
