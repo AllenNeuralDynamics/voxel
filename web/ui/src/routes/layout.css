@@ -163,25 +163,29 @@
     @apply bg-background text-foreground;
   }
 
-  /* Thin scrollbars — webkit (Chrome, Safari, Edge) */
-  ::-webkit-scrollbar {
-    width: 2px !important;
-    height: 2px !important;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent !important;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb) !important;
-    border-radius: 3px !important;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover) !important;
+  @supports selector(::-webkit-scrollbar) {
+    /* Thin scrollbars — webkit (Chrome, Safari, Edge) */
+    ::-webkit-scrollbar {
+      width: 4px !important;
+      height: 4px !important;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent !important;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb) !important;
+      border-radius: 8px !important;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--scrollbar-thumb-hover) !important;
+    }
   }
 
-  /* Thin scrollbars — Firefox */
-  * {
-    scrollbar-width: thin !important;
-    scrollbar-color: var(--scrollbar-thumb) transparent !important;
+  @supports (scrollbar-width: auto) {
+    /* Thin scrollbars — Firefox */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
   }
 }
