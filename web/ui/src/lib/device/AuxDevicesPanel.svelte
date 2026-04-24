@@ -8,20 +8,16 @@
 
   interface Props {
     session: Session;
-    profileId?: string;
     class?: string;
   }
 
-  let { session, profileId, class: className }: Props = $props();
-
-  const effectiveProfileId = $derived(profileId ?? session.profiles.activeId);
-  const profile = $derived(effectiveProfileId ? session.rig_cfg.profiles[effectiveProfileId] : undefined);
-  const isActiveProfile = $derived(!!effectiveProfileId && effectiveProfileId === session.profiles.activeId);
+  let { session, class: className }: Props = $props();
 
   /** Aux devices: everything except cameras, lasers, and filter wheels. */
   const devices = $derived.by(() => {
-    if (!effectiveProfileId) return [];
-    return discoverProfileDevices(session.rig_cfg, effectiveProfileId).filter(
+    const activeId = session.profiles.activeId;
+    if (!activeId) return [];
+    return discoverProfileDevices(session.rig_cfg, activeId).filter(
       (d) => d.role !== 'camera' && d.role !== 'laser' && !isFilterWheel(session.rig_cfg, d.id)
     );
   });
@@ -30,7 +26,7 @@
   let setupOpen: Record<string, boolean> = $state({});
 </script>
 
-{#if !profile}
+{#if !session.profiles.activeId}
   <div class={cn('flex items-center justify-center py-12', className)}>
     <p class="text-sm text-fg-muted">No active profile</p>
   </div>
@@ -42,8 +38,9 @@
   <div class={cn('grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] items-start gap-3', className)}>
     {#each devices as { id: deviceId } (deviceId)}
       {@const device = session.devices.getDevice(deviceId)}
-      {@const savedProps = profile.props?.[deviceId]}
-      {@const setupCommands = profile.setup?.[deviceId]}
+      {@const savedProps = session.profiles.savedProps(deviceId)}
+      {@const setupCommands =
+        session.profiles.activeId ? session.rig_cfg.profiles[session.profiles.activeId]?.setup?.[deviceId] : undefined}
 
       {@const rwProperties = (() => {
         const props = device?.interface?.properties;
@@ -56,25 +53,23 @@
       {@const hasContent = rwProperties.length > 0 || (savedProps != null && Object.keys(savedProps).length > 0)}
 
       {#if hasContent}
-        <div class="rounded-lg border border-border bg-panel p-3">
+        <div class="rounded-lg border border-border bg-canvas p-3">
           <!-- Card header -->
           <div class="mb-2.5 flex items-center justify-between">
             <span class="text-sm font-medium text-fg">{sanitizeString(deviceId)}</span>
-            {#if isActiveProfile}
-              <div class="flex items-center gap-1">
-                {#if session.devices.hasDivergence(deviceId, savedProps)}
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onclick={() => session.profiles.applyProps([deviceId])}
-                    title="Revert to saved"
-                  >
-                    <Restore width="14" height="14" />
-                  </Button>
-                {/if}
-                <Button variant="outline" size="xs" onclick={() => session.profiles.saveProps(deviceId)}>Save</Button>
-              </div>
-            {/if}
+            <div class="flex items-center gap-1">
+              {#if session.devices.hasDivergence(deviceId, savedProps)}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onclick={() => session.profiles.applyProps([deviceId])}
+                  title="Revert to saved"
+                >
+                  <Restore width="14" height="14" />
+                </Button>
+              {/if}
+              <Button variant="outline" size="xs" onclick={() => session.profiles.saveProps(deviceId)}>Save</Button>
+            </div>
           </div>
 
           <!-- Properties -->
@@ -104,7 +99,7 @@
                   </div>
 
                   <div class="w-40 shrink-0">
-                    {#if isActiveProfile && model}
+                    {#if model}
                       {#if model.options && model.options.length > 0}
                         <Select
                           size="xs"
@@ -149,7 +144,7 @@
                       <span
                         class="block text-right font-mono text-xs {current != null ? 'text-fg' : 'text-fg-muted/40'}"
                       >
-                        {formatPropValue(current, model?.step)}
+                        {formatPropValue(current)}
                       </span>
                     {/if}
                   </div>

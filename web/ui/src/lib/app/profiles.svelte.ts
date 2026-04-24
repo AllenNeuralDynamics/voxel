@@ -86,6 +86,18 @@ export class ProfilesManager {
   available = $derived.by<Record<string, ProfileConfig>>(() => this.#getCfg().profiles ?? {});
   availableIds = $derived.by<string[]>(() => Object.keys(this.available));
 
+  /** Saved props for a device in the active profile, or undefined if none. */
+  savedProps(deviceId: string): Record<string, unknown> | undefined {
+    const id = this.activeId;
+    return id ? this.#getCfg().profiles?.[id]?.props?.[deviceId] : undefined;
+  }
+
+  /** Saved ROI for a camera in the active profile, or undefined if none. */
+  savedRoi(cameraId: string) {
+    const id = this.activeId;
+    return id ? this.#getCfg().profiles?.[id]?.rois?.[cameraId] : undefined;
+  }
+
   #deriveActiveChannels(): Record<string, ChannelConfig> {
     const id = this.activeId;
     if (!id) return {};

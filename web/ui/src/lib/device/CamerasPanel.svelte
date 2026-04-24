@@ -17,24 +17,21 @@
 
   interface Props {
     session: Session;
-    profileId?: string;
     class?: string;
   }
 
-  let { session, profileId, class: className }: Props = $props();
+  let { session, class: className }: Props = $props();
 
   let roiExpanded = $state(true);
-
-  // ── Profile context ──
-
-  const effectiveProfileId = $derived(profileId ?? session.profiles.activeId);
-  const profile = $derived(effectiveProfileId ? session.rig_cfg.profiles[effectiveProfileId] : undefined);
 
   // ── Camera lists ──
 
   const profileCameraIds = $derived.by(() => {
-    if (!profile) return new Set<string>();
-    return new Set(profile.channels.map((chId) => session.rig_cfg.channels[chId]?.detection).filter(Boolean));
+    const ids = new SvelteSet<string>();
+    for (const ch of Object.values(session.profiles.activeChannels)) {
+      if (ch.detection) ids.add(ch.detection);
+    }
+    return ids;
   });
   const cameras = $derived(Object.values(session.cameras).filter((c) => profileCameraIds.has(c.deviceId)));
   const otherCameras = $derived(Object.values(session.cameras).filter((c) => !profileCameraIds.has(c.deviceId)));
@@ -44,7 +41,7 @@
   let linkedIds = new SvelteSet<string>();
 
   watch(
-    () => effectiveProfileId,
+    () => session.profiles.activeId,
     () => {
       linkedIds.clear();
       for (const c of cameras) linkedIds.add(c.deviceId);
@@ -219,13 +216,14 @@
         roiGrid: camera.roiGrid
       }
     : getConstraints(camera)}
+  {@const activeProfileId = session.profiles.activeId}
   {@const channelLabel =
-    !isOther && effectiveProfileId
-      ? (getChannelFor(session.rig_cfg, effectiveProfileId, camera.deviceId)?.config?.label ??
-        getChannelFor(session.rig_cfg, effectiveProfileId, camera.deviceId)?.id)
+    !isOther && activeProfileId
+      ? (getChannelFor(session.rig_cfg, activeProfileId, camera.deviceId)?.config?.label ??
+        getChannelFor(session.rig_cfg, activeProfileId, camera.deviceId)?.id)
       : undefined}
-  {@const savedProps = isOther ? undefined : profile?.props?.[camera.deviceId]}
-  {@const savedRoi = isOther ? undefined : profile?.rois?.[camera.deviceId]}
+  {@const savedProps = isOther ? undefined : session.profiles.savedProps(camera.deviceId)}
+  {@const savedRoi = isOther ? undefined : session.profiles.savedRoi(camera.deviceId)}
   {@const expDiverged = isPropDiverged(savedProps?.exposure_time_ms, camera.exposure?.value)}
   {@const frDiverged = isPropDiverged(savedProps?.frame_rate_hz, camera.frameRate?.value)}
   {@const binDiverged = isPropDiverged(savedProps?.binning, camera.binning?.value)}
@@ -246,7 +244,7 @@
   {@const frameSizePx = camera.frameSizePx}
   {@const frameSizeMb = camera.frameSizeMb}
 
-  <div class={cn('flex flex-col rounded border border-border bg-panel px-3', isOther && 'opacity-60')}>
+  <div class={cn('flex flex-col rounded border border-border bg-surface px-3', isOther && 'opacity-60')}>
     <!-- ═══ Header ═══ -->
     <div class="flex h-ui-md items-center gap-2">
       <span class="text-sm font-medium">{camera.deviceId}</span>
@@ -597,7 +595,7 @@
   </div>
 {/snippet}
 
-{#if !profile}
+{#if !session.profiles.activeId}
   <div class={cn('flex items-center justify-center py-12', className)}>
     <p class="text-sm text-fg-muted">No active profile</p>
   </div>

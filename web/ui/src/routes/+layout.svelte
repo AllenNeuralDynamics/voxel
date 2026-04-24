@@ -89,7 +89,7 @@
   const leftPaneMin = createPaneMinSize(() => shellRef, 850, 50);
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
-    { id: '/', label: 'Inspect', icon: Microscope },
+    { id: '/', label: 'Configure', icon: Microscope },
     { id: '/tune', label: 'Tune', icon: WaveformsIcon },
     { id: '/snap', label: 'Snap', icon: Crosshair },
     { id: '/plan', label: 'Plan', icon: Layers },
@@ -229,6 +229,7 @@
               minSize={30}
               maxSize={50}
               onCollapse={() => {}}
+              class="bg-surface/50"
             >
               {#if bottomPanelTab === 'devices'}
                 <AuxDevicesPanel {session} class="h-full overflow-auto p-4" />

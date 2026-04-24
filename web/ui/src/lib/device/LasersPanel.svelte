@@ -19,19 +19,42 @@
 
   interface Props {
     session: Session;
-    profileId?: string;
     class?: string;
   }
 
-  let { session, profileId, class: className }: Props = $props();
+  let { session, class: className }: Props = $props();
 
-  const effectiveProfileId = $derived(profileId ?? session.profiles.activeId);
-  const profile = $derived(effectiveProfileId ? session.rig_cfg.profiles[effectiveProfileId] : undefined);
-  const isActiveProfile = $derived(!!effectiveProfileId && effectiveProfileId === session.profiles.activeId);
+  type ProfileLaser = { laser: Laser; config: ChannelConfig };
+  type OtherLaser = { laser: Laser; config: null };
+  type LaserEntry = ProfileLaser | OtherLaser;
+  type Divergence = {
+    savedPower: unknown;
+    isUnsaved: boolean;
+    isDiverged: boolean;
+    isDirty: boolean;
+  };
+
+  const activeProfileId = $derived(session.profiles.activeId);
 
   const allLasers = $derived(Object.values(session.lasers));
 
-  // Record power history on all lasers
+  const laserEntries = $derived<LaserEntry[]>(
+    allLasers.map((laser) => {
+      const config = activeProfileId
+        ? (getChannelFor(session.rig_cfg, activeProfileId, laser.deviceId)?.config ?? null)
+        : null;
+      return { laser, config };
+    })
+  );
+  const profileLasers = $derived(laserEntries.filter((e): e is ProfileLaser => e.config !== null));
+  const otherLasers = $derived(laserEntries.filter((e): e is OtherLaser => e.config === null));
+
+  let selectedDeviceId = $state('');
+
+  const selectedEntry = $derived<LaserEntry | null>(
+    laserEntries.find((e) => e.laser.deviceId === selectedDeviceId) ?? laserEntries[0] ?? null
+  );
+
   useInterval(100, {
     callback: () => {
       for (const laser of allLasers) {
@@ -40,65 +63,37 @@
     }
   });
 
-  const profileLasers = $derived(
-    effectiveProfileId ? allLasers.filter((l) => getChannelFor(session.rig_cfg, effectiveProfileId, l.deviceId)) : []
-  );
-  const otherLasers = $derived(
-    effectiveProfileId
-      ? allLasers.filter((l) => !getChannelFor(session.rig_cfg, effectiveProfileId, l.deviceId))
-      : allLasers
-  );
-
-  const anyLaserEnabled = $derived(allLasers.some((l) => l.isEnabled));
-  const anyLaserDiverged = $derived(
-    profileLasers.some((l) => {
-      const saved = profile?.props?.[l.deviceId]?.['power_setpoint_mw'];
-      return saved === undefined || saved === null || isPropDiverged(saved, l.powerSetpoint);
-    })
-  );
-  const anyHistory = $derived(allLasers.some((l) => l.hasHistory));
-  const globalMaxPower = $derived(Math.max(...allLasers.map((l) => l.maxPower)));
-  const currentMaxPower = $derived(Math.max(0, ...allLasers.map((l) => l.powerMw ?? 0)));
-
-  let _selectedDeviceId = $state('');
-
-  const selectedLaser = $derived(allLasers.find((l) => l.deviceId === _selectedDeviceId) ?? allLasers[0] ?? null);
-  const selectedDeviceId = $derived(selectedLaser?.deviceId ?? '');
-
-  function selectRow(deviceId: string) {
-    _selectedDeviceId = deviceId;
-  }
-
-  function stopAllLasers() {
-    for (const laser of allLasers) {
-      if (laser.isEnabled) laser.disable();
+  function divergenceOf(entry: LaserEntry): Divergence {
+    if (entry.config === null) {
+      return { savedPower: undefined, isUnsaved: false, isDiverged: false, isDirty: false };
     }
+    const savedPower = session.profiles.savedProps(entry.laser.deviceId)?.['power_setpoint_mw'];
+    const isUnsaved = savedPower === undefined || savedPower === null;
+    const isDiverged = !isUnsaved && isPropDiverged(savedPower, entry.laser.powerSetpoint);
+    return { savedPower, isUnsaved, isDiverged, isDirty: isUnsaved || isDiverged };
   }
 </script>
 
-{#snippet laserRow(laser: Laser, cfg: ChannelConfig | null = null)}
-  {@const savedProps = cfg ? profile?.props?.[laser.deviceId] : undefined}
-  {@const savedPower = savedProps?.['power_setpoint_mw']}
-  {@const powerDiverged = isPropDiverged(savedPower, laser.powerSetpoint)}
-  {@const hasUnsaved = cfg && (savedPower === undefined || savedPower === null)}
-  {@const showIndicator = hasUnsaved || powerDiverged}
+{#snippet laserRow(entry: LaserEntry)}
+  {@const { laser, config } = entry}
   <button
-    onclick={() => selectRow(laser.deviceId)}
-    class="flex w-full min-w-90 items-center gap-3 rounded-xs border px-3 py-2 text-left transition-colors
-			{selectedDeviceId === laser.deviceId ? 'border-border bg-panel' : 'hover:bg-panel/50'}"
+    onclick={() => (selectedDeviceId = laser.deviceId)}
+    class="flex w-full min-w-90 items-center gap-3 rounded-2xl border px-3 py-1 text-left transition-colors
+			{selectedEntry?.laser.deviceId === laser.deviceId ? 'border-border bg-panel' : 'hover:bg-panel/50'}"
   >
-    <!-- Wavelength dot + label + divergence dot -->
     <div class="flex min-w-22 shrink-0 items-center gap-1">
       <div class="mr-1">
-        {@render channelDot(laser, cfg)}
+        {@render channelDot(laser, config)}
       </div>
       <span class="min-w-[7ch] text-sm font-medium tabular-nums">
         {laser.wavelength ? `${laser.wavelength} nm` : 'Laser'}
       </span>
-      <span class="inline-block size-1 rounded-full bg-warning {showIndicator ? 'opacity-70' : 'opacity-0 '}"> </span>
+      <span
+        class="inline-block size-1 rounded-full bg-warning {divergenceOf(entry).isDirty ? 'opacity-70' : 'opacity-0 '}"
+      >
+      </span>
     </div>
 
-    <!-- Power slider -->
     <div class="flex min-w-24 flex-1 items-center">
       {#if typeof laser.powerSetpoint === 'number'}
         <Slider
@@ -113,14 +108,12 @@
       {/if}
     </div>
 
-    <!-- Actual power readout -->
     <div class="min-w-18 shrink-0 text-right font-mono text-sm text-nowrap text-fg-muted tabular-nums">
       {#if typeof laser.powerMw === 'number'}
         {laser.powerMw.toFixed(1)} mW
       {/if}
     </div>
 
-    <!-- Toggle -->
     <Switch class="shrink-0" checked={laser.isEnabled} onCheckedChange={() => laser.toggle()} size="xs" />
   </button>
 {/snippet}
@@ -178,130 +171,19 @@
   {/if}
 {/snippet}
 
-{#snippet detailPanel(laser: Laser, cfg: ChannelConfig | null)}
-  {@const savedProps = cfg ? profile?.props?.[laser.deviceId] : undefined}
-  {@const savedPower = savedProps?.['power_setpoint_mw']}
-  {@const powerDiverged = isPropDiverged(savedPower, laser.powerSetpoint)}
-  {@const hasUnsaved = cfg && (savedPower === undefined || savedPower === null)}
-  <div class="flex h-full flex-col justify-between gap-4 border-border bg-panel">
-    <div class="flex flex-col gap-2 px-4 py-2">
-      <!-- Header -->
-      <div class="flex items-center justify-between">
-        <div class="flex h-ui-sm items-center gap-2 text-xs text-fg-muted">
-          {@render channelDot(laser, cfg)}
-          <span class="text-base font-medium">
-            {laser.wavelength ? `${laser.wavelength} nm` : 'Laser'}
-          </span>
-          <span>·</span>
-          <span>{laser.deviceId}</span>
-        </div>
-      </div>
-
-      <!-- Power setpoint + quick actions -->
-      {#if typeof laser.powerSetpoint === 'number'}
-        <div class="space-y-3">
-          <div>
-            <div class="mb-1.5 flex items-center gap-1.5">
-              <h5 class="text-xs font-medium text-fg-muted uppercase">Power Setpoint</h5>
-              {#if hasUnsaved}
-                <span class="inline-block size-1 rounded-full bg-warning opacity-70"></span>
-              {:else if powerDiverged}
-                <span class="text-xs text-warning opacity-90">({formatPropValue(savedPower, 1)})</span>
-              {/if}
-            </div>
-            <SpinBox
-              value={laser.powerSetpoint}
-              min={0}
-              max={laser.maxPower}
-              step={1}
-              decimals={1}
-              suffix="mW"
-              size="xs"
-              class="w-full"
-              onChange={(v) => laser.setPower(v)}
-            />
-          </div>
-          <div class="flex gap-1.5">
-            {#each [0, 25, 50, 75, 100] as pct (pct)}
-              {@const targetValue = (laser.maxPower * pct) / 100}
-              <button
-                onclick={() => laser.setPower(targetValue)}
-                class="flex-1 rounded border border-border px-1 py-1 text-xs text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-              >
-                {pct}%
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      <div class="space-y-3">
-        <!-- Power readout -->
-        <div class="flex items-baseline justify-between">
-          <h5 class="text-xs font-medium text-fg-muted uppercase">Power</h5>
-          <span class="font-mono text-sm text-fg tabular-nums">
-            {typeof laser.powerMw === 'number' ? `${laser.powerMw.toFixed(1)} mW` : '—'}
-          </span>
-        </div>
-
-        <!-- Temperature -->
-        {#if typeof laser.temperatureC === 'number'}
-          <div class="flex items-baseline justify-between">
-            <h5 class="text-xs font-medium text-fg-muted uppercase">Temperature</h5>
-            <span class="font-mono text-sm text-fg tabular-nums">{laser.temperatureC.toFixed(1)}°C</span>
-          </div>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Power history sparkline (all lasers) — fills remaining space -->
-    <div class="flex max-h-48 min-h-24 flex-1 flex-col border-t border-border p-4 pt-2 pb-6">
-      <p class="pointer-events-none pb-2 font-mono text-xs text-fg-muted tabular-nums">
-        Max Power: {currentMaxPower.toFixed(0)} / {globalMaxPower.toFixed(0)} mW
-      </p>
-      {#if anyHistory}
-        <svg
-          viewBox="0 0 {POWER_HISTORY_MAX} 100"
-          preserveAspectRatio="none"
-          class="h-full w-full rounded-md bg-canvas"
-        >
-          {#each allLasers as l (l.deviceId)}
-            {@const isSelected = l.deviceId === laser.deviceId}
-            {#if l.hasHistory}
-              <polyline
-                points={l.powerHistory
-                  .map(
-                    (v, i) =>
-                      `${((i / (POWER_HISTORY_MAX - 1)) * POWER_HISTORY_MAX).toFixed(1)},${(100 - (v / globalMaxPower) * 100).toFixed(1)}`
-                  )
-                  .join(' ')}
-                fill="none"
-                stroke={l.color}
-                stroke-width={isSelected ? 2 : 1.5}
-                opacity={isSelected ? 0.75 : 0.5}
-                vector-effect="non-scaling-stroke"
-              />
-            {/if}
-          {/each}
-        </svg>
-      {:else}
-        <div class="flex h-full items-center justify-center">
-          <span class="text-xs text-fg-muted/50">Collecting data...</span>
-        </div>
-      {/if}
-    </div>
-  </div>
-{/snippet}
-
 {#if allLasers.length === 0}
   <div class={cn('flex h-full items-center justify-center', className)}>
     <p class="text-sm text-fg-muted">No lasers configured</p>
   </div>
-{:else if selectedLaser}
+{:else if selectedEntry}
   {@const groupLabelClasses = 'text-xs leading-ui-sm font-medium text-fg-muted/60 uppercase'}
+  {@const selectedLaser = selectedEntry.laser}
+  {@const selectedConfig = selectedEntry.config}
+  {@const divergence = divergenceOf(selectedEntry)}
+  {@const globalMaxPower = Math.max(...allLasers.map((l) => l.maxPower))}
   <div class={cn('grid h-full grid-cols-[minmax(350px,5fr)_minmax(350px,2fr)]', className)}>
     <!-- Left: laser list -->
-    <div class="flex flex-col overflow-auto px-4">
+    <div class="flex flex-col overflow-auto px-4 pb-4">
       <div class="flex h-full flex-col gap-3">
         {#if profileLasers.length > 0}
           <div>
@@ -309,19 +191,21 @@
               <h4 class={groupLabelClasses}>This Profile</h4>
               <div class="flex items-center gap-2">
                 <button
-                  onclick={stopAllLasers}
-                  class="flex items-center gap-1.5 rounded bg-danger/20 px-2 py-1 text-sm text-danger transition-all hover:bg-danger/30 {anyLaserEnabled
+                  onclick={() => allLasers.forEach((l) => (l.isEnabled ? l.disable() : null))}
+                  class="flex items-center gap-1.5 rounded bg-danger/20 px-2 py-1 text-sm text-danger transition-all hover:bg-danger/30 {allLasers.some(
+                    (l) => l.isEnabled
+                  )
                     ? ''
                     : 'pointer-events-none opacity-0'}"
                 >
                   <Power width="14" height="14" />
                   <span>Stop All</span>
                 </button>
-                {#if anyLaserDiverged && isActiveProfile}
+                {#if profileLasers.some((pl) => divergenceOf(pl).isDirty)}
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    onclick={() => session.profiles.applyProps(profileLasers.map((l) => l.deviceId))}
+                    onclick={() => session.profiles.applyProps(profileLasers.map((pl) => pl.laser.deviceId))}
                     title="Revert all to saved"
                   >
                     <Restore width="14" height="14" />
@@ -331,7 +215,7 @@
                     size="xs"
                     class="text-warning/80"
                     onclick={() => {
-                      for (const l of profileLasers) session.profiles.saveProps(l.deviceId);
+                      for (const pl of profileLasers) session.profiles.saveProps(pl.laser.deviceId);
                     }}
                   >
                     Save
@@ -340,13 +224,8 @@
               </div>
             </div>
             <div class="space-y-2">
-              {#each profileLasers as laser (laser.deviceId)}
-                {@render laserRow(
-                  laser,
-                  effectiveProfileId
-                    ? (getChannelFor(session.rig_cfg, effectiveProfileId, laser.deviceId)?.config ?? null)
-                    : null
-                )}
+              {#each profileLasers as entry (entry.laser.deviceId)}
+                {@render laserRow(entry)}
               {/each}
             </div>
           </div>
@@ -358,8 +237,8 @@
               <h4 class={groupLabelClasses}>Other Lasers</h4>
             </div>
             <div class="space-y-2">
-              {#each otherLasers as laser (laser.deviceId)}
-                {@render laserRow(laser)}
+              {#each otherLasers as entry (entry.laser.deviceId)}
+                {@render laserRow(entry)}
               {/each}
             </div>
           </div>
@@ -367,11 +246,108 @@
       </div>
     </div>
     <!-- Right: detail panel -->
-    {@render detailPanel(
-      selectedLaser,
-      session.profiles.activeId
-        ? (getChannelFor(session.rig_cfg, session.profiles.activeId, selectedLaser.deviceId)?.config ?? null)
-        : null
-    )}
+    <div class="flex h-full flex-col justify-between gap-4 border-l border-border bg-surface">
+      <div class="flex flex-col gap-2 px-4 py-2">
+        <div class="flex items-center justify-between">
+          <div class="flex h-ui-sm items-center gap-2 text-xs text-fg-muted">
+            {@render channelDot(selectedLaser, selectedConfig)}
+            <span class="text-base font-medium">
+              {selectedLaser.wavelength ? `${selectedLaser.wavelength} nm` : 'Laser'}
+            </span>
+            <span>·</span>
+            <span>{selectedLaser.deviceId}</span>
+          </div>
+        </div>
+
+        {#if typeof selectedLaser.powerSetpoint === 'number'}
+          <div class="space-y-3">
+            <div>
+              <div class="mb-1.5 flex items-center gap-1.5">
+                <h5 class="text-xs font-medium text-fg-muted uppercase">Power Setpoint</h5>
+                {#if divergence.isUnsaved}
+                  <span class="inline-block size-1 rounded-full bg-warning opacity-70"></span>
+                {:else if divergence.isDiverged}
+                  <span class="text-xs text-warning opacity-90">({formatPropValue(divergence.savedPower, 1)})</span>
+                {/if}
+              </div>
+              <SpinBox
+                value={selectedLaser.powerSetpoint}
+                min={0}
+                max={selectedLaser.maxPower}
+                step={1}
+                decimals={1}
+                suffix="mW"
+                size="xs"
+                class="w-full"
+                onChange={(v) => selectedLaser.setPower(v)}
+              />
+            </div>
+            <div class="flex gap-1.5">
+              {#each [0, 25, 50, 75, 100] as pct (pct)}
+                {@const targetValue = (selectedLaser.maxPower * pct) / 100}
+                <button
+                  onclick={() => selectedLaser.setPower(targetValue)}
+                  class="flex-1 rounded border border-border px-1 py-1 text-xs text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+                >
+                  {pct}%
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <div class="space-y-3">
+          <div class="flex items-baseline justify-between">
+            <h5 class="text-xs font-medium text-fg-muted uppercase">Power</h5>
+            <span class="font-mono text-sm text-fg tabular-nums">
+              {typeof selectedLaser.powerMw === 'number' ? `${selectedLaser.powerMw.toFixed(1)} mW` : '—'}
+            </span>
+          </div>
+
+          {#if typeof selectedLaser.temperatureC === 'number'}
+            <div class="flex items-baseline justify-between">
+              <h5 class="text-xs font-medium text-fg-muted uppercase">Temperature</h5>
+              <span class="font-mono text-sm text-fg tabular-nums">{selectedLaser.temperatureC.toFixed(1)}°C</span>
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <div class="flex max-h-48 min-h-24 flex-1 flex-col border-t border-border p-4 pt-2 pb-6">
+        <p class="pointer-events-none pb-2 font-mono text-xs text-fg-muted tabular-nums">
+          Max Power: {Math.max(0, ...allLasers.map((l) => l.powerMw ?? 0)).toFixed(0)} / {globalMaxPower.toFixed(0)} mW
+        </p>
+        {#if allLasers.some((l) => l.hasHistory)}
+          <svg
+            viewBox="0 0 {POWER_HISTORY_MAX} 100"
+            preserveAspectRatio="none"
+            class="h-full w-full rounded-md bg-canvas"
+          >
+            {#each allLasers as l (l.deviceId)}
+              {@const isSelected = l.deviceId === selectedLaser.deviceId}
+              {#if l.hasHistory}
+                <polyline
+                  points={l.powerHistory
+                    .map(
+                      (v, i) =>
+                        `${((i / (POWER_HISTORY_MAX - 1)) * POWER_HISTORY_MAX).toFixed(1)},${(100 - (v / globalMaxPower) * 100).toFixed(1)}`
+                    )
+                    .join(' ')}
+                  fill="none"
+                  stroke={l.color}
+                  stroke-width={isSelected ? 2 : 1.5}
+                  opacity={isSelected ? 0.75 : 0.5}
+                  vector-effect="non-scaling-stroke"
+                />
+              {/if}
+            {/each}
+          </svg>
+        {:else}
+          <div class="flex h-full items-center justify-center">
+            <span class="text-xs text-fg-muted/50">Collecting data...</span>
+          </div>
+        {/if}
+      </div>
+    </div>
   </div>
 {/if}
