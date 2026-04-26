@@ -3,7 +3,7 @@
 from enum import StrEnum
 
 from pycobolt import CoboltLaser
-from rigup.device.props import deliminated_float, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_string, numeric
 
 from rigup import describe
 from vxl.laser.base import Laser
@@ -145,6 +145,29 @@ class CoboltSkyra(Laser):
     def power_mw(self) -> float:
         """Get the actual power of the laser in mW."""
         return self._inst.get_power()
+
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self._max_power_mw,
+        step=0.1,
+        target=lambda self: float(self.power_setpoint_mw),
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        return self._inst.get_power()
+
+    @power.setter
+    def power(self, value: float) -> None:
+        if self.modulation_mode != "off":
+            # In modulation mode, set current directly
+            # This is simplified - the classic driver uses polynomial conversion
+            self._current_setpoint_ma = value  # Store for getter
+            self._inst.send_cmd(f"{self._prefix}{Cmd.CURRENT_SETPOINT} {value}")
+        else:
+            # In constant power mode, set power in Watts
+            power_w = value / 1000.0
+            self._inst.send_cmd(f"{self._prefix}{Cmd.POWER_SETPOINT} {power_w}")
+        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float | None:

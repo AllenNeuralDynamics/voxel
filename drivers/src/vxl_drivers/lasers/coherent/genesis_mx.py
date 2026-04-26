@@ -2,7 +2,8 @@
 
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX as GenesisMXDriver
-from rigup.device.props import deliminated_float
+from rigup.device.props import deliminated_float, numeric
+from rigup.device.schema import describe
 
 from vxl.laser.base import Laser
 
@@ -75,6 +76,23 @@ class GenesisMX(Laser):
     def power_mw(self) -> float:
         """Get the actual power of the laser in mW."""
         return self._inst.power_mw
+
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self._max_power_mw,
+        step=0.1,
+        target=lambda self: float(self.power_setpoint_mw),
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        """Get the actual power of the laser in mW."""
+        return self._inst.power_mw
+
+    @power.setter
+    def power(self, value: float) -> None:
+        """Set the power setpoint in mW."""
+        self._inst.power_mw = value
+        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float:

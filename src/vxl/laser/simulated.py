@@ -1,6 +1,6 @@
 import random
 
-from rigup import deliminated_float, describe
+from rigup import deliminated_float, describe, numeric
 from vxl.aotf.base import AOTF
 from vxl.laser.base import Laser
 
@@ -39,6 +39,23 @@ class SimulatedLaser(Laser):
         if not self._is_enabled:
             return 0.0
         return random.gauss(self._power_setpoint_mw, 0.1)
+
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self._max_power_mw,
+        step=1.0,
+        target=lambda self: self._power_setpoint_mw,
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        if not self._is_enabled:
+            return 0.0
+        return random.gauss(self._power_setpoint_mw, 0.1)
+
+    @power.setter
+    def power(self, value: float) -> None:
+        self._power_setpoint_mw = value
+        self.log.debug("power commanded to %s mW", value)
 
     @property
     def temperature_c(self) -> float:
@@ -137,6 +154,23 @@ class SimulatedAOTFShutteredLaser(Laser):
         if not self.is_enabled:
             return 0.0
         return random.gauss(self._power_setpoint_mw, 0.1)
+
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self._max_power_mw,
+        step=1.0,
+        target=lambda self: self._power_setpoint_mw,
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        if not self.is_enabled:
+            return 0.0
+        return random.gauss(self._power_setpoint_mw, 0.1)
+
+    @power.setter
+    def power(self, value: float) -> None:
+        self._power_setpoint_mw = value
+        self.log.debug(f"power commanded to {value} mW")
 
     @property
     def temperature_c(self) -> float:
@@ -248,6 +282,30 @@ class SimulatedAOTFModulatedLaser(Laser):
         if not self.is_enabled:
             return 0.0
         return self._aotf.get_power_dbm(self._aotf_channel)
+
+    @numeric(
+        min_value=lambda self: self._aotf.min_power_dbm,
+        max_value=lambda self: self._aotf.max_power_dbm,
+        step=lambda self: self._aotf.power_step_dbm,
+        target=lambda self: self._power_setpoint_dbm,
+    )
+    @describe(
+        label="Power",
+        units="dBm",
+        desc="Measured AOTF RF power; writes command the setpoint. (dBm despite the property name.)",
+        stream=True,
+    )
+    def power(self) -> float:
+        if not self.is_enabled:
+            return 0.0
+        return self._aotf.get_power_dbm(self._aotf_channel)
+
+    @power.setter
+    def power(self, value: float) -> None:
+        self._power_setpoint_dbm = value
+        if self.is_enabled:
+            self._aotf.set_power_dbm(self._aotf_channel, value)
+        self.log.debug(f"power commanded to {value} dBm")
 
     @property
     def temperature_c(self) -> float | None:

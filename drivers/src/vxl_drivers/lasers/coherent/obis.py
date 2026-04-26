@@ -5,7 +5,7 @@ from enum import StrEnum
 from obis_laser import LSModulationType, LXModulationType
 from obis_laser import ObisLS as ObisLSDriver
 from obis_laser import ObisLX as ObisLXDriver
-from rigup.device.props import deliminated_float, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_string, numeric
 from serial import Serial
 
 from rigup import describe
@@ -96,6 +96,21 @@ class ObisLX(Laser):
     def power_mw(self) -> float:
         """Get the actual power of the laser in mW."""
         return self._inst.power_setpoint
+
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self._inst.max_power,
+        step=0.1,
+        target=lambda self: float(self.power_setpoint_mw),
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        return self._inst.power_setpoint
+
+    @power.setter
+    def power(self, value: float) -> None:
+        self._inst.power_setpoint = value
+        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float:
@@ -190,6 +205,21 @@ class ObisLS(Laser):
     def power_mw(self) -> float:
         """Get the actual power of the laser in mW."""
         return self._inst.power_setpoint
+
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self._inst.max_power,
+        step=0.1,
+        target=lambda self: float(self.power_setpoint_mw),
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        return self._inst.power_setpoint
+
+    @power.setter
+    def power(self, value: float) -> None:
+        self._inst.power_setpoint = value
+        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float:

@@ -5,7 +5,7 @@ from enum import IntEnum, StrEnum
 from time import perf_counter
 from typing import Literal
 
-from rigup.device.props import deliminated_float, enumerated_string
+from rigup.device.props import deliminated_float, enumerated_string, numeric
 from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
 
 from rigup import Device, describe
@@ -423,6 +423,24 @@ class OxxiusLBX(Laser):
         """Get the actual power of the laser in mW."""
         return float(self._hub.query(Query.LASER_POWER, self._prefix))
 
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self.max_power_mw,
+        step=0.1,
+        target=lambda self: float(self.power_setpoint_mw),
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        return float(self._hub.query(Query.LASER_POWER, self._prefix))
+
+    @power.setter
+    def power(self, value: float) -> None:
+        if value < 0 or value > self.max_power_mw:
+            self.log.error(f"Power {value} mW out of range [0, {self.max_power_mw}]")
+            return
+        self._hub.command(Cmd.LASER_POWER, value, self._prefix)
+        self.log.debug(f"Power setpoint set to {value} mW")
+
     @property
     def temperature_c(self) -> float:
         """Get the temperature of the laser in degrees Celsius."""
@@ -550,6 +568,24 @@ class OxxiusLCX(Laser):
     def power_mw(self) -> float:
         """Get the actual power of the laser in mW."""
         return float(self._hub.query(Query.LASER_POWER, self._prefix))
+
+    @numeric(
+        min_value=0.0,
+        max_value=lambda self: self.max_power_mw,
+        step=0.1,
+        target=lambda self: float(self.power_setpoint_mw),
+    )
+    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    def power(self) -> float:
+        return float(self._hub.query(Query.LASER_POWER, self._prefix))
+
+    @power.setter
+    def power(self, value: float) -> None:
+        if value < 0 or value > self.max_power_mw:
+            self.log.error(f"Power {value} mW out of range [0, {self.max_power_mw}]")
+            return
+        self._hub.command(Cmd.LASER_POWER, value, self._prefix)
+        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float:

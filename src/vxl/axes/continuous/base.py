@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from rigup import DeviceController, describe
+from rigup import DeviceController, deliminated_float, describe
 from vxl.axes.base import Axis
 from vxl.device import DeviceType
 
@@ -220,7 +220,7 @@ class ContinuousAxis(Axis):
 
     # State properties _______________________________________________________________________________________________
 
-    @property
+    @deliminated_float(min_value=lambda self: self.lower_limit, max_value=lambda self: self.upper_limit)
     @describe(label="Position", desc="The current position.", stream=True)
     def position(self) -> float:
         """The current position in axis units."""
