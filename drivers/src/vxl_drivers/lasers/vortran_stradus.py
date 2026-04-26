@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from rigup.device.props import deliminated_float, enumerated_string, numeric
+from rigup.device.props import enumerated, numeric
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusDriver
 
@@ -65,7 +65,7 @@ class VortranStradus(Laser):
         """Check if the laser is enabled."""
         return self._inst.laser_is_emitting
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: float(self._inst.max_power), step=0.1)
+    @numeric(min_value=0.0, max_value=lambda self: float(self._inst.max_power), step=0.1)
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint in mW."""
         return float(self._inst.power_setpoint)
@@ -101,7 +101,7 @@ class VortranStradus(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return float(self._inst.temperature)
 
-    @enumerated_string(options=list(ModulationMode))
+    @enumerated(options=list(ModulationMode))
     @describe(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""

@@ -16,7 +16,7 @@ from ome_zarr_writer.types import Compression, ScaleLevel
 from pydantic import BaseModel
 from vxlib.vec import IVec2D, Vec2D
 
-from rigup import Device, DeviceController, deliminated_float, describe, enumerated_int, enumerated_string
+from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
 from vxl.camera.preview import (
     PreviewConfig,
     PreviewFrame,
@@ -440,7 +440,7 @@ class Camera(Device):
     def pixel_size_um(self) -> Vec2D:
         """Get the size of the camera pixel in microns."""
 
-    @enumerated_string(options=list(PIXEL_FMT_TO_DTYPE.keys()))
+    @enumerated(options=list(PIXEL_FMT_TO_DTYPE.keys()))
     @abstractmethod
     @describe(label="Pixel Format", stream=True)
     def pixel_format(self) -> PixelFormat:
@@ -468,7 +468,7 @@ class Camera(Device):
     def binning(self, binning: int) -> None:
         """Set the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
 
-    @deliminated_float()
+    @numeric()
     @abstractmethod
     @describe(label="Exposure Time", units="ms", stream=True)
     def exposure_time_ms(self) -> float:
@@ -479,7 +479,7 @@ class Camera(Device):
     def exposure_time_ms(self, exposure_time_ms: float) -> None:
         """Set the exposure time of the camera in ms."""
 
-    @deliminated_float()
+    @numeric()
     @abstractmethod
     @describe(label="Frame Rate", units="Hz", stream=True)
     def frame_rate_hz(self) -> float:

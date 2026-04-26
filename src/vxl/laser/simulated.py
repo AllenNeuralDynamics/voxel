@@ -1,6 +1,6 @@
 import random
 
-from rigup import deliminated_float, describe, numeric
+from rigup import describe, numeric
 from vxl.aotf.base import AOTF
 from vxl.laser.base import Laser
 
@@ -25,7 +25,7 @@ class SimulatedLaser(Laser):
     def is_enabled(self) -> bool:
         return self._is_enabled
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self._max_power_mw, step=1.0)
+    @numeric(min_value=0.0, max_value=lambda self: self._max_power_mw, step=1.0)
     def power_setpoint_mw(self) -> float:
         return random.gauss(self._power_setpoint_mw, 0.1)
 
@@ -136,7 +136,7 @@ class SimulatedAOTFShutteredLaser(Laser):
         """Check if the AOTF shutter is open."""
         return self._aotf.get_channel_state(self._aotf_channel)
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self._max_power_mw, step=1.0)
+    @numeric(min_value=0.0, max_value=lambda self: self._max_power_mw, step=1.0)
     @describe(label="Power Setpoint", units="mW", desc="Target laser power.", stream=True)
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint in mW (controlled by laser, not AOTF)."""
@@ -255,7 +255,7 @@ class SimulatedAOTFModulatedLaser(Laser):
         """Check if the AOTF channel is enabled."""
         return self._aotf.get_channel_state(self._aotf_channel)
 
-    @deliminated_float(
+    @numeric(
         min_value=lambda self: self._aotf.min_power_dbm,
         max_value=lambda self: self._aotf.max_power_dbm,
         step=lambda self: self._aotf.power_step_dbm,

@@ -5,7 +5,7 @@ from contextlib import suppress
 from typing import Any
 
 import numpy as np
-from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import enumerated, enumerated_int, numeric
 from vxlib.vec import IVec2D, Vec2D
 from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
@@ -113,7 +113,7 @@ class XimeaCamera(Camera):
 
     # ==================== Pixel Format ====================
 
-    @enumerated_string(options=list(_PIXEL_FMT_TO_XIMEA.keys()))
+    @enumerated(options=list(_PIXEL_FMT_TO_XIMEA.keys()))
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera."""
         ximea_fmt: str = _to_str(self._camera.get_output_bit_depth())
@@ -157,7 +157,7 @@ class XimeaCamera(Camera):
 
     # ==================== Exposure & Frame Rate ====================
 
-    @deliminated_float(
+    @numeric(
         min_value=lambda self: _to_float(self._camera.get_exposure_minimum()) / 1000,
         max_value=lambda self: _to_float(self._camera.get_exposure_maximum()) / 1000,
         step=0.001,
@@ -172,7 +172,7 @@ class XimeaCamera(Camera):
         self._camera.set_exposure(round(exposure_time_ms * 1000, 1))  # ms to us
         self.log.debug(f"Exposure time set to {exposure_time_ms} ms")
 
-    @deliminated_float(min_value=0.1, max_value=1000.0, step=0.1)
+    @numeric(min_value=0.1, max_value=1000.0, step=0.1)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
         return _to_float(self._camera.get_framerate())

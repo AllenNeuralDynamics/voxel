@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, Protocol, Self, cast, overload
 
-from .common import PropertyModel, get_descriptor_logger
+from ._common import PropertyModel, get_descriptor_logger
 
 
 class EnumeratedValueProtocol[T](Protocol):
@@ -97,7 +97,7 @@ class EnumeratedStrProperty[S](EnumeratedProperty[S, str]):
         return EnumeratedString(value=self._fget(obj), options=[str(option) for option in options])
 
 
-def enumerated_string(options: list[str] | Callable[[Any], list[str]]) -> Callable[..., EnumeratedStrProperty[Any]]:
+def enumerated(options: list[str] | Callable[[Any], list[str]]) -> Callable[..., EnumeratedStrProperty[Any]]:
     def decorator(fget: Callable[[Any], str]) -> EnumeratedStrProperty[Any]:
         return EnumeratedStrProperty(options=options, fget=fget)
 

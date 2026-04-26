@@ -3,9 +3,6 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Self
 
 from vxl_drivers.tigerhub.model.axis_state import AxisState
-
-if TYPE_CHECKING:
-    from vxl_drivers.tigerhub.hub import TigerHub
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
 from vxl_drivers.tigerhub.ops.params import TigerParam, TigerParams
 from vxl_drivers.tigerhub.ops.step_shoot import (
@@ -22,6 +19,9 @@ from vxl.axes.continuous.base import (
     TTLStepper,
     TTLStepperConfig,
 )
+
+if TYPE_CHECKING:
+    from vxl_drivers.tigerhub.hub import TigerHub
 
 
 class TigerTTLStepper(TTLStepper):

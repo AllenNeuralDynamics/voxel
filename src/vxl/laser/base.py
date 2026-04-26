@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from rigup import Device, deliminated_float, describe, numeric
+from rigup import Device, describe, numeric
 from vxl.device import DeviceType
 
 
@@ -47,7 +47,7 @@ class Laser(Device):
     # ── Deprecated: superseded by ``power`` (which carries both measured value and setpoint target). ──
     # Kept for backward compatibility during the migration window. Will be removed in Phase 2.
 
-    @deliminated_float()
+    @numeric()
     @abstractmethod
     @describe(label="Power Setpoint", units="mW", desc="The target power setpoint.", stream=True)
     def power_setpoint_mw(self) -> float:

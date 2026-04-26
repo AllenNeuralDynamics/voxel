@@ -2,6 +2,7 @@
 
 import math
 
+from typing import Any
 from pydantic import BaseModel
 from rigup.device.props import (
     NumericFloat,
@@ -58,7 +59,10 @@ class TestNumericFloat:
 class TestNumericInt:
     def test_coerces_float_input_truncates(self):
         # int(3.7) == 3 — int construction truncates, unlike float.
-        n = NumericInt(3.7)
+        # Typed via Any so the test exercises runtime coercion (NumericInt's __new__
+        # accepts only int statically; we want to verify the float→int truncation path).
+        val: Any = 3.7
+        n = NumericInt(val)
         assert isinstance(n, int)
         assert n == 3
 
@@ -241,15 +245,20 @@ class TestLaserSetpointPattern:
                 self._setpoint = v  # writes route to setpoint, not actual
 
         laser = Laser()
-        assert laser.power == 0.0
-        assert laser.power.target == 50.0
+        initial = laser.power
+        assert initial == 0.0
+        assert initial.target == 50.0
 
-        # Commanding new power updates target only; actual lags
+        # Commanding new power updates target only; actual lags.
+        # Bind to a local — pyright narrows `laser.power` to `float` after a setter call,
+        # losing the descriptor's NumericFloat return type on subsequent reads.
         laser.power = 75.0
-        assert laser.power == 0.0
-        assert laser.power.target == 75.0
+        commanded: Any = laser.power
+        assert commanded == 0.0
+        assert commanded.target == 75.0
 
         # Simulate device settling — actual catches up to target
         laser._actual = 75.0
-        assert laser.power == 75.0
-        assert laser.power.target == 75.0
+        settled: Any = laser.power
+        assert settled == 75.0
+        assert settled.target == 75.0

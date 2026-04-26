@@ -5,7 +5,7 @@ from typing import Any, Protocol, Self, overload
 
 from pydantic_core import core_schema
 
-from .common import PropertyModel, get_descriptor_logger
+from ._common import PropertyModel, get_descriptor_logger
 
 type DynamicNumber = float | Callable[[Any], float]
 

@@ -2,7 +2,7 @@
 
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX as GenesisMXDriver
-from rigup.device.props import deliminated_float, numeric
+from rigup.device.props import numeric
 from rigup.device.schema import describe
 
 from vxl.laser.base import Laser
@@ -61,7 +61,7 @@ class GenesisMX(Laser):
         """Check if the laser is enabled."""
         return self._inst.enable_loop.software
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self._max_power_mw, step=0.1)
+    @numeric(min_value=0.0, max_value=lambda self: self._max_power_mw, step=0.1)
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint in mW."""
         return self._inst.power_setpoint_mw

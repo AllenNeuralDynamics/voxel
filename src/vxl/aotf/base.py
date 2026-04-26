@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from rigup import Device, describe, enumerated_string
+from rigup import Device, describe, enumerated
 from vxl.device import DeviceType
 
 
@@ -85,7 +85,7 @@ class AOTF(Device):
     def num_channels(self) -> int:
         """Number of available AOTF channels."""
 
-    @enumerated_string(options=["internal", "external"])
+    @enumerated(options=["internal", "external"])
     @abstractmethod
     @describe(label="Blanking Mode")
     def blanking_mode(self) -> str:

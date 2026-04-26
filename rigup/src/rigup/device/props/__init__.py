@@ -1,31 +1,17 @@
-from .common import PropertyModel as PropertyModel
-from .deliminated import DeliminatedFloat, DeliminatedInt, deliminated_float, deliminated_int
-from .enumerated import enumerated_int, enumerated_string
-from .numeric import (
-    NumericFloat,
-    NumericFloatProperty,
-    NumericInt,
-    NumericIntProperty,
-    NumericProperty,
-    numeric,
-    numeric_int,
-)
+from ._common import PropertyModel as PropertyModel
+from ._enumerated import EnumeratedInt, EnumeratedString, enumerated, enumerated_int
+from ._numeric import NumericFloat, NumericInt, numeric, numeric_int
 
 __all__ = [
-    "DeliminatedFloat",
-    "DeliminatedInt",
+    "EnumeratedInt",
+    "EnumeratedString",
     "NumericFloat",
-    "NumericFloatProperty",
     "NumericInt",
-    "NumericIntProperty",
-    "NumericProperty",
     "PropertyModel",
-    "deliminated_float",
-    "deliminated_int",
+    "enumerated",
     "enumerated_int",
-    "enumerated_string",
-    "numeric_int",
     "numeric",
+    "numeric_int",
 ]
 
 if __name__ == "__main__":
@@ -42,7 +28,7 @@ if __name__ == "__main__":
             self._mode = "sine"
             self._preset = 1
 
-        @deliminated_float(min_value=0.0, max_value=1.0, step=0.1)
+        @numeric(min_value=0.0, max_value=1.0, step=0.1)
         def volume(self) -> float:
             return self._volume
 
@@ -50,7 +36,7 @@ if __name__ == "__main__":
         def volume(self, value: float) -> None:
             self._volume = value
 
-        @deliminated_int(min_value=-10, max_value=10, step=2)
+        @numeric_int(min_value=-10, max_value=10, step=2)
         def gain(self) -> int:
             return self._gain
 
@@ -58,7 +44,7 @@ if __name__ == "__main__":
         def gain(self, value: int) -> None:
             self._gain = value
 
-        @enumerated_string(options=["sine", "square", "saw"])
+        @enumerated(options=["sine", "square", "saw"])
         def mode(self) -> str:
             return self._mode
 

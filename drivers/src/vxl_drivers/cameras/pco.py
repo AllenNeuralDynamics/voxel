@@ -4,7 +4,7 @@ from enum import StrEnum
 
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
-from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import enumerated, enumerated_int, numeric
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import describe
@@ -106,7 +106,7 @@ class PCOCamera(Camera):
 
     # ==================== Pixel Format ====================
 
-    @enumerated_string(options=["MONO16"])
+    @enumerated(options=["MONO16"])
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera.
 
@@ -137,7 +137,7 @@ class PCOCamera(Camera):
 
     # ==================== Exposure & Frame Rate ====================
 
-    @deliminated_float(min_value=0.001, max_value=10000.0, step=0.001)
+    @numeric(min_value=0.001, max_value=10000.0, step=0.001)
     def exposure_time_ms(self) -> float:
         """Get the exposure time of the camera in ms."""
         return self._pco.exposure_time * 1000  # s to ms
@@ -148,7 +148,7 @@ class PCOCamera(Camera):
         self._pco.exposure_time = exposure_time_ms / 1000  # ms to s
         self.log.debug(f"Exposure time set to {exposure_time_ms} ms")
 
-    @deliminated_float(min_value=0.1, max_value=1000.0, step=0.1)
+    @numeric(min_value=0.1, max_value=1000.0, step=0.1)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
         # Estimate from frame time
@@ -206,7 +206,7 @@ class PCOCamera(Camera):
 
     # ==================== Readout Mode ====================
 
-    @enumerated_string(options=list(ReadoutMode))
+    @enumerated(options=list(ReadoutMode))
     @describe(label="Readout Mode", desc="sCMOS readout direction mode.")
     def readout_mode(self) -> str:
         """Get the readout mode."""
@@ -325,7 +325,7 @@ class PCOCamera(Camera):
 
     # ==================== Line Timing ====================
 
-    @deliminated_float(min_value=1.0, max_value=1000.0, step=0.1)
+    @numeric(min_value=1.0, max_value=1000.0, step=0.1)
     @describe(label="Line Interval", units="µs", desc="Line interval for rolling shutter.")
     def line_interval_us(self) -> float:
         """Get the line interval in microseconds."""

@@ -5,7 +5,7 @@ from enum import StrEnum
 from obis_laser import LSModulationType, LXModulationType
 from obis_laser import ObisLS as ObisLSDriver
 from obis_laser import ObisLX as ObisLXDriver
-from rigup.device.props import deliminated_float, enumerated_string, numeric
+from rigup.device.props import enumerated, numeric
 from serial import Serial
 
 from rigup import describe
@@ -81,7 +81,7 @@ class ObisLX(Laser):
         # OBIS doesn't have a direct enabled query - infer from power
         return self._inst.power_setpoint > 0
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self._inst.max_power, step=0.1)
+    @numeric(min_value=0.0, max_value=lambda self: self._inst.max_power, step=0.1)
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint in mW."""
         return self._inst.power_setpoint
@@ -117,7 +117,7 @@ class ObisLX(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._inst.temperature
 
-    @enumerated_string(options=list(ModulationMode))
+    @enumerated(options=list(ModulationMode))
     @describe(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
@@ -190,7 +190,7 @@ class ObisLS(Laser):
         """Check if the laser is enabled."""
         return self._inst.power_setpoint > 0
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self._inst.max_power, step=0.1)
+    @numeric(min_value=0.0, max_value=lambda self: self._inst.max_power, step=0.1)
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint in mW."""
         return self._inst.power_setpoint
@@ -226,7 +226,7 @@ class ObisLS(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._inst.temperature
 
-    @enumerated_string(options=list(ModulationMode))
+    @enumerated(options=list(ModulationMode))
     @describe(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""

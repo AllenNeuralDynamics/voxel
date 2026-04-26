@@ -18,7 +18,7 @@ from egrabber import (
     StreamModule,
     ct,
 )
-from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import enumerated, enumerated_int, numeric
 from vxlib.vec import IVec2D, Vec2D
 
 from vxl.camera.base import (
@@ -162,7 +162,7 @@ class VieworksCamera(Camera):
     def pixel_size_um(self) -> Vec2D:
         return self._pixel_size_um
 
-    @enumerated_string(options=lambda self: self._pixel_format_options)
+    @enumerated(options=lambda self: self._pixel_format_options)
     def pixel_format(self) -> PixelFormat:
         fmt = self._dev.fetch_remote(feature="PixelFormat", dtype=str)
         return cast("PixelFormat", fmt.upper())
@@ -195,7 +195,7 @@ class VieworksCamera(Camera):
             self._refresh_binning_info()
             self._refresh_exposure_ms()
 
-    @deliminated_float(
+    @numeric(
         min_value=lambda self: self._exposure_ms.min,
         max_value=lambda self: self._exposure_ms.max,
     )
@@ -210,7 +210,7 @@ class VieworksCamera(Camera):
         self.log.info("Set exposure time to %s ms", self._exposure_ms.val)
         self._refresh_exposure_ms()
 
-    @deliminated_float(
+    @numeric(
         min_value=lambda self: self._frame_rate_hz.min,
         max_value=lambda self: self._frame_rate_hz.max,
     )

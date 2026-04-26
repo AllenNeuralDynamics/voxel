@@ -3,7 +3,7 @@
 import time
 
 import numpy as np
-from rigup.device.props import deliminated_float, enumerated_int, enumerated_string
+from rigup.device.props import enumerated, enumerated_int, numeric
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import describe
@@ -163,7 +163,7 @@ class HamamatsuCamera(Camera):
 
     # ==================== Pixel Format ====================
 
-    @enumerated_string(options=lambda self: self._pixel_format_options)
+    @enumerated(options=lambda self: self._pixel_format_options)
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera."""
         dcam_type = _unwrap(self._cam.prop_getvalue(_PROPS["pixel_type"]), 0.0)
@@ -201,7 +201,7 @@ class HamamatsuCamera(Camera):
 
     # ==================== Exposure & Frame Rate ====================
 
-    @deliminated_float(
+    @numeric(
         min_value=lambda self: _unwrap(self._cam.prop_getattr(_PROPS["exposure_time"]), _DEFAULT_ATTR).valuemin * 1000,
         max_value=lambda self: _unwrap(self._cam.prop_getattr(_PROPS["exposure_time"]), _DEFAULT_ATTR).valuemax * 1000,
         step=0.001,
@@ -216,7 +216,7 @@ class HamamatsuCamera(Camera):
         self._cam.prop_setvalue(_PROPS["exposure_time"], exposure_time_ms / 1000)  # ms to s
         self.log.debug(f"Exposure time set to {exposure_time_ms} ms")
 
-    @deliminated_float(min_value=0.1, max_value=1000.0, step=0.1)
+    @numeric(min_value=0.1, max_value=1000.0, step=0.1)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
         frame_time_ms = self._get_frame_time_ms()
@@ -278,7 +278,7 @@ class HamamatsuCamera(Camera):
 
     # ==================== Sensor Mode ====================
 
-    @enumerated_string(options=lambda self: list(self._sensor_mode_options.keys()))
+    @enumerated(options=lambda self: list(self._sensor_mode_options.keys()))
     @describe(label="Sensor Mode", desc="Camera sensor readout mode.")
     def sensor_mode(self) -> str:
         """Get the sensor mode."""
@@ -418,7 +418,7 @@ class HamamatsuCamera(Camera):
 
     # ==================== Line Interval ====================
 
-    @deliminated_float(
+    @numeric(
         min_value=lambda self: _unwrap(self._cam.prop_getattr(_PROPS["line_interval"]), _DEFAULT_ATTR).valuemin * 1e6,
         max_value=lambda self: _unwrap(self._cam.prop_getattr(_PROPS["line_interval"]), _DEFAULT_ATTR).valuemax * 1e6,
         step=0.01,

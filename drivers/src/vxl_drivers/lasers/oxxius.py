@@ -5,7 +5,7 @@ from enum import IntEnum, StrEnum
 from time import perf_counter
 from typing import Literal
 
-from rigup.device.props import deliminated_float, enumerated_string, numeric
+from rigup.device.props import enumerated, numeric
 from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
 
 from rigup import Device, describe
@@ -404,7 +404,7 @@ class OxxiusLBX(Laser):
         """Get the maximum power in mW."""
         return float(self._hub.query(Query.MAX_LASER_POWER, self._prefix))
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self.max_power_mw, step=0.1)
+    @numeric(min_value=0.0, max_value=lambda self: self.max_power_mw, step=0.1)
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint in mW."""
         return float(self._hub.query(Query.LASER_POWER_SETTING, self._prefix))
@@ -446,7 +446,7 @@ class OxxiusLBX(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._hub.baseplate_temperature_c
 
-    @enumerated_string(options=list(ModulationMode))
+    @enumerated(options=list(ModulationMode))
     @describe(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
@@ -550,7 +550,7 @@ class OxxiusLCX(Laser):
         """Get the maximum power in mW."""
         return float(self._hub.query(Query.MAX_LASER_POWER, self._prefix))
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self.max_power_mw, step=0.1)
+    @numeric(min_value=0.0, max_value=lambda self: self.max_power_mw, step=0.1)
     def power_setpoint_mw(self) -> float:
         """Get the power setpoint in mW."""
         return float(self._hub.query(Query.LASER_POWER_SETTING, self._prefix))
@@ -592,7 +592,7 @@ class OxxiusLCX(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._hub.baseplate_temperature_c
 
-    @deliminated_float(min_value=0.0, max_value=lambda self: self.max_power_mw * 0.9, step=0.1)
+    @numeric(min_value=0.0, max_value=lambda self: self.max_power_mw * 0.9, step=0.1)
     @describe(label="AOM Power", units="mW", desc="AOM-linked power setting.")
     def aom_power_mw(self) -> float:
         """Get the AOM power in mW."""

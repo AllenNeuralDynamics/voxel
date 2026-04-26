@@ -4,7 +4,7 @@ from typing import ClassVar, cast, final
 import numpy as np
 from vxlib.vec import IVec2D, Vec2D
 
-from rigup import deliminated_float, enumerated_int, enumerated_string
+from rigup import enumerated, enumerated_int, numeric
 from vxl.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
@@ -88,7 +88,7 @@ class SimulatedCamera(Camera):
     def pixel_size_um(self) -> Vec2D:
         return self._pixel_size_um
 
-    @enumerated_string(options=list(PIXEL_FMT_TO_DTYPE.keys()))
+    @enumerated(options=list(PIXEL_FMT_TO_DTYPE.keys()))
     def pixel_format(self) -> PixelFormat:
         return self._pixel_format
 
@@ -104,7 +104,7 @@ class SimulatedCamera(Camera):
     def binning(self, binning: int) -> None:
         self._binning = binning
 
-    @deliminated_float(min_value=_min_exposure_ms, max_value=_max_exposure_ms)
+    @numeric(min_value=_min_exposure_ms, max_value=_max_exposure_ms)
     def exposure_time_ms(self) -> float:
         return self._exposure_time_ms
 
@@ -114,7 +114,7 @@ class SimulatedCamera(Camera):
         max_frame_rate = 1000.0 / (self._exposure_time_ms + self.readout_time_ms)
         self._frame_rate_hz = min(max_frame_rate, self._frame_rate_hz)
 
-    @deliminated_float(
+    @numeric(
         min_value=lambda self: 1000.0 / (self._max_exposure_ms + self.readout_time_ms),
         max_value=lambda self: 1000.0 / (self._exposure_time_ms + self.readout_time_ms),
     )
