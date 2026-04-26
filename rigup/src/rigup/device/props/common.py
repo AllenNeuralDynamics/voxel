@@ -19,6 +19,7 @@ class PropertyModel[T: str | int | float](BaseModel):
     min_val: float | None = None
     max_val: float | None = None
     step: float | None = None
+    target: float | None = None
     options: list[T] | None = None
 
     @staticmethod

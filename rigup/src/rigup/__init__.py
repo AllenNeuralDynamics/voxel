@@ -6,6 +6,8 @@ from .device import (
     DeviceController,
     DeviceHandle,
     DeviceInterface,
+    NumericFloat,
+    NumericInt,
     PropertyModel,
     PropResults,
     Result,
@@ -16,6 +18,8 @@ from .device import (
     describe,
     enumerated_int,
     enumerated_string,
+    numeric,
+    numeric_int,
 )
 from .rig import Rig
 
@@ -30,6 +34,8 @@ __all__ = [
     "DeviceHandle",
     "DeviceInterface",
     "NodeConfig",
+    "NumericFloat",
+    "NumericInt",
     "PropResults",
     "PropertyModel",
     "Result",
@@ -44,4 +50,6 @@ __all__ = [
     "describe",
     "enumerated_int",
     "enumerated_string",
+    "numeric",
+    "numeric_int",
 ]
