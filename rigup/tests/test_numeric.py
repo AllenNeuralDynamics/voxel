@@ -117,6 +117,7 @@ class TestPydanticIntegration:
 
         dumped = W.model_validate({"f": 3.14}).model_dump()
         assert dumped["f"] == {
+            "kind": "float",
             "value": 3.14,
             "min_val": None,
             "max_val": None,

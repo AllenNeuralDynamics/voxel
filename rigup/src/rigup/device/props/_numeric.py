@@ -11,11 +11,11 @@ such as a laser exposing ``power`` (measured) and ``power_setpoint`` (commanded)
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, Protocol, Self, overload
+from typing import Any, ClassVar, Protocol, Self, overload
 
 from pydantic_core import core_schema
 
-from ._common import PropertyModel, get_descriptor_logger
+from ._common import PropertyKind, PropertyModel, get_descriptor_logger
 
 type _Number = float | int
 type _Dynamic[N: _Number] = N | Callable[[Any], N]
@@ -41,6 +41,10 @@ class _Numeric[N: _Number](ABC):
     # routes through this to call float/int's __new__ — super() can't reach the
     # leaf because the mixin sits between the subclass and the leaf in the MRO.
     base_type: type[N]
+
+    # Wire-format discriminator emitted in to_property_model / _serialize.
+    # Set per-subclass: "float" for NumericFloat, "integer" for NumericInt.
+    kind: ClassVar[PropertyKind]
 
     min_value: N | None
     max_value: N | None
@@ -115,6 +119,7 @@ class _Numeric[N: _Number](ABC):
 
     def to_property_model(self) -> PropertyModel:
         return PropertyModel(
+            kind=type(self).kind,
             value=self._native(),
             min_val=self.min_value,
             max_val=self.max_value,
@@ -139,6 +144,7 @@ class _Numeric[N: _Number](ABC):
 
     def _serialize(self) -> dict[str, Any]:
         return {
+            "kind": type(self).kind,
             "value": self._native(),
             "min_val": self.min_value,
             "max_val": self.max_value,
@@ -149,6 +155,7 @@ class _Numeric[N: _Number](ABC):
 
 class NumericFloat(_Numeric[float], float):
     base_type = float
+    kind = "float"
 
     @classmethod
     def _is_on_grid(cls, modulus: float, step: float) -> bool:
@@ -157,6 +164,7 @@ class NumericFloat(_Numeric[float], float):
 
 class NumericInt(_Numeric[int], int):
     base_type = int
+    kind = "integer"
 
     @classmethod
     def _is_on_grid(cls, modulus: int, step: int) -> bool:

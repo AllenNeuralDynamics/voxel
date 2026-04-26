@@ -77,7 +77,7 @@ class EnumeratedString(str):
         return f"{super().__repr__()} (options={self.options})"
 
     def to_property_model(self) -> PropertyModel[str]:
-        return PropertyModel(value=str(self), options=list(self.options))
+        return PropertyModel(kind="string", value=str(self), options=list(self.options))
 
     def __del__(self) -> None:
         self._options_map.pop(id(self), None)
@@ -123,7 +123,7 @@ class EnumeratedInt(int):
         return f"{super().__repr__()} (options={self.options})"
 
     def to_property_model(self) -> PropertyModel[int]:
-        return PropertyModel(value=int(self), options=list(self.options))
+        return PropertyModel(kind="integer", value=int(self), options=list(self.options))
 
     def __del__(self) -> None:
         self._options_map.pop(id(self), None)
