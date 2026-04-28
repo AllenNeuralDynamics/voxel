@@ -1,6 +1,6 @@
 import type { ChannelConfig, MicroscopeConfig, SessionStateUpdate } from '$lib/protocol/session';
 import type { PreviewConfig, PreviewLevels, PreviewViewport } from '$lib/protocol/preview';
-import type { MsgClient } from '$lib/wire.svelte';
+import type { Client } from '$lib/wire.svelte';
 import type { PreviewFrameInfo, PreviewTileInfo } from '$lib/preview/frame';
 
 import { channelFromTopic, decodeFrameBody, decodeTileBody } from '$lib/preview/frame';
@@ -346,7 +346,7 @@ export class PreviewManager {
   catalog = $state<ColormapCatalog>([]);
   redrawGeneration = $state(0);
 
-  #client: MsgClient;
+  #client: Client;
   #config: MicroscopeConfig;
   #unsubscribers: Array<() => void> = [];
   #viewportUpdateTimer: number | null = null;
@@ -355,7 +355,7 @@ export class PreviewManager {
   #levelsLastSent = new SvelteMap<string, number>();
   readonly #THROTTLE_MS = 200;
 
-  constructor(client: MsgClient, config: MicroscopeConfig, initialStatus: SessionStateUpdate | null) {
+  constructor(client: Client, config: MicroscopeConfig, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.#config = config;
 
@@ -371,7 +371,7 @@ export class PreviewManager {
       .catch((e) => console.warn('[PreviewManager] Failed to fetch colormap catalog:', e));
   }
 
-  get client(): MsgClient {
+  get client(): Client {
     return this.#client;
   }
 

@@ -8,7 +8,7 @@
 
 import { toast } from 'svelte-sonner';
 import { SvelteSet } from 'svelte/reactivity';
-import type { MsgClient } from '$lib/wire.svelte';
+import type { Client } from '$lib/wire.svelte';
 import { UndoStack } from '$lib/utils';
 import type { Stack, StackOrder, StackStatus, PlanConfig } from '$lib/protocol/stacks';
 import type { SessionStateUpdate } from '$lib/protocol';
@@ -27,11 +27,11 @@ export class StacksManager {
   order = $state<string[]>([]);
   plan = $state<PlanConfig>(DEFAULT_PLAN);
 
-  readonly #client: MsgClient;
+  readonly #client: Client;
   readonly #undo: UndoStack;
   readonly #unsubscribe: () => void;
 
-  constructor(client: MsgClient, undo: UndoStack, initialStatus: SessionStateUpdate | null) {
+  constructor(client: Client, undo: UndoStack, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.#undo = undo;
     this.handleStatus(initialStatus);

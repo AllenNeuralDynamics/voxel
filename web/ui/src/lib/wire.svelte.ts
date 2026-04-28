@@ -98,7 +98,7 @@ const DEFAULT_OPTIONS: Required<Omit<ClientOptions, 'apiUrl'>> = {
 type TypedHandler = (event: unknown) => void;
 type PatternHandler = (topic: string, body: Uint8Array) => void;
 
-export class MsgClient {
+export class Client {
   readonly wsUrl: string;
   readonly baseUrl: string;
 

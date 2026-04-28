@@ -10,7 +10,7 @@
  */
 
 import { toast } from 'svelte-sonner';
-import type { MsgClient } from '$lib/wire.svelte';
+import type { Client } from '$lib/wire.svelte';
 import type { Stage } from '$lib/microscope';
 import { SnapshotStore } from '$lib/preview/snapshots.svelte';
 import type { GridConfig } from '$lib/protocol/stacks';
@@ -31,11 +31,11 @@ export class MosaicManager {
   fov = $state<{ width: number; height: number }>(DEFAULT_FOV);
   readonly snaps = new SnapshotStore();
 
-  readonly #client: MsgClient;
+  readonly #client: Client;
   readonly #getStage: () => Stage | null;
   readonly #unsubscribe: () => void;
 
-  constructor(client: MsgClient, getStage: () => Stage | null, initialStatus: SessionStateUpdate | null) {
+  constructor(client: Client, getStage: () => Stage | null, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.#getStage = getStage;
     this.handleStatus(initialStatus);

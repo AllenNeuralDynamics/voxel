@@ -8,7 +8,7 @@
 
 import { SvelteMap } from 'svelte/reactivity';
 import { toast } from 'svelte-sonner';
-import type { MsgClient } from '$lib/wire.svelte';
+import type { Client } from '$lib/wire.svelte';
 import type { SessionMode } from '$lib/protocol/session';
 import type { SessionStateUpdate, StackProgress } from '$lib/protocol';
 
@@ -18,11 +18,11 @@ export class AcquisitionManager {
   /** Live per-stack progress, keyed by stack_id. Populated by ``stack/progress`` events. */
   progressByStack = new SvelteMap<string, StackProgress>();
 
-  readonly #client: MsgClient;
+  readonly #client: Client;
   readonly #unsubStatus: () => void;
   readonly #unsubProgress: () => void;
 
-  constructor(client: MsgClient, initialStatus: SessionStateUpdate | null) {
+  constructor(client: Client, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.handleStatus(initialStatus);
     this.#unsubStatus = client.on('app.status', (status) => {

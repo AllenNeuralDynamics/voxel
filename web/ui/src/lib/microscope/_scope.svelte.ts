@@ -5,7 +5,7 @@
  */
 
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import type { MsgClient } from '$lib/wire.svelte';
+import type { Client } from '$lib/wire.svelte';
 import type { DeviceSnapshot, DevicesSnapshot } from '$lib/protocol/device';
 import type { PropSnapshot } from '$lib/prop.svelte';
 import { AnalogOut, Axis, Camera, Device, Laser, type DeviceCallbacks } from './device';
@@ -27,11 +27,11 @@ export class Profiles {
   profileOrder = $state<string[]>([]);
   isSwitching = $state(false);
 
-  readonly #client: MsgClient;
+  readonly #client: Client;
   readonly #getCfg: () => MicroscopeConfig;
   #unsubscribers: Array<() => void> = [];
 
-  constructor(client: MsgClient, getCfg: () => MicroscopeConfig, initialStatus: SessionStateUpdate | null) {
+  constructor(client: Client, getCfg: () => MicroscopeConfig, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.#getCfg = getCfg;
     this.handleStatus(initialStatus);
@@ -262,15 +262,15 @@ export class Microscope {
     return out;
   });
 
-  readonly #client: MsgClient;
+  readonly #client: Client;
   #unsubProps?: () => void;
 
-  get client(): MsgClient {
+  get client(): Client {
     return this.#client;
   }
 
   constructor(
-    client: MsgClient,
+    client: Client,
     config: MicroscopeConfig,
     initial: DevicesSnapshot,
     initialStatus: SessionStateUpdate | null

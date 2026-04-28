@@ -3,7 +3,7 @@ import { sanitizeString, UndoStack } from '$lib/utils';
 import type { OutputConfig, SessionInfo, SessionMode } from '$lib/protocol/session';
 import type { JsonSchema } from '$lib/protocol/common';
 import type { AppStatusUpdate, SessionDetails, SessionStateUpdate } from '$lib/protocol';
-import type { MsgClient } from '$lib/wire.svelte';
+import type { Client } from '$lib/wire.svelte';
 
 import { PreviewManager, compositeFullFrames, type SnapshotChannel } from '$lib/preview';
 import { StacksManager, AcquisitionManager } from '$lib/stacks';
@@ -17,13 +17,13 @@ const DEFAULT_OUTPUT: OutputConfig = {
 };
 
 export interface SessionInit {
-  client: MsgClient;
+  client: Client;
   status: AppStatusUpdate;
   details: SessionDetails;
 }
 
 export class Session {
-  readonly client: MsgClient;
+  readonly client: Client;
   readonly scope: Microscope;
   readonly undo = new UndoStack();
 
@@ -61,7 +61,7 @@ export class Session {
     );
   }
 
-  static async create(client: MsgClient, initialStatus: AppStatusUpdate): Promise<Session> {
+  static async create(client: Client, initialStatus: AppStatusUpdate): Promise<Session> {
     const res = await client.request('GET', '/session/details');
     const details: SessionDetails = await res.json();
     const session = new Session({ client, status: initialStatus, details });

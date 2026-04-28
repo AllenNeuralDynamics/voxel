@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { toast } from 'svelte-sonner';
-import { MsgClient, type ClientOptions } from '$lib/wire.svelte';
+import { Client, type ClientOptions } from '$lib/wire.svelte';
 import type { DataRoot, SessionListing, TemplateInfo } from '$lib/protocol/app';
 import type { JsonSchema } from '$lib/protocol/common';
 import type { AppStatusUpdate, LogMessage } from '$lib/protocol';
@@ -14,7 +14,7 @@ export interface AppOptions {
 const MAX_LOGS = 500;
 
 export class App {
-  readonly #client: MsgClient;
+  readonly #client: Client;
 
   logs = $state<LogMessage[]>([]);
   status = $state<AppStatusUpdate | null>(null);
@@ -28,10 +28,10 @@ export class App {
   private unsubscribers: Array<() => void> = [];
 
   constructor(options: AppOptions = {}) {
-    this.#client = new MsgClient(options.clientOptions);
+    this.#client = new Client(options.clientOptions);
   }
 
-  get client(): MsgClient {
+  get client(): Client {
     return this.#client;
   }
 
