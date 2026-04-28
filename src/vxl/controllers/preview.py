@@ -12,11 +12,10 @@ import logging
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
-from vxl.camera.handle import CameraHandle
 from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
 from vxl.microscope import Microscope
 from vxl.profiles import Channel
-from vxlib import Cell, Sink, merge_dicts
+from vxlib import Cell, Sink, Unsub, merge_dicts
 
 FrameCallback = Callable[[str, str, bytes], Awaitable[None]]
 
@@ -65,18 +64,14 @@ class PreviewController:
         for cam_id, handle in self._scope.cameras.items():
             frame_cb = self._make_forward(cam_id, "preview")
             tile_cb = self._make_forward(cam_id, "preview_tile")
-            await handle.subscribe("preview", frame_cb)
-            await handle.subscribe("preview_tile", tile_cb)
+            unsub_frame = await handle.subscribe("preview", frame_cb)
+            unsub_tile = await handle.subscribe("preview_tile", tile_cb)
 
-            async def _unsub(
-                h: CameraHandle = handle,
-                fcb: Callable[[bytes], Awaitable[None]] = frame_cb,
-                tcb: Callable[[bytes], Awaitable[None]] = tile_cb,
-            ) -> None:
+            async def _unsub(uf: Unsub = unsub_frame, ut: Unsub = unsub_tile) -> None:
                 with suppress(Exception):
-                    await h.unsubscribe("preview", fcb)
+                    uf()
                 with suppress(Exception):
-                    await h.unsubscribe("preview_tile", tcb)
+                    ut()
 
             self._stream_unsubs.append(_unsub)
         self._streams_connected = True

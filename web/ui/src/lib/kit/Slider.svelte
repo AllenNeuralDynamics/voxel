@@ -66,23 +66,22 @@
     outline: none;
     cursor: pointer;
     background: transparent;
-    --thumb-width: 0.2rem;
-    --thumb-height: 0.75rem;
-    --thumb-radius: 2px;
-    --thumb-color: var(--color-primary);
     --track-filled: var(--color-primary);
     --track-unfilled: var(--color-element-bg);
-    --track-height: 0.5rem;
-    --track-radius: 0.25rem;
-    --track-border: 1px solid color-mix(in srgb, var(--color-fg-faint) 60%, transparent);
+    --thumb-color: var(--track-filled);
+    --track-radius: 0.2rem;
+    --thumb-width: 4px;
+    --track-height: 0.75rem;
+    --thumb-radius: var(--thumb-width);
+    --thumb-height: calc(var(--track-height) * 2);
+    --thumb-margin-block: calc((var(--track-height) / 2 - var(--thumb-height) / 2) - 0.5px);
+    --track-border: 1px solid color-mix(in oklch, var(--color-fg-faint) 60%, transparent);
   }
 
-  .slider:hover {
-    --track-unfilled: var(--color-element-hover);
-  }
-
+  .slider:hover,
   .slider:focus,
   .slider:active {
+    --track-filled: color-mix(in oklch, var(--color-primary) 50%, var(--color-fg));
     --track-unfilled: var(--color-element-hover);
     --track-border: 1px solid var(--color-border-focused);
   }
@@ -97,7 +96,7 @@
       var(--track-unfilled) var(--fill-percentage),
       var(--track-unfilled) 100%
     );
-    border: var(--track-border);
+    /*border: var(--track-border);*/
     border-radius: var(--track-radius);
     transition: background 150ms ease;
   }
@@ -108,8 +107,9 @@
     width: var(--thumb-width);
     height: var(--thumb-height);
     background: var(--thumb-color);
+    margin-block: var(--thumb-margin-block);
     border-radius: var(--thumb-radius);
-    margin-block: calc((var(--thumb-height) - var(--track-height)) * -0.7);
+    border-inline: 1px solid var(--track-unfilled);
   }
 
   .slider::-moz-range-track {

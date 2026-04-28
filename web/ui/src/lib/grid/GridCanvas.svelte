@@ -1,8 +1,10 @@
 <script lang="ts">
-  import type { Session } from '$lib/app';
+  import type { Session } from '$lib/session.svelte';
   import type { Component } from 'svelte';
-  import type { GridConfig, LayerVisibility, StackOrder } from '$lib/app/types';
-  import { STACK_ORDER_OPTIONS } from '$lib/app/types';
+  import type { GridConfig } from '$lib/protocol/stacks';
+  import type { LayerVisibility } from './types';
+  import type { StackOrder } from '$lib/protocol/stacks';
+  import { STACK_ORDER_OPTIONS } from '$lib/stacks';
   import { Link, LinkOff, PanelLeft, GridLines, StackLight, ImageLight, GripVertical } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
   import XYPlane from './XYPlane.svelte';
@@ -38,7 +40,23 @@
   );
 </script>
 
-{#if session.stage && session.stage.x && session.stage.y && session.stage.z}
+{#if session.scope.stage}
+  {@const stage = session.scope.stage}
+  {@const sx = stage.x}
+  {@const sy = stage.y}
+  {@const sz = stage.z}
+  {@const sxLower = sx.lowerLimit?.value ?? 0}
+  {@const sxUpper = sx.upperLimit?.value ?? 0}
+  {@const syLower = sy.lowerLimit?.value ?? 0}
+  {@const syUpper = sy.upperLimit?.value ?? 0}
+  {@const szLower = sz.lowerLimit?.value ?? 0}
+  {@const szUpper = sz.upperLimit?.value ?? 0}
+  {@const sxPos = sx.position?.value ?? 0}
+  {@const syPos = sy.position?.value ?? 0}
+  {@const szPos = sz.position?.value ?? 0}
+  {@const sxMoving = sx.isMoving?.value === true}
+  {@const syMoving = sy.isMoving?.value === true}
+  {@const szMoving = sz.isMoving?.value === true}
   <div class="flex h-full">
     <!-- Grid controls sidebar (collapses when grid layer hidden) -->
     {#if sidebarOpen}
@@ -232,7 +250,7 @@
                     class="flex items-center gap-1 rounded border border-transparent py-1 pr-2 pl-0.5 text-xs text-fg hover:border-fg/20"
                   >
                     <GripVertical width="12" height="12" class="shrink-0 text-fg-muted/50" />
-                    {session.rig_cfg.profiles[profile.profile_id]?.label ?? sanitizeString(profile.profile_id)}
+                    {session.scope.config.profiles[profile.profile_id]?.label ?? sanitizeString(profile.profile_id)}
                   </SortableList.Item>
                 {/snippet}
               </SortableList.Root>
@@ -273,59 +291,53 @@
           {/each}
         </div>
         <div class="flex flex-1 items-center justify-end gap-4">
-          {#if session.stage.x}
-            <SpinBox
-              value={session.stage.x.position / 1000}
-              min={session.stage.x.lowerLimit / 1000}
-              max={session.stage.x.upperLimit / 1000}
-              step={0.01}
-              decimals={3}
-              numCharacters={8}
-              size="xs"
-              align="right"
-              prefix="X"
-              suffix="mm"
-              color={session.stage.x.isMoving ? 'var(--danger)' : undefined}
-              onChange={(v) => session.stage.x.move(v * 1000)}
-            />
-          {/if}
-          {#if session.stage.y}
-            <SpinBox
-              value={session.stage.y.position / 1000}
-              min={session.stage.y.lowerLimit / 1000}
-              max={session.stage.y.upperLimit / 1000}
-              step={0.01}
-              decimals={3}
-              numCharacters={8}
-              size="xs"
-              align="right"
-              prefix="Y"
-              suffix="mm"
-              color={session.stage.y.isMoving ? 'var(--danger)' : undefined}
-              onChange={(v) => session.stage.y.move(v * 1000)}
-            />
-          {/if}
-          {#if session.stage.z}
-            <SpinBox
-              value={session.stage.z.position / 1000}
-              min={session.stage.z.lowerLimit / 1000}
-              max={session.stage.z.upperLimit / 1000}
-              step={0.001}
-              decimals={3}
-              numCharacters={8}
-              size="xs"
-              align="right"
-              prefix="Z"
-              suffix="mm"
-              color={session.stage.z.isMoving ? 'var(--danger)' : undefined}
-              onChange={(v) => session.stage.z.move(v * 1000)}
-            />
-          {/if}
-          <Button
-            variant={session.stage.isMoving ? 'danger' : 'outline'}
+          <SpinBox
+            value={sxPos / 1000}
+            min={sxLower / 1000}
+            max={sxUpper / 1000}
+            step={0.01}
+            decimals={3}
+            numCharacters={8}
             size="xs"
-            onclick={() => session.stage.halt()}
-            disabled={!session.stage.isMoving}
+            align="right"
+            prefix="X"
+            suffix="mm"
+            color={sxMoving ? 'var(--danger)' : undefined}
+            onChange={(v) => sx.move(v * 1000)}
+          />
+          <SpinBox
+            value={syPos / 1000}
+            min={syLower / 1000}
+            max={syUpper / 1000}
+            step={0.01}
+            decimals={3}
+            numCharacters={8}
+            size="xs"
+            align="right"
+            prefix="Y"
+            suffix="mm"
+            color={syMoving ? 'var(--danger)' : undefined}
+            onChange={(v) => sy.move(v * 1000)}
+          />
+          <SpinBox
+            value={szPos / 1000}
+            min={szLower / 1000}
+            max={szUpper / 1000}
+            step={0.001}
+            decimals={3}
+            numCharacters={8}
+            size="xs"
+            align="right"
+            prefix="Z"
+            suffix="mm"
+            color={szMoving ? 'var(--danger)' : undefined}
+            onChange={(v) => sz.move(v * 1000)}
+          />
+          <Button
+            variant={stage.isMoving ? 'danger' : 'outline'}
+            size="xs"
+            onclick={() => stage.halt()}
+            disabled={!stage.isMoving}
             aria-label="Halt stage"
           >
             Halt Stage

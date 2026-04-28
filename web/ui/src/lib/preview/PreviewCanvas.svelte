@@ -5,8 +5,8 @@
   import PreviewInfo from './PreviewInfo.svelte';
   import PanZoomControls from './PanZoomControls.svelte';
   import Histogram from './Histogram.svelte';
-  import type { PreviewManager } from '$lib/app';
-  import { channelBoundingBox, compositeTiledFrames } from '$lib/app/preview.svelte.ts';
+  import type { PreviewManager } from '$lib/preview';
+  import { channelBoundingBox, compositeTiledFrames } from '$lib/preview';
   import { clampTopLeft } from '$lib/utils';
 
   let canvasEl: HTMLCanvasElement;

@@ -1,6 +1,6 @@
 import { setContext, getContext } from 'svelte';
-import type { Session } from './app';
-import type { LogMessage } from './app/types/types';
+import type { Session } from './session.svelte';
+import type { LogMessage } from '$lib/protocol';
 
 // --- Session context (set inside session gate, always non-null) ---
 

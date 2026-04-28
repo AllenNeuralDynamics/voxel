@@ -10,7 +10,9 @@ by routing device calls through the shared transport.
 
 import logging
 from contextlib import suppress
-from typing import Any
+from typing import Any, overload
+
+from pydantic import BaseModel
 
 from rigup.device import (
     Adapter,
@@ -36,7 +38,8 @@ from rigup.protocol import (
     call,
 )
 from rigup.transport import TransportClient
-from vxlib import Signal, Unsub
+from rigup.wire import TopicDispatcher
+from vxlib import Unsub
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 
@@ -44,28 +47,22 @@ from ._base import DevicesBuildResult, DevicesConfig, Node
 class TransportAdapter[D: Device](Adapter[D]):
     """Routes device RPC through a shared :class:`TransportClient`.
 
-    One adapter per device, all sharing one transport. The device UID is
-    included in every protocol payload so the remote dispatcher can route
-    to the right controller.
+    One adapter per device, all sharing one transport. Subscriptions are lazy:
+    the adapter creates a :class:`TopicDispatcher` and a wire ZMQ subscription
+    on first app-level subscribe for a topic; both go away when the last
+    subscriber leaves. Decode happens once per wire message regardless of
+    subscriber count; bytes pass through verbatim for byte subs.
     """
 
     def __init__(self, uid: str, transport: TransportClient) -> None:
         self._uid = uid
         self._transport = transport
         self._log = logging.getLogger(f"{uid}.TransportAdapter")
-        self._props_changed: Signal[PropResults] = Signal()
-        self._unsubs: dict[tuple[str, StreamCallback], Unsub] = {}
-        self._props_unsub: Unsub | None = None
+        self._signals: dict[str, TopicDispatcher] = {}
+        self._zmq_unsubs: dict[str, Unsub] = {}
 
     async def start(self) -> None:
-        """Subscribe to the device's property stream on the transport."""
-
-        async def _on_props(data: bytes) -> None:
-            with suppress(Exception):
-                props = PropResults.model_validate_json(data)
-                await self._props_changed.emit(props)
-
-        self._props_unsub = await self._transport.subscribe(f"{self._uid}/properties", _on_props)
+        """No-op — wire subscriptions are lazy, established on first subscribe()."""
 
     @property
     def uid(self) -> str:
@@ -74,10 +71,6 @@ class TransportAdapter[D: Device](Adapter[D]):
     @property
     def device(self) -> D | None:
         return None
-
-    @property
-    def props_changed(self) -> Signal[PropResults]:
-        return self._props_changed
 
     async def interface(self) -> DeviceInterface:
         return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(uid=self._uid), DeviceInterface)
@@ -105,23 +98,58 @@ class TransportAdapter[D: Device](Adapter[D]):
     async def set_props(self, **props: Any) -> PropResults:
         return await call(self._transport, Action.SET_PROPS, SetPropsRequest(uid=self._uid, props=props), PropResults)
 
-    async def subscribe(self, topic: str, callback: StreamCallback) -> None:
-        full_topic = f"{self._uid}/{topic}"
-        unsub = await self._transport.subscribe(full_topic, callback)
-        self._unsubs[(topic, callback)] = unsub
+    @overload
+    async def subscribe(self, topic: str, callback: StreamCallback[bytes]) -> Unsub: ...
 
-    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None:
-        unsub = self._unsubs.pop((topic, callback), None)
+    @overload
+    async def subscribe[T: BaseModel](self, topic: str, callback: StreamCallback[T], *, schema: type[T]) -> Unsub: ...
+
+    async def subscribe(
+        self,
+        topic: str,
+        callback: Any,
+        *,
+        schema: type[BaseModel] | None = None,
+    ) -> Unsub:
+        full_topic = f"{self._uid}.{topic}"
+        sig = await self._ensure_signal(full_topic)
+        inner_unsub = sig.subscribe(callback, schema=schema) if schema is not None else sig.subscribe(callback)
+
+        def unsub() -> None:
+            inner_unsub()
+            self._maybe_release(full_topic)
+
+        return unsub
+
+    async def _ensure_signal(self, full_topic: str) -> TopicDispatcher:
+        """Create the TopicDispatcher and ZMQ subscription for ``full_topic`` if absent."""
+        if (sig := self._signals.get(full_topic)) is not None:
+            return sig
+        sig = TopicDispatcher()
+        self._signals[full_topic] = sig
+
+        async def on_wire(data: bytes) -> None:
+            await sig.emit_bytes(data)
+
+        self._zmq_unsubs[full_topic] = await self._transport.subscribe(full_topic, on_wire)
+        return sig
+
+    def _maybe_release(self, full_topic: str) -> None:
+        """Drop the wire subscription and dispatcher when no app-level subscribers remain."""
+        sig = self._signals.get(full_topic)
+        if sig is None or len(sig) > 0:
+            return
+        unsub = self._zmq_unsubs.pop(full_topic, None)
         if unsub is not None:
             unsub()
+        self._signals.pop(full_topic, None)
 
     async def close(self) -> None:
-        if self._props_unsub is not None:
-            self._props_unsub()
-            self._props_unsub = None
-        for unsub in self._unsubs.values():
-            unsub()
-        self._unsubs.clear()
+        for unsub in self._zmq_unsubs.values():
+            with suppress(Exception):
+                unsub()
+        self._zmq_unsubs.clear()
+        self._signals.clear()
 
 
 class TransportNode(Node):

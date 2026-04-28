@@ -1,8 +1,8 @@
 """Tests for rigup.device.props.numeric — value classes, descriptors, decorators."""
 
 import math
-
 from typing import Any
+
 from pydantic import BaseModel
 from rigup.device.props import (
     NumericFloat,

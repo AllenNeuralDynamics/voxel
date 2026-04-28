@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { StacksManager } from '$lib/app';
+  import type { StacksManager } from './stacks.svelte';
   import { sanitizeString, cn } from '$lib/utils';
   import { selectVariants } from '$lib/kit/Select.svelte';
   import { ChevronUpDown } from '$lib/icons';

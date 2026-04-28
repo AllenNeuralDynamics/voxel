@@ -7,6 +7,7 @@ export { default as Checkbox, checkboxVariants, type CheckboxVariants } from './
 export { default as ColorPicker } from './ColorPicker.svelte';
 export { default as Field } from './Field.svelte';
 export { default as JsonView } from './JsonView.svelte';
+export { default as NumberInput, numberInputVariants, type NumberInputVariants } from './NumberInput.svelte';
 export { default as PaneDivider } from './PaneDivider.svelte';
 export { default as Select, selectVariants, type SelectVariants } from './Select.svelte';
 export { default as Slider } from './Slider.svelte';
@@ -18,6 +19,7 @@ export { default as TextArea, textAreaVariants, type TextAreaVariants } from './
 export { default as Rename, renameVariants, type RenameVariants } from './Rename.svelte';
 export { default as TextInput, textInputVariants, type TextInputVariants } from './TextInput.svelte';
 
+export * as Numeric from './field/numeric';
 export * as SortableList from './sortable-list';
 export * as Collapsible from './cn/collapsible';
 export * as ContextMenu from './cn/context-menu';

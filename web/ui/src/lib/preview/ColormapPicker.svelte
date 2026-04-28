@@ -2,7 +2,7 @@
   import { DropdownMenu, Popover } from 'bits-ui';
   import { FilterVariant, Check } from '$lib/icons';
   import { isValidHex } from '$lib/utils';
-  import type { ColormapCatalog } from '$lib/app';
+  import type { ColormapCatalog } from '$lib/preview';
   import { SvelteSet } from 'svelte/reactivity';
 
   interface Props {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { JsonSchema, JsonSchemaProperty } from '$lib/app/types/types';
+  import type { JsonSchema, JsonSchemaProperty } from '$lib/protocol/common';
   import type { Snippet } from 'svelte';
   import { sanitizeString } from '$lib/utils';
   import { Select, SpinBox, TagInput, TextArea, TextInput } from '$lib/kit';

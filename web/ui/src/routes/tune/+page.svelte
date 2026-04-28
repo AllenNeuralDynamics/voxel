@@ -3,11 +3,11 @@
   import { Pane, PaneGroup } from 'paneforge';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { createPaneMinSize, sanitizeString } from '$lib/utils';
-  import { discoverProfileDevices } from '$lib/app';
-  import type { AOSignals, ClockSource, DerivedWaveform, Waveform } from '$lib/app';
-  import { isDerivedWaveform } from '$lib/app';
+  import { discoverProfileDevices } from '$lib/microscope/profile';
+  import { generateTraces, resolveWaveforms } from '$lib/protocol/waveform';
+  import type { AOSignals, ClockSource } from '$lib/protocol/session';
+  import { isDerivedWaveform, type Waveform, type DerivedWaveform } from '$lib/protocol/waveform';
   import type { SelectOption } from '$lib/kit/Select.svelte';
-  import { generateTraces, resolveWaveforms } from '$lib/profile/generate';
   import WaveformPanel from './WaveformPanel.svelte';
   import { SpinBox, Select, Button } from '$lib/kit';
   import { Collapsible } from 'bits-ui';
@@ -19,12 +19,12 @@
   // ──────────────────────────────── Session wiring ────────────────────────────────
 
   const session = getSessionContext();
-  const profiles = $derived(session.profiles);
-  const devices = $derived(session.devices);
-  const rigCfg = $derived(session.rig_cfg);
+  const scope = $derived(session.scope);
+  const profiles = $derived(scope.profiles);
+  const rigCfg = $derived(scope.config);
   const canEdit = $derived(session.mode !== 'acquiring');
 
-  const profile = $derived(session.profiles.activeId ? rigCfg.profiles[session.profiles.activeId] : undefined);
+  const profile = $derived(profiles.activeId ? rigCfg.profiles[profiles.activeId] : undefined);
 
   // ──────────────────────────────── Constants (pure) ────────────────────────────────
 
@@ -164,8 +164,7 @@
 
   const loadedSignals = $derived.by<AOSignals | null>(() => {
     if (!selectedAoUid) return null;
-    const val = devices.getPropertyValue(selectedAoUid, 'loaded');
-    return (val ?? null) as AOSignals | null;
+    return scope.analogOuts.get(selectedAoUid)?.loaded ?? null;
   });
 
   const configSignals = $derived.by<AOSignals | null>(() => {
@@ -185,12 +184,7 @@
 
   const aoRange = $derived.by<{ min: number; max: number } | null>(() => {
     if (!selectedAoUid) return null;
-    const val = devices.getPropertyValue(selectedAoUid, 'voltage_range') as
-      | { min: number; max: number }
-      | null
-      | undefined;
-    if (val && typeof val === 'object' && 'min' in val && 'max' in val) return val;
-    return null;
+    return scope.analogOuts.get(selectedAoUid)?.voltageRange ?? null;
   });
 
   const aoPorts = $derived.by<Record<string, string>>(() => {
@@ -817,7 +811,7 @@
                     appearance="full"
                     decimals={3}
                     step={0.01}
-                    coarseStep={0.05}
+                    bigStep={0.05}
                     min={0}
                     max={wf.window.max}
                     numCharacters={6}
@@ -832,7 +826,7 @@
                     appearance="full"
                     decimals={3}
                     step={0.01}
-                    coarseStep={0.05}
+                    bigStep={0.05}
                     min={wf.window.min}
                     max={1}
                     numCharacters={6}
@@ -970,8 +964,7 @@
                   numCharacters={8}
                   align="right"
                   step={1}
-                  coarseStep={1000}
-                  fineStep={10}
+                  bigStep={1000}
                   min={1000}
                   disabled={!canEdit}
                   onChange={(v) => updateTimingField('sample_rate', v)}
@@ -986,7 +979,7 @@
                   numCharacters={8}
                   align="right"
                   step={0.0001}
-                  coarseStep={0.001}
+                  bigStep={0.001}
                   min={0.0001}
                   disabled={!canEdit}
                   onChange={(v) => updateTimingField('duration', v)}
@@ -1001,7 +994,7 @@
                   numCharacters={8}
                   align="right"
                   step={0.0001}
-                  coarseStep={0.001}
+                  bigStep={0.001}
                   min={0}
                   disabled={!canEdit}
                   onChange={(v) => updateTimingField('rest_time', v)}

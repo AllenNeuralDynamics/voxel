@@ -8,6 +8,8 @@ from contextlib import suppress
 from enum import StrEnum
 from typing import Any, ClassVar
 
+from pydantic import BaseModel
+
 from .props import PropertyModel
 from .schema import (
     Command,
@@ -22,8 +24,15 @@ from .schema import (
 )
 
 # Type aliases
-PublishFn = Callable[[str, bytes], Awaitable[None]]
-StreamCallback = Callable[[bytes], Awaitable[None]]
+#
+# Two publish paths reflect two distinct stream kinds:
+# - **typed** for events with a Pydantic schema (e.g. ``props.update``).
+#   Subscribers want the deserialized object; serialization is on-demand.
+# - **bytes** for raw streams without a schema (e.g. preview frames, custom
+#   device telemetry). Subscribers want the bytes verbatim.
+type PublishTypedFn = Callable[[str, BaseModel], Awaitable[None]]
+type PublishBytesFn = Callable[[str, bytes], Awaitable[None]]
+type StreamCallback[T] = Callable[[T], Awaitable[None]]
 
 
 class DeviceController[D: "Device"]:
@@ -34,7 +43,8 @@ class DeviceController[D: "Device"]:
 
     def __init__(self, device: D, stream_interval: float = 0.5):
         self._device = device
-        self._publish_fn: PublishFn | None = None
+        self._publish_typed_fn: PublishTypedFn | None = None
+        self._publish_bytes_fn: PublishBytesFn | None = None
         self._stream_interval = stream_interval
         # Per-device single-worker pool: sync calls into a given device are serialized
         # (most hardware SDKs aren't thread-safe and many rely on single-instance state),
@@ -80,9 +90,13 @@ class DeviceController[D: "Device"]:
     def commands(self) -> dict[str, Command]:
         return self._commands
 
-    def set_publisher(self, fn: PublishFn) -> None:
-        """Set the publish function for this controller."""
-        self._publish_fn = fn
+    def set_typed_publisher(self, fn: PublishTypedFn) -> None:
+        """Wire the typed publish path (used for events with a Pydantic schema)."""
+        self._publish_typed_fn = fn
+
+    def set_bytes_publisher(self, fn: PublishBytesFn) -> None:
+        """Wire the bytes publish path (used for raw streams like frames)."""
+        self._publish_bytes_fn = fn
 
     async def _run_sync[R](self, fn: Callable[..., R], *args: Any, **kwargs: Any) -> R:
         """Run a sync function in the thread pool."""
@@ -167,9 +181,13 @@ class DeviceController[D: "Device"]:
         return await self._run_sync(_set)
 
     async def publish(self, topic: str, data: bytes) -> None:
-        """Publish raw bytes to a topic. No-op if no publish function set."""
-        if self._publish_fn is not None:
-            await self._publish_fn(topic, data)
+        """Publish raw bytes to a topic (for streams without a Pydantic schema, e.g. frames).
+
+        For typed events with a schema, the controller's stream loop uses the typed
+        publisher directly — devices don't go through this for property updates.
+        """
+        if self._publish_bytes_fn is not None:
+            await self._publish_bytes_fn(topic, data)
 
     # ==================== Property Streaming ====================
 
@@ -202,9 +220,8 @@ class DeviceController[D: "Device"]:
                     if last is None or value != last:
                         changed[name] = current[name]
 
-                if changed and self._publish_fn is not None:
-                    payload = PropResults(results=changed).model_dump_json().encode()
-                    await self._publish_fn("properties", payload)
+                if changed and self._publish_typed_fn is not None:
+                    await self._publish_typed_fn("props.update", PropResults(results=changed))
 
                 last_state = current
                 await asyncio.sleep(self._stream_interval)

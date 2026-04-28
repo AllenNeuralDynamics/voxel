@@ -1,9 +1,11 @@
 """User-facing device handle."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Self
+from typing import Any, Self, overload
 
-from vxlib import Signal
+from pydantic import BaseModel
+
+from vxlib import Unsub
 
 from .driver import Device, StreamCallback
 from .props import PropertyModel
@@ -11,7 +13,12 @@ from .schema import CommandRequest, DeviceInterface, PropResults, Result, Result
 
 
 class Adapter[D: Device](ABC):
-    """Abstract base for device communication. Used by DeviceHandle."""
+    """Abstract base for device communication. Used by DeviceHandle.
+
+    The pub/sub API is :meth:`subscribe`. Bytes form receives raw payload (good
+    for forwarders); typed form (with ``schema=...``) deserializes into a
+    Pydantic model. Both return an ``Unsub`` callable.
+    """
 
     @property
     @abstractmethod
@@ -20,10 +27,6 @@ class Adapter[D: Device](ABC):
     @property
     @abstractmethod
     def device(self) -> D | None: ...
-
-    @property
-    @abstractmethod
-    def props_changed(self) -> Signal[PropResults]: ...
 
     @abstractmethod
     async def interface(self) -> DeviceInterface: ...
@@ -40,11 +43,19 @@ class Adapter[D: Device](ABC):
     @abstractmethod
     async def set_props(self, **props: Any) -> PropResults: ...
 
-    @abstractmethod
-    async def subscribe(self, topic: str, callback: StreamCallback) -> None: ...
+    @overload
+    async def subscribe(self, topic: str, callback: StreamCallback[bytes]) -> Unsub: ...
+
+    @overload
+    async def subscribe[T: BaseModel](self, topic: str, callback: StreamCallback[T], *, schema: type[T]) -> Unsub: ...
 
     @abstractmethod
-    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None: ...
+    async def subscribe(self, topic: str, callback: Any, *, schema: type[BaseModel] | None = None) -> Unsub:
+        """Subscribe to ``topic``. Returns an Unsub callable.
+
+        - Without ``schema``: ``callback`` receives raw ``bytes`` (for forwarders).
+        - With ``schema``: ``callback`` receives a validated instance of ``schema``.
+        """
 
     @abstractmethod
     async def close(self) -> None: ...
@@ -80,10 +91,9 @@ class DeviceHandle[D: Device]:
     def uid(self) -> str:
         return self._adapter.uid
 
-    @property
-    def props_changed(self) -> Signal[PropResults]:
-        """Fires on property changes for ``stream=True`` props. Subscribe to receive ``PropResults``."""
-        return self._adapter.props_changed
+    async def on_props_change(self, callback: StreamCallback[PropResults]) -> Unsub:
+        """Convenience for the most common typed subscription: device property updates."""
+        return await self._adapter.subscribe("props.update", callback, schema=PropResults)
 
     async def call(self, command: str, *args: Any, **kwargs: Any) -> Any:
         """Call a command and return the result, raising on error."""
@@ -124,11 +134,17 @@ class DeviceHandle[D: Device]:
             self._interface = await self._adapter.interface()
         return self._interface
 
-    async def subscribe(self, topic: str, callback: StreamCallback) -> None:
-        await self._adapter.subscribe(topic, callback)
+    @overload
+    async def subscribe(self, topic: str, callback: StreamCallback[bytes]) -> Unsub: ...
 
-    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None:
-        await self._adapter.unsubscribe(topic, callback)
+    @overload
+    async def subscribe[T: BaseModel](self, topic: str, callback: StreamCallback[T], *, schema: type[T]) -> Unsub: ...
+
+    async def subscribe(self, topic: str, callback: Any, *, schema: type[BaseModel] | None = None) -> Unsub:
+        """Subscribe to ``topic``. Bytes form (no schema) for forwarders; typed form with ``schema=...``."""
+        if schema is not None:
+            return await self._adapter.subscribe(topic, callback, schema=schema)
+        return await self._adapter.subscribe(topic, callback)
 
     async def close(self) -> None:
         await self._adapter.close()

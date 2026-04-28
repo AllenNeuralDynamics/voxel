@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Tooltip } from 'bits-ui';
   import { Alert } from '$lib/icons';
-  import type { PreviewManager } from '$lib/app';
+  import type { PreviewManager } from '$lib/preview';
 
   interface Props {
     previewer: PreviewManager;

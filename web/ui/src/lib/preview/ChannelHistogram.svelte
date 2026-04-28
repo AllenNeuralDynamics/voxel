@@ -2,7 +2,7 @@
   import { SpinBox } from '$lib/kit';
   import { computeAutoLevels } from '$lib/utils';
   import ColormapPicker from './ColormapPicker.svelte';
-  import type { ColormapCatalog } from '$lib/app';
+  import type { ColormapCatalog } from '$lib/preview';
   import { useEventListener } from 'runed';
 
   type WindowMode = 'visible' | 'hover' | 'inline';

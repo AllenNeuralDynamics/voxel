@@ -6,10 +6,10 @@
 </script>
 
 <script lang="ts">
-  import type { Session } from '$lib/app';
-  import type { LayerVisibility } from '$lib/app/types';
-  import { type Tile, type Stack } from '$lib/app/types';
-  import { compositeFullFrames } from '$lib/app/preview.svelte';
+  import type { Session } from '$lib/session.svelte';
+  import type { LayerVisibility, Tile } from './types';
+  import type { Stack } from '$lib/protocol/stacks';
+  import { compositeFullFrames } from '$lib/preview';
   import { sanitizeString } from '$lib/utils';
   import { ContextMenu } from '$lib/kit';
   import { SvelteSet } from 'svelte/reactivity';
@@ -26,10 +26,25 @@
 
   // ── Geometry ─────────────────────────────────────────────────────────
 
-  let isXYMoving = $derived(session.stage.x?.isMoving || session.stage.y?.isMoving);
-  let isAcquiring = $derived(session.mode === 'acquiring');
+  const stage = $derived(session.scope.stage);
+  const sx = $derived(stage?.x);
+  const sy = $derived(stage?.y);
+  const sxLower = $derived(sx?.lowerLimit?.value ?? 0);
+  const sxUpper = $derived(sx?.upperLimit?.value ?? 0);
+  const syLower = $derived(sy?.lowerLimit?.value ?? 0);
+  const syUpper = $derived(sy?.upperLimit?.value ?? 0);
+  const sxPos = $derived(sx?.position?.value ?? 0);
+  const syPos = $derived(sy?.position?.value ?? 0);
+  const sxMoving = $derived(sx?.isMoving?.value === true);
+  const syMoving = $derived(sy?.isMoving?.value === true);
+  const stageWidth = $derived(stage?.width ?? 0);
+  const stageHeight = $derived(stage?.height ?? 0);
+  const activeProfileId = $derived(session.scope.profiles.activeId);
 
-  let arrowSize = $derived(Math.min(session.mosaic.fov.width, session.mosaic.fov.height) * 0.08);
+  const isXYMoving = $derived(sxMoving || syMoving);
+  const isAcquiring = $derived(session.mode === 'acquiring');
+
+  const arrowSize = $derived(Math.min(session.mosaic.fov.width, session.mosaic.fov.height) * 0.08);
 
   // ── Local tile selection ────────────────────────────────────────────
 
@@ -69,18 +84,18 @@
   let selectedTilesList = $derived(session.mosaic.list.filter((t) => isTileSelected(t.row, t.col)));
 
   // ── Stacks partitioned by active profile ────────────────────────────
-  let activeStacks = $derived(session.stacks.list.filter((s) => s.profile_id === session.profiles.activeId));
-  let inactiveStacks = $derived(session.stacks.list.filter((s) => s.profile_id !== session.profiles.activeId));
+  const activeStacks = $derived(session.stacks.list.filter((s) => s.profile_id === activeProfileId));
+  const inactiveStacks = $derived(session.stacks.list.filter((s) => s.profile_id !== activeProfileId));
 
   // FOV position relative to stage origin (lower limits)
-  let fovX = $derived(session.stage.x ? session.stage.x.position - session.stage.x.lowerLimit : 0);
-  let fovY = $derived(session.stage.y ? session.stage.y.position - session.stage.y.lowerLimit : 0);
+  const fovX = $derived(sx ? sxPos - sxLower : 0);
+  const fovY = $derived(sy ? syPos - syLower : 0);
   // ViewBox: stage bounds + margin to fit current FOV and any existing stacks
-  let marginX = $derived(Math.max(session.mosaic.fov.width / 2, ...session.stacks.list.map((s) => s.w / 2)));
-  let marginY = $derived(Math.max(session.mosaic.fov.height / 2, ...session.stacks.list.map((s) => s.h / 2)));
-  let viewBoxWidth = $derived(session.stage.width + marginX * 2);
-  let viewBoxHeight = $derived(session.stage.height + marginY * 2);
-  let viewBoxStr = $derived(`${-marginX} ${-marginY} ${viewBoxWidth} ${viewBoxHeight}`);
+  const marginX = $derived(Math.max(session.mosaic.fov.width / 2, ...session.stacks.list.map((s) => s.w / 2)));
+  const marginY = $derived(Math.max(session.mosaic.fov.height / 2, ...session.stacks.list.map((s) => s.h / 2)));
+  const viewBoxWidth = $derived(stageWidth + marginX * 2);
+  const viewBoxHeight = $derived(stageHeight + marginY * 2);
+  const viewBoxStr = $derived(`${-marginX} ${-marginY} ${viewBoxWidth} ${viewBoxHeight}`);
 
   // ── Canvas sizing ────────────────────────────────────────────────────
 
@@ -88,10 +103,10 @@
   let canvasWidth = $state(400);
   let canvasHeight = $state(250);
 
-  let aspectRatio = $derived(viewBoxWidth / viewBoxHeight);
-  let scale = $derived(canvasWidth / viewBoxWidth);
-  let stagePixelsX = $derived(session.stage.width * scale);
-  let stagePixelsY = $derived(session.stage.height * scale);
+  const aspectRatio = $derived(viewBoxWidth / viewBoxHeight);
+  const scale = $derived(canvasWidth / viewBoxWidth);
+  const stagePixelsX = $derived(stageWidth * scale);
+  const stagePixelsY = $derived(stageHeight * scale);
 
   const XY_SLIDER_WIDTH = 16;
 
@@ -192,30 +207,30 @@
   let targetX = $state<number | null>(null);
   let targetY = $state<number | null>(null);
 
-  let displayX = $derived(session.stage.x?.isMoving && targetX !== null ? targetX : (session.stage.x?.position ?? 0));
-  let displayY = $derived(session.stage.y?.isMoving && targetY !== null ? targetY : (session.stage.y?.position ?? 0));
+  const displayX = $derived(sxMoving && targetX !== null ? targetX : sxPos);
+  const displayY = $derived(syMoving && targetY !== null ? targetY : syPos);
 
   function onSliderInputX(e: Event) {
     const v = parseFloat((e.target as HTMLInputElement).value);
     targetX = v;
-    session.stage.x?.move(v);
+    sx?.move(v);
   }
 
   function onSliderInputY(e: Event) {
     const v = parseFloat((e.target as HTMLInputElement).value);
     targetY = v;
-    session.stage.y?.move(v);
+    sy?.move(v);
   }
 
   // ── Interaction handlers ─────────────────────────────────────────────
 
   function moveToTilePosition(x: number, y: number) {
-    if (isXYMoving || !session.stage.x || !session.stage.y) return;
-    const tx = session.stage.x.lowerLimit + x;
-    const ty = session.stage.y.lowerLimit + y;
+    if (isXYMoving || !stage) return;
+    const tx = sxLower + x;
+    const ty = syLower + y;
     targetX = tx;
     targetY = ty;
-    session.stage.moveXY(tx, ty);
+    stage.moveXY(tx, ty);
   }
 
   function handleTileSelect(e: MouseEvent, tile: Tile) {
@@ -286,11 +301,11 @@
   function handleCanvasContext(e: MouseEvent) {
     if (e.target !== svgRef) return;
     const pt = svgPoint(e);
-    if (!pt || !session.stage.x || !session.stage.y) return;
+    if (!pt || !stage) return;
     contextTarget = {
       kind: 'empty',
-      x: session.stage.x.lowerLimit + pt.x,
-      y: session.stage.y.lowerLimit + pt.y
+      x: sxLower + pt.x,
+      y: syLower + pt.y
     };
   }
 
@@ -301,15 +316,15 @@
     if (isAcquiring) return [{ type: 'action', label: 'Acquisition in progress', action: () => {}, disabled: true }];
 
     const items: MenuItem[] = [];
-    const lx = session.stage.x?.lowerLimit ?? 0;
-    const ly = session.stage.y?.lowerLimit ?? 0;
+    const lx = sxLower;
+    const ly = syLower;
 
     // ── Move here (all targets) ──
     const moveAction = () => {
       if (target.kind === 'empty') {
         targetX = target.x;
         targetY = target.y;
-        session.stage.moveXY(target.x, target.y);
+        stage?.moveXY(target.x, target.y);
       } else if (target.kind === 'tile') {
         moveToTilePosition(target.tile.x, target.tile.y);
       } else {
@@ -434,7 +449,7 @@
       });
     } else if (target.kind === 'tile') {
       const emptyCount = selectedTilesList.filter(
-        (t) => !session.stacks.findAt(t.x, t.y, session.profiles.activeId ?? '')
+        (t) => !session.stacks.findAt(t.x, t.y, activeProfileId ?? '')
       ).length;
       if (emptyCount > 0) {
         items.push({ type: 'separator' });
@@ -442,9 +457,7 @@
           type: 'action',
           label: emptyCount === 1 ? 'Add stack' : `Add stacks (${emptyCount})`,
           action: () => {
-            const tiles = selectedTilesList.filter(
-              (t) => !session.stacks.findAt(t.x, t.y, session.profiles.activeId ?? '')
-            );
+            const tiles = selectedTilesList.filter((t) => !session.stacks.findAt(t.x, t.y, activeProfileId ?? ''));
             session.stacks.add(
               tiles.map((t) => ({
                 x: t.x,
@@ -463,7 +476,7 @@
       const stack = target.stack;
       const selectedCount = session.stacks.selected.length;
       const isSingle = selectedCount <= 1;
-      const isOtherProfile = stack.profile_id !== session.profiles.activeId;
+      const isOtherProfile = stack.profile_id !== activeProfileId;
       const isPlanned = session.stacks.selected.some((s) => s.status === 'planned');
       const canDelete = isSingle
         ? stack.status === 'planned' || stack.status === 'skipped'
@@ -530,9 +543,7 @@
       // Add stack(s) for active profile (other-profile stacks only)
       if (isOtherProfile) {
         const otherStacks = (isSingle ? [stack] : session.stacks.selected).filter(
-          (s) =>
-            s.profile_id !== session.profiles.activeId &&
-            !session.stacks.findAt(s.x, s.y, session.profiles.activeId ?? '')
+          (s) => s.profile_id !== activeProfileId && !session.stacks.findAt(s.x, s.y, activeProfileId ?? '')
         );
         if (otherStacks.length > 0) {
           items.push({
@@ -590,7 +601,7 @@
       x2={-marginX + viewBoxWidth}
       y2={fovY}
       stroke-width="1"
-      stroke={session.stage.y?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+      stroke={syMoving ? 'var(--color-danger)' : 'var(--color-success)'}
     />
     <line
       class="nss"
@@ -599,7 +610,7 @@
       x2={fovX}
       y2={-marginY + viewBoxHeight}
       stroke-width="1"
-      stroke={session.stage.x?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+      stroke={sxMoving ? 'var(--color-danger)' : 'var(--color-success)'}
     />
   </g>
 {/snippet}
@@ -737,11 +748,11 @@
       class="stage-slider absolute z-10"
       style:--thumb-length="{XY_SLIDER_WIDTH}px"
       style={xSliderStyle}
-      min={session.stage.x.lowerLimit}
-      max={session.stage.x.upperLimit}
+      min={sxLower}
+      max={sxUpper}
       step={100}
       value={displayX}
-      disabled={session.stage.x.isMoving}
+      disabled={sxMoving}
       oninput={onSliderInputX}
     />
     <input
@@ -749,11 +760,11 @@
       class="stage-slider vertical-ltr absolute z-10"
       style:--thumb-length="{XY_SLIDER_WIDTH}px"
       style={ySliderStyle}
-      min={session.stage.y.lowerLimit}
-      max={session.stage.y.upperLimit}
+      min={syLower}
+      max={syUpper}
       step={100}
       value={displayY}
-      disabled={session.stage.y.isMoving}
+      disabled={syMoving}
       oninput={onSliderInputY}
     />
     <ContextMenu.Root>

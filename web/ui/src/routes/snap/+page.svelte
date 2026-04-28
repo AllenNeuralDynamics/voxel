@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getSessionContext } from '$lib/context';
-  import type { Snapshot } from '$lib/app/snapshots.svelte';
+  import type { Snapshot } from '$lib/preview/snapshots.svelte';
   import { Button, ContextMenu, Rename } from '$lib/kit';
   import { Pane, PaneGroup } from 'paneforge';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
@@ -111,8 +111,8 @@
     <ContextMenu.Content>
       <ContextMenu.Item
         onSelect={() => {
-          session.stage.moveXY(snapPos.x, snapPos.y);
-          session.stage.moveZ(snap.stageZ);
+          session.scope.stage?.moveXY(snapPos.x, snapPos.y);
+          session.scope.stage?.moveZ(snap.stageZ);
         }}
       >
         Go to position

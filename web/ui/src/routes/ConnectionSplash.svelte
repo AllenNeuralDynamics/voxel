@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { App } from '$lib/app';
+  import type { App } from '$lib/app.svelte';
   import { Cog } from '$lib/icons';
-  import VoxelLogo from '$lib/VoxelLogo.svelte';
+  import VoxelLogo from './VoxelLogo.svelte';
   import { themes } from '$lib/themes';
   import { cn } from '$lib/utils';
 
   const { app }: { app: App } = $props();
-  const connectionState = $derived(app.client.connectionState);
+  const connectionState = $derived(app.client.state);
 
   const borderClass = $derived(connectionState === 'failed' ? 'border-danger/30 bg-danger/5' : 'border-border');
 </script>

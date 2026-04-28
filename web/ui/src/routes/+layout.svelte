@@ -11,19 +11,19 @@
   import { Pane, PaneGroup } from 'paneforge';
   import { DropdownMenu } from 'bits-ui';
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
-  import { App } from '$lib/app';
+  import { App } from '$lib/app.svelte';
   import { Toaster, Dialog, Button } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { cn, createPaneMinSize } from '$lib/utils';
   import { setSessionContext, setLogsContext } from '$lib/context';
-  import { Crosshair, Layers, Play, WaveformsIcon, Microscope } from '$lib/icons';
-  import VoxelLogo from '$lib/VoxelLogo.svelte';
-  import StartButton from '$lib/StartButton.svelte';
-  import LogViewer from '$lib/LogViewer.svelte';
-  import LasersPanel from '$lib/device/LasersPanel.svelte';
-  import CamerasPanel from '$lib/device/CamerasPanel.svelte';
-  import AuxDevicesPanel from '$lib/device/AuxDevicesPanel.svelte';
-  import { ProfileSelector } from '$lib/profile';
+  import { Crosshair, Layers, Play, WaveformsIcon, Microscope, TuneVertical } from '$lib/icons';
+  import VoxelLogo from './VoxelLogo.svelte';
+  import StartButton from './StartButton.svelte';
+  import LogViewer from './LogViewer.svelte';
+  import LasersPanel from '$lib/microscope/device/LasersPanel.svelte';
+  import CamerasPanel from '$lib/microscope/CamerasPanel.svelte';
+  import AuxDevicesPanel from '$lib/microscope/AuxDevicesPanel.svelte';
+  import { ProfileSelector } from '$lib/microscope';
   import { PreviewCanvas } from '$lib/preview';
   import { GridCanvas } from '$lib/grid';
   import { AppearanceSheet, themes } from '$lib/themes';
@@ -86,11 +86,12 @@
   // --- Shell nav ---
 
   let shellRef = $state<HTMLElement | null>(null);
-  const leftPaneMin = createPaneMinSize(() => shellRef, 850, 50);
+  const leftPaneMin = createPaneMinSize(() => shellRef, 870, 50);
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
-    { id: '/', label: 'Configure', icon: Microscope },
+    { id: '/', label: 'Inspect', icon: Microscope },
     { id: '/tune', label: 'Tune', icon: WaveformsIcon },
+    { id: '/configure', label: 'Configure', icon: TuneVertical },
     { id: '/snap', label: 'Snap', icon: Crosshair },
     { id: '/plan', label: 'Plan', icon: Layers },
     { id: '/acquire', label: 'Acquire', icon: Play }
@@ -142,14 +143,14 @@
   <link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if app.client.connectionState !== 'connected' || !app.status || (app.hasSession && !session)}
+{#if app.client.state !== 'connected' || !app.status || (app.hasSession && !session)}
   <ConnectionSplash {app} />
 {:else if session}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
     <PaneGroup direction="horizontal" autoSaveId="shell">
       <Pane defaultSize={60} minSize={leftPaneMin.value} maxSize={70}>
         <div class="grid h-full grid-rows-[auto_1fr_auto]">
-          <header class="flex items-center justify-between border-b border-border bg-elevated px-4 py-4">
+          <header class="flex h-14 items-center justify-between border-b border-border bg-surface px-4">
             <div class="flex items-center gap-x-4">
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
@@ -184,16 +185,17 @@
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
 
-              <nav class="grid w-fit grid-cols-5 gap-x-2">
+              <nav class="flex h-ui-sm items-center gap-1 text-fg-muted">
                 {#each navTabs as tab (tab.id)}
                   {@const Icon = tab.icon}
+                  {@const active = viewId === tab.id}
                   <button
                     onclick={() => selectView(tab.id)}
                     class={cn(
-                      'flex h-ui-md cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 text-sm transition-colors',
-                      viewId === tab.id
-                        ? 'border-fg-faint/60 bg-element-selected text-fg'
-                        : 'border-transparent text-fg-muted hover:bg-element-hover hover:text-fg'
+                      'inline-flex h-full cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm whitespace-nowrap transition-colors',
+                      active
+                        ? 'border-fg-accent/30 bg-fg-accent/10 text-fg'
+                        : 'border-transparent hover:bg-element-hover hover:text-fg'
                     )}
                     title={tab.label}
                   >
@@ -232,18 +234,16 @@
               class="bg-surface/50"
             >
               {#if bottomPanelTab === 'devices'}
-                <AuxDevicesPanel {session} class="h-full overflow-auto p-4" />
+                <AuxDevicesPanel microscope={session.scope} class="h-full overflow-auto p-4" />
               {:else if bottomPanelTab === 'cameras'}
-                <CamerasPanel {session} class="h-full overflow-auto p-4" />
+                <CamerasPanel microscope={session.scope} class="h-full overflow-auto p-4" />
               {:else if bottomPanelTab === 'lasers'}
-                <LasersPanel {session} />
+                <LasersPanel microscope={session.scope} />
                 <!-- {:else if bottomPanelTab === 'analog-out'}
-                {#if session.profiles.activeId}
+                {#if session.scope.profiles.activeId}
                   <AnalogOutPanel
-                    profiles={session.profiles}
-                    devices={session.devices}
-                    rigCfg={session.rig_cfg}
-                    acquiring={session.mode === 'acquiring'}
+                    microscope={session.scope}
+                    canEdit={session.mode === 'idle'}
                     class="h-full overflow-auto"
                   />
                 {:else}
@@ -275,9 +275,10 @@
                 >
                 <button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
                   Lasers
-                  {#each Object.values(session.lasers) as laser (laser.deviceId)}
+                  {#each [...session.scope.lasers.values()] as laser (laser.id)}
+                    {@const enabled = laser.isEnabled?.value === true}
                     <div class="relative">
-                      {#if laser.isEnabled}
+                      {#if enabled}
                         <div class="h-2 w-2 rounded-full" style="background-color: {laser.color};"></div>
                         <span
                           class="absolute inset-0 animate-ping rounded-full opacity-75"
@@ -292,7 +293,7 @@
               </div>
             </div>
             <div class="max-w-100 min-w-40 flex-1">
-              <ProfileSelector profiles={session.profiles} stacks={session.stacks} size="xs" class="w-full" />
+              <ProfileSelector profiles={session.scope.profiles} stacks={session.stacks} size="xs" class="w-full" />
             </div>
           </footer>
         </div>

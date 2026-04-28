@@ -2,14 +2,15 @@
 
 Devices are constructed directly via :func:`build_objects_async`, wrapped in
 :class:`DeviceController` + :class:`LocalAdapter`, and exposed as
-:class:`DeviceHandle` instances. No serialization, no sockets — the fastest
-path for dev/simulation and for devices that don't need process isolation.
+:class:`DeviceHandle` instances. No serialization for typed subscribers — the
+fastest path for dev/simulation and for devices that don't need process isolation.
 """
 
 import logging
 from collections import defaultdict
-from contextlib import suppress
-from typing import Any
+from typing import Any, overload
+
+from pydantic import BaseModel
 
 from rigup.build import build_objects_async
 from rigup.device import (
@@ -24,7 +25,8 @@ from rigup.device import (
     Results,
     StreamCallback,
 )
-from vxlib import Signal
+from rigup.wire import TopicDispatcher
+from vxlib import Unsub
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 
@@ -32,31 +34,29 @@ from ._base import DevicesBuildResult, DevicesConfig, Node
 class LocalAdapter[D: Device](Adapter[D]):
     """Adapter that wraps a :class:`DeviceController` directly — no transport.
 
-    The controller's ``publish_fn`` is wired to this adapter's local dispatch so
-    property changes land on :attr:`props_changed` and stream subscribers receive
-    raw bytes, all in-process.
+    One :class:`TopicDispatcher` per topic owns all subscribers (typed + bytes)
+    for that topic. Typed subs receive Python objects with zero serialization.
+    Bytes subs receive packed bytes (lazy — pack only when bytes subs exist).
     """
 
     def __init__(self, controller: DeviceController[D]) -> None:
         self._controller = controller
-        self._props_changed: Signal[PropResults] = Signal()
-        self._topic_cbs: dict[str, list[StreamCallback]] = defaultdict(list)
+        self._log = logging.getLogger(f"{controller.uid}.LocalAdapter")
+        self._signals: defaultdict[str, TopicDispatcher] = defaultdict(TopicDispatcher)
 
-        controller.set_publisher(self._on_publish)
+        controller.set_typed_publisher(self._on_typed)
+        controller.set_bytes_publisher(self._on_bytes)
 
-    async def _on_publish(self, topic: str, data: bytes) -> None:
-        if topic == "properties":
-            with suppress(Exception):
-                props = PropResults.model_validate_json(data)
-                await self._props_changed.emit(props)
+    async def _on_typed(self, topic: str, body: BaseModel) -> None:
+        """Typed event from controller — TopicDispatcher fans to typed subs verbatim, packs on demand for bytes."""
+        if sig := self._signals.get(topic):
+            await sig.emit(body)
 
-        for cb in list(self._topic_cbs.get(topic, [])):
-            try:
-                await cb(data)
-            except Exception:
-                logging.getLogger(f"{self._controller.uid}.LocalAdapter").exception(
-                    "stream callback error on topic %r", topic
-                )
+    async def _on_bytes(self, topic: str, data: bytes) -> None:
+        """Raw byte stream from controller (e.g. frames)
+        TopicDispatcher fans bytes through;typed decode skipped if no schema."""
+        if sig := self._signals.get(topic):
+            await sig.emit_bytes(data)
 
     @property
     def uid(self) -> str:
@@ -65,10 +65,6 @@ class LocalAdapter[D: Device](Adapter[D]):
     @property
     def device(self) -> D | None:
         return self._controller.device
-
-    @property
-    def props_changed(self) -> Signal[PropResults]:
-        return self._props_changed
 
     async def interface(self) -> DeviceInterface:
         return self._controller.interface
@@ -85,14 +81,17 @@ class LocalAdapter[D: Device](Adapter[D]):
     async def set_props(self, **props: Any) -> PropResults:
         return await self._controller.set_props(**props)
 
-    async def subscribe(self, topic: str, callback: StreamCallback) -> None:
-        self._topic_cbs[topic].append(callback)
+    @overload
+    async def subscribe(self, topic: str, callback: StreamCallback[bytes]) -> Unsub: ...
 
-    async def unsubscribe(self, topic: str, callback: StreamCallback) -> None:
-        cbs = self._topic_cbs.get(topic)
-        if cbs is not None:
-            with suppress(ValueError):
-                cbs.remove(callback)
+    @overload
+    async def subscribe[T: BaseModel](self, topic: str, callback: StreamCallback[T], *, schema: type[T]) -> Unsub: ...
+
+    async def subscribe(self, topic: str, callback: Any, *, schema: type[BaseModel] | None = None) -> Unsub:
+        sig = self._signals[topic]  # defaultdict creates on first access
+        if schema is not None:
+            return sig.subscribe(callback, schema=schema)
+        return sig.subscribe(callback)
 
     async def close(self) -> None:
         await self._controller.close()

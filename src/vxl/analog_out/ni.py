@@ -430,6 +430,7 @@ class NiAnalogOutput(AnalogOutput):
         on every load is a few ms of extra work and causes a brief output gap if
         the task was running.
         """
+        del old, new
         return False
 
 

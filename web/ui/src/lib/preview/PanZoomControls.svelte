@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Restore } from '$lib/icons';
   import { SpinBox } from '$lib/kit';
-  import type { PreviewManager } from '$lib/app';
-  import { isDefaultViewport } from '$lib/app/preview.svelte.ts';
+  import type { PreviewManager } from '$lib/preview';
+  import { isDefaultViewport } from '$lib/preview';
   import { clampTopLeft } from '$lib/utils';
 
   interface Props {

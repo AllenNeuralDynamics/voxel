@@ -54,7 +54,7 @@ class DeviceHandleQt(QObject):
 
         try:
             # Subscribe to property updates
-            self._handle.props_changed.subscribe(self._on_properties)
+            await self._handle.on_props_change(self._on_properties)
             self._started = True
             self.connected.emit(True)
             self.log.info("Adapter started")

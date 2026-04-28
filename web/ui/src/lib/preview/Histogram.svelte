@@ -3,7 +3,7 @@
   import { computeAutoLevels } from '$lib/utils';
   import ColormapPicker from './ColormapPicker.svelte';
   import { EyeOff } from '$lib/icons';
-  import type { ColormapCatalog } from '$lib/app';
+  import type { ColormapCatalog } from '$lib/preview';
   import { useEventListener } from 'runed';
 
   interface Props {

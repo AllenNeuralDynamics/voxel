@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { StackStatus } from '$lib/app/types';
+  import type { StackStatus } from '$lib/protocol/stacks';
   import { DotsSpinner, LucideCircle, Check, AlertCircleOutline, Minus } from '$lib/icons';
 
   interface Props {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Session } from '$lib/app';
+  import type { Session } from '$lib/session.svelte';
   import { onMount } from 'svelte';
 
   interface Props {
@@ -15,15 +15,23 @@
 
   let target = $state<number | null>(null);
 
-  let fovZ = $derived(session.stage.z ? session.stage.z.position - session.stage.z.lowerLimit : 0);
-  let zLineY = $derived((1 - fovZ / session.stage.depth) * panelHeight - 1);
+  const z = $derived(session.scope.stage?.z);
+  const zPos = $derived(z?.position?.value ?? 0);
+  const zLower = $derived(z?.lowerLimit?.value ?? 0);
+  const zUpper = $derived(z?.upperLimit?.value ?? 0);
+  const zMoving = $derived(z?.isMoving?.value === true);
+  const depth = $derived(session.scope.stage?.depth ?? 0);
+  const activeProfileId = $derived(session.scope.profiles.activeId);
 
-  let displayValue = $derived(session.stage.z?.isMoving && target !== null ? target : (session.stage.z?.position ?? 0));
+  const fovZ = $derived(z ? zPos - zLower : 0);
+  const zLineY = $derived(depth > 0 ? (1 - fovZ / depth) * panelHeight - 1 : 0);
+
+  const displayValue = $derived(zMoving && target !== null ? target : zPos);
 
   function oninput(e: Event) {
     const v = parseFloat((e.target as HTMLInputElement).value);
     target = v;
-    session.stage.z?.move(v);
+    z?.move(v);
   }
 
   onMount(() => {
@@ -44,16 +52,16 @@
 >
   <p class="absolute top-1 right-1 z-10 text-xs text-fg-muted">Z</p>
 
-  {#if session.stage.z}
+  {#if z}
     <input
       type="range"
       class="stage-slider absolute inset-0 z-10 h-full w-full"
       style:--thumb-length="{PANEL_WIDTH}px"
-      min={session.stage.z.lowerLimit}
-      max={session.stage.z.upperLimit}
+      min={zLower}
+      max={zUpper}
       step={10}
       value={displayValue}
-      disabled={session.stage.z.isMoving}
+      disabled={zMoving}
       {oninput}
     />
   {/if}
@@ -67,9 +75,9 @@
   >
     {#each session.stacks.list as stack (stack.stack_id)}
       {@const selected = session.stacks.isSelected(stack.stack_id)}
-      {@const isActive = stack.profile_id === session.profiles.activeId}
-      {@const z0Y = (1 - (stack.z_start - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
-      {@const z1Y = (1 - (stack.z_end - session.stage.z.lowerLimit) / session.stage.depth) * panelHeight - 1}
+      {@const isActive = stack.profile_id === activeProfileId}
+      {@const z0Y = depth > 0 ? (1 - (stack.z_start - zLower) / depth) * panelHeight - 1 : 0}
+      {@const z1Y = depth > 0 ? (1 - (stack.z_end - zLower) / depth) * panelHeight - 1 : 0}
       <g
         data-stack-status={stack.status}
         class="text-(--stack-status)"
@@ -88,9 +96,9 @@
       y2={zLineY}
       class="nss"
       stroke-width="1"
-      stroke={session.stage.z?.isMoving ? 'var(--color-danger)' : 'var(--color-success)'}
+      stroke={zMoving ? 'var(--color-danger)' : 'var(--color-success)'}
     >
-      <title>Z: {((session.stage.z?.position ?? 0) / 1000).toFixed(3)} mm</title>
+      <title>Z: {(zPos / 1000).toFixed(3)} mm</title>
     </line>
   </svg>
 </div>

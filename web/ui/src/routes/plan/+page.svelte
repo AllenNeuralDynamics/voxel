@@ -8,7 +8,7 @@
   import StackStatusIcon from '$lib/stacks/StackStatusIcon.svelte';
   import { watch } from 'runed';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-  import type { Stack, StackStatus } from '$lib/app/types';
+  import type { Stack, StackStatus } from '$lib/protocol/stacks';
 
   const session = getSessionContext();
 
@@ -46,14 +46,14 @@
       else groupMap.set(s.profile_id, [s]);
     }
 
-    const activeId = session.profiles.activeId;
+    const activeId = session.scope.profiles.activeId;
     const profileOrder = session.stacks.plan.profile_order;
 
     const groups: ProfileGroup[] = [];
     for (const [profileId, stacks] of groupMap) {
       groups.push({
         profileId,
-        label: session.rig_cfg.profiles[profileId]?.label ?? sanitizeString(profileId),
+        label: session.scope.config.profiles[profileId]?.label ?? sanitizeString(profileId),
         stacks,
         isActive: profileId === activeId
       });
@@ -114,7 +114,7 @@
     }
     return [...counts.entries()].map(([id, count]) => ({
       id,
-      label: session.rig_cfg.profiles[id]?.label ?? sanitizeString(id),
+      label: session.scope.config.profiles[id]?.label ?? sanitizeString(id),
       count
     }));
   });
@@ -233,7 +233,9 @@
   let clearDialogOpen = $state(false);
   let clearMode = $state<'selected' | 'profile'>('selected');
   let clearProfileId = $state<string>('');
-  let clearProfileLabel = $derived(session.rig_cfg.profiles[clearProfileId]?.label ?? sanitizeString(clearProfileId));
+  let clearProfileLabel = $derived(
+    session.scope.config.profiles[clearProfileId]?.label ?? sanitizeString(clearProfileId)
+  );
 
   // --- Pane sizing (pixel-based min for sidebar) ---
 
@@ -473,7 +475,10 @@
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item
-                    onclick={() => applyPosition('x', session.stage.x.position - session.stage.x.lowerLimit)}
+                    onclick={() => {
+                      const x = session.scope.stage?.x;
+                      if (x) applyPosition('x', (x.position?.value ?? 0) - (x.lowerLimit?.value ?? 0));
+                    }}
                   >
                     Match stage X
                   </DropdownMenu.Item>
@@ -496,7 +501,10 @@
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item
-                    onclick={() => applyPosition('y', session.stage.y.position - session.stage.y.lowerLimit)}
+                    onclick={() => {
+                      const y = session.scope.stage?.y;
+                      if (y) applyPosition('y', (y.position?.value ?? 0) - (y.lowerLimit?.value ?? 0));
+                    }}
                   >
                     Match stage Y
                   </DropdownMenu.Item>
@@ -544,7 +552,9 @@
                   <EllipsisVertical width="14" height="14" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.stage.z.position)}>
+                  <DropdownMenu.Item
+                    onclick={() => applyZRange('zStartUm', session.scope.stage?.z.position?.value ?? 0)}
+                  >
                     Match stage Z
                   </DropdownMenu.Item>
                   <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.stacks.plan.default_z_start)}>
@@ -568,7 +578,7 @@
                   <EllipsisVertical width="14" height="14" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.stage.z.position)}>
+                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.scope.stage?.z.position?.value ?? 0)}>
                     Match stage Z
                   </DropdownMenu.Item>
                   <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.stacks.plan.default_z_end)}>

@@ -362,7 +362,11 @@ class PropsSetRequest(BaseModel):
 
 
 class PropResults(Results[PropertyModel]):
-    """Property results. Concrete subclass for proper deserialization of PropertyModel values."""
+    """Property results. Concrete subclass for proper deserialization of PropertyModel values.
+
+    Used both as the RPC response shape (caller knows the device) and the broadcast
+    body (device id lives in the templated topic ``{uid}.props.update``).
+    """
 
 
 def collect_properties(obj: Any) -> dict[str, PropertyInfo]:

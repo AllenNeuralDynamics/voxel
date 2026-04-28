@@ -15,13 +15,16 @@ Lifecycle::
 import asyncio
 import logging
 
+from pydantic import BaseModel
+
 from rigup.build import build_objects_async
 from rigup.device import (
     Device,
     DeviceController,
     DeviceInterface,
     PropResults,
-    PublishFn,
+    PublishBytesFn,
+    PublishTypedFn,
     Results,
 )
 from rigup.protocol import (
@@ -46,6 +49,7 @@ from rigup.protocol import (
     bind,
 )
 from rigup.transport import NodeAddress, TransportServer
+from rigup.wire import pack
 
 
 class NodeDaemon:
@@ -140,7 +144,8 @@ class NodeDaemon:
         for uid, device in built_devices.items():
             controller_cls = type(device).__CONTROLLER_TYPE__
             controller: DeviceController = controller_cls(device)
-            controller.set_publisher(self._make_publisher(uid))
+            controller.set_typed_publisher(self._make_typed_publisher(uid))
+            controller.set_bytes_publisher(self._make_bytes_publisher(uid))
             controller.start_streaming()
             self._controllers[uid] = controller
             built_interfaces[uid] = controller.interface
@@ -151,11 +156,19 @@ class NodeDaemon:
 
         return BuildDevicesResponse(built=built_interfaces, errors=errors)
 
-    def _make_publisher(self, device_uid: str) -> PublishFn:
-        """Create a publish function that prefixes the device UID to topics."""
+    def _make_typed_publisher(self, device_uid: str) -> PublishTypedFn:
+        """Pack typed events into wire bytes and publish on ZMQ topic ``{uid}.{topic}``."""
+
+        async def publish(topic: str, body: BaseModel) -> None:
+            await self._transport.publish(f"{device_uid}.{topic}", pack(body))
+
+        return publish
+
+    def _make_bytes_publisher(self, device_uid: str) -> PublishBytesFn:
+        """Pass-through raw byte streams (e.g. frames) to ZMQ topic ``{uid}.{topic}``."""
 
         async def publish(topic: str, data: bytes) -> None:
-            await self._transport.publish(f"{device_uid}/{topic}", data)
+            await self._transport.publish(f"{device_uid}.{topic}", data)
 
         return publish
 

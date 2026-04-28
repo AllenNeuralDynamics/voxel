@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { AcquisitionManager, StacksManager } from '$lib/app';
-  import type { Stack } from '$lib/app/types';
+  import type { AcquisitionManager, StacksManager } from '$lib/stacks';
+  import type { Stack } from '$lib/protocol/stacks';
 
   interface Props {
     stacks: StacksManager;

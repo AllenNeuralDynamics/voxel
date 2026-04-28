@@ -1,13 +1,14 @@
 <script lang="ts">
-  import type { App } from '$lib/app';
-  import type { SessionListing, DataRoot, TemplateInfo, JsonSchema } from '$lib/app';
-  import LogViewer from '$lib/LogViewer.svelte';
+  import type { App } from '$lib/app.svelte';
+  import type { SessionListing, DataRoot, TemplateInfo } from '$lib/protocol/app';
+  import type { JsonSchema } from '$lib/protocol/common';
+  import LogViewer from './LogViewer.svelte';
   import MetadataFields from '$lib/metadata/MetadataFields.svelte';
   import { Collapsible } from 'bits-ui';
   import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/kit';
   import { Plus, FolderOpenOutline, GitFork, Clipboard, LucideChevronRight, EllipsisVertical, Cog } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
-  import VoxelLogo from '$lib/VoxelLogo.svelte';
+  import VoxelLogo from './VoxelLogo.svelte';
   import { themes } from '$lib/themes';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -39,7 +40,7 @@
 
   const appStatus = $derived(app.status?.status);
   const isLaunching = $derived(appStatus === 'launching');
-  const connectionState = $derived(app.client.connectionState);
+  const connectionState = $derived(app.client.state);
   const logs = $derived(app.logs);
 
   // Derived

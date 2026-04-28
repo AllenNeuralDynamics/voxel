@@ -3,8 +3,8 @@
 
   export const spinBoxVariants = tv({
     slots: {
-      wrapper: ['items-center', 'transition-colors focus-within:border-focused'],
-      input: ['m-0 border-none bg-transparent py-0 font-mono text-fg outline-none'],
+      wrapper: ['items-center', 'transition-colors focus-within:border-focused select-none'],
+      input: ['m-0 border-none bg-transparent py-0 font-mono text-fg outline-none select-none'],
       stack: ['flex cursor-pointer self-stretch flex-col border-l border-input'],
       stepButton: [
         'flex flex-1 items-center justify-center',
@@ -93,18 +93,14 @@
     value?: number;
     min?: number;
     max?: number;
-    /**
-     * Snap grid. All committed values (typed + button / scroll / drag) round to
-     * ``min + n·step``. Also the fallback increment for buttons when ``coarseStep``
-     * / ``fineStep`` aren't set.
-     */
+    /** Grid resolution. All committed values round to ``min + n·step``. */
     step?: number;
-    /** Button / scroll / drag increment (default click). Defaults to ``step``. */
-    coarseStep?: number;
-    /** Shift-modifier increment. Defaults to ``step`` (one grid cell). */
-    fineStep?: number;
+    /**
+     * Optional gesture step for buttons / drag / wheel. Defaults to ``step``.
+     * Should be a multiple of ``step``; non-multiples still snap to the grid.
+     */
+    bigStep?: number;
     decimals?: number;
-    placeholder?: string;
     numCharacters?: number;
     color?: string;
     align?: 'left' | 'right';
@@ -115,7 +111,6 @@
     resetValue?: number | (() => number);
     disabled?: boolean;
     class?: string;
-    throttle?: number;
     onChange?: (newValue: number) => void;
   }
 
@@ -124,10 +119,8 @@
     min = -Infinity,
     max = Infinity,
     step = 1,
-    coarseStep,
-    fineStep,
+    bigStep,
     decimals,
-    placeholder = '–',
     numCharacters = 4,
     color = 'inherit',
     align = 'left',
@@ -140,47 +133,48 @@
     disabled = false,
     size = 'md',
     class: className = '',
-    throttle = 100,
     onChange: onValueChange
   }: Props = $props();
 
   const styles = $derived(spinBoxVariants({ variant, size, appearance }));
-
-  function activeStep(e?: { shiftKey?: boolean }): number {
-    return e?.shiftKey ? (fineStep ?? step) : (coarseStep ?? step);
-  }
+  const gestureStep = $derived(bigStep ?? step);
 
   const throttledDragCallback = useThrottle(
     (newValue: number) => {
       onValueChange?.(newValue);
     },
-    () => throttle
+    () => 100
   );
 
   let isEditing = $state(false);
   let editingText = $state('');
+
   function snapToStep(v: number): number {
     if (step <= 0 || !isFinite(step)) return v;
     if (!isFinite(min)) return Math.round(v / step) * step;
     return min + Math.round((v - min) / step) * step;
   }
 
-  function commitEdit() {
-    if (!isEditing) return;
-    isEditing = false;
-
-    const parsed = parseFloat(editingText);
-    if (isNaN(parsed)) return; // discard invalid input
-
-    const snapped = snapToStep(Math.max(min, Math.min(max, parsed)));
-    const clamped = Math.max(min, Math.min(max, snapped));
-    value = clamped;
-    if (onValueChange) {
-      onValueChange(clamped);
+  function commit(raw: number, opts: { throttled?: boolean } = {}) {
+    const clamped = Math.max(min, Math.min(max, raw));
+    const snapped = Math.max(min, Math.min(max, snapToStep(clamped)));
+    value = snapped;
+    if (opts.throttled) {
+      throttledDragCallback(snapped);
+    } else {
+      onValueChange?.(snapped);
     }
   }
 
-  let inputValue = $derived(() => {
+  function commitEdit() {
+    if (!isEditing) return;
+    isEditing = false;
+    const parsed = parseFloat(editingText);
+    if (isNaN(parsed)) return; // discard invalid input
+    commit(parsed);
+  }
+
+  let inputValue = $derived.by(() => {
     if (isEditing) return editingText;
     if (value === undefined || Number.isNaN(value)) return '';
     if (decimals !== undefined) return value.toFixed(decimals);
@@ -220,19 +214,13 @@
 
     if (!isDragging) return;
 
-    const sensitivity = 1;
-    const deltaValue = Math.round(deltaX / sensitivity) * activeStep(e);
-    let newValue = dragStartValue + deltaValue;
-    newValue = Math.max(min, Math.min(max, newValue));
-    value = newValue;
-
-    throttledDragCallback(newValue);
+    commit(dragStartValue + Math.round(deltaX) * gestureStep, { throttled: true });
   }
 
   function handleMouseUp() {
     throttledDragCallback.cancel();
-    if (isDragging && onValueChange) {
-      onValueChange(value);
+    if (isDragging) {
+      onValueChange?.(value);
     }
     isDragging = false;
     isPotentialDrag = false;
@@ -244,10 +232,7 @@
   function handleDoubleClick() {
     if (resetValue === undefined) return;
     const resolved = typeof resetValue === 'function' ? resetValue() : resetValue;
-    value = resolved;
-    if (onValueChange) {
-      onValueChange(resolved);
-    }
+    commit(resolved);
   }
 
   function handleInput(e: Event) {
@@ -273,33 +258,16 @@
   function handleWheel(e: WheelEvent) {
     if (!e.altKey || !draggable) return;
     e.preventDefault();
-
     const direction = e.deltaY < 0 ? 1 : -1;
-    let newValue = value + direction * activeStep(e);
-    newValue = Math.max(min, Math.min(max, newValue));
-    value = newValue;
-
-    if (onValueChange) {
-      onValueChange(newValue);
-    }
+    commit(value + direction * gestureStep);
   }
 
   function increment() {
-    let newValue = value + step;
-    newValue = Math.max(min, Math.min(max, newValue));
-    value = newValue;
-    if (onValueChange) {
-      onValueChange(newValue);
-    }
+    commit(value + gestureStep);
   }
 
   function decrement() {
-    let newValue = value - step;
-    newValue = Math.max(min, Math.min(max, newValue));
-    value = newValue;
-    if (onValueChange) {
-      onValueChange(newValue);
-    }
+    commit(value - gestureStep);
   }
 
   useEventListener(() => wrapperElement, 'wheel', handleWheel, { passive: false });
@@ -329,8 +297,7 @@
   <input
     bind:this={inputElement}
     type="text"
-    {placeholder}
-    value={inputValue()}
+    value={inputValue}
     oninput={handleInput}
     onblur={handleBlur}
     onkeydown={handleKeydown}
@@ -361,16 +328,3 @@
     </button>
   </div>
 </div>
-
-<style>
-  /* Hide native spin buttons */
-  input::-webkit-inner-spin-button,
-  input::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  input {
-    user-select: none;
-  }
-</style>

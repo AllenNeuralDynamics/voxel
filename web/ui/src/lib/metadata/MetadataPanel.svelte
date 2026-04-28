@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Session } from '$lib/app';
-  import type { JsonSchema, JsonSchemaProperty } from '$lib/app/types/types';
+  import type { Session } from '$lib/session.svelte';
+  import type { JsonSchema, JsonSchemaProperty } from '$lib/protocol/common';
   import { toast } from 'svelte-sonner';
   import { sanitizeString } from '$lib/utils';
   import { Button, Dialog, Select } from '$lib/kit';
@@ -14,10 +14,10 @@
 
   const { session, class: className }: Props = $props();
 
-  const jsonSchema = $derived<JsonSchema | null>(session.details?.metadata_schema ?? null);
+  const jsonSchema = $derived<JsonSchema | null>(session.metadata_schema);
   const metadata = $derived(session.metadata);
   const hasAcquired = $derived(
-    session.stacks.list.some((s) => s.profile_id === session.profiles.activeId && s.status !== 'planned')
+    session.stacks.list.some((s) => s.profile_id === session.scope.profiles.activeId && s.status !== 'planned')
   );
 
   // ── Schema selector ──
@@ -115,7 +115,7 @@
         } else if (a !== b) changes[key] = a;
       }
       if (Object.keys(changes).length > 0) {
-        await session.client.updateMetadata(changes);
+        await session.client.request('PATCH', '/session/metadata', { metadata: changes });
       }
       editing = false;
       draft = {};

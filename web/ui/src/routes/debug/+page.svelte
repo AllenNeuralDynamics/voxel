@@ -3,6 +3,7 @@
     Button,
     Checkbox,
     ColorPicker,
+    Numeric,
     Select,
     Slider,
     SpinBox,
@@ -12,6 +13,7 @@
     TextInput
   } from '$lib/kit';
   import { ThemePicker } from '$lib/themes';
+  import { toast } from 'svelte-sonner';
 
   let checked = $state(true);
   let unchecked = $state(false);
@@ -24,6 +26,27 @@
   let selectValue = $state('one');
   let tags = $state(['alpha', 'beta']);
   let pickerColor = $state('#3b82f6');
+
+  const freeRange = new Numeric.Model({
+    value: 0,
+    step: 1,
+    home: 0,
+    onPatch: (v) => toast(`free → ${v}`)
+  });
+  const bounded = new Numeric.Model({
+    value: 50,
+    min: 0,
+    max: 100,
+    step: 5,
+    home: 50,
+    onPatch: (v) => toast(`bounded [0..100, step 5] → ${v}`)
+  });
+  const precise = new Numeric.Model({
+    value: 1.234,
+    step: 0.001,
+    home: 1,
+    onPatch: (v) => toast(`decimal (3dp) → ${v.toFixed(3)}`)
+  });
 
   const sizes = ['xs', 'sm', 'md', 'lg'] as const;
 
@@ -143,6 +166,62 @@
               <Switch bind:checked={switchOff} size={sz} />
             </div>
           {/each}
+        </div>
+      </div>
+
+      <!-- Numeric primitive (new) -->
+      <div>
+        <h3 class="mb-2 text-xs text-fg-faint">Numeric primitive (new)</h3>
+        <div class="flex flex-col gap-2 text-xs">
+          <div class="flex items-center gap-3">
+            <span class="w-40 text-fg-muted">Free range, step 1</span>
+            <Numeric.Input model={freeRange} numCharacters={6} {@attach freeRange.wheel} />
+            <span class="cursor-ew-resize text-fg-muted" {@attach freeRange.scrubber}>drag me</span>
+            <span class="font-mono text-fg-faint">value: {freeRange.value}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-40 text-fg-muted">[0..100], step 5</span>
+            <Numeric.Input model={bounded} numCharacters={6} {@attach bounded.wheel} />
+            <span class="cursor-ew-resize text-fg-muted" {@attach bounded.scrubber}>drag me</span>
+            <span class="font-mono text-fg-faint">value: {bounded.value}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-40 text-fg-muted">3 decimals, step 0.001</span>
+            <Numeric.Input model={precise} decimals={3} numCharacters={8} align="right" {@attach precise.wheel} />
+            <span class="cursor-ew-resize text-fg-muted" {@attach precise.scrubber}>drag me</span>
+            <span class="font-mono text-fg-faint">value: {precise.value}</span>
+          </div>
+          <p class="mt-1 text-fg-faint">
+            Try: type + Enter, ↑/↓ keys (in input), Alt+wheel (over input), drag the "drag me" label, double-click it to
+            snap home. Each commit fires onPatch (toast).
+          </p>
+        </div>
+      </div>
+
+      <!-- Numeric.SpinBox (new composition) -->
+      <div>
+        <h3 class="mb-2 text-xs text-fg-faint">Numeric.SpinBox (new)</h3>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-3">
+            <span class="w-40 text-xs text-fg-muted">freeRange (no prefix)</span>
+            <Numeric.SpinBox model={freeRange} numCharacters={6} />
+            <span class="font-mono text-xs text-fg-faint">value: {freeRange.value}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-40 text-xs text-fg-muted">bounded + prefix/suffix</span>
+            <Numeric.SpinBox model={bounded} prefix="X" suffix="mm" numCharacters={6} align="right" />
+            <span class="font-mono text-xs text-fg-faint">value: {bounded.value}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-40 text-xs text-fg-muted">precise (3 decimals)</span>
+            <Numeric.SpinBox model={precise} prefix="t" suffix="s" decimals={3} numCharacters={8} align="right" />
+            <span class="font-mono text-xs text-fg-faint">value: {precise.value}</span>
+          </div>
+          <p class="mt-1 text-xs text-fg-faint">
+            Each SpinBox is bound to the same model used in the section above — drag the "drag me" label up there and
+            this SpinBox's value updates too (and vice versa). Try: type + Enter, ↑/↓, Alt+wheel over the chrome, drag
+            the prefix, double-click prefix to snap home, click ▲/▼.
+          </p>
         </div>
       </div>
 

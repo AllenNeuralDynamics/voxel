@@ -100,7 +100,7 @@ class Profiles:
     async def open(self) -> None:
         """Build channels, subscribe cameras for FOV triggers, activate the default profile."""
         for cam_id, handle in self._scope.cameras.items():
-            handle.props_changed.subscribe(self._make_camera_props_callback(cam_id))
+            await handle.on_props_change(self._make_camera_props_callback(cam_id))
         self._channels = self._build_channels()
         # set_active_profile would no-op since _active_id already matches; call _activate directly
         await self._activate(self._active_id)
