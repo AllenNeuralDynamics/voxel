@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { isPropDiverged, formatPropValue } from './utils';
-  import { Laser } from './_device.svelte';
-  import { getChannelFor } from '../profile';
+  import { isPropDiverged, formatPropValue, Laser } from './device';
+  import { getChannelFor } from './profile';
   import type { ChannelConfig } from '$lib/protocol/session';
   import Switch from '$lib/kit/Switch.svelte';
   import SpinBox from '$lib/kit/SpinBox.svelte';
@@ -11,7 +10,7 @@
   import { Tooltip } from 'bits-ui';
   import { useInterval } from 'runed';
   import { cn } from '$lib/utils';
-  import type { Microscope } from '..';
+  import type { Microscope } from '.';
 
   interface Props {
     microscope: Microscope;
