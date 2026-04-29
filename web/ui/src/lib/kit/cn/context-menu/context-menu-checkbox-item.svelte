@@ -1,8 +1,9 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from 'bits-ui';
+  import type { Snippet } from 'svelte';
+
   import { LucideCheck as CheckIcon } from '$lib/icons';
   import { cn, type WithoutChildrenOrChild } from '$lib/utils';
-  import type { Snippet } from 'svelte';
 
   let {
     ref = $bindable(null),

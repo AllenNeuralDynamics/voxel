@@ -6,15 +6,17 @@
 </script>
 
 <script lang="ts">
-  import type { Session } from '$lib/session.svelte';
-  import type { LayerVisibility, Tile } from './types';
-  import type { Stack } from '$lib/protocol/stacks';
-  import { compositeFullFrames } from '$lib/preview';
-  import { sanitizeString } from '$lib/utils';
-  import { ContextMenu } from '$lib/kit';
-  import { SvelteSet } from 'svelte/reactivity';
-  import { onMount } from 'svelte';
   import { watch } from 'runed';
+  import { onMount } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
+
+  import type { Stack } from '$lib/config';
+  import { ContextMenu } from '$lib/kit';
+  import { compositeFullFrames } from '$lib/preview';
+  import type { Session } from '$lib/session.svelte';
+  import { sanitizeString } from '$lib/utils';
+
+  import type { LayerVisibility, Tile } from './types';
 
   interface Props {
     session: Session;

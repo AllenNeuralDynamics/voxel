@@ -86,8 +86,9 @@
 </script>
 
 <script lang="ts">
-  import { cn } from '$lib/utils';
   import { useEventListener, useThrottle } from 'runed';
+
+  import { cn } from '$lib/utils';
 
   interface Props extends SpinBoxVariants {
     value?: number;

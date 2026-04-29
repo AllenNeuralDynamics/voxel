@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { getSessionContext } from '$lib/context';
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { resolve } from '$app/paths';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { page } from '$app/state';
+  import { getSessionContext } from '$lib/context';
   import DeviceBrowser from '$lib/microscope/device/DeviceBrowser.svelte';
+  import { cn, sanitizeString } from '$lib/utils';
+
+  import AnalogOutConfig from './AnalogOutConfig.svelte';
   import CameraConfig from './CameraConfig.svelte';
   import LaserConfig from './LaserConfig.svelte';
-  import AnalogOutConfig from './AnalogOutConfig.svelte';
 
   const session = getSessionContext();
   const scope = $derived(session.scope);

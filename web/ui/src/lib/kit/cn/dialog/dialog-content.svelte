@@ -27,12 +27,14 @@
 
 <script lang="ts">
   import { Dialog as DialogPrimitive } from 'bits-ui';
-  import DialogPortal from './dialog-portal.svelte';
-  import { Close as XIcon } from '$lib/icons';
   import type { Snippet } from 'svelte';
-  import * as Dialog from './index';
-  import { cn, type WithoutChildrenOrChild } from '$lib/utils';
   import type { ComponentProps } from 'svelte';
+
+  import { Close as XIcon } from '$lib/icons';
+  import { cn, type WithoutChildrenOrChild } from '$lib/utils';
+
+  import DialogPortal from './dialog-portal.svelte';
+  import * as Dialog from './index';
 
   let {
     ref = $bindable(null),

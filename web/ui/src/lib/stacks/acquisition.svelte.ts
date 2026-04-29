@@ -8,9 +8,10 @@
 
 import { SvelteMap } from 'svelte/reactivity';
 import { toast } from 'svelte-sonner';
-import type { Client } from '$lib/wire.svelte';
-import type { SessionMode } from '$lib/protocol/session';
+
 import type { SessionStateUpdate, StackProgress } from '$lib/protocol';
+import type { SessionMode } from '$lib/protocol/session';
+import type { Client } from '$lib/wire.svelte';
 
 export class AcquisitionManager {
   mode = $state<SessionMode>('idle');

@@ -54,7 +54,7 @@ class DeviceCommandResult(BaseModel):
 
     device: str
     command: str
-    result: dict[str, Any]
+    result: Any
 
 
 # ==================== Commands ====================

@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Popover } from 'bits-ui';
-  import { isValidHex } from '$lib/utils';
   import type { PopoverContentProps } from 'bits-ui';
+  import { Popover } from 'bits-ui';
+
+  import { isValidHex } from '$lib/utils';
 
   interface Props {
     color: string;

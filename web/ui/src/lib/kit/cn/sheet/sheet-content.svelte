@@ -22,12 +22,14 @@
 
 <script lang="ts">
   import { Dialog as SheetPrimitive } from 'bits-ui';
-  import { LucideX as XIcon } from '$lib/icons';
   import type { Snippet } from 'svelte';
-  import SheetPortal from './sheet-portal.svelte';
-  import SheetOverlay from './sheet-overlay.svelte';
-  import { cn, type WithoutChildrenOrChild } from '$lib/utils';
   import type { ComponentProps } from 'svelte';
+
+  import { LucideX as XIcon } from '$lib/icons';
+  import { cn, type WithoutChildrenOrChild } from '$lib/utils';
+
+  import SheetOverlay from './sheet-overlay.svelte';
+  import SheetPortal from './sheet-portal.svelte';
 
   let {
     ref = $bindable(null),

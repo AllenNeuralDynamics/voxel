@@ -404,14 +404,15 @@ class OxxiusLBX(Laser):
         """Get the maximum power in mW."""
         return float(self._hub.query(Query.MAX_LASER_POWER, self._prefix))
 
-    @numeric(min_value=0.0, max_value=lambda self: self.max_power_mw, step=0.1)
-    def power_setpoint_mw(self) -> float:
-        """Get the power setpoint in mW."""
+    @numeric(minimum=0.0, maximum=lambda self: self.max_power_mw, step=0.1)
+    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    def power_setpoint(self) -> float:
+        """Get the commanded power setpoint in mW."""
         return float(self._hub.query(Query.LASER_POWER_SETTING, self._prefix))
 
-    @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float) -> None:
-        """Set the power setpoint in mW."""
+    @power_setpoint.setter
+    def power_setpoint(self, value: float) -> None:
+        """Set the commanded power setpoint in mW."""
         if value < 0 or value > self.max_power_mw:
             self.log.error(f"Power {value} mW out of range [0, {self.max_power_mw}]")
             return
@@ -419,27 +420,10 @@ class OxxiusLBX(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    def power_mw(self) -> float:
-        """Get the actual power of the laser in mW."""
-        return float(self._hub.query(Query.LASER_POWER, self._prefix))
-
-    @numeric(
-        min_value=0.0,
-        max_value=lambda self: self.max_power_mw,
-        step=0.1,
-        target=lambda self: float(self.power_setpoint_mw),
-    )
-    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
+        """Get the measured output power in mW."""
         return float(self._hub.query(Query.LASER_POWER, self._prefix))
-
-    @power.setter
-    def power(self, value: float) -> None:
-        if value < 0 or value > self.max_power_mw:
-            self.log.error(f"Power {value} mW out of range [0, {self.max_power_mw}]")
-            return
-        self._hub.command(Cmd.LASER_POWER, value, self._prefix)
-        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float:
@@ -550,14 +534,15 @@ class OxxiusLCX(Laser):
         """Get the maximum power in mW."""
         return float(self._hub.query(Query.MAX_LASER_POWER, self._prefix))
 
-    @numeric(min_value=0.0, max_value=lambda self: self.max_power_mw, step=0.1)
-    def power_setpoint_mw(self) -> float:
-        """Get the power setpoint in mW."""
+    @numeric(minimum=0.0, maximum=lambda self: self.max_power_mw, step=0.1)
+    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    def power_setpoint(self) -> float:
+        """Get the commanded power setpoint in mW."""
         return float(self._hub.query(Query.LASER_POWER_SETTING, self._prefix))
 
-    @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float) -> None:
-        """Set the power setpoint in mW."""
+    @power_setpoint.setter
+    def power_setpoint(self, value: float) -> None:
+        """Set the commanded power setpoint in mW."""
         if value < 0 or value > self.max_power_mw:
             self.log.error(f"Power {value} mW out of range [0, {self.max_power_mw}]")
             return
@@ -565,34 +550,17 @@ class OxxiusLCX(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    def power_mw(self) -> float:
-        """Get the actual power of the laser in mW."""
-        return float(self._hub.query(Query.LASER_POWER, self._prefix))
-
-    @numeric(
-        min_value=0.0,
-        max_value=lambda self: self.max_power_mw,
-        step=0.1,
-        target=lambda self: float(self.power_setpoint_mw),
-    )
-    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
+        """Get the measured output power in mW."""
         return float(self._hub.query(Query.LASER_POWER, self._prefix))
-
-    @power.setter
-    def power(self, value: float) -> None:
-        if value < 0 or value > self.max_power_mw:
-            self.log.error(f"Power {value} mW out of range [0, {self.max_power_mw}]")
-            return
-        self._hub.command(Cmd.LASER_POWER, value, self._prefix)
-        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float:
         """Get the temperature of the laser in degrees Celsius."""
         return self._hub.baseplate_temperature_c
 
-    @numeric(min_value=0.0, max_value=lambda self: self.max_power_mw * 0.9, step=0.1)
+    @numeric(minimum=0.0, maximum=lambda self: self.max_power_mw * 0.9, step=0.1)
     @describe(label="AOM Power", units="mW", desc="AOM-linked power setting.")
     def aom_power_mw(self) -> float:
         """Get the AOM power in mW."""

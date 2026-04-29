@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { Button, Select, Slider, SpinBox } from '$lib/kit';
   import type { Microscope } from '$lib/microscope';
-  import { cn, sanitizeString } from '$lib/utils';
-  import { Select, SpinBox, Button, Slider } from '$lib/kit';
   import DeviceBrowser from '$lib/microscope/device/DeviceBrowser.svelte';
+  import { cn, sanitizeString } from '$lib/utils';
 
   const cameraExclusions = {
     props: [

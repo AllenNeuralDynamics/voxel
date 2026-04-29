@@ -1,13 +1,14 @@
 <script lang="ts">
+  import { Pane, PaneGroup } from 'paneforge';
+  import { toast } from 'svelte-sonner';
+
   import { getSessionContext } from '$lib/context';
   import { Crosshair } from '$lib/icons';
-  import { Button, PaneDivider, SpinBox, Select } from '$lib/kit';
+  import { Button, PaneDivider, Select, SpinBox } from '$lib/kit';
   import MetadataPanel from '$lib/metadata/MetadataPanel.svelte';
   import ProgressGrid from '$lib/stacks/ProgressGrid.svelte';
   import StackSelector from '$lib/stacks/StackSelector.svelte';
   import { sanitizeString } from '$lib/utils';
-  import { Pane, PaneGroup } from 'paneforge';
-  import { toast } from 'svelte-sonner';
 
   const session = getSessionContext();
 
@@ -227,10 +228,10 @@
   <!-- Full-width footer: progress + action -->
   <div class="flex flex-col gap-3 border-t border-border px-4 py-3 pb-6">
     {#if !hasPlanned && !isAcquiring}
-      <Button size="sm" variant="outline" disabled class="w-full">Add new stacks to start acquisition</Button>
+      <Button size="lg" variant="outline" disabled class="w-full">Add new stacks to start acquisition</Button>
     {:else}
       <Button
-        size="sm"
+        size="lg"
         variant={isAcquiring ? 'outline' : 'default'}
         onclick={() => (isAcquiring ? session.acquisition.stop() : session.acquisition.start())}
         class="w-full {isAcquiring ? 'border-danger text-danger hover:bg-danger/10' : ''}"

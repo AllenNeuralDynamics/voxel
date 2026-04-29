@@ -1,34 +1,36 @@
 <script lang="ts">
   import './layout.css';
-  import favicon from '$lib/assets/favicon.svg';
-  import type { Component } from 'svelte';
-  import { onMount, onDestroy } from 'svelte';
-  import { useEventListener, PersistedState } from 'runed';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/state';
-  import { resolve } from '$app/paths';
-  import type { Pathname } from '$app/types';
-  import { Pane, PaneGroup } from 'paneforge';
-  import { DropdownMenu } from 'bits-ui';
+
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
+  import { DropdownMenu } from 'bits-ui';
+  import { Pane, PaneGroup } from 'paneforge';
+  import { PersistedState, useEventListener } from 'runed';
+  import type { Component } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
+
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { page } from '$app/state';
+  import type { Pathname } from '$app/types';
   import { App } from '$lib/app.svelte';
-  import { Toaster, Dialog, Button } from '$lib/kit';
-  import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import { cn, createPaneMinSize } from '$lib/utils';
-  import { setSessionContext, setLogsContext } from '$lib/context';
-  import { Crosshair, Layers, Play, WaveformsIcon, Microscope, TuneVertical } from '$lib/icons';
-  import VoxelLogo from './VoxelLogo.svelte';
-  import StartButton from './StartButton.svelte';
-  import LogViewer from './LogViewer.svelte';
-  import LasersPanel from '$lib/microscope/device/LasersPanel.svelte';
-  import CamerasPanel from '$lib/microscope/CamerasPanel.svelte';
-  import AuxDevicesPanel from '$lib/microscope/AuxDevicesPanel.svelte';
-  import { ProfileSelector } from '$lib/microscope';
-  import { PreviewCanvas } from '$lib/preview';
+  import favicon from '$lib/assets/favicon.svg';
+  import { setLogsContext, setSessionContext } from '$lib/context';
   import { GridCanvas } from '$lib/grid';
+  import { Crosshair, Layers, Microscope, Play, TuneVertical, WaveformsIcon } from '$lib/icons';
+  import { Button, Dialog, Toaster } from '$lib/kit';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import { ProfileSelector } from '$lib/microscope';
+  import AuxDevicesPanel from '$lib/microscope/AuxDevicesPanel.svelte';
+  import CamerasPanel from '$lib/microscope/CamerasPanel.svelte';
+  import LasersPanel from '$lib/microscope/LasersPanel.svelte';
+  import { PreviewCanvas } from '$lib/preview';
   import { AppearanceSheet, themes } from '$lib/themes';
-  import LaunchScreen from './LaunchScreen.svelte';
+  import { cn, createPaneMinSize } from '$lib/utils';
+
   import ConnectionSplash from './ConnectionSplash.svelte';
+  import LaunchScreen from './LaunchScreen.svelte';
+  import LogViewer from './LogViewer.svelte';
+  import VoxelLogo from './VoxelLogo.svelte';
 
   let { children } = $props();
 
@@ -146,18 +148,20 @@
 {#if app.client.state !== 'connected' || !app.status || (app.hasSession && !session)}
   <ConnectionSplash {app} />
 {:else if session}
+  {@const isPreviewing = session.mode === 'previewing'}
+  {@const isAcquiring = session.mode === 'acquiring'}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
     <PaneGroup direction="horizontal" autoSaveId="shell">
       <Pane defaultSize={60} minSize={leftPaneMin.value} maxSize={70}>
         <div class="grid h-full grid-rows-[auto_1fr_auto]">
-          <header class="flex h-14 items-center justify-between border-b border-border bg-surface px-4">
-            <div class="flex items-center gap-x-4">
+          <header class="flex h-15 items-center justify-between border-b border-border bg-surface px-4">
+            <div class="flex items-center gap-x-3">
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
                   class="flex cursor-pointer items-center text-fg-muted transition-colors hover:text-fg"
                   title="App menu"
                 >
-                  <VoxelLogo class="size-ui-sm" />
+                  <VoxelLogo class="size-ui-md" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content
@@ -185,14 +189,14 @@
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
 
-              <nav class="flex h-ui-sm items-center gap-1 text-fg-muted">
+              <nav class="flex h-ui-md items-center gap-x-1 text-fg-muted">
                 {#each navTabs as tab (tab.id)}
                   {@const Icon = tab.icon}
                   {@const active = viewId === tab.id}
                   <button
                     onclick={() => selectView(tab.id)}
                     class={cn(
-                      'inline-flex h-full cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm whitespace-nowrap transition-colors',
+                      'inline-flex h-full cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm whitespace-nowrap transition-colors',
                       active
                         ? 'border-fg-accent/30 bg-fg-accent/10 text-fg'
                         : 'border-transparent hover:bg-element-hover hover:text-fg'
@@ -206,7 +210,24 @@
               </nav>
             </div>
 
-            <StartButton {session} />
+            <Button
+              class="min-w-38"
+              variant={isPreviewing || isAcquiring ? 'danger' : 'success'}
+              size="lg"
+              onclick={() => {
+                if (isAcquiring) session.acquisition.stop();
+                else if (isPreviewing) session.preview.stopPreview();
+                else session.preview.startPreview();
+              }}
+            >
+              {#if isAcquiring}
+                Stop Acquisition
+              {:else if isPreviewing}
+                Stop Preview
+              {:else}
+                Start Preview
+              {/if}
+            </Button>
           </header>
 
           <!-- Middle: children + bottom pane -->
@@ -260,7 +281,7 @@
           </PaneGroup>
 
           <!-- Footer: close session + tab strip + profile selector -->
-          <footer class="flex h-ui-xl items-center justify-between gap-20 border-t border-border px-4 py-2">
+          <footer class="flex h-12 items-center justify-between gap-20 border-t border-border px-4 py-2">
             <div class="flex items-center gap-2">
               <div class="flex divide-x divide-border rounded border border-border">
                 <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
@@ -293,7 +314,7 @@
               </div>
             </div>
             <div class="max-w-100 min-w-40 flex-1">
-              <ProfileSelector profiles={session.scope.profiles} stacks={session.stacks} size="xs" class="w-full" />
+              <ProfileSelector profiles={session.scope.profiles} stacks={session.stacks} size="md" class="w-full" />
             </div>
           </footer>
         </div>

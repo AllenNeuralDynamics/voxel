@@ -1,20 +1,22 @@
 <script lang="ts">
-  import { getSessionContext } from '$lib/context';
-  import { Pane, PaneGroup } from 'paneforge';
-  import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import { createPaneMinSize, sanitizeString } from '$lib/utils';
-  import { discoverProfileDevices } from '$lib/microscope/profile';
-  import { generateTraces, resolveWaveforms } from '$lib/protocol/waveform';
-  import type { AOSignals, ClockSource } from '$lib/protocol/session';
-  import { isDerivedWaveform, type Waveform, type DerivedWaveform } from '$lib/protocol/waveform';
-  import type { SelectOption } from '$lib/kit/Select.svelte';
-  import WaveformPanel from './WaveformPanel.svelte';
-  import { SpinBox, Select, Button } from '$lib/kit';
   import { Collapsible } from 'bits-ui';
-  import { Check, Close, ChevronDown } from '$lib/icons';
-  import { toast } from 'svelte-sonner';
+  import { Pane, PaneGroup } from 'paneforge';
   import { watch } from 'runed';
   import { SvelteSet } from 'svelte/reactivity';
+  import { toast } from 'svelte-sonner';
+
+  import type { AOSignals, ClockSource } from '$lib/config';
+  import { getSessionContext } from '$lib/context';
+  import { Check, ChevronDown, Close } from '$lib/icons';
+  import { Button, Select, SpinBox } from '$lib/kit';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import type { SelectOption } from '$lib/kit/Select.svelte';
+  import { discoverProfileDevices } from '$lib/microscope/profile';
+  import { createPaneMinSize, sanitizeString } from '$lib/utils';
+  import type { DerivedWaveform, Waveform } from '$lib/waveform';
+  import { generateTraces, isDerivedWaveform, resolveWaveforms } from '$lib/waveform';
+
+  import WaveformPanel from './WaveformPanel.svelte';
 
   // ──────────────────────────────── Session wiring ────────────────────────────────
 

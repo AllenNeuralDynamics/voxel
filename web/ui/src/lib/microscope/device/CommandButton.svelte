@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { Device } from './_device.svelte';
-  import type { CommandInfo, ParamInfo } from '$lib/protocol/device';
-  import { isErrorMsg } from './utils';
-  import { cn, sanitizeString } from '$lib/utils';
   import { Button, Dialog, Select, SpinBox, TextInput } from '$lib/kit';
+  import { cn, sanitizeString } from '$lib/utils';
+
+  import type { CommandInfo, Device, ParamInfo } from './_device.svelte';
+  import { isErrorMsg } from './utils';
 
   interface Props {
     device: Device;

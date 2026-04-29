@@ -137,7 +137,7 @@ class PCOCamera(Camera):
 
     # ==================== Exposure & Frame Rate ====================
 
-    @numeric(min_value=0.001, max_value=10000.0, step=0.001)
+    @numeric(minimum=0.001, maximum=10000.0, step=0.001)
     def exposure_time_ms(self) -> float:
         """Get the exposure time of the camera in ms."""
         return self._pco.exposure_time * 1000  # s to ms
@@ -148,7 +148,7 @@ class PCOCamera(Camera):
         self._pco.exposure_time = exposure_time_ms / 1000  # ms to s
         self.log.debug(f"Exposure time set to {exposure_time_ms} ms")
 
-    @numeric(min_value=0.1, max_value=1000.0, step=0.1)
+    @numeric(minimum=0.1, maximum=1000.0, step=0.1)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
         # Estimate from frame time
@@ -325,7 +325,7 @@ class PCOCamera(Camera):
 
     # ==================== Line Timing ====================
 
-    @numeric(min_value=1.0, max_value=1000.0, step=0.1)
+    @numeric(minimum=1.0, maximum=1000.0, step=0.1)
     @describe(label="Line Interval", units="µs", desc="Line interval for rolling shutter.")
     def line_interval_us(self) -> float:
         """Get the line interval in microseconds."""

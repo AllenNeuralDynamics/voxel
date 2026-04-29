@@ -1,17 +1,18 @@
 <script lang="ts">
-  import type { Session } from '$lib/session.svelte';
+  import { watch } from 'runed';
   import type { Component } from 'svelte';
-  import type { GridConfig } from '$lib/protocol/stacks';
-  import type { LayerVisibility } from './types';
-  import type { StackOrder } from '$lib/protocol/stacks';
+  import { slide } from 'svelte/transition';
+
+  import type { GridConfig, StackOrder } from '$lib/config';
+  import { GridLines, GripVertical, ImageLight, Link, LinkOff, PanelLeft, StackLight } from '$lib/icons';
+  import type { Session } from '$lib/session.svelte';
   import { STACK_ORDER_OPTIONS } from '$lib/stacks';
-  import { Link, LinkOff, PanelLeft, GridLines, StackLight, ImageLight, GripVertical } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
+
+  import { Button, Checkbox, Select, SortableList, SpinBox } from '../kit';
+  import type { LayerVisibility } from './types';
   import XYPlane from './XYPlane.svelte';
   import ZPlane from './ZPlane.svelte';
-  import { slide } from 'svelte/transition';
-  import { watch } from 'runed';
-  import { Button, Checkbox, Select, SortableList, SpinBox } from '../kit';
 
   interface Props {
     session: Session;

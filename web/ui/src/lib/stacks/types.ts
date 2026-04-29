@@ -1,4 +1,4 @@
-import type { StackOrder } from '$lib/protocol/stacks';
+import type { StackOrder } from '$lib/config';
 
 /** UI labels for the stack-ordering dropdown, in display order. */
 export const STACK_ORDER_OPTIONS: { value: StackOrder; label: string }[] = [

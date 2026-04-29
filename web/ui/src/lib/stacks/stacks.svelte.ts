@@ -6,12 +6,13 @@
  * reversible CRUD operations.
  */
 
-import { toast } from 'svelte-sonner';
 import { SvelteSet } from 'svelte/reactivity';
-import type { Client } from '$lib/wire.svelte';
-import { UndoStack } from '$lib/utils';
-import type { Stack, StackOrder, StackStatus, PlanConfig } from '$lib/protocol/stacks';
+import { toast } from 'svelte-sonner';
+
+import type { PlanConfig, Stack, StackOrder, StackStatus } from '$lib/config';
 import type { SessionStateUpdate } from '$lib/protocol';
+import { UndoStack } from '$lib/utils';
+import type { Client } from '$lib/wire.svelte';
 
 const DEFAULT_PLAN: PlanConfig = {
   profile_order: [],

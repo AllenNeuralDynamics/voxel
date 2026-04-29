@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { SpinBox } from '$lib/kit';
-  import { computeAutoLevels } from '$lib/utils';
-  import ColormapPicker from './ColormapPicker.svelte';
-  import type { ColormapCatalog } from '$lib/preview';
   import { useEventListener } from 'runed';
+
+  import { SpinBox } from '$lib/kit';
+  import type { ColormapCatalog } from '$lib/preview';
+  import { computeAutoLevels } from '$lib/utils';
+
+  import ColormapPicker from './ColormapPicker.svelte';
 
   type WindowMode = 'visible' | 'hover' | 'inline';
 

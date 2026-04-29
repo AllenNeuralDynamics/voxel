@@ -1,6 +1,6 @@
-export { Microscope, Stage, Profiles } from './_scope.svelte';
+export { Microscope, Profiles, Stage } from './_scope.svelte';
+export { default as DetectionCard } from './DetectionCard.svelte';
 export * from './device';
-
 export { default as ProfileCard } from './ProfileCard.svelte';
 export { default as ProfileInfoPopover } from './ProfileInfoPopover.svelte';
 export { default as ProfileProperties } from './ProfileProperties.svelte';

@@ -1,5 +1,14 @@
 import type { Attachment } from 'svelte/attachments';
 
+export interface PropertyInfo {
+  name: string;
+  label: string;
+  desc?: string | null;
+  dtype: string;
+  access: 'ro' | 'rw';
+  units: string;
+}
+
 /** Wire-format discriminator emitted by the backend on every PropertyModel payload. */
 export type PropertyKind = 'integer' | 'float' | 'string' | 'bool' | 'generic';
 
@@ -16,10 +25,9 @@ export interface PropOptions<T> {
 export interface PropSnapshot<T> {
   kind: PropertyKind;
   value: T;
-  min?: number | null;
-  max?: number | null;
+  minimum?: number | null;
+  maximum?: number | null;
   step?: number | null;
-  target?: number | null;
   options?: T[] | null;
 }
 
@@ -128,22 +136,20 @@ export interface NumericOptions extends PropOptions<number> {
   min?: number | null;
   max?: number | null;
   step?: number | null;
-  target?: number | null;
   /** Double-click target for the `scrubber` attachment. Number, function, or null to disable. */
   home?: number | (() => number) | null;
-  /** Throttle interval in ms for `patchThrottled()`. Defaults to 100. */
+  /** Throttle interval in ms for `patch(value, { throttled: true })`. Defaults to 100. */
   throttleMs?: number;
 }
 
 const DRAG_THRESHOLD_PX = 3;
 
 /**
- * Property model for numeric values with optional min/max/step constraints
- * and an optional `target` (commanded vs measured, e.g. laser setpoint).
+ * Property model for numeric values with optional min/max/step constraints.
  *
  * Operations:
- *   - `patch(value)` — clamp/snap, set, publish (immediate)
- *   - `patchThrottled(value)` — same, but coalesces calls within `throttleMs`
+ *   - `patch(value)` — clamp/snap, set, publish (immediate; cancels any pending throttle)
+ *   - `patch(value, { throttled: true })` — same, but coalesces calls within `throttleMs`
  *   - `resolve(raw)` — pure: returns what `raw` would clamp/snap to
  *   - `stage(raw)` — resolve + set, no publish
  *
@@ -155,7 +161,6 @@ export class NumericModel extends BasePropModel<number> {
   min: number | null = $state(null);
   max: number | null = $state(null);
   step: number | null = $state(null);
-  target: number | null = $state(null);
   home: number | (() => number) | null = $state(null);
 
   #throttleMs: number;
@@ -166,7 +171,6 @@ export class NumericModel extends BasePropModel<number> {
     this.min = opts.min ?? null;
     this.max = opts.max ?? null;
     this.step = opts.step ?? null;
-    this.target = opts.target ?? null;
     this.home = opts.home ?? null;
     this.#throttleMs = opts.throttleMs ?? 100;
   }
@@ -191,33 +195,34 @@ export class NumericModel extends BasePropModel<number> {
     return this.value;
   }
 
-  /** Resolve, set, publish (immediate). Cancels any pending throttled fire. */
-  patch(value: number): void {
-    if (this.#throttleTimer !== null) {
-      clearTimeout(this.#throttleTimer);
-      this.#throttleTimer = null;
-    }
-    this.value = this.resolve(value);
-    this._publish(this.value);
-  }
-
-  /** Resolve, set, publish (throttled). Subsequent calls within `throttleMs` coalesce. */
-  patchThrottled(value: number): void {
-    this.value = this.resolve(value);
-    if (this.#throttleTimer !== null) return;
-    this.#throttleTimer = setTimeout(() => {
-      this.#throttleTimer = null;
+  /**
+   * Resolve, set, publish.
+   * Default is immediate — cancels any pending throttle and fires now.
+   * `{ throttled: true }` coalesces calls within `throttleMs`.
+   */
+  patch(value: number, opts: { throttled?: boolean } = {}): void {
+    this.stage(value);
+    if (opts.throttled) {
+      if (this.#throttleTimer !== null) return;
+      this.#throttleTimer = setTimeout(() => {
+        this.#throttleTimer = null;
+        this._publish(this.value);
+      }, this.#throttleMs);
+    } else {
+      if (this.#throttleTimer !== null) {
+        clearTimeout(this.#throttleTimer);
+        this.#throttleTimer = null;
+      }
       this._publish(this.value);
-    }, this.#throttleMs);
+    }
   }
 
-  /** Sync value, min, max, step, target from authoritative source (e.g. backend echo). */
+  /** Sync value, min, max, step from authoritative source (e.g. backend echo). */
   update(snapshot: PropSnapshot<unknown>): void {
     super.update(snapshot);
-    if (snapshot.min !== undefined) this.min = snapshot.min;
-    if (snapshot.max !== undefined) this.max = snapshot.max;
+    if (snapshot.minimum !== undefined) this.min = snapshot.minimum;
+    if (snapshot.maximum !== undefined) this.max = snapshot.maximum;
     if (snapshot.step !== undefined) this.step = snapshot.step;
-    if (snapshot.target !== undefined) this.target = snapshot.target;
   }
 
   /** Alt+wheel scrubs the value by `step`. Attach to any element to make it a gesture surface. */
@@ -248,7 +253,7 @@ export class NumericModel extends BasePropModel<number> {
         e.preventDefault();
       }
       if (!isDragging) return;
-      this.patchThrottled(dragStartValue + Math.round(delta) * (this.step ?? 1));
+      this.patch(dragStartValue + Math.round(delta) * (this.step ?? 1), { throttled: true });
     };
 
     const onMouseUp = () => {
@@ -322,10 +327,9 @@ export function createPropModel(snapshot: PropSnapshot<unknown>, onPatch?: (valu
     case 'integer':
     case 'float':
       return new NumericModel(snapshot.value as number, {
-        min: snapshot.min,
-        max: snapshot.max,
+        min: snapshot.minimum,
+        max: snapshot.maximum,
         step: snapshot.step,
-        target: snapshot.target,
         onPatch: onPatch as ((v: number) => void) | undefined
       });
     case 'string':
@@ -343,4 +347,49 @@ export function createPropModel(snapshot: PropSnapshot<unknown>, onPatch?: (valu
       console.warn('[createPropModel] unknown kind, falling back to PropModel:', snapshot.kind);
       return new PropModel(snapshot.value, { onPatch });
   }
+}
+
+/** A PropModel paired with its interface metadata and active-profile saved value. */
+export class Prop {
+  readonly model: AnyPropModel;
+  info: PropertyInfo = $state(undefined as never);
+
+  #getSaved?: () => unknown;
+
+  constructor(model: AnyPropModel, info: PropertyInfo, getSaved?: () => unknown) {
+    this.model = model;
+    this.info = info;
+    this.#getSaved = getSaved;
+  }
+
+  saved: unknown = $derived(this.#getSaved?.());
+
+  get value(): unknown {
+    return this.model.value;
+  }
+  get label(): string {
+    return this.info.label || '';
+  }
+  get units(): string {
+    return this.info.units ?? '';
+  }
+  get access() {
+    return this.info.access;
+  }
+
+  isDiverged: boolean = $derived.by(() => propValueDiverged(this.saved, this.model.value));
+
+  applySaved(): void {
+    if (this.saved !== undefined) this.model.patch(this.saved as never);
+  }
+}
+
+/** Compare two property values; treats floating-point near-equality as equal. */
+function propValueDiverged(saved: unknown, current: unknown): boolean {
+  if (saved === undefined || saved === null) return false;
+  if (current === undefined || current === null) return false;
+  if (typeof saved === 'number' && typeof current === 'number') {
+    return Math.abs(saved - current) > 1e-6;
+  }
+  return saved !== current;
 }

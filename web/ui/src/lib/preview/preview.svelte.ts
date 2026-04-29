@@ -1,11 +1,12 @@
-import type { ChannelConfig, MicroscopeConfig, SessionStateUpdate } from '$lib/protocol/session';
-import type { PreviewConfig, PreviewLevels, PreviewViewport } from '$lib/protocol/preview';
-import type { Client } from '$lib/wire.svelte';
-import type { PreviewFrameInfo, PreviewTileInfo } from '$lib/preview/frame';
-
-import { channelFromTopic, decodeFrameBody, decodeTileBody } from '$lib/preview/frame';
-import { computeAutoLevels, sanitizeString } from '$lib/utils';
 import { SvelteMap } from 'svelte/reactivity';
+
+import type { ChannelConfig, MicroscopeConfig } from '$lib/config';
+import type { PreviewFrameInfo, PreviewTileInfo } from '$lib/preview/frame';
+import { channelFromTopic, decodeFrameBody, decodeTileBody } from '$lib/preview/frame';
+import type { PreviewConfig, PreviewLevels, PreviewViewport } from '$lib/protocol/preview';
+import type { SessionStateUpdate } from '$lib/protocol/session';
+import { computeAutoLevels, sanitizeString } from '$lib/utils';
+import type { Client } from '$lib/wire.svelte';
 
 /** A colormap: list of hex color stops (black->color for single-stop). */
 export type ColormapDef = string[];

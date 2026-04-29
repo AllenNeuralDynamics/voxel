@@ -1,7 +1,8 @@
 <script lang="ts" generics="T">
   import type { Snippet } from 'svelte';
   import { flip } from 'svelte/animate';
-  import { SortableListState, setSortableListContext } from './sortable-list.svelte';
+
+  import { setSortableListContext, SortableListState } from './sortable-list.svelte';
 
   interface Props {
     items: T[];

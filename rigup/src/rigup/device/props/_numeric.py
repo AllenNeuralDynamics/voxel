@@ -1,11 +1,7 @@
-"""Numeric property descriptors with optional target/setpoint support.
+"""Numeric property descriptors.
 
 Provides ``@numeric`` (float) and ``@numeric_int`` (int) plus
 the value classes ``NumericFloat`` and ``NumericInt``.
-
-Target is an optional second value that travels alongside ``value`` — useful for
-hardware that distinguishes between measured (current) and commanded (setpoint),
-such as a laser exposing ``power`` (measured) and ``power_setpoint`` (commanded).
 """
 
 import math
@@ -25,8 +21,8 @@ class _Numeric[N: _Number](ABC):
     """Shared logic for :class:`NumericFloat` and :class:`NumericInt`.
 
     Generic over ``N`` so subclasses inherit precisely-typed attributes
-    (``NumericFloat`` gets ``min_value: float | None``; ``NumericInt`` gets
-    ``min_value: int | None``) without needing to redeclare them.
+    (``NumericFloat`` gets ``minimum: float | None``; ``NumericInt`` gets
+    ``minimum: int | None``) without needing to redeclare them.
 
     Concrete subclasses declare two small pieces:
 
@@ -46,10 +42,9 @@ class _Numeric[N: _Number](ABC):
     # Set per-subclass: "float" for NumericFloat, "integer" for NumericInt.
     kind: ClassVar[PropertyKind]
 
-    min_value: N | None
-    max_value: N | None
+    minimum: N | None
+    maximum: N | None
     step: N | None
-    target: N | None
 
     @classmethod
     @abstractmethod
@@ -85,10 +80,9 @@ class _Numeric[N: _Number](ABC):
     def __new__(
         cls,
         value: N,
-        min_value: N | None = None,
-        max_value: N | None = None,
+        minimum: N | None = None,
+        maximum: N | None = None,
         step: N | None = None,
-        target: N | None = None,
     ) -> Self:
         # ``base`` is float or int. Typed as Any so the call to ``base.__new__(cls, v)``
         # accepts cls — the type checker can't see that subclasses inherit from
@@ -96,35 +90,31 @@ class _Numeric[N: _Number](ABC):
         base: Any = cls.base_type
         v: Any = value if isinstance(value, base) else base(value)
 
-        if min_value is not None:
-            v = max(min_value, v)
+        if minimum is not None:
+            v = max(minimum, v)
         if step is not None:
-            modulus = (v - (min_value or 0)) % step
+            modulus = (v - (minimum or 0)) % step
             if not cls._is_on_grid(modulus, step):
                 v = v - modulus if modulus < step / 2 else v + (step - modulus)
-        if max_value is not None:
-            v = min(max_value, v)
+        if maximum is not None:
+            v = min(maximum, v)
 
         obj = base.__new__(cls, v)
-        obj.min_value = min_value
-        obj.max_value = max_value
+        obj.minimum = minimum
+        obj.maximum = maximum
         obj.step = step
-        obj.target = target
         return obj
 
     def __str__(self) -> str:
-        return (
-            f"{super().__str__()} (min={self.min_value}, max={self.max_value}, step={self.step}, target={self.target})"
-        )
+        return f"{super().__str__()} (min={self.minimum}, max={self.maximum}, step={self.step})"
 
     def to_property_model(self) -> PropertyModel:
         return PropertyModel(
             kind=type(self).kind,
             value=self._native(),
-            min_val=self.min_value,
-            max_val=self.max_value,
+            minimum=self.minimum,
+            maximum=self.maximum,
             step=self.step,
-            target=self.target,
         )
 
     @classmethod
@@ -139,17 +129,16 @@ class _Numeric[N: _Number](ABC):
         if isinstance(v, cls):
             return v
         if isinstance(v, dict):
-            return cls(v["value"], v.get("min_val"), v.get("max_val"), v.get("step"), v.get("target"))
+            return cls(v["value"], v.get("minimum"), v.get("maximum"), v.get("step"))
         return cls(v)
 
     def _serialize(self) -> dict[str, Any]:
         return {
             "kind": type(self).kind,
             "value": self._native(),
-            "min_val": self.min_value,
-            "max_val": self.max_value,
+            "minimum": self.minimum,
+            "maximum": self.maximum,
             "step": self.step,
-            "target": self.target,
         }
 
 
@@ -173,10 +162,9 @@ class NumericInt(_Numeric[int], int):
 
 
 class NumericProtocol[N: _Number](Protocol):
-    min_value: N | None
-    max_value: N | None
+    minimum: N | None
+    maximum: N | None
     step: N | None
-    target: N | None
 
 
 class NumericProperty[N: _Number](property, ABC):
@@ -184,18 +172,16 @@ class NumericProperty[N: _Number](property, ABC):
         self,
         fget: Callable[[Any], N],
         fset: Callable[[Any, N], None] | None = None,
-        min_value: _Dynamic[N] | None = None,
-        max_value: _Dynamic[N] | None = None,
+        minimum: _Dynamic[N] | None = None,
+        maximum: _Dynamic[N] | None = None,
         step: _Dynamic[N] | None = None,
-        target: _Dynamic[N] | None = None,
     ) -> None:
         property.__init__(self, fget, fset)
         self._fget: Callable[[Any], N] = fget
         self._fset: Callable[[Any, N], None] | None = fset
-        self._min = min_value
-        self._max = max_value
+        self._min = minimum
+        self._max = maximum
         self._step = step
-        self._target = target
         self.log = get_descriptor_logger(fget=fget)
 
     def get_minimum(self, instance: object) -> N | None:
@@ -208,9 +194,6 @@ class NumericProperty[N: _Number](property, ABC):
         if not self._step:
             return None
         return self._unwrap_dynamic_attribute(self._step, instance)
-
-    def get_target(self, instance: object) -> N | None:
-        return self._unwrap_dynamic_attribute(self._target, instance)
 
     @overload
     def __get__(self, obj: None, objtype: type | None = ...) -> Self: ...
@@ -231,7 +214,7 @@ class NumericProperty[N: _Number](property, ABC):
         self._full_name = f"{owner.__name__}.{name}"
 
     def setter(self, fset: Callable[[Any, N], None]) -> Self:
-        return type(self)(self._fget, fset, self._min, self._max, self._step, self._target)
+        return type(self)(self._fget, fset, self._min, self._max, self._step)
 
     @staticmethod
     def _unwrap_dynamic_attribute(attr: Any, obj: object) -> Any:
@@ -255,7 +238,6 @@ class NumericFloatProperty(NumericProperty[float]):
             self.get_minimum(obj),
             self.get_maximum(obj),
             self.get_step(obj),
-            self.get_target(obj),
         )
 
     def __set__(self, obj: object, value: float) -> None:
@@ -282,7 +264,6 @@ class NumericIntProperty(NumericProperty[int]):
             self.get_minimum(obj),
             self.get_maximum(obj),
             self.get_step(obj),
-            self.get_target(obj),
         )
 
     def __set__(self, obj: object, value: int) -> None:
@@ -295,60 +276,40 @@ class NumericIntProperty(NumericProperty[int]):
 
 
 def numeric(
-    min_value: _Dynamic[float] | None = None,
-    max_value: _Dynamic[float] | None = None,
+    minimum: _Dynamic[float] | None = None,
+    maximum: _Dynamic[float] | None = None,
     step: _Dynamic[float] | None = None,
-    target: _Dynamic[float] | None = None,
 ) -> Callable[[Callable[..., float]], NumericFloatProperty]:
-    """Declare a numeric (float) property with optional constraints and target.
-
-    The optional ``target`` is a "commanded" or "setpoint" value that travels
-    alongside ``value``. It can be a static number or a callable resolved at
-    read time. Use it for hardware that distinguishes measured-vs-commanded
-    semantics (e.g., a laser exposing both current power and a setpoint).
+    """Declare a numeric (float) property with optional constraints.
 
     Example::
 
-        @numeric(min_value=0.0, max_value=100.0, step=0.1)
+        @numeric(minimum=0.0, maximum=100.0, step=0.1)
         def power(self) -> float:
             return self._power
-
-
-        @numeric(
-            min_value=0.0,
-            max_value=100.0,
-            step=0.1,
-            target=lambda self: self._power_setpoint,
-        )
-        def power(self) -> float:
-            return self._power_actual
     """
 
     def decorator(func: Callable[..., float]) -> NumericFloatProperty:
         return NumericFloatProperty(
             fget=func,
-            min_value=min_value,
-            max_value=max_value,
+            minimum=minimum,
+            maximum=maximum,
             step=step,
-            target=target,
         )
 
     return decorator
 
 
 def numeric_int(
-    min_value: _Dynamic[int] | None = None,
-    max_value: _Dynamic[int] | None = None,
+    minimum: _Dynamic[int] | None = None,
+    maximum: _Dynamic[int] | None = None,
     step: _Dynamic[int] | None = None,
-    target: _Dynamic[int] | None = None,
 ) -> Callable[[Callable[..., int]], NumericIntProperty]:
-    """Declare a numeric (int) property with optional constraints and target.
-
-    Mirrors :func:`numeric` for integer-typed device properties.
+    """Declare a numeric (int) property with optional constraints.
 
     Example::
 
-        @numeric_int(min_value=0, max_value=10)
+        @numeric_int(minimum=0, maximum=10)
         def channel(self) -> int:
             return self._channel
     """
@@ -356,10 +317,9 @@ def numeric_int(
     def decorator(func: Callable[..., int]) -> NumericIntProperty:
         return NumericIntProperty(
             fget=func,
-            min_value=min_value,
-            max_value=max_value,
+            minimum=minimum,
+            maximum=maximum,
             step=step,
-            target=target,
         )
 
     return decorator

@@ -1,10 +1,12 @@
 <script lang="ts">
-  import type { StacksManager } from './stacks.svelte';
-  import { sanitizeString, cn } from '$lib/utils';
-  import { selectVariants } from '$lib/kit/Select.svelte';
-  import { ChevronUpDown } from '$lib/icons';
-  import StackStatusIcon from './StackStatusIcon.svelte';
   import { Select } from 'bits-ui';
+
+  import { ChevronUpDown } from '$lib/icons';
+  import { selectVariants } from '$lib/kit/Select.svelte';
+  import { cn, sanitizeString } from '$lib/utils';
+
+  import type { StacksManager } from './stacks.svelte';
+  import StackStatusIcon from './StackStatusIcon.svelte';
 
   interface Props {
     stacks: StacksManager;

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { cn } from '$lib/utils';
+
+  import type { NumericModel } from '../models.svelte';
   import Input from './Input.svelte';
-  import type { NumericModel } from './numericModel.svelte';
 
   interface Props {
     model: NumericModel;
@@ -26,10 +27,10 @@
   }: Props = $props();
 
   function increment() {
-    model.patch({ value: model.value + (model.step ?? 1) });
+    model.patch(model.value + (model.step ?? 1));
   }
   function decrement() {
-    model.patch({ value: model.value - (model.step ?? 1) });
+    model.patch(model.value - (model.step ?? 1));
   }
 </script>
 

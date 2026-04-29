@@ -52,7 +52,7 @@ export type ThemeId = (typeof registry)[number]['id'];
 export type ThemeEntry = (typeof registry)[number];
 
 export type Mode = 'light' | 'dark' | 'auto';
-export type Density = 'compact' | 'cozy' | 'comfortable';
+export type Density = 'compact' | 'cozy';
 export type Scale = 'xs' | 'sm' | 'default' | 'lg' | 'xl';
 
 export interface ThemePrefs {
@@ -76,8 +76,7 @@ const MEDIA = '(prefers-color-scheme: dark)';
 
 const DENSITY_CLASSES: Record<Density, string> = {
   compact: 'density-compact',
-  cozy: '',
-  comfortable: 'density-comfortable'
+  cozy: ''
 };
 
 const SCALE_PX: Record<Scale, number> = {

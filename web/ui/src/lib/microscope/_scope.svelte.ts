@@ -4,14 +4,17 @@
  * snapshots + property updates from the WS bus and dispatches by interface type.
  */
 
-import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import type { Client } from '$lib/wire.svelte';
-import type { DeviceSnapshot, DevicesSnapshot } from '$lib/protocol/device';
-import type { PropSnapshot } from '$lib/prop.svelte';
-import { AnalogOut, Axis, Camera, Device, Laser, type DeviceCallbacks } from './device';
+import { SvelteMap } from 'svelte/reactivity';
 import { toast } from 'svelte-sonner';
-import type { AOSignals, ChannelConfig, MicroscopeConfig, ProfileConfig } from '$lib/protocol/session';
+
+import type { AOSignals, ChannelConfig, MicroscopeConfig, ProfileConfig } from '$lib/config';
+import type { PropSnapshot } from '$lib/prop';
 import type { SessionStateUpdate } from '$lib/protocol';
+import type { DevicesSnapshot } from '$lib/protocol/session';
+import type { Client } from '$lib/wire.svelte';
+
+import type { DeviceSnapshot } from './device';
+import { AnalogOut, Axis, Camera, Device, type DeviceHooks, Laser } from './device';
 
 interface ErrorMsg {
   msg: string;
@@ -215,13 +218,12 @@ export class Stage {
 }
 
 export class Microscope {
-  cameras = new SvelteMap<string, Camera>();
-  lasers = new SvelteMap<string, Laser>();
-  aotfs = new SvelteMap<string, Device>();
-  continuousAxes = new SvelteMap<string, Axis>();
-  discreteAxes = new SvelteMap<string, Device>();
-  analogOuts = new SvelteMap<string, AnalogOut>();
-  others = new SvelteMap<string, Device>();
+  devices = new SvelteMap<string, Device>();
+
+  cameras = devicesOfType(this.devices, Camera);
+  lasers = devicesOfType(this.devices, Laser);
+  continuousAxes = devicesOfType(this.devices, Axis);
+  analogOuts = devicesOfType(this.devices, AnalogOut);
 
   profiles: Profiles;
 
@@ -236,19 +238,6 @@ export class Microscope {
     const z = this.continuousAxes.get(cfg.z);
     return x && y && z ? new Stage(x, y, z) : null;
   });
-
-  /** Unified view across all typed device maps. Mirrors backend `microscope.devices`. */
-  devices = $derived(
-    new SvelteMap<string, Device>([
-      ...this.cameras,
-      ...this.lasers,
-      ...this.aotfs,
-      ...this.continuousAxes,
-      ...this.discreteAxes,
-      ...this.analogOuts,
-      ...this.others
-    ])
-  );
 
   /** Filter wheels — devices referenced from any DetectionPathConfig.filter_wheels. */
   fws = $derived.by<SvelteMap<string, Device>>(() => {
@@ -305,16 +294,8 @@ export class Microscope {
     await Promise.all(promises);
   }
 
-  /** Lookup any device by ID across all typed maps. */
   get(id: string): Device | undefined {
-    return (
-      this.cameras.get(id) ??
-      this.lasers.get(id) ??
-      this.aotfs.get(id) ??
-      this.continuousAxes.get(id) ??
-      this.discreteAxes.get(id) ??
-      this.analogOuts.get(id)
-    );
+    return this.devices.get(id);
   }
 
   /** Reconcile against a fresh DevicesSnapshot — adds new devices, removes stale. */
@@ -354,15 +335,15 @@ export class Microscope {
     this.profiles.dispose();
   }
 
-  #callbacks(deviceId: string): DeviceCallbacks {
+  #hooks(deviceId: string): DeviceHooks {
     return {
-      patch: (propName, value) => {
+      onPatch: (propName, value) => {
         this.#client.send('device.set_property', {
           device: deviceId,
           properties: { [propName]: value }
         });
       },
-      execute: async (command, args = [], kwargs = {}) => {
+      onExecute: async (command, args = [], kwargs = {}) => {
         const res = await this.#client.request('POST', `/session/devices/${deviceId}/commands/${command}`, {
           args,
           kwargs
@@ -372,64 +353,63 @@ export class Microscope {
         }
         const body = (await res.json()) as { result: unknown };
         return body.result;
-      }
+      },
+      getSaved: (propName) => this.savedFor(deviceId, propName)
     };
   }
 
-  #upsert<T extends Device>(
-    map: SvelteMap<string, T>,
-    id: string,
-    info: DeviceSnapshot,
-    Ctor: new (id: string, cb: DeviceCallbacks) => T
-  ): void {
-    let dev = map.get(id);
-    if (!dev) {
-      dev = new Ctor(id, this.#callbacks(id));
-      map.set(id, dev);
-    }
-    dev.connected = info.connected;
-    dev.interface = info.interface;
-    dev.error = info.error;
+  /** Reactive lookup for the active profile's saved value of `(deviceId, propName)`. */
+  savedFor(deviceId: string, propName: string): unknown {
+    const id = this.profiles.activeId;
+    if (!id) return undefined;
+    return this.config.profiles?.[id]?.props?.[deviceId]?.[propName];
   }
 
   #applyDevices(snapshot: DevicesSnapshot): void {
     for (const [id, info] of Object.entries(snapshot.devices)) {
-      switch (info.interface?.type) {
-        case 'camera':
-          this.#upsert(this.cameras, id, info, Camera);
-          break;
-        case 'laser':
-          this.#upsert(this.lasers, id, info, Laser);
-          break;
-        case 'aotf':
-          this.#upsert(this.aotfs, id, info, Device);
-          break;
-        case 'continuous_axis':
-          this.#upsert(this.continuousAxes, id, info, Axis);
-          break;
-        case 'discrete_axis':
-          this.#upsert(this.discreteAxes, id, info, Device);
-          break;
-        case 'analog_output':
-          this.#upsert(this.analogOuts, id, info, AnalogOut);
-          break;
-        default:
-          this.#upsert(this.discreteAxes, id, info, Device);
+      let dev = this.devices.get(id);
+      if (!dev) {
+        dev = createDevice(id, info, this.#hooks(id));
+        this.devices.set(id, dev);
       }
+      dev.applySnapshot(info);
     }
 
-    const seen = new SvelteSet(Object.keys(snapshot.devices));
-    for (const map of [
-      this.cameras,
-      this.lasers,
-      this.aotfs,
-      this.continuousAxes,
-      this.discreteAxes,
-      this.analogOuts
-    ]) {
-      for (const id of [...map.keys()]) {
-        if (!seen.has(id)) map.delete(id);
-      }
+    for (const id of [...this.devices.keys()]) {
+      if (!Object.hasOwn(snapshot.devices, id)) this.devices.delete(id);
     }
   }
+}
+
+function createDevice(id: string, info: DeviceSnapshot, hooks: DeviceHooks): Device {
+  switch (info.interface?.type) {
+    case 'camera':
+      return new Camera(id, hooks);
+    case 'laser':
+      return new Laser(id, hooks);
+    case 'continuous_axis':
+      return new Axis(id, hooks);
+    case 'analog_output':
+      return new AnalogOut(id, hooks);
+    default:
+      return new Device(id, hooks);
+  }
+}
+
+function devicesOfType<T extends Device>(source: SvelteMap<string, Device>, Cls: new (...args: never[]) => T) {
+  return {
+    get(id: string): T | undefined {
+      const d = source.get(id);
+      return d instanceof Cls ? d : undefined;
+    },
+    has(id: string): boolean {
+      return source.get(id) instanceof Cls;
+    },
+    *values(): IterableIterator<T> {
+      for (const d of source.values()) if (d instanceof Cls) yield d;
+    },
+    *keys(): IterableIterator<string> {
+      for (const [id, d] of source) if (d instanceof Cls) yield id;
+    }
+  };
 }

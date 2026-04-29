@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { resolve } from '$app/paths';
   import { toast } from 'svelte-sonner';
+
+  import { resolve } from '$app/paths';
   import { getSessionContext } from '$lib/context';
-  import { sanitizeString, wavelengthToColor } from '$lib/utils';
   import { Clipboard } from '$lib/icons';
   import { ProfileCard } from '$lib/microscope';
+  import { sanitizeString, wavelengthToColor } from '$lib/utils';
 
   const session = getSessionContext();
   const config = $derived(session.scope.config);

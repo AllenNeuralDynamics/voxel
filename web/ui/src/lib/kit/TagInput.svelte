@@ -59,9 +59,10 @@
 </script>
 
 <script lang="ts">
-  import { cn } from '$lib/utils';
-  import { Close, Plus } from '$lib/icons';
   import { tick } from 'svelte';
+
+  import { Close, Plus } from '$lib/icons';
+  import { cn } from '$lib/utils';
 
   interface Props extends TagInputVariants {
     value: string[];

@@ -1,5 +1,5 @@
-import { getContext, setContext } from 'svelte';
 import type { DragDropState } from '@thisux/sveltednd';
+import { getContext, setContext } from 'svelte';
 
 const CTX = Symbol('sortable-list');
 

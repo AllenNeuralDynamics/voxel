@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Device } from './_device.svelte';
-  import type { PropertyInfo } from '$lib/protocol/device';
   import { ChevronDown } from '$lib/icons';
   import { Collapsible } from '$lib/kit';
-  import PropertyControl from './PropertyControl.svelte';
+  import type { PropertyInfo } from '$lib/prop';
+
+  import type { Device } from './_device.svelte';
   import CommandButton from './CommandButton.svelte';
-  import { isStructuredValue, type DeviceExclusions } from './utils';
+  import PropertyControl from './PropertyControl.svelte';
+  import { type DeviceExclusions, isStructuredValue } from './utils';
 
   interface Props {
     device: Device;

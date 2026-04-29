@@ -1,16 +1,18 @@
 <script lang="ts">
-  import { isPropDiverged, formatPropValue, Laser } from './device';
-  import { getChannelFor } from './profile';
-  import type { ChannelConfig } from '$lib/protocol/session';
-  import Switch from '$lib/kit/Switch.svelte';
-  import SpinBox from '$lib/kit/SpinBox.svelte';
-  import Slider from '$lib/kit/Slider.svelte';
-  import { Button } from '$lib/kit';
-  import { Power, Restore } from '$lib/icons';
   import { Tooltip } from 'bits-ui';
   import { useInterval } from 'runed';
+
+  import type { ChannelConfig } from '$lib/config';
+  import { Power, Restore } from '$lib/icons';
+  import { Button } from '$lib/kit';
+  import Slider from '$lib/kit/Slider.svelte';
+  import SpinBox from '$lib/kit/SpinBox.svelte';
+  import Switch from '$lib/kit/Switch.svelte';
   import { cn } from '$lib/utils';
+
   import type { Microscope } from '.';
+  import { formatPropValue, isPropDiverged, Laser } from './device';
+  import { getChannelFor } from './profile';
 
   interface Props {
     microscope: Microscope;
@@ -64,9 +66,9 @@
     if (entry.config === null) {
       return { savedPower: undefined, isUnsaved: false, isDiverged: false, isDirty: false };
     }
-    const savedPower = microscope.profiles.savedProps(entry.laser.id)?.['power'];
+    const savedPower = microscope.profiles.savedProps(entry.laser.id)?.['power_setpoint'];
     const isUnsaved = savedPower === undefined || savedPower === null;
-    const isDiverged = !isUnsaved && isPropDiverged(savedPower, entry.laser.power?.target);
+    const isDiverged = !isUnsaved && isPropDiverged(savedPower, entry.laser.powerSetpoint?.value);
     return { savedPower, isUnsaved, isDiverged, isDirty: isUnsaved || isDiverged };
   }
 </script>
@@ -74,7 +76,7 @@
 {#snippet laserRow(entry: LaserEntry)}
   {@const { laser, config } = entry}
   {@const measured = laser.power?.value}
-  {@const setpoint = laser.power?.target}
+  {@const setpoint = laser.powerSetpoint?.value}
   {@const wavelength = laser.wavelength?.value}
   {@const enabled = laser.isEnabled?.value === true}
   <button
@@ -104,7 +106,7 @@
           max={laser.maxPower}
           step={1}
           throttle={100}
-          onChange={(v) => laser.power?.patch(v)}
+          onChange={(v) => laser.powerSetpoint?.patch(v)}
         />
       {/if}
     </div>
@@ -181,7 +183,7 @@
   {@const selectedLaser = selectedEntry.laser}
   {@const selectedConfig = selectedEntry.config}
   {@const divergence = divergenceOf(selectedEntry)}
-  {@const selectedSetpoint = selectedLaser.power?.target}
+  {@const selectedSetpoint = selectedLaser.powerSetpoint?.value}
   {@const selectedMeasured = selectedLaser.power?.value}
   {@const selectedTemp = selectedLaser.temperature?.value}
   {@const globalMaxPower = Math.max(...allLasers.map((l) => l.maxPower))}
@@ -283,14 +285,14 @@
                 suffix="mW"
                 size="xs"
                 class="w-full"
-                onChange={(v) => selectedLaser.power?.patch(v)}
+                onChange={(v) => selectedLaser.powerSetpoint?.patch(v)}
               />
             </div>
             <div class="flex gap-1.5">
               {#each [0, 25, 50, 75, 100] as pct (pct)}
                 {@const targetValue = (selectedLaser.maxPower * pct) / 100}
                 <button
-                  onclick={() => selectedLaser.power?.patch(targetValue)}
+                  onclick={() => selectedLaser.powerSetpoint?.patch(targetValue)}
                   class="flex-1 rounded border border-border px-1 py-1 text-xs text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
                 >
                   {pct}%
