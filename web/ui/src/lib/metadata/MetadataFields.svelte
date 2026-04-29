@@ -1,9 +1,10 @@
 <script lang="ts">
-  import type { JsonSchema, JsonSchemaProperty } from '$lib/protocol/common';
   import type { Snippet } from 'svelte';
-  import { sanitizeString } from '$lib/utils';
-  import { Select, SpinBox, TagInput, TextArea, TextInput } from '$lib/kit';
+
   import type { SelectVariants } from '$lib/kit';
+  import { Select, SpinBox, TagInput, TextArea, TextInput } from '$lib/kit';
+  import type { JsonSchema, JsonSchemaProperty } from '$lib/types';
+  import { sanitizeString } from '$lib/utils';
 
   interface Props {
     schema: JsonSchema;

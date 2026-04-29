@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { page } from '$app/state';
-  import { resolve } from '$app/paths';
   import { afterNavigate, goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { page } from '$app/state';
   import type { Pathname } from '$app/types';
   import { getSessionContext } from '$lib/context';
   import { cn, sanitizeString } from '$lib/utils';

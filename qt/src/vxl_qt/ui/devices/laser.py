@@ -75,8 +75,8 @@ class LaserControl(QWidget):
 
         # Power slider
         self._power_slider = LockableSlider(
-            min_value=0.0,
-            max_value=100.0,
+            minimum=0.0,
+            maximum=100.0,
             color=self._color,
         )
 
@@ -109,12 +109,12 @@ class LaserControl(QWidget):
             self._enable_toggle.setChecked(is_enabled)
             self._enable_toggle.blockSignals(False)
 
-        if "power_setpoint_mw" in props:
-            setpoint = float(props["power_setpoint_mw"])
+        if "power_setpoint" in props:
+            setpoint = float(props["power_setpoint"])
             self._power_slider.setTarget(setpoint)
 
-        if "power_mw" in props:
-            power = float(props["power_mw"])
+        if "power" in props:
+            power = float(props["power"])
             self._power_slider.setActual(power)
             self._power_label.setText(f"{power:.1f} mW")
 
@@ -126,8 +126,8 @@ class LaserControl(QWidget):
 
     def _on_power_changed(self, value: float) -> None:
         """Handle power setpoint change from slider."""
-        fire_and_forget(self._adapter.set("power_setpoint_mw", value), log=log)
-        log.debug("Laser %s: set power_setpoint_mw = %.1f", self._adapter.uid, value)
+        fire_and_forget(self._adapter.set("power_setpoint", value), log=log)
+        log.debug("Laser %s: set power_setpoint = %.1f", self._adapter.uid, value)
 
     def update_power_range(self, min_val: float, max_val: float) -> None:
         """Update the power slider range (call after fetching device interface)."""

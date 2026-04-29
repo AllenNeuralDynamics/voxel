@@ -104,7 +104,7 @@ class SimulatedCamera(Camera):
     def binning(self, binning: int) -> None:
         self._binning = binning
 
-    @numeric(min_value=_min_exposure_ms, max_value=_max_exposure_ms)
+    @numeric(minimum=_min_exposure_ms, maximum=_max_exposure_ms, step=0.001)
     def exposure_time_ms(self) -> float:
         return self._exposure_time_ms
 
@@ -115,8 +115,9 @@ class SimulatedCamera(Camera):
         self._frame_rate_hz = min(max_frame_rate, self._frame_rate_hz)
 
     @numeric(
-        min_value=lambda self: 1000.0 / (self._max_exposure_ms + self.readout_time_ms),
-        max_value=lambda self: 1000.0 / (self._exposure_time_ms + self.readout_time_ms),
+        minimum=lambda self: round(1000.0 / (self._max_exposure_ms + self.readout_time_ms), 2),
+        maximum=lambda self: round(1000.0 / (self._exposure_time_ms + self.readout_time_ms), 2),
+        step=0.01,
     )
     def frame_rate_hz(self) -> float:
         return self._frame_rate_hz

@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { JsonView, Select, SpinBox, Switch, TextInput } from '$lib/kit';
+  import { BoolModel, EnumeratedModel, NumericModel, StringModel } from '$lib/prop';
+
   import type { Device } from './_device.svelte';
-  import { BoolModel, EnumeratedModel, NumericModel, StringModel } from '$lib/prop.svelte';
-  import { JsonView, Select, Switch, SpinBox, TextInput } from '$lib/kit';
   import SliderInput from './SliderInput.svelte';
   import { isStructuredValue } from './utils';
 
@@ -14,7 +15,7 @@
   let { device, propName, size = 'sm' }: Props = $props();
 
   const info = $derived(device.interface?.properties?.[propName]);
-  const model = $derived(device.getProp(propName));
+  const model = $derived(device.getProp(propName)?.model);
   const isReadonly = $derived(info?.access === 'ro');
   const isStructured = $derived(isStructuredValue(model?.value));
 

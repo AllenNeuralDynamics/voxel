@@ -5,15 +5,15 @@
     slots: {
       root: [
         'group flex cursor-pointer items-center rounded-full transition-colors',
-        'border border-border data-[state=checked]:border-primary',
-        'bg-element-bg/30 hover:bg-element-hover/60',
-        'data-[state=checked]:bg-primary/90 data-[state=checked]:hover:bg-primary',
+        'border border-border data-[state=checked]:border-highlight',
+        'bg-element-bg hover:bg-element-hover',
+        'data-[state=checked]:bg-highlight data-[state=checked]:hover:bg-highlight',
         'data-disabled:cursor-not-allowed data-disabled:opacity-40',
         'h-[var(--switch-h)] w-[calc(var(--switch-h)*1.8)] px-[calc(var(--switch-h)*0.1)]'
       ],
       thumb: [
         'block rounded-full transition-[margin-left,colors]',
-        'bg-fg-faint/50 group-hover:bg-fg-faint data-[state=checked]:bg-fg-muted',
+        'bg-zinc-400 group-hover:bg-zinc-200 data-[state=checked]:bg-zinc-100',
         'h-[calc(var(--switch-h)*0.7)] w-[calc(var(--switch-h)*0.7)]',
         'ml-0 data-[state=checked]:ml-[calc(var(--switch-h)*0.8)]'
       ]

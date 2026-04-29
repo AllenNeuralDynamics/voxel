@@ -10,12 +10,14 @@
  */
 
 import { toast } from 'svelte-sonner';
-import type { Client } from '$lib/wire.svelte';
+
+import type { GridConfig } from '$lib/config';
 import type { Stage } from '$lib/microscope';
 import { SnapshotStore } from '$lib/preview/snapshots.svelte';
-import type { GridConfig } from '$lib/protocol/stacks';
-import type { Tile } from './grid/types';
 import type { SessionStateUpdate } from '$lib/protocol';
+import type { Client } from '$lib/wire.svelte';
+
+import type { Tile } from './grid/types';
 
 /** Edge to align the mosaic to relative to the current FOV position. */
 export type AlignEdge = 'top' | 'bottom' | 'left' | 'right' | 'center';

@@ -1,14 +1,15 @@
 <script lang="ts">
-  import { getSessionContext } from '$lib/context';
-  import { Button, Dialog, DropdownMenu, NudgeInput, Select, SpinBox } from '$lib/kit';
   import { Pane, PaneGroup } from 'paneforge';
-  import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import { sanitizeString, cn, createPaneMinSize } from '$lib/utils';
-  import { ChevronDown, ChevronRight, EllipsisVertical } from '$lib/icons';
-  import StackStatusIcon from '$lib/stacks/StackStatusIcon.svelte';
   import { watch } from 'runed';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-  import type { Stack, StackStatus } from '$lib/protocol/stacks';
+
+  import type { Stack, StackStatus } from '$lib/config';
+  import { getSessionContext } from '$lib/context';
+  import { ChevronDown, ChevronRight, EllipsisVertical } from '$lib/icons';
+  import { Button, Dialog, DropdownMenu, NudgeInput, Select, SpinBox } from '$lib/kit';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import StackStatusIcon from '$lib/stacks/StackStatusIcon.svelte';
+  import { cn, createPaneMinSize, sanitizeString } from '$lib/utils';
 
   const session = getSessionContext();
 

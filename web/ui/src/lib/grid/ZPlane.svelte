@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { Session } from '$lib/session.svelte';
   import { onMount } from 'svelte';
+
+  import type { Session } from '$lib/session.svelte';
 
   interface Props {
     session: Session;

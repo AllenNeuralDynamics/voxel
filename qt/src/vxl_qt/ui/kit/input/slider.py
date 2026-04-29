@@ -158,7 +158,7 @@ class Slider(QWidget):
     For a user-controllable lock button, use LockableSlider.
 
     Usage:
-        slider = Slider(min_value=0, max_value=100, color="#0078d4")
+        slider = Slider(minimum=0, maximum=100, color="#0078d4")
         slider.inputReleased.connect(on_user_input)
 
         # Update from device properties:
@@ -171,15 +171,15 @@ class Slider(QWidget):
 
     def __init__(
         self,
-        min_value: float = 0.0,
-        max_value: float = 100.0,
+        minimum: float = 0.0,
+        maximum: float = 100.0,
         color: str = "#0078d4",
         locked: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._min = min_value
-        self._max = max_value
+        self._min = minimum
+        self._max = maximum
         self._color = QColor(color)
         self._locked = locked
 
@@ -276,10 +276,10 @@ class Slider(QWidget):
         self.lockedChanged.emit(locked)
 
     @Slot(float, float)
-    def setRange(self, min_value: float, max_value: float) -> None:
+    def setRange(self, minimum: float, maximum: float) -> None:
         """Update the value range."""
-        self._min = min_value
-        self._max = max_value
+        self._min = minimum
+        self._max = maximum
 
     @Slot(str)
     def setColor(self, color: str) -> None:
@@ -323,7 +323,7 @@ class LockableSlider(Slider):
     drag the input handle).
 
     Usage:
-        slider = LockableSlider(min_value=0, max_value=100, color="#0078d4")
+        slider = LockableSlider(minimum=0, maximum=100, color="#0078d4")
         slider.inputReleased.connect(on_user_input)
 
         # Update from device properties:
@@ -333,12 +333,12 @@ class LockableSlider(Slider):
 
     def __init__(
         self,
-        min_value: float = 0.0,
-        max_value: float = 100.0,
+        minimum: float = 0.0,
+        maximum: float = 100.0,
         color: str = "#0078d4",
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__(min_value, max_value, color, locked=True, parent=parent)
+        super().__init__(minimum, maximum, color, locked=True, parent=parent)
 
         self._lock_btn = LockButton()
         self._lock_btn.toggled.connect(self._on_lock_toggled)
@@ -367,11 +367,11 @@ class SliderSpinBox(QWidget):
 
     Usage:
         # Basic (no lock button)
-        slider = SliderSpinBox(min_value=0, max_value=100)
+        slider = SliderSpinBox(minimum=0, maximum=100)
         slider.valueChanged.connect(on_value_changed)
 
         # With lock button
-        slider = SliderSpinBox(min_value=0, max_value=100, show_lock=True)
+        slider = SliderSpinBox(minimum=0, maximum=100, show_lock=True)
 
         # Update from device
         slider.setActual(current_value)
@@ -382,8 +382,8 @@ class SliderSpinBox(QWidget):
 
     def __init__(
         self,
-        min_value: float = 0.0,
-        max_value: float = 100.0,
+        minimum: float = 0.0,
+        maximum: float = 100.0,
         value: float = 0.0,
         *,
         decimals: int = 2,
@@ -399,15 +399,15 @@ class SliderSpinBox(QWidget):
         # Create widgets
         self._spinbox = DoubleSpinBox(
             value=value,
-            min_val=min_value,
-            max_val=max_value,
+            min_val=minimum,
+            max_val=maximum,
             decimals=decimals,
             step=step,
             size=size,
         )
         self._slider = Slider(
-            min_value=min_value,
-            max_value=max_value,
+            minimum=minimum,
+            maximum=maximum,
             color=color,
             locked=show_lock,  # Start locked if lock button is shown
         )
@@ -470,10 +470,10 @@ class SliderSpinBox(QWidget):
         self._spinbox.setValue(value)
         self._spinbox.blockSignals(False)
 
-    def setRange(self, min_value: float, max_value: float) -> None:
+    def setRange(self, minimum: float, maximum: float) -> None:
         """Update the value range."""
-        self._slider.setRange(min_value, max_value)
-        self._spinbox.setRange(min_value, max_value)
+        self._slider.setRange(minimum, maximum)
+        self._spinbox.setRange(minimum, maximum)
 
     def setLocked(self, locked: bool) -> None:
         """Set locked state programmatically."""

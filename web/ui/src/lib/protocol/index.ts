@@ -38,9 +38,7 @@ export type {
   DeviceExecuteCommand,
   DevicePropsUpdate,
   DeviceSetProperty,
-  DeviceSnapshot,
-  DevicesSnapshot,
   PropResults
 } from './device';
 export type { SessionDetails, SessionStateUpdate } from './session';
-export type { Stack, StackStatus, StackOrder, BatchResult, PlanConfig, StackProgress } from './stacks';
+export type { BatchResult, StackProgress } from './stacks';

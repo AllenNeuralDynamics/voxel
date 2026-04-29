@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { Device } from './_device.svelte';
   import { resolve } from '$app/paths';
-  import { sanitizeString, cn } from '$lib/utils';
+  import { cn, sanitizeString } from '$lib/utils';
+
+  import type { Device } from './_device.svelte';
 
   interface Props {
     device: Device;

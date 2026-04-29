@@ -44,8 +44,9 @@
 </script>
 
 <script lang="ts">
-  import { cn } from '$lib/utils';
   import { watch } from 'runed';
+
+  import { cn } from '$lib/utils';
 
   interface Props extends TextAreaVariants {
     value: string;

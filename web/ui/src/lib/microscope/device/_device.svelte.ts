@@ -1,23 +1,55 @@
-import type { AOSignals } from '$lib/protocol/session';
-import type { DeviceInterface } from '$lib/protocol/device';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+
+import type { AOSignals } from '$lib/config';
 import {
+  type AnyPropModel,
   BoolModel,
   createPropModel,
   EnumeratedModel,
   NumericModel,
-  type AnyPropModel,
+  Prop,
+  type PropertyInfo,
   type PropSnapshot
-} from '$lib/prop.svelte';
-import { parseVec2D, type Vec2D } from '$lib/utils/vec';
+} from '$lib/prop';
 import type { SensorROI } from '$lib/protocol/profile';
 import { wavelengthToColor } from '$lib/utils';
-import { SvelteSet } from 'svelte/reactivity';
+import { parseVec2D, type Vec2D } from '$lib/utils/vec';
 
 const _warnedTypedPropKeys = new SvelteSet<string>();
 
-export interface DeviceCallbacks {
-  patch: (propName: string, value: unknown) => void;
-  execute: (command: string, args?: unknown[], kwargs?: Record<string, unknown>) => Promise<unknown>;
+export interface ParamInfo {
+  dtype: string;
+  required: boolean;
+  default?: unknown | null;
+  kind: 'regular' | 'var_positional' | 'var_keyword';
+  options?: string[] | null;
+}
+
+export interface CommandInfo {
+  name: string;
+  label: string;
+  desc?: string | null;
+  params: Record<string, ParamInfo>;
+}
+
+export interface DeviceInterface {
+  uid: string;
+  type: string;
+  commands: Record<string, CommandInfo>;
+  properties: Record<string, PropertyInfo>;
+}
+
+export interface DeviceSnapshot {
+  id: string;
+  connected: boolean;
+  interface?: DeviceInterface;
+  error?: string;
+}
+
+export interface DeviceHooks {
+  getSaved?: (propName: string) => unknown;
+  onPatch: (propName: string, value: unknown) => void;
+  onExecute: (command: string, args?: unknown[], kwargs?: Record<string, unknown>) => Promise<unknown>;
 }
 
 export class Device {
@@ -25,47 +57,58 @@ export class Device {
   connected = $state(false);
   error = $state<string | undefined>(undefined);
   interface = $state<DeviceInterface | undefined>(undefined);
-  props = $state<Record<string, AnyPropModel>>({});
+  props = new SvelteMap<string, Prop>();
 
-  #patch: DeviceCallbacks['patch'];
-  #execute: DeviceCallbacks['execute'];
+  #hooks: DeviceHooks;
 
-  constructor(id: string, callbacks: DeviceCallbacks) {
+  constructor(id: string, hooks: DeviceHooks) {
     this.id = id;
-    this.#patch = callbacks.patch;
-    this.#execute = callbacks.execute;
+    this.#hooks = hooks;
   }
 
-  getProp(name: string): AnyPropModel | undefined {
-    return this.props[name];
+  applySnapshot(snapshot: DeviceSnapshot): void {
+    this.connected = snapshot.connected;
+    this.interface = snapshot.interface;
+    this.error = snapshot.error;
   }
 
-  /** Read a property and assert its model type; warns once per (deviceId, propName, kind) on mismatch. */
+  getProp(name: string): Prop | undefined {
+    return this.props.get(name);
+  }
+
+  /** Read a property's model and assert its type; warns once per (deviceId, propName, kind) on mismatch. */
   protected typedProp<T extends AnyPropModel>(name: string, ctor: new (...args: never[]) => T): T | undefined {
-    const p = this.getProp(name);
-    if (p === undefined) return undefined;
-    if (p instanceof ctor) return p;
-    const key = `${this.id}.${name}.${p.constructor.name}`;
+    const model = this.getProp(name)?.model;
+    if (model === undefined) return undefined;
+    if (model instanceof ctor) return model;
+    const key = `${this.id}.${name}.${model.constructor.name}`;
     if (!_warnedTypedPropKeys.has(key)) {
       _warnedTypedPropKeys.add(key);
       console.warn(
-        `[${this.constructor.name} ${this.id}] expected ${ctor.name} for '${name}', got ${p.constructor.name}`
+        `[${this.constructor.name} ${this.id}] expected ${ctor.name} for '${name}', got ${model.constructor.name}`
       );
     }
     return undefined;
   }
 
   upsertProp(name: string, snapshot: PropSnapshot<unknown>): void {
-    const existing = this.props[name];
+    const existing = this.props.get(name);
     if (existing) {
-      existing.update(snapshot);
-    } else {
-      this.props[name] = createPropModel(snapshot, (v) => this.#patch(name, v));
+      existing.model.update(snapshot);
+      return;
     }
+    const info = this.interface?.properties?.[name];
+    if (!info) {
+      console.warn(`[${this.constructor.name} ${this.id}] no interface entry for property '${name}'`);
+      return;
+    }
+    const model = createPropModel(snapshot, (v) => this.#hooks.onPatch(name, v));
+    const getSaved = this.#hooks.getSaved ? () => this.#hooks.getSaved!(name) : undefined;
+    this.props.set(name, new Prop(model, info, getSaved));
   }
 
   execute(command: string, args?: unknown[], kwargs?: Record<string, unknown>): Promise<unknown> {
-    return this.#execute(command, args, kwargs);
+    return this.#hooks.onExecute(command, args, kwargs);
   }
 }
 
@@ -120,8 +163,8 @@ export class Laser extends Device {
 
   powerHistory = $state<number[]>([]);
 
-  /** Measured power (`value`) + commanded setpoint (`target`); writes go to the setpoint. */
   power = $derived.by(() => this.typedProp('power', NumericModel));
+  powerSetpoint = $derived.by(() => this.typedProp('power_setpoint', NumericModel));
   isEnabled = $derived.by(() => this.typedProp('is_enabled', BoolModel));
   wavelength = $derived.by(() => this.typedProp('wavelength', NumericModel));
   temperature = $derived.by(() => this.typedProp('temperature_c', NumericModel));
@@ -132,7 +175,7 @@ export class Laser extends Device {
   });
 
   hasHistory = $derived(this.powerHistory.length > 1);
-  maxPower = $derived(this.power?.max ?? 100);
+  maxPower = $derived(this.powerSetpoint?.max ?? this.power?.max ?? 100);
 
   enable(): Promise<unknown> {
     return this.execute('enable');
@@ -187,13 +230,13 @@ export class Camera extends Device {
   frameSizeMb = $derived.by(() => this.typedProp('frame_size_mb', NumericModel));
 
   pixelFormat = $derived.by((): EnumeratedModel<string> | undefined => {
-    const p = this.getProp('pixel_format');
-    return p instanceof EnumeratedModel ? (p as EnumeratedModel<string>) : undefined;
+    const m = this.getProp('pixel_format')?.model;
+    return m instanceof EnumeratedModel ? (m as EnumeratedModel<string>) : undefined;
   });
 
   binning = $derived.by((): EnumeratedModel<number> | undefined => {
-    const p = this.getProp('binning');
-    return p instanceof EnumeratedModel ? (p as EnumeratedModel<number>) : undefined;
+    const m = this.getProp('binning')?.model;
+    return m instanceof EnumeratedModel ? (m as EnumeratedModel<number>) : undefined;
   });
 
   roi = $derived.by((): SensorROI | undefined => {

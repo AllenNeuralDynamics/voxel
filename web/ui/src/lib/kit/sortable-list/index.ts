@@ -1,4 +1,4 @@
-import Root from './sortable-list-root.svelte';
 import Item from './sortable-list-item.svelte';
+import Root from './sortable-list-root.svelte';
 
-export { Root, Item };
+export { Item, Root };

@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { isPropDiverged } from './device/utils';
-  import type { Microscope } from './_scope.svelte';
-  import type { Camera, ROIGrid } from '.';
-  import type { EnumeratedModel, NumericModel } from '$lib/prop.svelte';
-  import { getChannelFor } from './profile';
-  import { Link, LinkOff, Restore, ChevronDown, ChevronRight } from '$lib/icons';
-  import { Button, Select, SpinBox } from '$lib/kit';
-  import { SvelteSet } from 'svelte/reactivity';
   import { watch } from 'runed';
+  import { SvelteSet } from 'svelte/reactivity';
+
+  import { ChevronDown, ChevronRight, Link, LinkOff, Restore } from '$lib/icons';
+  import { Button, Select, SpinBox } from '$lib/kit';
+  import type { EnumeratedModel, NumericModel } from '$lib/prop';
   import { cn } from '$lib/utils';
+
+  import type { Camera, ROIGrid } from '.';
+  import type { Microscope } from './_scope.svelte';
+  import { isPropDiverged } from './device/utils';
+  import { getChannelFor } from './profile';
 
   interface Props {
     microscope: Microscope;

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { StackStatus } from '$lib/protocol/stacks';
-  import { DotsSpinner, LucideCircle, Check, AlertCircleOutline, Minus } from '$lib/icons';
+  import type { StackStatus } from '$lib/config';
+  import { AlertCircleOutline, Check, DotsSpinner, LucideCircle, Minus } from '$lib/icons';
 
   interface Props {
     status: StackStatus;

@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { cn } from '$lib/utils';
   import type { HTMLInputAttributes } from 'svelte/elements';
-  import type { NumericModel } from './numericModel.svelte';
+
+  import { cn } from '$lib/utils';
+
+  import type { NumericModel } from '../models.svelte';
 
   type OwnProps = {
     model: NumericModel;
@@ -22,7 +24,8 @@
     if (isEditing) return editingText;
     if (model.value === undefined || Number.isNaN(model.value)) return '';
     if (decimals !== undefined) return model.value.toFixed(decimals);
-    return model.value.toString();
+    if (!Number.isFinite(model.value)) return String(model.value);
+    return parseFloat(model.value.toPrecision(15)).toString();
   });
 
   function handleInput(e: Event) {
@@ -35,7 +38,7 @@
     isEditing = false;
     const parsed = parseFloat(editingText);
     if (isNaN(parsed)) return;
-    model.patch({ value: parsed });
+    model.patch(parsed);
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -58,7 +61,7 @@
         isEditing = false;
       }
       const delta = e.key === 'ArrowUp' ? 1 : -1;
-      model.patch({ value: base + delta * (model.step ?? 1) });
+      model.patch(base + delta * (model.step ?? 1));
     }
   }
 </script>

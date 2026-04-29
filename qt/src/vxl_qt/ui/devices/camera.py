@@ -52,7 +52,7 @@ class CameraControl(QWidget):
 
         # Exposure control
         self._exposure = SliderSpinBox(
-            min_value=0.1, max_value=100.0, value=0.1, decimals=2, step=0.1, show_lock=True, size=ControlSize.SM
+            minimum=0.1, maximum=100.0, value=0.1, decimals=2, step=0.1, show_lock=True, size=ControlSize.SM
         )
 
         # Format/Binning

@@ -28,6 +28,7 @@
 
 <script lang="ts">
   import { tick } from 'svelte';
+
   import { cn } from '$lib/utils';
 
   interface Props extends RenameVariants {

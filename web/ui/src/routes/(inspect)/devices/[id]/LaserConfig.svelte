@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { Slider, SpinBox, Switch } from '$lib/kit';
   import type { Microscope } from '$lib/microscope';
-  import { cn, sanitizeString } from '$lib/utils';
-  import { Switch, SpinBox, Slider } from '$lib/kit';
   import DeviceBrowser from '$lib/microscope/device/DeviceBrowser.svelte';
+  import { cn, sanitizeString } from '$lib/utils';
 
   const laserExclusions = {
-    props: ['wavelength', 'is_enabled', 'power', 'temperature_c'],
+    props: ['wavelength', 'is_enabled', 'power', 'power_setpoint', 'temperature_c'],
     cmds: ['enable', 'disable']
   };
 
@@ -22,7 +22,7 @@
   const laserColor = $derived(laser?.color);
   const enabled = $derived(laser?.isEnabled?.value === true);
   const measured = $derived(laser?.power?.value);
-  const setpoint = $derived(laser?.power?.target);
+  const setpoint = $derived(laser?.powerSetpoint?.value);
   const temperature = $derived(laser?.temperature?.value);
 
   function handleToggle() {
@@ -52,28 +52,28 @@
 {#if laser?.connected}
   <div class="max-w-xl space-y-6">
     <!-- Power Setpoint -->
-    {#if laser.power && typeof setpoint === 'number'}
-      {@const power = laser.power}
-      {@const info = laser.interface?.properties?.['power']}
+    {#if laser.powerSetpoint && typeof setpoint === 'number'}
+      {@const ps = laser.powerSetpoint}
+      {@const info = laser.interface?.properties?.['power_setpoint']}
       <div class="grid gap-1">
         <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Power'}</span>
         <div class="grid grid-cols-[8rem_1fr] items-center gap-3">
           <SpinBox
             value={setpoint}
-            min={power.min ?? 0}
-            max={power.max ?? 100}
-            step={power.step ?? 1}
+            min={ps.min ?? 0}
+            max={ps.max ?? 100}
+            step={ps.step ?? 1}
             appearance="full"
             size="xs"
-            onChange={(v) => power.patch(v)}
+            onChange={(v) => ps.patch(v)}
           />
           <Slider
             target={setpoint}
             value={measured}
-            min={power.min ?? 0}
-            max={power.max ?? 100}
-            step={power.step ?? 1}
-            onChange={(v) => power.patch(v)}
+            min={ps.min ?? 0}
+            max={ps.max ?? 100}
+            step={ps.step ?? 1}
+            onChange={(v) => ps.patch(v)}
           />
         </div>
       </div>

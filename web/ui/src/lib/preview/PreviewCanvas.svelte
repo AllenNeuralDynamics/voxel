@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { ElementSize, watch } from 'runed';
   import { onMount } from 'svelte';
-  import { watch, ElementSize } from 'runed';
+
   import { Bargraph } from '$lib/icons';
-  import PreviewInfo from './PreviewInfo.svelte';
-  import PanZoomControls from './PanZoomControls.svelte';
-  import Histogram from './Histogram.svelte';
   import type { PreviewManager } from '$lib/preview';
   import { channelBoundingBox, compositeTiledFrames } from '$lib/preview';
   import { clampTopLeft } from '$lib/utils';
+
+  import Histogram from './Histogram.svelte';
+  import PanZoomControls from './PanZoomControls.svelte';
+  import PreviewInfo from './PreviewInfo.svelte';
 
   let canvasEl: HTMLCanvasElement;
   let containerEl: HTMLDivElement;

@@ -1,14 +1,16 @@
 import { toast } from 'svelte-sonner';
-import { sanitizeString, UndoStack } from '$lib/utils';
-import type { OutputConfig, SessionInfo, SessionMode } from '$lib/protocol/session';
-import type { JsonSchema } from '$lib/protocol/common';
+
+import type { OutputConfig, SessionInfo } from '$lib/config';
+import { Microscope } from '$lib/microscope';
+import { compositeFullFrames, PreviewManager, type SnapshotChannel } from '$lib/preview';
 import type { AppStatusUpdate, SessionDetails, SessionStateUpdate } from '$lib/protocol';
+import type { SessionMode } from '$lib/protocol/session';
+import { AcquisitionManager, StacksManager } from '$lib/stacks';
+import type { JsonSchema } from '$lib/types';
+import { sanitizeString, UndoStack } from '$lib/utils';
 import type { Client } from '$lib/wire.svelte';
 
-import { PreviewManager, compositeFullFrames, type SnapshotChannel } from '$lib/preview';
-import { StacksManager, AcquisitionManager } from '$lib/stacks';
 import { MosaicManager } from './mosaic.svelte';
-import { Microscope } from '$lib/microscope';
 
 const DEFAULT_OUTPUT: OutputConfig = {
   store_path: './data',
@@ -179,7 +181,7 @@ export class Session {
         if (laser) {
           entry.illumination = {
             deviceId: chConfig.illumination,
-            powerSetpoint: laser.power?.target ?? undefined,
+            powerSetpoint: laser.powerSetpoint?.value ?? undefined,
             power: laser.power?.value ?? undefined
           };
         }

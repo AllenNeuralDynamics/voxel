@@ -64,7 +64,7 @@ class Dtype(StrEnum):
         return np.dtype(self.value).itemsize
 
     @property
-    def max_value(self) -> int:
+    def maximum(self) -> int:
         """Get the maximum representable value for this dtype."""
         return np.iinfo(self.value).max
 

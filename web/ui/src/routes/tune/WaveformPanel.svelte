@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
-  import uPlot, { type Options, type AlignedData } from 'uplot';
   import 'uplot/dist/uPlot.min.css';
+
+  import { untrack } from 'svelte';
+  import uPlot, { type AlignedData, type Options } from 'uplot';
 
   function formatTime(s: number): string {
     if (s >= 1) return `${s.toFixed(1)}s`;

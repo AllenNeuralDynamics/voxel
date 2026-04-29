@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Session } from '$lib/session.svelte';
-  import type { JsonSchema, JsonSchemaProperty } from '$lib/protocol/common';
   import { toast } from 'svelte-sonner';
-  import { sanitizeString } from '$lib/utils';
-  import { Button, Dialog, Select } from '$lib/kit';
+
   import { Check, Close, LockOutline } from '$lib/icons';
+  import { Button, Dialog, Select } from '$lib/kit';
   import MetadataFields from '$lib/metadata/MetadataFields.svelte';
+  import type { Session } from '$lib/session.svelte';
+  import type { JsonSchema, JsonSchemaProperty } from '$lib/types';
+  import { sanitizeString } from '$lib/utils';
 
   interface Props {
     session: Session;

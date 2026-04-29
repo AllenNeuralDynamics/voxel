@@ -65,36 +65,23 @@ class VortranStradus(Laser):
         """Check if the laser is enabled."""
         return self._inst.laser_is_emitting
 
-    @numeric(min_value=0.0, max_value=lambda self: float(self._inst.max_power), step=0.1)
-    def power_setpoint_mw(self) -> float:
-        """Get the power setpoint in mW."""
+    @numeric(minimum=0.0, maximum=lambda self: float(self._inst.max_power), step=0.1)
+    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    def power_setpoint(self) -> float:
+        """Get the commanded power setpoint in mW."""
         return float(self._inst.power_setpoint)
 
-    @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float) -> None:
-        """Set the power setpoint in mW."""
+    @power_setpoint.setter
+    def power_setpoint(self, value: float) -> None:
+        """Set the commanded power setpoint in mW."""
         self._inst.power_setpoint = value
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    def power_mw(self) -> float:
-        """Get the actual power of the laser in mW."""
-        return float(self._inst.power)
-
-    @numeric(
-        min_value=0.0,
-        max_value=lambda self: float(self._inst.max_power),
-        step=0.1,
-        target=lambda self: float(self.power_setpoint_mw),
-    )
-    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
+        """Get the measured output power in mW."""
         return float(self._inst.power)
-
-    @power.setter
-    def power(self, value: float) -> None:
-        self._inst.power_setpoint = value
-        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float:

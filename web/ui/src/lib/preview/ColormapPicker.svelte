@@ -1,9 +1,10 @@
 <script lang="ts">
   import { DropdownMenu, Popover } from 'bits-ui';
-  import { FilterVariant, Check } from '$lib/icons';
-  import { isValidHex } from '$lib/utils';
-  import type { ColormapCatalog } from '$lib/preview';
   import { SvelteSet } from 'svelte/reactivity';
+
+  import { Check, FilterVariant } from '$lib/icons';
+  import type { ColormapCatalog } from '$lib/preview';
+  import { isValidHex } from '$lib/utils';
 
   interface Props {
     label: string;

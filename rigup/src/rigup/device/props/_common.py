@@ -23,10 +23,9 @@ class PropertyModelProtocol(Protocol):
 class PropertyModel[T: str | int | float | bool](BaseModel):
     kind: PropertyKind = "generic"
     value: Any
-    min_val: float | None = None
-    max_val: float | None = None
+    minimum: float | None = None
+    maximum: float | None = None
     step: float | None = None
-    target: float | None = None
     options: list[T] | None = None
 
     @staticmethod

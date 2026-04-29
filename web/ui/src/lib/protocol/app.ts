@@ -5,7 +5,7 @@
  * `vxl_web/router/catalog.py`.
  */
 
-import type { SessionConfig } from './session';
+import type { SessionConfig } from '../config';
 import type { SessionStateUpdate } from './session';
 
 // ==================== Events ====================

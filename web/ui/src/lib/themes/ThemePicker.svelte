@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { themes, type Mode, type Density, type Scale, type ThemeId } from '$lib/themes';
   import { Select } from 'bits-ui';
+
   import { ChevronDown } from '$lib/icons';
+  import { type Density, type Mode, type Scale, type ThemeId, themes } from '$lib/themes';
 
   const modes: { value: Mode; label: string }[] = [
     { value: 'light', label: 'Light' },
@@ -11,8 +12,7 @@
 
   const densities: { value: Density; label: string }[] = [
     { value: 'compact', label: 'Compact' },
-    { value: 'cozy', label: 'Cozy' },
-    { value: 'comfortable', label: 'Comfortable' }
+    { value: 'cozy', label: 'Cozy' }
   ];
 
   const scales: { value: Scale; label: string }[] = [

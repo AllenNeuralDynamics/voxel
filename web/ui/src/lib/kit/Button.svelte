@@ -22,8 +22,8 @@
       },
       size: {
         xs: 'h-ui-xs gap-1 px-1.5 text-xs',
-        sm: 'h-ui-sm gap-1.5 px-2 text-xs',
-        md: 'h-ui-md gap-1.5 px-3 text-xs',
+        sm: 'h-ui-sm gap-1.5 px-2 text-sm',
+        md: 'h-ui-md gap-1.5 px-3 text-base',
         lg: 'h-ui-lg gap-2 px-3 text-base capitalize',
         'icon-xs': 'size-ui-xs',
         icon: 'size-ui-sm',

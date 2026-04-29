@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { MicroscopeConfig } from '$lib/protocol/session';
   import { Popover } from 'bits-ui';
+
+  import type { MicroscopeConfig } from '$lib/config';
   import { InformationOutline } from '$lib/icons';
   import { sanitizeString } from '$lib/utils';
 

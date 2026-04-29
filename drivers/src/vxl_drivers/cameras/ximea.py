@@ -158,8 +158,8 @@ class XimeaCamera(Camera):
     # ==================== Exposure & Frame Rate ====================
 
     @numeric(
-        min_value=lambda self: _to_float(self._camera.get_exposure_minimum()) / 1000,
-        max_value=lambda self: _to_float(self._camera.get_exposure_maximum()) / 1000,
+        minimum=lambda self: _to_float(self._camera.get_exposure_minimum()) / 1000,
+        maximum=lambda self: _to_float(self._camera.get_exposure_maximum()) / 1000,
         step=0.001,
     )
     def exposure_time_ms(self) -> float:
@@ -172,7 +172,7 @@ class XimeaCamera(Camera):
         self._camera.set_exposure(round(exposure_time_ms * 1000, 1))  # ms to us
         self.log.debug(f"Exposure time set to {exposure_time_ms} ms")
 
-    @numeric(min_value=0.1, max_value=1000.0, step=0.1)
+    @numeric(minimum=0.1, maximum=1000.0, step=0.1)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
         return _to_float(self._camera.get_framerate())

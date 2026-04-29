@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { StacksManager } from '$lib/stacks';
-  import type { Profiles } from '$lib/microscope';
-  import { sanitizeString, cn } from '$lib/utils';
-  import { selectVariants } from '$lib/kit/Select.svelte';
-  import { ChevronUpDown, DotsSpinner, Check } from '$lib/icons';
   import { Select } from 'bits-ui';
   import { watch } from 'runed';
+
+  import { Check, ChevronUpDown, DotsSpinner } from '$lib/icons';
+  import { selectVariants } from '$lib/kit/Select.svelte';
+  import type { Profiles } from '$lib/microscope';
+  import type { StacksManager } from '$lib/stacks';
+  import { cn, sanitizeString } from '$lib/utils';
 
   interface Props {
     profiles: Profiles;

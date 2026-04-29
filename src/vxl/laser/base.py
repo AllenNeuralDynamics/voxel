@@ -33,36 +33,22 @@ class Laser(Device):
     def is_enabled(self) -> bool:
         """Check if the laser is enabled."""
 
-    @numeric()
-    @abstractmethod
-    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
-    def power(self) -> float:
-        """Get the measured power. Writes command the setpoint (target tracks it)."""
-
-    @power.setter
-    @abstractmethod
-    def power(self, value: float) -> None:
-        """Command the laser to a new power setpoint."""
-
-    # ── Deprecated: superseded by ``power`` (which carries both measured value and setpoint target). ──
-    # Kept for backward compatibility during the migration window. Will be removed in Phase 2.
-
-    @numeric()
-    @abstractmethod
-    @describe(label="Power Setpoint", units="mW", desc="The target power setpoint.", stream=True)
-    def power_setpoint_mw(self) -> float:
-        """Get the power setpoint in mW. (Deprecated — use ``power.target``.)"""
-
-    @power_setpoint_mw.setter
-    @abstractmethod
-    def power_setpoint_mw(self, value: float) -> None:
-        """Set the power setpoint in mW. (Deprecated — assign to ``power``.)"""
-
     @property
     @abstractmethod
-    @describe(label="Power (legacy)", units="mW", desc="The actual power of the laser.", stream=True)
-    def power_mw(self) -> float:
-        """Get the actual power of the laser in mW. (Deprecated — use ``power``.)"""
+    @describe(label="Power", desc="Measured laser output power.", stream=True)
+    def power(self) -> float:
+        """Get the measured laser output power."""
+
+    @numeric()
+    @abstractmethod
+    @describe(label="Power Setpoint", desc="Commanded laser power.", stream=True)
+    def power_setpoint(self) -> float:
+        """Get the commanded laser power setpoint."""
+
+    @power_setpoint.setter
+    @abstractmethod
+    def power_setpoint(self, value: float) -> None:
+        """Command the laser to a new power setpoint."""
 
     @property
     @abstractmethod

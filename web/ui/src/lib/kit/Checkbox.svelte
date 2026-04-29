@@ -27,8 +27,9 @@
 </script>
 
 <script lang="ts">
-  import { Check, Minus } from '$lib/icons';
   import { Checkbox as CheckboxPrimitive } from 'bits-ui';
+
+  import { Check, Minus } from '$lib/icons';
 
   interface Props extends CheckboxVariants {
     checked?: boolean;

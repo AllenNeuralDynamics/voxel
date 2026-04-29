@@ -1,36 +1,36 @@
 import Root from './dialog.svelte';
-import Portal from './dialog-portal.svelte';
-import Title from './dialog-title.svelte';
+import Close from './dialog-close.svelte';
+import Content, { type DialogContentVariants, dialogContentVariants } from './dialog-content.svelte';
+import Description from './dialog-description.svelte';
 import Footer from './dialog-footer.svelte';
 import Header from './dialog-header.svelte';
 import Overlay from './dialog-overlay.svelte';
-import Content, { dialogContentVariants, type DialogContentVariants } from './dialog-content.svelte';
-import Description from './dialog-description.svelte';
+import Portal from './dialog-portal.svelte';
+import Title from './dialog-title.svelte';
 import Trigger from './dialog-trigger.svelte';
-import Close from './dialog-close.svelte';
 
 export {
-  Root,
-  Title,
-  Portal,
-  Footer,
-  Header,
-  Trigger,
-  Overlay,
+  Close,
   Content,
   Description,
-  Close,
   //
   Root as Dialog,
-  Title as DialogTitle,
-  Portal as DialogPortal,
+  Close as DialogClose,
+  Content as DialogContent,
+  type DialogContentVariants,
+  dialogContentVariants,
+  Description as DialogDescription,
   Footer as DialogFooter,
   Header as DialogHeader,
-  Trigger as DialogTrigger,
   Overlay as DialogOverlay,
-  Content as DialogContent,
-  Description as DialogDescription,
-  Close as DialogClose,
-  dialogContentVariants,
-  type DialogContentVariants
+  Portal as DialogPortal,
+  Title as DialogTitle,
+  Trigger as DialogTrigger,
+  Footer,
+  Header,
+  Overlay,
+  Portal,
+  Root,
+  Title,
+  Trigger
 };

@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { App } from '$lib/app.svelte';
   import { Cog } from '$lib/icons';
-  import VoxelLogo from './VoxelLogo.svelte';
   import { themes } from '$lib/themes';
   import { cn } from '$lib/utils';
+
+  import VoxelLogo from './VoxelLogo.svelte';
 
   const { app }: { app: App } = $props();
   const connectionState = $derived(app.client.state);

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui';
+
   import { LucideCircle as CircleIcon } from '$lib/icons';
   import { cn, type WithoutChild } from '$lib/utils';
 

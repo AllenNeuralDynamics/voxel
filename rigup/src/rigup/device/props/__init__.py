@@ -28,7 +28,7 @@ if __name__ == "__main__":
             self._mode = "sine"
             self._preset = 1
 
-        @numeric(min_value=0.0, max_value=1.0, step=0.1)
+        @numeric(minimum=0.0, maximum=1.0, step=0.1)
         def volume(self) -> float:
             return self._volume
 
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         def volume(self, value: float) -> None:
             self._volume = value
 
-        @numeric_int(min_value=-10, max_value=10, step=2)
+        @numeric_int(minimum=-10, maximum=10, step=2)
         def gain(self) -> int:
             return self._gain
 

@@ -68,10 +68,11 @@
 </script>
 
 <script lang="ts">
-  import { ChevronDown, DotsSpinner, Check } from '$lib/icons';
   import { Select as SelectPrimitive } from 'bits-ui';
-  import { cn } from '$lib/utils';
   import type { Component } from 'svelte';
+
+  import { Check, ChevronDown, DotsSpinner } from '$lib/icons';
+  import { cn } from '$lib/utils';
 
   interface Props<T extends string = string> extends SelectVariants {
     value: T;

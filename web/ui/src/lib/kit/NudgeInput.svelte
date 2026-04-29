@@ -48,9 +48,10 @@
 </script>
 
 <script lang="ts">
+  import { getIsKeyHeld } from '@tanstack/svelte-hotkeys';
+
   import { Minus, Plus } from '$lib/icons';
   import { cn } from '$lib/utils';
-  import { getIsKeyHeld } from '@tanstack/svelte-hotkeys';
 
   interface Props extends NudgeVariants {
     /** Step size per button click / scroll tick / arrow key */

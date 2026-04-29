@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Microscope } from '$lib/microscope';
-  import { cn, sanitizeString } from '$lib/utils';
   import DeviceBrowser from '$lib/microscope/device/DeviceBrowser.svelte';
+  import { cn, sanitizeString } from '$lib/utils';
 
   interface Props {
     microscope: Microscope;

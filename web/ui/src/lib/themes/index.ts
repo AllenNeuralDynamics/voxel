@@ -1,14 +1,14 @@
-export { default as ThemePicker } from './ThemePicker.svelte';
 export { default as AppearanceSheet } from './AppearanceSheet.svelte';
 export {
-  themes,
+  type Density,
+  type Mode,
+  type Scale,
   type ThemeEntry,
   type ThemeId,
-  type Mode,
-  type Density,
-  type Scale,
-  type ThemePrefs
+  type ThemePrefs,
+  themes
 } from './manager.svelte';
+export { default as ThemePicker } from './ThemePicker.svelte';
 
 export const brand = {
   green: { light: '#2EF58D', mid: '#22CC75', dark: '#189960' },

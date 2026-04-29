@@ -118,18 +118,19 @@ class CoboltSkyra(Laser):
         """Get the maximum power in mW."""
         return self._max_power_mw
 
-    @numeric(min_value=0.0, max_value=lambda self: self._max_power_mw, step=0.1)
-    def power_setpoint_mw(self) -> float:
-        """Get the power setpoint in mW."""
+    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
+    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    def power_setpoint(self) -> float:
+        """Get the commanded power setpoint in mW."""
         if self._is_constant_current():
             # In constant current mode, we track the setpoint internally
             return self._current_setpoint_ma  # This is a simplification
         response = self._inst.send_cmd(f"{self._prefix}{Query.POWER_SETPOINT}")
         return float(response) * 1000  # Convert W to mW
 
-    @power_setpoint_mw.setter
-    def power_setpoint_mw(self, value: float) -> None:
-        """Set the power setpoint in mW."""
+    @power_setpoint.setter
+    def power_setpoint(self, value: float) -> None:
+        """Set the commanded power setpoint in mW."""
         if self.modulation_mode != "off":
             # In modulation mode, set current directly
             # This is simplified - the classic driver uses polynomial conversion
@@ -142,32 +143,10 @@ class CoboltSkyra(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    def power_mw(self) -> float:
-        """Get the actual power of the laser in mW."""
-        return self._inst.get_power()
-
-    @numeric(
-        min_value=0.0,
-        max_value=lambda self: self._max_power_mw,
-        step=0.1,
-        target=lambda self: float(self.power_setpoint_mw),
-    )
-    @describe(label="Power", units="mW", desc="Measured power; writes command the setpoint.", stream=True)
+    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
+        """Get the measured output power in mW."""
         return self._inst.get_power()
-
-    @power.setter
-    def power(self, value: float) -> None:
-        if self.modulation_mode != "off":
-            # In modulation mode, set current directly
-            # This is simplified - the classic driver uses polynomial conversion
-            self._current_setpoint_ma = value  # Store for getter
-            self._inst.send_cmd(f"{self._prefix}{Cmd.CURRENT_SETPOINT} {value}")
-        else:
-            # In constant power mode, set power in Watts
-            power_w = value / 1000.0
-            self._inst.send_cmd(f"{self._prefix}{Cmd.POWER_SETPOINT} {power_w}")
-        self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
     def temperature_c(self) -> float | None:

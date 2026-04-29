@@ -34,7 +34,7 @@ class DevicesStore(QObject):
         adapter.properties_changed.connect(self._on_laser_props)
 
         # Or use convenience methods
-        value = store.get_property("laser_488", "power_mw")
+        value = store.get_property("laser_488", "power")
     """
 
     device_added = Signal(str)  # device_id

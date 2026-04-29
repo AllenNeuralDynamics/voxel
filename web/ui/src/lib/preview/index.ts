@@ -1,34 +1,30 @@
-export { default as PreviewCanvas } from './PreviewCanvas.svelte';
-export { default as PreviewInfo } from './PreviewInfo.svelte';
-export { default as ColormapPicker } from './ColormapPicker.svelte';
-export { default as PanZoomControls } from './PanZoomControls.svelte';
-export { default as Histogram } from './Histogram.svelte';
 export { default as ChannelHistogram } from './ChannelHistogram.svelte';
-
-export {
-  PreviewManager,
-  PreviewChannel,
-  fetchColormapCatalog,
-  isViewportEqual,
-  isDefaultViewport,
-  channelBoundingBox,
-  compositeTiledFrames,
-  compositeFullFrames,
-  DEFAULT_VIEWPORT
-} from './preview.svelte';
-export type { ColormapDef, ColormapGroup, ColormapCatalog } from './preview.svelte';
-
-export { SnapshotStore } from './snapshots.svelte';
-export type { Snapshot, SnapshotChannel } from './snapshots.svelte';
-
-export { decodeFrameBody, decodeTileBody, channelFromTopic } from './frame';
+export { default as ColormapPicker } from './ColormapPicker.svelte';
 export type {
-  PreviewFrameInfo,
-  PreviewTileInfo,
-  PreviewTile,
   DecodedFrame,
   DecodedTile,
-  DecodedTileBatch
+  DecodedTileBatch,
+  PreviewFrameInfo,
+  PreviewTile,
+  PreviewTileInfo
 } from './frame';
-
+export { channelFromTopic, decodeFrameBody, decodeTileBody } from './frame';
+export { default as Histogram } from './Histogram.svelte';
+export { default as PanZoomControls } from './PanZoomControls.svelte';
+export type { ColormapCatalog, ColormapDef, ColormapGroup } from './preview.svelte';
+export {
+  channelBoundingBox,
+  compositeFullFrames,
+  compositeTiledFrames,
+  DEFAULT_VIEWPORT,
+  fetchColormapCatalog,
+  isDefaultViewport,
+  isViewportEqual,
+  PreviewChannel,
+  PreviewManager
+} from './preview.svelte';
+export { default as PreviewCanvas } from './PreviewCanvas.svelte';
+export { default as PreviewInfo } from './PreviewInfo.svelte';
+export type { Snapshot, SnapshotChannel } from './snapshots.svelte';
+export { SnapshotStore } from './snapshots.svelte';
 export type { PreviewConfig, PreviewLevels, PreviewViewport } from '$lib/protocol/preview';

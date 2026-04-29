@@ -220,7 +220,7 @@ class ContinuousAxis(Axis):
 
     # State properties _______________________________________________________________________________________________
 
-    @numeric(min_value=lambda self: self.lower_limit, max_value=lambda self: self.upper_limit)
+    @numeric(minimum=lambda self: self.lower_limit, maximum=lambda self: self.upper_limit)
     @describe(label="Position", desc="The current position.", stream=True)
     def position(self) -> float:
         """The current position in axis units."""

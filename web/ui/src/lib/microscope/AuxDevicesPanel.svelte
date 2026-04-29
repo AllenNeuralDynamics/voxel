@@ -1,12 +1,14 @@
 <script lang="ts">
-  import type { Microscope } from './_scope.svelte';
-  import { discoverProfileDevices, isFilterWheel } from './profile';
-  import { isPropDiverged, formatPropValue, decimalsFromStep } from './device/utils';
-  import { BoolModel, EnumeratedModel, NumericModel } from '$lib/prop.svelte';
   import { Collapsible } from 'bits-ui';
+
   import { ChevronRight, Restore } from '$lib/icons';
-  import { Button, SpinBox, Select, Switch } from '$lib/kit';
-  import { sanitizeString, cn } from '$lib/utils';
+  import { Button, Select, SpinBox, Switch } from '$lib/kit';
+  import { BoolModel, EnumeratedModel, NumericModel } from '$lib/prop';
+  import { cn, sanitizeString } from '$lib/utils';
+
+  import type { Microscope } from './_scope.svelte';
+  import { decimalsFromStep, formatPropValue, isPropDiverged } from './device/utils';
+  import { discoverProfileDevices, isFilterWheel } from './profile';
 
   interface Props {
     microscope: Microscope;
@@ -89,7 +91,7 @@
           <div class="space-y-1.5">
             {#each rwProperties as [propName, propInfo] (propName)}
               {@const saved = savedProps?.[propName]}
-              {@const model = device?.getProp(propName)}
+              {@const model = device?.getProp(propName)?.model}
               {@const current = model?.value}
               {@const propDiverged = isPropDiverged(saved, current)}
               {@const hasSaved = saved !== undefined && saved !== null}

@@ -196,8 +196,8 @@ class VieworksCamera(Camera):
             self._refresh_exposure_ms()
 
     @numeric(
-        min_value=lambda self: self._exposure_ms.min,
-        max_value=lambda self: self._exposure_ms.max,
+        minimum=lambda self: self._exposure_ms.min,
+        maximum=lambda self: self._exposure_ms.max,
     )
     def exposure_time_ms(self) -> int:
         if exp_time := self._dev.remote.get(feature="ExposureTime", dtype=float):
@@ -211,8 +211,8 @@ class VieworksCamera(Camera):
         self._refresh_exposure_ms()
 
     @numeric(
-        min_value=lambda self: self._frame_rate_hz.min,
-        max_value=lambda self: self._frame_rate_hz.max,
+        minimum=lambda self: self._frame_rate_hz.min,
+        maximum=lambda self: self._frame_rate_hz.max,
     )
     def frame_rate_hz(self) -> float:
         if frame_rate := self._dev.remote.get(feature="AcquisitionFrameRate", dtype=float):

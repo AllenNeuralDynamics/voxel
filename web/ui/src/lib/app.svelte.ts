@@ -1,11 +1,13 @@
-import { browser } from '$app/environment';
-import { toast } from 'svelte-sonner';
-import { Client, type ClientOptions } from '$lib/wire.svelte';
-import type { DataRoot, SessionListing, TemplateInfo } from '$lib/protocol/app';
-import type { JsonSchema } from '$lib/protocol/common';
-import type { AppStatusUpdate, LogMessage } from '$lib/protocol';
-import { Session } from './session.svelte';
 import { SvelteDate } from 'svelte/reactivity';
+import { toast } from 'svelte-sonner';
+
+import { browser } from '$app/environment';
+import type { AppStatusUpdate, LogMessage } from '$lib/protocol';
+import type { DataRoot, SessionListing, TemplateInfo } from '$lib/protocol/app';
+import type { JsonSchema } from '$lib/types';
+import { Client, type ClientOptions } from '$lib/wire.svelte';
+
+import { Session } from './session.svelte';
 
 export interface AppOptions {
   clientOptions?: ClientOptions;

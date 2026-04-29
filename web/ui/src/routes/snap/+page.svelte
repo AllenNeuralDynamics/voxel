@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { getSessionContext } from '$lib/context';
-  import type { Snapshot } from '$lib/preview/snapshots.svelte';
-  import { Button, ContextMenu, Rename } from '$lib/kit';
   import { Pane, PaneGroup } from 'paneforge';
+
+  import { getSessionContext } from '$lib/context';
+  import { Crosshair, ImageLight, TrashCanOutline } from '$lib/icons';
+  import { Button, ContextMenu, Rename } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import type { Snapshot } from '$lib/preview/snapshots.svelte';
   import { cn, createPaneMinSize } from '$lib/utils';
-  import { Crosshair, TrashCanOutline, ImageLight } from '$lib/icons';
 
   const session = getSessionContext();
   const snaps = $derived(session.mosaic.snaps);

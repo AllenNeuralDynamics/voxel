@@ -1,6 +1,7 @@
-import type { MicroscopeConfig, ChannelConfig } from '$lib/protocol/session';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { wavelengthToColor, desaturateColor } from '$lib/utils';
+
+import type { ChannelConfig, MicroscopeConfig } from '$lib/config';
+import { desaturateColor, wavelengthToColor } from '$lib/utils';
 
 // ── Types ──────────────────────────────────────────────────
 

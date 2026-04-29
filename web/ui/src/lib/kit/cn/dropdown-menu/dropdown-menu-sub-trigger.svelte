@@ -1,5 +1,6 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui';
+
   import { LucideChevronRight as ChevronRightIcon } from '$lib/icons';
   import { cn } from '$lib/utils';
 

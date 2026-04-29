@@ -1,16 +1,18 @@
 <script lang="ts">
-  import type { Microscope } from '.';
-  import { discoverProfileDevices } from './profile';
-  import { generateTraces, niceTicks, resolveWaveforms, voltageRange } from '$lib/protocol/waveform';
-  import type { AOSignals, ClockSource } from '$lib/protocol/session';
-  import { isDerivedWaveform, type Waveform, type DerivedWaveform } from '$lib/protocol/waveform';
-  import type { SelectOption } from '$lib/kit/Select.svelte';
-  import { SpinBox, Select, Button } from '$lib/kit';
-  import { cn, sanitizeString } from '$lib/utils';
-  import { Check, Close } from '$lib/icons';
-  import { toast } from 'svelte-sonner';
   import { watch } from 'runed';
   import { SvelteSet } from 'svelte/reactivity';
+  import { toast } from 'svelte-sonner';
+
+  import type { AOSignals, ClockSource } from '$lib/config';
+  import { Check, Close } from '$lib/icons';
+  import { Button, Select, SpinBox } from '$lib/kit';
+  import type { SelectOption } from '$lib/kit/Select.svelte';
+  import { cn, sanitizeString } from '$lib/utils';
+  import type { DerivedWaveform, Waveform } from '$lib/waveform';
+  import { generateTraces, isDerivedWaveform, niceTicks, resolveWaveforms, voltageRange } from '$lib/waveform';
+
+  import type { Microscope } from '.';
+  import { discoverProfileDevices } from './profile';
 
   // ──────────────────────────────── Props ────────────────────────────────
 

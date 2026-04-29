@@ -1,6 +1,7 @@
 <script lang="ts" generics="T">
-  import type { Snippet } from 'svelte';
   import { draggable, droppable } from '@thisux/sveltednd';
+  import type { Snippet } from 'svelte';
+
   import { getSortableListContext } from './sortable-list.svelte';
 
   interface Props {

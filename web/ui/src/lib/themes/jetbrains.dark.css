@@ -40,7 +40,6 @@
   /* ── Interactive ───────────────────────────────────────────────────── */
 
   --primary: #3474f0; /* zed: text.accent, border.selected */
-  --primary: #6196e9; /* zed: text.accent, border.selected */
   --primary-fg: #dfe1e5;
   --secondary: #43454a; /* zed: element.selected, ghost_element.selected */
   --secondary-fg: #dfe1e5;

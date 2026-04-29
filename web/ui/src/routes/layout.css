@@ -6,7 +6,7 @@
 
 /* ── Density tokens ───────────────────────────────────────────────────── */
 
-:root {
+/*:root {
   --ui-xs: 1.75rem;
   --ui-sm: 2rem;
   --ui-md: 2.25rem;
@@ -14,12 +14,20 @@
   --ui-xl: 3rem;
 }
 
+:root {
+  --ui-xs: 1.375rem;
+  --ui-sm: 1.55rem;
+  --ui-md: 1.725rem;
+  --ui-lg: 1.9rem;
+  --ui-xl: 2.075rem;
+}
+
 .density-compact {
-  --ui-xs: 1.5rem;
-  --ui-sm: 1.75rem;
-  --ui-md: 2rem;
-  --ui-lg: 2.25rem;
-  --ui-xl: 3.5rem;
+  --ui-xs: 1.25rem;
+  --ui-sm: 1.375rem;
+  --ui-md: 1.5rem;
+  --ui-lg: 1.75rem;
+  --ui-xl: 2rem;
 }
 
 .density-comfortable {
@@ -28,6 +36,26 @@
   --ui-md: 2.5rem;
   --ui-lg: 2.75rem;
   --ui-xl: 3.75rem;
+}*/
+
+:root {
+  --ui-step: 0.25rem; /* 4px */
+  --ui-base: 1.75rem; /* 28px — md anchor */
+  --ui-base: 2rem;
+
+  --ui-xs: calc(var(--ui-base) - 2 * var(--ui-step)); /* 20px */
+  --ui-sm: calc(var(--ui-base) - 1 * var(--ui-step)); /* 24px */
+  --ui-md: var(--ui-base); /* 28px */
+  --ui-lg: calc(var(--ui-base) + 1 * var(--ui-step)); /* 32px */
+
+  --highlight: #467ff2;
+  --highlight: #588ff8;
+  --highlight: #6b9eff;
+}
+
+.density-compact {
+  --ui-base: 1.5rem; /* 24px → 16/20/24/28 */
+  --ui-base: 1.75rem;
 }
 
 .nss {
@@ -40,7 +68,6 @@
   --spacing-ui-sm: var(--ui-sm);
   --spacing-ui-md: var(--ui-md);
   --spacing-ui-lg: var(--ui-lg);
-  --spacing-ui-xl: var(--ui-xl);
 
   /* ── Surfaces ──────────────────────────────────────────────────────── */
   --color-canvas: var(--canvas);
@@ -76,6 +103,7 @@
   --color-primary-fg: var(--primary-fg);
   --color-secondary: var(--secondary);
   --color-secondary-fg: var(--secondary-fg);
+  --color-highlight: var(--highlight);
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
   --color-danger: var(--danger);

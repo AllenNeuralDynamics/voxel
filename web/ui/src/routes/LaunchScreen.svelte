@@ -1,18 +1,20 @@
 <script lang="ts">
-  import type { App } from '$lib/app.svelte';
-  import type { SessionListing, DataRoot, TemplateInfo } from '$lib/protocol/app';
-  import type { JsonSchema } from '$lib/protocol/common';
-  import LogViewer from './LogViewer.svelte';
-  import MetadataFields from '$lib/metadata/MetadataFields.svelte';
   import { Collapsible } from 'bits-ui';
-  import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/kit';
-  import { Plus, FolderOpenOutline, GitFork, Clipboard, LucideChevronRight, EllipsisVertical, Cog } from '$lib/icons';
-  import { sanitizeString } from '$lib/utils';
-  import VoxelLogo from './VoxelLogo.svelte';
-  import { themes } from '$lib/themes';
+  import { toast } from 'svelte-sonner';
+
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { toast } from 'svelte-sonner';
+  import type { App } from '$lib/app.svelte';
+  import { Clipboard, Cog, EllipsisVertical, FolderOpenOutline, GitFork, LucideChevronRight, Plus } from '$lib/icons';
+  import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/kit';
+  import MetadataFields from '$lib/metadata/MetadataFields.svelte';
+  import type { DataRoot, SessionListing, TemplateInfo } from '$lib/protocol/app';
+  import { themes } from '$lib/themes';
+  import type { JsonSchema } from '$lib/types';
+  import { sanitizeString } from '$lib/utils';
+
+  import LogViewer from './LogViewer.svelte';
+  import VoxelLogo from './VoxelLogo.svelte';
 
   const { app }: { app: App } = $props();
 
