@@ -46,6 +46,19 @@ export function desaturateColor(hex: string, amount = 0.7): string {
   return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
 }
 
+/**
+ * Return `color` at a reduced opacity, expressed as a CSS `color-mix()` against transparent.
+ * Useful for low-emphasis tinted backgrounds/borders derived from a runtime-computed color
+ * (hex strings have no built-in alpha channel; `color-mix` fills that gap).
+ *
+ * @param color - Any CSS color string (hex, rgb, named).
+ * @param opacity - Opacity percentage (0-100). Default 18.
+ * @returns CSS string, e.g. `color-mix(in srgb, #aabbcc 18%, transparent)`
+ */
+export function withOpacity(color: string, opacity = 18): string {
+  return `color-mix(in srgb, ${color} ${opacity}%, transparent)`;
+}
+
 export function wavelengthToColor(wavelength: number | undefined): string {
   if (!wavelength) return '#6366f1'; // Default indigo for unknown wavelengths
 

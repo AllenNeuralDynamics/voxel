@@ -13,8 +13,9 @@ import type { SessionStateUpdate } from '$lib/protocol';
 import type { DevicesSnapshot } from '$lib/protocol/session';
 import type { Client } from '$lib/wire.svelte';
 
-import type { DeviceSnapshot } from './device';
-import { AnalogOut, Axis, Camera, Device, type DeviceHooks, Laser } from './device';
+import type { CameraHooks, DeviceSnapshot, ProfileContext } from './device';
+import { AnalogOut, Axis, Camera, Device, Laser } from './device';
+import { type DeviceRole, type DeviceRoleKind, sortByRoleOrder } from './role';
 
 interface ErrorMsg {
   msg: string;
@@ -251,6 +252,19 @@ export class Microscope {
     return out;
   });
 
+  /**
+   * Real Devices participating in the active profile, in canonical role order
+   * (cameras, lasers, filters, aux, stage axes, waveform-only). Skips IDs without a backing Device.
+   */
+  profileDevices = $derived.by<Device[]>(() => {
+    const out: Device[] = [];
+    for (const id of this.#profileContexts.keys()) {
+      const dev = this.devices.get(id);
+      if (dev) out.push(dev);
+    }
+    return out;
+  });
+
   readonly #client: Client;
   #unsubProps?: () => void;
 
@@ -335,7 +349,7 @@ export class Microscope {
     this.profiles.dispose();
   }
 
-  #hooks(deviceId: string): DeviceHooks {
+  #hooks(deviceId: string): CameraHooks {
     return {
       onPatch: (propName, value) => {
         this.#client.send('device.set_property', {
@@ -354,15 +368,107 @@ export class Microscope {
         const body = (await res.json()) as { result: unknown };
         return body.result;
       },
-      getSaved: (propName) => this.savedFor(deviceId, propName)
+      getProfileContext: () => this.profileContextFor(deviceId),
+      getSavedROI: () => this.profiles.savedRoi(deviceId)
     };
   }
 
-  /** Reactive lookup for the active profile's saved value of `(deviceId, propName)`. */
-  savedFor(deviceId: string, propName: string): unknown {
-    const id = this.profiles.activeId;
-    if (!id) return undefined;
-    return this.config.profiles?.[id]?.props?.[deviceId]?.[propName];
+  /**
+   * Walker output: ProfileContext per real Device participating in the active profile.
+   * IDs in `aoSignals.waveforms` that don't correspond to a Device (pure DAQ port labels)
+   * are skipped — those are tune-page concerns, not device-profile state.
+   */
+  #profileContexts = $derived.by<SvelteMap<string, ProfileContext>>(() => this.#walkProfileContexts());
+
+  #walkProfileContexts(): SvelteMap<string, ProfileContext> {
+    const out = new SvelteMap<string, ProfileContext>();
+    const profileId = this.profiles.activeId;
+    if (!profileId || !this.config) return out;
+
+    const profile = this.config.profiles?.[profileId];
+    if (!profile) return out;
+
+    // Discover roles by walking the profile. Capture the channel reference (id + emission +
+    // label) alongside role for any channel-derived device (camera/laser/filter/aux) so we
+    // don't re-walk channels later.
+    const roles = new SvelteMap<string, DeviceRoleKind>();
+    const channels = new SvelteMap<string, { id: string; emission?: number; label?: string }>();
+    for (const chId of profile.channels) {
+      const ch = this.config.channels[chId];
+      if (!ch) continue;
+      const channelRef = { id: chId, emission: ch.emission ?? undefined, label: ch.label ?? undefined };
+      if (!roles.has(ch.detection)) {
+        roles.set(ch.detection, 'camera');
+        channels.set(ch.detection, channelRef);
+      }
+      if (!roles.has(ch.illumination)) {
+        roles.set(ch.illumination, 'laser');
+        channels.set(ch.illumination, channelRef);
+      }
+      for (const fwId of Object.keys(ch.filters)) {
+        if (!roles.has(fwId)) {
+          roles.set(fwId, 'filter');
+          channels.set(fwId, channelRef);
+        }
+      }
+      const detPath = this.config.detection[ch.detection];
+      if (detPath) {
+        for (const auxId of detPath.aux_devices) {
+          if (!roles.has(auxId)) {
+            roles.set(auxId, 'aux');
+            channels.set(auxId, channelRef);
+          }
+        }
+      }
+      const illPath = this.config.illumination[ch.illumination];
+      if (illPath) {
+        for (const auxId of illPath.aux_devices) {
+          if (!roles.has(auxId)) {
+            roles.set(auxId, 'aux');
+            channels.set(auxId, channelRef);
+          }
+        }
+      }
+    }
+    if (this.config.stage) {
+      const axes = [this.config.stage.x, this.config.stage.y, this.config.stage.z].filter(Boolean) as string[];
+      for (const axisId of axes) {
+        if (!roles.has(axisId)) roles.set(axisId, 'stage');
+      }
+    }
+    for (const aoSignals of Object.values(profile.sync)) {
+      for (const devId of Object.keys(aoSignals.waveforms)) {
+        if (!roles.has(devId)) roles.set(devId, 'waveform');
+      }
+    }
+
+    // Per-kind index counters; produces deterministic palette assignment.
+    const counters: Record<DeviceRoleKind, number> = {
+      camera: 0,
+      laser: 0,
+      filter: 0,
+      aux: 0,
+      stage: 0,
+      waveform: 0,
+      other: 0
+    };
+
+    for (const [id, kind] of sortByRoleOrder(roles)) {
+      // Skip IDs without a backing Device — pure DAQ port labels are not device-profile state.
+      if (!this.devices.has(id)) continue;
+
+      const role: DeviceRole = { kind, index: counters[kind]++ };
+      const channel = channels.get(id);
+      const savedProps = profile.props?.[id];
+      out.set(id, { role, channel, savedProps });
+    }
+
+    return out;
+  }
+
+  /** Reactive lookup of the active-profile ProfileContext for a device. Empty for n/a. */
+  profileContextFor(deviceId: string): ProfileContext {
+    return this.#profileContexts.get(deviceId) ?? { role: undefined, savedProps: undefined };
   }
 
   #applyDevices(snapshot: DevicesSnapshot): void {
@@ -381,7 +487,7 @@ export class Microscope {
   }
 }
 
-function createDevice(id: string, info: DeviceSnapshot, hooks: DeviceHooks): Device {
+function createDevice(id: string, info: DeviceSnapshot, hooks: CameraHooks): Device {
   switch (info.interface?.type) {
     case 'camera':
       return new Camera(id, hooks);

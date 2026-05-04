@@ -8,13 +8,13 @@
 </script>
 
 <script lang="ts">
-  import { ChevronDown, ChevronRight, Restore } from '$lib/icons';
+  import { ChevronDown, ChevronRight, Link, Restore } from '$lib/icons';
   import { Button, SpinBox } from '$lib/kit';
   import type { Microscope } from '$lib/microscope';
   import type { Device } from '$lib/microscope/device';
-  import { formatPropValue } from '$lib/microscope/device';
+  import { formatPropValue, roiNeedsSave } from '$lib/microscope/device';
   import { EnumeratedModel, NumericModel, type Prop, PropInput } from '$lib/prop';
-  import { cn } from '$lib/utils';
+  import { cn, sanitizeString, withOpacity } from '$lib/utils';
 
   interface Props {
     microscope: Microscope;
@@ -91,7 +91,21 @@
     return false;
   }
 
-  const isDirty = $derived(deviceHasDiverged(camera) || auxDevices.some(deviceHasDiverged) || roiDirty);
+  function deviceNeedsSave(d: Device | undefined): boolean {
+    if (!d) return false;
+    for (const prop of d.props.values()) {
+      if (prop.access === 'rw' && prop.needsSave) return true;
+    }
+    return false;
+  }
+
+  const inActiveProfile = $derived(camera?.role !== undefined);
+
+  const hasDivergence = $derived(deviceHasDiverged(camera) || auxDevices.some(deviceHasDiverged) || roiDirty);
+
+  const needsSave = $derived(
+    deviceNeedsSave(camera) || auxDevices.some(deviceNeedsSave) || (inActiveProfile && roiNeedsSave(savedRoi, liveRoi))
+  );
 
   async function save() {
     const ops: Promise<void>[] = [microscope.profiles.saveProps(cameraId)];
@@ -130,22 +144,41 @@
     if (!camera || !sensorSize) return;
     camera.updateRoi({ x: 0, y: 0, w: sensorSize.x, h: sensorSize.y });
   }
+
+  function modeDotColor(mode: string | undefined): string {
+    if (mode === 'PREVIEW') return 'bg-success';
+    if (mode === 'ACQUISITION') return 'bg-warning';
+    return 'bg-fg-muted/40';
+  }
+
+  function modeLabel(mode: string | undefined): string {
+    if (mode === 'PREVIEW') return 'Preview';
+    if (mode === 'ACQUISITION') return 'Acquiring';
+    return 'Idle';
+  }
 </script>
 
 {#snippet propRow(prop: Prop)}
   {@const stepHint = prop.model instanceof NumericModel ? prop.model.step : null}
-  <div class="grid grid-cols-[10rem_1fr_minmax(5rem,auto)] items-center gap-3">
-    <div class="flex min-w-0 items-center gap-2 text-sm text-fg-muted">
+  <div class="grid grid-cols-[10rem_minmax(8rem,1fr)_minmax(6rem,auto)] items-center gap-2">
+    <div class="flex min-w-0 items-center gap-2 text-sm leading-none text-fg-muted">
       <span class="truncate" title={prop.info.desc ?? ''}>
-        {prop.label}{#if prop.units}<span class="ml-1 text-fg-faint">({prop.units})</span>{/if}
+        {prop.label}
       </span>
-      <span class={cn('ml-auto size-1.5 shrink-0 rounded-full bg-highlight', !prop.isDiverged && 'invisible')}></span>
+
+      {#if prop.model.group}
+        <span title="Linked across cameras" class="flex shrink-0 text-fg-muted">
+          <Link width="10" height="10" />
+        </span>
+      {/if}
+      <span class={cn('size-1 shrink-0 rounded-full bg-highlight', !prop.needsSave && 'invisible')}></span>
     </div>
     <PropInput model={prop.model} size="xs" />
     <button
       type="button"
       class={cn(
-        'w-full text-right font-mono text-xs text-fg-faint tabular-nums transition-colors select-none',
+        'flex min-w-0 items-center justify-end gap-1 text-sm text-fg-muted',
+        'w-full text-right font-mono text-xs text-fg-muted tabular-nums transition-colors select-none',
         prop.isDiverged ? 'cursor-pointer hover:text-fg' : 'cursor-default',
         prop.saved === undefined && 'invisible'
       )}
@@ -154,13 +187,14 @@
       ondblclick={() => prop.applySaved()}
     >
       {formatPropValue(prop.saved, stepHint)}
+      <span class="min-w-[2ch] text-[0.65rem] text-nowrap opacity-50">{prop.units !== '' ? prop.units : '  '}</span>
     </button>
   </div>
 {/snippet}
 
 {#snippet sectionHeader(name: string, type?: string)}
   <div class="flex items-baseline justify-between gap-2 pb-1.5">
-    <span class="text-xs font-medium text-fg">{name}</span>
+    <span class="text-xs font-medium text-fg">{sanitizeString(name)}</span>
     {#if type}
       <span class="py-0.5 font-mono text-[0.65rem] text-fg-faint">{type}</span>
     {/if}
@@ -205,31 +239,58 @@
   </div>
 {/snippet}
 
+{#snippet chip(text: string, modifiers?: string, style?: string)}
+  <span class={cn('truncate rounded-full px-2 py-px text-[0.65rem]', modifiers)} {style}>
+    {text}
+  </span>
+{/snippet}
+
 {#if camera}
   <div class={cn('rounded-lg border border-border bg-surface/30', className)}>
-    <!-- Header: detection path id + Save/Revert -->
-    <div class="flex items-center justify-between border-b border-border px-3 py-2">
-      <span class="text-sm font-medium text-fg">{cameraId}</span>
-      <div class="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          disabled={!isDirty}
-          onclick={revert}
-          title="Revert to saved"
-          class="text-warning/75 transition-opacity disabled:opacity-0"
-        >
-          <Restore width="12" height="12" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          class={isDirty ? 'bg-primary/15 text-primary hover:bg-primary/25' : ''}
-          disabled={!isDirty || !microscope.profiles.activeId}
-          onclick={save}
-        >
-          Save
-        </Button>
+    <div class="flex h-ui-lg items-center justify-between border-b border-border px-3 py-2">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-medium text-fg">{sanitizeString(cameraId)}</span>
+        {#if inActiveProfile}
+          <div class="flex items-center gap-0">
+            <Button
+              variant="ghost"
+              size="xs"
+              class={cn(
+                'transition-opacity disabled:opacity-0',
+                needsSave ? 'text-highlight hover:bg-highlight/25 hover:text-highlight' : ''
+              )}
+              disabled={!needsSave || !microscope.profiles.activeId}
+              onclick={save}
+            >
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={!hasDivergence}
+              onclick={revert}
+              title="Revert to saved"
+              class="text-fg/80 transition-opacity disabled:opacity-0"
+            >
+              <Restore width="12" height="12" />
+            </Button>
+          </div>
+        {/if}
+      </div>
+      <div class="flex items-center gap-2">
+        {#if !inActiveProfile}
+          {@render chip('Not in profile', 'bg-fg-muted/10 text-fg-muted')}
+        {:else if camera.profileContext.channel}
+          {@const ch = camera.profileContext.channel}
+          {@const accent = camera.accentColor}
+          {@render chip(
+            ch.label ?? ch.id,
+            accent ? '' : 'bg-element-bg text-fg-muted',
+            accent ? `background-color: ${withOpacity(accent)}; color: ${accent};` : ''
+          )}
+        {:else}
+          {@render chip('Unknown channel', 'bg-fg-muted/10 text-fg-muted italic')}
+        {/if}
       </div>
     </div>
 
@@ -249,7 +310,12 @@
               onclick={() => (roiExpanded = !roiExpanded)}
             >
               <span class="text-sm text-fg-muted">Sensor ROI</span>
-              <span class={cn('text-xs text-highlight', !roiDirty && 'invisible')}>*</span>
+              <span
+                class={cn(
+                  'text-xs text-highlight',
+                  !(inActiveProfile && roiNeedsSave(savedRoi, liveRoi)) && 'invisible'
+                )}>*</span
+              >
               {#if roiExpanded}
                 <ChevronDown width="12" height="12" class="ml-auto" />
               {:else}
@@ -258,7 +324,7 @@
             </button>
 
             {#if roiExpanded}
-              <div class="grid grid-cols-[10rem_1fr] gap-3 pt-2">
+              <div class="grid grid-cols-[9rem_1fr] gap-8 pt-2">
                 <!-- SVG sensor diagram -->
                 <svg
                   viewBox="0 0 {sensorW} {sensorH}"
@@ -376,6 +442,38 @@
           {/if}
         </div>
       {/each}
+    </div>
+
+    <!-- Footer: live camera mode + stream info + frame size -->
+    <div
+      class="flex items-center justify-between gap-3 border-t border-border px-3 py-2 font-mono text-xs text-fg-muted tabular-nums"
+    >
+      <div class="flex items-center gap-1.5">
+        <div class="h-2 w-2 rounded-full {modeDotColor(camera.mode)}"></div>
+        <span class="text-xs text-fg-muted">{modeLabel(camera.mode)}</span>
+      </div>
+      {#if camera.streamInfo}
+        {@const info = camera.streamInfo}
+        <div class="flex items-center">
+          <span>{info.frame_rate_fps.toFixed(1)} fps</span>
+          <span>&ensp;&middot;&ensp;</span>
+          <span>{info.data_rate_mbs.toFixed(1)} MB/s</span>
+          {#if info.dropped_frames > 0}
+            <span>&ensp;&middot;&ensp;</span>
+            <span class="text-danger">{info.dropped_frames} dropped</span>
+          {/if}
+        </div>
+      {:else}
+        <div></div>
+      {/if}
+      <div class="flex items-center">
+        {#if camera.frameSizePx}
+          <span>{camera.frameSizePx.x}&times;{camera.frameSizePx.y}</span>
+          {#if camera.frameSizeMb?.value != null}
+            <span>&ensp;&middot;&ensp;{camera.frameSizeMb.value.toFixed(1)} MB</span>
+          {/if}
+        {/if}
+      </div>
     </div>
   </div>
 {/if}

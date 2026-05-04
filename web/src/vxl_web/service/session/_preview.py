@@ -34,6 +34,8 @@ class PreviewService:
         self._unsubs: list[Callable[[], None]] = [
             bus.on_command("preview.start", Empty, self._handle_start),
             bus.on_command("preview.stop", Empty, self._handle_stop),
+            bus.on_command("preview.pause", Empty, self._handle_pause),
+            bus.on_command("preview.resume", Empty, self._handle_resume),
             bus.on_command("preview.viewport.set", PreviewViewport, self._handle_viewport_set),
             bus.on_command("preview.levels.set", PreviewLevelsUpdate, self._handle_levels_set),
             bus.on_command("preview.colormap.set", PreviewColormapUpdate, self._handle_colormap_set),
@@ -55,6 +57,14 @@ class PreviewService:
     async def _handle_stop(self, _cmd: Empty, _sender_id: ClientId) -> None:
         async with self._preview_lock:
             await self.session.stop_preview()
+
+    async def _handle_pause(self, _cmd: Empty, sender_id: ClientId) -> None:
+        if (client := self.bus.get_client(sender_id)) is not None:
+            client.pause()
+
+    async def _handle_resume(self, _cmd: Empty, sender_id: ClientId) -> None:
+        if (client := self.bus.get_client(sender_id)) is not None:
+            client.resume()
 
     async def _handle_viewport_set(self, viewport: PreviewViewport, sender_id: ClientId) -> None:
         await self.session.preview.update_viewport(viewport)

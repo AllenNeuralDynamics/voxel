@@ -9,7 +9,7 @@
 
   import type { Camera, ROIGrid } from '.';
   import type { Microscope } from './_scope.svelte';
-  import { isPropDiverged } from './device/utils';
+  import { isPropDiverged, isRoiDiverged, roiNeedsSave } from './device/utils';
   import { getChannelFor } from './profile';
 
   interface Props {
@@ -233,15 +233,15 @@
   {@const binDiverged = isPropDiverged(savedProps?.binning, camera.binning?.value)}
   {@const fmtDiverged = isPropDiverged(savedProps?.pixel_format, camera.pixelFormat?.value)}
   {@const anyPropDiverged = expDiverged || frDiverged || binDiverged || fmtDiverged}
-  {@const anyRoiDiverged =
-    savedRoi != null &&
-    camera.roi != null &&
-    (savedRoi.x !== camera.roi.x ||
-      savedRoi.y !== camera.roi.y ||
-      savedRoi.w !== camera.roi.w ||
-      savedRoi.h !== camera.roi.h)}
+  {@const anyRoiDiverged = isRoiDiverged(savedRoi, camera.roi)}
   {@const anyDiverged = anyPropDiverged || anyRoiDiverged}
-  {@const hasUnsaved = !savedProps || !savedRoi}
+  {@const anyPropNeedsSave =
+    !!camera.getProp('exposure_time_ms')?.needsSave ||
+    !!camera.getProp('frame_rate_hz')?.needsSave ||
+    !!camera.getProp('binning')?.needsSave ||
+    !!camera.getProp('pixel_format')?.needsSave}
+  {@const anyRoiNeedsSave = roiNeedsSave(savedRoi, camera.roi)}
+  {@const needsSave = anyPropNeedsSave || anyRoiNeedsSave}
   {@const sensorW = camera.sensorSizePx?.x ?? 1}
   {@const sensorH = camera.sensorSizePx?.y ?? 1}
   {@const strokeWidth = Math.max(sensorW, sensorH) * 0.004}
@@ -259,7 +259,7 @@
         <span class="ml-auto rounded-full bg-fg-muted/10 px-1.5 py-px text-xs text-fg-muted">Not in profile</span>
       {:else}
         <div class="ml-auto flex items-center gap-1.5">
-          {#if anyDiverged || hasUnsaved}
+          {#if needsSave}
             {#if anyDiverged}
               <Button
                 variant="ghost"

@@ -21,7 +21,6 @@
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { ProfileSelector } from '$lib/microscope';
   import AuxDevicesPanel from '$lib/microscope/AuxDevicesPanel.svelte';
-  import CamerasPanel from '$lib/microscope/CamerasPanel.svelte';
   import LasersPanel from '$lib/microscope/LasersPanel.svelte';
   import { PreviewCanvas } from '$lib/preview';
   import { AppearanceSheet, themes } from '$lib/themes';
@@ -111,7 +110,7 @@
 
   // --- Bottom pane (setup) ---
 
-  const panelTab = new PersistedState('setup.panel.tab', 'lasers');
+  const panelTab = new PersistedState('setup.panel.tab', 'logs');
   let bottomPanelTab = $derived(panelTab.current);
 
   function setTab(tab: string) {
@@ -256,8 +255,6 @@
             >
               {#if bottomPanelTab === 'devices'}
                 <AuxDevicesPanel microscope={session.scope} class="h-full overflow-auto p-4" />
-              {:else if bottomPanelTab === 'cameras'}
-                <CamerasPanel microscope={session.scope} class="h-full overflow-auto p-4" />
               {:else if bottomPanelTab === 'lasers'}
                 <LasersPanel microscope={session.scope} />
                 <!-- {:else if bottomPanelTab === 'analog-out'}
@@ -288,12 +285,9 @@
                 <!-- <button onclick={() => selectTab('analog-out')} class={tabClass(bottomPanelTab === 'analog-out')}
                   >Analog Out</button
                 > -->
-                <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}
-                  >Auxiliary</button
-                >
-                <button onclick={() => selectTab('cameras')} class={tabClass(bottomPanelTab === 'cameras')}
-                  >Cameras</button
-                >
+                <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}>
+                  Auxiliary
+                </button>
                 <button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
                   Lasers
                   {#each [...session.scope.lasers.values()] as laser (laser.id)}

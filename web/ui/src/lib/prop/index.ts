@@ -1,10 +1,11 @@
 export * as Bool from './bool';
 export * as Enumerated from './enumerated';
-export type { AnyPropModel, NumericOptions, PropertyInfo, PropOptions, PropSnapshot } from './models.svelte';
+export type { AnyPropModel, NumericOptions, PropertyInfo, PropOptions, PropSnapshot, SavedInfo } from './models.svelte';
 export {
   BoolModel,
   createPropModel,
   EnumeratedModel,
+  LinkGroup,
   NumericModel,
   Prop,
   PropModel,

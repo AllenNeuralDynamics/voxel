@@ -356,6 +356,9 @@ export class PreviewManager {
   #levelsLastSent = new SvelteMap<string, number>();
   readonly #THROTTLE_MS = 200;
 
+  /** Auto-pause preview when the tab is backgrounded (UX/battery). */
+  #visibilityHandler: (() => void) | null = null;
+
   constructor(client: Client, config: MicroscopeConfig, initialStatus: SessionStateUpdate | null) {
     this.#client = client;
     this.#config = config;
@@ -364,6 +367,13 @@ export class PreviewManager {
 
     this.#applySessionState(initialStatus);
     this.#subscribe();
+
+    if (typeof document !== 'undefined') {
+      this.#visibilityHandler = () => {
+        this.#client.send(document.hidden ? 'preview.pause' : 'preview.resume', {});
+      };
+      document.addEventListener('visibilitychange', this.#visibilityHandler);
+    }
 
     fetchColormapCatalog(client.baseUrl)
       .then((catalog) => {
@@ -400,6 +410,11 @@ export class PreviewManager {
 
     this.#unsubscribers.forEach((unsub) => unsub());
     this.#unsubscribers = [];
+
+    if (this.#visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.#visibilityHandler);
+      this.#visibilityHandler = null;
+    }
 
     if (this.#viewportUpdateTimer !== null) {
       clearTimeout(this.#viewportUpdateTimer);

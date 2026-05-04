@@ -11,7 +11,7 @@
   import { Button, Select, SpinBox } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import type { SelectOption } from '$lib/kit/Select.svelte';
-  import { discoverProfileDevices } from '$lib/microscope/profile';
+  import { waveformPortColor } from '$lib/microscope/role';
   import { createPaneMinSize, sanitizeString } from '$lib/utils';
   import type { DerivedWaveform, Waveform } from '$lib/waveform';
   import { generateTraces, isDerivedWaveform, resolveWaveforms } from '$lib/waveform';
@@ -213,21 +213,31 @@
 
   // ──────────────────────────────── Sidebar: waveform devices ────────────────────────────────
 
-  const profileDevices = $derived(profiles.activeId ? discoverProfileDevices(rigCfg, profiles.activeId) : []);
-
-  /** Device ids that have a waveform entry in the current AO tab's signals. */
+  /** Device ids that have a waveform entry in the current AO tab's signals.
+   *  Real devices in the active profile come first (in profile-discovery order); pure DAQ
+   *  port labels (no backing Device) appear after, in waveform-key order. */
   const tabWaveformIds = $derived.by<string[]>(() => {
     const names = Object.keys(baseWaveforms);
-    const knownOrder = profileDevices.map((d) => d.id);
     const ordered: string[] = [];
-    for (const id of knownOrder) if (names.includes(id)) ordered.push(id);
+    for (const dev of scope.profileDevices) {
+      if (names.includes(dev.id)) ordered.push(dev.id);
+    }
     for (const id of names) if (!ordered.includes(id)) ordered.push(id);
     return ordered;
   });
 
-  const waveformColors = $derived<Record<string, string>>(
-    Object.fromEntries(profileDevices.map((d) => [d.id, d.color]))
-  );
+  /** Per-channel color: real Devices read from `device.accentColor`; port labels get
+   *  reverse-indexed entries from the waveform palette so the two pools don't collide. */
+  const waveformColors = $derived.by<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    let portIdx = 0;
+    for (const id of tabWaveformIds) {
+      const dev = scope.get(id);
+      const accent = dev?.accentColor;
+      out[id] = accent ?? waveformPortColor(portIdx++);
+    }
+    return out;
+  });
 
   // ──────────────────────────────── Panel grouping ────────────────────────────────
   //
@@ -584,7 +594,10 @@
                     {@const color = waveformColors[channelId] ?? '#888'}
                     <button
                       type="button"
-                      onclick={() => selectDevice(channelId)}
+                      onclick={() => {
+                        selectDevice(channelId);
+                        collapsedPanels.delete(panelKey);
+                      }}
                       class="flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors
                         {channelId === selectedDeviceId ? 'border-border bg-element-selected' : 'border-transparent'}"
                     >

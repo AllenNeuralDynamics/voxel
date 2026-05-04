@@ -1,3 +1,5 @@
+import type { SensorROI } from '$lib/protocol/profile';
+
 /** Whether a property value is complex enough for tree-view rendering. */
 export function isStructuredValue(value: unknown): boolean {
   if (value == null || typeof value !== 'object') return false;
@@ -27,6 +29,19 @@ export function isPropDiverged(saved: unknown, current: unknown): boolean {
     return Math.abs(saved - current) > 1e-6;
   }
   return saved !== current;
+}
+
+/** Whether a saved ROI exists and disagrees with the live ROI. */
+export function isRoiDiverged(saved: SensorROI | null | undefined, current: SensorROI | null | undefined): boolean {
+  if (!saved || !current) return false;
+  return saved.x !== current.x || saved.y !== current.y || saved.w !== current.w || saved.h !== current.h;
+}
+
+/** Whether the ROI needs saving — either no saved record, or saved disagrees with live. */
+export function roiNeedsSave(saved: SensorROI | null | undefined, current: SensorROI | null | undefined): boolean {
+  if (!current) return false;
+  if (!saved) return true;
+  return isRoiDiverged(saved, current);
 }
 
 /** Format a property value for display, respecting step precision. */
