@@ -18,7 +18,7 @@
   let {
     model,
     decimals,
-    numCharacters = 10,
+    numCharacters = 8,
     align = 'left',
     prefix,
     suffix,
@@ -44,7 +44,7 @@
 
 <div
   class={cn(
-    'flex h-ui-xs items-stretch rounded bg-element-bg',
+    'flex h-ui-xs min-w-0 items-stretch rounded bg-element-bg',
     disabled && 'pointer-events-none opacity-50',
     className
   )}
@@ -52,7 +52,7 @@
   <SpinBox {model} {decimals} {numCharacters} {align} {prefix} {suffix} {disabled} />
   <input
     type="range"
-    class="slider-input focus:border-focused flex-1 cursor-pointer appearance-none overflow-hidden rounded border border-input bg-element-bg transition-colors outline-none"
+    class="slider-input focus:border-focused min-w-16 flex-1 cursor-pointer appearance-none overflow-hidden rounded border border-input bg-element-bg transition-colors outline-none"
     min={sliderMin}
     max={sliderMax}
     step={sliderStep}

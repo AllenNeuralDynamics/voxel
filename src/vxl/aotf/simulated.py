@@ -1,5 +1,6 @@
 """Simulated AOTF driver for testing without hardware."""
 
+from src.vxl.aotf.base import BlankingMode
 from vxl.aotf.base import AOTF
 
 # Simulates an 8-channel AOTF (common MPDS configuration)
@@ -21,13 +22,8 @@ class SimulatedAotf(AOTF):
         default_input_mode: Default channel input mode ("internal" or "external").
     """
 
-    def __init__(
-        self,
-        uid: str,
-        blanking_mode: str = "external",
-        default_input_mode: str = "external",
-    ) -> None:
-        self._blanking_mode = blanking_mode
+    def __init__(self, uid: str, blanking_mode: str = "external", default_input_mode: str = "external") -> None:
+        self._blanking_mode: BlankingMode = BlankingMode(blanking_mode)
 
         # Initialize channel state
         self._channel_states: dict[int, bool] = dict.fromkeys(range(1, _NUM_CHANNELS + 1), False)
@@ -48,12 +44,12 @@ class SimulatedAotf(AOTF):
         return _NUM_CHANNELS
 
     @property
-    def blanking_mode(self) -> str:
+    def blanking_mode(self) -> BlankingMode:
         """Get the current blanking mode."""
         return self._blanking_mode
 
     @blanking_mode.setter
-    def blanking_mode(self, value: str) -> None:
+    def blanking_mode(self, value: BlankingMode) -> None:
         """Set the blanking mode."""
         self._blanking_mode = value
         self.log.debug("blanking mode set to %s", value)

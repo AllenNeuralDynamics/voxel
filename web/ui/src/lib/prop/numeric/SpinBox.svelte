@@ -18,7 +18,7 @@
   let {
     model,
     decimals,
-    numCharacters = 4,
+    numCharacters = 8,
     align = 'left',
     prefix,
     suffix,

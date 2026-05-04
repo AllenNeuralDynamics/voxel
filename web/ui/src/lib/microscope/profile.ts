@@ -3,6 +3,8 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { ChannelConfig, MicroscopeConfig } from '$lib/config';
 import { desaturateColor, wavelengthToColor } from '$lib/utils';
 
+import { ROLE_ORDER } from './role';
+
 // ── Types ──────────────────────────────────────────────────
 
 export type DeviceRole = 'camera' | 'laser' | 'filter' | 'aux' | 'waveform' | 'stage' | 'other';
@@ -21,16 +23,6 @@ export interface DeviceGroup {
 }
 
 // ── Standalone discovery / grouping functions ──────────────
-
-const ROLE_ORDER: Record<DeviceRole, number> = {
-  camera: 0,
-  laser: 1,
-  filter: 2,
-  aux: 3,
-  stage: 4,
-  waveform: 5,
-  other: 6
-};
 
 const AUX_COLORS = [
   '#a78bfa',

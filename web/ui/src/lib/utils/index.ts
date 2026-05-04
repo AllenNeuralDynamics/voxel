@@ -1,6 +1,6 @@
 export type { WithElementRef, WithoutChild, WithoutChildren, WithoutChildrenOrChild } from './cn';
 export { clampTopLeft, cn } from './cn';
-export { desaturateColor, isValidHex, wavelengthToColor } from './color';
+export { desaturateColor, isValidHex, wavelengthToColor, withOpacity } from './color';
 export { sanitizeString } from './helpers';
 export { IDBKeyVal } from './idb';
 export { computeAutoLevels } from './image';

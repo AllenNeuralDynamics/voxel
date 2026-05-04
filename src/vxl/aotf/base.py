@@ -1,11 +1,19 @@
 from abc import abstractmethod
+from enum import StrEnum
 
-from rigup import Device, describe, enumerated
+from rigup import Device, describe
 from vxl.device import DeviceType
 
 
 class ChannelCollisionError(Exception):
     """Raised when a device tries to register an already-claimed AOTF channel."""
+
+
+class BlankingMode(StrEnum):
+    """Blanking control mode for the AOTF."""
+
+    EXTERNAL = "external"
+    INTERNAL = "internal"
 
 
 class AOTF(Device):
@@ -85,15 +93,15 @@ class AOTF(Device):
     def num_channels(self) -> int:
         """Number of available AOTF channels."""
 
-    @enumerated(options=["internal", "external"])
+    @property
     @abstractmethod
     @describe(label="Blanking Mode")
-    def blanking_mode(self) -> str:
+    def blanking_mode(self) -> BlankingMode:
         """Blanking control mode. External uses TTL input for synchronization."""
 
     @blanking_mode.setter
     @abstractmethod
-    def blanking_mode(self, value: str) -> None:
+    def blanking_mode(self, value: BlankingMode) -> None:
         """Set the blanking mode."""
 
     @abstractmethod

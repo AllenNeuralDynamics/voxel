@@ -459,9 +459,11 @@ class YamlSessionCatalog(SessionCatalog):
         # Load source config
         if template is not None:
             source_config = self._load_template(template)
-        else:
+        elif session is not None:
             source_store = self.get_session_store(session)  # type: ignore[arg-type]
             source_config = source_store.load()
+        else:
+            raise ValueError("Exactly one of 'template' or 'session' must be provided")
 
         # Build new config
         stacks = {} if clear_stacks else source_config.stacks

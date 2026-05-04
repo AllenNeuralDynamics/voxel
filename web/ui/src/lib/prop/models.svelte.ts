@@ -1,4 +1,32 @@
 import type { Attachment } from 'svelte/attachments';
+import { SvelteSet } from 'svelte/reactivity';
+
+/**
+ * Shared coordinator for N models linked together. Each member holds a back-reference via
+ * its own `group` field; mutation goes exclusively through this class so the back-references
+ * stay in sync. When linked, member models' bounds/options merge across peers and patches
+ * propagate to all members.
+ */
+export class LinkGroup<M extends { group?: LinkGroup<M> }> {
+  members = $state(new SvelteSet<M>());
+
+  add(model: M): void {
+    if (model.group === this) return;
+    model.group?.remove(model);
+    this.members.add(model);
+    model.group = this;
+  }
+
+  remove(model: M): void {
+    if (!this.members.delete(model)) return;
+    if (model.group === this) model.group = undefined;
+  }
+
+  /** Detach every member; used when the owning UI surface unmounts or the active profile changes. */
+  dissolve(): void {
+    for (const m of [...this.members]) this.remove(m);
+  }
+}
 
 export interface PropertyInfo {
   name: string;
@@ -45,6 +73,13 @@ export abstract class BasePropModel<T> {
   // field-init clash and no per-subclass boilerplate.
   value: T = $state(undefined as T);
 
+  /**
+   * Active link group, or undefined when this model is standalone. Mutated via `LinkGroup.add/remove`.
+   * Typed `LinkGroup<this>` so subclasses get a concrete-class group automatically:
+   * `NumericModel.group` is `LinkGroup<NumericModel>`, `EnumeratedModel<T>.group` is `LinkGroup<EnumeratedModel<T>>`, etc.
+   */
+  group: LinkGroup<this> | undefined = $state(undefined);
+
   #onPatch?: (value: T) => void;
 
   constructor(value: T, opts: PropOptions<T> = {}) {
@@ -63,14 +98,24 @@ export abstract class BasePropModel<T> {
     this.value = snapshot.value as T;
   }
 
-  /** Set value locally and notify upstream via onPatch. */
+  /**
+   * Set value locally and notify upstream via onPatch.
+   * When linked, the value propagates to every peer in the group (each peer sets + publishes).
+   */
   patch(value: T): void {
-    this.value = value;
-    this._publish(value);
+    if (this.group) {
+      for (const peer of this.group.members) {
+        peer.value = value;
+        peer.publish(value);
+      }
+    } else {
+      this.value = value;
+      this.publish(value);
+    }
   }
 
   /** Notify upstream without mutating local state. Subclasses use this when value was set some other way. */
-  protected _publish(value: T): void {
+  protected publish(value: T): void {
     this.#onPatch?.(value);
   }
 }
@@ -101,20 +146,33 @@ export class BoolModel extends BasePropModel<boolean> {
  */
 export class EnumeratedModel<T extends string | number> extends BasePropModel<T> {
   // Same lie pattern as BasePropModel.value — placeholder set in constructor body.
-  options: T[] = $state([] as T[]);
+  #rawOptions: T[] = $state([] as T[]);
+
+  /** Effective options: raw, intersected with peers' raw options when linked. */
+  get options(): T[] {
+    if (!this.group) return this.#rawOptions;
+    const group = this.group;
+    return this.#rawOptions.filter((v) => {
+      for (const peer of group.members) {
+        if (peer === this) continue;
+        if (!peer.#rawOptions.includes(v)) return false;
+      }
+      return true;
+    });
+  }
 
   constructor(value: T, options: T[], opts: PropOptions<T> = {}) {
     super(value, opts);
-    this.options = options;
+    this.#rawOptions = options;
   }
 
   /** Sync value AND options from snapshot. */
   update(snapshot: PropSnapshot<unknown>): void {
     super.update(snapshot);
-    if (snapshot.options != null) this.options = snapshot.options as T[];
+    if (snapshot.options != null) this.#rawOptions = snapshot.options as T[];
   }
 
-  /** Patch to `value` if it's in current options; otherwise warn + no-op (mirrors backend). */
+  /** Patch to `value` if it's in current (merged) options; otherwise warn + no-op. */
   select(value: T): void {
     if (!this.options.includes(value)) {
       console.warn('[EnumeratedModel] value not in options:', value, this.options);
@@ -125,10 +183,11 @@ export class EnumeratedModel<T extends string | number> extends BasePropModel<T>
 
   /** Patch to next (1) or previous (-1) option, wrapping. No-op when options is empty. */
   cycle(direction: 1 | -1 = 1): void {
-    if (this.options.length === 0) return;
-    const i = this.options.indexOf(this.value);
-    const next = (i + direction + this.options.length) % this.options.length;
-    this.patch(this.options[next]);
+    const opts = this.options;
+    if (opts.length === 0) return;
+    const i = opts.indexOf(this.value);
+    const next = (i + direction + opts.length) % opts.length;
+    this.patch(opts[next]);
   }
 }
 
@@ -158,19 +217,57 @@ const DRAG_THRESHOLD_PX = 3;
  *   - `scrubber` — click-and-drag horizontal scrub; double-click snaps to `home`
  */
 export class NumericModel extends BasePropModel<number> {
-  min: number | null = $state(null);
-  max: number | null = $state(null);
-  step: number | null = $state(null);
+  // Raw bounds — what the backend told us. Public accessors below merge across linked peers.
+  #rawMin: number | null = $state(null);
+  #rawMax: number | null = $state(null);
+  #rawStep: number | null = $state(null);
+
   home: number | (() => number) | null = $state(null);
+
+  /** Effective minimum: raw, intersected with peers' raw mins (largest wins) when linked. */
+  get min(): number | null {
+    if (!this.group) return this.#rawMin;
+    let m: number | null = this.#rawMin;
+    for (const peer of this.group.members) {
+      if (peer === this) continue;
+      const pm = peer.#rawMin;
+      if (pm != null) m = m == null ? pm : Math.max(m, pm);
+    }
+    return m;
+  }
+
+  /** Effective maximum: raw, intersected with peers' raw maxes (smallest wins) when linked. */
+  get max(): number | null {
+    if (!this.group) return this.#rawMax;
+    let m: number | null = this.#rawMax;
+    for (const peer of this.group.members) {
+      if (peer === this) continue;
+      const pm = peer.#rawMax;
+      if (pm != null) m = m == null ? pm : Math.min(m, pm);
+    }
+    return m;
+  }
+
+  /** Effective step: raw, or the coarsest step across linked peers. */
+  get step(): number | null {
+    if (!this.group) return this.#rawStep;
+    let s: number | null = this.#rawStep;
+    for (const peer of this.group.members) {
+      if (peer === this) continue;
+      const ps = peer.#rawStep;
+      if (ps != null) s = s == null ? ps : Math.max(s, ps);
+    }
+    return s;
+  }
 
   #throttleMs: number;
   #throttleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(value: number, opts: NumericOptions = {}) {
     super(value, opts);
-    this.min = opts.min ?? null;
-    this.max = opts.max ?? null;
-    this.step = opts.step ?? null;
+    this.#rawMin = opts.min ?? null;
+    this.#rawMax = opts.max ?? null;
+    this.#rawStep = opts.step ?? null;
     this.home = opts.home ?? null;
     this.#throttleMs = opts.throttleMs ?? 100;
   }
@@ -199,30 +296,44 @@ export class NumericModel extends BasePropModel<number> {
    * Resolve, set, publish.
    * Default is immediate — cancels any pending throttle and fires now.
    * `{ throttled: true }` coalesces calls within `throttleMs`.
+   * When linked, the resolved value propagates to every peer in the group; throttling
+   * applies to NumericModel peers, non-numeric peers (theoretically possible since the
+   * group type is `BasePropModel<number>`) just get an immediate set + publish.
    */
   patch(value: number, opts: { throttled?: boolean } = {}): void {
-    this.stage(value);
+    // Resolve once at the entry — uses merged bounds when linked, raw bounds otherwise.
+    const resolved = this.resolve(value);
+    if (this.group) {
+      for (const peer of this.group.members) peer.#setAndPublish(resolved, opts);
+    } else {
+      this.#setAndPublish(resolved, opts);
+    }
+  }
+
+  /** Local-only: set this model's value and (throttled-)publish upstream. No group dispatch. */
+  #setAndPublish(value: number, opts: { throttled?: boolean }): void {
+    this.value = value;
     if (opts.throttled) {
       if (this.#throttleTimer !== null) return;
       this.#throttleTimer = setTimeout(() => {
         this.#throttleTimer = null;
-        this._publish(this.value);
+        this.publish(this.value);
       }, this.#throttleMs);
     } else {
       if (this.#throttleTimer !== null) {
         clearTimeout(this.#throttleTimer);
         this.#throttleTimer = null;
       }
-      this._publish(this.value);
+      this.publish(this.value);
     }
   }
 
   /** Sync value, min, max, step from authoritative source (e.g. backend echo). */
   update(snapshot: PropSnapshot<unknown>): void {
     super.update(snapshot);
-    if (snapshot.minimum !== undefined) this.min = snapshot.minimum;
-    if (snapshot.maximum !== undefined) this.max = snapshot.maximum;
-    if (snapshot.step !== undefined) this.step = snapshot.step;
+    if (snapshot.minimum !== undefined) this.#rawMin = snapshot.minimum;
+    if (snapshot.maximum !== undefined) this.#rawMax = snapshot.maximum;
+    if (snapshot.step !== undefined) this.#rawStep = snapshot.step;
   }
 
   /** Alt+wheel scrubs the value by `step`. Attach to any element to make it a gesture surface. */
@@ -349,20 +460,30 @@ export function createPropModel(snapshot: PropSnapshot<unknown>, onPatch?: (valu
   }
 }
 
+/**
+ * Three mutually-exclusive states a property can hold relative to a profile:
+ * - `saved`   — there's an active profile and a saved value for this property
+ * - `unsaved` — there's an active profile but no saved value yet (savable; pending)
+ * - `n/a`    — no active profile, or this device isn't part of it (not savable)
+ */
+export type SavedInfo = { kind: 'saved'; value: unknown } | { kind: 'unsaved' } | { kind: 'n/a' };
+
 /** A PropModel paired with its interface metadata and active-profile saved value. */
 export class Prop {
   readonly model: AnyPropModel;
   info: PropertyInfo = $state(undefined as never);
 
-  #getSaved?: () => unknown;
+  #getSavedInfo?: () => SavedInfo;
 
-  constructor(model: AnyPropModel, info: PropertyInfo, getSaved?: () => unknown) {
+  constructor(model: AnyPropModel, info: PropertyInfo, getSavedInfo?: () => SavedInfo) {
     this.model = model;
     this.info = info;
-    this.#getSaved = getSaved;
+    this.#getSavedInfo = getSavedInfo;
   }
 
-  saved: unknown = $derived(this.#getSaved?.());
+  savedInfo: SavedInfo = $derived(this.#getSavedInfo?.() ?? { kind: 'n/a' });
+
+  saved: unknown = $derived(this.savedInfo.kind === 'saved' ? this.savedInfo.value : undefined);
 
   get value(): unknown {
     return this.model.value;
@@ -377,10 +498,18 @@ export class Prop {
     return this.info.access;
   }
 
-  isDiverged: boolean = $derived.by(() => propValueDiverged(this.saved, this.model.value));
+  isDiverged: boolean = $derived.by(
+    () => this.savedInfo.kind === 'saved' && propValueDiverged(this.savedInfo.value, this.model.value)
+  );
+
+  needsSave: boolean = $derived.by(() => {
+    if (this.savedInfo.kind === 'unsaved') return true;
+    if (this.savedInfo.kind === 'saved') return this.isDiverged;
+    return false;
+  });
 
   applySaved(): void {
-    if (this.saved !== undefined) this.model.patch(this.saved as never);
+    if (this.savedInfo.kind === 'saved') this.model.patch(this.savedInfo.value as never);
   }
 }
 

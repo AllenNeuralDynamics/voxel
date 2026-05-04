@@ -5,9 +5,9 @@ rigup device framework.
 """
 
 from aaopto_aotf.aotf import MAX_POWER_DBM, MPDS
-from aaopto_aotf.device_codes import BlankingMode, InputMode
+from aaopto_aotf.device_codes import BlankingMode as MPDSBlankingMode, InputMode
 
-from vxl.aotf.base import AOTF
+from vxl.aotf.base import AOTF, BlankingMode
 
 
 class MpdsAotf(AOTF):
@@ -35,11 +35,11 @@ class MpdsAotf(AOTF):
     ) -> None:
         # Initialize hardware connection first
         self._mpds = MPDS(com_port)
-        self._blanking_mode = blanking_mode
         self._default_input_mode = default_input_mode
 
         # Set blanking mode
-        bmode = BlankingMode.INTERNAL if blanking_mode == "internal" else BlankingMode.EXTERNAL
+        blanking_mode_enum = BlankingMode(blanking_mode)
+        bmode = MPDSBlankingMode(blanking_mode_enum.value)
         self._mpds.set_blanking_mode(bmode)
 
         # Set all channels to the specified input mode
@@ -61,16 +61,15 @@ class MpdsAotf(AOTF):
         return self._mpds.num_channels
 
     @property
-    def blanking_mode(self) -> str:
+    def blanking_mode(self) -> BlankingMode:
         """Get the current blanking mode."""
-        return self._blanking_mode
+        return BlankingMode(self._mpds.get_blanking_mode().value)
 
     @blanking_mode.setter
-    def blanking_mode(self, value: str) -> None:
+    def blanking_mode(self, value: BlankingMode) -> None:
         """Set the blanking mode."""
-        bmode = BlankingMode.INTERNAL if value == "internal" else BlankingMode.EXTERNAL
+        bmode = MPDSBlankingMode(value.value)
         self._mpds.set_blanking_mode(bmode)
-        self._blanking_mode = value
         self.log.info(f"Blanking mode set to {value}")
 
     @property

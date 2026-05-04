@@ -9,11 +9,14 @@ import {
   NumericModel,
   Prop,
   type PropertyInfo,
-  type PropSnapshot
+  type PropSnapshot,
+  type SavedInfo
 } from '$lib/prop';
 import type { SensorROI } from '$lib/protocol/profile';
 import { wavelengthToColor } from '$lib/utils';
 import { parseVec2D, type Vec2D } from '$lib/utils/vec';
+
+import { type DeviceRole, resolveDeviceColor } from '../role';
 
 const _warnedTypedPropKeys = new SvelteSet<string>();
 
@@ -46,11 +49,34 @@ export interface DeviceSnapshot {
   error?: string;
 }
 
+/**
+ * Bundle of profile-derived state the scope hands to a device. Purely structural — no
+ * presentation fields. `role === undefined` ↔ device is not in the active profile.
+ * Per-prop SavedInfo is projected from this bundle by `Device.savedInfoFor()`.
+ * Accent color is a presentation projection on `Device`, derived from `role` + `channel?.emission`.
+ */
+export interface ProfileContext {
+  role: DeviceRole | undefined;
+  /** Channel that placed this device into its role; populated for any channel-derived role. */
+  channel?: { id: string; emission?: number; label?: string };
+  savedProps: Record<string, unknown> | undefined;
+}
+
 export interface DeviceHooks {
-  getSaved?: (propName: string) => unknown;
+  getProfileContext?: () => ProfileContext;
   onPatch: (propName: string, value: unknown) => void;
   onExecute: (command: string, args?: unknown[], kwargs?: Record<string, unknown>) => Promise<unknown>;
 }
+
+/** Camera-specific hooks — adds saved ROI lookup to the base device hook surface. */
+export interface CameraHooks extends DeviceHooks {
+  getSavedROI?: () => SensorROI | undefined;
+}
+
+const EMPTY_PROFILE_CONTEXT: ProfileContext = {
+  role: undefined,
+  savedProps: undefined
+};
 
 export class Device {
   id: string;
@@ -60,6 +86,15 @@ export class Device {
   props = new SvelteMap<string, Prop>();
 
   #hooks: DeviceHooks;
+
+  profileContext = $derived.by<ProfileContext>(() => this.#hooks.getProfileContext?.() ?? EMPTY_PROFILE_CONTEXT);
+
+  role = $derived.by<DeviceRole | undefined>(() => this.profileContext.role);
+
+  accentColor = $derived.by<string | undefined>(() => {
+    const ctx = this.profileContext;
+    return ctx.role ? resolveDeviceColor(ctx.role, ctx.channel?.emission) : undefined;
+  });
 
   constructor(id: string, hooks: DeviceHooks) {
     this.id = id;
@@ -103,8 +138,14 @@ export class Device {
       return;
     }
     const model = createPropModel(snapshot, (v) => this.#hooks.onPatch(name, v));
-    const getSaved = this.#hooks.getSaved ? () => this.#hooks.getSaved!(name) : undefined;
-    this.props.set(name, new Prop(model, info, getSaved));
+    this.props.set(name, new Prop(model, info, () => this.savedInfoFor(name)));
+  }
+
+  /** Project per-prop SavedInfo from the active profile's saved-props bundle. */
+  savedInfoFor(propName: string): SavedInfo {
+    const sp = this.profileContext.savedProps;
+    if (sp === undefined) return { kind: 'n/a' };
+    return Object.hasOwn(sp, propName) ? { kind: 'saved', value: sp[propName] } : { kind: 'unsaved' };
   }
 
   execute(command: string, args?: unknown[], kwargs?: Record<string, unknown>): Promise<unknown> {
@@ -225,6 +266,15 @@ export interface StreamInfoData {
 }
 
 export class Camera extends Device {
+  #cameraHooks: CameraHooks;
+
+  constructor(id: string, hooks: CameraHooks) {
+    super(id, hooks);
+    this.#cameraHooks = hooks;
+  }
+
+  savedROI = $derived.by<SensorROI | undefined>(() => this.#cameraHooks.getSavedROI?.());
+
   exposure = $derived.by(() => this.typedProp('exposure_time_ms', NumericModel));
   frameRate = $derived.by(() => this.typedProp('frame_rate_hz', NumericModel));
   frameSizeMb = $derived.by(() => this.typedProp('frame_size_mb', NumericModel));

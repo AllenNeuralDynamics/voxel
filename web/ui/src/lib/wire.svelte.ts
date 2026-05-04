@@ -121,9 +121,6 @@ export class Client {
   readonly #maxReconnectDelay: number;
   readonly #maxReconnectAttempts: number;
 
-  // Visibility-pause integration
-  #visibilityHandler: (() => void) | null = null;
-
   constructor(options: ClientOptions = {}) {
     const { apiUrl, ...connectionOpts } = options;
     const resolved = { ...DEFAULT_OPTIONS, ...connectionOpts };
@@ -154,13 +151,6 @@ export class Client {
           this.state = 'connected';
           this.reconnectAttempts = 0;
           this.#reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
-
-          // Auto-pause preview when tab is backgrounded (UX/battery)
-          this.#visibilityHandler = () => {
-            this.send(document.hidden ? 'preview.pause' : 'preview.resume', {});
-          };
-          document.addEventListener('visibilitychange', this.#visibilityHandler);
-
           resolve();
         };
 
@@ -197,10 +187,6 @@ export class Client {
     this.#clearReconnectTimer();
     this.#cleanupSocket();
     this.state = 'idle';
-    if (this.#visibilityHandler) {
-      document.removeEventListener('visibilitychange', this.#visibilityHandler);
-      this.#visibilityHandler = null;
-    }
   }
 
   /** Reset reconnect counters (e.g. after a manual reconnect). */
