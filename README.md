@@ -38,6 +38,27 @@ bun check                     # Type checking
 uv run vxl-qt                 # Optionally: uv run vxl-qt config.yaml
 ```
 
+## Development
+
+After the initial `uv sync`, install the git hooks:
+
+```bash
+uvx pre-commit install          # wires pre-commit and pre-push hooks
+uvx pre-commit run --all-files  # optional: one-time pass over the tree
+```
+
+`pre-commit` runs ruff (format + lint) and `uv-lock` sync. `pre-push` adds basedpyright and `pytest -m "not slow"`. Slow-flagged tests (ZMQ networking, zarr I/O) run only in CI. Use `git commit --no-verify` / `git push --no-verify` only for genuine WIP.
+
+Manual commands:
+
+```bash
+uv run ruff check
+uv run ruff format
+uv run basedpyright
+uv run pytest                # full suite
+uv run pytest -m "not slow"  # pre-push subset
+```
+
 ## vxl
 
 The core package that models a light sheet microscope as a coordinated **rig** of devices.
