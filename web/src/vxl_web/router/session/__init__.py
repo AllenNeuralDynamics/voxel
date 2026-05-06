@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from ome_zarr_writer.types import Compression, ScaleLevel
 
 from vxl.config import GridConfig
 from vxl_web.protocol import AppStatusUpdate
@@ -119,11 +120,14 @@ async def get_output(svc: SessionDep) -> dict[str, Any]:
 @router.patch("/output")
 async def update_output(request: OutputUpdateRequest, svc: SessionDep, app: AppDep) -> dict[str, Any]:
     output = svc.session.config.output
-    if request.store_path is not None:
-        output.store_path = Path(request.store_path)
-    if request.max_level is not None:
-        output.max_level = request.max_level  # type: ignore[assignment]
-    if request.compression is not None:
-        output.compression = request.compression  # type: ignore[assignment]
+    try:
+        if request.store_path is not None:
+            output.store_path = Path(request.store_path)
+        if request.max_level is not None:
+            output.max_level = ScaleLevel(int(request.max_level))
+        if request.compression is not None:
+            output.compression = Compression(request.compression)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     await app.broadcast_status()
     return output.model_dump(mode="json")

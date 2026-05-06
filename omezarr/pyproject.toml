@@ -45,8 +45,5 @@ pydantic-tensorstore = { git = "https://github.com/tlambert03/pydantic-tensorsto
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
 
-[tool.pyright]
-typeCheckingMode = "standard"
-
 [tool.ruff]
 line-length = 120

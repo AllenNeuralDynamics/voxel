@@ -202,5 +202,3 @@ class TestNumericIntPropertyDecorator:
         d = Device()
         d.value = 7
         assert d._v == 8
-
-

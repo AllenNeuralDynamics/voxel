@@ -686,20 +686,15 @@ class TestControllerValidation:
 class TestNiAnalogOutputHelpers:
     """Pure-Python parts of ``NiAnalogOutput`` testable without NI hardware."""
 
-    def test_can_hotswap_truth_table(self):
-        # Build a NiAnalogOutput without calling setup() so no hardware contact.
-        # We bypass the constructor since it would take a real NiDaqmx hub;
-        # we only want to exercise the can_hotswap method which is pure Python.
+    def test_can_hotswap_always_false(self):
+        """Pinned to False: see can_hotswap docstring on NI-DAQmx error -200547."""
         ao = NiAnalogOutput.__new__(NiAnalogOutput)
         ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
         ao._triggers = {}  # type: ignore[attr-defined]
-        old = _signals()
-        assert ao.can_hotswap(old, _signals()) is True
-        assert ao.can_hotswap(old, _signals(sample_rate=20_000.0)) is False
-        assert ao.can_hotswap(old, _signals(duration=0.02)) is False
-        assert ao.can_hotswap(old, _signals(rest_time=0.005)) is False
-        assert ao.can_hotswap(old, _signals(clock_src=ExternalClock(source="x"))) is False
-        assert ao.can_hotswap(old, _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
+        # Identical signals — would have been hotswappable before the buffer-error workaround.
+        assert ao.can_hotswap(_signals(), _signals()) is False
+        # Different waveforms — also False under the disabled-hotswap policy.
+        assert ao.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
 
     def test_can_hotswap_false_when_nothing_loaded(self):
         ao = NiAnalogOutput.__new__(NiAnalogOutput)

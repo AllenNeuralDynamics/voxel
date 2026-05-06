@@ -10,6 +10,8 @@ from rigup.transport import (
     ZMQTransportServer,
 )
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 async def transport_pair(free_tcp_address: TCPAddress):

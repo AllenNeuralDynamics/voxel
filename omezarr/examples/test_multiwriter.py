@@ -5,12 +5,15 @@ Demonstrates writing to multiple backends simultaneously (LogBackend + LogBacken
 """
 
 import numpy as np
+import pytest
 from rich import print
 from rich.table import Table
 
 from ome_zarr_writer import Dtype, OMEZarrWriter, ScaleLevel, UIVec3D, WriterConfig
 from ome_zarr_writer.backends.base import MultiBackend
 from ome_zarr_writer.backends.log import LogBackend
+
+pytestmark = pytest.mark.slow
 
 
 def test_multiwriter():
