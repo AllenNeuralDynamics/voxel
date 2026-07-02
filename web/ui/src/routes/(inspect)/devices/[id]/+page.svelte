@@ -2,35 +2,35 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { getSessionContext } from '$lib/context';
-  import DeviceBrowser from '$lib/microscope/device/DeviceBrowser.svelte';
+  import { getVoxelApp } from '$lib/model';
   import { cn, sanitizeString } from '$lib/utils';
 
-  import AnalogOutConfig from './AnalogOutConfig.svelte';
-  import CameraConfig from './CameraConfig.svelte';
-  import LaserConfig from './LaserConfig.svelte';
+  import AnalogOutInspector from './AnalogOutInspector.svelte';
+  import CameraInspector from './CameraInspector.svelte';
+  import DeviceBrowser from './DeviceBrowser.svelte';
+  import LaserInspector from './LaserInspector.svelte';
 
-  const session = getSessionContext();
-  const scope = $derived(session.scope);
+  const app = getVoxelApp();
+  const instrument = $derived(app.instrument);
   const deviceId = $derived(page.params.id!);
-  const device = $derived(scope.get(deviceId));
 
   // Redirect if this route points at a device that no longer exists
   $effect(() => {
-    if (!scope.devices.has(deviceId)) {
+    if (instrument && !instrument.devices.has(deviceId)) {
       goto(resolve('/' as const), { keepFocus: true, noScroll: true });
     }
   });
 </script>
 
-{#if scope.devices.has(deviceId)}
+{#if instrument && instrument.devices.has(deviceId)}
+  {@const device = instrument.devices.get(deviceId)}
   <section class="px-4">
-    {#if scope.cameras.has(deviceId)}
-      <CameraConfig microscope={scope} {deviceId} />
-    {:else if scope.lasers.has(deviceId)}
-      <LaserConfig microscope={scope} {deviceId} />
-    {:else if scope.analogOuts.has(deviceId)}
-      <AnalogOutConfig microscope={scope} {deviceId} />
+    {#if instrument.cameras.has(deviceId)}
+      <CameraInspector {instrument} {deviceId} />
+    {:else if instrument.lasers.has(deviceId)}
+      <LaserInspector {instrument} {deviceId} />
+    {:else if instrument.analogOuts.has(deviceId)}
+      <AnalogOutInspector {instrument} {deviceId} />
     {:else}
       <!-- Generic device config -->
       <div class="flex h-full flex-col gap-6">
@@ -39,7 +39,8 @@
           <span
             class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
             title={device?.connected ? 'Connected' : 'Disconnected'}
-          ></span>
+          >
+          </span>
         </div>
 
         {#if device?.connected}

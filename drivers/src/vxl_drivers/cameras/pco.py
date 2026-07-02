@@ -272,7 +272,7 @@ class PCOCamera(Camera):
 
     # ==================== Acquisition ====================
 
-    def _arm(self) -> None:
+    def _allocate_buffer(self) -> None:
         """Prepare the camera to acquire images."""
         # PCO uses 16-bit (2 bytes per pixel)
         frame_size_mb = self.frame_size_px.x * self.frame_size_px.y * 2 / (1024**2)
@@ -281,7 +281,7 @@ class PCOCamera(Camera):
         self.log.debug(f"Buffer set to {self._buffer_size_frames} frames")
 
     @describe(label="Start", desc="Start acquiring frames from the camera.")
-    def start(self, frame_count: int | None = None) -> None:
+    def _start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames.
 
         Note: PCO cameras start recording when record() is called in _arm().

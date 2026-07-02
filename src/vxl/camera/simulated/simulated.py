@@ -171,7 +171,7 @@ class SimulatedCamera(Camera):
     def _configure_trigger_polarity(self, polarity: TriggerPolarity) -> None:
         self.log.debug("trigger polarity set to %s", polarity)
 
-    def _arm(self) -> None:
+    def _allocate_buffer(self) -> None:
         self.log.debug("generating reference frame")
 
         # Generate reference frame at output dimensions (post-binning)
@@ -189,7 +189,7 @@ class SimulatedCamera(Camera):
         self.log.debug("reference frame: %s, dtype=%s", reference_frame.shape, reference_frame.dtype)
         self._reference_frame = reference_frame
 
-    def start(self, frame_count: int | None = None) -> None:
+    def _start(self, frame_count: int | None = None) -> None:
         if self._frame_count >= 0:
             self.log.warning("Camera is already running. Ignoring start command.")
             return
@@ -253,6 +253,6 @@ class SimulatedCamera(Camera):
         self.log.debug("stopped after %d frames", self._frame_count)
         self._frame_count = -1
 
-    def disarm(self) -> None:
+    def _free_buffer(self) -> None:
         """Release simulated camera resources."""
         self._reference_frame = None

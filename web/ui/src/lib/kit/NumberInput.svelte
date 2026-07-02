@@ -4,21 +4,22 @@
   export const numberInputVariants = tv({
     slots: {
       wrapper: 'inline-flex items-center',
-      input: 'm-0 border-none bg-transparent py-0 font-mono outline-none select-none',
-      prefix: 'shrink-0 cursor-default font-mono whitespace-nowrap text-fg-muted select-none',
-      suffix: 'pointer-events-none shrink-0 font-mono whitespace-nowrap text-fg-muted'
+      input:
+        'm-0 cursor-default border-none bg-transparent py-0 tabular-nums outline-none select-none focus:cursor-text',
+      prefix: 'shrink-0 cursor-default whitespace-nowrap text-fg-muted select-none',
+      suffix: 'pointer-events-none shrink-0 whitespace-nowrap text-fg-muted'
     },
     variants: {
       size: {
         xs: {
-          input: 'text-xs leading-none px-0.5',
-          prefix: 'text-xs leading-none px-0.5',
-          suffix: 'text-xs leading-none px-0.5'
+          input: 'leading-none px-0.5',
+          prefix: 'leading-none px-0.5',
+          suffix: 'leading-none px-0.5'
         },
         sm: {
-          input: 'text-xs leading-none px-1',
-          prefix: 'text-xs leading-none px-1',
-          suffix: 'text-xs leading-none px-1'
+          input: 'leading-none px-1',
+          prefix: 'leading-none px-1',
+          suffix: 'leading-none px-1'
         }
       }
     },
@@ -50,6 +51,7 @@
     numCharacters?: number;
     align?: 'left' | 'right';
     draggable?: boolean;
+    scrollable?: boolean;
     prefix?: string;
     suffix?: string;
     /** Double-click preset target. */
@@ -69,6 +71,7 @@
     numCharacters = 4,
     align = 'left',
     draggable = true,
+    scrollable = true,
     prefix,
     suffix,
     resetValue,
@@ -171,6 +174,26 @@
     editingText = (e.target as HTMLInputElement).value;
   }
 
+  function stepBy(direction: number, coarse: boolean) {
+    if (disabled) return;
+    const base = isEditing ? parseFloat(editingText) : value;
+    isEditing = false;
+    commit((Number.isNaN(base) ? value : base) + direction * (coarse ? gestureStep : step));
+  }
+
+  function handleFocus(e: FocusEvent) {
+    (e.currentTarget as HTMLInputElement).select();
+  }
+
+  // First click selects the whole value (type-to-replace); once focused, a further click places the caret to edit.
+  function handleInputMouseDown(e: MouseEvent) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (document.activeElement !== input) {
+      e.preventDefault();
+      input.focus();
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       commitEdit();
@@ -178,12 +201,15 @@
     } else if (e.key === 'Escape') {
       isEditing = false;
       (e.target as HTMLInputElement)?.blur();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      stepBy(e.key === 'ArrowUp' ? 1 : -1, e.shiftKey);
     }
   }
 
   // Alt-gated to avoid stealing the page scroll when the cursor passes over.
   function handleWheel(e: WheelEvent) {
-    if (!e.altKey || !draggable) return;
+    if (disabled || !scrollable || !e.altKey) return;
     e.preventDefault();
     const direction = e.deltaY < 0 ? 1 : -1;
     commit(value + direction * gestureStep);
@@ -211,6 +237,8 @@
     type="text"
     value={inputValue}
     oninput={handleInput}
+    onfocus={handleFocus}
+    onmousedown={handleInputMouseDown}
     onblur={commitEdit}
     onkeydown={handleKeydown}
     style:width="{numCharacters + 1}ch"

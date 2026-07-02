@@ -1,350 +1,428 @@
-import logging
-import time
-from collections.abc import Callable
-from concurrent.futures import Future
+"""`OMEZarrWriter`: a self-contained writer for one OME-Zarr dataset (a single stack + channel).
+
+Frames are ingested one at a time, batched into a ring, downsampled asynchronously, and flushed
+to per-level array writers. When `config.scratch` is set, each batch's shards are written locally
+and uploaded to the (S3) `config.target`, then evicted; otherwise they go straight to the target.
+
+Self-contained — the writer never reads system state. Batch depth (`batch_z`) comes from the
+config's policy knobs; the caller sizes the ring `slots` from its own RAM share.
+"""
+
+import math
+import threading
+from collections.abc import Generator
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from functools import cached_property
+from pathlib import Path
+from typing import Any, Self
 
 import numpy as np
-from pydantic import BaseModel, Field, computed_field
-from vxlib.vec import UIVec3D
+from cloudpathlib import S3Path
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from vxlib.vec import UIVec3D, UVec3D
 
-from ome_zarr_writer.backends.base import Backend
-from ome_zarr_writer.buffer import BufferSlot, BufferStage, BufferStatus, PyramidRingBuffer
-from ome_zarr_writer.types import ScaleLevel
+from ome_zarr_writer.array import ArrayWriter
+from ome_zarr_writer.buffer import BufferSlot, BufferStage, PyramidRingBuffer
+from ome_zarr_writer.dataset import (
+    Compression,
+    DownscaleType,
+    Dtype,
+    OmeZarrDataset,
+    ScaleLevel,
+    SpaceUnit,
+    Zarr3ArrayMeta,
+    Zarr3GroupMeta,
+)
+from ome_zarr_writer.transfer import TransferJob, run_s5cmd
 
-log = logging.getLogger(__name__)
+# Floor for the base (L0) chunk edge: chunks never fall below 64 voxels per axis, regardless of level.
+MIN_CHUNK_EDGE = 64
 
 
-class StreamStatus(BaseModel):
-    """Complete streaming acquisition status snapshot."""
+class WriterSettings(BaseModel):
+    """Output-format settings applied during acquisition. Broadcast uniformly to every camera so all
+    channels produce a coherent dataset; the camera conforms or raises. Mutable — it's an editable
+    fragment of the controller's bench state."""
 
-    # Performance metrics
-    fps: float = Field(..., description="Cumulative frames per second")
-    fps_inst: float = Field(..., description="Instantaneous FPS")
-    throughput_gbs: float = Field(..., description="Cumulative throughput (GB/s)")
-    throughput_gbs_inst: float = Field(..., description="Instantaneous throughput (GB/s)")
-    frames_acquired: int = Field(..., description="Total frames acquired")
+    model_config = ConfigDict(extra="forbid")
 
-    # Progress (from Pipeline)
-    global_z: int = Field(..., ge=0, description="Current global frame index")
-    total_frames: int = Field(..., gt=0, description="Total frames in volume")
-    frames_remaining: int = Field(..., ge=0, description="Frames remaining")
+    # sync-critical (determine batch_z)
+    max_level: ScaleLevel = Field(default=ScaleLevel.L7, description="Maximum pyramid downscale level")
+    shard_z_chunks: int = 1
+    batch_z_shards: int = 1
+    # coherence (uniform for a consistent dataset; camera conforms)
+    compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
+    downscale_type: DownscaleType = DownscaleType.MEAN
+    target_shard_gb: float = 1.0
 
-    # Batches (from Pipeline)
-    current_batch: int = Field(..., ge=0, description="Current batch index")
-    total_batches: int = Field(..., gt=0, description="Total number of batches")
-
-    # Buffers (from Pipeline)
-    current_slot: int = Field(..., ge=0, description="Active buffer slot index")
-    buffers: dict[int, BufferStatus] = Field(..., description="Status of each buffer slot")
-
-    # Timing
-    elapsed_time: float = Field(..., ge=0, description="Elapsed time (seconds)")
-    estimated_remaining: float | None = Field(None, description="Estimated time remaining (seconds)")
-
-    @computed_field
     @property
-    def progress_percent(self) -> float:
-        """Overall progress percentage."""
-        return (self.global_z / self.total_frames) * 100 if self.total_frames > 0 else 0.0
+    def chunk_shape(self) -> UIVec3D:
+        # Base (L0) chunk is a cube of edge 2^max_level, floored at MIN_CHUNK_EDGE.
+        edge = max(MIN_CHUNK_EDGE, self.max_level.factor)
+        return UIVec3D(z=edge, y=edge, x=edge)
 
-    @computed_field
     @property
-    def is_complete(self) -> bool:
-        """Whether all frames have been collected."""
-        return self.global_z >= self.total_frames
+    def batch_z(self) -> int:
+        return self.batch_z_shards * self.shard_z_chunks * self.max_level.factor
 
-    def summary(self) -> str:
-        """One-line summary for quick reporting.
 
-        Reports instantaneous rates rather than lifetime averages: `fps_inst`
-        and `throughput_gbs_inst` reflect the most recent status window
-        (~5 s), avoiding the artifact where cumulative averages decline
-        throughout a run simply because early "warm-up" batches were faster.
-        """
-        return (
-            f"Frame {self.global_z}/{self.total_frames} ({self.progress_percent:.1f}%) | "
-            f"Batch {self.current_batch}/{self.total_batches} | "
-            f"FPS: {self.fps_inst:.1f} | "
-            f"Throughput: {self.throughput_gbs_inst:.2f} GB/s"
+class WriterConfig(WriterSettings):
+    """Complete configuration for a writer run. Frozen — a constructed-then-read spec (its
+    ``dataset`` is cached, which immutability keeps sound)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # acquisition geometry
+    volume_shape: UIVec3D
+    voxel_size: UVec3D
+    voxel_unit: SpaceUnit = SpaceUnit.MICROMETER
+    dtype: Dtype = Dtype.UINT16
+    channel_index: int = 0
+
+    # storage
+    target: Path | S3Path
+    scratch: Path | None = None
+
+    @model_validator(mode="after")
+    def _validate_staging(self) -> Self:
+        if self.scratch is not None and not isinstance(self.target, S3Path):
+            raise ValueError("scratch (staging) requires a remote (s3://) target")
+        return self
+
+    @cached_property
+    def shard_shape(self) -> UIVec3D:
+        c_bytes = self.dtype.calc_nbytes(self.chunk_shape)
+        c_size_z, c_size_y, c_size_x = self.chunk_shape
+        target_bytes = int(self.target_shard_gb * (1024**3))
+        target_chunks = max(1, round(target_bytes / c_bytes))
+
+        zc = self.shard_z_chunks
+        per_layer = max(1, target_chunks // zc)
+        yc = max(1, round(math.sqrt(per_layer)))
+        xc = max(1, per_layer // yc)
+
+        v_shape = self.volume_shape
+        return UIVec3D(
+            z=min(zc, max(1, v_shape.z // c_size_z)) * c_size_z,
+            y=min(yc, max(1, v_shape.y // c_size_y)) * c_size_y,
+            x=min(xc, max(1, v_shape.x // c_size_x)) * c_size_x,
         )
+
+    @cached_property
+    def dataset(self) -> OmeZarrDataset:
+        """Resolve into the OME-Zarr v3 on-disk dataset description."""
+        arrays: dict[ScaleLevel, Zarr3ArrayMeta] = {}
+        for level in self.max_level.levels:
+            sv = level.scale(self.volume_shape)
+            ss = level.scale(self.shard_shape)
+            sc = level.scale(self.chunk_shape)
+            arrays[level] = Zarr3ArrayMeta.sharded(
+                shape=[1, sv.z, sv.y, sv.x],
+                shard_shape=[1, ss.z, ss.y, ss.x],
+                chunk_shape=[1, sc.z, sc.y, sc.x],
+                dtype=self.dtype,
+                compression=self.compression,
+                dimension_names=["c", "z", "y", "x"],
+            )
+
+        group = Zarr3GroupMeta.multiscale(
+            voxel_size=self.voxel_size,
+            voxel_unit=self.voxel_unit,
+            max_level=self.max_level,
+            downscale_type=self.downscale_type,
+        )
+
+        return OmeZarrDataset(group=group, arrays=arrays)
+
+
+class StagingConfig(BaseModel):
+    """Tuning for staged (scratch -> S3) upload."""
+
+    max_pending: int = 4  # batches uploaded-or-queued before the flush blocks (bounds scratch growth)
+    numworkers: int = 256  # s5cmd parallelism per invocation
+    retry_count: int = 10  # s5cmd per-object retries
+
+
+class Timing(BaseModel):
+    started: datetime | None = None
+    ended: datetime | None = None
+    error: str | None = None
+
+    def begin(self) -> None:
+        """Mark the step's start. Pair with `complete()` for steps that span scopes
+        (where `measure()` can't wrap a single block)."""
+        self.started = datetime.now(UTC)
+
+    def complete(self) -> None:
+        """Mark the step's end."""
+        self.ended = datetime.now(UTC)
+
+    def fail(self, error: str) -> None:
+        """Mark the step as failed with the given error message."""
+        self.error = error
+        self.ended = datetime.now(UTC)
+
+    @contextmanager
+    def measure(self) -> Generator[Self]:
+        """Time a synchronous block: marks start, then ends via `complete()` on success or
+        `fail()` on error. The two terminal states are mutually exclusive."""
+        self.begin()
+        try:
+            yield self
+        except Exception as e:
+            self.fail(f"{type(e).__name__}: {e}")
+            raise
+        else:
+            self.complete()
+
+    def track(self, future: Future[Any]) -> None:
+        """Time async work: mark started now, then end it — via `complete()` or `fail()` —
+        when `future` resolves. The async analog of `measure()`, so the end is marked at the
+        work's actual finish rather than whenever the caller later harvests it."""
+        self.begin()
+
+        def _on_done(done: Future[Any]) -> None:
+            if (exc := done.exception()) is not None:
+                self.fail(f"{type(exc).__name__}: {exc}")
+            else:
+                self.complete()
+
+        future.add_done_callback(_on_done)
+
+
+class BatchMetrics(BaseModel):
+    batch_idx: int
+    expected_frames: int
+    collected_frames: int = 0
+    flushed_bytes: int = 0
+    transfered_bytes: int = 0
+    collecting: Timing = Field(default_factory=Timing)
+    processing: Timing = Field(default_factory=Timing)
+    flushing: Timing = Field(default_factory=Timing)
+    transferring: Timing = Field(default_factory=Timing)
+    evicting: Timing = Field(default_factory=Timing)
 
     @classmethod
-    def empty(cls, target_frames: int) -> "StreamStatus":
-        return cls(
-            fps=0,
-            fps_inst=0,
-            throughput_gbs=0,
-            throughput_gbs_inst=0,
-            frames_acquired=0,
-            global_z=0,
-            total_frames=target_frames,
-            frames_remaining=target_frames,
-            estimated_remaining=0,
-            current_batch=0,
-            total_batches=1,
-            current_slot=0,
-            buffers={},
-            elapsed_time=0,
-        )
-
-
-class StreamMetrics:
-    """Performance tracker for streaming acquisition."""
-
-    def __init__(self, frame_bytes: int):
-        self.frame_bytes = frame_bytes
-        self.start_time = time.perf_counter()
-        self.frame_count = 0
-        self.total_bytes = 0
-        self._window_start = self.start_time
-        self._window_frames = 0
-        self._window_bytes = 0
-
-    def tick(self) -> None:
-        """Record a frame acquisition event."""
-        self.frame_count += 1
-        self.total_bytes += self.frame_bytes
-        self._window_frames += 1
-        self._window_bytes += self.frame_bytes
-
-    def reset_window(self) -> None:
-        """Reset instantaneous measurement window."""
-        self._window_start = time.perf_counter()
-        self._window_frames = 0
-        self._window_bytes = 0
-
-    @property
-    def elapsed(self) -> float:
-        return time.perf_counter() - self.start_time
-
-    @property
-    def fps(self) -> float:
-        return self.frame_count / self.elapsed if self.elapsed > 0 else 0.0
-
-    @property
-    def fps_inst(self) -> float:
-        elapsed = time.perf_counter() - self._window_start
-        return self._window_frames / elapsed if elapsed > 0 else 0.0
-
-    @property
-    def throughput_gbs(self) -> float:
-        return (self.total_bytes / 1e9) / self.elapsed if self.elapsed > 0 else 0.0
-
-    @property
-    def throughput_gbs_inst(self) -> float:
-        elapsed = time.perf_counter() - self._window_start
-        return (self._window_bytes / 1e9) / elapsed if elapsed > 0 else 0.0
+    def create_many(cls, total_frames: int, batch_z: int) -> list[Self]:
+        n_batches = total_frames // batch_z + 1
+        return [cls(batch_idx=i, expected_frames=min(batch_z, total_frames - i * batch_z)) for i in range(n_batches)]
 
 
 class OMEZarrWriter:
+    """Writes one multiscale OME-Zarr dataset (a single stack + channel) from a
+    frame stream. Self-contained: owns its ring of buffer slots, a write pool, and
+    one array writer per pyramid level for the dataset's lifetime.
+
+    Frames are ingested one at a time via `add_frame`; each fills the current ring
+    slot until a batch is complete, the slot downsamples asynchronously, and the
+    result is flushed to every pyramid level. `close` drains the final (partial)
+    batch and releases all resources.
+
+        writer = OMEZarrWriter(config, slots=6)
+        for frame in frames:
+            writer.add_frame(frame)
+        writer.close()
+
+    When `config.scratch` is set, shards are written locally there and uploaded to the
+    (S3) `config.target` per batch on a background upload pool (s5cmd), then the local
+    copies are evicted; otherwise they are written straight to `config.target`.
+    """
+
     def __init__(
         self,
-        backend: Backend,
-        channel_index: int = 0,
-        slots: int = 6,
-        ring_buffer: PyramidRingBuffer | str = PyramidRingBuffer.PROCESS,
-        status_callback: Callable[[StreamStatus], None] | None = None,
-        status_interval: float = 5.0,
+        config: WriterConfig,
+        *,
+        backend: ArrayWriter.Backend = ArrayWriter.Backend.TS,
+        ring_buffer: PyramidRingBuffer = PyramidRingBuffer.PROCESS,
+        slots: int = 4,  # ring depth = max batches in flight (caller sizes from its RAM share)
+        staging: StagingConfig = StagingConfig(),  # upload tuning; used only when config.scratch is set
     ) -> None:
-        """Initialize the streaming writer.
+        self._config = config
+        self._channel = config.channel_index
+        self._volume_z = config.volume_shape.z
+        self._levels = list(config.dataset.arrays)
+        self._slot_count = slots
+        self._shard_z = config.dataset.shard_shape.z
+        self._batch_z = config.batch_z
 
-        Args:
-            backend: Backend instance (contains cfg)
-            channel_index: Channel index this writer writes to in the (C, Z, Y, X) array
-            slots: Number of buffer slots in the ring (minimum 2)
-            buffer_mode: Ring-buffer factory — accepts a `PyramidRingBuffer`
-                member or the equivalent string ("threaded" | "process"). Cast
-                to the enum immediately at the start of __init__.
-            status_callback: Called periodically with status updates.
-                           Default: prints to console with rich formatting.
-                           None: silent (no auto-reporting).
-            status_interval: How often to call status_callback (seconds)
-        """
-        if slots < 1:
-            raise ValueError("Ring buffer requires at least 1 slot")
-
-        self.backend = backend
-        self.channel_index = channel_index
-        self.slots = slots
-        self.buf = PyramidRingBuffer(ring_buffer)
-
-        # Create buffer shape for each batch
-        self.batch_shape = UIVec3D(
-            z=self.cfg.batch_z,
-            y=self.cfg.volume_shape.y,
-            x=self.cfg.volume_shape.x,
-        )
-
-        # Initialize ring of buffers via the mode's factory.
-        self.buffers = self.buf(
+        # The ring of RAM slots (each collects one batch, then downsamples it) and a
+        # pool that fans this dataset's per-level writes. Slots are sized to the batch's
+        # frame geometry (batch_z, y, x).
+        self._slots = ring_buffer(
             slots=slots,
-            prefix="ring",
-            shape_l0=self.batch_shape,
-            max_level=self.cfg.max_level,
-            dtype=self.cfg.dtype,
+            prefix=f"ozw_{id(self):x}",  # SharedMemory names must be process-unique
+            shape_l0=UIVec3D(z=self._batch_z, y=config.volume_shape.y, x=config.volume_shape.x),
+            max_level=config.max_level,
+            dtype=config.dtype,
         )
+        self._write_pool = ThreadPoolExecutor(max_workers=max(len(self._levels), 1))
 
-        # Track state. Batch assignment is lazy — `_batch_number` names the
-        # next batch to assign, and `add_frame` assigns it to the current slot
-        # on the first frame of each batch. This keeps the current slot in IDLE
-        # state between batches so `ready_for_batch` reflects real capacity.
-        self._global_z = 0
+        # Shards are written to scratch when staging, else straight to target. Author the
+        # dataset metadata at the write root (so the array writers can open) and — when
+        # staging — also at the target so the uploaded shards form a valid dataset there.
+        write_root = config.scratch or config.target
+        config.dataset.write_metadata(write_root)
+        if config.scratch is not None:
+            config.dataset.write_metadata(config.target)
+
+        self._level_writers: dict[ScaleLevel, ArrayWriter] = {}
+        for level in self._levels:
+            writer = backend()  # construct the backend instance
+            writer.open(write_root / str(level.value))  # open the (just-described) per-level array
+            self._level_writers[level] = writer
+
+        # Staged upload: one background thread (max_workers=1 → groups upload serially; s5cmd
+        # parallelizes within a group) built only when staging. A semaphore bounds the batches
+        # in flight so the flush (and thus the camera) blocks before scratch grows unbounded.
+        self._staging = staging
+        self._upload_pool = ThreadPoolExecutor(max_workers=1) if config.scratch is not None else None
+        self._upload_slots = threading.Semaphore(staging.max_pending)
+        self._uploads: list[Future[None]] = []
+
+        # Pipeline state. Batch assignment is lazy — the first frame of each batch
+        # promotes the current slot from IDLE to COLLECTING (see `add_frame`).
+        self._frames_added = 0
+        self._next_batch_idx = 0
         self._current_slot = 0
-        self._batch_number = 0
-        self._pending: dict[int, Future] = {}  # slot_idx → processing future
-
-        # Status reporting
-        self._status_callback = status_callback or self._default_status_callback
-        self._status_interval = status_interval
-        self._last_status_time = time.perf_counter()
-
-        # Performance tracker
-        frame_bytes = backend.cfg.volume_shape.y * backend.cfg.volume_shape.x * backend.cfg.dtype.dtype.itemsize
-        self._perf = StreamMetrics(frame_bytes)
-
-    @property
-    def cfg(self):
-        return self.backend.cfg
-
-    def _default_status_callback(self, status: StreamStatus) -> None:
-        log.info(status.summary())
-
-    def _flush_slot(self, slot_idx: int) -> None:
-        """Wait for a slot's processing to complete and flush to backend."""
-        if slot_idx not in self._pending:
-            return
-        future = self._pending.pop(slot_idx)
-        future.result()  # wait for downsampling
-        buf = self.buffers[slot_idx]
-        success = self.backend.write_batch(buf, channel_index=self.channel_index)
-        if not success:
-            log.warning("batch %d write failed", buf.batch_idx)
-
-    @property
-    def current_buffer(self) -> BufferSlot:
-        return self.buffers[self._current_slot]
+        self._inflight: dict[int, Future] = {}  # slot index → its downsampling future, until flushed
+        self._batches = BatchMetrics.create_many(self._volume_z, self._batch_z)  # one record per batch, by index
 
     @property
     def ready_for_batch(self) -> bool:
-        """Whether at least one ring slot is IDLE and can accept a new batch."""
-        return any(buf.stage == BufferStage.IDLE for buf in self.buffers)
+        """Whether the next batch can be collected without blocking: at least one ring slot is IDLE."""
+        return any(slot.stage == BufferStage.IDLE for slot in self._slots)
 
     @property
-    def latest_frame(self) -> np.ndarray:
-        if self._global_z == 0:
-            raise RuntimeError("No frames have been added yet")
-        buf = self.current_buffer
-        z_in_buffer = buf.filled_l0 - 1
-        return buf.get_volume(ScaleLevel.L0)[z_in_buffer, :, :]
+    def batches(self) -> list[BatchMetrics]:
+        return self._batches
 
     def add_frame(self, frame: np.ndarray) -> None:
-        """Add a frame to the pipeline.
-
-        Automatically tracks performance, reports status, rotates buffers,
-        and triggers async downsampling.
-        """
-        if self._global_z >= self.cfg.volume_shape.z:
-            raise RuntimeError(f"Volume complete: cannot add more frames ({self._global_z}/{self.cfg.volume_shape.z})")
-
-        buf = self.current_buffer
-        # Lazy batch assignment: first frame of a batch promotes the slot from
-        # IDLE to COLLECTING. Keeps the post-rotation window observable as IDLE
-        # so cross-camera readiness checks stay honest.
-        if buf.stage == BufferStage.IDLE:
-            buf.assign_batch(self._batch_number)
-            self._batch_number += 1
-        z_in_buffer = self._global_z % self.cfg.batch_z
-
-        buf.add_frame(frame, z_in_buffer)
-        self._global_z += 1
-        self._perf.tick()
-
-        # Auto-report status
-        now = time.perf_counter()
-        if now - self._last_status_time >= self._status_interval:
-            if self._status_callback:
-                self._status_callback(self.get_status())
-            self._last_status_time = now
-            self._perf.reset_window()
-
-        # Buffer full — start processing and rotate
-        if self._global_z % self.cfg.batch_z == 0 and self._global_z < self.cfg.volume_shape.z:
-            future = buf.start_processing()
-            self._pending[self._current_slot] = future
-            self._rotate_buffer()
-
-    def _rotate_buffer(self) -> None:
-        """Rotate to the next buffer slot, flushing any in-flight work there.
-
-        Does NOT assign a new batch to the new current slot — that happens
-        lazily in `add_frame` when the first frame of the next batch arrives.
-        """
-        next_slot = (self._current_slot + 1) % self.slots
-
-        # If next slot has a pending future, flush it first
-        if next_slot in self._pending:
-            self._flush_slot(next_slot)
-
-        self._current_slot = next_slot
-
-    def get_buffer_for_batch(self, batch_idx: int) -> BufferSlot | None:
-        """Get the buffer containing a specific batch, if available."""
-        for buf in self.buffers:
-            if buf.batch_idx == batch_idx and buf.stage == BufferStage.IDLE:
-                return buf
-        return None
+        """Add one frame to the pipeline. On a batch boundary, kicks off async
+        downsampling for the filled slot and rotates to the next one."""
+        if self._frames_added >= self._volume_z:
+            raise RuntimeError(f"volume complete: {self._frames_added}/{self._volume_z} frames")
+        slot = self._slots[self._current_slot]
+        if slot.stage == BufferStage.IDLE:  # first frame of a new batch
+            slot.assign_batch(self._next_batch_idx)
+            self._batches[self._next_batch_idx].collecting.begin()
+            self._next_batch_idx += 1
+        assert slot.batch_idx is not None  # assigned above (or on a prior frame of this batch)
+        slot.add_frame(frame, self._frames_added % self._batch_z)
+        self._batches[slot.batch_idx].collected_frames += 1
+        self._frames_added += 1
+        if self._frames_added % self._batch_z == 0 and self._frames_added < self._volume_z:
+            self._start_processing(slot)
+            # Rotate to the next slot, flushing it first if it's still in flight — the
+            # natural backpressure once all `slots` are occupied (the camera blocks here).
+            nxt = (self._current_slot + 1) % self._slot_count
+            if nxt in self._inflight:
+                self._flush_slot(nxt)
+            self._current_slot = nxt
+            if self._upload_pool is not None:
+                self._reap_uploads()  # surface a failed upload promptly rather than acquiring into a doomed run
 
     def close(self) -> None:
-        """Close all buffers, flush pending, and clean up resources."""
-        # Start processing the current partial buffer if it has data
-        buf = self.current_buffer
-        if buf.filled_l0 > 0 and buf.stage == BufferStage.COLLECTING:
-            future = buf.start_processing()
-            self._pending[self._current_slot] = future
-
-        # Flush all pending slots
-        for slot_idx in list(self._pending):
+        """Drain the final (often partial) batch, finish any uploads, then release the
+        array writers, upload pool, ring slots, and write pool. Raises if an upload failed."""
+        slot = self._slots[self._current_slot]
+        if slot.filled_l0 > 0 and slot.stage == BufferStage.COLLECTING:  # the final partial batch
+            self._start_processing(slot)
+        for slot_idx in list(self._inflight):
             self._flush_slot(slot_idx)
+        for writer in self._level_writers.values():
+            writer.close()
+        self._level_writers.clear()
 
-        # Clean up
-        for buf in self.buffers:
-            buf.close()
-        self.backend._finalize()
+        # Finish uploads before tearing down. Collect the first failure but always complete
+        # teardown, then raise — so a failed upload never leaks the upload pool or slots.
+        upload_error = self._drain_uploads()
+        if self._upload_pool is not None:
+            self._upload_pool.shutdown(wait=True)
+        for slot in self._slots:
+            slot.close()
+        self._write_pool.shutdown(wait=True)
+        if upload_error is not None:
+            raise upload_error
 
-    def __enter__(self):
-        return self
+    def _start_processing(self, slot: BufferSlot) -> None:
+        """Close a filled slot's `collecting` span and kick off its async downsample.
+        `track` opens the `processing` span and completes it when the downsample future
+        resolves — so its timing reflects the actual compute, not the later harvest."""
+        assert slot.batch_idx is not None  # the slot has been collecting a batch
+        batch = self._batches[slot.batch_idx]
+        batch.collecting.complete()
+        future = slot.start_processing()
+        self._inflight[self._current_slot] = future
+        batch.processing.track(future)
 
-    def __exit__(self, *args):
-        self.close()
+    def _flush_slot(self, slot_idx: int) -> None:
+        """Wait for a slot's downsampling to finish, write every pyramid level, and — when
+        staging — queue the batch's freshly-written shards for upload."""
+        self._inflight.pop(slot_idx).result()  # wait for downsampling (processing span closed by its track callback)
+        slot = self._slots[slot_idx]
+        assert slot.batch_idx is not None  # assign_batch runs before any frame is added
+        batch = self._batches[slot.batch_idx]
+        z_start = slot.batch_idx * self._batch_z
+        z_end = min(z_start + self._batch_z, self._volume_z)
+        with batch.flushing.measure():
+            writes = [self._write_pool.submit(self._write_level, level, slot, z_start, z_end) for level in self._levels]
+            batch.flushed_bytes = sum(write.result() for write in writes)
+        if self._upload_pool is not None:
+            jobs = self._transfer_jobs(z_start, z_end)
+            self._upload_slots.acquire()  # blocks the flush (→ camera) once max_pending are in flight
+            self._uploads.append(self._upload_pool.submit(self._upload_and_evict, jobs, batch))
 
-    def get_status(self) -> StreamStatus:
-        buffer_statuses = {i: buf.get_status() for i, buf in enumerate(self.buffers)}
+    def _write_level(self, level: ScaleLevel, slot: BufferSlot, z_start: int, z_end: int) -> int:
+        """Write one pyramid level's rows for a batch. The `[: z1 - z0]` slice keeps
+        a partial tail batch honest — only its real rows are written, at every level."""
+        z0, z1 = z_start // level.factor, z_end // level.factor
+        return self._level_writers[level].write_slice(self._channel, z0, slot.get_volume(level)[: z1 - z0])
 
-        estimated_remaining = None
-        if self._perf.fps > 0:
-            frames_left = self.cfg.volume_shape.z - self._global_z
-            estimated_remaining = frames_left / self._perf.fps
+    def _transfer_jobs(self, z_start: int, z_end: int) -> list[TransferJob]:
+        """The batch's shards as upload jobs: scratch source -> target destination, across
+        every pyramid level (`dataset.shards` enumerates them; z is in L0 shard indices)."""
+        scratch = self._config.scratch
+        target = self._config.target
+        assert scratch is not None and isinstance(target, S3Path)  # staging requires an s3:// target
+        z_shards = range(z_start // self._shard_z, math.ceil(z_end / self._shard_z))
+        return [
+            TransferJob(src=shard.at(scratch), dest=shard.at(target))
+            for shard in self._config.dataset.shards(channels=[self._channel], z_range=z_shards)
+        ]
 
-        return StreamStatus(
-            fps=self._perf.fps,
-            fps_inst=self._perf.fps_inst,
-            throughput_gbs=self._perf.throughput_gbs,
-            throughput_gbs_inst=self._perf.throughput_gbs_inst,
-            frames_acquired=self._perf.frame_count,
-            global_z=self._global_z,
-            total_frames=self.cfg.volume_shape.z,
-            frames_remaining=self.cfg.volume_shape.z - self._global_z,
-            current_batch=self._batch_number,
-            total_batches=self.cfg.num_batches,
-            current_slot=self._current_slot,
-            buffers=buffer_statuses,
-            elapsed_time=self._perf.elapsed,
-            estimated_remaining=estimated_remaining,
-        )
+    def _upload_and_evict(self, jobs: list[TransferJob], batch: BatchMetrics) -> None:
+        """Upload one batch's shards (s5cmd), then delete the local copies — each step
+        measured into `batch`. Runs on the upload pool. A failed upload skips eviction
+        (sources are kept) and surfaces via the future."""
+        try:
+            with batch.transferring.measure():
+                bytes_up = run_s5cmd(jobs, numworkers=self._staging.numworkers, retry_count=self._staging.retry_count)
+                batch.transfered_bytes = bytes_up
+            with batch.evicting.measure():
+                for job in jobs:
+                    if job.src.exists():
+                        job.src.unlink()
+        finally:
+            self._upload_slots.release()
 
-    def __repr__(self) -> str:
-        return (
-            f"OMEZarrWriter(slots={self.slots}, "
-            f"batch_shape={self.batch_shape}, "
-            f"progress={self._global_z}/{self.cfg.volume_shape.z})"
-        )
+    def _reap_uploads(self) -> None:
+        """Re-raise the first settled-and-failed upload; keep the unsettled ones."""
+        pending: list[Future[None]] = []
+        for upload in self._uploads:
+            if upload.done():
+                upload.result()  # re-raises a failed upload → aborts the acquisition
+            else:
+                pending.append(upload)
+        self._uploads = pending
+
+    def _drain_uploads(self) -> BaseException | None:
+        """Block on every outstanding upload; return the first failure seen (or None)."""
+        error: BaseException | None = None
+        for upload in self._uploads:
+            exc = upload.exception()  # blocks until the upload settles
+            if error is None and exc is not None:
+                error = exc
+        self._uploads.clear()
+        return error

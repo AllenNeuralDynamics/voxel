@@ -3,8 +3,7 @@
   import { onMount } from 'svelte';
 
   import { Bargraph } from '$lib/icons';
-  import type { PreviewManager } from '$lib/preview';
-  import { channelBoundingBox, compositeTiledFrames } from '$lib/preview';
+  import { channelBoundingBox, compositeTiledFrames, type Preview } from '$lib/model';
   import { clampTopLeft } from '$lib/utils';
 
   import Histogram from './Histogram.svelte';
@@ -15,8 +14,9 @@
   let containerEl: HTMLDivElement;
 
   interface Props {
-    previewer: PreviewManager;
-    fov: { width: number; height: number };
+    previewer: Preview;
+    /** Field of view as a `[width, height]` µm tuple (`instrument.fov`), or null when unavailable. */
+    fov: [number, number] | null;
   }
 
   let { previewer, fov }: Props = $props();
@@ -200,7 +200,8 @@
 
   let scaleBar = $derived.by(() => {
     const { maxW, maxH } = channelBoundingBox(previewer.channels);
-    if (maxW <= 0 || maxH <= 0 || fov.width <= 0 || fov.height <= 0) return null;
+    const [fovW, fovH] = fov ?? [0, 0];
+    if (maxW <= 0 || maxH <= 0 || fovW <= 0 || fovH <= 0) return null;
 
     const cw = containerSize.width;
     const ch = containerSize.height;
@@ -213,7 +214,7 @@
     const drawW = canvasAspect > vpAspect ? ch * vpAspect : cw;
 
     // µm per CSS pixel
-    const umPerPx = (vp.w * fov.width) / drawW;
+    const umPerPx = (vp.w * fovW) / drawW;
     if (!Number.isFinite(umPerPx) || umPerPx <= 0) return null;
 
     // Target bar: ~20% of canvas width

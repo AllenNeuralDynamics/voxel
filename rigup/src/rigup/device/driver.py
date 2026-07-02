@@ -15,7 +15,6 @@ from .schema import (
     Command,
     CommandRequest,
     DeviceInterface,
-    ErrorMsg,
     PropResults,
     Result,
     Results,
@@ -105,7 +104,7 @@ class DeviceController[D: "Device"]:
 
     async def execute_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         if command not in self._commands:
-            return Result(ErrorMsg(msg=f"Unknown command: {command}"))
+            return Result.err(f"Unknown command: {command}")
 
         cmd = self._commands[command]
         self.log.debug("", extra={"action": "cmd.execute", "target": command})
@@ -114,10 +113,10 @@ class DeviceController[D: "Device"]:
                 result = await cmd(*args, **kwargs)
             else:
                 result = await self._run_sync(cmd, *args, **kwargs)
-            return Result(result)
+            return Result.ok(result)
         except Exception as e:
             self.log.exception("", extra={"action": "cmd.fail", "target": command})
-            return Result(ErrorMsg(msg=str(e)))
+            return Result.err(str(e))
 
     async def execute_commands(self, commands: list[CommandRequest]) -> Results:
         """Execute multiple commands and collect results.
@@ -133,7 +132,7 @@ class DeviceController[D: "Device"]:
         for i, cmd_req in enumerate(commands):
             key = f"{i}:{cmd_req.attr}"
             if cmd_req.attr not in self._commands:
-                results[key] = Result(ErrorMsg(msg=f"Unknown command: {cmd_req.attr}"))
+                results[key] = Result.err(f"Unknown command: {cmd_req.attr}")
                 continue
             cmd = self._commands[cmd_req.attr]
             self.log.debug("", extra={"action": "cmd.execute", "target": cmd_req.attr})
@@ -142,10 +141,10 @@ class DeviceController[D: "Device"]:
                     result = await cmd(*cmd_req.args, **cmd_req.kwargs)
                 else:
                     result = await self._run_sync(cmd, *cmd_req.args, **cmd_req.kwargs)
-                results[key] = Result(result)
+                results[key] = Result.ok(result)
             except Exception as e:
                 self.log.exception("", extra={"action": "cmd.fail", "target": cmd_req.attr})
-                results[key] = Result(ErrorMsg(msg=str(e)))
+                results[key] = Result.err(str(e))
         return Results(results=results)
 
     async def get_props(self, *props: str) -> PropResults:
@@ -156,9 +155,9 @@ class DeviceController[D: "Device"]:
             for name in props_to_get:
                 try:
                     target = self._device if name in self._device_props else self
-                    results[name] = Result(PropertyModel.from_value(getattr(target, name)))
+                    results[name] = Result.ok(PropertyModel.from_value(getattr(target, name)))
                 except Exception as e:
-                    results[name] = Result(ErrorMsg(msg=str(e)))
+                    results[name] = Result.err(str(e))
             return PropResults(results=results)
 
         return await self._run_sync(_get)
@@ -173,9 +172,9 @@ class DeviceController[D: "Device"]:
                 try:
                     target = self._device if name in self._device_props else self
                     setattr(target, name, value)
-                    results[name] = Result(PropertyModel.from_value(getattr(target, name)))
+                    results[name] = Result.ok(PropertyModel.from_value(getattr(target, name)))
                 except Exception as e:
-                    results[name] = Result(ErrorMsg(msg=str(e)))
+                    results[name] = Result.err(str(e))
             return PropResults(results=results)
 
         return await self._run_sync(_set)

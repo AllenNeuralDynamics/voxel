@@ -56,7 +56,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
         upper_limit: float = 25000.0,
         speed: float = 1000.0,
         acceleration: float = 100000.0,
-        has_ttl_stepper: bool = False,
+        has_ttl_stepper: bool = True,
     ):
         super().__init__(uid=uid, units=units)
         self._position = 0.0
@@ -256,7 +256,11 @@ class SimulatedContinuousAxis(ContinuousAxis):
     # Capabilities ___________________________________________________________________________________________________
 
     def get_ttl_stepper(self) -> TTLStepper | None:
-        """Return a TTLStepper capability if this is a Z axis, otherwise None."""
+        """Return this axis's TTL stepper, or None if constructed with ``has_ttl_stepper=False``.
+
+        Defaults to having one — mirroring the real ASI ``TigerLinearAxis``, where every linear axis
+        carries a stepper — so a simulated scanning axis supports step-and-shoot acquisition by default.
+        """
         return self._ttl_stepper
 
 

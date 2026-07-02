@@ -3,7 +3,7 @@
   import { SvelteSet } from 'svelte/reactivity';
 
   import { Check, FilterVariant } from '$lib/icons';
-  import type { ColormapCatalog } from '$lib/preview';
+  import type { ColormapCatalog } from '$lib/model';
   import { isValidHex } from '$lib/utils';
 
   interface Props {

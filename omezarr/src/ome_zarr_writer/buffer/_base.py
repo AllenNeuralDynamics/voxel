@@ -8,7 +8,7 @@ import numpy as np
 from pydantic import BaseModel, Field, computed_field
 from vxlib.vec import UIVec3D
 
-from ome_zarr_writer.types import Dtype, ScaleLevel
+from ome_zarr_writer.dataset import Dtype, ScaleLevel
 
 
 class BufferStage(IntEnum):

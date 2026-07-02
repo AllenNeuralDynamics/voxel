@@ -1,7 +1,7 @@
 <script lang="ts">
+  import type { NumericModel } from '$lib/model';
   import { cn } from '$lib/utils';
 
-  import type { NumericModel } from '../models.svelte';
   import SpinBox from './SpinBox.svelte';
 
   interface Props {

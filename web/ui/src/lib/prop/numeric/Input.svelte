@@ -1,9 +1,8 @@
 <script lang="ts">
   import type { HTMLInputAttributes } from 'svelte/elements';
 
+  import type { NumericModel } from '$lib/model';
   import { cn } from '$lib/utils';
-
-  import type { NumericModel } from '../models.svelte';
 
   type OwnProps = {
     model: NumericModel;

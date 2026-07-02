@@ -1,19 +1,19 @@
 <script lang="ts">
   import { Pane, PaneGroup } from 'paneforge';
 
-  import { getSessionContext } from '$lib/context';
   import { Crosshair, ImageLight, TrashCanOutline } from '$lib/icons';
   import { Button, ContextMenu, Rename } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import type { Snapshot } from '$lib/preview/snapshots.svelte';
-  import { cn, createPaneMinSize } from '$lib/utils';
+  import { getVoxelApp, type Snapshot } from '$lib/model';
+  import { cn, createPaneSize, toastError } from '$lib/utils';
 
-  const session = getSessionContext();
-  const snaps = $derived(session.mosaic.snaps);
+  const app = getVoxelApp();
+  const instrument = $derived(app.instrument);
+  const snaps = app.snaps;
 
   let renamingId = $state<string | null>(null);
 
-  let canSnap = $derived(session.mode !== 'idle');
+  const canSnap = $derived(!!instrument && instrument.mode !== 'idle');
 
   let previewUrl = $state<string | null>(null);
   let previewAspect = $state('');
@@ -52,8 +52,13 @@
     }
   }
 
+  /** Drive the stage to a snapshot's captured position. */
+  function goToSnap(snap: Snapshot): void {
+    toastError(instrument?.moveStage({ x: snap.stageX, y: snap.stageY, z: snap.stageZ }));
+  }
+
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebarMin = createPaneMinSize(() => paneGroupEl, 350);
+  const sidebar = createPaneSize(() => paneGroupEl, { min: 350 });
 </script>
 
 {#snippet snapItem(snap: Snapshot)}
@@ -110,25 +115,26 @@
       </div>
     </ContextMenu.Trigger>
     <ContextMenu.Content>
-      <ContextMenu.Item
-        onSelect={() => {
-          session.scope.stage?.moveXY(snapPos.x, snapPos.y);
-          session.scope.stage?.moveZ(snap.stageZ);
-        }}
-      >
-        Go to position
-      </ContextMenu.Item>
+      <ContextMenu.Item onSelect={() => goToSnap(snap)}>Go to position</ContextMenu.Item>
       <ContextMenu.Item onSelect={() => (renamingId = snap.id)}>Rename</ContextMenu.Item>
       <ContextMenu.Separator />
       <ContextMenu.Sub>
-        <ContextMenu.SubTrigger disabled={!session.mosaic.config}>Align grid</ContextMenu.SubTrigger>
+        <ContextMenu.SubTrigger disabled={!instrument?.activeProfile}>Align grid</ContextMenu.SubTrigger>
         <ContextMenu.SubContent>
-          <ContextMenu.Item onSelect={() => session.mosaic.align('top', snapPos)}>Top</ContextMenu.Item>
-          <ContextMenu.Item onSelect={() => session.mosaic.align('bottom', snapPos)}>Bottom</ContextMenu.Item>
-          <ContextMenu.Item onSelect={() => session.mosaic.align('left', snapPos)}>Left</ContextMenu.Item>
-          <ContextMenu.Item onSelect={() => session.mosaic.align('right', snapPos)}>Right</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => toastError(instrument?.alignStencil('top', snapPos))}>Top</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => toastError(instrument?.alignStencil('bottom', snapPos))}
+            >Bottom</ContextMenu.Item
+          >
+          <ContextMenu.Item onSelect={() => toastError(instrument?.alignStencil('left', snapPos))}
+            >Left</ContextMenu.Item
+          >
+          <ContextMenu.Item onSelect={() => toastError(instrument?.alignStencil('right', snapPos))}
+            >Right</ContextMenu.Item
+          >
           <ContextMenu.Separator />
-          <ContextMenu.Item onSelect={() => session.mosaic.align('center', snapPos)}>Center</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => toastError(instrument?.alignStencil('center', snapPos))}
+            >Center</ContextMenu.Item
+          >
         </ContextMenu.SubContent>
       </ContextMenu.Sub>
       <ContextMenu.Separator />
@@ -172,7 +178,7 @@
 
                   <!-- Channel rows -->
                   {#each channelEntries as [name, ch] (name)}
-                    {@const color = session.preview.resolveColor(ch.colormap) ?? 'var(--color-fg-muted)'}
+                    {@const color = instrument?.preview.resolveColor(ch.colormap) ?? 'var(--color-fg-muted)'}
                     <div class="flex items-center gap-1.5">
                       <span class="h-2 w-2 shrink-0 rounded-full" style:background-color={color}></span>
                       <span class="font-medium text-fg">{ch.label}</span>
@@ -207,7 +213,7 @@
         <div class="flex h-full flex-col items-center justify-center gap-3 text-fg-faint">
           <Crosshair width="32" height="32" class="opacity-40" />
           <p class="text-sm">Move the stage and capture snapshots to explore your sample</p>
-          <Button variant="outline" size="sm" disabled={!canSnap} onclick={() => session.snap()}>
+          <Button variant="outline" size="sm" disabled={!canSnap} onclick={() => toastError(app.captureSnapshot())}>
             <ImageLight width="14" height="14" />
             Capture Snapshot
           </Button>
@@ -221,7 +227,7 @@
 
   <PaneDivider direction="vertical" />
 
-  <Pane defaultSize={30} minSize={sidebarMin.value} maxSize={45}>
+  <Pane defaultSize={30} minSize={sidebar.minSize} maxSize={45}>
     <div class="flex h-full flex-col overflow-hidden">
       <!-- Header with capture button -->
       <div class="flex items-center justify-between border-b border-border px-3 py-2">
@@ -246,7 +252,7 @@
               {snaps.sel.size > 1 ? `Clear ${snaps.sel.size}` : 'Clear all'}
             </Button>
           {/if}
-          <Button variant="outline" size="xs" disabled={!canSnap} onclick={() => session.snap()}>
+          <Button variant="outline" size="xs" disabled={!canSnap} onclick={() => toastError(app.captureSnapshot())}>
             <ImageLight width="14" height="14" />
             Snap
           </Button>

@@ -13,7 +13,8 @@
     TextArea,
     TextInput
   } from '$lib/kit';
-  import { type AnyPropModel, Bool, Enumerated, Numeric, PropInput, PropModel, Text } from '$lib/prop';
+  import { type AnyPropModel, BoolModel, EnumeratedModel, NumericModel, PropModel, StringModel } from '$lib/model';
+  import { Bool, Enumerated, Numeric, PropInput, Text } from '$lib/prop';
   import { ThemePicker } from '$lib/themes';
 
   let checked = $state(true);
@@ -28,34 +29,34 @@
   let tags = $state(['alpha', 'beta']);
   let pickerColor = $state('#3b82f6');
 
-  const freeRange = new Numeric.Model(0, {
+  const freeRange = new NumericModel(0, {
     step: 1,
     home: 0,
     onPatch: (v) => toast(`free → ${v}`)
   });
-  const bounded = new Numeric.Model(50, {
+  const bounded = new NumericModel(50, {
     min: 0,
     max: 100,
     step: 5,
     home: 50,
     onPatch: (v) => toast(`bounded [0..100, step 5] → ${v}`)
   });
-  const precise = new Numeric.Model(1.234, {
+  const precise = new NumericModel(1.234, {
     step: 0.001,
     home: 1,
     onPatch: (v) => toast(`decimal (3dp) → ${v.toFixed(3)}`)
   });
 
-  const stringEnum = new Enumerated.Model<string>('mono', ['mono', 'rgb', 'rgba'], {
+  const stringEnum = new EnumeratedModel<string>('mono', ['mono', 'rgb', 'rgba'], {
     onPatch: (v) => toast(`stringEnum → ${v}`)
   });
-  const numericEnum = new Enumerated.Model<number>(2, [1, 2, 4, 8], {
+  const numericEnum = new EnumeratedModel<number>(2, [1, 2, 4, 8], {
     onPatch: (v) => toast(`numericEnum → ${v}`)
   });
-  const boolModel = new Bool.Model(true, {
+  const boolModel = new BoolModel(true, {
     onPatch: (v) => toast(`bool → ${v}`)
   });
-  const textModel = new Text.Model('Hello, world', {
+  const textModel = new StringModel('Hello, world', {
     onPatch: (v) => toast(`text → "${v}"`)
   });
   const fallbackModel = new PropModel(

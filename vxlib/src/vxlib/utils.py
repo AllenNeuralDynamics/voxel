@@ -2,12 +2,15 @@
 
 import asyncio
 import logging
+import os
 import re
 import socket
+import tempfile
 import threading
 from collections.abc import Callable, Coroutine
 from datetime import datetime
 from functools import wraps
+from pathlib import Path
 from typing import Any, cast
 
 _log = logging.getLogger(__name__)
@@ -175,3 +178,34 @@ def get_local_ip() -> str:
         return ip
     except Exception:
         return "127.0.0.1"
+
+
+def atomic_write(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically and durably.
+
+    Writes to a temp file in the same directory, fsyncs it, then atomically
+    replaces ``path`` so readers see either the old contents or the new ones,
+    never a partial write. The parent directory is fsynced afterward so the
+    rename itself survives power loss (POSIX only). The temp file is removed
+    if anything fails before the replace.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp)
+    try:
+        # newline="" keeps output byte-deterministic (no Windows \n -> \r\n translation).
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp_path.replace(path)
+        try:
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass  # non-POSIX (e.g. Windows): directory fsync unsupported
+    finally:
+        tmp_path.unlink(missing_ok=True)  # no-op after a successful replace; cleanup on failure

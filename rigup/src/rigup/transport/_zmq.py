@@ -25,7 +25,7 @@ from itertools import count
 import zmq
 import zmq.asyncio
 
-from vxlib import Unsub
+from vxlib import Teardown
 
 from ._base import (
     MessageKind,
@@ -227,12 +227,12 @@ class ZMQTransportClient(_Reliable, TransportClient):
     def on_notify(self, handler: NotifyHandler) -> None:
         self._notify_handler = handler
 
-    async def subscribe(self, topic: str, callback: TopicCallback) -> Unsub:
+    def subscribe(self, topic: str, cb: TopicCallback) -> Teardown:
         if self._sub is None:
             raise RuntimeError("not connected")
         topic_bytes = topic.encode()
         first = not self._subs[topic]
-        self._subs[topic].append(callback)
+        self._subs[topic].append(cb)
         if first:
             self._sub.setsockopt(zmq.SUBSCRIBE, topic_bytes)
 
@@ -241,7 +241,7 @@ class ZMQTransportClient(_Reliable, TransportClient):
             if not cb_list:
                 return
             with suppress(ValueError):
-                cb_list.remove(callback)
+                cb_list.remove(cb)
             if not cb_list:
                 del self._subs[topic]
                 if self._sub is not None:

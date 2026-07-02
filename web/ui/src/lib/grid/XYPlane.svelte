@@ -10,27 +10,42 @@
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
 
-  import type { Stack } from '$lib/config';
   import { ContextMenu } from '$lib/kit';
-  import { compositeFullFrames } from '$lib/preview';
-  import type { Session } from '$lib/session.svelte';
-  import { sanitizeString } from '$lib/utils';
+  import { type AlignEdge, compositeFullFrames, type Instrument, type TaskTile } from '$lib/model';
+  import { toastError } from '$lib/utils';
 
-  import type { LayerVisibility, Tile } from './types';
+  import { getTaskSelection } from './selection.svelte';
+
+  export interface LayerVisibility {
+    grid: boolean;
+    tasks: boolean;
+    path: boolean;
+    fov: boolean;
+    thumbnail: boolean;
+  }
+
+  /** An auto-grid cell computed from the stencil (a potential tile position, not a placed task). */
+  interface GridTile {
+    row: number;
+    col: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }
 
   interface Props {
-    session: Session;
+    instrument: Instrument;
     layers?: LayerVisibility;
   }
 
-  let { session, layers = $bindable({ grid: false, stacks: true, path: true, fov: true, thumbnail: true }) }: Props =
+  let { instrument, layers = $bindable({ grid: true, tasks: true, path: true, fov: true, thumbnail: true }) }: Props =
     $props();
 
   // ── Geometry ─────────────────────────────────────────────────────────
 
-  const stage = $derived(session.scope.stage);
-  const sx = $derived(stage?.x);
-  const sy = $derived(stage?.y);
+  const sx = $derived(instrument.stage.x);
+  const sy = $derived(instrument.stage.y);
   const sxLower = $derived(sx?.lowerLimit?.value ?? 0);
   const sxUpper = $derived(sx?.upperLimit?.value ?? 0);
   const syLower = $derived(sy?.lowerLimit?.value ?? 0);
@@ -39,67 +54,86 @@
   const syPos = $derived(sy?.position?.value ?? 0);
   const sxMoving = $derived(sx?.isMoving?.value === true);
   const syMoving = $derived(sy?.isMoving?.value === true);
-  const stageWidth = $derived(stage?.width ?? 0);
-  const stageHeight = $derived(stage?.height ?? 0);
-  const activeProfileId = $derived(session.scope.profiles.activeId);
+  const stageWidth = $derived(sx?.range ?? 0);
+  const stageHeight = $derived(sy?.range ?? 0);
+
+  const fovW = $derived(instrument.fov?.[0] ?? 0);
+  const fovH = $derived(instrument.fov?.[1] ?? 0);
+  const activeProfileId = $derived(instrument.activeProfileId);
 
   const isXYMoving = $derived(sxMoving || syMoving);
-  const isAcquiring = $derived(session.mode === 'acquiring');
+  const isAcquiring = $derived(instrument.mode === 'capture');
+  const arrowSize = $derived(Math.min(fovW, fovH) * 0.08);
 
-  const arrowSize = $derived(Math.min(session.mosaic.fov.width, session.mosaic.fov.height) * 0.08);
+  // ── Auto-grid computed from the stencil ──────────────────────────────
 
-  // ── Local tile selection ────────────────────────────────────────────
+  const mosaicTiles = $derived.by<GridTile[]>(() => {
+    if (!sx || !sy) return [];
+    const s = instrument.state.stencil;
+    const stepW = fovW * (1 - s.overlap_x);
+    const stepH = fovH * (1 - s.overlap_y);
+    if (stepW <= 0 || stepH <= 0) return [];
+    const colMin = Math.ceil(-s.x_offset / stepW);
+    const colMax = Math.floor((stageWidth - s.x_offset) / stepW) + 1;
+    const rowMin = Math.ceil(-s.y_offset / stepH);
+    const rowMax = Math.floor((stageHeight - s.y_offset) / stepH) + 1;
+    const tiles: GridTile[] = [];
+    for (let row = rowMin; row < rowMax; row++) {
+      for (let col = colMin; col < colMax; col++) {
+        const tx = s.x_offset + col * stepW;
+        const ty = s.y_offset + row * stepH;
+        if (tx >= 0 && tx <= stageWidth && ty >= 0 && ty <= stageHeight) {
+          tiles.push({ row, col, x: tx, y: ty, w: fovW, h: fovH });
+        }
+      }
+    }
+    return tiles;
+  });
 
-  let tileSelection = new SvelteSet<string>();
+  // ── Placed tasks (backend-computed footprints, in traversal order) ───
 
-  function tileKey(row: number, col: number): string {
-    return `${row},${col}`;
+  const tasks = $derived(instrument.state.tasks);
+  const taskTiles = $derived(instrument.taskTiles);
+  const activeTiles = $derived(taskTiles.filter((t) => isActive(t.task_id)));
+
+  function isActive(taskId: string): boolean {
+    return activeProfileId ? (tasks[taskId]?.profile_ids.includes(activeProfileId) ?? false) : false;
   }
 
-  function isTileSelected(row: number, col: number): boolean {
-    return tileSelection.has(tileKey(row, col));
+  /** Whether the active profile already has a task placed at (x, y). */
+  function taskAt(x: number, y: number): boolean {
+    return activeTiles.some((t) => Math.abs(t.x - x) < 1 && Math.abs(t.y - y) < 1);
   }
 
-  function selectTiles(positions: Array<{ row: number; col: number }>): void {
+  // ── Selection (component-local) ──────────────────────────────────────
+
+  const tileSelection = new SvelteSet<string>();
+  const taskSelection = getTaskSelection();
+
+  const tileKey = (row: number, col: number): string => `${row},${col}`;
+  const isTileSelected = (row: number, col: number): boolean => tileSelection.has(tileKey(row, col));
+
+  function selectTiles(cells: GridTile[]): void {
     tileSelection.clear();
-    for (const { row, col } of positions) {
-      tileSelection.add(tileKey(row, col));
-    }
+    for (const { row, col } of cells) tileSelection.add(tileKey(row, col));
   }
 
-  function addTilesToSelection(positions: Array<{ row: number; col: number }>): void {
-    for (const { row, col } of positions) {
-      tileSelection.add(tileKey(row, col));
-    }
-  }
+  const selectedTiles = $derived(mosaicTiles.filter((t) => isTileSelected(t.row, t.col)));
 
-  function removeTilesFromSelection(positions: Array<{ row: number; col: number }>): void {
-    for (const { row, col } of positions) {
-      tileSelection.delete(tileKey(row, col));
-    }
-  }
+  // ── FOV crosshair position (relative to stage origin) ────────────────
 
-  function clearTileSelection(): void {
-    tileSelection.clear();
-  }
-
-  let selectedTilesList = $derived(session.mosaic.list.filter((t) => isTileSelected(t.row, t.col)));
-
-  // ── Stacks partitioned by active profile ────────────────────────────
-  const activeStacks = $derived(session.stacks.list.filter((s) => s.profile_id === activeProfileId));
-  const inactiveStacks = $derived(session.stacks.list.filter((s) => s.profile_id !== activeProfileId));
-
-  // FOV position relative to stage origin (lower limits)
   const fovX = $derived(sx ? sxPos - sxLower : 0);
   const fovY = $derived(sy ? syPos - syLower : 0);
-  // ViewBox: stage bounds + margin to fit current FOV and any existing stacks
-  const marginX = $derived(Math.max(session.mosaic.fov.width / 2, ...session.stacks.list.map((s) => s.w / 2)));
-  const marginY = $derived(Math.max(session.mosaic.fov.height / 2, ...session.stacks.list.map((s) => s.h / 2)));
+
+  // ── ViewBox + canvas sizing ──────────────────────────────────────────
+
+  const tileHalfW = $derived(Math.max(fovW / 2, ...taskTiles.map((t) => t.w / 2)));
+  const tileHalfH = $derived(Math.max(fovH / 2, ...taskTiles.map((t) => t.h / 2)));
+  const marginX = $derived(Number.isFinite(tileHalfW) ? tileHalfW : fovW / 2);
+  const marginY = $derived(Number.isFinite(tileHalfH) ? tileHalfH : fovH / 2);
   const viewBoxWidth = $derived(stageWidth + marginX * 2);
   const viewBoxHeight = $derived(stageHeight + marginY * 2);
   const viewBoxStr = $derived(`${-marginX} ${-marginY} ${viewBoxWidth} ${viewBoxHeight}`);
-
-  // ── Canvas sizing ────────────────────────────────────────────────────
 
   let containerRef = $state<HTMLDivElement | null>(null);
   let canvasWidth = $state(400);
@@ -112,14 +146,13 @@
 
   const XY_SLIDER_WIDTH = 16;
 
-  let xSliderStyle = $derived(
+  const xSliderStyle = $derived(
     `left: ${marginX * scale}px; top: ${-XY_SLIDER_WIDTH / 2}px; width: ${stagePixelsX}px; height: ${XY_SLIDER_WIDTH}px;`
   );
-  let ySliderStyle = $derived(
+  const ySliderStyle = $derived(
     `left: ${-XY_SLIDER_WIDTH / 2}px; top: ${marginY * scale}px; width: ${XY_SLIDER_WIDTH}px; height: ${stagePixelsY}px;`
   );
-
-  let fovExtension = $derived(XY_SLIDER_WIDTH / 2 / scale);
+  const fovExtension = $derived(XY_SLIDER_WIDTH / 2 / scale);
 
   function fitCanvas(w: number, h: number) {
     if (w <= 0 || h <= 0) return;
@@ -134,9 +167,7 @@
 
   onMount(() => {
     if (!containerRef) return;
-    const observer = new ResizeObserver(([entry]) => {
-      fitCanvas(entry.contentRect.width, entry.contentRect.height);
-    });
+    const observer = new ResizeObserver(([entry]) => fitCanvas(entry.contentRect.width, entry.contentRect.height));
     observer.observe(containerRef);
     return () => observer.disconnect();
   });
@@ -148,7 +179,7 @@
     }
   });
 
-  // ── FOV thumbnail ────────────────────────────────────────────────────
+  // ── FOV thumbnail (live preview composite) ───────────────────────────
 
   const FOV_RESOLUTION = 256;
   let thumbnail = $state('');
@@ -160,22 +191,18 @@
   const ctx = offscreen.getContext('2d')!;
 
   $effect(() => {
-    const aspect = session.mosaic.fov.width / session.mosaic.fov.height;
-    if (aspect > 0 && Number.isFinite(aspect)) {
-      offscreen.height = Math.round(FOV_RESOLUTION / aspect);
-    }
+    const aspect = fovW / fovH;
+    if (aspect > 0 && Number.isFinite(aspect)) offscreen.height = Math.round(FOV_RESOLUTION / aspect);
   });
 
-  // Redraw only when an overview frame arrives (not on tile batches)
   watch(
-    () => session.preview?.channels.map((ch) => ch.latestFrameInfo?.frame_idx ?? -1).join(','),
+    () => instrument.preview.channels.map((ch) => ch.latestFrameInfo?.frame_idx ?? -1).join(','),
     () => {
       needsRedraw = true;
     }
   );
 
-  // Clear stale thumbnail when stage moves without preview running
-  let shouldClearThumbnail = $derived(session.mode === 'idle' && isXYMoving);
+  const shouldClearThumbnail = $derived(instrument.mode === 'idle' && isXYMoving);
   watch(
     () => shouldClearThumbnail,
     (clear) => {
@@ -184,11 +211,12 @@
   );
 
   function fovFrameLoop() {
-    if (needsRedraw && session.preview) {
+    // Skip when the thumbnail layer is hidden — no point compositing/encoding what isn't shown.
+    if (needsRedraw && layers.thumbnail) {
       needsRedraw = false;
-      const hasFrames = session.preview.channels.some((ch) => ch.visible && ch.frame);
-      if (hasFrames) {
-        compositeFullFrames(ctx, offscreen, session.preview.channels);
+      const channels = instrument.preview.channels;
+      if (channels.some((ch) => ch.visible && ch.frame)) {
+        compositeFullFrames(ctx, offscreen, channels);
         thumbnail = offscreen.toDataURL('image/png');
       } else {
         thumbnail = '';
@@ -204,7 +232,7 @@
     };
   });
 
-  // ── Slider targets ──────────────────────────────────────────────────
+  // ── Slider targets ───────────────────────────────────────────────────
 
   let targetX = $state<number | null>(null);
   let targetY = $state<number | null>(null);
@@ -224,38 +252,36 @@
     sy?.move(v);
   }
 
-  // ── Interaction handlers ─────────────────────────────────────────────
+  // ── Interaction ──────────────────────────────────────────────────────
 
-  function moveToTilePosition(x: number, y: number) {
-    if (isXYMoving || !stage) return;
+  function moveTo(x: number, y: number) {
+    if (isXYMoving || !sx || !sy) return;
     const tx = sxLower + x;
     const ty = syLower + y;
     targetX = tx;
     targetY = ty;
-    stage.moveXY(tx, ty);
+    toastError(instrument.moveStage({ x: tx, y: ty }));
   }
 
-  function handleTileSelect(e: MouseEvent, tile: Tile) {
-    session.stacks.clearSelection();
+  function addTasksAt(positions: Array<{ x: number; y: number }>) {
+    const xy = positions.filter((p) => !taskAt(p.x, p.y)).map((p): [number, number] => [p.x, p.y]);
+    if (xy.length > 0) toastError(instrument.addTasks(xy, activeProfileId ? [activeProfileId] : undefined));
+  }
+
+  function handleTileSelect(e: MouseEvent, tile: GridTile) {
+    taskSelection.clear();
     if (e.ctrlKey || e.metaKey) {
-      if (isTileSelected(tile.row, tile.col)) removeTilesFromSelection([tile]);
-      else addTilesToSelection([tile]);
+      if (isTileSelected(tile.row, tile.col)) tileSelection.delete(tileKey(tile.row, tile.col));
+      else tileSelection.add(tileKey(tile.row, tile.col));
     } else {
       selectTiles([tile]);
     }
   }
 
-  function handleStackSelect(e: MouseEvent, stack: Stack) {
-    clearTileSelection();
-    if (e.ctrlKey || e.metaKey) {
-      if (session.stacks.isSelected(stack.stack_id)) {
-        session.stacks.removeFromSelection([stack]);
-      } else {
-        session.stacks.addToSelection([stack]);
-      }
-    } else {
-      session.stacks.select([stack]);
-    }
+  function handleTaskSelect(e: MouseEvent, taskId: string) {
+    tileSelection.clear();
+    if (e.ctrlKey || e.metaKey) taskSelection.toggle(taskId);
+    else taskSelection.select(taskId);
   }
 
   function handleKeydown(e: KeyboardEvent, selectFn: () => void) {
@@ -265,19 +291,19 @@
     }
   }
 
-  // ── Context menu ────────────────────────────────────────────────────
+  // ── Context menu ─────────────────────────────────────────────────────
 
   type ContextTarget =
-    | { kind: 'tile'; tile: Tile; x: number; y: number }
-    | { kind: 'stack'; stack: Stack; x: number; y: number }
+    | { kind: 'tile'; tile: GridTile }
+    | { kind: 'task'; tile: TaskTile }
     | { kind: 'empty'; x: number; y: number }
     | null;
 
   let contextTarget = $state<ContextTarget>(null);
-  let clipboard = $state<{ x?: number; y?: number; zStartUm?: number; zEndUm?: number }>({});
+  let clipboard = $state<{ x?: number; y?: number; start?: number; end?: number }>({});
   let svgRef = $state<SVGSVGElement | null>(null);
 
-  /** Convert mouse event to SVG viewBox coordinates (stage-relative). */
+  /** Mouse event → SVG viewBox coordinates (stage-relative). */
   function svgPoint(e: MouseEvent): { x: number; y: number } | null {
     if (!svgRef) return null;
     const ctm = svgRef.getScreenCTM()?.inverse();
@@ -286,56 +312,40 @@
     return { x: pt.x, y: pt.y };
   }
 
-  function handleTileContext(e: MouseEvent, tile: Tile) {
+  function handleTileContext(tile: GridTile) {
     if (!isTileSelected(tile.row, tile.col)) selectTiles([tile]);
-    session.stacks.clearSelection();
-    const pt = svgPoint(e);
-    contextTarget = { kind: 'tile', tile, x: pt?.x ?? tile.x, y: pt?.y ?? tile.y };
+    taskSelection.clear();
+    contextTarget = { kind: 'tile', tile };
   }
 
-  function handleStackContext(e: MouseEvent, stack: Stack) {
-    if (!session.stacks.isSelected(stack.stack_id)) session.stacks.select([stack]);
-    clearTileSelection();
-    const pt = svgPoint(e);
-    contextTarget = { kind: 'stack', stack, x: pt?.x ?? stack.x, y: pt?.y ?? stack.y };
+  function handleTaskContext(tile: TaskTile) {
+    if (!taskSelection.has(tile.task_id)) taskSelection.select(tile.task_id);
+    tileSelection.clear();
+    contextTarget = { kind: 'task', tile };
   }
 
   function handleCanvasContext(e: MouseEvent) {
     if (e.target !== svgRef) return;
     const pt = svgPoint(e);
-    if (!pt || !stage) return;
-    contextTarget = {
-      kind: 'empty',
-      x: sxLower + pt.x,
-      y: syLower + pt.y
-    };
+    if (!pt || !sx || !sy) return;
+    contextTarget = { kind: 'empty', x: sxLower + pt.x, y: syLower + pt.y };
   }
 
-  /** Build the context menu items based on what was right-clicked. */
   const menuItems = $derived.by<MenuItem[]>(() => {
     const target = contextTarget;
     if (!target) return [];
     if (isAcquiring) return [{ type: 'action', label: 'Acquisition in progress', action: () => {}, disabled: true }];
 
     const items: MenuItem[] = [];
-    const lx = sxLower;
-    const ly = syLower;
 
-    // ── Move here (all targets) ──
+    // Move here
     const moveAction = () => {
-      if (target.kind === 'empty') {
-        targetX = target.x;
-        targetY = target.y;
-        stage?.moveXY(target.x, target.y);
-      } else if (target.kind === 'tile') {
-        moveToTilePosition(target.tile.x, target.tile.y);
-      } else {
-        moveToTilePosition(target.stack.x, target.stack.y);
-      }
+      if (target.kind === 'empty') moveTo(target.x - sxLower, target.y - syLower);
+      else moveTo(target.tile.x, target.tile.y);
     };
     items.push({ type: 'action', label: 'Move here', action: moveAction, disabled: isXYMoving });
 
-    // ── Select tiles (tile targets only) ──
+    // Select tiles (auto-grid only)
     if (target.kind === 'tile') {
       const tile = target.tile;
       items.push({
@@ -345,238 +355,118 @@
           {
             type: 'action',
             label: `Row ${tile.row}`,
-            action: () => selectTiles(session.mosaic.list.filter((t) => t.row === tile.row))
+            action: () => selectTiles(mosaicTiles.filter((t) => t.row === tile.row))
           },
           {
             type: 'action',
             label: `Column ${tile.col}`,
-            action: () => selectTiles(session.mosaic.list.filter((t) => t.col === tile.col))
+            action: () => selectTiles(mosaicTiles.filter((t) => t.col === tile.col))
           },
           { type: 'separator' },
-          { type: 'action', label: 'All', action: () => selectTiles(session.mosaic.list) },
+          { type: 'action', label: 'All', action: () => selectTiles(mosaicTiles) },
           {
             type: 'action',
             label: 'Invert',
-            action: () => selectTiles(session.mosaic.list.filter((t) => !isTileSelected(t.row, t.col)))
-          }
-        ]
-      });
-      items.push({
-        type: 'action',
-        label: 'Copy X',
-        action: () => {
-          clipboard = { ...clipboard, x: tile.x };
-        }
-      });
-      items.push({
-        type: 'action',
-        label: 'Copy Y',
-        action: () => {
-          clipboard = { ...clipboard, y: tile.y };
-        }
-      });
-    }
-
-    // ── Select stacks (stack targets only) ──
-    if (target.kind === 'stack') {
-      const stack = target.stack;
-      const profileLabel = sanitizeString(stack.profile_id);
-      items.push({
-        type: 'submenu',
-        label: 'Select stacks',
-        items: [
-          { type: 'action', label: 'All', action: () => session.stacks.selectMultiple() },
-          {
-            type: 'action',
-            label: profileLabel,
-            action: () => session.stacks.selectMultiple({ profileIds: [stack.profile_id] })
+            action: () => selectTiles(mosaicTiles.filter((t) => !isTileSelected(t.row, t.col)))
           }
         ]
       });
     }
 
-    // ── Align grid (empty canvas and stacks only — tiles ARE the grid) ──
+    // Align grid (empty + task targets — tiles ARE the grid)
     if (target.kind !== 'tile') {
       const pos =
-        target.kind === 'empty' ? { x: target.x, y: target.y } : { x: lx + target.stack.x, y: ly + target.stack.y };
+        target.kind === 'empty'
+          ? { x: target.x, y: target.y }
+          : { x: sxLower + target.tile.x, y: syLower + target.tile.y };
       items.push({
         type: 'submenu',
         label: 'Align grid',
-        disabled: !session.mosaic.config,
-        items: [
-          { type: 'action', label: 'Top', action: () => session.mosaic.align('top', pos) },
-          { type: 'action', label: 'Bottom', action: () => session.mosaic.align('bottom', pos) },
-          { type: 'action', label: 'Left', action: () => session.mosaic.align('left', pos) },
-          { type: 'action', label: 'Right', action: () => session.mosaic.align('right', pos) },
-          { type: 'separator' },
-          { type: 'action', label: 'Center', action: () => session.mosaic.align('center', pos) }
-        ]
+        items: (['top', 'bottom', 'left', 'right', 'center'] as AlignEdge[]).map((edge) => ({
+          type: 'action' as const,
+          label: edge[0].toUpperCase() + edge.slice(1),
+          action: () => toastError(instrument.alignStencil(edge, pos))
+        }))
       });
     }
 
-    // ── Add stack ──
-    if (target.kind === 'empty') {
-      // Copy position from clicked point (stage-relative)
-      const clickX = target.x - lx;
-      const clickY = target.y - ly;
-      items.push({
-        type: 'action',
-        label: 'Copy X',
-        action: () => {
-          clipboard = { ...clipboard, x: clickX };
-        }
-      });
-      items.push({
-        type: 'action',
-        label: 'Copy Y',
-        action: () => {
-          clipboard = { ...clipboard, y: clickY };
-        }
-      });
-      // Add stack at clicked position for active profile
+    // Copy / paste
+    if (target.kind === 'tile' || target.kind === 'task') {
+      const { x, y } = target.tile;
       items.push({ type: 'separator' });
-      items.push({
-        type: 'action',
-        label: 'Add stack',
-        action: () => {
-          session.stacks.add([
-            {
-              x: target.x - lx,
-              y: target.y - ly,
-              zStartUm: session.stacks.plan.default_z_start,
-              zEndUm: session.stacks.plan.default_z_end
-            }
-          ]);
-        }
-      });
-    } else if (target.kind === 'tile') {
-      const emptyCount = selectedTilesList.filter(
-        (t) => !session.stacks.findAt(t.x, t.y, activeProfileId ?? '')
-      ).length;
-      if (emptyCount > 0) {
-        items.push({ type: 'separator' });
-        items.push({
-          type: 'action',
-          label: emptyCount === 1 ? 'Add stack' : `Add stacks (${emptyCount})`,
-          action: () => {
-            const tiles = selectedTilesList.filter((t) => !session.stacks.findAt(t.x, t.y, activeProfileId ?? ''));
-            session.stacks.add(
-              tiles.map((t) => ({
-                x: t.x,
-                y: t.y,
-                zStartUm: session.stacks.plan.default_z_start,
-                zEndUm: session.stacks.plan.default_z_end
-              }))
-            );
-          }
-        });
-      }
+      items.push({ type: 'action', label: 'Copy X', action: () => (clipboard = { ...clipboard, x }) });
+      items.push({ type: 'action', label: 'Copy Y', action: () => (clipboard = { ...clipboard, y }) });
     }
-
-    // ── Z range, Add for active profile, Delete (stack targets only) ──
-    if (target.kind === 'stack') {
-      const stack = target.stack;
-      const selectedCount = session.stacks.selected.length;
-      const isSingle = selectedCount <= 1;
-      const isOtherProfile = stack.profile_id !== activeProfileId;
-      const isPlanned = session.stacks.selected.some((s) => s.status === 'planned');
-      const canDelete = isSingle
-        ? stack.status === 'planned' || stack.status === 'skipped'
-        : session.stacks.selected.some((s) => s.status === 'planned' || s.status === 'skipped');
-      const plannedTargets = () => (isSingle ? [stack] : session.stacks.selected.filter((s) => s.status === 'planned'));
-
-      items.push({ type: 'separator' });
-
-      // Copy (single stack only)
-      if (isSingle) {
-        items.push({
-          type: 'action',
-          label: 'Copy X',
-          action: () => {
-            clipboard = { ...clipboard, x: stack.x };
-          }
-        });
-        items.push({
-          type: 'action',
-          label: 'Copy Y',
-          action: () => {
-            clipboard = { ...clipboard, y: stack.y };
-          }
-        });
+    if (target.kind === 'task') {
+      const t = tasks[target.tile.task_id];
+      if (t) {
         items.push({
           type: 'action',
           label: 'Copy Z range',
-          action: () => {
-            clipboard = { ...clipboard, zStartUm: stack.z_start, zEndUm: stack.z_end };
-          }
+          action: () => (clipboard = { ...clipboard, start: t.start, end: t.end })
         });
       }
-
-      // Paste
-      if (clipboard.x !== undefined && isPlanned) {
+      const selectedIds = taskSelection.list;
+      if (clipboard.x !== undefined) {
         items.push({
           type: 'action',
-          label: isSingle ? 'Paste X' : `Paste X (${selectedCount})`,
-          action: () => session.stacks.edit(plannedTargets().map((s) => ({ stackId: s.stack_id, x: clipboard.x })))
-        });
-      }
-      if (clipboard.y !== undefined && isPlanned) {
-        items.push({
-          type: 'action',
-          label: isSingle ? 'Paste Y' : `Paste Y (${selectedCount})`,
-          action: () => session.stacks.edit(plannedTargets().map((s) => ({ stackId: s.stack_id, y: clipboard.y })))
-        });
-      }
-      if (clipboard.zStartUm !== undefined && clipboard.zEndUm !== undefined && isPlanned) {
-        items.push({
-          type: 'action',
-          label: isSingle ? 'Paste Z range' : `Paste Z range (${selectedCount})`,
+          label: 'Paste X',
           action: () =>
-            session.stacks.edit(
-              plannedTargets().map((s) => ({
-                stackId: s.stack_id,
-                zStartUm: clipboard.zStartUm,
-                zEndUm: clipboard.zEndUm
-              }))
+            toastError(instrument.updateTasks(Object.fromEntries(selectedIds.map((id) => [id, { x: clipboard.x }]))))
+        });
+      }
+      if (clipboard.y !== undefined) {
+        items.push({
+          type: 'action',
+          label: 'Paste Y',
+          action: () =>
+            toastError(instrument.updateTasks(Object.fromEntries(selectedIds.map((id) => [id, { y: clipboard.y }]))))
+        });
+      }
+      if (clipboard.start !== undefined && clipboard.end !== undefined) {
+        items.push({
+          type: 'action',
+          label: 'Paste Z range',
+          action: () =>
+            toastError(
+              instrument.updateTasks(
+                Object.fromEntries(selectedIds.map((id) => [id, { start: clipboard.start, end: clipboard.end }]))
+              )
             )
         });
       }
+    }
 
-      // Add stack(s) for active profile (other-profile stacks only)
-      if (isOtherProfile) {
-        const otherStacks = (isSingle ? [stack] : session.stacks.selected).filter(
-          (s) => s.profile_id !== activeProfileId && !session.stacks.findAt(s.x, s.y, activeProfileId ?? '')
-        );
-        if (otherStacks.length > 0) {
-          items.push({
-            type: 'action',
-            label: otherStacks.length === 1 ? 'Add stack' : `Add stacks (${otherStacks.length})`,
-            action: () => {
-              session.stacks.add(
-                otherStacks.map((s) => ({
-                  x: s.x,
-                  y: s.y,
-                  zStartUm: session.stacks.plan.default_z_start,
-                  zEndUm: session.stacks.plan.default_z_end
-                }))
-              );
-            }
-          });
-        }
-      }
-
-      // Delete
-      if (canDelete) {
-        const deletable = isSingle
-          ? [stack]
-          : session.stacks.selected.filter((s) => s.status === 'planned' || s.status === 'skipped');
+    // Add task(s)
+    if (target.kind === 'empty') {
+      items.push({ type: 'separator' });
+      items.push({
+        type: 'action',
+        label: 'Add task',
+        action: () => addTasksAt([{ x: target.x - sxLower, y: target.y - syLower }])
+      });
+    } else if (target.kind === 'tile') {
+      const empty = selectedTiles.filter((t) => !taskAt(t.x, t.y));
+      if (empty.length > 0) {
+        items.push({ type: 'separator' });
         items.push({
           type: 'action',
-          label: isSingle ? 'Delete stack' : `Delete stacks (${deletable.length})`,
-          variant: 'destructive',
-          action: () => session.stacks.remove(deletable.map((s) => s.stack_id))
+          label: empty.length === 1 ? 'Add task' : `Add tasks (${empty.length})`,
+          action: () => addTasksAt(empty)
         });
       }
+    }
+
+    // Delete task(s)
+    if (target.kind === 'task') {
+      const ids = taskSelection.list;
+      items.push({ type: 'separator' });
+      items.push({
+        type: 'action',
+        label: ids.length <= 1 ? 'Delete task' : `Delete tasks (${ids.length})`,
+        variant: 'destructive',
+        action: () => toastError(instrument.removeTasks(ids))
+      });
     }
 
     return items;
@@ -587,10 +477,10 @@
   {#if layers.thumbnail && thumbnail}
     <image
       href={thumbnail}
-      x={fovX - session.mosaic.fov.width / 2}
-      y={fovY - session.mosaic.fov.height / 2}
-      width={session.mosaic.fov.width}
-      height={session.mosaic.fov.height}
+      x={fovX - fovW / 2}
+      y={fovY - fovH / 2}
+      width={fovW}
+      height={fovH}
       preserveAspectRatio="xMidYMid slice"
       class="pointer-events-none"
     />
@@ -619,28 +509,24 @@
 
 {#snippet gridLayer()}
   {#if layers.grid}
-    {@const sortedTiles = [...session.mosaic.list].sort(
+    {@const sorted = [...mosaicTiles].sort(
       (a, b) => Number(isTileSelected(a.row, a.col)) - Number(isTileSelected(b.row, b.col))
     )}
     <g>
-      {#each sortedTiles as tile (`${tile.row}_${tile.col}`)}
+      {#each sorted as tile (`${tile.row}_${tile.col}`)}
         {@const selected = isTileSelected(tile.row, tile.col)}
-        {@const cx = tile.x}
-        {@const cy = tile.y}
-        {@const w = tile.w}
-        {@const h = tile.h}
         <rect
-          x={cx - w / 2}
-          y={cy - h / 2}
-          width={w}
-          height={h}
+          x={tile.x - tile.w / 2}
+          y={tile.y - tile.h / 2}
+          width={tile.w}
+          height={tile.h}
           class="nss fill-transparent stroke-1 outline-none {selected ? 'stroke-fg/50' : 'stroke-border'}"
           class:cursor-pointer={!isXYMoving}
           class:cursor-not-allowed={isXYMoving}
           role="button"
           tabindex={isXYMoving ? -1 : 0}
           onclick={(e) => handleTileSelect(e, tile)}
-          oncontextmenu={(e) => handleTileContext(e, tile)}
+          oncontextmenu={() => handleTileContext(tile)}
           onkeydown={(e) => handleKeydown(e, () => selectTiles([tile]))}
         >
           <title>Tile [{tile.row}, {tile.col}]</title>
@@ -649,55 +535,46 @@
     </g>
   {/if}
 {/snippet}
-{#snippet stackRect(stack: Stack, isActive: boolean)}
-  {@const selected = session.stacks.isSelected(stack.stack_id)}
-  {@const w = stack.w}
-  {@const h = stack.h}
-  <rect
-    x={stack.x - w / 2}
-    y={stack.y - h / 2}
-    width={w}
-    height={h}
-    data-stack-status={stack.status}
-    class="nss text-(--stack-status) outline-none"
-    fill={isActive ? 'currentColor' : 'transparent'}
-    fill-opacity={isActive ? (selected ? '0.5' : '0.15') : '0'}
-    stroke="currentColor"
-    stroke-opacity={selected ? '0.9' : isActive ? '0.25' : '0.4'}
-    stroke-width="1"
-    class:cursor-pointer={!isXYMoving}
-    class:cursor-not-allowed={isXYMoving}
-    role="button"
-    tabindex={isXYMoving ? -1 : 0}
-    onclick={(e) => handleStackSelect(e, stack)}
-    oncontextmenu={(e) => handleStackContext(e, stack)}
-    onkeydown={(e) => handleKeydown(e, () => session.stacks.select([stack]))}
-  >
-    <title>Stack {stack.stack_id} - {stack.status} ({stack.num_frames} frames)</title>
-  </rect>
-{/snippet}
 
-{#snippet inactiveStacksLayer()}
-  {#if layers.stacks}
-    <g>
-      {#each inactiveStacks as stack (stack.stack_id)}
-        {@render stackRect(stack, false)}
+{#snippet taskLayer()}
+  {#if layers.tasks}
+    {@const sorted = [...taskTiles].sort((a, b) => Number(isActive(a.task_id)) - Number(isActive(b.task_id)))}
+    <g class="text-fg">
+      {#each sorted as tile (tile.task_id)}
+        {@const active = isActive(tile.task_id)}
+        {@const selected = taskSelection.has(tile.task_id)}
+        <rect
+          x={tile.x - tile.w / 2}
+          y={tile.y - tile.h / 2}
+          width={tile.w}
+          height={tile.h}
+          class="nss outline-none"
+          fill="currentColor"
+          fill-opacity={active ? (selected ? 0.3 : 0.1) : 0.04}
+          stroke="currentColor"
+          stroke-opacity={selected ? 0.7 : active ? 0.35 : 0.18}
+          stroke-width="1"
+          class:cursor-pointer={!isXYMoving}
+          class:cursor-not-allowed={isXYMoving}
+          role="button"
+          tabindex={isXYMoving ? -1 : 0}
+          onclick={(e) => handleTaskSelect(e, tile.task_id)}
+          oncontextmenu={() => handleTaskContext(tile)}
+          onkeydown={(e) => handleKeydown(e, () => taskSelection.select(tile.task_id))}
+        >
+          <title>Task {tile.task_id}</title>
+        </rect>
       {/each}
     </g>
   {/if}
 {/snippet}
 
-{#snippet activeStacksLayer()}
-  {#if layers.stacks}
-    {@const points = session.stacks.list.filter((s) => s.status !== 'completed').map((s) => ({ x: s.x, y: s.y }))}
-    <g>
-      {#each activeStacks as stack (stack.stack_id)}
-        {@render stackRect(stack, true)}
-      {/each}
-    </g>
+{#snippet pathLayer()}
+  {#if layers.path && taskTiles.length > 1}
+    {@const points = taskTiles.map((t) => ({ x: t.x, y: t.y }))}
     <g class="pointer-events-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
       <polyline
-        class="nss fill-none opacity-35"
+        class="nss fill-none opacity-60"
         stroke-width="1.5"
         points={points.map((p) => `${p.x},${p.y}`).join(' ')}
       />
@@ -705,18 +582,13 @@
         {@const p2 = points[i + 1]}
         {@const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y)}
         {#if dist > arrowSize}
-          {@const midX = (p1.x + p2.x) / 2}
-          {@const midY = (p1.y + p2.y) / 2}
           {@const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI)}
           <path
             d="M {-arrowSize * 0.5} {-arrowSize * 0.6} L {arrowSize * 0.5} 0 L {-arrowSize * 0.5} {arrowSize * 0.6}"
             stroke-width={arrowSize * 0.15}
-            class="fill-none opacity-70"
-            transform="translate({midX}, {midY}) rotate({angle})"
+            class="fill-none opacity-90"
+            transform="translate({(p1.x + p2.x) / 2}, {(p1.y + p2.y) / 2}) rotate({angle})"
           />
-        {:else if dist < 1}
-          <!-- Overlapping stacks: show dot marker -->
-          <circle cx={p1.x} cy={p1.y} r={arrowSize * 0.25} class="fill-current opacity-50" stroke="none" />
         {/if}
       {/each}
     </g>
@@ -782,8 +654,8 @@
         >
           {@render fovLayer()}
           {@render gridLayer()}
-          {@render inactiveStacksLayer()}
-          {@render activeStacksLayer()}
+          {@render taskLayer()}
+          {@render pathLayer()}
         </svg>
       </ContextMenu.Trigger>
       <ContextMenu.Content class="min-w-44">

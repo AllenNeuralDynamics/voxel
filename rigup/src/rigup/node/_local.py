@@ -26,7 +26,7 @@ from rigup.device import (
     StreamCallback,
 )
 from rigup.wire import TopicDispatcher
-from vxlib import Unsub
+from vxlib import Teardown
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 
@@ -49,13 +49,13 @@ class LocalAdapter[D: Device](Adapter[D]):
 
     async def _on_typed(self, topic: str, body: BaseModel) -> None:
         """Typed event from controller — TopicDispatcher fans to typed subs verbatim, packs on demand for bytes."""
-        if sig := self._signals.get(topic):
+        if (sig := self._signals.get(topic)) is not None:
             await sig.emit(body)
 
     async def _on_bytes(self, topic: str, data: bytes) -> None:
         """Raw byte stream from controller (e.g. frames)
         TopicDispatcher fans bytes through;typed decode skipped if no schema."""
-        if sig := self._signals.get(topic):
+        if (sig := self._signals.get(topic)) is not None:
             await sig.emit_bytes(data)
 
     @property
@@ -82,16 +82,16 @@ class LocalAdapter[D: Device](Adapter[D]):
         return await self._controller.set_props(**props)
 
     @overload
-    async def subscribe(self, topic: str, callback: StreamCallback[bytes]) -> Unsub: ...
+    def subscribe(self, topic: str, cb: StreamCallback[bytes]) -> Teardown: ...
 
     @overload
-    async def subscribe[T: BaseModel](self, topic: str, callback: StreamCallback[T], *, schema: type[T]) -> Unsub: ...
+    def subscribe[T: BaseModel](self, topic: str, cb: StreamCallback[T], *, schema: type[T]) -> Teardown: ...
 
-    async def subscribe(self, topic: str, callback: Any, *, schema: type[BaseModel] | None = None) -> Unsub:
+    def subscribe(self, topic: str, cb: Any, *, schema: type[BaseModel] | None = None) -> Teardown:
         sig = self._signals[topic]  # defaultdict creates on first access
         if schema is not None:
-            return sig.subscribe(callback, schema=schema)
-        return sig.subscribe(callback)
+            return sig.subscribe(cb, schema=schema)
+        return sig.subscribe(cb)
 
     async def close(self) -> None:
         await self._controller.close()

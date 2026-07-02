@@ -359,7 +359,7 @@ class HamamatsuCamera(Camera):
 
     # ==================== Acquisition ====================
 
-    def _arm(self) -> None:
+    def _allocate_buffer(self) -> None:
         """Prepare the camera to acquire images."""
         bit_to_byte = 1 if self.pixel_format == "MONO8" else 2
         frame_size_mb = self.frame_size_px.x * self.frame_size_px.y * bit_to_byte / (1024**2)
@@ -368,7 +368,7 @@ class HamamatsuCamera(Camera):
         self.log.debug(f"Buffer set to {self._buffer_size_frames} frames")
 
     @describe(label="Start", desc="Start acquiring frames from the camera.")
-    def start(self, frame_count: int | None = None) -> None:
+    def _start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames."""
         del frame_count  # unused - continuous acquisition
         self.log.info("Starting camera acquisition")
@@ -403,7 +403,7 @@ class HamamatsuCamera(Camera):
         self.log.info("Stopping camera acquisition")
         self._cam.cap_stop()
 
-    def disarm(self) -> None:
+    def _free_buffer(self) -> None:
         """Release camera capture buffers."""
         self._cam.buf_release()
         self.log.info("Camera buffers released")

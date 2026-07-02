@@ -56,7 +56,6 @@ class TestNodeConfigValidation:
 class TestRigConfig:
     def test_minimal_config(self):
         cfg = RigConfig.model_validate({"name": "test"})
-        assert cfg.name == "test"
         assert cfg.devices == {}
         assert cfg.nodes == {}
 
@@ -71,7 +70,3 @@ class TestRigConfig:
         assert "stage" in cfg.devices
         assert cfg.nodes["cam_host"].kind == "remote"
         assert cfg.nodes["cam_host"].address == "tcp://10.0.0.2:5555"
-
-    def test_default_name(self):
-        cfg = RigConfig()
-        assert cfg.name == "rig"

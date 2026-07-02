@@ -1,17 +1,25 @@
+import { toast } from 'svelte-sonner';
+
+/** Fire-and-forget a mutation promise, surfacing any rejection as an error toast.
+ *  Accepts `undefined` so `toastError(instrument?.method())` is a no-op when there's no instrument. */
+export function toastError(promise: Promise<unknown> | undefined): void {
+  promise?.catch((e) => toast.error(e instanceof Error ? e.message : String(e)));
+}
+
 /**
- * Sanitizes a string by replacing underscores with spaces and capitalizing words.
+ * Sanitizes a string by replacing underscores and dashes with spaces and capitalizing words.
  *
- * @param str - The string to sanitize (e.g., "camera_1", "laser_power")
- * @returns The sanitized string (e.g., "Camera 1", "Laser Power")
+ * @param str - The string to sanitize (e.g., "camera_1", "simulated-distributed")
+ * @returns The sanitized string (e.g., "Camera 1", "Simulated Distributed")
  *
  * @example
  * sanitizeString("camera_1") // "Camera 1"
  * sanitizeString("laser_power") // "Laser Power"
- * sanitizeString("some_long_name") // "Some Long Name"
+ * sanitizeString("simulated-distributed") // "Simulated Distributed"
  */
 export function sanitizeString(str: string): string {
   return str
-    .split('_')
+    .split(/[_-]/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 }

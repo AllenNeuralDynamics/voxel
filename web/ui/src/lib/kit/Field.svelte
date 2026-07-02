@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
+  import Label from './Label.svelte';
+
   const {
     label,
     id,
@@ -13,8 +15,6 @@
 </script>
 
 <div class="grid gap-1">
-  <label for={id} class="text-xs text-fg-muted">
-    {label}
-  </label>
+  <Label for={id}>{label}</Label>
   {@render children()}
 </div>

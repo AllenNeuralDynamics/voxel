@@ -15,6 +15,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
+    "jsonpatch>=1.33",
     "numpy>=2.0",
     "pydantic>=2.0",
 ]

@@ -25,7 +25,7 @@ from typing import Literal
 import numpy as np
 from numba import jit, prange
 
-from ome_zarr_writer.types import ScaleLevel
+from ome_zarr_writer.dataset import ScaleLevel
 
 Reduction = Literal["mean", "max"]
 

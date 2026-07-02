@@ -9,7 +9,7 @@ Type checkers may warn about dict inputs, but this is expected behavior.
 import pytest
 from pydantic import ValidationError
 
-from ome_zarr_writer.metadata import Multiscale
+from ome_zarr_writer.dataset import Multiscale
 
 
 class TestAxisValidation:
@@ -259,7 +259,7 @@ class TestDatasetOrdering:
 
     def test_datasets_wrong_order(self):
         """Datasets with decreasing resolution (increasing scale) should fail."""
-        with pytest.raises(ValidationError, match="must be ordered from highest to lowest resolution"):
+        with pytest.raises(ValidationError, match="must be ordered highest-to-lowest resolution"):
             Multiscale(
                 axes=[
                     {"type": "space", "name": "y", "unit": "micrometer"},
@@ -283,7 +283,7 @@ class TestDatasetOrdering:
 
     def test_datasets_equal_resolution(self):
         """Datasets with equal resolution should fail."""
-        with pytest.raises(ValidationError, match="must be ordered from highest to lowest resolution"):
+        with pytest.raises(ValidationError, match="must be ordered highest-to-lowest resolution"):
             Multiscale(
                 axes=[
                     {"type": "space", "name": "y", "unit": "micrometer"},

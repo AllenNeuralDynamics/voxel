@@ -18,7 +18,7 @@ from typing import Any, Literal, cast, overload
 import msgpack
 from pydantic import BaseModel
 
-from vxlib import Signal, Unsub
+from vxlib import Emitter, Teardown
 
 log = logging.getLogger("rigup.wire")
 
@@ -70,28 +70,28 @@ class TopicDispatcher:
     """
 
     def __init__(self) -> None:
-        self._schemas: dict[type[BaseModel], Signal[Any]] = {}
-        self._bytes: Signal[bytes] = Signal()
+        self._schemas: dict[type[BaseModel], Emitter[Any]] = {}
+        self._bytes: Emitter[bytes] = Emitter()
 
     @overload
-    def subscribe(self, callback: Callable[[bytes], Awaitable[None]]) -> Unsub: ...
+    def subscribe(self, cb: Callable[[bytes], Awaitable[None]]) -> Teardown: ...
 
     @overload
-    def subscribe[T: BaseModel](self, callback: Callable[[T], Awaitable[None]], *, schema: type[T]) -> Unsub: ...
+    def subscribe[T: BaseModel](self, cb: Callable[[T], Awaitable[None]], *, schema: type[T]) -> Teardown: ...
 
-    def subscribe(self, callback: Any, *, schema: type[BaseModel] | None = None) -> Unsub:
+    def subscribe(self, cb: Any, *, schema: type[BaseModel] | None = None) -> Teardown:
         """Register a subscriber. Without ``schema`` → bytes; with ``schema`` → typed."""
         if schema is not None:
-            sig = self._schemas.setdefault(schema, Signal())
-            return sig.subscribe(callback)
-        return self._bytes.subscribe(callback)
+            sig = self._schemas.setdefault(schema, Emitter())
+            return sig.subscribe(cb)
+        return self._bytes.subscribe(cb)
 
     async def emit(self, body: BaseModel) -> None:
         """Local origin: dispatch to typed subs whose schema matches via isinstance; pack on demand for bytes."""
         for schema, sig in self._schemas.items():
             if isinstance(body, schema):
                 await sig.emit(body)
-        if len(self._bytes) > 0:
+        if self._bytes.subs > 0:
             await self._bytes.emit(pack(body))
 
     async def emit_bytes(self, data: bytes) -> None:
@@ -112,5 +112,7 @@ class TopicDispatcher:
                 await sig.emit(obj)
         await self._bytes.emit(data)
 
-    def __len__(self) -> int:
-        return sum(len(s) for s in self._schemas.values()) + len(self._bytes)
+    @property
+    def subs(self) -> int:
+        """Total active subscribers across all typed schemas plus the raw-bytes stream."""
+        return sum(s.subs for s in self._schemas.values()) + self._bytes.subs

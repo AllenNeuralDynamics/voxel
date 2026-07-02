@@ -1,12 +1,11 @@
 <script lang="ts">
   import { Restore } from '$lib/icons';
   import { SpinBox } from '$lib/kit';
-  import type { PreviewManager } from '$lib/preview';
-  import { isDefaultViewport } from '$lib/preview';
+  import { isDefaultViewport, type Preview } from '$lib/model';
   import { clampTopLeft } from '$lib/utils';
 
   interface Props {
-    previewer: PreviewManager;
+    previewer: Preview;
   }
 
   let { previewer }: Props = $props();

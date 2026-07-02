@@ -336,6 +336,7 @@ class PreviewGenerator:
         self.levels = levels or PreviewLevels()
         self._idx: int = 0
         self._current_frame: np.ndarray | None = None
+        self._last_histogram: list[int] | None = None  # most recent overview histogram, for auto-leveling
         self._colormap: str | None = None
         self._lut: np.ndarray | None = None  # (256, 3) uint8, cached
         self._tile_task: asyncio.Task | None = None  # background tile generation
@@ -347,6 +348,11 @@ class PreviewGenerator:
         self._overview_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewOverview")
         # Parallel executor for tile generation
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="PreviewTile")
+
+    @property
+    def last_histogram(self) -> list[int] | None:
+        """Histogram of the most recent overview frame (pre-level-adjustment), or None before any frame."""
+        return self._last_histogram
 
     @property
     def colormap(self) -> str | None:
@@ -470,7 +476,7 @@ class PreviewGenerator:
         max_val = np.iinfo(raw_frame.dtype).max
         num_bins = 1024
         histogram, _ = np.histogram(resized, bins=num_bins, range=(0, max_val))
-        hist_data = histogram.tolist()
+        self._last_histogram = histogram.tolist()
 
         # Apply levels + colormap
         processed = self._apply_processing(resized, raw_frame.dtype)
@@ -484,7 +490,7 @@ class PreviewGenerator:
             levels=self.levels,
             fmt=self._fmt,
             colormap=self._colormap,
-            histogram=hist_data,
+            histogram=self._last_histogram,
         )
 
         preview_frame = PreviewFrame.from_array(processed, info)
@@ -498,7 +504,13 @@ class PreviewGenerator:
     # ── Internal: Tiles ────────────────────────────────────────────────
 
     async def _generate_and_send_tiles(self, raw_frame: np.ndarray, frame_idx: int, viewport: PreviewViewport) -> None:
-        """Generate visible tiles in parallel and send each as it completes."""
+        """Generate visible tiles in parallel and send each as it completes.
+
+        No-op at a full (unzoomed) viewport: the overview frame already covers it, so tiles would be
+        redundant work (encode + transport + client decode) for no added detail.
+        """
+        if not viewport.needs_adjustment:
+            return
         scale = select_scale(viewport)
 
         visible = compute_visible_tiles(viewport, scale)

@@ -1,7 +1,6 @@
 <script lang="ts" generics="T extends string | number">
   import { Select as KitSelect, type SelectVariants } from '$lib/kit';
-
-  import type { EnumeratedModel } from '../models.svelte';
+  import type { EnumeratedModel } from '$lib/model';
 
   interface Props extends SelectVariants {
     model: EnumeratedModel<T>;

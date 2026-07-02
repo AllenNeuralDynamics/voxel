@@ -1,14 +1,15 @@
-"""Voxel system configuration.
+"""Machine-local facts, config, and YAML I/O for the box this code runs on.
 
-Combines user-settable preferences (loaded from ``~/.voxel/system.yaml``) with
-machine-introspected facts exposed as read-only properties. One object, both
-sources of truth: YAML for what the user chose, psutil for what the machine is.
+``System`` exposes what is true of *this* machine — CPU count, platform, hostname,
+the RAM budget (:class:`System.Ram`), and the local storage roots (``store``/``scratch``).
+Machine-specific knobs are sourced from ``VOXEL_*`` env vars, deliberately kept out of
+the portable app config.
 
-YAML loading routes through a custom ruyaml-backed source so the project stays
-on a single YAML parser (ruyaml, already a dep) rather than pulling in PyYAML
-via pydantic-settings' stock YAML source.
+``load_yaml``/``save_yaml`` are the project's YAML helpers: pyyaml for loading,
+ruyaml for comment-preserving writes.
 """
 
+import io
 import logging
 import socket
 import sys
@@ -16,233 +17,144 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import psutil
-from pydantic import BaseModel, Field, field_validator
-from pydantic_settings import (
-    BaseSettings,
-    InitSettingsSource,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-)
+import yaml
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from ruyaml import YAML
+
+from vxlib import atomic_write
+
+try:
+    from yaml import CSafeLoader as _YamlLoader
+except ImportError:
+    from yaml import SafeLoader as _YamlLoader
 
 log = logging.getLogger(__name__)
 
-VOXEL_DIR = Path.home() / ".voxel"
-SYSTEM_CONFIG_PATH = VOXEL_DIR / "system.yaml"
 
+class System(BaseSettings):
+    """This machine: ``VOXEL_*`` env-configured knobs plus introspected facts.
 
-class DataRoot(BaseModel):
-    """A storage location for acquired session data."""
-
-    name: str
-    label: str | None = None
-    path: Path
-    default: bool = False
-
-
-class RuyamlConfigSettingsSource(InitSettingsSource):
-    """Pydantic-settings source that loads from YAML via ruyaml.
-
-    Slots into the same priority layering as the stock YamlConfigSettingsSource
-    by subclassing InitSettingsSource with the loaded dict, but uses ruyaml
-    (already a dep) instead of PyYAML.
+    Construct to read and validate the environment (each field maps to ``VOXEL_<FIELD>``).
+    Exposes the local storage roots (``store``/``scratch`` as :class:`Path`, defaulting under
+    ``dir``), the pure machine facts (``cpu_count``/``platform``/``hostname``), and the shared
+    RAM budget (:class:`Ram`). Paths are resolved only; whoever writes creates the directories.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], yaml_file: Path) -> None:
-        init_kwargs: dict[str, Any] = {}
-        if yaml_file.is_file():
-            loaded = YAML(typ="safe").load(yaml_file.read_text())
-            if loaded:
-                init_kwargs = dict(loaded)
-        super().__init__(settings_cls, init_kwargs)
+    model_config = SettingsConfigDict(env_prefix="VOXEL_", extra="ignore")
 
+    dir: Path = Field(default_factory=lambda: Path.home() / ".voxel")
+    store: Path = Field(default_factory=lambda: Path.home() / ".voxel" / "store", description="VOXEL_STORE")
+    scratch: Path = Field(default_factory=lambda: Path.home() / ".voxel" / "scratch", description="VOXEL_SCRATCH")
+    max_ram_fraction: float = Field(default=0.75, gt=0.0, le=1.0)
 
-class SystemConfig(BaseSettings):
-    """Voxel system configuration — user preferences + machine facts.
-
-    User-settable fields load from ``~/.voxel/system.yaml`` (if present), with
-    env var overrides (``VOXEL_*``) and init kwargs taking precedence. Machine
-    facts (RAM, CPU, platform, hostname) are exposed as read-only properties
-    that query psutil/stdlib on access.
-
-    Construct via ``SystemConfig.load()`` to also materialize the
-    ``~/.voxel/`` directory structure on first run. Direct construction
-    (``SystemConfig()``) skips that step and just loads whatever YAML exists.
-    """
-
-    model_config = SettingsConfigDict(
-        env_prefix="VOXEL_",
-        extra="ignore",
-    )
-
-    # ==================== User-settable preferences ====================
-
-    data_roots: list[DataRoot] = Field(default_factory=list)
-
-    max_ram_fraction: float = Field(
-        default=0.75,
-        gt=0.0,
-        le=1.0,
-        description="Fraction of total RAM voxel may use for writer buffers and pipelines.",
-    )
-
-    @field_validator("data_roots", mode="after")
+    @model_validator(mode="before")
     @classmethod
-    def _expand_root_paths(cls, v: list[DataRoot]) -> list[DataRoot]:
-        """Ensure every DataRoot's path is expanded and resolved."""
-        return [root.model_copy(update={"path": root.path.expanduser().resolve()}) for root in v]
+    def _default_roots(cls, data: Any) -> Any:
+        """Default store/scratch to ``<dir>/{store,scratch}`` when not set via VOXEL_STORE/VOXEL_SCRATCH."""
+        if isinstance(data, dict):
+            root = Path(data.get("dir") or Path.home() / ".voxel").expanduser()
+            data.setdefault("store", root / "store")
+            data.setdefault("scratch", root / "scratch")
+        return data
 
+    @field_validator("dir", "store", "scratch", mode="after")
     @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Source priority: init kwargs > YAML file > env vars > .env > secrets."""
-        return (
-            init_settings,
-            RuyamlConfigSettingsSource(settings_cls, yaml_file=SYSTEM_CONFIG_PATH),
-            env_settings,
-            dotenv_settings,
-            file_secret_settings,
-        )
+    def _expand(cls, p: Path) -> Path:
+        return p.expanduser()
 
-    # ==================== First-run initialization ====================
-
-    @classmethod
-    def initialize_defaults(cls) -> None:
-        """Create the ``~/.voxel/`` directory structure and default system.yaml."""
-        VOXEL_DIR.mkdir(parents=True, exist_ok=True)
-        data_dir = VOXEL_DIR / "data"
-        data_dir.mkdir(exist_ok=True)
-
-        defaults: dict[str, Any] = {
-            "data_roots": [
-                {
-                    "name": "local",
-                    "label": "Local Storage",
-                    "path": str(data_dir),
-                    "default": True,
-                },
-            ],
-        }
-        yaml = YAML()
-        yaml.preserve_quotes = True  # type: ignore[assignment]
-        with SYSTEM_CONFIG_PATH.open("w") as f:
-            yaml.dump(defaults, f)
-        log.info("Created system config: %s", SYSTEM_CONFIG_PATH)
-
-    @classmethod
-    def load(cls) -> "SystemConfig":
-        """Load SystemConfig, creating ``~/.voxel/`` defaults on first run.
-
-        Also propagates ``max_ram_fraction`` into the ``System`` class-singleton
-        so subsequent ``System.max_ram_bytes()`` / ``reserve_ram()`` / etc. use
-        the configured value.
-        """
-        if not SYSTEM_CONFIG_PATH.exists():
-            log.info("First run detected, creating ~/.voxel/ directory structure")
-            cls.initialize_defaults()
-        cfg = cls()
-        System.configure(cfg.max_ram_fraction)
-        return cfg
-
-
-class System:
-    """Process-global machine state and RAM-budget mediation.
-
-    Class-level singleton: every method is a classmethod, no instances exist.
-    Combines machine introspection (``cpu_count``, ``*_ram_bytes``, ``platform``,
-    ``hostname``) with weighted RAM-budget mediation for consumers on this host.
-
-    Defaults to ``max_ram_fraction=0.75``; call ``configure()`` to override
-    (typically done automatically by ``SystemConfig.load()`` from YAML).
-    Call ``reset()`` in tests for a clean slate.
-    """
-
-    _max_ram_fraction: ClassVar[float] = 0.75
-    _consumers: ClassVar[dict[str, float]] = {}
-
-    # ==================== Configuration ====================
-
-    @classmethod
-    def configure(cls, max_ram_fraction: float) -> None:
-        """Set the policy fraction for RAM budget math."""
-        if not 0.0 < max_ram_fraction <= 1.0:
-            raise ValueError(f"max_ram_fraction must be in (0, 1], got {max_ram_fraction}")
-        cls._max_ram_fraction = max_ram_fraction
-
-    @classmethod
-    def max_ram_fraction(cls) -> float:
-        return cls._max_ram_fraction
-
-    # ==================== Machine introspection (non-resource-specific) ====================
-
-    @classmethod
-    def cpu_count(cls) -> int:
+    @staticmethod
+    def cpu_count() -> int:
         return psutil.cpu_count(logical=True) or 1
 
-    @classmethod
-    def platform(cls) -> str:
+    @staticmethod
+    def platform() -> str:
         return sys.platform
 
-    @classmethod
-    def hostname(cls) -> str:
+    @staticmethod
+    def hostname() -> str:
         return socket.gethostname()
 
-    # ==================== RAM introspection ====================
+    class Ram:
+        """Weighted RAM-budget mediation for consumers sharing this machine's memory.
 
-    @classmethod
-    def total_ram_bytes(cls) -> int:
-        return psutil.virtual_memory().total
-
-    @classmethod
-    def available_ram_bytes(cls) -> int:
-        return psutil.virtual_memory().available
-
-    @classmethod
-    def max_ram_bytes(cls) -> int:
-        """Live policy cap: available_ram_bytes * max_ram_fraction."""
-        return int(cls.available_ram_bytes() * cls._max_ram_fraction)
-
-    # ==================== RAM budget operations ====================
-
-    @classmethod
-    def reserve_ram(cls, consumer_id: str, weight: float = 1.0) -> int:
-        """Register ``consumer_id`` with ``weight``; return current share in bytes."""
-        if weight <= 0:
-            raise ValueError(f"weight must be > 0, got {weight}")
-        cls._consumers[consumer_id] = weight
-        return cls.ram_share(consumer_id)
-
-    @classmethod
-    def release_ram(cls, consumer_id: str) -> None:
-        """Deregister ``consumer_id`` (no-op if not registered)."""
-        cls._consumers.pop(consumer_id, None)
-
-    @classmethod
-    def ram_share(cls, consumer_id: str) -> int:
-        """Return the consumer's current weighted share in bytes.
-
-        Raises KeyError if the consumer hasn't been registered via reserve_ram().
+        Holds a policy fraction of available RAM and divides it among registered
+        consumers in proportion to their weights. Consumers register via
+        ``reserve()`` / ``release()`` and read their allocation via ``reserved()``.
         """
-        if consumer_id not in cls._consumers:
-            raise KeyError(consumer_id)
-        total_weight = sum(cls._consumers.values()) or 1.0
-        return int(cls.max_ram_bytes() * cls._consumers[consumer_id] / total_weight)
 
-    @classmethod
-    def ram_reserved(cls, consumer_id: str) -> bool:
-        """Return True if ``consumer_id`` currently has a RAM reservation."""
-        return consumer_id in cls._consumers
+        _consumers: ClassVar[dict[str, float]] = {}
 
-    # ==================== Test support ====================
+        @classmethod
+        def total_bytes(cls) -> int:
+            return psutil.virtual_memory().total
 
-    @classmethod
-    def reset(cls) -> None:
-        """Reset to pristine state — primarily for tests."""
-        cls._consumers = {}
-        cls._max_ram_fraction = 0.75
+        @classmethod
+        def available_bytes(cls) -> int:
+            return psutil.virtual_memory().available
+
+        @classmethod
+        def max_bytes(cls) -> int:
+            """Live policy cap: available system RAM * VOXEL_MAX_RAM_FRACTION."""
+            return int(cls.available_bytes() * System().max_ram_fraction)
+
+        @classmethod
+        def reserve(cls, consumer_id: str, weight: float = 1.0) -> int:
+            """Register ``consumer_id`` with ``weight``; return its share in bytes."""
+            if weight <= 0:
+                raise ValueError(f"weight must be > 0, got {weight}")
+            cls._consumers[consumer_id] = weight
+            return cls.reserved(consumer_id)
+
+        @classmethod
+        def release(cls, consumer_id: str) -> None:
+            """Deregister ``consumer_id`` (no-op if not registered)."""
+            cls._consumers.pop(consumer_id, None)
+
+        @classmethod
+        def reserved(cls, consumer_id: str) -> int:
+            """Return the consumer's current weighted share in bytes.
+
+            Raises KeyError if the consumer hasn't been registered via reserve().
+            """
+            if consumer_id not in cls._consumers:
+                raise KeyError(consumer_id)
+            total_weight = sum(cls._consumers.values()) or 1.0
+            return int(cls.max_bytes() * cls._consumers[consumer_id] / total_weight)
+
+
+def load_yaml[T: BaseModel](path: Path, model_cls: type[T]) -> T:
+    """Load and validate a YAML file into ``model_cls`` (pyyaml, load-only)."""
+    if not path.exists():
+        raise FileNotFoundError(f"No {model_cls.__name__} found at {path}")
+    data = yaml.load(path.read_text(encoding="utf-8"), Loader=_YamlLoader)
+    return model_cls.model_validate(data)
+
+
+def save_yaml(path: Path, model: BaseModel) -> None:
+    """Write ``model`` to ``path`` as YAML, preserving any comments already in the file (ruyaml)."""
+    # text = yaml.safe_dump(model.model_dump(mode="json"), sort_keys=False, default_flow_style=False, width=4096)
+
+    def _merge(dst: Any, src: Any) -> Any:
+        """Overlay ``src`` (plain dict from a model dump) onto ``dst`` (a ruyaml CommentedMap),
+        keeping ``dst``'s comments. Mappings merge key-by-key; everything else replaces."""
+        if isinstance(dst, dict) and isinstance(src, dict):
+            for key in [k for k in dst if k not in src]:
+                del dst[key]  # field dropped from the model
+            for key, value in src.items():
+                cur = dst.get(key)
+                dst[key] = _merge(cur, value) if isinstance(cur, dict) and isinstance(value, dict) else value
+            return dst
+        return src
+
+    rt = YAML()  # round-trip mode: keeps comments, quotes, key order
+    rt.preserve_quotes = True  # pyright: ignore[reportAttributeAccessIssue]
+    rt.width = 4096  # pyright: ignore[reportAttributeAccessIssue]  # prevent unwanted line wrapping
+    data: Any = model.model_dump(mode="json")
+    if path.exists():
+        data = _merge(rt.load(path.read_text(encoding="utf-8")), data)
+    buf = io.StringIO()
+    rt.dump(data, buf)
+    text = buf.getvalue()
+
+    atomic_write(path, text)

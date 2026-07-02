@@ -2,7 +2,7 @@
   import './layout.css';
 
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
-  import { DropdownMenu } from 'bits-ui';
+  import { Accordion, DropdownMenu } from 'bits-ui';
   import { Pane, PaneGroup } from 'paneforge';
   import { PersistedState, useEventListener } from 'runed';
   import type { Component } from 'svelte';
@@ -12,90 +12,67 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import type { Pathname } from '$app/types';
-  import { App } from '$lib/app.svelte';
   import favicon from '$lib/assets/favicon.svg';
-  import { setLogsContext, setSessionContext } from '$lib/context';
+  import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import { GridCanvas } from '$lib/grid';
-  import { Crosshair, Layers, Microscope, Play, TuneVertical, WaveformsIcon } from '$lib/icons';
+  import { provideTaskSelection } from '$lib/grid/selection.svelte';
+  import { ChevronDown, Crosshair, Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import { ProfileSelector } from '$lib/microscope';
-  import AuxDevicesPanel from '$lib/microscope/AuxDevicesPanel.svelte';
-  import LasersPanel from '$lib/microscope/LasersPanel.svelte';
+  import LogViewer from '$lib/LogViewer.svelte';
+  import MetadataPanel from '$lib/MetadataPanel.svelte';
+  import { setVoxelApp, VoxelApp } from '$lib/model';
   import { PreviewCanvas } from '$lib/preview';
+  import ProfileSelector from '$lib/ProfileSelector.svelte';
+  import StartAcquisition from '$lib/StartAcquisition.svelte';
+  import StencilControls from '$lib/StencilControls.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
-  import { cn, createPaneMinSize } from '$lib/utils';
+  import { cn, createPaneSize, toastError } from '$lib/utils';
+  import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import ConnectionSplash from './ConnectionSplash.svelte';
   import LaunchScreen from './LaunchScreen.svelte';
-  import LogViewer from './LogViewer.svelte';
-  import VoxelLogo from './VoxelLogo.svelte';
 
-  let { children } = $props();
+  const { children } = $props();
 
-  // --- App lifecycle ---
+  const app = new VoxelApp();
+  setVoxelApp(app);
+  provideTaskSelection();
 
-  const app = new App();
-
-  function cleanup() {
-    app.dispose();
-  }
-
-  useEventListener(window, 'beforeunload', cleanup);
-
-  onMount(async () => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js');
-    }
-    try {
-      await app.initialize();
-    } catch {
-      // Connection state managed by client — splash handles the UI
-    }
+  onMount(() => {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    toastError(app.initialize());
   });
+  onDestroy(() => app.dispose());
+  useEventListener(window, 'beforeunload', () => app.dispose());
 
-  onDestroy(cleanup);
-
-  const session = $derived(app.session);
   const logs = $derived(app.logs);
-  const clearLogs = () => app.clearLogs();
-
-  // --- Session-scoped context (consumers only dereference when session is truthy) ---
-
-  setSessionContext(() => session!);
-  setLogsContext({
-    get logs() {
-      return app.logs;
-    },
-    clearLogs: () => app.clearLogs()
-  });
 
   // --- Keyboard shortcuts ---
 
-  createHotkey('Mod+Z', () => session?.undo.undo());
-  createHotkey('Mod+Shift+Z', () => session?.undo.redo());
   createHotkey('Alt+P', () => {
-    if (!session) return;
-    if (session.mode === 'previewing') session.preview.stopPreview();
-    else session.preview.startPreview();
+    const inst = app.instrument;
+    if (!inst) return;
+    if (inst.mode === 'preview') inst.preview.stopPreview();
+    else inst.preview.startPreview();
   });
   createHotkeySequence(['Mod+K', 'T'], () => (themes.pickerOpen = true));
   createHotkeySequence(['Mod+K', 'Q'], () => {
-    if (session) closeDialogOpen = true;
+    if (app.instrument) closeDialogOpen = true;
   });
 
   // --- Shell nav ---
 
   let shellRef = $state<HTMLElement | null>(null);
-  const leftPaneMin = createPaneMinSize(() => shellRef, 870, 50);
+  const leftPane = createPaneSize(() => shellRef, { min: 740, fallbackMin: 30 });
+  const rightPane = createPaneSize(() => shellRef, { min: 340, max: 350, fallbackMin: 15, fallbackMax: 18 });
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
     { id: '/', label: 'Inspect', icon: Microscope },
+    { id: '/snap', label: 'Snap', icon: Crosshair },
     { id: '/tune', label: 'Tune', icon: WaveformsIcon },
     { id: '/configure', label: 'Configure', icon: TuneVertical },
-    { id: '/snap', label: 'Snap', icon: Crosshair },
-    { id: '/plan', label: 'Plan', icon: Layers },
-    { id: '/acquire', label: 'Acquire', icon: Play }
+    { id: '/plan', label: 'Plan', icon: Layers }
   ];
 
   const viewId = $derived<Pathname>(
@@ -138,20 +115,26 @@
   // --- Dialog state ---
 
   let closeDialogOpen = $state(false);
+
+  // Sidebar accordion: multiple sections may be open; Grid Stencil open by default.
+  let openSections = $state<string[]>(['grid']);
 </script>
 
 <svelte:head>
   <link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if app.client.state !== 'connected' || !app.status || (app.hasSession && !session)}
+{#if !app.client.isConnected}
   <ConnectionSplash {app} />
-{:else if session}
-  {@const isPreviewing = session.mode === 'previewing'}
-  {@const isAcquiring = session.mode === 'acquiring'}
+{:else if !app.instrument}
+  <LaunchScreen {app} />
+{:else}
+  {@const instrument = app.instrument}
+  {@const isPreviewing = instrument.mode === 'preview'}
+  {@const isAcquiring = instrument.mode === 'capture'}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
-    <PaneGroup direction="horizontal" autoSaveId="shell">
-      <Pane defaultSize={60} minSize={leftPaneMin.value} maxSize={70}>
+    <PaneGroup direction="horizontal" autoSaveId="shell.v2">
+      <Pane defaultSize={leftPane.minSize} minSize={leftPane.minSize} maxSize={60}>
         <div class="grid h-full grid-rows-[auto_1fr_auto]">
           <header class="flex h-15 items-center justify-between border-b border-border bg-surface px-4">
             <div class="flex items-center gap-x-3">
@@ -178,7 +161,7 @@
                     <DropdownMenu.Separator class="my-1 h-px bg-border" />
                     <DropdownMenu.Item
                       class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
-                      disabled={!session}
+                      disabled={!app.instrument}
                       onclick={() => (closeDialogOpen = true)}
                     >
                       Close Session…
@@ -214,9 +197,9 @@
               variant={isPreviewing || isAcquiring ? 'danger' : 'success'}
               size="lg"
               onclick={() => {
-                if (isAcquiring) session.acquisition.stop();
-                else if (isPreviewing) session.preview.stopPreview();
-                else session.preview.startPreview();
+                if (isAcquiring) toastError(instrument.stopAcquisition());
+                else if (isPreviewing) instrument.preview.stopPreview();
+                else instrument.preview.startPreview();
               }}
             >
               {#if isAcquiring}
@@ -253,26 +236,8 @@
               onCollapse={() => {}}
               class="bg-surface/50"
             >
-              {#if bottomPanelTab === 'devices'}
-                <AuxDevicesPanel microscope={session.scope} class="h-full overflow-auto p-4" />
-              {:else if bottomPanelTab === 'lasers'}
-                <LasersPanel microscope={session.scope} />
-                <!-- {:else if bottomPanelTab === 'analog-out'}
-                {#if session.scope.profiles.activeId}
-                  <AnalogOutPanel
-                    microscope={session.scope}
-                    canEdit={session.mode === 'idle'}
-                    class="h-full overflow-auto"
-                  />
-                {:else}
-                  <div class="flex h-full items-center justify-center text-sm text-fg-muted">
-                    Select a profile to view waveforms
-                  </div>
-                {/if} -->
-              {:else if bottomPanelTab === 'logs'}
-                <div class="h-full overflow-hidden bg-card p-4 pt-2">
-                  <LogViewer {logs} onClear={clearLogs} />
-                </div>
+              {#if bottomPanelTab === 'logs'}
+                <LogViewer {logs} class="bg-card" />
               {/if}
             </Pane>
           </PaneGroup>
@@ -282,33 +247,7 @@
             <div class="flex items-center gap-2">
               <div class="flex divide-x divide-border rounded border border-border">
                 <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
-                <!-- <button onclick={() => selectTab('analog-out')} class={tabClass(bottomPanelTab === 'analog-out')}
-                  >Analog Out</button
-                > -->
-                <button onclick={() => selectTab('devices')} class={tabClass(bottomPanelTab === 'devices')}>
-                  Auxiliary
-                </button>
-                <button onclick={() => selectTab('lasers')} class={tabClass(bottomPanelTab === 'lasers')}>
-                  Lasers
-                  {#each [...session.scope.lasers.values()] as laser (laser.id)}
-                    {@const enabled = laser.isEnabled?.value === true}
-                    <div class="relative">
-                      {#if enabled}
-                        <div class="h-2 w-2 rounded-full" style="background-color: {laser.color};"></div>
-                        <span
-                          class="absolute inset-0 animate-ping rounded-full opacity-75"
-                          style="background-color: {laser.color};"
-                        ></span>
-                      {:else}
-                        <div class="h-2 w-2 rounded-full border opacity-70" style="border-color: {laser.color};"></div>
-                      {/if}
-                    </div>
-                  {/each}
-                </button>
               </div>
-            </div>
-            <div class="max-w-100 min-w-40 flex-1">
-              <ProfileSelector profiles={session.scope.profiles} stacks={session.stacks} size="md" class="w-full" />
             </div>
           </footer>
         </div>
@@ -321,14 +260,59 @@
         <main class="flex h-full flex-col overflow-hidden">
           <PaneGroup direction="vertical" autoSaveId="shell.right">
             <Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
-              <PreviewCanvas previewer={session.preview} fov={session.mosaic.fov} />
+              <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
             </Pane>
             <PaneDivider direction="horizontal" />
             <Pane defaultSize={50} minSize={30} class="h-full flex-1">
-              <GridCanvas {session} />
+              <GridCanvas {instrument} />
             </Pane>
           </PaneGroup>
         </main>
+      </Pane>
+      <PaneDivider direction="vertical" />
+      <Pane defaultSize={16} {...rightPane}>
+        <div class="flex h-full flex-col">
+          <div class="flex h-15 shrink-0 items-center border-b border-border px-3">
+            <ProfileSelector {instrument} size="md" class="w-full" />
+          </div>
+
+          <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            {#if instrument.lasers.size > 0}
+              <LasersMonitor {instrument} />
+            {/if}
+
+            {#snippet section(id: string, title: string, body: import('svelte').Snippet)}
+              <Accordion.Item value={id} class="border-t border-border">
+                <Accordion.Header>
+                  <Accordion.Trigger
+                    class="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-fg-muted/70 uppercase transition-colors outline-none hover:text-fg-muted [&[data-state=closed]>svg]:-rotate-90"
+                  >
+                    <span class="text-xs font-medium tracking-wide">{title}</span>
+                    <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
+                  </Accordion.Trigger>
+                </Accordion.Header>
+                <Accordion.Content
+                  class="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+                >
+                  <div class="px-3 pb-3">{@render body()}</div>
+                </Accordion.Content>
+              </Accordion.Item>
+            {/snippet}
+
+            {#snippet gridBody()}<StencilControls {instrument} />{/snippet}
+            {#snippet metadataBody()}<MetadataPanel {instrument} />{/snippet}
+            <!-- {#snippet outputBody()}<OutputControls {instrument} />{/snippet} -->
+
+            <div class="flex-1"></div>
+            <Accordion.Root type="multiple" bind:value={openSections}>
+              {@render section('grid', 'Grid Stencil', gridBody)}
+              {@render section('metadata', 'Metadata', metadataBody)}
+              <!-- {@render section('output', 'Output', outputBody)} -->
+            </Accordion.Root>
+          </div>
+
+          <StartAcquisition {app} class="shrink-0 border-t border-border" />
+        </div>
       </Pane>
     </PaneGroup>
   </div>
@@ -347,7 +331,7 @@
           variant="danger"
           onclick={() => {
             closeDialogOpen = false;
-            app.closeSession();
+            app.close();
           }}
         >
           Close Session
@@ -355,8 +339,7 @@
       </Dialog.Footer>
     </Dialog.Content>
   </Dialog.Root>
-{:else}
-  <LaunchScreen {app} />
 {/if}
+
 <AppearanceSheet bind:open={themes.pickerOpen} />
 <Toaster position="bottom-left" />

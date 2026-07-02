@@ -10,8 +10,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from rich import print
 
-from ome_zarr_writer.ng_view import NGLUT, NGLayerConfig, ng_quick_view
-from ome_zarr_writer.zarr_server.fastapi import FastAPIZarrServer
+from ome_zarr_writer.viewer.ng_view import NGLUT, NGLayerConfig, ng_quick_view
+from ome_zarr_writer.viewer.zarr_server.fastapi import FastAPIZarrServer
 
 
 def ng_quick_view_fastapi(

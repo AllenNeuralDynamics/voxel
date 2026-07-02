@@ -2,10 +2,10 @@
   import { Tooltip } from 'bits-ui';
 
   import { Alert } from '$lib/icons';
-  import type { PreviewManager } from '$lib/preview';
+  import type { Preview } from '$lib/model';
 
   interface Props {
-    previewer: PreviewManager;
+    previewer: Preview;
   }
 
   let { previewer }: Props = $props();

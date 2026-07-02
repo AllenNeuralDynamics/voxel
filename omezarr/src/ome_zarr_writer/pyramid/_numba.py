@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 
-from ome_zarr_writer.types import ScaleLevel
+from ome_zarr_writer.dataset import ScaleLevel
 
 try:
     from numba import jit, prange

@@ -3,7 +3,7 @@
 
   import { EyeOff } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
-  import type { ColormapCatalog } from '$lib/preview';
+  import type { ColormapCatalog } from '$lib/model';
   import { computeAutoLevels } from '$lib/utils';
 
   import ColormapPicker from './ColormapPicker.svelte';

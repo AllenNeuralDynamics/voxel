@@ -15,8 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-vxl-qt = "vxl_qt.cli:main"
-voxel-qt = "vxl_qt.cli:main"
+vxl-qt = "vxl_qt.app:main"
+voxel-qt = "vxl_qt.app:main"
 
 [tool.uv.sources]
 vxl = { workspace = true }

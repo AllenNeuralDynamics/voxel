@@ -1,682 +1,494 @@
 <script lang="ts">
-  import { Pane, PaneGroup } from 'paneforge';
-  import { watch } from 'runed';
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  import { Popover } from 'bits-ui';
+  import { PersistedState, watch } from 'runed';
+  import type { Component } from 'svelte';
 
-  import type { Stack, StackStatus } from '$lib/config';
-  import { getSessionContext } from '$lib/context';
-  import { ChevronDown, ChevronRight, EllipsisVertical } from '$lib/icons';
-  import { Button, Dialog, DropdownMenu, NudgeInput, Select, SpinBox } from '$lib/kit';
-  import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import StackStatusIcon from '$lib/stacks/StackStatusIcon.svelte';
-  import { cn, createPaneMinSize, sanitizeString } from '$lib/utils';
+  import { getTaskSelection } from '$lib/grid/selection.svelte';
+  import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, TrashCanOutline } from '$lib/icons';
+  import { Button, Checkbox, Dialog, NumberInput, Select, SpinBox } from '$lib/kit';
+  import { getVoxelApp, type TaskPatch, type TileOrder } from '$lib/model';
+  import { cn, sanitizeString, toastError } from '$lib/utils';
 
-  const session = getSessionContext();
+  const app = getVoxelApp();
+  const instrument = $derived(app.instrument);
+  const selection = getTaskSelection();
 
-  // --- Filter ---
+  // Stored in µm, like task positions; displayed/entered through the active unit.
+  let nudgeStep = $state(100);
 
-  type StackFilter = 'all' | StackStatus;
-  let filter = $state<StackFilter>('all');
+  // --- Space units: a display/entry lens over µm-stored values ---
 
-  const filterOptions: { value: StackFilter; label: string }[] = [
-    { value: 'all', label: 'All Stacks' },
-    { value: 'planned', label: 'Planned' },
-    { value: 'completed', label: 'Completed' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'skipped', label: 'Skipped' }
+  interface SpaceUnit {
+    value: 'mm' | 'um';
+    label: string;
+    scale: number; // µm per unit
+    step: number; // fine step (0.1 µm resolution)
+    bigStep: number; // coarse step (10 µm)
+    decimals: number; // display precision
+  }
+
+  const SPACE_UNITS: SpaceUnit[] = [
+    { value: 'mm', label: 'mm', scale: 1000, step: 0.0001, bigStep: 0.01, decimals: 4 },
+    { value: 'um', label: 'µm', scale: 1, step: 0.1, bigStep: 10, decimals: 1 }
+  ];
+  const SPACE_UNIT_OPTIONS = SPACE_UNITS.map((u) => ({ value: u.value, label: u.label }));
+
+  const spaceUnit = new PersistedState<SpaceUnit['value']>('acquire.spaceUnit', 'mm');
+  const unit = $derived(SPACE_UNITS.find((u) => u.value === spaceUnit.current) ?? SPACE_UNITS[0]);
+
+  const TILE_ORDER_OPTIONS: { value: TileOrder; label: string }[] = [
+    { value: 'sweep_row', label: 'Sweep Row' },
+    { value: 'sweep_column', label: 'Sweep Column' },
+    { value: 'snake_row', label: 'Snake Row' },
+    { value: 'snake_column', label: 'Snake Column' },
+    { value: 'nearest_neighbor', label: 'Nearest Neighbor' },
+    { value: 'optimized', label: 'Optimized' },
+    { value: 'custom', label: 'Custom' }
   ];
 
-  // --- Profile groups ---
+  // --- Rows: placed tasks in traversal (taskTiles) order ---
 
-  interface ProfileGroup {
-    profileId: string;
-    label: string;
-    stacks: Stack[];
-    isActive: boolean;
+  interface TaskRow {
+    taskId: string;
+    x: number;
+    y: number;
+    start: number;
+    end: number;
+    profileIds: string[];
+    order: number;
   }
 
-  let collapsedProfiles = new SvelteSet<string>();
-
-  const profileGroups = $derived.by<ProfileGroup[]>(() => {
-    const allStacks = filter === 'all' ? session.stacks.list : session.stacks.list.filter((s) => s.status === filter);
-
-    const groupMap = new SvelteMap<string, Stack[]>();
-    for (const s of allStacks) {
-      const group = groupMap.get(s.profile_id);
-      if (group) group.push(s);
-      else groupMap.set(s.profile_id, [s]);
-    }
-
-    const activeId = session.scope.profiles.activeId;
-    const profileOrder = session.stacks.plan.profile_order;
-
-    const groups: ProfileGroup[] = [];
-    for (const [profileId, stacks] of groupMap) {
-      groups.push({
-        profileId,
-        label: session.scope.config.profiles[profileId]?.label ?? sanitizeString(profileId),
-        stacks,
-        isActive: profileId === activeId
-      });
-    }
-
-    groups.sort((a, b) => {
-      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-      return profileOrder.indexOf(a.profileId) - profileOrder.indexOf(b.profileId);
+  const rows = $derived.by<TaskRow[]>(() => {
+    const inst = instrument;
+    if (!inst) return [];
+    return inst.taskTiles.map((tile, i) => {
+      const t = inst.state.tasks[tile.task_id];
+      return {
+        taskId: tile.task_id,
+        x: tile.x,
+        y: tile.y,
+        start: t?.start ?? 0,
+        end: t?.end ?? 0,
+        profileIds: t?.profile_ids ?? [],
+        order: i + 1
+      };
     });
-
-    return groups;
   });
 
-  // Flat list of visible stacks (for shift-click range selection)
-  const flatStacks = $derived(profileGroups.flatMap((g) => (collapsedProfiles.has(g.profileId) ? [] : g.stacks)));
+  const selectedRows = $derived(rows.filter((r) => selection.has(r.taskId)));
+  const hasSelection = $derived(selectedRows.length > 0);
+  const allSelected = $derived(rows.length > 0 && selectedRows.length === rows.length);
+  const someSelected = $derived(hasSelection && !allSelected);
 
-  const totalCount = $derived(
-    filter === 'all' ? session.stacks.list.length : session.stacks.list.filter((s) => s.status === filter).length
-  );
-
-  const hasSelection = $derived(session.stacks.selected.length > 0);
-
-  // Acquisition order: index of each stack in the plan's ordered stacks list
-  const acquisitionOrder = $derived(new Map(session.stacks.list.map((s, i) => [s.stack_id, i + 1])));
-
-  // --- Merged Z values for batch editing ---
-
-  function commonValue(values: number[]): number | undefined {
-    if (values.length === 0) return undefined;
-    const first = values[0];
-    return values.every((v) => v === first) ? first : undefined;
+  function toggleAll(checked: boolean) {
+    if (checked) selection.add(...rows.map((r) => r.taskId));
+    else selection.clear();
   }
 
-  const selectedStacks = $derived(session.stacks.selected);
-
-  // Common values in mm (undefined = mixed)
-  function toMm(v: number | undefined): number {
-    return v !== undefined ? v / 1000 : NaN;
+  function profileLabel(id: string): string {
+    return instrument?.imaging.profiles[id]?.label || sanitizeString(id);
   }
-  const commonX = $derived(toMm(commonValue(selectedStacks.map((s) => s.x))));
-  const commonY = $derived(toMm(commonValue(selectedStacks.map((s) => s.y))));
-  const commonZStart = $derived(toMm(commonValue(selectedStacks.map((s) => s.z_start))));
-  const commonZEnd = $derived(toMm(commonValue(selectedStacks.map((s) => s.z_end))));
-  const commonFrames = $derived(commonValue(selectedStacks.map((s) => s.num_frames)) ?? NaN);
-  const commonRange = $derived(
-    !Number.isNaN(commonZStart) && !Number.isNaN(commonZEnd) ? Math.abs(commonZEnd - commonZStart) : NaN
-  );
 
-  // FOV — show "Mixed" when stacks have different FOVs
-  const commonFovW = $derived(commonValue(selectedStacks.map((s) => s.w)));
-  const commonFovH = $derived(commonValue(selectedStacks.map((s) => s.h)));
+  const allProfileIds = $derived(Object.keys(instrument?.imaging.profiles ?? {}));
 
-  // Profile breakdown for header badges
-  const profileBreakdown = $derived.by(() => {
-    const counts = new SvelteMap<string, number>();
-    for (const s of selectedStacks) {
-      counts.set(s.profile_id, (counts.get(s.profile_id) ?? 0) + 1);
-    }
-    return [...counts.entries()].map(([id, count]) => ({
-      id,
-      label: session.scope.config.profiles[id]?.label ?? sanitizeString(id),
-      count
-    }));
-  });
+  // Frames a profile captures over this task's Z-range: ⌊range / z_step⌋ + 1.
+  function framesFor(row: TaskRow, profileId: string): number {
+    const zStep = instrument?.imaging.profiles[profileId]?.z_step ?? 0;
+    return zStep > 0 ? Math.floor(Math.abs(row.end - row.start) / zStep) + 1 : 0;
+  }
 
-  // Status breakdown for header
-  const statusBreakdown = $derived.by(() => {
-    const counts = new SvelteMap<string, number>();
-    for (const s of selectedStacks) {
-      counts.set(s.status, (counts.get(s.status) ?? 0) + 1);
-    }
-    return [...counts.entries()] as [StackStatus, number][];
-  });
-
-  // --- Actions ---
-
-  function applyPosition(axis: 'x' | 'y', value: number) {
-    if (selectedStacks.length === 0) return;
-    session.stacks.edit(
-      selectedStacks.map((s) => ({
-        stackId: s.stack_id,
-        ...(axis === 'x' ? { x: value } : { y: value })
-      }))
+  // Add/remove a profile across the selection (or just this row), keyed off the clicked row's membership.
+  function toggleProfile(row: TaskRow, profileId: string) {
+    const targets = selection.has(row.taskId) && selectedRows.length > 1 ? selectedRows : [row];
+    const shouldAdd = !row.profileIds.includes(profileId);
+    const patches = Object.fromEntries(
+      targets.map((r) => {
+        const next = shouldAdd
+          ? r.profileIds.includes(profileId)
+            ? r.profileIds
+            : [...r.profileIds, profileId]
+          : r.profileIds.filter((p) => p !== profileId);
+        return [r.taskId, { profile_ids: next }];
+      })
     );
+    toastError(instrument?.updateTasks(patches));
   }
 
-  function applyNudge(dx: number, dy: number) {
-    if (selectedStacks.length === 0 || (dx === 0 && dy === 0)) return;
-    session.stacks.edit(
-      selectedStacks.map((s) => ({
-        stackId: s.stack_id,
-        x: s.x + dx,
-        y: s.y + dy
-      })),
-      'nudge'
-    );
+  // --- Actions (batched) ---
+
+  function applyToSelected(patchFor: (r: TaskRow) => TaskPatch) {
+    if (selectedRows.length === 0) return;
+    toastError(instrument?.updateTasks(Object.fromEntries(selectedRows.map((r) => [r.taskId, patchFor(r)]))));
   }
 
-  function applyFrameCount(frames: number) {
-    if (selectedStacks.length === 0 || frames < 1) return;
-    session.stacks.edit(
-      selectedStacks.map((s) => ({
-        stackId: s.stack_id,
-        zEndUm: s.z_start + (frames - 1) * s.z_step
-      }))
-    );
+  const applyNudge = (dx: number, dy: number) => applyToSelected((r) => ({ x: r.x + dx, y: r.y + dy }));
+
+  // Applies a field patch to every selected task when this row is part of a multi-selection, else just this row.
+  function applyField(row: TaskRow, field: 'x' | 'y' | 'start' | 'end', value: number) {
+    const targets = selection.has(row.taskId) && selectedRows.length > 1 ? selectedRows : [row];
+    toastError(instrument?.updateTasks(Object.fromEntries(targets.map((r) => [r.taskId, { [field]: value }]))));
   }
 
-  function applyZRange(field: 'zStartUm' | 'zEndUm', value: number) {
-    if (selectedStacks.length === 0) return;
-    session.stacks.edit(
-      selectedStacks.map((s) => ({
-        stackId: s.stack_id,
-        zStartUm: field === 'zStartUm' ? value : s.z_start,
-        zEndUm: field === 'zEndUm' ? value : s.z_end
-      }))
-    );
+  const setField = (row: TaskRow, field: 'x' | 'y' | 'start' | 'end', value: number) =>
+    applyField(row, field, value * unit.scale);
+
+  // Current stage value for a field: X/Y are relative to the axis lower limit; Z start/end are absolute stage Z.
+  function stageValue(field: 'x' | 'y' | 'start' | 'end'): number | undefined {
+    const s = instrument?.stage;
+    if (field === 'start' || field === 'end') return s?.z?.position?.value;
+    const axis = field === 'x' ? s?.x : s?.y;
+    return axis ? (axis.position?.value ?? 0) - (axis.lowerLimit?.value ?? 0) : undefined;
   }
 
-  function removeSelectedStacks() {
-    const stacks = session.stacks.selected;
-    if (stacks.length === 0) return;
-    session.stacks.remove(stacks.map((s) => s.stack_id));
-    clearDialogOpen = false;
+  // Match-stage from the column headers: applies the current stage value to every selected task.
+  function matchStageSelection(field: 'x' | 'y' | 'start' | 'end') {
+    const value = stageValue(field);
+    if (value == null || selectedRows.length === 0) return;
+    toastError(instrument?.updateTasks(Object.fromEntries(selectedRows.map((r) => [r.taskId, { [field]: value }]))));
   }
+
+  // A click/keydown that originated inside an editable cell — selection should ignore it (unless a modifier is held).
+  const isEditTarget = (e: Event) => (e.target as HTMLElement | null)?.closest('[data-cell-edit]') != null;
 
   // --- Selection ---
 
-  function handleRowClick(stack: Stack, e: MouseEvent) {
-    if (e.metaKey || e.ctrlKey) {
-      if (session.stacks.isSelected(stack.stack_id)) {
-        session.stacks.removeFromSelection([stack]);
-      } else {
-        session.stacks.addToSelection([stack]);
-      }
-    } else if (e.shiftKey && lastClickedId) {
-      const lastIdx = flatStacks.findIndex((s) => s.stack_id === lastClickedId);
-      const curIdx = flatStacks.findIndex((s) => s.stack_id === stack.stack_id);
-      if (lastIdx >= 0 && curIdx >= 0) {
-        const from = Math.min(lastIdx, curIdx);
-        const to = Math.max(lastIdx, curIdx);
-        session.stacks.select(flatStacks.slice(from, to + 1));
-      } else {
-        session.stacks.select([stack]);
-      }
-    } else if (session.stacks.isSelected(stack.stack_id) && session.stacks.selected.length === 1) {
-      session.stacks.clearSelection();
-    } else {
-      session.stacks.select([stack]);
-    }
-    lastClickedId = stack.stack_id;
-  }
-
   let lastClickedId = $state<string | null>(null);
 
-  function toggleGroup(profileId: string) {
-    if (collapsedProfiles.has(profileId)) {
-      collapsedProfiles.delete(profileId);
-    } else {
-      collapsedProfiles.add(profileId);
+  function handleRowClick(row: TaskRow, e: MouseEvent) {
+    if (isEditTarget(e) && !(e.metaKey || e.ctrlKey || e.shiftKey)) {
+      // Editing a cell in an unselected row makes that row the selection, so header actions target it;
+      // editing a cell in an already-selected row leaves the selection intact (batch editing).
+      if (!selection.has(row.taskId)) selection.select(row.taskId);
+      return;
     }
+    if (e.metaKey || e.ctrlKey) {
+      selection.toggle(row.taskId);
+    } else if (e.shiftKey && lastClickedId) {
+      const lastIdx = rows.findIndex((r) => r.taskId === lastClickedId);
+      const curIdx = rows.findIndex((r) => r.taskId === row.taskId);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        selection.clear();
+        selection.add(...rows.slice(Math.min(lastIdx, curIdx), Math.max(lastIdx, curIdx) + 1).map((r) => r.taskId));
+      } else {
+        selection.select(row.taskId);
+      }
+    } else if (selection.has(row.taskId) && selection.size === 1) {
+      selection.clear();
+    } else {
+      selection.select(row.taskId);
+    }
+    lastClickedId = row.taskId;
   }
 
-  // --- Auto-scroll to selection from canvas ---
-
+  // Auto-scroll the table to the first selected task (e.g. selected from the canvas)
   watch(
-    () => session.stacks.selected[0],
+    () => selection.list[0],
     (first) => {
-      if (!first) return;
-      const el = document.getElementById(`stack-${first.stack_id}`);
-      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (first) document.getElementById(`task-${first}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   );
 
-  // --- Clear dialog ---
+  // --- Delete ---
 
-  let clearDialogOpen = $state(false);
-  let clearMode = $state<'selected' | 'profile'>('selected');
-  let clearProfileId = $state<string>('');
-  let clearProfileLabel = $derived(
-    session.scope.config.profiles[clearProfileId]?.label ?? sanitizeString(clearProfileId)
-  );
+  let deleteDialogOpen = $state(false);
 
-  // --- Pane sizing (pixel-based min for sidebar) ---
-
-  let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebarMin = createPaneMinSize(() => paneGroupEl, 300);
+  function deleteSelected() {
+    toastError(instrument?.removeTasks(selection.list));
+    deleteDialogOpen = false;
+  }
 </script>
 
-{#snippet stackRow(stack: Stack, selected: boolean)}
+{#snippet headerMatch(field: 'x' | 'y' | 'start' | 'end')}
+  <button
+    type="button"
+    title="Match stage for selected tasks"
+    disabled={!hasSelection}
+    onclick={() => matchStageSelection(field)}
+    class="flex size-4 shrink-0 items-center justify-center rounded text-fg-faint transition-colors hover:text-fg disabled:pointer-events-none"
+  >
+    <Crosshair width="12" height="12" />
+  </button>
+{/snippet}
+
+{#snippet taskRow(row: TaskRow, selected: boolean)}
   <div
-    id="stack-{stack.stack_id}"
+    id="task-{row.taskId}"
     role="row"
     tabindex="0"
     aria-selected={selected}
-    aria-label="Stack at ({(stack.x / 1000).toFixed(2)}, {(stack.y / 1000).toFixed(2)}) mm, {stack.status}"
-    data-stack-status={stack.status}
-    class={cn(
-      'col-span-full grid cursor-default grid-cols-subgrid items-center gap-x-3 px-3 py-1.5 text-left text-xs transition-colors select-none',
-      'border-b border-border/50',
-      selected ? 'bg-element-selected/50' : 'hover:bg-element-hover/30'
-    )}
-    onclick={(e) => handleRowClick(stack, e)}
+    class="col-span-full grid cursor-default grid-cols-subgrid text-left text-sm text-fg-muted select-none"
+    onclick={(e) => handleRowClick(row, e)}
     onkeydown={(e) => {
+      if (isEditTarget(e)) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        handleRowClick(stack, e as unknown as MouseEvent);
+        selection.select(row.taskId);
       }
     }}
   >
-    <!-- X position (mm) -->
-    <span class="text-fg-muted tabular-nums">{(stack.x / 1000).toFixed(4)}</span>
-    <!-- Y position (mm) -->
-    <span class="text-fg-muted tabular-nums">{(stack.y / 1000).toFixed(4)}</span>
-
-    <!-- Z range -->
-    <div class="pr-1">
-      <span class="text-fg tabular-nums">
-        {(stack.z_start / 1000).toFixed(3)} → {(stack.z_end / 1000).toFixed(3)} mm
+    <!-- Selection checkbox (always visible; checked when selected) -->
+    <span class="cell cell-first justify-center">
+      <span
+        class={cn(
+          'flex size-3.5 items-center justify-center rounded border',
+          selected ? 'border-primary bg-primary text-primary-fg' : 'border-input bg-element-bg'
+        )}
+      >
+        {#if selected}<Check width="9" height="9" />{/if}
       </span>
+    </span>
+    <span class="cell justify-end text-fg-faint tabular-nums">#{row.order}</span>
+    <span data-cell-edit class="cell justify-end focus-within:text-fg">
+      <NumberInput
+        value={row.x / unit.scale}
+        step={unit.step}
+        bigStep={unit.bigStep}
+        decimals={unit.decimals}
+        numCharacters={8}
+        size="xs"
+        align="right"
+        draggable={false}
+        onChange={(v) => setField(row, 'x', v)}
+      />
+    </span>
+    <span data-cell-edit class="cell justify-end focus-within:text-fg">
+      <NumberInput
+        value={row.y / unit.scale}
+        step={unit.step}
+        bigStep={unit.bigStep}
+        decimals={unit.decimals}
+        numCharacters={8}
+        size="xs"
+        align="right"
+        draggable={false}
+        onChange={(v) => setField(row, 'y', v)}
+      />
+    </span>
+    <span data-cell-edit class="cell justify-end focus-within:text-fg">
+      <NumberInput
+        value={row.start / unit.scale}
+        step={unit.step}
+        bigStep={unit.bigStep}
+        decimals={unit.decimals}
+        numCharacters={8}
+        size="xs"
+        align="right"
+        draggable={false}
+        onChange={(v) => setField(row, 'start', v)}
+      />
+    </span>
+    <span data-cell-edit class="cell justify-end focus-within:text-fg">
+      <NumberInput
+        value={row.end / unit.scale}
+        step={unit.step}
+        bigStep={unit.bigStep}
+        decimals={unit.decimals}
+        numCharacters={8}
+        size="xs"
+        align="right"
+        draggable={false}
+        onChange={(v) => setField(row, 'end', v)}
+      />
+    </span>
+    <div data-cell-edit class="cell justify-end">
+      <Popover.Root>
+        <Popover.Trigger
+          class="flex max-w-full flex-wrap justify-end gap-1 rounded px-1 py-0.5 hover:bg-element-hover"
+          title="Edit profiles"
+        >
+          {#if row.profileIds.length === 0}
+            <span class="text-fg-faint">＋</span>
+          {:else}
+            {#each row.profileIds as id (id)}
+              <span
+                class={cn(
+                  'truncate rounded-full px-1.5 py-px text-xs',
+                  id === instrument?.activeProfileId ? 'bg-element-bg text-fg' : 'bg-element-bg/50 text-fg-muted'
+                )}
+              >
+                {profileLabel(id)} <span class="text-fg-faint tabular-nums">{framesFor(row, id)}f</span>
+              </span>
+            {/each}
+          {/if}
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content align="end" class="z-50 min-w-40 rounded border bg-floating p-1 text-fg shadow-md">
+            {#each allProfileIds as id (id)}
+              {@const active = row.profileIds.includes(id)}
+              <button
+                type="button"
+                onclick={() => toggleProfile(row, id)}
+                class="flex w-full items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-element-hover"
+              >
+                <span
+                  class={cn(
+                    'flex size-3.5 shrink-0 items-center justify-center rounded border',
+                    active ? 'border-primary bg-primary text-primary-fg' : 'border-input bg-element-bg'
+                  )}
+                >
+                  {#if active}<Check width="9" height="9" />{/if}
+                </span>
+                <span class="flex-1 text-left">{profileLabel(id)}</span>
+                <span class="text-fg-faint tabular-nums">{framesFor(row, id)}f</span>
+              </button>
+            {/each}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
     </div>
-
-    <!-- Frame count -->
-    <div class="pr-2">
-      <span class="text-fg-muted tabular-nums">{stack.num_frames} frames</span>
-    </div>
-
-    <!-- Acquisition order -->
-    {#if true}
-      {@const order = acquisitionOrder.get(stack.stack_id)}
-      <span class="min-w-[5ch] justify-self-end text-right text-fg-faint tabular-nums">#{order ?? '?'}</span>
-    {/if}
-
-    <!-- Status -->
-    <StackStatusIcon status={stack.status} class="justify-self-end" />
   </div>
 {/snippet}
 
-<PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="setup.plan" class="h-full">
-  <!-- Stack list (main area) -->
-  <Pane minSize={40}>
-    <div class="flex h-full flex-col overflow-hidden pb-2">
-      <!-- List header -->
-      <div class="flex items-center gap-2 border-b border-border px-3 py-2">
-        <Select
-          value={filter}
-          options={filterOptions}
-          onchange={(v) => (filter = v as StackFilter)}
-          size="xs"
-          variant="ghost"
-          class="w-28 shrink-0"
-        />
-        <span class="text-xs text-fg-muted">
-          {#if filter === 'all'}
-            {totalCount} stack{totalCount !== 1 ? 's' : ''}
-          {:else}
-            {totalCount} of {session.stacks.list.length} stacks
-          {/if}
+{#snippet nudgeButton(Icon: Component, label: string, onNudge: () => void)}
+  <button
+    class="flex size-ui-xs items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg disabled:pointer-events-none disabled:opacity-80"
+    title={label}
+    disabled={!hasSelection}
+    onclick={onNudge}
+  >
+    <Icon width="18" height="18" />
+  </button>
+{/snippet}
+
+<div class="flex h-full flex-col overflow-hidden">
+  <div class="shrink-0 px-3 py-4">
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-nowrap text-fg-muted tabular-nums">
+          {selectedRows.length}/{rows.length} tasks
         </span>
-        <div class="flex-1"></div>
+        {#if instrument}
+          <Select
+            size="xs"
+            class="w-full"
+            prefix="Traversal"
+            value={instrument.state.traversal}
+            options={TILE_ORDER_OPTIONS}
+            onchange={(v) => toastError(instrument.setTraversal(v as TileOrder))}
+          />
+        {/if}
+      </div>
+      <div class="flex items-center gap-3">
         <div class="flex items-center gap-1.5">
           <SpinBox
+            value={nudgeStep / unit.scale}
+            min={unit.step}
+            step={unit.bigStep}
+            decimals={unit.decimals}
+            numCharacters={7}
             size="xs"
-            variant="ghost"
-            value={session.stacks.plan.default_z_start / 1000}
-            step={0.001}
-            decimals={3}
-            numCharacters={8}
-            prefix="Z Start"
-            suffix="mm"
-            align="right"
-            onChange={(value) => session.stacks.setDefaultZRange(value * 1000, session.stacks.plan.default_z_end)}
+            appearance="bordered"
+            prefix="Nudge"
+            suffix={unit.label}
+            onChange={(v) => (nudgeStep = v * unit.scale)}
           />
-          <SpinBox
-            size="xs"
-            variant="ghost"
-            value={session.stacks.plan.default_z_end / 1000}
-            step={0.001}
-            decimals={3}
-            numCharacters={8}
-            prefix="Z End"
-            suffix="mm"
-            align="right"
-            onChange={(value) => session.stacks.setDefaultZRange(session.stacks.plan.default_z_start, value * 1000)}
-          />
-        </div>
-      </div>
-
-      <!-- Scrollable grouped stack rows -->
-      <div
-        role="grid"
-        aria-label="Stack list"
-        class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_1fr_auto_auto] content-start overflow-y-auto"
-      >
-        {#if profileGroups.length === 0}
-          <div class="col-span-full flex min-h-32 items-center justify-center p-4">
-            <p class="text-sm text-fg-faint">
-              {#if session.stacks.list.length === 0}
-                No stacks — add stacks from the grid
-              {:else}
-                No stacks match filter
-              {/if}
-            </p>
+          <div class="flex items-center gap-0.5">
+            {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}
+            {@render nudgeButton(ChevronRight, 'Nudge +X', () => applyNudge(nudgeStep, 0))}
+            {@render nudgeButton(ChevronUp, 'Nudge +Y', () => applyNudge(0, nudgeStep))}
+            {@render nudgeButton(ChevronDown, 'Nudge −Y', () => applyNudge(0, -nudgeStep))}
           </div>
-        {:else}
-          {#each profileGroups as group (group.profileId)}
-            {@const collapsed = collapsedProfiles.has(group.profileId)}
-            <!-- Profile group header -->
-            <div class="col-span-full flex items-center gap-2 px-3 py-1.5">
-              <button
-                class="flex cursor-pointer items-center gap-1.5 bg-transparent p-0 text-xs text-fg-muted transition-colors hover:text-fg"
-                onclick={() => toggleGroup(group.profileId)}
-              >
-                {#if collapsed}
-                  <ChevronRight width="12" height="12" />
-                {:else}
-                  <ChevronDown width="12" height="12" />
-                {/if}
-                <span class={cn('font-semibold', group.isActive ? 'text-info' : 'text-fg')}>{group.label}</span>
-                <span class="text-fg-faint">({group.stacks.length})</span>
-              </button>
-              <div class="flex-1"></div>
-              <button
-                class="cursor-pointer bg-transparent p-0 text-xs text-fg-muted transition-colors hover:text-danger"
-                onclick={() => {
-                  clearMode = 'profile';
-                  clearProfileId = group.profileId;
-                  clearDialogOpen = true;
-                }}
-              >
-                Clear
-              </button>
-            </div>
-            <!-- Stack rows -->
-            {#if !collapsed}
-              {#each group.stacks as stack (stack.stack_id)}
-                {@const selected = session.stacks.isSelected(stack.stack_id)}
-                {@render stackRow(stack, selected)}
-              {/each}
-            {/if}
-          {/each}
-        {/if}
+        </div>
+        <Select
+          size="xs"
+          class="w-24"
+          prefix="Units"
+          value={spaceUnit.current}
+          options={SPACE_UNIT_OPTIONS}
+          onchange={(v) => (spaceUnit.current = v as SpaceUnit['value'])}
+        />
+        <Button
+          variant="secondary"
+          size="xs"
+          title="Delete selected tasks"
+          disabled={!hasSelection}
+          onclick={() => (deleteDialogOpen = true)}
+        >
+          <TrashCanOutline width="14" height="14" />
+          Delete
+        </Button>
       </div>
     </div>
-  </Pane>
+  </div>
+  <!-- Rows -->
+  <div
+    role="grid"
+    aria-label="Task list"
+    class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_auto_auto_auto_1fr] content-start overflow-y-auto px-2"
+  >
+    {#if rows.length === 0}
+      <div class="col-span-full flex min-h-32 items-center justify-center p-4">
+        <p class="text-sm text-fg-faint">No tasks — add tasks from the grid</p>
+      </div>
+    {:else}
+      <!-- Column header -->
+      <div class="col-span-full grid grid-cols-subgrid text-sm font-medium text-fg-muted">
+        <span class="cell cell-first cell-head justify-center">
+          <Checkbox
+            size="xs"
+            checked={allSelected}
+            indeterminate={someSelected}
+            disabled={rows.length === 0}
+            onchange={toggleAll}
+          />
+        </span>
+        <span class="cell cell-head justify-end">#</span>
+        <span class="cell cell-head justify-between">{@render headerMatch('x')}X</span>
+        <span class="cell cell-head justify-between">{@render headerMatch('y')}Y</span>
+        <span class="cell cell-head justify-between">{@render headerMatch('start')}Z Start</span>
+        <span class="cell cell-head justify-between">{@render headerMatch('end')}Z End</span>
+        <span class="cell cell-head justify-end"><span class="pr-2">Profiles</span></span>
+      </div>
+      {#each rows as row (row.taskId)}
+        {@render taskRow(row, selection.has(row.taskId))}
+      {/each}
+    {/if}
+  </div>
+</div>
 
-  <PaneDivider direction="vertical" />
-
-  <!-- Sidebar (right) -->
-  <Pane defaultSize={30} minSize={sidebarMin.value} maxSize={45}>
-    <div class="flex h-full flex-col overflow-y-auto bg-canvas">
-      {#if !hasSelection}
-        <div class="flex flex-1 items-center justify-center p-3">
-          <p class="text-sm text-fg-faint">Select stacks to edit</p>
-        </div>
-      {:else}
-        <!-- Sidebar header + properties -->
-        {#if selectedStacks.length > 0}
-          {@const actionBtnCn =
-            'inline-flex w-3 items-center justify-center cursor-pointer text-fg-faint hover:text-fg transition-colors'}
-          <div class="flex items-center justify-between px-4 py-2">
-            <span class="text-xs text-fg-muted">
-              {selectedStacks.length} Stack{selectedStacks.length !== 1 ? 's' : ''}
-            </span>
-            <Button
-              variant="ghost"
-              size="xs"
-              class="-mx-2 text-danger/80 hover:bg-danger/10 hover:text-danger"
-              onclick={() => {
-                clearMode = 'selected';
-                clearDialogOpen = true;
-              }}
-            >
-              Remove
-            </Button>
-          </div>
-
-          <hr class="border-border" />
-          <div class="px-4 py-2">
-            <div class="-mr-1 grid grid-cols-[minmax(6rem,auto)_1fr_auto] items-center gap-x-1 gap-y-1.5">
-              <!-- Profile -->
-              <span class="flex h-ui-xs items-center text-[10px] text-fg-faint"
-                >Profile{profileBreakdown.length > 1 ? 's' : ''}</span
-              >
-              <span class="col-span-2 text-[10px] text-fg-muted">
-                {#each profileBreakdown as p, i (i)}
-                  {#if i > 0},{/if}
-                  {p.label}{profileBreakdown.length > 1 ? ` (${p.count})` : ''}
-                {/each}
-              </span>
-
-              <!-- Status -->
-              <span class="flex h-ui-xs items-center text-[10px] text-fg-faint">Status</span>
-              <span class="col-span-2 text-[10px] text-fg-muted">
-                {#each statusBreakdown as [status, count], i (i)}
-                  {#if i > 0}
-                    ·
-                  {/if}
-                  {count}
-                  {status}
-                {/each}
-              </span>
-
-              <hr class="col-span-full -mx-4 mb-2 border-border" />
-
-              <!-- X Position -->
-              <span class="text-xs text-fg-muted">X Position</span>
-              <SpinBox
-                value={commonX}
-                suffix="mm"
-                size="xs"
-                step={0.1}
-                decimals={4}
-                onChange={(v) => applyPosition('x', v * 1000)}
-              />
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger class={actionBtnCn}>
-                  <EllipsisVertical width="14" height="14" />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item
-                    onclick={() => {
-                      const x = session.scope.stage?.x;
-                      if (x) applyPosition('x', (x.position?.value ?? 0) - (x.lowerLimit?.value ?? 0));
-                    }}
-                  >
-                    Match stage X
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-
-              <!-- Y Position -->
-              <span class="text-xs text-fg-muted">Y Position</span>
-              <SpinBox
-                value={commonY}
-                suffix="mm"
-                size="xs"
-                step={0.1}
-                decimals={4}
-                onChange={(v) => applyPosition('y', v * 1000)}
-              />
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger class={actionBtnCn}>
-                  <EllipsisVertical width="14" height="14" />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item
-                    onclick={() => {
-                      const y = session.scope.stage?.y;
-                      if (y) applyPosition('y', (y.position?.value ?? 0) - (y.lowerLimit?.value ?? 0));
-                    }}
-                  >
-                    Match stage Y
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-
-              <!-- Nudge X -->
-              <span class="text-xs text-fg-muted">Nudge X</span>
-              <NudgeInput
-                prefix="dX"
-                suffix="mm"
-                size="xs"
-                step={0.1}
-                fineStep={0.01}
-                decimals={4}
-                onNudge={(v) => applyNudge(v * 1000, 0)}
-              />
-              <span></span>
-
-              <!-- Nudge Y -->
-              <span class="text-xs text-fg-muted">Nudge Y</span>
-              <NudgeInput
-                prefix="dY"
-                suffix="mm"
-                size="xs"
-                step={0.1}
-                fineStep={0.01}
-                decimals={4}
-                onNudge={(v) => applyNudge(0, v * 1000)}
-              />
-              <span></span>
-
-              <!-- Z Start -->
-              <span class="text-xs text-fg-muted">Z Start</span>
-              <SpinBox
-                value={commonZStart}
-                suffix="mm"
-                size="xs"
-                step={0.001}
-                decimals={3}
-                onChange={(v) => applyZRange('zStartUm', v * 1000)}
-              />
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger class={actionBtnCn}>
-                  <EllipsisVertical width="14" height="14" />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item
-                    onclick={() => applyZRange('zStartUm', session.scope.stage?.z.position?.value ?? 0)}
-                  >
-                    Match stage Z
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item onclick={() => applyZRange('zStartUm', session.stacks.plan.default_z_start)}>
-                    Reset to default
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-
-              <!-- Z End -->
-              <span class="text-xs text-fg-muted">Z End</span>
-              <SpinBox
-                value={commonZEnd}
-                suffix="mm"
-                size="xs"
-                step={0.001}
-                decimals={3}
-                onChange={(v) => applyZRange('zEndUm', v * 1000)}
-              />
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger class={actionBtnCn}>
-                  <EllipsisVertical width="14" height="14" />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.scope.stage?.z.position?.value ?? 0)}>
-                    Match stage Z
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item onclick={() => applyZRange('zEndUm', session.stacks.plan.default_z_end)}>
-                    Reset to default
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-
-              <!-- Z Range -->
-              <span class="text-xs text-fg-muted">Z Range</span>
-              <SpinBox
-                value={commonFrames}
-                min={1}
-                step={1}
-                decimals={0}
-                suffix={!Number.isNaN(commonRange) ? `frames · ${commonRange.toFixed(3)} mm` : 'frames'}
-                size="xs"
-                onChange={(v) => applyFrameCount(v)}
-              />
-              <span></span>
-
-              <!-- FOV -->
-              <span class="text-xs text-fg-muted">FOV</span>
-              <div class="flex items-center gap-1">
-                <SpinBox
-                  value={commonFovW ?? NaN}
-                  variant="ghost"
-                  appearance="bordered"
-                  size="xs"
-                  disabled
-                  decimals={0}
-                  suffix="µm"
-                  class="flex-1"
-                />
-                <span class="text-xs text-fg-faint">×</span>
-                <SpinBox
-                  value={commonFovH ?? NaN}
-                  variant="ghost"
-                  appearance="bordered"
-                  size="xs"
-                  disabled
-                  decimals={0}
-                  suffix="µm"
-                  class="flex-1"
-                />
-              </div>
-            </div>
-          </div>
-          <hr class="my-2 border-border" />
-        {/if}
-      {/if}
-    </div>
-  </Pane>
-</PaneGroup>
-
-<!-- Clear stacks confirmation -->
-<Dialog.Root bind:open={clearDialogOpen}>
+<Dialog.Root bind:open={deleteDialogOpen}>
   <Dialog.Portal>
     <Dialog.Overlay />
     <Dialog.Content>
       <Dialog.Header>
-        <Dialog.Title>
-          {clearMode === 'selected' ? 'Remove selected stacks' : `Clear stacks for ${clearProfileLabel}`}
-        </Dialog.Title>
+        <Dialog.Title>Delete task{selectedRows.length !== 1 ? 's' : ''}</Dialog.Title>
         <Dialog.Description>
-          {#if clearMode === 'selected'}
-            Remove {selectedStacks.length} selected stack{selectedStacks.length !== 1 ? 's' : ''}?
-          {:else}
-            {@const count = session.stacks.list.filter((s) => s.profile_id === clearProfileId).length}
-            Remove all {count} stack{count !== 1 ? 's' : ''} for
-            <strong>{clearProfileLabel}</strong>?
-          {/if}
+          Delete {selectedRows.length} selected task{selectedRows.length !== 1 ? 's' : ''}? This can't be undone.
         </Dialog.Description>
       </Dialog.Header>
       <Dialog.Footer>
         <button
-          onclick={() => (clearDialogOpen = false)}
+          onclick={() => (deleteDialogOpen = false)}
           class="rounded border border-border px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
         >
           Cancel
         </button>
         <button
-          onclick={() => {
-            if (clearMode === 'selected') {
-              removeSelectedStacks();
-            } else {
-              session.stacks.remove(
-                session.stacks.list.filter((s) => s.profile_id === clearProfileId).map((s) => s.stack_id)
-              );
-              clearDialogOpen = false;
-            }
-          }}
+          onclick={deleteSelected}
           class="rounded bg-danger px-3 py-1.5 text-sm text-danger-fg transition-colors hover:bg-danger/90"
         >
-          {clearMode === 'selected' ? 'Remove' : 'Clear All'}
+          Delete
         </button>
       </Dialog.Footer>
     </Dialog.Content>
   </Dialog.Portal>
 </Dialog.Root>
+
+<style>
+  /* Task-table cell chrome: single-pixel grid lines (right + bottom; first column adds left, header adds top). */
+  .cell {
+    --cell-border: 1px solid color-mix(in oklch, var(--color-border) 90%, transparent);
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border-right: var(--cell-border);
+    border-bottom: var(--cell-border);
+    transition: background-color 150ms;
+  }
+  .cell-first {
+    border-left: var(--cell-border);
+  }
+  .cell-head {
+    border-top: var(--cell-border);
+  }
+</style>

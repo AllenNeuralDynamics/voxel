@@ -1,32 +1,41 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  import type { Session } from '$lib/session.svelte';
+  import type { Instrument } from '$lib/model';
+
+  import { getTaskSelection } from './selection.svelte';
 
   interface Props {
-    session: Session;
+    instrument: Instrument;
   }
 
-  let { session }: Props = $props();
+  let { instrument }: Props = $props();
 
   const PANEL_WIDTH = 64;
 
   let containerRef = $state<HTMLDivElement | null>(null);
   let panelHeight = $state(250);
-
   let target = $state<number | null>(null);
 
-  const z = $derived(session.scope.stage?.z);
+  const taskSelection = getTaskSelection();
+
+  const z = $derived(instrument.stage.z);
   const zPos = $derived(z?.position?.value ?? 0);
   const zLower = $derived(z?.lowerLimit?.value ?? 0);
   const zUpper = $derived(z?.upperLimit?.value ?? 0);
   const zMoving = $derived(z?.isMoving?.value === true);
-  const depth = $derived(session.scope.stage?.depth ?? 0);
-  const activeProfileId = $derived(session.scope.profiles.activeId);
+  const depth = $derived(z?.range ?? 0);
+  const activeProfileId = $derived(instrument.activeProfileId);
+
+  const tasks = $derived(instrument.state.tasks);
+  const taskTiles = $derived(instrument.taskTiles);
+
+  function isActive(taskId: string): boolean {
+    return activeProfileId ? (tasks[taskId]?.profile_ids.includes(activeProfileId) ?? false) : false;
+  }
 
   const fovZ = $derived(z ? zPos - zLower : 0);
   const zLineY = $derived(depth > 0 ? (1 - fovZ / depth) * panelHeight - 1 : 0);
-
   const displayValue = $derived(zMoving && target !== null ? target : zPos);
 
   function oninput(e: Event) {
@@ -74,21 +83,23 @@
     width="100%"
     height="100%"
   >
-    {#each session.stacks.list as stack (stack.stack_id)}
-      {@const selected = session.stacks.isSelected(stack.stack_id)}
-      {@const isActive = stack.profile_id === activeProfileId}
-      {@const z0Y = depth > 0 ? (1 - (stack.z_start - zLower) / depth) * panelHeight - 1 : 0}
-      {@const z1Y = depth > 0 ? (1 - (stack.z_end - zLower) / depth) * panelHeight - 1 : 0}
-      <g
-        data-stack-status={stack.status}
-        class="text-(--stack-status)"
-        stroke-width={selected ? '1.5' : '0.5'}
-        stroke="currentColor"
-        opacity={selected ? 1 : isActive ? 0.3 : 0.15}
-      >
-        <line class="nss" x1="0" y1={z0Y} x2={PANEL_WIDTH} y2={z0Y} />
-        <line class="nss" x1="0" y1={z1Y} x2={PANEL_WIDTH} y2={z1Y} />
-      </g>
+    {#each taskTiles as tile (tile.task_id)}
+      {@const t = tasks[tile.task_id]}
+      {#if t}
+        {@const selected = taskSelection.has(tile.task_id)}
+        {@const active = isActive(tile.task_id)}
+        {@const z0Y = depth > 0 ? (1 - (t.start - zLower) / depth) * panelHeight - 1 : 0}
+        {@const z1Y = depth > 0 ? (1 - (t.end - zLower) / depth) * panelHeight - 1 : 0}
+        <g
+          class="text-fg"
+          stroke-width={selected ? '1.5' : '0.5'}
+          stroke="currentColor"
+          opacity={selected ? 1 : active ? 0.3 : 0.15}
+        >
+          <line class="nss" x1="0" y1={z0Y} x2={PANEL_WIDTH} y2={z0Y} />
+          <line class="nss" x1="0" y1={z1Y} x2={PANEL_WIDTH} y2={z1Y} />
+        </g>
+      {/if}
     {/each}
     <line
       x1="0"
