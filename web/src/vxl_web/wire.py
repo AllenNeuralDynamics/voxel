@@ -31,7 +31,7 @@ from fastapi import WebSocket
 from pydantic import BaseModel
 from rigup.wire import pack, unpack
 
-from vxlib import Cell, Unsub
+from vxlib import Cell, Teardown
 
 log = logging.getLogger(__name__)
 
@@ -156,6 +156,16 @@ class _CommandEntry[T: BaseModel]:
         self.handler = handler
 
 
+class _ClientActive(BaseModel):
+    """Inbound ``client.active`` control: whether this WS peer is actively viewing.
+
+    ``False`` pauses the peer's queue (drops priority>0 payloads — frames/tiles — while still delivering
+    status); ``True`` resumes. Lets a backgrounded tab stop its own frame delivery without affecting any
+    other client or global state."""
+
+    active: bool
+
+
 class MsgBus:
     """App-scoped wire bus: WS connection registry + typed pubsub.
 
@@ -177,6 +187,7 @@ class MsgBus:
         self._handlers: dict[str, _CommandEntry[Any]] = {}
         self.clients: Cell[set[ClientId]] = Cell(set())
         self._log = log
+        self.on_command("client.active", _ClientActive, self._set_client_active)  # built-in per-client backpressure
 
     # ---- Connection lifecycle (called by the WS endpoint) ----
 
@@ -195,13 +206,23 @@ class MsgBus:
         """Look up a connected client (e.g. for pause/resume)."""
         return self._clients.get(client_id)
 
+    async def _set_client_active(self, cmd: _ClientActive, client_id: ClientId) -> None:
+        """Pause/resume a peer's own queue on ``client.active`` (e.g. tab backgrounded)."""
+        client = self.get_client(client_id)
+        if client is None:
+            return
+        if cmd.active:
+            client.resume()
+        else:
+            client.pause()
+
     # ---- Inbound — typed command handler registration ----
 
-    def on_command[T: BaseModel](self, topic: str, schema: type[T], handler: CommandHandler[T]) -> Unsub:
+    def on_command[T: BaseModel](self, topic: str, schema: type[T], handler: CommandHandler[T]) -> Teardown:
         """Register the typed command handler for ``topic``.
 
         One handler per topic — raises ``ValueError`` if a handler already exists.
-        Returns an Unsub callable to remove the registration.
+        Returns a ``Teardown`` callable to remove the registration.
         """
         if topic in self._handlers:
             raise ValueError(f"command handler already registered for topic {topic!r}")

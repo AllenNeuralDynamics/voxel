@@ -2,9 +2,9 @@
 
 import importlib
 from importlib.metadata import entry_points
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
 ENTRY_POINT_GROUP = "vxl.metadata"
@@ -111,3 +111,34 @@ def resolve_metadata_class(target: str) -> type[ExperimentMetadata]:
     if not (isinstance(cls, type) and issubclass(cls, ExperimentMetadata)):
         raise TypeError(f"{target} is not an ExperimentMetadata subclass")
     return cls
+
+
+def resolve_class_from_path(v: Any) -> type[ExperimentMetadata]:
+    """Deserializer: String -> Class (Runs when loading JSON)"""
+    # If it's already a class (e.g. instantiated in code), just return it
+    if isinstance(v, type) and issubclass(v, ExperimentMetadata):
+        return v
+
+    # If it's a string, import it
+    if isinstance(v, str):
+        module_path, class_name = v.rsplit(".", 1)
+        module = importlib.import_module(module_path)
+        cls = getattr(module, class_name)
+        if not issubclass(cls, ExperimentMetadata):
+            raise TypeError(f"'{v}' is not an ExperimentMetadata subclass")
+        return cls
+
+    raise ValueError("Must be a class or a valid import path string.")
+
+
+def get_path_from_class(cls: type[ExperimentMetadata]) -> str:
+    """Serializer: Class -> String (Runs when saving JSON)"""
+    return f"{cls.__module__}.{cls.__name__}"
+
+
+# This tells Pydantic to intercept this type in both directions.
+MetadataCls = Annotated[
+    type[ExperimentMetadata],
+    BeforeValidator(resolve_class_from_path),
+    PlainSerializer(get_path_from_class, return_type=str, when_used="json"),
+]

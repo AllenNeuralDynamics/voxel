@@ -139,7 +139,7 @@ class TestPubSub:
         async def callback(data: bytes) -> None:
             received.append(data)
 
-        unsub = await client.subscribe("topic/a", callback)
+        unsub = client.subscribe("topic/a", callback)
         await asyncio.sleep(0.1)  # let subscription propagate
 
         await server.publish("topic/a", b"msg1")
@@ -160,7 +160,7 @@ class TestPubSub:
         async def callback(data: bytes) -> None:
             received.append(data)
 
-        unsub = await client.subscribe("topic/x", callback)
+        unsub = client.subscribe("topic/x", callback)
         await asyncio.sleep(0.1)
 
         await server.publish("topic/x", b"before")

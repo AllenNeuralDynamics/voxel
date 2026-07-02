@@ -1,10 +1,8 @@
-info:
-  name: ""
-  description: "Local configuration — all devices in-process (no ZMQ)"
+# Simulated Local — all devices in-process (no ZMQ). Launches with no hardware attached.
+# A .voxel.yaml template: `hal` (the hardware blueprint) + `state` (the baseline acquisition state).
+# Scaffolding splits these into <name>.voxel/hal.yaml + default.yaml.
 
-rig:
-  name: "Simulated Local Rig"
-
+hal:
   devices:
     daq_hub:
       target: vxl.analog_out.simulated.SimulatedDaqmx
@@ -54,93 +52,94 @@ rig:
       target: *axis_target
       init: { lower_limit: 0, upper_limit: 50000 }
 
-stage:
-  x: x_axis
-  y: y_axis
-  z: z_axis
+  stage:
+    x: x_axis
+    y: y_axis
+    z: z_axis
 
-detection:
-  camera_1:
-    filter_wheels: [fw_emission]
-    magnification: 8.0
+  detection:
+    camera_1:
+      filter_wheels: [fw_emission]
+      magnification: 8.0
 
-illumination:
-  laser_488: {}
-  laser_561: {}
+  illumination:
+    laser_488: {}
+    laser_561: {}
 
-channels:
-  gfp:
-    detection: camera_1
-    illumination: laser_488
-    filters:
-      fw_emission: "BP525"
-    desc: "GFP channel"
-    label: GFP
-    emission: 510
-  rfp:
-    detection: camera_1
-    illumination: laser_561
-    filters:
-      fw_emission: "BP600"
-    desc: "RFP channel"
-    label: RFP
-    emission: 600
+default:
+  imaging:
+    channels:
+      gfp:
+        detection: camera_1
+        illumination: laser_488
+        filters:
+          fw_emission: "BP525"
+        desc: "GFP channel"
+        label: GFP
+        emission: 510
+      rfp:
+        detection: camera_1
+        illumination: laser_561
+        filters:
+          fw_emission: "BP600"
+        desc: "RFP channel"
+        label: RFP
+        emission: 600
 
-profiles:
-  single_gfp:
-    channels: ["gfp"]
-    sync:
-      daq: &default_aosignals
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src: { type: internal }
-        waveforms:
-          camera_1: &camera_waveform
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.0, max: 0.95 }
-          laser_488: &laser_488_waveform
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.1, max: 0.9 }
-          aotf_1: &aotf_blanking_waveform
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.05, max: 0.95 }
-    desc: "Single GFP channel"
-  single_rfp:
-    channels: ["rfp"]
-    sync:
-      daq:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src: { type: internal }
-        waveforms:
-          camera_1: *camera_waveform
-          laser_561:
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.1, max: 0.9 }
-          aotf_1: *aotf_blanking_waveform
-    desc: "Single RFP channel"
+    profiles:
+      single_gfp:
+        channels: ["gfp"]
+        z_step: 1.0
+        sync:
+          daq:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src: { type: internal }
+            waveforms:
+              camera_1: &camera_waveform
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.0, max: 0.95 }
+              laser_488:
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.1, max: 0.9 }
+              aotf_1: &aotf_blanking_waveform
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.05, max: 0.95 }
+        desc: "Single GFP channel"
+      single_rfp:
+        channels: ["rfp"]
+        z_step: 1.0
+        sync:
+          daq:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src: { type: internal }
+            waveforms:
+              camera_1: *camera_waveform
+              laser_561:
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.1, max: 0.9 }
+              aotf_1: *aotf_blanking_waveform
+        desc: "Single RFP channel"
 
-plan:
-  stack_order: snake_row
-  z_step: 1.0
-  default_z_start: 0.0
-  default_z_end: 511.0
+  stencil:
+    x_offset: 0.0
+    y_offset: 0.0
+    overlap_x: 0.1
+    overlap_y: 0.1
+    z_start: 0.0
+    z_end: 511.0
 
-output:
-  store_path: ./data
-  max_level: 3
-  compression: blosc.lz4
+  traversal: snake_row
 
-grid:
-  x_offset: 0.0
-  y_offset: 0.0
-  overlap_x: 0.1
-  overlap_y: 0.1
+  output:
+    max_level: 3
+    compression: blosc.lz4
 
-stacks: {}
+  tasks: {}

@@ -1,18 +1,30 @@
 import { ElementSize } from 'runed';
 
+export interface PaneSizeBounds {
+  /** Minimum width in px. */
+  min?: number;
+  /** Maximum width in px. */
+  max?: number;
+  /** Fallback `minSize` % used before the container is measured. */
+  fallbackMin?: number;
+  /** Fallback `maxSize` % used before the container is measured. */
+  fallbackMax?: number;
+}
+
 /**
- * Creates a reactive pane min-size calculator that converts a pixel minimum
- * to a percentage of the container width (as required by paneforge).
- *
- * @param containerEl - Getter for the PaneGroup element ref
- * @param minPx - Minimum width in pixels
- * @param fallback - Fallback percentage when container hasn't been measured yet
+ * Reactive pixel-based pane sizing for paneforge. Tracks the container width and converts px bounds to
+ * the percentages a `<Pane>` expects, exposed under the pane's own prop names so the result spreads
+ * straight on: `<Pane defaultSize={16} {...createPaneSize(() => el, { min: 275, max: 325 })} />`.
  */
-export function createPaneMinSize(containerEl: () => HTMLElement | null, minPx: number, fallback = 25) {
+export function createPaneSize(containerEl: () => HTMLElement | null, bounds: PaneSizeBounds) {
   const size = new ElementSize(containerEl);
+  const pct = (px: number, fallback: number) => (size.width > 0 ? (px / size.width) * 100 : fallback);
   return {
-    get value() {
-      return size.width > 0 ? (minPx / size.width) * 100 : fallback;
+    get minSize(): number | undefined {
+      return bounds.min !== undefined ? pct(bounds.min, bounds.fallbackMin ?? 25) : undefined;
+    },
+    get maxSize(): number | undefined {
+      return bounds.max !== undefined ? pct(bounds.max, bounds.fallbackMax ?? 100) : undefined;
     }
   };
 }

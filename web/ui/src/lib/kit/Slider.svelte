@@ -8,11 +8,22 @@
     max?: number;
     step?: number;
     throttle?: number;
+    orientation?: 'horizontal' | 'vertical';
     onChange?: (value: number) => void;
     class?: string;
   }
 
-  let { value, target, min = 0, max = 100, step = 1, throttle = 0, onChange, class: className = '' }: Props = $props();
+  let {
+    value,
+    target,
+    min = 0,
+    max = 100,
+    step = 1,
+    throttle = 0,
+    orientation = 'horizontal',
+    onChange,
+    class: className = ''
+  }: Props = $props();
 
   const fillPercentage = $derived(
     value != null ? ((value - min) / (max - min)) * 100 : ((target - min) / (max - min)) * 100
@@ -55,7 +66,7 @@
     throttledChange.cancel();
     onChange?.(parseFloat(e.currentTarget.value));
   }}
-  class="slider {className}"
+  class="slider {orientation} {className}"
   style="--fill-percentage: {fillPercentage}%"
 />
 
@@ -135,5 +146,41 @@
     border: none;
     border-radius: var(--thumb-radius);
     cursor: pointer;
+  }
+
+  /* Vertical: min at bottom, max at top. Width becomes the track thickness; height fills the container. */
+  .slider.vertical {
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: var(--track-height);
+    height: 100%;
+  }
+
+  .slider.vertical::-webkit-slider-runnable-track {
+    width: var(--track-height);
+    height: 100%;
+    background: linear-gradient(
+      to top,
+      var(--track-filled) 0%,
+      var(--track-filled) var(--fill-percentage),
+      var(--track-unfilled) var(--fill-percentage),
+      var(--track-unfilled) 100%
+    );
+  }
+
+  .slider.vertical::-webkit-slider-thumb {
+    width: var(--thumb-height);
+    height: var(--thumb-width);
+    margin: 0 var(--thumb-margin-block);
+  }
+
+  .slider.vertical::-moz-range-track {
+    width: var(--track-height);
+    height: 100%;
+  }
+
+  .slider.vertical::-moz-range-thumb {
+    width: var(--thumb-height);
+    height: var(--thumb-width);
   }
 </style>

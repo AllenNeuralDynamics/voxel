@@ -3,15 +3,16 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import type { Pathname } from '$app/types';
-  import { getSessionContext } from '$lib/context';
+  import { getVoxelApp } from '$lib/model';
   import { cn, sanitizeString } from '$lib/utils';
 
-  const session = getSessionContext();
+  const app = getVoxelApp();
+  const instrument = $derived(app.instrument);
 
   let lastConfigurePath = '/';
 
   function isInsideConfigure(path: string): boolean {
-    return path === '/' || path === '/config' || path.startsWith('/devices/');
+    return path === '/' || path === '/config' || path === '/stage' || path.startsWith('/devices/');
   }
 
   afterNavigate(({ from, to }) => {
@@ -30,17 +31,17 @@
 
   let { children } = $props();
 
-  const scope = $derived(session.scope);
-  const cameraIds = $derived([...scope.cameras.keys()]);
-  const laserIds = $derived([...scope.lasers.keys()]);
-  const stageIds = $derived(scope.stage ? [scope.stage.x.id, scope.stage.y.id, scope.stage.z.id] : []);
-  const analogOutIds = $derived([...scope.analogOuts.keys()]);
+  const cameraIds = $derived(instrument ? [...instrument.cameras.keys()] : []);
+  const laserIds = $derived(instrument ? [...instrument.lasers.keys()] : []);
+  const stageIds = $derived(instrument ? [instrument.hal.stage.x, instrument.hal.stage.y, instrument.hal.stage.z] : []);
+  const analogOutIds = $derived(instrument ? [...instrument.analogOuts.keys()] : []);
 
   const groupedIds = $derived(new Set([...cameraIds, ...laserIds, ...stageIds, ...analogOutIds]));
-  const otherIds = $derived([...scope.devices.keys()].filter((id) => !groupedIds.has(id)));
+  const otherIds = $derived(instrument ? [...instrument.devices.keys()].filter((id) => !groupedIds.has(id)) : []);
 
   const overviewActive = $derived(page.url.pathname === '/');
   const configActive = $derived(page.url.pathname === '/config');
+  const stageActive = $derived(page.url.pathname === '/stage');
   const activeDeviceId = $derived(page.params.id);
 
   function rowClass(active: boolean, hasError: boolean): string {
@@ -70,7 +71,7 @@
 {/snippet}
 
 {#snippet deviceRow(id: string)}
-  {@const device = scope.get(id)}
+  {@const device = instrument?.devices.get(id)}
   <a href={resolve(`/devices/${id}` as '/')} class={rowClass(activeDeviceId === id, !!device?.error)}>
     <span class="min-w-0 flex-1 truncate">{sanitizeString(id)}</span>
     <span
@@ -85,6 +86,7 @@
     <div class="flex flex-col gap-0.5 px-2">
       {@render navItem('Overview', '/', overviewActive)}
       {@render navItem('Config', '/config', configActive)}
+      {@render navItem('Stage', '/stage', stageActive)}
     </div>
 
     {#if cameraIds.length > 0}

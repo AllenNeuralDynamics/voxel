@@ -17,7 +17,6 @@ def mock_device_config() -> DeviceConfig:
 @pytest.fixture
 def local_rig_config(mock_device_config: DeviceConfig) -> RigConfig:
     return RigConfig(
-        name="test-rig",
         devices={
             "device_a": mock_device_config,
             "device_b": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),

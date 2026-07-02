@@ -7,14 +7,21 @@ For maximum type safety in production code, construct models explicitly.
 # pyright: reportArgumentType=false, reportOptionalSubscript=false
 # ruff: noqa: PGH003
 
-from ome_zarr_writer.metadata import Dataset, Multiscale, OmeMeta5
-from ome_zarr_writer.metadata.axis import ChannelAxis, TimeAxis
-from ome_zarr_writer.metadata.transforms import DownscaleType, ScaleTransform, TranslationTransform
+from ome_zarr_writer.dataset import (
+    ChannelAxis,
+    Dataset,
+    DownscaleType,
+    Multiscale,
+    OmeMeta,
+    ScaleTransform,
+    TimeAxis,
+    TranslationTransform,
+)
 
 
 def test_minimal_2d():
     """Test minimal valid 2D image (YX)."""
-    meta = OmeMeta5.model_validate(
+    meta = OmeMeta.model_validate(
         {
             "multiscales": [
                 {
@@ -41,7 +48,7 @@ def test_minimal_2d():
 
 def test_3d_zyx():
     """Test 3D image (ZYX)."""
-    meta = OmeMeta5(
+    meta = OmeMeta(
         multiscales=[
             Multiscale(
                 axes=[
@@ -65,7 +72,7 @@ def test_3d_zyx():
 
 def test_2d_with_channel():
     """Test 2D image with channel axis (CYX)."""
-    meta = OmeMeta5(
+    meta = OmeMeta(
         multiscales=[
             Multiscale(
                 axes=[
@@ -91,7 +98,7 @@ def test_2d_with_channel():
 
 def test_2d_with_time():
     """Test 2D time series (TYX)."""
-    meta = OmeMeta5(
+    meta = OmeMeta(
         multiscales=[
             Multiscale(
                 axes=[
@@ -116,7 +123,7 @@ def test_2d_with_time():
 
 def test_5d_tczyx():
     """Test full 5D image (TCZYX)."""
-    meta = OmeMeta5(
+    meta = OmeMeta(
         multiscales=[
             Multiscale(
                 name="example",
@@ -145,7 +152,7 @@ def test_5d_tczyx():
 
 def test_multiscale_pyramid():
     """Test multiscale pyramid with multiple resolution levels."""
-    meta = OmeMeta5(
+    meta = OmeMeta(
         multiscales=[
             Multiscale(
                 axes=[
@@ -183,7 +190,7 @@ def test_multiscale_pyramid():
 
 def test_with_translation():
     """Test dataset with both scale and translation."""
-    meta = OmeMeta5(
+    meta = OmeMeta(
         multiscales=[
             Multiscale(
                 axes=[
@@ -211,7 +218,7 @@ def test_with_translation():
 
 def test_json_serialization():
     """Test that metadata can be serialized to JSON."""
-    meta = OmeMeta5(
+    meta = OmeMeta(
         multiscales=[
             Multiscale(
                 name="test",
@@ -230,7 +237,7 @@ def test_json_serialization():
             )
         ]
     )
-    json_str = meta.to_json()
+    json_str = meta.model_dump_json()
     assert "0.5" in json_str
     assert "test" in json_str
     assert "micrometer" in json_str

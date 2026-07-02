@@ -2,6 +2,7 @@
   import { Select } from 'bits-ui';
 
   import { ChevronDown } from '$lib/icons';
+  import { Label } from '$lib/kit';
   import { type Density, type Mode, type Scale, type ThemeId, themes } from '$lib/themes';
 
   const modes: { value: Mode; label: string }[] = [
@@ -145,7 +146,7 @@
   {#if themes.prefs.current.mode === 'light' || themes.prefs.current.mode === 'auto'}
     <div class="flex flex-col gap-1.5">
       {#if themes.prefs.current.mode === 'auto'}
-        <span class="text-xs text-fg-muted">Light</span>
+        <Label>Light</Label>
       {/if}
       {@render themeSelect('light')}
     </div>
@@ -154,7 +155,7 @@
   {#if themes.prefs.current.mode === 'dark' || themes.prefs.current.mode === 'auto'}
     <div class="flex flex-col gap-1.5">
       {#if themes.prefs.current.mode === 'auto'}
-        <span class="text-xs text-fg-muted">Dark</span>
+        <Label>Dark</Label>
       {/if}
       {@render themeSelect('dark')}
     </div>

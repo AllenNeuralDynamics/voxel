@@ -1,31 +1,62 @@
-# Voxel Drivers
+# vxl-drivers
 
-`vxl-drivers` hosts hardware adapters for the Voxel rig: NI DAQ timing, AA Opto AOTFs, ASI stages, Vieworks cameras (via EGrabber), and drop-in simulated devices for local development. Each driver implements the abstract interfaces defined in `voxel` so you can bind real instruments in your `system.yaml`.
+Hardware drivers for Voxel microscopes. Each driver implements a device interface defined in the `vxl` package — `Camera`, `Laser`, `AOTF`, or `ContinuousAxis` — so concrete instruments plug into a rig the same way their simulated counterparts do. This package contains real-hardware drivers only; simulated devices live in the `vxl` package.
 
-## Using the Drivers
+## Using the drivers
 
-- Install alongside the rest of the workspace (`uv sync …` already links the package in editable mode).
-- Reference the driver classes from your rig configuration (e.g. `target: vxl_drivers.daqs.ni.NIDaqTask`).
-- Mix and match simulated and hardware-backed drivers to mirror whatever subset of gear you have connected.
+Drivers are referenced from an instrument template by their fully qualified class name. Each device in the template's `hal:` section names a `target` class and its constructor `init` arguments:
 
-The Voxel example (`examples/voxel`) defaults to the simulated drivers so you can explore the UI without any hardware. Swap in the concrete drivers listed above when you're ready to run on an actual microscope.
+```yaml
+hal:
+  devices:
+    camera_1:
+      target: vxl_drivers.cameras.dcam.hamamatsu.HamamatsuCamera
+      init: { serial: "S/N-001" }
+    stage_x:
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: { hub: tiger_hub, axis_label: "X" }
+```
 
-## Driver Catalog
+Many drivers depend on a vendor SDK or runtime (EGrabber, DCAM, serial libraries) and require the corresponding hardware to run. To explore Voxel without any hardware, start from the `simulated-local` template, which wires up the simulated devices from the `vxl` package; swap in the drivers below when moving to a real microscope.
 
-**Legend:** Status column shows Implementation + Hardware test (✅ ready, ⚠️ pending).
+## Driver catalog
 
-| Device Type | Target | Status | Notes |
-| --- | --- | --- | --- |
-| **AOTF** | [`vxl_drivers.aotf.simulated.SimulatedAotf`](src/vxl_drivers/aotf/simulated.py) | ✅ ✅ | Used by `examples/voxel` for end-to-end smoke tests. |
-| **AOTF** | [`vxl_drivers.aotf.mpds.MpdsAotf`](src/vxl_drivers/aotf/mpds.py) | ✅ ⚠️ | Hardware hookup required for full validation; API settled. |
-| **Laser** | [`vxl_drivers.lasers.simulated.SimulatedLaser`](src/vxl_drivers/lasers/simulated.py) | ✅ ✅ | Standalone DPSS: adjustable power + telemetry without AOTF dependency. |
-| **Laser** | [`vxl_drivers.lasers.simulated.SimulatedAOTFShutteredLaser`](src/vxl_drivers/lasers/simulated.py) | ✅ ✅ | Uses AOTF for fast blanking while laser holds power. |
-| **Laser** | [`vxl_drivers.lasers.simulated.SimulatedAOTFModulatedLaser`](src/vxl_drivers/lasers/simulated.py) | ✅ ✅ | Passive source—AOTF sets both blanking and RF drive power. |
-| **Camera** | [`vxl_drivers.cameras.simulated.SimulatedCamera`](src/vxl_drivers/cameras/simulated) | ✅ ✅ | Procedural frames + ROI/binning validation in the Voxel demo. |
-| **Camera** | [`vxl_drivers.cameras.egrabber.vieworks.VieworksCamera`](src/vxl_drivers/cameras/egrabber) | ✅ ⚠️ | Requires Vieworks hardware + EGrabber runtime to exercise. |
-| **DAQ** | [`vxl_drivers.daqs.simulated.SimulatedDaq`](src/vxl_drivers/daqs/simulated.py) | ✅ ✅ | Drives the simulated timing stack in `examples/voxel`. |
-| **DAQ** | [`vxl_drivers.daqs.ni.NiDaq`](src/vxl_drivers/daqs/ni.py) | ✅ ⚠️ | NI PCIe-6738: awaiting lab timing tests; structure mirrors deployed rigs. |
-| **Continuous Axis** | [`vxl_drivers.axes.simulated.SimulatedContinuousAxis`](src/vxl_drivers/axes/simulated.py) | ✅ ✅ | Includes optional simulated TTL stepper for stage scanning. |
-| **Continuous Axis** | [`vxl_drivers.axes.asi.TigerLinearAxis`](src/vxl_drivers/axes/asi.py) | ✅ ⚠️ | ASI Tiger: integrates with Tiger hub ops; needs on-hardware sweep. |
-| **Discrete Axis** | [`vxl_drivers.axes.simulated.SimulatedDiscreteAxis`](src/vxl_drivers/axes/simulated.py) | ✅ ✅ | Ideal for filter wheels, turrets, and other indexed devices. |
-| **Support** | [Tiger hub shared protocol](src/vxl_drivers/tigerhub) | ✅ ⚠️ | Dependency for ASI drivers; protocol helpers still evolving. |
+Grouped by the `vxl` interface each driver implements.
+
+### Cameras (`vxl.camera.base.Camera`)
+
+| Vendor / model | Target |
+|----------------|--------|
+| Vieworks (via EGrabber) | `vxl_drivers.cameras.egrabber.VieworksCamera` |
+| Hamamatsu (via DCAM) | `vxl_drivers.cameras.dcam.hamamatsu.HamamatsuCamera` |
+| PCO | `vxl_drivers.cameras.pco.PCOCamera` |
+| Ximea | `vxl_drivers.cameras.ximea.XimeaCamera` |
+
+### Lasers (`vxl.laser.base.Laser`)
+
+| Vendor / model | Target |
+|----------------|--------|
+| Vortran Stradus | `vxl_drivers.lasers.vortran_stradus.VortranStradus` |
+| Cobolt Skyra | `vxl_drivers.lasers.cobolt_skyra.CoboltSkyra` |
+| Coherent Genesis MX | `vxl_drivers.lasers.coherent.genesis_mx.GenesisMX` |
+| Coherent OBIS (LX / LS) | `vxl_drivers.lasers.coherent.obis.ObisLX`, `ObisLS` |
+| MPB VFL | `vxl_drivers.lasers.mpb.vfl.MpbVfl` |
+| Oxxius (LBX / LCX) | `vxl_drivers.lasers.oxxius.OxxiusLBX`, `OxxiusLCX` |
+
+Oxxius lasers on a shared controller connect through `vxl_drivers.lasers.oxxius.OxxiusHub`.
+
+### AOTF (`vxl.aotf.base.AOTF`)
+
+| Vendor / model | Target |
+|----------------|--------|
+| AA OptoElectronics MPDSnC | `vxl_drivers.aotf.mpds.MpdsAotf` |
+
+### Stage axes (`vxl.axes.continuous.base.ContinuousAxis`)
+
+| Vendor / model | Target |
+|----------------|--------|
+| ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` |
+| ASI Tiger TTL stepper | `vxl_drivers.axes.asi.TigerTTLStepper` |
+| ASI Tiger XYZ stage | `vxl_drivers.axes.stage.TigerXYZStage` |
+
+The ASI drivers share a serial-protocol layer in [`tigerhub/`](src/vxl_drivers/tigerhub) (`TigerHub`, `TigerBox`), which speaks the Tiger/MS2000 command set to an ASI controller. See [`tigerhub/ops/`](src/vxl_drivers/tigerhub/ops) for the operation, parser, and model reference.

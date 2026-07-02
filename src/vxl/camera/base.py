@@ -1,19 +1,17 @@
 import asyncio
 import logging
+import shutil
 from abc import abstractmethod
 from contextlib import suppress
-from datetime import datetime
 from enum import StrEnum
-from pathlib import Path
-from typing import Literal, cast
+from pathlib import Path, PurePosixPath
+from typing import Literal, Self, cast
 
 import numpy as np
-from ome_zarr_writer import OMEZarrWriter, WriterConfig
-from ome_zarr_writer.backends.log import LogBackend
-from ome_zarr_writer.backends.ts import TensorStoreBackend
-from ome_zarr_writer.buffer import PyramidRingBuffer
-from ome_zarr_writer.types import Compression, ScaleLevel
-from pydantic import BaseModel
+from cloudpathlib import S3Path
+from ome_zarr_writer import OMEZarrWriter, PyramidRingBuffer, UIVec3D, UVec3D, WriterConfig, WriterSettings
+from ome_zarr_writer.writer import BatchMetrics
+from pydantic import BaseModel, model_validator
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
@@ -25,15 +23,59 @@ from vxl.camera.preview import (
     PreviewViewport,
 )
 from vxl.device import DeviceType
-from vxl.stack import BatchResult, Stack
 from vxl.system import System
 from vxlib import Dtype, SchemaModel
 
 log = logging.getLogger(__name__)
 
-TESTING = True
 
-WRITER_BACKEND_CLS = LogBackend if TESTING else TensorStoreBackend
+class Storage(SchemaModel):
+    """Where a camera writes, specified logically by the controller. The node resolves
+    it: `bucket=None` → the node's local store; a bucket → s3://bucket. Absolute paths
+    and the scratch location are the node's to fill, never the controller's."""
+
+    bucket: str | None = None  # None → node-local store; else an S3 bucket
+    path: PurePosixPath  # relative path under the root, e.g. "exp42/stack3/488.ome.zarr"
+    stage: bool = False  # write to local scratch first, then upload (bucket only)
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.path.is_absolute() or ".." in self.path.parts:
+            raise ValueError("path must be relative and stay under the root")
+        if self.stage and self.bucket is None:
+            raise ValueError("stage requires a bucket (nothing to stage a local target to)")
+        return self
+
+    def __truediv__(self, segment: str) -> Self:
+        """Child storage one segment deeper, same bucket/stage."""
+        return self.model_copy(update={"path": self.path / segment})
+
+    def resolve(self) -> Path | S3Path:
+        """Concrete write root on this machine: an S3 path for a bucket, else the local store."""
+        if self.bucket:
+            return S3Path(f"s3://{self.bucket}") / self.path.as_posix()
+        return System().store / self.path
+
+
+class StorageStatus(SchemaModel):
+    """A node's write-access result for a `Storage` root (preflight). ``free_bytes`` is -1 when
+    capacity is unknown (e.g. an S3 bucket)."""
+
+    host: str
+    root: str
+    free_bytes: int
+
+
+class DatasetRef(SchemaModel):
+    """Control-owned pointer to one written OME-Zarr dataset — the content of ``<channel>.ref.json``.
+    Self-describing (carries geometry), not a bare path."""
+
+    host: str
+    target: str
+    staged: bool
+    dtype: Dtype
+    shape: UIVec3D  # z=num_frames, y, x
+    voxel_size: UVec3D  # z=z_step, y, x (sample-space µm)
 
 
 class IntRange(BaseModel):
@@ -119,13 +161,25 @@ PIXEL_FMT_TO_DTYPE: dict[PixelFormat, Dtype] = {
 
 BINNING_OPTIONS = [1, 2, 4, 8]
 
-MAX_SLOTS = 12
+
+class CaptureState(StrEnum):
+    IDLE = "IDLE"
+    COLLECTING = "COLLECTING"
+    DONE = "DONE"
+    CLOSING = "CLOSING"
+    CLOSED = "CLOSED"
 
 
 class CameraMode(StrEnum):
     IDLE = "IDLE"
     PREVIEW = "PREVIEW"
     ACQUISITION = "ACQUISITION"
+
+
+# Ring depth: at least 2 (so collect overlaps downsample/flush) up to this cap (coordination +
+# cache pressure outweigh gains beyond it). Sized within these bounds from the camera's RAM share.
+MIN_WRITER_SLOTS = 2
+MAX_WRITER_SLOTS = 5
 
 
 class CameraController(DeviceController["Camera"]):
@@ -140,30 +194,38 @@ class CameraController(DeviceController["Camera"]):
             uid=device.uid,
         )
         self._writer: OMEZarrWriter | None = None
+        self._task: asyncio.Task[None] | None = None
+        self._task_kind: Literal["batch", "close"] | None = None
         self._preview_publishing = False
         self._publish_task: asyncio.Task | None = None
-        System.reserve_ram(self.device.uid, weight=1.0)
+        System.Ram.reserve(self.device.uid, weight=1.0)
 
     async def close(self) -> None:
         self._preview_publishing = False
         self._publish_fn = None
         self._previewer.shutdown()
-        System.release_ram(self.device.uid)
+        System.Ram.release(self.device.uid)
         await super().close()
 
     @property
     @describe(label="RAM Budget", units="bytes", stream=True)
     def ram_budget_bytes(self) -> int:
-        """Current RAM share for this camera from the node-level System singleton."""
-        return System.ram_share(self.device.uid)
+        """Current RAM share for this camera from the host RAM budget."""
+        return System.Ram.reserved(self.device.uid)
 
     @property
     @describe(label="Camera Mode", stream=True)
     def mode(self) -> CameraMode:
         return self._mode
 
+    @property
+    @describe(label="Writer Metrics", stream=True)
+    def writer_metrics(self) -> list[BatchMetrics]:
+        return self._writer.batches if self._writer else []
+
     def _on_preview_frame(self, frame: PreviewFrame) -> None:
-        if not self._preview_publishing:
+        # Publish live frames (preview/acquisition); while idle, only a one-off reprocessed frame.
+        if self._mode is CameraMode.IDLE and not self._preview_publishing:
             return
         if self._publish_task is not None and not self._publish_task.done():
             return
@@ -174,14 +236,14 @@ class CameraController(DeviceController["Camera"]):
             await self.publish("preview", frame.pack())
 
     async def _on_preview_tiles(self, packed: bytes) -> None:
-        if not self._preview_publishing:
+        if self._mode is CameraMode.IDLE and not self._preview_publishing:
             return
         with suppress(RuntimeError):
             await self.publish("preview_tile", packed)
 
     @describe(label="Update Preview Viewport")
     async def update_preview_viewport(self, viewport: PreviewViewport):
-        if self._mode == CameraMode.PREVIEW:
+        if self._mode is not CameraMode.IDLE:
             self._previewer.viewport = viewport
         else:
             self._preview_publishing = True
@@ -191,7 +253,7 @@ class CameraController(DeviceController["Camera"]):
     @describe(label="Update Preview Levels")
     async def update_preview_levels(self, levels: PreviewLevels):
         self._previewer.levels = levels
-        if self._mode != CameraMode.PREVIEW:
+        if self._mode is CameraMode.IDLE:
             self._preview_publishing = True
             await self._previewer.reprocess()
             self._preview_publishing = False
@@ -204,9 +266,16 @@ class CameraController(DeviceController["Camera"]):
     @describe(label="Update Preview Colormap")
     async def update_preview_colormap(self, colormap: str | None) -> None:
         self._previewer.colormap = colormap
-        self._preview_publishing = True
-        await self._previewer.reprocess()
-        self._preview_publishing = False
+        if self._mode is CameraMode.IDLE:
+            self._preview_publishing = True
+            await self._previewer.reprocess()
+            self._preview_publishing = False
+
+    @describe(label="Auto Level")
+    async def auto_level(self, percentile: float = 1.0) -> None:
+        """Set preview levels by percentile-clipping the latest overview histogram (no-op before any frame)."""
+        if (histogram := self._previewer.last_histogram) is not None:
+            await self.update_preview_levels(PreviewLevels.from_histogram(histogram, percentile))
 
     @property
     @describe(label="Preview Config", stream=True)
@@ -232,14 +301,12 @@ class CameraController(DeviceController["Camera"]):
         if self._mode != CameraMode.IDLE:
             raise RuntimeError(f"Cannot start preview: camera in {self._mode} mode")
 
-        def _arm_and_start():
-            self.device.arm(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
-            self.device.start(frame_count=None)
-
-        await self._run_sync(_arm_and_start)
+        # start() lazily allocates the buffer, configures the trigger, and begins (frame_count=None → infinite).
+        await self._run_sync(
+            lambda: self.device.start(frame_count=None, trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
+        )
 
         self._mode = CameraMode.PREVIEW
-        self._preview_publishing = True
         self._frame_idx = 0
         self._preview_task = asyncio.create_task(self._preview_loop())
 
@@ -269,106 +336,138 @@ class CameraController(DeviceController["Camera"]):
             await self._preview_task
             self._preview_task = None
         await self._run_sync(self.device.stop)
-        await self._run_sync(self.device.disarm)
+        await self._run_sync(self.device.free_buffer)
 
-    @describe(label="Initialize Stack")
-    async def initialize_stack(
+    @describe(label="Check Writable")
+    async def check_writable(self, storage: Storage) -> StorageStatus:
+        """Resolve ``storage`` on this node and prove write access with a round-trip marker write.
+
+        The acquisition preflight (before any task): raises with a clear reason if the destination
+        is unreachable or not writable, so the run aborts before any stage motion or capture.
+        """
+
+        def _check() -> StorageStatus:
+            root = storage.resolve()
+            root.mkdir(parents=True, exist_ok=True)
+            marker = root / f".voxel_write_check-{self.device.uid}"
+            marker.write_text(self.device.uid)  # raises on missing creds / no permission / unreachable
+            marker.unlink(missing_ok=True)
+            free = shutil.disk_usage(root).free if isinstance(root, Path) else -1
+            return StorageStatus(host=System.hostname(), root=str(root), free_bytes=free)
+
+        return await self._run_sync(_check)
+
+    @describe(label="Open Stack")
+    async def open_stack(
         self,
-        stack: Stack,
         *,
-        store_path: Path,
-        channel_name: str,
-        max_level: ScaleLevel = ScaleLevel.L3,
-        compression: Compression = Compression.BLOSC_LZ4,
-        batch_z_shards: int = 1,
-        target_shard_gb: float = 1.0,
-        trigger_mode: TriggerMode = TriggerMode.ON,
-        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
-    ) -> None:
-        """Prepare camera and writer for a stack acquisition.
+        num_frames: int,
+        z_step: float,
+        magnification: float,
+        storage: Storage,
+        settings: WriterSettings,
+    ) -> DatasetRef:
+        """Prepare the camera + writer for a stack and return a pointer to its dataset.
 
-        Arms the camera (allocates buffers, configures trigger) and creates an
-        OMEZarrWriter that writes a single-channel OME-Zarr named by
-        ``channel_name`` at ``store_path / {channel_name}.ome.zarr``. The caller
-        (rig) is responsible for composing a per-stack ``store_path`` so that
-        stacks written to the same base don't collide on channel names.
-
-        ``batch_z_shards`` and ``target_shard_gb`` are runtime pipeline knobs
-        supplied by the rig — not persisted in any config — so the rig can
-        eventually compute them from per-camera RAM budgets.
+        ``storage`` is the per-channel logical destination — the node resolves it
+        (``bucket=None`` → ``System.store``; a bucket → ``s3://bucket``; ``stage`` → local
+        scratch then upload). ``num_frames``/``z_step`` are the volume's geometry;
+        ``magnification`` converts the sensor-space ``effective_pixel_size_um`` into the
+        sample-space lateral voxel size. ``settings`` are the broadcast output-format knobs.
+        Returns a :class:`DatasetRef` (control persists it as ``<channel>.ref.json``). The
+        trigger is configured per-batch in ``begin_batch``.
         """
         if self._writer is not None:
-            raise RuntimeError("Stack already initialized. Call finalize_stack() first.")
+            raise RuntimeError("Stack already open. Call close_stack() first.")
         if self._mode != CameraMode.IDLE:
-            raise RuntimeError(f"Cannot initialize stack: camera in {self._mode} mode")
+            raise RuntimeError(f"Cannot open stack: camera in {self._mode} mode")
 
         self._mode = CameraMode.ACQUISITION
         self._frame_idx = 0
+        self._task = None
+        self._task_kind = None
 
-        # Arm camera (allocates buffers, configures trigger)
-        await self._run_sync(lambda: self.device.arm(trigger_mode=trigger_mode, trigger_polarity=trigger_polarity))
+        # Allocate buffers eagerly (after ROI is set), so every batch's start() is fast.
+        await self._run_sync(self.device.allocate_buffer)
 
-        frame_size_px = self.device.frame_size_px
-        cfg = WriterConfig.create(
-            name=channel_name,
-            num_frames=stack.num_frames,
-            frame_height=frame_size_px.y,
-            frame_width=frame_size_px.x,
-            z_step=stack.z_step,
-            pixel_size=self.device.effective_pixel_size_um,
+        # Resolve the logical Storage to concrete roots, then build the writer config: the broadcast
+        # `settings` (knobs) + this camera's geometry (frame size, voxel size from z_step + magnification)
+        # + dtype from the device's pixel format.
+        target = storage.resolve()
+        scratch = (System().scratch / storage.path) if storage.stage else None
+        frame = self.device.frame_size_px
+        eff_px = self.device.effective_pixel_size_um(magnification)
+        cfg = WriterConfig(
+            **settings.model_dump(),
+            volume_shape=UIVec3D(z=num_frames, y=frame.y, x=frame.x),
+            voxel_size=UVec3D(z=z_step, y=eff_px.y, x=eff_px.x),
             dtype=self.device.pixel_type,
-            max_level=max_level,
-            compression=compression,
-            batch_z_shards=batch_z_shards,
-            target_shard_gb=target_shard_gb,
+            target=target,
+            scratch=scratch,
         )
 
-        # Derive ring slots from this camera's RAM budget. Refuses acquisition
-        # if not even 1 slot fits — user needs to reduce batch_z_shards,
-        # target_shard_gb, max_level, or ROI (or raise max_ram_fraction).
-        frame_bytes = frame_size_px.y * frame_size_px.x * self.device.pixel_type.itemsize
-        per_slot_bytes = int(cfg.batch_z * frame_bytes * 8 / 7)  # incl. pyramid tail
+        # Size the ring from this camera's RAM share. `cfg.batch_z` is policy-derived (matches the
+        # engine's batch_z), so a slot holds one batch + its pyramid tail (~1/7 overhead). Refuse if
+        # not even the minimum slot count fits — one slot would serialize collect against flush.
+        frame_bytes = frame.y * frame.x * self.device.pixel_type.itemsize
+        per_slot_bytes = int(cfg.batch_z * frame_bytes * 8 / 7)
         budget = self.ram_budget_bytes
         max_slots = budget // per_slot_bytes if per_slot_bytes else 0
-        if max_slots < 1:
+        if max_slots < MIN_WRITER_SLOTS:
             raise RuntimeError(
-                f"{self.device.uid}: cannot fit even 1 slot. "
-                f"Needs {per_slot_bytes:,} bytes/slot, RAM share {budget:,} bytes. "
-                f"Reduce batch_z_shards, target_shard_gb, max_level, or ROI; "
-                f"or raise max_ram_fraction in ~/.voxel/system.yaml."
+                f"{self.device.uid}: cannot fit {MIN_WRITER_SLOTS} batch slots "
+                f"({per_slot_bytes:,} B/slot, {budget:,} B RAM share). Reduce batch_z_shards, "
+                f"shard_z_chunks, max_level, target_shard_gb, or ROI; or raise max_ram_fraction."
             )
-        # Cap slots at cpu_count (no parallelism past that) and at MAX_SLOTS
-        # (coordination + cache pressure outweighs gains beyond that).
-        slots = min(System.cpu_count(), MAX_SLOTS, max_slots)
-        # PROCESS is worthwhile once the machine has enough cores to amortize
-        # process-spawn overhead and benefit from per-worker parallel numba.
+        slots = min(max_slots, MAX_WRITER_SLOTS)
         ring_buf = PyramidRingBuffer.by_cpu_count(System.cpu_count())
+        self._writer = OMEZarrWriter(cfg, slots=slots, ring_buffer=ring_buf)
 
-        # Backend composes the final path as `{storage_root}/{cfg.name}.ome.zarr`.
-        backend = WRITER_BACKEND_CLS(cfg, storage_root=str(store_path))
-        self._writer = OMEZarrWriter(backend, slots=slots, ring_buffer=ring_buf)
         log.info(
-            "Stack initialized for %s: %s ch=%s slots=%d mode=%s (%.2f GB/slot, %.2f GB share)",
+            "Stack init for %s → %s: batch_z=%d slots=%d (%.2f GB/slot, %.2f GB share)",
             self.device.uid,
-            stack.stack_id,
-            channel_name,
+            target,
+            cfg.batch_z,
             slots,
-            ring_buf.value,
             per_slot_bytes / 1e9,
             budget / 1e9,
         )
+        return DatasetRef(
+            host=System.hostname(),
+            target=str(target),
+            staged=storage.stage,
+            dtype=cfg.dtype,
+            shape=cfg.volume_shape,
+            voxel_size=cfg.voxel_size,
+        )
 
-    @describe(label="Finalize Stack")
-    async def finalize_stack(self) -> None:
-        """Complete stack acquisition. Closes writer and disarms camera."""
+    @describe(label="Close Stack")
+    async def close_stack(self) -> None:
+        """Drain and close the writer in the background, then disarm the camera. Returns immediately;
+        poll :meth:`capture_state` until ``CLOSED``. Draining/uploading can take a while, so it runs
+        off the RPC path rather than blocking the call."""
+        if self._task is not None and not self._task.done():
+            raise RuntimeError("Capture task already in progress.")
+        self._task = asyncio.create_task(self._close_stack())
+        self._task_kind = "close"
+
+    async def _close_stack(self) -> None:
+        """Flush and close the writer, then reset the camera to a reusable IDLE state.
+
+        The camera is always reset even if ``writer.close()`` raises (e.g. a flush error): the writer is
+        dropped, the buffer freed, and the mode returned to IDLE in a ``finally``, so a close failure
+        can't wedge the camera into "Stack already open" on the next run.
+        """
         self._preview_publishing = False
         self._previewer.cancel_tile_task()
-        if self._writer is not None:
-            self._writer.close()
+        try:
+            if self._writer is not None:
+                await self._run_sync(self._writer.close)
+        finally:
             self._writer = None
-        await self._run_sync(self.device.disarm)
-        self._mode = CameraMode.IDLE
-        log.info("Stack finalized for %s", self.device.uid)
+            await self._run_sync(self.device.free_buffer)
+            self._mode = CameraMode.IDLE
+        log.info("Stack closed for %s", self.device.uid)
 
     @property
     @describe(label="Ready For Batch", stream=True)
@@ -380,45 +479,59 @@ class CameraController(DeviceController["Camera"]):
         """
         return self._writer is None or self._writer.ready_for_batch
 
-    @describe(label="Capture Batch")
-    async def capture_batch(self, num_frames: int) -> BatchResult:
-        """Capture a batch of frames. Must call initialize_stack first.
+    @describe(label="Begin Batch")
+    async def begin_batch(
+        self,
+        num_frames: int,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> None:
+        """Arm the trigger for ``num_frames`` frames and start grabbing them in the background.
 
-        Starts the camera, grabs num_frames frames (feeding them to the writer),
-        then stops the camera. Can be called multiple times per stack.
+        Waits for a free writer slot, then arms the camera before returning — so the caller can start
+        the AO/triggers as soon as this resolves. Poll :meth:`capture_state` for completion; frame and
+        pipeline progress stream via ``writer_metrics``. Must call ``open_stack`` first.
         """
         if self._writer is None:
-            raise RuntimeError("No stack initialized. Call initialize_stack() first.")
+            raise RuntimeError("No stack open. Call open_stack() first.")
         if self._mode != CameraMode.ACQUISITION:
             raise RuntimeError(f"Cannot capture batch: camera in {self._mode} mode")
+        if self._task is not None and not self._task.done():
+            raise RuntimeError("Capture task already in progress.")
+        writer = self._writer
+        while True:  # wait for a free ring slot before arming (a prior batch may still be flushing)
+            if writer.ready_for_batch:
+                break
+            await asyncio.sleep(0.005)
+        await self._run_sync(
+            lambda: self.device.start(
+                frame_count=num_frames, trigger_mode=trigger_mode, trigger_polarity=trigger_polarity
+            )
+        )
+        self._task = asyncio.create_task(self._collect_batch(num_frames, writer))
+        self._task_kind = "batch"
 
-        started_at = datetime.now()
-        await self._run_sync(lambda: self.device.start(frame_count=num_frames))
-
-        frames_captured = 0
-        dropped = 0
-
+    async def _collect_batch(self, num_frames: int, writer: OMEZarrWriter) -> None:
+        """Grab ``num_frames`` frames into the writer, then stop the camera."""
         for _ in range(num_frames):
             frame = await self._run_sync(self.device.grab_frame)
-            self._writer.add_frame(frame)
+            writer.add_frame(frame)
             await self._previewer.new_frame(frame, self._frame_idx)
             self._frame_idx += 1
-            frames_captured += 1
-
-            stream_info = self.device.stream_info
-            if stream_info:
-                dropped = stream_info.dropped_frames
-
         await self._run_sync(self.device.stop)
 
-        completed_at = datetime.now()
-        return BatchResult(
-            num_frames=frames_captured,
-            started_at=started_at,
-            completed_at=completed_at,
-            duration_s=(completed_at - started_at).total_seconds(),
-            dropped_frames=dropped,
-        )
+    @describe(label="Capture State")
+    async def capture_state(self) -> CaptureState:
+        """Lifecycle of the most recent :meth:`begin_batch`/:meth:`close_stack` task. Non-mutating: the
+        terminal state persists until the next task starts. Raises if the task failed."""
+        task = self._task
+        if task is None:
+            return CaptureState.IDLE
+        if not task.done():
+            return CaptureState.COLLECTING if self._task_kind == "batch" else CaptureState.CLOSING
+        if (exc := task.exception()) is not None:
+            raise RuntimeError(f"Capture task failed: {exc}")
+        return CaptureState.DONE if self._task_kind == "batch" else CaptureState.CLOSED
 
 
 class Camera(Device):
@@ -427,6 +540,8 @@ class Camera(Device):
 
     trigger_mode: TriggerMode = TriggerMode.OFF
     trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE
+
+    _buffer_allocated = False
 
     @property
     @abstractmethod
@@ -532,6 +647,11 @@ class Camera(Device):
         self._set_roi(snapped)
         return self._get_roi()
 
+    @describe(label="Reset ROI")
+    def reset_roi(self) -> SensorROI:
+        """Reset the sensor ROI to the full sensor."""
+        return self.update_roi(SensorROI(w=self.sensor_size_px.x, h=self.sensor_size_px.y))
+
     @property
     @describe(label="Frame Size", units="px", stream=True)
     def frame_size_px(self) -> IVec2D:
@@ -545,13 +665,6 @@ class Camera(Device):
     def frame_size_mb(self) -> float:
         """Get the size of the camera image in MB."""
         return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
-
-    @property
-    @describe(label="Effective Pixel Size", units="µm", stream=True)
-    def effective_pixel_size_um(self) -> Vec2D:
-        """Physical size of each output pixel in µm, accounting for binning."""
-        b = int(self.binning)
-        return Vec2D(x=self.pixel_size_um.x * b, y=self.pixel_size_um.y * b)
 
     @property
     @describe(label="Frame Area", units="µm", stream=True)
@@ -577,6 +690,11 @@ class Camera(Device):
         - Frame Rate [fps] - frames per second of acquisition
         """
 
+    def effective_pixel_size_um(self, magnification: float = 1.0) -> Vec2D:
+        """Physical size of each output pixel in µm, accounting for binning."""
+        b = int(self.binning)
+        return Vec2D(x=self.pixel_size_um.x * b, y=self.pixel_size_um.y * b) / magnification
+
     @abstractmethod
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:
         """Configure the trigger mode of the camera."""
@@ -586,26 +704,33 @@ class Camera(Device):
         """Configure the trigger polarity of the camera."""
 
     @abstractmethod
-    def _arm(self) -> None:
-        """Allocate capture buffers. Called by arm()."""
-
-    def disarm(self) -> None:
-        """Release capture buffers. Override if driver needs explicit cleanup."""
-
-    def arm(self, trigger_mode: TriggerMode | None = None, trigger_polarity: TriggerPolarity | None = None):
-        """Configure trigger and allocate capture buffers.
-
-        Safe to call multiple times — releases existing buffers before re-allocating.
-        """
-        self.disarm()
-        self.trigger_mode = trigger_mode if trigger_mode is not None else self.trigger_mode
-        self.trigger_polarity = trigger_polarity if trigger_polarity is not None else self.trigger_polarity
-        self._configure_trigger_mode(self.trigger_mode)
-        self._configure_trigger_polarity(self.trigger_polarity)
-        self._arm()
+    def _start(self, frame_count: int | None = None) -> None:
+        """Begin acquiring ``frame_count`` frames (None = until stopped). Driver primitive for start()."""
 
     @abstractmethod
-    def start(self, frame_count: int | None = None) -> None:
+    def _allocate_buffer(self) -> None:
+        """Allocate capture buffers. Driver primitive for allocate_buffer()."""
+
+    def _free_buffer(self) -> None:
+        """Release capture buffers. Override if the driver needs explicit cleanup."""
+
+    def allocate_buffer(self) -> None:
+        """Allocate capture buffers (releasing any existing first)."""
+        self.free_buffer()
+        self._allocate_buffer()
+        self._buffer_allocated = True
+
+    def free_buffer(self) -> None:
+        """Release capture buffers."""
+        self._free_buffer()
+        self._buffer_allocated = False
+
+    def start(
+        self,
+        frame_count: int | None = None,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> None:
         """Start the camera to acquire a certain number of frames.
 
         If frame number is not specified, acquires infinitely until stopped.
@@ -613,7 +738,16 @@ class Camera(Device):
 
         Arguments:
             frame_count: The number of frames to acquire. If None, acquires indefinitely until stopped.
+            trigger_mode: The trigger mode to use. Defaults to TriggerMode.ON.
+            trigger_polarity: The trigger polarity to use. Defaults to None.
         """
+        if not self._buffer_allocated:
+            self.allocate_buffer()
+        self.trigger_mode = trigger_mode
+        self.trigger_polarity = trigger_polarity
+        self._configure_trigger_mode(self.trigger_mode)
+        self._configure_trigger_polarity(self.trigger_polarity)
+        self._start(frame_count)
 
     @abstractmethod
     def grab_frame(self) -> np.ndarray:
@@ -632,6 +766,3 @@ class Camera(Device):
     @abstractmethod
     def stop(self) -> None:
         """Stop the camera."""
-
-
-# ==================== Camera Controller ====================

@@ -28,6 +28,7 @@ dependencies = [
     "pydantic-settings>=2.13.1",
     "rich>=14.2.0",
     "ruyaml>=0.91.0",
+    "cloudpathlib[s3]>=0.24.0",
 ]
 
 [project.urls]

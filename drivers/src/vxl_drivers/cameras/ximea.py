@@ -269,7 +269,7 @@ class XimeaCamera(Camera):
 
     # ==================== Acquisition ====================
 
-    def _arm(self) -> None:
+    def _allocate_buffer(self) -> None:
         """Prepare the camera to acquire images."""
         self._buffer_size_frames = round(BUFFER_SIZE_MB / self.frame_size_mb)
         self._camera.set_acq_buffer_size_unit(1024**2)  # Buffer size in MB
@@ -277,7 +277,7 @@ class XimeaCamera(Camera):
         self.log.debug(f"Buffer set to {self._buffer_size_frames} frames")
 
     @describe(label="Start", desc="Start acquiring frames from the camera.")
-    def start(self, frame_count: int | None = None) -> None:
+    def _start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames."""
         del frame_count  # unused - continuous acquisition
         self.log.info("Starting camera acquisition")

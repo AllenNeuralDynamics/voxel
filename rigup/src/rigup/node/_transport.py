@@ -39,7 +39,7 @@ from rigup.protocol import (
 )
 from rigup.transport import TransportClient
 from rigup.wire import TopicDispatcher
-from vxlib import Unsub
+from vxlib import Teardown
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 
@@ -59,7 +59,7 @@ class TransportAdapter[D: Device](Adapter[D]):
         self._transport = transport
         self._log = logging.getLogger(f"{uid}.TransportAdapter")
         self._signals: dict[str, TopicDispatcher] = {}
-        self._zmq_unsubs: dict[str, Unsub] = {}
+        self._zmq_unsubs: dict[str, Teardown] = {}
 
     async def start(self) -> None:
         """No-op — wire subscriptions are lazy, established on first subscribe()."""
@@ -77,7 +77,10 @@ class TransportAdapter[D: Device](Adapter[D]):
 
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         results = await self.run_commands([CommandRequest(attr=command, args=list(args), kwargs=kwargs)])
-        return results[f"0:{command}"]
+        # Rebuild a standalone Result: the member extracted from the batch carries the generic
+        # `Results` type parameter, which mis-serializes when a downstream serializer (e.g. FastAPI's
+        # response model) dumps it against a plain `Result` schema.
+        return Result.model_validate(results[f"0:{command}"].model_dump())
 
     async def run_commands(self, commands: list[CommandRequest]) -> Results:
         return await call(
@@ -99,21 +102,21 @@ class TransportAdapter[D: Device](Adapter[D]):
         return await call(self._transport, Action.SET_PROPS, SetPropsRequest(uid=self._uid, props=props), PropResults)
 
     @overload
-    async def subscribe(self, topic: str, callback: StreamCallback[bytes]) -> Unsub: ...
+    def subscribe(self, topic: str, cb: StreamCallback[bytes]) -> Teardown: ...
 
     @overload
-    async def subscribe[T: BaseModel](self, topic: str, callback: StreamCallback[T], *, schema: type[T]) -> Unsub: ...
+    def subscribe[T: BaseModel](self, topic: str, cb: StreamCallback[T], *, schema: type[T]) -> Teardown: ...
 
-    async def subscribe(
+    def subscribe(
         self,
         topic: str,
-        callback: Any,
+        cb: Any,
         *,
         schema: type[BaseModel] | None = None,
-    ) -> Unsub:
+    ) -> Teardown:
         full_topic = f"{self._uid}.{topic}"
-        sig = await self._ensure_signal(full_topic)
-        inner_unsub = sig.subscribe(callback, schema=schema) if schema is not None else sig.subscribe(callback)
+        sig = self._ensure_signal(full_topic)
+        inner_unsub = sig.subscribe(cb, schema=schema) if schema is not None else sig.subscribe(cb)
 
         def unsub() -> None:
             inner_unsub()
@@ -121,7 +124,7 @@ class TransportAdapter[D: Device](Adapter[D]):
 
         return unsub
 
-    async def _ensure_signal(self, full_topic: str) -> TopicDispatcher:
+    def _ensure_signal(self, full_topic: str) -> TopicDispatcher:
         """Create the TopicDispatcher and ZMQ subscription for ``full_topic`` if absent."""
         if (sig := self._signals.get(full_topic)) is not None:
             return sig
@@ -131,13 +134,13 @@ class TransportAdapter[D: Device](Adapter[D]):
         async def on_wire(data: bytes) -> None:
             await sig.emit_bytes(data)
 
-        self._zmq_unsubs[full_topic] = await self._transport.subscribe(full_topic, on_wire)
+        self._zmq_unsubs[full_topic] = self._transport.subscribe(full_topic, on_wire)
         return sig
 
     def _maybe_release(self, full_topic: str) -> None:
         """Drop the wire subscription and dispatcher when no app-level subscribers remain."""
         sig = self._signals.get(full_topic)
-        if sig is None or len(sig) > 0:
+        if sig is None or sig.subs > 0:
             return
         unsub = self._zmq_unsubs.pop(full_topic, None)
         if unsub is not None:

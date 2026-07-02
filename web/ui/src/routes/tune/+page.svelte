@@ -5,28 +5,24 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { toast } from 'svelte-sonner';
 
-  import type { AOSignals, ClockSource } from '$lib/config';
-  import { getSessionContext } from '$lib/context';
   import { Check, ChevronDown, Close } from '$lib/icons';
   import { Button, Select, SpinBox } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import type { SelectOption } from '$lib/kit/Select.svelte';
-  import { waveformPortColor } from '$lib/microscope/role';
-  import { createPaneMinSize, sanitizeString } from '$lib/utils';
-  import type { DerivedWaveform, Waveform } from '$lib/waveform';
-  import { generateTraces, isDerivedWaveform, resolveWaveforms } from '$lib/waveform';
+  import type { AOSignals, ClockSource, DerivedWaveform, Waveform } from '$lib/model';
+  import { getVoxelApp, resolveDeviceColor, waveformPortColor } from '$lib/model';
+  import { createPaneSize, sanitizeString, toastError } from '$lib/utils';
 
   import WaveformPanel from './WaveformPanel.svelte';
+  import { generateTraces, isDerivedWaveform, resolveWaveforms } from './waveforms';
 
   // ──────────────────────────────── Session wiring ────────────────────────────────
 
-  const session = getSessionContext();
-  const scope = $derived(session.scope);
-  const profiles = $derived(scope.profiles);
-  const rigCfg = $derived(scope.config);
-  const canEdit = $derived(session.mode !== 'acquiring');
+  const app = getVoxelApp();
+  const instrument = $derived(app.instrument);
+  const canEdit = $derived(instrument?.mode !== 'capture');
 
-  const profile = $derived(profiles.activeId ? rigCfg.profiles[profiles.activeId] : undefined);
+  const profile = $derived(instrument ? instrument.imaging.profiles[instrument.activeProfileId] : undefined);
 
   // ──────────────────────────────── Constants (pure) ────────────────────────────────
 
@@ -155,7 +151,7 @@
   // Reset timing-dirty flag when profile changes. Re-anchoring of ``selectedDeviceId``
   // is handled by the ``tabWaveformIds`` watch further down.
   watch(
-    () => profiles.activeId,
+    () => instrument?.activeProfileId,
     () => {
       timingDirty = false;
     },
@@ -166,7 +162,7 @@
 
   const loadedSignals = $derived.by<AOSignals | null>(() => {
     if (!selectedAoUid) return null;
-    return scope.analogOuts.get(selectedAoUid)?.loaded ?? null;
+    return instrument?.analogOuts.get(selectedAoUid)?.loaded ?? null;
   });
 
   const configSignals = $derived.by<AOSignals | null>(() => {
@@ -186,19 +182,19 @@
 
   const aoRange = $derived.by<{ min: number; max: number } | null>(() => {
     if (!selectedAoUid) return null;
-    return scope.analogOuts.get(selectedAoUid)?.voltageRange ?? null;
+    return instrument?.analogOuts.get(selectedAoUid)?.voltageRange ?? null;
   });
 
   const aoPorts = $derived.by<Record<string, string>>(() => {
     if (!selectedAoUid) return {};
-    const dev = rigCfg.rig.devices[selectedAoUid];
+    const dev = instrument?.hal.devices[selectedAoUid];
     const ports = dev?.init?.ports as Record<string, string> | undefined;
     return ports ?? {};
   });
 
   const aoTriggers = $derived.by<Record<string, string>>(() => {
     if (!selectedAoUid) return {};
-    const dev = rigCfg.rig.devices[selectedAoUid];
+    const dev = instrument?.hal.devices[selectedAoUid];
     const triggers = dev?.init?.triggers as Record<string, string> | undefined;
     return triggers ?? {};
   });
@@ -219,21 +215,22 @@
   const tabWaveformIds = $derived.by<string[]>(() => {
     const names = Object.keys(baseWaveforms);
     const ordered: string[] = [];
-    for (const dev of scope.profileDevices) {
-      if (names.includes(dev.id)) ordered.push(dev.id);
+    for (const id of instrument?.roles.keys() ?? []) {
+      if (names.includes(id)) ordered.push(id);
     }
     for (const id of names) if (!ordered.includes(id)) ordered.push(id);
     return ordered;
   });
 
-  /** Per-channel color: real Devices read from `device.accentColor`; port labels get
-   *  reverse-indexed entries from the waveform palette so the two pools don't collide. */
+  /** Per-channel color: devices in the active profile get their role accent (from `instrument.roles`);
+   *  pure DAQ port labels get reverse-indexed entries from the waveform palette so the pools don't collide. */
   const waveformColors = $derived.by<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     let portIdx = 0;
     for (const id of tabWaveformIds) {
-      const dev = scope.get(id);
-      const accent = dev?.accentColor;
+      const role = instrument?.roles.get(id);
+      const emission = instrument?.activeChannels.find((ch) => ch.camera.id === id || ch.laser.id === id)?.emission;
+      const accent = role ? resolveDeviceColor(role, emission) : undefined;
       out[id] = accent ?? waveformPortColor(portIdx++);
     }
     return out;
@@ -383,7 +380,7 @@
       waveforms: configSignals.waveforms
     };
     try {
-      await profiles.patchAoSync(selectedAoUid, next);
+      await instrument?.updateAoSignals(selectedAoUid, next);
       timingDirty = false;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update timing');
@@ -452,9 +449,7 @@
           clock_src: base.clock_src,
           waveforms: { ...base.waveforms, [channelId]: nextWf }
         };
-        void profiles.patchAoSync(aoUid, merged).catch((error: unknown) => {
-          toast.error(error instanceof Error ? error.message : 'Failed to auto-load waveform');
-        });
+        toastError(instrument?.updateAoSignals(aoUid, merged));
       }, 150);
 
       return () => {
@@ -554,7 +549,7 @@
   // ──────────────────────────────── Outer pane layout ────────────────────────────────
 
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebarMin = createPaneMinSize(() => paneGroupEl, 350);
+  const sidebar = createPaneSize(() => paneGroupEl, { min: 350 });
 </script>
 
 {#if profile}
@@ -631,7 +626,7 @@
 
       <PaneDivider direction="vertical" />
 
-      <Pane defaultSize={30} minSize={sidebarMin.value} maxSize={45}>
+      <Pane defaultSize={30} minSize={sidebar.minSize} maxSize={45}>
         <div class="flex h-full flex-col border-l">
           {#if selectedDeviceId && editingWaveform}
             {@const port = aoPorts[selectedDeviceId]}

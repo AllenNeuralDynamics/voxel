@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { getSessionContext } from '$lib/context';
   import { JsonView } from '$lib/kit';
+  import { getVoxelApp } from '$lib/model';
 
-  const session = getSessionContext();
-  const config = $derived(session.scope.config);
+  const app = getVoxelApp();
+  const instrument = $derived(app.instrument);
+  const config = $derived(instrument ? { hal: instrument.hal, bench: instrument.state } : null);
 </script>
 
 <section class="px-4 pt-2 pb-4">

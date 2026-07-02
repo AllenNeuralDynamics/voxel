@@ -1,10 +1,10 @@
 """Vector types for 2D and 3D coordinates.
 
-Provides float, integer, and positive-validated variants:
+Provides float, integer, and non-negative-validated variants:
 - Vec2D, Vec3D: Float vectors for physical coordinates (micrometers, etc.)
 - IVec2D, IVec3D: Integer vectors for pixel coordinates, shapes, etc.
-- UVec2D, UVec3D: Positive float vectors (all components > 0)
-- UIVec2D, UIVec3D: Positive integer vectors (all components > 0)
+- UVec2D, UVec3D: Non-negative float vectors (all components >= 0)
+- UIVec2D, UIVec3D: Non-negative (unsigned) integer vectors (all components >= 0)
 
 All vectors use y,x (and z,y,x) ordering to match NumPy array indexing.
 """
@@ -351,47 +351,47 @@ class IVec3D:
 # === Positive-validated variants ===
 
 
-def _check_positive_2d(name: str, y: float, x: float) -> None:
-    if y <= 0 or x <= 0:
-        raise ValueError(f"{name}: all components must be positive, got y={y}, x={x}")
+def _check_non_negative_2d(name: str, y: float, x: float) -> None:
+    if y < 0 or x < 0:
+        raise ValueError(f"{name}: all components must be non-negative, got y={y}, x={x}")
 
 
-def _check_positive_3d(name: str, z: float, y: float, x: float) -> None:
-    if z <= 0 or y <= 0 or x <= 0:
-        raise ValueError(f"{name}: all components must be positive, got z={z}, y={y}, x={x}")
+def _check_non_negative_3d(name: str, z: float, y: float, x: float) -> None:
+    if z < 0 or y < 0 or x < 0:
+        raise ValueError(f"{name}: all components must be non-negative, got z={z}, y={y}, x={x}")
 
 
 @final
 @dataclass(frozen=True, slots=True)
 class UVec2D(Vec2D):
-    """Positive float 2D vector. All components must be > 0."""
+    """Non-negative float 2D vector. All components must be >= 0."""
 
     def __post_init__(self):
-        _check_positive_2d(type(self).__name__, self.y, self.x)
+        _check_non_negative_2d(type(self).__name__, self.y, self.x)
 
 
 @final
 @dataclass(frozen=True, slots=True)
 class UIVec2D(IVec2D):
-    """Positive integer 2D vector. All components must be > 0."""
+    """Non-negative (unsigned) integer 2D vector. All components must be >= 0."""
 
     def __post_init__(self):
-        _check_positive_2d(type(self).__name__, self.y, self.x)
+        _check_non_negative_2d(type(self).__name__, self.y, self.x)
 
 
 @final
 @dataclass(frozen=True, slots=True)
 class UVec3D(Vec3D):
-    """Positive float 3D vector. All components must be > 0."""
+    """Non-negative float 3D vector. All components must be >= 0."""
 
     def __post_init__(self):
-        _check_positive_3d(type(self).__name__, self.z, self.y, self.x)
+        _check_non_negative_3d(type(self).__name__, self.z, self.y, self.x)
 
 
 @final
 @dataclass(frozen=True, slots=True)
 class UIVec3D(IVec3D):
-    """Positive integer 3D vector. All components must be > 0."""
+    """Non-negative (unsigned) integer 3D vector. All components must be >= 0."""
 
     def __post_init__(self):
-        _check_positive_3d(type(self).__name__, self.z, self.y, self.x)
+        _check_non_negative_3d(type(self).__name__, self.z, self.y, self.x)

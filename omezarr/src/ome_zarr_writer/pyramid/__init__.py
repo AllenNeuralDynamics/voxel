@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from ome_zarr_writer.types import ScaleLevel
+from ome_zarr_writer.dataset import ScaleLevel
 
 from ._numpy import pyramids_2d as pyramids_2d_numpy
 from ._numpy import pyramids_3d as pyramids_3d_numpy

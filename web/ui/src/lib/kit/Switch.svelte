@@ -5,7 +5,7 @@
     slots: {
       root: [
         'group flex cursor-pointer items-center rounded-full transition-colors',
-        'border border-border data-[state=checked]:border-highlight',
+        'border border-fg-faint data-[state=checked]:border-highlight',
         'bg-element-bg hover:bg-element-hover',
         'data-[state=checked]:bg-highlight data-[state=checked]:hover:bg-highlight',
         'data-disabled:cursor-not-allowed data-disabled:opacity-40',
@@ -20,10 +20,10 @@
     },
     variants: {
       size: {
-        xs: { root: '[--switch-h:calc(var(--ui-xs)*0.95)]' },
-        sm: { root: '[--switch-h:calc(var(--ui-sm)*0.95)]' },
-        md: { root: '[--switch-h:calc(var(--ui-md)*0.95)]' },
-        lg: { root: '[--switch-h:calc(var(--ui-lg)*0.95)]' }
+        xs: { root: '[--switch-h:calc(var(--ui-xs)*0.65)]' },
+        sm: { root: '[--switch-h:calc(var(--ui-sm)*0.65)]' },
+        md: { root: '[--switch-h:calc(var(--ui-md)*0.65)]' },
+        lg: { root: '[--switch-h:calc(var(--ui-lg)*0.65)]' }
       }
     },
     defaultVariants: {

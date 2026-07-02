@@ -1,516 +1,311 @@
 <script lang="ts">
-  import { Collapsible } from 'bits-ui';
+  import { Select } from 'bits-ui';
   import { toast } from 'svelte-sonner';
 
-  import { goto } from '$app/navigation';
-  import { resolve } from '$app/paths';
-  import type { App } from '$lib/app.svelte';
-  import { Clipboard, Cog, EllipsisVertical, FolderOpenOutline, GitFork, LucideChevronRight, Plus } from '$lib/icons';
-  import { Button, Checkbox, Dialog, DropdownMenu, Field, Select, TextInput } from '$lib/kit';
-  import MetadataFields from '$lib/metadata/MetadataFields.svelte';
-  import type { DataRoot, SessionListing, TemplateInfo } from '$lib/protocol/app';
+  import { AlertCircleOutline, ChevronDown, Cog } from '$lib/icons';
+  import InstrumentInspector from '$lib/InstrumentInspector.svelte';
+  import { Button, Dialog, Field, TextInput } from '$lib/kit';
+  import LogViewer from '$lib/LogViewer.svelte';
+  import type { HALConfig, InstrumentInfo, InstrumentState, LoadError, VoxelApp } from '$lib/model';
+  import { configError, isLoaded } from '$lib/model';
   import { themes } from '$lib/themes';
-  import type { JsonSchema } from '$lib/types';
   import { sanitizeString } from '$lib/utils';
+  import VoxelLogo from '$lib/VoxelLogo.svelte';
 
-  import LogViewer from './LogViewer.svelte';
-  import VoxelLogo from './VoxelLogo.svelte';
+  interface Props {
+    app: VoxelApp;
+  }
 
-  const { app }: { app: App } = $props();
+  const { app }: Props = $props();
 
-  let sessions = $state<SessionListing[]>([]);
-  let templates = $state<TemplateInfo[]>([]);
-  let dataRoots = $state<DataRoot[]>([]);
-  let loadingSessions = $state(false);
-  let error = $state<string | null>(null);
-  let metadataSchemas = $state<Record<string, string>>({});
-  let metadataSchema = $state<JsonSchema | null>(null);
+  type Selection = { kind: 'instrument'; name: string } | { kind: 'template'; name: string } | null;
 
-  // Dialog state
+  let selection = $state<Selection>(null);
+
+  // Create-from-template dialog state.
   let dialogOpen = $state(false);
-  let forkTarget = $state<SessionListing | null>(null);
+  let dialogTemplate = $state('');
+  let dialogName = $state('');
 
-  // Unified form state
-  let formName = $state('');
-  let formDescription = $state('');
-  let formTemplate = $state('');
-  let formDataRoot = $state('');
-  let formMetaTarget = $state('');
-  let formMetadata = $state<Record<string, unknown>>({});
-  let formClearStacks = $state(true);
-  let formSubmitting = $state(false);
+  const instrumentEntries = $derived(Object.entries(app.catalog.instruments));
+  const templateEntries = $derived(Object.entries(app.catalog.templates));
 
-  const appStatus = $derived(app.status?.status);
-  const isLaunching = $derived(appStatus === 'launching');
-  const connectionState = $derived(app.client.state);
-  const logs = $derived(app.logs);
+  // Picker value encodes the kind so instrument/template names can't collide.
+  const pickerValue = $derived(selection ? `${selection.kind}:${selection.name}` : '');
 
-  // Derived
-  const isFork = $derived(forkTarget !== null);
-  const forkSourceName = $derived(forkTarget?.config?.info.name || forkTarget?.uid || '');
-  const formValid = $derived(isFork ? formName.trim().length > 0 : formTemplate.length > 0);
-  const templateOptions = $derived(templates.map((t) => ({ value: t.name, label: t.rig_name || t.name })));
-  const dataRootOptions = $derived(dataRoots.map((r) => ({ value: r.name, label: r.label ?? r.name })));
+  function onPick(value: string | undefined): void {
+    if (!value) return;
+    const sep = value.indexOf(':');
+    const kind = value.slice(0, sep);
+    const name = value.slice(sep + 1);
+    if (kind === 'template') selectTemplate(name);
+    else selectInstrument(name);
+  }
 
-  // ── Effects ──
+  // The primary action for the current selection: open an instrument, or create from a template.
+  const action = $derived.by(() => {
+    const s = selected;
+    if (!s?.ok) return null;
+    return s.kind === 'template'
+      ? { label: 'Create', busy: false, onclick: () => openCreateDialog(s.name) }
+      : { label: 'Open', busy: app.busy, onclick: () => openInstrument(s.name) };
+  });
 
+  // Auto-select once the catalog loads: prefer the last-opened instrument, else the first.
   $effect(() => {
-    if (connectionState === 'connected') {
-      loadAllSessions();
-      app
-        .fetchTemplates()
-        .then((t) => (templates = t))
-        .catch(console.warn);
-      app
-        .fetchDataRoots()
-        .then((r) => (dataRoots = r))
-        .catch(console.warn);
-      app
-        .fetchMetadataSchemas()
-        .then((t) => (metadataSchemas = t))
-        .catch(console.warn);
+    if (selection === null && instrumentEntries.length > 0) {
+      const last = app.lastInstrument;
+      const name = last && last in app.catalog.instruments ? last : instrumentEntries[0][0];
+      selection = { kind: 'instrument', name };
     }
   });
 
-  // Reset form when dialog opens
-  $effect(() => {
-    if (dialogOpen) {
-      formSubmitting = false;
-      formDataRoot = dataRoots.find((r) => r.default)?.name ?? dataRoots[0]?.name ?? '';
-      const keys = Object.keys(metadataSchemas);
-      formMetaTarget = keys.length > 0 ? keys[0] : '';
-      if (keys.length > 0) handleMetadataSchemaChanged(metadataSchemas[keys[0]]);
-      formMetadata = {};
+  // Resolve the HAL + bench (or load errors) for the current selection.
+  type Selected =
+    | { ok: true; name: string; kind: 'instrument' | 'template'; hal: HALConfig; bench: InstrumentState }
+    | { ok: false; name: string; source: 'config' | 'bench'; errors: LoadError };
 
-      if (forkTarget) {
-        // Fork mode: pre-fill from source
-        formName = (forkTarget.config?.info.name || forkTarget.uid) + '-fork';
-        formDescription = forkTarget.config?.info.description ?? '';
-        formTemplate = '';
-        formClearStacks = true;
-      } else {
-        // Create mode
-        formName = '';
-        formDescription = '';
-        formTemplate = templates.length > 0 ? templates[0].name : '';
-        formClearStacks = true;
-      }
+  const selected = $derived.by((): Selected | null => {
+    if (!selection) return null;
+    if (selection.kind === 'template') {
+      const config = app.catalog.templates[selection.name];
+      if (!config) return null;
+      return { ok: true, name: selection.name, kind: 'template', hal: config.hal, bench: config.default };
     }
+    const info = app.catalog.instruments[selection.name];
+    if (!info) return null;
+    if (!isLoaded(info)) return { ok: false, name: selection.name, source: 'config', errors: configError(info) ?? {} };
+    const benchErr = benchError(info);
+    if (benchErr) return { ok: false, name: selection.name, source: 'bench', errors: benchErr };
+    // A never-opened instrument (no bench.json) has no saved bench — preview the config's defaults instead.
+    const bench = isLoadedBench(info.bench) ? info.bench : info.config.default;
+    return { ok: true, name: selection.name, kind: 'instrument', hal: info.config.hal, bench };
   });
 
-  // Reset metadata values when schema changes
+  /** The bench's load errors, or null when the bench loaded cleanly or was never saved (no bench.json). */
+  function benchError(info: InstrumentInfo): LoadError | null {
+    const bench = info.bench;
+    if (bench === null || isLoadedBench(bench)) return null;
+    return bench;
+  }
+
+  /** Whether an instrument failed to load its config or has a stale/invalid saved bench. */
+  function hasError(info: InstrumentInfo): boolean {
+    return !isLoaded(info) || benchError(info) !== null;
+  }
+
   $effect(() => {
-    if (!metadataSchema) {
-      formMetadata = {};
-      return;
-    }
-    const values: Record<string, unknown> = {};
-    for (const [key, prop] of Object.entries(metadataSchema.properties)) {
-      if (prop.default !== undefined) values[key] = prop.default;
-      else if (prop.type === 'array') values[key] = [''];
-      else if (prop.type === 'string') values[key] = '';
-      else if (prop.type === 'number' || prop.type === 'integer') values[key] = 0;
-    }
-    formMetadata = values;
+    if (app.client.state === 'connected') app.refresh();
   });
 
-  // ── Handlers ──
+  function isLoadedBench(bench: InstrumentInfo['bench']): bench is InstrumentState {
+    return typeof bench === 'object' && bench !== null && 'imaging' in bench;
+  }
 
-  async function loadAllSessions() {
-    loadingSessions = true;
-    error = null;
+  function sanitize(name: string): string {
+    return name.trim().toLowerCase().replace(/\s+/g, '-');
+  }
+
+  function selectInstrument(name: string) {
+    selection = { kind: 'instrument', name };
+  }
+
+  function selectTemplate(name: string) {
+    selection = { kind: 'template', name };
+  }
+
+  async function openInstrument(name: string) {
     try {
-      sessions = await app.fetchSessions();
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load sessions';
-      sessions = [];
-    } finally {
-      loadingSessions = false;
-    }
-  }
-
-  async function handleMetadataSchemaChanged(target: string) {
-    try {
-      metadataSchema = await app.fetchMetadataSchema(target);
-    } catch (e) {
-      console.warn('[LaunchScreen] Failed to fetch metadata schema:', e);
-      metadataSchema = null;
-    }
-  }
-
-  async function handleSubmitSession() {
-    if (!formValid || formSubmitting) return;
-    formSubmitting = true;
-    error = null;
-    try {
-      const name = formName.trim().toLowerCase().replace(/\s+/g, '-');
-      if (forkTarget) {
-        const sourceUid = forkTarget.uid;
-        await app.forkSession(sourceUid, {
-          name,
-          description: formDescription,
-          clearStacks: formClearStacks
-        });
-      } else {
-        await app.createSession(formTemplate, {
-          dataRoot: formDataRoot || undefined,
-          name,
-          description: formDescription
-        });
-      }
-      dialogOpen = false;
-      goto(resolve('/scout'));
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to create session';
-    } finally {
-      formSubmitting = false;
-    }
-  }
-
-  async function handleResumeSession(session: SessionListing) {
-    error = null;
-    try {
-      const uid = session.uid;
-      await app.resumeSession(uid);
-      goto(resolve('/scout'));
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to resume session';
-    }
-  }
-
-  function openForkDialog(session: SessionListing) {
-    forkTarget = session;
-    dialogOpen = true;
-  }
-
-  function openNewSessionDialog() {
-    forkTarget = null;
-    dialogOpen = true;
-  }
-
-  // ── Helpers ──
-
-  function formatRelativeTime(isoString: string): string {
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
-
-  function formatDate(isoString: string): string {
-    if (!isoString) return '';
-    return new Date(isoString).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  async function copyPath(path: string) {
-    try {
-      await navigator.clipboard.writeText(path);
-      toast.success('Copied to clipboard');
+      await app.launch(name);
     } catch {
-      toast.error('Failed to copy');
+      if (app.error) toast.error(app.error);
     }
   }
 
-  function handleFormMetaTargetChange(key: string) {
-    const target = metadataSchemas[key];
-    if (target) handleMetadataSchemaChanged(target);
+  function openCreateDialog(template: string) {
+    dialogTemplate = template;
+    dialogName = template;
+    dialogOpen = true;
   }
 
-  function setFormMetaValue(key: string, val: unknown) {
-    formMetadata = { ...formMetadata, [key]: val };
+  async function createFromTemplate() {
+    const name = sanitize(dialogName) || dialogTemplate;
+    try {
+      await app.launchTemplate(dialogTemplate, name);
+      dialogOpen = false;
+    } catch {
+      if (app.error) toast.error(app.error);
+    }
   }
 </script>
 
-<!-- ── Session Card Snippet ── -->
-{#snippet sessionCard(session: SessionListing)}
-  {@const info = session.config?.info}
-  {@const hasError = session.errors.length > 0}
-
-  <div
-    class={hasError
-      ? 'rounded border border-danger/30 bg-danger/5 px-3 py-2.5'
-      : 'rounded border border-border bg-card px-3 py-2.5'}
-  >
-    {#if hasError}
-      <div class="flex w-full items-center gap-2">
-        <span class="min-w-0 flex-1 truncate text-sm font-medium text-fg">
-          {info?.name || session.uid}
-        </span>
-      </div>
-      <div class="mt-2 text-xs text-danger">{session.errors[0]}</div>
-    {:else}
-      <Collapsible.Root>
-        <div class="flex w-full items-center gap-2">
-          <Collapsible.Trigger
-            class="flex min-w-0 flex-1 items-center gap-1 text-sm font-medium text-fg hover:text-fg [&[data-state=open]>svg]:rotate-90"
-          >
-            <LucideChevronRight
-              width="12"
-              height="12"
-              class="shrink-0 text-fg-muted transition-transform duration-200"
-            />
-            <span class="truncate">{info?.name || session.uid}</span>
-          </Collapsible.Trigger>
-
-          {#if info?.last_opened}
-            <span class="shrink-0 text-xs text-fg-muted/60">
-              {formatRelativeTime(info.last_opened)}
-            </span>
-          {/if}
-
-          <div class="flex items-center gap-0.5">
-            <Button variant="ghost" size="xs" onclick={() => handleResumeSession(session)}>Resume</Button>
-
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <button {...props} class="text-fg-muted/40 hover:text-fg-muted">
-                    <EllipsisVertical width="14" height="14" />
-                  </button>
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content
-                align="end"
-                side="bottom"
-                sideOffset={16}
-                alignOffset={-12}
-                class="min-w-40 **:data-[slot=dropdown-menu-item]:py-1"
-              >
-                <DropdownMenu.Item onclick={() => openForkDialog(session)}>
-                  <GitFork width="12" height="12" />
-                  Fork
-                </DropdownMenu.Item>
-                {#if session.location}
-                  <DropdownMenu.Separator />
-                  <DropdownMenu.Item onclick={() => copyPath(session.location!)}>
-                    <Clipboard width="12" height="12" />
-                    Copy location
-                  </DropdownMenu.Item>
-                {/if}
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-          </div>
-        </div>
-
-        <Collapsible.Content
-          class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"
-        >
-          <div class="mt-2 space-y-1 border-t border-border/50 pt-1.5 pl-5 text-xs text-fg-muted">
-            <div class="grid grid-cols-[4rem_1fr] items-center gap-x-3 *:h-5 [&>*:nth-child(odd)]:text-fg-muted/80">
-              <span>Rig</span>
-              <span>{session.config?.rig.name ?? ''}</span>
-              {#if info?.source}
-                <span>Source</span>
-                <span>{info.source}</span>
-              {/if}
-              {#if info?.description}
-                <span>Description</span>
-                <span>{info.description}</span>
-              {/if}
-              {#if info?.collection}
-                <span>Collection</span>
-                <span>{info.collection}</span>
-              {/if}
-              {#if session.location}
-                <span>Location</span>
-                <div class="flex min-w-0 items-center gap-1">
-                  <span class="min-w-0 truncate">{session.location}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onclick={() => copyPath(session.location!)}
-                    title="Copy location"
-                  >
-                    <Clipboard width="10" height="10" />
-                  </Button>
-                </div>
-              {/if}
-            </div>
-
-            <div class="flex items-center gap-2 py-2">
-              {#if info?.created_at}
-                <span>Created {formatDate(info.created_at)}</span>
-                <span>&middot;</span>
-              {/if}
-              {#if info?.last_opened}
-                <span>Last opened {formatDate(info.last_opened)}</span>
-              {/if}
-              {#if info && info.open_count > 0}
-                <span>&middot;</span>
-                <span>Opened {info.open_count} {info.open_count === 1 ? 'time' : 'times'}</span>
-              {/if}
-            </div>
-          </div>
-        </Collapsible.Content>
-      </Collapsible.Root>
-    {/if}
-  </div>
-{/snippet}
-
-<!-- ═══════════════════════════════════════════ -->
-<!-- Main Layout                                -->
-<!-- ═══════════════════════════════════════════ -->
-
-<div class="flex h-screen w-full bg-canvas">
-  <!-- Left panel -->
-  <div class="flex w-180 shrink-0 flex-col border-r border-border">
+<div class="grid h-screen w-full grid-cols-[auto_1fr] bg-canvas">
+  <!-- Inspector -->
+  <div class="flex min-w-4xl flex-col bg-surface/60">
     <!-- Header -->
-    <div class="shrink-0 p-4 pb-0">
-      <div class="mb-4 flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <VoxelLogo class="h-8 w-8" />
-            <h1 class="text-2xl font-light text-fg uppercase">Voxel</h1>
-          </div>
-          <button
-            title="Appearance"
-            onclick={() => (themes.pickerOpen = true)}
-            class="flex items-center rounded p-1 text-fg-muted transition-colors hover:text-fg"
-          >
-            <Cog width="16" height="16" />
-          </button>
+    <div class="shrink-0">
+      <!-- Row 1: brand + appearance -->
+      <div class="flex items-center justify-between px-4 py-2">
+        <div class="flex items-center gap-2">
+          <VoxelLogo class="h-6 w-6" />
+          <h1 class="text-2xl font-normal tracking-wider text-fg uppercase">Voxel</h1>
         </div>
-        <!-- <p class="text-sm text-fg-muted">Light sheet microscopy</p> -->
+        <button
+          title="Appearance"
+          onclick={() => (themes.pickerOpen = true)}
+          class="flex items-center rounded p-1 text-fg-muted transition-colors hover:text-fg"
+        >
+          <Cog width="16" height="16" />
+        </button>
       </div>
 
-      {#if error}
-        <div class="mb-4 rounded border border-danger/50 bg-danger/10 px-4 py-3 text-base text-danger">
-          {error}
+      <!-- Row 2: instrument/template picker + action -->
+      <div class="flex items-center gap-3 border-b border-border px-4 py-2.5">
+        <Select.Root type="single" value={pickerValue} onValueChange={onPick}>
+          <Select.Trigger
+            class="flex min-w-56 items-center justify-between gap-2 rounded px-1.5 py-0.5 text-lg font-medium text-fg transition-colors hover:bg-element-hover focus:outline-none"
+          >
+            <span class="truncate">
+              {#if selection}{sanitizeString(selection.name)}{:else}<span class="text-fg-muted"
+                  >Select an instrument</span
+                >{/if}
+            </span>
+            <ChevronDown width="16" height="16" class="shrink-0 opacity-50" />
+          </Select.Trigger>
+          <Select.Portal>
+            <Select.Content
+              align="start"
+              class="z-50 mt-1 min-w-(--bits-select-anchor-width) rounded border bg-floating p-1 text-fg shadow-md"
+            >
+              <Select.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
+                <Select.Group>
+                  <Select.GroupHeading
+                    class="px-1.5 py-1 text-[10px] font-medium tracking-wide text-fg-muted/70 uppercase"
+                  >
+                    Instruments
+                  </Select.GroupHeading>
+                  {#each instrumentEntries as [name, info] (name)}
+                    <Select.Item
+                      value={`instrument:${name}`}
+                      label={sanitizeString(name)}
+                      class="relative flex w-full cursor-default items-center gap-2 rounded px-1.5 py-1 text-xs outline-none select-none data-highlighted:bg-element-hover"
+                    >
+                      <span class="min-w-0 flex-1 truncate text-fg">{sanitizeString(name)}</span>
+                      {#if hasError(info)}
+                        <span class="size-1.5 shrink-0 rounded-full bg-danger" title="Failed to load"></span>
+                      {/if}
+                    </Select.Item>
+                  {/each}
+                </Select.Group>
+
+                {#if templateEntries.length > 0}
+                  <div class="my-1 h-px bg-border"></div>
+                  <Select.Group>
+                    <Select.GroupHeading
+                      class="px-1.5 py-1 text-[10px] font-medium tracking-wide text-fg-muted/70 uppercase"
+                    >
+                      Templates
+                    </Select.GroupHeading>
+                    {#each templateEntries as [name] (name)}
+                      <Select.Item
+                        value={`template:${name}`}
+                        label={sanitizeString(name)}
+                        class="relative flex w-full cursor-default items-center gap-2 rounded px-1.5 py-1 text-xs outline-none select-none data-highlighted:bg-element-hover"
+                      >
+                        <span class="min-w-0 flex-1 truncate text-fg">{sanitizeString(name)}</span>
+                      </Select.Item>
+                    {/each}
+                  </Select.Group>
+                {/if}
+              </Select.Viewport>
+            </Select.Content>
+          </Select.Portal>
+        </Select.Root>
+
+        <span class="flex-1"></span>
+
+        {#if action}
+          <Button variant="success" size="sm" disabled={action.busy} onclick={action.onclick}>
+            {action.busy ? `${action.label}…` : action.label}
+          </Button>
+        {/if}
+      </div>
+    </div>
+
+    <div class="flex min-h-0 flex-1 flex-col">
+      {#if selected}
+        {#if !selected.ok}
+          {@const errorEntries = Object.entries(selected.errors)}
+          <div class="flex h-full flex-col gap-3 overflow-y-auto p-4">
+            <div class="flex items-center gap-2">
+              <AlertCircleOutline width="18" height="18" class="shrink-0 text-danger" />
+              <h2 class="text-lg font-medium text-fg">{selected.name}</h2>
+            </div>
+            <div class="overflow-hidden rounded border border-danger/40 bg-danger/5">
+              <div class="border-b border-danger/30 px-3 py-2">
+                <div class="text-sm font-medium text-danger">
+                  {selected.source === 'config' ? 'config.yaml' : 'bench.json'} couldn't be loaded — {errorEntries.length}
+                  issue{errorEntries.length === 1 ? '' : 's'}
+                </div>
+                <p class="mt-0.5 text-xs text-fg-muted">
+                  {selected.source === 'config'
+                    ? 'Fix these fields in the instrument configuration before it can be opened.'
+                    : 'The saved bench no longer matches the current schema. Fix or delete bench.json to recover.'}
+                </p>
+              </div>
+              {#if errorEntries.length === 0}
+                <p class="px-3 py-2 text-sm text-fg-muted">No further details were reported.</p>
+              {:else}
+                <ul class="divide-y divide-border/40">
+                  {#each errorEntries as [location, message] (location)}
+                    <li class="flex flex-col gap-0.5 px-3 py-2">
+                      <span class="font-mono text-xs break-all text-fg-muted">
+                        {location === '' ? 'file' : location === '<model>' ? 'model' : location}
+                      </span>
+                      <span class="text-sm text-danger">{message}</span>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+          </div>
+        {:else}
+          <InstrumentInspector hal={selected.hal} bench={selected.bench} />
+        {/if}
+      {:else}
+        <div class="flex h-full items-center justify-center">
+          <p class="text-sm text-fg-muted/60">Select an instrument or template</p>
         </div>
       {/if}
     </div>
-
-    {#if isLaunching}
-      <div class="flex flex-1 items-center justify-center gap-2">
-        <div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border border-t-primary"></div>
-        <p class="text-sm text-fg-muted">Starting session&hellip;</p>
-      </div>
-    {:else}
-      <!-- Toolbar -->
-      <div class="flex items-center gap-2 px-4 py-3">
-        <Button variant="ghost" size="sm" onclick={openNewSessionDialog}>
-          <Plus width="14" height="14" />
-          New Session
-        </Button>
-        <span class="flex-1"></span>
-      </div>
-
-      <!-- Session list -->
-      <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        {#if loadingSessions}
-          <div class="flex items-center justify-center rounded border border-border bg-card py-12">
-            <div class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-fg-muted"></div>
-            <span class="ml-3 text-base text-fg-muted">Loading sessions...</span>
-          </div>
-        {:else if sessions.length === 0}
-          <div
-            class="flex flex-col items-center justify-center rounded border border-dashed border-border bg-card py-10"
-          >
-            <FolderOpenOutline width="32" height="32" class="text-fg-muted/50" />
-            <p class="mt-2 text-base text-fg-muted">No recent sessions</p>
-            <p class="text-sm text-fg-muted/60">Create a new session to get started</p>
-          </div>
-        {:else}
-          <div class="space-y-2">
-            {#each sessions as session (session.uid)}
-              {@render sessionCard(session)}
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/if}
   </div>
 
-  <!-- Right panel: logs -->
-  <div class="flex flex-1 flex-col bg-card p-4">
-    <LogViewer {logs} onClear={() => app.clearLogs()} />
-  </div>
+  <!-- Logs -->
+  <LogViewer logs={app.logs} class="flex-1 border-l border-border bg-canvas" />
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- New Session Dialog                         -->
-<!-- ═══════════════════════════════════════════ -->
-
 <Dialog.Root bind:open={dialogOpen}>
-  <Dialog.Content size="xl">
+  <Dialog.Content size="md">
     <Dialog.Header>
-      {#if isFork}
-        <Dialog.Title>Forking: {forkSourceName}</Dialog.Title>
-      {:else}
-        <Dialog.Title>New Session</Dialog.Title>
-      {/if}
+      <Dialog.Title>Create Instrument</Dialog.Title>
     </Dialog.Header>
     <hr class="-mx-4 border-border" />
 
-    <div class="flex flex-col gap-4">
-      <div class="grid grid-cols-2 gap-4">
-        {#if !isFork}
-          <Field label="Template">
-            <Select options={templateOptions} bind:value={formTemplate} />
-          </Field>
-        {/if}
-
-        <Field label="Data Root">
-          <Select options={dataRootOptions} bind:value={formDataRoot} />
-        </Field>
-
-        <Field label="Session Name" id="form-name">
-          <TextInput bind:value={formName} id="form-name" align="left" placeholder="Auto-generated if empty" />
-        </Field>
-
-        <Field label="Description">
-          <TextInput bind:value={formDescription} align="left" placeholder="" />
-        </Field>
-      </div>
-
-      <div class="flex flex-col gap-2">
-        <div class="col-span-full my-1 flex items-center gap-3">
-          <span class="shrink-0 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Metadata</span>
-          <hr class="flex-1 border-border" />
-        </div>
-
-        {#if Object.keys(metadataSchemas).length > 0}
-          <div class="col-span-full grid grid-cols-[10rem_1fr] items-center gap-x-3">
-            <div class="text-xs text-fg-muted">Schema</div>
-            <Select
-              options={Object.keys(metadataSchemas).map((k) => ({ value: k, label: sanitizeString(k) }))}
-              bind:value={formMetaTarget}
-              onchange={handleFormMetaTargetChange}
-              size="sm"
-            />
-          </div>
-        {/if}
-
-        {#if metadataSchema}
-          <div class="col-span-full grid grid-cols-[10rem_1fr] items-start gap-x-3 gap-y-2 pb-2">
-            <MetadataFields schema={metadataSchema} values={formMetadata} onChange={setFormMetaValue} size="sm">
-              <!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
-              {#snippet field(key, _prop, input)}
-                <div class="pt-1 text-xs text-fg-muted">{sanitizeString(key)}</div>
-                <div>{@render input()}</div>
-              {/snippet}
-            </MetadataFields>
-          </div>
-        {/if}
-      </div>
+    <div class="flex flex-col gap-4 py-2">
+      <p class="text-sm text-fg-muted">
+        From template <span class="font-medium text-fg">{dialogTemplate}</span>.
+      </p>
+      <Field label="Instance Name" id="instance-name">
+        <TextInput bind:value={dialogName} id="instance-name" align="left" placeholder={dialogTemplate} />
+      </Field>
     </div>
+
     <hr class="-mx-4 border-border" />
     <Dialog.Footer>
-      <div class="flex items-center gap-2">
-        <Checkbox bind:checked={formClearStacks} disabled={!isFork} />
-        <span class="text-xs text-fg-muted">Clear stacks</span>
-      </div>
       <div class="flex-1"></div>
       <Button variant="outline" onclick={() => (dialogOpen = false)}>Cancel</Button>
-      <Button variant="success" onclick={handleSubmitSession} disabled={!formValid || formSubmitting}>
-        {formSubmitting ? 'Creating...' : isFork ? 'Create Fork' : 'Create Session'}
+      <Button variant="success" disabled={app.busy} onclick={createFromTemplate}>
+        {app.busy ? 'Creating…' : 'Create'}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

@@ -1,9 +1,4 @@
-info:
-  name: ""
-  description: ""
-
-rig:
-  name: "AIND ExASPIM Beta 1"
+hal:
   devices:
     ao_main:
       target: vxl.analog_out.ni.NiAnalogOutput
@@ -65,157 +60,159 @@ rig:
       init:
         device_name: Dev3
 
-stage:
-  x: x_axis
-  y: y_axis
-  z: z_axis
+  stage:
+    x: x_axis
+    y: y_axis
+    z: z_axis
 
-detection:
-  camera:
-    aux_devices: [camera_focus]
-    filter_wheels: [fw_emission]
-    magnification: 5.0
-    rotation_deg: 90
+  detection:
+    camera:
+      aux_devices: [camera_focus]
+      filter_wheels: [fw_emission]
+      magnification: 5.0
+      rotation_deg: 90
 
-illumination:
-  laser_488:
-    aux_devices: [left_focus, right_focus]
-  laser_561:
-    aux_devices: [left_focus, right_focus]
-  laser_640:
-    aux_devices: [left_focus, right_focus]
+  illumination:
+    laser_488:
+      aux_devices: [left_focus, right_focus]
+    laser_561:
+      aux_devices: [left_focus, right_focus]
+    laser_640:
+      aux_devices: [left_focus, right_focus]
 
-channels:
-  gfp:
-    detection: camera
-    illumination: laser_488
-    filters: {fw_emission: "BP525"}
-    desc: "GFP using 488nm excitation"
-    label: GFP
-    emission: 510
-  rfp:
-    detection: camera
-    illumination: laser_561
-    filters: {fw_emission: "BP600"}
-    desc: "RFP using 561nm excitation"
-    label: RFP
-    emission: 600
-  cy5:
-    detection: camera
-    illumination: laser_640
-    filters: {fw_emission: "BP700"}
-    desc: "Cy5 using 640nm excitation"
-    label: Cy5
-    emission: 670
+default:
+  imaging:
+    channels:
+      gfp:
+        detection: camera
+        illumination: laser_488
+        filters: {fw_emission: "BP525"}
+        desc: "GFP using 488nm excitation"
+        label: GFP
+        emission: 510
+      rfp:
+        detection: camera
+        illumination: laser_561
+        filters: {fw_emission: "BP600"}
+        desc: "RFP using 561nm excitation"
+        label: RFP
+        emission: 600
+      cy5:
+        detection: camera
+        illumination: laser_640
+        filters: {fw_emission: "BP700"}
+        desc: "Cy5 using 640nm excitation"
+        label: Cy5
+        emission: 670
 
-profiles:
-  single_gfp:
-    channels: ["gfp"]
-    desc: "Single GFP channel imaging"
-    sync:
-      ao_main:
-        sample_rate: "10 kHz"
-        duration: "544 ms"
-        rest_time: "0 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera: &camera_waveform
-            type: pulse
-            voltage: {min: 0.0, max: 5.0}
-            window: {min: 0.045956, max: 0.25}
-          laser_488: &laser_waveform
-            type: pulse
-            voltage: {min: 0.0, max: 5.0}
-            window: {min: 0.027574, max: 1.0}
-          aotf_1: &aotf_blanking_waveform
-            type: triangle
-            voltage: {min: 0.0, max: 5.0}
-            window: {min: 0.0, max: 1.0}
-            cycles: 1
-            symmetry: 0.5
-          left_tunable_lens: &left_tunable_lens_waveform
-            type: triangle
-            voltage: {min: 1.98, max: 4.28}
-            window: {min: 0.0, max: 1.0}
-            cycles: 1
-            symmetry: 1.0
-          right_tunable_lens: &right_tunable_lens_waveform
-            type: triangle
-            voltage: {min: 4.85, max: 4.851}
-            window: {min: 0.0, max: 1.0}
-            cycles: 1
-            symmetry: 1.0
-          positive_galvo: &positive_galvo_waveform
-            type: triangle
-            voltage: {min: 0.0, max: 0.01}
-            window: {min: 0.0, max: 1.0}
-            cycles: 1
-          negative_galvo: &negative_galvo_waveform
-            type: triangle
-            voltage: {min: 0.0, max: 0.01}
-            window: {min: 0.0, max: 1.0}
-            cycles: 1
-          z_axis: &z_axis_waveform
-            type: pulse
-            voltage: {min: 0.0, max: 5.0}
-            window: {min: 0.0, max: 0.01}
+    profiles:
+      single_gfp:
+        channels: ["gfp"]
+        z_step: 1.0
+        desc: "Single GFP channel imaging"
+        sync:
+          ao_main:
+            sample_rate: "10 kHz"
+            duration: "544 ms"
+            rest_time: "0 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera: &camera_waveform
+                type: pulse
+                voltage: {min: 0.0, max: 5.0}
+                window: {min: 0.045956, max: 0.25}
+              laser_488: &laser_waveform
+                type: pulse
+                voltage: {min: 0.0, max: 5.0}
+                window: {min: 0.027574, max: 1.0}
+              aotf_1: &aotf_blanking_waveform
+                type: triangle
+                voltage: {min: 0.0, max: 5.0}
+                window: {min: 0.0, max: 1.0}
+                cycles: 1
+                symmetry: 0.5
+              left_tunable_lens: &left_tunable_lens_waveform
+                type: triangle
+                voltage: {min: 1.98, max: 4.28}
+                window: {min: 0.0, max: 1.0}
+                cycles: 1
+                symmetry: 1.0
+              right_tunable_lens: &right_tunable_lens_waveform
+                type: triangle
+                voltage: {min: 4.85, max: 4.851}
+                window: {min: 0.0, max: 1.0}
+                cycles: 1
+                symmetry: 1.0
+              positive_galvo: &positive_galvo_waveform
+                type: triangle
+                voltage: {min: 0.0, max: 0.01}
+                window: {min: 0.0, max: 1.0}
+                cycles: 1
+              negative_galvo: &negative_galvo_waveform
+                type: triangle
+                voltage: {min: 0.0, max: 0.01}
+                window: {min: 0.0, max: 1.0}
+                cycles: 1
+              z_axis: &z_axis_waveform
+                type: pulse
+                voltage: {min: 0.0, max: 5.0}
+                window: {min: 0.0, max: 0.01}
 
-  single_rfp:
-    channels: ["rfp"]
-    desc: "Single RFP channel imaging"
-    sync:
-      ao_main:
-        sample_rate: "10 kHz"
-        duration: "544 ms"
-        rest_time: "0 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera: *camera_waveform
-          laser_561: *laser_waveform
-          aotf_1: *aotf_blanking_waveform
-          left_tunable_lens: *left_tunable_lens_waveform
-          right_tunable_lens: *right_tunable_lens_waveform
-          positive_galvo: *positive_galvo_waveform
-          negative_galvo: *negative_galvo_waveform
-          z_axis: *z_axis_waveform
+      single_rfp:
+        channels: ["rfp"]
+        z_step: 1.0
+        desc: "Single RFP channel imaging"
+        sync:
+          ao_main:
+            sample_rate: "10 kHz"
+            duration: "544 ms"
+            rest_time: "0 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera: *camera_waveform
+              laser_561: *laser_waveform
+              aotf_1: *aotf_blanking_waveform
+              left_tunable_lens: *left_tunable_lens_waveform
+              right_tunable_lens: *right_tunable_lens_waveform
+              positive_galvo: *positive_galvo_waveform
+              negative_galvo: *negative_galvo_waveform
+              z_axis: *z_axis_waveform
 
-  single_cy5:
-    channels: ["cy5"]
-    desc: "Single Cy5 channel imaging"
-    sync:
-      ao_main:
-        sample_rate: "10 kHz"
-        duration: "544 ms"
-        rest_time: "0 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera: *camera_waveform
-          laser_640: *laser_waveform
-          aotf_1: *aotf_blanking_waveform
-          left_tunable_lens: *left_tunable_lens_waveform
-          right_tunable_lens: *right_tunable_lens_waveform
-          positive_galvo: *positive_galvo_waveform
-          negative_galvo: *negative_galvo_waveform
-          z_axis: *z_axis_waveform
+      single_cy5:
+        channels: ["cy5"]
+        z_step: 1.0
+        desc: "Single Cy5 channel imaging"
+        sync:
+          ao_main:
+            sample_rate: "10 kHz"
+            duration: "544 ms"
+            rest_time: "0 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera: *camera_waveform
+              laser_640: *laser_waveform
+              aotf_1: *aotf_blanking_waveform
+              left_tunable_lens: *left_tunable_lens_waveform
+              right_tunable_lens: *right_tunable_lens_waveform
+              positive_galvo: *positive_galvo_waveform
+              negative_galvo: *negative_galvo_waveform
+              z_axis: *z_axis_waveform
 
-plan:
-  stack_order: snake_row
-  z_step: 1.0
-  default_z_start: 0.0
-  default_z_end: 511.0
+  stencil:
+    x_offset: 0.0
+    y_offset: 0.0
+    overlap_x: 0.1
+    overlap_y: 0.1
+    z_start: 0.0
+    z_end: 511.0
 
-output:
-  store_path: ./data
-  max_level: 3
-  compression: blosc.lz4
+  traversal: snake_row
 
-grid:
-  x_offset: 0.0
-  y_offset: 0.0
-  overlap_x: 0.1
-  overlap_y: 0.1
+  output:
+    max_level: 3
+    compression: blosc.lz4
 
-stacks: {}
+  tasks: {}

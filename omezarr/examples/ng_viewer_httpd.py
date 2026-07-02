@@ -7,18 +7,20 @@ with Neuroglancer.
 
 from pathlib import Path
 
+from cloudpathlib import S3Path
 from rich import print
 
-from ome_zarr_writer.ng_view import NGLUT, NGLayerConfig, S3Config, ng_quick_view
+from ome_zarr_writer.viewer.ng_view import NGLUT, NGLayerConfig, ng_quick_view
 
 
 def create_multi_tile_s3_urls(
     tiles: list[int],
     channel: int,
     bucket: str = "aind-open-data",
-    directory: str = "exaSPIM_709221_2025-05-16_12-00-49/SPIM.ome.zarr/",
-):
-    return [S3Config(bucket=bucket, path=f"{directory}/tile_{tile:06d}_ch_{channel}.zarr") for tile in tiles]
+    directory: str = "exaSPIM_709221_2025-05-16_12-00-49/SPIM.ome.zarr",
+) -> list[S3Path]:
+    root = S3Path(f"s3://{bucket}") / directory
+    return [root / f"tile_{tile:06d}_ch_{channel}.zarr" for tile in tiles]
 
 
 def create_aind_exaspim_s3_urls(
@@ -26,7 +28,7 @@ def create_aind_exaspim_s3_urls(
     tiles: list[int],
     channel: int,
     bucket: str = "aind-open-data",
-) -> list[S3Config]:
+) -> list[S3Path]:
     directory = f"exaSPIM_{uid}/SPIM.ome.zarr"
     return create_multi_tile_s3_urls(tiles, channel, bucket, directory)
 

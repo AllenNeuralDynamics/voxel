@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Switch as KitSwitch, type SwitchVariants } from '$lib/kit';
-
-  import type { BoolModel } from '../models.svelte';
+  import type { BoolModel } from '$lib/model';
 
   interface Props extends SwitchVariants {
     model: BoolModel;

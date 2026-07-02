@@ -1,13 +1,11 @@
-info:
-  name: ""
-  description: ""
-
-rig:
-  name: "Simulated Distributed Rig"
-
+hal:
   nodes:
     primary:
       devices:
+        nidaq_1:
+          target: vxl.analog_out.simulated.SimulatedDaqmx
+          init:
+            device_name: "MockDev1"
         ao_main:
           target: vxl.analog_out.simulated.SimulatedAnalogOutput
           init:
@@ -58,7 +56,8 @@ rig:
         fw_detection_shared:
           target: &fw_target vxl.axes.simulated.SimulatedDiscreteAxis
           init:
-            slots: { 0: "Quad-DGRC", 1: "Dual-DR", 2: "Dual-GC", 3: "NIR-LP720" }
+            slots:
+              { 0: "Quad-DGRC", 1: "Dual-DR", 2: "Dual-GC", 3: "NIR-LP720" }
         fw_emission_cam1:
           target: *fw_target
           init:
@@ -90,253 +89,256 @@ rig:
       devices:
         camera_2: *sim_camera
       kind: subprocess
-  devices:
-    nidaq_1:
-      target: vxl.analog_out.simulated.SimulatedDaqmx
-      init:
-        device_name: "MockDev1"
 
-stage:
-  x: x_axis
-  y: y_axis
-  z: z_axis
+  stage:
+    x: x_axis
+    y: y_axis
+    z: z_axis
 
-detection:
-  camera_1:
-    filter_wheels: [fw_detection_shared, fw_emission_cam1]
-    magnification: 8.0
-  camera_2:
-    filter_wheels: [fw_detection_shared, fw_emission_cam2]
-    magnification: 8.0
+  detection:
+    camera_1:
+      filter_wheels: [fw_detection_shared, fw_emission_cam1]
+      magnification: 8.0
+    camera_2:
+      filter_wheels: [fw_detection_shared, fw_emission_cam2]
+      magnification: 8.0
 
-illumination:
-  laser_405: {}
-  laser_488: {}
-  laser_561: {}
-  laser_640: {}
-  laser_730: {}
+  illumination:
+    laser_405: {}
+    laser_488: {}
+    laser_561: {}
+    laser_640: {}
+    laser_730: {}
 
-channels:
-  dapi:
-    detection: camera_1
-    illumination: laser_405
-    filters:
-      fw_detection_shared: "Quad-DGRC"
-      fw_emission_cam1: "BP450"
-    desc: "DAPI nuclear stain using 405nm excitation"
-    label: DAPI
-    emission: 461
-  gfp:
-    detection: camera_2
-    illumination: laser_488
-    filters:
-      fw_detection_shared: "Quad-DGRC"
-      fw_emission_cam2: "BP525"
-    desc: "Green fluorescent protein using 488nm excitation"
-    label: GFP
-    emission: 510
-  rfp:
-    detection: camera_1
-    illumination: laser_561
-    filters:
-      fw_detection_shared: "Quad-DGRC"
-      fw_emission_cam1: "BP600"
-    desc: "Red fluorescent protein using 561nm excitation"
-    label: RFP
-    emission: 600
-  cy5:
-    detection: camera_2
-    illumination: laser_640
-    filters:
-      fw_detection_shared: "Quad-DGRC"
-      fw_emission_cam2: "BP700"
-    desc: "Far-red Cy5 channel using 640nm excitation"
-    label: Cy5
-    emission: 670
-  nir:
-    detection: camera_1
-    illumination: laser_730
-    filters:
-      fw_detection_shared: "NIR-LP720"
-      fw_emission_cam1: "BP780"
-    desc: "Near-infrared channel for iRFP/miRFP using 730nm excitation"
-    label: NIR
-    emission: 760
+default:
+  imaging:
+    channels:
+      dapi:
+        detection: camera_1
+        illumination: laser_405
+        filters:
+          fw_detection_shared: "Quad-DGRC"
+          fw_emission_cam1: "BP450"
+        desc: "DAPI nuclear stain using 405nm excitation"
+        label: DAPI
+        emission: 461
+      gfp:
+        detection: camera_2
+        illumination: laser_488
+        filters:
+          fw_detection_shared: "Quad-DGRC"
+          fw_emission_cam2: "BP525"
+        desc: "Green fluorescent protein using 488nm excitation"
+        label: GFP
+        emission: 510
+      rfp:
+        detection: camera_1
+        illumination: laser_561
+        filters:
+          fw_detection_shared: "Quad-DGRC"
+          fw_emission_cam1: "BP600"
+        desc: "Red fluorescent protein using 561nm excitation"
+        label: RFP
+        emission: 600
+      cy5:
+        detection: camera_2
+        illumination: laser_640
+        filters:
+          fw_detection_shared: "Quad-DGRC"
+          fw_emission_cam2: "BP700"
+        desc: "Far-red Cy5 channel using 640nm excitation"
+        label: Cy5
+        emission: 670
+      nir:
+        detection: camera_1
+        illumination: laser_730
+        filters:
+          fw_detection_shared: "NIR-LP720"
+          fw_emission_cam1: "BP780"
+        desc: "Near-infrared channel for iRFP/miRFP using 730nm excitation"
+        label: NIR
+        emission: 760
 
-profiles:
-  dapi_gfp:
-    channels: ["dapi", "gfp"]
-    desc: "Simultaneous DAPI (cam1) and GFP (cam2) imaging"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_1: &camera_waveform_ch1
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.0, max: 0.95 }
-          laser_405: &laser_waveform_ch1
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.1, max: 0.9 }
-          camera_2: &camera_waveform_ch2
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.02, max: 0.97 }
-          laser_488: &laser_waveform_ch2
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.12, max: 0.92 }
-          aotf_1: &aotf_blanking_waveform
-            type: pulse
-            voltage: { min: 0.0, max: 5.0 }
-            window: { min: 0.05, max: 0.95 }
+    profiles:
+      dapi_gfp:
+        channels: ["dapi", "gfp"]
+        z_step: 1.0
+        desc: "Simultaneous DAPI (cam1) and GFP (cam2) imaging"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_1: &camera_waveform_ch1
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.0, max: 0.95 }
+              laser_405: &laser_waveform_ch1
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.1, max: 0.9 }
+              camera_2: &camera_waveform_ch2
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.02, max: 0.97 }
+              laser_488: &laser_waveform_ch2
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.12, max: 0.92 }
+              aotf_1: &aotf_blanking_waveform
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.05, max: 0.95 }
 
-  dapi_cy5:
-    channels: ["dapi", "cy5"]
-    desc: "Simultaneous DAPI (cam1) and Cy5 (cam2) imaging"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          laser_405: *laser_waveform_ch1
-          camera_2: *camera_waveform_ch2
-          laser_640: *laser_waveform_ch2
-          aotf_1: *aotf_blanking_waveform
+      dapi_cy5:
+        channels: ["dapi", "cy5"]
+        z_step: 1.0
+        desc: "Simultaneous DAPI (cam1) and Cy5 (cam2) imaging"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_1: *camera_waveform_ch1
+              laser_405: *laser_waveform_ch1
+              camera_2: *camera_waveform_ch2
+              laser_640: *laser_waveform_ch2
+              aotf_1: *aotf_blanking_waveform
 
-  gfp_rfp:
-    channels: ["gfp", "rfp"]
-    desc: "Simultaneous GFP (cam2) and RFP (cam1) imaging"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          laser_561: *laser_waveform_ch1
-          camera_2: *camera_waveform_ch2
-          laser_488: *laser_waveform_ch2
-          aotf_1: *aotf_blanking_waveform
+      gfp_rfp:
+        channels: ["gfp", "rfp"]
+        z_step: 1.0
+        desc: "Simultaneous GFP (cam2) and RFP (cam1) imaging"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_1: *camera_waveform_ch1
+              laser_561: *laser_waveform_ch1
+              camera_2: *camera_waveform_ch2
+              laser_488: *laser_waveform_ch2
+              aotf_1: *aotf_blanking_waveform
 
-  rfp_cy5:
-    channels: ["rfp", "cy5"]
-    desc: "Simultaneous RFP (cam1) and Cy5 (cam2) imaging"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          laser_561: *laser_waveform_ch1
-          camera_2: *camera_waveform_ch2
-          laser_640: *laser_waveform_ch2
-          aotf_1: *aotf_blanking_waveform
+      rfp_cy5:
+        channels: ["rfp", "cy5"]
+        z_step: 1.0
+        desc: "Simultaneous RFP (cam1) and Cy5 (cam2) imaging"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_1: *camera_waveform_ch1
+              laser_561: *laser_waveform_ch1
+              camera_2: *camera_waveform_ch2
+              laser_640: *laser_waveform_ch2
+              aotf_1: *aotf_blanking_waveform
 
-  single_dapi:
-    channels: ["dapi"]
-    desc: "Single DAPI channel for nuclear staining"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          laser_405: *laser_waveform_ch1
-          aotf_1: *aotf_blanking_waveform
+      single_dapi:
+        channels: ["dapi"]
+        z_step: 1.0
+        desc: "Single DAPI channel for nuclear staining"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_1: *camera_waveform_ch1
+              laser_405: *laser_waveform_ch1
+              aotf_1: *aotf_blanking_waveform
 
-  single_gfp:
-    channels: ["gfp"]
-    desc: "Single GFP channel imaging"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_2: *camera_waveform_ch1
-          laser_488: *laser_waveform_ch1
-          aotf_1: *aotf_blanking_waveform
+      single_gfp:
+        channels: ["gfp"]
+        z_step: 1.0
+        desc: "Single GFP channel imaging"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_2: *camera_waveform_ch1
+              laser_488: *laser_waveform_ch1
+              aotf_1: *aotf_blanking_waveform
 
-  single_rfp:
-    channels: ["rfp"]
-    desc: "Single RFP channel imaging"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          laser_561: *laser_waveform_ch1
-          aotf_1: *aotf_blanking_waveform
+      single_rfp:
+        channels: ["rfp"]
+        z_step: 1.0
+        desc: "Single RFP channel imaging"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_1: *camera_waveform_ch1
+              laser_561: *laser_waveform_ch1
+              aotf_1: *aotf_blanking_waveform
 
-  single_cy5:
-    channels: ["cy5"]
-    desc: "Single Cy5 far-red channel imaging"
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_2: *camera_waveform_ch1
-          laser_640: *laser_waveform_ch1
-          aotf_1: *aotf_blanking_waveform
+      single_cy5:
+        channels: ["cy5"]
+        z_step: 1.0
+        desc: "Single Cy5 far-red channel imaging"
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_2: *camera_waveform_ch1
+              laser_640: *laser_waveform_ch1
+              aotf_1: *aotf_blanking_waveform
 
-  single_nir:
-    channels: ["nir"]
-    desc: "Single NIR channel for iRFP/miRFP imaging"
+      single_nir:
+        channels: ["nir"]
+        z_step: 1.0
+        desc: "Single NIR channel for iRFP/miRFP imaging"
 
-    sync:
-      ao_main:
-        sample_rate: "100 kHz"
-        duration: "0.2 s"
-        rest_time: "0.05 s"
-        clock_src:
-          type: internal
-        waveforms:
-          camera_1: *camera_waveform_ch1
-          laser_730: *laser_waveform_ch1
+        sync:
+          ao_main:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            clock_src:
+              type: internal
+            waveforms:
+              camera_1: *camera_waveform_ch1
+              laser_730: *laser_waveform_ch1
 
-plan:
-  stack_order: snake_row
-  z_step: 1.0
-  default_z_start: 0.0
-  default_z_end: 511.0
+  stencil:
+    x_offset: 0.0
+    y_offset: 0.0
+    overlap_x: 0.1
+    overlap_y: 0.1
+    z_start: 0.0
+    z_end: 511.0
 
-output:
-  store_path: ./data
-  max_level: 3
-  compression: blosc.lz4
+  traversal: snake_row
 
-grid:
-  x_offset: 0.0
-  y_offset: 0.0
-  overlap_x: 0.1
-  overlap_y: 0.1
+  output:
+    max_level: 3
+    compression: blosc.lz4
 
-stacks: {}
+  tasks: {}

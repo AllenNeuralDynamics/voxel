@@ -1,10 +1,10 @@
 export type { WithElementRef, WithoutChild, WithoutChildren, WithoutChildrenOrChild } from './cn';
 export { clampTopLeft, cn } from './cn';
 export { desaturateColor, isValidHex, wavelengthToColor, withOpacity } from './color';
-export { sanitizeString } from './helpers';
+export { sanitizeString, toastError } from './helpers';
 export { IDBKeyVal } from './idb';
 export { computeAutoLevels } from './image';
 export { createMultiSelect, type MultiSelect } from './multiselect.svelte';
-export { createPaneMinSize } from './pane.svelte';
+export { createPaneSize, type PaneSizeBounds } from './pane.svelte';
 export { UndoStack } from './undo.svelte';
 export { getWebGPUDevice } from './wgpu';

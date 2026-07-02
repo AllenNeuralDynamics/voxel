@@ -13,7 +13,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 import numpy as np
 from vxlib.vec import UIVec3D
 
-from ome_zarr_writer.types import Dtype, ScaleLevel
+from ome_zarr_writer.dataset import Dtype, ScaleLevel
 
 from ._base import BufferSlot, BufferStage
 from ._pyramid import pyramids_3d_numba

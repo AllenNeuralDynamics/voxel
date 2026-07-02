@@ -4,12 +4,28 @@ These types are used throughout rigup and related packages for consistent
 data representation across device drivers, camera handling, and schemas.
 """
 
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from enum import StrEnum
-from typing import Any
+from typing import Any, final
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
+
+type Teardown = Callable[[], None]
+type AsyncTeardown = Callable[[], Awaitable[None]]
+
+
+@final
+class UnsetType:
+    """Singleton marker for values that have not been supplied or computed."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+
+UNSET = UnsetType()
 
 
 class SchemaModel(BaseModel):

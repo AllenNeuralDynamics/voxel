@@ -290,7 +290,7 @@ class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
         await self.call("wait_until_done", timeout_s)
 
     async def get_loaded(self) -> AOSignals | None:
-        val = await self.get_prop_value("loaded")
+        val = await self.props.get_value("loaded")
         if val is None:
             return None
         if isinstance(val, AOSignals):
@@ -298,18 +298,18 @@ class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
         return AOSignals.model_validate(val)
 
     async def get_state(self) -> AOState:
-        return await self.get_prop_value("state")
+        return await self.props.get_value("state")
 
     async def get_ports(self) -> dict[str, str]:
-        val = await self.get_prop_value("ports")
+        val = await self.props.get_value("ports")
         return dict(val) if val else {}
 
     async def get_triggers(self) -> dict[str, str]:
-        val = await self.get_prop_value("triggers")
+        val = await self.props.get_value("triggers")
         return dict(val) if val else {}
 
     async def get_voltage_range(self) -> VoltageRange:
-        val = await self.get_prop_value("voltage_range")
+        val = await self.props.get_value("voltage_range")
         if isinstance(val, QuantityRange):
             return val
         return VoltageRange.model_validate(val)

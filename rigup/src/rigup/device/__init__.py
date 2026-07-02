@@ -1,5 +1,5 @@
 from .driver import Device, DeviceController, PublishBytesFn, PublishTypedFn, StreamCallback
-from .handle import Adapter, DeviceHandle
+from .handle import Adapter, DeviceHandle, DeviceProperties, DeviceProperty
 from .props import PropertyModel, enumerated, enumerated_int, numeric, numeric_int
 from .schema import CommandRequest, DeviceInterface, PropResults, Result, Results, describe
 
@@ -10,6 +10,8 @@ __all__ = [
     "DeviceController",
     "DeviceHandle",
     "DeviceInterface",
+    "DeviceProperties",
+    "DeviceProperty",
     "PropResults",
     "PropertyModel",
     "PublishBytesFn",

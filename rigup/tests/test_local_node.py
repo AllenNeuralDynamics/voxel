@@ -62,11 +62,11 @@ class TestLocalNodeDeviceOps:
         await node.build_devices(device_configs)
         handle = node.devices["dev_a"]
 
-        props = await handle.get_props("value")
+        props = await handle.props.get("value")
         assert props["value"].unwrap().value == 1.0
 
-        await handle.set_prop("value", 99.0)
-        props = await handle.get_props("value")
+        await handle.props.set(value=99.0)
+        props = await handle.props.get("value")
         assert props["value"].unwrap().value == 99.0
         await node.close()
 

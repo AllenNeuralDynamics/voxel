@@ -1,8 +1,7 @@
 <script lang="ts">
   import { type TextInputVariants, textInputVariants } from '$lib/kit';
+  import type { StringModel } from '$lib/model';
   import { cn } from '$lib/utils';
-
-  import type { StringModel } from '../models.svelte';
 
   interface Props extends TextInputVariants {
     model: StringModel;

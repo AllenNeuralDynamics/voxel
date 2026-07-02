@@ -1,31 +1,14 @@
 <script lang="ts">
-  import { toast } from 'svelte-sonner';
+  import { getVoxelApp } from '$lib/model';
+  import { sanitizeString, toastError, wavelengthToColor } from '$lib/utils';
 
-  import { resolve } from '$app/paths';
-  import { getSessionContext } from '$lib/context';
-  import { Clipboard } from '$lib/icons';
-  import { ProfileCard } from '$lib/microscope';
-  import { sanitizeString, wavelengthToColor } from '$lib/utils';
-
-  const session = getSessionContext();
-  const config = $derived(session.scope.config);
-  const info = $derived(session.info);
+  const app = getVoxelApp();
+  const instrument = $derived(app.instrument);
 
   const headingClass = 'mb-2 text-xs tracking-wide text-fg-muted uppercase';
   const cardGroupClass = 'grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3';
-
-  function formatDate(iso: string): string {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  }
+  const rowLabelClass = 'whitespace-nowrap text-fg-muted';
+  const rowValueClass = 'truncate font-mono text-sm text-fg';
 
   function formatRelative(iso: string): string {
     if (!iso) return '';
@@ -44,125 +27,138 @@
       ['second', 1000]
     ];
     for (const [unit, ms] of units) {
-      if (absMs >= ms || unit === 'second') {
-        return rtf.format(sign * Math.round(absMs / ms), unit);
-      }
+      if (absMs >= ms || unit === 'second') return rtf.format(sign * Math.round(absMs / ms), unit);
     }
     return iso;
   }
-
-  async function copyToClipboard(value: string, label: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success(`Copied ${label}`);
-    } catch {
-      toast.error(`Failed to copy ${label}`);
-    }
-  }
-
-  interface Row {
-    label: string;
-    value: string;
-    copy?: boolean;
-  }
-
-  const rows = $derived<Row[]>([
-    { label: 'Rig', value: config.rig.name },
-    { label: 'Source', value: info.source },
-    {
-      label: 'Created',
-      value: info.created_at ? `${formatDate(info.created_at)}${info.created_by ? ` by ${info.created_by}` : ''}` : ''
-    },
-    {
-      label: 'Last opened',
-      value: info.last_opened
-        ? `${formatRelative(info.last_opened)}${info.open_count ? ` (${info.open_count}×)` : ''}`
-        : ''
-    },
-    { label: 'Hostname', value: info.hostname },
-    { label: 'Collection', value: info.collection },
-    { label: 'Data root', value: info.data_root, copy: true },
-    { label: 'Data path', value: info.data_path, copy: true },
-    { label: 'UID', value: info.uid, copy: true }
-  ]);
 </script>
 
-<!-- Session identity -->
-<section class="border-b border-border px-4 pt-2 pb-6">
-  <h2 class="text-base font-medium text-fg">{info.name || info.uid}</h2>
-  {#if info.description}
-    <p class="mt-0.5 text-sm text-fg-muted">{info.description}</p>
-  {/if}
+{#if instrument}
+  {@const state = instrument.state}
+  {@const imaging = instrument.imaging}
+  {@const activeProfile = instrument.activeProfile}
 
-  <dl class="mt-4 grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
-    {#each rows as row (row.label)}
-      <dt class="whitespace-nowrap text-fg-muted">{row.label}</dt>
-      <dd class="flex items-center gap-1.5 text-fg">
-        <span class="truncate font-mono text-sm">{row.value || '—'}</span>
-        {#if row.copy}
-          <button
-            type="button"
-            class="flex shrink-0 cursor-pointer items-center rounded p-0.5 text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-            title="Copy"
-            onclick={() => copyToClipboard(row.value, row.label)}
-          >
-            <Clipboard width="11" height="11" />
-          </button>
-        {/if}
+  <!-- Identity / status -->
+  <section class="border-b border-border px-4 pt-2 pb-6">
+    <div class="flex items-center gap-2">
+      <h2 class="text-base font-medium text-fg">{app.activeName ?? 'Instrument'}</h2>
+      <span class="rounded-full bg-element-bg px-1.5 py-px text-xs font-medium text-fg-muted uppercase">
+        {instrument.mode}
+      </span>
+    </div>
+
+    <dl class="mt-4 grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+      <dt class={rowLabelClass}>Active profile</dt>
+      <dd class={rowValueClass}>{(activeProfile?.label ?? sanitizeString(instrument.activeProfileId)) || '—'}</dd>
+
+      <dt class={rowLabelClass}>FOV</dt>
+      <dd class={rowValueClass}>
+        {instrument.fov ? `${instrument.fov[0].toFixed(0)} × ${instrument.fov[1].toFixed(0)} µm` : '—'}
       </dd>
-    {/each}
-  </dl>
-</section>
 
-<!-- Channel cards -->
-<section class="px-4 pt-4">
-  <h3 class={headingClass}>Channels</h3>
-  <div class={cardGroupClass}>
-    {#each Object.entries(config.channels) as [channelId, channel] (channelId)}
-      <div class="rounded-lg border bg-card p-3 text-sm text-fg shadow-sm">
-        <div class="mb-2 flex items-center gap-2">
-          {#if channel.emission}
-            <span
-              class="h-2.5 w-2.5 shrink-0 rounded-full"
-              style="background-color: {wavelengthToColor(channel.emission)}"
-            ></span>
-          {/if}
-          <span class="font-medium text-fg">
-            {channel.label ?? sanitizeString(channelId)}
-          </span>
-        </div>
-        <div class="space-y-1 text-fg-muted">
-          <div class="flex justify-between">
-            <span>Detection</span>
-            <span class="text-fg">{channel.detection}</span>
+      <dt class={rowLabelClass}>Traversal</dt>
+      <dd class={rowValueClass}>{sanitizeString(state.traversal)}</dd>
+
+      <dt class={rowLabelClass}>Metadata</dt>
+      <dd class={rowValueClass}>{state.metadata_cls.split('.').pop()}</dd>
+
+      <dt class={rowLabelClass}>Tasks</dt>
+      <dd class={rowValueClass}>{Object.keys(state.tasks).length}</dd>
+
+      <dt class={rowLabelClass}>Last modified</dt>
+      <dd class={rowValueClass}>{formatRelative(state.last_modified)}</dd>
+    </dl>
+  </section>
+
+  <!-- Channel cards -->
+  <section class="px-4 pt-4">
+    <h3 class={headingClass}>Channels</h3>
+    <div class={cardGroupClass}>
+      {#each Object.entries(imaging.channels) as [channelId, channel] (channelId)}
+        <div class="rounded-lg border bg-card p-3 text-sm text-fg shadow-sm">
+          <div class="mb-2 flex items-center gap-2">
+            {#if channel.emission}
+              <span
+                class="h-2.5 w-2.5 shrink-0 rounded-full"
+                style="background-color: {wavelengthToColor(channel.emission)}"
+              ></span>
+            {/if}
+            <span class="font-medium text-fg">{channel.label ?? sanitizeString(channelId)}</span>
           </div>
-          <div class="flex justify-between">
-            <span>Illumination</span>
-            <span class="text-fg">{channel.illumination}</span>
-          </div>
-          {#each Object.entries(channel.filters) as [fwId, position] (fwId)}
+          <div class="space-y-1 text-fg-muted">
             <div class="flex justify-between">
-              <span>{fwId}</span>
-              <span class="text-fg">{position}</span>
+              <span>Detection</span>
+              <span class="text-fg">{channel.detection}</span>
             </div>
-          {/each}
+            <div class="flex justify-between">
+              <span>Illumination</span>
+              <span class="text-fg">{channel.illumination}</span>
+            </div>
+            {#each Object.entries(channel.filters) as [fwId, position] (fwId)}
+              <div class="flex justify-between">
+                <span>{fwId}</span>
+                <span class="text-fg">{position}</span>
+              </div>
+            {/each}
+          </div>
         </div>
+      {/each}
+    </div>
+  </section>
+
+  <!-- Profile cards -->
+  <section class="px-4 pt-6 pb-8">
+    <h3 class={headingClass}>Profiles</h3>
+    <div class={cardGroupClass}>
+      {#each Object.keys(imaging.profiles) as profileId (profileId)}
+        {@render profileCard(profileId)}
+      {/each}
+    </div>
+  </section>
+{/if}
+
+{#snippet profileCard(profileId: string)}
+  {#if instrument}
+    {@const profile = instrument.imaging.profiles[profileId]}
+    {@const channels = instrument.imaging.channels}
+    {@const isActive = profileId === instrument.activeProfileId}
+    {#if profile}
+      <div class="rounded-lg border bg-card p-3 text-sm text-fg shadow-sm">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span class="truncate font-medium text-fg">{profile.label ?? sanitizeString(profileId)}</span>
+          {#if isActive}
+            <span class="shrink-0 rounded-full bg-success/15 px-1.5 py-px text-center text-xs font-medium text-success">
+              Active
+            </span>
+          {:else}
+            <button
+              class="shrink-0 cursor-pointer rounded-full border border-fg-faint px-1.5 py-px text-center text-xs font-medium text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+              onclick={() => toastError(instrument.setActiveProfile(profileId))}
+            >
+              Activate
+            </button>
+          {/if}
+        </div>
+        {#if profile.desc}
+          <p class="mb-2 text-fg-muted">{profile.desc}</p>
+        {/if}
+        {#if profile.channels.length > 0}
+          <div class="flex flex-wrap gap-1.5">
+            {#each profile.channels as channelId (channelId)}
+              {@const ch = channels[channelId]}
+              {#if ch}
+                <span class="flex items-center gap-1 rounded bg-element-bg px-1.5 py-0.5 text-xs text-fg-muted">
+                  {#if ch.emission}
+                    <span class="h-1.5 w-1.5 rounded-full" style="background-color: {wavelengthToColor(ch.emission)}"
+                    ></span>
+                  {/if}
+                  {ch.label ?? sanitizeString(channelId)}
+                </span>
+              {/if}
+            {/each}
+          </div>
+        {/if}
       </div>
-    {/each}
-  </div>
-</section>
-
-<!-- Profile cards -->
-<section class="px-4 pt-6">
-  <h3 class={headingClass}>Profiles</h3>
-  <div class={cardGroupClass}>
-    {#each Object.keys(config.profiles) as profileId (profileId)}
-      <ProfileCard microscope={session.scope} {profileId} />
-    {/each}
-  </div>
-</section>
-
-<!-- Debug link -->
-<section class="px-4 pt-4 pb-8">
-  <a href={resolve('/debug' as '/')} class="text-sm text-fg-muted transition-colors hover:text-fg"> Debug &rarr; </a>
-</section>
+    {/if}
+  {/if}
+{/snippet}

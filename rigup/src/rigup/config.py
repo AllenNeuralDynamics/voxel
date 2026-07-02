@@ -103,7 +103,7 @@ class NodeConfig(BaseModel):
         return self
 
 
-class RigConfig(BaseModel):
+class RigConfig(BaseModel, frozen=True):
     """Top-level rig configuration.
 
     ``devices`` declares in-process devices owned by the orchestrator itself —
@@ -111,7 +111,6 @@ class RigConfig(BaseModel):
     remote) that each host their own ``devices`` dict.
     """
 
-    name: str = "rig"
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
     nodes: dict[str, NodeConfig] = Field(default_factory=dict)
 

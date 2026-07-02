@@ -35,19 +35,19 @@
       },
       size: {
         xs: {
-          trigger: 'h-ui-xs px-1.5 text-xs',
+          trigger: 'h-ui-xs min-h-ui-xs px-1.5 text-xs',
           item: 'min-h-ui-xs px-1.5 py-1 text-xs'
         },
         sm: {
-          trigger: 'h-ui-sm px-1.5 text-xs',
+          trigger: 'h-ui-sm min-h-ui-sm px-1.5 text-xs',
           item: 'min-h-ui-sm px-1.5 py-1 text-xs'
         },
         md: {
-          trigger: 'h-ui-md px-2 text-sm',
+          trigger: 'h-ui-md min-h-ui-md px-2 text-sm',
           item: 'min-h-ui-md px-2 py-1 text-sm'
         },
         lg: {
-          trigger: 'h-ui-lg px-2.5 text-base capitalize',
+          trigger: 'h-ui-lg min-h-ui-lg px-2.5 text-base capitalize',
           item: 'min-h-ui-lg px-2.5 py-1.5 text-base'
         }
       }
@@ -64,6 +64,7 @@
     value: T;
     label: string;
     description?: string;
+    hint?: string;
   }
 </script>
 
@@ -106,7 +107,9 @@
     class: className = ''
   }: Props = $props();
 
-  const selectedLabel = $derived(options.find((o) => o.value === value)?.label ?? '');
+  const selected = $derived(options.find((o) => o.value === value));
+  const selectedLabel = $derived(selected?.label ?? '');
+  const selectedHint = $derived(selected?.hint ?? '');
 
   function handleChange(newValue: string | undefined) {
     if (!newValue) return;
@@ -135,6 +138,7 @@
         <span class="text-fg-muted">{placeholder}</span>
       {/if}
     </span>
+    {#if selectedHint}<span class="ml-auto shrink-0 pl-3 text-fg-muted tabular-nums">{selectedHint}</span>{/if}
     {#if suffix}<span class="shrink-0 text-fg-muted">{suffix}</span>{/if}
     {#if loading}
       <DotsSpinner class="shrink-0 text-fg-muted" width={iconSizes[size]} height={iconSizes[size]} />
@@ -170,6 +174,9 @@
                     <span class="text-xs text-fg-muted">{option.description}</span>
                   {/if}
                 </div>
+                {#if option.hint}
+                  <span class="ml-auto shrink-0 self-center pl-3 text-fg-muted tabular-nums">{option.hint}</span>
+                {/if}
               </SelectPrimitive.Item>
             {/each}
           </SelectPrimitive.Group>

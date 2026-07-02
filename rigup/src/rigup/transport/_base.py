@@ -24,7 +24,7 @@ from typing import Self
 
 from pydantic import BaseModel, Field
 
-from vxlib import Unsub
+from vxlib import Teardown
 
 
 class MessageKind(IntEnum):
@@ -162,8 +162,8 @@ class TransportClient(ABC):
         """Register the handler for server-initiated notifies (one at a time)."""
 
     @abstractmethod
-    async def subscribe(self, topic: str, callback: TopicCallback) -> Unsub:
-        """Subscribe to a pub/sub topic. Returns an ``Unsub`` to remove the callback."""
+    def subscribe(self, topic: str, cb: TopicCallback) -> Teardown:
+        """Subscribe to a pub/sub topic. Returns a ``Teardown`` to remove the callback."""
 
 
 class TransportServer(ABC):

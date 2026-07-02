@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { type AnyPropModel, BoolModel, EnumeratedModel, NumericModel, StringModel } from '$lib/model';
   import { cn } from '$lib/utils';
 
   import * as Bool from './bool';
   import * as Enumerated from './enumerated';
-  import { type AnyPropModel, BoolModel, EnumeratedModel, NumericModel, StringModel } from './models.svelte';
   import * as Numeric from './numeric';
   import * as Text from './text';
 

@@ -5,7 +5,7 @@ from enum import StrEnum
 
 from vxlib.vec import UIVec3D
 
-from ome_zarr_writer.types import Dtype, ScaleLevel
+from ome_zarr_writer.dataset import Dtype, ScaleLevel
 
 from ._base import BufferSlot, BufferStage, BufferStatus
 from ._process import ProcessBufferSlot

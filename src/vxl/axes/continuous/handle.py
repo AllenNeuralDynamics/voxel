@@ -15,22 +15,22 @@ class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
     # Property accessors
 
     async def get_position(self) -> float:
-        return await self.get_prop_value("position")
+        return await self.props.get_value("position")
 
     async def get_lower_limit(self) -> float:
-        return await self.get_prop_value("lower_limit")
+        return await self.props.get_value("lower_limit")
 
     async def get_upper_limit(self) -> float:
-        return await self.get_prop_value("upper_limit")
+        return await self.props.get_value("upper_limit")
 
     async def get_speed(self) -> float | None:
-        return await self.get_prop_value("speed")
+        return await self.props.get_value("speed")
 
     async def get_units(self) -> str:
-        return await self.get_prop_value("units")
+        return await self.props.get_value("units")
 
     async def is_moving(self) -> bool:
-        return await self.get_prop_value("is_moving")
+        return await self.props.get_value("is_moving")
 
     # Motion commands
 

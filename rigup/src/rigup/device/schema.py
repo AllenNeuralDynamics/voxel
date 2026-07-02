@@ -4,7 +4,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from enum import Enum
 from functools import wraps
-from typing import Any, Literal, Self, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field, RootModel, ValidationError, create_model
 
@@ -289,27 +289,44 @@ class CommandRequests(BaseModel):
     commands: list[CommandRequest]
 
 
-class ErrorMsg(BaseModel):
+class Err(BaseModel):
+    ok: Literal[False] = False
     msg: str
 
 
-class Result[T](RootModel[T | ErrorMsg]):
+class Ok[T](BaseModel):
+    ok: Literal[True] = True
+    value: T
+
+
+class Result[T](RootModel[Annotated[Ok[T] | Err, Field(discriminator="ok")]]):
+    """Tagged success/error envelope. The ``ok`` discriminator lives on the wrapper so
+    ok/err stays distinguishable after JSON round-trips, even when ``T`` erases to ``Any``."""
+
+    @classmethod
+    def ok(cls, value: T) -> Self:
+        return cls(Ok(value=value))
+
+    @classmethod
+    def err(cls, msg: str) -> Self:
+        return cls(Err(msg=msg))
+
     def __bool__(self) -> bool:
-        return not isinstance(self.root, ErrorMsg)
+        return isinstance(self.root, Ok)
 
     def unwrap(self) -> T:
-        if isinstance(self.root, ErrorMsg):
+        if isinstance(self.root, Err):
             raise RuntimeError(self.root.msg)
-        return self.root
+        return self.root.value
 
     def unwrap_or(self, default: T) -> T:
         """Get result or return default if error occurred."""
-        return default if isinstance(self.root, ErrorMsg) else self.root
+        return self.root.value if isinstance(self.root, Ok) else default
 
     @property
     def is_ok(self) -> bool:
         """Check if response is successful."""
-        return not isinstance(self.root, ErrorMsg)
+        return isinstance(self.root, Ok)
 
 
 class Results[V](BaseModel):

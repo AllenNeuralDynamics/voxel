@@ -25,15 +25,16 @@ class Rig:
     operations — the rig is either fully open or fully closed.
     """
 
-    def __init__(self, config: RigConfig) -> None:
+    def __init__(self, config: RigConfig, name: str = "Rig") -> None:
+        self._name = name
         self._config = config
-        self._log = logging.getLogger(f"rigup.rig.{config.name}")
+        self._log = logging.getLogger(f"rigup.rig.{name}")
         self._nodes: dict[str, Node] = {}
         self._build_errors: dict[str, BuildError] = {}
 
     @property
     def name(self) -> str:
-        return self._config.name
+        return self._name
 
     @property
     def config(self) -> RigConfig:

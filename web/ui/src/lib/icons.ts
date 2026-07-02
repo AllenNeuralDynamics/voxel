@@ -45,6 +45,7 @@ export { default as ViewDashboardOutline } from '~icons/mdi/view-dashboard-outli
 
 // Phosphor Icons
 export { default as ImageLight } from '~icons/ph/image-light';
+export { default as PathLight } from '~icons/ph/path-light';
 export { default as StackLight } from '~icons/ph/stack-light';
 
 // Other collections
