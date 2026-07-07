@@ -275,7 +275,9 @@ async def call[Resp: BaseModel](
     raised or is missing; :class:`asyncio.TimeoutError` on deadline.
     """
     key = action.value if isinstance(action, Action) else action
-    payload = request.model_dump_json().encode()
+    # fallback=str: values with no JSON form in an `Any`-typed position (e.g. a PurePath command
+    # arg) serialize as their string; the receiver coerces them back per the command's signature.
+    payload = request.model_dump_json(fallback=str).encode()
     if isinstance(transport, TransportServer):
         response_bytes = await transport.push_request(key, payload, timeout_s=timeout_s)
     else:
@@ -286,7 +288,7 @@ async def call[Resp: BaseModel](
 async def send_notify(transport: TransportClient | TransportServer, action: str | Notify, payload: BaseModel) -> None:
     """Typed fire-and-forget notify over a transport."""
     key = action.value if isinstance(action, Notify) else action
-    payload_bytes = payload.model_dump_json().encode()
+    payload_bytes = payload.model_dump_json(fallback=str).encode()
     if isinstance(transport, TransportServer):
         await transport.push_notify(key, payload_bytes)
     else:

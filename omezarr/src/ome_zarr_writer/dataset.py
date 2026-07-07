@@ -593,10 +593,11 @@ class OmeZarrDataset(SchemaModel):
                             yield Shard(level=level, c=c, z=z, y=y, x=x)
 
     def write_metadata(self, target: Path | S3Path) -> None:
-        """Write Zarr v3 group + per-level array `zarr.json` files under `target`.
+        """Write Zarr v3 group + per-level array `zarr.json` files under `target` — a local path
+        or an S3Path (bind it to a client beforehand for a non-default endpoint/profile).
 
-        One `zarr.json` at the group root plus one per pyramid level; existing
-        files/objects are overwritten. Uniform across local and S3 paths.
+        One `zarr.json` at the group root plus one per pyramid level; existing files/objects are
+        overwritten. Uniform across local and S3 paths.
         """
         for relpath, meta in (
             ("zarr.json", self.group),

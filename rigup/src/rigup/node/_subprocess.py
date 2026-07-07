@@ -47,12 +47,13 @@ class SubprocessNode(TransportNode):
         self._process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "rigup.node._runner",
+            "rigup.node",
             self.node_id,
             bind_addr,
         )
 
         await self._transport.connect(address)
+        self._start_log_relay()  # subscribe before the child binds so its startup logs aren't missed
 
         # DEALER queues messages until the peer binds, so this PING will
         # be delivered once the daemon's ROUTER is up. Generous timeout
@@ -70,6 +71,7 @@ class SubprocessNode(TransportNode):
                     timeout=2.0,
                 )
 
+        self._stop_log_relay()
         await self._transport.close()
 
         if self._process is not None:

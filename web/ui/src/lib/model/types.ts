@@ -319,11 +319,40 @@ export interface PreviewLevels {
 
 // ---- acquisition request / record ----
 
-/** Where a camera writes: `bucket=null` → node-local store, else an S3 bucket; `path` is relative. */
-export interface Storage {
-  bucket?: string | null;
+/** How an S3 store resolves credentials: a strategy tag plus non-secret params, never the secrets.
+ * Discriminated on `type`; mirrors `vxlib.S3Credentials`. */
+export type S3Credentials =
+  | { type: 'environment' }
+  | { type: 'profile'; name?: string; config_file?: string | null; credentials_file?: string | null }
+  | { type: 'chain' }
+  | { type: 'anonymous' };
+
+/** An S3-compatible connection: routing + credential strategy, no secrets. Mirrors `vxlib.S3Store`. */
+export interface S3Store {
+  endpoint?: string | null;
+  region?: string | null;
+  credentials: S3Credentials;
+}
+
+/** A configured object store: connection plus selectable roots (label → a write root: a bucket,
+ * optionally narrowed to `bucket/prefix`).
+ * Mirrors `vxl.system.Remote`; the payload of `GET /catalog/remotes` (keyed by store name). */
+export interface Remote extends S3Store {
+  roots: Record<string, string>;
+}
+
+/** An S3 destination for a run: which configured store, which root, and whether to stage. */
+export interface RemoteTarget {
+  store: string; // key into the remotes registry
+  root: string;
+  stage: boolean;
+}
+
+/** Where a run is written, logically: `remote=null` → node-local store, else an S3 destination.
+ * `path` is the relative run base; the node resolves and the writer adds `.ome.zarr`. */
+export interface StorageSpec {
   path: string;
-  stage?: boolean;
+  remote?: RemoteTarget | null;
 }
 
 /** Who/where/when an acquisition was launched. */
@@ -341,7 +370,7 @@ export interface PlannedVolume {
 
 /** Parameters of an acquisition run; `task_ids=null` → every planned task in traversal order. */
 export interface AcquisitionRequest {
-  storage: Storage;
+  storage: StorageSpec;
   task_ids?: string[] | null;
   operator?: string | null;
 }

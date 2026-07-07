@@ -18,11 +18,17 @@ from typing import Any, ClassVar
 
 import psutil
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
 from ruyaml import YAML
 
-from vxlib import atomic_write
+from vxlib import S3Store, atomic_write
 
 try:
     from yaml import CSafeLoader as _YamlLoader
@@ -32,33 +38,71 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-class System(BaseSettings):
-    """This machine: ``VOXEL_*`` env-configured knobs plus introspected facts.
+def _voxel_home() -> Path:
+    """The fixed config/state home, ``~/.voxel`` -- holds ``system.yaml`` and ``instruments/``.
+    Relocate it by setting ``$HOME``; move the data roots independently with
+    ``VOXEL_STORE`` / ``VOXEL_SCRATCH``."""
+    return Path.home() / ".voxel"
 
-    Construct to read and validate the environment (each field maps to ``VOXEL_<FIELD>``).
-    Exposes the local storage roots (``store``/``scratch`` as :class:`Path`, defaulting under
-    ``dir``), the pure machine facts (``cpu_count``/``platform``/``hostname``), and the shared
-    RAM budget (:class:`Ram`). Paths are resolved only; whoever writes creates the directories.
+
+def load_voxel_env() -> None:
+    """Load ``~/.voxel/.env`` into the process environment if present (a no-op when absent;
+    existing vars win). A per-machine escape hatch for ambient settings the file layer can't
+    reach: the ``VOXEL_*`` knobs *and* the AWS chain (``AWS_*``, ``S3_ENDPOINT_URL``) that
+    s5cmd / boto3 / TensorStore read. Call once at startup, before constructing :class:`System`
+    or any S3 client."""
+    load_dotenv(_voxel_home() / ".env", override=False)
+
+
+class Remote(S3Store):
+    """A configured object store in the registry: the :class:`~vxlib.S3Store` connection plus the
+    ``roots`` (display label -> write root) an operator may select. A root is a bucket, optionally
+    narrowed by a key prefix (``bucket`` or ``bucket/prefix``). Extends the shared connection model
+    with the UI catalog; still holds no secrets -- credentials come from the AWS chain."""
+
+    roots: dict[str, str] = Field(default_factory=dict, description="display label -> bucket or bucket/prefix")
+
+
+class System(BaseSettings):
+    """This machine: ``VOXEL_*`` env knobs, the ``system.yaml`` config, and introspected facts.
+
+    Construct to read and validate the environment plus ``~/.voxel/system.yaml`` (init > env >
+    yaml). Exposes the local storage roots (``store``/``scratch``, overridable via
+    ``VOXEL_STORE``/``VOXEL_SCRATCH``), the object-store registry (:attr:`remotes`), the fixed
+    config home (:attr:`dir`), the pure machine facts (``cpu_count``/``platform``/``hostname``),
+    and the shared RAM budget (:class:`Ram`). Paths are resolved only; whoever writes creates them.
     """
 
     model_config = SettingsConfigDict(env_prefix="VOXEL_", extra="ignore")
 
-    dir: Path = Field(default_factory=lambda: Path.home() / ".voxel")
-    store: Path = Field(default_factory=lambda: Path.home() / ".voxel" / "store", description="VOXEL_STORE")
-    scratch: Path = Field(default_factory=lambda: Path.home() / ".voxel" / "scratch", description="VOXEL_SCRATCH")
+    store: Path = Field(default_factory=lambda: _voxel_home() / "store", description="VOXEL_STORE")
+    scratch: Path = Field(default_factory=lambda: _voxel_home() / "scratch", description="VOXEL_SCRATCH")
     max_ram_fraction: float = Field(default=0.75, gt=0.0, le=1.0)
+    remotes: dict[str, Remote] = Field(
+        default_factory=dict, description="object-store name -> connection (from ~/.voxel/system.yaml)"
+    )
 
-    @model_validator(mode="before")
     @classmethod
-    def _default_roots(cls, data: Any) -> Any:
-        """Default store/scratch to ``<dir>/{store,scratch}`` when not set via VOXEL_STORE/VOXEL_SCRATCH."""
-        if isinstance(data, dict):
-            root = Path(data.get("dir") or Path.home() / ".voxel").expanduser()
-            data.setdefault("store", root / "store")
-            data.setdefault("scratch", root / "scratch")
-        return data
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Layer ``~/.voxel/system.yaml`` under the env (priority: init > env > yaml). The yaml
+        carries structured config -- notably :attr:`remotes` -- that flat env vars can't express."""
+        del dotenv_settings, file_secret_settings
+        yaml_source = YamlConfigSettingsSource(settings_cls, yaml_file=_voxel_home() / "system.yaml")
+        return (init_settings, env_settings, yaml_source)
 
-    @field_validator("dir", "store", "scratch", mode="after")
+    @property
+    def dir(self) -> Path:
+        """The fixed config/state home (``~/.voxel``); see :func:`_voxel_home`."""
+        return _voxel_home()
+
+    @field_validator("store", "scratch", mode="after")
     @classmethod
     def _expand(cls, p: Path) -> Path:
         return p.expanduser()

@@ -16,7 +16,20 @@ from .log import (
 )
 from .poller import Poller
 from .reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Readable, ReadableView, Subscribable
-from .types import UNSET, AsyncTeardown, Dtype, SchemaModel, Teardown, UnsetType
+from .types import (
+    UNSET,
+    AnonymousCredentials,
+    AsyncTeardown,
+    ChainCredentials,
+    Dtype,
+    EnvCredentials,
+    ProfileCredentials,
+    S3Credentials,
+    S3Store,
+    SchemaModel,
+    Teardown,
+    UnsetType,
+)
 from .utils import (
     atomic_write,
     bounded,
@@ -33,8 +46,10 @@ from .vec import IVec2D, IVec3D, UIVec2D, UIVec3D, UVec2D, UVec3D, Vec2D, Vec3D
 __all__ = [
     "COLORMAP_CATALOG",
     "UNSET",
+    "AnonymousCredentials",
     "AsyncTeardown",
     "Cell",
+    "ChainCredentials",
     "Coalescer",
     "Color",
     "Colormap",
@@ -43,13 +58,17 @@ __all__ = [
     "Derived",
     "Dtype",
     "Emitter",
+    "EnvCredentials",
     "IVec2D",
     "IVec3D",
     "JsonDocument",
     "Poller",
+    "ProfileCredentials",
     "ReactiveQuery",
     "Readable",
     "ReadableView",
+    "S3Credentials",
+    "S3Store",
     "SchemaModel",
     "Subscribable",
     "Teardown",

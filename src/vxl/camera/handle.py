@@ -1,5 +1,6 @@
 """Camera device handle with typed methods."""
 
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, cast
 
 from ome_zarr_writer import WriterSettings
@@ -12,7 +13,7 @@ from vxl.camera.base import (
     CaptureState,
     DatasetRef,
     SensorROI,
-    Storage,
+    StorageSpec,
     StorageStatus,
     TriggerMode,
     TriggerPolarity,
@@ -112,7 +113,7 @@ class CameraHandle(DeviceHandle[Camera]):
         result = await self.call("get_preview_config")
         return PreviewConfig.model_validate(result)
 
-    async def check_writable(self, storage: Storage) -> StorageStatus:
+    async def check_writable(self, storage: StorageSpec) -> StorageStatus:
         """Preflight: prove this camera's node can write ``storage``. Raises if not. Returns the
         node's storage status (host, resolved root, free bytes)."""
         result = await self.call("check_writable", storage=storage)
@@ -121,7 +122,8 @@ class CameraHandle(DeviceHandle[Camera]):
     async def open_stack(
         self,
         *,
-        storage: Storage,
+        storage: StorageSpec,
+        subpath: PurePosixPath,
         num_frames: int,
         z_step: float,
         magnification: float,
@@ -129,14 +131,16 @@ class CameraHandle(DeviceHandle[Camera]):
     ) -> DatasetRef:
         """Prepare camera and writer for a stack acquisition; return a pointer to its dataset.
 
-        ``storage`` is the per-channel logical destination (the node resolves it);
-        ``settings`` are the broadcast output-format knobs. ``magnification`` converts
-        the sensor-space pixel size into the sample-space lateral voxel size. The returned
-        :class:`DatasetRef` is persisted by control as ``<channel>.ref.json``.
+        ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
+        under it (the node resolves ``storage.resolve(subpath)``); ``settings`` are the broadcast
+        output-format knobs. ``magnification`` converts the sensor-space pixel size into the
+        sample-space lateral voxel size. The returned :class:`DatasetRef` is persisted by control as
+        ``<channel>.ref.json``.
         """
         result = await self.call(
             "open_stack",
             storage=storage,
+            subpath=subpath,
             num_frames=num_frames,
             z_step=z_step,
             magnification=magnification,

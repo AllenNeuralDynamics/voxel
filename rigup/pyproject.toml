@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-rigup-node = "rigup.node._runner:standalone_main"
+rigup-node = "rigup.node:run_node"
 
 [dependency-groups]
 dev = [

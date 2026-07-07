@@ -27,6 +27,7 @@ from rigup.device import (
     PublishTypedFn,
     Results,
 )
+from rigup.node._logs import NodeLogHandler
 from rigup.protocol import (
     Action,
     BuildDevicesRequest,
@@ -68,6 +69,7 @@ class NodeDaemon:
         self._controllers: dict[str, DeviceController] = {}
         self._authority_owner: str | None = None
         self._shutdown_event = asyncio.Event()
+        self._log_handler: NodeLogHandler | None = None
 
         self._dispatcher = Dispatcher()
         self._register_handlers()
@@ -76,6 +78,7 @@ class NodeDaemon:
     async def start(self, address: NodeAddress) -> None:
         """Bind the transport and begin accepting requests."""
         await self._transport.bind(address)
+        self._install_log_forwarding()
         self._log.info("Daemon %s bound to %s", self._node_id, address)
 
     def request_shutdown(self) -> None:
@@ -89,8 +92,26 @@ class NodeDaemon:
     async def stop(self) -> None:
         """Close all devices and shut down the transport."""
         await self._close_all_controllers()
+        self._log.info("Daemon %s stopping", self._node_id)  # last forwarded line, before the sink goes away
+        await self._remove_log_forwarding()
         await self._transport.close()
-        self._log.info("Daemon %s stopped", self._node_id)
+
+    def _install_log_forwarding(self) -> None:
+        """Publish this process's log records to the orchestrator over the transport (see
+        :mod:`rigup.node._logs`). Lowers the root level to INFO so INFO records reach the handler;
+        a subprocess node has no console handler, so forwarding is the only sink."""
+        self._log_handler = NodeLogHandler(self._transport, self._node_id, asyncio.get_running_loop())
+        self._log_handler.start()
+        root = logging.getLogger()
+        if root.level == logging.NOTSET or root.level > logging.INFO:
+            root.setLevel(logging.INFO)
+        root.addHandler(self._log_handler)
+
+    async def _remove_log_forwarding(self) -> None:
+        if self._log_handler is not None:
+            logging.getLogger().removeHandler(self._log_handler)
+            await self._log_handler.aclose()
+            self._log_handler = None
 
     # ==================== Handler registration ====================
 

@@ -30,6 +30,7 @@ from starlette.types import Receive, Scope, Send
 
 from vxl.app import VoxelApp
 from vxl.instrument import ProtocolError
+from vxl.system import load_voxel_env
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
 from .live import AppFeed, LogMessage
@@ -145,6 +146,7 @@ def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) 
 
 
 def main() -> None:
+    load_voxel_env()  # ambient env from ~/.voxel/.env before anything reads it (System, S3 clients)
     parser = argparse.ArgumentParser(prog="vxl", description="Voxel — microscope control system")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: all interfaces)")  # noqa: S104
     parser.add_argument("--port", type=int, default=8000, help="Web server port (default: 8000)")

@@ -28,6 +28,7 @@ from vxl.instrument import (
     WriterPatch,
 )
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
+from vxl.system import Remote
 from vxl.traversal import TileOrder
 from vxlib import ColormapGroup, get_colormap_catalog
 
@@ -103,10 +104,11 @@ async def list_colormaps() -> list[ColormapGroup]:
     return get_colormap_catalog()
 
 
-@app_router.get("/catalog/buckets")
-async def list_buckets(app: AppDep) -> dict[str, str]:
-    """Selectable S3 acquisition targets (label → bucket name). A local run is ``bucket=None`` — no entry."""
-    return app.buckets
+@app_router.get("/catalog/remotes")
+async def list_remotes(app: AppDep) -> dict[str, Remote]:
+    """Configured object stores: name → connection + selectable roots (from ``System.remotes``).
+    A local run targets no remote."""
+    return app.remotes
 
 
 @app_router.get("/catalog/metadata/schemas")

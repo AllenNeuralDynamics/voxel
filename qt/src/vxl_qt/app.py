@@ -30,6 +30,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 
 from vxl.app import InstrumentInfo, VoxelApp
 from vxl.instrument import Instrument
+from vxl.system import load_voxel_env
 from vxl_qt.devices import DevicesStore
 from vxl_qt.devices.stage import StageStore
 from vxl_qt.preview import PreviewPanel
@@ -473,6 +474,7 @@ def run_app(_config_path: Path | None = None) -> int:
 
 def main() -> None:
     """CLI entry point."""
+    load_voxel_env()  # ambient env from ~/.voxel/.env before anything reads it (System, S3 clients)
     parser = argparse.ArgumentParser(
         description="Voxel - Microscope control application",
         formatter_class=argparse.RawDescriptionHelpFormatter,

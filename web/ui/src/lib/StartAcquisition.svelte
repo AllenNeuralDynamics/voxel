@@ -5,7 +5,7 @@
   import { InformationOutline } from '$lib/icons';
   import { Button, Dialog, Field, Label, Select, Switch, TextInput } from '$lib/kit';
   import MetadataPanel from '$lib/MetadataPanel.svelte';
-  import type { VoxelApp } from '$lib/model';
+  import type { Remote, VoxelApp } from '$lib/model';
   import OutputControls from '$lib/OutputControls.svelte';
   import { cn, toastError } from '$lib/utils';
 
@@ -16,7 +16,7 @@
 
   let { app, class: className }: Props = $props();
 
-  const LOCAL = '__local__'; // sentinel for node-local storage (Storage.bucket = null)
+  const LOCAL = '__local__'; // sentinel for node-local storage (StorageSpec.remote = null)
 
   const instrument = $derived(app.instrument);
   const isCapturing = $derived(instrument?.mode === 'capture');
@@ -25,18 +25,22 @@
   let open = $state(false);
 
   // Per-run storage params (not persisted — supplied fresh each run).
-  let bucket = $state(LOCAL);
+  let store = $state(LOCAL); // LOCAL sentinel (node-local), or a configured remote store name
+  let root = $state('');
   let path = $state('');
   let stage = $state(false);
   let operator = $state('');
-  let buckets = $state<Record<string, string>>({});
+  let remotes = $state<Record<string, Remote>>({});
   let busy = $state(false);
 
-  const isLocal = $derived(bucket === LOCAL);
-  const bucketOptions = $derived([
+  const isLocal = $derived(store === LOCAL);
+  const storeOptions = $derived([
     { value: LOCAL, label: 'Local' },
-    ...Object.entries(buckets).map(([label, name]) => ({ value: name, label }))
+    ...Object.keys(remotes).map((s) => ({ value: s, label: s }))
   ]);
+  const rootOptions = $derived(
+    isLocal ? [] : Object.entries(remotes[store]?.roots ?? {}).map(([label, name]) => ({ value: name, label }))
+  );
 
   // Each (task, profile) pair is one captured volume.
   const taskCount = $derived(instrument ? Object.keys(instrument.state.tasks).length : 0);
@@ -50,17 +54,22 @@
     return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
   }
 
-  // On open: regenerate the default path and (re)load buckets.
+  // On open: regenerate the default path and (re)load remotes.
   watch(
     () => open,
     (isOpen) => {
       if (!isOpen) return;
       path = `${app.activeName ?? 'acquisition'}/${timestamp()}`;
       app
-        .fetchBuckets()
-        .then((b) => (buckets = b))
-        .catch(() => (buckets = {}));
+        .fetchRemotes()
+        .then((r) => (remotes = r))
+        .catch(() => (remotes = {}));
     }
+  );
+
+  watch(
+    () => store,
+    () => (root = rootOptions[0]?.value ?? '')
   );
 
   async function start() {
@@ -68,7 +77,7 @@
     busy = true;
     try {
       await instrument.startAcquisition({
-        storage: { bucket: isLocal ? null : bucket, path, stage: isLocal ? false : stage },
+        storage: isLocal ? { path } : { path, remote: { store, root, stage } },
         task_ids: null,
         operator: operator || null
       });
@@ -106,16 +115,23 @@
           <h3 class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Storage</h3>
           <div class="flex items-start gap-4">
             <div class="flex-1">
-              <Field label="Destination" id="acq-bucket">
-                <Select value={bucket} options={bucketOptions} onchange={(v) => (bucket = v)} size="xs" />
+              <Field label="Store" id="acq-store">
+                <Select value={store} options={storeOptions} onchange={(v) => (store = v)} size="xs" />
               </Field>
             </div>
+            {#if !isLocal}
+              <div class="flex-1">
+                <Field label="Destination" id="acq-root">
+                  <Select value={root} options={rootOptions} onchange={(v) => (root = v)} size="xs" />
+                </Field>
+              </div>
+            {/if}
             <div class="grid gap-1">
               <div class="flex items-center gap-1">
                 <Label>Staged?</Label>
                 <span
                   class="text-fg-faint"
-                  title="Write to local scratch during capture, then upload to the bucket. S3 destinations only."
+                  title="Write to local scratch during capture, then upload to the destination. S3 destinations only."
                 >
                   <InformationOutline width="12" height="12" />
                 </span>

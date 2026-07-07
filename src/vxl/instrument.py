@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
@@ -31,7 +31,7 @@ from vxlib import (
 
 from .analog_out import AnalogOutputHandle, AOSignals
 from .axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from .camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, SensorROI, Storage
+from .camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, SensorROI, StorageSpec
 from .metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from .traversal import Tile, TileOrder
 
@@ -724,7 +724,7 @@ class PlannedVolume(BaseModel, frozen=True):
 class AcquisitionRequest(BaseModel):
     """Parameters of an acquisition run. Shared by the instrument API and the web request body."""
 
-    storage: Storage
+    storage: StorageSpec
     task_ids: list[str] | None = None  # None → every planned task, in traversal order
     operator: str | None = None
 
@@ -1195,7 +1195,7 @@ class Instrument:
     async def start_acquisition(self, request: AcquisitionRequest) -> AcquisitionRecord:
         """Begin acquiring the requested volumes into ``request.storage``; return the record once started.
 
-        ``storage`` is the run's logical destination (bucket + relative base; the node resolves it).
+        ``storage`` is the run's logical destination (root + relative base; the node resolves it).
         ``task_ids`` selects a subset of planned tasks (``None`` → all), always captured in traversal
         order. Runs the preflight (each participating camera must be able to write ``storage``) and writes
         ``<run>/record.json`` (a snapshot of the plan + hardware) **synchronously** — so a bad target or
@@ -1236,7 +1236,7 @@ class Instrument:
                 state=state,
                 hardware=self._hal.config,
             )
-            run_root = storage.resolve()
+            run_root = storage.resolve().target
             run_root.mkdir(parents=True, exist_ok=True)
             (run_root / "record.json").write_text(record.model_dump_json(indent=2))
         except BaseException:
@@ -1259,7 +1259,7 @@ class Instrument:
             with suppress(asyncio.CancelledError):
                 await task
 
-    async def _run_acquisition(self, storage: Storage, plan: list[PlannedVolume]) -> None:
+    async def _run_acquisition(self, storage: StorageSpec, plan: list[PlannedVolume]) -> None:
         """Capture each planned (task, profile) volume in order. Runs as the background ``_acq_task``.
 
         Reads the bench live — it's frozen for the whole run (CAPTURE blocks edits) — and delegates each
@@ -1272,16 +1272,18 @@ class Instrument:
         try:
             for v in plan:
                 await self._apply_profile(v.profile)
-                target = storage / tasks[v.task].signature / v.profile
-                await self._capture_volume(tasks[v.task].stack, target, task=v.task, profile=v.profile)
-            logger.info("Acquisition complete: %d volumes → %s", len(plan), storage.resolve())
+                subpath = PurePosixPath(tasks[v.task].signature, v.profile)
+                await self._capture_volume(tasks[v.task].stack, storage, subpath, task=v.task, profile=v.profile)
+            logger.info("Acquisition complete: %d volumes → %s", len(plan), storage.resolve().target)
         except Exception:
             logger.exception("Acquisition aborted")
         finally:
             self._acq_task = None
             await self._mode.set(AcquisitionMode.IDLE)
 
-    async def _capture_volume(self, stack: ZStack, storage: Storage, *, task: str, profile: str) -> None:
+    async def _capture_volume(
+        self, stack: ZStack, storage: StorageSpec, subpath: PurePosixPath, *, task: str, profile: str
+    ) -> None:
         """Acquire one volume for the already-active profile, emitting :attr:`progress` per batch.
 
         The ``finally`` disables lasers, resets the stepper, and finalizes the writers — so a cancel
@@ -1307,7 +1309,8 @@ class Instrument:
                 config = self._channel_config(ch_id)
                 init_coros.append(
                     ch.camera.open_stack(
-                        storage=storage / ch_id,
+                        storage=storage,
+                        subpath=subpath / ch_id,
                         num_frames=num_frames,
                         z_step=z_step,
                         magnification=self._hal.config.detection[config.detection].magnification,
@@ -1316,7 +1319,7 @@ class Instrument:
                 )
             refs = await asyncio.gather(*init_coros)
 
-            profile_root = storage.resolve()
+            profile_root = storage.resolve(subpath).target
             profile_root.mkdir(parents=True, exist_ok=True)
             for ch_id, ref in zip(channels, refs, strict=True):
                 (profile_root / f"{ch_id}.ref.json").write_text(ref.model_dump_json(indent=2))

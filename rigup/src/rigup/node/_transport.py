@@ -42,6 +42,7 @@ from rigup.wire import TopicDispatcher
 from vxlib import Teardown
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
+from ._logs import relay_logs
 
 
 class TransportAdapter[D: Device](Adapter[D]):
@@ -168,6 +169,19 @@ class TransportNode(Node):
         self._log = logging.getLogger(f"rigup.node.{node_id}")
         self._adapters: dict[str, TransportAdapter] = {}
         self._handles: dict[str, DeviceHandle] = {}
+        self._log_relay: Teardown | None = None
+
+    def _start_log_relay(self) -> None:
+        """Relay this node's forwarded logs into the local logging system. Call once, after the
+        transport connects."""
+        if self._log_relay is None:
+            self._log_relay = relay_logs(self._transport)
+
+    def _stop_log_relay(self) -> None:
+        """Drop the log subscription. Call before closing the transport."""
+        if self._log_relay is not None:
+            self._log_relay()
+            self._log_relay = None
 
     @property
     def node_id(self) -> str:
