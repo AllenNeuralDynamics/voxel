@@ -1,8 +1,9 @@
 """`OMEZarrWriter`: a self-contained writer for one OME-Zarr dataset (a single stack + channel).
 
 Frames are ingested one at a time, batched into a ring, downsampled asynchronously, and flushed
-to per-level array writers. When `config.scratch` is set, each batch's shards are written locally
-and uploaded to the (S3) `config.target`, then evicted; otherwise they go straight to the target.
+to per-level array writers. The `Storage` passed to the writer selects where shards land: a
+`StagedS3` writes each batch to local scratch and uploads it to S3 (then evicts), while
+`Local`/`DirectS3` write straight to the target.
 
 Self-contained — the writer never reads system state. Batch depth (`batch_z`) comes from the
 config's policy knobs; the caller sizes the ring `slots` from its own RAM share.
@@ -16,11 +17,11 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import numpy as np
 from cloudpathlib import S3Path
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from vxlib.vec import UIVec3D, UVec3D
 
 from ome_zarr_writer.array import ArrayWriter
@@ -35,10 +36,19 @@ from ome_zarr_writer.dataset import (
     Zarr3ArrayMeta,
     Zarr3GroupMeta,
 )
+from ome_zarr_writer.storage import Local, S3Store, StagedS3, StagingConfig, Storage
 from ome_zarr_writer.transfer import TransferJob, run_s5cmd
 
 # Floor for the base (L0) chunk edge: chunks never fall below 64 voxels per axis, regardless of level.
 MIN_CHUNK_EDGE = 64
+
+OME_ZARR_SUFFIX = ".ome.zarr"
+
+
+def _as_ome_zarr(path: Path | S3Path) -> Path | S3Path:
+    """`path` named as an OME-Zarr dataset (a trailing ``.ome.zarr``); idempotent. The writer owns
+    this naming convention — a `Storage` carries only the base location."""
+    return path if path.name.endswith(OME_ZARR_SUFFIX) else path.parent / f"{path.name}{OME_ZARR_SUFFIX}"
 
 
 class WriterSettings(BaseModel):
@@ -69,8 +79,9 @@ class WriterSettings(BaseModel):
 
 
 class WriterConfig(WriterSettings):
-    """Complete configuration for a writer run. Frozen — a constructed-then-read spec (its
-    ``dataset`` is cached, which immutability keeps sound)."""
+    """The dataset spec for a writer run — acquisition geometry plus the output-format knobs
+    inherited from :class:`WriterSettings`. Frozen; its ``dataset`` is cached, which immutability
+    keeps sound. *Where* the run is written is a separate :class:`Storage` passed to the writer."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -80,16 +91,6 @@ class WriterConfig(WriterSettings):
     voxel_unit: SpaceUnit = SpaceUnit.MICROMETER
     dtype: Dtype = Dtype.UINT16
     channel_index: int = 0
-
-    # storage
-    target: Path | S3Path
-    scratch: Path | None = None
-
-    @model_validator(mode="after")
-    def _validate_staging(self) -> Self:
-        if self.scratch is not None and not isinstance(self.target, S3Path):
-            raise ValueError("scratch (staging) requires a remote (s3://) target")
-        return self
 
     @cached_property
     def shard_shape(self) -> UIVec3D:
@@ -135,14 +136,6 @@ class WriterConfig(WriterSettings):
         )
 
         return OmeZarrDataset(group=group, arrays=arrays)
-
-
-class StagingConfig(BaseModel):
-    """Tuning for staged (scratch -> S3) upload."""
-
-    max_pending: int = 4  # batches uploaded-or-queued before the flush blocks (bounds scratch growth)
-    numworkers: int = 256  # s5cmd parallelism per invocation
-    retry_count: int = 10  # s5cmd per-object retries
 
 
 class Timing(BaseModel):
@@ -220,32 +213,36 @@ class OMEZarrWriter:
     result is flushed to every pyramid level. `close` drains the final (partial)
     batch and releases all resources.
 
-        writer = OMEZarrWriter(config, slots=6)
+        writer = OMEZarrWriter(config, storage, slots=6)
         for frame in frames:
             writer.add_frame(frame)
         writer.close()
 
-    When `config.scratch` is set, shards are written locally there and uploaded to the
-    (S3) `config.target` per batch on a background upload pool (s5cmd), then the local
-    copies are evicted; otherwise they are written straight to `config.target`.
+    For a `StagedS3` storage, shards are written to local scratch and uploaded to the S3
+    target per batch on a background upload pool (s5cmd), then the local copies are evicted;
+    `Local`/`DirectS3` write straight to the target.
     """
 
     def __init__(
         self,
         config: WriterConfig,
+        storage: Storage,
         *,
         backend: ArrayWriter.Backend = ArrayWriter.Backend.TS,
         ring_buffer: PyramidRingBuffer = PyramidRingBuffer.PROCESS,
         slots: int = 4,  # ring depth = max batches in flight (caller sizes from its RAM share)
-        staging: StagingConfig = StagingConfig(),  # upload tuning; used only when config.scratch is set
     ) -> None:
         self._config = config
+        self._storage = storage
         self._channel = config.channel_index
         self._volume_z = config.volume_shape.z
         self._levels = list(config.dataset.arrays)
         self._slot_count = slots
         self._shard_z = config.dataset.shard_shape.z
         self._batch_z = config.batch_z
+        self._staging = storage.tuning if isinstance(storage, StagedS3) else None  # upload tuning, iff staged
+        self._store: S3Store | None = None if isinstance(storage, Local) else storage.store  # S3 connection, iff remote
+        self._target = _as_ome_zarr(storage.target)  # concrete dataset location: the base target + .ome.zarr
 
         # The ring of RAM slots (each collects one batch, then downsamples it) and a
         # pool that fans this dataset's per-level writes. Slots are sized to the batch's
@@ -259,26 +256,27 @@ class OMEZarrWriter:
         )
         self._write_pool = ThreadPoolExecutor(max_workers=max(len(self._levels), 1))
 
-        # Shards are written to scratch when staging, else straight to target. Author the
-        # dataset metadata at the write root (so the array writers can open) and — when
-        # staging — also at the target so the uploaded shards form a valid dataset there.
-        write_root = config.scratch or config.target
-        config.dataset.write_metadata(write_root)
-        if config.scratch is not None:
-            config.dataset.write_metadata(config.target)
+        # Author metadata at the dataset target, and — when staging — at the local scratch tree too
+        # (so the uploaded shards land in a valid dataset). Arrays are authored at scratch when
+        # staging, else straight at the dataset target.
+        scratch = storage.scratch if isinstance(storage, StagedS3) else None
+        config.dataset.write_metadata(_as_ome_zarr(storage.target))  # client-bound dataset root
+        if scratch is not None:
+            config.dataset.write_metadata(scratch)  # local author tree (no suffix; mirrors the upload)
 
+        author_root = scratch if scratch is not None else self._target
         self._level_writers: dict[ScaleLevel, ArrayWriter] = {}
         for level in self._levels:
-            writer = backend()  # construct the backend instance
-            writer.open(write_root / str(level.value))  # open the (just-described) per-level array
+            writer = backend()
+            writer.open(author_root / str(level.value), self._store)
             self._level_writers[level] = writer
 
         # Staged upload: one background thread (max_workers=1 → groups upload serially; s5cmd
-        # parallelizes within a group) built only when staging. A semaphore bounds the batches
-        # in flight so the flush (and thus the camera) blocks before scratch grows unbounded.
-        self._staging = staging
-        self._upload_pool = ThreadPoolExecutor(max_workers=1) if config.scratch is not None else None
-        self._upload_slots = threading.Semaphore(staging.max_pending)
+        # parallelizes within a group). The pool spawns its worker lazily, so it costs nothing
+        # when not staging. A semaphore bounds the batches in flight so the flush (and thus the
+        # camera) blocks before scratch grows unbounded.
+        self._upload_pool = ThreadPoolExecutor(max_workers=1)
+        self._upload_slots = threading.Semaphore(self._staging.max_pending if self._staging else 1)
         self._uploads: list[Future[None]] = []
 
         # Pipeline state. Batch assignment is lazy — the first frame of each batch
@@ -288,6 +286,11 @@ class OMEZarrWriter:
         self._current_slot = 0
         self._inflight: dict[int, Future] = {}  # slot index → its downsampling future, until flushed
         self._batches = BatchMetrics.create_many(self._volume_z, self._batch_z)  # one record per batch, by index
+
+    @property
+    def target(self) -> Path | S3Path:
+        """The concrete dataset location this writer writes to (the storage base + ``.ome.zarr``)."""
+        return self._target
 
     @property
     def ready_for_batch(self) -> bool:
@@ -320,7 +323,7 @@ class OMEZarrWriter:
             if nxt in self._inflight:
                 self._flush_slot(nxt)
             self._current_slot = nxt
-            if self._upload_pool is not None:
+            if self._staging is not None:
                 self._reap_uploads()  # surface a failed upload promptly rather than acquiring into a doomed run
 
     def close(self) -> None:
@@ -338,8 +341,7 @@ class OMEZarrWriter:
         # Finish uploads before tearing down. Collect the first failure but always complete
         # teardown, then raise — so a failed upload never leaks the upload pool or slots.
         upload_error = self._drain_uploads()
-        if self._upload_pool is not None:
-            self._upload_pool.shutdown(wait=True)
+        self._upload_pool.shutdown(wait=True)
         for slot in self._slots:
             slot.close()
         self._write_pool.shutdown(wait=True)
@@ -369,10 +371,10 @@ class OMEZarrWriter:
         with batch.flushing.measure():
             writes = [self._write_pool.submit(self._write_level, level, slot, z_start, z_end) for level in self._levels]
             batch.flushed_bytes = sum(write.result() for write in writes)
-        if self._upload_pool is not None:
+        if self._staging is not None:
             jobs = self._transfer_jobs(z_start, z_end)
             self._upload_slots.acquire()  # blocks the flush (→ camera) once max_pending are in flight
-            self._uploads.append(self._upload_pool.submit(self._upload_and_evict, jobs, batch))
+            self._uploads.append(self._upload_pool.submit(self._upload_and_evict, jobs, batch, self._staging))
 
     def _write_level(self, level: ScaleLevel, slot: BufferSlot, z_start: int, z_end: int) -> int:
         """Write one pyramid level's rows for a batch. The `[: z1 - z0]` slice keeps
@@ -381,24 +383,25 @@ class OMEZarrWriter:
         return self._level_writers[level].write_slice(self._channel, z0, slot.get_volume(level)[: z1 - z0])
 
     def _transfer_jobs(self, z_start: int, z_end: int) -> list[TransferJob]:
-        """The batch's shards as upload jobs: scratch source -> target destination, across
-        every pyramid level (`dataset.shards` enumerates them; z is in L0 shard indices)."""
-        scratch = self._config.scratch
-        target = self._config.target
-        assert scratch is not None and isinstance(target, S3Path)  # staging requires an s3:// target
+        """The batch's shards as upload jobs: scratch source -> S3 target, across every pyramid
+        level (`dataset.shards` enumerates them; z is in L0 shard indices). Empty for a
+        non-staged storage (nothing to upload)."""
+        if not isinstance(self._storage, StagedS3):  # nothing to upload
+            return []
         z_shards = range(z_start // self._shard_z, math.ceil(z_end / self._shard_z))
+        dest_root = cast("S3Path", self._target)  # staged ⇒ target is an S3Path (see StagedS3)
         return [
-            TransferJob(src=shard.at(scratch), dest=shard.at(target))
+            TransferJob(src=shard.at(self._storage.scratch), dest=shard.at(dest_root))
             for shard in self._config.dataset.shards(channels=[self._channel], z_range=z_shards)
         ]
 
-    def _upload_and_evict(self, jobs: list[TransferJob], batch: BatchMetrics) -> None:
+    def _upload_and_evict(self, jobs: list[TransferJob], batch: BatchMetrics, tuning: StagingConfig) -> None:
         """Upload one batch's shards (s5cmd), then delete the local copies — each step
         measured into `batch`. Runs on the upload pool. A failed upload skips eviction
         (sources are kept) and surfaces via the future."""
         try:
             with batch.transferring.measure():
-                bytes_up = run_s5cmd(jobs, numworkers=self._staging.numworkers, retry_count=self._staging.retry_count)
+                bytes_up = run_s5cmd(jobs, self._store, numworkers=tuning.numworkers, retry_count=tuning.retry_count)
                 batch.transfered_bytes = bytes_up
             with batch.evicting.measure():
                 for job in jobs:

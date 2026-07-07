@@ -1,22 +1,20 @@
-"""Node daemon runners — subprocess and standalone entry points.
+"""Node daemon runner — shared core and the public CLI for a node process.
 
-Shared core: :func:`run` creates a :class:`NodeDaemon`, binds a transport,
-and serves until shutdown. Two entry points use it:
+:func:`_run` creates a :class:`NodeDaemon`, binds a transport, and serves until shutdown. Two
+entry points build on it:
 
-- :func:`subprocess_main` — internal, invoked by :class:`SubprocessNode` via
-  ``sys.executable -m rigup.node._runner <node_id> <address>``.
-- :func:`standalone_main` — public CLI for manually-run remote daemons.
-  Wired as ``rigup-node`` (rigup package) and ``vxl-node`` (vxl-web package).
+- :func:`run_node` — the public CLI for manually-run remote daemons. Backs the ``rigup-node``
+  console script (exported as ``rigup.node.run``) and ``vxl-node`` (``vxl.node:main``, which first
+  loads ambient env). A standalone process owns its terminal, so it configures logging.
+- ``python -m rigup.node`` (see ``__main__``) — invoked by the :class:`SubprocessNode` the
+  orchestrator spawns. A subprocess node shares the parent's terminal, so it configures no logging
+  and calls :func:`_run` directly.
 """
 
-import argparse
 import asyncio
-import logging
 import signal
-import sys
 
 from rigup.node._daemon import NodeDaemon
-from rigup.node._remote import _parse_address
 from rigup.transport import NodeAddress, ZMQTransportServer
 
 
@@ -38,47 +36,3 @@ async def run(node_id: str, address: NodeAddress) -> None:
 
     await daemon.serve_until_shutdown()
     await daemon.stop()
-
-
-def subprocess_main() -> None:
-    """Internal entry point for SubprocessNode spawning.
-
-    Minimal CLI: ``<node_id> <address>`` where address is a ZMQ endpoint
-    string (``ipc:///path`` or ``tcp://0.0.0.0:port``).
-    """
-    if len(sys.argv) < 3:
-        print(f"Usage: {sys.executable} -m rigup.node._runner <node_id> <address>")  # noqa: T201
-        sys.exit(1)
-    address = _parse_address(sys.argv[2])
-    asyncio.run(run(sys.argv[1], address))
-
-
-def standalone_main() -> None:
-    """Public entry point for manually-run remote daemons.
-
-    Usage::
-
-        vxl-node <node_id> --address tcp://0.0.0.0:5555
-        rigup-node cameras --address tcp://0.0.0.0:5555 --debug
-    """
-    parser = argparse.ArgumentParser(
-        prog="vxl-node",
-        description="Start a rigup node daemon for remote device hosting.",
-    )
-    parser.add_argument("node_id", help="Node identifier (must match the rig config)")
-    parser.add_argument("--address", "-a", required=True, help="ZMQ bind address (e.g. tcp://0.0.0.0:5555)")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    args = parser.parse_args()
-
-    level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(level=level, format="%(asctime)s %(levelname)-5s %(name)s: %(message)s", datefmt="[%X]")
-
-    log = logging.getLogger("rigup.node")
-    log.info("Starting node '%s' at %s", args.node_id, args.address)
-
-    address = _parse_address(args.address)
-    asyncio.run(run(args.node_id, address))
-
-
-if __name__ == "__main__":
-    subprocess_main()

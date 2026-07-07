@@ -9,7 +9,18 @@ from typing import Literal, Self, cast
 
 import numpy as np
 from cloudpathlib import S3Path
-from ome_zarr_writer import OMEZarrWriter, PyramidRingBuffer, UIVec3D, UVec3D, WriterConfig, WriterSettings
+from ome_zarr_writer import (
+    DirectS3,
+    Local,
+    OMEZarrWriter,
+    PyramidRingBuffer,
+    StagedS3,
+    Storage,
+    UIVec3D,
+    UVec3D,
+    WriterConfig,
+    WriterSettings,
+)
 from ome_zarr_writer.writer import BatchMetrics
 from pydantic import BaseModel, model_validator
 from vxlib.vec import IVec2D, Vec2D
@@ -29,37 +40,52 @@ from vxlib import Dtype, SchemaModel
 log = logging.getLogger(__name__)
 
 
-class Storage(SchemaModel):
-    """Where a camera writes, specified logically by the controller. The node resolves
-    it: `bucket=None` → the node's local store; a bucket → s3://bucket. Absolute paths
-    and the scratch location are the node's to fill, never the controller's."""
+class RemoteTarget(SchemaModel):
+    """An S3 destination: which configured store (a key into ``System.remotes``), which root,
+    and whether to stage. The node resolves ``store`` to a connection from its own registry."""
 
-    bucket: str | None = None  # None → node-local store; else an S3 bucket
-    path: PurePosixPath  # relative path under the root, e.g. "exp42/stack3/488.ome.zarr"
-    stage: bool = False  # write to local scratch first, then upload (bucket only)
+    store: str  # key into System.remotes
+    root: str
+    stage: bool = False  # write to local scratch first, then upload
+
+
+class StorageSpec(SchemaModel):
+    """Where a camera writes, specified logically by the controller. The node resolves it:
+    ``remote is None`` → the node's local store; else the S3 root named by ``remote``.
+    Absolute paths and the scratch location are the node's to fill, never the controller's."""
+
+    path: PurePosixPath  # relative run base, e.g. "exp42/2024-ts" (sub-structure is passed as a subpath)
+    remote: RemoteTarget | None = None  # None → node-local store; else an S3 destination
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         if self.path.is_absolute() or ".." in self.path.parts:
             raise ValueError("path must be relative and stay under the root")
-        if self.stage and self.bucket is None:
-            raise ValueError("stage requires a bucket (nothing to stage a local target to)")
         return self
 
-    def __truediv__(self, segment: str) -> Self:
-        """Child storage one segment deeper, same bucket/stage."""
-        return self.model_copy(update={"path": self.path / segment})
-
-    def resolve(self) -> Path | S3Path:
-        """Concrete write root on this machine: an S3 path for a bucket, else the local store."""
-        if self.bucket:
-            return S3Path(f"s3://{self.bucket}") / self.path.as_posix()
-        return System().store / self.path
+    def resolve(self, subpath: PurePosixPath | None = None) -> Storage:
+        """Resolve to a concrete omezarr :class:`Storage` at ``<base>/<subpath>`` on this machine:
+        :class:`Local` for a node-local write, else :class:`DirectS3`/:class:`StagedS3` with the
+        connection looked up from :attr:`System.remotes`. No ``.ome.zarr`` — the writer names the
+        dataset; navigate below the returned location with ``target / ...``."""
+        if subpath is None:
+            subpath = PurePosixPath()
+        relpath = self.path / subpath
+        if self.remote is None:
+            return Local(target=System().store / relpath)
+        remotes = System().remotes
+        if self.remote.store not in remotes:
+            raise KeyError(f"unknown remote store '{self.remote.store}'; configured: {sorted(remotes)}")
+        store = remotes[self.remote.store]  # Remote is-a S3Store
+        target = S3Path(f"s3://{self.remote.root}") / relpath.as_posix()
+        if self.remote.stage:
+            return StagedS3(scratch=System().scratch / relpath, target=target, store=store)
+        return DirectS3(target=target, store=store)
 
 
 class StorageStatus(SchemaModel):
     """A node's write-access result for a `Storage` root (preflight). ``free_bytes`` is -1 when
-    capacity is unknown (e.g. an S3 bucket)."""
+    capacity is unknown (e.g. an S3 root)."""
 
     host: str
     root: str
@@ -339,7 +365,7 @@ class CameraController(DeviceController["Camera"]):
         await self._run_sync(self.device.free_buffer)
 
     @describe(label="Check Writable")
-    async def check_writable(self, storage: Storage) -> StorageStatus:
+    async def check_writable(self, storage: StorageSpec) -> StorageStatus:
         """Resolve ``storage`` on this node and prove write access with a round-trip marker write.
 
         The acquisition preflight (before any task): raises with a clear reason if the destination
@@ -347,7 +373,8 @@ class CameraController(DeviceController["Camera"]):
         """
 
         def _check() -> StorageStatus:
-            root = storage.resolve()
+            dest = storage.resolve()
+            root = dest.target  # client-bound path for S3, plain path for local
             root.mkdir(parents=True, exist_ok=True)
             marker = root / f".voxel_write_check-{self.device.uid}"
             marker.write_text(self.device.uid)  # raises on missing creds / no permission / unreachable
@@ -364,18 +391,19 @@ class CameraController(DeviceController["Camera"]):
         num_frames: int,
         z_step: float,
         magnification: float,
-        storage: Storage,
+        storage: StorageSpec,
+        subpath: PurePosixPath,
         settings: WriterSettings,
     ) -> DatasetRef:
         """Prepare the camera + writer for a stack and return a pointer to its dataset.
 
-        ``storage`` is the per-channel logical destination — the node resolves it
-        (``bucket=None`` → ``System.store``; a bucket → ``s3://bucket``; ``stage`` → local
-        scratch then upload). ``num_frames``/``z_step`` are the volume's geometry;
-        ``magnification`` converts the sensor-space ``effective_pixel_size_um`` into the
-        sample-space lateral voxel size. ``settings`` are the broadcast output-format knobs.
-        Returns a :class:`DatasetRef` (control persists it as ``<channel>.ref.json``). The
-        trigger is configured per-batch in ``begin_batch``.
+        ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
+        under it (e.g. ``task/profile/channel``); the node resolves ``storage.resolve(subpath)`` and
+        the writer names it ``<subpath>.ome.zarr``. ``num_frames``/``z_step`` are the volume's
+        geometry; ``magnification`` converts the sensor-space ``effective_pixel_size_um`` into the
+        sample-space lateral voxel size. ``settings`` are the broadcast output-format knobs. Returns a
+        :class:`DatasetRef` (control persists it as ``<channel>.ref.json``). The trigger is configured
+        per-batch in ``begin_batch``.
         """
         if self._writer is not None:
             raise RuntimeError("Stack already open. Call close_stack() first.")
@@ -390,11 +418,11 @@ class CameraController(DeviceController["Camera"]):
         # Allocate buffers eagerly (after ROI is set), so every batch's start() is fast.
         await self._run_sync(self.device.allocate_buffer)
 
-        # Resolve the logical Storage to concrete roots, then build the writer config: the broadcast
-        # `settings` (knobs) + this camera's geometry (frame size, voxel size from z_step + magnification)
-        # + dtype from the device's pixel format.
-        target = storage.resolve()
-        scratch = (System().scratch / storage.path) if storage.stage else None
+        # Resolve the logical StorageSpec to a concrete omezarr Storage, then build the writer config:
+        # the broadcast `settings` (knobs) + this camera's geometry (frame size, voxel size from
+        # z_step + magnification) + dtype from the device's pixel format. Where/how to write lives on
+        # the Storage; the config is purely the dataset spec.
+        dest = storage.resolve(subpath)
         frame = self.device.frame_size_px
         eff_px = self.device.effective_pixel_size_um(magnification)
         cfg = WriterConfig(
@@ -402,8 +430,6 @@ class CameraController(DeviceController["Camera"]):
             volume_shape=UIVec3D(z=num_frames, y=frame.y, x=frame.x),
             voxel_size=UVec3D(z=z_step, y=eff_px.y, x=eff_px.x),
             dtype=self.device.pixel_type,
-            target=target,
-            scratch=scratch,
         )
 
         # Size the ring from this camera's RAM share. `cfg.batch_z` is policy-derived (matches the
@@ -421,12 +447,12 @@ class CameraController(DeviceController["Camera"]):
             )
         slots = min(max_slots, MAX_WRITER_SLOTS)
         ring_buf = PyramidRingBuffer.by_cpu_count(System.cpu_count())
-        self._writer = OMEZarrWriter(cfg, slots=slots, ring_buffer=ring_buf)
+        self._writer = OMEZarrWriter(cfg, dest, slots=slots, ring_buffer=ring_buf)
 
         log.info(
             "Stack init for %s → %s: batch_z=%d slots=%d (%.2f GB/slot, %.2f GB share)",
             self.device.uid,
-            target,
+            self._writer.target,
             cfg.batch_z,
             slots,
             per_slot_bytes / 1e9,
@@ -434,8 +460,8 @@ class CameraController(DeviceController["Camera"]):
         )
         return DatasetRef(
             host=System.hostname(),
-            target=str(target),
-            staged=storage.stage,
+            target=str(self._writer.target),
+            staged=isinstance(dest, StagedS3),
             dtype=cfg.dtype,
             shape=cfg.volume_shape,
             voxel_size=cfg.voxel_size,

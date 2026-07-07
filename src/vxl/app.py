@@ -1,52 +1,20 @@
-"""Voxel application: settings (:class:`AppConfig`) and instrument orchestration.
+"""Voxel application: instrument discovery and orchestration.
 
-``AppConfig`` is the user-settable configuration loaded from ``~/.voxel/app.yaml``:
-where instruments live and which remote buckets runs may target.
-The orchestrator (``VoxelApp``) is added on top of it.
+``VoxelApp`` discovers the instruments and templates under ``~/.voxel/`` and launches one at a
+time. Selectable storage targets come from the machine's object-store registry (:attr:`System.remotes`).
 """
 
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentState
-from vxl.system import System, load_yaml, save_yaml
+from vxl.system import Remote, System, load_yaml, save_yaml
 from vxlib import Cell, Readable
 
 logger = logging.getLogger(__name__)
-
-
-class AppConfig(BaseModel):
-    """Voxel application settings — selectable storage buckets and the on-disk layout.
-
-    Loaded from ``~/.voxel/app.yaml``. The on-disk layout it owns:
-
-    ::
-
-        ~/.voxel/
-          ├── app.yaml          <-- these settings
-          └── instruments/
-              └── <name>.voxel/ <-- one instrument each (config.yaml + bench.json)
-    """
-
-    CONFIG_PATH: ClassVar[Path] = System().dir / "app.yaml"
-    INSTRUMENTS_DIR: ClassVar[Path] = System().dir / "instruments"
-
-    buckets: dict[str, str] = Field(
-        default_factory=dict,
-        description="Selectable S3 acquisition targets, keyed by display label → bucket name "
-        "(the value becomes Storage.bucket). Local runs use System.store (Storage.bucket=None).",
-    )
-
-    @classmethod
-    def load(cls) -> Self:
-        """Load from app.yaml if present, else defaults. Ensures the on-disk layout exists."""
-        System().dir.mkdir(parents=True, exist_ok=True)
-        cls.INSTRUMENTS_DIR.mkdir(exist_ok=True)
-        return load_yaml(cls.CONFIG_PATH, cls) if cls.CONFIG_PATH.exists() else cls()
 
 
 TEMPLATES_DIR = Path(__file__).parent / "_templates"
@@ -150,12 +118,14 @@ class VoxelApp:
 
     def __init__(self) -> None:
         self._active: Cell[Instrument | None] = Cell(None)
-        self._config = AppConfig.load()
+        System().dir.mkdir(parents=True, exist_ok=True)  # ensure ~/.voxel/ and instruments/ exist
+        self.instruments_dir.mkdir(exist_ok=True)
 
     @property
-    def buckets(self) -> dict[str, str]:
-        """Selectable S3 acquisition targets (display label → bucket name). Local runs use no bucket."""
-        return self._config.buckets
+    def remotes(self) -> dict[str, Remote]:
+        """The machine's configured object stores (name → connection + selectable roots), from
+        :attr:`System.remotes` — the selectable acquisition targets. Local runs use no remote."""
+        return System().remotes
 
     @property
     def active(self) -> Readable[Instrument | None]:

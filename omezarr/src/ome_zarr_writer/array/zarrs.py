@@ -19,6 +19,8 @@ import zarrs  # noqa: F401 — registers the zarrs codec pipeline
 from cloudpathlib import S3Path
 from zarr.storage import LocalStore
 
+from ome_zarr_writer.storage import S3Store
+
 from .base import ArrayWriter
 
 zarr.config.set(
@@ -46,11 +48,12 @@ class ZarrsArrayWriter(ArrayWriter):
     def __init__(self) -> None:
         self._handle: Any = None
 
-    def open(self, target: Path | S3Path) -> None:
+    def open(self, target: Path | S3Path, store: S3Store | None = None) -> None:
+        del store  # filesystem-only backend; no S3 connection to apply
         if isinstance(target, S3Path):
             raise ValueError("ZarrsArrayWriter is filesystem-only; use the TensorStore backend for S3 targets")
-        store = LocalStore(target.expanduser().resolve().as_posix())
-        self._handle = zarr.open_array(store=store, mode="r+")
+        local_store = LocalStore(target.expanduser().resolve().as_posix())
+        self._handle = zarr.open_array(store=local_store, mode="r+")
 
     def write_slice(self, c: int, z_offset: int, arr: np.ndarray) -> int:
         if self._handle is None:

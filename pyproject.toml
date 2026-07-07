@@ -29,6 +29,7 @@ dependencies = [
     "rich>=14.2.0",
     "ruyaml>=0.91.0",
     "cloudpathlib[s3]>=0.24.0",
+    "python-dotenv>=1.2.2",
 ]
 
 [project.urls]
@@ -36,8 +37,8 @@ Repository = "https://github.com/AllenNeuralDynamics/voxel"
 Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
 [project.scripts]
-vxl-node = "rigup.node._runner:standalone_main"
-voxel-node = "rigup.node._runner:standalone_main"
+vxl-node = "vxl.node:main"
+voxel-node = "vxl.node:main"
 
 [project.entry-points."vxl.metadata"]
 exaspim = "vxl.metadata.ExaspimMetadata"

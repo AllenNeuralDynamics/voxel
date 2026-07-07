@@ -1,10 +1,9 @@
 """The `ArrayWriter` abstraction used by the Writer.
 
 `ArrayWriter` writes one Zarr v3 array to a path — a local `pathlib.Path` or a
-cloudpathlib `S3Path`. Targets are addressed purely by path: joining segments,
-splitting bucket/key, and URI rendering live on the path types themselves, and
-S3 credentials / region / endpoint come from the environment (the AWS chain),
-so no auth is threaded through here.
+cloudpathlib `S3Path`. Targets are addressed by path (joining segments, bucket/key
+split, and URI rendering live on the path types); for an S3 target, an `S3Store`
+supplies the endpoint, region, and credential selection, threaded to `open`.
 
 `ArrayWriter.Backend` is a `StrEnum` that doubles as a factory: calling a
 member (e.g. `ArrayWriter.Backend.TS()`) constructs the matching backend.
@@ -16,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 from cloudpathlib import S3Path
+
+from ome_zarr_writer.storage import S3Store
 
 
 class ArrayWriter(ABC):
@@ -43,9 +44,9 @@ class ArrayWriter(ABC):
             raise ValueError(f"Unsupported ArrayWriter.Backend: {self}")
 
     @abstractmethod
-    def open(self, target: Path | S3Path) -> None:
-        """Open the array at `target`. Metadata must already
-        exist there (the caller writes it before calling `open`)."""
+    def open(self, target: Path | S3Path, store: S3Store | None = None) -> None:
+        """Open the array at `target`, using `store` for an S3 target's endpoint/region/
+        credentials. Metadata must already exist there (the caller writes it before `open`)."""
 
     @abstractmethod
     def write_slice(self, c: int, z_offset: int, arr: np.ndarray) -> int:

@@ -55,11 +55,13 @@ class RemoteNode(TransportNode):
 
         address = _parse_address(self._config.address)
         await self._transport.connect(address)
+        self._start_log_relay()
 
         response = await call(
             self._transport, Action.CLAIM, ClaimRequest(orchestrator_id=self._orchestrator_id), ClaimResponse
         )
         if not response.accepted:
+            self._stop_log_relay()
             await self._transport.close()
             raise RuntimeError(
                 f"Authority claim rejected for node {self.node_id} (current owner: {response.current_owner})"
@@ -76,4 +78,5 @@ class RemoteNode(TransportNode):
                 ReleaseResponse,
             )
 
+        self._stop_log_relay()
         await self._transport.close()

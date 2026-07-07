@@ -32,6 +32,7 @@ import type {
   JsonSchema,
   LogMessage,
   ProfilePatch,
+  Remote,
   SensorROI,
   StencilPatch,
   TaskPatch,
@@ -527,9 +528,9 @@ export class VoxelApp {
     await this.#client.connect();
   }
 
-  /** Selectable S3 acquisition targets (display label → bucket name); empty when only local storage. */
-  fetchBuckets(): Promise<Record<string, string>> {
-    return this.#client.get<Record<string, string>>('/catalog/buckets');
+  /** Configured object stores (name → connection + selectable roots); empty when only local storage. */
+  fetchRemotes(): Promise<Record<string, Remote>> {
+    return this.#client.get<Record<string, Remote>>('/catalog/remotes');
   }
 
   /** Load the available instruments and templates. */

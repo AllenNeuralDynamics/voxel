@@ -4,8 +4,9 @@ from .base import (
     CameraMode,
     CaptureState,
     DatasetRef,
+    RemoteTarget,
     SensorROI,
-    Storage,
+    StorageSpec,
     StorageStatus,
 )
 from .handle import CameraHandle
@@ -23,7 +24,8 @@ __all__ = [
     "PreviewTileInfo",
     "PreviewTiles",
     "PreviewViewport",
+    "RemoteTarget",
     "SensorROI",
-    "Storage",
+    "StorageSpec",
     "StorageStatus",
 ]
