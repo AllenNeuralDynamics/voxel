@@ -1282,7 +1282,13 @@ class Instrument:
             await self._mode.set(AcquisitionMode.IDLE)
 
     async def _capture_volume(
-        self, stack: ZStack, storage: StorageSpec, subpath: PurePosixPath, *, task: str, profile: str
+        self,
+        stack: ZStack,
+        storage: StorageSpec,
+        subpath: PurePosixPath,
+        *,
+        task: str,
+        profile: str,
     ) -> None:
         """Acquire one volume for the already-active profile, emitting :attr:`progress` per batch.
 

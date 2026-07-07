@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 from cloudpathlib import S3Path
+from vxlib import ProfileCredentials
 
 from ome_zarr_writer import (
     DirectS3,
@@ -48,7 +49,7 @@ def example_direct() -> None:
 
 def example_profile() -> None:
     """Select a named ~/.aws profile and region for the connection."""
-    store = S3Store(region="us-east-1", profile="my-profile")
+    store = S3Store(region="us-east-1", credentials=ProfileCredentials(name="my-profile"))
     write_volume(DirectS3(target=S3Path("s3://my-bucket/experiment_002.ome.zarr"), store=store))
 
 

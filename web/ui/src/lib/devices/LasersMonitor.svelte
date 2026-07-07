@@ -46,6 +46,21 @@
       if (laser.isEnabled?.value === true) toastError(laser.disable());
     }
   }
+
+  // Event-driven history is a sample-and-hold signal: a value stays put until the next event. Draw it as a
+  // staircase — hold flat at (t_next, v_prev), then jump vertically to v_next — so a return to a prior level
+  // reads as a square edge rather than a diagonal ramp across the idle gap.
+  function stepPoints(
+    samples: { t: number; v: number }[],
+    toX: (t: number) => string,
+    toY: (v: number) => string
+  ): string {
+    let pts = `${toX(samples[0].t)},${toY(samples[0].v)}`;
+    for (let i = 1; i < samples.length; i++) {
+      pts += ` ${toX(samples[i].t)},${toY(samples[i - 1].v)} ${toX(samples[i].t)},${toY(samples[i].v)}`;
+    }
+    return pts;
+  }
 </script>
 
 <div class={cn('flex w-full min-w-68 flex-col bg-surface/50 py-2', className)}>
@@ -128,10 +143,10 @@
     </div>
 
     <div
-      class="flex h-12 overflow-hidden border border-border bg-canvas"
+      class="flex h-12 gap-1 overflow-hidden rounded border-0 border-border bg-canvas"
       {@attach laser.powerSetpoint?.wheel ?? (() => {})}
     >
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 flex-1 rounded border border-border">
         {@render graph(laser)}
       </div>
       {#if typeof setpoint === 'number'}
@@ -146,7 +161,7 @@
   {@const py = 100 - ((laser.power?.value ?? 0) / maxP) * 100}
   {@const sy = 100 - (setpoint / maxP) * 100}
   {@const color = laser.color ?? 'var(--color-fg-muted)'}
-  <div class="relative h-full w-6 shrink-0 bg-card">
+  <div class="relative h-full w-7 shrink-0 rounded-sm border border-border bg-card">
     <svg viewBox="0 0 10 100" preserveAspectRatio="none" class="pointer-events-none absolute inset-0 h-full w-full">
       <rect x="0" y={py} width="10" height={100 - py} fill={color} opacity="0.3" />
       <line x1="0" y1={py} x2="10" y2={py} stroke={color} stroke-width="1" vector-effect="non-scaling-stroke" />
@@ -184,7 +199,7 @@
   {@const setpoint = laser.setpointHistory}
   <svg viewBox="0 0 {W} 100" preserveAspectRatio="none" class="h-full w-full">
     {#if power.length > 0}
-      {@const line = power.map((s) => `${toX(s.t)},${toY(s.v)}`).join(' ')}
+      {@const line = stepPoints(power, toX, toY)}
       {@const edgeY = toY(power[power.length - 1].v)}
       <polygon
         points="{toX(power[0].t)},100 {line} {W},{edgeY} {W},100"
@@ -201,7 +216,7 @@
       />
     {/if}
     {#if setpoint.length > 0}
-      {@const line = setpoint.map((s) => `${toX(s.t)},${toY(s.v)}`).join(' ')}
+      {@const line = stepPoints(setpoint, toX, toY)}
       {@const edgeY = toY(setpoint[setpoint.length - 1].v)}
       <polyline
         points="{line} {W},{edgeY}"
