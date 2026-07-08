@@ -13,6 +13,7 @@
   import { page } from '$app/state';
   import type { Pathname } from '$app/types';
   import favicon from '$lib/assets/favicon.svg';
+  import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import { GridCanvas } from '$lib/grid';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
@@ -65,7 +66,7 @@
 
   let shellRef = $state<HTMLElement | null>(null);
   const leftPane = createPaneSize(() => shellRef, { min: 740, fallbackMin: 30 });
-  const rightPane = createPaneSize(() => shellRef, { min: 340, max: 350, fallbackMin: 15, fallbackMax: 18 });
+  const rightPane = createPaneSize(() => shellRef, { min: 336, max: 350, fallbackMin: 15, fallbackMax: 18 });
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
     { id: '/', label: 'Inspect', icon: Microscope },
@@ -270,49 +271,44 @@
         </main>
       </Pane>
       <PaneDivider direction="vertical" />
-      <Pane defaultSize={16} {...rightPane}>
-        <div class="flex h-full flex-col">
-          <div class="flex h-15 shrink-0 items-center border-b border-border px-3">
-            <ProfileSelector {instrument} size="md" class="w-full" />
-          </div>
-
-          <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            {#if instrument.lasers.size > 0}
-              <LasersMonitor {instrument} />
-            {/if}
-
-            {#snippet section(id: string, title: string, body: import('svelte').Snippet)}
-              <Accordion.Item value={id} class="border-t border-border">
-                <Accordion.Header>
-                  <Accordion.Trigger
-                    class="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-fg-muted/70 uppercase transition-colors outline-none hover:text-fg-muted [&[data-state=closed]>svg]:-rotate-90"
-                  >
-                    <span class="text-xs font-medium tracking-wide">{title}</span>
-                    <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
-                  </Accordion.Trigger>
-                </Accordion.Header>
-                <Accordion.Content
-                  class="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
-                >
-                  <div class="px-3 pb-3">{@render body()}</div>
-                </Accordion.Content>
-              </Accordion.Item>
-            {/snippet}
-
-            {#snippet gridBody()}<StencilControls {instrument} />{/snippet}
-            {#snippet metadataBody()}<MetadataPanel {instrument} />{/snippet}
-            <!-- {#snippet outputBody()}<OutputControls {instrument} />{/snippet} -->
-
-            <div class="flex-1"></div>
-            <Accordion.Root type="multiple" bind:value={openSections}>
-              {@render section('grid', 'Grid Stencil', gridBody)}
-              {@render section('metadata', 'Metadata', metadataBody)}
-              <!-- {@render section('output', 'Output', outputBody)} -->
-            </Accordion.Root>
-          </div>
-
-          <StartAcquisition {app} class="shrink-0 border-t border-border" />
+      <Pane defaultSize={16} {...rightPane} class="flex flex-col">
+        <div class="flex h-15 shrink-0 items-center border-b border-border px-3">
+          <ProfileSelector {instrument} size="md" class="w-full" />
         </div>
+        <div class="flex flex-1 flex-col divide-y divide-border overflow-y-auto">
+          {#if instrument.cameras.size > 0}
+            <CamerasMonitor {instrument} />
+          {/if}
+          {#if instrument.lasers.size > 0}
+            <LasersMonitor {instrument} />
+          {/if}
+          <div class="flex-1"></div>
+          {#snippet section(id: string, title: string, body: import('svelte').Snippet)}
+            <Accordion.Item value={id}>
+              <Accordion.Header>
+                <Accordion.Trigger
+                  class="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-fg-muted/70 uppercase transition-colors outline-none hover:text-fg-muted [&[data-state=closed]>svg]:-rotate-90"
+                >
+                  <span class="text-xs font-medium tracking-wide">{title}</span>
+                  <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
+                </Accordion.Trigger>
+              </Accordion.Header>
+              <Accordion.Content
+                class="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+              >
+                <div class="px-3 pb-3">{@render body()}</div>
+              </Accordion.Content>
+            </Accordion.Item>
+          {/snippet}
+
+          {#snippet gridBody()}<StencilControls {instrument} />{/snippet}
+          {#snippet metadataBody()}<MetadataPanel {instrument} />{/snippet}
+          <Accordion.Root type="multiple" bind:value={openSections}>
+            {@render section('grid', 'Grid Stencil', gridBody)}
+            {@render section('metadata', 'Metadata', metadataBody)}
+          </Accordion.Root>
+        </div>
+        <StartAcquisition {app} class="shrink-0 border-t border-border" />
       </Pane>
     </PaneGroup>
   </div>
