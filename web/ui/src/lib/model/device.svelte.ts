@@ -145,12 +145,26 @@ export class DiscreteAxisHandle extends DeviceHandle {
 
 type Sample = { t: number; v: number };
 
+/** Rolling telemetry window + point cap, shared by laser power and camera stream sparklines. */
+const HISTORY_WINDOW_MS = 60_000;
+const HISTORY_MAX = 600;
+
 /** Whether a wire result carries a value (vs. an error envelope). */
 const isFresh = (r: PropResult | undefined): boolean => r != null && r.ok;
 
+/** Append a sample, dropping points older than the window (keeping one just outside so the trace spans the left edge), capped at `max` points. */
+function pushSample(series: Sample[], t: number, v: number, windowMs = HISTORY_WINDOW_MS, max = HISTORY_MAX): Sample[] {
+  const cutoff = t - windowMs;
+  const next = [...series, { t, v }];
+  let start = 0;
+  while (start < next.length - 1 && next[start + 1].t < cutoff) start++;
+  const windowed = start > 0 ? next.slice(start) : next;
+  return windowed.length > max ? windowed.slice(-max) : windowed;
+}
+
 export class LaserHandle extends DeviceHandle {
-  static readonly HISTORY_WINDOW_MS = 60_000;
-  static readonly HISTORY_MAX = 600;
+  static readonly HISTORY_WINDOW_MS = HISTORY_WINDOW_MS;
+  static readonly HISTORY_MAX = HISTORY_MAX;
 
   powerHistory = $state<Sample[]>([]);
   setpointHistory = $state<Sample[]>([]);
@@ -187,21 +201,11 @@ export class LaserHandle extends DeviceHandle {
     const t = performance.now();
     const r = results.results;
     if (isFresh(r.power) && typeof this.power?.value === 'number') {
-      this.powerHistory = this.#appended(this.powerHistory, t, this.power.value);
+      this.powerHistory = pushSample(this.powerHistory, t, this.power.value);
     }
     if (isFresh(r.power_setpoint) && typeof this.powerSetpoint?.value === 'number') {
-      this.setpointHistory = this.#appended(this.setpointHistory, t, this.powerSetpoint.value);
+      this.setpointHistory = pushSample(this.setpointHistory, t, this.powerSetpoint.value);
     }
-  }
-
-  /** Append a sample, dropping points older than the window (keeping one just outside so the trace spans the left edge). */
-  #appended(series: Sample[], t: number, v: number): Sample[] {
-    const cutoff = t - LaserHandle.HISTORY_WINDOW_MS;
-    const next = [...series, { t, v }];
-    let start = 0;
-    while (start < next.length - 1 && next[start + 1].t < cutoff) start++;
-    const windowed = start > 0 ? next.slice(start) : next;
-    return windowed.length > LaserHandle.HISTORY_MAX ? windowed.slice(-LaserHandle.HISTORY_MAX) : windowed;
   }
 }
 
@@ -386,6 +390,14 @@ export class CameraHandle extends DeviceHandle {
   streamInfo = $derived.by<StreamInfoData | undefined>(() => {
     const v = this.getProp('stream_info')?.value;
     return v && typeof v === 'object' ? (v as StreamInfoData) : undefined;
+  });
+
+  /** Fraction of the capture buffer that is filled (0–1), or null when the driver doesn't report usable buffer sizes. */
+  bufferFill = $derived.by<number | null>(() => {
+    const info = this.streamInfo;
+    if (!info || info.input_buffer_size < 0 || info.output_buffer_size < 0) return null;
+    const total = info.input_buffer_size + info.output_buffer_size;
+    return total > 0 ? info.output_buffer_size / total : null;
   });
 
   mode = $derived.by<CameraMode | undefined>(() => {
