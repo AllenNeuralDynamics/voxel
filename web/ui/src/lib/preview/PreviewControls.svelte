@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { Restore } from '$lib/icons';
+  import { ChevronDown } from '$lib/icons';
   import { SpinBox } from '$lib/kit';
-  import { isDefaultViewport, type Preview } from '$lib/model';
+  import { type Preview } from '$lib/model';
   import { clampTopLeft } from '$lib/utils';
+
+  import Histogram from './Histogram.svelte';
 
   interface Props {
     previewer: Preview;
@@ -10,12 +12,14 @@
 
   let { previewer }: Props = $props();
 
-  let isDefault = $derived(isDefaultViewport(previewer.viewport));
-
   // Local state for inputs (synced from previewer)
   let panX = $state(0);
   let panY = $state(0);
   let magnification = $state(1);
+  let showHistograms = $state(false);
+
+  const namedChannels = $derived(previewer.channels.filter((c) => c.name));
+  const hasHistograms = $derived(showHistograms && namedChannels.length > 0);
 
   // Sync local state with previewer
   $effect.pre(() => {
@@ -47,16 +51,35 @@
   }
 </script>
 
-<div class="flex items-center gap-1 font-mono text-xs">
-  <button
-    onclick={() => previewer.resetViewport()}
-    disabled={isDefault}
-    class="flex cursor-pointer items-center rounded p-1 text-fg transition-colors hover:bg-element-hover disabled:opacity-60"
-    aria-label="Reset pan and zoom"
-  >
-    <Restore width="14" height="14" />
-  </button>
-  <div class="flex items-center gap-4">
+<div
+  class="pointer-events-auto flex w-fit flex-col overflow-hidden rounded-xs border border-border/50 bg-canvas/90 pb-1.5 shadow-lg backdrop-blur-sm"
+>
+  {#if hasHistograms}
+    <div class="flex w-0 min-w-full flex-col divide-y divide-border px-2.5">
+      {#each namedChannels as channel (channel.idx)}
+        <div class="py-2">
+          <Histogram
+            label={channel.label ?? channel.config?.label ?? channel.name ?? ''}
+            histData={channel.latestHistogram}
+            levelsMin={channel.levelsMin}
+            levelsMax={channel.levelsMax}
+            onLevelsChange={(min, max) => {
+              if (channel.name) previewer.setChannelLevels(channel.name, min, max);
+            }}
+            colormap={channel.colormap}
+            catalog={previewer.catalog}
+            onColormapChange={(cmap) => {
+              if (channel.name) previewer.setChannelColormap(channel.name, cmap);
+            }}
+            visible={channel.visible}
+            onVisibilityChange={(v) => (channel.visible = v)}
+          />
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="flex items-center gap-2 px-2.5 pt-1.5 font-mono text-xs {hasHistograms ? 'border-t border-border' : ''}">
     <SpinBox
       bind:value={magnification}
       min={1}
@@ -81,7 +104,7 @@
       numCharacters={5}
       size="xs"
       variant="filled"
-      prefix="Pan X"
+      prefix="X"
       onChange={handlePanXChange}
     />
     <SpinBox
@@ -94,8 +117,16 @@
       numCharacters={5}
       size="xs"
       variant="filled"
-      prefix="Pan Y"
+      prefix="Y"
       onChange={handlePanYChange}
     />
+    <button
+      onclick={() => (showHistograms = !showHistograms)}
+      class="flex cursor-pointer items-center justify-center rounded-full p-1 text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+      aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
+      title={showHistograms ? 'Hide histograms' : 'Show histograms'}
+    >
+      <ChevronDown width="14" height="14" class="transition-transform {showHistograms ? '' : 'rotate-180'}" />
+    </button>
   </div>
 </div>
