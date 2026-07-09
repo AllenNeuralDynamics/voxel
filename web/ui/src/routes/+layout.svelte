@@ -2,7 +2,7 @@
   import './layout.css';
 
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
-  import { Accordion, DropdownMenu } from 'bits-ui';
+  import { DropdownMenu } from 'bits-ui';
   import { Pane, PaneGroup } from 'paneforge';
   import { PersistedState, useEventListener } from 'runed';
   import type { Component } from 'svelte';
@@ -17,16 +17,15 @@
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import { GridCanvas } from '$lib/grid';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
-  import { ChevronDown, Crosshair, Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
+  import StageCube from '$lib/grid/StageCube.svelte';
+  import { Crosshair, Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
-  import MetadataPanel from '$lib/MetadataPanel.svelte';
   import { setVoxelApp, VoxelApp } from '$lib/model';
   import { PreviewCanvas } from '$lib/preview';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
-  import StencilControls from '$lib/StencilControls.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
   import { cn, createPaneSize, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
@@ -116,9 +115,6 @@
   // --- Dialog state ---
 
   let closeDialogOpen = $state(false);
-
-  // Sidebar accordion: multiple sections may be open; Grid Stencil open by default.
-  let openSections = $state<string[]>(['grid']);
 </script>
 
 <svelte:head>
@@ -264,31 +260,8 @@
             <LasersMonitor {instrument} />
           {/if}
           <div class="flex-1"></div>
-          {#snippet section(id: string, title: string, body: import('svelte').Snippet)}
-            <Accordion.Item value={id}>
-              <Accordion.Header>
-                <Accordion.Trigger
-                  class="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-fg-muted/70 uppercase transition-colors outline-none hover:text-fg-muted [&[data-state=closed]>svg]:-rotate-90"
-                >
-                  <span class="text-xs font-medium tracking-wide">{title}</span>
-                  <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
-                </Accordion.Trigger>
-              </Accordion.Header>
-              <Accordion.Content
-                class="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
-              >
-                <div class="px-3 pb-3">{@render body()}</div>
-              </Accordion.Content>
-            </Accordion.Item>
-          {/snippet}
-
-          {#snippet gridBody()}<StencilControls {instrument} />{/snippet}
-          {#snippet metadataBody()}<MetadataPanel {instrument} />{/snippet}
-          <Accordion.Root type="multiple" bind:value={openSections}>
-            {@render section('grid', 'Grid Stencil', gridBody)}
-            {@render section('metadata', 'Metadata', metadataBody)}
-          </Accordion.Root>
         </div>
+        <StageCube {instrument} class="shrink-0 border-t border-border p-3" />
       </Pane>
     </PaneGroup>
   </div>

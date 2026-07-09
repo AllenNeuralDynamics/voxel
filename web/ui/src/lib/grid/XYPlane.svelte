@@ -196,7 +196,10 @@
   });
 
   watch(
-    () => instrument.preview.channels.map((ch) => ch.latestFrameInfo?.frame_idx ?? -1).join(','),
+    // Track frame index AND frame presence: on a profile switch the frames are cleared (frame → null)
+    // while frame_idx is left as-is, so keying on the index alone would leave a stale thumbnail.
+    () =>
+      instrument.preview.channels.map((ch) => `${ch.latestFrameInfo?.frame_idx ?? -1}:${ch.frame ? 1 : 0}`).join(','),
     () => {
       needsRedraw = true;
     }

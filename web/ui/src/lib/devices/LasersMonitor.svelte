@@ -112,7 +112,7 @@
     </div>
 
     <!-- row 2: power graph + setpoint slider — full-bleed to the card edges, hairline dividers only -->
-    <div class="flex h-12 border-t border-border" {@attach laser.powerSetpoint?.wheel ?? (() => {})}>
+    <div class="flex h-10 border-t border-border" {@attach laser.powerSetpoint?.wheel ?? (() => {})}>
       <div class="min-w-0 flex-1">
         {@render graph(laser)}
       </div>
