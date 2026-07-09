@@ -1291,6 +1291,15 @@ class Instrument:
             logger.exception("Acquisition aborted")
         finally:
             self._acq_task = None
+            # Free each camera's writer ring (workers + ~hundreds of GB shared memory) now the run is
+            # over — it's kept resident across volumes for reuse, but not indefinitely afterward. The
+            # next acquisition re-allocates it cold. Runs on completion, failure, or cancellation.
+            released = await asyncio.gather(
+                *(cam.release_writer() for cam in self._hal.cameras.values()), return_exceptions=True
+            )
+            for cam_id, result in zip(self._hal.cameras, released, strict=True):
+                if isinstance(result, BaseException):
+                    logger.warning("release_writer failed for %s: %r", cam_id, result)
             await self._mode.set(AcquisitionMode.IDLE)
 
     async def _capture_volume(

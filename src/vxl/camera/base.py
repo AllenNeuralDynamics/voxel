@@ -224,6 +224,9 @@ class CameraController(DeviceController["Camera"]):
         self._task_kind: Literal["batch", "close"] | None = None
         self._preview_publishing = False
         self._publish_task: asyncio.Task | None = None
+        # Preview-publish counters (best-effort publish is skip-if-busy); reported per stack.
+        self._pub_sent = 0
+        self._pub_busy_drops = 0
         System.Ram.reserve(self.device.uid, weight=1.0)
 
     async def close(self) -> None:
@@ -257,7 +260,9 @@ class CameraController(DeviceController["Camera"]):
         if self._mode is CameraMode.IDLE and not self._preview_publishing:
             return
         if self._publish_task is not None and not self._publish_task.done():
+            self._pub_busy_drops += 1  # Gate 2 drop: prior publish still in flight
             return
+        self._pub_sent += 1
         self._publish_task = asyncio.create_task(self._publish_overview(frame))
 
     async def _publish_overview(self, frame: PreviewFrame) -> None:
@@ -505,6 +510,39 @@ class CameraController(DeviceController["Camera"]):
             await self._run_sync(self.device.free_buffer)
             self._mode = CameraMode.IDLE
         log.info("Stack closed for %s", self.device.uid)
+        # Preview health for the stack: how many frames got an overview vs were dropped (best-effort),
+        # overview gen-time, and publish drops. overview_busy_drops climbing means gen can't hold 6fps.
+        pv = self._previewer.drain_skip_stats()
+        log.info(
+            "Preview health %s: frames=%d overview_gen=%d overview_busy_drops=%d "
+            "gen_ms(avg=%.1f max=%.1f) | publish_sent=%d publish_busy_drops=%d",
+            self.device.uid,
+            pv["frames"],
+            pv["overviews_generated"],
+            pv["overview_busy_drops"],
+            pv["gen_ms_avg"],
+            pv["gen_ms_max"],
+            self._pub_sent,
+            self._pub_busy_drops,
+        )
+        self._pub_sent = 0
+        self._pub_busy_drops = 0
+
+    @describe(label="Release Writer")
+    async def release_writer(self) -> None:
+        """Free the reusable writer ring (its worker processes + shared memory) while keeping the
+        controller alive for preview / the next acquisition, which re-allocates the ring cold.
+
+        The ring is otherwise held from the first ``open_stack`` until ``close``; releasing it here
+        (e.g. once an acquisition run ends) avoids holding ~hundreds of GB resident while idle. No-op
+        if a capture task is still active — freeing a ring mid-flush would corrupt in-flight writes.
+        """
+        if self._task is not None and not self._task.done():
+            raise RuntimeError("Cannot release writer while a capture task is in progress.")
+        if self._writer is not None:
+            await self._run_sync(self._writer.close)
+            self._writer = None
+            log.info("Writer ring released for %s", self.device.uid)
 
     @property
     @describe(label="Ready For Batch", stream=True)
