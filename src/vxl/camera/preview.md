@@ -11,7 +11,7 @@ renderer") and delivered to clients as **two coherent images per channel**:
 
 | Layer | Topic | Role | Cadence |
 |-------|-------|------|---------|
-| **Overview** | `preview` | Full sensor, downsampled to `DEFAULT_PREVIEW_WIDTH` (~1500 px), with a 1024-bin histogram. The always-present backdrop and the fallback when a pan/zoom exceeds overscan. | every frame |
+| **Overview** | `preview` | Full sensor, downsampled to `OVERVIEW_WIDTH` (2048 px unzoomed; `OVERVIEW_WIDTH_ZOOMED` = 1024 px while zoomed, since the viewport image then carries the detail), with a 1024-bin histogram. The always-present backdrop and the fallback when a pan/zoom exceeds overscan. | every frame |
 | **Viewport image** | `preview_view` | One coherent image of the zoomed region (expanded by overscan), rendered/cropped/resampled/level-mapped/colormapped as a **single unit** at up to `RENDER_CAP` px. | every frame while zoomed |
 
 There are no tiles: the viewport is one image, so there are no seams, no per-tile tone differences, and
@@ -170,8 +170,9 @@ class PreviewLevels(SchemaModel):        # black/white points, [0, 1]
 
 ## Performance & WAN notes
 
-- **Per frame per channel** (lossless PNG today): overview (~full-sensor, `DEFAULT_PREVIEW_WIDTH`) + one
-  viewport image (≤ `RENDER_CAP`). One encode + one transfer + one decode per layer — no per-tile multiplication.
+- **Per frame per channel** (JPEG at `PREVIEW_JPEG_QUALITY`): overview (full-sensor, `OVERVIEW_WIDTH`, or
+  `OVERVIEW_WIDTH_ZOOMED` while zoomed) + one viewport image (≤ `RENDER_CAP`). One encode + one transfer +
+  one decode per layer — no per-tile multiplication.
 - **Settle latency**: after a pan/zoom settles there is one round-trip (crop + resample + level + colormap
   + encode + network + decode) before the sharp image lands. On LAN/Qt this is sub-frame; over WAN the
   ever-present overview + transform-tracked cached view cover the gap (never blank).

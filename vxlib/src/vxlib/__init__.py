@@ -3,6 +3,7 @@
 from .coalescer import Coalescer
 from .color import (
     COLORMAP_CATALOG,
+    ChannelOrder,
     Color,
     Colormap,
     ColormapGroup,
@@ -50,6 +51,7 @@ __all__ = [
     "AsyncTeardown",
     "Cell",
     "ChainCredentials",
+    "ChannelOrder",
     "Coalescer",
     "Color",
     "Colormap",
