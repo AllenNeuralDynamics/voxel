@@ -125,7 +125,11 @@ def pyramids_3d_numba(
     sorted_levels = sorted(levels, key=lambda x: x.factor)
 
     current_factor = 1
-    current_vol = block.astype(np.float32, copy=False)
+    # Read L0 in its native dtype. The kernel accumulates in float64 and integer pixel values are exact
+    # in float32/float64, so an up-front full float32 copy of the (largest) L0 array is wasted work —
+    # it was the dominant downsample cost. numba specializes the kernel on the input dtype and writes
+    # float32 for L1; every subsequent level is already float32.
+    current_vol = block
 
     for target_level in sorted_levels:
         target_factor = target_level.factor
@@ -182,7 +186,9 @@ def pyramids_3d_numpy(
     sorted_levels = sorted(levels, key=lambda x: x.factor)
 
     current_factor = 1
-    current_vol = block.astype(np.float32, copy=False)
+    # Read L0 in its native dtype; the reductions below force float32 output, so the result is
+    # unchanged while avoiding an up-front full float32 copy of the largest array.
+    current_vol = block
 
     for target_level in sorted_levels:
         target_factor = target_level.factor
@@ -195,9 +201,9 @@ def pyramids_3d_numpy(
                 break
             reshaped = current_vol[:z2, :y2, :x2].reshape(z2 // 2, 2, y2 // 2, 2, x2 // 2, 2)
             if reduction == "mean":
-                current_vol = reshaped.mean(axis=(1, 3, 5))
+                current_vol = reshaped.mean(axis=(1, 3, 5), dtype=np.float32)
             else:
-                current_vol = reshaped.max(axis=(1, 3, 5))
+                current_vol = reshaped.max(axis=(1, 3, 5)).astype(np.float32, copy=False)
             current_factor *= 2
 
         z_out = block.shape[0] // target_factor
