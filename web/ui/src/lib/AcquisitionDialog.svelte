@@ -7,22 +7,17 @@
   import MetadataPanel from '$lib/MetadataPanel.svelte';
   import type { Remote, VoxelApp } from '$lib/model';
   import OutputControls from '$lib/OutputControls.svelte';
-  import { cn, toastError } from '$lib/utils';
 
   interface Props {
     app: VoxelApp;
-    class?: string;
+    open?: boolean;
   }
 
-  let { app, class: className }: Props = $props();
+  let { app, open = $bindable(false) }: Props = $props();
 
   const LOCAL = '__local__'; // sentinel for node-local storage (StorageSpec.remote = null)
 
   const instrument = $derived(app.instrument);
-  const isCapturing = $derived(instrument?.mode === 'capture');
-  const canStart = $derived((instrument?.taskTiles.length ?? 0) > 0);
-
-  let open = $state(false);
 
   // Per-run storage params (not persisted — supplied fresh each run).
   let store = $state(LOCAL); // LOCAL sentinel (node-local), or a configured remote store name
@@ -91,17 +86,6 @@
     }
   }
 </script>
-
-<div class={cn('p-3', className)}>
-  <Button
-    variant={isCapturing ? 'danger' : 'success'}
-    class="w-full"
-    disabled={!instrument || (!isCapturing && !canStart)}
-    onclick={() => (isCapturing ? instrument && toastError(instrument.stopAcquisition()) : (open = true))}
-  >
-    {isCapturing ? 'Stop Acquisition' : 'Start Acquisition'}
-  </Button>
-</div>
 
 <Dialog.Root bind:open>
   <Dialog.Content size="xl">
