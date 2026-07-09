@@ -25,6 +25,7 @@ from ome_zarr_writer import (
     WriterConfig,
 )
 from ome_zarr_writer.array.ts import TSArrayReader
+from ome_zarr_writer.writer import _as_ome_zarr
 
 
 def write_volume(storage: Storage) -> None:
@@ -35,11 +36,12 @@ def write_volume(storage: Storage) -> None:
         voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
         max_level=ScaleLevel.L3,
     )
-    writer = OMEZarrWriter(cfg, storage, slots=3)
+    writer = OMEZarrWriter(slots=3)
+    writer.begin_stack(cfg, storage)
     for i in range(z):
         writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))
     writer.close()
-    print(f"wrote {z} frames to {writer.target}")
+    print(f"wrote {z} frames to {_as_ome_zarr(storage.target)}")
 
 
 def example_direct() -> None:

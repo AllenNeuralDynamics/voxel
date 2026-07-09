@@ -3,7 +3,7 @@
 Compares the production kernel against two prototype variants to isolate where time goes on the
 dominant L0→L1 pass, and verifies the prototypes produce numerically equivalent output:
 
-    current  : ome_zarr_writer.buffer._pyramid.pyramids_3d_numba (parallel=True) — upcasts the whole
+    current  : ome_zarr_writer.pyramid.pyramids_3d_numba (parallel=True) — upcasts the whole
                L0 block to float32 up front, parallel prange over the output-Z dimension only.
     flat_f32 : same up-front float32 upcast, but the kernel's parallel loop is flattened over
                (T_out * H_out) — isolates the effect of (b) more parallelism.
@@ -35,7 +35,7 @@ from statistics import median
 import numpy as np
 from numba import get_num_threads, jit, prange, threading_layer
 
-from ome_zarr_writer.buffer._pyramid import pyramids_3d_numba
+from ome_zarr_writer.pyramid import pyramids_3d_numba
 from ome_zarr_writer.dataset import ScaleLevel
 
 
@@ -64,9 +64,9 @@ def _kernel_3d_mean_flat(vol: np.ndarray, out: np.ndarray) -> None:
             out[t, i, j] = s * 0.125
 
 
-_mean_flat: Callable[[np.ndarray, np.ndarray], None] = jit(
-    nopython=True, parallel=True, fastmath=True, cache=True
-)(_kernel_3d_mean_flat)
+_mean_flat: Callable[[np.ndarray, np.ndarray], None] = jit(nopython=True, parallel=True, fastmath=True, cache=True)(
+    _kernel_3d_mean_flat
+)
 
 
 def pyramids_3d_flat(block: np.ndarray, max_level: ScaleLevel, *, upcast: bool) -> dict[ScaleLevel, np.ndarray]:
@@ -132,7 +132,9 @@ def main() -> None:
 
     l0_gb = z * y * x * 2 / 1e9
     print(f"block=({z}, {y}, {x}) uint16  L0={l0_gb:.2f} GB  max_level={max_level.name}  repeats={repeats}")
-    print(f"NUMBA_NUM_THREADS={get_num_threads()}  requested_layer={os.environ.get('NUMBA_THREADING_LAYER', '(default)')}")
+    print(
+        f"NUMBA_NUM_THREADS={get_num_threads()}  requested_layer={os.environ.get('NUMBA_THREADING_LAYER', '(default)')}"
+    )
 
     if "--random" in sys.argv:
         block = np.random.randint(0, 65536, size=(z, y, x), dtype=np.uint16)  # non-trivial correctness check
