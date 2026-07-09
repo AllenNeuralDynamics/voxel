@@ -6,6 +6,7 @@
   import { getTaskSelection } from '$lib/grid/selection.svelte';
   import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, TrashCanOutline } from '$lib/icons';
   import { Button, Checkbox, Dialog, NumberInput, Select, SpinBox } from '$lib/kit';
+  import MetadataPanel from '$lib/MetadataPanel.svelte';
   import { getVoxelApp, type TaskPatch, type TileOrder } from '$lib/model';
   import { cn, sanitizeString, toastError } from '$lib/utils';
 
@@ -444,6 +445,12 @@
       {/each}
     {/if}
   </div>
+  {#if instrument}
+    <div class="shrink-0 border-t border-border px-3 py-4">
+      <h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Metadata</h3>
+      <MetadataPanel {instrument} class="max-w-2xl" />
+    </div>
+  {/if}
 </div>
 
 <Dialog.Root bind:open={deleteDialogOpen}>
