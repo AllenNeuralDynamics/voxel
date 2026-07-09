@@ -406,12 +406,7 @@ export class NumericModel extends BasePropModel<number> {
 }
 
 export type AnyPropModel =
-  | NumericModel
-  | EnumeratedModel<string>
-  | EnumeratedModel<number>
-  | BoolModel
-  | StringModel
-  | PropModel;
+  NumericModel | EnumeratedModel<string> | EnumeratedModel<number> | BoolModel | StringModel | PropModel;
 
 /**
  * Construct the appropriate PropModel subclass for a given snapshot.

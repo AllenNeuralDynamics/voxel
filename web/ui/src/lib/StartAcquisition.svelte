@@ -69,7 +69,9 @@
 
   watch(
     () => store,
-    () => (root = rootOptions[0]?.value ?? '')
+    () => {
+      root = rootOptions[0]?.value ?? '';
+    }
   );
 
   async function start() {

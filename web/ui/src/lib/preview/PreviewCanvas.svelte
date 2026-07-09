@@ -2,7 +2,7 @@
   import { ElementSize, watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { channelBoundingBox, compositeTiledFrames, type Preview } from '$lib/model';
+  import { channelBoundingBox, compositeViewFrames, type Preview } from '$lib/model';
   import { clampTopLeft } from '$lib/utils';
 
   import PreviewControls from './PreviewControls.svelte';
@@ -58,7 +58,7 @@
 
     if (needsRedraw && ctx && canvasEl) {
       needsRedraw = false;
-      compositeTiledFrames(ctx, canvasEl, previewer.channels, previewer.viewport);
+      compositeViewFrames(ctx, canvasEl, previewer.channels, previewer.viewport);
     }
 
     animFrameId = requestAnimationFrame(frameLoop);
@@ -98,6 +98,7 @@
       const newX = clampTopLeft(startViewport.x - dx, previewer.viewport.w);
       const newY = clampTopLeft(startViewport.y - dy, previewer.viewport.h);
       previewer.setViewport({ x: newX, y: newY, w: previewer.viewport.w, h: previewer.viewport.h });
+      previewer.queueViewportUpdate({ ...previewer.viewport });
     };
 
     const pointerUp = (e: PointerEvent) => {
@@ -201,7 +202,7 @@
     const ch = containerSize.height;
     if (cw <= 0 || ch <= 0) return null;
 
-    // Compute draw area (same contain-fit as compositeTiledFrames)
+    // Compute draw area (same contain-fit as compositeViewFrames)
     const vp = previewer.viewport;
     const vpAspect = (vp.w * maxW) / (vp.h * maxH);
     const canvasAspect = cw / ch;

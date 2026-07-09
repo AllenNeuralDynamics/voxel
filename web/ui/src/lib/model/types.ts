@@ -112,13 +112,7 @@ export interface DerivedShift {
 export type DerivedWaveform = DerivedMirror | DerivedScale | DerivedOffset | DerivedShift;
 /** An AO waveform: a primitive shape, or a derived transform of another channel. */
 export type Waveform =
-  | PulseWaveform
-  | SquareWaveform
-  | SineWaveform
-  | TriangleWaveform
-  | MultiPointWaveform
-  | CSVWaveform
-  | DerivedWaveform;
+  PulseWaveform | SquareWaveform | SineWaveform | TriangleWaveform | MultiPointWaveform | CSVWaveform | DerivedWaveform;
 
 /** Internal clock: the AO device generates its own frame clock. */
 export interface InternalClock {
@@ -222,13 +216,7 @@ export interface TaskTile extends Tile {
 
 /** Tile acquisition ordering strategy. */
 export type TileOrder =
-  | 'sweep_row'
-  | 'sweep_column'
-  | 'snake_row'
-  | 'snake_column'
-  | 'nearest_neighbor'
-  | 'optimized'
-  | 'custom';
+  'sweep_row' | 'sweep_column' | 'snake_row' | 'snake_column' | 'nearest_neighbor' | 'optimized' | 'custom';
 
 export type ScaleLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type Compression = 'none' | 'gzip' | 'zstd' | 'lz4' | 'blosc.lz4' | 'blosc.zstd';
@@ -446,6 +434,7 @@ export interface AppStatus {
 export interface InstrumentStatus {
   mode: AcquisitionMode;
   active_profile_id: string;
+  preview_epoch: number;
   fov: [number, number] | null;
   state: InstrumentState;
   task_tiles: TaskTile[];

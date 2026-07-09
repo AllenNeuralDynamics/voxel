@@ -1,9 +1,11 @@
-"""Preview widget: multi-channel camera feed with pan/zoom and tiled compositing.
+"""Preview widget: multi-channel camera feed with pan/zoom and viewport-image compositing.
 
-Mirrors the web canvas model: per channel, a downsampled overview backdrop with high-res tiles
-overlaid for the zoomed viewport, each channel composited additively. Pan/zoom edits the shared
-viewport (cropped locally via the pixel mapping, fed back to the cameras through ``viewport_changed``).
+Mirrors the web canvas model: per channel, a downsampled overview backdrop with one coherent high-res
+viewport image overlaid for the zoomed region, each channel composited additively. Pan/zoom edits the
+shared viewport (cropped locally via the pixel mapping, fed back to the cameras through ``viewport_changed``).
 """
+
+import time
 
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPixmap, QResizeEvent, QWheelEvent
@@ -25,7 +27,7 @@ def channel_bbox(channels: list[ChannelData]) -> tuple[int, int]:
     """Max sensor width/height across drawable channels (rotation-swapped) — the shared footprint."""
     max_w = max_h = 0
     for ch in channels:
-        if (ch.frame is None and not ch.tiles) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
+        if (ch.frame is None and ch.view is None) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
             continue
         swapped = ch.rotation_deg % 180 != 0
         max_w = max(max_w, ch.sensor_h if swapped else ch.sensor_w)
@@ -59,13 +61,13 @@ def draw_rotated(painter: QPainter, image: QImage, x: float, y: float, w: float,
 
 
 class PreviewPanel(QWidget):
-    """Displays the live preview (overview + tiles) with pan/zoom interaction."""
+    """Displays the live preview (overview + viewport image) with pan/zoom interaction."""
 
     viewport_changed = Signal(float, float, float, float)  # x, y, w, h
 
     MIN_VIEWPORT = 0.01
     ZOOM_SENSITIVITY = 0.001
-    VIEWPORT_DEBOUNCE_MS = 100
+    PAN_ZOOM_STREAM_MS = 150  # tighter than web's 500 ms: Qt is local/in-process, settle is sub-frame
 
     def __init__(self, store: PreviewStore, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -90,10 +92,12 @@ class PreviewPanel(QWidget):
         self._pan_start_y = 0.0
         self._pan_start_viewport = PreviewViewport()
 
-        # Debounce feeding the viewport back to the cameras until pan/zoom settles
-        self._viewport_debounce_timer = QTimer(self)
-        self._viewport_debounce_timer.setSingleShot(True)
-        self._viewport_debounce_timer.timeout.connect(self._emit_viewport_changed)
+        # Throttle feeding the viewport back to the cameras: leading + trailing, so pan/zoom
+        # streams mid-gesture (at most one send per PAN_ZOOM_STREAM_MS) and always sends the last value.
+        self._viewport_last_sent = 0.0
+        self._viewport_throttle_timer = QTimer(self)
+        self._viewport_throttle_timer.setSingleShot(True)
+        self._viewport_throttle_timer.timeout.connect(self._emit_viewport_changed)
 
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
@@ -144,6 +148,7 @@ class PreviewPanel(QWidget):
         new_x = clamp_top_left(self._pan_start_viewport.x - dx, vp.w)
         new_y = clamp_top_left(self._pan_start_viewport.y - dy, vp.h)
         self._store.set_viewport(PreviewViewport(x=new_x, y=new_y, w=vp.w, h=vp.h))
+        self._schedule_viewport_changed()
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
@@ -208,13 +213,14 @@ class PreviewPanel(QWidget):
         self._update_display()
 
     def _update_display(self) -> None:
-        """Composite the channels' overview + tiles for the current viewport and show it."""
+        """Composite the channels' overview + viewport image for the current viewport and show it."""
         channels = list(self._store.channels.values())
         cv_w, cv_h = self._image_label.width(), self._image_label.height()
-        if not channels or cv_w < 1 or cv_h < 1:
+        if cv_w < 1 or cv_h < 1:
             return
         max_w, max_h = channel_bbox(channels)
         if max_w <= 0 or max_h <= 0:
+            self._image_label.clear()  # nothing to draw — blank so a cleared/switched profile doesn't linger
             return
 
         smooth = not self._store.is_interacting  # nearest-neighbor while panning/zooming; smooth when settled
@@ -262,7 +268,7 @@ class PreviewPanel(QWidget):
             return (bb / vp.h) * draw_h
 
         for ch in channels:
-            if (ch.frame is None and not ch.tiles) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
+            if (ch.frame is None and ch.view is None) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
                 continue
             rot = ch.rotation_deg % 360
             swapped = rot % 180 != 0
@@ -271,7 +277,7 @@ class PreviewPanel(QWidget):
             offset_x = (1 - scale_x) / 2
             offset_y = (1 - scale_y) / 2
 
-            # Per-channel offscreen: overview + tiles with source-over so tiles cleanly replace the
+            # Per-channel offscreen: overview + view with source-over so the view cleanly replaces the
             # backdrop, then the whole layer is added onto the canvas (no double-brightness on overlap).
             layer = QImage(cv_w, cv_h, QImage.Format.Format_ARGB32_Premultiplied)
             layer.fill(Qt.GlobalColor.transparent)
@@ -281,16 +287,13 @@ class PreviewPanel(QWidget):
             if ch.frame is not None:
                 draw_rotated(lp, ch.frame, px_x(offset_x), px_y(offset_y), px_w(scale_x), px_h(scale_y), rot)
 
-            if vp.needs_adjustment and ch.tile_scale >= 0:  # tiles only when zoomed; overview covers full view
-                grid = 2**ch.tile_scale
-                for key, image in ch.tiles.items():
-                    col, row = (int(part) for part in key.split(":"))
-                    sx, sy, sw, sh = sensor_to_stage(col / grid, row / grid, 1 / grid, 1 / grid, rot)
-                    tx, ty = px_x(offset_x + sx * scale_x), px_y(offset_y + sy * scale_y)
-                    tw, th = px_w(sw * scale_x), px_h(sh * scale_y)
-                    if tx + tw < 0 or ty + th < 0 or tx > cv_w or ty > cv_h:
-                        continue
-                    draw_rotated(lp, image, tx, ty, tw, th, rot)
+            # Viewport image (high-res), positioned by its server-authoritative rect — only when zoomed
+            if vp.needs_adjustment and ch.view is not None and ch.view_rect is not None:
+                r = ch.view_rect
+                sx, sy, sw, sh = sensor_to_stage(r.x, r.y, r.w, r.h, rot)
+                tx, ty = px_x(offset_x + sx * scale_x), px_y(offset_y + sy * scale_y)
+                tw, th = px_w(sw * scale_x), px_h(sh * scale_y)
+                draw_rotated(lp, ch.view, tx, ty, tw, th, rot)
             lp.end()
 
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
@@ -299,11 +302,17 @@ class PreviewPanel(QWidget):
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
     def _emit_viewport_changed(self) -> None:
+        self._viewport_last_sent = time.monotonic() * 1000.0
         vp = self._store.viewport
         self.viewport_changed.emit(vp.x, vp.y, vp.w, vp.h)
 
     def _schedule_viewport_changed(self) -> None:
-        self._viewport_debounce_timer.start(self.VIEWPORT_DEBOUNCE_MS)
+        elapsed = time.monotonic() * 1000.0 - self._viewport_last_sent
+        if elapsed >= self.PAN_ZOOM_STREAM_MS:
+            self._emit_viewport_changed()  # leading edge: fire now
+        else:
+            # trailing edge: coalesce to the window boundary
+            self._viewport_throttle_timer.start(int(self.PAN_ZOOM_STREAM_MS - elapsed))
 
     def _load_default_image(self) -> None:
         pixmap = QPixmap(str(VOXEL_LOGO))
@@ -349,6 +358,7 @@ class PreviewThumbnail(QWidget):
     def _update_display(self) -> None:
         frames = [ch.frame for ch in self._store.channels.values() if ch.frame is not None]
         if not frames or frames[0].width() <= 0:
+            self._image_label.clear()  # nothing to draw — blank so a cleared/switched profile doesn't linger
             return
         tw = self._target_width
         th = max(1, int(frames[0].height() * tw / frames[0].width()))

@@ -855,11 +855,12 @@ class Instrument:
         self._preview_unsubs: list[Teardown] = []
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
+        self._preview_epoch = Cell[int](0)
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
         self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
         self.frames: Emitter[tuple[str, bytes]] = Emitter()
-        self.tiles: Emitter[tuple[str, bytes]] = Emitter()
+        self.views: Emitter[tuple[str, bytes]] = Emitter()
         self.progress: Emitter[AcquisitionProgress] = Emitter()
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._bench, fn=self._compute_task_tiles)
 
@@ -881,6 +882,12 @@ class Instrument:
     def active_profile_id(self) -> Readable[str]:
         """The currently selected profile id. This is always a valid profile key."""
         return self._active_profile_id
+
+    @property
+    def preview_epoch(self) -> Readable[int]:
+        """Monotonic counter bumped whenever displayed preview frames go stale (e.g. profile switch);
+        clients clear their preview when it changes."""
+        return self._preview_epoch
 
     @property
     def active_profile(self) -> ProfileConfig:
@@ -978,6 +985,11 @@ class Instrument:
         previous_id = self._active_profile_id.value
         await self._active_profile_id.set(profile_id)
         try:
+            # Invalidate preview before the colormap/viewport updates below: bump the epoch (clients clear
+            # the previous profile's frames on the next status) and drop each camera's cached raw frame (so
+            # the idle reprocess those updates trigger can't re-render the previous profile).
+            await self._preview_epoch.set(self._preview_epoch.value + 1)
+            await asyncio.gather(*(ch.camera.clear_preview_cache() for ch in self.active_channels.values()))
             await self._apply_filters()
             await self.apply_settings()
             for ch_id, ch in self.active_channels.items():
@@ -1395,12 +1407,12 @@ class Instrument:
             if (channel_id := self._channel_for_camera(cam_id)) is not None:
                 await self.frames.emit((channel_id, data))
 
-        async def forward_tiles(data: bytes) -> None:
+        async def forward_views(data: bytes) -> None:
             if (channel_id := self._channel_for_camera(cam_id)) is not None:
-                await self.tiles.emit((channel_id, data))
+                await self.views.emit((channel_id, data))
 
         self._preview_unsubs.append(camera.subscribe("preview", forward_frames))
-        self._preview_unsubs.append(camera.subscribe("preview_tile", forward_tiles))
+        self._preview_unsubs.append(camera.subscribe("preview_view", forward_views))
 
     async def _apply_filters(self) -> None:
         desired: dict[str, str] = {}
