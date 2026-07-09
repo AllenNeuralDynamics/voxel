@@ -13,7 +13,7 @@ import msgpack
 import msgpack_numpy as mpack_numpy
 import numpy as np
 from pydantic import Field, field_validator
-from vxlib.color import resolve_colormap
+from vxlib.color import ChannelOrder, resolve_colormap
 
 from vxlib import SchemaModel
 
@@ -29,7 +29,7 @@ class PreviewFmt(StrEnum):
             case PreviewFmt.RAW:
                 return convert_to_raw(frame)
             case PreviewFmt.JPEG:
-                return convert_to_jpeg(frame)
+                return convert_to_jpeg(frame, PREVIEW_JPEG_QUALITY)
             case PreviewFmt.PNG:
                 return convert_to_png(frame)
             case PreviewFmt.ZLIB:
@@ -168,7 +168,7 @@ class PreviewInfoBase(SchemaModel):
     full_width: int = Field(..., gt=0, description="Full sensor width in pixels.")
     full_height: int = Field(..., gt=0, description="Full sensor height in pixels.")
     levels: PreviewLevels = Field(default_factory=PreviewLevels)
-    fmt: PreviewFmt = Field(default=PreviewFmt.PNG)
+    fmt: PreviewFmt = Field(default=PreviewFmt.JPEG)
     colormap: str | None = Field(default=None, description="Colormap applied, or None for grayscale.")
 
 
@@ -230,9 +230,16 @@ type PreviewViewSink = Callable[[bytes], Awaitable[None]]
 # ── Render sizing ─────────────────────────────────────────────────────
 
 
-DEFAULT_PREVIEW_WIDTH = 2048  # overview output width
-RENDER_CAP = DEFAULT_PREVIEW_WIDTH  # max width of a single coherent viewport-image render
-OVERSCAN_MARGIN = 0.25  # fraction each axis grows beyond the viewport, so small pans stay covered (tunable)
+PREVIEW_JPEG_QUALITY = 95  # single JPEG quality knob for both the overview and the viewport image
+OVERVIEW_WIDTH = 2048  # overview output width when NOT zoomed (the overview is the main view)
+# While zoomed, the viewport image carries the detail at RENDER_CAP, so the full-sensor overview is
+# only a backdrop — render it smaller to keep the per-frame, always-on overview cheap.
+OVERVIEW_WIDTH_ZOOMED = 1024
+RENDER_CAP = 2048  # max width of a single coherent viewport-image render (rendered on demand, not per frame)
+# Fraction each axis grows beyond the viewport so small pans stay covered without a re-render. Only earns
+# its keep when panning a static frame — during live acquisition the viewport re-renders every frame anyway,
+# so overscan is pure per-frame cost then. Kept modest to trim that cost (quadratic in 1 + 2*margin).
+OVERSCAN_MARGIN = 0.15
 
 
 # ── Preview Generator ─────────────────────────────────────────────────
@@ -251,8 +258,8 @@ class PreviewGenerator:
         view_sink: PreviewViewSink | None = None,
         uid: str = "camera",
         *,
-        target_width: int = DEFAULT_PREVIEW_WIDTH,
-        fmt: PreviewFmt = PreviewFmt.PNG,
+        target_width: int = OVERVIEW_WIDTH,
+        fmt: PreviewFmt = PreviewFmt.JPEG,
         viewport: PreviewViewport | None = None,
         levels: PreviewLevels | None = None,
     ) -> None:
@@ -268,7 +275,8 @@ class PreviewGenerator:
         self._current_frame: np.ndarray | None = None
         self._last_histogram: list[int] | None = None  # most recent overview histogram, for auto-leveling
         self._colormap: str | None = None
-        self._lut: np.ndarray | None = None  # (256, 3) uint8, cached
+        # (256, 1, 3) uint8 BGR map for cv2.applyColorMap, precomputed from the colormap LUT.
+        self._colormap_bgr: np.ndarray | None = None
         self._view_task: asyncio.Task | None = None  # background viewport-image generation
         self._view_futures: list[asyncio.Future] = []  # tracked for cancellation
         self._overview_task: asyncio.Task | None = None  # background overview generation
@@ -278,6 +286,14 @@ class PreviewGenerator:
         self._overview_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewOverview")
         # Executor for the viewport-image crop/resample/encode
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="PreviewView")
+
+        # Preview-health counters: the overview is best-effort (skip-if-busy), so track how many frames
+        # get an overview vs are dropped, plus gen-time, and report per stack via drain_skip_stats().
+        self._skip_frames = 0
+        self._skip_overview_busy = 0
+        self._gen_ms_sum = 0.0
+        self._gen_ms_max = 0.0
+        self._gen_count = 0
 
     @property
     def last_histogram(self) -> list[int] | None:
@@ -292,7 +308,27 @@ class PreviewGenerator:
     @colormap.setter
     def colormap(self, value: str | None) -> None:
         self._colormap = value
-        self._lut = resolve_colormap(value) if value else None
+        # Resolve straight to BGR and reshape once so the per-frame colormap is a single
+        # cv2.applyColorMap C-gather (~3x faster than the numpy LUT gather + cvtColor).
+        lut = resolve_colormap(value, order=ChannelOrder.BGR) if value else None  # (256, 3) BGR uint8
+        self._colormap_bgr = lut.reshape(-1, 1, 3) if lut is not None else None
+
+    def drain_skip_stats(self) -> dict[str, float]:
+        """Snapshot + reset the preview-health counters (overview generated vs dropped, gen-time)."""
+        gen_avg = self._gen_ms_sum / self._gen_count if self._gen_count else 0.0
+        stats = {
+            "frames": self._skip_frames,
+            "overviews_generated": self._gen_count,
+            "overview_busy_drops": self._skip_overview_busy,
+            "gen_ms_avg": gen_avg,
+            "gen_ms_max": self._gen_ms_max,
+        }
+        self._skip_frames = 0
+        self._skip_overview_busy = 0
+        self._gen_ms_sum = 0.0
+        self._gen_ms_max = 0.0
+        self._gen_count = 0
+        return stats
 
     async def new_frame(self, frame: np.ndarray, idx: int) -> None:
         """Process a new raw frame: dispatch overview + tiles as background tasks.
@@ -309,8 +345,11 @@ class PreviewGenerator:
             self.cancel_view_task()
             self._view_task = asyncio.create_task(self._generate_and_send_view(frame, idx, self.viewport))
 
+        self._skip_frames += 1
         if self._overview_task is None or self._overview_task.done():
             self._overview_task = asyncio.create_task(self._run_overview(frame, idx))
+        else:
+            self._skip_overview_busy += 1  # Gate 1 drop: prior overview still generating
 
     async def _run_overview(self, frame: np.ndarray, idx: int) -> None:
         loop = asyncio.get_event_loop()
@@ -367,28 +406,20 @@ class PreviewGenerator:
 
     @staticmethod
     def _downsample(frame: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
-        """Downsample a frame to approximately target dimensions.
+        """Downsample a frame to at most the target dimensions via an integer stride view.
 
-        TEST: stride-only downsampling (no cv2.resize). Skips directly to ~target
-        size via numpy stride view (O(1), no memory read). Output dimensions are
-        approximate (nearest integer stride). The frontend's drawImage scales to
-        canvas anyway so exact dimensions don't matter.
+        Stride-only (no cv2.resize): O(output), no full-frame read. Nearest-neighbor (no
+        anti-aliasing) but fine for a live preview; the frontend's drawImage scales to canvas.
 
-        This eliminates the cv2.resize bottleneck entirely. Quality is nearest-
-        neighbor (no anti-aliasing) but acceptable for live preview.
+        The stride is chosen by ceil, so the output never exceeds the target (a floor stride
+        overshoots up to ~2x/axis for inputs between 1x and 2x the target, which blew the
+        viewport up to ~4x its intended pixel count at mid-zoom). A uniform step preserves aspect.
         """
         h, w = frame.shape[:2]
-        step_w = max(1, w // target_w)
-        step_h = max(1, h // target_h)
-        step = max(step_w, step_h)  # uniform step preserves aspect ratio
+        step_w = -(-w // target_w)  # ceil(w / target_w)
+        step_h = -(-h // target_h)
+        step = max(1, step_w, step_h)
         return np.ascontiguousarray(frame[::step, ::step])
-
-        # ORIGINAL: two-step with cv2.resize for final anti-aliased downsample
-        # h, w = frame.shape[:2]
-        # step = max(1, min(w // (target_w * 2), h // (target_h * 2)))
-        # if step > 1:
-        #     frame = frame[::step, ::step]
-        # return cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
 
     # ── Internal: Overview ─────────────────────────────────────────────
 
@@ -397,16 +428,19 @@ class PreviewGenerator:
         gen_start = time.perf_counter()
 
         full_height, full_width = raw_frame.shape[:2]
-        preview_width = self._target_width
+        # Adaptive: while zoomed, the viewport image carries the detail, so the overview is a mere
+        # backdrop — render it smaller to keep this per-frame path cheap. Full width when unzoomed.
+        preview_width = OVERVIEW_WIDTH_ZOOMED if self.viewport.needs_adjustment else self._target_width
         preview_height = int(full_height * (preview_width / full_width))
 
         resized = self._downsample(raw_frame, preview_width, preview_height)
 
-        # Compute histogram on resized data BEFORE level adjustment
+        # Histogram on resized data BEFORE level adjustment. cv2.calcHist is ~3.6x faster than
+        # np.histogram for identical 1024-bin counts (1024 bins over the dtype range == a >>6 shift).
         max_val = np.iinfo(raw_frame.dtype).max
         num_bins = 1024
-        histogram, _ = np.histogram(resized, bins=num_bins, range=(0, max_val))
-        self._last_histogram = histogram.tolist()
+        hist = cv2.calcHist([resized], [0], None, [num_bins], [0, max_val + 1])
+        self._last_histogram = hist.ravel().astype(np.int32).tolist()
 
         # Apply levels + colormap
         processed = self._apply_processing(resized, raw_frame.dtype)
@@ -426,6 +460,9 @@ class PreviewGenerator:
         preview_frame = PreviewFrame.from_array(processed, info)
 
         gen_time = time.perf_counter() - gen_start
+        self._gen_ms_sum += gen_time * 1000  # accumulated in the executor thread
+        self._gen_ms_max = max(self._gen_ms_max, gen_time * 1000)
+        self._gen_count += 1
         if frame_idx < 5 or frame_idx % 100 == 0:
             self.log.debug(f"Overview frame {frame_idx}: {gen_time * 1000:.1f}ms")
 
@@ -493,19 +530,22 @@ class PreviewGenerator:
     def _apply_processing(self, frame: np.ndarray, src_dtype: np.dtype) -> np.ndarray:
         """Apply levels + colormap to a resized frame. Returns uint8 (or BGR if colormap)."""
         max_val = np.iinfo(src_dtype).max
-        preview_float = frame.astype(np.float32) / max_val
-
         levels = self.levels
+
         if levels.needs_adjustment:
-            preview_float = np.clip(preview_float, levels.min, levels.max)
+            # Level clip/normalize needs the float path — convertScaleAbs' abs() would fold the
+            # below-black-point values back up instead of clamping them to 0.
+            preview_float = np.clip(frame.astype(np.float32) / max_val, levels.min, levels.max)
             denom = (levels.max - levels.min) + 1e-8
-            preview_float = (preview_float - levels.min) / denom
+            preview_float = (preview_float - levels.min) / denom * 255.0
+            preview_uint8 = preview_float.astype(np.uint8)
+        else:
+            # No level adjustment: a single linear scale to uint8 via a cv2 SIMD kernel
+            # (~12x faster than the astype/divide/multiply/astype float roundtrip; ±1 LSB).
+            preview_uint8 = cv2.convertScaleAbs(frame, alpha=255.0 / max_val)
 
-        preview_float *= 255.0
-        preview_uint8 = preview_float.astype(np.uint8)
-
-        if self._lut is not None:
-            return cv2.cvtColor(self._lut[preview_uint8], cv2.COLOR_RGB2BGR)
+        if self._colormap_bgr is not None:
+            return cv2.applyColorMap(preview_uint8, self._colormap_bgr)
         return preview_uint8
 
 

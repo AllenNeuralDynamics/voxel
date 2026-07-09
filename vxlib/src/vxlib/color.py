@@ -21,10 +21,18 @@ Usage:
 from __future__ import annotations
 
 import colorsys
+from enum import StrEnum
 from typing import Self
 
 import numpy as np
 from pydantic import BaseModel, RootModel, field_validator
+
+
+class ChannelOrder(StrEnum):
+    """Channel order of a returned LUT: RGB (default) or BGR (for OpenCV/cv2 consumers)."""
+
+    RGB = "rgb"
+    BGR = "bgr"
 
 
 class Color(str):
@@ -415,13 +423,18 @@ _COLORMAP_INDEX: dict[str, Colormap] = {
 }
 
 
-def resolve_colormap(name: str, resolution: int = 256) -> np.ndarray:
-    """Resolve a colormap name or hex color to a LUT array (resolution, 3) uint8."""
+def resolve_colormap(name: str, resolution: int = 256, order: ChannelOrder = ChannelOrder.RGB) -> np.ndarray:
+    """Resolve a colormap name or hex color to a LUT array (resolution, 3) uint8.
+
+    order: channel order of the returned LUT. RGB (default) or BGR for OpenCV consumers
+    (e.g. cv2.applyColorMap / cv2.imencode), which expect BGR.
+    """
     key = name.strip().lower()
     cmap = _COLORMAP_INDEX.get(key)
-    if cmap is not None:
-        return cmap.to_lut(resolution)
-    return Colormap(key).to_lut(resolution)
+    lut = cmap.to_lut(resolution) if cmap is not None else Colormap(key).to_lut(resolution)
+    if order is ChannelOrder.BGR:
+        lut = np.ascontiguousarray(lut[:, ::-1])
+    return lut
 
 
 def get_colormap_catalog() -> list[ColormapGroup]:
