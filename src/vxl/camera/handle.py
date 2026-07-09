@@ -152,6 +152,10 @@ class CameraHandle(DeviceHandle[Camera]):
         """Start draining and closing the writer in the background. Poll capture_state until CLOSED."""
         await self.call("close_stack")
 
+    async def release_writer(self) -> None:
+        """Free the writer ring (workers + shared memory); the next open_stack re-allocates it cold."""
+        await self.call("release_writer")
+
     async def begin_batch(self, num_frames: int) -> None:
         """Arm and start grabbing num_frames frames in the background. Poll capture_state for completion."""
         await self.call("begin_batch", num_frames)
