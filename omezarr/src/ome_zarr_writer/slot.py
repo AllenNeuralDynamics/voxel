@@ -23,6 +23,7 @@ import logging
 import math
 import multiprocessing as mp
 import os
+import signal
 import threading
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -123,6 +124,10 @@ _WORKER_STATE: dict[str, OutputSetup] = {}  # holds the current "setup"; a dict 
 
 def _worker_init(shm_layout: list[tuple[int, str, tuple[int, int, int]]], dtype_str: str) -> None:
     """Runs once per worker on startup: attach to the shared-memory segments (one per level)."""
+    # Ignore SIGINT/Ctrl+C in workers: on Windows CTRL_C_EVENT hits the whole process group, so
+    # otherwise each worker blocked in the pool's call queue dumps a KeyboardInterrupt traceback.
+    # The parent handles the interrupt and tears the pool down via the normal close() path.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     # Force the single-threaded-safe numba layer in this worker (one Python thread per worker).
     os.environ["NUMBA_THREADING_LAYER"] = "workqueue"
     for level_value, shm_name, shape in shm_layout:
