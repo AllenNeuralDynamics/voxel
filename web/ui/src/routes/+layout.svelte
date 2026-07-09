@@ -25,7 +25,7 @@
   import { setVoxelApp, VoxelApp } from '$lib/model';
   import { PreviewCanvas } from '$lib/preview';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
-  import StartAcquisition from '$lib/StartAcquisition.svelte';
+  import RunButton from '$lib/RunButton.svelte';
   import StencilControls from '$lib/StencilControls.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
   import { cn, createPaneSize, toastError } from '$lib/utils';
@@ -131,89 +131,67 @@
   <LaunchScreen {app} />
 {:else}
   {@const instrument = app.instrument}
-  {@const isPreviewing = instrument.mode === 'preview'}
-  {@const isAcquiring = instrument.mode === 'capture'}
+  {#snippet appMenu()}
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
+        class="flex shrink-0 cursor-pointer items-center text-fg-muted transition-colors hover:text-fg"
+        title="App menu"
+      >
+        <VoxelLogo class="size-ui-md" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="start"
+          sideOffset={8}
+          class="z-50 min-w-56 rounded-md border border-border bg-elevated p-1 text-sm shadow-lg outline-none"
+        >
+          <DropdownMenu.Item
+            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-highlighted:bg-element-hover"
+            onclick={() => (themes.pickerOpen = true)}
+          >
+            Change Appearance
+            <span class="ml-8 text-xs text-fg-faint">⌘K T</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator class="my-1 h-px bg-border" />
+          <DropdownMenu.Item
+            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
+            disabled={!app.instrument}
+            onclick={() => (closeDialogOpen = true)}
+          >
+            Close Session…
+            <span class="ml-8 text-xs text-fg-faint">⌘K Q</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  {/snippet}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
-    <PaneGroup direction="horizontal" autoSaveId="shell.v2">
+    <PaneGroup direction="horizontal" autoSaveId="shell.v5">
+      <!-- Mode controls: nav + routed content + logs -->
       <Pane defaultSize={leftPane.minSize} minSize={leftPane.minSize} maxSize={60}>
         <div class="grid h-full grid-rows-[auto_1fr_auto]">
-          <header class="flex h-15 items-center justify-between border-b border-border bg-surface px-4">
-            <div class="flex items-center gap-x-3">
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger
-                  class="flex cursor-pointer items-center text-fg-muted transition-colors hover:text-fg"
-                  title="App menu"
+          <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border bg-surface px-4">
+            {@render appMenu()}
+            <nav class="flex h-ui-md items-center gap-x-1 text-fg-muted">
+              {#each navTabs as tab (tab.id)}
+                {@const Icon = tab.icon}
+                {@const active = viewId === tab.id}
+                <button
+                  onclick={() => selectView(tab.id)}
+                  class={cn(
+                    'inline-flex h-full cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm whitespace-nowrap transition-colors',
+                    active
+                      ? 'border-fg-accent/30 bg-fg-accent/10 text-fg'
+                      : 'border-transparent hover:bg-element-hover hover:text-fg'
+                  )}
+                  title={tab.label}
                 >
-                  <VoxelLogo class="size-ui-md" />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content
-                    align="start"
-                    sideOffset={8}
-                    class="z-50 min-w-56 rounded-md border border-border bg-elevated p-1 text-sm shadow-lg outline-none"
-                  >
-                    <DropdownMenu.Item
-                      class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-highlighted:bg-element-hover"
-                      onclick={() => (themes.pickerOpen = true)}
-                    >
-                      Change Appearance
-                      <span class="ml-8 text-xs text-fg-faint">⌘K T</span>
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Separator class="my-1 h-px bg-border" />
-                    <DropdownMenu.Item
-                      class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
-                      disabled={!app.instrument}
-                      onclick={() => (closeDialogOpen = true)}
-                    >
-                      Close Session…
-                      <span class="ml-8 text-xs text-fg-faint">⌘K Q</span>
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
-
-              <nav class="flex h-ui-md items-center gap-x-1 text-fg-muted">
-                {#each navTabs as tab (tab.id)}
-                  {@const Icon = tab.icon}
-                  {@const active = viewId === tab.id}
-                  <button
-                    onclick={() => selectView(tab.id)}
-                    class={cn(
-                      'inline-flex h-full cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm whitespace-nowrap transition-colors',
-                      active
-                        ? 'border-fg-accent/30 bg-fg-accent/10 text-fg'
-                        : 'border-transparent hover:bg-element-hover hover:text-fg'
-                    )}
-                    title={tab.label}
-                  >
-                    <Icon width="12" height="12" class="shrink-0" />
-                    {tab.label}
-                  </button>
-                {/each}
-              </nav>
-            </div>
-
-            <Button
-              class="min-w-38"
-              variant={isPreviewing || isAcquiring ? 'danger' : 'success'}
-              size="lg"
-              onclick={() => {
-                if (isAcquiring) toastError(instrument.stopAcquisition());
-                else if (isPreviewing) instrument.preview.stopPreview();
-                else instrument.preview.startPreview();
-              }}
-            >
-              {#if isAcquiring}
-                Stop Acquisition
-              {:else if isPreviewing}
-                Stop Preview
-              {:else}
-                Start Preview
-              {/if}
-            </Button>
+                  <Icon width="12" height="12" class="shrink-0" />
+                  {tab.label}
+                </button>
+              {/each}
+            </nav>
           </header>
-
-          <!-- Middle: children + bottom pane -->
           <PaneGroup direction="vertical" autoSaveId="setup.layout">
             <Pane>
               <div class="flex h-full flex-col">
@@ -243,38 +221,41 @@
             </Pane>
           </PaneGroup>
 
-          <!-- Footer: close session + tab strip + profile selector -->
-          <footer class="flex h-12 items-center justify-between gap-20 border-t border-border px-4 py-2">
-            <div class="flex items-center gap-2">
-              <div class="flex divide-x divide-border rounded border border-border">
-                <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
-              </div>
+          <footer class="flex h-12 items-center border-t border-border px-4 py-2">
+            <div class="flex divide-x divide-border rounded border border-border">
+              <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
             </div>
           </footer>
         </div>
       </Pane>
-
       <PaneDivider direction="vertical" />
 
-      <!-- Right column: Viewer (Preview + Grid Canvas) -->
+      <!-- Viewer: Preview + Grid Canvas (centerpiece) -->
       <Pane defaultSize={45}>
-        <main class="flex h-full flex-col overflow-hidden">
-          <PaneGroup direction="vertical" autoSaveId="shell.right">
-            <Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
-              <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
-            </Pane>
-            <PaneDivider direction="horizontal" />
-            <Pane defaultSize={50} minSize={30} class="h-full flex-1">
-              <GridCanvas {instrument} />
-            </Pane>
-          </PaneGroup>
-        </main>
+        <div class="flex h-full flex-col">
+          <header class="flex h-15 shrink-0 items-center justify-end border-b border-border bg-surface px-4">
+            <RunButton {app} />
+          </header>
+          <main class="min-h-0 flex-1 overflow-hidden">
+            <PaneGroup direction="vertical" autoSaveId="shell.right">
+              <Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
+                <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+              </Pane>
+              <PaneDivider direction="horizontal" />
+              <Pane defaultSize={50} minSize={30} class="h-full flex-1">
+                <GridCanvas {instrument} />
+              </Pane>
+            </PaneGroup>
+          </main>
+        </div>
       </Pane>
       <PaneDivider direction="vertical" />
+
+      <!-- Monitors: run controls + device telemetry -->
       <Pane defaultSize={16} {...rightPane} class="flex flex-col">
-        <div class="flex h-15 shrink-0 items-center border-b border-border px-3">
+        <header class="flex h-15 shrink-0 items-center border-b border-border bg-surface px-4">
           <ProfileSelector {instrument} size="md" class="w-full" />
-        </div>
+        </header>
         <div class="flex flex-1 flex-col divide-y divide-border overflow-y-auto">
           {#if instrument.cameras.size > 0}
             <CamerasMonitor {instrument} />
@@ -308,7 +289,6 @@
             {@render section('metadata', 'Metadata', metadataBody)}
           </Accordion.Root>
         </div>
-        <StartAcquisition {app} class="shrink-0 border-t border-border" />
       </Pane>
     </PaneGroup>
   </div>
