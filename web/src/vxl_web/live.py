@@ -39,6 +39,7 @@ class InstrumentStatus(BaseModel):
 
     mode: AcquisitionMode
     active_profile_id: str
+    preview_epoch: int
     fov: tuple[float, float] | None
     state: InstrumentState
     task_tiles: list[TaskTile]
@@ -77,11 +78,12 @@ class InstrumentFeed:
             i.state.subscribe(lambda _s: self.broadcast_status()),
             i.mode.subscribe(lambda _m: self.broadcast_status()),
             i.active_profile_id.subscribe(lambda _id: self.broadcast_status()),
+            i.preview_epoch.subscribe(lambda _e: self.broadcast_status()),
             i.task_tiles.subscribe(lambda _t: self.broadcast_status()),
             i.fov.subscribe(lambda _f: self.broadcast_status()),
             i.progress.subscribe(lambda p: bus.broadcast("acquisition.progress", p)),
             i.frames.subscribe(self._on_frame),
-            i.tiles.subscribe(self._on_tiles),
+            i.views.subscribe(self._on_view),
         ]
         self._unsubs += [
             handle.props.subscribe(self._forward_props(device_id)) for device_id, handle in i.hal.devices.items()
@@ -112,6 +114,7 @@ class InstrumentFeed:
             InstrumentStatus(
                 mode=i.mode.value,
                 active_profile_id=i.active_profile_id.value,
+                preview_epoch=i.preview_epoch.value,
                 fov=i.fov.cache,
                 state=i.state.value,
                 task_tiles=i.task_tiles.value,
@@ -122,9 +125,9 @@ class InstrumentFeed:
         channel, data = item
         self._bus.broadcast(f"preview.frame.{channel}", data)
 
-    async def _on_tiles(self, item: tuple[str, bytes]) -> None:
+    async def _on_view(self, item: tuple[str, bytes]) -> None:
         channel, data = item
-        self._bus.broadcast(f"preview.tile.{channel}", data)
+        self._bus.broadcast(f"preview.view.{channel}", data)
 
     def _forward_props(self, device_id: str) -> Callable[[PropResults], None]:
         def forward(props: PropResults) -> None:

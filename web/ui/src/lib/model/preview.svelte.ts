@@ -33,7 +33,7 @@ export function fetchColormapCatalog(client: Client): Promise<ColormapCatalog> {
 }
 
 // ── Frame wire shapes + decoders ────────────────────────────────────
-// Frames are a binary domain stream (per-channel `preview.frame.{ch}` / `preview.tile.{ch}` topics),
+// Frames are a binary domain stream (per-channel `preview.frame.{ch}` / `preview.view.{ch}` topics),
 // not typed `ServerTopics` events — so their wire shapes and msgpack decoding live here, not in models.
 
 export interface PreviewFrameInfo {
@@ -43,48 +43,16 @@ export interface PreviewFrameInfo {
   full_width: number;
   full_height: number;
   levels: PreviewLevels;
-  fmt: 'jpeg' | 'png' | 'uint16';
+  fmt: 'raw' | 'jpeg' | 'png' | 'zlib';
   histogram?: number[];
   colormap?: string;
-}
-
-export interface PreviewTileInfo {
-  frame_idx: number;
-  width: number;
-  height: number;
-  full_width: number;
-  full_height: number;
-  levels: PreviewLevels;
-  fmt: 'jpeg' | 'png' | 'uint16';
-  colormap?: string;
-  scale: number;
-  viewport: PreviewViewport;
-}
-
-interface PreviewTileBody {
-  col: number;
-  row: number;
-  width: number;
-  height: number;
-  data: ArrayBuffer;
+  /** Server-rendered region in sensor-normalized coords: full frame for the overview, sub-rect (incl. overscan) for the zoomed view. */
+  rect: PreviewViewport;
 }
 
 interface DecodedFrame {
   info: PreviewFrameInfo;
   bitmap: ImageBitmap;
-}
-
-interface DecodedTile {
-  col: number;
-  row: number;
-  width: number;
-  height: number;
-  bitmap: ImageBitmap;
-}
-
-interface DecodedTileBatch {
-  info: PreviewTileInfo;
-  tiles: DecodedTile[];
 }
 
 async function decodeFrameBody(body: Uint8Array): Promise<DecodedFrame | null> {
@@ -94,42 +62,23 @@ async function decodeFrameBody(body: Uint8Array): Promise<DecodedFrame | null> {
   return bitmap ? { info: frame.info, bitmap } : null;
 }
 
-async function decodeTileBody(body: Uint8Array): Promise<DecodedTileBatch | null> {
-  const batch = unpack(body) as { info: PreviewTileInfo; tiles: PreviewTileBody[] };
-  if (!batch.info || !batch.tiles) return null;
-  const decoded = await Promise.all(
-    batch.tiles.map(async (tile) => {
-      const bitmap = await decodeBitmap(batch.info.fmt, tile.data);
-      return bitmap ? { col: tile.col, row: tile.row, width: tile.width, height: tile.height, bitmap } : null;
-    })
-  );
-  const tiles = decoded.filter((t): t is DecodedTile => t !== null);
-  return tiles.length > 0 ? { info: batch.info, tiles } : null;
-}
-
-/** Channel id is the topic suffix: `preview.frame.{channel}` / `preview.tile.{channel}`. */
-function channelFromTopic(topic: string, prefix: 'preview.frame' | 'preview.tile'): string {
+/** Channel id is the topic suffix: `preview.frame.{channel}` / `preview.view.{channel}`. */
+function channelFromTopic(topic: string, prefix: 'preview.frame' | 'preview.view'): string {
   return topic.slice(prefix.length + 1);
 }
 
-async function decodeBitmap(fmt: 'jpeg' | 'png' | 'uint16', data: ArrayBuffer): Promise<ImageBitmap | null> {
-  let mimeType: string;
+async function decodeBitmap(fmt: PreviewFrameInfo['fmt'], data: ArrayBuffer): Promise<ImageBitmap | null> {
   switch (fmt) {
     case 'jpeg':
-      mimeType = 'image/jpeg';
-      break;
-    case 'png':
-      mimeType = 'image/png';
-      break;
-    case 'uint16':
-      console.warn('[preview] uint16 format not yet supported');
-      return null;
+    case 'png': {
+      const blob = new Blob([data], { type: `image/${fmt}` });
+      return await createImageBitmap(blob, { colorSpaceConversion: 'none' });
+    }
     default:
-      console.warn('[preview] unknown frame format:', fmt);
+      // raw / zlib are 16-bit paths the client can't decode yet (needs the GPU upload path).
+      console.warn('[preview] format not yet supported:', fmt);
       return null;
   }
-  const blob = new Blob([data], { type: mimeType });
-  return await createImageBitmap(blob, { colorSpaceConversion: 'none' });
 }
 
 // ── Viewport Helpers ────────────────────────────────────────────────
@@ -142,19 +91,6 @@ export const DEFAULT_VIEWPORT: PreviewViewport = { x: 0, y: 0, w: 1, h: 1 };
 
 export function isDefaultViewport(vp: PreviewViewport): boolean {
   return vp.x === 0 && vp.y === 0 && vp.w === 1 && vp.h === 1;
-}
-
-// ── Tile Cache ──────────────────────────────────────────────────────
-
-interface TileCacheEntry {
-  bitmap: ImageBitmap;
-  scale: number;
-  col: number;
-  row: number;
-}
-
-function tileKey(scale: number, col: number, row: number): string {
-  return `${scale}:${col}:${row}`;
 }
 
 // ── Compositing ─────────────────────────────────────────────────────
@@ -231,16 +167,16 @@ function getOffscreenCanvas(idx: number, w: number, h: number): OffscreenCanvasR
 }
 
 /**
- * Composite tiles (with overview backdrop) for all visible channels.
+ * Composite the viewport image (with overview backdrop) for all visible channels.
  *
- * Each channel is drawn to an offscreen canvas using 'source-over': the
- * overview frame provides a low-resolution base, and tiles overlay it at
- * full resolution where available. The offscreen canvases are then
- * composited onto the main canvas with 'lighter' for multi-channel
- * additive blending. This ensures no blank areas when tiles only partially
- * cover the viewport.
+ * Each channel is drawn to an offscreen canvas using 'source-over': the overview
+ * frame provides a low-resolution base, and the coherent viewport image (when present)
+ * overlays it at full resolution, positioned by its server-authoritative `rect`. The
+ * offscreen canvases are then composited onto the main canvas with 'lighter' for
+ * multi-channel additive blending. This ensures no blank areas when the view only
+ * partially covers the canvas.
  */
-export function compositeTiledFrames(
+export function compositeViewFrames(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   channels: PreviewChannel[],
@@ -278,7 +214,7 @@ export function compositeTiledFrames(
   let offIdx = 0;
   for (const ch of channels) {
     if (!ch.visible || ch.sensorWidth <= 0 || ch.sensorHeight <= 0) continue;
-    if (!ch.frame && ch.tiles.size === 0) continue;
+    if (!ch.frame && !ch.view) continue;
 
     const rot = ((ch.rotationDeg % 360) + 360) % 360;
     const rad = (rot * Math.PI) / 180;
@@ -288,8 +224,8 @@ export function compositeTiledFrames(
     const offsetX = (1 - scaleX) / 2;
     const offsetY = (1 - scaleY) / 2;
 
-    // Draw this channel to an offscreen canvas with source-over so that
-    // tiles cleanly replace the overview backdrop without additive doubling.
+    // Draw this channel to an offscreen canvas with source-over so that the
+    // view image cleanly replaces the overview backdrop without additive doubling.
     const octx = getOffscreenCanvas(offIdx++, canvas.width, canvas.height);
     octx.imageSmoothingEnabled = true;
     octx.imageSmoothingQuality = 'high';
@@ -312,27 +248,23 @@ export function compositeTiledFrames(
       );
     }
 
-    // 2. Tile overlay (high-res, replaces overview where present)
-    for (const { bitmap, scale, col, row } of ch.tiles.values()) {
-      const gridSize = 2 ** scale;
-      const st = sensorToStage(col / gridSize, row / gridSize, 1 / gridSize, 1 / gridSize, rot);
-
+    // 2. Viewport image (high-res), positioned by its server-authoritative rect
+    if (ch.view) {
+      const { rect } = ch.view;
+      const st = sensorToStage(rect.x, rect.y, rect.w, rect.h, rot);
       const px = toPixelX(offsetX + st.x * scaleX);
       const py = toPixelY(offsetY + st.y * scaleY);
       const pw = toPixelW(st.w * scaleX);
       const ph = toPixelH(st.h * scaleY);
-
-      if (px + pw < 0 || py + ph < 0 || px > canvas.width || py > canvas.height) continue;
-
       const dx = Math.round(px);
       const dy = Math.round(py);
       drawRotated(
         octx,
-        bitmap,
+        ch.view.bitmap,
         0,
         0,
-        bitmap.width,
-        bitmap.height,
+        ch.view.bitmap.width,
+        ch.view.bitmap.height,
         dx,
         dy,
         Math.round(px + pw) - dx,
@@ -419,18 +351,14 @@ export class PreviewChannel {
   /** Overview frame (full sensor, downsampled). */
   frame: ImageBitmap | null = $state<ImageBitmap | null>(null);
 
-  /** Tile cache: key is "scale:col:row". */
-  tiles = $state<SvelteMap<string, TileCacheEntry>>(new SvelteMap());
-  tileScale = $state<number>(-1);
+  /** Latest coherent viewport image + the sensor-normalized region it covers (incl. overscan). */
+  view = $state<{ bitmap: ImageBitmap; rect: PreviewViewport; frameIdx: number } | null>(null);
 
   constructor(public readonly idx: number) {}
 
-  clearTiles(): void {
-    for (const entry of this.tiles.values()) {
-      entry.bitmap.close();
-    }
-    this.tiles = new SvelteMap();
-    this.tileScale = -1;
+  clearView(): void {
+    this.view?.bitmap.close();
+    this.view = null;
   }
 }
 
@@ -447,11 +375,13 @@ export class Preview {
   #client: Client;
   #hal: HALConfig;
   #unsubscribers: Array<() => void> = [];
+  #previewEpoch = -1;
   #viewportUpdateTimer: number | null = null;
   #viewportLastSent = 0;
   #levelsUpdateTimers = new SvelteMap<string, number>();
   #levelsLastSent = new SvelteMap<string, number>();
   readonly #THROTTLE_MS = 200;
+  readonly #PAN_ZOOM_STREAM_MS = 500;
 
   constructor(client: Client, hal: HALConfig, initialStatus: InstrumentStatus) {
     this.#client = client;
@@ -563,16 +493,16 @@ export class Preview {
       if (decoded) this.#handleFrame(channelFromTopic(topic, 'preview.frame'), decoded.info, decoded.bitmap);
     });
 
-    const unsubTile = this.#client.subscribe('preview.tile', async (topic, body) => {
-      const decoded = await decodeTileBody(body);
-      if (decoded) this.#handleTileBatch(channelFromTopic(topic, 'preview.tile'), decoded.info, decoded.tiles);
+    const unsubView = this.#client.subscribe('preview.view', async (topic, body) => {
+      const decoded = await decodeFrameBody(body);
+      if (decoded) this.#handleView(channelFromTopic(topic, 'preview.view'), decoded.info, decoded.bitmap);
     });
 
     const unsubUpdates = this.#client.on('preview.updates', (update) => {
       this.#applyPreviewUpdate(update);
     });
 
-    this.#unsubscribers.push(unsubStatus, unsubFrame, unsubTile, unsubUpdates);
+    this.#unsubscribers.push(unsubStatus, unsubFrame, unsubView, unsubUpdates);
   }
 
   // ── Handlers ────────────────────────────────────────────────────
@@ -585,26 +515,32 @@ export class Preview {
     const newChannelNames = (activeProfile?.channels ?? []).slice(0, this.MAX_CHANNELS);
     if (newChannelNames.length === 0) return;
 
+    const epochChanged = status.preview_epoch !== this.#previewEpoch;
+    this.#previewEpoch = status.preview_epoch;
     const channelsChanged = this.channels.some((channel, i) => (channel.name ?? '') !== (newChannelNames[i] ?? ''));
-    if (!channelsChanged) return;
+    if (!epochChanged && !channelsChanged) return;
 
+    // A new epoch means the server invalidated preview (profile switch etc.) — drop displayed frames so a
+    // previous profile's images don't linger; a channel-set change additionally re-slots the channels.
     for (const ch of this.channels) {
       ch.frame = null;
-      ch.clearTiles();
+      ch.clearView();
     }
 
-    for (let i = 0; i < this.MAX_CHANNELS; i++) {
-      const slot = this.channels[i];
-      slot.visible = false;
-      slot.initAutoLevelDone = false;
-      slot.config = undefined;
-      slot.colormap = null;
-      slot.name = newChannelNames[i];
-      if (!slot.name) continue;
+    if (channelsChanged) {
+      for (let i = 0; i < this.MAX_CHANNELS; i++) {
+        const slot = this.channels[i];
+        slot.visible = false;
+        slot.initAutoLevelDone = false;
+        slot.config = undefined;
+        slot.colormap = null;
+        slot.name = newChannelNames[i];
+        if (!slot.name) continue;
 
-      slot.config = imaging.channels[slot.name];
-      slot.rotationDeg = this.#hal.detection[slot.config?.detection ?? '']?.rotation_deg ?? 0;
-      slot.visible = true;
+        slot.config = imaging.channels[slot.name];
+        slot.rotationDeg = this.#hal.detection[slot.config?.detection ?? '']?.rotation_deg ?? 0;
+        slot.visible = true;
+      }
     }
 
     this.redrawGeneration++;
@@ -641,31 +577,18 @@ export class Preview {
     }
   };
 
-  #handleTileBatch = (
-    channelName: string,
-    info: PreviewTileInfo,
-    tiles: { col: number; row: number; width: number; height: number; bitmap: ImageBitmap }[]
-  ): void => {
+  #handleView = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
     const channel = this.channels.find((c) => c.name === channelName);
     if (!channel) return;
 
-    if (channel.tileScale !== info.scale) {
-      channel.clearTiles();
-      channel.tileScale = info.scale;
+    // Latest-wins: a fast pan can land renders out of order, so drop any view older than the one
+    // we're showing; otherwise adopt it and close the superseded bitmap.
+    if (channel.view && info.frame_idx < channel.view.frameIdx) {
+      bitmap.close();
+      return;
     }
-
-    for (const tile of tiles) {
-      const key = tileKey(info.scale, tile.col, tile.row);
-      const existing = channel.tiles.get(key);
-      if (existing) existing.bitmap.close();
-      channel.tiles.set(key, { bitmap: tile.bitmap, scale: info.scale, col: tile.col, row: tile.row });
-    }
-
-    // The tiles carry the shared viewport they were generated for — a late joiner (or a follower) learns
-    // the current zoom from the stream itself. Don't yank a user actively panning/zooming locally.
-    if (!this.isPanZoomActive && !isViewportEqual(this.viewport, info.viewport)) {
-      this.setViewport(info.viewport);
-    }
+    channel.view?.bitmap.close();
+    channel.view = { bitmap, rect: info.rect, frameIdx: info.frame_idx };
 
     this.redrawGeneration++;
   };
@@ -694,7 +617,7 @@ export class Preview {
     if (this.#viewportUpdateTimer !== null) clearTimeout(this.#viewportUpdateTimer);
     const now = Date.now();
     const send = () => this.#client.send('preview.update', { viewport });
-    if (now - this.#viewportLastSent >= this.#THROTTLE_MS) {
+    if (now - this.#viewportLastSent >= this.#PAN_ZOOM_STREAM_MS) {
       this.#viewportLastSent = now;
       send();
     } else {
@@ -704,7 +627,7 @@ export class Preview {
           send();
           this.#viewportUpdateTimer = null;
         },
-        this.#THROTTLE_MS - (now - this.#viewportLastSent)
+        this.#PAN_ZOOM_STREAM_MS - (now - this.#viewportLastSent)
       );
     }
   }

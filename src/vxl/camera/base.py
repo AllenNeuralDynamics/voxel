@@ -216,7 +216,7 @@ class CameraController(DeviceController["Camera"]):
         self._frame_idx = 0
         self._previewer = PreviewGenerator(
             frame_sink=self._on_preview_frame,
-            tile_sink=self._on_preview_tiles,
+            view_sink=self._on_preview_view,
             uid=device.uid,
         )
         self._writer: OMEZarrWriter | None = None
@@ -261,11 +261,11 @@ class CameraController(DeviceController["Camera"]):
         with suppress(RuntimeError):
             await self.publish("preview", frame.pack())
 
-    async def _on_preview_tiles(self, packed: bytes) -> None:
+    async def _on_preview_view(self, packed: bytes) -> None:
         if self._mode is CameraMode.IDLE and not self._preview_publishing:
             return
         with suppress(RuntimeError):
-            await self.publish("preview_tile", packed)
+            await self.publish("preview_view", packed)
 
     @describe(label="Update Preview Viewport")
     async def update_preview_viewport(self, viewport: PreviewViewport):
@@ -357,7 +357,7 @@ class CameraController(DeviceController["Camera"]):
 
         self._mode = CameraMode.IDLE
         self._preview_publishing = False
-        self._previewer.cancel_tile_task()
+        self._previewer.cancel_view_task()
         if self._preview_task:
             await self._preview_task
             self._preview_task = None
@@ -485,7 +485,7 @@ class CameraController(DeviceController["Camera"]):
         can't wedge the camera into "Stack already open" on the next run.
         """
         self._preview_publishing = False
-        self._previewer.cancel_tile_task()
+        self._previewer.cancel_view_task()
         try:
             if self._writer is not None:
                 await self._run_sync(self._writer.close)

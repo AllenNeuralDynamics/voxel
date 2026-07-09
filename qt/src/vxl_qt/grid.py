@@ -199,7 +199,7 @@ class GridCanvas(QWidget):
 
     Layers toggle independently. Single-click selects a stack; double-click a stack moves the stage
     there; double-click an empty grid cell stamps a new stack at it. The mosaic is computed UI-side
-    (stencil + active FOV + stage bounds, mirroring the web); stacks come from ``instrument.tiles``.
+    (stencil + active FOV + stage bounds, mirroring the web); stacks come from ``instrument.task_tiles``.
     """
 
     def __init__(self, instrument: Instrument, stage: StageStore, parent: QWidget | None = None) -> None:

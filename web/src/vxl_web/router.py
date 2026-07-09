@@ -199,6 +199,7 @@ async def get_status(inst: InstrumentDep) -> InstrumentStatus:
     return InstrumentStatus(
         mode=inst.mode.value,
         active_profile_id=inst.active_profile_id.value,
+        preview_epoch=inst.preview_epoch.value,
         fov=await inst.fov.get(),
         state=inst.state.value,
         task_tiles=inst.task_tiles.value,

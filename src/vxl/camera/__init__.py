@@ -10,7 +10,7 @@ from .base import (
     StorageStatus,
 )
 from .handle import CameraHandle
-from .preview import PreviewFrame, PreviewLevels, PreviewTileInfo, PreviewTiles, PreviewViewport
+from .preview import PreviewFrame, PreviewLevels, PreviewViewport
 
 __all__ = [
     "Camera",
@@ -21,8 +21,6 @@ __all__ = [
     "DatasetRef",
     "PreviewFrame",
     "PreviewLevels",
-    "PreviewTileInfo",
-    "PreviewTiles",
     "PreviewViewport",
     "RemoteTarget",
     "SensorROI",

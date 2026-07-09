@@ -1,11 +1,11 @@
 """Preview state store.
 
-:class:`PreviewStore` holds the per-channel overview + tile data decoded from the instrument's preview
-streams, plus the shared viewport; :class:`vxl_qt.preview.panel.PreviewPanel` composites and renders it.
+:class:`PreviewStore` holds the per-channel overview + viewport-image data decoded from the instrument's
+preview streams, plus the shared viewport; :class:`vxl_qt.preview.panel.PreviewPanel` composites and renders it.
 """
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
@@ -14,9 +14,6 @@ from vxl.camera.preview import (
     PreviewFrame,
     PreviewFrameInfo,
     PreviewLevels,
-    PreviewTile,
-    PreviewTileInfo,
-    PreviewTiles,
     PreviewViewport,
 )
 from vxl.instrument import Instrument
@@ -29,21 +26,12 @@ def _decode_image(data: bytes) -> QImage | None:
     return image if image.loadFromData(data) else None
 
 
-def _decode_tiles(tiles: list[PreviewTile]) -> list[tuple[int, int, QImage]]:
-    """Decode a tile batch to ``(col, row, QImage)`` triples, skipping any that fail to decode."""
-    decoded: list[tuple[int, int, QImage]] = []
-    for tile in tiles:
-        image = QImage()
-        if image.loadFromData(tile.data):
-            decoded.append((tile.col, tile.row, image))
-    return decoded
-
-
 @dataclass
 class ChannelData:
-    """Display data for one channel: the overview backdrop, its high-res tile overlay, and the sensor
-    geometry needed to lay it out (full sensor size + rotation). Decoded to ``QImage`` for direct
-    ``QPainter`` compositing. Histogram accompanies the overview."""
+    """Display data for one channel: the overview backdrop, the coherent high-res viewport image (when
+    zoomed) + the sensor-normalized region it covers, and the sensor geometry needed to lay it out (full
+    sensor size + rotation). Decoded to ``QImage`` for direct ``QPainter`` compositing. Histogram
+    accompanies the overview."""
 
     frame: QImage | None = None  # overview backdrop (full sensor, downsampled)
     colormap: str | None = None
@@ -51,8 +39,9 @@ class ChannelData:
     sensor_w: int = 0
     sensor_h: int = 0
     rotation_deg: int = 0
-    tiles: dict[str, QImage] = field(default_factory=dict)  # keyed "col:row" at the current tile_scale
-    tile_scale: int = -1
+    view: QImage | None = None  # latest coherent viewport image (zoomed); None at full viewport
+    view_rect: PreviewViewport | None = None  # sensor-normalized region the view covers (incl. overscan)
+    view_frame_idx: int = -1  # for latest-wins
 
     def levels(self, percentile: float = 1.0) -> PreviewLevels:
         """Calculate auto-levels from histogram."""
@@ -109,26 +98,26 @@ class PreviewStore(QObject):
         self.frame_received.emit(channel)
         self.composite_updated.emit()
 
-    def set_tiles(self, channel: str, info: PreviewTileInfo, tiles: list[tuple[int, int, QImage]]) -> None:
-        """Add a batch of high-res tiles for a channel; clear the cache when the pyramid scale changes."""
+    def set_view(self, channel: str, info: PreviewFrameInfo, image: QImage) -> None:
+        """Store the latest coherent viewport image + its sensor-normalized rect (latest-wins by frame index)."""
         data = self._channel(channel)
-        if data.tile_scale != info.scale:
-            data.tiles.clear()
-            data.tile_scale = info.scale
-        for col, row, image in tiles:
-            data.tiles[f"{col}:{row}"] = image
+        if info.frame_idx < data.view_frame_idx:
+            return
+        data.view = image
+        data.view_rect = info.rect
+        data.view_frame_idx = info.frame_idx
         self.composite_updated.emit()
 
     def start_feed(self, instrument: Instrument) -> Teardown:
-        """Consume the instrument's live preview streams (overview frames + tiles, preview and
-        acquisition alike). Clears stale data on profile switch so a previous profile's channels don't
+        """Consume the instrument's live preview streams (overview frames + viewport images, preview and
+        acquisition alike). Clears stale data on preview-epoch bump so a previous profile's channels don't
         linger. Returns a teardown callable that detaches the subscriptions.
         """
         self._instrument = instrument
         unsubs = [
             instrument.frames.subscribe(self._on_frame),
-            instrument.tiles.subscribe(self._on_tiles),
-            instrument.active_profile_id.subscribe(lambda _id: self.clear_frames()),
+            instrument.views.subscribe(self._on_view),
+            instrument.preview_epoch.subscribe(lambda _e: self.clear_frames()),
         ]
 
         def teardown() -> None:
@@ -146,14 +135,13 @@ class PreviewStore(QObject):
         if image is not None:
             self.set_frame(channel, image, frame.info, self._rotation_for(channel))
 
-    async def _on_tiles(self, update: tuple[str, bytes]) -> None:
-        # Decode the whole batch off the UI thread — zoomed in a batch is dozens of tiles, and a
-        # synchronous decode of all of them would wedge the UI loop (the beach ball).
+    async def _on_view(self, update: tuple[str, bytes]) -> None:
+        # Decode off the UI thread — a synchronous loadFromData would block the qasync (UI) loop.
         channel, data = update
-        batch = PreviewTiles.from_packed(data)
-        decoded = await asyncio.get_running_loop().run_in_executor(None, _decode_tiles, batch.tiles)
-        if decoded:
-            self.set_tiles(channel, batch.info, decoded)
+        frame = PreviewFrame.from_packed(data)
+        image = await asyncio.get_running_loop().run_in_executor(None, _decode_image, frame.data)
+        if image is not None:
+            self.set_view(channel, frame.info, image)
 
     def _rotation_for(self, channel: str) -> int:
         """The channel's camera rotation (deg) from its channel config + HAL config; 0 if unknown."""
