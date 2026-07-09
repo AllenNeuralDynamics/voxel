@@ -13,10 +13,11 @@ data is pickled.
 """
 
 import logging
+import math
 import multiprocessing as mp
 import os
 import threading
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from multiprocessing.shared_memory import SharedMemory
 
 import numpy as np
@@ -28,6 +29,32 @@ from ._base import BufferSlot, BufferStage
 from ._pyramid import pyramids_3d_numba
 
 log = logging.getLogger(__name__)
+
+# Threads used to prefault (zero) a large segment. numpy's fill releases the GIL, so leading-axis
+# slices commit in parallel; sized for many-core hosts. Segments below the threshold are filled in one
+# call — the thread-pool overhead is not worth it for the small upper pyramid levels.
+_PREFAULT_WORKERS = min(32, os.cpu_count() or 1)
+_PREFAULT_MIN_BYTES = 1 << 28  # 256 MiB
+
+
+def _prefault_zero(arr: np.ndarray) -> None:
+    """Zero — and thereby commit — a freshly created SharedMemory-backed array, in parallel.
+
+    A new SharedMemory segment is demand-zero: its pages are not resident until first touched, and a
+    single-threaded fill leaves most cores idle while the OS faults pages in one at a time. Splitting
+    the fill into leading-axis slices commits the segment with many cores at once, turning a
+    first-touch that would otherwise cost minutes into seconds on a many-core host. Paying it here keeps
+    it off the capture path, where the same faults would otherwise stall ``add_frame`` and depress the
+    frame rate.
+    """
+    n = int(arr.shape[0])
+    if arr.nbytes < _PREFAULT_MIN_BYTES or n <= 1 or _PREFAULT_WORKERS <= 1:
+        arr.fill(0)
+        return
+    workers = min(_PREFAULT_WORKERS, n)
+    step = math.ceil(n / workers)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(lambda z: arr[z : z + step].fill(0), range(0, n, step)))
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +120,7 @@ class ProcessBufferSlot(BufferSlot):
                 shm_name = f"{self.name}_{level.value}"
                 shm = SharedMemory(name=shm_name, create=True, size=nbytes, track=False)
                 arr = np.ndarray(shape, dtype=self._dtype, buffer=shm.buf)
-                arr.fill(0)
+                _prefault_zero(arr)  # commit the segment now, in parallel — off the capture path
                 self._shms[level] = shm
                 self._arrays[level] = arr
                 shm_layout.append((level.value, shm_name, shape))

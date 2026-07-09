@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import shutil
+import time
 from abc import abstractmethod
 from contextlib import suppress
 from enum import StrEnum
@@ -416,7 +417,9 @@ class CameraController(DeviceController["Camera"]):
         self._task_kind = None
 
         # Allocate buffers eagerly (after ROI is set), so every batch's start() is fast.
+        _t = time.perf_counter()
         await self._run_sync(self.device.allocate_buffer)
+        log.info("allocate_buffer for %s took %.1fs", self.device.uid, time.perf_counter() - _t)
 
         # Resolve the logical StorageSpec to a concrete omezarr Storage, then build the writer config:
         # the broadcast `settings` (knobs) + this camera's geometry (frame size, voxel size from
@@ -447,7 +450,12 @@ class CameraController(DeviceController["Camera"]):
             )
         slots = min(max_slots, MAX_WRITER_SLOTS)
         ring_buf = PyramidRingBuffer.by_cpu_count(System.cpu_count())
+        _t = time.perf_counter()
         self._writer = OMEZarrWriter(cfg, dest, slots=slots, ring_buffer=ring_buf)
+        log.info(
+            "OMEZarrWriter construction for %s took %.1fs (%d slots, %.2f GB ring)",
+            self.device.uid, time.perf_counter() - _t, slots, slots * per_slot_bytes / 1e9,
+        )
 
         log.info(
             "Stack init for %s → %s: batch_z=%d slots=%d (%.2f GB/slot, %.2f GB share)",
