@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 from cloudpathlib import S3Path
+from ome_zarr_writer.writer import _as_ome_zarr
 from pydantic import ValidationError
 
 from ome_zarr_writer.storage import DirectS3, Local, S3Store, StagedS3
-from ome_zarr_writer.writer import _as_ome_zarr
 
 
 @pytest.mark.parametrize(

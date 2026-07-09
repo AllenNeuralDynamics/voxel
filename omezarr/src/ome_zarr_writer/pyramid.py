@@ -13,9 +13,9 @@ JIT-specialized twice (serial + parallel) at module import. `prange` on the
 outermost loop degenerates to `range` under `@jit(parallel=False)`, so a single
 source supports both variants without duplication.
 
-Buffers pick the right numba variant for their execution model:
-- ThreadedBufferSlot calls parallel=False (multiple Python threads may call concurrently)
-- ProcessBufferSlot's worker calls parallel=True (single Python caller per worker process)
+`BatchSlot`'s worker is the only caller and passes `parallel=True` (a single Python
+caller per worker process). The serial (`parallel=False`) variant remains JIT-specialized
+so the source stays valid for any in-process caller and for tests.
 """
 
 import math

@@ -9,8 +9,9 @@ from pathlib import Path
 
 import numpy as np
 
-from ome_zarr_writer import Local, OMEZarrWriter, PyramidRingBuffer, ScaleLevel, UIVec3D, UVec3D, WriterConfig
+from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, UIVec3D, UVec3D, WriterConfig
 from ome_zarr_writer.array.ts import TSArrayReader
+from ome_zarr_writer.writer import _as_ome_zarr
 
 
 def main(directory: Path | None = None, filename: str = "stack") -> None:
@@ -26,15 +27,17 @@ def main(directory: Path | None = None, filename: str = "stack") -> None:
     )
 
     # Batch depth (cfg.batch_z) is policy-derived from the config knobs; RAM only sizes the ring slots.
-    writer = OMEZarrWriter(cfg, storage, ring_buffer=PyramidRingBuffer.PROCESS, slots=3)
+    writer = OMEZarrWriter(slots=3)
+    writer.begin_stack(cfg, storage)
     for i in range(z):
         writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))  # frame i holds value i+1
     writer.close()
 
-    l0 = TSArrayReader(writer.target / "0").read_3d(z0=0, z1=z)
+    dataset = _as_ome_zarr(storage.target)  # writer.target is None after close(); derive from the storage
+    l0 = TSArrayReader(dataset / "0").read_3d(z0=0, z1=z)
     assert l0.shape == (z, y, x), l0.shape
     assert int(l0[0].max()) == 1 and int(l0[z - 1].max()) == z
-    print(f"wrote + verified {z} frames at {writer.target}")
+    print(f"wrote + verified {z} frames at {dataset}")
 
 
 if __name__ == "__main__":

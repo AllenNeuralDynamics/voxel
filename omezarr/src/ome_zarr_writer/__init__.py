@@ -13,9 +13,11 @@ is added by the writer, so pass a bare base path):
     ...     voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
     ...     max_level=ScaleLevel.L5,
     ... )
-    >>> writer = OMEZarrWriter(config, Local(target="/path/to/experiment"), slots=6)
+    >>> writer = OMEZarrWriter(slots=6)  # coordinator: owns a reusable ring across stacks
+    >>> writer.begin_stack(config, Local(target="/path/to/experiment"))
     >>> for frame in camera.stream():
     ...     writer.add_frame(frame)
+    >>> writer.end_stack()
     >>> writer.close()
 
 Write to S3 with a `Storage` variant -- `DirectS3` writes straight to S3, `StagedS3` stages
@@ -28,15 +30,15 @@ profile (credentials come from the AWS chain):
     ...     target=S3Path("s3://my-bucket/experiment"),
     ...     store=S3Store(endpoint="http://10.0.0.1", region="us-east-1"),
     ... )
-    >>> writer = OMEZarrWriter(config, storage, slots=6)
+    >>> writer = OMEZarrWriter(slots=6)
+    >>> writer.begin_stack(config, storage)
 
-The array backend (`ArrayWriter.Backend.TS` / `.ZARRS`) and ring-buffer mode
-(`PyramidRingBuffer.THREADED` / `.PROCESS`) are `OMEZarrWriter` constructor options.
+The array backend (`ArrayWriter.Backend.TS` / `.ZARRS`) is an `OMEZarrWriter` constructor
+option; each batch is downsampled and flushed in a worker process (see `buffer.BatchSlot`).
 """
 
 from vxlib.vec import UIVec2D, UIVec3D, UVec3D
 
-from .buffer import BufferSlot, BufferStage, BufferStatus, PyramidRingBuffer
 from .dataset import Compression, DownscaleType, Dtype, ScaleLevel
 from .storage import DirectS3, Local, S3Store, StagedS3, StagingConfig, Storage
 from .writer import BatchMetrics, OMEZarrWriter, WriterConfig, WriterSettings
@@ -53,10 +55,6 @@ __all__ = [
     "UVec3D",
     "Compression",
     "BatchMetrics",
-    "BufferStage",
-    "BufferStatus",
-    "BufferSlot",
-    "PyramidRingBuffer",
     "S3Store",
     "StagingConfig",
     "Storage",

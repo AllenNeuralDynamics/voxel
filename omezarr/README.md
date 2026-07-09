@@ -95,7 +95,7 @@ The backend is selected with `ArrayWriter.Backend`, passed to the writer as `bac
 | `Backend.ZARRS` | zarr-python with the zarrs Rust codec pipeline — local filesystem only | Implemented |
 | `Backend.AQZ` | Acquire-zarr | Declared, not yet implemented |
 
-The ring buffer likewise has two modes via `PyramidRingBuffer`: `THREADED` (in-process numpy slots) and `PROCESS` (shared-memory slots across processes, the default).
+Each batch is held in a shared-memory ring slot (`BatchSlot`) whose worker process both downsamples and writes it, so the compress+write never contends with the capture loop's GIL.
 
 ## Layout
 
@@ -104,8 +104,8 @@ The ring buffer likewise has two modes via `PyramidRingBuffer`: `THREADED` (in-p
 | [`writer.py`](src/ome_zarr_writer/writer.py) | `OMEZarrWriter`, `WriterConfig`, batch orchestration and staging |
 | [`dataset.py`](src/ome_zarr_writer/dataset.py) | OME-NGFF / Zarr v3 metadata, `ScaleLevel`, `Compression`, `DownscaleType` |
 | [`array/`](src/ome_zarr_writer/array/) | `ArrayWriter` base and the TensorStore / zarrs backends |
-| [`buffer/`](src/ome_zarr_writer/buffer/) | Threaded and process ring-buffer implementations |
-| [`pyramid/`](src/ome_zarr_writer/pyramid/) | Downsampling kernels (numba JIT, numpy reference) |
+| [`slot.py`](src/ome_zarr_writer/slot.py) | `BatchSlot` ring slot — worker process downsamples + writes one batch |
+| [`pyramid.py`](src/ome_zarr_writer/pyramid.py) | Downsampling kernels (numba JIT, numpy reference) |
 | [`transfer.py`](src/ome_zarr_writer/transfer.py) | s5cmd wrapper for staged S3 upload |
 | [`viewer/`](src/ome_zarr_writer/viewer/) | Read-side loader and Neuroglancer helpers |
 

@@ -17,7 +17,6 @@ from cloudpathlib import S3Path
 from ome_zarr_writer import (
     DirectS3,
     OMEZarrWriter,
-    PyramidRingBuffer,
     ScaleLevel,
     StagedS3,
     Storage,
@@ -52,7 +51,8 @@ def test_s3_roundtrip(minio: Minio, kind: str, tmp_path: Path, monkeypatch: pyte
     cfg = WriterConfig(
         volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L6
     )
-    writer = OMEZarrWriter(cfg, _storage(kind, tmp_path, minio), slots=3, ring_buffer=PyramidRingBuffer.THREADED)
+    writer = OMEZarrWriter(slots=3)
+    writer.begin_stack(cfg, _storage(kind, tmp_path, minio))
     for i in range(z):
         writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))
     writer.close()

@@ -14,7 +14,6 @@ from ome_zarr_writer import (
     DirectS3,
     Local,
     OMEZarrWriter,
-    PyramidRingBuffer,
     StagedS3,
     Storage,
     UIVec3D,
@@ -231,6 +230,9 @@ class CameraController(DeviceController["Camera"]):
         self._preview_publishing = False
         self._publish_fn = None
         self._previewer.shutdown()
+        if self._writer is not None:  # free the reusable ring (its slots' workers + shared memory)
+            await self._run_sync(self._writer.close)
+            self._writer = None
         System.Ram.release(self.device.uid)
         await super().close()
 
@@ -406,9 +408,7 @@ class CameraController(DeviceController["Camera"]):
         :class:`DatasetRef` (control persists it as ``<channel>.ref.json``). The trigger is configured
         per-batch in ``begin_batch``.
         """
-        if self._writer is not None:
-            raise RuntimeError("Stack already open. Call close_stack() first.")
-        if self._mode != CameraMode.IDLE:
+        if self._mode != CameraMode.IDLE:  # a stack already open (or previewing) → mode is not IDLE
             raise RuntimeError(f"Cannot open stack: camera in {self._mode} mode")
 
         self._mode = CameraMode.ACQUISITION
@@ -449,12 +449,16 @@ class CameraController(DeviceController["Camera"]):
                 f"shard_z_chunks, max_level, target_shard_gb, or ROI; or raise max_ram_fraction."
             )
         slots = min(max_slots, MAX_WRITER_SLOTS)
-        ring_buf = PyramidRingBuffer.by_cpu_count(System.cpu_count())
+        if self._writer is None:  # the coordinator persists across volumes so its ring is reused
+            self._writer = OMEZarrWriter(slots=slots)
         _t = time.perf_counter()
-        self._writer = OMEZarrWriter(cfg, dest, slots=slots, ring_buffer=ring_buf)
+        self._writer.begin_stack(cfg, dest)  # (re)allocates the ring on the first volume; reused after
         log.info(
-            "OMEZarrWriter construction for %s took %.1fs (%d slots, %.2f GB ring)",
-            self.device.uid, time.perf_counter() - _t, slots, slots * per_slot_bytes / 1e9,
+            "OMEZarrWriter begin_stack for %s took %.1fs (%d slots, %.2f GB ring)",
+            self.device.uid,
+            time.perf_counter() - _t,
+            slots,
+            slots * per_slot_bytes / 1e9,
         )
 
         log.info(
@@ -496,9 +500,8 @@ class CameraController(DeviceController["Camera"]):
         self._previewer.cancel_view_task()
         try:
             if self._writer is not None:
-                await self._run_sync(self._writer.close)
+                await self._run_sync(self._writer.end_stack)  # drain the dataset; keep the ring for reuse
         finally:
-            self._writer = None
             await self._run_sync(self.device.free_buffer)
             self._mode = CameraMode.IDLE
         log.info("Stack closed for %s", self.device.uid)
