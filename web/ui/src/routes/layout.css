@@ -48,9 +48,6 @@
   --ui-md: var(--ui-base); /* 28px */
   --ui-lg: calc(var(--ui-base) + 1 * var(--ui-step)); /* 32px */
 
-  --highlight: #467ff2;
-  --highlight: #588ff8;
-  --highlight: #6b9eff;
 }
 
 .density-compact {
@@ -95,15 +92,16 @@
   --color-border-focused: var(--border-focused);
   --color-border-selected: var(--border-selected);
   --color-border-disabled: var(--border-disabled);
+  --color-border-faint: var(--border-faint);
   --color-input: var(--border-variant);
   --color-ring: var(--border-focused);
 
   /* ── Interactive ───────────────────────────────────────────────────── */
   --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
   --color-primary-fg: var(--primary-fg);
   --color-secondary: var(--secondary);
   --color-secondary-fg: var(--secondary-fg);
-  --color-highlight: var(--highlight);
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
   --color-danger: var(--danger);

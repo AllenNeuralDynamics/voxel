@@ -2,7 +2,7 @@
   import type { PopoverContentProps } from 'bits-ui';
   import { Popover } from 'bits-ui';
 
-  import { isValidHex } from '$lib/utils';
+  import { isValidHex } from '$lib/colors.svelte';
 
   interface Props {
     color: string;

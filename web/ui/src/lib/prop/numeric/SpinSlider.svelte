@@ -49,10 +49,10 @@
     className
   )}
 >
-  <SpinBox {model} {decimals} {numCharacters} {align} {prefix} {suffix} {disabled} />
+    <SpinBox {model} {decimals} {numCharacters} {align} {prefix} {suffix} {disabled} class="border-r-0 rounded-r-none bg-transparent"/>
   <input
     type="range"
-    class="slider-input focus:border-focused min-w-16 flex-1 cursor-pointer appearance-none overflow-hidden rounded border border-input bg-element-bg transition-colors outline-none"
+    class="slider-input focus:border-focused min-w-16 flex-1 cursor-pointer appearance-none overflow-hidden rounded-r border border-input bg-transparent transition-colors outline-none"
     min={sliderMin}
     max={sliderMax}
     step={sliderStep}
@@ -65,14 +65,14 @@
 
 <style>
   .slider-input {
-    --track-filled: var(--color-highlight);
+    --track-filled: var(--color-primary-soft);
     --thumb-width: 3px;
     margin: 0;
     padding: 0;
   }
 
   .slider-input:hover {
-    --track-filled: color-mix(in oklch, var(--color-highlight) 85%, var(--color-fg));
+    --track-filled: color-mix(in oklch, var(--color-primary-soft) 85%, var(--color-fg));
   }
 
   .slider-input::-webkit-slider-runnable-track {

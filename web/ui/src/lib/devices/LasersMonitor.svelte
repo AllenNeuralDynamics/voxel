@@ -99,7 +99,7 @@
   <!-- {@const temp = laser.temperature?.value} -->
   {@const enabled = laser.isEnabled?.value === true}
   {@const channel = channelOf(laser.id)}
-  <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card/50">
+  <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card">
     <!-- row 1: identity + power readout + enable -->
     <div class="flex items-center gap-3 px-2.5 pt-2 pb-1.5">
       {@render deviceIdentity(wl ? `${wl} nm` : laser.id, channel)}

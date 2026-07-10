@@ -2,9 +2,9 @@
   import { DropdownMenu, Popover } from 'bits-ui';
   import { SvelteSet } from 'svelte/reactivity';
 
+  import { isValidHex } from '$lib/colors.svelte';
   import { Check, FilterVariant } from '$lib/icons';
   import type { ColormapCatalog } from '$lib/model';
-  import { isValidHex } from '$lib/utils';
 
   interface Props {
     label: string;
@@ -38,6 +38,20 @@
   }
 
   const triggerColor = $derived(getTriggerColor(colormap, catalog));
+  const colormapName = $derived(colormap ? (colormap.startsWith('#') ? 'custom' : colormap) : 'none');
+
+  const triggerStops = $derived.by(() => {
+    if (!colormap) return null;
+    for (const group of catalog) {
+      const stops = group.colormaps[colormap];
+      if (stops) return stops;
+    }
+    return colormap.startsWith('#') ? [colormap] : null;
+  });
+  // A gradient for multi-stop maps, a solid swatch for a single/custom color.
+  const triggerGradient = $derived(
+    triggerStops && triggerStops.length > 1 ? stopsToGradient(triggerStops) : (triggerStops?.[0] ?? 'var(--color-fg-muted)')
+  );
 
   const defaultTriggerClass = 'cursor-pointer text-base leading-5 font-medium transition-colors hover:brightness-125';
 
@@ -81,11 +95,12 @@
 
 <Popover.Root bind:open>
   <Popover.Trigger
-    class={triggerClass ?? defaultTriggerClass}
-    style="color: {triggerColor};"
-    aria-label="Pick colormap for {label}"
+    class={`${triggerClass ?? defaultTriggerClass} flex w-full items-center gap-2`}
+    title="Colormap: {colormapName} · {label}"
+    aria-label="Pick colormap for {label} (current: {colormapName})"
   >
-    {label}
+    <span class="shrink-0 text-fg">{label}</span>
+    <span class="h-2 min-w-0 flex-1 rounded-[2px]" style="background: {triggerGradient};"></span>
   </Popover.Trigger>
 
   <Popover.Portal>
@@ -107,6 +122,7 @@
         />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
+            tabindex={-1}
             class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input bg-element-bg transition-colors hover:bg-element-hover {hasFilter
               ? 'text-fg'
               : 'text-fg-muted'}"

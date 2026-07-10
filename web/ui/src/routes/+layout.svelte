@@ -4,7 +4,7 @@
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
   import { DropdownMenu } from 'bits-ui';
   import { Pane, PaneGroup } from 'paneforge';
-  import { PersistedState, useEventListener } from 'runed';
+  import { useEventListener } from 'runed';
   import type { Component } from 'svelte';
   import { onDestroy, onMount } from 'svelte';
 
@@ -14,6 +14,7 @@
   import type { Pathname } from '$app/types';
   import favicon from '$lib/assets/favicon.svg';
   import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
+  import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import { GridCanvas } from '$lib/grid';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
@@ -64,8 +65,17 @@
   // --- Shell nav ---
 
   let shellRef = $state<HTMLElement | null>(null);
-  const leftPane = createPaneSize(() => shellRef, { min: 740, fallbackMin: 30 });
-  const rightPane = createPaneSize(() => shellRef, { min: 336, max: 350, fallbackMin: 15, fallbackMax: 18 });
+  const leftPane = createPaneSize(() => shellRef, { min: 740, fallback: { min: 30 } });
+  const rightPane = createPaneSize(() => shellRef, { min: 336, max: 350, fallback: { min: 15, max: 18 } });
+
+  // Vertical split inside the right pane: monitors (top) over the StageCube (bottom).
+  let rightSplitEl = $state<HTMLElement | null>(null);
+  const stageCubePane = createPaneSize(() => rightSplitEl, {
+    default: 280,
+    min: 250,
+    max: 320,
+    fallback: { min: 28, max: 40, default: 32 }
+  });
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
     { id: '/', label: 'Inspect', icon: Microscope },
@@ -85,31 +95,14 @@
     goto(resolve(id), { keepFocus: true, noScroll: true });
   }
 
-  // --- Bottom pane (setup) ---
+  // --- Bottom pane (logs) ---
 
-  const panelTab = new PersistedState('setup.panel.tab', 'logs');
-  let bottomPanelTab = $derived(panelTab.current);
+  let bottomPane = $state<Pane | undefined>(undefined);
+  const logsOpen = $derived(bottomPane ? !bottomPane.isCollapsed() : false);
 
-  function setTab(tab: string) {
-    panelTab.current = tab;
-  }
-  let bottomPane: Pane | undefined = $state(undefined);
-
-  function selectTab(id: string) {
-    if (bottomPanelTab === id) {
-      if (bottomPane?.isCollapsed()) bottomPane.expand();
-      else bottomPane?.collapse();
-    } else {
-      setTab(id);
-      if (bottomPane?.isCollapsed()) bottomPane.expand();
-    }
-  }
-
-  function tabClass(selected: boolean): string {
-    return cn(
-      'gap-2 flex items-center h-ui-xs px-2 text-sm transition-colors hover:bg-element-hover',
-      selected ? 'bg-element-bg text-fg' : 'text-fg-muted'
-    );
+  function toggleLogs() {
+    if (bottomPane?.isCollapsed()) bottomPane.expand();
+    else bottomPane?.collapse();
   }
 
   // --- Dialog state ---
@@ -165,8 +158,8 @@
     <PaneGroup direction="horizontal" autoSaveId="shell.v5">
       <!-- Mode controls: nav + routed content + logs -->
       <Pane defaultSize={leftPane.minSize} minSize={leftPane.minSize} maxSize={60}>
-        <div class="grid h-full grid-rows-[auto_1fr_auto]">
-          <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border bg-surface px-4">
+        <div class="grid h-full grid-rows-[auto_1fr] bg-surface">
+          <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border bg-elevated px-4">
             {@render appMenu()}
             <nav class="flex h-ui-md items-center gap-x-1 text-fg-muted">
               {#each navTabs as tab (tab.id)}
@@ -187,6 +180,12 @@
                 </button>
               {/each}
             </nav>
+            <button
+              onclick={toggleLogs}
+              class="ml-auto inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+            >
+              {logsOpen ? 'Hide logs' : 'Show logs'}
+            </button>
           </header>
           <PaneGroup direction="vertical" autoSaveId="setup.layout">
             <Pane>
@@ -194,42 +193,27 @@
                 {@render children()}
               </div>
             </Pane>
-            <PaneDivider
-              direction="horizontal"
-              ondblclick={() => {
-                if (bottomPane?.isCollapsed()) bottomPane.expand();
-                else bottomPane?.collapse();
-              }}
-            />
+            <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
             <Pane
               bind:this={bottomPane}
               collapsible
               collapsedSize={0}
-              defaultSize={40}
+              defaultSize={30}
               minSize={30}
               maxSize={50}
-              onCollapse={() => {}}
               class="bg-surface/50"
             >
-              {#if bottomPanelTab === 'logs'}
-                <LogViewer {logs} class="bg-card" />
-              {/if}
+              <LogViewer {logs} class="bg-card" />
             </Pane>
           </PaneGroup>
-
-          <footer class="flex h-12 items-center border-t border-border px-4 py-2">
-            <div class="flex divide-x divide-border rounded border border-border">
-              <button onclick={() => selectTab('logs')} class={tabClass(bottomPanelTab === 'logs')}>Logs</button>
-            </div>
-          </footer>
         </div>
       </Pane>
       <PaneDivider direction="vertical" />
 
       <!-- Viewer: Preview + Grid Canvas (centerpiece) -->
       <Pane defaultSize={45}>
-        <div class="flex h-full flex-col">
-          <header class="flex h-15 shrink-0 items-center justify-end border-b border-border bg-surface px-4">
+        <div class="flex h-full flex-col bg-canvas">
+          <header class="flex h-15 shrink-0 items-center justify-end border-b border-border bg-elevated px-4">
             <RunButton {app} />
           </header>
           <main class="min-h-0 flex-1 overflow-hidden">
@@ -248,20 +232,29 @@
       <PaneDivider direction="vertical" />
 
       <!-- Monitors: run controls + device telemetry -->
-      <Pane defaultSize={16} {...rightPane} class="flex flex-col">
-        <header class="flex h-15 shrink-0 items-center border-b border-border bg-surface px-4">
+      <Pane defaultSize={16} {...rightPane} class="flex flex-col bg-surface">
+        <header class="flex h-15 shrink-0 items-center border-b border-border bg-elevated px-4">
           <ProfileSelector {instrument} size="md" class="w-full" />
         </header>
-        <div class="flex flex-1 flex-col divide-y divide-border overflow-y-auto">
-          {#if instrument.cameras.size > 0}
-            <CamerasMonitor {instrument} />
-          {/if}
-          {#if instrument.lasers.size > 0}
-            <LasersMonitor {instrument} />
-          {/if}
-          <div class="flex-1"></div>
-        </div>
-        <StageCube {instrument} class="shrink-0 border-t border-border p-3" />
+        <PaneGroup direction="vertical" bind:ref={rightSplitEl} autoSaveId="monitors.v1" class="min-h-0 flex-1">
+          <Pane class="min-h-0">
+            <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
+              {#if instrument.cameras.size > 0}
+                <CamerasMonitor {instrument} />
+              {/if}
+              {#if instrument.lasers.size > 0}
+                <LasersMonitor {instrument} />
+              {/if}
+              {#if instrument.filterWheels.length > 0}
+                <FilterWheelsMonitor {instrument} />
+              {/if}
+            </div>
+          </Pane>
+          <PaneDivider direction="horizontal" />
+          <Pane defaultSize={32} {...stageCubePane} class="min-h-0">
+            <StageCube {instrument} class="border-t border-border p-3" />
+          </Pane>
+        </PaneGroup>
       </Pane>
     </PaneGroup>
   </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { wavelengthToColor } from '$lib/colors.svelte';
   import { getVoxelApp } from '$lib/model';
-  import { sanitizeString, toastError, wavelengthToColor } from '$lib/utils';
+  import { sanitizeString, toastError } from '$lib/utils';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);

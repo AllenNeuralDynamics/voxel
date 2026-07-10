@@ -5,9 +5,9 @@
     slots: {
       root: [
         'group flex cursor-pointer items-center rounded-full transition-colors',
-        'border border-fg-faint data-[state=checked]:border-highlight',
+        'border border-fg-faint data-[state=checked]:border-primary-soft',
         'bg-element-bg hover:bg-element-hover',
-        'data-[state=checked]:bg-highlight data-[state=checked]:hover:bg-highlight',
+        'data-[state=checked]:bg-primary-soft data-[state=checked]:hover:bg-primary-soft',
         'data-disabled:cursor-not-allowed data-disabled:opacity-40',
         'h-[var(--switch-h)] w-[calc(var(--switch-h)*1.8)] px-[calc(var(--switch-h)*0.1)]'
       ],

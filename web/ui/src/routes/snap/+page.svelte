@@ -58,7 +58,7 @@
   }
 
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebar = createPaneSize(() => paneGroupEl, { min: 350 });
+  const sidebar = createPaneSize(() => paneGroupEl, { min: 280 });
 </script>
 
 {#snippet snapItem(snap: Snapshot)}

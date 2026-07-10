@@ -649,7 +649,7 @@
         <svg
           bind:this={svgRef}
           viewBox={viewBoxStr}
-          class="border border-fg-faint/70"
+          class="border border-border-faint"
           style="width: {canvasWidth}px; height: {canvasHeight}px;"
           overflow="visible"
           role="img"
@@ -677,8 +677,9 @@
     padding: 0;
     border: none;
     background-color: transparent;
-    --_track-color: var(--color-border);
-    --_track-width: 0.5px;
+    /* Transparent: the XYPlane's own border serves as the rail, so the slider blends into it. */
+    --_track-color: transparent;
+    --_track-width: 1px;
     --_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / 100% var(--_track-width) no-repeat;
 
     &::-webkit-slider-runnable-track {

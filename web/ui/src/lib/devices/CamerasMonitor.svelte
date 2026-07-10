@@ -48,11 +48,11 @@
   {@const sizeMb = cam.frameSizeMb?.value}
   {@const fill = cam.bufferFill}
   {@const dropped = info?.dropped_frames ?? 0}
-  <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card/50">
+  <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card">
     <!-- row 1: identity + geometry -->
     <div class="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
       {@render deviceIdentity(sanitizeString(cam.id), channel)}
-      <span class="ml-auto font-mono text-[10px] text-fg-faint tabular-nums">
+      <span class="ml-auto font-mono text-[10px] text-fg-muted tabular-nums">
         {frame ? `${frame.x}×${frame.y}` : '—'}{#if typeof sizeMb === 'number'}
           · {sizeMb.toFixed(1)} MB{/if}
       </span>

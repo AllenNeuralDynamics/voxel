@@ -77,9 +77,14 @@ function propValueDiverged(saved: unknown, current: unknown): boolean {
 }
 
 /** Whether a live ROI needs saving against the profile-saved one (never-saved counts as dirty). */
-function roiDiffers(saved: SensorROI | undefined, live: SensorROI | undefined): boolean {
+function roiDiffers(saved: SensorROI | undefined, live: SensorROI | undefined, sensor?: { x: number; y: number }): boolean {
   if (!live) return false;
-  if (!saved) return true;
+  if (!saved) {
+    // The backend stores no ROI for a full-sensor crop (its implicit default), so an absent saved
+    // ROI means "full sensor" — a live ROI is only dirty here if it's an unsaved *crop*.
+    if (!sensor) return false;
+    return !(live.x === 0 && live.y === 0 && live.w === sensor.x && live.h === sensor.y);
+  }
   return saved.x !== live.x || saved.y !== live.y || saved.w !== live.w || saved.h !== live.h;
 }
 
@@ -143,6 +148,17 @@ export class Instrument {
   readonly axes = $derived.by(() => this.#devicesOfType(AxisHandle));
   readonly discreteAxes = $derived.by(() => this.#devicesOfType(DiscreteAxisHandle));
   readonly analogOuts = $derived.by(() => this.#devicesOfType(AnalogOutHandle));
+
+  // Discrete axes any detection path declares as a filter wheel — config-authoritative, across all profiles.
+  readonly filterWheels = $derived.by<DiscreteAxisHandle[]>(() => {
+    const ids = Object.values(this.hal.detection).flatMap((det) => det.filter_wheels);
+    return ids
+      .filter((id, i) => ids.indexOf(id) === i)
+      .flatMap((id) => {
+        const wheel = this.discreteAxes.get(id);
+        return wheel ? [wheel] : [];
+      });
+  });
 
   /** The stage's mapped axis handles (each carries position + lower/upper limits); undefined if unmapped. */
   readonly stage = $derived.by<{ x?: AxisHandle; y?: AxisHandle; z?: AxisHandle }>(() => {
@@ -236,7 +252,9 @@ export class Instrument {
         if (prop.access !== 'rw' || name === 'roi' || name === 'roi_grid') continue;
         if (!(name in saved) || propValueDiverged(saved[name], prop.value)) dirty.add(name);
       }
-      const roiDirty = device instanceof CameraHandle && roiDiffers(profile.rois[device.id], device.roi.value);
+      const roiDirty =
+        device instanceof CameraHandle &&
+        roiDiffers(profile.rois[device.id], device.roi.value, device.sensorSizePx ?? undefined);
       out.set(device.id, { saved, dirty, roiDirty });
     };
     for (const ch of this.activeChannels) {

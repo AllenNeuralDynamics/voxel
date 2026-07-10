@@ -16,24 +16,23 @@
 	 * canvas < surface < elevated < floating
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --canvas: oklch(1 0 0);
-  /* zed: background — white
+  --canvas: oklch(0.869 0.005 56.366);
+  /* stone-300 — warm gray app base (was zinc-200 0.92)
 	 * App-level base. Body background, empty areas. */
 
-  --surface: oklch(0.985 0 0);
-  /* zed: surface.background — zinc-50
+  --surface: oklch(0.923 0.003 48.717);
+  /* stone-200 — panels read warm gray, not white (was zinc-100 0.967)
 	 * Panels, content panes. Where most UI lives. */
 
   --panel: var(--surface);
-  /* zed: panel.background
-	 * Secondary panels. Falls back to surface; override per-theme. */
+  /* Secondary panels. Falls back to surface; override per-theme. */
 
-  --elevated: oklch(0.967 0.001 286.375);
-  /* zed: elevated_surface.background, tab_bar.background, toolbar.background — zinc-100
+  --elevated: oklch(0.97 0.001 106.424);
+  /* stone-100 — cards, a soft warm gray above surface (was zinc-50 0.985)
 	 * Cards, headers, toolbars, detail panels. */
 
-  --floating: oklch(1 0 0);
-  /* zed: elevated_surface.background (for popups) — white
+  --floating: oklch(0.985 0.001 106.423);
+  /* stone-50 — near-white, pops as an overlay (was white)
 	 * Popovers, dropdowns, dialog panels. */
 
   --backdrop: oklch(0 0 0 / 50%);
@@ -54,28 +53,26 @@
   /* zed: element.hover, ghost_element.hover — ~zinc-150 on white
 	 * Hovered interactive elements. */
 
-  --element-active: oklch(0 0 0 / 12%);
-  /* zed: element.active, ghost_element.active — ~zinc-200 on white
-	 * Pressed/clicked interactive elements. */
+  --element-active: oklch(0 0 0 / 16%);
+  /* Pressed/clicked interactive elements. (was 12%) */
 
-  --element-selected: oklch(0 0 0 / 8%);
-  /* zed: element.selected, ghost_element.selected — ~zinc-150 on white
-	 * Selected state. Current tab, chosen list item. */
+  --element-selected: oklch(0 0 0 / 12%);
+  /* Selected state — now distinct from hover. Current tab, chosen list item. (was 8%, == hover) */
 
   /* ── Text ──────────────────────────────────────────────────────────
 	 * Flat hierarchy. Icons inherit text color.
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --fg: oklch(0.141 0.005 285.823);
-  /* zed: text — zinc-950
+  --fg: oklch(0.147 0.004 49.25);
+  /* stone-950 — warm near-black (was zinc-950 0.141)
 	 * Primary text. Body copy, headings, values. */
 
-  --fg-muted: oklch(0.552 0.016 285.938);
-  /* zed: text.muted — zinc-500
+  --fg-muted: oklch(0.553 0.013 58.071);
+  /* stone-500 — warm (was zinc-500 0.552)
 	 * Secondary text. Labels, descriptions, inactive items. */
 
-  --fg-faint: oklch(0.705 0.015 286.067);
-  /* zed: text.placeholder, text.disabled — zinc-400
+  --fg-faint: oklch(0.709 0.01 56.259);
+  /* stone-400 — warm (was zinc-400 0.705)
 	 * Tertiary. Placeholders, disabled text, subtle hints. */
 
   --fg-accent: oklch(0.623 0.214 259.815);
@@ -85,24 +82,27 @@
   /* ── Borders ───────────────────────────────────────────────────────
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --border: oklch(0.92 0.004 286.32);
-  /* zed: border — zinc-200
+  --border: oklch(0.709 0.01 56.259);
+  /* stone-400, warm — ~2:1 on the gray surfaces (was 0.795, too close to surface)
 	 * Structural borders. Panel edges, section dividers. */
 
-  --border-variant: oklch(0.92 0.004 286.32);
-  /* zed: border.variant — zinc-200
+  --border-variant: oklch(0.78 0.008 57);
+  /* ~stone-350, subtler than border (was 0.855)
 	 * Contained elements — inputs, cards, soft divisions. */
+
+  --border-faint: oklch(0.709 0.01 56.259 / 0.7);
+  /* faint guide line — grid plane outlines, subtle rules */
 
   --border-focused: oklch(0.623 0.214 259.815);
   /* zed: border.focused — blue-500
 	 * Focus rings on inputs, buttons, interactive elements. */
 
-  --border-selected: oklch(0.623 0.214 259.815);
-  /* zed: border.selected — blue-500
+  --border-selected: oklch(0.546 0.216 262);
+  /* deeper blue than the focus ring so selection reads distinct from focus (was == border-focused blue-500)
 	 * Selected element borders. */
 
-  --border-disabled: oklch(0.941 0.003 286.375);
-  /* zed: border.disabled — zinc-150
+  --border-disabled: oklch(0.84 0.006 56);
+  /* warm, faint (was 0.895)
 	 * Disabled element borders. */
 
   /* ── Interactive ───────────────────────────────────────────────────
@@ -112,16 +112,19 @@
   /* zed: (derived from text.accent) — blue-500
 	 * Main action color. CTA buttons, links. */
 
+  --primary-soft: oklch(0.623 0.118 259.815);
+  /* softer primary (~half chroma) — slider/track fills */
+
   --primary-fg: oklch(0.97 0.014 254.604);
   /* zed: (light text on accent) — blue-50
 	 * Text on primary backgrounds. */
 
-  --secondary: oklch(0.967 0.001 286.375);
-  /* zed: element.background — zinc-100
+  --secondary: oklch(0.923 0.003 48.717);
+  /* stone-200 — warm subtle fill (was zinc-100 0.967)
 	 * Secondary/subtle button fills. */
 
-  --secondary-fg: oklch(0.21 0.006 285.885);
-  /* zed: text — zinc-900
+  --secondary-fg: oklch(0.216 0.006 56.043);
+  /* stone-900 — warm (was zinc-900 0.21)
 	 * Text on secondary backgrounds. */
 
   /* ── Semantic: Danger ──────────────────────────────────────────── */
@@ -192,36 +195,35 @@
 .dark {
   /* ── Surfaces ─────────────────────────────────────────────────────── */
 
-  --canvas: oklch(0.141 0.005 285.823);
-  /* zed: background — zinc-950 */
+  --canvas: oklch(0.21 0.006 285.885);
+  /* zinc-900 — lifted base, less harsh than the old near-black (was zinc-950 0.141) */
 
-  --surface: oklch(0.175 0.005 285.823);
-  /* zed: surface.background — ~zinc-925 */
+  --surface: oklch(0.274 0.006 286.033);
+  /* zinc-800 — panels one zinc step above canvas (was ~zinc-920 0.185) */
 
   /* --panel: var(--surface); — inherited from :root */
 
-  --elevated: oklch(0.21 0.006 285.885);
-  /* zed: elevated_surface.background — zinc-900 */
+  --elevated: oklch(0.322 0.0095 285.9);
+  /* ~zinc-750 (interpolated 700↔800) — cards/headers/toolbars (was zinc-900 0.21) */
 
-  --floating: oklch(0.21 0.006 285.885);
-  /* zed: elevated_surface.background — zinc-900 */
+  --floating: oklch(0.37 0.013 285.805);
+  /* zinc-700 — brightest tier, popovers/dialogs (was zinc-900 0.21) */
 
   --backdrop: oklch(0 0 0 / 60%);
 
   /* ── Element ──────────────────────────────────────────────────────── */
 
-  --element-bg: oklch(1 0 0 / 8%);
-  /* zed: element.background — ~zinc-800 on zinc-950
-	 * Transparent: adapts to any parent surface. */
+  --element-bg: oklch(1 0 0 / 10%);
+  /* Default fill. Transparent: adapts to any parent surface. (was 8%) */
 
-  --element-hover: oklch(1 0 0 / 12%);
-  /* zed: element.hover — ~zinc-750 */
+  --element-hover: oklch(1 0 0 / 16%);
+  /* Hovered interactive elements. (was 12%) */
 
-  --element-active: oklch(1 0 0 / 16%);
-  /* zed: element.active — ~zinc-700 */
+  --element-active: oklch(1 0 0 / 26%);
+  /* Pressed/clicked. (was 16→18%) */
 
-  --element-selected: oklch(1 0 0 / 12%);
-  /* zed: element.selected — ~zinc-750 */
+  --element-selected: oklch(1 0 0 / 20%);
+  /* Selected — distinct from hover. (was 12→15%) */
 
   /* ── Text ─────────────────────────────────────────────────────────── */
 
@@ -239,25 +241,31 @@
 
   /* ── Borders ──────────────────────────────────────────────────────── */
 
-  --border: oklch(1 0 0 / 10%);
-  /* zed: border — white/10 */
+  --border: oklch(1 0 0 / 22%);
+  /* white/22 — visible on the lifted surfaces (was white/10→14) */
 
-  --border-variant: oklch(1 0 0 / 15%);
-  /* zed: border.variant — white/15 */
+  --border-variant: oklch(1 0 0 / 14%);
+  /* white/14 — subtler than border (was white/15→9) */
+
+  --border-faint: oklch(0.552 0.016 285.938 / 0.7);
+  /* faint guide line — grid plane outlines, subtle rules */
 
   --border-focused: oklch(0.488 0.243 264.376);
   /* zed: border.focused — blue-600 */
 
-  --border-selected: oklch(0.488 0.243 264.376);
-  /* zed: border.selected — blue-600 */
+  --border-selected: oklch(0.57 0.2 262);
+  /* lighter blue than the focus ring so selection pops on dark (was == border-focused blue-600) */
 
-  --border-disabled: oklch(1 0 0 / 5%);
-  /* zed: border.disabled — white/5 */
+  --border-disabled: oklch(1 0 0 / 8%);
+  /* white/8 — faint but present (was white/5) */
 
   /* ── Interactive ──────────────────────────────────────────────────── */
 
   --primary: oklch(0.528 0.132 234.76);
   /* sky-700 */
+
+  --primary-soft: oklch(0.528 0.073 234.76);
+  /* softer primary (~half chroma) — slider/track fills */
 
   --primary-fg: oklch(0.985 0 0);
   /* white */

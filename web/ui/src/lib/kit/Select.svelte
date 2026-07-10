@@ -11,7 +11,7 @@
         'disabled:cursor-not-allowed disabled:border-input/50'
       ],
       content: [
-        'z-50 mt-1 rounded border bg-floating p-1 shadow-md',
+        'z-50 rounded border bg-floating p-1 shadow-md',
         'w-(--bits-select-anchor-width) min-w-(--bits-select-anchor-width)',
         'origin-(--bits-select-content-transform-origin) text-fg',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
@@ -64,13 +64,12 @@
     value: T;
     label: string;
     description?: string;
-    hint?: string;
   }
 </script>
 
 <script lang="ts">
   import { Select as SelectPrimitive } from 'bits-ui';
-  import type { Component } from 'svelte';
+  import type { Component, Snippet } from 'svelte';
 
   import { Check, ChevronDown, DotsSpinner } from '$lib/icons';
   import { cn } from '$lib/utils';
@@ -87,6 +86,13 @@
     emptyMessage?: string;
     prefix?: string;
     suffix?: string;
+    /** Adornments rendered per option (passed that option) — in each item and in the trigger for the selected one. */
+    leading?: Snippet<[SelectOption<T>]>;
+    trailing?: Snippet<[SelectOption<T>]>;
+    /** Dropdown placement relative to the trigger (forwarded to the floating layer). */
+    side?: 'top' | 'bottom' | 'left' | 'right';
+    sideOffset?: number;
+    align?: 'start' | 'center' | 'end';
     class?: string;
   }
 
@@ -102,6 +108,11 @@
     emptyMessage,
     prefix,
     suffix,
+    leading,
+    trailing,
+    side = 'bottom',
+    sideOffset = 4,
+    align = 'start',
     variant = 'filled',
     size = 'md',
     class: className = ''
@@ -109,7 +120,6 @@
 
   const selected = $derived(options.find((o) => o.value === value));
   const selectedLabel = $derived(selected?.label ?? '');
-  const selectedHint = $derived(selected?.hint ?? '');
 
   function handleChange(newValue: string | undefined) {
     if (!newValue) return;
@@ -130,15 +140,18 @@
 
 <SelectPrimitive.Root type="single" {value} onValueChange={handleChange} {items} disabled={disabled || loading}>
   <SelectPrimitive.Trigger class={cn(styles.trigger(), className)}>
-    {#if prefix}<span class="mr-auto shrink-0 text-fg-muted">{prefix}</span>{/if}
-    <span class="truncate">
-      {#if selectedLabel}
-        {selectedLabel}
-      {:else}
-        <span class="text-fg-muted">{placeholder}</span>
-      {/if}
+    {#if prefix}<span class="shrink-0 text-fg-muted">{prefix}</span>{/if}
+    <span class={cn('flex min-w-0 flex-1 items-center gap-1.5', prefix && 'justify-end')}>
+      {#if leading && selected}{@render leading(selected)}{/if}
+      <span class="truncate">
+        {#if selectedLabel}
+          {selectedLabel}
+        {:else}
+          <span class="text-fg-muted">{placeholder}</span>
+        {/if}
+      </span>
     </span>
-    {#if selectedHint}<span class="ml-auto shrink-0 pl-3 text-fg-muted tabular-nums">{selectedHint}</span>{/if}
+    {#if trailing && selected}<span class="shrink-0 pl-3">{@render trailing(selected)}</span>{/if}
     {#if suffix}<span class="shrink-0 text-fg-muted">{suffix}</span>{/if}
     {#if loading}
       <DotsSpinner class="shrink-0 text-fg-muted" width={iconSizes[size]} height={iconSizes[size]} />
@@ -149,7 +162,7 @@
   </SelectPrimitive.Trigger>
 
   <SelectPrimitive.Portal>
-    <SelectPrimitive.Content align="start" class={styles.content()}>
+    <SelectPrimitive.Content {side} {sideOffset} {align} class={styles.content()}>
       {#if options.length === 0 && emptyMessage}
         <div class="px-3 py-2 text-base text-fg-muted">{emptyMessage}</div>
       {:else}
@@ -168,14 +181,17 @@
                     {/if}
                   </span>
                 {/if}
+                {#if leading}
+                  <span class="shrink-0 self-center">{@render leading(option)}</span>
+                {/if}
                 <div class="flex flex-col gap-0.5">
                   <span class="text-fg">{option.label}</span>
                   {#if option.description}
                     <span class="text-xs text-fg-muted">{option.description}</span>
                   {/if}
                 </div>
-                {#if option.hint}
-                  <span class="ml-auto shrink-0 self-center pl-3 text-fg-muted tabular-nums">{option.hint}</span>
+                {#if trailing}
+                  <span class="ml-auto shrink-0 self-center pl-3">{@render trailing(option)}</span>
                 {/if}
               </SelectPrimitive.Item>
             {/each}

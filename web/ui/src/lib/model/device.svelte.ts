@@ -1,7 +1,7 @@
 /** App-level store (`VoxelApp`) + the active-instrument store (`Instrument`) and its device handles. */
 import { SvelteMap } from 'svelte/reactivity';
 
-import { wavelengthToColor } from '$lib/utils';
+import { wavelengthToColor } from '$lib/colors.svelte';
 import { parseVec2D, type Vec2D } from '$lib/utils/vec';
 
 import { Client } from './client.svelte';

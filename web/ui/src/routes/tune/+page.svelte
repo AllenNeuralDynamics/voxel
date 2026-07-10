@@ -5,12 +5,13 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { toast } from 'svelte-sonner';
 
+  import { resolveDeviceColor, waveformPortColor } from '$lib/colors.svelte';
   import { Check, ChevronDown, Close } from '$lib/icons';
   import { Button, Select, SpinBox } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import type { SelectOption } from '$lib/kit/Select.svelte';
   import type { AOSignals, ClockSource, DerivedWaveform, Waveform } from '$lib/model';
-  import { getVoxelApp, resolveDeviceColor, waveformPortColor } from '$lib/model';
+  import { getVoxelApp } from '$lib/model';
   import { createPaneSize, sanitizeString, toastError } from '$lib/utils';
 
   import WaveformPanel from './WaveformPanel.svelte';
@@ -295,6 +296,10 @@
   type VoltageMode = 'minmax' | 'ampoffset';
   let voltageMode = $state<VoltageMode>('minmax');
 
+  // Window edit lens: absolute seconds within [0, duration] (default), or raw fractions [0,1] the API expects.
+  type WindowMode = 'percent' | 'seconds';
+  let windowMode = $state<WindowMode>('seconds');
+
   /** Radio-button selection: clicking the currently-selected row is a no-op.
    *  ``selectedDeviceId`` is always anchored to a valid row when the tab has any
    *  waveforms — see the ``tabWaveformIds`` watch below. There is no explicit
@@ -549,7 +554,7 @@
   // ──────────────────────────────── Outer pane layout ────────────────────────────────
 
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebar = createPaneSize(() => paneGroupEl, { min: 350 });
+  const sidebar = createPaneSize(() => paneGroupEl, { min: 280 });
 </script>
 
 {#if profile}
@@ -716,7 +721,7 @@
                 </div>
               {:else}
                 <!-- Primitive-waveform editor -->
-                <div class="grid grid-cols-1 items-end gap-2 gap-y-3">
+                <div class="flex flex-col gap-5">
                   <Select
                     prefix="Waveform Type"
                     size="xs"
@@ -725,207 +730,275 @@
                     disabled={!canEdit}
                     onchange={(v) => changeEditingType(v)}
                   />
-                  <Select
-                    prefix="Voltage Mode"
-                    size="xs"
-                    value={voltageMode}
-                    options={[
-                      { value: 'minmax', label: 'Min / Max' },
-                      { value: 'ampoffset', label: 'Amp / Offset' }
-                    ]}
-                    disabled={!canEdit}
-                    onchange={(v) => (voltageMode = v as VoltageMode)}
-                  />
-                  {#if voltageMode === 'minmax'}
-                    <SpinBox
-                      value={wf.voltage.min}
-                      prefix="Min V"
-                      suffix=" V"
-                      size="xs"
-                      appearance="full"
-                      decimals={3}
-                      step={0.05}
-                      min={aoRange?.min}
-                      max={wf.voltage.max}
-                      numCharacters={8}
-                      align="right"
-                      disabled={!canEdit}
-                      onChange={(v) => setEditingVoltage('min', v)}
-                    />
-                    <SpinBox
-                      value={wf.voltage.max}
-                      prefix="Max V"
-                      suffix=" V"
-                      size="xs"
-                      appearance="full"
-                      decimals={3}
-                      step={0.05}
-                      min={wf.voltage.min}
-                      max={aoRange?.max}
-                      numCharacters={8}
-                      align="right"
-                      disabled={!canEdit}
-                      onChange={(v) => setEditingVoltage('max', v)}
-                    />
-                  {:else}
-                    <SpinBox
-                      value={(wf.voltage.max + wf.voltage.min) / 2}
-                      prefix="Offset V"
-                      suffix=" V"
-                      size="xs"
-                      appearance="full"
-                      decimals={3}
-                      step={0.05}
-                      min={aoRange?.min}
-                      max={aoRange?.max}
-                      numCharacters={8}
-                      align="right"
-                      disabled={!canEdit}
-                      onChange={(v) => setEditingOffset(v)}
-                    />
-                    <SpinBox
-                      value={(wf.voltage.max - wf.voltage.min) / 2}
-                      prefix="Amplitude V"
-                      suffix=" V"
-                      size="xs"
-                      appearance="full"
-                      decimals={3}
-                      step={0.05}
-                      min={0}
-                      numCharacters={8}
-                      align="right"
-                      disabled={!canEdit}
-                      onChange={(v) => setEditingAmplitude(v)}
-                    />
-                  {/if}
-                  <SpinBox
-                    value={wf.rest_voltage ?? 0}
-                    prefix="Rest Voltage"
-                    suffix=" V"
-                    size="xs"
-                    appearance="full"
-                    decimals={2}
-                    step={0.1}
-                    min={wf.voltage.min}
-                    max={wf.voltage.max}
-                    resetValue={() => wf.voltage.min}
-                    numCharacters={6}
-                    align="right"
-                    disabled={!canEdit}
-                    onChange={(v) => updateEditingField('rest_voltage', v)}
-                  />
-                  <SpinBox
-                    value={wf.window.min}
-                    prefix="Window Start"
-                    size="xs"
-                    appearance="full"
-                    decimals={3}
-                    step={0.01}
-                    bigStep={0.05}
-                    min={0}
-                    max={wf.window.max}
-                    numCharacters={6}
-                    align="right"
-                    disabled={!canEdit}
-                    onChange={(v) => updateEditingWindow('min', v)}
-                  />
-                  <SpinBox
-                    value={wf.window.max}
-                    prefix="Window End"
-                    size="xs"
-                    appearance="full"
-                    decimals={3}
-                    step={0.01}
-                    bigStep={0.05}
-                    min={wf.window.min}
-                    max={1}
-                    numCharacters={6}
-                    align="right"
-                    disabled={!canEdit}
-                    onChange={(v) => updateEditingWindow('max', v)}
-                  />
 
+                  <!-- Voltage -->
+                  <section class="flex flex-col gap-2">
+                    <h3 class="text-[10px] font-semibold tracking-wider text-fg-muted uppercase">Voltage</h3>
+                    <Select
+                      prefix="Mode"
+                      size="xs"
+                      value={voltageMode}
+                      options={[
+                        { value: 'minmax', label: 'Min / Max' },
+                        { value: 'ampoffset', label: 'Amp / Offset' }
+                      ]}
+                      disabled={!canEdit}
+                      onchange={(v) => (voltageMode = v as VoltageMode)}
+                    />
+                    {#if voltageMode === 'minmax'}
+                      <div class="grid grid-cols-2 gap-2">
+                        <SpinBox
+                          value={wf.voltage.min}
+                          prefix="Min"
+                          suffix=" V"
+                          size="xs"
+                          appearance="full"
+                          decimals={3}
+                          step={0.05}
+                          min={aoRange?.min}
+                          max={wf.voltage.max}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => setEditingVoltage('min', v)}
+                        />
+                        <SpinBox
+                          value={wf.voltage.max}
+                          prefix="Max"
+                          suffix=" V"
+                          size="xs"
+                          appearance="full"
+                          decimals={3}
+                          step={0.05}
+                          min={wf.voltage.min}
+                          max={aoRange?.max}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => setEditingVoltage('max', v)}
+                        />
+                      </div>
+                    {:else}
+                      <div class="grid grid-cols-2 gap-2">
+                        <SpinBox
+                          value={(wf.voltage.max + wf.voltage.min) / 2}
+                          prefix="Offset"
+                          suffix=" V"
+                          size="xs"
+                          appearance="full"
+                          decimals={3}
+                          step={0.05}
+                          min={aoRange?.min}
+                          max={aoRange?.max}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => setEditingOffset(v)}
+                        />
+                        <SpinBox
+                          value={(wf.voltage.max - wf.voltage.min) / 2}
+                          prefix="Amp"
+                          suffix=" V"
+                          size="xs"
+                          appearance="full"
+                          decimals={3}
+                          step={0.05}
+                          min={0}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => setEditingAmplitude(v)}
+                        />
+                      </div>
+                    {/if}
+                    <SpinBox
+                      value={wf.rest_voltage ?? 0}
+                      prefix="Rest Voltage"
+                      suffix=" V"
+                      size="xs"
+                      appearance="full"
+                      decimals={2}
+                      step={0.1}
+                      min={wf.voltage.min}
+                      max={wf.voltage.max}
+                      resetValue={() => wf.voltage.min}
+                      numCharacters={6}
+                      align="right"
+                      disabled={!canEdit}
+                      onChange={(v) => updateEditingField('rest_voltage', v)}
+                    />
+                  </section>
+
+                  <!-- Timing: the active window, as fractions of the duration or absolute seconds -->
+                  <section class="flex flex-col gap-2">
+                    <h3 class="text-[10px] font-semibold tracking-wider text-fg-muted uppercase">Timing</h3>
+                    <Select
+                      prefix="Mode"
+                      size="xs"
+                      value={windowMode}
+                      options={[
+                        { value: 'percent', label: 'Percent' },
+                        { value: 'seconds', label: 'Seconds' }
+                      ]}
+                      disabled={!canEdit}
+                      onchange={(v) => (windowMode = v as WindowMode)}
+                    />
+                    {#if windowMode === 'percent'}
+                      <div class="grid grid-cols-2 gap-2">
+                        <SpinBox
+                          value={wf.window.min}
+                          prefix="Start"
+                          size="xs"
+                          appearance="full"
+                          decimals={3}
+                          step={0.01}
+                          bigStep={0.05}
+                          min={0}
+                          max={wf.window.max}
+                          numCharacters={5}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => updateEditingWindow('min', v)}
+                        />
+                        <SpinBox
+                          value={wf.window.max}
+                          prefix="End"
+                          size="xs"
+                          appearance="full"
+                          decimals={3}
+                          step={0.01}
+                          bigStep={0.05}
+                          min={wf.window.min}
+                          max={1}
+                          numCharacters={5}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => updateEditingWindow('max', v)}
+                        />
+                      </div>
+                    {:else}
+                      <div class="grid grid-cols-2 gap-2">
+                        <SpinBox
+                          value={wf.window.min * duration}
+                          prefix="Start"
+                          suffix=" s"
+                          size="xs"
+                          appearance="full"
+                          decimals={4}
+                          step={0.0001}
+                          bigStep={0.001}
+                          min={0}
+                          max={wf.window.max * duration}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit || duration <= 0}
+                          onChange={(v) => updateEditingWindow('min', duration > 0 ? v / duration : 0)}
+                        />
+                        <SpinBox
+                          value={wf.window.max * duration}
+                          prefix="End"
+                          suffix=" s"
+                          size="xs"
+                          appearance="full"
+                          decimals={4}
+                          step={0.0001}
+                          bigStep={0.001}
+                          min={wf.window.min * duration}
+                          max={duration}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit || duration <= 0}
+                          onChange={(v) => updateEditingWindow('max', duration > 0 ? v / duration : 0)}
+                        />
+                      </div>
+                    {/if}
+                  </section>
+
+                  <!-- Shape -->
                   {#if wf.type === 'square' || wf.type === 'sine' || wf.type === 'triangle' || wf.type === 'sawtooth'}
                     {@const windowSpan = wf.window.max - wf.window.min}
                     {@const hasCycles = wf.cycles != null && wf.cycles > 0}
                     {@const derivedFreq =
                       hasCycles && windowSpan > 0 ? (wf.cycles ?? 0) / (windowSpan * duration) : (wf.frequency ?? 0)}
-                    {#if wf.type === 'square'}
+                    <section class="flex flex-col gap-2">
+                      <h3 class="text-[10px] font-semibold tracking-wider text-fg-muted uppercase">Shape</h3>
+                      {#if wf.type === 'square'}
+                        <SpinBox
+                          value={wf.duty_cycle}
+                          prefix="Duty"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          size="xs"
+                          appearance="full"
+                          decimals={2}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => updateEditingField('duty_cycle', v)}
+                        />
+                      {/if}
                       <SpinBox
-                        value={wf.duty_cycle}
-                        prefix="Duty"
-                        min={0}
-                        max={1}
-                        step={0.05}
+                        value={wf.cycles ?? 0}
+                        prefix="Cycles"
                         size="xs"
                         appearance="full"
-                        decimals={2}
+                        step={1}
+                        min={0}
+                        numCharacters={4}
+                        align="right"
+                        disabled={!canEdit}
+                        onChange={(v) => {
+                          updateEditingField('cycles', v > 0 ? v : null);
+                          if (v > 0) updateEditingField('frequency', null);
+                        }}
+                      />
+                      <SpinBox
+                        value={derivedFreq}
+                        prefix="Freq"
+                        suffix=" Hz"
+                        size="xs"
+                        appearance="full"
+                        step={1}
+                        min={0}
+                        numCharacters={8}
+                        align="right"
+                        disabled={!canEdit || hasCycles}
+                        onChange={(v) => {
+                          updateEditingField('frequency', v > 0 ? v : null);
+                          if (v > 0) updateEditingField('cycles', null);
+                        }}
+                      />
+                      <SpinBox
+                        value={(wf.phase ?? 0) * (180 / Math.PI)}
+                        prefix="Phase"
+                        suffix=" deg"
+                        size="xs"
+                        appearance="full"
+                        step={0.1}
+                        decimals={1}
                         numCharacters={6}
                         align="right"
                         disabled={!canEdit}
-                        onChange={(v) => updateEditingField('duty_cycle', v)}
+                        onChange={(v) => updateEditingField('phase', v * (Math.PI / 180))}
                       />
-                    {/if}
-                    <SpinBox
-                      value={wf.cycles ?? 0}
-                      prefix="Cycles"
-                      size="xs"
-                      appearance="full"
-                      step={1}
-                      min={0}
-                      numCharacters={4}
-                      align="right"
-                      disabled={!canEdit}
-                      onChange={(v) => {
-                        updateEditingField('cycles', v > 0 ? v : null);
-                        if (v > 0) updateEditingField('frequency', null);
-                      }}
-                    />
-                    <SpinBox
-                      value={derivedFreq}
-                      prefix="Freq"
-                      suffix=" Hz"
-                      size="xs"
-                      appearance="full"
-                      step={1}
-                      min={0}
-                      numCharacters={8}
-                      align="right"
-                      disabled={!canEdit || hasCycles}
-                      onChange={(v) => {
-                        updateEditingField('frequency', v > 0 ? v : null);
-                        if (v > 0) updateEditingField('cycles', null);
-                      }}
-                    />
-                    <SpinBox
-                      value={(wf.phase ?? 0) * (180 / Math.PI)}
-                      prefix="Phase"
-                      suffix=" deg"
-                      size="xs"
-                      appearance="full"
-                      step={0.1}
-                      decimals={1}
-                      numCharacters={6}
-                      align="right"
-                      disabled={!canEdit}
-                      onChange={(v) => updateEditingField('phase', v * (Math.PI / 180))}
-                    />
-                    {#if wf.type === 'triangle' || wf.type === 'sawtooth'}
-                      <SpinBox
-                        value={wf.symmetry ?? 1}
-                        prefix="Symmetry"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        size="xs"
-                        appearance="full"
-                        decimals={2}
-                        numCharacters={6}
-                        align="right"
-                        disabled={!canEdit}
-                        onChange={(v) => updateEditingField('symmetry', v)}
-                      />
-                    {/if}
+                      {#if wf.type === 'triangle' || wf.type === 'sawtooth'}
+                        <SpinBox
+                          value={wf.symmetry ?? 1}
+                          prefix="Symmetry"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          size="xs"
+                          appearance="full"
+                          decimals={2}
+                          numCharacters={6}
+                          align="right"
+                          disabled={!canEdit}
+                          onChange={(v) => updateEditingField('symmetry', v)}
+                        />
+                      {/if}
+                    </section>
                   {/if}
                 </div>
               {/if}
@@ -934,14 +1007,14 @@
             <!-- Timing footer: device-scoped params, always pinned to bottom of sidebar -->
             <div class="shrink-0 border-t px-4 pt-2 pb-3">
               <div class="mb-2 flex items-center justify-between">
-                <h3 class="text-[10px] font-semibold tracking-wider text-fg-muted uppercase">Timing</h3>
+                <h3 class="text-[10px] font-semibold tracking-wider text-fg-muted uppercase">Clock</h3>
                 <div class="flex gap-1">
                   <Button
                     variant={timingDirty ? 'danger' : 'ghost'}
                     size="icon-xs"
                     disabled={!timingDirty || !canEdit}
                     onclick={cancelTiming}
-                    title="Reset timing"
+                    title="Reset clock"
                   >
                     <Close width="14" height="14" />
                   </Button>
@@ -950,7 +1023,7 @@
                     size="icon-xs"
                     disabled={!timingDirty || !canEdit}
                     onclick={commitTiming}
-                    title="Apply timing"
+                    title="Apply clock"
                   >
                     <Check width="14" height="14" />
                   </Button>

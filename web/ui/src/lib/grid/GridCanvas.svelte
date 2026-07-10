@@ -26,16 +26,11 @@
 </script>
 
 {#if instrument.stage.x && instrument.stage.y && instrument.stage.z}
-  <div class="flex h-full min-w-0 flex-col">
-    <div class="flex min-h-0 min-w-0 flex-1 items-stretch gap-4 p-4">
-      <XYPlane {instrument} bind:layers />
-      <ZPlane {instrument} />
-    </div>
-
-    <!-- Grid controls footer: layer toggles + grid stencil -->
-    <div class="flex w-full flex-wrap items-stretch gap-7 border-t border-border">
+  <div class="flex h-full min-w-0">
+    <!-- Left rail: grid stencil controls with layer toggles pinned to the bottom -->
+    <aside class="flex w-40 shrink-0 flex-col border-r border-border p-3">
       <StencilControls {instrument} />
-      <div class="ml-auto flex items-center gap-1 pr-4">
+      <div class="mt-auto flex flex-wrap items-center gap-1 pt-4">
         {#each layerItems as { key, color, Icon, title } (key)}
           <button
             onclick={() => (layers[key] = !layers[key])}
@@ -46,6 +41,11 @@
           </button>
         {/each}
       </div>
+    </aside>
+
+    <div class="flex min-h-0 min-w-0 flex-1 items-stretch gap-4 p-4">
+      <XYPlane {instrument} bind:layers />
+      <ZPlane {instrument} />
     </div>
   </div>
 {:else}

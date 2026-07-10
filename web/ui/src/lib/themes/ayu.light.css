@@ -31,15 +31,17 @@
 
   /* ── Borders ───────────────────────────────────────────────────────── */
 
-  --border: #cfd1d2; /* zed: border */
-  --border-variant: #dfe0e1; /* zed: border.variant */
-  --border-focused: #c4daf6; /* zed: border.focused */
-  --border-selected: #c4daf6; /* zed: border.selected */
+  --border: #9fa0a1; /* zed: border (was #cfd1d2) */
+  --border-variant: #acadae; /* zed: border.variant (was #dfe0e1) */
+  --border-faint: #a9acaeb3; /* faint guide line — grid outlines, subtle rules */
+  --border-focused: #99aac0; /* zed: border.focused (was #c4daf6) */
+  --border-selected: #99aac0; /* zed: border.selected (was #c4daf6) */
   --border-disabled: #d5d6d8; /* zed: border.disabled */
 
   /* ── Interactive ───────────────────────────────────────────────────── */
 
   --primary: #3b9ee5; /* zed: text.accent */
+  --primary-soft: #6d9cc2; /* softer primary — slider/track fills */
   --primary-fg: #ffffff;
   --secondary: #cfd0d2; /* zed: element.selected */
   --secondary-fg: #5c6166;

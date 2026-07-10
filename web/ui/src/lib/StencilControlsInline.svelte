@@ -21,24 +21,26 @@
   const gridLimY = $derived((fovH * (1 - stencil.overlap_y)) / 1000);
 </script>
 
-<div class={cn('grid grid-cols-3 divide-x divide-border border-r border-border', className)}>
-  {#snippet linkButton(linked: boolean, onLink: () => void)}
-    <button
-      class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:text-fg"
-      title={linked ? 'Unlink X/Y' : 'Link X/Y'}
-      onclick={onLink}
-    >
-      {#if linked}<Link class="h-3 w-3" />{:else}<LinkOff class="h-3 w-3" />{/if}
-    </button>
-  {/snippet}
+{#snippet linkButton(linked: boolean, onLink: () => void)}
+  <button
+    class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:text-fg"
+    title={linked ? 'Unlink X/Y' : 'Link X/Y'}
+    onclick={onLink}
+  >
+    {#if linked}<Link class="h-3 w-3" />{:else}<LinkOff class="h-3 w-3" />{/if}
+  </button>
+{/snippet}
 
+<div class={cn('flex flex-col gap-6', className)}>
   <!-- Offset -->
-  <div class="flex min-w-0 items-center gap-1.5 px-3 py-3">
-    <span class="shrink-0 text-xs text-fg-muted">Offset</span>
-    {@render linkButton(offsetLinked, () => {
-      offsetLinked = !offsetLinked;
-      if (offsetLinked) toastError(instrument.updateStencil({ y_offset: stencil.x_offset }));
-    })}
+  <div class="flex flex-col gap-2">
+    <div class="flex items-center justify-between">
+      <span class="text-xs text-fg-muted">Offset</span>
+      {@render linkButton(offsetLinked, () => {
+        offsetLinked = !offsetLinked;
+        if (offsetLinked) toastError(instrument.updateStencil({ y_offset: stencil.x_offset }));
+      })}
+    </div>
     {#if offsetLinked}
       <SpinBox
         value={stencil.x_offset / 1000}
@@ -51,7 +53,6 @@
         suffix="mm"
         size="xs"
         align="right"
-        class="min-w-0 flex-1"
         onChange={(v) => toastError(instrument.updateStencil({ x_offset: v * 1000, y_offset: v * 1000 }))}
       />
     {:else}
@@ -66,7 +67,6 @@
         suffix="mm"
         size="xs"
         align="right"
-        class="min-w-0 flex-1"
         onChange={(v) => toastError(instrument.updateStencil({ x_offset: v * 1000 }))}
       />
       <SpinBox
@@ -80,19 +80,20 @@
         suffix="mm"
         size="xs"
         align="right"
-        class="min-w-0 flex-1"
         onChange={(v) => toastError(instrument.updateStencil({ y_offset: v * 1000 }))}
       />
     {/if}
   </div>
 
   <!-- Overlap -->
-  <div class="flex min-w-0 items-center gap-1.5 px-3 py-2">
-    <span class="shrink-0 text-xs text-fg-muted">Overlap</span>
-    {@render linkButton(overlapLinked, () => {
-      overlapLinked = !overlapLinked;
-      if (overlapLinked) toastError(instrument.updateStencil({ overlap_y: stencil.overlap_x }));
-    })}
+  <div class="flex flex-col gap-2">
+    <div class="flex items-center justify-between">
+      <span class="text-xs text-fg-muted">Overlap</span>
+      {@render linkButton(overlapLinked, () => {
+        overlapLinked = !overlapLinked;
+        if (overlapLinked) toastError(instrument.updateStencil({ overlap_y: stencil.overlap_x }));
+      })}
+    </div>
     {#if overlapLinked}
       <SpinBox
         value={stencil.overlap_x}
@@ -105,7 +106,6 @@
         suffix="%"
         size="xs"
         align="right"
-        class="min-w-0 flex-1"
         onChange={(v) => toastError(instrument.updateStencil({ overlap_x: v, overlap_y: v }))}
       />
     {:else}
@@ -120,7 +120,6 @@
         suffix="%"
         size="xs"
         align="right"
-        class="min-w-0 flex-1"
         onChange={(v) => toastError(instrument.updateStencil({ overlap_x: v }))}
       />
       <SpinBox
@@ -134,15 +133,14 @@
         suffix="%"
         size="xs"
         align="right"
-        class="min-w-0 flex-1"
         onChange={(v) => toastError(instrument.updateStencil({ overlap_y: v }))}
       />
     {/if}
   </div>
 
-  <!-- Default Z -->
-  <div class="flex min-w-0 items-center gap-1.5 px-3 py-2">
-    <span class="shrink-0 text-xs text-fg-muted">Z</span>
+  <!-- Z range -->
+  <div class="flex flex-col gap-2">
+    <span class="text-xs text-fg-muted">Z range</span>
     <SpinBox
       value={stencil.z_start / 1000}
       step={0.001}
