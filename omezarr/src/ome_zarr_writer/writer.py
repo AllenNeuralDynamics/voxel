@@ -39,7 +39,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from vxlib.vec import UIVec3D, UVec3D
 
 from ome_zarr_writer.array import ArrayWriter
-from ome_zarr_writer.slot import BatchResult, BatchSlot, OutputSetup, SlotStage
 from ome_zarr_writer.dataset import (
     Compression,
     DownscaleType,
@@ -50,6 +49,7 @@ from ome_zarr_writer.dataset import (
     Zarr3ArrayMeta,
     Zarr3GroupMeta,
 )
+from ome_zarr_writer.slot import BatchResult, BatchSlot, OutputSetup, SlotStage
 from ome_zarr_writer.storage import Local, S3Store, StagedS3, StagingConfig, Storage
 from ome_zarr_writer.transfer import TransferJob, run_s5cmd
 
@@ -80,7 +80,10 @@ class WriterSettings(BaseModel):
     batch_z_shards: int = 1
     # coherence (uniform for a consistent dataset; camera conforms)
     compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
-    downscale_type: DownscaleType = DownscaleType.MEAN
+    downscale_type: DownscaleType = Field(
+        default=DownscaleType.GAUSSIAN,
+        description="Pyramid downsample method. Gaussian (anti-aliased) is the default for display-quality",
+    )
     target_shard_gb: float = 1.0
 
     @property
@@ -350,6 +353,7 @@ class DatasetWriter:
                 levels=tuple(self._levels),
                 batch_z=self._batch_z,
                 volume_z=self._volume_z,
+                reduction=config.downscale_type,
             )
         )
 

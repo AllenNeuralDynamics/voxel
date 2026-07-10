@@ -32,13 +32,14 @@ from enum import IntEnum
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 
+import numba
 import numpy as np
 from cloudpathlib import S3Path
 from pydantic import BaseModel, ConfigDict
 from vxlib.vec import UIVec3D
 
 from ome_zarr_writer.array import ArrayWriter
-from ome_zarr_writer.dataset import Dtype, ScaleLevel
+from ome_zarr_writer.dataset import DownscaleType, Dtype, ScaleLevel
 from ome_zarr_writer.storage import S3Store
 
 from .pyramid import pyramids_3d_numba
@@ -96,6 +97,7 @@ class OutputSetup(BaseModel):
     levels: tuple[ScaleLevel, ...]  # pyramid levels to write — one ArrayWriter each
     batch_z: int  # L0 depth per batch → maps batch_idx to its z-range
     volume_z: int  # total L0 depth → clamps the final partial batch
+    reduction: DownscaleType = DownscaleType.MEAN  # pyramid downsample method (mirrors config.downscale_type)
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,7 @@ _WORKER_SHMS: list[SharedMemory] = []
 _WORKER_ARRAYS: dict[ScaleLevel, np.ndarray] = {}
 _WORKER_WRITERS: dict[ScaleLevel, ArrayWriter] = {}
 _WORKER_STATE: dict[str, OutputSetup] = {}  # holds the current "setup"; a dict to avoid a global rebind
+_LAYER_WARNED: list[bool] = []  # one-shot latch for the threading-layer warning (list mutated in place, no `global`)
 
 
 def _worker_init(shm_layout: list[tuple[int, str, tuple[int, int, int]]], dtype_str: str) -> None:
@@ -128,8 +131,9 @@ def _worker_init(shm_layout: list[tuple[int, str, tuple[int, int, int]]], dtype_
     # otherwise each worker blocked in the pool's call queue dumps a KeyboardInterrupt traceback.
     # The parent handles the interrupt and tears the pool down via the normal close() path.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    # Force the single-threaded-safe numba layer in this worker (one Python thread per worker).
-    os.environ["NUMBA_THREADING_LAYER"] = "workqueue"
+    # We don't force a numba threading layer: its default already cascades tbb > omp > workqueue and
+    # honors a NUMBA_THREADING_LAYER env override. Workers are spawned (not forked), so omp/tbb (not
+    # fork-safe) are fine; the first flush warns if it lands on workqueue (the slowest fallback).
     for level_value, shm_name, shape in shm_layout:
         shm = SharedMemory(name=shm_name, create=False, track=False)
         arr = np.ndarray(shape, dtype=dtype_str, buffer=shm.buf)
@@ -157,6 +161,25 @@ def _worker_close_output() -> None:
     _WORKER_WRITERS.clear()
 
 
+def _warn_if_slow_threading_layer() -> None:
+    """After the first parallel region, log once if numba fell back to the slowest layer (workqueue).
+    `numba.threading_layer()` is only valid once a parallel region has run, so call it after the pyramid."""
+    if _LAYER_WARNED:
+        return
+    _LAYER_WARNED.append(True)
+    try:
+        layer = numba.threading_layer()
+    except ValueError:
+        return  # no parallel region ran yet; nothing to report
+    if layer == "workqueue":
+        log.warning(
+            "numba threading layer fell back to 'workqueue' (slowest); install a loadable 'tbb' (Linux) or "
+            "ensure an OpenMP runtime is present for ~2x faster pyramid downsampling"
+        )
+    else:
+        log.debug("numba threading layer: %s", layer)
+
+
 def _worker_process_and_write(max_level_value: int, filled_l0: int, batch_idx: int) -> BatchResult:
     """Downsample the collected L0 block into the pyramid (in shared memory), then write every level to
     the store. Runs entirely in the worker process, so the compress+write never touches the main GIL."""
@@ -167,7 +190,8 @@ def _worker_process_and_write(max_level_value: int, filled_l0: int, batch_idx: i
 
     process_started = datetime.now(UTC)
     block = _WORKER_ARRAYS[ScaleLevel.L0][:filled_l0]
-    pyramid = pyramids_3d_numba(block, max_level, parallel=True)
+    pyramid = pyramids_3d_numba(block, max_level, reduction=setup.reduction, parallel=True)
+    _warn_if_slow_threading_layer()
     for level, vol in pyramid.items():
         arr = _WORKER_ARRAYS[level]
         z = min(arr.shape[0], vol.shape[0])
