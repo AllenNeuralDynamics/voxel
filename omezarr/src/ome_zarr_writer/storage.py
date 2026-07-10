@@ -17,6 +17,7 @@ Only the endpoint (and, for a custom endpoint, the region) must be passed explic
 TensorStore cannot read the endpoint from the environment.
 """
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Self
 
@@ -25,9 +26,13 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from vxlib import AnonymousCredentials, ProfileCredentials, S3Store
 
 
+@lru_cache
 def _s3_client(store: S3Store) -> S3Client:
     """A cloudpathlib client for `store`'s connection (endpoint + credential strategy; region via the
-    profile/env). Bind S3 paths to it so cloudpathlib operations reach the configured endpoint."""
+    profile/env). Bind S3 paths to it so cloudpathlib operations reach the configured endpoint.
+
+    Cached per `S3Store` (frozen/hashable): `resolve()` rebuilds a `Storage` on every call, but the
+    boto session + credential-chain walk should happen once per connection, not once per resolve."""
     creds = store.credentials
     profile_name = creds.name if isinstance(creds, ProfileCredentials) else None
     return S3Client(
@@ -65,8 +70,11 @@ class _S3(_Frozen):
 
     @model_validator(mode="after")
     def _bind_client(self) -> Self:
+        # `store` is hashable at runtime (frozen model) so it's a valid lru_cache key; pydantic's stub
+        # still types __hash__ as None, so pyright can't see that — hence the ignore.
+        client = _s3_client(self.store)  # pyright: ignore[reportArgumentType]
         # Frozen model: assign via object.__setattr__ (plain `self.target =` raises "Instance is frozen").
-        object.__setattr__(self, "target", S3Path(str(self.target), client=_s3_client(self.store)))
+        object.__setattr__(self, "target", S3Path(str(self.target), client=client))
         return self
 
 
