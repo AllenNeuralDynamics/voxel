@@ -6,7 +6,6 @@
   import { getTaskSelection } from '$lib/grid/selection.svelte';
   import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, TrashCanOutline } from '$lib/icons';
   import { Button, Checkbox, Dialog, NumberInput, Select, SpinBox } from '$lib/kit';
-  import MetadataPanel from '$lib/MetadataPanel.svelte';
   import { getVoxelApp, type TaskPatch, type TileOrder } from '$lib/model';
   import { cn, sanitizeString, toastError } from '$lib/utils';
 
@@ -217,7 +216,10 @@
     role="row"
     tabindex="0"
     aria-selected={selected}
-    class="col-span-full grid cursor-default grid-cols-subgrid text-left text-sm text-fg-muted select-none"
+    class={cn(
+      'col-span-full grid cursor-default grid-cols-subgrid text-left text-sm text-fg-muted transition-colors select-none',
+      selected ? 'bg-element-selected/50' : 'hover:bg-element-hover'
+    )}
     onclick={(e) => handleRowClick(row, e)}
     onkeydown={(e) => {
       if (isEditTarget(e)) return;
@@ -229,14 +231,25 @@
   >
     <!-- Selection checkbox (always visible; checked when selected) -->
     <span class="cell cell-first justify-center">
-      <span
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        title={selected ? 'Deselect task' : 'Select task'}
+        onclick={(e) => {
+          e.stopPropagation();
+          selection.toggle(row.taskId);
+        }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+        }}
         class={cn(
-          'flex size-3.5 items-center justify-center rounded border',
-          selected ? 'border-primary bg-primary text-primary-fg' : 'border-input bg-element-bg'
+          'flex size-3.5 cursor-pointer items-center justify-center rounded border transition-colors',
+          selected ? 'border-primary bg-primary text-primary-fg' : 'border-input bg-element-bg hover:border-fg-muted'
         )}
       >
         {#if selected}<Check width="9" height="9" />{/if}
-      </span>
+      </button>
     </span>
     <span class="cell justify-end text-fg-faint tabular-nums">#{row.order}</span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
@@ -445,12 +458,6 @@
       {/each}
     {/if}
   </div>
-  {#if instrument}
-    <div class="shrink-0 border-t border-border px-3 py-4">
-      <h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Metadata</h3>
-      <MetadataPanel {instrument} class="max-w-2xl" />
-    </div>
-  {/if}
 </div>
 
 <Dialog.Root bind:open={deleteDialogOpen}>
@@ -484,7 +491,7 @@
 <style>
   /* Task-table cell chrome: single-pixel grid lines (right + bottom; first column adds left, header adds top). */
   .cell {
-    --cell-border: 1px solid color-mix(in oklch, var(--color-border) 90%, transparent);
+    --cell-border: 1px solid var(--color-border-faint);
     display: flex;
     align-items: center;
     padding: 0.25rem 0.5rem;

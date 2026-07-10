@@ -31,8 +31,9 @@
 
   /* ── Borders ───────────────────────────────────────────────────────── */
 
-  --border: #3d444d; /* zed: border */
-  --border-variant: #3d444db3; /* zed: border.variant (70% alpha) */
+  --border: #414850; /* zed: border (was #3d444d) */
+  --border-variant: #414850b3; /* zed: border.variant (70% alpha; was #3d444db3) */
+  --border-faint: #656c76b3; /* faint guide line — grid outlines, subtle rules */
   --border-focused: #1f6feb; /* zed: border.focused */
   --border-selected: #1f6feb; /* zed: border.selected */
   --border-disabled: #3d444d66; /* zed: border.disabled (40% alpha) */
@@ -40,6 +41,7 @@
   /* ── Interactive ───────────────────────────────────────────────────── */
 
   --primary: #1f6feb; /* zed: border.focused, border.selected */
+  --primary-soft: #4e77b8; /* softer primary — slider/track fills */
   --primary-fg: #ffffff;
   --secondary: #656c7633; /* zed: element.background */
   --secondary-fg: #f0f6fc;

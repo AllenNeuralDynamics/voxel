@@ -17,9 +17,9 @@
 
   // Toggle + line color per axis — classic RGB (X red · Y green · Z blue).
   const AXIS_ON: Record<Axis, string> = {
-    x: 'bg-danger/15 text-danger',
-    y: 'bg-success/15 text-success',
-    z: 'bg-primary/15 text-primary'
+    x: 'bg-danger/25 text-danger',
+    y: 'bg-success/25 text-success',
+    z: 'bg-primary/25 text-primary'
   };
 
   // Which axes are shown; the on-set determines the view (2 on → ortho of that plane, 3 → isometric).
@@ -454,7 +454,7 @@
   );
 </script>
 
-<div class={cn('flex flex-col gap-0', className)}>
+<div class={cn('flex h-full flex-col gap-0', className)}>
   <div class="flex items-center justify-between gap-2">
     <span class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Stage</span>
     <div class="flex items-center gap-2">
@@ -484,16 +484,18 @@
     </div>
   </div>
 
-  <div bind:this={box} class="relative mx-auto aspect-square w-full max-w-62 rounded bg-canvas">
-    <canvas
-      bind:this={canvasEl}
-      class="absolute inset-0 h-full w-full touch-none"
-      style="width:100%;height:100%"
-      style:cursor
-      onpointerdown={pointerDown}
-      onpointermove={pointerMove}
-      onpointerup={pointerUp}
-    ></canvas>
+  <div class="flex min-h-0 flex-1 items-center justify-center py-2">
+    <div bind:this={box} class="relative aspect-square h-full">
+      <canvas
+        bind:this={canvasEl}
+        class="absolute inset-0 h-full w-full touch-none"
+        style="width:100%;height:100%"
+        style:cursor
+        onpointerdown={pointerDown}
+        onpointermove={pointerMove}
+        onpointerup={pointerUp}
+      ></canvas>
+    </div>
   </div>
 
   <div class="grid grid-cols-3 gap-2">

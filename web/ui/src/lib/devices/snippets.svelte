@@ -1,8 +1,9 @@
 <script module lang="ts">
+  import { wavelengthToColor } from '$lib/colors.svelte';
   import { type Channel } from '$lib/model';
-  import { sanitizeString, wavelengthToColor } from '$lib/utils';
+  import { sanitizeString } from '$lib/utils';
 
-  export { deviceIdentity };
+  export { channelDot, deviceIdentity };
 </script>
 
 <!--
@@ -15,12 +16,21 @@
   <span class="text-xs font-medium text-fg tabular-nums">{label}</span>
 {/snippet}
 
-<!-- Subtle channel marker: an emission-colored dot with the channel id (muted dot when the channel has no emission). -->
-{#snippet channelChip(channel: Channel)}
+<!-- Emission-colored channel dot (muted when the channel has no emission); channel id on hover. -->
+{#snippet channelDot(channel: Channel)}
   {@const em = channel.emission}
   {@const accent = typeof em === 'number' ? wavelengthToColor(em) : 'var(--color-fg-muted)'}
+  <span
+    class="inline-block size-1.5 shrink-0 rounded-full align-middle"
+    style="background-color: {accent};"
+    title={sanitizeString(channel.id)}
+  ></span>
+{/snippet}
+
+<!-- Subtle channel marker: an emission-colored dot with the channel id (muted dot when the channel has no emission). -->
+{#snippet channelChip(channel: Channel)}
   <span class="inline-flex items-center gap-1 text-[0.6rem] text-fg tabular-nums">
-    <span class="size-1.5 rounded-full" style="background-color: {accent};"></span>
+    {@render channelDot(channel)}
     {sanitizeString(channel.id)}
   </span>
 {/snippet}

@@ -3,12 +3,13 @@
   import { onDestroy } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
+  import { wavelengthToColor } from '$lib/colors.svelte';
   import { ChevronDown, ChevronRight, Link, LinkOff } from '$lib/icons';
-  import { Button, Label, SpinBox } from '$lib/kit';
+  import { Button, SpinBox } from '$lib/kit';
   import { type CameraHandle, type DeviceHandle, type FilterSetting, getVoxelApp, type LaserHandle } from '$lib/model';
   import { type AnyPropModel, BoolModel, EnumeratedModel, LinkGroup, NumericModel, Prop, RoiModel } from '$lib/model';
   import { formatPropValue, PropInput } from '$lib/prop';
-  import { cn, sanitizeString, toastError, wavelengthToColor, withOpacity } from '$lib/utils';
+  import { cn, sanitizeString, toastError } from '$lib/utils';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
@@ -40,18 +41,6 @@
   /** Default always-visible props by device type (until user-pinning exists). */
   function defaultPinned(type: string | undefined): string[] {
     return type === 'continuous_axis' ? ['position'] : [];
-  }
-
-  function modeDotColor(mode: string | undefined): string {
-    if (mode === 'PREVIEW') return 'bg-success';
-    if (mode === 'ACQUISITION') return 'bg-warning';
-    return 'bg-fg-muted/40';
-  }
-
-  function modeLabel(mode: string | undefined): string {
-    if (mode === 'PREVIEW') return 'Preview';
-    if (mode === 'ACQUISITION') return 'Acquiring';
-    return 'Idle';
   }
 
   /** rw props shared (same model class) across ≥ 2 of the given devices. */
@@ -88,6 +77,17 @@
       { kind: 'camera' as const, label: 'Cameras', items: cameraItems },
       { kind: 'laser' as const, label: 'Lasers', items: sharedRwProps(channels.map((ch) => ch.laser)) }
     ].filter((g) => g.items.length > 0);
+  });
+
+  /** Every linkable model → its group key + peer models, so any row can host the inline link toggle. */
+  const linkableByModel = $derived.by(() => {
+    const map = new SvelteMap<AnyPropModel | RoiModel, { key: string; models: (AnyPropModel | RoiModel)[] }>();
+    for (const g of linkGroupsByKind)
+      for (const it of g.items) {
+        const key = `${g.kind}:${it.name}`;
+        for (const model of it.models) map.set(model, { key, models: it.models });
+      }
+    return map;
   });
 
   /** Active link groups, keyed by `${kind}:${propName}`. Stored as the duck-type the section uses. */
@@ -128,12 +128,17 @@
   }
 
   /**
-   * On profile change (and initial mount), auto-link every eligible prop. Users can opt out
-   * by toggling individual chips off. The reconciliation runs on the *current* eligible set —
-   * cameras that join later don't auto-add to existing links.
+   * Auto-link every eligible prop, keyed on the profile *and* the eligible set. Keying on the set
+   * (not just the profile id) is what makes props link once they finish streaming in — the profile
+   * id is set before device props arrive, so a profile-only key would reset against an empty set and
+   * never re-run. Opting a prop out doesn't change either key, so opt-outs survive; a profile switch
+   * resets to all-linked.
    */
   watch(
-    () => instrument?.activeProfileId,
+    () =>
+      `${instrument?.activeProfileId ?? ''}::${linkGroupsByKind
+        .flatMap((g) => g.items.map((i) => `${g.kind}:${i.name}`))
+        .join(',')}`,
     () => {
       for (const g of linkGroups.values()) g.dissolve();
       linkGroups.clear();
@@ -157,18 +162,25 @@
   {@const hasSaved = div ? name in div.saved : false}
   {@const saved = div?.saved[name]}
   {@const isDiverged = needsSave && hasSaved}
+  {@const link = linkableByModel.get(prop.model)}
   <div class="grid grid-cols-[9rem_minmax(8rem,1fr)_minmax(5rem,auto)] items-center gap-2">
     <div class="flex min-w-0 items-center gap-2 text-sm leading-none text-fg-muted">
       <span class="truncate" title={prop.info.desc ?? ''}>
         {prop.label}
       </span>
 
-      {#if prop.model.group}
-        <span title="Linked across cameras" class="flex shrink-0 text-fg-muted">
-          <Link width="10" height="10" />
-        </span>
+      {#if link}
+        {@const linked = linkGroups.has(link.key)}
+        <button
+          type="button"
+          class={cn('flex shrink-0 cursor-pointer transition-colors', linked ? 'text-fg' : 'text-fg-faint hover:text-fg')}
+          title={linked ? 'Linked across devices — click to unlink' : 'Link across devices'}
+          onclick={() => toggleLink(link.key, link.models)}
+        >
+          {#if linked}<Link width="10" height="10" />{:else}<LinkOff width="10" height="10" />{/if}
+        </button>
       {/if}
-      <span class={cn('size-1 shrink-0 rounded-full bg-highlight', !needsSave && 'invisible')}></span>
+      <span class={cn('size-1 shrink-0 rounded-full bg-primary-soft', !needsSave && 'invisible')}></span>
     </div>
     <PropInput model={prop.model} size="xs" />
     <button
@@ -205,6 +217,7 @@
   {@const grid = cam.roi.grid}
   {@const sensor = cam.sensorSizePx}
   {@const roiDirty = instrument?.divergence.get(cam.id)?.roiDirty ?? false}
+  {@const roiLink = linkableByModel.get(cam.roi)}
   <div class="space-y-2">
     {#each props as prop (prop.info.name)}
       {@render propRow(prop, cam)}
@@ -216,23 +229,36 @@
       {@const sensorH = sensor.y}
       {@const strokeWidth = Math.max(sensorW, sensorH) * 0.004}
       <div>
-        <button
-          class="flex w-full cursor-pointer items-center gap-2 text-fg-muted transition-colors hover:text-fg"
-          onclick={() => (roiExpanded = !roiExpanded)}
-        >
-          <span class="text-sm text-fg-muted">Sensor ROI</span>
-          {#if cam.roi.group}
-            <span title="Linked across cameras" class="flex shrink-0 text-fg-muted">
-              <Link width="10" height="10" />
-            </span>
+        <div class="flex w-full items-center gap-2 text-fg-muted">
+          <button
+            class="flex cursor-pointer items-center gap-2 transition-colors hover:text-fg"
+            onclick={() => (roiExpanded = !roiExpanded)}
+          >
+            <span class="text-sm">Sensor ROI</span>
+          </button>
+          {#if roiLink}
+            {@const linked = linkGroups.has(roiLink.key)}
+            <button
+              type="button"
+              class={cn('flex shrink-0 cursor-pointer transition-colors', linked ? 'text-fg' : 'text-fg-faint hover:text-fg')}
+              title={linked ? 'Linked across cameras — click to unlink' : 'Link across cameras'}
+              onclick={() => toggleLink(roiLink.key, roiLink.models)}
+            >
+              {#if linked}<Link width="10" height="10" />{:else}<LinkOff width="10" height="10" />{/if}
+            </button>
           {/if}
-          <span class={cn('text-xs text-highlight', !roiDirty && 'invisible')}>*</span>
-          {#if roiExpanded}
-            <ChevronDown width="12" height="12" class="ml-auto" />
-          {:else}
-            <ChevronRight width="12" height="12" class="ml-auto" />
-          {/if}
-        </button>
+          <span class={cn('size-1 shrink-0 rounded-full bg-primary-soft', !roiDirty && 'invisible')}></span>
+          <button
+            class="ml-auto flex cursor-pointer transition-colors hover:text-fg"
+            onclick={() => (roiExpanded = !roiExpanded)}
+          >
+            {#if roiExpanded}
+              <ChevronDown width="12" height="12" />
+            {:else}
+              <ChevronRight width="12" height="12" />
+            {/if}
+          </button>
+        </div>
 
         {#if roiExpanded}
           <div class="grid grid-cols-[9rem_1fr] gap-8 pt-2">
@@ -369,32 +395,13 @@
 
 {#snippet filterWheel(setting: FilterSetting)}
   {@const wheel = setting.wheel}
-  {@const live = wheel.label}
   {@const declared = setting.filter}
-  {@const names = Object.values(wheel.labels).filter((l): l is string => l != null)}
-  <div>
-    {@render sectionHeader(wheel.id, wheel.interface?.type)}
-    {#if names.length}
-      <div class="flex flex-wrap gap-1.5">
-        {#each names as name (name)}
-          {@const isDeclared = name === declared}
-          {@const isLive = name === live}
-          <div
-            class={cn(
-              'rounded px-2 py-1 text-xs tabular-nums transition-colors',
-              isDeclared
-                ? 'border border-border bg-element-selected text-fg'
-                : 'border border-transparent bg-element-bg/40 text-fg-muted',
-              isLive && 'border-b-2 border-b-highlight'
-            )}
-            title={isLive ? 'Live wheel position' : isDeclared ? 'Declared by channel' : undefined}
-          >
-            {name}
-          </div>
-        {/each}
-      </div>
+  <div class="flex min-h-ui-xs items-center justify-between gap-2">
+    <span class="text-xs text-fg-muted">{sanitizeString(wheel.id)}</span>
+    {#if declared}
+      <span class="text-xs text-fg tabular-nums">{declared}</span>
     {:else}
-      <span class="text-xs text-fg-faint italic">no position data</span>
+      <span class="text-xs text-fg-faint italic">none declared</span>
     {/if}
   </div>
 {/snippet}
@@ -417,19 +424,16 @@
     <div class="flex flex-wrap gap-4">
       {#each instrument.activeChannels as ch (ch.id)}
         {@const accent = ch.emission ? wavelengthToColor(ch.emission) : undefined}
-        {@const mode = ch.camera.mode}
-        {@const stream = ch.camera.streamInfo}
-        {@const frame = ch.camera.frameSizePx}
-        {@const sizeMb = ch.camera.frameSizeMb?.value}
-        <div class="max-w-3xl min-w-90 flex-1 rounded-lg border border-border bg-surface/30">
+        <div class="max-w-3xl min-w-90 flex-1 rounded-sm border border-border bg-card">
           <!-- Header: channel identity + emission accent -->
           <div class="flex h-ui-lg items-center justify-between border-b border-border px-3 py-2">
             <span class="text-sm font-medium text-fg">{ch.label}</span>
-            <span
-              class={cn('truncate rounded-full px-2 py-px text-[0.65rem]', !accent && 'bg-element-bg text-fg-muted')}
-              style={accent ? `background-color: ${withOpacity(accent)}; color: ${accent};` : ''}
-            >
-              {ch.emission ? `${ch.emission} nm` : ch.id}
+            <span class="flex shrink-0 items-center gap-1.5 text-[0.65rem] text-fg-muted">
+              <span
+                class="inline-block size-1.5 shrink-0 rounded-full"
+                style="background-color: {accent ?? 'var(--color-fg-muted)'};"
+              ></span>
+              <span class="truncate">{ch.emission ? `${ch.emission} nm` : ch.id}</span>
             </span>
           </div>
 
@@ -440,79 +444,26 @@
             {#each ch.auxilliary as aux (aux.id)}
               {@render auxDevice(aux, defaultPinned(aux.interface?.type))}
             {/each}
-            {#each ch.filters as f (f.wheel.id)}
-              {@render filterWheel(f)}
-            {/each}
-          </div>
-
-          <!-- Footer: live camera mode + stream + frame size -->
-          <div
-            class="flex items-center justify-between gap-3 border-t border-border px-3 py-2 font-mono text-xs text-fg-muted tabular-nums"
-          >
-            <div class="flex items-center gap-1.5">
-              <div class="h-2 w-2 rounded-full {modeDotColor(mode)}"></div>
-              <span class="text-xs text-fg-muted">{modeLabel(mode)}</span>
-            </div>
-            {#if stream}
-              <div class="flex items-center">
-                <span>{stream.frame_rate_fps.toFixed(1)} fps</span>
-                <span>&ensp;&middot;&ensp;</span>
-                <span>{stream.data_rate_mbs.toFixed(1)} MB/s</span>
-                {#if stream.dropped_frames > 0}
-                  <span>&ensp;&middot;&ensp;</span>
-                  <span class="text-danger">{stream.dropped_frames} dropped</span>
-                {/if}
+            {#if ch.filters.length}
+              <div>
+                {@render sectionHeader('Filters')}
+                <div class="space-y-1.5">
+                  {#each ch.filters as f (f.wheel.id)}
+                    {@render filterWheel(f)}
+                  {/each}
+                </div>
               </div>
-            {:else}
-              <div></div>
             {/if}
-            <div class="flex items-center">
-              {#if frame}
-                <span>{frame.x}&times;{frame.y}</span>
-                {#if sizeMb != null}
-                  <span>&ensp;&middot;&ensp;{sizeMb.toFixed(1)} MB</span>
-                {/if}
-              {/if}
-            </div>
           </div>
         </div>
       {/each}
     </div>
-    <footer class="mt-4">
-      {#if linkGroupsByKind.length > 0}
-        <div class="flex flex-wrap items-center gap-1.5">
-          <Label class="mr-0.5">Links</Label>
-          {#each linkGroupsByKind as group (group.kind)}
-            {#each group.items as { name, label, models } (name)}
-              {@const key = `${group.kind}:${name}`}
-              {@const linked = linkGroups.has(key)}
-              <button
-                type="button"
-                class="flex cursor-pointer items-center gap-1 rounded-full px-2 py-px text-xs transition-colors hover:bg-element-hover {linked
-                  ? 'bg-element-bg text-fg'
-                  : 'text-fg-muted'}"
-                title={linked ? `Unlink ${label}` : `Link ${label} across ${group.label.toLowerCase()}`}
-                onclick={() => toggleLink(key, models)}
-              >
-                {#if linked}
-                  <Link width="10" height="10" />
-                {:else}
-                  <LinkOff width="10" height="10" />
-                {/if}
-                {label}
-              </button>
-            {/each}
-          {/each}
-        </div>
-      {/if}
-    </footer>
-
     {#if syncDevices.length > 0}
       <div class="mt-6">
         <h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Sync</h3>
         <div class="flex flex-wrap gap-4">
           {#each syncDevices as dev (dev.id)}
-            <div class="max-w-md min-w-72 flex-1 rounded-lg border border-border bg-surface/30 px-3 py-3">
+            <div class="max-w-md min-w-72 flex-1 rounded-sm border border-border bg-card px-3 py-3">
               {@render auxDevice(dev, defaultPinned(dev.interface?.type))}
             </div>
           {/each}

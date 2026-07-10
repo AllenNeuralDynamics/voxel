@@ -31,8 +31,9 @@
 
   /* ── Borders ───────────────────────────────────────────────────────── */
 
-  --border: #ebecf0; /* zed: border */
-  --border-variant: #ebecf0; /* zed: border.variant */
+  --border: #a9a9ac; /* zed: border (was #ebecf0) */
+  --border-variant: #b6b6ba; /* zed: border.variant, subtler step (was #ebecf0) */
+  --border-faint: #818594b3; /* faint guide line — grid outlines, subtle rules */
   --border-focused: #0055ff; /* zed: border.focused */
   --border-selected: #3474f0; /* zed: border.selected */
   --border-disabled: #ebecf0; /* zed: border.disabled (fallback to border) */
@@ -40,6 +41,7 @@
   /* ── Interactive ───────────────────────────────────────────────────── */
 
   --primary: #3474f0; /* zed: text.accent, border.selected */
+  --primary-soft: #587cbd; /* softer primary — slider/track fills */
   --primary-fg: #ffffff;
   --secondary: #dfe1e5; /* zed: element.selected, ghost_element.selected */
   --secondary-fg: #000000;
@@ -48,11 +50,11 @@
 
   --danger: #ff0000; /* zed: error */
   --danger-bg: #ffe8e8; /* zed: error.background */
-  --danger-fg: #ffffff;
+  --danger-fg: #000000; /* = --fg (was #ffffff) */
 
   --success: #55a76a; /* zed: success */
   --success-bg: #e9f5e6; /* zed: success.background */
-  --success-fg: #ffffff;
+  --success-fg: #000000; /* = --fg (was #ffffff) */
 
   --warning: #f49810; /* zed: warning */
   --warning-bg: #fff8dc; /* zed: warning.background */
@@ -60,7 +62,7 @@
 
   --info: #389fd6; /* zed: info */
   --info-bg: #e3e3e5; /* zed: info.background */
-  --info-fg: #ffffff;
+  --info-fg: #000000; /* = --fg (was #ffffff) */
 
   /* ── Scrollbar ─────────────────────────────────────────────────────── */
 

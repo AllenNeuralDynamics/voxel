@@ -31,8 +31,9 @@
 
   /* ── Borders ───────────────────────────────────────────────────────── */
 
-  --border: #313244; /* zed: border */
-  --border-variant: #313244; /* zed: border (using border instead of variant which is accent-colored) */
+  --border: #4f505f; /* zed: border (was #313244) */
+  --border-variant: #464657; /* zed: border, subtler step (was #313244; variant is accent-colored in zed) */
+  --border-faint: #585b70b3; /* faint guide line — grid outlines, subtle rules */
   --border-focused: #b4befe; /* zed: border.focused */
   --border-selected: #cba6f7; /* zed: border.selected */
   --border-disabled: #6c7086; /* zed: border.disabled */
@@ -40,6 +41,7 @@
   /* ── Interactive ───────────────────────────────────────────────────── */
 
   --primary: #cba6f7; /* zed: text.accent, border.selected */
+  --primary-soft: #c3b0dc; /* softer primary — slider/track fills */
   --primary-fg: #1e1e2e;
   --secondary: #313244; /* zed: element.hover */
   --secondary-fg: #cdd6f4;

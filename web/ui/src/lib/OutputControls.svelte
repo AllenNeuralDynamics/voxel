@@ -29,13 +29,14 @@
   ];
 
   // Base chunk is a cube of edge 2^level, floored at 64 (omezarr): L0–L6 → 64³, L7 → 128³.
-  const PYRAMID_LEVEL_OPTIONS = Array.from({ length: 8 }, (_, level) => {
-    const edge = Math.max(64, 1 << level);
-    return { value: String(level), label: `L${level}`, hint: `${edge}³` };
-  });
+  const PYRAMID_LEVEL_OPTIONS = Array.from({ length: 8 }, (_, level) => ({
+    value: String(level),
+    label: `L${level}`
+  }));
+  const pyramidEdge = (level: string) => Math.max(64, 1 << Number(level));
 </script>
 
-<div class={cn('grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs', className)}>
+<div class={cn('grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-xs', className)}>
   <Label>Compression</Label>
   <Select
     size="xs"
@@ -56,7 +57,11 @@
     value={String(writer.max_level)}
     options={PYRAMID_LEVEL_OPTIONS}
     onchange={(v) => toastError(instrument.updateOutput({ max_level: Number(v) as ScaleLevel }))}
-  />
+  >
+    {#snippet trailing(option)}
+      <span class="text-fg-muted tabular-nums">{pyramidEdge(option.value)}³</span>
+    {/snippet}
+  </Select>
   <Label>Shard Z chunks</Label>
   <SpinBox
     value={writer.shard_z_chunks}

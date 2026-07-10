@@ -52,7 +52,7 @@
 </script>
 
 <div
-  class="pointer-events-auto flex w-fit flex-col overflow-hidden rounded-xs border border-border/50 bg-canvas/90 pb-1.5 shadow-lg backdrop-blur-sm"
+  class="pointer-events-auto flex w-fit flex-col overflow-hidden rounded-xs border border-border/50 bg-floating/90 pb-1.5 shadow-lg backdrop-blur-sm"
 >
   {#if hasHistograms}
     <div class="flex w-0 min-w-full flex-col divide-y divide-border px-2.5">

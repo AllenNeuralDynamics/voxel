@@ -114,9 +114,19 @@
       const rect = canvas.getBoundingClientRect();
       previewer.isPanZoomActive = true;
 
-      const zoomSensitivity = 0.001;
-      const delta = -e.deltaY * zoomSensitivity;
       const vp = previewer.viewport;
+
+      // Normalize the wheel delta so zoom feels the same on any device: mice report large
+      // per-notch deltas (some in lines/pages), trackpads emit many small pixel deltas.
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16; // lines → px
+      else if (e.deltaMode === 2) dy *= 400; // pages → px
+      dy = Math.max(-40, Math.min(40, dy)); // clamp so one aggressive notch can't leap
+
+      // Multiplicative zoom (fixed fraction per step) — steady at every zoom level, whereas
+      // linear subtraction accelerates as you zoom in. Lower ZOOM_SPEED = slower.
+      const ZOOM_SPEED = 0.0015;
+      const factor = Math.exp(dy * ZOOM_SPEED);
 
       // Derive w from h (or vice versa) to fill the canvas as you zoom in.
       // At full zoom-out (w=h=1) contain-fit may show bars; zooming in
@@ -126,10 +136,10 @@
       const canvasAspect = rect.width / rect.height;
       let newW: number, newH: number;
       if (canvasAspect >= bbAspect) {
-        newH = Math.max(0.01, Math.min(1.0, vp.h - delta));
+        newH = Math.max(0.01, Math.min(1.0, vp.h * factor));
         newW = Math.max(0.01, Math.min(1.0, (newH * canvasAspect) / bbAspect));
       } else {
-        newW = Math.max(0.01, Math.min(1.0, vp.w - delta));
+        newW = Math.max(0.01, Math.min(1.0, vp.w * factor));
         newH = Math.max(0.01, Math.min(1.0, (newW * bbAspect) / canvasAspect));
       }
 

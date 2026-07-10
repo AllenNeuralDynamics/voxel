@@ -38,7 +38,7 @@
 
   // ── Constants ─────────────────────────────────────────────────────
 
-  const svgHeight = 20;
+  const svgHeight = 30;
   const labelWidth = 36;
   const labelGap = 4;
   const gradientId = `ch-grad-${Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('')}`;
@@ -287,13 +287,13 @@
   });
 </script>
 
-{#snippet handle(x: number, color: string, ariaLabel: string, value: number, kind: 'min' | 'max')}
+{#snippet handle(x: number, colorClass: string, ariaLabel: string, value: number, kind: 'min' | 'max')}
   <line
     x1={x}
     y1="0"
     x2={x}
     y2={svgHeight}
-    stroke={color}
+    class={colorClass}
     stroke-width="1"
     stroke-opacity="0.9"
     pointer-events="none"
@@ -345,7 +345,7 @@
       </defs>
 
       {#if bgPoints}
-        <polyline points={bgPoints} fill="none" stroke="#3f3f46" stroke-width="1" class="non-scaling" />
+        <polyline points={bgPoints} fill="none" stroke-width="1" class="non-scaling stroke-fg-faint" />
       {/if}
       {#if fgPolygon}
         <polygon points={fgPolygon} fill="url(#{gradientId})" fill-opacity="0.15" stroke="none" />
@@ -354,8 +354,8 @@
         <polyline points={fgPoints} fill="none" stroke="url(#{gradientId})" stroke-width="1.5" class="non-scaling" />
       {/if}
 
-      {@render handle(minHandleX, '#10b981', 'Minimum level', minIntensity, 'min')}
-      {@render handle(maxHandleX, '#f59e0b', 'Maximum level', maxIntensity, 'max')}
+      {@render handle(minHandleX, 'stroke-success', 'Minimum level', minIntensity, 'min')}
+      {@render handle(maxHandleX, 'stroke-warning', 'Maximum level', maxIntensity, 'max')}
 
       <rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
       <rect
@@ -363,14 +363,14 @@
         y="0"
         width={svgWidth - maxHandleX}
         height={svgHeight}
-        fill="var(--surface)"
+        fill="black"
         opacity="0.4"
         pointer-events="none"
       />
     </svg>
   {:else}
     <div class="flex items-center justify-center" style:height="{svgHeight}px">
-      <span class="text-xs text-fg-muted">No histogram data</span>
+      <span class="text-[10px] text-fg-faint">No histogram data</span>
     </div>
   {/if}
 {/snippet}
@@ -425,7 +425,7 @@
   <div class="flex -translate-y-px items-center justify-between">
     <input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
 
-    <div class="flex items-center gap-1">
+    <div class="mx-2 min-w-0 flex-1">
       <ColormapPicker
         {label}
         {colormap}
@@ -433,7 +433,7 @@
         {onColormapChange}
         width={columnWidth}
         align="center"
-        triggerClass="cursor-pointer text-xs leading-none font-medium transition-colors hover:brightness-125"
+        triggerClass="text-xs font-medium cursor-pointer transition-[filter] hover:brightness-125"
       />
     </div>
 
