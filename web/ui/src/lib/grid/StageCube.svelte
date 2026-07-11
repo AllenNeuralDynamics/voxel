@@ -484,7 +484,7 @@
     </div>
   </div>
 
-  <div class="flex min-h-0 flex-1 items-center justify-center py-2">
+  <div class="flex min-h-0 flex-1 items-center justify-center py-0">
     <div bind:this={box} class="relative aspect-square h-full">
       <canvas
         bind:this={canvasEl}

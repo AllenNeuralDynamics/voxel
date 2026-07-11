@@ -72,10 +72,7 @@
 </script>
 
 <div class={cn('w-56', className)}>
-  <div
-    class="grid transition-[grid-template-columns] duration-300 ease-out"
-    style="grid-template-columns: {cols}"
-  >
+  <div class="grid transition-[grid-template-columns] duration-300 ease-out" style="grid-template-columns: {cols}">
     <div class={cn('overflow-hidden', active === 'acquire' && 'pointer-events-none')}>
       <Button
         variant={active === 'preview' ? 'danger' : 'outline'}

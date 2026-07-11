@@ -20,7 +20,8 @@
   const channelsOf = (id: string) => instrument.activeChannels.filter((c) => c.filters.some((f) => f.wheel.id === id));
 
   /** The filter a channel declares on a given wheel, if any. */
-  const declaredFor = (channel: Channel, wheelId: string) => channel.filters.find((f) => f.wheel.id === wheelId)?.filter;
+  const declaredFor = (channel: Channel, wheelId: string) =>
+    channel.filters.find((f) => f.wheel.id === wheelId)?.filter;
 
   // In-profile wheels first, then the rest — matches the Cameras/Lasers monitors.
   const sortedWheels = $derived([
@@ -89,7 +90,13 @@
   <div class="flex shrink-0 items-center gap-2 px-3 py-1">
     <span class="text-xs font-medium tracking-wide text-fg-muted uppercase">Filter Wheels</span>
     <div class="flex-1"></div>
-    <Button variant="ghost" size="xs" disabled={!canRevert} class={cn(canRevert ? 'text-danger' : 'opacity-50')} onclick={revert}>
+    <Button
+      variant="ghost"
+      size="xs"
+      disabled={!canRevert}
+      class={cn(canRevert ? 'text-danger' : 'opacity-50')}
+      onclick={revert}
+    >
       Revert
     </Button>
     <span class="font-mono text-[10px] text-fg-faint tabular-nums">{sortedWheels.length}</span>
@@ -166,7 +173,7 @@
                 s.name == null
                   ? 'text-fg-faint'
                   : s.slot === current
-                    ? 'text-fg font-medium'
+                    ? 'font-medium text-fg'
                     : 'text-fg-muted hover:text-fg'
               )}
               style="width: var(--cell)"
