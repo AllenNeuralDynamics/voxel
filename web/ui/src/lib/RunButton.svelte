@@ -2,6 +2,7 @@
   import { watch } from 'runed';
 
   import AcquisitionDialog from '$lib/AcquisitionDialog.svelte';
+  import { DotsSpinner, ImageLight } from '$lib/icons';
   import { Button } from '$lib/kit';
   import type { VoxelApp } from '$lib/model';
   import { cn, toastError } from '$lib/utils';
@@ -71,13 +72,29 @@
   const cols = $derived(active === 'preview' ? '1fr 0fr' : active === 'acquire' ? '0fr 1fr' : '1fr 1fr');
 </script>
 
-<div class={cn('w-56', className)}>
-  <div class="grid transition-[grid-template-columns] duration-300 ease-out" style="grid-template-columns: {cols}">
+<div class={cn('flex items-center gap-2', className)}>
+  <Button
+    variant="secondary"
+    size="md"
+    disabled={!instrument || app.snapping}
+    title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
+    class="border-border text-sm"
+    onclick={() => toastError(app.captureSnapshot())}
+  >
+    {#if app.snapping}
+      <DotsSpinner width="16" height="16" />
+    {:else}
+      <ImageLight width="16" height="16" />
+    {/if}
+    Snap
+  </Button>
+  <div class="w-56">
+    <div class="grid transition-[grid-template-columns] duration-300 ease-out" style="grid-template-columns: {cols}">
     <div class={cn('overflow-hidden', active === 'acquire' && 'pointer-events-none')}>
       <Button
-        variant={active === 'preview' ? 'danger' : 'outline'}
+        variant={active === 'preview' ? 'danger' : 'secondary'}
         size="md"
-        class={cn('w-full whitespace-nowrap', active === null && 'rounded-r-none')}
+        class={cn('w-full whitespace-nowrap', active === null && 'rounded-r-none border-border')}
         disabled={!instrument || (active === null && !canPreview)}
         onclick={togglePreview}
       >
@@ -86,18 +103,15 @@
     </div>
     <div class={cn('overflow-hidden', active === 'preview' && 'pointer-events-none')}>
       <Button
-        variant={active === 'acquire' ? 'danger' : 'ghost'}
+        variant={active === 'acquire' ? 'danger' : 'secondary'}
         size="md"
-        class={cn(
-          'w-full whitespace-nowrap',
-          active === null &&
-            'rounded-l-none border-l-0 border-border bg-success/15 text-success hover:bg-success/25 hover:text-success'
-        )}
+        class={cn('w-full whitespace-nowrap', active === null && 'rounded-l-none border-l-0 border-border')}
         disabled={!instrument || (active === null && !canAcquire)}
         onclick={toggleAcquire}
       >
         {active === 'acquire' ? 'Stop Acquisition' : 'Acquire'}
       </Button>
+    </div>
     </div>
   </div>
 </div>

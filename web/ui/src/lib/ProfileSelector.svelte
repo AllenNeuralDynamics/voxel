@@ -78,7 +78,7 @@
   </div>
 
   <Select.Portal>
-    <Select.Content align="start" sideOffset={4} class={styles.content()}>
+    <Select.Content align="start" sideOffset={4} class={cn(styles.content(), 'bg-surface')}>
       {#if profileList.length === 0}
         <div class="px-3 py-2 text-base text-fg-muted">No profiles available</div>
       {:else}
@@ -89,7 +89,11 @@
               <Select.Item
                 value={profile.value}
                 label={profile.label}
-                class={cn(styles.item(), profile.description ? 'items-start' : 'items-center')}
+                class={cn(
+                  styles.item(),
+                  'data-highlighted:bg-floating',
+                  profile.description ? 'items-start' : 'items-center'
+                )}
               >
                 <span
                   class="mt-1.5 inline-block size-1.5 shrink-0 self-start rounded-full {hasStacks

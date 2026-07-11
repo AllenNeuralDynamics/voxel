@@ -26,7 +26,6 @@
   const app = getVoxelApp();
   const snaps = app.snaps;
   const instrument = $derived(app.instrument);
-  const previewing = $derived(app.instrument?.mode === 'preview');
 
   const ALIGN_EDGES = [
     { edge: 'top', label: 'Top' },
@@ -184,9 +183,11 @@
     return { barPx, label };
   });
 
-  // Navigator is a live-preview locator: shown while preview is running and either a snap is up or we're zoomed in.
+  // Navigator locates the live viewport: shown whenever visible channels have frames (live or a frozen
+  // last frame) and there's something to locate — we're zoomed in, or viewing a snapshot.
+  const hasFrames = $derived(previewer.channels.some((ch) => ch.visible && ch.frame));
   const zoomed = $derived(previewer.viewport.w < 1 || previewer.viewport.h < 1);
-  const showNavigator = $derived(previewing && (snaps.active !== null || zoomed));
+  const showNavigator = $derived(hasFrames && (snaps.active !== null || zoomed));
 </script>
 
 <div class="flex h-full flex-col bg-canvas">

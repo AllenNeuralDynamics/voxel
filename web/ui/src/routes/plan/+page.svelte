@@ -1,11 +1,14 @@
 <script lang="ts">
   import { Popover } from 'bits-ui';
+  import { Pane, PaneGroup } from 'paneforge';
   import { PersistedState, watch } from 'runed';
   import type { Component } from 'svelte';
 
+  import { GridCanvas } from '$lib/grid';
   import { getTaskSelection } from '$lib/grid/selection.svelte';
   import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, TrashCanOutline } from '$lib/icons';
   import { Button, Checkbox, Dialog, Select } from '$lib/kit';
+  import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { getVoxelApp, type TaskPatch, type TileOrder } from '$lib/model';
   import { Input, SpinBox } from '$lib/prop/numeric';
   import { cn, sanitizeString, toastError } from '$lib/utils';
@@ -369,68 +372,70 @@
   </button>
 {/snippet}
 
-<div class="flex h-full flex-col overflow-hidden">
-  <div class="shrink-0 px-3 py-4">
-    <div class="flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <span class="text-xs text-nowrap text-fg-muted tabular-nums">
-          {selectedRows.length}/{rows.length} tasks
-        </span>
-        {#if instrument}
-          <Select
-            size="xs"
-            class="w-full"
-            prefix="Traversal"
-            value={instrument.state.traversal}
-            options={TILE_ORDER_OPTIONS}
-            onchange={(v) => toastError(instrument.setTraversal(v as TileOrder))}
-          />
-        {/if}
-      </div>
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-1.5">
-          <SpinBox
-            model={{
-              value: nudgeStep / unit.scale,
-              onChange: (v) => (nudgeStep = v * unit.scale),
-              min: unit.step,
-              step: unit.bigStep
-            }}
-            decimals={unit.decimals}
-            numCharacters={7}
-            size="xs"
-            steppers={false}
-            prefix="Nudge"
-            suffix={unit.label}
-          />
-          <div class="flex items-center gap-0.5">
-            {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}
-            {@render nudgeButton(ChevronRight, 'Nudge +X', () => applyNudge(nudgeStep, 0))}
-            {@render nudgeButton(ChevronUp, 'Nudge +Y', () => applyNudge(0, nudgeStep))}
-            {@render nudgeButton(ChevronDown, 'Nudge −Y', () => applyNudge(0, -nudgeStep))}
-          </div>
+<PaneGroup direction="vertical" autoSaveId="plan.grid" class="h-full">
+  <Pane defaultSize={60} minSize={30}>
+    <div class="flex h-full flex-col overflow-hidden">
+        <div class="shrink-0 px-3 py-4">
+            <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-nowrap text-fg-muted tabular-nums">
+                {selectedRows.length}/{rows.length} tasks
+                </span>
+                {#if instrument}
+                <Select
+                    size="xs"
+                    class="w-full"
+                    prefix="Traversal"
+                    value={instrument.state.traversal}
+                    options={TILE_ORDER_OPTIONS}
+                    onchange={(v) => toastError(instrument.setTraversal(v as TileOrder))}
+                />
+                {/if}
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                <SpinBox
+                    model={{
+                    value: nudgeStep / unit.scale,
+                    onChange: (v) => (nudgeStep = v * unit.scale),
+                    min: unit.step,
+                    step: unit.bigStep
+                    }}
+                    decimals={unit.decimals}
+                    numCharacters={7}
+                    size="xs"
+                    steppers={false}
+                    prefix="Nudge"
+                    suffix={unit.label}
+                />
+                <div class="flex items-center gap-0.5">
+                    {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}
+                    {@render nudgeButton(ChevronRight, 'Nudge +X', () => applyNudge(nudgeStep, 0))}
+                    {@render nudgeButton(ChevronUp, 'Nudge +Y', () => applyNudge(0, nudgeStep))}
+                    {@render nudgeButton(ChevronDown, 'Nudge −Y', () => applyNudge(0, -nudgeStep))}
+                </div>
+                </div>
+                <Select
+                size="xs"
+                class="w-24"
+                prefix="Units"
+                value={spaceUnit.current}
+                options={SPACE_UNIT_OPTIONS}
+                onchange={(v) => (spaceUnit.current = v as SpaceUnit['value'])}
+                />
+                <Button
+                variant="secondary"
+                size="xs"
+                title="Delete selected tasks"
+                disabled={!hasSelection}
+                onclick={() => (deleteDialogOpen = true)}
+                >
+                <TrashCanOutline width="14" height="14" />
+                Delete
+                </Button>
+            </div>
+            </div>
         </div>
-        <Select
-          size="xs"
-          class="w-24"
-          prefix="Units"
-          value={spaceUnit.current}
-          options={SPACE_UNIT_OPTIONS}
-          onchange={(v) => (spaceUnit.current = v as SpaceUnit['value'])}
-        />
-        <Button
-          variant="secondary"
-          size="xs"
-          title="Delete selected tasks"
-          disabled={!hasSelection}
-          onclick={() => (deleteDialogOpen = true)}
-        >
-          <TrashCanOutline width="14" height="14" />
-          Delete
-        </Button>
-      </div>
-    </div>
-  </div>
   <!-- Rows -->
   <div
     role="grid"
@@ -464,8 +469,16 @@
         {@render taskRow(row, selection.has(row.taskId))}
       {/each}
     {/if}
-  </div>
-</div>
+    </div>
+    </div>
+  </Pane>
+  <PaneDivider direction="horizontal" />
+  <Pane defaultSize={40} minSize={20} class="min-w-0 overflow-hidden">
+    {#if instrument}
+      <GridCanvas {instrument} />
+    {/if}
+  </Pane>
+</PaneGroup>
 
 <Dialog.Root bind:open={deleteDialogOpen}>
   <Dialog.Portal>
