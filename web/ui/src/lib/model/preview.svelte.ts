@@ -467,6 +467,16 @@ export class Preview {
     void this.#client.post('/instrument/preview/stop');
   }
 
+  /** Drop cached frames so a fresh (transient) preview waits for new images instead of compositing stale ones. */
+  clearFrames(): void {
+    for (const ch of this.channels) {
+      ch.frame?.close();
+      ch.frame = null;
+      ch.clearView();
+    }
+    this.redrawGeneration++;
+  }
+
   setChannelLevels(name: string, min: number, max: number): void {
     const channel = this.channels.find((c) => c.name === name);
     if (!channel) return;

@@ -1,7 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 
 import { IDBKeyVal } from '$lib/utils/idb';
-import { createMultiSelect } from '$lib/utils/multiselect.svelte';
 
 export interface SnapshotChannel {
   label: string;
@@ -25,6 +24,8 @@ export interface SnapshotChannel {
 export interface Snapshot {
   id: string;
   label: string;
+  /** Name of the instrument this snapshot was captured on (its identity — see AppStatus.active). */
+  instrument: string;
   profileId: string;
   profileLabel: string;
   stageX: number;
@@ -40,25 +41,49 @@ export interface Snapshot {
 
 const db = new IDBKeyVal<Snapshot>('voxel-snapshots');
 
+/** Cap per instrument; the oldest beyond this are evicted on capture. */
+const MAX_PER_INSTRUMENT = 50;
+
 let nextId = 1;
 
 export class SnapshotStore {
+  /** Every stored snapshot across all instruments, keyed by id. `list` narrows to the active one. */
   readonly items = new SvelteMap<string, Snapshot>();
 
-  /** Snapshots ordered newest-first. */
-  list = $derived<Snapshot[]>([...this.items.values()].sort((a, b) => b.timestamp - a.timestamp));
+  #scope = $state<string | null>(null);
+  #activeId = $state<string | null>(null);
+  readonly #ready: Promise<void>;
 
-  readonly sel = createMultiSelect<string>(() => this.list.map((s) => s.id));
+  /** Snapshots for the active instrument (`scope`), newest-first. */
+  list = $derived<Snapshot[]>(
+    [...this.items.values()].filter((s) => s.instrument === this.#scope).sort((a, b) => b.timestamp - a.timestamp)
+  );
 
-  /** The focused snapshot shown in the preview pane. */
-  focused = $derived<Snapshot | null>(this.sel.focused ? (this.items.get(this.sel.focused) ?? null) : null);
+  /** The snapshot the viewer is showing, or null while showing live preview. */
+  active = $derived<Snapshot | null>(this.#activeId ? (this.items.get(this.#activeId) ?? null) : null);
+
+  /** The instrument whose snapshots are shown; set by the app when the open instrument changes. */
+  get scope(): string | null {
+    return this.#scope;
+  }
+
+  set scope(name: string | null) {
+    if (name === this.#scope) return;
+    this.#scope = name;
+    this.#activeId = null; // a snapshot from the previous instrument shouldn't linger in view
+  }
+
+  /** Point the viewer at a snapshot (by id) or back to live preview (null). */
+  view(id: string | null): void {
+    this.#activeId = id;
+  }
 
   get size(): number {
-    return this.items.size;
+    return this.list.length;
   }
 
   constructor() {
-    this.#load();
+    this.#ready = this.#load();
   }
 
   async #load(): Promise<void> {
@@ -66,11 +91,7 @@ export class SnapshotStore {
     for (const [, snap] of entries) {
       this.items.set(snap.id, snap);
       const n = parseInt(snap.id.replace('snap-', ''), 10);
-      if (n >= nextId) nextId = n + 1;
-    }
-    if (this.sel.focused === null && this.items.size > 0) {
-      const first = this.list[0]?.id;
-      if (first) this.sel.select(first);
+      if (Number.isFinite(n) && n >= nextId) nextId = n + 1;
     }
   }
 
@@ -78,22 +99,29 @@ export class SnapshotStore {
     const id = `snap-${nextId++}`;
     const full: Snapshot = { ...snapshot, id, label: id };
     this.items.set(id, full);
-    this.sel.select(id);
     db.put(id, full);
+    this.#enforceCap(full.instrument);
     return full;
+  }
+
+  /** Evict the oldest snapshots beyond the per-instrument cap. */
+  #enforceCap(instrument: string): void {
+    const scoped = [...this.items.values()]
+      .filter((s) => s.instrument === instrument)
+      .sort((a, b) => b.timestamp - a.timestamp);
+    for (const stale of scoped.slice(MAX_PER_INSTRUMENT)) {
+      this.items.delete(stale.id);
+      if (this.#activeId === stale.id) this.#activeId = null;
+      db.delete(stale.id);
+    }
   }
 
   remove(ids: string | Iterable<string>): void {
     for (const id of typeof ids === 'string' ? [ids] : ids) {
       this.items.delete(id);
-      this.sel.selection.delete(id);
       db.delete(id);
     }
-    if (this.sel.focused && !this.items.has(this.sel.focused)) {
-      const first = this.list[0]?.id;
-      if (first) this.sel.select(first);
-      else this.sel.clear();
-    }
+    if (this.#activeId != null && !this.items.has(this.#activeId)) this.#activeId = null;
   }
 
   rename(id: string, label: string): void {
@@ -105,9 +133,24 @@ export class SnapshotStore {
     }
   }
 
+  /** Clear the active instrument's snapshots (leaves other instruments' untouched). */
   clear(): void {
-    this.items.clear();
-    this.sel.clear();
-    db.clear();
+    for (const snap of this.list) {
+      this.items.delete(snap.id);
+      db.delete(snap.id);
+    }
+    this.#activeId = null;
+  }
+
+  /** Drop snapshots whose instrument is no longer in the catalog — called on connect. */
+  async reconcile(validInstruments: string[]): Promise<void> {
+    await this.#ready;
+    for (const snap of [...this.items.values()]) {
+      if (!validInstruments.includes(snap.instrument)) {
+        this.items.delete(snap.id);
+        db.delete(snap.id);
+      }
+    }
+    if (this.#activeId != null && !this.items.has(this.#activeId)) this.#activeId = null;
   }
 }

@@ -19,12 +19,12 @@
   import { GridCanvas } from '$lib/grid';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
   import StageCube from '$lib/grid/StageCube.svelte';
-  import { Crosshair, Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
+  import { Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
   import { setVoxelApp, VoxelApp } from '$lib/model';
-  import { PreviewCanvas } from '$lib/preview';
+  import { PreviewSourceSelector, PreviewViewer } from '$lib/preview';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
@@ -83,7 +83,6 @@
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
     { id: '/', label: 'Inspect', icon: Microscope },
-    { id: '/snap', label: 'Snap', icon: Crosshair },
     { id: '/tune', label: 'Tune', icon: WaveformsIcon },
     { id: '/configure', label: 'Configure', icon: TuneVertical },
     { id: '/plan', label: 'Plan', icon: Layers }
@@ -217,13 +216,14 @@
       <!-- Viewer: Preview + Grid Canvas (centerpiece) -->
       <Pane defaultSize={45}>
         <div class="flex h-full flex-col bg-canvas">
-          <header class="flex h-15 shrink-0 items-center justify-end border-b border-border bg-elevated px-4">
+          <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-elevated px-4">
+            <PreviewSourceSelector />
             <RunButton {app} />
           </header>
           <main class="min-h-0 flex-1 overflow-hidden">
             <PaneGroup direction="vertical" autoSaveId="shell.right">
               <Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
-                <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+                <PreviewViewer previewer={instrument.preview} fov={instrument.fov} />
               </Pane>
               <PaneDivider direction="horizontal" />
               <Pane defaultSize={50} minSize={30} class="h-full flex-1">
