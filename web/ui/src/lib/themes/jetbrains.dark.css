@@ -11,8 +11,8 @@
   --canvas: #191a1c; /* zed: editor.background, toolbar.background, tab.active_background, terminal.background */
   --surface: #26282b; /* zed: surface.background, background, status_bar.background, title_bar.background, tab_bar.background */
   --panel: var(--surface); /* zed: panel.background */
-  --elevated: #26282b; /* zed: elevated_surface.background, editor.subheader.background */
-  --floating: #26282b; /* zed: elevated_surface.background */
+  --elevated: #2f3134; /* synthesized lift above surface — Zed mapped this to surface (#26282b) */
+  --floating: #3a3d40; /* synthesized — popover/dialog tier (~Darcula popup); Zed had no distinct value */
   --backdrop: #000000aa;
 
   /* ── Element ───────────────────────────────────────────────────────── */
@@ -43,8 +43,6 @@
   --primary: #3474f0; /* zed: text.accent, border.selected */
   --primary-soft: #587cbd; /* softer primary — slider/track fills */
   --primary-fg: #dfe1e5;
-  --secondary: #43454a; /* zed: element.selected, ghost_element.selected */
-  --secondary-fg: #dfe1e5;
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
 

@@ -84,8 +84,8 @@
   /* stone-400, warm — ~2:1 on the gray surfaces (was 0.795, too close to surface)
 	 * Structural borders. Panel edges, section dividers. */
 
-  --border-variant: oklch(0.78 0.008 57);
-  /* ~stone-350, subtler than border (was 0.855)
+  --border-variant: oklch(0.74 0.008 57);
+  /* ~stone-375, a touch subtler than border but close enough that inputs stay defined on the lifted surfaces (was 0.78)
 	 * Contained elements — inputs, cards, soft divisions. */
 
   --border-faint: oklch(0.709 0.01 56.259 / 0.7);
@@ -116,14 +116,6 @@
   --primary-fg: oklch(0.97 0.014 254.604);
   /* zed: (light text on accent) — blue-50
 	 * Text on primary backgrounds. */
-
-  --secondary: oklch(0.923 0.003 48.717);
-  /* stone-200 — warm subtle fill (was zinc-100 0.967)
-	 * Secondary/subtle button fills. */
-
-  --secondary-fg: oklch(0.216 0.006 56.043);
-  /* stone-900 — warm (was zinc-900 0.21)
-	 * Text on secondary backgrounds. */
 
   /* ── Semantic: Danger ──────────────────────────────────────────── */
 
@@ -242,8 +234,8 @@
   --border: oklch(1 0 0 / 22%);
   /* white/22 — visible on the lifted surfaces (was white/10→14) */
 
-  --border-variant: oklch(1 0 0 / 14%);
-  /* white/14 — subtler than border (was white/15→9) */
+  --border-variant: oklch(1 0 0 / 18%);
+  /* white/18 — a touch subtler than border, but close enough that inputs stay defined (was white/14) */
 
   --border-faint: oklch(0.552 0.016 285.938 / 0.7);
   /* faint guide line — grid plane outlines, subtle rules */
@@ -267,12 +259,6 @@
 
   --primary-fg: oklch(0.985 0 0);
   /* white */
-
-  --secondary: oklch(0.274 0.006 286.033);
-  /* zed: element.background — zinc-800 */
-
-  --secondary-fg: oklch(0.985 0 0);
-  /* zinc-50 */
 
   /* ── Semantic: Danger ────────────────────────────────────────────── */
 

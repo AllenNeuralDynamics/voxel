@@ -43,8 +43,6 @@
   --primary: #3474f0; /* zed: text.accent, border.selected */
   --primary-soft: #587cbd; /* softer primary — slider/track fills */
   --primary-fg: #ffffff;
-  --secondary: #dfe1e5; /* zed: element.selected, ghost_element.selected */
-  --secondary-fg: #000000;
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
 

@@ -11,8 +11,8 @@
   --canvas: #0d1016; /* zed: editor.background, toolbar.background, tab.active_background */
   --surface: #1f2127; /* zed: surface.background, elevated_surface.background */
   --panel: var(--surface); /* zed: panel.background */
-  --elevated: #1f2127; /* zed: elevated_surface.background */
-  --floating: #1f2127; /* zed: elevated_surface.background */
+  --elevated: #282b32; /* synthesized lift above surface — Zed mapped this to surface (#1f2127) */
+  --floating: #33373f; /* synthesized — popover/dialog tier; Zed had no distinct value */
   --backdrop: #000000aa;
 
   /* ── Element ───────────────────────────────────────────────────────── */
@@ -43,8 +43,6 @@
   --primary: #5ac1fe; /* zed: text.accent */
   --primary-soft: #8bbdde; /* softer primary — slider/track fills */
   --primary-fg: #0d1016;
-  --secondary: #3e4043; /* zed: element.selected */
-  --secondary-fg: #bfbdb6;
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
 
