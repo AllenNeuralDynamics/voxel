@@ -65,7 +65,11 @@
   // --- Shell nav ---
 
   let shellRef = $state<HTMLElement | null>(null);
-  const leftPane = createPaneSize(() => shellRef, { min: 740, fallback: { min: 30 } });
+  const leftPane = createPaneSize(() => shellRef, {
+    min: 700,
+    default: 740,
+    fallback: { min: 30, default: 30, max: 50 }
+  });
   const rightPane = createPaneSize(() => shellRef, { min: 336, max: 350, fallback: { min: 15, max: 18 } });
 
   // Vertical split inside the right pane: monitors (top) over the StageCube (bottom).
@@ -157,7 +161,7 @@
   <div bind:this={shellRef} class="h-screen w-full text-fg">
     <PaneGroup direction="horizontal" autoSaveId="shell.v5">
       <!-- Mode controls: nav + routed content + logs -->
-      <Pane defaultSize={leftPane.minSize} minSize={leftPane.minSize} maxSize={60}>
+      <Pane {...leftPane}>
         <div class="grid h-full grid-rows-[auto_1fr] bg-surface">
           <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border bg-elevated px-4">
             {@render appMenu()}

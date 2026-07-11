@@ -77,7 +77,11 @@ function propValueDiverged(saved: unknown, current: unknown): boolean {
 }
 
 /** Whether a live ROI needs saving against the profile-saved one (never-saved counts as dirty). */
-function roiDiffers(saved: SensorROI | undefined, live: SensorROI | undefined, sensor?: { x: number; y: number }): boolean {
+function roiDiffers(
+  saved: SensorROI | undefined,
+  live: SensorROI | undefined,
+  sensor?: { x: number; y: number }
+): boolean {
   if (!live) return false;
   if (!saved) {
     // The backend stores no ROI for a full-sensor crop (its implicit default), so an absent saved
