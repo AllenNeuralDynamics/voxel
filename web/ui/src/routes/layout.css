@@ -99,8 +99,6 @@
   --color-primary: var(--primary);
   --color-primary-soft: var(--primary-soft);
   --color-primary-fg: var(--primary-fg);
-  --color-secondary: var(--secondary);
-  --color-secondary-fg: var(--secondary-fg);
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
   --color-danger: var(--danger);
@@ -132,7 +130,6 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary-foreground: var(--primary-foreground);
-  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);

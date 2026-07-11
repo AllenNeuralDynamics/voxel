@@ -5,20 +5,23 @@
     base: [
       'inline-flex shrink-0 items-center justify-center',
       'rounded border font-medium',
-      'transition-colors focus:outline-none',
+      'transition-[color,background-color,border-color,transform] focus:outline-none',
       'focus-visible:ring-2 focus-visible:ring-focused focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
-      'disabled:pointer-events-none disabled:opacity-50',
+      'active:scale-[0.98]',
+      'disabled:pointer-events-none disabled:opacity-80',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0'
     ],
     variants: {
       variant: {
-        default: 'border-primary bg-primary text-primary-fg hover:bg-primary/90',
-        secondary: 'border-secondary bg-secondary text-secondary-fg hover:bg-secondary/80',
-        outline: 'border-input bg-transparent hover:bg-element-hover hover:text-secondary-fg focus:border-focused',
-        ghost: 'border-transparent hover:bg-element-hover hover:text-secondary-fg focus:border-focused',
-        danger: 'border-danger bg-danger text-danger-fg hover:bg-danger/90',
-        success: 'border-success bg-success text-success-fg hover:bg-success/90',
-        link: 'border-transparent text-primary underline-offset-4 hover:underline'
+        default: 'border-primary bg-primary text-primary-fg hover:bg-primary/90 active:bg-primary/80',
+        secondary:
+          'border-input bg-element-bg text-fg hover:border-border hover:bg-element-hover active:bg-element-active',
+        outline:
+          'border-input bg-transparent hover:border-border hover:bg-element-hover hover:text-fg active:bg-element-active focus:border-focused',
+        ghost: 'border-transparent hover:bg-element-hover hover:text-fg active:bg-element-active focus:border-focused',
+        danger: 'border-danger bg-danger text-danger-fg hover:bg-danger/90 active:bg-danger/80',
+        success: 'border-success bg-success text-success-fg hover:bg-success/90 active:bg-success/80',
+        link: 'border-transparent text-primary underline-offset-4 hover:underline active:text-primary/70'
       },
       size: {
         xs: 'h-ui-xs gap-1 px-1.5 text-xs',

@@ -11,8 +11,8 @@
   --canvas: #1e1e2e; /* zed: editor.background, toolbar.background, tab.active_background */
   --surface: #181825; /* zed: surface.background */
   --panel: var(--surface); /* zed: panel.background */
-  --elevated: #181825; /* zed: elevated_surface.background */
-  --floating: #1e1e2e; /* zed: toolbar.background */
+  --elevated: #313244; /* catppuccin surface0 — proper lift above the mantle panels */
+  --floating: #45475a; /* catppuccin surface1 — popover/dialog tier */
   --backdrop: #000000aa;
 
   /* ── Element ───────────────────────────────────────────────────────── */
@@ -43,8 +43,6 @@
   --primary: #cba6f7; /* zed: text.accent, border.selected */
   --primary-soft: #c3b0dc; /* softer primary — slider/track fills */
   --primary-fg: #1e1e2e;
-  --secondary: #313244; /* zed: element.hover */
-  --secondary-fg: #cdd6f4;
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
 

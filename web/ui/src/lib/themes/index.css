@@ -15,8 +15,8 @@
 
 /* ── shadcn bridge ─────────────────────────────────────────────────────
  * Maps shadcn token names to the Voxel design system.
- * Tokens with identical names in both systems (--primary, --secondary,
- * --border, --radius) are defined directly by the theme — no bridge needed.
+ * Tokens with identical names in both systems (--primary, --border,
+ * --radius) are defined directly by the theme — no bridge needed.
  * ───────────────────────────────────────────────────────────────────── */
 
 :root {
@@ -29,12 +29,9 @@
   --popover-foreground: var(--fg);
   /* --primary: defined by theme */
   --primary-foreground: var(--primary-fg);
-  /* --secondary: defined by theme */
-  --secondary-foreground: var(--secondary-fg);
   --muted: var(--element-bg);
   --muted-foreground: var(--fg-muted);
   --accent: var(--element-hover);
-  --accent-foreground: var(--secondary-fg);
   --destructive: var(--danger);
   /* --border: defined by theme */
   --input: var(--border-variant);

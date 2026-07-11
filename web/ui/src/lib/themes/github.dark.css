@@ -12,7 +12,7 @@
   --surface: #010409; /* zed: surface.background, panel.background, status_bar.background, tab_bar.background */
   --panel: var(--surface); /* zed: panel.background */
   --elevated: #151b23; /* zed: editor.subheader.background, editor.active_line.background */
-  --floating: #010409; /* zed: elevated_surface.background */
+  --floating: #21262d; /* synthesized — overlay tier lifted above elevated (Primer canvas.inset+); Zed mapped this to surface (#010409) */
   --backdrop: #000000cc;
 
   /* ── Element ───────────────────────────────────────────────────────── */
@@ -43,8 +43,6 @@
   --primary: #1f6feb; /* zed: border.focused, border.selected */
   --primary-soft: #4e77b8; /* softer primary — slider/track fills */
   --primary-fg: #ffffff;
-  --secondary: #656c7633; /* zed: element.background */
-  --secondary-fg: #f0f6fc;
 
   /* ── Semantic ──────────────────────────────────────────────────────── */
 
