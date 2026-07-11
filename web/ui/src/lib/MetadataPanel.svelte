@@ -1,8 +1,9 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner';
 
-  import { Button, Dialog, Label, Select, SpinBox, TagInput, TextArea, TextInput } from '$lib/kit';
+  import { Button, Dialog, Label, Select, TagInput, TextArea, TextInput } from '$lib/kit';
   import type { Instrument, JsonSchema, JsonSchemaProperty } from '$lib/model';
+  import { SpinBox } from '$lib/prop/numeric';
   import { sanitizeString, toastError } from '$lib/utils';
 
   interface Props {
@@ -119,12 +120,14 @@
       />
     {:else if prop.type === 'number' || prop.type === 'integer'}
       <SpinBox
-        value={Number(values[key] ?? 0)}
-        step={prop.type === 'number' ? 0.01 : 1}
+        model={{
+          value: Number(values[key] ?? 0),
+          onChange: (v) => setField(key, v),
+          step: prop.type === 'number' ? 0.01 : 1
+        }}
         decimals={prop.type === 'number' ? 3 : 0}
         size="xs"
-        appearance="bordered"
-        onChange={(v) => setField(key, v)}
+        steppers={false}
       />
     {:else if prop.type === 'array' && prop.items?.type === 'string'}
       <TagInput value={(values[key] as string[]) ?? []} onChange={(v) => setField(key, v)} size="xs" />

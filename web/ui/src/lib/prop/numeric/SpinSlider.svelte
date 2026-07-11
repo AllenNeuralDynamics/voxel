@@ -4,6 +4,13 @@
 
   import SpinBox from './SpinBox.svelte';
 
+  const H = {
+    xs: 'h-ui-xs',
+    sm: 'h-ui-sm',
+    md: 'h-ui-md',
+    lg: 'h-ui-lg'
+  } as const;
+
   interface Props {
     model: NumericModel;
     decimals?: number;
@@ -12,6 +19,7 @@
     prefix?: string;
     suffix?: string;
     disabled?: boolean;
+    size?: keyof typeof H;
     class?: string;
   }
 
@@ -23,6 +31,7 @@
     prefix,
     suffix,
     disabled = false,
+    size = 'xs',
     class: className = ''
   }: Props = $props();
 
@@ -44,7 +53,8 @@
 
 <div
   class={cn(
-    'flex h-ui-xs min-w-0 items-stretch rounded bg-element-bg',
+    'flex min-w-0 items-stretch rounded bg-element-bg',
+    H[size],
     disabled && 'pointer-events-none opacity-50',
     className
   )}
@@ -57,6 +67,7 @@
     {prefix}
     {suffix}
     {disabled}
+    {size}
     class="rounded-r-none border-r-0 bg-transparent"
   />
   <input

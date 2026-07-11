@@ -1,8 +1,9 @@
 <script lang="ts">
   import { watch } from 'runed';
 
-  import { Button, SpinBox } from '$lib/kit';
+  import { Button } from '$lib/kit';
   import type { Instrument } from '$lib/model';
+  import { SpinBox } from '$lib/prop/numeric';
   import { cn, toastError } from '$lib/utils';
 
   interface Props {
@@ -500,46 +501,49 @@
 
   <div class="grid grid-cols-3 gap-2">
     <SpinBox
-      value={pos('x') / 1000}
-      min={lower('x') / 1000}
-      max={upper('x') / 1000}
-      step={0.01}
+      model={{
+        value: pos('x') / 1000,
+        onChange: (v) => toastError(stage.x!.move(v * 1000)),
+        min: lower('x') / 1000,
+        max: upper('x') / 1000,
+        step: 0.01
+      }}
       decimals={3}
       size="xs"
       align="right"
       prefix="X"
       suffix="mm"
-      class="w-full"
-      color={moving('x') ? 'var(--danger)' : undefined}
-      onChange={(v) => toastError(stage.x!.move(v * 1000))}
+      class={moving('x') ? 'w-full text-danger' : 'w-full'}
     />
     <SpinBox
-      value={pos('y') / 1000}
-      min={lower('y') / 1000}
-      max={upper('y') / 1000}
-      step={0.01}
+      model={{
+        value: pos('y') / 1000,
+        onChange: (v) => toastError(stage.y!.move(v * 1000)),
+        min: lower('y') / 1000,
+        max: upper('y') / 1000,
+        step: 0.01
+      }}
       decimals={3}
       size="xs"
       align="right"
       prefix="Y"
       suffix="mm"
-      class="w-full"
-      color={moving('y') ? 'var(--danger)' : undefined}
-      onChange={(v) => toastError(stage.y!.move(v * 1000))}
+      class={moving('y') ? 'w-full text-danger' : 'w-full'}
     />
     <SpinBox
-      value={pos('z') / 1000}
-      min={lower('z') / 1000}
-      max={upper('z') / 1000}
-      step={0.001}
+      model={{
+        value: pos('z') / 1000,
+        onChange: (v) => toastError(stage.z!.move(v * 1000)),
+        min: lower('z') / 1000,
+        max: upper('z') / 1000,
+        step: 0.001
+      }}
       decimals={3}
       size="xs"
       align="right"
       prefix="Z"
       suffix="mm"
-      class="w-full"
-      color={moving('z') ? 'var(--danger)' : undefined}
-      onChange={(v) => toastError(stage.z!.move(v * 1000))}
+      class={moving('z') ? 'w-full text-danger' : 'w-full'}
     />
   </div>
 </div>

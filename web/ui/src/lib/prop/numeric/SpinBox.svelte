@@ -1,11 +1,18 @@
 <script lang="ts">
-  import type { NumericModel } from '$lib/model';
   import { cn } from '$lib/utils';
 
   import Input from './Input.svelte';
+  import { type NumericSource,useNumericModel } from './model.svelte';
+
+  const SIZE = {
+    xs: 'h-ui-xs text-xs',
+    sm: 'h-ui-sm text-xs',
+    md: 'h-ui-md text-sm',
+    lg: 'h-ui-lg text-base'
+  } as const;
 
   interface Props {
-    model: NumericModel;
+    model: NumericSource;
     decimals?: number;
     numCharacters?: number;
     align?: 'left' | 'right';
@@ -13,11 +20,12 @@
     suffix?: string;
     disabled?: boolean;
     steppers?: boolean;
+    size?: keyof typeof SIZE;
     class?: string;
   }
 
   let {
-    model,
+    model: source,
     decimals,
     numCharacters = 8,
     align = 'left',
@@ -25,8 +33,11 @@
     suffix,
     disabled = false,
     steppers = true,
+    size = 'xs',
     class: className = ''
   }: Props = $props();
+
+  const model = useNumericModel(() => source);
 
   function increment() {
     model.patch(model.value + (model.step ?? 1));
@@ -38,23 +49,23 @@
 
 <div
   class={cn(
-    'focus-within:border-focused inline-flex h-ui-xs items-center overflow-hidden rounded border border-input bg-element-bg text-xs leading-none transition-colors hover:bg-element-hover',
+    'focus-within:border-focused inline-flex items-center overflow-hidden rounded border border-input bg-element-bg leading-none transition-colors hover:bg-element-hover',
+    SIZE[size],
     disabled && 'pointer-events-none opacity-50',
     className
   )}
-  {@attach model.wheel}
 >
   {#if prefix}
     <span class="shrink-0 px-1.5 font-mono text-fg-muted select-none" {@attach model.scrubber}>
       {prefix}
     </span>
   {/if}
-  <Input {model} {decimals} {numCharacters} {align} class="flex-1 px-0.5 leading-none" />
+  <Input {model} {decimals} {numCharacters} {align} class="min-w-0 flex-1 px-0.5 leading-none" />
   {#if suffix}
     <span class="pointer-events-none shrink-0 px-1.5 font-mono text-fg-muted">{suffix}</span>
   {/if}
   {#if steppers}
-    <div class="flex cursor-pointer flex-col self-stretch border-l border-input">
+    <div class="flex shrink-0 cursor-pointer flex-col self-stretch border-l border-input">
       <button
         class="flex flex-1 items-center justify-center rounded-tr border-b border-input bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
         onclick={increment}

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Label, Select, SpinBox } from '$lib/kit';
+  import { Label, Select } from '$lib/kit';
   import { type Compression, type DownscaleType, type Instrument, type ScaleLevel } from '$lib/model';
+  import { SpinBox } from '$lib/prop/numeric';
   import { cn, toastError } from '$lib/utils';
 
   interface Props {
@@ -64,35 +65,38 @@
   </Select>
   <Label>Shard Z chunks</Label>
   <SpinBox
-    value={writer.shard_z_chunks}
-    min={1}
-    step={1}
+    model={{
+      value: writer.shard_z_chunks,
+      onChange: (v) => toastError(instrument.updateOutput({ shard_z_chunks: v })),
+      min: 1,
+      step: 1
+    }}
     numCharacters={4}
-    draggable={false}
     size="xs"
-    onChange={(v) => toastError(instrument.updateOutput({ shard_z_chunks: v }))}
   />
   <Label>Batch Z shards</Label>
   <SpinBox
-    value={writer.batch_z_shards}
-    min={1}
-    step={1}
+    model={{
+      value: writer.batch_z_shards,
+      onChange: (v) => toastError(instrument.updateOutput({ batch_z_shards: v })),
+      min: 1,
+      step: 1
+    }}
     numCharacters={4}
-    draggable={false}
     size="xs"
-    onChange={(v) => toastError(instrument.updateOutput({ batch_z_shards: v }))}
   />
   <Label>Target shard</Label>
   <SpinBox
-    value={writer.target_shard_gb}
-    min={0.1}
-    step={0.05}
-    bigStep={0.25}
+    model={{
+      value: writer.target_shard_gb,
+      onChange: (v) => toastError(instrument.updateOutput({ target_shard_gb: v })),
+      min: 0.1,
+      step: 0.05,
+      bigStep: 0.25
+    }}
     decimals={2}
     numCharacters={5}
     suffix="GB"
-    draggable={false}
     size="xs"
-    onChange={(v) => toastError(instrument.updateOutput({ target_shard_gb: v }))}
   />
 </div>

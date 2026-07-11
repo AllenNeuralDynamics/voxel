@@ -7,7 +7,6 @@
     ColorPicker,
     Select,
     Slider,
-    SpinBox,
     Switch,
     TagInput,
     TextArea,
@@ -211,7 +210,7 @@
               <div class="flex flex-wrap items-center gap-3">
                 <span class="w-6 text-xs text-fg-faint">{sz}</span>
                 <TextInput size={sz} bind:value={textValue} placeholder="Type here…" />
-                <SpinBox size={sz} bind:value={spinValue} min={0} max={100} />
+                <Numeric.SpinBox size={sz} model={{ value: spinValue, onChange: (v) => (spinValue = v), min: 0, max: 100 }} />
                 <Select size={sz} options={selectOptions} bind:value={selectValue} class="w-40" />
                 <Switch bind:checked={switchOn} size={sz} />
                 <Switch bind:checked={switchOff} size={sz} />

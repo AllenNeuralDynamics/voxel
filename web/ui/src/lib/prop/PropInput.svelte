@@ -31,9 +31,9 @@
   <Bool.Toggle {model} {disabled} {size} class={className} />
 {:else if model instanceof NumericModel}
   {#if model.min != null && model.max != null}
-    <Numeric.SpinSlider {model} {disabled} class={className} />
+    <Numeric.SpinSlider {model} {disabled} {size} class={className} />
   {:else}
-    <Numeric.SpinBox {model} {disabled} class={className} />
+    <Numeric.SpinBox {model} {disabled} {size} class={className} />
   {/if}
 {:else if model instanceof StringModel}
   <Text.Input {model} {disabled} {size} class={className} />
