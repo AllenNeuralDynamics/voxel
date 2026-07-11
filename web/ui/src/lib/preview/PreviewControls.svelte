@@ -1,8 +1,6 @@
 <script lang="ts">
-  import { ChevronDown } from '$lib/icons';
-  import { SpinBox } from '$lib/kit';
+  import { Alert, ChevronDown } from '$lib/icons';
   import { type Preview } from '$lib/model';
-  import { clampTopLeft } from '$lib/utils';
 
   import Histogram from './Histogram.svelte';
 
@@ -12,50 +10,65 @@
 
   let { previewer }: Props = $props();
 
-  // Local state for inputs (synced from previewer)
-  let panX = $state(0);
-  let panY = $state(0);
-  let magnification = $state(1);
   let showHistograms = $state(false);
 
   const namedChannels = $derived(previewer.channels.filter((c) => c.name));
   const hasHistograms = $derived(showHistograms && namedChannels.length > 0);
 
-  // Sync local state with previewer
-  $effect.pre(() => {
-    panX = previewer.viewport.x;
-    panY = previewer.viewport.y;
-    magnification = 1 / previewer.viewport.w;
+  const sizedChannels = $derived(namedChannels.filter((c) => c.latestFrameInfo));
+  const frameInfo = $derived(sizedChannels[0]?.latestFrameInfo ?? null);
+  const sizeMismatch = $derived.by(() => {
+    const first = sizedChannels[0]?.latestFrameInfo;
+    if (!first || sizedChannels.length <= 1) return false;
+    return sizedChannels.some((c) => {
+      const fi = c.latestFrameInfo;
+      return (
+        !fi ||
+        fi.width !== first.width ||
+        fi.height !== first.height ||
+        fi.full_width !== first.full_width ||
+        fi.full_height !== first.full_height
+      );
+    });
   });
 
-  function handlePanXChange(value: number) {
-    previewer.setViewport({ ...previewer.viewport, x: value });
-    previewer.queueViewportUpdate(previewer.viewport);
-  }
-
-  function handlePanYChange(value: number) {
-    previewer.setViewport({ ...previewer.viewport, y: value });
-    previewer.queueViewportUpdate(previewer.viewport);
-  }
-
-  function handleZoomChange(value: number) {
-    const newW = Math.max(0.01, Math.min(1.0, 1 / value));
-    const newH = newW;
-    // Zoom toward center of current viewport
-    const centerX = previewer.viewport.x + previewer.viewport.w / 2;
-    const centerY = previewer.viewport.y + previewer.viewport.h / 2;
-    const newX = clampTopLeft(centerX - newW / 2, newW);
-    const newY = clampTopLeft(centerY - newH / 2, newH);
-    previewer.setViewport({ x: newX, y: newY, w: newW, h: newH });
-    previewer.queueViewportUpdate(previewer.viewport);
-  }
+  const maxFrameIdx = $derived(Math.max(0, ...sizedChannels.map((c) => c.latestFrameInfo?.frame_idx ?? 0)));
 </script>
 
-<div
-  class="pointer-events-auto flex w-fit flex-col overflow-hidden rounded-xs border border-border/50 bg-floating/90 pb-1.5 shadow-lg backdrop-blur-sm"
->
+<div class="pointer-events-none flex flex-col items-start gap-1.5">
   {#if hasHistograms}
-    <div class="flex w-0 min-w-full flex-col divide-y divide-border px-2.5">
+    <div
+      class="pointer-events-auto flex w-64 flex-col divide-y divide-border overflow-hidden rounded-xs border border-border/50 bg-floating/90 px-2.5 shadow-lg backdrop-blur-sm"
+    >
+      {#if frameInfo}
+        <div class="space-y-1 py-2 text-xs">
+          {#if sizeMismatch}
+            <div class="flex items-center gap-1.5 text-warning">
+              <Alert width="12" height="12" />
+              <span class="font-medium">Frame size mismatch</span>
+            </div>
+            {#each sizedChannels as channel (channel.idx)}
+              {@const fi = channel.latestFrameInfo}
+              {#if fi}
+                <div class="flex justify-between gap-2">
+                  <span class="text-fg-muted">{channel.label ?? channel.name}</span>
+                  <span class="text-right tabular-nums">{fi.width}×{fi.height} · {fi.full_width}×{fi.full_height}</span>
+                </div>
+              {/if}
+            {/each}
+          {:else}
+            <div class="flex justify-between gap-2">
+              <span class="text-fg-muted">Preview</span>
+              <span class="text-right tabular-nums">{frameInfo.width} × {frameInfo.height}</span>
+            </div>
+            <div class="flex justify-between gap-2">
+              <span class="text-fg-muted">Full</span>
+              <span class="text-right tabular-nums">{frameInfo.full_width} × {frameInfo.full_height}</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       {#each namedChannels as channel (channel.idx)}
         <div class="py-2">
           <Histogram
@@ -79,54 +92,20 @@
     </div>
   {/if}
 
-  <div class="flex items-center gap-2 px-2.5 pt-1.5 font-mono text-xs {hasHistograms ? 'border-t border-border' : ''}">
-    <SpinBox
-      bind:value={magnification}
-      min={1}
-      max={100}
-      step={0.1}
-      resetValue={1}
-      decimals={1}
-      numCharacters={5}
-      size="xs"
-      variant="filled"
-      prefix="Zoom"
-      suffix="x"
-      onChange={handleZoomChange}
-    />
-    <SpinBox
-      bind:value={panX}
-      min={0}
-      max={1}
-      step={0.01}
-      resetValue={0}
-      decimals={2}
-      numCharacters={5}
-      size="xs"
-      variant="filled"
-      prefix="X"
-      onChange={handlePanXChange}
-    />
-    <SpinBox
-      bind:value={panY}
-      min={0}
-      max={1}
-      step={0.01}
-      resetValue={0}
-      decimals={2}
-      numCharacters={5}
-      size="xs"
-      variant="filled"
-      prefix="Y"
-      onChange={handlePanYChange}
-    />
-    <button
-      onclick={() => (showHistograms = !showHistograms)}
-      class="flex cursor-pointer items-center justify-center rounded-full p-1 text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-      aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
-      title={showHistograms ? 'Hide histograms' : 'Show histograms'}
-    >
-      <ChevronDown width="14" height="14" class="transition-transform {showHistograms ? '' : 'rotate-180'}" />
-    </button>
-  </div>
+  <button
+    onclick={() => (showHistograms = !showHistograms)}
+    class="pointer-events-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border/50 bg-floating/90 px-2 font-mono text-xs text-fg-muted shadow-lg backdrop-blur-sm transition-colors hover:bg-element-hover hover:text-fg"
+    aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
+    title={showHistograms ? 'Hide histograms' : 'Show histograms'}
+  >
+    {#if frameInfo}
+      <span>Frame <span class="text-fg">{maxFrameIdx}</span></span>
+    {:else}
+      <span>No frames</span>
+    {/if}
+    {#if sizeMismatch}
+      <Alert width="12" height="12" class="text-warning" />
+    {/if}
+    <ChevronDown width="14" height="14" class="transition-transform {showHistograms ? '' : 'rotate-180'}" />
+  </button>
 </div>

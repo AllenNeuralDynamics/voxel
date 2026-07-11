@@ -2,11 +2,11 @@
   import { ElementSize, watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { channelBoundingBox, compositeViewFrames, type Preview } from '$lib/model';
+  import { channelBoundingBox, compositeViewFrames, type Preview, wheelZoomFactor } from '$lib/model';
   import { clampTopLeft } from '$lib/utils';
 
   import PreviewControls from './PreviewControls.svelte';
-  import PreviewInfo from './PreviewInfo.svelte';
+  import PreviewNavigator from './PreviewNavigator.svelte';
 
   let canvasEl: HTMLCanvasElement;
   let containerEl: HTMLDivElement;
@@ -64,6 +64,26 @@
     animFrameId = requestAnimationFrame(frameLoop);
   }
 
+  /** Multiplicative, anchored zoom against the live canvas aspect. Shared with the navigator via prop. */
+  function zoomBy(factor: number, anchorX: number, anchorY: number, anchorFracX = 0.5, anchorFracY = 0.5) {
+    if (!canvasEl) return;
+    const rect = canvasEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const canvasAspect = rect.width / rect.height;
+    const bb = previewer.boundingBoxAspect;
+    const vp = previewer.viewport;
+    let w: number, h: number;
+    if (canvasAspect >= bb) {
+      h = Math.max(0.01, Math.min(1, vp.h * factor));
+      w = Math.max(0.01, Math.min(1, (h * canvasAspect) / bb));
+    } else {
+      w = Math.max(0.01, Math.min(1, vp.w * factor));
+      h = Math.max(0.01, Math.min(1, (w * bb) / canvasAspect));
+    }
+    previewer.setViewport({ x: clampTopLeft(anchorX - anchorFracX * w, w), y: clampTopLeft(anchorY - anchorFracY * h, h), w, h });
+    previewer.queueViewportUpdate({ ...previewer.viewport });
+  }
+
   function setupPanZoom(canvas: HTMLCanvasElement): () => void {
     let isPanning = false;
     let panStartX = 0;
@@ -111,52 +131,13 @@
 
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
       previewer.isPanZoomActive = true;
-
+      const rect = canvas.getBoundingClientRect();
       const vp = previewer.viewport;
-
-      // Normalize the wheel delta so zoom feels the same on any device: mice report large
-      // per-notch deltas (some in lines/pages), trackpads emit many small pixel deltas.
-      let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16; // lines → px
-      else if (e.deltaMode === 2) dy *= 400; // pages → px
-      dy = Math.max(-40, Math.min(40, dy)); // clamp so one aggressive notch can't leap
-
-      // Multiplicative zoom (fixed fraction per step) — steady at every zoom level, whereas
-      // linear subtraction accelerates as you zoom in. Lower ZOOM_SPEED = slower.
-      const ZOOM_SPEED = 0.0015;
-      const factor = Math.exp(dy * ZOOM_SPEED);
-
-      // Derive w from h (or vice versa) to fill the canvas as you zoom in.
-      // At full zoom-out (w=h=1) contain-fit may show bars; zooming in
-      // increases w/h ratio until the image fills the canvas, then both
-      // shrink together maintaining the fill.
-      const bbAspect = previewer.boundingBoxAspect;
-      const canvasAspect = rect.width / rect.height;
-      let newW: number, newH: number;
-      if (canvasAspect >= bbAspect) {
-        newH = Math.max(0.01, Math.min(1.0, vp.h * factor));
-        newW = Math.max(0.01, Math.min(1.0, (newH * canvasAspect) / bbAspect));
-      } else {
-        newW = Math.max(0.01, Math.min(1.0, vp.w * factor));
-        newH = Math.max(0.01, Math.min(1.0, (newW * bbAspect) / canvasAspect));
-      }
-
-      // Point on sensor under cursor
+      // Keep the sensor point under the cursor fixed on screen.
       const mouseX = (e.clientX - rect.left) / rect.width;
       const mouseY = (e.clientY - rect.top) / rect.height;
-      const sensorX = vp.x + mouseX * vp.w;
-      const sensorY = vp.y + mouseY * vp.h;
-
-      // Recompute top-left so sensorX/Y stays under cursor
-      let newX = sensorX - mouseX * newW;
-      let newY = sensorY - mouseY * newH;
-      newX = clampTopLeft(newX, newW);
-      newY = clampTopLeft(newY, newH);
-
-      previewer.setViewport({ x: newX, y: newY, w: newW, h: newH });
-      previewer.queueViewportUpdate({ ...previewer.viewport });
+      zoomBy(wheelZoomFactor(e), vp.x + mouseX * vp.w, vp.y + mouseY * vp.h, mouseX, mouseY);
       scheduleWheelIdleReset();
     };
 
@@ -230,26 +211,32 @@
     const label = barUm >= 1000 ? `${barUm / 1000} mm` : `${barUm} µm`;
     return { barPx, label };
   });
+
+  // The navigator (with its viewport controls) shows only while zoomed in — a box covering the whole
+  // frame is redundant. Later: also show while viewing a snapshot with preview running.
+  const showNavigator = $derived(previewer.viewport.w < 1 || previewer.viewport.h < 1);
 </script>
 
 <div class="flex h-full flex-col bg-canvas" bind:this={containerEl}>
   <!-- Center: Canvas -->
   <div class="relative flex flex-1 items-center justify-center overflow-hidden" bind:this={canvasContainerEl}>
     <canvas bind:this={canvasEl} class="h-full w-full"></canvas>
-    <!-- Overlay: frame counter (left) + histogram toggle (right) -->
-    <div class="pointer-events-auto absolute top-4 right-4 left-4 flex items-center justify-between">
-      <PreviewInfo {previewer} />
-    </div>
-    <!-- Overlay: pan/zoom controls (bottom-left) + scale bar (bottom-right) -->
+    <!-- Overlay: histograms (bottom-left) + viewport navigator over scale bar (bottom-right) -->
     <div class="pointer-events-none absolute right-4 bottom-4 left-4 flex items-end justify-between">
       <PreviewControls {previewer} />
-      <div class="flex flex-col items-end gap-0.5">
+      <div class="flex flex-col items-end gap-1.5">
+        {#if showNavigator}
+          <PreviewNavigator {previewer} {zoomBy} />
+        {/if}
         {#if scaleBar}
-          <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{scaleBar.label}</span>
-          <div
-            class="h-1 rounded-full bg-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-            style:width="{scaleBar.barPx}px"
-          ></div>
+          <div class="flex flex-col items-end gap-0.5">
+            <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{scaleBar.label}</span
+            >
+            <div
+              class="h-1 rounded-full bg-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+              style:width="{scaleBar.barPx}px"
+            ></div>
+          </div>
         {/if}
       </div>
     </div>

@@ -9,9 +9,10 @@ import type {
   PreviewUpdate,
   PreviewViewport
 } from '$lib/model/types';
-import { computeAutoLevels, sanitizeString } from '$lib/utils';
+import { clampTopLeft, computeAutoLevels, sanitizeString } from '$lib/utils';
 
 import type { Client } from './client.svelte';
+import { NumericModel } from './prop.svelte';
 
 /** A colormap: list of hex color stops (black->color for single-stop). */
 export type ColormapDef = string[];
@@ -88,6 +89,17 @@ export function isViewportEqual(a: PreviewViewport, b: PreviewViewport): boolean
 }
 
 export const DEFAULT_VIEWPORT: PreviewViewport = { x: 0, y: 0, w: 1, h: 1 };
+
+const WHEEL_ZOOM_SPEED = 0.0015;
+
+/** Multiplicative zoom factor from a wheel event, normalized across mice/trackpads. */
+export function wheelZoomFactor(e: WheelEvent): number {
+  let dy = e.deltaY;
+  if (e.deltaMode === 1) dy *= 16; // lines → px
+  else if (e.deltaMode === 2) dy *= 400; // pages → px
+  dy = Math.max(-40, Math.min(40, dy)); // clamp so one aggressive notch can't leap
+  return Math.exp(dy * WHEEL_ZOOM_SPEED);
+}
 
 export function isDefaultViewport(vp: PreviewViewport): boolean {
   return vp.x === 0 && vp.y === 0 && vp.w === 1 && vp.h === 1;
@@ -372,6 +384,11 @@ export class Preview {
   catalog = $state<ColormapCatalog>([]);
   redrawGeneration = $state(0);
 
+  // Numeric editors of the viewport; setViewport mirrors the applied value back into each.
+  readonly zoomModel = new NumericModel(1, { min: 1, max: 100, step: 0.1, home: 1, onPatch: (v) => this.setZoom(v) });
+  readonly panXModel = new NumericModel(0, { min: 0, max: 1, step: 0.01, home: 0, onPatch: (v) => this.setPanX(v) });
+  readonly panYModel = new NumericModel(0, { min: 0, max: 1, step: 0.01, home: 0, onPatch: (v) => this.setPanY(v) });
+
   #client: Client;
   #hal: HALConfig;
   #unsubscribers: Array<() => void> = [];
@@ -472,7 +489,29 @@ export class Preview {
 
   setViewport(value: PreviewViewport): void {
     this.viewport = value;
+    this.zoomModel.value = 1 / value.w;
+    this.panXModel.value = value.x;
+    this.panYModel.value = value.y;
     this.redrawGeneration++;
+  }
+
+  /** Set magnification (1/w), preserving the viewport center. */
+  setZoom(value: number): void {
+    const w = Math.max(0.01, Math.min(1.0, 1 / value));
+    const cx = this.viewport.x + this.viewport.w / 2;
+    const cy = this.viewport.y + this.viewport.h / 2;
+    this.setViewport({ x: clampTopLeft(cx - w / 2, w), y: clampTopLeft(cy - w / 2, w), w, h: w });
+    this.#queueViewportUpdate(this.viewport);
+  }
+
+  setPanX(value: number): void {
+    this.setViewport({ ...this.viewport, x: value });
+    this.#queueViewportUpdate(this.viewport);
+  }
+
+  setPanY(value: number): void {
+    this.setViewport({ ...this.viewport, y: value });
+    this.#queueViewportUpdate(this.viewport);
   }
 
   queueViewportUpdate(viewport: PreviewViewport): void {

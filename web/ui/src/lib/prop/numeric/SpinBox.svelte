@@ -12,6 +12,7 @@
     prefix?: string;
     suffix?: string;
     disabled?: boolean;
+    steppers?: boolean;
     class?: string;
   }
 
@@ -23,6 +24,7 @@
     prefix,
     suffix,
     disabled = false,
+    steppers = true,
     class: className = ''
   }: Props = $props();
 
@@ -51,22 +53,24 @@
   {#if suffix}
     <span class="pointer-events-none shrink-0 px-1.5 font-mono text-fg-muted">{suffix}</span>
   {/if}
-  <div class="flex cursor-pointer flex-col self-stretch border-l border-input">
-    <button
-      class="flex flex-1 items-center justify-center rounded-tr border-b border-input bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-      onclick={increment}
-      disabled={model.max != null && model.value >= model.max}
-      aria-label="Increment"
-    >
-      <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z" /></svg>
-    </button>
-    <button
-      class="flex flex-1 items-center justify-center rounded-br bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-      onclick={decrement}
-      disabled={model.min != null && model.value <= model.min}
-      aria-label="Decrement"
-    >
-      <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 5L0 0H8L4 5Z" /></svg>
-    </button>
-  </div>
+  {#if steppers}
+    <div class="flex cursor-pointer flex-col self-stretch border-l border-input">
+      <button
+        class="flex flex-1 items-center justify-center rounded-tr border-b border-input bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+        onclick={increment}
+        disabled={model.max != null && model.value >= model.max}
+        aria-label="Increment"
+      >
+        <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z" /></svg>
+      </button>
+      <button
+        class="flex flex-1 items-center justify-center rounded-br bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+        onclick={decrement}
+        disabled={model.min != null && model.value <= model.min}
+        aria-label="Decrement"
+      >
+        <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 5L0 0H8L4 5Z" /></svg>
+      </button>
+    </div>
+  {/if}
 </div>
