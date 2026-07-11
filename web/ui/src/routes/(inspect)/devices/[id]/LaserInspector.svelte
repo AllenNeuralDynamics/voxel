@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Slider, SpinBox, Switch } from '$lib/kit';
+  import { Switch } from '$lib/kit';
   import type { Instrument } from '$lib/model';
+  import { PropInput } from '$lib/prop';
   import { cn, sanitizeString } from '$lib/utils';
 
   import DeviceBrowser from './DeviceBrowser.svelte';
@@ -58,25 +59,7 @@
       {@const info = laser.interface?.properties?.['power_setpoint']}
       <div class="grid gap-1">
         <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Power'}</span>
-        <div class="grid grid-cols-[8rem_1fr] items-center gap-3">
-          <SpinBox
-            value={setpoint}
-            min={ps.min ?? 0}
-            max={ps.max ?? 100}
-            step={ps.step ?? 1}
-            appearance="full"
-            size="xs"
-            onChange={(v) => ps.patch(v)}
-          />
-          <Slider
-            target={setpoint}
-            value={measured}
-            min={ps.min ?? 0}
-            max={ps.max ?? 100}
-            step={ps.step ?? 1}
-            onChange={(v) => ps.patch(v)}
-          />
-        </div>
+        <PropInput model={ps} size="xs" />
       </div>
     {/if}
 

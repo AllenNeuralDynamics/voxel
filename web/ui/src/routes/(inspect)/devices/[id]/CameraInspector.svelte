@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { Button, Select, Slider, SpinBox } from '$lib/kit';
+  import { Button } from '$lib/kit';
   import type { Instrument } from '$lib/model';
+  import { Enumerated, PropInput } from '$lib/prop';
+  import { SpinBox } from '$lib/prop/numeric';
   import { cn, sanitizeString } from '$lib/utils';
 
   import DeviceBrowser from './DeviceBrowser.svelte';
@@ -99,24 +101,7 @@
           {@const info = camera.interface?.properties?.['exposure_time_ms']}
           <div class="grid gap-1">
             <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Exposure'}</span>
-            <div class="grid grid-cols-[8rem_1fr] items-center gap-3">
-              <SpinBox
-                value={exposure.value ?? 0}
-                min={exposure.min ?? 0}
-                max={exposure.max ?? 100}
-                step={exposure.step ?? 0.1}
-                appearance="full"
-                size="xs"
-                onChange={(v) => exposure.patch(v)}
-              />
-              <Slider
-                target={exposure.value ?? 0}
-                min={exposure.min ?? 0}
-                max={exposure.max ?? 100}
-                step={exposure.step ?? 0.1}
-                onChange={(v) => exposure.patch(v)}
-              />
-            </div>
+            <PropInput model={exposure} size="xs" />
           </div>
         {/if}
 
@@ -127,12 +112,7 @@
             {@const info = camera.interface?.properties?.['pixel_format']}
             <div class="grid gap-1">
               <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Pixel Format'}</span>
-              <Select
-                value={String(pf.value)}
-                options={pf.options.map((o) => ({ value: String(o), label: String(o) }))}
-                onchange={(v) => pf.patch(v)}
-                size="xs"
-              />
+              <PropInput model={pf} size="xs" />
             </div>
           {/if}
 
@@ -141,12 +121,7 @@
             {@const info = camera.interface?.properties?.['binning']}
             <div class="grid gap-1">
               <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Binning'}</span>
-              <Select
-                value={String(bin.value)}
-                options={bin.options.map((o) => ({ value: String(o), label: `${o}x${o}` }))}
-                onchange={(v) => bin.patch(Number(v))}
-                size="xs"
-              />
+              <Enumerated.Select model={bin} formatLabel={(o) => `${o}x${o}`} size="xs" />
             </div>
           {/if}
         </div>
@@ -199,43 +174,51 @@
           {#if roi && roiGrid}
             <div class="grid grid-cols-4 gap-2">
               <SpinBox
-                value={roiX}
+                model={{
+                  value: roiX,
+                  onChange: (v) => updateRoi({ x: v }),
+                  min: 0,
+                  max: roiGrid.h.max - roiW,
+                  step: roiGrid.h.step
+                }}
                 prefix="x"
-                min={0}
-                max={roiGrid.h.max - roiW}
-                step={roiGrid.h.step}
-                onChange={(v) => updateRoi({ x: v })}
-                appearance="bordered"
+                steppers={false}
                 size="xs"
               />
               <SpinBox
-                value={roiY}
+                model={{
+                  value: roiY,
+                  onChange: (v) => updateRoi({ y: v }),
+                  min: 0,
+                  max: roiGrid.v.max - roiH,
+                  step: roiGrid.v.step
+                }}
                 prefix="y"
-                min={0}
-                max={roiGrid.v.max - roiH}
-                step={roiGrid.v.step}
-                onChange={(v) => updateRoi({ y: v })}
-                appearance="bordered"
+                steppers={false}
                 size="xs"
               />
               <SpinBox
-                value={roiW}
+                model={{
+                  value: roiW,
+                  onChange: (v) => updateRoi({ w: v }),
+                  min: roiGrid.h.min,
+                  max: roiGrid.h.max,
+                  step: roiGrid.h.step
+                }}
                 prefix="w"
-                min={roiGrid.h.min}
-                max={roiGrid.h.max}
-                step={roiGrid.h.step}
-                onChange={(v) => updateRoi({ w: v })}
-                appearance="bordered"
+                steppers={false}
                 size="xs"
               />
               <SpinBox
-                value={roiH}
+                model={{
+                  value: roiH,
+                  onChange: (v) => updateRoi({ h: v }),
+                  min: roiGrid.v.min,
+                  max: roiGrid.v.max,
+                  step: roiGrid.v.step
+                }}
                 prefix="h"
-                min={roiGrid.v.min}
-                max={roiGrid.v.max}
-                step={roiGrid.v.step}
-                onChange={(v) => updateRoi({ h: v })}
-                appearance="bordered"
+                steppers={false}
                 size="xs"
               />
             </div>

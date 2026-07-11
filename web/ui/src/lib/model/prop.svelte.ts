@@ -195,6 +195,8 @@ export interface NumericOptions extends PropOptions<number> {
   min?: number | null;
   max?: number | null;
   step?: number | null;
+  /** Coarse step for shift+arrow. Inferred from the range (or 10× step) when omitted. */
+  bigStep?: number | null;
   /** Double-click target for the `scrubber` attachment. Number, function, or null to disable. */
   home?: number | (() => number) | null;
   /** Throttle interval in ms for `patch(value, { throttled: true })`. Defaults to 100. */
@@ -202,6 +204,14 @@ export interface NumericOptions extends PropOptions<number> {
 }
 
 const DRAG_THRESHOLD_PX = 3;
+
+/** Round to the nearest 1/2/5 × 10ⁿ "nice" value. */
+function niceStep(x: number): number {
+  if (!(x > 0)) return 0;
+  const mag = 10 ** Math.floor(Math.log10(x));
+  const n = x / mag;
+  return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * mag;
+}
 
 /**
  * Property model for numeric values with optional min/max/step constraints.
@@ -221,6 +231,7 @@ export class NumericModel extends BasePropModel<number> {
   #rawMin: number | null = $state(null);
   #rawMax: number | null = $state(null);
   #rawStep: number | null = $state(null);
+  #rawBigStep: number | null = $state(null);
 
   home: number | (() => number) | null = $state(null);
 
@@ -260,6 +271,19 @@ export class NumericModel extends BasePropModel<number> {
     return s;
   }
 
+  /** Coarse step: explicit `bigStep`, else a nice ~1/10-of-range value, else 10× step. */
+  get bigStep(): number {
+    const step = this.step ?? 1;
+    if (this.#rawBigStep != null) return this.#rawBigStep;
+    const { min, max } = this;
+    if (min != null && max != null && max > min) return Math.max(step, niceStep((max - min) / 10));
+    return step * 10;
+  }
+
+  set bigStep(value: number | null) {
+    this.#rawBigStep = value;
+  }
+
   #throttleMs: number;
   #throttleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -268,6 +292,7 @@ export class NumericModel extends BasePropModel<number> {
     this.#rawMin = opts.min ?? null;
     this.#rawMax = opts.max ?? null;
     this.#rawStep = opts.step ?? null;
+    this.#rawBigStep = opts.bigStep ?? null;
     this.home = opts.home ?? null;
     this.#throttleMs = opts.throttleMs ?? 100;
   }

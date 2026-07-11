@@ -1,11 +1,10 @@
 <script lang="ts">
   import { ChevronDown } from '$lib/icons';
-  import { Collapsible } from '$lib/kit';
+  import { Collapsible, JsonView } from '$lib/kit';
   import type { DeviceHandle, PropertyInfo } from '$lib/model';
-  import { isStructuredValue } from '$lib/prop';
+  import { formatPropDisplay, isStructuredValue, PropInput } from '$lib/prop';
 
   import CommandButton from './CommandButton.svelte';
-  import PropertyControl from './PropertyControl.svelte';
 
   interface DeviceExclusions {
     props: string[];
@@ -63,7 +62,7 @@
           {info.label}
         </span>
         <div class="max-w-64 min-w-0">
-          <PropertyControl {device} propName={name} {size} />
+          <PropInput model={device.getProp(name)?.model} {size} />
         </div>
       </div>
     {/each}
@@ -83,7 +82,7 @@
           </Collapsible.Trigger>
           <Collapsible.Content class="pt-1">
             <div class="rounded border border-border bg-card p-2">
-              <PropertyControl {device} propName={name} {size} />
+              <JsonView data={device.getProp(name)?.value} />
             </div>
           </Collapsible.Content>
         </Collapsible.Root>
@@ -92,7 +91,9 @@
           <span class="shrink-0 text-sm text-fg-muted" title={info.desc ?? ''}>
             {info.label}
           </span>
-          <PropertyControl {device} propName={name} {size} />
+          <span class="font-mono text-sm text-fg-muted">
+            {formatPropDisplay(device.getProp(name)?.value, info.units || undefined)}
+          </span>
         </div>
       {/if}
     {/each}

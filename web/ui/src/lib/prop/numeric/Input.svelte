@@ -1,19 +1,26 @@
 <script lang="ts">
   import type { HTMLInputAttributes } from 'svelte/elements';
 
-  import type { NumericModel } from '$lib/model';
   import { cn } from '$lib/utils';
 
+  import { type NumericSource,useNumericModel } from './model.svelte';
+
   type OwnProps = {
-    model: NumericModel;
+    model: NumericSource;
     decimals?: number;
     numCharacters?: number;
     align?: 'left' | 'right';
     class?: string;
   };
-  type Props = Omit<HTMLInputAttributes, 'type' | 'value' | 'oninput' | 'onkeydown' | 'onblur'> & OwnProps;
+  type Props = Omit<
+    HTMLInputAttributes,
+    'type' | 'value' | 'oninput' | 'onkeydown' | 'onblur' | 'onfocus' | 'onmousedown'
+  > &
+    OwnProps;
 
-  let { model, decimals, numCharacters = 4, align = 'left', class: className = '', ...rest }: Props = $props();
+  let { model: source, decimals, numCharacters = 4, align = 'left', class: className = '', ...rest }: Props = $props();
+
+  const model = useNumericModel(() => source);
 
   let isEditing = $state(false);
   let editingText = $state('');
@@ -60,7 +67,20 @@
         isEditing = false;
       }
       const delta = e.key === 'ArrowUp' ? 1 : -1;
-      model.patch(base + delta * (model.step ?? 1));
+      model.patch(base + delta * (e.shiftKey ? model.bigStep : (model.step ?? 1)));
+    }
+  }
+
+  function handleFocus(e: FocusEvent) {
+    (e.currentTarget as HTMLInputElement).select();
+  }
+
+  // First click selects the value (type-to-replace); a second click, once focused, places the caret.
+  function handleMouseDown(e: MouseEvent) {
+    const el = e.currentTarget as HTMLInputElement;
+    if (document.activeElement !== el) {
+      e.preventDefault();
+      el.focus();
     }
   }
 </script>
@@ -78,9 +98,12 @@
   type="text"
   value={inputValue}
   oninput={handleInput}
+  onfocus={handleFocus}
+  onmousedown={handleMouseDown}
   onblur={commitEdit}
   onkeydown={handleKeydown}
   style:width="{numCharacters + 1}ch"
   style:text-align={align}
   class={cn('m-0 border-none bg-transparent py-0 font-mono outline-none', className)}
+  {@attach model.wheel}
 />

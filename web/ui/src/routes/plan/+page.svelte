@@ -5,8 +5,9 @@
 
   import { getTaskSelection } from '$lib/grid/selection.svelte';
   import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, TrashCanOutline } from '$lib/icons';
-  import { Button, Checkbox, Dialog, NumberInput, Select, SpinBox } from '$lib/kit';
+  import { Button, Checkbox, Dialog, Select } from '$lib/kit';
   import { getVoxelApp, type TaskPatch, type TileOrder } from '$lib/model';
+  import { Input, SpinBox } from '$lib/prop/numeric';
   import { cn, sanitizeString, toastError } from '$lib/utils';
 
   const app = getVoxelApp();
@@ -253,55 +254,59 @@
     </span>
     <span class="cell justify-end text-fg-faint tabular-nums">#{row.order}</span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <NumberInput
-        value={row.x / unit.scale}
-        step={unit.step}
-        bigStep={unit.bigStep}
+      <Input
+        model={{
+          value: row.x / unit.scale,
+          onChange: (v) => setField(row, 'x', v),
+          step: unit.step,
+          bigStep: unit.bigStep
+        }}
         decimals={unit.decimals}
         numCharacters={8}
-        size="xs"
         align="right"
-        draggable={false}
-        onChange={(v) => setField(row, 'x', v)}
+        class="text-xs leading-none px-0.5"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <NumberInput
-        value={row.y / unit.scale}
-        step={unit.step}
-        bigStep={unit.bigStep}
+      <Input
+        model={{
+          value: row.y / unit.scale,
+          onChange: (v) => setField(row, 'y', v),
+          step: unit.step,
+          bigStep: unit.bigStep
+        }}
         decimals={unit.decimals}
         numCharacters={8}
-        size="xs"
         align="right"
-        draggable={false}
-        onChange={(v) => setField(row, 'y', v)}
+        class="text-xs leading-none px-0.5"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <NumberInput
-        value={row.start / unit.scale}
-        step={unit.step}
-        bigStep={unit.bigStep}
+      <Input
+        model={{
+          value: row.start / unit.scale,
+          onChange: (v) => setField(row, 'start', v),
+          step: unit.step,
+          bigStep: unit.bigStep
+        }}
         decimals={unit.decimals}
         numCharacters={8}
-        size="xs"
         align="right"
-        draggable={false}
-        onChange={(v) => setField(row, 'start', v)}
+        class="text-xs leading-none px-0.5"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <NumberInput
-        value={row.end / unit.scale}
-        step={unit.step}
-        bigStep={unit.bigStep}
+      <Input
+        model={{
+          value: row.end / unit.scale,
+          onChange: (v) => setField(row, 'end', v),
+          step: unit.step,
+          bigStep: unit.bigStep
+        }}
         decimals={unit.decimals}
         numCharacters={8}
-        size="xs"
         align="right"
-        draggable={false}
-        onChange={(v) => setField(row, 'end', v)}
+        class="text-xs leading-none px-0.5"
       />
     </span>
     <div data-cell-edit class="cell justify-end">
@@ -385,16 +390,18 @@
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-1.5">
           <SpinBox
-            value={nudgeStep / unit.scale}
-            min={unit.step}
-            step={unit.bigStep}
+            model={{
+              value: nudgeStep / unit.scale,
+              onChange: (v) => (nudgeStep = v * unit.scale),
+              min: unit.step,
+              step: unit.bigStep
+            }}
             decimals={unit.decimals}
             numCharacters={7}
             size="xs"
-            appearance="bordered"
+            steppers={false}
             prefix="Nudge"
             suffix={unit.label}
-            onChange={(v) => (nudgeStep = v * unit.scale)}
           />
           <div class="flex items-center gap-0.5">
             {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}

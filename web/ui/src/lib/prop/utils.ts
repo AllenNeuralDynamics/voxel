@@ -12,6 +12,30 @@ export function formatPropValue(value: unknown, step?: number | null): string {
   return String(value);
 }
 
+/** Readonly display of a prop value: numbers (with units), booleans, ROI/vector objects, or nested pairs. */
+export function formatPropDisplay(value: unknown, units?: string): string {
+  if (value == null) return '—';
+  if (typeof value === 'number') {
+    const num = Number.isInteger(value) ? String(value) : value.toFixed(2);
+    return units ? `${num} ${units}` : num;
+  }
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value !== 'object') return String(value);
+  if ('w' in value && 'h' in value) {
+    const r = value as { x: number; y: number; w: number; h: number };
+    return `${r.w}×${r.h} @ (${r.x}, ${r.y})`;
+  }
+  if ('y' in value && 'x' in value) {
+    const v = value as { y: number; x: number };
+    const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+    const text = `${fmt(v.y)} × ${fmt(v.x)}`;
+    return units ? `${text} ${units}` : text;
+  }
+  return Object.entries(value as Record<string, unknown>)
+    .map(([k, v]) => `${k}: ${formatPropDisplay(v)}`)
+    .join(', ');
+}
+
 /** Whether a property value is complex enough for tree-view rendering (array, or a multi-field object). */
 export function isStructuredValue(value: unknown): boolean {
   if (value == null || typeof value !== 'object') return false;

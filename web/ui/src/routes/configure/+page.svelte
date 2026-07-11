@@ -5,10 +5,11 @@
 
   import { wavelengthToColor } from '$lib/colors.svelte';
   import { ChevronDown, ChevronRight, Link, LinkOff } from '$lib/icons';
-  import { Button, SpinBox } from '$lib/kit';
+  import { Button } from '$lib/kit';
   import { type CameraHandle, type DeviceHandle, type FilterSetting, getVoxelApp, type LaserHandle } from '$lib/model';
   import { type AnyPropModel, BoolModel, EnumeratedModel, LinkGroup, NumericModel, Prop, RoiModel } from '$lib/model';
   import { formatPropValue, PropInput } from '$lib/prop';
+  import { SpinBox } from '$lib/prop/numeric';
   import { cn, sanitizeString, toastError } from '$lib/utils';
 
   const app = getVoxelApp();
@@ -296,48 +297,52 @@
             <div class="flex min-w-0 flex-col justify-between gap-2">
               <div class="grid grid-cols-2 gap-2">
                 <SpinBox
-                  value={roi.x}
+                  model={{
+                    value: roi.x,
+                    onChange: (v) => toastError(cam.roi.patchDim({ x: v })),
+                    min: 0,
+                    max: (grid?.h.max ?? 0) - roi.w,
+                    step: grid?.h.step ?? 1
+                  }}
                   prefix="x"
-                  min={0}
-                  max={(grid?.h.max ?? 0) - roi.w}
-                  step={grid?.h.step ?? 1}
                   numCharacters={7}
-                  appearance="full"
                   size="xs"
-                  onChange={(v) => toastError(cam.roi.patchDim({ x: v }))}
                 />
                 <SpinBox
-                  value={roi.y}
+                  model={{
+                    value: roi.y,
+                    onChange: (v) => toastError(cam.roi.patchDim({ y: v })),
+                    min: 0,
+                    max: (grid?.v.max ?? 0) - roi.h,
+                    step: grid?.v.step ?? 1
+                  }}
                   prefix="y"
-                  min={0}
-                  max={(grid?.v.max ?? 0) - roi.h}
-                  step={grid?.v.step ?? 1}
                   numCharacters={7}
-                  appearance="full"
                   size="xs"
-                  onChange={(v) => toastError(cam.roi.patchDim({ y: v }))}
                 />
                 <SpinBox
-                  value={roi.w}
+                  model={{
+                    value: roi.w,
+                    onChange: (v) => toastError(cam.roi.patchDim({ w: v })),
+                    min: grid?.h.min ?? 1,
+                    max: grid?.h.max ?? 99999,
+                    step: grid?.h.step ?? 1
+                  }}
                   prefix="w"
-                  min={grid?.h.min ?? 1}
-                  max={grid?.h.max ?? 99999}
-                  step={grid?.h.step ?? 1}
                   numCharacters={7}
-                  appearance="full"
                   size="xs"
-                  onChange={(v) => toastError(cam.roi.patchDim({ w: v }))}
                 />
                 <SpinBox
-                  value={roi.h}
+                  model={{
+                    value: roi.h,
+                    onChange: (v) => toastError(cam.roi.patchDim({ h: v })),
+                    min: grid?.v.min ?? 1,
+                    max: grid?.v.max ?? 99999,
+                    step: grid?.v.step ?? 1
+                  }}
                   prefix="h"
-                  min={grid?.v.min ?? 1}
-                  max={grid?.v.max ?? 99999}
-                  step={grid?.v.step ?? 1}
                   numCharacters={7}
-                  appearance="full"
                   size="xs"
-                  onChange={(v) => toastError(cam.roi.patchDim({ h: v }))}
                 />
               </div>
               <div class="grid grid-cols-2 gap-2">

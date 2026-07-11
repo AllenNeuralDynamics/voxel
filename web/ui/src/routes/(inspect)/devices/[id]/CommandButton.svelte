@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Button, Dialog, Select, SpinBox, TextInput } from '$lib/kit';
+  import { Button, Dialog, Select, TextInput } from '$lib/kit';
   import type { CommandInfo, DeviceHandle, ParamInfo } from '$lib/model';
   import { isErrorMsg } from '$lib/prop';
+  import { SpinBox } from '$lib/prop/numeric';
   import { cn, sanitizeString } from '$lib/utils';
 
   interface Props {
@@ -108,10 +109,12 @@
                 />
               {:else if isNumericDtype(param.dtype)}
                 <SpinBox
-                  value={typeof paramValues[name] === 'number' ? paramValues[name] : (getDefaultValue(param) as number)}
-                  onChange={(v) => (paramValues[name] = v)}
-                  step={param.dtype.includes('int') ? 1 : 0.1}
-                  appearance="bordered"
+                  model={{
+                    value: typeof paramValues[name] === 'number' ? paramValues[name] : (getDefaultValue(param) as number),
+                    onChange: (v) => (paramValues[name] = v),
+                    step: param.dtype.includes('int') ? 1 : 0.1
+                  }}
+                  steppers={false}
                   size="xs"
                 />
               {:else}
