@@ -173,7 +173,10 @@
         {@const linked = linkGroups.has(link.key)}
         <button
           type="button"
-          class={cn('flex shrink-0 cursor-pointer transition-colors', linked ? 'text-fg' : 'text-fg-faint hover:text-fg')}
+          class={cn(
+            'flex shrink-0 cursor-pointer transition-colors',
+            linked ? 'text-fg' : 'text-fg-faint hover:text-fg'
+          )}
           title={linked ? 'Linked across devices — click to unlink' : 'Link across devices'}
           onclick={() => toggleLink(link.key, link.models)}
         >
@@ -240,7 +243,10 @@
             {@const linked = linkGroups.has(roiLink.key)}
             <button
               type="button"
-              class={cn('flex shrink-0 cursor-pointer transition-colors', linked ? 'text-fg' : 'text-fg-faint hover:text-fg')}
+              class={cn(
+                'flex shrink-0 cursor-pointer transition-colors',
+                linked ? 'text-fg' : 'text-fg-faint hover:text-fg'
+              )}
               title={linked ? 'Linked across cameras — click to unlink' : 'Link across cameras'}
               onclick={() => toggleLink(roiLink.key, roiLink.models)}
             >
