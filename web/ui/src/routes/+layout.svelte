@@ -16,7 +16,6 @@
   import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
   import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
-  import { GridCanvas } from '$lib/grid';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
   import StageCube from '$lib/grid/StageCube.svelte';
   import { Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
@@ -161,8 +160,8 @@
     <PaneGroup direction="horizontal" autoSaveId="shell.v5">
       <!-- Mode controls: nav + routed content + logs -->
       <Pane {...leftPane}>
-        <div class="grid h-full grid-rows-[auto_1fr] bg-surface">
-          <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border bg-elevated px-4">
+        <div class="bg-surface grid h-full grid-rows-[auto_1fr]">
+          <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border px-4">
             {@render appMenu()}
             <nav class="flex h-ui-md items-center gap-x-1 text-fg-muted">
               {#each navTabs as tab (tab.id)}
@@ -183,51 +182,45 @@
                 </button>
               {/each}
             </nav>
-            <button
-              onclick={toggleLogs}
-              class="ml-auto inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-            >
-              {logsOpen ? 'Hide logs' : 'Show logs'}
-            </button>
           </header>
-          <PaneGroup direction="vertical" autoSaveId="setup.layout">
-            <Pane>
-              <div class="flex h-full flex-col">
-                {@render children()}
-              </div>
-            </Pane>
-            <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
-            <Pane
-              bind:this={bottomPane}
-              collapsible
-              collapsedSize={0}
-              defaultSize={30}
-              minSize={30}
-              maxSize={50}
-              class="bg-surface/50"
-            >
-              <LogViewer {logs} class="bg-card" />
-            </Pane>
-          </PaneGroup>
+          <div class="flex h-full min-h-0 min-w-0 flex-col bg-canvas/35">
+            {@render children()}
+          </div>
         </div>
       </Pane>
       <PaneDivider direction="vertical" />
 
-      <!-- Viewer: Preview + Grid Canvas (centerpiece) -->
+      <!-- Viewer: Preview + Logs (centerpiece) -->
       <Pane defaultSize={45}>
         <div class="flex h-full flex-col bg-canvas">
-          <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-elevated px-4">
-            <PreviewSourceSelector />
+          <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
+            <div class="flex items-center gap-2">
+              <PreviewSourceSelector />
+              <button
+                onclick={toggleLogs}
+                class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+              >
+                {logsOpen ? 'Hide logs' : 'Show logs'}
+              </button>
+            </div>
             <RunButton {app} />
           </header>
           <main class="min-h-0 flex-1 overflow-hidden">
-            <PaneGroup direction="vertical" autoSaveId="shell.right">
-              <Pane defaultSize={50} minSize={30} class="flex flex-1 flex-col justify-center">
+            <PaneGroup direction="vertical" autoSaveId="shell.viewer">
+              <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
                 <PreviewViewer previewer={instrument.preview} fov={instrument.fov} />
               </Pane>
-              <PaneDivider direction="horizontal" />
-              <Pane defaultSize={50} minSize={30} class="h-full flex-1">
-                <GridCanvas {instrument} />
+              <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
+              <Pane
+                bind:this={bottomPane}
+                collapsible
+                collapsedSize={0}
+                defaultSize={35}
+                minSize={20}
+                maxSize={55}
+                class="bg-surface"
+              >
+                <LogViewer {logs} class="bg-canvas/35" />
               </Pane>
             </PaneGroup>
           </main>
@@ -237,11 +230,11 @@
 
       <!-- Monitors: run controls + device telemetry -->
       <Pane defaultSize={16} {...rightPane} class="flex flex-col bg-surface">
-        <header class="flex h-15 shrink-0 items-center border-b border-border bg-elevated px-4">
+        <header class="flex h-15 shrink-0 items-center border-b border-border px-4">
           <ProfileSelector {instrument} size="md" class="w-full" />
         </header>
         <PaneGroup direction="vertical" bind:ref={rightSplitEl} autoSaveId="monitors.v1" class="min-h-0 flex-1">
-          <Pane class="min-h-0">
+          <Pane class="min-h-0 bg-canvas/35">
             <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
               {#if instrument.cameras.size > 0}
                 <CamerasMonitor {instrument} />

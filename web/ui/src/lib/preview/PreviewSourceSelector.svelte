@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Select } from 'bits-ui';
 
-  import { Check, ChevronDown, Crosshair, DotsSpinner, ImageLight, TrashCanOutline, VideoCamera } from '$lib/icons';
+  import { Check, ChevronDown, Close, Crosshair, TrashCanOutline, VideoCamera } from '$lib/icons';
   import { Button } from '$lib/kit';
   import { getVoxelApp } from '$lib/model';
   import { toastError } from '$lib/utils';
@@ -10,9 +10,10 @@
   const instrument = $derived(app.instrument);
   const snaps = app.snaps;
 
-  const canSnap = $derived(!!instrument && !app.snapping);
-
   const LIVE = 'live';
+
+  /** First click on "Delete all" arms this; second click clears. Reset when the dropdown closes. */
+  let confirmingClear = $state(false);
 
   /** Current source as a Select value: a snapshot id, or the `live` sentinel. */
   const currentValue = $derived(snaps.active?.id ?? LIVE);
@@ -36,7 +37,15 @@
 </script>
 
 <div class="flex items-center gap-2">
-  <Select.Root type="single" value={currentValue} onValueChange={changeSource} {items}>
+  <Select.Root
+    type="single"
+    value={currentValue}
+    onValueChange={changeSource}
+    {items}
+    onOpenChange={(open) => {
+      if (!open) confirmingClear = false;
+    }}
+  >
     <Select.Trigger
       data-fly-target
       class="flex h-ui-md w-72 items-center gap-2 rounded-sm border border-input bg-element-bg px-2 text-sm transition-colors hover:bg-element-hover focus:border-focused focus:outline-none"
@@ -135,23 +144,62 @@
             </Select.Item>
           {/each}
         </Select.Viewport>
+
+        {#if snaps.size > 0}
+          <!-- Pinned footer: destructive "clear all" with an inline two-state confirm (no nested dialog).
+               stopPropagation on pointer events keeps the Select from treating clicks as item selection. -->
+          <div class="mt-1 border-t border-border pt-1">
+            {#if confirmingClear}
+              <div class="flex items-center gap-1">
+                <button
+                  type="button"
+                  class="flex flex-1 items-center gap-2 rounded-sm px-1.5 py-1.5 text-sm text-danger outline-none hover:bg-element-hover"
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onpointerup={(e) => e.stopPropagation()}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    snaps.clear();
+                    confirmingClear = false;
+                  }}
+                >
+                  <TrashCanOutline width="16" height="16" class="shrink-0" />
+                  <span class="flex-1 text-left">Delete {snaps.size} snapshots?</span>
+                </button>
+                <button
+                  type="button"
+                  title="Cancel"
+                  class="flex shrink-0 items-center rounded-sm p-1.5 text-fg-muted outline-none hover:bg-element-hover hover:text-fg"
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onpointerup={(e) => e.stopPropagation()}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    confirmingClear = false;
+                  }}
+                >
+                  <Close width="14" height="14" />
+                </button>
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-element-hover hover:text-fg"
+                onpointerdown={(e) => e.stopPropagation()}
+                onpointerup={(e) => e.stopPropagation()}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  confirmingClear = true;
+                }}
+              >
+                <TrashCanOutline width="16" height="16" class="shrink-0" />
+                <span class="flex-1 text-left">Delete all ({snaps.size})</span>
+              </button>
+            {/if}
+          </div>
+        {/if}
       </Select.Content>
     </Select.Portal>
   </Select.Root>
-
-  <Button
-    variant="secondary"
-    size="md"
-    disabled={!canSnap}
-    title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
-    class="text-sm"
-    onclick={() => toastError(app.captureSnapshot())}
-  >
-    {#if app.snapping}
-      <DotsSpinner width="16" height="16" />
-    {:else}
-      <ImageLight width="16" height="16" />
-    {/if}
-    Snap
-  </Button>
 </div>
