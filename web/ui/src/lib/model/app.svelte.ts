@@ -477,6 +477,7 @@ export class VoxelApp {
   logs = $state<LogMessage[]>([]);
   error = $state<string | null>(null);
   busy = $state(false);
+  snapping = $state(false);
 
   /** App-lifetime, IndexedDB-backed collection of captured preview snapshots. */
   readonly snaps = new SnapshotStore();
@@ -505,10 +506,12 @@ export class VoxelApp {
   }
 
   async initialize(): Promise<void> {
+    if (browser) void navigator.storage?.persist?.(); // durable storage so snapshots survive eviction
     this.#unsubs.push(this.#client.on('app.status', (s) => this.#onPresence(s)));
     this.#unsubs.push(this.#client.on('logs', (m) => this.#pushLog(m)));
     this.#unsubs.push(this.#client.onOpen(() => void this.#resync()));
     await this.#client.connect(); // onOpen → #resync hydrates presence + the active instrument
+    void this.#pruneSnapshots(); // GC snapshots whose instrument no longer exists
   }
 
   #pushLog(msg: LogMessage): void {
@@ -582,15 +585,43 @@ export class VoxelApp {
   }
 
   /**
-   * Capture the active instrument's live preview into a persisted snapshot (frontend-only):
-   * composites the visible channel frames to a JPEG + thumbnail and records stage/profile/channel
-   * metadata. Throws if there's no instrument or no preview frames yet.
+   * Capture the active instrument's preview into a persisted snapshot (frontend-only): composites the
+   * visible channel frames to a JPEG + thumbnail and records stage/profile/channel metadata. When preview
+   * is stopped, transiently starts it, waits for frames, captures, then stops it again.
    */
   static readonly SNAPSHOT_THUMB_SIZE = 160;
 
   async captureSnapshot(): Promise<void> {
     const inst = this.instrument;
-    if (!inst) return;
+    if (!inst || this.snapping) return;
+    this.snapping = true;
+    const wasIdle = inst.mode === 'idle';
+    try {
+      if (wasIdle) {
+        inst.preview.clearFrames(); // drop stale frames so we wait for images from the current position
+        inst.preview.startPreview();
+        await this.#awaitPreviewFrames(inst);
+      }
+      await this.#writeSnapshot(inst);
+    } finally {
+      if (wasIdle) inst.preview.stopPreview();
+      this.snapping = false;
+    }
+  }
+
+  /** Poll until every visible channel has a frame, or the timeout elapses. */
+  async #awaitPreviewFrames(inst: Instrument, timeoutMs = 6000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    const ready = () => {
+      const visible = inst.preview.channels.filter((ch) => ch.visible);
+      return visible.length > 0 && visible.every((ch) => ch.frame);
+    };
+    while (!ready() && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  async #writeSnapshot(inst: Instrument): Promise<void> {
     const channels = inst.preview.channels;
     const first = channels.find((ch) => ch.visible && ch.frame)?.frame;
     if (!first) throw new Error('No preview frames available');
@@ -643,6 +674,7 @@ export class VoxelApp {
     }
 
     this.snaps.add({
+      instrument: this.activeName ?? '',
       profileId,
       profileLabel: inst.activeProfile?.label || sanitizeString(profileId),
       stageX: inst.stage.x?.position?.value ?? 0,
@@ -655,6 +687,8 @@ export class VoxelApp {
       blob,
       thumbnail
     });
+
+    if (browser) window.dispatchEvent(new CustomEvent('voxel:snapshot-captured', { detail: { thumbnail } }));
   }
 
   /** REST re-sync on every (re)connect: refresh presence, then refresh a surviving instrument's state. */
@@ -677,6 +711,16 @@ export class VoxelApp {
     }
   }
 
+  /** Sweep persisted snapshots whose instrument no longer exists (frontend-only GC, on connect). */
+  async #pruneSnapshots(): Promise<void> {
+    try {
+      const { instruments } = await this.#client.get<InstrumentsCatalog>('/instruments');
+      await this.snaps.reconcile(Object.keys(instruments));
+    } catch {
+      // best-effort — a failed catalog fetch just skips this round of GC
+    }
+  }
+
   #onPresence(status: AppStatus): void {
     this.#desired = status.active;
     void this.#reconcile();
@@ -693,6 +737,7 @@ export class VoxelApp {
           this.instrument.dispose();
           this.instrument = null;
           this.#openName = null;
+          this.snaps.scope = null;
         }
         if (target === null) continue;
         let opened: Instrument | null = null;
@@ -708,6 +753,7 @@ export class VoxelApp {
         if (opened === null) break; // open failed; retry on the next presence / reconnect
         this.instrument = opened;
         this.#openName = target;
+        this.snaps.scope = target;
         if (browser) localStorage.setItem('voxel.lastInstrument', target);
       }
     } finally {

@@ -47,6 +47,7 @@ export { default as ViewDashboardOutline } from '~icons/mdi/view-dashboard-outli
 export { default as ImageLight } from '~icons/ph/image-light';
 export { default as PathLight } from '~icons/ph/path-light';
 export { default as StackLight } from '~icons/ph/stack-light';
+export { default as VideoCamera } from '~icons/ph/video-camera';
 
 // Other collections
 export { default as Bargraph } from '~icons/et/bargraph';
