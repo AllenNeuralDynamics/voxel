@@ -4,6 +4,8 @@
   import { untrack } from 'svelte';
   import uPlot, { type AlignedData, type Options } from 'uplot';
 
+  import { themes } from '$lib/themes';
+
   function formatTime(s: number): string {
     if (s >= 1) return `${s.toFixed(1)}s`;
     if (s >= 0.001) return `${(s * 1000).toFixed(1)}ms`;
@@ -69,6 +71,17 @@
     const _yRange = yRange;
     const _ctx = context;
 
+    // Theme chrome resolved from CSS vars — uPlot draws to canvas and can't read CSS classes.
+    // `themes.resolvedMode` is read here so the effect re-runs (and re-reads the flipped vars)
+    // on a light/dark switch. SPA app, so the DOM is always present.
+    const styles = getComputedStyle(document.documentElement);
+    const chrome = {
+      mode: themes.resolvedMode,
+      axis: styles.getPropertyValue('--color-fg-muted').trim(),
+      grid: styles.getPropertyValue('--color-border').trim(),
+      limit: styles.getPropertyValue('--color-danger').trim()
+    };
+
     // Untracked reads (initial values only; updated via setData / setSize):
     const initData = untrack(() => [time, ...voltages] as AlignedData);
     const rect = container.getBoundingClientRect();
@@ -93,7 +106,7 @@
       if (_ctx.aoRange) {
         ctx.save();
         ctx.setLineDash([6, 3]);
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = chrome.limit;
         ctx.globalAlpha = 0.4;
         ctx.lineWidth = 1;
         for (const v of [_ctx.aoRange.min, _ctx.aoRange.max]) {
@@ -132,9 +145,9 @@
         {
           show: true,
           size: 24,
-          stroke: 'rgb(161, 161, 170)',
+          stroke: chrome.axis,
           font: '10px ui-monospace, monospace',
-          grid: { show: true, stroke: 'rgba(128, 128, 128, 0.25)', width: 1 },
+          grid: { show: true, stroke: chrome.grid, width: 1 },
           ticks: { show: false },
           values: (_u, ticks) => ticks.map(formatTime)
         },
@@ -142,9 +155,9 @@
           show: true,
           size: 42,
           gap: 6,
-          stroke: 'rgb(161, 161, 170)',
+          stroke: chrome.axis,
           font: '10px ui-monospace, monospace',
-          grid: { show: true, stroke: 'rgba(128, 128, 128, 0.25)', width: 1 },
+          grid: { show: true, stroke: chrome.grid, width: 1 },
           ticks: { show: false },
           values: (_u, ticks) => ticks.map((t) => `${t.toFixed(1)}V`)
         }

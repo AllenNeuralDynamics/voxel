@@ -49,7 +49,16 @@
     className
   )}
 >
-    <SpinBox {model} {decimals} {numCharacters} {align} {prefix} {suffix} {disabled} class="border-r-0 rounded-r-none bg-transparent"/>
+  <SpinBox
+    {model}
+    {decimals}
+    {numCharacters}
+    {align}
+    {prefix}
+    {suffix}
+    {disabled}
+    class="rounded-r-none border-r-0 bg-transparent"
+  />
   <input
     type="range"
     class="slider-input focus:border-focused min-w-16 flex-1 cursor-pointer appearance-none overflow-hidden rounded-r border border-input bg-transparent transition-colors outline-none"

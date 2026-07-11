@@ -102,7 +102,10 @@ function spectralHex(wavelength: number): string {
   } else {
     r = 0.5; // IR → deep red
   }
-  const toHex = (val: number) => Math.round(val * 255).toString(16).padStart(2, '0');
+  const toHex = (val: number) =>
+    Math.round(val * 255)
+      .toString(16)
+      .padStart(2, '0');
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
@@ -137,8 +140,11 @@ export function desaturateColor(hex: string, amount = 0.7): string {
 // The presentation policy of which color represents which device role. Depends on the
 // structural role model (`DeviceRole`), never the reverse.
 
-/** Aux + filter palette: violet → purple → fuchsia. Outside the visible-emission spectrum. */
-const AUX_COLORS = [
+/**
+ * Aux + filter palette: violet → purple → fuchsia (outside the visible-emission spectrum),
+ * in light/dark sets so the traces read against either canvas.
+ */
+const AUX_COLORS_DARK = [
   '#c4b5fd', // violet-300
   '#a78bfa', // violet-400
   '#8b5cf6', // violet-500
@@ -149,8 +155,24 @@ const AUX_COLORS = [
   '#f0abfc' // fuchsia-300
 ];
 
-/** Stage palette: cool slate greys, light → dark for x/y/z ordering. */
-const STAGE_COLORS = ['#cbd5e1', '#94a3b8', '#64748b']; // slate 300/400/500
+const AUX_COLORS_LIGHT = [
+  '#8b5cf6', // violet-500
+  '#7c3aed', // violet-600
+  '#6d28d9', // violet-700
+  '#9333ea', // purple-600
+  '#7e22ce', // purple-700
+  '#a21caf', // fuchsia-700
+  '#c026d3', // fuchsia-600
+  '#d946ef' // fuchsia-500
+];
+
+const auxPalette = () => (themes.resolvedMode === 'light' ? AUX_COLORS_LIGHT : AUX_COLORS_DARK);
+
+/** Stage palette: cool slate greys, in light/dark sets for x/y/z ordering. */
+const STAGE_COLORS_DARK = ['#cbd5e1', '#94a3b8', '#64748b']; // slate 300/400/500
+const STAGE_COLORS_LIGHT = ['#64748b', '#475569', '#334155']; // slate 500/600/700
+
+const stagePalette = () => (themes.resolvedMode === 'light' ? STAGE_COLORS_LIGHT : STAGE_COLORS_DARK);
 
 /**
  * Waveform neutrals, in two lightness sets so 'waveform'/'other'/port traces stay visible:
@@ -206,10 +228,14 @@ export function resolveDeviceColor(role: DeviceRole, emission?: number): string 
     case 'laser':
       return wavelengthToColor(emission);
     case 'filter':
-    case 'aux':
-      return AUX_COLORS[role.index % AUX_COLORS.length];
-    case 'stage':
-      return STAGE_COLORS[role.index % STAGE_COLORS.length];
+    case 'aux': {
+      const aux = auxPalette();
+      return aux[role.index % aux.length];
+    }
+    case 'stage': {
+      const stage = stagePalette();
+      return stage[role.index % stage.length];
+    }
     case 'waveform':
       return waveformDeviceColor(role.index);
     default:

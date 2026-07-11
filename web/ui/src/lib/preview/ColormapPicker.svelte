@@ -50,7 +50,9 @@
   });
   // A gradient for multi-stop maps, a solid swatch for a single/custom color.
   const triggerGradient = $derived(
-    triggerStops && triggerStops.length > 1 ? stopsToGradient(triggerStops) : (triggerStops?.[0] ?? 'var(--color-fg-muted)')
+    triggerStops && triggerStops.length > 1
+      ? stopsToGradient(triggerStops)
+      : (triggerStops?.[0] ?? 'var(--color-fg-muted)')
   );
 
   const defaultTriggerClass = 'cursor-pointer text-base leading-5 font-medium transition-colors hover:brightness-125';
@@ -100,7 +102,7 @@
     aria-label="Pick colormap for {label} (current: {colormapName})"
   >
     <span class="shrink-0 text-fg">{label}</span>
-    <span class="h-2 min-w-0 flex-1 rounded-[2px]" style="background: {triggerGradient};"></span>
+    <span class="h-2 min-w-0 flex-1 rounded-xs" style="background: {triggerGradient};"></span>
   </Popover.Trigger>
 
   <Popover.Portal>

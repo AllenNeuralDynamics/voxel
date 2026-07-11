@@ -47,7 +47,6 @@
   --ui-sm: calc(var(--ui-base) - 1 * var(--ui-step)); /* 24px */
   --ui-md: var(--ui-base); /* 28px */
   --ui-lg: calc(var(--ui-base) + 1 * var(--ui-step)); /* 32px */
-
 }
 
 .density-compact {
