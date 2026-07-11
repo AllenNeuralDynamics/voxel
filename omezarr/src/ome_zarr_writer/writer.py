@@ -310,7 +310,7 @@ class DatasetWriter:
         storage: Storage,
         ring: Ring,
         *,
-        backend: ArrayWriter.Backend = ArrayWriter.Backend.TS,
+        backend: ArrayWriter.Backend,
     ) -> None:
         if not ring.matches(config.batch_shape, config.max_level, config.dtype):
             raise ValueError(
