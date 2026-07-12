@@ -1,0 +1,37 @@
+[project]
+name = "bench"
+version = "0"
+description = "OME-Zarr writer benchmarks (internal workspace tooling; not built or published)"
+requires-python = ">=3.13"
+dependencies = [
+    "vxl",
+    "vxlib",
+    "ome-zarr-writer",
+    "boto3>=1.40",
+    "cloudpathlib[s3]>=0.24",
+    "numpy>=2.3",
+    "psutil>=5.9",
+    "pydantic>=2.11",
+    "rich>=14",
+]
+
+# Analysis stack (bench/*/analysis.py + loaders). pandas is the only hard requirement for reading results;
+# marimo/altair are for the interactive notebook, pyarrow for optional parquet export.
+[dependency-groups]
+analysis = [
+    "pandas>=2.2",
+    "pyarrow>=18",
+    "plotly>=5",
+    "altair>=5",
+    "marimo>=0.9",
+]
+
+# Virtual member: managed in the workspace, but never built or installed as a distribution ("not a
+# library"). Run its benches as modules from the repo root, e.g. `uv run -m bench.write.run`.
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+vxl = { workspace = true }
+vxlib = { workspace = true }
+ome-zarr-writer = { workspace = true }

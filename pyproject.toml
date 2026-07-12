@@ -55,6 +55,7 @@ members = [
     "qt",
     "vxlib",
     "omezarr",
+    "bench",
 ]
 
 [tool.uv.sources]
@@ -83,4 +84,5 @@ typeCheckingMode = "standard"
 ignore = [
     "**/sdk/**",
     "**/vendor/**",
+    "**/bench/**/analysis.py",  # marimo notebooks: cells end in a bare expression to display a widget
 ]

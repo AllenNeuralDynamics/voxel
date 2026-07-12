@@ -51,6 +51,14 @@ log = logging.getLogger(__name__)
 _PREFAULT_WORKERS = min(32, os.cpu_count() or 1)
 _PREFAULT_MIN_BYTES = 1 << 28  # 256 MiB
 
+# Thread cap for the pyramid's numba parallel region. The separable gaussian downscale is memory-
+# bandwidth bound and saturates by ~16 threads; past that, memory-controller/NUMA contention makes it
+# *slower* (measured ~3x slower at 256 vs 16 threads on a 256-core host). Left uncapped numba grabs the
+# whole machine, so with several slots downsampling at once the memory system is badly oversubscribed.
+# Env-tunable (`VOXEL_NUMBA_THREADS`) so the in-pipeline optimum can be swept; clamped to the pool max.
+_NUMBA_POOL_MAX = int(getattr(numba.config, "NUMBA_NUM_THREADS", os.cpu_count() or 1))  # runtime-only attr
+_NUMBA_THREADS = max(1, min(int(os.environ.get("VOXEL_NUMBA_THREADS", "16")), _NUMBA_POOL_MAX))
+
 
 def _prefault_zero(arr: np.ndarray) -> None:
     """Zero (and thereby commit) a freshly created SharedMemory-backed array, in parallel — so the
@@ -131,6 +139,9 @@ def _worker_init(shm_layout: list[tuple[int, str, tuple[int, int, int]]], dtype_
     # otherwise each worker blocked in the pool's call queue dumps a KeyboardInterrupt traceback.
     # The parent handles the interrupt and tears the pool down via the normal close() path.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    numba.set_num_threads(
+        _NUMBA_THREADS
+    )  # cap pyramid parallelism to avoid memory oversubscription (see _NUMBA_THREADS)
     # We don't force a numba threading layer: its default already cascades tbb > omp > workqueue and
     # honors a NUMBA_THREADING_LAYER env override. Workers are spawned (not forked), so omp/tbb (not
     # fork-safe) are fine; the first flush warns if it lands on workqueue (the slowest fallback).

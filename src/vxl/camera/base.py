@@ -205,7 +205,7 @@ class CameraMode(StrEnum):
 # Ring depth: at least 2 (so collect overlaps downsample/flush) up to this cap (coordination +
 # cache pressure outweigh gains beyond it). Sized within these bounds from the camera's RAM share.
 MIN_WRITER_SLOTS = 2
-MAX_WRITER_SLOTS = 5
+MAX_WRITER_SLOTS = 4
 
 
 class CameraController(DeviceController["Camera"]):

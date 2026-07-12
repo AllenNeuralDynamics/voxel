@@ -1,0 +1,5 @@
+# Benchmark run data is machine-specific and append-only; don't commit it. Findings that matter get
+# distilled into notes/. Keep this .gitignore so the directory exists for the JSONL sink.
+*.jsonl
+*.parquet
+*.html

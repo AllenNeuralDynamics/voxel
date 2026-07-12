@@ -24,6 +24,7 @@ from ome_zarr_writer import (
     UVec3D,
     WriterConfig,
 )
+from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.array.ts import TSArrayReader
 
 from conftest import Minio
@@ -68,6 +69,30 @@ def test_s3_roundtrip(minio: Minio, kind: str, tmp_path: Path, monkeypatch: pyte
     # Bytes are real: read L0 back (same store connection, creds from the env above) and check
     # the per-frame values survived the round-trip.
     arr = TSArrayReader(S3Path(f"s3://{minio.bucket}/{kind}.ome.zarr/0"), minio.store()).read_3d(z0=0, n=z)
+    assert arr.shape == (z, y, x)
+    assert int(arr[0].max()) == 1
+    assert int(arr[z - 1].max()) == z
+
+
+def test_s3_roundtrip_zarrs_backend(minio: Minio, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """DirectS3 with the ZARRS backend: the worker writes arrays to S3 through the zarrs Rust pipeline
+    (obstore S3Store behind zarr's ObjectStore, configured via AWS_* env). Written by zarrs, read back
+    by TensorStore — a cross-backend check that the on-disk Zarr v3 bytes are correct."""
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", minio.user)
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", minio.password)
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+    z, y, x = 128, 128, 128
+    cfg = WriterConfig(
+        volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L6
+    )
+    writer = OMEZarrWriter(backend=ArrayWriter.Backend.ZARRS, slots=3)
+    writer.begin_stack(cfg, DirectS3(target=S3Path(f"s3://{minio.bucket}/zarrs"), store=minio.store()))
+    for i in range(z):
+        writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))
+    writer.close()
+
+    arr = TSArrayReader(S3Path(f"s3://{minio.bucket}/zarrs.ome.zarr/0"), minio.store()).read_3d(z0=0, n=z)
     assert arr.shape == (z, y, x)
     assert int(arr[0].max()) == 1
     assert int(arr[z - 1].max()) == z
