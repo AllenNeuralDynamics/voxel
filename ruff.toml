@@ -101,6 +101,9 @@ flake8-bugbear.extend-immutable-calls = [
     'LOG015',  # Root logger call
 ]
 "qt/**" = ["ANN", "N802", "N815"]  # Qt uses camelCase method names
+# marimo notebooks (bench/<name>/analysis.py): cells are `def _()` with local imports and a trailing bare
+# expression to display; the import bootstrap runs before imports.
+"bench/*/analysis.py" = ["PLC0415", "B018", "ARG001", "F811", "E402"]
 "**/scripts/**" = ["EXE001", "PLW1510", "S108", "S110", "PLR0912", "S104", "TRY401"]  # Utility scripts
 "**/tests/manual/**" = ["EXE001"]  # Manual test scripts
 

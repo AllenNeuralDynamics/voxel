@@ -7,7 +7,7 @@ the others show which specific layers are installed/loadable here and how they c
 pyramid kernel. `workqueue` is always available but slowest; `omp` needs an OpenMP runtime (usually
 present on Windows/Linux); `tbb` needs a numba-loadable Intel TBB (often conda-only on Windows).
 
-    uv run python bench/numba_threading_layer.py
+    uv run omezarr/scripts/numba_threading_layer.py
 """
 
 import os
