@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils';
 
   import Input from './Input.svelte';
-  import { type NumericSource,useNumericModel } from './model.svelte';
+  import { type NumericSource, useNumericModel } from './model.svelte';
 
   const SIZE = {
     xs: 'h-ui-xs text-xs',

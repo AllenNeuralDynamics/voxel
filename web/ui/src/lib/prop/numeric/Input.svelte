@@ -3,7 +3,7 @@
 
   import { cn } from '$lib/utils';
 
-  import { type NumericSource,useNumericModel } from './model.svelte';
+  import { type NumericSource, useNumericModel } from './model.svelte';
 
   type OwnProps = {
     model: NumericSource;

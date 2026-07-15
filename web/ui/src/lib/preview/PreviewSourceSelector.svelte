@@ -19,10 +19,7 @@
   const currentValue = $derived(snaps.active?.id ?? LIVE);
 
   /** Typeahead / a11y labels for the primitive. */
-  const items = $derived([
-    { value: LIVE, label: 'Live' },
-    ...snaps.list.map((s) => ({ value: s.id, label: s.label }))
-  ]);
+  const items = $derived([{ value: LIVE, label: 'Live' }, ...snaps.list.map((s) => ({ value: s.id, label: s.label }))]);
 
   function changeSource(v: string) {
     snaps.view(v === LIVE ? null : v);
@@ -48,7 +45,7 @@
   >
     <Select.Trigger
       data-fly-target
-      class="flex h-ui-md w-72 items-center gap-2 rounded-sm border border-input bg-element-bg px-2 text-sm transition-colors hover:bg-element-hover focus:border-focused focus:outline-none"
+      class="focus:border-focused flex h-ui-md w-72 items-center gap-2 rounded-sm border border-input bg-element-bg px-2 text-sm transition-colors hover:bg-element-hover focus:outline-none"
     >
       {#if snaps.active}
         <img
@@ -88,19 +85,16 @@
           {#each snaps.list as snap (snap.id)}
             <Select.Item value={snap.id} label={snap.label} class={itemClass}>
               {#snippet children({ selected })}
-                <img
-                  src={snap.thumbnail}
-                  alt=""
-                  class="h-9 w-11 shrink-0 rounded border border-border object-cover"
-                />
-                <div class="flex min-w-0 flex-1 flex-col gap-1 justify-between">
-                  <div class="flex min-w-0 justify-between items-center gap-1.5">
+                <img src={snap.thumbnail} alt="" class="h-9 w-11 shrink-0 rounded border border-border object-cover" />
+                <div class="flex min-w-0 flex-1 flex-col justify-between gap-1">
+                  <div class="flex min-w-0 items-center justify-between gap-1.5">
                     <span class="min-w-0 truncate">{snap.label}</span>
                     {#if snap.profileLabel}
-                        <span class="shrink-0 truncate max-w-[10ch] rounded bg-element-bg px-1 py-0.5 text-xs text-fg-muted">
-                          {snap.profileLabel}
-                        </span>
-
+                      <span
+                        class="max-w-[10ch] shrink-0 truncate rounded bg-element-bg px-1 py-0.5 text-xs text-fg-muted"
+                      >
+                        {snap.profileLabel}
+                      </span>
                     {/if}
                   </div>
                   <span class="truncate font-mono text-xs text-fg-muted tabular-nums">

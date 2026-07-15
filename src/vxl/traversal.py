@@ -1,4 +1,4 @@
-"""Stack, ordering, and acquisition result models."""
+"""Tile ordering and acquisition result models."""
 
 import math
 from enum import StrEnum
@@ -14,7 +14,7 @@ class Tile(BaseModel):
 
 
 class TileOrder(StrEnum):
-    """Stack acquisition ordering strategy. Callable — sorts a list of tiles."""
+    """Task acquisition ordering strategy. Callable — sorts a list of tiles."""
 
     SWEEP_ROW = "sweep_row"
     SWEEP_COLUMN = "sweep_column"

@@ -24,7 +24,13 @@
   <!-- Name (double-click to rename) + profile -->
   <div class="flex min-h-8 items-center justify-between gap-2 px-2.5">
     <div class="pointer-events-auto min-w-0">
-      <Rename value={snap.label} size="sm" class="font-medium text-fg" textClass="truncate" onSave={(v) => onRename?.(v)} />
+      <Rename
+        value={snap.label}
+        size="sm"
+        class="font-medium text-fg"
+        textClass="truncate"
+        onSave={(v) => onRename?.(v)}
+      />
     </div>
     {#if snap.profileLabel}
       <span class="shrink-0 rounded bg-element-bg px-1.5 py-0.5 text-fg-muted">{snap.profileLabel}</span>
