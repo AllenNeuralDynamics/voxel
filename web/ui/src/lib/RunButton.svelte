@@ -90,28 +90,28 @@
   </Button>
   <div class="w-56">
     <div class="grid transition-[grid-template-columns] duration-300 ease-out" style="grid-template-columns: {cols}">
-    <div class={cn('overflow-hidden', active === 'acquire' && 'pointer-events-none')}>
-      <Button
-        variant={active === 'preview' ? 'danger' : 'secondary'}
-        size="md"
-        class={cn('w-full whitespace-nowrap', active === null && 'rounded-r-none border-border')}
-        disabled={!instrument || (active === null && !canPreview)}
-        onclick={togglePreview}
-      >
-        {active === 'preview' ? 'Stop Preview' : 'Preview'}
-      </Button>
-    </div>
-    <div class={cn('overflow-hidden', active === 'preview' && 'pointer-events-none')}>
-      <Button
-        variant={active === 'acquire' ? 'danger' : 'secondary'}
-        size="md"
-        class={cn('w-full whitespace-nowrap', active === null && 'rounded-l-none border-l-0 border-border')}
-        disabled={!instrument || (active === null && !canAcquire)}
-        onclick={toggleAcquire}
-      >
-        {active === 'acquire' ? 'Stop Acquisition' : 'Acquire'}
-      </Button>
-    </div>
+      <div class={cn('overflow-hidden', active === 'acquire' && 'pointer-events-none')}>
+        <Button
+          variant={active === 'preview' ? 'danger' : 'secondary'}
+          size="md"
+          class={cn('w-full whitespace-nowrap', active === null && 'rounded-r-none border-border')}
+          disabled={!instrument || (active === null && !canPreview)}
+          onclick={togglePreview}
+        >
+          {active === 'preview' ? 'Stop Preview' : 'Preview'}
+        </Button>
+      </div>
+      <div class={cn('overflow-hidden', active === 'preview' && 'pointer-events-none')}>
+        <Button
+          variant={active === 'acquire' ? 'danger' : 'secondary'}
+          size="md"
+          class={cn('w-full whitespace-nowrap', active === null && 'rounded-l-none border-l-0 border-border')}
+          disabled={!instrument || (active === null && !canAcquire)}
+          onclick={toggleAcquire}
+        >
+          {active === 'acquire' ? 'Stop Acquisition' : 'Acquire'}
+        </Button>
+      </div>
     </div>
   </div>
 </div>

@@ -110,7 +110,8 @@
               {:else if isNumericDtype(param.dtype)}
                 <SpinBox
                   model={{
-                    value: typeof paramValues[name] === 'number' ? paramValues[name] : (getDefaultValue(param) as number),
+                    value:
+                      typeof paramValues[name] === 'number' ? paramValues[name] : (getDefaultValue(param) as number),
                     onChange: (v) => (paramValues[name] = v),
                     step: param.dtype.includes('int') ? 1 : 0.1
                   }}

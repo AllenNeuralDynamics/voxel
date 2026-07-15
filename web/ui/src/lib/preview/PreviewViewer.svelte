@@ -225,7 +225,8 @@
         {/if}
         {#if !snaps.active && scaleBar}
           <div class="flex flex-col items-end gap-0.5" transition:fade={{ duration: 150 }}>
-            <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{scaleBar.label}</span>
+            <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{scaleBar.label}</span
+            >
             <div
               class="h-1 rounded-full bg-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
               style:width="{scaleBar.barPx}px"
@@ -250,7 +251,10 @@
 
     {#if snaps.active}
       {@const active = snaps.active}
-      <div class="pointer-events-auto absolute top-4 right-4 flex items-center gap-1" transition:fade={{ duration: 150 }}>
+      <div
+        class="pointer-events-auto absolute top-4 right-4 flex items-center gap-1"
+        transition:fade={{ duration: 150 }}
+      >
         <Button
           variant="ghost"
           size="icon"

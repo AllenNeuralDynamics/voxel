@@ -267,7 +267,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="text-xs leading-none px-0.5"
+        class="px-0.5 text-xs leading-none"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
@@ -281,7 +281,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="text-xs leading-none px-0.5"
+        class="px-0.5 text-xs leading-none"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
@@ -295,7 +295,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="text-xs leading-none px-0.5"
+        class="px-0.5 text-xs leading-none"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
@@ -309,7 +309,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="text-xs leading-none px-0.5"
+        class="px-0.5 text-xs leading-none"
       />
     </span>
     <div data-cell-edit class="cell justify-end">
@@ -375,101 +375,101 @@
 <PaneGroup direction="vertical" autoSaveId="plan.grid" class="h-full">
   <Pane defaultSize={60} minSize={30}>
     <div class="flex h-full flex-col overflow-hidden">
-        <div class="shrink-0 px-3 py-4">
-            <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-                <span class="text-xs text-nowrap text-fg-muted tabular-nums">
-                {selectedRows.length}/{rows.length} tasks
-                </span>
-                {#if instrument}
-                <Select
-                    size="xs"
-                    class="w-full"
-                    prefix="Traversal"
-                    value={instrument.state.traversal}
-                    options={TILE_ORDER_OPTIONS}
-                    onchange={(v) => toastError(instrument.setTraversal(v as TileOrder))}
-                />
-                {/if}
-            </div>
-            <div class="flex items-center gap-3">
-                <div class="flex items-center gap-1.5">
-                <SpinBox
-                    model={{
-                    value: nudgeStep / unit.scale,
-                    onChange: (v) => (nudgeStep = v * unit.scale),
-                    min: unit.step,
-                    step: unit.bigStep
-                    }}
-                    decimals={unit.decimals}
-                    numCharacters={7}
-                    size="xs"
-                    steppers={false}
-                    prefix="Nudge"
-                    suffix={unit.label}
-                />
-                <div class="flex items-center gap-0.5">
-                    {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}
-                    {@render nudgeButton(ChevronRight, 'Nudge +X', () => applyNudge(nudgeStep, 0))}
-                    {@render nudgeButton(ChevronUp, 'Nudge +Y', () => applyNudge(0, nudgeStep))}
-                    {@render nudgeButton(ChevronDown, 'Nudge −Y', () => applyNudge(0, -nudgeStep))}
-                </div>
-                </div>
-                <Select
+      <div class="shrink-0 px-3 py-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-nowrap text-fg-muted tabular-nums">
+              {selectedRows.length}/{rows.length} tasks
+            </span>
+            {#if instrument}
+              <Select
                 size="xs"
-                class="w-24"
-                prefix="Units"
-                value={spaceUnit.current}
-                options={SPACE_UNIT_OPTIONS}
-                onchange={(v) => (spaceUnit.current = v as SpaceUnit['value'])}
-                />
-                <Button
-                variant="secondary"
+                class="w-full"
+                prefix="Traversal"
+                value={instrument.state.traversal}
+                options={TILE_ORDER_OPTIONS}
+                onchange={(v) => toastError(instrument.setTraversal(v as TileOrder))}
+              />
+            {/if}
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1.5">
+              <SpinBox
+                model={{
+                  value: nudgeStep / unit.scale,
+                  onChange: (v) => (nudgeStep = v * unit.scale),
+                  min: unit.step,
+                  step: unit.bigStep
+                }}
+                decimals={unit.decimals}
+                numCharacters={7}
                 size="xs"
-                title="Delete selected tasks"
-                disabled={!hasSelection}
-                onclick={() => (deleteDialogOpen = true)}
-                >
-                <TrashCanOutline width="14" height="14" />
-                Delete
-                </Button>
+                steppers={false}
+                prefix="Nudge"
+                suffix={unit.label}
+              />
+              <div class="flex items-center gap-0.5">
+                {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}
+                {@render nudgeButton(ChevronRight, 'Nudge +X', () => applyNudge(nudgeStep, 0))}
+                {@render nudgeButton(ChevronUp, 'Nudge +Y', () => applyNudge(0, nudgeStep))}
+                {@render nudgeButton(ChevronDown, 'Nudge −Y', () => applyNudge(0, -nudgeStep))}
+              </div>
             </div>
-            </div>
+            <Select
+              size="xs"
+              class="w-24"
+              prefix="Units"
+              value={spaceUnit.current}
+              options={SPACE_UNIT_OPTIONS}
+              onchange={(v) => (spaceUnit.current = v as SpaceUnit['value'])}
+            />
+            <Button
+              variant="secondary"
+              size="xs"
+              title="Delete selected tasks"
+              disabled={!hasSelection}
+              onclick={() => (deleteDialogOpen = true)}
+            >
+              <TrashCanOutline width="14" height="14" />
+              Delete
+            </Button>
+          </div>
         </div>
-  <!-- Rows -->
-  <div
-    role="grid"
-    aria-label="Task list"
-    class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_auto_auto_auto_1fr] content-start overflow-y-auto px-2"
-  >
-    {#if rows.length === 0}
-      <div class="col-span-full flex min-h-32 items-center justify-center p-4">
-        <p class="text-sm text-fg-faint">No tasks — add tasks from the grid</p>
       </div>
-    {:else}
-      <!-- Column header -->
-      <div class="col-span-full grid grid-cols-subgrid text-sm font-medium text-fg-muted">
-        <span class="cell cell-first cell-head justify-center">
-          <Checkbox
-            size="xs"
-            checked={allSelected}
-            indeterminate={someSelected}
-            disabled={rows.length === 0}
-            onchange={toggleAll}
-          />
-        </span>
-        <span class="cell cell-head justify-end">#</span>
-        <span class="cell cell-head justify-between">{@render headerMatch('x')}X</span>
-        <span class="cell cell-head justify-between">{@render headerMatch('y')}Y</span>
-        <span class="cell cell-head justify-between">{@render headerMatch('start')}Z Start</span>
-        <span class="cell cell-head justify-between">{@render headerMatch('end')}Z End</span>
-        <span class="cell cell-head justify-end"><span class="pr-2">Profiles</span></span>
+      <!-- Rows -->
+      <div
+        role="grid"
+        aria-label="Task list"
+        class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_auto_auto_auto_1fr] content-start overflow-y-auto px-2"
+      >
+        {#if rows.length === 0}
+          <div class="col-span-full flex min-h-32 items-center justify-center p-4">
+            <p class="text-sm text-fg-faint">No tasks — add tasks from the grid</p>
+          </div>
+        {:else}
+          <!-- Column header -->
+          <div class="col-span-full grid grid-cols-subgrid text-sm font-medium text-fg-muted">
+            <span class="cell cell-first cell-head justify-center">
+              <Checkbox
+                size="xs"
+                checked={allSelected}
+                indeterminate={someSelected}
+                disabled={rows.length === 0}
+                onchange={toggleAll}
+              />
+            </span>
+            <span class="cell cell-head justify-end">#</span>
+            <span class="cell cell-head justify-between">{@render headerMatch('x')}X</span>
+            <span class="cell cell-head justify-between">{@render headerMatch('y')}Y</span>
+            <span class="cell cell-head justify-between">{@render headerMatch('start')}Z Start</span>
+            <span class="cell cell-head justify-between">{@render headerMatch('end')}Z End</span>
+            <span class="cell cell-head justify-end"><span class="pr-2">Profiles</span></span>
+          </div>
+          {#each rows as row (row.taskId)}
+            {@render taskRow(row, selection.has(row.taskId))}
+          {/each}
+        {/if}
       </div>
-      {#each rows as row (row.taskId)}
-        {@render taskRow(row, selection.has(row.taskId))}
-      {/each}
-    {/if}
-    </div>
     </div>
   </Pane>
   <PaneDivider direction="horizontal" />

@@ -1,17 +1,7 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner';
 
-  import {
-    Button,
-    Checkbox,
-    ColorPicker,
-    Select,
-    Slider,
-    Switch,
-    TagInput,
-    TextArea,
-    TextInput
-  } from '$lib/kit';
+  import { Button, Checkbox, ColorPicker, Select, Slider, Switch, TagInput, TextArea, TextInput } from '$lib/kit';
   import { type AnyPropModel, BoolModel, EnumeratedModel, NumericModel, PropModel, StringModel } from '$lib/model';
   import { Bool, Enumerated, Numeric, PropInput, Text } from '$lib/prop';
   import { ThemePicker } from '$lib/themes';
@@ -210,7 +200,10 @@
               <div class="flex flex-wrap items-center gap-3">
                 <span class="w-6 text-xs text-fg-faint">{sz}</span>
                 <TextInput size={sz} bind:value={textValue} placeholder="Type here…" />
-                <Numeric.SpinBox size={sz} model={{ value: spinValue, onChange: (v) => (spinValue = v), min: 0, max: 100 }} />
+                <Numeric.SpinBox
+                  size={sz}
+                  model={{ value: spinValue, onChange: (v) => (spinValue = v), min: 0, max: 100 }}
+                />
                 <Select size={sz} options={selectOptions} bind:value={selectValue} class="w-40" />
                 <Switch bind:checked={switchOn} size={sz} />
                 <Switch bind:checked={switchOff} size={sz} />

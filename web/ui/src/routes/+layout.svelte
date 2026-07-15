@@ -160,7 +160,7 @@
     <PaneGroup direction="horizontal" autoSaveId="shell.v5">
       <!-- Mode controls: nav + routed content + logs -->
       <Pane {...leftPane}>
-        <div class="bg-surface grid h-full grid-rows-[auto_1fr]">
+        <div class="grid h-full grid-rows-[auto_1fr] bg-surface">
           <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border px-4">
             {@render appMenu()}
             <nav class="flex h-ui-md items-center gap-x-1 text-fg-muted">

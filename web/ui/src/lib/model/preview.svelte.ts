@@ -95,7 +95,8 @@ const WHEEL_ZOOM_SPEED = 0.0015;
 /** Multiplicative zoom factor from a wheel event, normalized across mice/trackpads. */
 export function wheelZoomFactor(e: WheelEvent): number {
   let dy = e.deltaY;
-  if (e.deltaMode === 1) dy *= 16; // lines → px
+  if (e.deltaMode === 1)
+    dy *= 16; // lines → px
   else if (e.deltaMode === 2) dy *= 400; // pages → px
   dy = Math.max(-40, Math.min(40, dy)); // clamp so one aggressive notch can't leap
   return Math.exp(dy * WHEEL_ZOOM_SPEED);

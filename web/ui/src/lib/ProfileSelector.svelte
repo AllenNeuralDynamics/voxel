@@ -40,7 +40,7 @@
   const styles = $derived(selectVariants({ variant: 'filled', size }));
 
   const iconSize = $derived({ xs: 10, sm: 12, md: 14, lg: 16 }[size]);
-  const selectedHasStacks = $derived(profileHasTasks(selected));
+  const selectedHasTasks = $derived(profileHasTasks(selected));
 
   async function handleChange(value: string | undefined) {
     if (!value) return;
@@ -59,7 +59,7 @@
   <div class={cn('relative', className)}>
     <Select.Trigger class={cn(styles.trigger(), 'w-full rounded-md px-3 pr-8')}>
       <span class="flex items-center gap-1.5 truncate">
-        <span class="inline-block size-1.5 shrink-0 rounded-full {selectedHasStacks ? 'bg-info' : 'bg-fg-faint/50'}"
+        <span class="inline-block size-1.5 shrink-0 rounded-full {selectedHasTasks ? 'bg-info' : 'bg-fg-faint/50'}"
         ></span>
         {#if selectedLabel}
           {selectedLabel}
@@ -85,7 +85,7 @@
         <Select.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
           <Select.Group>
             {#each profileList as profile (profile.value)}
-              {@const hasStacks = profileHasTasks(profile.value)}
+              {@const hasTasks = profileHasTasks(profile.value)}
               <Select.Item
                 value={profile.value}
                 label={profile.label}
@@ -96,7 +96,7 @@
                 )}
               >
                 <span
-                  class="mt-1.5 inline-block size-1.5 shrink-0 self-start rounded-full {hasStacks
+                  class="mt-1.5 inline-block size-1.5 shrink-0 self-start rounded-full {hasTasks
                     ? 'bg-info'
                     : 'bg-fg-faint/50'}"
                 ></span>

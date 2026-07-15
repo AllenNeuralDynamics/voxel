@@ -126,7 +126,7 @@
       aria-label="Preview viewport"
       aria-valuenow={Math.round(previewer.viewport.x * 100)}
       tabindex="-1"
-      class="absolute min-h-5 min-w-5 cursor-move border border-fg/80 bg-fg/10 transition-colors hover:bg-fg/20"
+      class="absolute min-h-5 min-w-5 cursor-move border border-warning/80 bg-warning/10 transition-colors hover:bg-fg/20"
       style:left="{previewer.viewport.x * 100}%"
       style:top="{previewer.viewport.y * 100}%"
       style:width="{previewer.viewport.w * 100}%"

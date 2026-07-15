@@ -519,7 +519,7 @@ class ImagingProtocol(SchemaModel):
 
 
 class Stencil(SchemaModel):
-    """Tile-mosaic and z-range defaults prefilled into newly-authored stacks. All positions in micrometers (µm)."""
+    """Tile-mosaic and z-range defaults prefilled into newly-authored tasks. All positions in micrometers (µm)."""
 
     x_offset: float = 0.0
     y_offset: float = 0.0
@@ -600,7 +600,7 @@ class WriterPatch(Patch):
 
 class InstrumentState(SchemaModel):
     """The instrument's editable acquisition state: the imaging protocol (channels + profiles)
-    plus planning defaults, traversal, writer options, planned stacks, and metadata."""
+    plus planning defaults, traversal, writer options, acquisition tasks, and metadata."""
 
     imaging: ImagingProtocol
     metadata_cls: MetadataCls = Field(default=ExperimentMetadata)
@@ -1170,7 +1170,7 @@ class Instrument:
         await self._bench.update(traversal=order)
 
     async def add_tasks(self, xy: Sequence[tuple[float, float]], *, profile_ids: Sequence[str] | None = None) -> None:
-        """Add a stack at each (x, y), defaulting to the active profile."""
+        """Add a task at each (x, y), defaulting to the active profile."""
         self._ensure_not_capturing()
         state = self._bench.value
         profiles = list(profile_ids) if profile_ids is not None else [self._active_profile_id.value]
