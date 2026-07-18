@@ -64,6 +64,13 @@ export class IDBKeyVal<T> {
     return keys.map((k, i) => [String(k), values[i]]);
   }
 
+  /** All keys, without loading their values — for prefix scans (e.g. deleting one mosaic's patches). */
+  async keys(): Promise<string[]> {
+    const store = await this.#tx('readonly');
+    const keys = await IDBKeyVal.#wrap(store.getAllKeys());
+    return keys.map(String);
+  }
+
   async clear(): Promise<void> {
     const store = await this.#tx('readwrite');
     await IDBKeyVal.#wrap(store.clear());

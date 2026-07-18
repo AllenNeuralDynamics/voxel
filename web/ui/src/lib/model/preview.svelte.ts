@@ -381,6 +381,8 @@ export class Preview {
   isPreviewing = $state(false);
   isPanZoomActive = $state(false);
   viewport = $state<PreviewViewport>({ ...DEFAULT_VIEWPORT });
+  /** Width/height of the display surface, kept current by the renderer; anchors aspect-aware zoom. */
+  displayAspect = $state(1);
   channels = $state<PreviewChannel[]>([]);
   catalog = $state<ColormapCatalog>([]);
   redrawGeneration = $state(0);
@@ -504,6 +506,33 @@ export class Preview {
     this.panXModel.value = value.x;
     this.panYModel.value = value.y;
     this.redrawGeneration++;
+  }
+
+  /**
+   * Multiplicative, anchored zoom against the current display aspect (`displayAspect`, kept fresh by the
+   * renderer). `factor` scales the viewport; the anchor (sensor-normalized 0..1) stays fixed on screen.
+   */
+  zoomBy(factor: number, anchorX: number, anchorY: number, anchorFracX = 0.5, anchorFracY = 0.5): void {
+    const canvasAspect = this.displayAspect;
+    if (canvasAspect <= 0) return;
+    const bb = this.boundingBoxAspect;
+    const vp = this.viewport;
+    let w: number;
+    let h: number;
+    if (canvasAspect >= bb) {
+      h = Math.max(0.01, Math.min(1, vp.h * factor));
+      w = Math.max(0.01, Math.min(1, (h * canvasAspect) / bb));
+    } else {
+      w = Math.max(0.01, Math.min(1, vp.w * factor));
+      h = Math.max(0.01, Math.min(1, (w * bb) / canvasAspect));
+    }
+    this.setViewport({
+      x: clampTopLeft(anchorX - anchorFracX * w, w),
+      y: clampTopLeft(anchorY - anchorFracY * h, h),
+      w,
+      h
+    });
+    this.#queueViewportUpdate(this.viewport);
   }
 
   /** Set magnification (1/w), preserving the viewport center. */

@@ -1,6 +1,7 @@
 export * from './app.svelte';
 export * from './client.svelte';
 export * from './device.svelte';
+export * from './inpaint.svelte';
 export * from './preview.svelte';
 export * from './prop.svelte';
 export * from './role';

@@ -105,6 +105,11 @@
     ]
   };
 
+  // Shared per-axis display sign (hardcoded +1 for now). The pose above is the cube's fixed visualization;
+  // the sign flips an axis's direction on top of it — so one orientation drives the cube and SnapCanvas alike.
+  const orient = $derived(instrument.stage.orientation);
+  const axisScreen = (a: Axis) => ({ x: POSE.axes[a].screen.x * orient[a], y: POSE.axes[a].screen.y * orient[a] });
+
   // The remaining axis of a face (the one the thumb spans), given the sliding axis and the face's normal.
   const thirdAxis = (a: Axis, perp: Axis): Axis => AXES.find((x) => x !== a && x !== perp)!;
 
@@ -133,8 +138,8 @@
     for (const nx of [0, 1])
       for (const ny of [0, 1])
         for (const nz of [0, 1]) {
-          const rx = nx * POSE.axes.x.screen.x + ny * POSE.axes.y.screen.x + nz * POSE.axes.z.screen.x;
-          const ry = nx * POSE.axes.x.screen.y + ny * POSE.axes.y.screen.y + nz * POSE.axes.z.screen.y;
+          const rx = nx * axisScreen('x').x + ny * axisScreen('y').x + nz * axisScreen('z').x;
+          const ry = nx * axisScreen('x').y + ny * axisScreen('y').y + nz * axisScreen('z').y;
           minx = Math.min(minx, rx);
           maxx = Math.max(maxx, rx);
           miny = Math.min(miny, ry);
@@ -157,8 +162,8 @@
       let x = 0;
       let y = 0;
       for (const a of AXES) {
-        x += n[a] * POSE.axes[a].screen.x;
-        y += n[a] * POSE.axes[a].screen.y;
+        x += n[a] * axisScreen(a).x;
+        y += n[a] * axisScreen(a).y;
       }
       return { x: ox + x * s, y: oy + y * s };
     }
@@ -172,7 +177,7 @@
   function movementVec(a: Axis): Pt {
     if (isIso) {
       const { s } = layout();
-      return { x: POSE.axes[a].screen.x * s, y: POSE.axes[a].screen.y * s };
+      return { x: axisScreen(a).x * s, y: axisScreen(a).y * s };
     }
     // ortho: the horizontal axis moves across the width, the vertical axis up the height
     const [ha] = orthoAxes!;

@@ -1,4 +1,5 @@
 /** App-level store (`VoxelApp`) + the active-instrument store (`Instrument`) and its device handles. */
+import { PersistedState } from 'runed';
 import { getContext, setContext } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
@@ -16,8 +17,10 @@ import {
   DiscreteAxisHandle,
   LaserHandle
 } from './device.svelte';
+import { Inpainter } from './inpaint.svelte';
 import { compositeFullFrames, Preview } from './preview.svelte';
-import { type SnapshotChannel, SnapshotStore } from './snapshots.svelte';
+import type { SnapshotChannel } from './snapshots.svelte';
+import { SnapshotStore } from './snapshots.svelte';
 import type {
   AcquisitionProgress,
   AcquisitionRecord,
@@ -34,11 +37,13 @@ import type {
   ProfilePatch,
   Remote,
   SensorROI,
+  StageOrientation,
   StencilPatch,
   TaskPatch,
   TileOrder,
   WriterPatch
 } from './types';
+import { DEFAULT_STAGE_ORIENTATION } from './types';
 
 const MAX_LOGS = 500;
 
@@ -165,14 +170,18 @@ export class Instrument {
   });
 
   /** The stage's mapped axis handles (each carries position + lower/upper limits); undefined if unmapped. */
-  readonly stage = $derived.by<{ x?: AxisHandle; y?: AxisHandle; z?: AxisHandle }>(() => {
-    const s = this.hal.stage;
-    return {
-      x: s.x ? this.axes.get(s.x) : undefined,
-      y: s.y ? this.axes.get(s.y) : undefined,
-      z: s.z ? this.axes.get(s.z) : undefined
-    };
-  });
+  readonly stage = $derived.by<{ x?: AxisHandle; y?: AxisHandle; z?: AxisHandle; orientation: StageOrientation }>(
+    () => {
+      const s = this.hal.stage;
+      return {
+        x: s.x ? this.axes.get(s.x) : undefined,
+        y: s.y ? this.axes.get(s.y) : undefined,
+        z: s.z ? this.axes.get(s.z) : undefined,
+        // Hardcoded for now — later a per-instrument physical field, read from the backend.
+        orientation: DEFAULT_STAGE_ORIENTATION
+      };
+    }
+  );
 
   readonly activeChannels = $derived.by<Channel[]>(() => {
     const profile = this.imaging.profiles[this.activeProfileId];
@@ -469,6 +478,51 @@ export class Instrument {
   }
 }
 
+/** Top-level view mode. Snaps and Inpaint hold their own item selection (on their stores); Live is the stream. */
+export type PreviewMode = 'live' | 'snaps' | 'inpaint';
+
+/**
+ * The center viewer's top-level mode. Item selection lives on the stores — `snaps.activeSnap`,
+ * `inpaint.viewed` — so toggling modes preserves each mode's selection for free.
+ */
+export class PreviewView {
+  readonly #snaps!: SnapshotStore;
+  // Persisted so the chosen view (Live / Snaps / Inpaint) survives a page refresh.
+  readonly #mode = new PersistedState<PreviewMode>('voxel-preview-mode', 'live');
+
+  constructor(snaps: SnapshotStore) {
+    this.#snaps = snaps;
+  }
+
+  get mode(): PreviewMode {
+    return this.#mode.current;
+  }
+
+  set mode(value: PreviewMode) {
+    this.#mode.current = value;
+  }
+
+  get isLive(): boolean {
+    return this.mode === 'live';
+  }
+
+  /** Whether there's saved snapshot content to enter Snaps mode with. */
+  get hasSnaps(): boolean {
+    return this.#snaps.hasSnaps;
+  }
+
+  /** Switch top-level mode; entering Snaps auto-selects an item if the store has none yet. */
+  setMode(mode: PreviewMode): void {
+    this.mode = mode;
+    if (mode === 'snaps' && !this.#snaps.activeSnap) this.#snaps.selectMostRecent();
+    // 'inpaint' auto-select lands with the Inpaint canvas in a later phase.
+  }
+
+  goLive(): void {
+    this.mode = 'live';
+  }
+}
+
 export class VoxelApp {
   readonly #client: Client;
 
@@ -481,6 +535,12 @@ export class VoxelApp {
 
   /** App-lifetime, IndexedDB-backed collection of captured preview snapshots. */
   readonly snaps = new SnapshotStore();
+
+  /** App-lifetime in-paint mosaics (live-painted per-channel MIP maps). */
+  readonly inpaint = new Inpainter();
+
+  /** Center viewer's top-level mode (Live / Snaps / Inpaint); item selection lives on the stores. */
+  readonly view = new PreviewView(this.snaps);
 
   #unsubs: Unsub[] = [];
   #desired: string | null = null; // latest presence (app.status / GET /app)
@@ -545,6 +605,7 @@ export class VoxelApp {
     this.instrument?.dispose();
     this.instrument = null;
     this.#openName = null;
+    this.inpaint.dispose();
     this.#client.disconnect();
   }
 
@@ -715,7 +776,8 @@ export class VoxelApp {
   async #pruneSnapshots(): Promise<void> {
     try {
       const { instruments } = await this.#client.get<InstrumentsCatalog>('/instruments');
-      await this.snaps.reconcile(Object.keys(instruments));
+      const names = Object.keys(instruments);
+      await Promise.all([this.snaps.reconcile(names), this.inpaint.reconcile(names)]);
     } catch {
       // best-effort — a failed catalog fetch just skips this round of GC
     }
@@ -738,6 +800,8 @@ export class VoxelApp {
           this.instrument = null;
           this.#openName = null;
           this.snaps.scope = null;
+          this.inpaint.scope = null;
+          this.view.goLive(); // the previous instrument's view shouldn't linger
         }
         if (target === null) continue;
         let opened: Instrument | null = null;
@@ -754,6 +818,7 @@ export class VoxelApp {
         this.instrument = opened;
         this.#openName = target;
         this.snaps.scope = target;
+        this.inpaint.scope = target;
         if (browser) localStorage.setItem('voxel.lastInstrument', target);
       }
     } finally {

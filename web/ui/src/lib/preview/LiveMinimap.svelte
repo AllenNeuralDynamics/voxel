@@ -1,52 +1,24 @@
 <script lang="ts">
-  import { ElementSize, watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { compositeFullFrames, DEFAULT_VIEWPORT, type Preview, wheelZoomFactor } from '$lib/model';
+  import { DEFAULT_VIEWPORT, type Preview, wheelZoomFactor } from '$lib/model';
   import { clampTopLeft } from '$lib/utils';
 
-  import PanZoomControls from './PanZoomControls.svelte';
+  import LiveThumbnail from './LiveThumbnail.svelte';
 
   interface Props {
     previewer: Preview;
-    zoomBy: (factor: number, anchorX: number, anchorY: number, anchorFracX?: number, anchorFracY?: number) => void;
   }
 
-  let { previewer, zoomBy }: Props = $props();
+  let { previewer }: Props = $props();
 
   let wrapperEl: HTMLDivElement;
-  let canvasEl: HTMLCanvasElement;
-  let ctx: CanvasRenderingContext2D | null = null;
-
-  const size = new ElementSize(() => wrapperEl);
 
   // The minimap matches the sensor bounding-box aspect so the full-frame composite fills it with
   // no letterboxing — which lets the viewport box map to plain normalized percentages.
   const aspect = $derived(previewer.boundingBoxAspect || 1);
 
-  function draw() {
-    if (ctx && canvasEl) compositeFullFrames(ctx, canvasEl, previewer.channels);
-  }
-
-  watch(
-    () => [size.width, size.height] as const,
-    ([w, h]) => {
-      if (!canvasEl || w <= 0 || h <= 0) return;
-      const dpr = devicePixelRatio;
-      canvasEl.width = Math.round(w * dpr);
-      canvasEl.height = Math.round(h * dpr);
-      draw();
-    }
-  );
-
-  watch(
-    () => previewer.redrawGeneration,
-    () => draw()
-  );
-
   onMount(() => {
-    ctx = canvasEl.getContext('2d');
-    draw();
     // Non-passive so preventDefault can stop the page from scrolling while zooming the minimap.
     wrapperEl.addEventListener('wheel', wheelZoom, { passive: false });
     return () => wrapperEl.removeEventListener('wheel', wheelZoom);
@@ -101,41 +73,35 @@
   function wheelZoom(e: WheelEvent) {
     e.preventDefault();
     const { x, y, w, h } = previewer.viewport;
-    zoomBy(wheelZoomFactor(e), x + w / 2, y + h / 2, 0.5, 0.5);
+    previewer.zoomBy(wheelZoomFactor(e), x + w / 2, y + h / 2, 0.5, 0.5);
   }
 </script>
 
 <div
-  class="pointer-events-auto flex w-fit max-w-62 flex-col gap-1.5 rounded-xs border border-border/50 bg-floating/90 p-1.5 shadow-lg backdrop-blur-sm"
+  bind:this={wrapperEl}
+  class="relative w-full overflow-hidden rounded-xs border border-border/40 bg-canvas/60"
+  style:aspect-ratio={aspect}
 >
+  <LiveThumbnail
+    {previewer}
+    role="button"
+    tabindex={-1}
+    aria-label="Recenter viewport"
+    onpointerdown={recenter}
+    class="h-full w-full cursor-pointer"
+  />
   <div
-    bind:this={wrapperEl}
-    class="relative w-full overflow-hidden rounded-xs border border-border/40 bg-canvas/60"
-    style:aspect-ratio={aspect}
-  >
-    <canvas
-      bind:this={canvasEl}
-      role="button"
-      tabindex="-1"
-      aria-label="Recenter viewport"
-      onpointerdown={recenter}
-      class="h-full w-full cursor-pointer"
-    ></canvas>
-    <div
-      role="slider"
-      aria-label="Preview viewport"
-      aria-valuenow={Math.round(previewer.viewport.x * 100)}
-      tabindex="-1"
-      class="absolute min-h-5 min-w-5 cursor-move border border-warning/80 bg-warning/10 transition-colors hover:bg-fg/20"
-      style:left="{previewer.viewport.x * 100}%"
-      style:top="{previewer.viewport.y * 100}%"
-      style:width="{previewer.viewport.w * 100}%"
-      style:height="{previewer.viewport.h * 100}%"
-      onpointerdown={pointerDown}
-      onpointermove={pointerMove}
-      onpointerup={pointerUp}
-    ></div>
-  </div>
-
-  <PanZoomControls {previewer} />
+    role="slider"
+    aria-label="Preview viewport"
+    aria-valuenow={Math.round(previewer.viewport.x * 100)}
+    tabindex="-1"
+    class="absolute min-h-5 min-w-5 cursor-move border border-warning/80 bg-warning/10 transition-colors hover:bg-fg/20"
+    style:left="{previewer.viewport.x * 100}%"
+    style:top="{previewer.viewport.y * 100}%"
+    style:width="{previewer.viewport.w * 100}%"
+    style:height="{previewer.viewport.h * 100}%"
+    onpointerdown={pointerDown}
+    onpointermove={pointerMove}
+    onpointerup={pointerUp}
+  ></div>
 </div>
