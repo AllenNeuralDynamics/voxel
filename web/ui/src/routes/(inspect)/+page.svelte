@@ -7,7 +7,7 @@
   const instrument = $derived(app.instrument);
 
   const headingClass = 'mb-2 text-xs tracking-wide text-fg-muted uppercase';
-  const cardGroupClass = 'grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3';
+  const cardGroupClass = 'grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3';
   const rowLabelClass = 'whitespace-nowrap text-fg-muted';
   const rowValueClass = 'truncate font-mono text-sm text-fg';
 
@@ -71,8 +71,18 @@
     </dl>
   </section>
 
+  <!-- Profile cards -->
+  <section class="p-4">
+    <h3 class={headingClass}>Profiles</h3>
+    <div class={cardGroupClass}>
+      {#each Object.keys(imaging.profiles) as profileId (profileId)}
+        {@render profileCard(profileId)}
+      {/each}
+    </div>
+  </section>
+
   <!-- Channel cards -->
-  <section class="px-4 pt-4">
+  <section class="p-4">
     <h3 class={headingClass}>Channels</h3>
     <div class={cardGroupClass}>
       {#each Object.entries(imaging.channels) as [channelId, channel] (channelId)}
@@ -107,15 +117,6 @@
     </div>
   </section>
 
-  <!-- Profile cards -->
-  <section class="px-4 pt-6 pb-8">
-    <h3 class={headingClass}>Profiles</h3>
-    <div class={cardGroupClass}>
-      {#each Object.keys(imaging.profiles) as profileId (profileId)}
-        {@render profileCard(profileId)}
-      {/each}
-    </div>
-  </section>
 {/if}
 
 {#snippet profileCard(profileId: string)}

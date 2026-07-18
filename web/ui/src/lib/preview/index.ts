@@ -1,2 +1,2 @@
-export { default as PreviewSourceSelector } from './PreviewSourceSelector.svelte';
+export { default as PreviewModeToggle } from './PreviewModeToggle.svelte';
 export { default as PreviewViewer } from './PreviewViewer.svelte';

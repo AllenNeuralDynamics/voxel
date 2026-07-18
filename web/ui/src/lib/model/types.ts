@@ -532,3 +532,14 @@ export interface ClientTopics {
   'client.active': { active: boolean };
   'preview.update': PreviewUpdate;
 }
+
+/** Per-axis display sign: +1 if increasing the stage coordinate goes in the canonical screen direction,
+ *  -1 if reversed. Shared by all stage-space renderers so one value gives them a consistent pose.
+ *  (Hardcoded to +1 for now; a per-instrument physical field later.) */
+export type AxisSign = 1 | -1;
+export interface StageOrientation {
+  x: AxisSign;
+  y: AxisSign;
+  z: AxisSign;
+}
+export const DEFAULT_STAGE_ORIENTATION: StageOrientation = { x: 1, y: 1, z: 1 };

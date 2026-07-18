@@ -23,7 +23,7 @@
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
   import { setVoxelApp, VoxelApp } from '$lib/model';
-  import { PreviewSourceSelector, PreviewViewer } from '$lib/preview';
+  import { PreviewModeToggle, PreviewViewer } from '$lib/preview';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
@@ -195,7 +195,7 @@
         <div class="flex h-full flex-col bg-canvas">
           <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
             <div class="flex items-center gap-2">
-              <PreviewSourceSelector />
+              <PreviewModeToggle />
               <button
                 onclick={toggleLogs}
                 class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Alert, ChevronDown } from '$lib/icons';
   import { type Preview } from '$lib/model';
+  import { cn } from '$lib/utils';
 
   import Histogram from './Histogram.svelte';
 
@@ -10,10 +11,9 @@
 
   let { previewer }: Props = $props();
 
-  let showHistograms = $state(false);
+  let expanded = $state(false);
 
   const namedChannels = $derived(previewer.channels.filter((c) => c.name));
-  const hasHistograms = $derived(showHistograms && namedChannels.length > 0);
 
   const sizedChannels = $derived(namedChannels.filter((c) => c.latestFrameInfo));
   const frameInfo = $derived(sizedChannels[0]?.latestFrameInfo ?? null);
@@ -33,13 +33,12 @@
   });
 
   const maxFrameIdx = $derived(Math.max(0, ...sizedChannels.map((c) => c.latestFrameInfo?.frame_idx ?? 0)));
+  const overlayCard = 'border border-border bg-surface/80 shadow-xl backdrop-blur-sm rounded-md';
 </script>
 
-<div class="pointer-events-none flex flex-col items-start gap-1.5">
-  {#if hasHistograms}
-    <div
-      class="pointer-events-auto flex w-64 flex-col divide-y divide-border overflow-hidden rounded-xs border border-border/50 bg-floating/90 px-2.5 shadow-lg backdrop-blur-sm"
-    >
+<div class={cn(overlayCard, 'pointer-events-auto flex w-64 flex-col items-start gap-1.5')}>
+  {#if expanded}
+    <div class="flex w-64 flex-col divide-y divide-border overflow-hidden px-2.5">
       {#if frameInfo}
         <div class="space-y-1 py-2 text-xs">
           {#if sizeMismatch}
@@ -68,7 +67,6 @@
           {/if}
         </div>
       {/if}
-
       {#each namedChannels as channel (channel.idx)}
         <div class="py-2">
           <Histogram
@@ -93,10 +91,10 @@
   {/if}
 
   <button
-    onclick={() => (showHistograms = !showHistograms)}
-    class="pointer-events-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border/50 bg-floating/90 px-2 font-mono text-xs text-fg-muted shadow-lg backdrop-blur-sm transition-colors hover:bg-element-hover hover:text-fg"
-    aria-label={showHistograms ? 'Hide histograms' : 'Show histograms'}
-    title={showHistograms ? 'Hide histograms' : 'Show histograms'}
+    onclick={() => (expanded = !expanded)}
+    class="flex h-7 w-full cursor-pointer items-center justify-between gap-1.5 border border-border/50 bg-floating/90 px-2 font-mono text-xs text-fg-muted shadow-lg backdrop-blur-sm transition-colors hover:bg-element-hover hover:text-fg"
+    aria-label={expanded ? 'Hide histograms' : 'Show histograms'}
+    title={expanded ? 'Hide histograms' : 'Show histograms'}
   >
     {#if frameInfo}
       <span>Frame <span class="text-fg">{maxFrameIdx}</span></span>
@@ -106,6 +104,6 @@
     {#if sizeMismatch}
       <Alert width="12" height="12" class="text-warning" />
     {/if}
-    <ChevronDown width="14" height="14" class="transition-transform {showHistograms ? '' : 'rotate-180'}" />
+    <ChevronDown width="14" height="14" class="transition-transform {expanded ? '' : 'rotate-180'}" />
   </button>
 </div>
