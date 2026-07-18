@@ -127,6 +127,94 @@ function snapAxis(fovCenter: number, offset: number, step: number): number {
   return Math.abs(a - offset) <= Math.abs(b - offset) ? a : b;
 }
 
+type StageAxis = 'x' | 'y' | 'z';
+
+/** Stage extent per axis (µm). Structurally a superset of the renderer's 2D `Bounds` (X/Y). */
+export interface StageBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * A value object over the mapped stage axes (resolved handles) + FOV + orientation: derived geometry
+ * (imageable bounds, normalized position) and whole-stage move/halt commands. Constructed reactively by
+ * the instrument (re-made when the mapping or FOV changes); the handles carry their own live position.
+ */
+export class Stage {
+  constructor(
+    readonly x: AxisHandle | undefined,
+    readonly y: AxisHandle | undefined,
+    readonly z: AxisHandle | undefined,
+    readonly fov: [number, number] | null,
+    /** Per-axis display sign shared with the renderers (hardcoded upstream for now). */
+    readonly orientation: StageOrientation
+  ) {}
+
+  axis(a: StageAxis): AxisHandle | undefined {
+    return a === 'x' ? this.x : a === 'y' ? this.y : this.z;
+  }
+
+  position(a: StageAxis): number {
+    return this.axis(a)?.position?.value ?? 0;
+  }
+  moving(a: StageAxis): boolean {
+    return this.axis(a)?.isMoving?.value === true;
+  }
+
+  get anyMoving(): boolean {
+    return this.moving('x') || this.moving('y') || this.moving('z');
+  }
+
+  /** Raw [lower, upper] soft limits for an axis (µm), defaulting to [0, 1] when unmapped. */
+  #range(a: StageAxis): [number, number] {
+    const h = this.axis(a);
+    return [h?.lowerLimit?.value ?? 0, h?.upperLimit?.value ?? 1];
+  }
+
+  /** Normalized [0,1] position along an axis (guards a zero-length range). */
+  norm(a: StageAxis): number {
+    const [lo, hi] = this.#range(a);
+    return hi > lo ? (this.position(a) - lo) / (hi - lo) : 0;
+  }
+  denorm(a: StageAxis, n: number): number {
+    const [lo, hi] = this.#range(a);
+    return lo + Math.min(1, Math.max(0, n)) * (hi - lo);
+  }
+
+  /**
+   * Stage extent per axis (µm). `includeFov` expands X/Y by half a FOV on each side (the imageable
+   * extent, for the top-down view); Z is unaffected. Null until the X/Y soft limits are known.
+   */
+  bounds(includeFov = false): StageBounds | null {
+    const xl = this.x?.lowerLimit?.value;
+    const xu = this.x?.upperLimit?.value;
+    const yl = this.y?.lowerLimit?.value;
+    const yu = this.y?.upperLimit?.value;
+    if (xl == null || xu == null || yl == null || yu == null) return null;
+    const [fw, fh] = includeFov ? (this.fov ?? [0, 0]) : [0, 0];
+    const [zl, zu] = this.#range('z');
+    return { minX: xl - fw / 2, maxX: xu + fw / 2, minY: yl - fh / 2, maxY: yu + fh / 2, minZ: zl, maxZ: zu };
+  }
+
+  /** Drive the stage to an absolute position (µm); axes omitted from `pos` are left unchanged. */
+  moveTo(pos: { x?: number; y?: number; z?: number }): Promise<unknown> {
+    const moves: (Promise<unknown> | undefined)[] = [];
+    if (pos.x != null) moves.push(this.x?.move(pos.x));
+    if (pos.y != null) moves.push(this.y?.move(pos.y));
+    if (pos.z != null) moves.push(this.z?.move(pos.z));
+    return Promise.all(moves);
+  }
+
+  /** Halt all mapped stage axes. */
+  halt(): Promise<unknown> {
+    return Promise.all([this.x?.halt(), this.y?.halt(), this.z?.halt()]);
+  }
+}
+
 export class Instrument {
   status = $state.raw<InstrumentStatus>(undefined as unknown as InstrumentStatus); // set in the constructor
   hal = $state.raw<HALConfig>(undefined as unknown as HALConfig);
@@ -169,19 +257,16 @@ export class Instrument {
       });
   });
 
-  /** The stage's mapped axis handles (each carries position + lower/upper limits); undefined if unmapped. */
-  readonly stage = $derived.by<{ x?: AxisHandle; y?: AxisHandle; z?: AxisHandle; orientation: StageOrientation }>(
-    () => {
-      const s = this.hal.stage;
-      return {
-        x: s.x ? this.axes.get(s.x) : undefined,
-        y: s.y ? this.axes.get(s.y) : undefined,
-        z: s.z ? this.axes.get(s.z) : undefined,
-        // Hardcoded for now — later a per-instrument physical field, read from the backend.
-        orientation: DEFAULT_STAGE_ORIENTATION
-      };
-    }
+  /** The mapped stage: resolved axis handles + FOV + orientation, with derived geometry and move/halt.
+   *  Re-made when the mapping or FOV changes; orientation is hardcoded for now (later a backend field). */
+  readonly stage = $derived.by(
+    () => new Stage(this.#stageAxis('x'), this.#stageAxis('y'), this.#stageAxis('z'), this.fov, DEFAULT_STAGE_ORIENTATION)
   );
+
+  #stageAxis(a: StageAxis): AxisHandle | undefined {
+    const id = this.hal.stage[a];
+    return id ? this.axes.get(id) : undefined;
+  }
 
   readonly activeChannels = $derived.by<Channel[]>(() => {
     const profile = this.imaging.profiles[this.activeProfileId];
@@ -349,19 +434,6 @@ export class Instrument {
     return this.#client.post<{ active: string }>('/instrument/profile/active', { profile_id: profileId });
   }
 
-  /** Drive the stage to an absolute position (µm); axes omitted from `pos` are left unchanged. */
-  moveStage(pos: { x?: number; y?: number; z?: number }): Promise<unknown> {
-    const moves: (Promise<unknown> | undefined)[] = [];
-    if (pos.x != null) moves.push(this.stage.x?.move(pos.x));
-    if (pos.y != null) moves.push(this.stage.y?.move(pos.y));
-    if (pos.z != null) moves.push(this.stage.z?.move(pos.z));
-    return Promise.all(moves);
-  }
-
-  /** Halt all mapped stage axes. */
-  haltStage(): Promise<unknown> {
-    return Promise.all([this.stage.x?.halt(), this.stage.y?.halt(), this.stage.z?.halt()]);
-  }
 
   /** Shift the stencil mosaic offset so `edge` aligns to a stage position (default: current). µm. */
   alignStencil(edge: AlignEdge, position?: { x: number; y: number }): Promise<void> {
@@ -479,7 +551,7 @@ export class Instrument {
 }
 
 /** Top-level view mode. Snaps and Inpaint hold their own item selection (on their stores); Live is the stream. */
-export type PreviewMode = 'live' | 'snaps' | 'inpaint';
+export type PreviewMode = 'live' | 'snaps' | 'inpaint' | 'stage';
 
 /**
  * The center viewer's top-level mode. Item selection lives on the stores — `snaps.activeSnap`,

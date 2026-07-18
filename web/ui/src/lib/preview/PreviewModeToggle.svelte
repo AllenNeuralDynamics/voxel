@@ -15,4 +15,5 @@
 <div class="flex h-ui-md items-center rounded-md border border-input bg-canvas/50 p-0.5">
   <button type="button" class={seg('live')} onclick={() => view.setMode('live')}>Live</button>
   <button type="button" data-fly-target class={seg('snaps')} onclick={() => view.setMode('snaps')}>Snaps</button>
+  <button type="button" class={seg('stage')} onclick={() => view.setMode('stage')}>Stage</button>
 </div>

@@ -17,7 +17,6 @@
   import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
-  import StageCube from '$lib/grid/StageCube.svelte';
   import { Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
@@ -26,6 +25,8 @@
   import { PreviewModeToggle, PreviewViewer } from '$lib/preview';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
+  import { provideStageScene } from '$lib/stage';
+  import StageGizmo from '$lib/stage/StageGizmo.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
   import { cn, createPaneSize, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
@@ -38,6 +39,7 @@
   const app = new VoxelApp();
   setVoxelApp(app);
   provideTaskSelection();
+  provideStageScene();
 
   onMount(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
@@ -65,15 +67,15 @@
 
   let shellRef = $state<HTMLElement | null>(null);
   const leftPane = createPaneSize(() => shellRef, {
-    min: 700,
+    min: 560,
     default: 740,
     fallback: { min: 30, default: 30, max: 50 }
   });
   const rightPane = createPaneSize(() => shellRef, { min: 336, max: 350, fallback: { min: 15, max: 18 } });
 
-  // Vertical split inside the right pane: monitors (top) over the StageCube (bottom).
+  // Vertical split inside the right pane: monitors (top) over the stage gizmo (bottom).
   let rightSplitEl = $state<HTMLElement | null>(null);
-  const stageCubePane = createPaneSize(() => rightSplitEl, {
+  const stagePane = createPaneSize(() => rightSplitEl, {
     default: 280,
     min: 250,
     max: 320,
@@ -248,8 +250,8 @@
             </div>
           </Pane>
           <PaneDivider direction="horizontal" />
-          <Pane defaultSize={32} {...stageCubePane} class="min-h-0">
-            <StageCube {instrument} class="border-t border-border p-3" />
+          <Pane defaultSize={32} {...stagePane} class="min-h-0">
+            <StageGizmo stage={instrument.stage} class="border-t border-border p-3" />
           </Pane>
         </PaneGroup>
       </Pane>

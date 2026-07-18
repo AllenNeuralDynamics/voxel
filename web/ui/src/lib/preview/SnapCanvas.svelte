@@ -111,7 +111,7 @@
   let menuTarget = $state<CanvasTarget | null>(null);
 
   function goToSnap(snap: Snapshot) {
-    toastError(instrument?.moveStage({ x: snap.stageX, y: snap.stageY, z: snap.stageZ }));
+    toastError(instrument?.stage.moveTo({ x: snap.stageX, y: snap.stageY, z: snap.stageZ }));
   }
 
   // Move the stage to an exact clicked position (z unchanged), clamped to the reachable stage limits.
@@ -124,7 +124,7 @@
       gy = Math.min(Math.max(y, b.minY + fov[1] / 2), b.maxY - fov[1] / 2);
     }
     const z = app.instrument?.stage.z?.position?.value ?? 0;
-    toastError(instrument?.moveStage({ x: gx, y: gy, z }));
+    toastError(instrument?.stage.moveTo({ x: gx, y: gy, z }));
   }
 
   /** Right-click on the canvas: a tile, or the clicked position when inside the stage frame; else no menu. */
