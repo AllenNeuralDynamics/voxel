@@ -263,7 +263,7 @@
     const ty = syLower + y;
     targetX = tx;
     targetY = ty;
-    toastError(instrument.moveStage({ x: tx, y: ty }));
+    toastError(instrument.stage.moveTo({ x: tx, y: ty }));
   }
 
   function addTasksAt(positions: Array<{ x: number; y: number }>) {
