@@ -435,7 +435,7 @@
     <div class="flex flex-wrap gap-4">
       {#each instrument.activeChannels as ch (ch.id)}
         {@const accent = ch.emission ? wavelengthToColor(ch.emission) : undefined}
-        <div class="max-w-3xl min-w-90 flex-1 rounded-sm border border-border bg-card">
+        <div class="max-w-3xl min-w-96 flex-1 rounded-sm border border-border bg-card/50">
           <!-- Header: channel identity + emission accent -->
           <div class="flex h-ui-lg items-center justify-between border-b border-border px-3 py-2">
             <span class="text-sm font-medium text-fg">{ch.label}</span>

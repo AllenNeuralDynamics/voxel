@@ -555,7 +555,12 @@
   // ──────────────────────────────── Outer pane layout ────────────────────────────────
 
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebar = createPaneSize(() => paneGroupEl, { min: 280 });
+  const sidebarSize = createPaneSize(() => paneGroupEl, { min: 260, max: 320, fallback: {
+    min: 30, max: 40, default: 30
+  } });
+  const mainPanelSize = createPaneSize(() => paneGroupEl, { min: 350, fallback: {
+    min: 55, default: 70
+  } });
 </script>
 
 {#if profile}
@@ -577,7 +582,7 @@
       </div>
     </div>
     <PaneGroup bind:ref={paneGroupEl} direction="horizontal" autoSaveId="tune" class="min-h-0 flex-1">
-      <Pane defaultSize={70} minSize={40} class="pb-4">
+      <Pane class="pb-4" {...mainPanelSize}>
         <div class="flex h-full [scroll-snap-type:y_mandatory] flex-col gap-3 overflow-y-auto p-4">
           {#each panels as panel (panel.channels.join(','))}
             {@const yRange = panelYRange(panel.channels)}
@@ -632,7 +637,7 @@
 
       <PaneDivider direction="vertical" />
 
-      <Pane defaultSize={30} minSize={sidebar.minSize} maxSize={45}>
+      <Pane {...sidebarSize}>
         <div class="flex h-full flex-col border-l">
           {#if selectedDeviceId && editingWaveform}
             {@const port = aoPorts[selectedDeviceId]}
@@ -750,7 +755,7 @@
                       onchange={(v) => (voltageMode = v as VoltageMode)}
                     />
                     {#if voltageMode === 'minmax'}
-                      <div class="grid grid-cols-2 gap-2">
+                      <div class="flex flex-wrap gap-2">
                         <SpinBox
                           model={{
                             value: wf.voltage.min,
@@ -766,6 +771,7 @@
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
+                          class="min-w-32 flex-1"
                         />
                         <SpinBox
                           model={{
@@ -782,6 +788,7 @@
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
+                          class="min-w-32 flex-1"
                         />
                       </div>
                     {:else}
@@ -853,7 +860,7 @@
                       onchange={(v) => (windowMode = v as WindowMode)}
                     />
                     {#if windowMode === 'percent'}
-                      <div class="grid grid-cols-2 gap-2">
+                      <div class="flex flex-wrap gap-2">
                         <SpinBox
                           model={{
                             value: wf.window.min,
@@ -869,6 +876,7 @@
                           numCharacters={5}
                           align="right"
                           disabled={!canEdit}
+                          class="min-w-32 flex-1"
                         />
                         <SpinBox
                           model={{
@@ -885,10 +893,11 @@
                           numCharacters={5}
                           align="right"
                           disabled={!canEdit}
+                          class="min-w-32 flex-1"
                         />
                       </div>
                     {:else}
-                      <div class="grid grid-cols-2 gap-2">
+                      <div class="flex flex-wrap gap-2">
                         <SpinBox
                           model={{
                             value: wf.window.min * duration,
@@ -905,6 +914,7 @@
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit || duration <= 0}
+                          class="min-w-32 flex-1"
                         />
                         <SpinBox
                           model={{
@@ -922,6 +932,7 @@
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit || duration <= 0}
+                          class="min-w-32 flex-1"
                         />
                       </div>
                     {/if}
