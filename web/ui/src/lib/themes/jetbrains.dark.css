@@ -12,15 +12,15 @@
   --surface: #26282b; /* zed: surface.background, background, status_bar.background, title_bar.background, tab_bar.background */
   --panel: var(--surface); /* zed: panel.background */
   --elevated: #2f3134; /* synthesized lift above surface — Zed mapped this to surface (#26282b) */
-  --floating: #3a3d40; /* synthesized — popover/dialog tier (~Darcula popup); Zed had no distinct value */
+  --floating: #35383d; /* synthesized — popover/dialog tier, kept below element.hover so menu highlights read */
   --backdrop: #000000aa;
 
   /* ── Element ───────────────────────────────────────────────────────── */
 
   --element-bg: #393b41; /* zed: element.background */
-  --element-hover: #3c3e41; /* zed: element.hover, ghost_element.hover */
-  --element-active: #494a4d; /* zed: element.active, ghost_element.active */
-  --element-selected: #43454a; /* zed: element.selected, ghost_element.selected */
+  --element-hover: #414449; /* zed: element.hover, nudged up to separate from the floating tier */
+  --element-active: #4e4f54; /* zed: element.active, nudged up to stay above the selected tier */
+  --element-selected: #494c52; /* zed: element.selected, nudged up to separate from the floating tier */
 
   /* ── Text ──────────────────────────────────────────────────────────── */
 

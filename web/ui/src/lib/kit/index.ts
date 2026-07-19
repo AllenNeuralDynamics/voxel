@@ -8,6 +8,7 @@ export * as Collapsible from './cn/collapsible';
 export * as ContextMenu from './cn/context-menu';
 export * as Dialog from './cn/dialog';
 export * as DropdownMenu from './cn/dropdown-menu';
+export * as HoverCard from './cn/hover-card';
 export * as Sheet from './cn/sheet';
 export { Toaster } from './cn/sonner';
 export { default as ColorPicker } from './ColorPicker.svelte';

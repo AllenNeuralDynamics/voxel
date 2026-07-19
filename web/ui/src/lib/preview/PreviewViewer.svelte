@@ -2,7 +2,7 @@
   import { fade } from 'svelte/transition';
 
   import { getVoxelApp, type Preview } from '$lib/model';
-  import { StageCanvas } from '$lib/stage';
+  import { StageView } from '$lib/stage';
 
   import PreviewCanvas from './PreviewCanvas.svelte';
   import SnapCanvas from './SnapCanvas.svelte';
@@ -27,7 +27,7 @@
       </div>
     {:else if view.mode === 'stage'}
       <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-        <StageCanvas />
+        <StageView />
       </div>
     {:else}
       <div class="absolute inset-0" transition:fade={{ duration: 120 }}>

@@ -12,15 +12,15 @@
   --surface: #1f2127; /* zed: surface.background, elevated_surface.background */
   --panel: var(--surface); /* zed: panel.background */
   --elevated: #282b32; /* synthesized lift above surface — Zed mapped this to surface (#1f2127) */
-  --floating: #33373f; /* synthesized — popover/dialog tier; Zed had no distinct value */
+  --floating: #2c2f37; /* synthesized — popover/dialog tier, kept below element.hover so menu highlights read */
   --backdrop: #000000aa;
 
   /* ── Element ───────────────────────────────────────────────────────── */
 
   --element-bg: #1f2127; /* zed: element.background */
-  --element-hover: #2d2f34; /* zed: element.hover */
-  --element-active: #3e4043; /* zed: element.active */
-  --element-selected: #3e4043; /* zed: element.selected */
+  --element-hover: #34373d; /* zed: element.hover, nudged up to separate from the lowered floating tier */
+  --element-active: #4a4c53; /* zed: element.active, nudged up to stay above the selected tier */
+  --element-selected: #45474e; /* zed: element.selected, nudged up to separate from the lowered floating tier */
 
   /* ── Text ──────────────────────────────────────────────────────────── */
 
