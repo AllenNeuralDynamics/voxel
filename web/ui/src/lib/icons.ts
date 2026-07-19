@@ -29,6 +29,7 @@ export { default as FitToScreen } from '~icons/mdi/fit-to-screen-outline';
 export { default as Folder } from '~icons/mdi/folder';
 export { default as FolderMoveOutline } from '~icons/mdi/folder-move-outline';
 export { default as FolderOpenOutline } from '~icons/mdi/folder-open-outline';
+export { default as ImageAlbum } from '~icons/mdi/image-album';
 export { default as CenterFocus } from '~icons/mdi/image-filter-center-focus';
 export { default as InformationOutline } from '~icons/mdi/information-outline';
 export { default as Link } from '~icons/mdi/link';

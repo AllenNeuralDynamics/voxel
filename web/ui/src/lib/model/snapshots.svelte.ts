@@ -61,11 +61,12 @@ export interface SnapshotGroup {
   mipEnabled: boolean;
 }
 
-/** The resolved snaps view: the group shown, its tiles, and the focused tile within it. */
+/** The resolved snaps view: the group shown, its tiles, the focused tile, and the multi-selection. */
 export interface ActiveSnap {
   group: SnapshotGroup;
   tiles: Snapshot[];
   focused: Snapshot | null;
+  selected: SvelteSet<string>;
 }
 
 const snapDb = new IDBKeyVal<Snapshot>('voxel-snapshots');
@@ -92,6 +93,7 @@ export class SnapshotStore {
   // Snaps view selection: a group + the focused tile within it.
   #viewGroupId = $state<string | null>(null);
   #viewFocusedId = $state<string | null>(null);
+  readonly #selected = new SvelteSet<string>();
   readonly #ready: Promise<void>;
 
   /** All snapshots for the active instrument (`scope`), newest-first. */
@@ -126,7 +128,8 @@ export class SnapshotStore {
     const group = this.snapshotGroups.get(groupId);
     if (!group) return null;
     const focusedId = this.#viewFocusedId;
-    return { group, tiles: this.tilesOf(groupId), focused: focusedId ? (this.items.get(focusedId) ?? null) : null };
+    const focused = focusedId ? (this.items.get(focusedId) ?? null) : null;
+    return { group, tiles: this.tilesOf(groupId), focused, selected: this.#selected };
   });
 
   /** The instrument whose snapshots and groups are shown; set by the app when the open instrument changes. */
@@ -139,6 +142,7 @@ export class SnapshotStore {
     this.#scope = name;
     this.#viewGroupId = null; // don't carry a selection across instruments
     this.#viewFocusedId = null;
+    this.#selected.clear();
   }
 
   /** Snapshots belonging to a group (scoped to the active instrument), newest-first. */
@@ -150,6 +154,7 @@ export class SnapshotStore {
   viewGroup(groupId: string | null): void {
     this.#viewGroupId = groupId;
     this.#viewFocusedId = null;
+    this.#selected.clear();
   }
 
   /** Show a group focused on one of its tiles (e.g. selecting a group child in the tree). */
@@ -161,6 +166,27 @@ export class SnapshotStore {
   /** Focus a tile within the current view. */
   focus(snapId: string | null): void {
     this.#viewFocusedId = snapId;
+  }
+
+  /** Replace the multi-selection (snap ids) within the viewed group. */
+  select(ids: Iterable<string>): void {
+    this.#selected.clear();
+    for (const id of ids) this.#selected.add(id);
+  }
+
+  /** Toggle one snap id in the multi-selection. */
+  addSelect(id: string): void {
+    this.#selected.add(id);
+  }
+
+  toggleSelect(id: string): void {
+    if (this.#selected.has(id)) this.#selected.delete(id);
+    else this.#selected.add(id);
+  }
+
+  /** Clear the multi-selection. */
+  clearSelect(): void {
+    this.#selected.clear();
   }
 
   /** Open the working (most-recently-touched) group — for entering Snaps mode. */

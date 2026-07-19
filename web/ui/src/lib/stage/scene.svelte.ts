@@ -2,7 +2,7 @@ import type { Snippet } from 'svelte';
 import { getContext, onMount, setContext } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
-import type { Painter } from './draw';
+import type { Bounds, Painter } from './draw';
 
 /**
  * A self-contained content layer on the stage: how to draw it, how to hit-test it, and how to act on /
@@ -15,15 +15,22 @@ export interface StageLayer<H = unknown> {
   visible: boolean;
   draw: (p: Painter) => void;
   hitTest?: (world: [number, number]) => H | null;
-  onSelect?: (hit: H) => void; // single click on a hit
+  onSelect?: (hit: H, e?: PointerEvent) => void; // single click on a hit (event carries modifier keys)
   onActivate?: (hit: H) => void; // double click on a hit
   menu?: Snippet<[H]>; // this layer's section of the context menu for a hit
+  maxScale?: () => number | null; // preferred zoom-in ceiling (px per µm), e.g. native tile resolution; null = no opinion
 }
 
 /** A resolved hit: the layer and its (opaque) hit payload. */
 export interface StageHit {
   layer: StageLayer;
   hit: unknown;
+}
+
+/** A request to frame a world-space region in the canvas viewport (consumed by StageCanvas). */
+export interface ViewRequest {
+  bounds: Bounds;
+  margin?: number;
 }
 
 /**
@@ -34,6 +41,7 @@ export interface StageHit {
 export class StageScene {
   readonly #layers = new SvelteMap<string, StageLayer>();
   #generation = $state(0);
+  #viewRequest = $state<ViewRequest | null>(null);
 
   /** Registered layers, ascending by z (draw order: lowest first / underneath). */
   readonly layers = $derived([...this.#layers.values()].sort((a, b) => a.z - b.z));
@@ -51,6 +59,27 @@ export class StageScene {
   /** Request a redraw — call after changing a layer's appearance or `visible`. */
   invalidate(): void {
     this.#generation++;
+  }
+
+  /** The pending viewport-framing request, or null. StageCanvas consumes it. */
+  get viewRequest(): ViewRequest | null {
+    return this.#viewRequest;
+  }
+
+  /** Ask the canvas to frame `bounds` (world µm), e.g. to recenter on a selection. */
+  requestView(bounds: Bounds, margin?: number): void {
+    this.#viewRequest = { bounds, margin }; // fresh object each call → StageCanvas re-fires even on identical bounds
+  }
+
+  /** The crispest zoom-in ceiling any visible layer asks for (px per µm), or null when none has an opinion. */
+  maxScale(): number | null {
+    let max: number | null = null;
+    for (const layer of this.#layers.values()) {
+      if (!layer.visible || !layer.maxScale) continue;
+      const m = layer.maxScale();
+      if (m != null && (max == null || m > max)) max = m;
+    }
+    return max;
   }
 
   /** All visible layers hit at `world`, top-first (highest z first). */
