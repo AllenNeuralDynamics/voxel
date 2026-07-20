@@ -6,13 +6,14 @@
   import { PersistedState, watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
+  import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelApp } from '$lib/model';
   import { toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
   import Inpaint from './features/Inpaint.svelte';
+  import Live from './features/Live.svelte';
   import Snapshots from './features/Snapshots.svelte';
   import { getStageScene, type StageHit } from './scene.svelte';
 
@@ -36,6 +37,7 @@
   const BOUNDS_FIT_MARGIN = 0.9; // matches Camera.fit's default, so minScale equals the fit-to-bounds scale
   const MAX_SCALE = 7; // hard px-per-µm zoom-in ceiling; layers may ask for less (e.g. native tile resolution)
   const NICE_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+  const EDGE_PAD = 16; // px inset of the off-screen pose pointer from the viewport border
 
   let hostEl: HTMLDivElement;
   let surface: Surface | null = null;
@@ -125,6 +127,16 @@
     refit();
   }
 
+  // Pan the view to center on the live stage position, keeping the current zoom (takes the view over).
+  function recenterOnLive() {
+    if (!surface || hereX == null || hereY == null) return;
+    surface.cam.cx = hereX;
+    surface.cam.cy = hereY;
+    if (stageBounds) surface.cam.clampPan(stageBounds);
+    saveViewport();
+    surface.invalidate();
+  }
+
   function halt() {
     if (stage) toastError(stage.halt());
   }
@@ -145,14 +157,39 @@
   };
 
   // Over-chrome: the live stage position + FOV as a "you are here" box with a crosshair, drawn over content.
+  // When that box is panned off-screen, a low-opacity chevron pinned to the viewport edge points back to it.
   const markerLayer: Layer = (p) => {
-    if (hereX == null || hereY == null || !fov) return;
+    const x = hereX;
+    const y = hereY;
+    if (x == null || y == null || !fov) return;
     const [fw, fh] = fov;
     p.strokeStyle = markerColor;
     p.lineWidthPx = 1.5;
-    p.strokeRect(hereX - fw / 2, hereY - fh / 2, fw, fh);
-    p.line(hereX - p.px(6), hereY, hereX + p.px(6), hereY);
-    p.line(hereX, hereY - p.px(6), hereX, hereY + p.px(6));
+    p.strokeRect(x - fw / 2, y - fh / 2, fw, fh);
+    p.line(x - p.px(6), y, x + p.px(6), y);
+    p.line(x, y - p.px(6), x, y + p.px(6));
+
+    const b = p.viewBounds();
+    if (x + fw / 2 > b.minX && x - fw / 2 < b.maxX && y + fh / 2 > b.minY && y - fh / 2 < b.maxY) return; // on-screen
+    p.raw((ctx) => {
+      const vw = ctx.canvas.width / devicePixelRatio;
+      const vh = ctx.canvas.height / devicePixelRatio;
+      const [sx, sy] = p.project(x, y);
+      const px = Math.min(Math.max(sx, EDGE_PAD), vw - EDGE_PAD);
+      const py = Math.min(Math.max(sy, EDGE_PAD), vh - EDGE_PAD);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(Math.atan2(sy - vh / 2, sx - vw / 2));
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = markerColor;
+      ctx.beginPath();
+      ctx.moveTo(7, 0);
+      ctx.lineTo(-5, -6);
+      ctx.lineTo(-5, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    });
   };
 
   // Over-chrome: the persistent marquee selection as a dashed rect with a faint wash, drawn on top of all.
@@ -350,6 +387,12 @@
           <FitToScreen width="14" height="14" />
           Fit to stage
         </ContextMenu.Item>
+        {#if hereX != null && hereY != null && fov}
+          <ContextMenu.Item onSelect={recenterOnLive}>
+            <CenterFocus width="14" height="14" />
+            Recenter on live
+          </ContextMenu.Item>
+        {/if}
         {#if stage?.anyMoving}
           <ContextMenu.Item variant="destructive" onSelect={halt}>
             <Stop width="14" height="14" />
@@ -369,6 +412,7 @@
       : 'w-62 border-l border-border'}"
   >
     <div class="flex h-full w-full flex-col gap-4 overflow-y-auto py-1.5">
+      <Live />
       <Inpaint />
       <Snapshots />
     </div>
