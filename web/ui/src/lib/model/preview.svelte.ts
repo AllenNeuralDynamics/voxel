@@ -581,6 +581,12 @@ export interface CapturedImage {
   channels: Record<string, { label: string; colormap: string | null; levelsMin: number; levelsMax: number }>;
 }
 
+/** A drawable stage-µm footprint: the oriented overview source + rect, plus its optional high-res detail. */
+export interface LiveStageFrame {
+  overview: { src: CanvasImageSource; rect: { x: number; y: number; w: number; h: number } };
+  detail: { src: CanvasImageSource; rect: { x: number; y: number; w: number; h: number } } | null;
+}
+
 /**
  * Control/view plane over a `FrameFeed`: viewport + pan/zoom, per-channel levels/colormap editing, preview
  * start/stop, cross-viewer update sync, and stage-awareness (`settled`/`pose`). Owns the feed; frame-plane
@@ -804,6 +810,46 @@ export class Preview {
   /** Current stage pose (µm). */
   get pose(): { x: number; y: number; z: number } {
     return { x: this.#stage.position('x'), y: this.#stage.position('y'), z: this.#stage.position('z') };
+  }
+
+  /**
+   * Visible channels' current frames mapped into stage µm at the live pose: an oriented overview plus its
+   * optional high-res detail ROI, each as a drawable source + stage-space rect. For painting the live camera
+   * footprint on the stage map. Empty when not previewing or no frames have arrived.
+   */
+  liveFrames(): LiveStageFrame[] {
+    const fov = this.#stage.fov;
+    if (!this.isPreviewing || !fov) return [];
+    const pose = { x: this.#stage.position('x'), y: this.#stage.position('y') };
+    const out: LiveStageFrame[] = [];
+    for (const ch of this.feed.channels) {
+      if (!ch.visible || !ch.frame) continue;
+      out.push({
+        overview: {
+          src: rotatedSource(ch.frame, ch.rotationDeg),
+          rect: frameStageRect(DEFAULT_VIEWPORT, pose, fov, ch.rotationDeg)
+        },
+        detail: ch.view
+          ? {
+              src: rotatedSource(ch.view.bitmap, ch.rotationDeg),
+              rect: frameStageRect(ch.view.rect, pose, fov, ch.rotationDeg)
+            }
+          : null
+      });
+    }
+    return out;
+  }
+
+  /** Native camera resolution in px per µm (crispest visible channel), or null when unknown. */
+  nativeScale(): number | null {
+    const fov = this.#stage.fov;
+    if (!fov || fov[0] <= 0 || fov[1] <= 0) return null;
+    let best = 0;
+    for (const ch of this.feed.channels) {
+      if (!ch.visible || ch.sensorWidth <= 0) continue;
+      best = Math.max(best, ch.sensorWidth / fov[0], ch.sensorHeight / fov[1]);
+    }
+    return best > 0 ? best : null;
   }
 
   /**
