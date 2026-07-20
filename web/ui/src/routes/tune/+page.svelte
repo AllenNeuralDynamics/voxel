@@ -555,12 +555,22 @@
   // ──────────────────────────────── Outer pane layout ────────────────────────────────
 
   let paneGroupEl = $state<HTMLElement | null>(null);
-  const sidebarSize = createPaneSize(() => paneGroupEl, { min: 260, max: 320, fallback: {
-    min: 30, max: 40, default: 30
-  } });
-  const mainPanelSize = createPaneSize(() => paneGroupEl, { min: 350, fallback: {
-    min: 55, default: 70
-  } });
+  const sidebarSize = createPaneSize(() => paneGroupEl, {
+    min: 260,
+    max: 320,
+    fallback: {
+      min: 30,
+      max: 40,
+      default: 30
+    }
+  });
+  const mainPanelSize = createPaneSize(() => paneGroupEl, {
+    min: 350,
+    fallback: {
+      min: 55,
+      default: 70
+    }
+  });
 </script>
 
 {#if profile}

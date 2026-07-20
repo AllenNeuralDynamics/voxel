@@ -185,11 +185,8 @@
 </script>
 
 {#snippet scaleBarBadge(bar: { barPx: number; label: string } | null)}
-  <span class="font-mono text-xs text-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{bar?.label ?? '--'}</span>
-  <div
-    class="h-1 rounded-full bg-fg-muted drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-    style:width="{bar?.barPx ?? 0}px"
-  ></div>
+  <span class="font-mono text-xs text-fg-muted">{bar?.label ?? '--'}</span>
+  <div class="h-1 rounded-full bg-fg-muted" style:width="{bar?.barPx ?? 0}px"></div>
 {/snippet}
 
 <div class="relative h-full w-full" bind:this={canvasContainerEl}>
@@ -225,7 +222,7 @@
     </div>
 
     <!-- Fixed height so the controls above never shift as the scale bar toggles -->
-    <div class="flex h-6 flex-col items-end justify-end gap-0.5">
+    <div class="canvas-overlay-halo flex h-6 flex-col items-end justify-end gap-0.5">
       {#if scaleBar}
         {@render scaleBarBadge(scaleBar)}
       {:else}
@@ -234,3 +231,10 @@
     </div>
   </div>
 </div>
+
+<style>
+  .canvas-overlay-halo {
+    filter: drop-shadow(0 1px 1px color-mix(in oklch, var(--color-canvas) 90%, transparent))
+      drop-shadow(0 0 2px color-mix(in oklch, var(--color-canvas) 75%, transparent));
+  }
+</style>

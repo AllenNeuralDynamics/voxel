@@ -23,7 +23,7 @@ export interface PatchDraw {
 }
 
 const PATCH = 512; // cap-level patch edge, px
-const OVERVIEW_MAX = 2048; // overview long-axis cap, px
+const OVERVIEW_MAX = 2048 * 2; // overview long-axis cap, px
 const CACHE_BUDGET = 256; // decoded cap patches kept hot (~256 MB RGBA worst case)
 const FLUSH_DELAY = 1000; // ms idle before persisting dirty tiles
 
@@ -93,10 +93,11 @@ export class InpaintRaster {
         if (!entry) continue; // `create` guarantees non-null, but keep the type honest
         const ctx = entry.canvas.getContext('2d')!;
         ctx.globalCompositeOperation = 'lighten';
+        // Y-up: canvas-top = the patch's max stage-Y, so it renders upright under the stage layer's p.image.
         ctx.drawImage(
           source,
           (rect.x - col * span.s) / umPerPx,
-          (rect.y - row * span.s) / umPerPx,
+          ((row + 1) * span.s - rect.y - rect.h) / umPerPx,
           rect.w / umPerPx,
           rect.h / umPerPx
         );
@@ -107,7 +108,7 @@ export class InpaintRaster {
     const octx = ov.canvas.getContext('2d')!;
     octx.globalCompositeOperation = 'lighten';
     const k = ov.canvas.width / stage.w; // overview px per µm
-    octx.drawImage(source, (rect.x - stage.x) * k, (rect.y - stage.y) * k, rect.w * k, rect.h * k);
+    octx.drawImage(source, (rect.x - stage.x) * k, (stage.y + stage.h - rect.y - rect.h) * k, rect.w * k, rect.h * k);
     ov.dirty = true;
 
     this.#evict();
@@ -128,7 +129,7 @@ export class InpaintRaster {
             .getContext('2d')!
             .clearRect(
               (rect.x - col * span.s) / umPerPx,
-              (rect.y - row * span.s) / umPerPx,
+              ((row + 1) * span.s - rect.y - rect.h) / umPerPx,
               rect.w / umPerPx,
               rect.h / umPerPx
             );
@@ -138,12 +139,34 @@ export class InpaintRaster {
       const ov = this.#overviews.get(this.#overviewKey(mosaicId, channel));
       if (ov) {
         const k = ov.canvas.width / stage.w;
-        ov.canvas.getContext('2d')!.clearRect((rect.x - stage.x) * k, (rect.y - stage.y) * k, rect.w * k, rect.h * k);
+        ov.canvas
+          .getContext('2d')!
+          .clearRect((rect.x - stage.x) * k, (stage.y + stage.h - rect.y - rect.h) * k, rect.w * k, rect.h * k);
         ov.dirty = true;
       }
     }
     this.#scheduleFlush();
     this.onChange?.();
+  }
+
+  /** Fold every channel of `srcId` into `dstId`, max-blended and resampled to the destination resolution. */
+  async merge(srcId: string, dstId: string, dstGeom: RasterGeom, srcUmPerPx: number): Promise<void> {
+    await this.flush(); // persist the source's dirty patches so the key scan sees them
+    const srcS = PATCH * srcUmPerPx;
+    const prefix = `${srcId}/`;
+    for (const key of await patchDb.keys()) {
+      if (!key.startsWith(prefix)) continue;
+      const rest = key.slice(prefix.length);
+      const slash = rest.lastIndexOf('/');
+      const tail = rest.slice(slash + 1);
+      if (tail === 'overview') continue; // the dst overview is rebuilt by the patch paints below
+      const [col, row] = tail.split(',').map(Number);
+      if (Number.isNaN(col) || Number.isNaN(row)) continue;
+      const entry = await this.#loadPatch(key, false);
+      if (!entry) continue;
+      const channel = rest.slice(0, slash);
+      await this.paint(dstId, channel, entry.canvas, { x: col * srcS, y: row * srcS, w: srcS, h: srcS }, dstGeom);
+    }
   }
 
   // ── Render reads (sync; warm missing tiles in the background) ────────────

@@ -18,7 +18,7 @@ import {
   LaserHandle
 } from './device.svelte';
 import { Inpainter } from './inpaint.svelte';
-import { compositeFullFrames, Preview } from './preview.svelte';
+import { Preview } from './preview.svelte';
 import type { SnapshotChannel } from './snapshots.svelte';
 import { SnapshotStore } from './snapshots.svelte';
 import type {
@@ -145,34 +145,43 @@ export interface StageBounds {
  * the instrument (re-made when the mapping or FOV changes); the handles carry their own live position.
  */
 export class Stage {
+  readonly #getFov: () => [number, number] | null;
+
   constructor(
-    readonly x: AxisHandle | undefined,
-    readonly y: AxisHandle | undefined,
-    readonly z: AxisHandle | undefined,
-    readonly fov: [number, number] | null,
+    readonly x: AxisHandle,
+    readonly y: AxisHandle,
+    readonly z: AxisHandle,
+    getFov: () => [number, number] | null,
     /** Per-axis display sign shared with the renderers (hardcoded upstream for now). */
     readonly orientation: StageOrientation
-  ) {}
+  ) {
+    this.#getFov = getFov;
+  }
 
-  axis(a: StageAxis): AxisHandle | undefined {
+  /** Field of view (µm), read live so a FOV change doesn't rebuild the whole Stage. */
+  get fov(): [number, number] | null {
+    return this.#getFov();
+  }
+
+  axis(a: StageAxis): AxisHandle {
     return a === 'x' ? this.x : a === 'y' ? this.y : this.z;
   }
 
   position(a: StageAxis): number {
-    return this.axis(a)?.position?.value ?? 0;
+    return this.axis(a).position?.value ?? 0;
   }
   moving(a: StageAxis): boolean {
-    return this.axis(a)?.isMoving?.value === true;
+    return this.axis(a).isMoving?.value === true;
   }
 
   get anyMoving(): boolean {
     return this.moving('x') || this.moving('y') || this.moving('z');
   }
 
-  /** Raw [lower, upper] soft limits for an axis (µm), defaulting to [0, 1] when unmapped. */
+  /** Raw [lower, upper] soft limits for an axis (µm), defaulting to [0, 1] until the limits stream in. */
   #range(a: StageAxis): [number, number] {
     const h = this.axis(a);
-    return [h?.lowerLimit?.value ?? 0, h?.upperLimit?.value ?? 1];
+    return [h.lowerLimit?.value ?? 0, h.upperLimit?.value ?? 1];
   }
 
   /** Normalized [0,1] position along an axis (guards a zero-length range). */
@@ -190,10 +199,10 @@ export class Stage {
    * extent, for the top-down view); Z is unaffected. Null until the X/Y soft limits are known.
    */
   bounds(includeFov = false): StageBounds | null {
-    const xl = this.x?.lowerLimit?.value;
-    const xu = this.x?.upperLimit?.value;
-    const yl = this.y?.lowerLimit?.value;
-    const yu = this.y?.upperLimit?.value;
+    const xl = this.x.lowerLimit?.value;
+    const xu = this.x.upperLimit?.value;
+    const yl = this.y.lowerLimit?.value;
+    const yu = this.y.upperLimit?.value;
     if (xl == null || xu == null || yl == null || yu == null) return null;
     const [fw, fh] = includeFov ? (this.fov ?? [0, 0]) : [0, 0];
     const [zl, zu] = this.#range('z');
@@ -202,16 +211,16 @@ export class Stage {
 
   /** Drive the stage to an absolute position (µm); axes omitted from `pos` are left unchanged. */
   moveTo(pos: { x?: number; y?: number; z?: number }): Promise<unknown> {
-    const moves: (Promise<unknown> | undefined)[] = [];
-    if (pos.x != null) moves.push(this.x?.move(pos.x));
-    if (pos.y != null) moves.push(this.y?.move(pos.y));
-    if (pos.z != null) moves.push(this.z?.move(pos.z));
+    const moves: Promise<unknown>[] = [];
+    if (pos.x != null) moves.push(this.x.move(pos.x));
+    if (pos.y != null) moves.push(this.y.move(pos.y));
+    if (pos.z != null) moves.push(this.z.move(pos.z));
     return Promise.all(moves);
   }
 
-  /** Halt all mapped stage axes. */
+  /** Halt all stage axes. */
   halt(): Promise<unknown> {
-    return Promise.all([this.x?.halt(), this.y?.halt(), this.z?.halt()]);
+    return Promise.all([this.x.halt(), this.y.halt(), this.z.halt()]);
   }
 }
 
@@ -257,11 +266,9 @@ export class Instrument {
       });
   });
 
-  /** The mapped stage: resolved axis handles + FOV + orientation, with derived geometry and move/halt.
-   *  Re-made when the mapping or FOV changes; orientation is hardcoded for now (later a backend field). */
-  readonly stage = $derived.by(
-    () => new Stage(this.#stageAxis('x'), this.#stageAxis('y'), this.#stageAxis('z'), this.fov, DEFAULT_STAGE_ORIENTATION)
-  );
+  /** The mapped stage: resolved axis handles + FOV + orientation. Built once at construction (all three
+   *  axes are required — the constructor throws otherwise); its methods read live values off the handles. */
+  readonly stage: Stage;
 
   #stageAxis(a: StageAxis): AxisHandle | undefined {
     const id = this.hal.stage[a];
@@ -386,7 +393,12 @@ export class Instrument {
     this.status = status;
     this.hal = hal;
     for (const [id, snapshot] of Object.entries(devices)) this.devices.set(id, createDevice(client, snapshot));
-    this.preview = new Preview(client, hal, status);
+    const sx = this.#stageAxis('x');
+    const sy = this.#stageAxis('y');
+    const sz = this.#stageAxis('z');
+    if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
+    this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
+    this.preview = new Preview(client, hal.detection, status, this.stage);
     this.#unsubs.push(
       client.on('instrument.status', (s) => {
         this.status = s;
@@ -434,13 +446,12 @@ export class Instrument {
     return this.#client.post<{ active: string }>('/instrument/profile/active', { profile_id: profileId });
   }
 
-
   /** Shift the stencil mosaic offset so `edge` aligns to a stage position (default: current). µm. */
   alignStencil(edge: AlignEdge, position?: { x: number; y: number }): Promise<void> {
     const { stencil } = this.state;
     const [fovW, fovH] = this.fov ?? [0, 0];
-    const lowerLimit = { x: this.stage.x?.lowerLimit?.value ?? 0, y: this.stage.y?.lowerLimit?.value ?? 0 };
-    const pos = position ?? { x: this.stage.x?.position?.value ?? 0, y: this.stage.y?.position?.value ?? 0 };
+    const lowerLimit = { x: this.stage.x.lowerLimit?.value ?? 0, y: this.stage.y.lowerLimit?.value ?? 0 };
+    const pos = position ?? { x: this.stage.x.position?.value ?? 0, y: this.stage.y.position?.value ?? 0 };
     const spacing = { x: fovW * (1 - stencil.overlap_x), y: fovH * (1 - stencil.overlap_y) };
     const { x, y } = alignedOffset(edge, pos, lowerLimit, { x: stencil.x_offset, y: stencil.y_offset }, spacing);
     return this.updateStencil({ x_offset: x, y_offset: y });
@@ -755,40 +766,21 @@ export class VoxelApp {
   }
 
   async #writeSnapshot(inst: Instrument): Promise<void> {
-    const channels = inst.preview.channels;
-    const first = channels.find((ch) => ch.visible && ch.frame)?.frame;
-    if (!first) throw new Error('No preview frames available');
-
-    const w = first.width;
-    const h = first.height;
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d')!;
-    compositeFullFrames(ctx, canvas, channels);
-    const blob = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/jpeg', 0.85)
-    );
-
-    const thumbW = VoxelApp.SNAPSHOT_THUMB_SIZE;
-    const thumbH = Math.round((h / w) * thumbW);
-    canvas.width = thumbW;
-    canvas.height = thumbH;
-    compositeFullFrames(ctx, canvas, channels);
-    const thumbnail = canvas.toDataURL('image/jpeg', 0.6);
+    const captured = await inst.preview.captureImage(VoxelApp.SNAPSHOT_THUMB_SIZE);
+    if (!captured) throw new Error('No preview frames available');
 
     const profileId = inst.activeProfileId ?? '';
 
+    // Enrich the preview's per-channel display with the instrument's device metadata (camera/laser).
     const snapChannels: Record<string, SnapshotChannel> = {};
-    for (const ch of channels) {
-      if (!ch.visible || !ch.frame || !ch.name) continue;
+    for (const [name, disp] of Object.entries(captured.channels)) {
       const entry: SnapshotChannel = {
-        label: ch.label ?? ch.name,
-        colormap: ch.colormap,
-        levelsMin: ch.levelsMin,
-        levelsMax: ch.levelsMax
+        label: disp.label,
+        colormap: disp.colormap,
+        levelsMin: disp.levelsMin,
+        levelsMax: disp.levelsMax
       };
-      const modelCh = inst.activeChannels.find((c) => c.id === ch.name);
+      const modelCh = inst.activeChannels.find((c) => c.id === name);
       if (modelCh) {
         entry.detection = {
           deviceId: modelCh.camera.id,
@@ -803,25 +795,27 @@ export class VoxelApp {
           power: modelCh.laser.power?.value ?? undefined
         };
       }
-      snapChannels[ch.name] = entry;
+      snapChannels[name] = entry;
     }
 
     this.snaps.add({
       instrument: this.activeName ?? '',
       profileId,
       profileLabel: inst.activeProfile?.label || sanitizeString(profileId),
-      stageX: inst.stage.x?.position?.value ?? 0,
-      stageY: inst.stage.y?.position?.value ?? 0,
-      stageZ: inst.stage.z?.position?.value ?? 0,
-      fovW: inst.fov?.[0] ?? 0,
-      fovH: inst.fov?.[1] ?? 0,
+      stageX: captured.pose.x,
+      stageY: captured.pose.y,
+      stageZ: captured.pose.z,
+      fovW: captured.fovW,
+      fovH: captured.fovH,
       channels: snapChannels,
       timestamp: Date.now(),
-      blob,
-      thumbnail
+      blob: captured.blob,
+      thumbnail: captured.thumbnail
     });
 
-    if (browser) window.dispatchEvent(new CustomEvent('voxel:snapshot-captured', { detail: { thumbnail } }));
+    if (browser) {
+      window.dispatchEvent(new CustomEvent('voxel:snapshot-captured', { detail: { thumbnail: captured.thumbnail } }));
+    }
   }
 
   /** REST re-sync on every (re)connect: refresh presence, then refresh a surviving instrument's state. */
@@ -891,6 +885,7 @@ export class VoxelApp {
         this.#openName = target;
         this.snaps.scope = target;
         this.inpaint.scope = target;
+        opened.preview.bindInpaint(this.inpaint);
         if (browser) localStorage.setItem('voxel.lastInstrument', target);
       }
     } finally {

@@ -25,7 +25,7 @@
   ];
 </script>
 
-{#if instrument.stage.x && instrument.stage.y && instrument.stage.z}
+{#if instrument.stage}
   <div class="flex h-full min-w-0">
     <!-- Left rail: grid stencil controls with layer toggles pinned to the bottom -->
     <aside class="flex w-40 shrink-0 flex-col border-r border-border p-3">

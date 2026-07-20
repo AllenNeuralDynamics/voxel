@@ -319,7 +319,18 @@
   // Redraw whenever the position, view (shown axes), or size changes.
   watch(
     () =>
-      [stage.norm('x'), stage.norm('y'), stage.norm('z'), stage.anyMoving, shown.x, shown.y, shown.z, size.w, size.h, dragN] as const,
+      [
+        stage.norm('x'),
+        stage.norm('y'),
+        stage.norm('z'),
+        stage.anyMoving,
+        shown.x,
+        shown.y,
+        shown.z,
+        size.w,
+        size.h,
+        dragN
+      ] as const,
     () => draw()
   );
 
