@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
-  import { Crosshair, FitToScreen, FolderMoveOutline, ImageAlbum, Layers, Plus, TrashCanOutline } from '$lib/icons';
+  import { Crosshair, FitToScreen, FolderMoveOutline, ImageMultiple, Layers, Plus, TrashCanOutline } from '$lib/icons';
   import { Button, ContextMenu, HoverCard, Rename } from '$lib/kit';
   import { getVoxelApp, type Instrument, type Snapshot, type SnapshotGroup } from '$lib/model';
   import { cn, toastError, trimFloat } from '$lib/utils';
@@ -205,7 +205,8 @@
     const seen: Record<string, string> = {};
     for (const t of gTiles) {
       for (const ch of Object.values(t.channels)) {
-        if (!(ch.label in seen)) seen[ch.label] = instrument?.preview.resolveColor(ch.colormap) ?? 'var(--color-fg-muted)';
+        if (!(ch.label in seen))
+          seen[ch.label] = instrument?.preview.resolveColor(ch.colormap) ?? 'var(--color-fg-muted)';
       }
     }
     return Object.entries(seen).map(([label, color]) => ({ label, color }));
@@ -368,7 +369,7 @@
       {#each groups as g (g.id)}
         {#if g.id !== activeGroupId}
           <ContextMenu.Item onSelect={() => snaps.moveToSnapshotGroup(ids, g.id)}>
-            <ImageAlbum width="14" height="14" />
+            <ImageMultiple width="14" height="14" />
             {g.name}
           </ContextMenu.Item>
         {/if}
@@ -398,7 +399,7 @@
               <div
                 {...props}
                 class={cn(
-                  'flex w-full cursor-pointer items-center gap-2 rounded-sm py-1 pr-2 pl-7 text-sm outline-none select-none',
+                  'flex w-full cursor-pointer items-center gap-2 rounded-sm py-1 pr-3.5 pl-6 text-sm outline-none select-none',
                   isSelected ? 'bg-element-selected' : 'hover:bg-element-hover'
                 )}
                 role="button"
@@ -406,7 +407,11 @@
                 onclick={(e) => onSnapClick(e, snap)}
                 onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && onSnapClick(e, snap)}
               >
-                <img src={snap.thumbnail} alt="" class="h-6 w-8 shrink-0 rounded-sm border border-border object-cover" />
+                <img
+                  src={snap.thumbnail}
+                  alt=""
+                  class="h-6 w-8 shrink-0 rounded-sm border border-border object-cover"
+                />
                 <Rename
                   value={snap.label}
                   size="sm"
@@ -419,7 +424,7 @@
             {/snippet}
           </HoverCard.Trigger>
           {#if instrument}
-            <HoverCard.Content class="w-60" side="right" sideOffset={12} align="start">
+            <HoverCard.Content class="w-60" side="left" sideOffset={12} align="start">
               {@render snapshotInfoCard(snap, instrument)}
             </HoverCard.Content>
           {/if}
@@ -433,7 +438,7 @@
 {/snippet}
 
 <div class="flex flex-col gap-0.5">
-  <div class="flex items-center gap-1 px-2 py-1">
+  <div class="flex items-center gap-1 px-3 py-1">
     <span class="flex-1 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Snapshots</span>
     <Button variant="ghost" size="icon-xs" title="New group" onclick={() => snaps.createSnapshotGroup()}>
       <Plus width="16" height="16" />
@@ -447,66 +452,70 @@
     <div class={cn('rounded-md', isActive && 'bg-element-selected/40')}>
       <ContextMenu.Root>
         <ContextMenu.Trigger>
-        {#snippet child({ props: ctxProps })}
-          <HoverCard.Root openDelay={550} closeDelay={120}>
-            <HoverCard.Trigger {...ctxProps}>
-              {#snippet child({ props })}
-                <div
-                  {...props}
-                  class={cn(
-                    'group flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1 text-sm outline-none select-none',
-                    'hover:bg-element-hover'
-                  )}
-                  role="button"
-                  tabindex="0"
-                  onclick={() => snaps.viewGroup(activeGroupId === g.id ? null : g.id)}
-                  onkeydown={(e) =>
-                    (e.key === 'Enter' || e.key === ' ') && snaps.viewGroup(activeGroupId === g.id ? null : g.id)}
-                >
-                  <button
-                    type="button"
-                    class="shrink-0"
-                    title={isTarget ? 'Capture target' : 'Set as capture target'}
-                    onclick={(e) => {
-                      e.stopPropagation();
-                      snaps.setTarget(g.id);
-                      snaps.viewGroup(g.id);
-                    }}
+          {#snippet child({ props: ctxProps })}
+            <HoverCard.Root openDelay={550} closeDelay={120}>
+              <HoverCard.Trigger {...ctxProps}>
+                {#snippet child({ props })}
+                  <div
+                    {...props}
+                    class={cn(
+                      'group flex w-full cursor-pointer items-center gap-2 rounded-sm px-3.5 py-1 text-sm outline-none select-none',
+                      'hover:bg-element-hover'
+                    )}
+                    role="button"
+                    tabindex="0"
+                    onclick={() => snaps.viewGroup(activeGroupId === g.id ? null : g.id)}
+                    onkeydown={(e) =>
+                      (e.key === 'Enter' || e.key === ' ') && snaps.viewGroup(activeGroupId === g.id ? null : g.id)}
                   >
-                    <ImageAlbum width="15" height="15" class={isTarget ? 'text-primary' : 'text-fg-muted hover:text-fg'} />
-                  </button>
-                  <Rename
-                    value={g.name}
-                    size="sm"
-                    onSave={(v) => snaps.renameSnapshotGroup(g.id, v)}
-                    class="min-w-0 flex-1"
-                    textClass="block cursor-pointer truncate {isTarget || isActive ? 'text-fg' : ''}"
-                  />
-                  <span class="shrink-0 rounded bg-element-bg px-1 text-xs text-fg-muted tabular-nums">{count}</span>
-                </div>
-              {/snippet}
-            </HoverCard.Trigger>
-            <HoverCard.Content class="w-60" side="right" sideOffset={12} align="start">
-              {@render groupInfoCard(g)}
-            </HoverCard.Content>
-          </HoverCard.Root>
-        {/snippet}
-      </ContextMenu.Trigger>
-      <ContextMenu.Content class="min-w-44">
-        <ContextMenu.Item onSelect={() => snaps.setTarget(g.id)}>
-          <ImageAlbum width="14" height="14" />
-          Set as target
-        </ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => snaps.setSnapshotGroupMip(g.id, !g.mipEnabled)}>
-          <Layers width="14" height="14" />
-          {g.mipEnabled ? 'Max projection on' : 'Max projection off'}
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-        <ContextMenu.Item variant="destructive" onSelect={() => snaps.deleteSnapshotGroup(g.id)}>
-          <TrashCanOutline width="14" height="14" />
-          Delete group
-        </ContextMenu.Item>
-      </ContextMenu.Content>
+                    <button
+                      type="button"
+                      class="shrink-0"
+                      title={isTarget ? 'Capture target' : 'Set as capture target'}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        snaps.setTarget(g.id);
+                        snaps.viewGroup(g.id);
+                      }}
+                    >
+                      <ImageMultiple
+                        width="15"
+                        height="15"
+                        class={isTarget ? 'text-primary' : 'text-fg-muted hover:text-fg'}
+                      />
+                    </button>
+                    <Rename
+                      value={g.name}
+                      size="sm"
+                      onSave={(v) => snaps.renameSnapshotGroup(g.id, v)}
+                      class="min-w-0 flex-1"
+                      textClass="block cursor-pointer truncate {isTarget || isActive ? 'text-fg' : ''}"
+                    />
+                    <span class="shrink-0 rounded bg-element-bg px-1 text-xs text-fg-muted tabular-nums">{count}</span>
+                  </div>
+                {/snippet}
+              </HoverCard.Trigger>
+              <HoverCard.Content class="w-60" side="left" sideOffset={12} align="start">
+                {@render groupInfoCard(g)}
+              </HoverCard.Content>
+            </HoverCard.Root>
+          {/snippet}
+        </ContextMenu.Trigger>
+        <ContextMenu.Content class="min-w-44">
+          <ContextMenu.Item onSelect={() => snaps.setTarget(g.id)}>
+            <ImageMultiple width="14" height="14" />
+            Set as target
+          </ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => snaps.setSnapshotGroupMip(g.id, !g.mipEnabled)}>
+            <Layers width="14" height="14" />
+            {g.mipEnabled ? 'Max projection on' : 'Max projection off'}
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+          <ContextMenu.Item variant="destructive" onSelect={() => snaps.deleteSnapshotGroup(g.id)}>
+            <TrashCanOutline width="14" height="14" />
+            Delete group
+          </ContextMenu.Item>
+        </ContextMenu.Content>
       </ContextMenu.Root>
       {#if activeGroupId === g.id}
         {#each snaps.tilesOf(g.id) as tile (tile.id)}

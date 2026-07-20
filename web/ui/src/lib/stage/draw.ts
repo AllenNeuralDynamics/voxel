@@ -114,8 +114,14 @@ export class Camera {
 }
 
 function clampAxis(c: number, halfView: number, lo: number, hi: number, slack: number): number {
-  if (halfView * 2 >= hi - lo) return (lo + hi) / 2;
-  const margin = halfView * (1 - 2 * slack);
+  const size = hi - lo;
+  const viewSize = halfView * 2;
+  const center = (lo + hi) / 2;
+  if (size <= 0 || viewSize >= size) return center;
+
+  // Taper overscroll as the whole stage comes into view, so centering at the fit boundary is continuous.
+  const effectiveSlack = slack * (1 - viewSize / size);
+  const margin = halfView * (1 - 2 * effectiveSlack);
   return Math.min(Math.max(c, lo + margin), hi - margin);
 }
 
@@ -275,6 +281,7 @@ export interface Painter {
   px(n: number): number; // n screen px → µm, for inline fixed lengths/offsets (e.g. crosshair arms)
   raw(fn: (ctx: CanvasRenderingContext2D) => void): void; // screen-space escape hatch
   project(x: number, y: number): [number, number]; // stage µm → screen px
+  viewBounds(): Bounds; // the currently visible world rect (stage µm), for viewport-aware layers
 }
 
 export interface TextOpts {
@@ -319,6 +326,13 @@ export class CanvasPainter implements Painter {
 
   project(x: number, y: number): [number, number] {
     return this.#cam.project(x, y);
+  }
+
+  viewBounds(): Bounds {
+    const s = this.#cam.scale || 1;
+    const hw = this.#cam.viewW / (2 * s);
+    const hh = this.#cam.viewH / (2 * s);
+    return { minX: this.#cam.cx - hw, minY: this.#cam.cy - hh, maxX: this.#cam.cx + hw, maxY: this.#cam.cy + hh };
   }
 
   #world(): void {
@@ -436,6 +450,8 @@ export interface Interaction {
   onClick?: (world: [number, number], e: PointerEvent) => void; // press + release without a drag
   onDblClick?: (world: [number, number], e: MouseEvent) => void;
   onContextMenu?: (world: [number, number], e: MouseEvent) => void; // right-click; the handler opens any menu
+  marqueeOn?: (e: PointerEvent) => boolean; // true on pointerdown → drag draws a marquee instead of panning
+  onMarquee?: (rect: Bounds | null, done: boolean) => void; // live rect while dragging (done=false), final on release (done=true); null = cleared (no drag)
 }
 
 export interface SurfaceOpts {
@@ -501,22 +517,43 @@ export class Surface {
     const CLICK_SLOP = 4; // px of movement before a press counts as a drag rather than a click
     let panning = false;
     let claimed = false;
+    let marqueeing = false;
     let moved = false;
     let lastX = 0;
     let lastY = 0;
     let downX = 0;
     let downY = 0;
+    let downWorld: [number, number] = [0, 0];
 
     const worldAt = (e: MouseEvent): [number, number] => {
       const rect = el.getBoundingClientRect();
       return this.cam.unproject(e.clientX - rect.left, e.clientY - rect.top);
     };
 
+    // Normalized world box spanning two corners (marquee runs at a fixed camera, so unproject stays valid).
+    const boxOf = (a: [number, number], b: [number, number]): Bounds => ({
+      minX: Math.min(a[0], b[0]),
+      minY: Math.min(a[1], b[1]),
+      maxX: Math.max(a[0], b[0]),
+      maxY: Math.max(a[1], b[1])
+    });
+
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;
       // A consumer gesture (paint / drag-bound) can claim the press; then we neither pan nor emit a click.
       if (i.onPointerDown?.(worldAt(e), e)) {
         claimed = true;
+        return;
+      }
+      // A modifier turns the drag into a marquee (rubber-band region) instead of a pan.
+      if (i.onMarquee && i.marqueeOn?.(e)) {
+        el.setPointerCapture(e.pointerId);
+        marqueeing = true;
+        moved = false;
+        downX = e.clientX;
+        downY = e.clientY;
+        downWorld = worldAt(e);
+        el.style.cursor = 'crosshair';
         return;
       }
       el.setPointerCapture(e.pointerId);
@@ -527,6 +564,11 @@ export class Surface {
       el.style.cursor = 'grabbing';
     };
     const move = (e: PointerEvent) => {
+      if (marqueeing) {
+        if (!moved && Math.hypot(e.clientX - downX, e.clientY - downY) > CLICK_SLOP) moved = true;
+        if (moved) i.onMarquee?.(boxOf(downWorld, worldAt(e)), false);
+        return;
+      }
       if (!panning) return;
       if (!moved && Math.hypot(e.clientX - downX, e.clientY - downY) > CLICK_SLOP) moved = true;
       if (!moved) return;
@@ -540,6 +582,14 @@ export class Surface {
       if (e.button !== 0) return;
       if (claimed) {
         claimed = false;
+        return;
+      }
+      if (marqueeing) {
+        el.releasePointerCapture(e.pointerId);
+        marqueeing = false;
+        el.style.cursor = 'grab';
+        // A drag commits the box; a modifier-press with no drag clears any existing marquee.
+        i.onMarquee?.(moved ? boxOf(downWorld, worldAt(e)) : null, true);
         return;
       }
       el.releasePointerCapture(e.pointerId);

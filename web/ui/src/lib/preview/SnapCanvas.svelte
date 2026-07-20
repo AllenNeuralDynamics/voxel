@@ -21,7 +21,13 @@
     TrashCanOutline
   } from '$lib/icons';
   import { Button, ContextMenu, Rename } from '$lib/kit';
-  import { DEFAULT_STAGE_ORIENTATION, getVoxelApp, type Snapshot, type SnapshotGroup, wheelZoomFactor } from '$lib/model';
+  import {
+    DEFAULT_STAGE_ORIENTATION,
+    getVoxelApp,
+    type Snapshot,
+    type SnapshotGroup,
+    wheelZoomFactor
+  } from '$lib/model';
   import { cn, toastError, trimFloat } from '$lib/utils';
 
   import LiveThumbnail from './LiveThumbnail.svelte';
@@ -123,7 +129,7 @@
       gx = Math.min(Math.max(x, b.minX + fov[0] / 2), b.maxX - fov[0] / 2);
       gy = Math.min(Math.max(y, b.minY + fov[1] / 2), b.maxY - fov[1] / 2);
     }
-    const z = app.instrument?.stage.z?.position?.value ?? 0;
+    const z = app.instrument?.stage.z.position?.value ?? 0;
     toastError(instrument?.stage.moveTo({ x: gx, y: gy, z }));
   }
 
@@ -210,8 +216,8 @@
   const viewKey = $derived(group?.id ?? null);
 
   // Live stage position + FOV drive the "you are here" marker; absolute stage µm, matching tile centers.
-  const hereX = $derived(app.instrument?.stage.x?.position?.value ?? null);
-  const hereY = $derived(app.instrument?.stage.y?.position?.value ?? null);
+  const hereX = $derived(app.instrument?.stage.x.position?.value ?? null);
+  const hereY = $derived(app.instrument?.stage.y.position?.value ?? null);
   const fov = $derived(app.instrument?.fov ?? null);
 
   // ── Viewport: stage-space center (µm) + uniform scale (CSS px per µm) ──
@@ -859,20 +865,20 @@
       class="flex w-64 shrink-0 flex-col overflow-hidden border-r border-border bg-surface/50"
       transition:slide={{ axis: 'x', duration: 200 }}
     >
-        <div class="flex h-12 shrink-0 items-center gap-0.5 border-b border-border p-1.5">
-          <Button variant="ghost" size="xs" title="New group" onclick={newGroup}>
-            <Plus width="16" height="16" /> New Group
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            class="ml-auto"
-            title="Hide snapshots"
-            onclick={() => (sidebarOpen.current = false)}
-          >
-            <PanelLeft width="16" height="16" />
-          </Button>
-        </div>
+      <div class="flex h-12 shrink-0 items-center gap-0.5 border-b border-border p-1.5">
+        <Button variant="ghost" size="xs" title="New group" onclick={newGroup}>
+          <Plus width="16" height="16" /> New Group
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          class="ml-auto"
+          title="Hide snapshots"
+          onclick={() => (sidebarOpen.current = false)}
+        >
+          <PanelLeft width="16" height="16" />
+        </Button>
+      </div>
 
       <!-- Tree -->
       <div class="min-h-0 flex-1 overflow-y-auto p-1">
@@ -913,7 +919,10 @@
                         toggleCollapse(g.id);
                       }}
                     >
-                      {#if open}<ChevronDown width="14" height="14" />{:else}<ChevronRight width="14" height="14" />{/if}
+                      {#if open}<ChevronDown width="14" height="14" />{:else}<ChevronRight
+                          width="14"
+                          height="14"
+                        />{/if}
                     </button>
                     <button
                       type="button"
@@ -963,7 +972,6 @@
           <p class="px-1.5 py-3 text-center text-xs text-fg-faint">No snapshots yet</p>
         {/if}
       </div>
-
     </div>
   {/if}
 

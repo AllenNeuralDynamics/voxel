@@ -15,9 +15,11 @@ export interface StageLayer<H = unknown> {
   visible: boolean;
   draw: (p: Painter) => void;
   hitTest?: (world: [number, number]) => H | null;
+  hitMarquee?: (rect: Bounds) => H | null; // what of this layer's content a marquee region covers (items or area)
   onSelect?: (hit: H, e?: PointerEvent) => void; // single click on a hit (event carries modifier keys)
   onActivate?: (hit: H) => void; // double click on a hit
-  menu?: Snippet<[H]>; // this layer's section of the context menu for a hit
+  menu?: Snippet<[H]>; // this layer's section of the point context menu for a hit
+  marqueeMenu?: Snippet<[H]>; // this layer's section of the marquee context menu for a covered region
   maxScale?: () => number | null; // preferred zoom-in ceiling (px per µm), e.g. native tile resolution; null = no opinion
 }
 
@@ -42,6 +44,7 @@ export class StageScene {
   readonly #layers = new SvelteMap<string, StageLayer>();
   #generation = $state(0);
   #viewRequest = $state<ViewRequest | null>(null);
+  #marquee = $state<Bounds | null>(null);
 
   /** Registered layers, ascending by z (draw order: lowest first / underneath). */
   readonly layers = $derived([...this.#layers.values()].sort((a, b) => a.z - b.z));
@@ -90,6 +93,29 @@ export class StageScene {
       const layer = ls[i];
       if (!layer.visible || !layer.hitTest) continue;
       const hit = layer.hitTest(world);
+      if (hit != null) out.push({ layer, hit });
+    }
+    return out;
+  }
+
+  /** The persistent selection rectangle (world µm), or null. Set by StageCanvas's marquee gesture. */
+  get marquee(): Bounds | null {
+    return this.#marquee;
+  }
+
+  /** Set (or clear) the marquee selection rectangle. */
+  setMarquee(rect: Bounds | null): void {
+    this.#marquee = rect;
+  }
+
+  /** All visible layers whose content the marquee `rect` covers, top-first (highest z first). */
+  marqueeHits(rect: Bounds): StageHit[] {
+    const ls = this.layers;
+    const out: StageHit[] = [];
+    for (let i = ls.length - 1; i >= 0; i--) {
+      const layer = ls[i];
+      if (!layer.visible || !layer.hitMarquee) continue;
+      const hit = layer.hitMarquee(rect);
       if (hit != null) out.push({ layer, hit });
     }
     return out;

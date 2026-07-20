@@ -1,8 +1,10 @@
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 import { IDBKeyVal } from '$lib/utils/idb';
 
 import { InpaintRaster, type PatchDraw, type StageRect } from './inpaint-raster';
+
+const TARGET_PX_PER_FOV = 2048 * 2; // mosaic cap resolution: µm/px = fovWidth / this
 
 /** A live-painted per-channel MIP map in stage space. Pixels live in the raster, keyed by this `id`. */
 export interface InpaintMosaic {
@@ -11,12 +13,15 @@ export interface InpaintMosaic {
   /** Instrument this mosaic belongs to (its identity — matches `Snapshot.instrument`). */
   instrument: string;
   createdAt: number;
+  /** Last painted-into or explicitly made-active; the newest-touched mosaic is the paint destination. */
+  touchedAt: number;
   /** Cap-level resolution (stage µm per patch pixel), fixed at creation. */
   umPerPx: number;
   /** Stage extent (absolute µm) — sizes the overview and clamps zoom-out. */
   stage: StageRect;
-  /** Painted channels → display weight (0..1); colormap/levels are baked into the pixels. */
-  channels: Record<string, { weight: number }>;
+  /** Painted channels → display weight (0..1) + identity color (resolved hex, baked at paint time to match
+   *  the pre-colored pixels); null when the source colormap couldn't be resolved. */
+  channels: Record<string, { weight: number; color: string | null }>;
   /** Painted extent (absolute µm), for fit-to-content framing; null until first paint. */
   bounds: StageRect | null;
 }
@@ -35,7 +40,7 @@ function expandBounds(bounds: StageRect | null, rect: StageRect): StageRect {
 }
 
 /**
- * The in-paint subsystem: owns the mosaics' metadata, the armed paint destination, and (Phase 4) the live
+ * The in-paint subsystem: owns the mosaics' metadata, the recency-derived paint destination, and the live
  * painting loop, composing a private `InpaintRaster` for pixels. The single public entry point (`app.inpaint`).
  */
 export class Inpainter {
@@ -45,8 +50,7 @@ export class Inpainter {
   readonly mosaics = new SvelteMap<string, InpaintMosaic>();
 
   #scope = $state<string | null>(null);
-  #armedId = $state<string | null>(null);
-  #viewedId = $state<string | null>(null);
+  readonly #viewedIds = new SvelteSet<string>();
   readonly #ready: Promise<void>;
 
   constructor() {
@@ -58,15 +62,35 @@ export class Inpainter {
     [...this.mosaics.values()].filter((m) => m.instrument === this.#scope).sort((a, b) => b.createdAt - a.createdAt)
   );
 
-  /** The mosaic currently armed as the paint destination, or null. */
-  armedMosaic = $derived<InpaintMosaic | null>(this.#armedId ? (this.mosaics.get(this.#armedId) ?? null) : null);
+  /** The paint destination: the newest-touched mosaic in scope (painting + explicit make-active touch). */
+  activeMosaic = $derived.by<InpaintMosaic | null>(() => {
+    let best: InpaintMosaic | null = null;
+    for (const m of this.mosaics.values()) {
+      if (m.instrument !== this.#scope) continue;
+      if (!best || m.touchedAt > best.touchedAt) best = m;
+    }
+    return best;
+  });
 
-  /** The mosaic currently shown in the Inpaint view, or null. */
-  viewed = $derived<InpaintMosaic | null>(this.#viewedId ? (this.mosaics.get(this.#viewedId) ?? null) : null);
+  /** The mosaics currently shown in the viewer (a composite), in list order. */
+  viewedList = $derived<InpaintMosaic[]>(this.list.filter((m) => this.#viewedIds.has(m.id)));
 
-  /** Show an in-paint mosaic in the viewer (by id), or clear (null). */
+  get viewedIds(): ReadonlySet<string> {
+    return this.#viewedIds;
+  }
+  isViewed(id: string): boolean {
+    return this.#viewedIds.has(id);
+  }
+
+  /** Collapse the view to a single mosaic, or clear it (null). */
   view(id: string | null): void {
-    this.#viewedId = id;
+    this.#viewedIds.clear();
+    if (id) this.#viewedIds.add(id);
+  }
+
+  /** Add or remove a mosaic from the viewed composite. */
+  toggleView(id: string): void {
+    if (!this.#viewedIds.delete(id)) this.#viewedIds.add(id);
   }
 
   /** The instrument whose mosaics are shown; set by the app when the open instrument changes. */
@@ -77,27 +101,29 @@ export class Inpainter {
   set scope(name: string | null) {
     if (name === this.#scope) return;
     this.#scope = name;
-    this.#armedId = null; // don't paint into another instrument's mosaic
-    this.#viewedId = null;
+    this.#viewedIds.clear();
   }
 
   async #load(): Promise<void> {
     for (const [, mosaic] of await mosaicDb.entries()) {
+      mosaic.touchedAt ??= mosaic.createdAt; // pre-existing mosaics predate touchedAt
       this.mosaics.set(mosaic.id, mosaic);
       const n = parseInt(mosaic.id.replace('inpaint-', ''), 10);
       if (Number.isFinite(n) && n >= nextId) nextId = n + 1;
     }
   }
 
-  // ── CRUD + arm ───────────────────────────────────────────────────────────
+  // ── CRUD ───────────────────────────────────────────────────────────────
 
   create(name: string, umPerPx: number, stage: StageRect): InpaintMosaic {
     const id = `inpaint-${nextId++}`;
+    const now = Date.now();
     const mosaic: InpaintMosaic = {
       id,
       name,
       instrument: this.#scope ?? '',
-      createdAt: Date.now(),
+      createdAt: now,
+      touchedAt: now,
       umPerPx,
       stage,
       channels: {},
@@ -108,31 +134,45 @@ export class Inpainter {
     return mosaic;
   }
 
+  /** Create a mosaic spanning `rect` at the default cap resolution for a given FOV width (µm). */
+  createFor(rect: StageRect, fovWidthUm: number): InpaintMosaic {
+    return this.create(String(this.list.length + 1), fovWidthUm / TARGET_PX_PER_FOV, rect);
+  }
+
   rename(id: string, name: string): void {
     this.#patch(id, (m) => ({ ...m, name }));
   }
 
   setChannelWeight(id: string, channel: string, weight: number): void {
-    this.#patch(id, (m) => ({ ...m, channels: { ...m.channels, [channel]: { weight } } }));
+    this.#patch(id, (m) => ({
+      ...m,
+      channels: { ...m.channels, [channel]: { ...m.channels[channel], weight } } // preserve color
+    }));
   }
 
-  /** Arm a mosaic as the paint destination, or disarm (null). */
-  arm(id: string | null): void {
-    this.#armedId = id;
+  /** Make a mosaic the paint destination by touching it (becomes the newest-touched). */
+  makeActive(id: string): void {
+    this.#patch(id, (m) => ({ ...m, touchedAt: Date.now() }));
   }
 
   async delete(id: string): Promise<void> {
     if (!this.mosaics.has(id)) return;
     this.mosaics.delete(id);
     void mosaicDb.delete(id);
-    if (this.#armedId === id) this.#armedId = null;
     await this.#raster.purge(id);
   }
 
   // ── Paint / erase (delegate to raster, keep metadata in step) ─────────────
 
-  /** Max-blend a pre-colored channel frame into a mosaic at its stage rect; registers channel + bounds. */
-  async paintInto(mosaicId: string, channel: string, source: CanvasImageSource, rect: StageRect): Promise<void> {
+  /** Max-blend a pre-colored channel frame into a mosaic at its stage rect; registers channel + bounds, and
+   *  records the channel's identity `color` (resolved at paint time to match the baked pixels). */
+  async paintInto(
+    mosaicId: string,
+    channel: string,
+    source: CanvasImageSource,
+    rect: StageRect,
+    color: string | null = null
+  ): Promise<void> {
     const mosaic = this.mosaics.get(mosaicId);
     if (!mosaic) return;
     await this.#raster.paint(mosaicId, channel, source, rect, { umPerPx: mosaic.umPerPx, stage: mosaic.stage });
@@ -144,23 +184,55 @@ export class Inpainter {
       bounds.y !== mosaic.bounds.y ||
       bounds.w !== mosaic.bounds.w ||
       bounds.h !== mosaic.bounds.h;
-    const channelNew = !(channel in mosaic.channels);
-    if (!boundsChanged && !channelNew) return;
+    const existing = mosaic.channels[channel];
+    const channelNew = !existing;
+    const colorChanged = !channelNew && color != null && existing.color !== color;
+    if (!boundsChanged && !channelNew && !colorChanged) return;
 
-    const updated: InpaintMosaic = {
-      ...mosaic,
-      bounds,
-      channels: channelNew ? { ...mosaic.channels, [channel]: { weight: 1 } } : mosaic.channels
-    };
+    const channels = channelNew
+      ? { ...mosaic.channels, [channel]: { weight: 1, color } }
+      : colorChanged
+        ? { ...mosaic.channels, [channel]: { ...existing, color } }
+        : mosaic.channels;
+    const updated: InpaintMosaic = { ...mosaic, touchedAt: Date.now(), bounds, channels };
     this.mosaics.set(mosaicId, updated);
     mosaicDb.put(mosaicId, updated);
   }
 
-  /** Clear a stage region across all of a mosaic's channels. */
-  async eraseFrom(mosaicId: string, rect: StageRect): Promise<void> {
+  /** Fold `srcId`'s pixels into `dstId` (max-blend), unioning channels + bounds; optionally discard the source. */
+  async flattenInto(srcId: string, dstId: string, opts: { discardSource: boolean }): Promise<void> {
+    const src = this.mosaics.get(srcId);
+    const dst = this.mosaics.get(dstId);
+    if (!src || !dst || srcId === dstId) return;
+    await this.#raster.merge(srcId, dstId, { umPerPx: dst.umPerPx, stage: dst.stage }, src.umPerPx);
+
+    const channels = { ...dst.channels };
+    for (const [ch, meta] of Object.entries(src.channels)) channels[ch] ??= meta; // adopt source-only channels
+    const bounds = src.bounds ? expandBounds(dst.bounds, src.bounds) : dst.bounds;
+    const updated: InpaintMosaic = { ...dst, channels, bounds, touchedAt: Date.now() };
+    this.mosaics.set(dstId, updated);
+    mosaicDb.put(dstId, updated);
+
+    if (opts.discardSource) await this.delete(srcId);
+  }
+
+  /** Combine several mosaics into a new one, leaving all untouched; returns it (null if fewer than 2). */
+  async combineMany(ids: string[]): Promise<InpaintMosaic | null> {
+    const srcs = ids.map((id) => this.mosaics.get(id)).filter((m): m is InpaintMosaic => !!m);
+    if (srcs.length < 2) return null;
+    const umPerPx = Math.min(...srcs.map((s) => s.umPerPx));
+    const stage = srcs.reduce<StageRect>((acc, s) => expandBounds(acc, s.stage), srcs[0].stage);
+    const c = this.create(srcs.map((s) => s.name).join(' + '), umPerPx, stage);
+    for (const s of srcs) await this.flattenInto(s.id, c.id, { discardSource: false });
+    return c;
+  }
+
+  /** Clear a stage region across a mosaic's channels — one channel, or all when omitted. */
+  async eraseFrom(mosaicId: string, rect: StageRect, channel?: string): Promise<void> {
     const mosaic = this.mosaics.get(mosaicId);
     if (!mosaic) return;
-    await this.#raster.erase(mosaicId, Object.keys(mosaic.channels), rect, {
+    const channels = channel ? [channel] : Object.keys(mosaic.channels);
+    await this.#raster.erase(mosaicId, channels, rect, {
       umPerPx: mosaic.umPerPx,
       stage: mosaic.stage
     });
@@ -197,7 +269,6 @@ export class Inpainter {
         void this.#raster.purge(mosaic.id);
       }
     }
-    if (this.#armedId && !this.mosaics.has(this.#armedId)) this.#armedId = null;
   }
 
   flush(): Promise<void> {

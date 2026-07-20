@@ -1,15 +1,22 @@
+<script module lang="ts">
+  export type StageViewport = { mode: 'auto' } | { mode: 'manual'; cx: number; cy: number; scale: number };
+</script>
+
 <script lang="ts">
   import { PersistedState, watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { Crosshair, FitToScreen, PanelLeft, Stop } from '$lib/icons';
+  import { Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelApp } from '$lib/model';
   import { toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
+  import Inpaint from './features/Inpaint.svelte';
   import Snapshots from './features/Snapshots.svelte';
   import { getStageScene, type StageHit } from './scene.svelte';
+
+  let { viewport = $bindable<StageViewport>({ mode: 'auto' }) }: { viewport?: StageViewport } = $props();
 
   const app = getVoxelApp();
   const scene = getStageScene();
@@ -29,20 +36,21 @@
   const BOUNDS_FIT_MARGIN = 0.9; // matches Camera.fit's default, so minScale equals the fit-to-bounds scale
   const MAX_SCALE = 7; // hard px-per-µm zoom-in ceiling; layers may ask for less (e.g. native tile resolution)
   const NICE_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
-  const shadow = 'drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]'; // legibility over the canvas
 
   let hostEl: HTMLDivElement;
   let surface: Surface | null = null;
   const collapsed = new PersistedState('voxel-stage-sidebar-collapsed', false);
   let boundsColor = '#3f3f46';
   let markerColor = '#22c55e';
-  let userAdjusted = false; // once the user pans/zooms, stop auto-fitting on resize
+  let marqueeColor = '#e5e7eb';
   // Camera scale + view width, mirrored from the (plain) camera each render to drive the reactive scale bar.
   let camScale = $state(0);
   let camViewW = $state(0);
-  // Context menu: the hits at the right-clicked point (each layer contributes a section) + the world point.
+  // Context menu: the hits contributing sections + the world point. 'marquee' mode acts on the selection
+  // region (each layer's covered content); 'point' mode acts on the right-clicked spot.
   let menuHits = $state<StageHit[]>([]);
   let menuWorld: [number, number] = [0, 0];
+  let menuMode = $state<'point' | 'marquee'>('point');
   // Live cursor position in stage µm for the readout overlay; null when the pointer is off the canvas.
   let cursor = $state<[number, number] | null>(null);
   // Whether the cursor is within the reachable stage limits (unknown limits count as in-range).
@@ -61,10 +69,27 @@
     surface.invalidate();
   }
 
+  function saveViewport() {
+    if (!surface) return;
+    const { cx, cy, scale } = surface.cam;
+    viewport = { mode: 'manual', cx, cy, scale };
+  }
+
+  // Restore the parent-owned camera snapshot after the new surface has measured its viewport.
+  function restoreViewport() {
+    if (!surface || viewport.mode !== 'manual') return;
+    surface.cam.orient = orient;
+    surface.cam.cx = viewport.cx;
+    surface.cam.cy = viewport.cy;
+    surface.cam.scale = viewport.scale;
+    reclamp();
+  }
+
   // Keep the view within the stage frame without re-fitting (after the user has taken over).
   function reclamp() {
-    if (!surface || !stageBounds) return;
-    surface.cam.clampPan(stageBounds);
+    if (!surface) return;
+    if (stageBounds) surface.cam.clampPan(stageBounds);
+    if (viewport.mode === 'manual') saveViewport();
     surface.invalidate();
   }
 
@@ -75,7 +100,8 @@
     const max = layerMax != null ? Math.min(layerMax, MAX_SCALE) : MAX_SCALE;
     const b = stageBounds;
     if (!b || !surface) return [Number.EPSILON, max];
-    const min = Math.min(surface.cam.viewW / (b.maxX - b.minX), surface.cam.viewH / (b.maxY - b.minY)) * BOUNDS_FIT_MARGIN;
+    const min =
+      Math.min(surface.cam.viewW / (b.maxX - b.minX), surface.cam.viewH / (b.maxY - b.minY)) * BOUNDS_FIT_MARGIN;
     return [min, max];
   }
 
@@ -95,7 +121,7 @@
 
   // Reset the view: re-fit to the stage frame and resume auto-fitting.
   function fitToStage() {
-    userAdjusted = false;
+    viewport = { mode: 'auto' };
     refit();
   }
 
@@ -129,6 +155,41 @@
     p.line(hereX, hereY - p.px(6), hereX, hereY + p.px(6));
   };
 
+  // Over-chrome: the persistent marquee selection as a dashed rect with a faint wash, drawn on top of all.
+  const marqueeLayer: Layer = (p) => {
+    const m = scene.marquee;
+    if (!m) return;
+    const w = m.maxX - m.minX;
+    const h = m.maxY - m.minY;
+    p.fillStyle = marqueeColor;
+    p.globalAlpha = 0.08;
+    p.fillRect(m.minX, m.minY, w, h);
+    p.globalAlpha = 1;
+    p.raw((ctx) => {
+      const [x1, y1] = p.project(m.minX, m.maxY); // world max-Y is screen-top under the Y-up camera
+      const [x2, y2] = p.project(m.maxX, m.minY);
+      ctx.save();
+      ctx.strokeStyle = marqueeColor;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      ctx.restore();
+    });
+  };
+
+  // True when a world point falls inside the current marquee selection.
+  function inMarquee(world: [number, number]): boolean {
+    const m = scene.marquee;
+    return !!m && world[0] >= m.minX && world[0] <= m.maxX && world[1] >= m.minY && world[1] <= m.maxY;
+  }
+
+  // Clear the marquee selection and redraw, if one is set.
+  function clearMarquee() {
+    if (!scene.marquee) return;
+    scene.setMarquee(null);
+    surface?.invalidate();
+  }
+
   // Scale bar: a "nice" round length filling ~20% of the canvas width, from the mirrored camera scale.
   const scaleBar = $derived.by(() => {
     if (camScale <= 0 || camViewW <= 0) return null;
@@ -141,7 +202,7 @@
   watch(
     () => [stageBounds, orient] as const,
     () => {
-      if (!userAdjusted) refit();
+      if (viewport.mode === 'auto') refit();
     }
   );
 
@@ -156,9 +217,9 @@
     () => scene.viewRequest,
     (rq) => {
       if (!rq || !surface) return;
-      userAdjusted = true; // an explicit fit-to-region counts as taking the view over
       surface.cam.fit(rq.bounds, rq.margin);
       if (stageBounds) surface.cam.clampPan(stageBounds);
+      saveViewport(); // an explicit fit-to-region counts as taking the view over
       surface.invalidate();
     }
   );
@@ -166,22 +227,25 @@
   onMount(() => {
     boundsColor = getComputedStyle(hostEl).getPropertyValue('--color-border').trim() || boundsColor;
     markerColor = getComputedStyle(hostEl).getPropertyValue('--color-success').trim() || markerColor;
+    marqueeColor = getComputedStyle(hostEl).getPropertyValue('--color-fg').trim() || marqueeColor;
     surface = new Surface(hostEl, {
       render: (p: Painter) => {
         boundsLayer(p);
         for (const layer of scene.layers) if (layer.visible) layer.draw(p);
         markerLayer(p);
+        marqueeLayer(p);
         camScale = surface?.cam.scale ?? 0;
         camViewW = surface?.cam.viewW ?? 0;
       },
-      onResize: () => (userAdjusted ? reclamp() : refit()),
+      onResize: () => (viewport.mode === 'manual' ? restoreViewport() : refit()),
       interactive: {
         constrain: (cam) => {
-          userAdjusted = true;
           if (stageBounds) cam.clampPan(stageBounds);
+          saveViewport();
         },
         scaleLimits,
         onClick: (world, e) => {
+          clearMarquee(); // a plain click drops the selection
           for (const { layer, hit } of scene.hits(world)) layer.onSelect?.(hit, e);
           surface?.invalidate();
         },
@@ -191,24 +255,36 @@
         },
         onContextMenu: (world) => {
           menuWorld = world;
-          menuHits = scene.hits(world);
+          const m = scene.marquee;
+          if (m && inMarquee(world)) {
+            menuMode = 'marquee';
+            menuHits = scene.marqueeHits(m);
+          } else {
+            clearMarquee(); // right-clicking outside the selection drops it, then acts on the point
+            menuMode = 'point';
+            menuHits = scene.hits(world);
+          }
+        },
+        marqueeOn: (e) => e.altKey, // Alt/Option-drag rubber-bands a selection region instead of panning
+        onMarquee: (rect) => {
+          scene.setMarquee(rect);
+          surface?.invalidate();
         }
       }
     });
-    return () => surface?.destroy();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearMarquee();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (viewport.mode === 'manual') saveViewport();
+      surface?.destroy();
+    };
   });
 </script>
 
 <div class="flex h-full w-full">
-  <div
-    class="shrink-0 overflow-hidden bg-surface/30 transition-[width] duration-200 {collapsed.current
-      ? 'w-0'
-      : 'w-60 border-r border-border'}"
-  >
-    <div class="flex h-full w-60 flex-col gap-3 overflow-y-auto py-2">
-      <Snapshots />
-    </div>
-  </div>
   <ContextMenu.Root>
     <ContextMenu.Trigger>
       {#snippet child({ props })}
@@ -219,57 +295,89 @@
           onpointermove={trackCursor}
           onpointerleave={() => (cursor = null)}
         >
-          <div class="absolute top-3 left-3 z-10">
+          <div class="absolute top-3 right-3 z-10">
             <Button
               variant="ghost"
               size="icon-xs"
               title={collapsed.current ? 'Show panel' : 'Hide panel'}
               onclick={() => (collapsed.current = !collapsed.current)}
             >
-              <PanelLeft width="16" height="16" />
+              <PanelRight width="16" height="16" />
             </Button>
           </div>
           {#if cursor}
-          <div
-            class="pointer-events-none absolute bottom-4 left-4 z-10 flex gap-2 font-mono text-xs tabular-nums {shadow} {cursorInBounds
-              ? 'text-fg-muted'
-              : 'text-fg-faint'}"
-          >
-            <span>X {Math.round(cursor[0])}</span>
-            <span>Y {Math.round(cursor[1])} µm</span>
-            {#if !cursorInBounds}
-              <span>· out of range</span>
-            {/if}
-          </div>
+            <div
+              class="canvas-overlay-halo pointer-events-none absolute bottom-4 left-4 z-10 flex gap-2 font-mono text-xs tabular-nums {cursorInBounds
+                ? 'text-fg-muted'
+                : 'text-fg-faint'}"
+            >
+              <span>X {Math.round(cursor[0])}</span>
+              <span>Y {Math.round(cursor[1])} µm</span>
+              {#if !cursorInBounds}
+                <span>· out of range</span>
+              {/if}
+            </div>
+          {/if}
+          {#if scaleBar}
+            <div
+              class="canvas-overlay-halo pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-0.5"
+            >
+              <span class="font-mono text-xs text-fg-muted">{scaleBar.label}</span>
+              <div class="h-1 rounded-full bg-fg-muted" style:width="{scaleBar.barPx}px"></div>
+            </div>
+          {/if}
+        </div>
+      {/snippet}
+    </ContextMenu.Trigger>
+    <ContextMenu.Content class="min-w-44">
+      {#if menuMode === 'marquee'}
+        {#each menuHits as mh (mh.layer.id)}
+          {#if mh.layer.marqueeMenu}
+            {@render mh.layer.marqueeMenu(mh.hit)}
+            <ContextMenu.Separator />
+          {/if}
+        {/each}
+        <ContextMenu.Item onSelect={clearMarquee}>
+          <Close width="14" height="14" />
+          Clear selection
+        </ContextMenu.Item>
+      {:else}
+        <ContextMenu.Item onSelect={goToWorld}>
+          <Crosshair width="14" height="14" />
+          Go to position
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={fitToStage}>
+          <FitToScreen width="14" height="14" />
+          Fit to stage
+        </ContextMenu.Item>
+        {#if stage?.anyMoving}
+          <ContextMenu.Item variant="destructive" onSelect={halt}>
+            <Stop width="14" height="14" />
+            Halt
+          </ContextMenu.Item>
         {/if}
-        {#if scaleBar}
-          <div class="pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-0.5">
-            <span class="font-mono text-xs text-fg-muted {shadow}">{scaleBar.label}</span>
-            <div class="h-1 rounded-full bg-fg-muted {shadow}" style:width="{scaleBar.barPx}px"></div>
-          </div>
-        {/if}
-      </div>
-    {/snippet}
-  </ContextMenu.Trigger>
-  <ContextMenu.Content class="min-w-44">
-    <ContextMenu.Item onSelect={goToWorld}>
-      <Crosshair width="14" height="14" />
-      Go to position
-    </ContextMenu.Item>
-    <ContextMenu.Item onSelect={fitToStage}>
-      <FitToScreen width="14" height="14" />
-      Fit to stage
-    </ContextMenu.Item>
-    {#if stage?.anyMoving}
-      <ContextMenu.Item variant="destructive" onSelect={halt}>
-        <Stop width="14" height="14" />
-        Halt
-      </ContextMenu.Item>
-    {/if}
-    {#each menuHits as mh (mh.layer.id)}
-      <ContextMenu.Separator />
-      {#if mh.layer.menu}{@render mh.layer.menu(mh.hit)}{/if}
-    {/each}
+        {#each menuHits as mh (mh.layer.id)}
+          <ContextMenu.Separator />
+          {#if mh.layer.menu}{@render mh.layer.menu(mh.hit)}{/if}
+        {/each}
+      {/if}
     </ContextMenu.Content>
   </ContextMenu.Root>
+  <div
+    class="shrink-0 overflow-hidden bg-surface/80 transition-[width] duration-200 {collapsed.current
+      ? 'w-0'
+      : 'w-62 border-l border-border'}"
+  >
+    <div class="flex h-full w-full flex-col gap-4 overflow-y-auto py-1.5">
+      <Inpaint />
+      <Snapshots />
+    </div>
+  </div>
 </div>
+
+<style>
+  .canvas-overlay-halo {
+    filter: drop-shadow(0 1px 1px color-mix(in oklch, var(--color-canvas) 90%, transparent))
+      drop-shadow(0 0 2px color-mix(in oklch, var(--color-canvas) 75%, transparent));
+  }
+</style>

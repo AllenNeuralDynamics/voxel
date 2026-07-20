@@ -116,7 +116,6 @@
       {/each}
     </div>
   </section>
-
 {/if}
 
 {#snippet profileCard(profileId: string)}

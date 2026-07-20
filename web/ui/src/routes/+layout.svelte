@@ -7,6 +7,7 @@
   import { useEventListener } from 'runed';
   import type { Component } from 'svelte';
   import { onDestroy, onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
 
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -21,11 +22,13 @@
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
-  import { setVoxelApp, VoxelApp } from '$lib/model';
-  import { PreviewModeToggle, PreviewViewer } from '$lib/preview';
+  import { type PreviewMode, setVoxelApp, VoxelApp } from '$lib/model';
+  import PreviewCanvas from '$lib/preview/PreviewCanvas.svelte';
+  import SnapCanvas from '$lib/preview/SnapCanvas.svelte';
+  import SnapshotFlyOverlay from '$lib/preview/SnapshotFlyOverlay.svelte';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
-  import { provideStageScene } from '$lib/stage';
+  import { provideStageScene, StageView, type StageViewport } from '$lib/stage';
   import StageGizmo from '$lib/stage/StageGizmo.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
   import { cn, createPaneSize, toastError } from '$lib/utils';
@@ -40,6 +43,7 @@
   setVoxelApp(app);
   provideTaskSelection();
   provideStageScene();
+  let stageViewport = $state.raw<StageViewport>({ mode: 'auto' });
 
   onMount(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
@@ -87,6 +91,11 @@
     { id: '/tune', label: 'Tune', icon: WaveformsIcon },
     { id: '/configure', label: 'Configure', icon: TuneVertical },
     { id: '/plan', label: 'Plan', icon: Layers }
+  ];
+
+  const previewModes: { mode: PreviewMode; label: string }[] = [
+    { mode: 'live', label: 'Live' },
+    { mode: 'stage', label: 'Stage' }
   ];
 
   const viewId = $derived<Pathname>(
@@ -197,7 +206,20 @@
         <div class="flex h-full flex-col bg-canvas">
           <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
             <div class="flex items-center gap-2">
-              <PreviewModeToggle />
+              <div class="flex h-ui-md items-center rounded-md border border-input bg-canvas/50 p-0.5">
+                {#each previewModes as { mode, label } (mode)}
+                  <button
+                    type="button"
+                    class={cn(
+                      'h-full rounded-sm px-3 text-sm transition-colors',
+                      app.view.mode === mode ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
+                    )}
+                    onclick={() => app.view.setMode(mode)}
+                  >
+                    {label}
+                  </button>
+                {/each}
+              </div>
               <button
                 onclick={toggleLogs}
                 class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
@@ -210,7 +232,25 @@
           <main class="min-h-0 flex-1 overflow-hidden">
             <PaneGroup direction="vertical" autoSaveId="shell.viewer">
               <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
-                <PreviewViewer previewer={instrument.preview} fov={instrument.fov} />
+                <div class="flex h-full flex-col bg-canvas">
+                  <div class="relative flex-1 overflow-hidden" data-fly-origin>
+                    {#if app.view.mode === 'snaps'}
+                      <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                        <SnapCanvas />
+                      </div>
+                    {:else if app.view.mode === 'stage'}
+                      <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                        <StageView bind:viewport={stageViewport} />
+                      </div>
+                    {:else}
+                      <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                        <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+                      </div>
+                    {/if}
+                  </div>
+
+                  <SnapshotFlyOverlay />
+                </div>
               </Pane>
               <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
               <Pane

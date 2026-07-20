@@ -3,7 +3,7 @@ import { SvelteMap } from 'svelte/reactivity';
 
 import type {
   ChannelConfig,
-  HALConfig,
+  DetectionPathConfig,
   InstrumentStatus,
   PreviewLevels,
   PreviewUpdate,
@@ -11,7 +11,9 @@ import type {
 } from '$lib/model/types';
 import { clampTopLeft, computeAutoLevels, sanitizeString } from '$lib/utils';
 
+import type { Stage } from './app.svelte';
 import type { Client } from './client.svelte';
+import type { Inpainter } from './inpaint.svelte';
 import { NumericModel } from './prop.svelte';
 
 /** A colormap: list of hex color stops (black->color for single-stop). */
@@ -91,6 +93,9 @@ export function isViewportEqual(a: PreviewViewport, b: PreviewViewport): boolean
 export const DEFAULT_VIEWPORT: PreviewViewport = { x: 0, y: 0, w: 1, h: 1 };
 
 const WHEEL_ZOOM_SPEED = 0.0015;
+const INPAINT_INTERVAL_MS = 1000;
+const INPAINT_SETTLE_DWELL_MS = 100;
+const INPAINT_NEW_BOUT_GAP_MS = 30 * 60 * 1000; // resuming preview after this long starts a fresh mosaic
 
 /** Multiplicative zoom factor from a wheel event, normalized across mice/trackpads. */
 export function wheelZoomFactor(e: WheelEvent): number {
@@ -129,6 +134,27 @@ function sensorToStage(tx: number, ty: number, tw: number, th: number, rot: numb
   return { x: tx, y: ty, w: tw, h: th };
 }
 
+/**
+ * Map a sensor-normalized rect (full frame or a `view` ROI) to its stage-µm footprint in the raster's
+ * Y-up, bottom-left convention: rotates via `sensorToStage`, then places it inside the FOV box centered on
+ * `pose`. The full-sensor rect reduces to the plain FOV box, so overview and ROI paints share this math.
+ */
+function frameStageRect(
+  sensor: PreviewViewport,
+  pose: { x: number; y: number },
+  fov: [number, number],
+  rot: number
+): { x: number; y: number; w: number; h: number } {
+  const [fw, fh] = fov;
+  const st = sensorToStage(sensor.x, sensor.y, sensor.w, sensor.h, rot);
+  return {
+    x: pose.x - fw / 2 + st.x * fw,
+    y: pose.y + fh / 2 - (st.y + st.h) * fh, // top-down sensor Y → bottom-left stage Y
+    w: st.w * fw,
+    h: st.h * fh
+  };
+}
+
 /** Draw a bitmap rotated at a pixel position. For 0° draws directly; otherwise saves/restores context. */
 function drawRotated(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -155,6 +181,22 @@ function drawRotated(
   const prH = swapped ? dw : dh;
   ctx.drawImage(bitmap, sx, sy, sw, sh, -prW / 2, -prH / 2, prW, prH);
   ctx.restore();
+}
+
+/** A stage-oriented copy of a sensor frame: applies the camera rotation so it lands upright in stage space.
+ *  Returns the frame untouched when there's no rotation (the common case). */
+function rotatedSource(frame: ImageBitmap, rotationDeg: number): CanvasImageSource {
+  const rot = ((rotationDeg % 360) + 360) % 360;
+  if (rot === 0) return frame;
+  const rad = (rot * Math.PI) / 180;
+  const swapped = rot % 180 !== 0; // 90/270 swap the bounding box
+  const w = swapped ? frame.height : frame.width;
+  const h = swapped ? frame.width : frame.height;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  drawRotated(c.getContext('2d')!, frame, 0, 0, frame.width, frame.height, 0, 0, w, h, rad, swapped);
+  return c;
 }
 
 // Reusable offscreen canvas pool for per-channel compositing.
@@ -375,17 +417,184 @@ export class PreviewChannel {
   }
 }
 
-export class Preview {
+/**
+ * Data plane: receives the per-channel binary frame streams and holds the current images + channel set.
+ * Knows nothing about viewport, levels, or preview control — a consumer (`Preview`) layers those on top.
+ * Register `onFrame` listeners to react after each overview frame is stored (e.g. first-frame auto-level).
+ */
+export class LiveFeed {
   readonly MAX_CHANNELS = 4;
+
+  channels = $state<PreviewChannel[]>([]);
+  redrawGeneration = $state(0);
+
+  #client: Client;
+  #detection: Record<string, DetectionPathConfig>;
+  #frameListeners: ((channelName: string) => void)[] = [];
+  #unsubscribers: Array<() => void> = [];
+  #previewEpoch = -1;
+
+  constructor(client: Client, detection: Record<string, DetectionPathConfig>, initialStatus: InstrumentStatus) {
+    this.#client = client;
+    this.#detection = detection;
+
+    this.channels = Array.from({ length: this.MAX_CHANNELS }, (_, idx) => new PreviewChannel(idx));
+
+    this.#applyStatus(initialStatus);
+    this.#subscribe();
+  }
+
+  /** Register a listener fired (with the channel name) after each overview frame is stored. Returns an unsubscribe. */
+  onFrame(listener: (channelName: string) => void): () => void {
+    this.#frameListeners.push(listener);
+    return () => {
+      this.#frameListeners = this.#frameListeners.filter((l) => l !== listener);
+    };
+  }
+
+  /** Server generation for the current preview stream; frame indices restart when this changes. */
+  get previewEpoch(): number {
+    return this.#previewEpoch;
+  }
+
+  /** Bounding-box aspect ratio across all visible channels (accounts for rotation). */
+  get boundingBoxAspect(): number {
+    const { maxW, maxH } = channelBoundingBox(this.channels);
+    return maxW > 0 && maxH > 0 ? maxW / maxH : 4 / 3;
+  }
+
+  dispose(): void {
+    this.#unsubscribers.forEach((unsub) => unsub());
+    this.#unsubscribers = [];
+  }
+
+  /** Drop cached frames so a fresh (transient) preview waits for new images instead of compositing stale ones. */
+  clearFrames(): void {
+    for (const ch of this.channels) {
+      ch.frame?.close();
+      ch.frame = null;
+      ch.clearView();
+    }
+    this.redrawGeneration++;
+  }
+
+  #subscribe(): void {
+    // Channel set comes off instrument.status; frames/tiles are binary streams.
+    const unsubStatus = this.#client.on('instrument.status', (status) => {
+      this.#applyStatus(status);
+    });
+
+    const unsubFrame = this.#client.subscribe('preview.frame', async (topic, body) => {
+      const decoded = await decodeFrameBody(body);
+      if (decoded) this.#handleFrame(channelFromTopic(topic, 'preview.frame'), decoded.info, decoded.bitmap);
+    });
+
+    const unsubView = this.#client.subscribe('preview.view', async (topic, body) => {
+      const decoded = await decodeFrameBody(body);
+      if (decoded) this.#handleView(channelFromTopic(topic, 'preview.view'), decoded.info, decoded.bitmap);
+    });
+
+    this.#unsubscribers.push(unsubStatus, unsubFrame, unsubView);
+  }
+
+  /** Sync the channel set + per-channel camera geometry; drops displayed frames on epoch/profile change. */
+  #applyStatus = (status: InstrumentStatus): void => {
+    const imaging = status.state.imaging;
+    const activeProfile = imaging.profiles[status.active_profile_id];
+    const newChannelNames = (activeProfile?.channels ?? []).slice(0, this.MAX_CHANNELS);
+    if (newChannelNames.length === 0) return;
+
+    const epochChanged = status.preview_epoch !== this.#previewEpoch;
+    this.#previewEpoch = status.preview_epoch;
+    const channelsChanged = this.channels.some((channel, i) => (channel.name ?? '') !== (newChannelNames[i] ?? ''));
+    if (!epochChanged && !channelsChanged) return;
+
+    // A new epoch means the server invalidated preview (profile switch etc.) — drop displayed frames so a
+    // previous profile's images don't linger; a channel-set change additionally re-slots the channels.
+    for (const ch of this.channels) {
+      ch.frame = null;
+      ch.clearView();
+    }
+
+    if (channelsChanged) {
+      for (let i = 0; i < this.MAX_CHANNELS; i++) {
+        const slot = this.channels[i];
+        slot.visible = false;
+        slot.initAutoLevelDone = false;
+        slot.config = undefined;
+        slot.colormap = null;
+        slot.name = newChannelNames[i];
+        if (!slot.name) continue;
+
+        slot.config = imaging.channels[slot.name];
+        slot.rotationDeg = this.#detection[slot.config?.detection ?? '']?.rotation_deg ?? 0;
+        slot.visible = true;
+      }
+    }
+
+    this.redrawGeneration++;
+  };
+
+  #handleFrame = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
+    const channel = this.channels.find((c) => c.name === channelName);
+    if (!channel) return;
+
+    // Track sensor dimensions per channel
+    channel.sensorWidth = info.full_width;
+    channel.sensorHeight = info.full_height;
+
+    channel.latestFrameInfo = info;
+    channel.frame = bitmap;
+
+    if (info.histogram) channel.latestHistogram = info.histogram;
+    if (info.colormap) channel.colormap = info.colormap;
+
+    this.redrawGeneration++;
+    for (const listener of this.#frameListeners) listener(channelName);
+  };
+
+  #handleView = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
+    const channel = this.channels.find((c) => c.name === channelName);
+    if (!channel) return;
+
+    // Latest-wins: a fast pan can land renders out of order, so drop any view older than the one
+    // we're showing; otherwise adopt it and close the superseded bitmap.
+    if (channel.view && info.frame_idx < channel.view.frameIdx) {
+      bitmap.close();
+      return;
+    }
+    channel.view?.bitmap.close();
+    channel.view = { bitmap, rect: info.rect, frameIdx: info.frame_idx };
+
+    this.redrawGeneration++;
+  };
+}
+
+/** The pixel half of a snapshot: composited image + stage footprint + per-channel display. The instrument
+ * layer enriches this with device metadata (camera/laser/profile) before persisting. */
+export interface CapturedImage {
+  blob: Blob;
+  thumbnail: string;
+  fovW: number;
+  fovH: number;
+  pose: { x: number; y: number; z: number };
+  channels: Record<string, { label: string; colormap: string | null; levelsMin: number; levelsMax: number }>;
+}
+
+/**
+ * Control/view plane over a `FrameFeed`: viewport + pan/zoom, per-channel levels/colormap editing, preview
+ * start/stop, cross-viewer update sync, and stage-awareness (`settled`/`pose`). Owns the feed; frame-plane
+ * reads are exposed as passthroughs. This is the stage-aware preview both snapping and inpainting build on.
+ */
+export class Preview {
+  readonly feed: LiveFeed;
 
   isPreviewing = $state(false);
   isPanZoomActive = $state(false);
   viewport = $state<PreviewViewport>({ ...DEFAULT_VIEWPORT });
   /** Width/height of the display surface, kept current by the renderer; anchors aspect-aware zoom. */
   displayAspect = $state(1);
-  channels = $state<PreviewChannel[]>([]);
   catalog = $state<ColormapCatalog>([]);
-  redrawGeneration = $state(0);
 
   // Numeric editors of the viewport; setViewport mirrors the applied value back into each.
   readonly zoomModel = new NumericModel(1, { min: 1, max: 100, step: 0.1, home: 1, onPatch: (v) => this.setZoom(v) });
@@ -393,9 +602,9 @@ export class Preview {
   readonly panYModel = new NumericModel(0, { min: 0, max: 1, step: 0.01, home: 0, onPatch: (v) => this.setPanY(v) });
 
   #client: Client;
-  #hal: HALConfig;
+  #stage: Stage;
+  #paintDispose: () => void = () => {};
   #unsubscribers: Array<() => void> = [];
-  #previewEpoch = -1;
   #viewportUpdateTimer: number | null = null;
   #viewportLastSent = 0;
   #levelsUpdateTimers = new SvelteMap<string, number>();
@@ -403,14 +612,25 @@ export class Preview {
   readonly #THROTTLE_MS = 200;
   readonly #PAN_ZOOM_STREAM_MS = 500;
 
-  constructor(client: Client, hal: HALConfig, initialStatus: InstrumentStatus) {
+  constructor(
+    client: Client,
+    detection: Record<string, DetectionPathConfig>,
+    initialStatus: InstrumentStatus,
+    stage: Stage
+  ) {
     this.#client = client;
-    this.#hal = hal;
+    this.#stage = stage;
+    this.feed = new LiveFeed(client, detection, initialStatus);
+    this.isPreviewing = initialStatus.mode === 'preview';
 
-    this.channels = Array.from({ length: this.MAX_CHANNELS }, (_, idx) => new PreviewChannel(idx));
-
-    this.#applyStatus(initialStatus);
-    this.#subscribe();
+    const unsubFrame = this.feed.onFrame((name) => this.#autoLevel(name));
+    const unsubStatus = this.#client.on('instrument.status', (status) => {
+      this.isPreviewing = status.mode === 'preview';
+    });
+    const unsubUpdates = this.#client.on('preview.updates', (update) => {
+      this.#applyPreviewUpdate(update);
+    });
+    this.#unsubscribers.push(unsubFrame, unsubStatus, unsubUpdates);
 
     fetchColormapCatalog(client)
       .then((catalog) => {
@@ -419,14 +639,220 @@ export class Preview {
       .catch((e) => console.warn('[Preview] failed to fetch colormap catalog:', e));
   }
 
+  /** Wire the mosaic store as the paint sink (owned by the app, injected once the instrument opens). */
+  bindInpaint(inpaint: Inpainter): void {
+    this.#paintDispose();
+    this.#paintDispose = $effect.root(() => this.#runPaintLoop(inpaint));
+  }
+
+  /** Continuously max-blend fresh frames into the active mosaic while previewing at a stationary stage pose. */
+  #runPaintLoop(inpaint: Inpainter): void {
+    interface AcceptedFrame {
+      token: string;
+      frameIdx: number;
+      mosaicId: string;
+      pose: { x: number; y: number };
+      fov: [number, number];
+      rotationDeg: number;
+      color: string | null;
+      detailQueued: boolean;
+    }
+
+    let sessionKey: string | null = null;
+    let stableSince = 0;
+    let paintQueue = Promise.resolve();
+    let baseline: Array<string | null> = [];
+    let accepted: Array<AcceptedFrame | undefined> = [];
+    let lastPaintAt: number[] = [];
+    let wasPreviewing = false;
+    let boutStarted = false; // whether this preview session has resolved its destination mosaic
+
+    const tokenFor = (frameIdx: number): string => `${this.feed.previewEpoch}:${frameIdx}`;
+    const currentToken = (ch: PreviewChannel): string | null =>
+      ch.latestFrameInfo ? tokenFor(ch.latestFrameInfo.frame_idx) : null;
+
+    const enqueuePaint = (
+      sample: AcceptedFrame,
+      channel: string,
+      source: CanvasImageSource,
+      rect: { x: number; y: number; w: number; h: number }
+    ) => {
+      paintQueue = paintQueue
+        .then(async () => {
+          if (inpaint.activeMosaic?.id !== sample.mosaicId) return;
+          await inpaint.paintInto(sample.mosaicId, channel, source, rect, sample.color);
+        })
+        .catch((e) => console.warn('[inpaint] paint failed:', e));
+    };
+
+    const queueMatchingDetail = (ch: PreviewChannel, sample: AcceptedFrame) => {
+      const view = ch.view;
+      if (!view || view.frameIdx !== sample.frameIdx || sample.detailQueued || !ch.name) return;
+      sample.detailQueued = true;
+      enqueuePaint(
+        sample,
+        ch.name,
+        rotatedSource(view.bitmap, sample.rotationDeg),
+        frameStageRect(view.rect, sample.pose, sample.fov, sample.rotationDeg)
+      );
+    };
+
+    $effect(() => {
+      void this.feed.redrawGeneration;
+      const fov = this.#stage.fov;
+
+      const previewing = this.isPreviewing;
+      if (previewing && !wasPreviewing) boutStarted = false; // preview off→on: this session may start fresh
+      wasPreviewing = previewing;
+
+      if (!previewing || !this.settled || !fov) {
+        sessionKey = null;
+        baseline = [];
+        accepted = [];
+        lastPaintAt = [];
+        return;
+      }
+
+      // Resolve the destination once per preview session: continue the active mosaic, or start a new one
+      // when it's stale (>30 min since last touch) or none exists. After that, follow whatever is active.
+      let mosaic = inpaint.activeMosaic;
+      if (!boutStarted) {
+        const stale = !mosaic || Date.now() - mosaic.touchedAt > INPAINT_NEW_BOUT_GAP_MS;
+        if (stale) {
+          const b = this.#stage.bounds(true);
+          if (!b) return; // stage limits not known yet; retry next frame
+          mosaic = inpaint.createFor({ x: b.minX, y: b.minY, w: b.maxX - b.minX, h: b.maxY - b.minY }, fov[0]);
+          if (inpaint.viewedIds.size === 0) inpaint.view(mosaic.id);
+        }
+        boutStarted = true;
+      }
+      if (!mosaic) return;
+
+      const key = `${mosaic.id}:${this.feed.previewEpoch}`;
+      const now = performance.now();
+      if (key !== sessionKey) {
+        sessionKey = key;
+        stableSince = now;
+        baseline = [];
+        accepted = [];
+        lastPaintAt = [];
+        for (const ch of this.feed.channels) {
+          baseline[ch.idx] = currentToken(ch);
+        }
+        return;
+      }
+      if (now - stableSince < INPAINT_SETTLE_DWELL_MS) return;
+
+      const pose = { x: this.#stage.position('x'), y: this.#stage.position('y') };
+      for (const ch of this.feed.channels) {
+        if (!ch.visible || !ch.name || !ch.frame || !ch.latestFrameInfo) continue;
+
+        const previous = accepted[ch.idx];
+        if (previous) queueMatchingDetail(ch, previous);
+
+        const token = currentToken(ch)!;
+        if (token === baseline[ch.idx] || token === previous?.token) continue;
+        if (now - (lastPaintAt[ch.idx] ?? -Infinity) < INPAINT_INTERVAL_MS) continue;
+
+        const color = this.resolveColor(ch.colormap); // baked into the mosaic so the UI needn't reconstruct it live
+        const sample: AcceptedFrame = {
+          token,
+          frameIdx: ch.latestFrameInfo.frame_idx,
+          mosaicId: mosaic.id,
+          pose,
+          fov,
+          rotationDeg: ch.rotationDeg,
+          color,
+          detailQueued: false
+        };
+        accepted[ch.idx] = sample;
+        lastPaintAt[ch.idx] = now;
+        enqueuePaint(
+          sample,
+          ch.name,
+          rotatedSource(ch.frame, ch.rotationDeg),
+          frameStageRect(DEFAULT_VIEWPORT, pose, fov, ch.rotationDeg)
+        );
+        queueMatchingDetail(ch, sample);
+      }
+    });
+  }
+
+  // ── Frame-plane passthroughs ─────────────────────────────────────
+  get channels(): PreviewChannel[] {
+    return this.feed.channels;
+  }
+  get redrawGeneration(): number {
+    return this.feed.redrawGeneration;
+  }
+  get boundingBoxAspect(): number {
+    return this.feed.boundingBoxAspect;
+  }
+  clearFrames(): void {
+    this.feed.clearFrames();
+  }
+
   get client(): Client {
     return this.#client;
   }
 
-  /** Bounding-box aspect ratio across all visible channels (accounts for rotation). */
-  get boundingBoxAspect(): number {
-    const { maxW, maxH } = channelBoundingBox(this.channels);
-    return maxW > 0 && maxH > 0 ? maxW / maxH : 4 / 3;
+  // ── Stage-awareness (motion gate + current pose) ─────────────────────────
+  /** True when the stage is not moving. */
+  get settled(): boolean {
+    return !this.#stage.anyMoving;
+  }
+  /** Current stage pose (µm). */
+  get pose(): { x: number; y: number; z: number } {
+    return { x: this.#stage.position('x'), y: this.#stage.position('y'), z: this.#stage.position('z') };
+  }
+
+  /**
+   * The pixel half of a snapshot: composite the visible channels to a JPEG blob + thumbnail, plus the FOV
+   * footprint and per-channel display. Returns null when no frames are available. The instrument layer adds
+   * device metadata (camera/laser/profile) and persists.
+   */
+  async captureImage(thumbSize = 160): Promise<CapturedImage | null> {
+    const channels = this.channels;
+    const first = channels.find((ch) => ch.visible && ch.frame)?.frame;
+    if (!first) return null;
+
+    const w = first.width;
+    const h = first.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+    compositeFullFrames(ctx, canvas, channels);
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/jpeg', 0.85)
+    );
+
+    const thumbH = Math.round((h / w) * thumbSize);
+    canvas.width = thumbSize;
+    canvas.height = thumbH;
+    compositeFullFrames(ctx, canvas, channels);
+    const thumbnail = canvas.toDataURL('image/jpeg', 0.6);
+
+    const chOut: CapturedImage['channels'] = {};
+    for (const ch of channels) {
+      if (!ch.visible || !ch.frame || !ch.name) continue;
+      chOut[ch.name] = {
+        label: ch.label ?? ch.name,
+        colormap: ch.colormap,
+        levelsMin: ch.levelsMin,
+        levelsMax: ch.levelsMax
+      };
+    }
+
+    const fov = this.#stage.fov;
+    return {
+      blob,
+      thumbnail,
+      fovW: fov?.[0] ?? 0,
+      fovH: fov?.[1] ?? 0,
+      pose: this.pose,
+      channels: chOut
+    };
   }
 
   /** Resolve a colormap name or hex string to a hex color. */
@@ -445,6 +871,7 @@ export class Preview {
       this.stopPreview();
     }
 
+    this.#paintDispose();
     this.#unsubscribers.forEach((unsub) => unsub());
     this.#unsubscribers = [];
 
@@ -456,6 +883,8 @@ export class Preview {
       clearTimeout(timer);
     }
     this.#levelsUpdateTimers.clear();
+
+    this.feed.dispose();
   }
 
   startPreview(): void {
@@ -463,21 +892,12 @@ export class Preview {
       console.warn('[Preview] no visible channels to preview');
       return;
     }
+    this.clearFrames();
     void this.#client.post('/instrument/preview/start');
   }
 
   stopPreview(): void {
     void this.#client.post('/instrument/preview/stop');
-  }
-
-  /** Drop cached frames so a fresh (transient) preview waits for new images instead of compositing stale ones. */
-  clearFrames(): void {
-    for (const ch of this.channels) {
-      ch.frame?.close();
-      ch.frame = null;
-      ch.clearView();
-    }
-    this.redrawGeneration++;
   }
 
   setChannelLevels(name: string, min: number, max: number): void {
@@ -505,7 +925,7 @@ export class Preview {
     this.zoomModel.value = 1 / value.w;
     this.panXModel.value = value.x;
     this.panYModel.value = value.y;
-    this.redrawGeneration++;
+    this.feed.redrawGeneration++;
   }
 
   /**
@@ -558,119 +978,27 @@ export class Preview {
     this.#queueViewportUpdate(viewport);
   }
 
-  // ── Subscriptions ────────────────────────────────────────────────
-
-  #subscribe(): void {
-    // Channel set + previewing state come off instrument.status; frames/tiles are binary streams;
-    // preview.updates echoes other viewers' viewport/levels/colormap changes (our own are sender-excluded).
-    const unsubStatus = this.#client.on('instrument.status', (status) => {
-      this.#applyStatus(status);
-    });
-
-    const unsubFrame = this.#client.subscribe('preview.frame', async (topic, body) => {
-      const decoded = await decodeFrameBody(body);
-      if (decoded) this.#handleFrame(channelFromTopic(topic, 'preview.frame'), decoded.info, decoded.bitmap);
-    });
-
-    const unsubView = this.#client.subscribe('preview.view', async (topic, body) => {
-      const decoded = await decodeFrameBody(body);
-      if (decoded) this.#handleView(channelFromTopic(topic, 'preview.view'), decoded.info, decoded.bitmap);
-    });
-
-    const unsubUpdates = this.#client.on('preview.updates', (update) => {
-      this.#applyPreviewUpdate(update);
-    });
-
-    this.#unsubscribers.push(unsubStatus, unsubFrame, unsubView, unsubUpdates);
-  }
-
   // ── Handlers ────────────────────────────────────────────────────
 
-  #applyStatus = (status: InstrumentStatus): void => {
-    this.isPreviewing = status.mode === 'preview';
-
-    const imaging = status.state.imaging;
-    const activeProfile = imaging.profiles[status.active_profile_id];
-    const newChannelNames = (activeProfile?.channels ?? []).slice(0, this.MAX_CHANNELS);
-    if (newChannelNames.length === 0) return;
-
-    const epochChanged = status.preview_epoch !== this.#previewEpoch;
-    this.#previewEpoch = status.preview_epoch;
-    const channelsChanged = this.channels.some((channel, i) => (channel.name ?? '') !== (newChannelNames[i] ?? ''));
-    if (!epochChanged && !channelsChanged) return;
-
-    // A new epoch means the server invalidated preview (profile switch etc.) — drop displayed frames so a
-    // previous profile's images don't linger; a channel-set change additionally re-slots the channels.
-    for (const ch of this.channels) {
-      ch.frame = null;
-      ch.clearView();
-    }
-
-    if (channelsChanged) {
-      for (let i = 0; i < this.MAX_CHANNELS; i++) {
-        const slot = this.channels[i];
-        slot.visible = false;
-        slot.initAutoLevelDone = false;
-        slot.config = undefined;
-        slot.colormap = null;
-        slot.name = newChannelNames[i];
-        if (!slot.name) continue;
-
-        slot.config = imaging.channels[slot.name];
-        slot.rotationDeg = this.#hal.detection[slot.config?.detection ?? '']?.rotation_deg ?? 0;
-        slot.visible = true;
-      }
-    }
-
-    this.redrawGeneration++;
-  };
-
-  #handleFrame = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
+  /** First frame of a channel: adopt the levels already in effect, else auto-level from its histogram. */
+  #autoLevel(channelName: string): void {
     const channel = this.channels.find((c) => c.name === channelName);
-    if (!channel) return;
+    if (!channel || channel.initAutoLevelDone) return;
+    const info = channel.latestFrameInfo;
+    if (!info) return;
 
-    // Track sensor dimensions per channel
-    channel.sensorWidth = info.full_width;
-    channel.sensorHeight = info.full_height;
-
-    channel.latestFrameInfo = info;
-    channel.frame = bitmap;
-
-    if (info.histogram) channel.latestHistogram = info.histogram;
-    if (info.colormap) channel.colormap = info.colormap;
-
-    this.redrawGeneration++;
-
-    // First frame: adopt the levels already in effect (a late joiner inherits the shared state without
-    // stomping it); auto-level only when none are set yet (default 0–1) — the server doesn't auto-level.
-    if (!channel.initAutoLevelDone) {
-      if (info.levels.min !== 0 || info.levels.max !== 1) {
-        channel.levelsMin = info.levels.min;
-        channel.levelsMax = info.levels.max;
-        channel.initAutoLevelDone = true;
-      } else if (channel.latestHistogram) {
-        const auto = computeAutoLevels(channel.latestHistogram);
-        if (auto) this.setChannelLevels(channelName, auto.min, auto.max);
-        channel.initAutoLevelDone = true;
-      }
+    if (info.levels.min !== 0 || info.levels.max !== 1) {
+      // A late joiner inherits the shared state without stomping it.
+      channel.levelsMin = info.levels.min;
+      channel.levelsMax = info.levels.max;
+      channel.initAutoLevelDone = true;
+    } else if (channel.latestHistogram) {
+      // Only auto-level when none are set yet (default 0–1) — the server doesn't auto-level.
+      const auto = computeAutoLevels(channel.latestHistogram);
+      if (auto) this.setChannelLevels(channelName, auto.min, auto.max);
+      channel.initAutoLevelDone = true;
     }
-  };
-
-  #handleView = (channelName: string, info: PreviewFrameInfo, bitmap: ImageBitmap): void => {
-    const channel = this.channels.find((c) => c.name === channelName);
-    if (!channel) return;
-
-    // Latest-wins: a fast pan can land renders out of order, so drop any view older than the one
-    // we're showing; otherwise adopt it and close the superseded bitmap.
-    if (channel.view && info.frame_idx < channel.view.frameIdx) {
-      bitmap.close();
-      return;
-    }
-    channel.view?.bitmap.close();
-    channel.view = { bitmap, rect: info.rect, frameIdx: info.frame_idx };
-
-    this.redrawGeneration++;
-  };
+  }
 
   /** Apply another viewer's view-state change (our own changes are sender-excluded by the server). */
   #applyPreviewUpdate = (update: PreviewUpdate): void => {
