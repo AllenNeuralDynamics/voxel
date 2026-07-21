@@ -859,11 +859,21 @@ export class Preview {
    */
   async captureImage(thumbSize = 160): Promise<CapturedImage | null> {
     const channels = this.channels;
-    const first = channels.find((ch) => ch.visible && ch.frame)?.frame;
-    if (!first) return null;
+    if (!channels.some((ch) => ch.visible && ch.frame)) return null;
 
-    const w = first.width;
-    const h = first.height;
+    // The blob is drawn into the stage-space FOV box, so its aspect must match: size the canvas from the
+    // stage-oriented bounding box, scaled to the resolution the downsampled overview frames actually carry.
+    const { maxW, maxH } = channelBoundingBox(channels);
+    if (maxW <= 0 || maxH <= 0) return null;
+    let framePerSensorPx = 0;
+    for (const ch of channels) {
+      if (!ch.visible || !ch.frame || ch.sensorWidth <= 0 || ch.sensorHeight <= 0) continue;
+      framePerSensorPx = Math.max(framePerSensorPx, ch.frame.width / ch.sensorWidth, ch.frame.height / ch.sensorHeight);
+    }
+    if (framePerSensorPx <= 0) return null;
+    const w = Math.max(1, Math.round(maxW * framePerSensorPx));
+    const h = Math.max(1, Math.round(maxH * framePerSensorPx));
+
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;

@@ -798,7 +798,7 @@ export class VoxelApp {
       snapChannels[name] = entry;
     }
 
-    this.snaps.add({
+    const snap = this.snaps.add({
       instrument: this.activeName ?? '',
       profileId,
       profileLabel: inst.activeProfile?.label || sanitizeString(profileId),
@@ -812,6 +812,8 @@ export class VoxelApp {
       blob: captured.blob,
       thumbnail: captured.thumbnail
     });
+
+    if (this.snaps.activeSnap?.group.id !== snap.groupId) this.snaps.viewGroup(snap.groupId);
 
     if (browser) {
       window.dispatchEvent(new CustomEvent('voxel:snapshot-captured', { detail: { thumbnail: captured.thumbnail } }));

@@ -700,7 +700,6 @@
                       }}
                       prefix="Factor"
                       size="xs"
-                      decimals={2}
                       numCharacters={6}
                       align="right"
                       disabled={!canEdit}
@@ -715,7 +714,6 @@
                       prefix="Delta"
                       suffix=" V"
                       size="xs"
-                      decimals={3}
                       numCharacters={6}
                       align="right"
                       disabled={!canEdit}
@@ -731,7 +729,6 @@
                       }}
                       prefix="Fraction"
                       size="xs"
-                      decimals={3}
                       numCharacters={6}
                       align="right"
                       disabled={!canEdit}
@@ -772,12 +769,11 @@
                             onChange: (v) => setEditingVoltage('min', v),
                             min: aoRange?.min,
                             max: wf.voltage.max,
-                            step: 0.05
+                            step: 0.005
                           }}
                           prefix="Min"
                           suffix=" V"
                           size="xs"
-                          decimals={3}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
@@ -789,12 +785,11 @@
                             onChange: (v) => setEditingVoltage('max', v),
                             min: wf.voltage.min,
                             max: aoRange?.max,
-                            step: 0.05
+                            step: 0.001
                           }}
                           prefix="Max"
                           suffix=" V"
                           size="xs"
-                          decimals={3}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
@@ -809,12 +804,11 @@
                             onChange: (v) => setEditingOffset(v),
                             min: aoRange?.min,
                             max: aoRange?.max,
-                            step: 0.05
+                            step: 0.001
                           }}
                           prefix="Offset"
                           suffix=" V"
                           size="xs"
-                          decimals={3}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
@@ -824,12 +818,11 @@
                             value: (wf.voltage.max - wf.voltage.min) / 2,
                             onChange: (v) => setEditingAmplitude(v),
                             min: 0,
-                            step: 0.05
+                            step: 0.001
                           }}
                           prefix="Amp"
                           suffix=" V"
                           size="xs"
-                          decimals={3}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
@@ -842,13 +835,12 @@
                         onChange: (v) => updateEditingField('rest_voltage', v),
                         min: wf.voltage.min,
                         max: wf.voltage.max,
-                        step: 0.1,
+                        step: 0.001,
                         home: () => wf.voltage.min
                       }}
                       prefix="Rest Voltage"
                       suffix=" V"
                       size="xs"
-                      decimals={2}
                       numCharacters={6}
                       align="right"
                       disabled={!canEdit}
@@ -877,12 +869,11 @@
                             onChange: (v) => updateEditingWindow('min', v),
                             min: 0,
                             max: wf.window.max,
-                            step: 0.01,
+                            step: 0.001,
                             bigStep: 0.05
                           }}
                           prefix="Start"
                           size="xs"
-                          decimals={3}
                           numCharacters={5}
                           align="right"
                           disabled={!canEdit}
@@ -894,12 +885,11 @@
                             onChange: (v) => updateEditingWindow('max', v),
                             min: wf.window.min,
                             max: 1,
-                            step: 0.01,
+                            step: 0.001,
                             bigStep: 0.05
                           }}
                           prefix="End"
                           size="xs"
-                          decimals={3}
                           numCharacters={5}
                           align="right"
                           disabled={!canEdit}
@@ -920,7 +910,6 @@
                           prefix="Start"
                           suffix=" s"
                           size="xs"
-                          decimals={4}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit || duration <= 0}
@@ -938,7 +927,6 @@
                           prefix="End"
                           suffix=" s"
                           size="xs"
-                          decimals={4}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit || duration <= 0}
@@ -963,11 +951,10 @@
                             onChange: (v) => updateEditingField('duty_cycle', v),
                             min: 0,
                             max: 1,
-                            step: 0.05
+                            step: 0.001
                           }}
                           prefix="Duty"
                           size="xs"
-                          decimals={2}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
@@ -981,7 +968,7 @@
                             if (v > 0) updateEditingField('frequency', null);
                           },
                           min: 0,
-                          step: 1
+                          step: 0.25
                         }}
                         prefix="Cycles"
                         size="xs"
@@ -997,7 +984,7 @@
                             if (v > 0) updateEditingField('cycles', null);
                           },
                           min: 0,
-                          step: 1
+                          step: 0.01
                         }}
                         prefix="Freq"
                         suffix=" Hz"
@@ -1010,12 +997,11 @@
                         model={{
                           value: (wf.phase ?? 0) * (180 / Math.PI),
                           onChange: (v) => updateEditingField('phase', v * (Math.PI / 180)),
-                          step: 0.1
+                          step: 0.01
                         }}
                         prefix="Phase"
                         suffix=" deg"
                         size="xs"
-                        decimals={1}
                         numCharacters={6}
                         align="right"
                         disabled={!canEdit}
@@ -1027,11 +1013,10 @@
                             onChange: (v) => updateEditingField('symmetry', v),
                             min: 0,
                             max: 1,
-                            step: 0.05
+                            step: 0.0001
                           }}
                           prefix="Symmetry"
                           size="xs"
-                          decimals={2}
                           numCharacters={6}
                           align="right"
                           disabled={!canEdit}
@@ -1103,7 +1088,6 @@
                   prefix="Duration"
                   suffix=" s"
                   size="xs"
-                  decimals={4}
                   numCharacters={8}
                   align="right"
                   disabled={!canEdit}
@@ -1119,7 +1103,6 @@
                   prefix="Rest Time"
                   suffix=" s"
                   size="xs"
-                  decimals={4}
                   numCharacters={8}
                   align="right"
                   disabled={!canEdit}
