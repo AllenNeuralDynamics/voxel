@@ -379,7 +379,7 @@
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
             <span class="text-xs text-nowrap text-fg-muted tabular-nums">
-              {selectedRows.length}/{rows.length} tasks
+              {selectedRows.length}/{rows.length}
             </span>
             {#if instrument}
               <Select
@@ -402,7 +402,7 @@
                   step: unit.bigStep
                 }}
                 decimals={unit.decimals}
-                numCharacters={7}
+                numCharacters={6}
                 size="xs"
                 steppers={false}
                 prefix="Nudge"
@@ -431,7 +431,6 @@
               onclick={() => (deleteDialogOpen = true)}
             >
               <TrashCanOutline width="14" height="14" />
-              Delete
             </Button>
           </div>
         </div>

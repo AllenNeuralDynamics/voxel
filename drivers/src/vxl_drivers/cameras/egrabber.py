@@ -198,6 +198,7 @@ class VieworksCamera(Camera):
     @numeric(
         minimum=lambda self: self._exposure_ms.min,
         maximum=lambda self: self._exposure_ms.max,
+        step=0.001,
     )
     def exposure_time_ms(self) -> int:
         if exp_time := self._dev.remote.get(feature="ExposureTime", dtype=float):

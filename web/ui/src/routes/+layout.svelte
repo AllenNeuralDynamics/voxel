@@ -86,6 +86,8 @@
     fallback: { min: 28, max: 40, default: 32 }
   });
 
+  type Segment = { key: string; label: string; icon?: Component; active: boolean; select: () => void };
+
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
     { id: '/', label: 'Inspect', icon: Microscope },
     { id: '/tune', label: 'Tune', icon: WaveformsIcon },
@@ -107,6 +109,25 @@
     if (viewId === id) return;
     goto(resolve(id), { keepFocus: true, noScroll: true });
   }
+
+  const navSegments = $derived<Segment[]>(
+    navTabs.map((t) => ({
+      key: t.id,
+      label: t.label,
+      icon: t.icon,
+      active: viewId === t.id,
+      select: () => selectView(t.id)
+    }))
+  );
+
+  const modeSegments = $derived<Segment[]>(
+    previewModes.map((m) => ({
+      key: m.mode,
+      label: m.label,
+      active: app.view.mode === m.mode,
+      select: () => app.view.setMode(m.mode)
+    }))
+  );
 
   // --- Bottom pane (logs) ---
 
@@ -167,31 +188,35 @@
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   {/snippet}
+  {#snippet segmented(segments: Segment[])}
+    <div class="flex h-ui-md items-center rounded-md border border-input bg-canvas/50 p-0.5">
+      {#each segments as { key, label, icon: Icon, active, select } (key)}
+        <button
+          type="button"
+          title={label}
+          onclick={select}
+          class={cn(
+            'inline-flex h-full cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 min-w-24 text-sm whitespace-nowrap transition-colors',
+            active ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
+          )}
+        >
+          {#if Icon}
+            <Icon width="12" height="12" class="shrink-0" />
+          {/if}
+          {label}
+        </button>
+      {/each}
+    </div>
+  {/snippet}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
     <PaneGroup direction="horizontal" autoSaveId="shell.v5">
       <!-- Mode controls: nav + routed content + logs -->
       <Pane {...leftPane}>
         <div class="grid h-full grid-rows-[auto_1fr] bg-surface">
-          <header class="flex h-15 shrink-0 items-center gap-x-3 border-b border-border px-4">
+          <header class="flex h-15 shrink-0 items-center gap-x-5 border-b border-border px-4">
             {@render appMenu()}
-            <nav class="flex h-ui-md items-center gap-x-1 text-fg-muted">
-              {#each navTabs as tab (tab.id)}
-                {@const Icon = tab.icon}
-                {@const active = viewId === tab.id}
-                <button
-                  onclick={() => selectView(tab.id)}
-                  class={cn(
-                    'inline-flex h-full cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm whitespace-nowrap transition-colors',
-                    active
-                      ? 'border-fg-accent/30 bg-fg-accent/10 text-fg'
-                      : 'border-transparent hover:bg-element-hover hover:text-fg'
-                  )}
-                  title={tab.label}
-                >
-                  <Icon width="12" height="12" class="shrink-0" />
-                  {tab.label}
-                </button>
-              {/each}
+            <nav class="flex items-center">
+              {@render segmented(navSegments)}
             </nav>
           </header>
           <div class="flex h-full min-h-0 min-w-0 flex-col bg-canvas/35">
@@ -206,20 +231,7 @@
         <div class="flex h-full flex-col bg-canvas">
           <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
             <div class="flex items-center gap-2">
-              <div class="flex h-ui-md items-center rounded-md border border-input bg-canvas/50 p-0.5">
-                {#each previewModes as { mode, label } (mode)}
-                  <button
-                    type="button"
-                    class={cn(
-                      'h-full rounded-sm px-3 text-sm transition-colors',
-                      app.view.mode === mode ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
-                    )}
-                    onclick={() => app.view.setMode(mode)}
-                  >
-                    {label}
-                  </button>
-                {/each}
-              </div>
+              {@render segmented(modeSegments)}
               <button
                 onclick={toggleLogs}
                 class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
