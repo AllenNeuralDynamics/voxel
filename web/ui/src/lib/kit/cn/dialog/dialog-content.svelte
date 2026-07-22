@@ -4,6 +4,7 @@
   export const dialogContentVariants = tv({
     base: [
       'bg-canvas fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2.3rem)]',
+      'max-h-[calc(100dvh-2.3rem)] overflow-y-auto',
       'translate-x-[-50%] translate-y-[-50%] gap-3 rounded-md border p-4 shadow-md duration-200',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -11,10 +12,13 @@
     ],
     variants: {
       size: {
-        sm: 'sm:max-w-sm',
-        md: 'sm:max-w-md',
-        lg: 'sm:max-w-lg',
-        xl: 'sm:max-w-xl'
+        sm: 'sm:max-w-lg',
+        md: 'sm:max-w-xl',
+        lg: 'sm:max-w-2xl',
+        xl: 'sm:max-w-3xl',
+        // Viewport-proportional with a hard cap — for content-heavy dialogs that should breathe on a
+        // wide screen without ever going edge-to-edge.
+        xxl: 'sm:w-[90vw] sm:max-w-7xl'
       }
     },
     defaultVariants: {

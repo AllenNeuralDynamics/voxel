@@ -1,3 +1,11 @@
+<script lang="ts" module>
+  let lastInspectPath = '/';
+
+  function isInspectPath(path: string): boolean {
+    return path === '/' || path === '/config' || path === '/stage' || path.startsWith('/devices/');
+  }
+</script>
+
 <script lang="ts">
   import { afterNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -9,23 +17,17 @@
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
 
-  let lastConfigurePath = '/';
-
-  function isInsideConfigure(path: string): boolean {
-    return path === '/' || path === '/config' || path === '/stage' || path.startsWith('/devices/');
-  }
-
   afterNavigate(({ from, to }) => {
     if (!to) return;
     const toPath = to.url.pathname;
 
-    if (toPath === '/' && from && !isInsideConfigure(from.url.pathname) && lastConfigurePath !== '/') {
-      goto(resolve(lastConfigurePath as '/'), { keepFocus: true, noScroll: true });
+    if (toPath === '/' && from && !isInspectPath(from.url.pathname) && lastInspectPath !== '/') {
+      goto(resolve(lastInspectPath as '/'), { keepFocus: true, noScroll: true });
       return;
     }
 
-    if (isInsideConfigure(toPath)) {
-      lastConfigurePath = toPath;
+    if (isInspectPath(toPath)) {
+      lastInspectPath = toPath;
     }
   });
 

@@ -14,6 +14,7 @@
   import { page } from '$app/state';
   import type { Pathname } from '$app/types';
   import favicon from '$lib/assets/favicon.svg';
+  import DefaultConfigDialog, { defaultDialog } from '$lib/DefaultConfigDialog.svelte';
   import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
   import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
@@ -180,6 +181,21 @@
           <DropdownMenu.Item
             class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
             disabled={!app.instrument}
+            onclick={() => defaultDialog.open('save')}
+          >
+            Save as Default…
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
+            disabled={!app.instrument}
+            onclick={() => defaultDialog.open('restore')}
+          >
+            Restore Default…
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator class="my-1 h-px bg-border" />
+          <DropdownMenu.Item
+            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
+            disabled={!app.instrument}
             onclick={() => (closeDialogOpen = true)}
           >
             Close Session…
@@ -336,4 +352,5 @@
 {/if}
 
 <AppearanceSheet bind:open={themes.pickerOpen} />
+<DefaultConfigDialog />
 <Toaster position="bottom-left" />

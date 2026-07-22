@@ -4,7 +4,7 @@ import getpass
 import logging
 import math
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
@@ -598,16 +598,67 @@ class WriterPatch(Patch):
     target_shard_gb: Annotated[float, Field(gt=0)] | None = None
 
 
-class InstrumentState(SchemaModel):
+class InstrumentDefaults(SchemaModel):  # everything that can live in config.default
+    imaging: ImagingProtocol
+    metadata_cls: MetadataCls = ExperimentMetadata
+    output: WriterSettings = Field(default_factory=WriterSettings)
+    stencil: Stencil = Field(default_factory=Stencil)
+    traversal: TileOrder = TileOrder.SNAKE_ROW
+
+
+PROMOTABLE_FIELDS = frozenset(InstrumentDefaults.model_fields)
+"""Baseline fields that ``save_as_default`` / ``restore_default`` can move between bench and config."""
+
+
+class InstrumentConfig(SchemaModel):
+    """A complete instrument spec: the hardware blueprint (:class:`HALConfig`) plus a baseline
+    acquisition state (``default``). Shared by shipped ``.voxel.yaml`` templates and each instrument's
+    on-disk ``config.yaml`` — a template is just a config without a ``.voxel`` home yet."""
+
+    hal: HALConfig
+    default: InstrumentDefaults
+
+    @model_validator(mode="after")
+    def check_state_compatibility(self) -> Self:
+        if errors := self.default.imaging.check_hal_compatibility(self.hal):
+            raise ValueError(", ".join(errors))
+        return self
+
+    @classmethod
+    def read(cls, path: Path | str) -> Self:
+        """Load and validate a config file (a template ``.voxel.yaml`` or an instrument ``config.yaml``)."""
+        return load_yaml(Path(path), cls)
+
+    @classmethod
+    def discover(cls, root: Path | str) -> dict[str, Self]:
+        """Valid configs under ``root`` (``*.voxel.yaml``), keyed by name. Skips unparseable files."""
+        root = Path(root)
+        if not root.is_dir():
+            return {}
+        found: dict[str, Self] = {}
+        for p_file in sorted(root.glob("*.voxel.yaml")):
+            name = p_file.name.removesuffix(".voxel.yaml")
+            try:
+                found[name] = cls.read(p_file)
+            except Exception as e:
+                logger.warning("Skipping config '%s': %s", p_file.name, e)
+        return found
+
+    def instantiate(self, name: str, into: Path | str) -> Path:
+        """Write this config to ``<into>/<name>.voxel/config.yaml``; return the dir. Raises if it exists."""
+        directory = Path(into) / f"{name}.voxel"
+        if directory.exists():
+            raise FileExistsError(f"Instrument '{name}' already exists at {directory}")
+        directory.mkdir(parents=True)
+        save_yaml(directory / "config.yaml", self)
+        return directory
+
+
+class InstrumentState(InstrumentDefaults):
     """The instrument's editable acquisition state: the imaging protocol (channels + profiles)
     plus planning defaults, traversal, writer options, acquisition tasks, and metadata."""
 
-    imaging: ImagingProtocol
-    metadata_cls: MetadataCls = Field(default=ExperimentMetadata)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    stencil: Stencil = Field(default_factory=Stencil)
-    traversal: TileOrder = TileOrder.SNAKE_ROW
-    output: WriterSettings = Field(default_factory=WriterSettings)
     tasks: dict[str, AcquisitionTask] = Field(default_factory=dict)
 
     last_modified: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
@@ -634,7 +685,6 @@ class Bench(Subscribable[InstrumentState]):
         super().__init__()
         self._path = path
         self._invariants = list(invariants)
-        self._default = default  # retained for restore_default (frozen, safe to re-adopt without copying)
         self._value = self._load_or_default(default)
         self._lock = asyncio.Lock()
 
@@ -754,50 +804,6 @@ class AcquisitionProgress(BaseModel, frozen=True):
         return self.model_copy(update={"done": done, "total": total if total is not None else self.total})
 
 
-class InstrumentConfig(SchemaModel):
-    """A complete instrument spec: the hardware blueprint (:class:`HALConfig`) plus a baseline
-    acquisition state (``default``). Shared by shipped ``.voxel.yaml`` templates and each instrument's
-    on-disk ``config.yaml`` — a template is just a config without a ``.voxel`` home yet."""
-
-    hal: HALConfig
-    default: InstrumentState
-
-    @model_validator(mode="after")
-    def check_state_compatibility(self) -> Self:
-        if errors := self.default.imaging.check_hal_compatibility(self.hal):
-            raise ValueError(", ".join(errors))
-        return self
-
-    @classmethod
-    def read(cls, path: Path | str) -> Self:
-        """Load and validate a config file (a template ``.voxel.yaml`` or an instrument ``config.yaml``)."""
-        return load_yaml(Path(path), cls)
-
-    @classmethod
-    def discover(cls, root: Path | str) -> dict[str, Self]:
-        """Valid configs under ``root`` (``*.voxel.yaml``), keyed by name. Skips unparseable files."""
-        root = Path(root)
-        if not root.is_dir():
-            return {}
-        found: dict[str, Self] = {}
-        for p_file in sorted(root.glob("*.voxel.yaml")):
-            name = p_file.name.removesuffix(".voxel.yaml")
-            try:
-                found[name] = cls.read(p_file)
-            except Exception as e:
-                logger.warning("Skipping config '%s': %s", p_file.name, e)
-        return found
-
-    def instantiate(self, name: str, into: Path | str) -> Path:
-        """Write this config to ``<into>/<name>.voxel/config.yaml``; return the dir. Raises if it exists."""
-        directory = Path(into) / f"{name}.voxel"
-        if directory.exists():
-            raise FileExistsError(f"Instrument '{name}' already exists at {directory}")
-        directory.mkdir(parents=True)
-        save_yaml(directory / "config.yaml", self)
-        return directory
-
-
 class TaskTile(Tile):
     """A task's footprint tile (a :class:`Tile`) tagged with its ``task_id``. Because :class:`TileOrder`
     is generic over the tile subtype, an ordered ``list[TaskTile]`` carries both the per-task geometry
@@ -842,13 +848,14 @@ class Instrument:
 
     def __init__(self, path: Path) -> None:
         self._path = Path(path)
-        cfg = load_yaml(self._path / "config.yaml", InstrumentConfig)
+        cfg = load_yaml(self.config_path, InstrumentConfig)
         self._hal = HAL(cfg.hal, name=f"{self._path.name}")
         self._bench = Bench(
             self._path / "bench.json",
-            cfg.default,
+            InstrumentState(**cfg.default.model_dump()),
             lambda state: state.imaging.check_hal_compatibility(self._hal.config),
         )
+        self._default = Cell[InstrumentDefaults](cfg.default)
         self._active_profile_id = Cell[str](next(iter(self._bench.value.imaging.profiles)))
         self._channels: dict[str, Channel] = {}
         self._preview_channels: list[Channel] = []
@@ -870,6 +877,11 @@ class Instrument:
         return self._path
 
     @property
+    def config_path(self) -> Path:
+        """The instrument's config file path (``<name>.voxel/config.yaml``)."""
+        return self._path / "config.yaml"
+
+    @property
     def hal(self) -> HAL:
         return self._hal
 
@@ -877,6 +889,11 @@ class Instrument:
     def state(self) -> Readable[InstrumentState]:
         """Committed acquisition state as a read-only reactive view."""
         return self._bench
+
+    @property
+    def default(self) -> Readable[InstrumentDefaults]:
+        """The on-disk baseline (``config.yaml`` ``default``) as a reactive view; updated by ``save_as_default``."""
+        return self._default
 
     @property
     def active_profile_id(self) -> Readable[str]:
@@ -1094,6 +1111,34 @@ class Instrument:
                     rois[device_id] = roi
 
         await self._update_active_profile_config(profile.model_copy(update={"props": props, "rois": rois}))
+
+    async def save_as_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
+        """Persist the named baseline fields from the live bench into ``config.yaml``'s ``default``.
+
+        ``include`` must be a subset of :data:`PROMOTABLE_FIELDS`; fields outside it keep their current
+        on-disk baseline value. Defaults to every promotable field.
+        """
+        self._ensure_not_capturing()
+        fields = set(include)
+        if unknown := fields - PROMOTABLE_FIELDS:
+            raise ProtocolError([f"cannot promote non-default fields: {sorted(unknown)}"])
+        state = self._bench.value
+        new_default = self._default.value.model_copy(update={f: getattr(state, f) for f in fields})
+        save_yaml(self._path / "config.yaml", InstrumentConfig(hal=self._hal.config, default=new_default))
+        await self._default.set(new_default)
+
+    async def restore_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
+        """Reset the named baseline fields on the live bench to ``config.yaml``'s ``default``.
+
+        ``include`` must be a subset of :data:`PROMOTABLE_FIELDS`. Run state (tasks, metadata) and any
+        field outside ``include`` are left untouched. Defaults to every promotable field.
+        """
+        self._ensure_not_capturing()
+        fields = set(include)
+        if unknown := fields - PROMOTABLE_FIELDS:
+            raise ProtocolError([f"cannot restore non-default fields: {sorted(unknown)}"])
+        default = self._default.value
+        await self._bench.update(**{f: getattr(default, f) for f in fields})
 
     async def update_ao_signals(self, ao_uid: str, signals: AOSignals) -> None:
         """Apply one AO signal config to hardware, then persist it into the active profile."""

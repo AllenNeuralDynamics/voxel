@@ -84,7 +84,7 @@
 <section class="space-y-5">
   <!-- Header -->
   <div class="flex items-center justify-between">
-    <h2 class="text-xl font-medium text-fg">{sanitizeString(deviceId)}</h2>
+    <h2 class="text-2xl text-fg">{sanitizeString(deviceId)}</h2>
     <span
       class={cn('h-2 w-2 rounded-full', camera?.connected ? 'bg-success' : 'bg-fg-muted/30')}
       title={camera?.connected ? 'Connected' : 'Disconnected'}

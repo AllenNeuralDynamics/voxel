@@ -82,6 +82,7 @@ class InstrumentFeed:
             i.task_tiles.subscribe(lambda _t: self.broadcast_status()),
             i.fov.subscribe(lambda _f: self.broadcast_status()),
             i.progress.subscribe(lambda p: bus.broadcast("acquisition.progress", p)),
+            i.default.subscribe(lambda _d: self.broadcast_default()),
             i.frames.subscribe(self._on_frame),
             i.views.subscribe(self._on_view),
         ]
@@ -90,6 +91,7 @@ class InstrumentFeed:
         ]
         self._unsubs.append(bus.on_command("preview.update", PreviewUpdate, self._on_preview_update))
         self.broadcast_status()
+        self.broadcast_default()
 
     def detach(self) -> None:
         """Release all subscriptions. Idempotent."""
@@ -120,6 +122,9 @@ class InstrumentFeed:
                 task_tiles=i.task_tiles.value,
             ),
         )
+
+    def broadcast_default(self) -> None:
+        self._bus.broadcast("instrument.default", self._inst.default.value)
 
     async def _on_frame(self, item: tuple[str, bytes]) -> None:
         channel, data = item

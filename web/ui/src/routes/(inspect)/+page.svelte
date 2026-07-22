@@ -6,7 +6,7 @@
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
 
-  const headingClass = 'mb-2 tracking-wide text-fg-muted uppercase';
+  const headingClass = 'mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase';
   const cardGroupClass = 'grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3';
   const rowLabelClass = 'whitespace-nowrap text-fg-muted';
   const rowValueClass = 'truncate font-mono text-fg';
@@ -41,12 +41,7 @@
 
   <!-- Identity / status -->
   <section class="border-b border-border px-4 pt-2 pb-6">
-    <div class="flex items-center gap-2">
-      <h2 class="text-xl font-medium text-fg">{app.activeName ?? 'Instrument'}</h2>
-      <span class="rounded-full bg-element-bg px-1.5 py-px font-medium text-fg-muted uppercase">
-        {instrument.mode}
-      </span>
-    </div>
+    <h2 class="text-2xl text-fg">{app.activeName ? sanitizeString(app.activeName) : 'Instrument'}</h2>
 
     <dl class="mt-4 grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
       <dt class={rowLabelClass}>Active profile</dt>

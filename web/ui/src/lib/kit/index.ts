@@ -12,6 +12,7 @@ export * as HoverCard from './cn/hover-card';
 export * as Sheet from './cn/sheet';
 export { Toaster } from './cn/sonner';
 export { default as ColorPicker } from './ColorPicker.svelte';
+export { default as DiffJsonView } from './DiffJsonView.svelte';
 export { default as Field } from './Field.svelte';
 export { default as JsonView } from './JsonView.svelte';
 export { default as Label } from './Label.svelte';
