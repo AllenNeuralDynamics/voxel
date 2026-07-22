@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Popover } from 'bits-ui';
   import { Pane, PaneGroup } from 'paneforge';
-  import { PersistedState, watch } from 'runed';
+  import { watch } from 'runed';
   import type { Component } from 'svelte';
 
   import { GridCanvas } from '$lib/grid';
@@ -11,7 +11,7 @@
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { getVoxelApp, type TaskPatch, type TileOrder } from '$lib/model';
   import { Input, SpinBox } from '$lib/prop/numeric';
-  import { cn, sanitizeString, toastError } from '$lib/utils';
+  import { cn, pref, sanitizeString, toastError } from '$lib/utils';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
@@ -37,7 +37,7 @@
   ];
   const SPACE_UNIT_OPTIONS = SPACE_UNITS.map((u) => ({ value: u.value, label: u.label }));
 
-  const spaceUnit = new PersistedState<SpaceUnit['value']>('acquire.spaceUnit', 'mm');
+  const spaceUnit = pref<SpaceUnit['value']>('plan:space-unit', 'mm');
   const unit = $derived(SPACE_UNITS.find((u) => u.value === spaceUnit.current) ?? SPACE_UNITS[0]);
 
   const TILE_ORDER_OPTIONS: { value: TileOrder; label: string }[] = [
@@ -372,7 +372,7 @@
   </button>
 {/snippet}
 
-<PaneGroup direction="vertical" autoSaveId="plan.grid" class="h-full">
+<PaneGroup direction="vertical" autoSaveId="plan:grid" class="h-full">
   <Pane defaultSize={60} minSize={30}>
     <div class="flex h-full flex-col overflow-hidden">
       <div class="shrink-0 px-3 py-4">

@@ -1,11 +1,10 @@
 /** App-level store (`VoxelApp`) + the active-instrument store (`Instrument`) and its device handles. */
-import { PersistedState } from 'runed';
 import { getContext, setContext } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 import { browser } from '$app/environment';
 import { type DeviceRole, type DeviceRoleKind, sortByRoleOrder } from '$lib/model/role';
-import { sanitizeString } from '$lib/utils';
+import { pref, sanitizeString } from '$lib/utils';
 
 import { Client, type ClientOptions, errorMessage, type Unsub } from './client.svelte';
 import {
@@ -571,7 +570,7 @@ export type PreviewMode = 'live' | 'snaps' | 'inpaint' | 'stage';
 export class PreviewView {
   readonly #snaps!: SnapshotStore;
   // Persisted so the chosen view (Live / Snaps / Inpaint) survives a page refresh.
-  readonly #mode = new PersistedState<PreviewMode>('voxel-preview-mode', 'live');
+  readonly #mode = pref<PreviewMode>('preview:mode', 'live');
 
   constructor(snaps: SnapshotStore) {
     this.#snaps = snaps;
@@ -629,6 +628,7 @@ export class VoxelApp {
   #desired: string | null = null; // latest presence (app.status / GET /app)
   #openName = $state<string | null>(null); // name of the instrument actually open
   #reconciling = false;
+  readonly #lastInstrument = pref<string | null>('last-instrument', null);
 
   constructor(options: ClientOptions = {}) {
     this.#client = new Client(options);
@@ -645,7 +645,7 @@ export class VoxelApp {
 
   /** The last instrument opened in this browser — used to default the launch picker after closing. */
   get lastInstrument(): string | null {
-    return browser ? localStorage.getItem('voxel.lastInstrument') : null;
+    return this.#lastInstrument.current;
   }
 
   async initialize(): Promise<void> {
@@ -888,7 +888,7 @@ export class VoxelApp {
         this.snaps.scope = target;
         this.inpaint.scope = target;
         opened.preview.bindInpaint(this.inpaint);
-        if (browser) localStorage.setItem('voxel.lastInstrument', target);
+        this.#lastInstrument.current = target;
       }
     } finally {
       this.#reconciling = false;

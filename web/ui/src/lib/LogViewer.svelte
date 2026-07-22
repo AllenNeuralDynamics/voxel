@@ -1,35 +1,14 @@
 <script module lang="ts">
-  import { browser } from '$app/environment';
   import type { LogMessage } from '$lib/model';
+  import { pref } from '$lib/utils';
 
   type Level = LogMessage['level'];
   // Ordered by severity; the filter shows the chosen level and everything above it.
   const LEVELS: Level[] = ['debug', 'info', 'warning', 'error'];
   const LEVEL_OPTIONS = LEVELS.map((l) => ({ value: l, label: l[0].toUpperCase() + l.slice(1) }));
 
-  function loadPref<T>(key: string, fallback: T): T {
-    if (!browser) return fallback;
-    try {
-      const raw = localStorage.getItem(key);
-      return raw === null ? fallback : (JSON.parse(raw) as T);
-    } catch {
-      return fallback;
-    }
-  }
-
-  // View prefs shared across every LogViewer instance (launch screen ↔ session shell) and persisted to
-  // localStorage. `minLevel` is the lowest severity shown — the server streams DEBUG too, revealed when lowered.
-  const view = $state<{ minLevel: Level; wrap: boolean }>({
-    minLevel: loadPref<Level>('logviewer.minLevel', 'info'),
-    wrap: loadPref<boolean>('logviewer.wrap', false)
-  });
-
-  if (browser) {
-    $effect.root(() => {
-      $effect(() => localStorage.setItem('logviewer.minLevel', JSON.stringify(view.minLevel)));
-      $effect(() => localStorage.setItem('logviewer.wrap', JSON.stringify(view.wrap)));
-    });
-  }
+  const minLevel = pref<Level>('log:min-level', 'info');
+  const wrap = pref('log:wrap', false);
 </script>
 
 <script lang="ts">
@@ -41,7 +20,7 @@
 
   const { logs, class: className }: { logs: LogMessage[]; class?: string } = $props();
 
-  const filtered = $derived(logs.filter((log) => LEVELS.indexOf(log.level) >= LEVELS.indexOf(view.minLevel)));
+  const filtered = $derived(logs.filter((log) => LEVELS.indexOf(log.level) >= LEVELS.indexOf(minLevel.current)));
 
   let container: HTMLDivElement;
 
@@ -95,11 +74,11 @@
   <div class="flex shrink-0 items-center gap-2 py-2">
     <div class="flex items-center gap-3">
       <label
-        class="flex cursor-pointer items-center gap-1.5 text-xs transition-colors {view.wrap
+        class="flex cursor-pointer items-center gap-1.5 text-xs transition-colors {wrap.current
           ? 'text-fg'
           : 'text-fg-muted'} hover:text-fg"
       >
-        <Checkbox size="xs" bind:checked={view.wrap} />
+        <Checkbox size="xs" bind:checked={wrap.current} />
         Wrap
       </label>
     </div>
@@ -108,9 +87,9 @@
       <Select
         size="xs"
         class="ml-auto border-transparent hover:border-accent"
-        value={view.minLevel}
+        value={minLevel.current}
         options={LEVEL_OPTIONS}
-        onchange={(v) => (view.minLevel = v as Level)}
+        onchange={(v) => (minLevel.current = v as Level)}
         prefix="Level ≥"
       />
     </div>
@@ -127,9 +106,9 @@
       <div class="space-y-0.5 p-2">
         {#each filtered as log, i (i)}
           {@const LevelIcon = levelIcons[log.level] ?? CircleSmall}
-          <div class="flex gap-2 {view.wrap ? 'items-start' : 'items-center'}">
+          <div class="flex gap-2 {wrap.current ? 'items-start' : 'items-center'}">
             <span class="w-[8ch] shrink-0 text-fg-muted/65">{formatTime(log.timestamp)}</span>
-            <span class="min-w-0 flex-1 {view.wrap ? 'wrap-break-word' : 'truncate'}">
+            <span class="min-w-0 flex-1 {wrap.current ? 'wrap-break-word' : 'truncate'}">
               <span class="mr-2 {getLevelColor(log.level)}" title={log.logger}>{truncateMiddle(log.logger, 42)}</span>
               <span class="text-fg/80">{log.message}</span>
             </span>

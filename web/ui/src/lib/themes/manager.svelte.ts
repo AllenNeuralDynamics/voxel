@@ -1,4 +1,4 @@
-import { PersistedState } from 'runed';
+import { pref } from '$lib/utils';
 
 // ── Registry ─────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ class ThemeManager {
   readonly list: readonly ThemeEntry[] = registry;
 
   /** Persisted user preferences. */
-  readonly prefs = new PersistedState<ThemePrefs>('voxel-theme', DEFAULTS);
+  readonly prefs = pref<ThemePrefs>('theme', DEFAULTS);
 
   /** Whether the AppearanceSheet is currently open. */
   pickerOpen = $state(false);
